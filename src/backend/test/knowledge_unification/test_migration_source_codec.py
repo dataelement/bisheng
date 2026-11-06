@@ -17,7 +17,13 @@ from bisheng.knowledge.application.unification_sources import (
 )
 from bisheng.knowledge.domain.repositories.unification_target_repository import KnowledgeMigrationTargetFact
 from bisheng.llm.domain.repositories.migration_target_repository import ModelMigrationTargetFact
-from bisheng.resource_reference.application.contracts import SourceKey, SourceRootKey, SourceType, TargetKey
+from bisheng.resource_reference.application.contracts import (
+    ReferenceSpec,
+    SourceKey,
+    SourceRootKey,
+    SourceType,
+    TargetKey,
+)
 
 RUN = "f118-source-page-test"
 DIGEST = "a" * 64
@@ -108,6 +114,30 @@ def test_page_limit_includes_header_without_silent_deduplication(codec, records)
     assert decode(codec, content).records == repeated
     with pytest.raises(KnowledgeOperationPlanConflictError):
         encode(codec, (*repeated, records[0]))
+
+
+@pytest.mark.parametrize("character", ["x", "槽"])
+def test_reference_slot_maximum_matches_actual_contract(codec, records, character):
+    reference = replace(records[2], slot_key=character * 192)
+    ReferenceSpec(reference.slot_key, reference.target)
+    assert decode(codec, encode(codec, (reference,))).records == (reference,)
+
+
+@pytest.mark.parametrize("length", [193, 255])
+def test_encode_rejects_slot_longer_than_actual_reference_contract(codec, records, length):
+    reference = replace(records[2], slot_key="x" * length)
+    with pytest.raises(ValueError):
+        ReferenceSpec(reference.slot_key, reference.target)
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        encode(codec, (reference,))
+
+
+@pytest.mark.parametrize("length", [193, 255])
+def test_decode_rejects_slot_longer_than_actual_reference_contract(codec, records, length):
+    content = json.loads(encode(codec, records))
+    content["records"][3]["slot_key"] = "x" * length
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        decode(codec, canonical(content))
 
 
 @pytest.mark.parametrize(
