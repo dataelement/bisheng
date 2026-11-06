@@ -16,6 +16,7 @@ from bisheng.common.errcode.model_face import (
     ModelFaceModelNotFoundError,
     ModelFaceModelOfflineError,
 )
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.core.context.tenant import get_visible_tenant_ids, is_management_all_tenants, is_tenant_filter_bypassed
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.core.logger import trace_id_var
@@ -100,12 +101,11 @@ class ModelNameResolutionPort:
 
     @staticmethod
     async def _identity(identity, tenant_id):
-        if (
-            type(tenant_id) is not int
-            or tenant_id <= 0
-            or _resolve_tenant_id() != tenant_id
-            or is_tenant_filter_bypassed()
-        ):
+        try:
+            actual_tenant = _resolve_tenant_id()
+        except NoTenantContextError as error:
+            raise _invalid() from error
+        if type(tenant_id) is not int or tenant_id <= 0 or actual_tenant != tenant_id or is_tenant_filter_bypassed():
             raise _invalid()
         if isinstance(identity, UserPayload):
             return (await AuthenticatedSourceReadIdentity().acapture(identity)).fingerprint
