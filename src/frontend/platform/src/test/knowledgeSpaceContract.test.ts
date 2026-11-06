@@ -125,6 +125,11 @@ describe("ordinary spaces and creation wire contract", () => {
     expect(request.post).toHaveBeenCalledExactlyOnceWith("/api/v1/knowledge/space", simple);
   });
 
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, 0, -1, 1.5])("does not serialize an invalid explicit model %s into a default fallback", async (id) => {
+    await expect(api.createSpace({ name: "Explicit", embedding_model_id: id }, 101)).rejects.toMatchObject({ code: "knowledge_embedding_model_invalid" });
+    expect(request.post).not.toHaveBeenCalled();
+  });
+
   it.each(["list", "bootstrap", "create"])("preserves the original ApiError for %s", async (operation) => {
     const error = { status_code: 10998, status_message: "original", data: { reason: "scope" } };
     request.get.mockRejectedValue(error);
