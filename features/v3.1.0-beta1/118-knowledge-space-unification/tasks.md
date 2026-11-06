@@ -1443,9 +1443,9 @@
 
 - [ ] **T177 · 平台目录/上传/版本**
   **类型 / Owner**：前端 Platform / PLATFORM\
-  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/KnowledgeFile.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/detail.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`\
   **逻辑 / 测试上下文**：复用空间树/文件夹上传/网页/预览下载rename版本，按相同开关相似文档/标签，按钮来自现有效动作，不新增fileedit。\
-  **依赖**：T176\
+  **依赖**：T176, T757\
   **验证 / 完成条件**：多层目录、新版本历史与主版本选择、rename-only行为；两端同数据人工验证；关联规格：AC-09, AC-10, AC-11, AC-14, AC-15, AC-30, AC-31。
 
 - [x] **T178 · 平台分类型策略草稿**
@@ -6058,6 +6058,92 @@
   **依赖**：T146, T150\
   **覆盖 AC**: AC-35, AC-79, AC-82, AC-83, AC-87\
   **验证 / 完成条件**：精确前驱两红保留证据，仅适配后当前Task mode/Skill相关同选集全绿，无新生产叶；不把退休fixture当作产品可忽略失败。
+
+## W6平台实际目录与基础文件动作消费闭环
+
+- [ ] **T750 · 平台可信知识页scope抽取测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/knowledgePageScope.test.tsx`\
+  **逻辑 / 测试上下文**：super selected/home、普通leaf、未知scope/retry/unmount/ABA及原三tab/QA/menu不变。\
+  **依赖**：T176\
+  **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
+
+- [ ] **T751 · 知识页可信scope共享消费者**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/hooks/useKnowledgePageScope.ts`；`src/frontend/platform/src/pages/KnowledgePage/index.tsx`\
+  **逻辑 / 测试上下文**：W6§27抽已验证逻辑为窄hook，保原目录/管理资格及真实当前tenant，不改认证store。\
+  **依赖**：T750\
+  **配对测试**：T750, T722\
+  **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
+
+- [ ] **T752 · 真实文件窄API合同测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/knowledgeFilesContract.test.ts`\
+  **逻辑 / 测试上下文**：路径/闭集body/真实preview与download分离、数组query、正整数和原ApiError，原空间DTO回归。\
+  **依赖**：T751\
+  **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
+
+- [ ] **T753 · SPACE目录基础动作真实API**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeFiles.ts`；`src/frontend/platform/src/controllers/API/knowledgeSpace.ts`\
+  **逻辑 / 测试上下文**：W6§27真实已存在endpoint；原API只补Child真实四字段且≤600，不改公共request或虚造后端能力。\
+  **依赖**：T752\
+  **配对测试**：T752\
+  **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
+
+- [ ] **T754 · 实际目录与逐项授权测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f118SpaceDirectory.test.tsx`\
+  **逻辑 / 测试上下文**：opaque空页/独立search分页、scope-parent-filter ABA、visible preview无download、rename独立及真实行type动作，不借root edit。\
+  **依赖**：T753\
+  **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
+
+- [ ] **T755 · 实际目录与基础文件行消费**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/SpaceDirectoryRow.tsx`\
+  **逻辑 / 测试上下文**：W6§27目录/搜索/逐项动作/原文预览/独立download，未接删除移动版本等不借旧接口；重建可读。\
+  **依赖**：T754\
+  **配对测试**：T754\
+  **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
+
+- [ ] **T756 · SPACE详情真实挂载与受控标题测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f118SpaceDetail.test.tsx`\
+  **逻辑 / 测试上下文**：实际路由/scope/父子目录，子树不叠root visible，不读unscoped历史标题，保旧QA Header兼容。\
+  **依赖**：T755\
+  **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
+
+- [ ] **T757 · SPACE详情与受控Header实际挂载**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/detail.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/Header.tsx`\
+  **逻辑 / 测试上下文**：W6§27挂实际目录scope/API，SPACE真实标题/面包屑，旧Paragraphs高级与版本/上传另卡，不冒充T177全完。\
+  **依赖**：T756, T758, T759\
+  **配对测试**：T756, T754\
+  **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
+
+- [ ] **T758 · 目录基础词条中英文接线**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/zh-Hans/knowledge.json`；`src/frontend/platform/public/locales/en-US/knowledge.json`\
+  **逻辑 / 测试上下文**：W6§27六个snake_case业务键，沿现UI语言与用语，不放内部token或改生成错误。\
+  **依赖**：T002\
+  **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
+
+- [ ] **T759 · 目录基础词条日文接线**
+  **类型 / Owner**：文案集成 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/ja/knowledge.json`\
+  **逻辑 / 测试上下文**：同六个业务键日文，保其他现值/keys及插值，三语同批可用。\
+  **依赖**：T758\
+  **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
+  **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
 
 ## 自动化覆盖索引
 

@@ -408,3 +408,23 @@ T736允许在现jobRepo同叶定义专用私有metadata acceptance authority/rec
 
 
 §25补T749：旧task_mode_personal_skills.py的permitted fixture仍回退休use，而已合UserSkillsService实际请求visible；同选集前驱/当前各两失败由该假结果导致。仅本叶改visible结果并保所有原行为断言，不扩改production Skill/WorkStation。
+
+
+## 27. 平台真实目录、原文预览与基础文件动作子合同 V1：已冻结
+
+本节是原T177/T179的真实前置小闭环，不代表版本/完整上传/批量删除/移动/高级Paragraphs已完成。实际路由/filelib/:id是detail.tsx，upload是filesUpload.tsx，QA独立qas.tsx。本节不改QA、legacy upload、版本或服务器动作模型；只消费已存在SPACE端点，不借旧/knowledge/process冒充同目录注册，也不把info.actions用于授file动作。
+
+T750先测试→T751 hooks/useKnowledgePageScope.ts+index.tsx只抽取已验证W6§22的原userContext/useAdminScope逻辑。导出named useKnowledgePageScope()，返回{scopes:{ordinary,admin}|null,isLoading:boolean,canManage:boolean,user:Partial<User>|null,retry:()=>Promise<void>}。super仅服务器selected具体tenant、非super active leaf，原actor/home不改；retry保原异常呈现、身份/卸载epoch，ordinary仍reload。isLoading包括原management加载与retry，未定scope不给数据/动作。index三tab/menu/QA/toolbar行为不变，原Page测试全部保留；detail只用ordinary scope/cache分区，不因来自管理列表而新增Grant或绕过具体资源资格。
+
+T752测试→T753新controllers/API/knowledgeFiles.ts容纳真实breadcrumb/create-folder/rename-file/rename-folder/preview/download/search窄API；现knowledgeSpace.ts仅补Child真实tags:{id:number,name:string}[]和has_failed_files/has_abnormal_files/has_processing_files可选bool，总行≤600。所有API原wrapped request、positive safe integer IDs、原ApiError传播，无新增管理头或认证参数。真实路由/方法/字段如下：GET /space/{sid}/folders/{fid}/parent→{id,file_name}[]；POST /space/{sid}/folders body{name,parent_id?}；PUT /space/{sid}/folders/{fid}或/files/{fid} body仅{name}；GET /space/{sid}/files/{fid}/preview→{original_url,preview_url,file_source,source_url,final_url,web_title,media_kind,html_preview_url}；GET同/download→{original_url,preview_url}。全部带原/knowledge前缀。搜索GET /space/{sid}/search仅接受{keyword?,parent_id?,tag_ids?:number[],file_status?:number[],page,page_size,order_field?,order_sort?}，不发送name或cursor，不把search伪造为children过滤；数组沿现API重复query key编码。父级路径含自身，原数字缺失祖先fallback保留，不把任意旧window名当事实。
+
+T754测试→T755 Files.tsx+SpaceDirectoryRow.tsx：以scope/space/parent为真实key消费现listChildren opaque cursor，空页has_more仍可继续，不能用total/client分页。搜索独立真实search端点且page envelope，清搜索回目录首cursor，scope/parent/filter/ABA退休迟到list/preview/action/dialog结果，不复用未授权旧行。每行真实type为folder或knowledge_file；仅点击动作菜单时读现getMyResourcePermissionsApi(type,id)，本地缓存及epoch含完整scope/目标，不用原缺tenant的useLazyResourceActions公共cache，不按容器canEdit/canDelete给所有file授权。create_folder/upload_file用当前容器，rename用目标rename，download独立download；预览直接真实/preview（服务端visible），不因预览额外请求download。原始文档复用现PreviewFile/RichPreviewFile，不走旧Paragraphs file_share/Chunk的额外资格；高级Chunk按原空间edit后续另卡。state重建仍可目录/preview/download、空folder与rename不加新冲突门禁。删除/move/retry/标签/批量与版本未装配不调旧library接口或展示可执行假入口。
+
+T756测试→T757 detail.tsx+Header.tsx实际挂上述目录，用实际info/breadcrumb的title/description受控props，不将window/localStorage历史标题当SPACE权威；Header旧QA consumer保兼容可选props。根info不是目录成功的额外前置；已准入子目录不先拉可能无权root info来阻断，面包屑可用真实当前目标名称。原space.info actions仅[visible]或[]提示，具体容器动作须原权限API；子目录只按folder.visible，不额外叠root.visible。root或隐藏壳只显示实际服务端准许信息，不从旧缓存补隐藏字段。原返回/filelib导航不变，原root/header菜单不显示未接能力。
+
+本节目录闭环完成后原T177仍等版本前置，T179等T083/084真实SPACE上传快照接线（现add_file未传processing_rule_request，不能前端绕回legacy）；普通upload_file不因读取edit-only settings新增edit门槛。版本服务器原读取/设主/删历史授权缺口只记录原事实，后续按已有用例动作冻结，不能猜成file.edit或以本节扩大安全加固需求。两端版本开关/env消费另卡。
+
+新增locale仅f118.create_folder/folder_name/current_folder/loading_directory/directory_empty/more_files，INT统一三语；其他rename/download/save/cancel沿现词条，不改API errors生成产物。T758/T759限三语登记叶。所有新UI先读当前共享组件规范，复用已落地组件和现页面布局，不新增库/公共组件/视觉风格。新测试需真实API port+query/cache与scope/仅子树可见/visible-only preview不download/rename-only/重建可读断言，不删除旧功能断言；独立固定review+主树组合后才闭各卡。
+
+
+§27文件API导出固定为listSpaceFolderParents(spaceId,folderId)、createSpaceFolder(spaceId,{name,parent_id?})、renameSpaceFolder(spaceId,folderId,{name})、renameSpaceFile(spaceId,fileId,{name})、getSpaceFilePreview(spaceId,fileId)、getSpaceFileDownload(spaceId,fileId)、searchSpaceChildren(spaceId,SpaceSearchQuery)。query与返回保持上文真实wire。locale只有已冻结业务用语无API依赖，T758/T759可先于其consumer准备，实际页面通过后再计入口闭合。
