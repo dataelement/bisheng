@@ -627,3 +627,53 @@ T811/T812由MIG在原codec两叶补闭集：queued_task_orphan仅tasks/global/te
 Sheet props为scope:KnowledgeQueryScope、spaceId、parentId:number|null、fileId:number|null、open、onOpenChange及同形测试readPort。仅open读取，复用现bs-ui Sheet与TanStack Query；key含完整scope/space/parent/file及每opening/实例epoch，queryFn消费AbortSignal。关闭/卸载/切scope/parent/file/行消失/flag关闭永久退休该opening，只取消自己的请求；A→空→A不复活旧响应。不得共享全局key或用cancelRefetch:false绕过隔离，结果不能异步重开Sheet。标题来自当前真实DTO，hidden primary只按后端visible anchor/current_primary_version_no=null显示；空/未知字段中性占位，错误不显示旧缓存metadata，原ApiError保留供重试。
 
 四新测试叶均在src/frontend/platform/src/test：knowledgeVersionFeature.test.tsx、knowledgeVersionsContract.test.ts、f118SpaceVersionHistory.test.tsx、f118SpaceDirectoryHistory.test.tsx（路径若现测试组织不同可在首提交前精确纠正，不扩生产叶）。覆盖flag缺失/false/true、仅子树visible、custom历史裁剪/hidden primary/null、读错重试、完整scope/parent/file/open ABA及abort、菜单关闭不误退休、实际row→Sheet→API、原rename/download/QA回归。原目录600行测试保持不加字。INT新增f118.version_history/version_no/primary_version/version_uploader/version_upload_time/no_visible_versions/document_code七三语键，其他loading/retry/fileName/status/bs:close复用原键。此slice仅原T177后继，完整版本写入与其他高级功能保持待办。
+
+
+## 42. M2真实Celery broker只读盘点子合同 V1：已冻结
+
+PROC独占三组：T823/824新application/unification_broker_codec.py及test_migration_broker_codec.py；T825/826原domain/repositories/unification_task_repository.py及test_migration_task_repository.py增精确批查；T827/828新application/unification_broker.py及test_migration_broker.py。INT独占T829/830原unification_inventory_codec.py、unification_inventory.py两叶及各配对测试的broker闭集/装配接缝，须与MIG后继精确交接，不并写。原worker/Celery路由、Model/DDL/队列均不改。每新叶≤600，单生产卡≤2叶；不创建Kombu channel/Consumer/QoS、不ACK/requeue/restore/unacked锁，不执行任务、不证明停服、不造任务模型引用。
+
+纯codec公开frozen BrokerReadConfiguration/DecodedKnowledgeMessage；配置默认取实际bisheng_celery.conf broker_url/read_url/write_url/transport_options（含CELERY环境覆盖），不用cache redis_url或result_backend。专用raw redis.asyncio与Sentinel.master_for，支持当前single redis/rediss与真实builder Sentinel master、DB/TLS/ACL/global_keyprefix。非Redis、多独立broker failover/读写源不一致、未知driver/options明确required-port fail closed，不能报空。原配置凭据repr=False不输出。Reader为RedisBrokerInventoryReader(session,*,repository=None,configuration=None,redis_connection=None).aiter_facts(*,tenant_ids:tuple[int,...])，每run全局一次；外部native Session/TX、no_autoflush、原tenant严格窗口，只读原事实。aclose只关自建raw客户端、借用不关；取消及原异常完整settle owned生命周期，不能Kombu close引发重投。
+
+遍历生效knowledge/ocr/default与静态knowledge routes、SCAN实际LIST候选和只读SSCAN _kombu.binding.*历史queue；含生效priority_steps/sep及global_keyprefix。SCAN COUNT是hint，处理切批≤200；cluster cursor映射/重复键去重沿已冻结task reader规则，不按消息内容去重重复occurrence。LRANGE offset200；共享queue仅凭严格解码已知非knowledge task跳过，不读其业务。未知/畸形且无法证明非知识不能静默漏；已知知识签名非法拒绝。全局unacked HSCAN值按真实Kombu `[raw,exchange,routing_key]`，ZSET score与mutex只读事实，不按时间推停服；index孤立metadata仅global诊断。有效同任务不同物理位置分别计occurrence，稳定ID含UUID/位置/offset或delivery tag摘要。
+
+只stdlib JSON：UTF8、拒重复键/nonfinite、content-type application/json、encoding utf-8、strict base64，v1 body task/id/args/kwargs与v2 headers task/id、body=[args,kwargs,embed]均真实Kombu离线产物测试。单raw及decoded≤16MiB；不支持的压缩/serializer、不可辨知识签名/非空未冻结canvas明确拒绝，禁pickle/yaml/decoder registry。headers含argsrepr/properties/body/callback只一次安全digest，不入artifact；不执行任何签名。
+
+精确追真实知识任务：parse/retry/rebuild_file_chunk按File→Root及可空Doc/Version；move当前target及显式source、copy真实source/target；整库/QA rebuild读knowledge_id，旧三参modelHint只hash标legacy_requires_reissue，不补operation/RG或模型绑定；七参Root operation/RG只match/obsolete事实。execute_processing_job以实际J1 Job/dispatch_revision/kind，purge以DeleteJob；delete已删File须真实Root/ledger依据，QA按原QA而非File。控制型scheduler/recovery/projection/chat-retention任务无单业务目标记global_control，不造Root归属；未知knowledge任务拒绝。Repo扩精确批查每批≤200、空零SQL，globalPK仅安全标量，无名称/原配置泄漏；完整SQL链坏/foreign、header claim与权威tenant矛盾、ACL/IO/WRONGTYPE均阻断；明确物理目标missing只global/M5诊断不假授权。
+
+T829/830新增唯一broker_task闭集，只tasks页，原queued_task十字段加header_tenant_id（nullable）、其中tenant_id允许null，task_kind真实task_name，state为上述明确闭集；tenant来自SQL归属，null仅global_control/明确target_missing/unacked_metadata_orphan。QA/job ID不塞file槽；完整target集合/count/顺序/SQL事实入record_digest。M2全run一次消费required真实broker port，known tenant分tenant页，null分global页，合原manifest/hash；scheduler和broker均必须存在，不以一个代替另一个。各message摘要一次、targets去重批查≤200，不逐target重编整个消息、不message×space/file×version相乘；10001消息/targets与优先级/unacked重复投递预算必须实测，读取前后raw字节/队列不变。
+
+§42原生分类补充：broker_task.task_kind仅明确unacked_index-only无message的transport metadata孤儿允许null，不伪造知识task_name；此类state使用unacked_metadata_orphan。真实消息保完整原task_name。同broker DB共用cache时，已配置或_kombu.binding登记queue的坏/不可分类消息拒绝；未登记未知LIST只有外层满足真实Kombu envelope才纳入候选，确定普通业务LIST不纳入。有效Kombu未知历史queue中的知识前缀必须捕获，已辨非知识任务只隔离，不核其业务参数；不把任意聊天LIST坏JSON变成本次M2故障。
+
+
+## 43. M2精确可执行SQL阶段转换计划子合同 V1：已冻结
+
+本阶段仅M2只读/纯计划，不执行M3业务DML，不闭合T163/164或正式迁移。MIG分组：T831/832原unification_sources.py单叶提取真实inventory KN修订纯SSOT，配原test_migration_source_context.py；T833/834新application/unification_conversion_plan.py及原unification_inventory_codec.py两叶，配新test_migration_conversion_plan.py与原codec测试；T835/836原unification_resource_repository.py单叶补精确全局Tag关系probe，配原resource repo测试；T837/838原unification_preflight.py与unification_inventory.py两叶实际委托，配原preflight与inventory_application测试。每实现≤2叶，所有新叶≤600；INT broker接缝T829/830必须等MIG固定交付后独占接手相同codec/app，不并写。
+
+ConversionPlanBuilder(*,run_id:str,writer_contract_version:str,planned_at:datetime)只三参；add_resources/files/documents/versions/tags/tag_links/defaults(rows:tuple[原Row,...])每批≤200，阶段有序一次消费，finish()->Iterator[ConversionCommand]只一次。只留安全标量索引/摘要/命令，不保存完整File/defaults/metadata/prompt/凭据；原Row本批瞬时hash即丢。资源/File/Version/TagLink各线性一次，以creation/file/doc/tag/最终link tuple索引，不每file扫描全部版本、不tenant×来源/消息×targets笛卡尔。planned_at由app全run一次确定，冻结显式datetime；M3不得DB时钟改变未计划字段。
+
+所有命令闭集含schema_version=1/run_id/writer_contract_version/tenant_id/command_key64及明确操作类型。ResourceConversionCommand仅原type0：knowledge_id、before/after_business_digest、before/after_neutral_digest、after_inventory_business_revision_digest、after_owner_configuration_digest、target_type=3、target_is_released=False、target_migration_origin=run_id。保原其余旧20/neutral6及update_time、model/index/collection/state/metadata/defaults/R/G/creation key；auth_type不硬设private，另依真实冻结权限finalize计划。after_inventory业务修订明确SQL阶段，不冒权限最终态：复用unification_sources提取knowledge_business_revision_digest(row)的原13字段算法；原_configured与builder同调用，原header摘要必须不变。after_owner_configuration_digest取真实ModelReferenceRepository13字段projection→KnowledgeReferenceSourceOwner._snapshot的纯configuration_digest（不authorize/IO/造授权证据），native对照实际repo.aload_source→Owner._snapshot。后续权限若改auth_type须整体M2 freeze前另冻其最终依赖，不覆盖SQL阶段hash。
+
+creation目标键用(tenant,user,最终type,非空request_id)一次去重；原type0投3与原3冲突明确预检拒绝，不修改creation ID/hash、不等M3 IntegrityError。已有type3资源列全不改，QA1/type2保原。所有KnowledgeFile列零写，不把upload改space_upload。InitializeV1Command仅实际FILE=1且冻结证明全局Version关联恰0，适用0/3资源；DIR不建、已有任何版本关系/主指针须完整验证并保原，不用first()/online上传helper/成功态筛选。命令含knowledge/file ID、file_business_digest、before_relation_digest、自然键SHA(run,writer,tenant,file,register_v1)、Doc/Version模板digest、原file_level_path/level、planned_at；Doc仅knowledge/path/level/primary及冻结timestamp，Version仅真实新DocID/原fileID/no1/primary及冻结timestamp。M2不猜新自增ID；M3后继同TX获得ID+原子outcome/checkpoint，重跑不得重复V1。
+
+Tag owner只Tag(tenant,business_type,business_id)，不借首个Link猜。仅business_type=knowledge且规范business_id精确命中原type0，并完整反查该Tag所有links同owner File、类型9/8时才转换knowledge_space。其他0/3/QA/nonKN/cross-tenant共享或不明parent明确预检拒绝，不clone/合Tag/全局替其他业务。Tag命令精确tag/knowledge ID、before/after digest、from/to。Link9→8只实际type0 File且Tag同tenant同owner；ResourceType1/其余不替。相同最终(resource_id,8,tag_id)保已有8、每冗余9单独drop_duplicate命令，含link/file/knowledge/tag ID、before/after?、from/to/action/survivor ID+digest，不塞无界数组；同名不同TagID冲突先报，不猜casefold或跨tenant合名。T835836补整个run一次raw LEFT LIMIT1闭集probe：TagLink→Tag存在/tenant及9/8→File存在/tenant，不能INNER吞坏链；不改其他Tag业务。
+
+DefaultConversionCommand仅own tenant_system_model_config的linsight_llm真实行。纯plan_default_conversion(row,*,run_id,writer_contract_version)严格校原IDs，依次复用现transform_linsight_llm_config、transform_chat_default：原task_model.id在models保它否则first/empty，移除task_model/linsight_executor_mode；仅原chat_default空才取models最后。保其他JSON键/值/顺序及models次序，artifact只摘要/闭集选择ID、不输出JSON；同值skip零写。其他4keys原样；own缺失不复制Root/新Child覆盖，不用APP NameIndex猜旧默认名。命令含row/key、before_raw_row/config digest、after_config/业务修订digest、before/after_refs_digest、action、selected_linsight/chat ID?、drop flags、algorithm_version及同run旧models槽→新default槽provenance。M3重读真实JSON复算哈希，不调用整库backfill/宽松skip/commit wrapper，不在线bind或造legacy自举。
+
+B实际app/preflight委托仅在全部资源链/精确plan检测及artifact上传读回后afreeze_all；源事实与来源流保持完整，plan闭集禁止raw内容。401稀疏分页/大量多版本/creation投影碰撞、Tag跨owner/重复link/同名、before/after篡改、半链/多主、非法defaultID/Root own缺省及现六来源完整组合必测。后继M3真实锁/白名单SQL、默认SQL、阶段outcome/namespace/FGA finalize尚未授权源码实施，须另冻协议。个人quota迁移豁免后继只count-only predicate三处（sync/async KnowledgeDao及QuotaService user branch），不得改通用排部门predicate/租户总量/文件SUM。
+
+
+## 44. 迁移来源个人配额计数真实接线子合同 V1：已冻结
+
+INT独占原T165测试test/knowledge_unification/test_quota.py与T166两生产叶knowledge/domain/models/knowledge.py、role/domain/services/quota_service.py；先在独立118-w6-kn lane红绿，固定后交非作者复查。沿§43迁移来源run_id字段稳定合同，前置为实际Model T010及原创建门禁T082，不必等待M3实现才写count-only谓词；正式转换后的真实配额联验仍归T203，不以本卡替代迁移。
+
+在Knowledge模块新增私有纯count-only谓词（无数据库入口），以migration_origin非空标记持续排除迁移空间；NULL/空串无来源仍计个人数。仅现KnowledgeDao.count_spaces_by_user/async_count_spaces_by_user及QuotaService._knowledge_space_count_stmt(user_id)复用；不改通用_exclude_department_spaces、不影响任何空间列表/详情。原DAO按当前tenant listener，QuotaService全局per-user原bypass口径保持，不能借此统一成不同租户语义。user创建/显示计数均type3，原部门排除参数保持；tenant_id分支仍统计包括迁移和部门的全部实际SPACE，原tenant链总量超限保留存量并限制新增；文件SUM仅原channel/space_upload、不按处理status，不改file_source/大小/usage。
+
+测试真实sync/async SQLite SQL、原创建_assert_space_creation_quota实际计数、各scope/跨tenant/global per-user原语义、重新Session/owner变更后origin不丢、native/dept/migrated/QA/type2、tenant超限与storage SQL稳定；C2编译type等标识符MySQL/DM8引用，无数据库专有函数/raw type SQL。无新增Model/DDL/API/配置或权限绕过，不执行M3写来源字段。原legacy两叶既有静态诊断冻结比对，新增0。
+
+
+## 45. APP最终模型绑定原任务闭合验证合同 V1：已冻结
+
+EDGE完成只读历史固定ce4后，仅独占原T139的test/knowledge_unification/test_app_model_binding.py补实际preview principal→ModelGatewayService.complete与真实删除LLMModel→provider不调用两条native回归。保已有同名实际ID/server漂移、原identity/TX、整Source无效、inspection不授权及missing port用例；真实Gateway/Adapter/SourceOwner/Core/SQL绑定参与，只有已有外部provider/传输或必要credential clock可隔离，不能固定准入结果。preview由真实credential/operation/route/qualification及preview_version，运行版本不同也不能套用active版许可。
+
+生产T140已由W4 694859943→2a4e7e991及后续真实APP接线实现，gateway在provider前取原主体完整来源并核实时alias ID/server与冻结版本槽集合；同名解析不等于可换模型。源码未发现SDK依赖，故T139依赖由T134改为真实T136/T447。若新测试首绿明确记录首绿，不伪造红或改无关生产；若真实失败先报最小范围与证据，原T140仅允许登记的model_range_policy.py/model_gateway_service.py内必要修正，其余Owner需另核文件Owner。主agent复查与现四叶组合后按实际完成勾原卡，不以此声称SDK或全产品E2E完成。

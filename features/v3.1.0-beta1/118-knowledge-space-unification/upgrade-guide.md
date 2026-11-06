@@ -133,7 +133,7 @@ W5本地100路径2852测试/15子测试通过，当前137待办；平台typechec
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史822编号：705已完成/历史交付、115当前待办、2外移；原137队列已完成28项、剩109项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史838编号：705已完成/历史交付、131当前待办、2外移；原137队列已完成28项、剩109项，另22张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -158,3 +158,10 @@ W6持续实施；历史822编号：705已完成/历史交付、115当前待办�
 ## M2只读端口联装状态（2026-11-07）
 
 主树44712aff4已接原Store tuple、原生ES/Milvus/object stat和受限artifact、SQL与fair scheduler Redis原任务事实；M2拒identifier_compatible=False、全部tenant同TX冻结、相同proof重入可保合法不同阶段且零写。本地3582项通过仅说明联装；真实Celery broker盘点、完整精确M3转换计划/初始引用回填、CLI与实际维护演练尚未完成，当前不发布可执行正式迁移命令、不启动新版线上runtime。正式停服/排空/一致备份、中性DDL、重新盘点并freeze顺序保持；DM8免实测，C2静态及MySQL/恢复验证保留。
+
+
+## 原生物理/任务端口准备实测（2026-11-07）
+
+以已提交候选95f1279be归档（SHA256 `6b418fca86a1698af2d62002800315f551df22b2cc5d4b1232c68413dde94c0b`）在109独立项目临时只读容器执行，不替换原API/worker。仅SQL克隆库bisheng_f118_probe_20261107，SQL守卫拒DML/DDL/其他库；13条SQL读取3个实际租户、2个统一目标及5个文件。原生ES/Milvus分别回读空间1计数16/49、空间3计数5/6，标识schema兼容均true；8个原文件对象均存在。两种索引原有计数不同按各自原事实保留，不伪造相等或以此误阻迁移。正式前后对账应分别比较对应索引的原摘要/计数。
+
+新版受限MinIO adapter写/回读准备盘点artifact SHA256 `8e7366b92b94ec511e5426a4571a9598da6da09d8c5b2423e93eb34d46b24d81`；无建桶、授权策略、模型或解析IO。真实SQL/fair Redis任务reader返回0项（这是该环境当时事实，不代表已盘点Celery broker）；knowledge_unification_run/processing_job/processing_item仍0行。证据`evidence/preparatory-native-ports.json` SHA256 `72981605007d6e3e2e4b8831dbbc35a663f3aaf24c3964fcced7badcabcf000f`，无凭据脚本同目录`preparatory-native-ports-probe.py`。这不是M1停服一致备份/正式M2 freeze/M3转换/恢复/E2E，3005保持不动。
