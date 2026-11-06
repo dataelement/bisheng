@@ -9,14 +9,18 @@ rendering the corresponding error, rather than roll it back by raising early.
 
 import hashlib
 import json
+import re
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from inspect import ismethod
 from typing import Any
 from uuid import uuid4
+from weakref import WeakKeyDictionary
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, inspect, or_
+from sqlalchemy.orm import defer
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -38,12 +42,15 @@ from bisheng.knowledge.domain.models.knowledge_processing_retry import Knowledge
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
 from bisheng.knowledge.domain.schemas.processing_job import ItemState, JobState, ProcessingKind, ResourceVersionTarget
 from bisheng.knowledge.domain.services.processing_cutover_receipts import consume_cutover_receipt
+from bisheng.resource_reference.application.contracts import TransactionIdentity
 
 
 @dataclass(frozen=True)
 class ProcessingConfiguration:
     model_config_revision: int
     index_generation: str | None
+    metadata_schema_revision: int | None = None
+    metadata_schema_digest: str | None = None
 
     def __post_init__(self):
         if type(self.model_config_revision) is not int or self.model_config_revision < 0:
@@ -52,6 +59,15 @@ class ProcessingConfiguration:
             not isinstance(self.index_generation, str) or not self.index_generation or len(self.index_generation) > 64
         ):
             raise ValueError("index_generation must be a nonempty stable identifier")
+        if self.metadata_schema_revision is None and self.metadata_schema_digest is None:
+            return
+        if (
+            type(self.metadata_schema_revision) is not int
+            or self.metadata_schema_revision < 0
+            or not isinstance(self.metadata_schema_digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", self.metadata_schema_digest) is None
+        ):
+            raise ValueError("metadata schema evidence requires a non-negative revision and canonical digest")
 
 
 @dataclass(frozen=True)
@@ -134,6 +150,148 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+@dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
+class _MetadataCompletionReceipt:
+    space_id: int
+    schema_revision: int
+    schema_digest: str
+
+
+_metadata_completions: WeakKeyDictionary = WeakKeyDictionary()
+
+
+def _metadata_completion_facts(space_id, actor_user_id, actor_reference, parameters, configuration):
+    # Orchestration adds its actual ledger identifiers later; it cannot change
+    # the accepted business request, schema, values or timestamp through them.
+    business = {
+        key: value for key, value in parameters.items() if key not in {"operation_id", "confirmation_id", "plan_digest"}
+    }
+    return (
+        space_id,
+        actor_user_id,
+        _digest(actor_reference),
+        _digest(business),
+        configuration.model_config_revision,
+        configuration.index_generation,
+        configuration.metadata_schema_revision,
+        configuration.metadata_schema_digest,
+    )
+
+
+async def _metadata_root_facts(session, space_id):
+    tenant = get_current_tenant_id()
+    if not isinstance(session, AsyncSession) or not session.in_transaction() or type(tenant) is not int or tenant <= 0:
+        raise ResourceReferenceInvalidError(reason="metadata_completion_native_transaction_required")
+    from bisheng.core.context.tenant import is_tenant_filter_bypassed
+
+    if is_tenant_filter_bypassed():
+        raise ResourceReferenceInvalidError(reason="metadata_completion_concrete_tenant_required")
+    fields = (
+        "id",
+        "tenant_id",
+        "type",
+        "metadata_schema_revision",
+        "metadata_fields",
+        "model_config_revision",
+        "index_generation",
+    )
+    with session.no_autoflush, strict_tenant_filter():
+        row = (
+            await session.execute(select(*(getattr(Knowledge, key) for key in fields)).where(Knowledge.id == space_id))
+        ).one_or_none()
+    if row is None or row.tenant_id != tenant or row.type != KnowledgeTypeEnum.SPACE.value:
+        raise ResourceReferenceInvalidError(reason="metadata_completion_space_required")
+    return (
+        row.id,
+        row.tenant_id,
+        row.metadata_schema_revision,
+        _digest(row.metadata_fields or []),
+        row.model_config_revision,
+        row.index_generation,
+    )
+
+
+def _assert_no_pending_metadata_root(session, space_id):
+    fields = (
+        "id",
+        "tenant_id",
+        "type",
+        "metadata_fields",
+        "metadata_schema_revision",
+        "model_config_revision",
+        "index_generation",
+    )
+    for collection in (session.new, session.dirty, session.deleted):
+        for row in collection:
+            state = inspect(row)
+            if isinstance(row, Knowledge) and space_id in (state.dict.get("id"), *(state.identity or ())):
+                if (
+                    row in session.new
+                    or row in session.deleted
+                    or any(state.attrs[name].history.has_changes() for name in fields)
+                ):
+                    raise ResourceReferenceInvalidError(reason="metadata_completion_pending_schema_change")
+
+
+class _MetadataCompletionAuthority:
+    """Private capability whose only issuance path executes the bound Owner."""
+
+    def __init__(self, owner):
+        callback = getattr(owner, "_aperform_metadata_acceptance", None)
+        if not ismethod(callback) or callback.__self__ is not owner:
+            raise TypeError("metadata completion requires its bound business Owner")
+        self._callback = callback
+
+    async def aaccept(self, session, prepared, *, identity):
+        transaction = TransactionIdentity.capture(session)
+        before = await _metadata_root_facts(session, prepared.space_id)
+        accepted = await self._callback(session, prepared, identity=identity)
+        transaction.assert_current(session)
+        after = await _metadata_root_facts(session, prepared.space_id)
+        facts = _metadata_completion_facts(
+            accepted.space_id,
+            accepted.actor_user_id,
+            accepted.actor_reference,
+            accepted.parameters,
+            accepted.configuration,
+        )
+        if (
+            after[:2] != before[:2]
+            or after[2] != before[2] + 1
+            or after[4:] != before[4:]
+            or (after[2], after[3])
+            != (accepted.configuration.metadata_schema_revision, accepted.configuration.metadata_schema_digest)
+        ):
+            raise ResourceReferenceInvalidError(reason="metadata_completion_business_result_changed")
+        if accepted.items:
+            return accepted, None
+        receipt = _MetadataCompletionReceipt(after[0], after[2], after[3])
+        _metadata_completions[receipt] = (transaction, self, facts, after)
+        return accepted, receipt
+
+
+async def _consume_metadata_completion(
+    session, receipt, *, space_id, actor_user_id, actor_reference, parameters, configuration
+):
+    registered = _metadata_completions.get(receipt) if isinstance(receipt, _MetadataCompletionReceipt) else None
+    try:
+        if registered is None:
+            raise ValueError("metadata completion was not issued")
+        registered[0].assert_current(session)
+        facts = _metadata_completion_facts(space_id, actor_user_id, actor_reference, parameters, configuration)
+        _assert_no_pending_metadata_root(session, space_id)
+        if (
+            facts != registered[2]
+            or await _metadata_root_facts(session, space_id) != registered[3]
+            or (receipt.space_id, receipt.schema_revision, receipt.schema_digest)
+            != (space_id, configuration.metadata_schema_revision, configuration.metadata_schema_digest)
+        ):
+            raise ValueError("metadata completion context changed")
+    except (ValueError, TypeError) as error:
+        raise ResourceReferenceInvalidError(reason="metadata_completion_receipt_invalid") from error
+    del _metadata_completions[receipt]
+
+
 class ProcessingJobRepository:
     def __init__(self, *, clock: Callable[[], datetime] = _utc_now):
         self.clock = clock
@@ -173,19 +331,38 @@ class ProcessingJobRepository:
         if row is None or row.tenant_id != tenant_id:
             raise SpaceNotFoundError()
 
-    async def _job(self, session: AsyncSession, job_id: str, *, lock: bool) -> KnowledgeProcessingJob:
+    async def _job(
+        self, session: AsyncSession, job_id: str, *, lock: bool, include_manifest: bool = True
+    ) -> KnowledgeProcessingJob:
         tenant_id = self._tenant_id()
         statement = select(KnowledgeProcessingJob).where(KnowledgeProcessingJob.id == job_id)
+        if not include_manifest:
+            cached = session.identity_map.get(inspect(KnowledgeProcessingJob).identity_key_from_primary_key((job_id,)))
+            if cached is not None and inspect(cached).dict.get("kind") == "metadata_schema_change":
+                # A prior query may have loaded the manifest in this Session.
+                # Expire only that immutable execution-irrelevant attribute so
+                # the explicit raiseload option cannot reuse its cached JSON.
+                session.expire(cached, ["scope_manifest"])
+            statement = statement.options(defer(KnowledgeProcessingJob.scope_manifest, raiseload=True))
+            statement = statement.execution_options(populate_existing=True)
         if lock:
             statement = statement.with_for_update().execution_options(populate_existing=True)
         with strict_tenant_filter():
             row = (await session.exec(statement)).one_or_none()
         if row is None or row.tenant_id != tenant_id:
             raise KnowledgeProcessingJobNotFoundError()
+        if not include_manifest and row.kind != "metadata_schema_change":
+            # Existing kinds retain their complete historical manifest. Only
+            # metadata uses the explicit bounded execution representation.
+            with strict_tenant_filter():
+                await session.refresh(row, attribute_names=["scope_manifest"])
         return row
 
     async def aget(self, session: AsyncSession, job_id: str) -> KnowledgeProcessingJob:
         return await self._job(session, job_id, lock=False)
+
+    async def aget_execution(self, session: AsyncSession, job_id: str) -> KnowledgeProcessingJob:
+        return await self._job(session, job_id, lock=False, include_manifest=False)
 
     async def aget_by_request_key(
         self, session: AsyncSession, kind: str, idempotency_key: str, *, lock: bool = False
@@ -252,7 +429,7 @@ class ProcessingJobRepository:
         state: str | None = None,
     ) -> ItemPage:
         offset = self._page(page, page_size)
-        job = await self._job(session, job_id, lock=False)
+        job = await self._job(session, job_id, lock=False, include_manifest=False)
         ids = tuple(dict.fromkeys(visible_file_ids))
         if any(type(value) is not int or value <= 0 for value in ids):
             raise ValueError("visible scope requires positive file identities")
@@ -279,7 +456,7 @@ class ProcessingJobRepository:
         return ItemPage(tuple(rows), total)
 
     async def alatest_retry_actor(self, session: AsyncSession, job_id: str) -> dict:
-        job = await self._job(session, job_id, lock=False)
+        job = await self._job(session, job_id, lock=False, include_manifest=False)
         with strict_tenant_filter():
             receipt = (
                 await session.exec(
@@ -315,7 +492,11 @@ class ProcessingJobRepository:
                 or_(KnowledgeProcessingJob.lease_until.is_(None), KnowledgeProcessingJob.lease_until <= now),
             ),
         )
-        statement = select(KnowledgeProcessingJob).where(active, KnowledgeProcessingJob.next_dispatch_at <= now)
+        statement = (
+            select(KnowledgeProcessingJob)
+            .options(defer(KnowledgeProcessingJob.scope_manifest, raiseload=True))
+            .where(active, KnowledgeProcessingJob.next_dispatch_at <= now)
+        )
         if after_id is not None:
             statement = statement.where(KnowledgeProcessingJob.id > after_id)
         with strict_tenant_filter():
@@ -336,7 +517,7 @@ class ProcessingJobRepository:
     ) -> bool:
         if type(expected_revision) is not int or expected_revision < 0 or type(published) is not bool:
             raise ValueError("dispatch acknowledgement requires an expected revision and boolean result")
-        job = await self._job(session, job_id, lock=True)
+        job = await self._job(session, job_id, lock=True, include_manifest=False)
         if job.revision != expected_revision or (
             not (job.state == "accepted" and job.pending_dispatch)
             and not (job.state == "running" and (job.lease_until is None or job.lease_until <= self._now()))
@@ -378,13 +559,20 @@ class ProcessingJobRepository:
         configuration: ProcessingConfiguration,
         items: Sequence[NewProcessingItem],
         space_config_version: int = 0,
+        metadata_acceptance=None,
     ) -> JobRequestResult:
         tenant_id = self._tenant_id()
         kind = ProcessingKind(kind).value
         idempotency_key = self._key(idempotency_key)
         actor = self._actor(actor_user_id, actor_reference)
-        if type(space_config_version) is not int or space_config_version < 0 or not items:
+        if (
+            type(space_config_version) is not int
+            or space_config_version < 0
+            or (not items and kind != "metadata_schema_change")
+        ):
             raise ValueError("a nonempty frozen scope and non-negative settings version are required")
+        if not items:
+            _assert_no_pending_metadata_root(session, space_id)
         manifest = []
         for value in items:
             target = ResourceVersionTarget.model_validate(value.target.model_dump(mode="json"))
@@ -402,20 +590,24 @@ class ProcessingJobRepository:
         if len({(value["file_id"], value["version_id"]) for value in manifest}) != len(manifest):
             raise ValueError("duplicate file/version scope")
         payload = deepcopy(dict(parameters))
-        request_hash = _digest(
-            {
-                "tenant_id": tenant_id,
-                "space_id": space_id,
-                "kind": kind,
-                "actor_user_id": actor_user_id,
-                "actor_reference": actor,
-                "parameters": payload,
-                "scope_manifest": manifest,
-                "model_config_revision": configuration.model_config_revision,
-                "index_generation": configuration.index_generation,
-                "space_config_version": space_config_version,
-            }
-        )
+        request_facts = {
+            "tenant_id": tenant_id,
+            "space_id": space_id,
+            "kind": kind,
+            "actor_user_id": actor_user_id,
+            "actor_reference": actor,
+            "parameters": payload,
+            "scope_manifest": manifest,
+            "model_config_revision": configuration.model_config_revision,
+            "index_generation": configuration.index_generation,
+            "space_config_version": space_config_version,
+        }
+        if kind == "metadata_schema_change":
+            request_facts.update(
+                metadata_schema_revision=configuration.metadata_schema_revision,
+                metadata_schema_digest=configuration.metadata_schema_digest,
+            )
+        request_hash = _digest(request_facts)
         # The verified owning resource lock serializes same-space creation;
         # the database unique key is the final cross-space collision guard.
         await self._space(session, space_id)
@@ -434,6 +626,16 @@ class ProcessingJobRepository:
             if existing.tenant_id != tenant_id or existing.request_hash != request_hash:
                 raise KnowledgeIdempotencyConflictError()
             return JobRequestResult(existing, True)
+        if not manifest:
+            await _consume_metadata_completion(
+                session,
+                metadata_acceptance,
+                space_id=space_id,
+                actor_user_id=actor_user_id,
+                actor_reference=actor,
+                parameters=payload,
+                configuration=configuration,
+            )
         now = self._now()
         job = KnowledgeProcessingJob(
             tenant_id=tenant_id,
@@ -444,7 +646,26 @@ class ProcessingJobRepository:
             idempotency_key=idempotency_key,
             request_hash=request_hash,
             parameters=payload,
-            scope_manifest=manifest,
+            scope_manifest=(
+                [
+                    {
+                        **{
+                            key: value[key]
+                            for key in (
+                                "file_id",
+                                "document_id",
+                                "version_id",
+                                "expected_space_id",
+                                "expected_parent_id",
+                            )
+                        },
+                        "processing_snapshot_digest": _digest(value["processing_snapshot"]),
+                    }
+                    for value in manifest
+                ]
+                if kind == "metadata_schema_change"
+                else manifest
+            ),
             expected_model_config_revision=configuration.model_config_revision,
             accepted_model_config_revision=configuration.model_config_revision,
             expected_index_generation=configuration.index_generation,
@@ -455,6 +676,10 @@ class ProcessingJobRepository:
             next_dispatch_at=now,
             create_time=now,
             update_time=now,
+            state="accepted" if manifest else "succeeded",
+            pending_dispatch=bool(manifest),
+            started_at=None if manifest else now,
+            finished_at=None if manifest else now,
         )
         session.add(job)
         for value in manifest:
@@ -484,6 +709,23 @@ class ProcessingJobRepository:
             reason = "model_config_revision_changed"
         elif job.expected_index_generation != configuration.index_generation:
             reason = "index_generation_changed"
+        elif job.kind == "metadata_schema_change":
+            metadata_evidence = job.parameters if isinstance(job.parameters, Mapping) else {}
+            revision = metadata_evidence.get("metadata_schema_revision")
+            digest = metadata_evidence.get("metadata_schema_digest")
+            if (
+                type(revision) is not int
+                or revision < 0
+                or not isinstance(digest, str)
+                or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+                or configuration.metadata_schema_revision is None
+                or configuration.metadata_schema_digest is None
+            ):
+                reason = "metadata_schema_evidence_missing"
+            elif revision != configuration.metadata_schema_revision:
+                reason = "metadata_schema_revision_changed"
+            elif digest != configuration.metadata_schema_digest:
+                reason = "metadata_schema_digest_changed"
         if reason is None:
             return True
         job.state = "obsolete"
@@ -508,7 +750,7 @@ class ProcessingJobRepository:
             raise ValueError("lease_seconds must be positive")
         if expected_job_revision is not None and (type(expected_job_revision) is not int or expected_job_revision < 0):
             raise ValueError("expected_job_revision must be a non-negative integer")
-        job = await self._job(session, job_id, lock=True)
+        job = await self._job(session, job_id, lock=True, include_manifest=False)
         if expected_job_revision is not None and job.revision != expected_job_revision:
             return None
         now = self._now()
@@ -541,7 +783,7 @@ class ProcessingJobRepository:
     ) -> JobLease | None:
         if type(lease_seconds) is not int or lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
-        job = await self._job(session, lease.job_id, lock=True)
+        job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease):
             return None
         if not self._check_configuration(job, configuration):
@@ -555,7 +797,7 @@ class ProcessingJobRepository:
     async def aclaim_next_item(
         self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration
     ) -> ClaimedItem | None:
-        job = await self._job(session, lease.job_id, lock=True)
+        job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease):
             return None
         if not self._check_configuration(job, configuration):
@@ -563,19 +805,25 @@ class ProcessingJobRepository:
             return None
         now = self._now()
         # Job-row locking serializes item leasing; no dialect-specific SKIP LOCKED.
-        with strict_tenant_filter():
-            candidates = (
-                await session.exec(
-                    select(KnowledgeProcessingItem)
-                    .where(
-                        KnowledgeProcessingItem.job_id == job.id,
-                        KnowledgeProcessingItem.state.in_(["pending", "running"]),
-                    )
-                    .order_by(KnowledgeProcessingItem.file_id, KnowledgeProcessingItem.version_id)
-                    .with_for_update()
-                    .execution_options(populate_existing=True)
+        query = select(KnowledgeProcessingItem).where(
+            KnowledgeProcessingItem.job_id == job.id,
+            KnowledgeProcessingItem.state.in_(["pending", "running"]),
+        )
+        if job.kind == "metadata_schema_change":
+            query = query.where(
+                or_(
+                    KnowledgeProcessingItem.state == "pending",
+                    KnowledgeProcessingItem.lease_until.is_(None),
+                    KnowledgeProcessingItem.lease_until <= now,
                 )
-            ).all()
+            ).limit(1)
+        query = (
+            query.order_by(KnowledgeProcessingItem.file_id, KnowledgeProcessingItem.version_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        with strict_tenant_filter():
+            candidates = (await session.exec(query)).all()
         for row in candidates:
             if row.tenant_id != job.tenant_id:
                 raise KnowledgeProcessingJobNotFoundError()
@@ -607,7 +855,7 @@ class ProcessingJobRepository:
     async def _guard_item(
         self, session: AsyncSession, lease: ItemLease, configuration: ProcessingConfiguration
     ) -> tuple[KnowledgeProcessingJob, KnowledgeProcessingItem] | None:
-        job = await self._job(session, lease.job.job_id, lock=True)
+        job = await self._job(session, lease.job.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease.job):
             return None
         row = await self._item(session, job, lease.item_id)
@@ -659,30 +907,58 @@ class ProcessingJobRepository:
         current_job_lease = JobLease(job.id, job.lease_token, job.claim_generation, job.lease_until)
         return ItemLease(current_job_lease, row.id, row.lease_token, row.claim_generation, row.lease_until)
 
-    async def _item_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> dict[str, int]:
+    async def _state_counts(self, session: AsyncSession, job_id: str) -> dict[str, int]:
         with strict_tenant_filter():
             rows = (
                 await session.exec(
                     select(KnowledgeProcessingItem.state, func.count())
-                    .where(KnowledgeProcessingItem.job_id == job.id)
+                    .where(KnowledgeProcessingItem.job_id == job_id)
                     .group_by(KnowledgeProcessingItem.state)
                 )
             ).all()
-        counts = dict(rows)
+        return dict(rows)
+
+    async def _item_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> dict[str, int]:
+        counts = await self._state_counts(session, job.id)
         total = sum(counts.values())
-        if total != len(job.scope_manifest):
+        expected_count = job.total_count if job.kind == "metadata_schema_change" else len(job.scope_manifest)
+        if total != expected_count:
             raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
         return counts
 
     async def aretry_eligibility(self, session: AsyncSession, job_id: str) -> RetryEligibility:
-        job = await self._job(session, job_id, lock=False)
-        counts = await self._item_counts(session, job)
+        # Eligibility is a read projection, not an execution refresh. Returning
+        # scalars preserves a caller's already loaded public/audit manifest.
+        query = select(
+            KnowledgeProcessingJob.tenant_id,
+            KnowledgeProcessingJob.kind,
+            KnowledgeProcessingJob.state,
+            KnowledgeProcessingJob.total_count,
+            KnowledgeProcessingJob.error_code,
+        ).where(KnowledgeProcessingJob.id == job_id)
+        with strict_tenant_filter():
+            job = (await session.execute(query)).one_or_none()
+        if job is None or job.tenant_id != self._tenant_id():
+            raise KnowledgeProcessingJobNotFoundError()
+        if job.kind == "metadata_schema_change":
+            expected_count = job.total_count
+        else:
+            with strict_tenant_filter():
+                manifest = (
+                    await session.exec(
+                        select(KnowledgeProcessingJob.scope_manifest).where(KnowledgeProcessingJob.id == job_id)
+                    )
+                ).one()
+            expected_count = len(manifest)
+        counts = await self._state_counts(session, job_id)
+        if sum(counts.values()) != expected_count:
+            raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
         terminal_failure = job.state in {"failed", "partial_failed"}
         finalize_only = (
             terminal_failure
             and job.error_code is not None
-            and bool(job.scope_manifest)
-            and counts.get("succeeded", 0) == len(job.scope_manifest)
+            and expected_count > 0
+            and counts.get("succeeded", 0) == expected_count
         )
         return RetryEligibility(
             terminal_failure and (bool(counts.get("failed", 0) + counts.get("pending", 0)) or finalize_only),
@@ -821,9 +1097,9 @@ class ProcessingJobRepository:
             raise ResourceReferenceInvalidError(reason="processing_attempt_background_required")
         if type(expected_job_revision) is not int or expected_job_revision < 0 or type(error_code) is not int:
             raise ValueError("failure requires the observed revision and a public error code")
-        candidate = await self._job(session, job_id, lock=False)
+        candidate = await self._job(session, job_id, lock=False, include_manifest=False)
         root = await KnowledgeModelReferenceRepository().aget(session, candidate.space_id, for_update=True)
-        job = await self._job(session, job_id, lock=True)
+        job = await self._job(session, job_id, lock=True, include_manifest=False)
         if job.state not in {"accepted", "running"}:
             return None
         if lease is not None:
@@ -838,16 +1114,32 @@ class ProcessingJobRepository:
             job.obsolete_reason = "owning_space_missing"
             job.error_code = KnowledgeProcessingObsoleteError.Code
         elif not self._check_configuration(
-            job, ProcessingConfiguration(root.model_config_revision, root.index_generation)
+            job,
+            ProcessingConfiguration(
+                root.model_config_revision,
+                root.index_generation,
+                **(
+                    {
+                        "metadata_schema_revision": root.metadata_schema_revision,
+                        "metadata_schema_digest": _digest(root.metadata_fields or []),
+                    }
+                    if job.kind == "metadata_schema_change"
+                    else {}
+                ),
+            ),
         ):
             await session.flush()
             return job
         else:
+            unfinished_query = select(KnowledgeProcessingItem)
+            if job.kind == "metadata_schema_change":
+                unfinished_query = unfinished_query.options(
+                    defer(KnowledgeProcessingItem.processing_snapshot, raiseload=True)
+                )
             with strict_tenant_filter():
                 unfinished = (
                     await session.exec(
-                        select(KnowledgeProcessingItem)
-                        .where(
+                        unfinished_query.where(
                             KnowledgeProcessingItem.job_id == job.id,
                             KnowledgeProcessingItem.state.in_(("pending", "running")),
                         )
@@ -876,7 +1168,7 @@ class ProcessingJobRepository:
     async def afinalize(
         self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration
     ) -> KnowledgeProcessingJob | None:
-        job = await self._job(session, lease.job_id, lock=True)
+        job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease):
             return None
         if not self._check_configuration(job, configuration):
@@ -904,7 +1196,7 @@ class ProcessingJobRepository:
         actor_reference: Mapping[str, Any],
         configuration: ProcessingConfiguration,
     ) -> JobRequestResult:
-        job = await self._job(session, job_id, lock=True)
+        job = await self._job(session, job_id, lock=True, include_manifest=False)
         key = self._key(idempotency_key)
         actor = self._actor(actor_user_id, actor_reference)
         if type(expected_job_revision) is not int or expected_job_revision < 0:
@@ -940,11 +1232,13 @@ class ProcessingJobRepository:
         if not self._check_configuration(job, configuration):
             await session.flush()
             return JobRequestResult(job, False)
+        retry_query = select(KnowledgeProcessingItem)
+        if job.kind == "metadata_schema_change":
+            retry_query = retry_query.options(defer(KnowledgeProcessingItem.processing_snapshot, raiseload=True))
         with strict_tenant_filter():
             rows = (
                 await session.exec(
-                    select(KnowledgeProcessingItem)
-                    .where(
+                    retry_query.where(
                         KnowledgeProcessingItem.job_id == job.id,
                         KnowledgeProcessingItem.state.in_(["failed", "pending"]),
                     )

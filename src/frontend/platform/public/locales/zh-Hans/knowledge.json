@@ -484,6 +484,7 @@
     "current_folder": "当前文件夹",
     "loading_directory": "正在加载目录…",
     "directory_empty": "此文件夹中暂无可显示内容",
-    "more_files": "加载更多"
+    "more_files": "加载更多",
+    "expand_folders": "展开省略的 {{count}} 层目录"
   }
 }

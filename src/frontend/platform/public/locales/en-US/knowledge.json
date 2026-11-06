@@ -484,6 +484,7 @@
     "current_folder": "Current folder",
     "loading_directory": "Loading folder…",
     "directory_empty": "No items to show in this folder.",
-    "more_files": "Load more"
+    "more_files": "Load more",
+    "expand_folders": "Show {{count}} hidden folder levels"
   }
 }

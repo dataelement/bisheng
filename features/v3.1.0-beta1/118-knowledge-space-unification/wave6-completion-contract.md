@@ -389,7 +389,7 @@ T746两叶和T747一叶仅原F073测试夹具适配实际visible结果键/统一
 
 ### 24.3原metadata桥接分层与双协议装配澄清：已冻结
 
-已rg核所有生产调用：v1 knowledge endpoint与v2 open_endpoints/knowledge皆经KnowledgeService→KnowledgeMetadataService。因此不在Domain import application，也不复制两个API桥接分支。T742在原KnowledgeMetadataService定义窄注入port，SPACE add/rename/delete转交注入writer；writer缺失明确拒绝SPACE写，不回旧无账本路径。QA及其他未统一类型原逻辑保持。T748只在现knowledge/api/dependencies.py的get_knowledge_metadata_service装配真实application/metadata_legacy.py writer；原KnowledgeService facade不用改，其余模块不依赖该application。
+已rg核所有生产调用：v1 knowledge endpoint与v2 open_endpoints/knowledge皆经KnowledgeService→KnowledgeMetadataService。因此不在Domain import application，也不复制两个API桥接分支。T742在原KnowledgeMetadataService定义窄注入port，SPACE add/rename/delete转交注入writer；writer缺失明确拒绝SPACE写，不回旧无账本路径。QA及其他未统一类型原逻辑保持。T748在knowledge/api/dependencies.py与open_endpoints/api/dependencies.py两个真实入口装配同一application/metadata_legacy.py组合工厂；原KnowledgeService facade不改。v2原工厂曾未传metadata_service，不能仅接v1即称双协议闭环。
 
 writer在application中获取真实ambient OpenApiPrincipal（若有，必须与现上下文对象相同并保原knowledge:write/S-D/data_scope），否则原web UserPayload；此原身份用于capture及Owner，不以v2 persistence/audit投影UserPayload制造web session。space ID只定位真实SQL资源，传入旧knowledge对象不构成CAS或授权证明。全部schema+J1通过Owner自己的同一native TX且一次commit，旧先读Session不能先update/commit业务。v1现有字段保持，可加只读processing_job；v2原data=True保持其既有“接收操作”语义，不改成新的task response或声称索引完成。T741真实DI加v1/v2协议/原身份测试，不只mock三方法即宣称闭环；T072需T748实际装配及T071完整链复核后闭合。
 
@@ -485,3 +485,14 @@ T762测试→T763唯一生产`knowledge/domain/repositories/unification_control_
 
 
 §24.3 T740原准入测试接缝（已冻结）：现HTTP precheck DTO只接受embedding_rebuild/file_reprocess/file_resplit/metadata_schema_change，metadata真实开放后四种都已装配。T766仅原test_processing_endpoints.py门禁用例使用FastAPI dependency override：调用原get_processing_service实际工厂，取得真实Owner/Service后仅在该测试实例缩窄available_kinds；仍以合法metadata请求验证10999。原bad pagination/state 422保持，其他测试继续生产默认工厂。不能编造file_move或放宽DTO、恢复生产metadata拒绝、删skip原门禁。T748的精确DI合同已在40553507f及本文件§24.3冻结，读主功能树即可，不依赖旧lane文档版本。
+
+
+§24.3双DI真实调用补正（已冻结）：已实际读v2 `open_endpoints/api/dependencies.py:get_knowledge_service`，其原直接构造KnowledgeService(repo,file_repo)，并未Depends v1的metadata工厂。T748因此明确两个API DI叶。T742已有application/metadata_legacy.py内定义唯一纯组合函数`build_legacy_metadata_service(*,knowledge_repository,knowledge_file_repository,permission_service=None)`：构造原Domain KnowledgeMetadataService并注同一真实SPACE writer；未显式permission_service沿原KnowledgePermissionService语义，不改当前权限运行时。两个API DI分别调用此application工厂，v1保持原注入permission实例，v2把返回metadata_service传原KnowledgeService；不跨模块import API，不复制业务桥接，也不在Domain反向import application。T741真实双router/DI红测应先暴露v2未注入事实，再检验两端SPACE均通过同TX schema+J1且原v2 principal/data=True保留。
+
+
+§27详情URL与Breadcrumb词条补充（已冻结）：维持现`/filelib/:id`，可选`?parent_id=<positive safe decimal integer>`表示当前目录；无该参数才是根。新query键不是授权证明，只定位真实后端parent；存在但为空、重复、非法格式、非正数或超safe integer时页面明确无效且不请求root/children，不静默退回根。点击folder或真实breadcrumb仅设置/删除parent_id，保fileStatus及其他原query；切目录沿真实完整scope重新读，不能复活旧行。直达合法子目录只读实际breadcrumb/children，不以root info或root.visible作前置；root info错误不阻止独立目录结果。Header新增可选受控title/description，空字符串仍受控，不以window/storage补SPACE权威；未提供props的原QA分支保兼容。
+
+复用当前@bisheng/ui Breadcrumb折叠能力，ariaLabel用现f118.current_folder；新增唯一键f118.expand_folders（须保{{count}}），中文“展开省略的 {{count}} 层目录”、英文“Show {{count}} hidden folder levels”、日文“省略された {{count}} 階層のフォルダーを表示”。locale由INT独写，T767中英/T768日文，原所有key/value不变；不新建UI组件或设计风格。
+
+
+§24.3旧空操作兼容补充（已冻结）：原legacy add/update/delete允许空字段列表。仅该协议writer对解析后changes=[]保原no-op：仍核实际ambient身份、真实SPACE/tenant和原容器edit等原业务准入，返回实际原schema，不把None改为空数组；不建Plan/J1/虚假item、不推进schema或R/G修订，不生成accepted/completed假任务。新processing precheck DTO的changes min_length=1保持。非空原完整schema+J1同TX逻辑不变；T741原叶先加三操作的空请求、无权限拒绝/SQL零写及两协议原响应测试，再在T742原writer叶窄实现。

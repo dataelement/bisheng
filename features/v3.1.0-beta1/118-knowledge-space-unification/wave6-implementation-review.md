@@ -120,3 +120,12 @@ T760/T761按事实仓储实际范围闭合。九页独立主键seek、每页≤2
 ## 原创建者与配额配置盘点事实收口（2026-11-07）
 
 固定05ad0f5d9仅两个新叶，Root已逐段独立读审：User.user_id精确存在性保delete事实、UserTenant显式tenant保历史、UserRole三键完整seek、quota原配置只读且repr隐藏、四个global LIMIT1探针由外层一次调用。作者102配对绿/12路径492绿；Root候选与实际合流树分别四路径278绿（`/private/tmp/f118-root-mig-control-candidate.log`与`/private/tmp/f118-root-mig-control-integrated.log/.xml`），无行动项。MIG原T161/T162仍待完整预检/闭集artifact和全租户正式freeze，不以新增事实仓储替代。
+
+
+## 实际目录、上传默认首阶段与静态收口（2026-11-07）
+
+目录原3c0独立审发现并复现row消失后同ID恢复复活旧draft/迟到权限、Radix关闭丢retry两P2；作者7192修复后发现者原样四反例4绿、相关104绿。Root正常合入，之后空suppression lint查出新rows数组每render触发effect的真实剩余告警，原作者7fb useMemo修复且原四反例不变。主树9e2a0c1d的五真实路径121绿（`/private/tmp/f118-root-directory-memo-integrated.log`）；主树最终strict精确22条既有诊断，新增/移除均0，未报typecheck通过。Root两次官方lint:prune均exit0，仅Files旧抑制条目先6行后5行删除（608956f2a、536cc833c），新目录空suppression直接零诊断。T754/T755/T764闭合；T756/T757依§27继续，原T177版本链尚未闭。
+
+上传固定ba01d10a2经非作者PERM复核，无确认问题：真实process_one_file/snapshot→保存split_rule→preview key/V1→原队列；额外独立四格验证新默认改变新preview指纹且不改旧快照、真实注册后quota/权限失败通过实际DI version/doc仓储补偿，原File/Doc/Version保留，无派发。Root正常merge4e2736f0，主树10路径73绿（`/private/tmp/f118-root-kn-upload-integrated.log/.xml`）。原前驱3新快照红、旧假结果另3红已按T765补字段闭合；扩展version15旧失败及另upload_size6旧失败各与固定前驱同集合，保留未绿不伪报成功。T765闭合，T083/T084仅默认/V1首阶段，整卡与新增高级wire仍未验收；音视频只kind/规则快照验证，非真实ASR。
+
+实际DI核对更正：v2独立KnowledgeService工厂未注入metadata_service，T748补第二API DI叶，共同调用T742 application纯组合工厂。禁止跨API import或以测试mock替代真实DI。元数据739/740新链仍待固定独立审/合流及旧协议桥接，不将待合分支数字记成主树结果。
