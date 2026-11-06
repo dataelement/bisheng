@@ -796,6 +796,7 @@ async def retrieve_chunks(
     principal = get_current_open_api_principal()
     if principal is not None and principal.actor_kind == HOSTED_APP_ACTOR_KIND:
         result = await CapabilityBusService.retrieve(
+            principal=principal,
             app_id=principal.subject_ref or "",
             access_user_id=hosted_app_access_user(request, principal),
             query=req.query,

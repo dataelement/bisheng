@@ -13,8 +13,8 @@ from bisheng.channel.domain.repositories.interfaces.channel_knowledge_sync_repos
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.channel.domain.schemas.channel_manager_schema import AddArticlesToKnowledgeSpaceRequest
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
-from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import ArticleSensitiveViolationError
+from bisheng.common.errcode.knowledge import KnowledgeUnificationError, ReferenceCoverageNotReadyError
 from bisheng.common.errcode.knowledge_space import (
     SpaceFileNameDuplicateError,
     SpaceFolderNotFoundError,
@@ -34,12 +34,14 @@ class InformationKnowledgeDeliveryService:
         *,
         channel_service: Any | None = None,
         get_conf: Callable[[], IntelligenceCenterConf] | None = None,
+        prepare_delivery: Callable | None = None,
     ) -> None:
         self.channel_repository = channel_repository
         self.config_repository = config_repository
         self.article_service = article_service
         self.channel_service = channel_service
         self._get_conf = get_conf
+        self._prepare_delivery = prepare_delivery
 
     def _conf(self) -> IntelligenceCenterConf:
         if self._get_conf is not None:
@@ -130,18 +132,38 @@ class InformationKnowledgeDeliveryService:
             return result
         if self.channel_service is None:
             raise RuntimeError("channel_service is required for knowledge delivery")
-        failed = Counter()
-        login_user = UserPayload(
-            user_id=int(config.user_id),
-            tenant_id=tenant_id,
-            user_name="information-worker",
-            user_role=[],
+        if self._prepare_delivery is None:
+            raise ReferenceCoverageNotReadyError(reason="channel_delivery_admission_unconfigured")
+        # The worker composes the actual application facade. Domain routing
+        # never synthesizes a person or treats config existence as admission.
+        prepared = await self._prepare_delivery(tenant_id, channel.id, sync_config_id, detected_at)
+        config = prepared.config
+        channel = prepared.channel
+        login_user = prepared.identity
+        unique_ids = list(dict.fromkeys(article_ids))
+        rules = []
+        if config["sub_channel_name"]:
+            rules = [
+                rule
+                for rule in channel["filter_rules"]
+                if isinstance(rule, dict)
+                and rule.get("channel_type") == "sub"
+                and rule.get("name") == config["sub_channel_name"]
+            ]
+        # Re-read source/filter selection from the same admitted snapshot.
+        # A queued batch cannot silently use a removed source or old subrule.
+        selected_ids = await asyncio.to_thread(
+            self.article_service.match_article_ids_sync,
+            unique_ids,
+            list(dict.fromkeys(str(item) for item in channel["source_list"])),
+            rules,
         )
-        for article_id in dict.fromkeys(article_ids):
+        failed = Counter()
+        for article_id in dict.fromkeys(selected_ids):
             request = AddArticlesToKnowledgeSpaceRequest(
-                knowledge_id=int(config.knowledge_space_id),
+                knowledge_id=int(config["knowledge_space_id"]),
                 article_ids=[article_id],
-                parent_id=(int(config.folder_id) if config.folder_id and str(config.folder_id).isdigit() else None),
+                parent_id=int(config["folder_id"]) if config["folder_id"] is not None else None,
                 skip_missing_and_duplicates=False,
             )
             try:
@@ -190,6 +212,8 @@ class InformationKnowledgeDeliveryService:
 
     @staticmethod
     def _classify_failure(exc: Exception) -> str:
+        if isinstance(exc, KnowledgeUnificationError):
+            return "reference_not_ready" if exc.code == 10994 else "invalid_reference"
         if isinstance(exc, SpaceFileNameDuplicateError):
             return "duplicate_name"
         if isinstance(exc, (SpaceNotFoundError, SpaceFolderNotFoundError)):
