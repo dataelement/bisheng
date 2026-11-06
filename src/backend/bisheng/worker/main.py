@@ -77,6 +77,16 @@ def _register_worker_permission_contexts() -> None:
     register_department_projection_runtime_context()
 
 
+def _prepare_native_reference_permissions() -> None:
+    """Prepare native readers on the existing persistent worker loop."""
+    if not settings.openfga.enabled:
+        return
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+    from bisheng.worker._asyncio_utils import run_async_task
+
+    run_async_task(get_f048_process_runtime)
+
+
 def _register_app_publish_composition() -> None:
     """Subscribe F055 to F054's deletion event on this worker.
 
@@ -109,6 +119,7 @@ def on_worker_init(*args, **kwargs):
     get_worker_loop()  # start the persistent loop thread before any task arrives
     run_async_task(lambda: initialize_app_context(settings, instance_role="celery"))
     _register_worker_permission_contexts()
+    _prepare_native_reference_permissions()
     _register_app_publish_composition()
     _register_resource_reference_composition()
     queues = bisheng_celery.amqp.queues

@@ -22,7 +22,11 @@ def helper(module, enabled):
     path = ROOT / module
     tree = ast.parse(path.read_text())
     function = next(
-        (node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == HELPER),
+        (
+            node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == HELPER
+        ),
         None,
     )
     assert function is not None, "startup must explicitly prepare native reference permissions"
@@ -53,8 +57,10 @@ async def test_real_helpers_initialize_only_enabled_permission_runtime(monkeypat
 async def test_readiness_failure_is_not_swallowed_as_success(monkeypatch, module):
     error = RuntimeError("permission migration is not ready")
     monkeypatch.setattr(process_runtime, "get_f048_process_runtime", AsyncMock(side_effect=error))
+
     def fail(factory):
         raise error
+
     monkeypatch.setattr(_asyncio_utils, "run_async_task", fail)
     prepare = helper(module, True)
     with pytest.raises(RuntimeError) as raised:
@@ -67,14 +73,20 @@ async def test_readiness_failure_is_not_swallowed_as_success(monkeypatch, module
 
 @pytest.mark.parametrize(
     "module,caller,register",
-    [("main.py", "lifespan", "_register_permission_runtime_contexts"),
-     ("worker/main.py", "on_worker_init", "_register_worker_permission_contexts")],
+    [
+        ("main.py", "lifespan", "_register_permission_runtime_contexts"),
+        ("worker/main.py", "on_worker_init", "_register_worker_permission_contexts"),
+    ],
 )
 def test_prepare_is_called_before_business_composition_and_reception(module, caller, register):
     tree = ast.parse((ROOT / module).read_text())
-    function = next(node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == caller)
+    function = next(
+        node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == caller
+    )
     calls = sorted(
-        ((node.lineno, node.func.id) for node in ast.walk(function) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name))
+        (node.lineno, node.func.id)
+        for node in ast.walk(function)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
     )
     names = [name for _, name in calls]
     assert HELPER in names
