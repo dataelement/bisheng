@@ -288,7 +288,8 @@ async def test_real_root_super_uses_existing_business_shortcut_after_selected_te
         reset_current_permission_actor(token)
 
 
-async def test_real_super_home_actor_cannot_adopt_sql_tenant_without_management_pin(catalog, monkeypatch):
+@pytest.mark.parametrize("context", ["no_pin", "wrong_pin", "different_subject"])
+async def test_real_super_home_actor_cannot_adopt_untrusted_management_scope(catalog, monkeypatch, context):
     original = UserPayload(user_id=7, tenant_id=1, user_role=[], is_global_super=True)
     service = KnowledgeSpaceService(
         None,
@@ -298,9 +299,17 @@ async def test_real_super_home_actor_cannot_adopt_sql_tenant_without_management_
     )
     scan = AsyncMock(side_effect=AssertionError("untrusted tenant must not scan SQL"))
     monkeypatch.setattr(catalog.repository, "alist_candidates", scan)
-    token = set_current_permission_actor(None)
+    contextual = (
+        PermissionActor(user_id=8, current_tenant_id=1, super_admin=True) if context == "different_subject" else None
+    )
+    token = set_current_permission_actor(contextual)
     try:
-        with tenant_execution_scope(101), pytest.raises(PermissionDeniedError):
+        scope = tenant_execution_scope(101) if context == "no_pin" else management_tenant_scope(101)
+        if context == "wrong_pin":
+            monkeypatch.setattr(
+                "bisheng.knowledge.domain.services.knowledge_space_service.get_admin_scope_tenant_id", lambda: 202
+            )
+        with scope, pytest.raises(PermissionDeniedError):
             await service.list_visible_spaces()
         scan.assert_not_awaited()
         assert original.tenant_id == (await service._permission_actor()).current_tenant_id == 1
