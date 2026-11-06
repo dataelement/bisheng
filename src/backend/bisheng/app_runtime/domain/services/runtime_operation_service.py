@@ -837,31 +837,69 @@ class RuntimeOperationService:
         }
 
     async def application(self, identity, app_id):
-        with bypass_tenant_filter():
-            assignments = await self.repo.find(RuntimeAssignment, app_id=app_id)
-            if not assignments or assignments[0].node_id != identity.node_id:
-                raise RuntimeConflict("application_not_found")
-            app = await self.app_loader(app_id)
-            if app is None or app.state == "deleted":
-                raise RuntimeConflict("application_not_found")
-            routes = await self.repo.find(RuntimeRoute, route_key=f"app:{app_id}")
-            route = routes[0] if routes else None
-            return {
-                "app_id": app.id,
-                "tenant_id": app.tenant_id,
-                "node_id": identity.node_id,
-                "generation": assignments[0].generation,
-                "owner_epoch": assignments[0].owner_epoch,
-                "phase": route.status if route else app.state,
-                "exec_ref": route.exec_ref if route else None,
-                "runtime_user": (await self.repo.get(RuntimeOperation, route.operation_id))
-                .payload.get("resolved_delivery", {})
-                .get("profile", {})
-                if route and route.operation_id
-                else {},
-                "operation_id": route.operation_id if route else None,
-                "target": route.target if route else None,
-            }
+        # One fresh repository UoW keeps the assignment, destroy and route facts
+        # in the same read snapshot. It grants no business/source access.
+        async with self.repo.transaction():
+            with bypass_tenant_filter():
+                assignments = await self.repo.find(RuntimeAssignment, app_id=app_id)
+                if len(assignments) != 1 or assignments[0].node_id != identity.node_id:
+                    raise RuntimeConflict("application_not_found")
+                assignment = assignments[0]
+                app = await self.app_loader(app_id)
+                if app is None:
+                    raise RuntimeConflict("application_not_found")
+                if app.state == "deleted":
+                    destroy = (
+                        await self.repo.get(RuntimeOperation, assignment.active_operation_id)
+                        if assignment.active_operation_id
+                        else None
+                    )
+                    now = self.clock()
+                    normal = bool(
+                        destroy
+                        and destroy.status not in {"completed", "failed", "cancelled", "timed_out"}
+                        and destroy.deadline > now
+                        and destroy.cleanup_status != "complete"
+                    )
+                    recovery = bool(
+                        destroy
+                        and destroy.status == "timed_out"
+                        and destroy.cleanup_status == "pending"
+                        and destroy.deadline <= now
+                        and isinstance(destroy.failure, dict)
+                        and destroy.failure.get("reason") == "operation_timeout"
+                    )
+                    if (
+                        destroy is None
+                        or not (normal or recovery)
+                        or (destroy.app_id, destroy.tenant_id, destroy.node_id, destroy.generation, destroy.owner_epoch)
+                        != (app.id, app.tenant_id, assignment.node_id, assignment.generation, assignment.owner_epoch)
+                        or assignment.tenant_id != app.tenant_id
+                        or destroy.scope_key != f"{app.tenant_id}/{app.id}"
+                        or destroy.kind != "destroy"
+                        or not isinstance(destroy.payload, dict)
+                        or destroy.payload.get("purge_volume") is not True
+                        or destroy.payload.get("delete_secret_config") is not True
+                    ):
+                        raise RuntimeConflict("application_not_found")
+                routes = await self.repo.find(RuntimeRoute, route_key=f"app:{app_id}")
+                route = routes[0] if routes else None
+                return {
+                    "app_id": app.id,
+                    "tenant_id": app.tenant_id,
+                    "node_id": identity.node_id,
+                    "generation": assignment.generation,
+                    "owner_epoch": assignment.owner_epoch,
+                    "phase": route.status if route else app.state,
+                    "exec_ref": route.exec_ref if route else None,
+                    "runtime_user": (await self.repo.get(RuntimeOperation, route.operation_id))
+                    .payload.get("resolved_delivery", {})
+                    .get("profile", {})
+                    if route and route.operation_id
+                    else {},
+                    "operation_id": route.operation_id if route else None,
+                    "target": route.target if route else None,
+                }
 
     async def observation(self, identity, body):
         with bypass_tenant_filter():
