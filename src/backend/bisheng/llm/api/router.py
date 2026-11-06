@@ -13,6 +13,8 @@ from bisheng.core.database import get_async_db_session
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.llm.application.model_default import ModelDefaultApplication, current_model_default_tenant
+from bisheng.llm.application.model_default_read import get_model_default_read_runtime
+from bisheng.llm.domain.services.default_reference_extractor import MODEL_DEFAULT_SCHEMAS
 from bisheng.utils.http_middleware import _check_is_global_super
 from bisheng.utils.mask_data import JsonFieldMasker
 
@@ -135,6 +137,12 @@ def _envelope(cfg, inherited: bool, blocked: bool) -> dict[str, Any]:
     }
 
 
+async def _read_default_metadata(key, login_user):
+    raw = await get_model_default_read_runtime().aget_default(key, login_user=login_user)
+    config = MODEL_DEFAULT_SCHEMAS[key].model_validate_json(raw.payload_json)
+    return config, raw.inherited_from_root, raw.fallback_blocked
+
+
 def _resolve_write_target(login_user: UserPayload) -> int:
     """Use the actual current/F019 tenant; explicit identities never select it."""
     return current_model_default_tenant()
@@ -239,7 +247,7 @@ async def verify_model_status(
 async def get_workbench_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Get Idea-Related Model Configurations. Honors admin-scope; envelope
     surfaces ``inherited_from_root`` / ``fallback_blocked`` for the UI."""
-    cfg, inherited, blocked = await LLMService.aget_workbench_llm_with_meta()
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.LINSIGHT_LLM.value, login_user)
     from bisheng.dsh.domain.services.model_catalog import project_workbench_config
 
     cfg = await project_workbench_config(cfg, login_user.user_id)
@@ -251,7 +259,7 @@ async def get_workbench_settings(login_user: UserPayload = Depends(UserPayload.g
     """Return stored metadata to administrators, preserving hidden and offline rows."""
     target = _resolve_write_target(login_user)
     await _assert_can_write_system_config(login_user, target)
-    cfg, inherited, blocked = await LLMService.aget_workbench_llm_with_meta(tenant_id=target)
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.LINSIGHT_LLM.value, login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
@@ -312,7 +320,7 @@ async def invoke_workbench_tts(
 
 @router.get("/knowledge")
 async def get_knowledge_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    cfg, inherited, blocked = await LLMService.aget_knowledge_llm_with_meta()
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.KNOWLEDGE_LLM.value, login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
@@ -340,7 +348,7 @@ async def update_knowledge_llm(
 @router.get("/assistant")
 async def get_assistant_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Get assistant related model configuration"""
-    cfg, inherited, blocked = await LLMService.aget_assistant_llm_with_meta()
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.ASSISTANT_LLM.value, login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
@@ -368,7 +376,7 @@ async def update_assistant_llm(
 @router.get("/evaluation")
 async def get_evaluation_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Get evaluation related model configurations"""
-    cfg, inherited, blocked = await LLMService.aget_evaluation_llm_with_meta()
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.EVALUATION_LLM.value, login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
@@ -396,7 +404,7 @@ async def update_evaluation_llm(
 @router.get("/workflow")
 async def get_workflow_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Get workflow-related model configurations"""
-    cfg, inherited, blocked = await LLMService.aget_workflow_llm_with_meta()
+    cfg, inherited, blocked = await _read_default_metadata(ConfigKeyEnum.WORKFLOW_LLM.value, login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 
