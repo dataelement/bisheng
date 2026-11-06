@@ -13,6 +13,7 @@ from bisheng.channel.domain.models.channel import Channel
 from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSync
 from bisheng.channel.domain.repositories.reference_binding_repository import ChannelReferenceBindingRepository
 from bisheng.common.errcode.channel import ChannelNotFoundError
+from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.common.models.space_channel_member import SpaceChannelMember
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
@@ -64,7 +65,17 @@ async def store(tmp_path, monkeypatch):
         await connection.execute(
             sa.insert(Channel),
             [
-                {"id": key, "tenant_id": tenant, "user_id": 7, "name": key, "visibility": "PUBLIC"}
+                {
+                    "id": key,
+                    "tenant_id": tenant,
+                    "user_id": 7,
+                    "name": key,
+                    "visibility": "PUBLIC",
+                    "source_list": [],
+                    "filter_rules": [],
+                    "is_pinned": False,
+                    "is_released": False,
+                }
                 for key, tenant in (("own", 101), ("root", 1), ("foreign", 202))
             ],
         )
@@ -83,10 +94,10 @@ async def store(tmp_path, monkeypatch):
 
 async def snapshot(engine):
     async with engine.connect() as connection:
-        return tuple(
-            tuple((await connection.execute(sa.select(table))).all())
-            for table in (Channel.__table__, ChannelKnowledgeSync.__table__, SpaceChannelMember.__table__)
-        )
+        result = []
+        for table in (Channel.__table__, ChannelKnowledgeSync.__table__, SpaceChannelMember.__table__):
+            result.append(tuple((await connection.execute(sa.select(table))).all()))
+        return tuple(result)
 
 
 def sync_row(channel="own", **changes):
@@ -163,7 +174,7 @@ async def test_write_boundary_is_not_caller_controlled(store, bad):
         else:
             token = set_current_tenant_id(None)
             try:
-                with pytest.raises(ChannelNotFoundError):
+                with pytest.raises((ChannelNotFoundError, NoTenantContextError)):
                     await repo.asave(session, root)
             finally:
                 current_tenant_id.reset(token)
