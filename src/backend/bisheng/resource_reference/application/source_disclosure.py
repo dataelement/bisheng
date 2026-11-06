@@ -5,6 +5,7 @@ from types import MappingProxyType
 from typing import Protocol
 
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_is_management_api
 from bisheng.resource_reference.application.contracts import SourceKey, SourceType, TransactionIdentity
 from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
 
@@ -48,6 +49,7 @@ class SourceDisclosureRuntime:
         if not source_keys:
             return ()
         try:
+            management_scope = (get_is_management_api(), get_admin_scope_tenant_id())
             original = await self.identity.acapture(identity)
             transaction = TransactionIdentity.capture(session)
             groups = {}
@@ -69,9 +71,13 @@ class SourceDisclosureRuntime:
                         raise ReferenceCoverageNotReadyError(reason="source_disclosure_mismatched_result")
                     result[index] = item
                 transaction.assert_current(session)
+                if (get_is_management_api(), get_admin_scope_tenant_id()) != management_scope:
+                    raise ReferenceCoverageNotReadyError(reason="source_disclosure_management_scope_changed")
             if await self.identity.acapture(identity) != original:
                 raise ReferenceCoverageNotReadyError(reason="source_disclosure_identity_changed")
             transaction.assert_current(session)
+            if (get_is_management_api(), get_admin_scope_tenant_id()) != management_scope:
+                raise ReferenceCoverageNotReadyError(reason="source_disclosure_management_scope_changed")
             return tuple(result)
         except ReferenceCoverageNotReadyError:
             raise
