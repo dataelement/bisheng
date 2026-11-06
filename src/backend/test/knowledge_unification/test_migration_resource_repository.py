@@ -131,7 +131,7 @@ def resource(ident, tenant=101, **changes):
         "metadata_fields": [{"name": "private-field", "type": "string"}],
         "create_time": NOW,
         "update_time": NOW,
-        "creation_request_id": "old-request",
+        "creation_request_id": f"old-request-{ident}",
         "creation_payload_hash": "a" * 64,
         **changes,
     }
