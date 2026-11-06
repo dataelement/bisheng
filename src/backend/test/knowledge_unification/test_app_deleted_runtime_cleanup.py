@@ -130,6 +130,7 @@ async def test_fenced_active_destroy_can_read_only_cleanup_facts_and_source_stay
         "wrong_tenant",
         "wrong_generation",
         "wrong_epoch",
+        "wrong_scope",
         "stop",
         "deploy",
         "preview",
@@ -157,6 +158,8 @@ async def test_other_deleted_resource_requests_are_not_cleanup_permission(cleanu
             changes["generation"] = 99
         elif bad == "wrong_epoch":
             changes["owner_epoch"] = 99
+        elif bad == "wrong_scope":
+            changes["scope_key"] = "202/foreign"
         elif bad in {"stop", "deploy", "preview"}:
             changes["kind"] = bad
         elif bad in {"no_purge", "no_secret_flag"}:
