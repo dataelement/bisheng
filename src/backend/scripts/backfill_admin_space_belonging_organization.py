@@ -7,7 +7,8 @@
 科室库使用 department_knowledge_space.department_id, 且必须是有效科室。
 团队库优先使用部门绑定或 owner 为部门的组织; 否则使用团队创建人的唯一有效主组织。
 只改 user_id 为 admin 的文件行, 不改目录、收藏引用和投影墓碑, 不改 update_time。
-已等于目标组织的不写。默认只预览。--apply 写完 MySQL 后, 再跑内容统计对账, 刷新 Elasticsearch 里的所属组织。
+已等于目标组织的不写。默认只预览。预览前会初始化 OpenFGA 客户端。
+--apply 写完 MySQL 后, 再跑内容统计对账, 刷新 Elasticsearch 里的所属组织。
 
 在 src/backend 执行:
   .venv/bin/python scripts/backfill_admin_space_belonging_organization.py --tenant-id 1 --output /tmp/admin-org-plan.jsonl
@@ -536,6 +537,34 @@ def sync_content_stat() -> dict:
     return result
 
 
+async def ensure_openfga(
+    settings=None,
+    app_context=None,
+    manager_cls=None,
+    get_client=None,
+) -> None:
+    """Register the OpenFGA client. A bare script process only opens the database."""
+    if settings is None or app_context is None or manager_cls is None or get_client is None:
+        from bisheng.common.services.config_service import settings as loaded_settings
+        from bisheng.core.context.manager import app_context as loaded_context
+        from bisheng.core.openfga.manager import FGAManager, aget_fga_client
+
+        settings = loaded_settings if settings is None else settings
+        app_context = loaded_context if app_context is None else app_context
+        manager_cls = FGAManager if manager_cls is None else manager_cls
+        get_client = aget_fga_client if get_client is None else get_client
+
+    if not settings.openfga.enabled:
+        raise RuntimeError("OpenFGA 未启用。部门库无法读取 manager")
+    try:
+        app_context.get_context("openfga")
+    except KeyError:
+        app_context.register_context(manager_cls(openfga_config=settings.openfga))
+    client = await get_client()
+    if client is None:
+        raise RuntimeError("OpenFGA 客户端初始化失败。部门库无法读取 manager")
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     result.add_argument("--tenant-id", type=int)
@@ -558,6 +587,8 @@ async def run(args: argparse.Namespace) -> int:
         raise SystemExit("写入必须使用 --plan --apply")
     if not args.plan and (not args.tenant_id or args.tenant_id <= 0):
         raise SystemExit("预览必须指定 --tenant-id")
+    if not args.plan:
+        await ensure_openfga()
     with JsonlJournal(args.output) as journal:
         async with get_async_db_session() as session:
             if args.plan:
