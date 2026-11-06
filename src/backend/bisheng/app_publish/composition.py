@@ -34,23 +34,22 @@ _app_reference_read_runtime = None
 
 
 def _app_reference_runtime(identity_port, authorization_context=None):
+    from bisheng.app_publish.application.reference_access import HostedAppReferenceReadRuntime
     from bisheng.app_publish.application.reference_source_owner import HostedAppReferenceSourceOwner
     from bisheng.knowledge.application.reference_read_legacy_evidence import KnowledgeReferenceReadLegacyEvidence
     from bisheng.knowledge.application.source_read_target_owner import KnowledgeSourceReadTargetOwner
     from bisheng.llm.application.source_read_target_owner import ModelSourceReadTargetOwner
     from bisheng.resource_reference.application.contracts import SourceType, TargetType
-    from bisheng.resource_reference.application.source_read import ReferenceSourceReadRuntime
     from bisheng.resource_reference.application.source_verification import SourceReadVerifier
     from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
 
-    verifier = SourceReadVerifier(
-        {SourceType.HOSTED_APP_VERSION: HostedAppReferenceSourceOwner(authorization_context=authorization_context)},
-        identity_port,
-    )
+    owner = HostedAppReferenceSourceOwner(authorization_context=authorization_context)
+    verifier = SourceReadVerifier({SourceType.HOSTED_APP_VERSION: owner}, identity_port)
     legacy = KnowledgeReferenceReadLegacyEvidence(verifier)
     model = ModelSourceReadTargetOwner(verifier, legacy_evidence=legacy)
     knowledge = KnowledgeSourceReadTargetOwner(verifier, legacy_evidence=legacy)
-    return ReferenceSourceReadRuntime(
+    return HostedAppReferenceReadRuntime(
+        owner,
         verifier,
         SourceReadRepository(verifier),
         {TargetType.MODEL: model, TargetType.KNOWLEDGE_SPACE: knowledge, TargetType.KNOWLEDGE_FILE: knowledge},

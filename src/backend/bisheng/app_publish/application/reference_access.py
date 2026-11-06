@@ -7,6 +7,25 @@ _runtime: ReferenceSourceReadRuntime | None = None
 _user_factory = None
 
 
+class HostedAppReferenceReadRuntime(ReferenceSourceReadRuntime):
+    """APP-only authority keeps final model checks bound to whole-source admission."""
+
+    def __init__(self, source_owner, verifier, repository, target_owners):
+        super().__init__(verifier, repository, target_owners)
+        self._source_owner = source_owner
+        self._admission_authority = object()
+        source_owner._install_admission_authority(self._admission_authority)
+
+    @property
+    def source_owner(self):
+        return self._source_owner
+
+    async def arequire_source_valid(self, session, scope, identity):
+        result = await super().arequire_source_valid(session, scope, identity)
+        self.source_owner._mark_admitted(self._admission_authority, session, result.snapshot, identity)
+        return result
+
+
 def configure_hosted_app_reference_runtimes(runtime, user_factory):
     global _runtime, _user_factory
     if not isinstance(runtime, ReferenceSourceReadRuntime) or not callable(user_factory):
