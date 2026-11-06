@@ -800,6 +800,6 @@ KnowledgeModelReadRuntime 是内部模型配置消费门面，独立私有 graph
 
 清理专用 vectorstore 构造不调用模型，实际 index 由当前 own Knowledge 或当前持久删除 job 的租约和冻结 manifest 核验，不能以 isFake 绕过标准执行。文件/文件夹仍保持原动作、引用范围与投影在先顺序；本波出向绑定接线不宣称完整入向 R3 删除协调、跨 SQL/ES/Milvus 原子提交或故障恢复演练完成。
 
-API/Celery 在原生来源读取接收业务前显式准备既有 F048 runtime；同步 getter 只读 READY 对象，不懒初始化异步数据库。启动取消两个默认 JSON 的在线 backfill；未来数据转换只能在升级说明的停服、备份、正式盘点并冻结 baseline/plan 后执行。未运行迁移，不自动制造来源索引或 Coverage ready。固定交付、集成验证与其余任务见 [W4 集成复查](./wave4-implementation-review.md)。
+API、Celery 和独立 Linsight 子进程在原生来源读取接收业务前显式准备既有 F048 runtime；同步 getter 只读 READY 对象，不懒初始化异步数据库。启动取消两个默认 JSON 的在线 backfill；未来数据转换只能在升级说明的停服、备份、正式盘点并冻结 baseline/plan 后执行。未运行迁移，不自动制造来源索引或 Coverage ready。固定交付、集成验证与其余任务见 [W4 集成复查](./wave4-implementation-review.md)。
 
 W4最终验证：d4d02e48b7d724c9ffe31d9650b75951eeb94e14，81路径2390 passed及6 subtests；438/597任务完成。170文件格式通过，架构及Ruff新增0，55条既有Ruff诊断已比对。此为本地SQLite/Port与实际调用链证据，不是双库/中间件、完整特性E2E或升级放行。

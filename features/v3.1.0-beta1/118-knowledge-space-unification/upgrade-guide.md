@@ -105,7 +105,7 @@ API 启动不再执行 linsight_default_model_backfill/chat_default_model_backfi
 
 升级后验收至少核对：APP 冻结模型与最终 alias/ID/server 一致及失效管理展示；频道自动化真实主体与上传前拒绝；默认覆盖/继承/恢复和跨多空间同事务变更；同 ID 知识元数据修改不触发重建；worker 由当前业务配置选模型并拒过期 operation/revision/generation；清理不因已失效模型失败。默认和知识联动提交后才派发任务，派发故障不能记录为配置已回滚。先查询持久资源 operation/revision，再由运维按原操作处置，不通过重复改模型制造新版本。
 
-API 和 Celery 的原生共享读取依赖 F048 runtime 显式 READY，准备失败明确阻止接收该业务。旧已删应用的持久 destroy/purge intent 仍保留清理诊断和操作 ID；本波不提供自动 destroy 恢复或 Docker/K8s 实机证明。MySQL/DM8 锁竞争、真实 FGA/队列/检索/模型、浏览器 E2E、CI、停服迁移和部署证据仍需单独收集；本地 SQLite/Port 通过数不能替代这些检查。
+API、Celery 和独立 Linsight 子进程的原生共享读取依赖 F048 runtime 显式 READY，准备失败明确阻止接收该业务。旧已删应用的持久 destroy/purge intent 仍保留清理诊断和操作 ID；本波不提供自动 destroy 恢复或 Docker/K8s 实机证明。MySQL/DM8 锁竞争、真实 FGA/队列/检索/模型、浏览器 E2E、CI、停服迁移和部署证据仍需单独收集；本地 SQLite/Port 通过数不能替代这些检查。
 
 M2 还须单独盘点旧 rebuild 消息：只有 knowledge_id/modelHint/auditUser、没有 operation/config_revision/index_generation，或 Knowledge 已无 transition 的旧消息，升级后会在外部 IO 前明确拒绝并保留诊断，不从当前值补造原操作证明。队列保留不等于该类旧重建消息可原样执行；正式 M3 受控转换或运维按新业务操作恢复的方案仍须实现/演练，未完成前不得升级放行。该限制只针对缺合法重建操作事实的消息，不概括为全部存量任务失效。
 

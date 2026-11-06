@@ -241,6 +241,18 @@ class LinsightQueue:
                 await self.__db.alrem(self.key, item)
 
 
+async def _prepare_reference_runtime() -> None:
+    """Prepare process-local model and knowledge readers before accepting work."""
+    if settings.openfga.enabled:
+        from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+        await get_f048_process_runtime()
+
+    from bisheng.resource_reference.composition import register
+
+    register()
+
+
 class ScheduleCenterProcess(Process):
     def __init__(
         self,
@@ -492,6 +504,8 @@ class ScheduleCenterProcess(Process):
 
             register_f048_permission_runtime_context(initialize)
             register_department_projection_runtime_context()
+
+        loop.run_until_complete(_prepare_reference_runtime())
 
         # 启动心跳
         self.node_manager = NodeManager.get_instance(

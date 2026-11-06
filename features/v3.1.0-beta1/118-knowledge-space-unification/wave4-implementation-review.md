@@ -169,3 +169,12 @@ test/workstation/test_assistant_name_config.py
 API 取消两个默认 JSON 在线 backfill。正式升级必须由运维停服/停写并一致备份，再正式盘点和冻结引用及全平台权限 baseline/plan；M3 转换和回填沿同 run，脚本不检测或控制停服。缺 index/coverage 拒绝，不在线自愈。
 
 本地 SQLite/SQL 形状与 Port 测试不证明真实 MySQL/DM8 锁竞争、OpenFGA、Redis/Celery、ES/Milvus、模型服务或浏览器 E2E。CI、正式迁移、部署均未执行；本波无 push，未修改主工作区。
+
+
+## 独立评审后修正：Linsight进程装配
+
+在945b52282基础上复核发现，独立Linsight进程原来仅注册F048，缺少业务默认模型/知识读取graph，冷启动后get_workbench_llm会10994。本次按单生产文件的hotfix修正：ScheduleCenterProcess.run在原进程事件循环内、F048上下文登记后准备READY权限runtime并注册真实引用composition，之后才创建NodeManager/心跳或接收任务；openfga关闭时仍装配读取graph。权限准备或装配失败明确阻止继续启动，不懒建另一数据库桥，不改变来源/模型权限或配置返回协议。
+
+新增test_linsight_reference_bootstrap.py直接执行真实run入口和真实composition，隔离Redis/权限transport/heartbeat：enabled开关两种冷启动及两类失败共4项，修复前4红、修后4绿。与既有native/bootstrap/composition/default读取及Linsight stranded/HITL/deferred、F048 API/worker组合11路径109 passed；两Python文件Ruff/format及arch-guard通过。该结果是定向本地回归，不替代前述W4全组历史结果或真实进程/中间件E2E。
+
+同次评审的ASR realtime响应回归仍待处理：专用asr_rt类型保持不变；默认配置只保存id，旧运行响应按实际类型派生realtime供前端。切换为保留失效ID的原始配置读取时误删了能力派生；恢复方向为普通workbench响应补回派生，管理settings保raw。此轮只修进程装配并解释该差异，没有改变ASR接口。

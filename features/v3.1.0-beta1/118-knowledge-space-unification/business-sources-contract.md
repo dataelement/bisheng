@@ -232,3 +232,5 @@ KN明确尚未写的T501/T502三叶（专用红测试、两个rebuild worker）�
 ### 状态查询不继续生成旧消息（T593–T594）
 
 最后调用方盘点确认 Space.info 与旧个人库 status 仍对非 Published 状态派发无期望的三参数 rebuild。查询只保原可见准入、状态/错误提示与阶段诊断，移除该退休副作用，不从 GET 补造新操作/stage/任务命令。显式模型变更由已有事务 Owner 在 commit 后派发7字段；合法重试/恢复由后续任务处理入口承担，不借 visible 查询授予重建能力。已退役个人库恢复仍在spec排除项，不新增自动恢复框架。
+
+独立Linsight进程按同一启动合同补齐：各ScheduleCenterProcess在自身事件循环注册F048上下文后，显式准备READY权限runtime并注册引用composition，再启动心跳/接收任务；关闭OpenFGA仍注册实际读取graph。准备/装配失败直接终止启动，不以模型getter懒装配掩盖入口遗漏。
