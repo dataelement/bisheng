@@ -16,6 +16,7 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument as Document
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion as Version
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile as File
+from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun as Run
 from bisheng.knowledge.domain.repositories import unification_resource_repository as raw
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import DefaultRow
 from bisheng.knowledge.domain.repositories.unification_run_repository import KnowledgeUnificationRunRepository
@@ -86,6 +87,17 @@ class UnificationConversionRepository:
         raw._scope(session)
         with session.no_autoflush, strict_tenant_filter():
             return tuple((await session.execute(query)).mappings())
+
+    async def aread_run(self, session, *, run_id, writer_contract_version, lock=False):
+        """Read detached scalar facts without refreshing the caller's ORM row."""
+        self.runs._identity(run_id, writer_contract_version)
+        query = select(Run.__table__).where(Run.run_id == run_id, Run.tenant_id == raw._scope(session))
+        rows = await self._read(session, query.with_for_update() if lock else query)
+        if not rows:
+            _blocked("run_missing")
+        run = Run(**dict(rows[0]))
+        self.runs._validate(run, run_id, writer_contract_version)
+        return run
 
     async def _rows(self, session, model, columns, ids, *, lock=True):
         ids = tuple(sorted(set(ids)))
@@ -163,7 +175,7 @@ class UnificationConversionRepository:
                 _blocked("unrepresentable_planned_time")
         if len({cmd.command_key for cmd in commands}) != len(commands):
             _blocked("duplicate_command")
-        run = await self.runs._required(session, run_id, writer_contract_version)
+        run = await self.aread_run(session, run_id=run_id, writer_contract_version=writer_contract_version, lock=True)
         self.runs._expected(run, "converting", baseline_hash, plan_hash)
         value = await self._load(session, commands, False)
         scope = LockedConversionScope(
@@ -213,19 +225,15 @@ class UnificationConversionRepository:
         primaries = {key: row for key, row in all_versions.items() if key in primary_ids}
         v1_files = {cmd.file_id for cmd in commands if type(cmd) is InitializeV1Command}
         v1_docs = {row["document_id"] for row in versions.values() if row["knowledge_file_id"] in v1_files}
-        v1_counts = (
-            {
-                row["id"]: dict(row)
-                for row in await self._read(
-                    session,
-                    select(Version.document_id.label("id"), func.count().label("count"))
-                    .where(Version.document_id.in_(v1_docs))
-                    .group_by(Version.document_id),
-                )
-            }
-            if v1_docs
-            else {}
-        )
+        v1_counts = {}
+        if v1_docs:
+            for row in await self._read(
+                session,
+                select(Version.document_id, func.count().label("count"))
+                .where(Version.document_id.in_(v1_docs))
+                .group_by(Version.document_id),
+            ):
+                v1_counts[row["document_id"]] = row["count"]
         await self._tag_relations(session, commands)
         tags = await self._rows(
             session, Tag, raw.TAG_COLUMNS, [cmd.tag_id for cmd in commands if hasattr(cmd, "tag_id")]
@@ -308,7 +316,7 @@ class UnificationConversionRepository:
         for rows in value.values():
             if type(rows) is dict:
                 for row in rows.values():
-                    if "tenant_id" in row and row["tenant_id"] != scope.tenant_id:
+                    if type(row) is dict and "tenant_id" in row and row["tenant_id"] != scope.tenant_id:
                         _blocked("foreign_row")
         for cmd in value["commands"]:
             if hasattr(cmd, "knowledge_id"):
@@ -441,7 +449,9 @@ class UnificationConversionRepository:
         return templates
 
     async def _current_run(self, session, scope, value):
-        run = await self.runs._required(session, scope.run_id, scope.writer_contract_version)
+        run = await self.aread_run(
+            session, run_id=scope.run_id, writer_contract_version=scope.writer_contract_version, lock=True
+        )
         self.runs._expected(run, "converting", scope.baseline_hash, scope.plan_hash)
         if digest(run.checkpoints.get("converting", {}).get("sql_conversion")) != value["checkpoint"]:
             _blocked("checkpoint_changed")
@@ -497,23 +507,13 @@ class UnificationConversionRepository:
                             .values(value=canonical(after).decode(), update_time=row["update_time"])
                         )
                     else:
-                        doc = Document(
-                            knowledge_id=cmd.knowledge_id,
-                            file_level_path=cmd.file_level_path,
-                            level=cmd.level,
-                            create_time=cmd.planned_at,
-                            update_time=cmd.planned_at,
-                        )
+                        document, version = self._templates(cmd)
+                        document.pop("primary_version_key")
+                        version.pop("document_key")
+                        doc = Document(**document)
                         session.add(doc)
                         await session.flush()
-                        version = Version(
-                            document_id=doc.id,
-                            knowledge_file_id=cmd.file_id,
-                            version_no=1,
-                            is_primary=True,
-                            create_time=cmd.planned_at,
-                            update_time=cmd.planned_at,
-                        )
+                        version = Version(document_id=doc.id, **version)
                         session.add(version)
                         await session.flush()
                         await session.execute(
@@ -553,7 +553,7 @@ class UnificationConversionRepository:
                 version = current["versions_by_file"].get(cmd.file_id)
                 if (
                     version is None
-                    or current["v1_counts"][version["document_id"]]["count"] != 1
+                    or current["v1_counts"][version["document_id"]] != 1
                     or digest(current["files"][cmd.file_id]) != cmd.file_business_digest
                 ):
                     _blocked("v1_after_invalid")

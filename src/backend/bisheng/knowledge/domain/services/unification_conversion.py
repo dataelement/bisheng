@@ -8,9 +8,6 @@ import re
 from dataclasses import asdict, dataclass
 from weakref import WeakKeyDictionary
 
-from sqlalchemy import select
-
-from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun as Run
 from bisheng.knowledge.domain.repositories.unification_conversion_repository import (
     KINDS,
     UnificationConversionRepository,
@@ -82,17 +79,9 @@ class UnificationConversionService:
         self._batches, self._results = WeakKeyDictionary(), WeakKeyDictionary()
 
     async def _run(self, session, identity, *, lock=False):
-        tenant = _scope(session)
-        self.runs._identity(identity["run_id"], identity["writer_contract_version"])
-        query = select(Run.__table__).where(Run.run_id == identity["run_id"], Run.tenant_id == tenant)
-        if lock:
-            query = query.with_for_update()
-        # Scalar rows leave caller ORM pending/cached state untouched.
-        with session.no_autoflush:
-            row = (await session.execute(query)).mappings().one_or_none()
-        if row is None:
-            _blocked("run_missing")
-        run = Run(**dict(row))
+        run = await self.repository.aread_run(
+            session, run_id=identity["run_id"], writer_contract_version=identity["writer_contract_version"], lock=lock
+        )
         self.runs._validate(run, identity["run_id"], identity["writer_contract_version"])
         self.runs._expected(run, "converting", identity["baseline_hash"], identity["plan_hash"])
         raw = run.checkpoints.get("converting", {}).get("sql_conversion")
