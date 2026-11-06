@@ -119,6 +119,15 @@ async def test_schema_precheck_is_read_only_and_creation_locks_the_real_tenant_f
         assert (await repo.aget_or_create(session, **IDENTITY)).id == row.id
 
 
+async def test_schema_precheck_does_not_autoflush_the_callers_pending_writes(repo, ledger):
+    async with AsyncSession(ledger) as session:
+        pending = KnowledgeUnificationRun(run_id="pending-owner-write", writer_contract_version=WRITER)
+        session.add(pending)
+        await repo.aschema_precheck(session)
+        assert pending in session.new
+        assert pending.tenant_id is None
+
+
 async def test_freeze_is_immutable_idempotent_and_consumable_by_the_actual_legacy_reader(repo, ledger):
     async with AsyncSession(ledger) as session:
         row = await freeze(repo, session)
