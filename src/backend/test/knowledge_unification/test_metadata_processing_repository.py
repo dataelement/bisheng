@@ -75,6 +75,7 @@ async def test_value_changes_are_separate_from_physical_source_revision(metadata
         await session.flush()
         changed = await repo.aload_scope(session, 40)
         assert changed.items[0].source_revision == first.items[0].source_revision
+        assert changed.items[0].values_revision != first.items[0].values_revision
         assert changed.items[0].user_metadata != first.items[0].user_metadata
         row.object_name = "replaced-source"
         await session.flush()
@@ -103,6 +104,25 @@ async def test_no_autoflush_and_fresh_columns_do_not_discard_identity_map_work(m
         assert scope.schema_revision == 4 and scope.items[0].status == 3
         assert root.metadata_schema_revision == 0 and cached.status == 2 and pending.id is None
         await session.rollback()
+
+
+@pytest.mark.parametrize("broken", ["schema", "values"])
+async def test_invalid_saved_json_shape_is_not_treated_as_empty(metadata, broken):
+    async with metadata.context.sessions() as session:
+        if broken == "schema":
+            await session.execute(
+                update(Knowledge).where(Knowledge.id == 40, Knowledge.tenant_id == 101).values(metadata_fields={})
+            )
+        else:
+            await session.execute(
+                update(KnowledgeFile)
+                .where(KnowledgeFile.id == 81, KnowledgeFile.tenant_id == 101)
+                .values(user_metadata=[])
+            )
+        await session.commit()
+    async with metadata.context.sessions() as session:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await MetadataProcessingRepository().aload_scope(session, 40)
 
 
 @pytest.mark.parametrize(
