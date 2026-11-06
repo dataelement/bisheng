@@ -93,4 +93,24 @@ WF/AS保存版本/当前配置的运行、Info及评测已接真实来源Reader�
 
 升级后应验证：真实凭据/管理pin及共享撤销收窄；WF正确版本与临时preview边界；AS失效原ID/状态及手动修复；10994/10996/10998明确失败且无执行副作用；缓存更新、评测每题准入和公共会话绑定。ACTIVE分享链接的生成授权加固T404/T405仍须完成，不能把查看绑定已核验当作签发ACL已修。
 
-当前248/421任务完成、1199 passed、6 subtests passed（46个pytest路径），仅本地SQLite/SQL形状及Port测试。真实MySQL/DM8/FGA、Redis/Celery、ES/Milvus、模型服务、E2E、迁移演练、CI与部署均未运行；详见[W3集成复查](./wave3-implementation-review.md)。
+W3结束时248/421任务完成、1199 passed、6 subtests passed（46个pytest路径），仅本地SQLite/SQL形状及Port测试。真实MySQL/DM8/FGA、Redis/Celery、ES/Milvus、模型服务、E2E、迁移演练、CI与部署均未运行；详见[W3集成复查](./wave3-implementation-review.md)。
+
+## 13. W4剩余来源接线与离线迁移检查（2026-11-06）
+
+APP 保存版本、频道当前配置、知识自身模型与五个系统默认 key 已进入实际来源写/读链；实现合同及受测固定提交见 [W4 集成复查](./wave4-implementation-review.md)。部署前仍必须完成六类来源全量回填、覆盖持久适配、目标删除协调、处理框架及完整环境验证。不能因为新版本 Reader 存在就在线开放缺 index/coverage 的旧资源；10994 是明确的未就绪结果。
+
+M2 正式盘点应覆盖全部 AppVersion.id UUID（包括历史保存版，暂停/停止不解除）、频道完整当前配置（包括 disabled）、Knowledge.model 和有定义的 pending 槽、五个实际默认 key/current，以及此前 WF/AS 来源。Root 继承不复制 Child 来源；恢复继承只移除 Child override。存量失效 ID 与引用继续保留并标记；清空知识保留模型配置/出向引用，真实资源删除才解除出向，入向失效关系仍供业务手动修复。
+
+API 启动不再执行 linsight_default_model_backfill/chat_default_model_backfill 在线 JSON 转换。这两项若需转换，必须纳入未来正式 M3：运维停服/停写和一致备份后，正式盘点并冻结同一 run 的引用及全平台权限 baseline/plan，再受控转换、回填和核对。迁移脚本不检查或控制停服，重跑沿原 run/冻结证据，不重新归类脚本造成的差异。
+
+升级后验收至少核对：APP 冻结模型与最终 alias/ID/server 一致及失效管理展示；频道自动化真实主体与上传前拒绝；默认覆盖/继承/恢复和跨多空间同事务变更；同 ID 知识元数据修改不触发重建；worker 由当前业务配置选模型并拒过期 operation/revision/generation；清理不因已失效模型失败。默认和知识联动提交后才派发任务，派发故障不能记录为配置已回滚。先查询持久资源 operation/revision，再由运维按原操作处置，不通过重复改模型制造新版本。
+
+API 和 Celery 的原生共享读取依赖 F048 runtime 显式 READY，准备失败明确阻止接收该业务。旧已删应用的持久 destroy/purge intent 仍保留清理诊断和操作 ID；本波不提供自动 destroy 恢复或 Docker/K8s 实机证明。MySQL/DM8 锁竞争、真实 FGA/队列/检索/模型、浏览器 E2E、CI、停服迁移和部署证据仍需单独收集；本地 SQLite/Port 通过数不能替代这些检查。
+
+M2 还须单独盘点旧 rebuild 消息：只有 knowledge_id/modelHint/auditUser、没有 operation/config_revision/index_generation，或 Knowledge 已无 transition 的旧消息，升级后会在外部 IO 前明确拒绝并保留诊断，不从当前值补造原操作证明。队列保留不等于该类旧重建消息可原样执行；正式 M3 受控转换或运维按新业务操作恢复的方案仍须实现/演练，未完成前不得升级放行。该限制只针对缺合法重建操作事实的消息，不概括为全部存量任务失效。
+
+APP知识检索保持原0/3支持类型；历史QA声明保原ID并标unsupported，完整APP来源不能因通用Knowledge目标有效而绕过该业务能力限制。单租户内部模型读取和清理沿C3合法默认tenant=1，多租户缺context仍明确拒绝。重建受控逐文件部分失败完成正常步骤后finalize；整体异常/过期/准入失败保当前stage诊断，不无条件发布为成功。完整恢复处置仍待Processing及升级演练闭合。
+
+升级核对须确认Space.info和旧个人库status查询不再自动生成退休三参数重建消息；两查询保原可见/状态与错误提示。显式改模和合法恢复应由各自操作入口承担原7字段命令，不从GET或旧消息补造操作证明。
+
+W4本地受测d4d02e48b7d724c9ffe31d9650b75951eeb94e14：81路径2390 passed/6subtests，438/597卡；完整证据见W4记录。本结果不解除上述迁移、Coverage、恢复或真实环境升级限制。

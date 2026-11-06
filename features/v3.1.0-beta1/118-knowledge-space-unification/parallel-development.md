@@ -153,3 +153,17 @@ WF57c1b17ef、AS03ec42355（真实Target测试补98a23538e）、REF9dccf1ef7、P
 从24481f0ca延续，先三agent只读核APP/CH/LLM，INT核KN，再冻结[W4合同](./business-sources-contract.md)及T422–T512单叶卡。APP/CH/LLM从同一合同checkpoint建独立worktree，先独立extractor/Repository；INT先交原生REF sync、窄权限sync、mixed源核心及APP后台授权Port，LLM接真实Target/名称计划后APP再接；KN批业务前置就绪后LLM接全空间默认联动。每卡1–2叶，Owner热点串行，不在不同lane直接改同文件，不将fake装生产。INT独占KN及generic REF/权限/glue/composition/main/docs；LLM新增native Model read及mixed Model physical四个现有叶由INT显式交接，其他REF叶不转交。
 
 遵既有AC92全源strict，不增加subset授权；旧清失效ID/drop配置不沿用。旧worktree/主工作区保持，禁止repo-wide stash/reset/clean/pathlessrestore及checkout--theirs。固定提交由他人交叉复核后INT按依赖正常merge；无push/部署/真实迁移。
+
+### W4按依赖交接与复核
+
+共同合同 checkpoint f5db3c79c 后，INT 先交 native sync REF/legacy、READY 权限端口及 mixed SourceBindingChange。CH 固定6b4ae63ef后独立复核/合流，随后明确将 KN T482–T502及相关小卡转交新118-wave4-kn，避免两个 agent 写同一knowledge热点。APP T442/443与511–516薄 Port 临时转交 APP；LLM独占Model Target/名称/默认读写；INT独占common composition/main/后台Context/gateway/filelib。
+
+LLM先交实际名称计划和模型Target，再由APP串bus与provider最终冻结身份；KN先交外部事务批计划，再由LLM串五key默认与全空间mixed变更。KN最后串RAG、命名清理、实际Space创建与worker。新增接缝先登记单/双叶卡；旧测试逐项追实际caller和固定基线，不退回退休DAO或生产fallback。INT独立T584/585处理api/services/knowledge_imp.py实际文件/QA清理消费者，KN不得并改。
+
+APP6e3fb5784由LLM agent固定archive独立源码+200项通过复核；LLM770769824由INT固定源码+188项通过；KN908496cf9、65a510bad、6f65a1fb8由INT分步固定47/38/54项通过及源码复核；Root4fc8b12fc公共装配与空union锁序由LLM固定61项通过复核。以上分步数字不相加。最终完整来源接线、共同受测源码、主组合及静态/文档证据统一见[W4集成记录](./wave4-implementation-review.md)。
+
+所有独立lane保留本地提交，主agent正常merge精确review SHA；主工作区原ac65c2fc5及其他worktree不写。真实Coverage/迁移、双库并发及中间件/E2E仍不能由这些Port/SQLite结果替代；完整目标删除恢复、处理框架及页面继续按未完成卡推进。
+
+WORKER最终交接：KN明确未写T501/T502三叶后，从INT已集成前置2467edc94创建独立118-wave4-worker，LLM agent接这三叶及T591旧可用性测试，KN不并写。APP额外T588–T590仅修原0/3能力边界和管理unsupported；Root保总装配/文档/最终验证。
+
+W4最终主组合：受测d4d02e48b7d724c9ffe31d9650b75951eeb94e14，81路径2390 passed/6subtests，438/597卡完成（较W3新增190）。170文件格式通过，架构/Ruff新增0，55个既有Ruff诊断与基线核对；固定交付及剩余159卡见W4记录。无push/迁移/部署。

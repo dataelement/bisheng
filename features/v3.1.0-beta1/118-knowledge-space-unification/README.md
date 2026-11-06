@@ -16,6 +16,8 @@
 - [W0/W1集成与任务级评审](./implementation-review.md)
 - [W2业务写入口集成与复查记录](./wave2-implementation-review.md)
 - [W3运行准入、共享来源读取及集成复查](./wave3-implementation-review.md)
+- [W4剩余业务来源接口合同](./business-sources-contract.md)
+- [W4剩余来源接线与集成复查](./wave4-implementation-review.md)
 - [运行与共享来源接口合同V1](./execution-read-contract.md)
 - [运行与共享读取实际入口接线](./execution-entrypoints.md)
 - [冻结接口合同：REF V1.1、W2 Runtime/batch与P1/J1/A1](./contracts.md)
@@ -30,7 +32,7 @@
 | spec.md | ✅ 已评审、用户已确认 | 2026-11-05 确认完整 94 条 AC，作为设计评审的需求基线 |
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查闭合；2026-11-05 用户授权进入任务拆分 |
 | test-cases.md | 已生成，待执行 | 140 条，94 AC 全覆盖；QA 参考，不是任务或 Harness 输入 |
-| tasks.md / parallel-development.md | ✅ 已拆分、复审 LGTM | 原213项复审通过；W3追加后421项、248项完成；运行准入已合流，完整特性仍在开发 |
+| tasks.md / parallel-development.md | ✅ 已拆分、复审 LGTM | 原213项复审通过；W4四类来源和消费者已合流，当前597项、438项完成；验证见W4记录；完整特性仍在开发 |
 
 ## 迁移边界
 
@@ -68,4 +70,11 @@ W2结束时166/342项完成（本波新增80项）；主agent在411d4f461473组�
 
 先冻结可信原身份、来源只读scope、目标当前读与最终root重验合同，再由WF/AS/REF并行开发。普通/public WS、v2、单节点预览、共用Agent、Info和JWT评测已按依赖接线，API/worker装配实际Reader；common在执行副作用前调用端点绑定Port，不自行导入领域服务。
 
-当前248/421项完成，本波新增82项。主agent在0c2587dbe5ec组合验证1199 passed、6 subtests passed（46个pytest路径），Ruff/格式70文件通过，架构新增违规0，既有告警见[W3集成记录](./wave3-implementation-review.md)。全部记录保留94AC/140QA及13张原图；分享签发授权T404/T405、其余来源与页面、正式回填/Coverage和真实环境验收仍待实施。无push、部署或数据迁移。
+W3结束时248/421项完成，本波新增82项。主agent在0c2587dbe5ec组合验证1199 passed、6 subtests passed（46个pytest路径），Ruff/格式70文件通过，架构新增违规0，既有告警见[W3集成记录](./wave3-implementation-review.md)。全部记录保留94AC/140QA及13张原图；分享签发授权T404/T405、其余来源与页面、正式回填/Coverage和真实环境验收仍待实施。无push、部署或数据迁移。
+
+
+## W4剩余业务来源接线
+
+APP真实保存版本、频道完整当前配置、Knowledge自身模型和五类默认配置已接实际维护与严格读取。模型默认覆盖与多空间同事务更新，commit后派发7字段业务命令；RAG/worker从当前业务配置取模型。APP维持原0/3检索能力，历史QA/删除目标保ID与失效状态。查询不再暗中产生退休重建消息；旧无stage/期望任务明确失败待升级受控处置。
+
+先冻结[业务来源合同](./business-sources-contract.md)，再按APP/CH/LLM/KN及最后WORKER独占交接并行；主agent固定提交复查、正常合流和组合验证。设计、升级说明与HTML已同步，原94AC、140QA及13张SVG保持。主组合2390项及6子测试通过（81路径），438/597任务完成。确切受测源码、静态结果及其余范围见[W4集成记录](./wave4-implementation-review.md)。未推送、迁移或部署，主工作区保持原状。

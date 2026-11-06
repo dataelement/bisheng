@@ -742,7 +742,7 @@ Knowledge的处理默认、处理配置版本、模型配置修订、索引gener
 
 W0/W1阶段的历史交付为86/273项、本地组合424项通过；本次W2继续由独立lane开发、交叉复核后合流，当前任务数及组合验证以[W2集成记录](./wave2-implementation-review.md)为准。完成项、固定提交和本地测试见[tasks.md](./tasks.md)及[implementation-review.md](./implementation-review.md)。任务分解原213项已由源码核对补充，当前总数以tasks为准。
 
-WF与AS的业务保存/删除已按§15.5接线，其余来源写端、完整执行/read scope、真实Coverage adapter、目标删除协调、两端页面及正式迁移脚本仍按依赖待实施。SQLite事务/租约回归、MySQL DDL编译和静态检查只证明本地范围；真实MySQL/DM8/OpenFGA、ES/Milvus、E2E、停服迁移及部署均未运行。
+W0/W1结束时WF/AS以外来源尚未接线；后续实际写端与运行接线分别见§15.5–§15.7。真实Coverage adapter、完整目标删除协调、两端页面及正式迁移脚本仍按依赖待实施。SQLite事务/租约回归、MySQL DDL编译和静态检查只证明本地范围；真实MySQL/DM8/OpenFGA、ES/Milvus、E2E、停服迁移及部署均未运行。
 
 
 ### 15.5 W2：实际业务写入口与事务接线
@@ -775,4 +775,31 @@ AS共用Agent init/run/stream及缓存复用都读取实际snapshot配置/links�
 
 评测传原JWT对象，homeTenant与管理pin分开核，原owner/tenant在调度和任务入口各检查；每题重新准入真实保存version再入队，AS复用同一每次guard链。不建立任务模型绑定或治理已排除的worker在途外部IO竞态。WeakKey/WeakSet相关scope/旧R2 proof另加私有weakref原对象is核验，防重载相等性的子类clone借用登记。
 
-主agent受测源码0c2587dbe5ec93135e06a45ed7615253a6a46ef1，1199 passed、6 subtests passed（46个pytest路径）；70个改动Python文件Ruff检查/格式通过，架构新增违规0；三个legacy common文件的6条既有RULE-1及2条既有RULE-3告警单列，未新增反向import。完整记录见[W3集成复查](./wave3-implementation-review.md)。当前248/421项完成；不是全特性验收、CI或真实双库/中间件/E2E证明。
+主agent受测源码0c2587dbe5ec93135e06a45ed7615253a6a46ef1，1199 passed、6 subtests passed（46个pytest路径）；70个改动Python文件Ruff检查/格式通过，架构新增违规0；三个legacy common文件的6条既有RULE-1及2条既有RULE-3告警单列，未新增反向import。完整记录见[W3集成复查](./wave3-implementation-review.md)。W3结束时248/421项完成；不是全特性验收、CI或真实双库/中间件/E2E证明。
+
+## 15.7 W4剩余业务来源接线（2026-11-06）
+
+本波先冻结 [business-sources-contract.md](./business-sources-contract.md)，从同一合同提交建立 APP、CH、LLM 独立工作树。CH 冻结后将 KN 显式交给空闲 agent 的新工作树；APP 薄授权 Port 和 LLM 原生目标叶子也先转交、后实施。INT 保有公共 REF、权限、gateway/filelib、两端启动装配及文档。每卡最多两叶，固定提交由他人复查后正常 merge，主工作区不变。
+
+| 真实来源 | 业务维护方式与准入 |
+| --- | --- |
+| HOSTED_APP_VERSION | 每个真实 AppVersion.id UUID，保存历史版本均保留引用，暂停/停止不解除。APP检索保持原0/3能力，不因通用0/1/3目标校验而新增QA；历史QA保ID标不可用。保存、预览/发布/启动及根删除复用真实授权；零版本根以 SourceRootKey 盘点，不能捏造 current。应用配置与完整版本引用同事务，根删除保留持久清理 intent 和失败诊断。 |
+| CHANNEL_SYNC | 完整当前配置（包括 disabled）保持引用；增删改与业务配置同 Session 提交。自动化只根据真实有效 owner、成员关系和角色发行域私有身份；先 whole-source strict，再沿原 upload_file/SPACE 成员规则交付，失败不先调用 Importer。删除知识/目录/文件不自动裁掉频道配置中的原 ID。 |
+| KNOWLEDGE | 实际 model 与已定义 transition.pending_model_id 是模型槽，processing_defaults 无模型字段。创建、修改、删除及 finalize 的业务配置和出向 R2 同事务；清空保留模型配置与引用。RAG/重建 worker 从准入后的实际当前配置取模型，不依赖任务中保存的模型 ID。 |
+| MODEL_DEFAULT | knowledge_llm / assistant_llm / evaluation_llm / workflow_llm / linsight_llm 五个实际 key/current；Root 继承只有 Root source，Child override 才有 Child source。恢复继承解除 Child source，不修改 Root。业务 getter 全 key strict，管理 raw 保失效 ID，完整准入后再取原槽。 |
+
+APP 名称在同 Session 以完整 uncached 目录解析并冻结到真实版本模型 ID；Gateway 在 provider 实例化前比对原请求别名、当前解析 ID/server 与冻结槽。管理页使用纯只读名称 findings 和 Core inspect，逐行保留失效 ID，不将观察结果当执行资格。filelib 透传原 principal，不能由裸 credential/user ID 补造身份。
+
+默认 embedding 联动先生成全空间计划和业务命令，模型 server→model→Root/current Tenant 辅助锁→KN/default roots，整批比较原清单、配置与引用，然后同一事务一次提交。即使目标 union 为空也不跳过 Tenant 辅助锁。所有即将 override 的 key 对同批各来源都不再贡献继承授权；其他仍继承 key 和真实显式共享保留。否则保存后可能立即让 currentA/pendingB 的 A 失去资格，确定性阻断后续执行。原旧槽已失效或实际资格已撤销且非 DELETING 时，按明确改绑修复分支将实际 current/pending 同指向合法 B；正常 A→B 保双槽，finalize 才解除 A。
+
+状态查询保原visible、状态/错误提示及阶段诊断，不再自动派发旧三参数重建；显式变更由事务Owner派发，查询不补造新操作或以visible取得重建资格。
+
+7 字段重建命令只含 knowledge/type/operation/config_revision/index_generation/tenant/审计 actor_user_id，不绑定模型。整体 commit 后派发，队列失败保留已提交配置并明确失败；外部 Session 调用者须取 asave_with_commands 返回并负责 commit 后派发，无命令出口的调用实际产生非空命令时在写入前拒绝。worker 还核真实 Celery 上下文、资源 operation/revision/generation；受控逐文件partial正常完成后finalize，整体异常/过期/guard失败保当前stage诊断，不无条件发布成功/解除pending；finalize 同事务把 model=B、清 transition、PUBLISHED、revision+1、保同一 build generation 并更新 R2。完整处理框架和在途外部 IO 竞态不因这组接线自动完成。 旧仅 ID/modelHint/审计 UID 的重建消息缺显式期望或 stage，IO 前明确拒绝并保留诊断，不从当前值补造旧操作证明；M2 盘点，未来 M3 受控转换或运维按新操作恢复，正式升级适配完成前不放行。
+
+KnowledgeModelReadRuntime 是内部模型配置消费门面，独立私有 graph 保原身份对象、当前 tenant 与 Session 事务，核完整模型配置/引用和实际资格，不重复增加 Knowledge.visible；数据访问继续沿原 AS/WF/检索与文件过滤（包括 knowledge_auth=False）。无 User 的合法同租户内部 RAG 不造人；后台命令另外核真实 worker proof。普通用户来源 inspect/读取仍保原可见规则，私有门面不成为 HTTP 许可。
+
+清理专用 vectorstore 构造不调用模型，实际 index 由当前 own Knowledge 或当前持久删除 job 的租约和冻结 manifest 核验，不能以 isFake 绕过标准执行。文件/文件夹仍保持原动作、引用范围与投影在先顺序；本波出向绑定接线不宣称完整入向 R3 删除协调、跨 SQL/ES/Milvus 原子提交或故障恢复演练完成。
+
+API/Celery 在原生来源读取接收业务前显式准备既有 F048 runtime；同步 getter 只读 READY 对象，不懒初始化异步数据库。启动取消两个默认 JSON 的在线 backfill；未来数据转换只能在升级说明的停服、备份、正式盘点并冻结 baseline/plan 后执行。未运行迁移，不自动制造来源索引或 Coverage ready。固定交付、集成验证与其余任务见 [W4 集成复查](./wave4-implementation-review.md)。
+
+W4最终验证：d4d02e48b7d724c9ffe31d9650b75951eeb94e14，81路径2390 passed及6 subtests；438/597任务完成。170文件格式通过，架构及Ruff新增0，55条既有Ruff诊断已比对。此为本地SQLite/Port与实际调用链证据，不是双库/中间件、完整特性E2E或升级放行。
