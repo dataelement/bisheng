@@ -343,16 +343,13 @@ def get_all_es_chunks(es_client, index_name, query):
     return res
 
 
-def rebuild_processing_file(
-    file_id: int,
-    *,
+def _require_processing_model(
     space_id: int,
-    invoke_user_id: int,
+    *,
     operation_id: str | None,
     expected_model_config_revision: int,
     expected_index_generation: str,
-) -> ProcessingFileResult:
-    """Actual J1 per-file work; it never finalizes a task or business source."""
+):
     if get_current_background_task() is None:
         raise ResourceReferenceInvalidError(reason="knowledge_rebuild_background_required")
     if (
@@ -378,6 +375,47 @@ def rebuild_processing_file(
             expected_index_generation=expected_index_generation,
         )
         knowledge = Knowledge(**json.loads(admitted.read.snapshot.payload_json)["knowledge"])
+    scope = {
+        "model_slot": slot,
+        "expected_operation_id": admitted.operation_id,
+        "expected_model_config_revision": admitted.model_config_revision,
+        "expected_index_generation": admitted.index_generation,
+    }
+    return knowledge, admitted, scope
+
+
+def reset_processing_target(*, space_id: int, invoke_user_id: int, **expectations) -> bool:
+    """Reset the original physical target before any file succeeds in this job."""
+    knowledge, _, scope = _require_processing_model(space_id, **expectations)
+    vector = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+        invoke_user_id=invoke_user_id,
+        knowledge=knowledge,
+        embeddings=FakeEmbeddings(),
+        **scope,
+    )
+    if vector.col is not None:
+        if not isinstance(vector.col, Collection) or not knowledge.collection_name.startswith("col"):
+            raise ValueError("rebuild target must use its original collection mode")
+        vector.col.drop()
+    return True
+
+
+def rebuild_processing_file(
+    file_id: int,
+    *,
+    space_id: int,
+    invoke_user_id: int,
+    operation_id: str | None,
+    expected_model_config_revision: int,
+    expected_index_generation: str,
+) -> ProcessingFileResult:
+    """Actual J1 per-file work; it never finalizes a task or business source."""
+    knowledge, admitted, scope = _require_processing_model(
+        space_id,
+        operation_id=operation_id,
+        expected_model_config_revision=expected_model_config_revision,
+        expected_index_generation=expected_index_generation,
+    )
     file = KnowledgeFileDao.query_by_id_sync(file_id)
     if file is None or file.knowledge_id != space_id or file.tenant_id != knowledge.tenant_id:
         raise ResourceReferenceInvalidError(reason="knowledge_rebuild_file_scope_changed")
@@ -387,12 +425,6 @@ def rebuild_processing_file(
         KnowledgeFileStatus.TIMEOUT.value,
     }:
         raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
-    scope = {
-        "model_slot": slot,
-        "expected_operation_id": admitted.operation_id,
-        "expected_model_config_revision": admitted.model_config_revision,
-        "expected_index_generation": admitted.index_generation,
-    }
     es = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge, **scope)
     embedding = LLMService.get_bisheng_knowledge_embedding_sync(
         model_id=admitted.model_id, invoke_user_id=invoke_user_id
