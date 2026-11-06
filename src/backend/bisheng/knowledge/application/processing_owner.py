@@ -10,18 +10,23 @@ from dataclasses import dataclass
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.core.context.background_execution import get_current_background_task
-from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
+from bisheng.knowledge.application.model_reference import (
+    KnowledgeModelReferenceApplication,
+    PreparedKnowledgeModelChange,
+)
 from bisheng.knowledge.application.model_reference_read import AdmittedKnowledgeModel, get_knowledge_model_read_runtime
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.repositories.processing_job_repository import (
     ProcessingConfiguration,
     ProcessingJobRepository,
 )
+from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
 from bisheng.knowledge.domain.schemas.processing_job import EmbeddingRebuildParameters
 from bisheng.knowledge.domain.services.processing_cutover_receipts import _ProcessingCutoverAuthority
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_endpoints.domain.utils import get_open_api_operator_async
+from bisheng.permission.application.business_authorization import require_business_action
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +53,7 @@ class _CutoverNotReady(Exception):
 class KnowledgeProcessingOwner:
     def __init__(self, *, jobs=None):
         self.jobs = jobs if jobs is not None else ProcessingJobRepository()
+        self.scope = ProcessingOwnerRepository()
         self._cutovers = _ProcessingCutoverAuthority(self)
 
     @staticmethod
@@ -143,11 +149,56 @@ class KnowledgeProcessingOwner:
             if acknowledged is None:
                 raise ResourceReferenceInvalidError(reason="processing_cutover_lease_changed")
             current = await self.aread_current(session, job.space_id, job=job)
-        return await self.jobs.afinalize(session, lease, configuration=current.configuration)
+        return await self.scope.afinalize_attempt(session, lease, jobs=self.jobs)
 
-    async def aprepare(
-        self, session, space_id, *, identity, parameters, operation_id, expected_configuration=None
-    ) -> ProcessingBusinessState:
+    async def abegin_retry_fence(self, session, job, *, identity):
+        await self._operator(identity)
+        await require_business_action(
+            identity, resource_type="knowledge_space", resource_id=job.space_id, action="edit"
+        )
+        await self.aread_current(session, job.space_id, identity=identity, job=job)
+        await self.scope.abegin_retry_fence(session, job, jobs=self.jobs)
+
+    async def aretry_failed(
+        self, session, job_id, *, identity, idempotency_key, expected_job_revision, actor_user_id, actor_reference
+    ):
+        # Keep the established business-resource -> job locking order. The
+        # SourceOwner revalidates the real current binding in this transaction.
+        _, job = await self.scope._attempt(session, job_id, self.jobs)
+        current = await self.aread_current(session, job.space_id, identity=identity)
+        result = await self.jobs.aretry_failed(
+            session,
+            job_id,
+            idempotency_key=idempotency_key,
+            expected_job_revision=expected_job_revision,
+            actor_user_id=actor_user_id,
+            actor_reference=actor_reference,
+            configuration=current.configuration,
+        )
+        if not result.reused and result.job.state == "accepted":
+            await self.abegin_retry_fence(session, result.job, identity=identity)
+        return result
+
+    async def afail_attempt(self, session, job_id, *, expected_job_revision, error_code, lease=None):
+        return await self.scope.afail_attempt(
+            session,
+            job_id,
+            jobs=self.jobs,
+            expected_job_revision=expected_job_revision,
+            error_code=error_code,
+            lease=lease,
+        )
+
+    async def apreview(
+        self,
+        session,
+        space_id,
+        *,
+        identity,
+        parameters,
+        operation_id: str | None = None,
+        expected_configuration: ProcessingConfiguration | None = None,
+    ) -> PreparedKnowledgeModelChange:
         operator = await self._operator(identity)
         request = EmbeddingRebuildParameters.model_validate(parameters)
         row = await KnowledgeModelReferenceApplication.repository.aget(session, space_id)
@@ -160,8 +211,20 @@ class KnowledgeProcessingOwner:
                 "expected_model_config_revision": expected_configuration.model_config_revision,
                 "expected_index_generation": expected_configuration.index_generation,
             }
-        plan = await KnowledgeModelReferenceApplication.aprepare_rebuild(
+        return await KnowledgeModelReferenceApplication.aprepare_rebuild(
             session, space_id, selected, login_user=operator, operation_id=operation_id, **expected
+        )
+
+    async def aprepare(
+        self, session, space_id, *, identity, parameters, operation_id, expected_configuration=None
+    ) -> ProcessingBusinessState:
+        plan = await self.apreview(
+            session,
+            space_id,
+            identity=identity,
+            parameters=parameters,
+            operation_id=operation_id,
+            expected_configuration=expected_configuration,
         )
         await KnowledgeModelReferenceApplication.aapply_model_change(session, plan)
         # This checks the actual new pending slot, complete source and current
@@ -169,7 +232,7 @@ class KnowledgeProcessingOwner:
         runtime = await get_knowledge_model_read_runtime()
         admitted = await runtime.arequire(
             space_id,
-            login_user=operator if isinstance(identity, UserPayload) else None,
+            login_user=identity if isinstance(identity, UserPayload) else None,
             session=session,
             slot_key="model_transition.pending_model_id",
             expected_operation_id=plan.operation_id,

@@ -1,14 +1,23 @@
 """T610: real SQL query boundaries, retry provenance and broker recovery CAS."""
 
+from dataclasses import replace
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 
-from bisheng.common.errcode.knowledge import KnowledgeProcessingJobNotFoundError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeProcessingConflictError,
+    KnowledgeProcessingJobNotFoundError,
+    KnowledgeProcessingJobNotRetryableError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.repositories.processing_job_repository import ProcessingConfiguration
+from bisheng.worker import tenant_context as workers
 from test.knowledge_unification.test_job_repo import (
     clock as clock,
 )
@@ -47,6 +56,180 @@ def job_query_tenant_filters(monkeypatch):
     tenant_filter.register_tenant_filter_events()
 
 
+@pytest.fixture
+def actual_processing_task(job_tenant, monkeypatch):
+    sender = SimpleNamespace(
+        name="bisheng.worker.knowledge.processing_jobs.execute_processing_job",
+        request=SimpleNamespace(id="actual-attempt", headers={"tenant_id": 101}, called_directly=False),
+    )
+    monkeypatch.setattr(workers, "current_task", SimpleNamespace(_get_current_object=lambda: sender))
+    workers.restore_tenant_context(sender=sender)
+    try:
+        yield sender
+    finally:
+        workers.reset_tenant_context(sender=sender)
+
+
+async def test_failed_attempt_records_actual_counts_and_can_retry_fresh_actor(
+    job_session, repository, configuration, actual_processing_task
+):
+    root = await job_session.get(Knowledge, 1)
+    root.index_generation = configuration.index_generation
+    await job_session.flush()
+    result = await create(repository, job_session, configuration)
+    lease = await repository.aclaim(job_session, result.job.id, configuration=configuration)
+    first = await repository.aclaim_next_item(job_session, lease, configuration=configuration)
+    await repository.acomplete_item(job_session, first.lease, configuration=configuration, succeeded=True)
+    second = await repository.aclaim_next_item(job_session, lease, configuration=configuration)
+    await repository.asave_checkpoint(
+        job_session, second.lease, configuration=configuration, step="page", checkpoint={"page": 2}
+    )
+    failed = await repository.afail_attempt(
+        job_session, result.job.id, expected_job_revision=result.job.revision, error_code=201, lease=lease
+    )
+    assert failed.state == "partial_failed" and (failed.succeeded_count, failed.failed_count, failed.pending_count) == (
+        1,
+        1,
+        0,
+    )
+    assert second.item.state == "failed" and second.item.checkpoint == {"page": 2}
+    assert not failed.pending_dispatch
+    retry = await repository.aretry_failed(
+        job_session,
+        failed.id,
+        idempotency_key="new-authority",
+        expected_job_revision=failed.revision,
+        actor_user_id=12,
+        actor_reference={"actor_id": 12},
+        configuration=configuration,
+    )
+    assert retry.job.state == "accepted" and first.item.state == "succeeded" and second.item.state == "pending"
+
+
+async def test_failure_cas_reads_actual_configuration_and_never_rebases_from_caller(
+    job_session, repository, configuration, actual_processing_task
+):
+    result = await create(repository, job_session, configuration)
+    root = await job_session.get(Knowledge, 1)
+    root.model_config_revision = configuration.model_config_revision + 1
+    await job_session.flush()
+    assert (
+        await repository.afail_attempt(
+            job_session, result.job.id, expected_job_revision=result.job.revision + 1, error_code=201
+        )
+        is None
+    )
+    obsolete = await repository.afail_attempt(
+        job_session, result.job.id, expected_job_revision=result.job.revision, error_code=201
+    )
+    assert obsolete.state == "obsolete" and not obsolete.pending_dispatch
+
+
+async def test_failure_requires_actual_background_proof(job_session, repository, configuration):
+    result = await create(repository, job_session, configuration)
+    with pytest.raises(ResourceReferenceInvalidError):
+        await repository.afail_attempt(job_session, result.job.id, expected_job_revision=0, error_code=201)
+
+
+async def test_finalize_only_retry_uses_actual_success_items_and_global_error(
+    job_session, repository, configuration, actual_processing_task
+):
+    root = await job_session.get(Knowledge, 1)
+    root.index_generation = configuration.index_generation
+    await job_session.flush()
+    created = await create(repository, job_session, configuration)
+    lease = await repository.aclaim(job_session, created.job.id, configuration=configuration)
+    saved = []
+    for _ in range(2):
+        claimed = await repository.aclaim_next_item(job_session, lease, configuration=configuration)
+        await repository.acomplete_item(job_session, claimed.lease, configuration=configuration, succeeded=True)
+        saved.append((claimed.item, claimed.item.attempt, dict(claimed.item.checkpoint)))
+    failed = await repository.afail_attempt(
+        job_session, created.job.id, expected_job_revision=created.job.revision, error_code=10994, lease=lease
+    )
+    eligible = await repository.aretry_eligibility(job_session, failed.id)
+    assert eligible.retryable and eligible.finalize_only
+    await repository.aretry_failed(
+        job_session,
+        failed.id,
+        idempotency_key="finalize-only",
+        expected_job_revision=failed.revision,
+        actor_user_id=12,
+        actor_reference={"actor_id": 12},
+        configuration=configuration,
+    )
+    for completed_item, attempt, checkpoint in saved:
+        assert (
+            completed_item.state == "succeeded"
+            and completed_item.attempt == attempt
+            and completed_item.checkpoint == checkpoint
+        )
+    assert failed.actor_user_id == 11
+    assert await repository.alatest_retry_actor(job_session, failed.id) == {"actor_id": 12}
+
+
+async def test_all_success_without_global_failure_is_not_retryable(job_session, repository, configuration):
+    created = await create(repository, job_session, configuration)
+    lease = await repository.aclaim(job_session, created.job.id, configuration=configuration)
+    for _ in range(2):
+        claimed = await repository.aclaim_next_item(job_session, lease, configuration=configuration)
+        await repository.acomplete_item(job_session, claimed.lease, configuration=configuration, succeeded=True)
+    created.job.state = "failed"
+    await job_session.flush()
+    eligibility = await repository.aretry_eligibility(job_session, created.job.id)
+    assert not eligibility.retryable and not eligibility.finalize_only
+    with pytest.raises(KnowledgeProcessingJobNotRetryableError):
+        await repository.aretry_failed(
+            job_session,
+            created.job.id,
+            idempotency_key="not-finalize-only",
+            expected_job_revision=created.job.revision,
+            actor_user_id=11,
+            actor_reference={"actor_id": 11},
+            configuration=configuration,
+        )
+
+
+async def reset_claim(repository, session, configuration):
+    root = await session.get(Knowledge, 1)
+    root.index_generation = configuration.index_generation
+    await session.flush()
+    created = await create(repository, session, configuration, parameters={"operation_id": "controlled-reset"})
+    lease = await repository.aclaim(session, created.job.id, configuration=configuration)
+    claimed = await repository.aclaim_next_item(session, lease, configuration=configuration)
+    return created.job, lease, claimed
+
+
+async def test_reset_marker_is_bound_to_first_item_and_real_configuration(job_session, repository, configuration):
+    job, lease, claimed = await reset_claim(repository, job_session, configuration)
+    state = await repository.areset_target_state(job_session, lease)
+    assert state.anchor_item_id == claimed.item.id and not state.prepared
+    assert state.configuration == configuration
+    assert await repository.amark_target_reset(job_session, claimed.lease)
+    assert (await repository.areset_target_state(job_session, lease)).prepared
+    await repository.acomplete_item(job_session, claimed.lease, configuration=configuration, succeeded=True)
+    assert (await repository.areset_target_state(job_session, lease)).prepared
+    assert job.parameters == {"operation_id": "controlled-reset"}
+
+
+async def test_success_without_reset_evidence_is_not_permission_to_drop_again(job_session, repository, configuration):
+    _, lease, claimed = await reset_claim(repository, job_session, configuration)
+    await repository.acomplete_item(job_session, claimed.lease, configuration=configuration, succeeded=True)
+    with pytest.raises(KnowledgeProcessingConflictError):
+        await repository.areset_target_state(job_session, lease)
+
+
+async def test_old_item_lease_and_current_generation_cannot_write_reset_marker(job_session, repository, configuration):
+    job, lease, claimed = await reset_claim(repository, job_session, configuration)
+    assert not await repository.amark_target_reset(job_session, replace(claimed.lease, lease_token="old"))
+    assert not claimed.item.checkpoint
+    root = await job_session.get(Knowledge, 1)
+    root.index_generation = "later-generation"
+    await job_session.flush()
+    assert await repository.areset_target_state(job_session, lease) is None
+    assert job.state == "obsolete" and not claimed.item.checkpoint
+
+
 async def test_job_pages_are_complete_and_stable_for_tied_acceptance_time(job_session, repository, configuration):
     jobs = [
         (await create(repository, job_session, configuration, idempotency_key=f"request-{i}")).job for i in range(5)
@@ -59,6 +242,18 @@ async def test_job_pages_are_complete_and_stable_for_tied_acceptance_time(job_se
         observed.extend(row.id for row in result.rows)
     assert observed == expected
     assert not (await repository.alist_jobs(job_session, 1, page=1, page_size=2, state="failed")).rows
+
+
+async def test_request_key_lookup_uses_real_tenant_kind_and_key(job_session, repository, configuration):
+    job = (await create(repository, job_session, configuration)).job
+    assert await repository.aget_by_request_key(job_session, "embedding_rebuild", "request-1", lock=True) is job
+    assert await repository.aget_by_request_key(job_session, "embedding_rebuild", "missing") is None
+    assert await repository.aget_by_request_key(job_session, "file_reprocess", "request-1") is None
+    token = set_current_tenant_id(202)
+    try:
+        assert await repository.aget_by_request_key(job_session, "embedding_rebuild", "request-1") is None
+    finally:
+        current_tenant_id.reset(token)
 
 
 async def test_item_query_applies_current_visible_scope_before_pagination(job_session, repository, configuration):

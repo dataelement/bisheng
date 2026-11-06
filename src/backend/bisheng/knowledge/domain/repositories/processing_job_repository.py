@@ -26,13 +26,16 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeProcessingJobNotFoundError,
     KnowledgeProcessingJobNotRetryableError,
     KnowledgeProcessingObsoleteError,
+    ResourceReferenceInvalidError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
+from bisheng.core.context.background_execution import get_current_background_task
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
+from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
 from bisheng.knowledge.domain.schemas.processing_job import ItemState, JobState, ProcessingKind, ResourceVersionTarget
 from bisheng.knowledge.domain.services.processing_cutover_receipts import consume_cutover_receipt
 
@@ -109,6 +112,19 @@ class JobDispatch:
     revision: int
 
 
+@dataclass(frozen=True)
+class RetryEligibility:
+    retryable: bool
+    finalize_only: bool
+
+
+@dataclass(frozen=True)
+class TargetResetState:
+    anchor_item_id: str
+    prepared: bool
+    configuration: ProcessingConfiguration
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -170,6 +186,22 @@ class ProcessingJobRepository:
 
     async def aget(self, session: AsyncSession, job_id: str) -> KnowledgeProcessingJob:
         return await self._job(session, job_id, lock=False)
+
+    async def aget_by_request_key(
+        self, session: AsyncSession, kind: str, idempotency_key: str, *, lock: bool = False
+    ) -> KnowledgeProcessingJob | None:
+        tenant = self._tenant_id()
+        query = select(KnowledgeProcessingJob).where(
+            KnowledgeProcessingJob.kind == ProcessingKind(kind).value,
+            KnowledgeProcessingJob.idempotency_key == self._key(idempotency_key),
+        )
+        if lock:
+            query = query.with_for_update().execution_options(populate_existing=True)
+        with strict_tenant_filter():
+            row = (await session.exec(query)).one_or_none()
+        if row is not None and row.tenant_id != tenant:
+            raise KnowledgeProcessingJobNotFoundError()
+        return row
 
     @staticmethod
     def _page(page: int, page_size: int) -> int:
@@ -627,7 +659,7 @@ class ProcessingJobRepository:
         current_job_lease = JobLease(job.id, job.lease_token, job.claim_generation, job.lease_until)
         return ItemLease(current_job_lease, row.id, row.lease_token, row.claim_generation, row.lease_until)
 
-    async def _refresh_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> None:
+    async def _item_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> dict[str, int]:
         with strict_tenant_filter():
             rows = (
                 await session.exec(
@@ -640,6 +672,26 @@ class ProcessingJobRepository:
         total = sum(counts.values())
         if total != len(job.scope_manifest):
             raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
+        return counts
+
+    async def aretry_eligibility(self, session: AsyncSession, job_id: str) -> RetryEligibility:
+        job = await self._job(session, job_id, lock=False)
+        counts = await self._item_counts(session, job)
+        terminal_failure = job.state in {"failed", "partial_failed"}
+        finalize_only = (
+            terminal_failure
+            and job.error_code is not None
+            and bool(job.scope_manifest)
+            and counts.get("succeeded", 0) == len(job.scope_manifest)
+        )
+        return RetryEligibility(
+            terminal_failure and (bool(counts.get("failed", 0) + counts.get("pending", 0)) or finalize_only),
+            finalize_only,
+        )
+
+    async def _refresh_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> None:
+        counts = await self._item_counts(session, job)
+        total = sum(counts.values())
         job.total_count = total
         job.succeeded_count = counts.get("succeeded", 0)
         job.failed_count = counts.get("failed", 0)
@@ -683,6 +735,141 @@ class ProcessingJobRepository:
         job.expected_index_generation = generation
         job.revision += 1
         job.update_time = self._now()
+        await session.flush()
+        return job
+
+    @staticmethod
+    def _reset_marker(job):
+        if (
+            type(job.accepted_model_config_revision) is not int
+            or job.accepted_model_config_revision < 0
+            or not job.expected_index_generation
+            or not isinstance(job.parameters.get("operation_id"), str)
+            or not job.parameters["operation_id"]
+        ):
+            raise ResourceReferenceInvalidError(reason="processing_reset_original_evidence_required")
+        return {
+            "schema_version": 1,
+            "job_id": job.id,
+            "operation_id": job.parameters["operation_id"],
+            "accepted_model_config_revision": job.accepted_model_config_revision,
+            "index_generation": job.expected_index_generation,
+        }
+
+    async def areset_target_state(self, session: AsyncSession, lease: JobLease) -> TargetResetState | None:
+        candidate = await self._job(session, lease.job_id, lock=False)
+        root = await KnowledgeModelReferenceRepository().aget(session, candidate.space_id, for_update=True)
+        job = await self._job(session, lease.job_id, lock=True)
+        if not self._active_job_lease(job, lease):
+            return None
+        if root is None:
+            raise KnowledgeProcessingConflictError(reason="processing_reset_owner_missing")
+        current = ProcessingConfiguration(root.model_config_revision, root.index_generation)
+        if not self._check_configuration(job, current):
+            await session.flush()
+            return None
+        marker = self._reset_marker(job)
+        with strict_tenant_filter():
+            anchor = (
+                await session.exec(
+                    select(KnowledgeProcessingItem)
+                    .where(KnowledgeProcessingItem.job_id == job.id)
+                    .order_by(
+                        KnowledgeProcessingItem.file_id, KnowledgeProcessingItem.version_id, KnowledgeProcessingItem.id
+                    )
+                    .limit(1)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).one_or_none()
+        if anchor is None or anchor.tenant_id != job.tenant_id:
+            raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
+        stored = anchor.checkpoint.get("target_reset")
+        prepared = isinstance(stored, dict) and _digest(stored) == _digest(marker)
+        counts = await self._item_counts(session, job)
+        if counts.get("succeeded", 0) and not prepared:
+            raise KnowledgeProcessingConflictError(reason="processing_reset_evidence_missing")
+        return TargetResetState(anchor.id, prepared, current)
+
+    async def amark_target_reset(self, session: AsyncSession, lease: ItemLease) -> bool:
+        state = await self.areset_target_state(session, lease.job)
+        if state is None:
+            return False
+        guarded = await self._guard_item(session, lease, state.configuration)
+        if guarded is None:
+            return False
+        job, item = guarded
+        if item.id != state.anchor_item_id:
+            raise KnowledgeProcessingConflictError(reason="processing_reset_anchor_changed")
+        checkpoint = deepcopy(item.checkpoint)
+        checkpoint["target_reset"] = self._reset_marker(job)
+        return await self.asave_checkpoint(
+            session, lease, configuration=state.configuration, step="target_prepared", checkpoint=checkpoint
+        )
+
+    async def afail_attempt(
+        self,
+        session: AsyncSession,
+        job_id: str,
+        *,
+        expected_job_revision: int,
+        error_code: int,
+        lease: JobLease | None = None,
+    ) -> KnowledgeProcessingJob | None:
+        background = get_current_background_task()
+        if background is None or background.tenant_id != self._tenant_id():
+            raise ResourceReferenceInvalidError(reason="processing_attempt_background_required")
+        if type(expected_job_revision) is not int or expected_job_revision < 0 or type(error_code) is not int:
+            raise ValueError("failure requires the observed revision and a public error code")
+        candidate = await self._job(session, job_id, lock=False)
+        root = await KnowledgeModelReferenceRepository().aget(session, candidate.space_id, for_update=True)
+        job = await self._job(session, job_id, lock=True)
+        if job.state not in {"accepted", "running"}:
+            return None
+        if lease is not None:
+            if not self._active_job_lease(job, lease):
+                return None
+        elif job.revision != expected_job_revision or (
+            job.state == "running" and job.lease_until is not None and job.lease_until > self._now()
+        ):
+            return None
+        if root is None:
+            job.state = "obsolete"
+            job.obsolete_reason = "owning_space_missing"
+            job.error_code = KnowledgeProcessingObsoleteError.Code
+        elif not self._check_configuration(
+            job, ProcessingConfiguration(root.model_config_revision, root.index_generation)
+        ):
+            await session.flush()
+            return job
+        else:
+            with strict_tenant_filter():
+                unfinished = (
+                    await session.exec(
+                        select(KnowledgeProcessingItem)
+                        .where(
+                            KnowledgeProcessingItem.job_id == job.id,
+                            KnowledgeProcessingItem.state.in_(("pending", "running")),
+                        )
+                        .with_for_update()
+                        .execution_options(populate_existing=True)
+                    )
+                ).all()
+            for item in unfinished:
+                if item.tenant_id != job.tenant_id:
+                    raise KnowledgeProcessingJobNotFoundError()
+                item.state = "failed"
+                item.error_code = error_code
+                item.lease_token = item.lease_until = None
+                item.finished_at = item.update_time = self._now()
+            await session.flush()
+            await self._refresh_counts(session, job)
+            job.state = "partial_failed" if job.succeeded_count and job.failed_count else "failed"
+            job.error_code = error_code
+        job.pending_dispatch = False
+        job.lease_token = job.lease_until = None
+        job.finished_at = job.update_time = self._now()
+        job.revision += 1
         await session.flush()
         return job
 
@@ -765,7 +952,7 @@ class ProcessingJobRepository:
                     .execution_options(populate_existing=True)
                 )
             ).all()
-        if not rows:
+        if not rows and not (await self.aretry_eligibility(session, job.id)).finalize_only:
             raise KnowledgeProcessingJobNotRetryableError()
         for row in rows:
             if row.tenant_id != job.tenant_id:

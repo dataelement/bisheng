@@ -110,7 +110,7 @@ async def rebuild(admission, monkeypatch, request):
         events.append("es")
         return es
 
-    vector = SimpleNamespace(col=SimpleNamespace(drop=Mock()), add_texts=Mock())
+    vector = SimpleNamespace(col=SimpleNamespace(drop=Mock(), delete=Mock()), add_texts=Mock())
 
     def vector_transport(*args, **kwargs):
         events.append("milvus")
@@ -377,7 +377,7 @@ def test_global_missing_source_index_does_not_become_controlled_partial_success(
 
 def test_failed_partial_cleanup_preserves_stage_instead_of_publishing_inconsistent_files(rebuild, monkeypatch):
     monkeypatch.setattr(document, "_process_single_file", Mock(return_value=False))
-    rebuild.es.client.delete_by_query.side_effect = RuntimeError("cleanup unavailable")
+    rebuild.vector.col.delete.side_effect = RuntimeError("cleanup unavailable")
     with pytest.raises(RuntimeError, match="cleanup unavailable"):
         execute(rebuild, "document")
     assert_stage_preserved(rebuild)

@@ -21,7 +21,7 @@ class KnowledgeProcessingRetryReceipt(SQLModelSerializable, table=True):
         Index("ix_kpr_job_revision", "tenant_id", "job_id", "accepted_job_revision", "id"),
         CheckConstraint("tenant_id > 0 AND actor_user_id > 0", name="ck_kpr_identity"),
         CheckConstraint(
-            "expected_job_revision >= 0 AND accepted_job_revision > expected_job_revision AND item_count > 0",
+            "expected_job_revision >= 0 AND accepted_job_revision > expected_job_revision AND item_count >= 0",
             name="ck_kpr_revision",
         ),
     )
