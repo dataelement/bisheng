@@ -310,3 +310,13 @@ def test_sentinel_master_tls_is_retained_independently_of_monitor_acl(codec):
     options = codec.BrokerReadConfiguration.from_conf(config).connection_options()
     assert options["ssl"] is True and options["ssl_ca_certs"] == "private-master-ca"
     assert options["sentinel_kwargs"] == {"password": "private-monitor"}
+
+
+@pytest.mark.parametrize("protocol", [1, 2])
+def test_real_kombu_unacked_tuple_decodes_without_reencoding_or_rehashing_the_envelope(codec, protocol):
+    value = json.loads(message(args=[81], protocol=protocol))
+    raw = envelope_dumps([value, "", "knowledge_celery"]).encode()
+    decoded, exchange, routing, fingerprint = codec.decode_unacked_message(raw)
+    assert decoded.target_ids == (81,) and exchange == "" and routing == "knowledge_celery"
+    assert decoded.raw_digest == fingerprint
+    assert len(fingerprint) == 64
