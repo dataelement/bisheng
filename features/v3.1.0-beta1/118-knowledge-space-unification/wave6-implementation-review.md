@@ -240,3 +240,10 @@ AS固定c2ea0f44b只原两生产叶/新测试，root审实际原资格及轻列�
 root KN原807db33be的13缺方法红→13绿，cached clean/dirty两反例2红13绿→15绿；独立PROC对05f实证P2：仅查当前row.id会漏未提交PK变化，populate_existing覆盖caller修改。6b628原反例一红15绿后6fe1a40ab按原persistent identity+当前PK窄拒，原发现者逐字应拒/无关pending/原super/narrowed四绿并确认pending ID99/history保留，主树相关七路径115绿。读实际SQL安全列、raiseload配置，401源3 SELECT/5权限批，File/业务无写。T853854据修复复验闭合，不全Session禁写、不扩文件edit。独立发现者日志/private/tmp/f118-proc-kn-6fe-independent.log，root/private/tmp/f118-t854-pk-fixed.log/.xml。
 
 WF真实SqlFence后续审计确认bad parent/mode/version三格未fail closed，原作者正在原叶窄修，T845846继续待办；不能因原组合213绿提前关闭。CH已交固定待独立审，APP仍在原两叶推进；defaults按§53纠正原GET资格并交INT，不误改原workbench用户投影。
+
+
+## WF/CH及默认来源复查闭合（2026-11-07）
+
+WF d863三种坏权限metadata经真实SqlPermissionScopeFence证实3真红，原作者c28bf0423仅原Owner八行条件修复，原反例逐字未改复验通过；非当前edit/原public/原super资格不变。CH3f498原两叶批量原channel.visible，停main/sub同步仍保来源，401源11 actual SELECT/5≤100 FGA批，无完整sync JSON。root合c28后12paths215 passed、759warnings、2.62秒（/private/tmp/f118-root-wf-ch-disclosure.log/.xml），据实际闭合845846/851852。
+
+Default root fc7278263新14缺方法红→5paths70绿，独立EDGE自选79绿及7个额外原生身份/SQL/管理pin/Root对照绿，无确认问题。按实际五GET登录资格只读原key，管理entry单独原设置资格，Root foreign不fallback不复制；T855856闭合。六Owner源均合main072240eee，8paths171 passed、795warnings、3.27秒；APP仍等已冻SA预算接缝联验，不提前勾。当前source helpers不替公开模型/空间删除或完整Coverage。

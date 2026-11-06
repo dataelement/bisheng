@@ -788,3 +788,22 @@ SqlPermissionControlState新增load_grants_batch(*,targets:tuple[VerifiedPermiss
 Runtime.batch_check_actions只在既有SA+delete且决策剩余拒绝项触发；一次_runtime_catalog核原process pin，从现permission_snapshots按批取Mode。CUSTOM仅同actor.tenant且原version/parent/projection_state=CURRENT精确匹配才调用上述batch；manager/Grant.active/model.active、CREATOR_GRANT active、同service_account subject_id、userset_relation=None逐项原条件不变；原log保留。INHERIT保原nearest CUSTOM ancestor单条fallback，不新改文件继承策略；非SA/非delete/原决策已允许/foreign不多读、原单条check_action不变。不能误将主路径DECIDABLE的PROJECTING许可套在本例外严格CURRENT上；任何原读失败按原方式拒例外，不将异常变ALLOW。
 
 同测试锁原50/50两例语义及实际SQL预算，再覆盖重复目标、空/foreign、撤销source/换model/非creator/非SA/版本或parent漂移/PROJECTING、Catalog pin或IO异常、INHERIT原路径对照。规模须50→200查询不逐项增长，401分批线性，禁止target×model×source关联乘积；不把原产品策略首绿伪称行为红。APP T849850待此预算接缝联装后才能闭合；既有权限其他全库性能不在本卡扩改。
+
+
+## 55. 模型影响核心的完整来源分类与有界分页 V1：已冻结
+
+EDGE先§56大目标集T873874，再T867868纯cursor/DTO、T869870实际核心。生产仅新llm/domain/services/model_reference_cursor.py与原model_reference_service.py，分两实现卡；测试新test_model_reference_sources.py及原test_llm_refs.py。新叶≤600。复用既有ModelDeletionRepository/真实Owner receipts/ReferenceRepository全BRR的200行seek、全局Coverage；constructor增disclosure_runtime:SourceDisclosureRuntime|None，默认纯disclosure_composition.get_runtime，不造另一ImpactCore、不假Ready。生产Coverage仍缺时保持10994，公开HTTP/确认plan/删除后继另冻，不据此验收整特性。
+
+ainspect_removed_models(...原参数...,source_page_size:int=50)全量distinct完整SourceKey(tenant,type,id,version)只分类一次，六业务真实端口每批≤200。source_counts完整全集，新增qualified_counts，必须source_counts=qualified+restricted；slot_counts与inbound_digest不随展示过滤。foreign完整计数restricted但不进入业务Owner，不切scope/身份；当前metadata/IO异常10994，不能当正常隐藏。仅保首个有界详情页names，其余临时metadata处理后丢。页ModelReferenceSourcePage(data:tuple[ModelReferenceSourceEntry,...],page_size,has_more,next_cursor)，Entry只已qualified SourceDisclosure+matched_slot_count（同source本removed目标集合的实际BRR行数），不吐无界slot_keys。当前tenant候选按(type,id,version)稳定排序，消费候选数分页，空data仍可has_more。每页1..200/default50，bool/错类型拒绝。
+
+alist_removed_model_sources(session,*,identity,server_id,retained_model_ids,delete_server=False,cursor:str,page_size:int=50)重新原管理员/目标/Owner/Coverage及完整BRR数据集核验，仅本页≤200候选重新资格，不重复全S资格计数，不将初次qualified_counts伪称后续实时汇总。cursor用现common.cursor封装source ordinal整数，context为规范command/server与实际target/server revisions、完整inbound hash、Coverage epoch/inventory、稳定原UserPayload/actor/闭集runtime credential/scope摘要及page_size（排trace）。隐藏SourceKey/名称/URL、原始凭据均不进入cursor。common.cursor未签名，只是上下文一致性，不能充当授权；篡改ordinal仍每个候选fresh授权，拒错上下文/负数/bool/越界/非法或超长payload。新session/新trace同原资格可继续，credential/scope/dataset变化拒复用。保Core现可接受user管理员身份，不借旧plan web-only形状新增限制。
+
+v2完整摘要明确为SHA256(b'f118-model-inbound-v2\0'+每条原BRR.id的8字节big-endian+原_binding_digest(row)32字节)，按原Repo.id全局严格递增流；拒非正/bool/重复/倒序/uint64溢出。去hashes全量列表与sort，任何实际行ID/语义字段变化要重确认；旧内部v1确认不能伪兼容。全仓源码核当前无公开生产调用/实际构造，既有两测试仅64hex/变化/原样存储，不约束排序/ID无关；此证据不等于已查线上绝无记录。独立100001slot/1source的聚合峰值8.5MiB→约2.7KiB，仅证明hash-list额外内存消除，完整Core仍O(S) distinct集合+≤200页，不能称O(1)。测试需100001slot峰值、401source批量、跨binding页重复source、多target、最后页变化/ID重插、每页fresh scope及无隐藏Key，完整Scope/计数/摘要失败仍阻删除。
+
+## 56. 原生目标规模及旧测试适配边界 V1：已冻结
+
+EDGE T873874仅原llm/domain/repositories/reference_target_repository.py与resource_reference/domain/repositories/reference_repository.py，配新test_model_target_scale.py。原401目标425 SELECT含401 tombstone逐键预锁（server3/model4/tenant2/Run14/BRR1），1001合法目标在每Target一OR处触发SQLite max depth1000，原13+401绿/1001真红已实证。完整Owner authority/receipt/原Scope与目标全集不变，无业务总量新上限。Model业务行已批读，不伪称其逐model SQL。
+
+TargetRepo仅将实际Tombstone(目标type/id/owner)读锁按完整集合预取分批≤200、复用原DeletionEvidence/_revision及missing/original/prelock proof校验，不每target一SQL；同步/异步共用原计划，原Server→Model→Tombstone锁顺序保持，分批内部与全局排序一致，注意数字ID/字符串索引顺序不可跨批交叉。不搬Owner认证到调用方、不读额外tenant、不改model默认/共享资格。原较大Model ID IN按便携条件分组，不改变实际锁定全集。RefRepo将等价目标谓词按target_type分组并按≤200 ID的IN片段组合，整条仍唯一SELECT、id seek/order与完整四键Source JOIN不变；不能拆成每目标组×每BRR页的重复扫描/用户×资源枚举。此处≤200是IN片段及Tombstone预取批次，不假报完整owner Scope总参数≤200；不另加Ref SQL总量限制或截断。401/1001多模型实际SQL、缺模型/合法tombstone/foreign/两Owner/全旧Owner/Reference paging选集须通过；真实MySQL锁/并发仍T202实测。
+
+INT T871只原test/open_api/test_service_account_creator_delete.py的State fake补permission_snapshots/load_grants_batch，复用原mode_for_target/load_grants语义，不删旧断言、不改生产兼容fake。T872只原APP注册测试：真实F118实现前a1b1a2387为43pass/1既有super bare-scope fail/7skip，当前41pass/3fail/7skip；其中2个use Catalog期望随本次退休已过期。对齐非可分配visible/5原动作与真实模型visible关系，保legacy use wire单测；旧super场景补原已存在可信management_tenant_scope fixture，不变任何生产跨tenant策略。7个原中间件placeholder仍明确skip，不伪报E2E。
