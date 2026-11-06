@@ -92,3 +92,19 @@ T692两端只读旧表格实际规则镜像通过平台63/client20原API回归�
 - 独立旧环境已通过原API保存工作流两版本（1 current/2非current）、助手原模型+legacy/SPACE知识槽及disabled频道同步目标，并GET回读配置/graph摘要。证据`evidence/preparation-saved-sources.json`。第一次助手稀疏PUT因旧代码把省略temperature写NULL报500，保留实际SQL1048及失败记录后，使用原GET temperature完整表单成功；没有改旧产品代码、隐藏失败或将其报为E2E成功。准备样本仍不作为正式基线。
 
 原94AC、140QA及13张SVG不变；当前HTML/设计/升级/任务数字同步。独立环境仍标准旧基线运行，未部署F118、正式停服冻结/转换/备份恢复/完整E2E，无push/生产修改。DM8实库免测继续执行，C2静态和MySQL演练保持。
+
+
+## 2026-11-07开放任务模式与目录API前置收口
+
+当前历史759编号：631完成/历史交付、126待办、2外移；原137队列累计26完成、111待办，另15个既有需求接缝待办。原T149/T150、T744–T747/T749及T750–T753、T758/T759已独立复查/合入。目录实际Files/detail、元数据Owner/runner等尚未完整交付，原T177/T179/T071/T072不勾。
+
+- Task mode固定0c113e69a原组合通过后，独立审实际发现逐ID资源解析：合法每槽50 unique为51条Knowledge SELECT，25 unique重复两遍为26条，S/D均可复现。修复固定a7d4df72f已合入：两个提交槽皆strict一次候选→按实际0/3 namespace的真实loaded-row adapter→原snapshot与verified-visible；只保library原full-scope super且仅verified IDs的既有shortcut，SPACE无新增扩张。原主体/数据范围、QA/退休/缺失及原worker白名单保持，不改公共权限框架。
+- 独立同审查代理在新固定archive复验13路径243绿（含原14格独立probe）；上述两合法请求场景均1条Knowledge SELECT，FGA仍2批/50或25 checks。作者23真实新红→绿，三核心109绿、原15路径293全绿；T749仅退休use假结果改实际visible，原candidate/disabled/他人/同名优先及错误断言保持，不忽略旧fixture失败。
+- root受测主树466f063e2c98cc9ca0dc71bc34ed839a34fb5bcb：Task mode、名称分页/异常清单及旧提交/配置/个人技能/状态/endpoint **251 passed**，6.18秒；日志`/private/tmp/f118-root-taskmode-focused.log`及同名前缀JUnit。带真实loopback mock的全目录再次运行申请因自动审批超时未启动，未报成通过；此前完整后端2867通过仍为a20ae8a48历史快照。本次采用不需网络的实际变更范围组合完成本波验证，没有篡改或跳过原测试断言。
+- 平台固定8c1341841由root独立审后合入：可信scope共享hook保原三tab/菜单/QA，并用对象epoch退休scope ABA；七个真实文件API闭集、正整数ID、repeat query键、preview/download分离，原Child仅补tags和三bool且598行。root主树16路径**227 passed**，日志/JSON`/private/tmp/f118-root-directory-api-integrated`；原scope/API/Page及旧默认表单全绿。实际Files目录挂载尚未完成，不冒称详情已可用。
+- T758/T759六个目录业务键中英日已同批提交，原所有其他keys/values逐项相同；check-i18n无新增漂移。没有更改公共request、认证store、QA或generated api_errors。
+- 元数据候选abdfa6ca8尚未合入：配对74/相关323为作者局部证据，独立八路径226绿加真实默认Runtime/Core的SA/D两格通过；另确认两项pending关系漏检（其他dirty version改指目标file、历史item的primary file pending移出）会在no_autoflush后随完成提交坏链，已交作者原叶修复。root另要求whole-job JSON投影/传输预算，避免逐item反复读取全部scope_manifest的平方体量；尚未闭合，metadata kind保持unavailable。
+
+真实旧环境增加205个保存工作流版本，跨200行正式盘点页边界；原current_version_id=1不变，17.274秒真实POST/GET验证，证据`evidence/preparation-many-workflow-versions.json`。仅为准备数据，没有执行工作流或冻结正式基线。另已从独立运行MySQL生成single-transaction准备快照并建立单独bisheng_f118_probe_20261107克隆库，原运行库未改；快照SHA256为0eba7c145bf6e2fe84a004f3f26ef62007cd8d7447c25f899810a3d931320629，私有文件probes/20261107/preparation-input.sql。候选backend 3ef4f26a1归档已上传但后续远端checksum/解包/私有配置/DDL探针尚未执行（配置脚本上传自动审批连续两次超时），不能称MySQL候选DDL/仓储已验证。
+
+自动审批超时不是业务拒绝或安全结论；相关远端探针暂挂起，本地开发与实际变更范围验证继续。未操作3005，未部署F118、正式停服冻结/业务转换/恢复或完整E2E，无push。DM8实库用户免测，C2静态保持；当前13张SVG/94AC/140QA未删减。
