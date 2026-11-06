@@ -63,25 +63,25 @@ async def test_all_five_native_kinds_checkpoint_and_business_share_the_parent_tr
 @pytest.mark.parametrize("kind", ["forged", "copied", "tampered", "replayed", "cross_transaction"])
 async def test_only_the_original_same_transaction_batch_can_write(service, database, kind):
     async with AsyncSession(database.engine) as session:
-        async with session.begin():
-            batch = await issue(service, session, database.commands, eof=True)
-            if kind == "forged":
-                attempted = asdict(batch)
-            elif kind == "copied":
-                attempted = replace(batch)
-            elif kind == "tampered":
-                object.__setattr__(batch, "eof", False)
-                attempted = batch
-            elif kind == "replayed":
-                await service.aapply_batch(session, batch=batch)
-                attempted = batch
-            elif kind == "cross_transaction":
-                await session.rollback()
-                await session.begin()
-                attempted = batch
-            with pytest.raises(KnowledgeOperationPlanConflictError):
-                await service.aapply_batch(session, batch=attempted)
+        await session.begin()
+        batch = await issue(service, session, database.commands, eof=True)
+        if kind == "forged":
+            attempted = asdict(batch)
+        elif kind == "copied":
+            attempted = replace(batch)
+        elif kind == "tampered":
+            object.__setattr__(batch, "eof", False)
+            attempted = batch
+        elif kind == "replayed":
+            await service.aapply_batch(session, batch=batch)
+            attempted = batch
+        elif kind == "cross_transaction":
             await session.rollback()
+            await session.begin()
+            attempted = batch
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await service.aapply_batch(session, batch=attempted)
+        await session.rollback()
 
 
 @pytest.mark.parametrize("drift", ["phase", "baseline", "plan", "cursor"])
@@ -265,4 +265,131 @@ async def test_recovery_rejects_real_after_drift_without_repairing_it(service, d
                     checker, session, database.commands, expected_checkpoint=goal, mode="verify", eof=True
                 ),
             )
+    assert await native.snapshot(database) == before
+
+
+@pytest.mark.parametrize("count", [401, 10001])
+async def test_native_large_conversion_and_fresh_session_recovery_are_linear_and_bounded(
+    service, database, module, count
+):
+    from bisheng.knowledge.domain.services.unification_fingerprints import digest
+
+    await database.insert(native.raw.KnowledgeFile, [native.raw.file(i) for i in range(10, count + 7)])
+    facts = await native.producer.acquire(database)
+    builder = importlib.import_module(
+        "bisheng.knowledge.application.unification_conversion_plan"
+    ).ConversionPlanBuilder(
+        run_id=native.IDENTITY["run_id"],
+        writer_contract_version=native.IDENTITY["writer_contract_version"],
+        planned_at=native.NOW,
+    )
+    for kind in native.producer.KINDS:
+        rows = facts[kind]
+        for offset in range(0, max(len(rows), 1), 200):
+            getattr(builder, "add_" + kind)(rows[offset : offset + 200])
+    builder.add_defaults(())
+    commands = tuple(cmd for cmd in builder.finish() if cmd.operation == "initialize_v1")
+    assert len(commands) == count
+
+    async def files_digest():
+        async with database.engine.connect() as connection:
+            return digest(
+                [
+                    dict(row)
+                    for row in (
+                        await connection.execute(
+                            sa.select(native.raw.KnowledgeFile.__table__).order_by(native.raw.KnowledgeFile.id)
+                        )
+                    ).mappings()
+                ]
+            )
+
+    original_files = await files_digest()
+    database.queries.clear()
+    current, continuation = None, None
+    for offset in range(0, count, 200):
+        async with AsyncSession(database.engine) as session, session.begin():
+            continuation = await service.aapply_batch(
+                session,
+                batch=await issue(
+                    service,
+                    session,
+                    commands[offset : offset + 200],
+                    ordinal=offset,
+                    expected_checkpoint=current,
+                    continuation=continuation,
+                    eof=offset + 200 >= count,
+                ),
+            )
+            current = continuation.progress
+    application_queries = len(database.queries)
+    assert current.processed_count == count and current.complete
+    assert application_queries <= ((count + 199) // 200) * 65
+    assert await files_digest() == original_files
+    async with database.engine.connect() as connection:
+        for model in (native.raw.KnowledgeDocument, native.raw.KnowledgeDocumentVersion):
+            assert await connection.scalar(sa.select(sa.func.count()).select_from(model)) == count
+    checker = module.UnificationConversionService()
+    database.queries.clear()
+    continuation = None
+    for offset in range(0, count, 200):
+        async with AsyncSession(database.engine) as session, session.begin():
+            continuation = await checker.averify_committed_page(
+                session,
+                batch=await issue(
+                    checker,
+                    session,
+                    commands[offset : offset + 200],
+                    ordinal=offset,
+                    expected_checkpoint=current,
+                    continuation=continuation,
+                    mode="verify",
+                    eof=offset + 200 >= count,
+                ),
+            )
+    assert continuation.verification_complete and continuation.progress == current
+    assert len(database.queries) <= ((count + 199) // 200) * 25
+    # Actual native SQL, including union primary/survivor candidates, never has
+    # an unbounded ID parameter list. Recovery never selects whole File history.
+    import re
+
+    for sql, _ in database.queries:
+        assert all(section.count("?") <= 200 for section in re.findall(r"\bIN \(([^)]+)\)", sql))
+    print(
+        f"native conversion count={count} apply_SELECT={application_queries} "
+        f"recovery_SELECT={len(database.queries)} pages={(count + 199) // 200}"
+    )
+
+
+async def test_rollback_result_is_not_a_committed_continuation_and_prefix_mode_cannot_write(service, database):
+    async with AsyncSession(database.engine) as session, session.begin():
+        first = await service.aapply_batch(session, batch=await issue(service, session, database.commands[:1]))
+        await session.rollback()
+    async with AsyncSession(database.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await issue(
+                service,
+                session,
+                database.commands[1:],
+                expected_checkpoint=first.progress,
+                ordinal=1,
+                continuation=first,
+                eof=True,
+            )
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await issue(service, session, database.commands, mode="verify", eof=True)
+
+
+async def test_getter_preserves_pending_run_changes_and_never_initializes_sql_progress(service, database):
+    before = await native.snapshot(database)
+    async with AsyncSession(database.engine) as session, session.begin():
+        run = (await session.execute(sa.select(Run))).scalar_one()
+        run.verification_report = {"caller": "pending"}
+        run.checkpoints = {
+            "converting": {"caller": {"cursor": None, "processed_count": 0, "digest": None, "complete": False}}
+        }
+        assert (await progress(service, session)).digest is None
+        assert run in session.dirty and run.verification_report == {"caller": "pending"}
+        assert "caller" in run.checkpoints["converting"]
+        await session.rollback()
     assert await native.snapshot(database) == before
