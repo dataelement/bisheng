@@ -72,6 +72,11 @@ async def test_each_model_default_root_auxiliary_plan_is_union_locked_before_fir
                 LLMModel(id=66, tenant_id=1, server_id=5, model_name="aux-evaluation", model_type="llm"),
                 TenantSystemModelConfig(tenant_id=1, key="evaluation_llm", value='{"model_id":66}'),
                 TenantSystemModelConfig(tenant_id=1, key="workflow_llm", value='{"model_id":44}'),
+                # The two written keys stop contributing fallback eligibility;
+                # this unchanged third key still requires both auxiliary IDs.
+                TenantSystemModelConfig(
+                    tenant_id=1, key="assistant_llm", value='{"llm_list":[{"model_id":44},{"model_id":66}]}'
+                ),
             ]
         )
     owner = ModelReferenceTargetOwner(sharing=models.FrozenSharing())
