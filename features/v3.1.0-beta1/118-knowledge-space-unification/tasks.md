@@ -4938,7 +4938,7 @@
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/application/processing_owner.py`\
   **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
-  **依赖**：T620, T623, T637, T641, T643\
+  **依赖**：T620, T623, T637, T641, T643, T645\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：运行配对T620及真实Owner组合；相关原回归不退化。
 
@@ -4970,7 +4970,7 @@
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
   **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
-  **依赖**：T624, T637, T641\
+  **依赖**：T624, T637, T641, T645\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：运行配对T624及真实Owner组合；相关原回归不退化。
 
@@ -5073,7 +5073,7 @@
 - [ ] **T637 · 任务原始接受修订模型**
   **类型 / Owner**：基础设施 / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_processing_job.py`\
-  **逻辑 / 测试上下文**：仅新增accepted_model_config_revision可空审计列；正常创建赋值由T625同一repo叶完成，不加独立模型绑定。\
+  **逻辑 / 测试上下文**：仅新增accepted_model_config_revision可空审计列；正常创建赋值由T645同一repo叶完成，不加独立模型绑定。\
   **依赖**：T636\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
@@ -5125,6 +5125,22 @@
   **依赖**：T642\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T644 · 任务接受修订真实创建仓储回归**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_job_acceptance_revision.py`\
+  **逻辑 / 测试上下文**：在T636模型测试之后补实际acreate接受R、幂等重放不覆盖、retry/后续切换不伪造初值；不把审计存到parameters。\
+  **依赖**：T637, T611\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：独立提交实际仓储红测，记录真实结果，不提前修改切换代码。
+
+- [ ] **T645 · 任务接受修订真实创建仓储写入**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
+  **逻辑 / 测试上下文**：仅正常acreate时显式写当前Owner配置R；已存在job/retry/cutover不覆写，旧NULL缺证据不猜。\
+  **依赖**：T644\
+  **配对测试**：T644\
+  **验证 / 完成条件**：T644与原job仓储组合全绿，Owner及收据在后续对应卡组合验证。
 
 ## 自动化覆盖索引
 
