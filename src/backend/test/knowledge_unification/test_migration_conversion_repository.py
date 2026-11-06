@@ -425,3 +425,19 @@ async def test_core_sql_link_change_after_scope_lock_is_not_erased_by_planned_de
     assert next(row for row in after["taglink"] if row["id"] == 1)["resource_id"] == "2"
     assert after["knowledge_document"] == after["knowledge_document_version"] == ()
     assert after["knowledge"][0]["type"] == 0
+
+
+async def test_every_native_update_or_delete_has_an_explicit_tenant_predicate(repo, database):
+    writes = []
+
+    @sa.event.listens_for(database.engine.sync_engine, "before_cursor_execute")
+    def seen(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.upper().startswith(("UPDATE ", "DELETE ")):
+            writes.append(statement)
+
+    try:
+        async with AsyncSession(database.engine) as session, session.begin():
+            await apply(repo, session, database.commands)
+    finally:
+        sa.event.remove(database.engine.sync_engine, "before_cursor_execute", seen)
+    assert writes and all("tenant_id" in statement.split(" WHERE ", 1)[1] for statement in writes)
