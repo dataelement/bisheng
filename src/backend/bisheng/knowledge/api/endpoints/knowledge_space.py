@@ -4,10 +4,13 @@ from fastapi import APIRouter, Body, Depends, Query, Request
 from loguru import logger
 from starlette.responses import StreamingResponse
 
+from bisheng.admin.application.tenant_scope import require_expected_management_tenant, resolve_management_scope
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.admin_scope import AdminScopeChangedError
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import SSEResponse, resp_200
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_document_version_repository,
     get_knowledge_space_chat_service,
@@ -40,6 +43,7 @@ from bisheng.knowledge.domain.schemas.work_retrieval import WorkRetrievalRequest
 from bisheng.knowledge.domain.services.department_knowledge_space_service import (
     DepartmentKnowledgeSpaceService,
 )
+from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
     KnowledgeSpaceChatService,
 )
@@ -83,9 +87,21 @@ async def retrieve_workspace_context(
 @router.post("")
 async def create_space(
     req: KnowledgeSpaceCreateReq,
+    request: Request,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
+    advanced = {}
+    if req.embedding_model_id is not None or req.processing_defaults is not None:
+        scope = await resolve_management_scope(login_user.user_id, is_super=login_user.is_global_super, for_write=True)
+        require_expected_management_tenant(request.headers.get("X-Management-Tenant"), scope)
+        if scope.tenant_id != get_current_tenant_id():
+            raise AdminScopeChangedError(scope_tenant_id=scope.tenant_id)
+        advanced = {
+            "embedding_model_id": req.embedding_model_id,
+            "processing_defaults": req.processing_defaults,
+            "web_creation_context": await KnowledgeCreationPolicy.prepare(login_user),
+        }
     space = await svc.create_knowledge_space(
         name=req.name,
         description=req.description,
@@ -97,8 +113,29 @@ async def create_space(
         auto_tag_custom_tags=req.auto_tag_custom_tags,
         creation_request_id=req.creation_request_id,
         initial_permissions=req.initial_permissions,
+        **advanced,
     )
     return resp_200(space)
+
+
+@router.get("/list")
+async def list_visible_spaces(
+    keyword: str | None = None,
+    page_size: int = Query(default=20, ge=1, le=200),
+    cursor: str | None = None,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.list_visible_spaces(keyword=keyword, page_size=page_size, cursor=cursor))
+
+
+@router.get("/admin/list")
+async def list_admin_spaces(
+    keyword: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.list_admin_spaces(keyword=keyword, page=page, page_size=page_size))
 
 
 @router.get("/auto-tag-visibility")

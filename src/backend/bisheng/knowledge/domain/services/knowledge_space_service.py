@@ -27,9 +27,11 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
 )
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.admin_scope import AdminScopeTenantRequiredError
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpacePrivateError,
+    KnowledgeSpaceInvalidCursorError,
     SpaceCreationRequestConflictError,
     SpaceFileDuplicateError,
     SpaceFileExtensionError,
@@ -50,7 +52,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceTenantMismatchError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
-from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
+from bisheng.common.errcode.permission import PermissionDeniedError, PermissionEnumerationIncompleteError
 from bisheng.common.models.space_channel_member import (
     MembershipStatusEnum,
     SpaceChannelMember,
@@ -58,7 +60,7 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
 )
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_current_tenant_id, get_is_management_api
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
@@ -104,8 +106,13 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceListItemResp,
     SpaceSubscriptionStatusEnum,
 )
+from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
     KnowledgeAuditTelemetryService,
+)
+from bisheng.knowledge.domain.services.knowledge_creation_policy import (
+    KnowledgeCreationContext,
+    KnowledgeCreationPolicy,
 )
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerPermissionRecord,
@@ -152,7 +159,7 @@ from bisheng.utils import generate_knowledge_index_name, generate_uuid, get_requ
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
-    from bisheng.common.schemas.api import PageInfiniteCursorData
+    from bisheng.common.schemas.api import PageData, PageInfiniteCursorData
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
         KnowledgeDocumentRepository,
     )
@@ -1242,18 +1249,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         creation_request_id: str | None = None,
         initial_permissions: InitialPermissionsRequest | None = None,
         skip_user_limit: bool = False,
+        embedding_model_id: int | None = None,
+        processing_defaults: ProcessingDefaults | None = None,
+        web_creation_context: KnowledgeCreationContext | None = None,
     ) -> KnowledgeSpaceCreateResp:
         """Create a new knowledge space, subject to the role-level creation quota."""
 
+        advanced = embedding_model_id is not None or processing_defaults is not None
+        if advanced and (
+            not isinstance(web_creation_context, KnowledgeCreationContext)
+            or web_creation_context.user_id != self.login_user.user_id
+        ):
+            raise PermissionDeniedError()
+        if web_creation_context is not None:
+            await KnowledgeCreationPolicy.revalidate(web_creation_context)
+        if embedding_model_id is not None and (type(embedding_model_id) is not int or embedding_model_id <= 0):
+            raise ValueError("embedding_model_id must be a positive integer")
+        defaults = (
+            ProcessingDefaults.model_validate(processing_defaults.model_dump(mode="json"))
+            if processing_defaults is not None
+            else None
+        )
         existing = await self._existing_creation(creation_request_id, None)
-        workbench_llm = None
+        selected_model_id = embedding_model_id
         if existing is None:
             if not skip_user_limit:
                 await self._assert_space_creation_quota()
 
-            workbench_llm = await LLMService.get_workbench_llm()
-            if not workbench_llm or not workbench_llm.embedding_model:
-                raise WorkbenchEmbeddingError()
+            if selected_model_id is None:
+                workbench_llm = await LLMService.get_workbench_llm()
+                if not workbench_llm or not workbench_llm.embedding_model:
+                    raise WorkbenchEmbeddingError()
+                selected_model_id = workbench_llm.embedding_model.id
 
         # Defence-in-depth: a tenant with the feature flag off must not be able to
         # configure auto-tag by hand-crafting requests. Normalize before hashing
@@ -1274,6 +1301,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             auto_tag_library_id=auto_tag_library_id,
             auto_tag_custom_tags=auto_tag_custom_tags,
             initial_permissions=initial_permissions,
+            embedding_model_id=embedding_model_id,
+            processing_defaults=defaults,
         )
         if existing is not None:
             if existing.creation_payload_hash != payload_hash:
@@ -1283,7 +1312,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 creation_request_id=creation_request_id,
                 initial_permissions=initial_permissions,
             )
-        if workbench_llm is None or workbench_llm.embedding_model is None:
+        if selected_model_id is None:
             raise WorkbenchEmbeddingError()
 
         # Library-id needs the freshly minted knowledge.id when we are upserting
@@ -1294,7 +1323,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             icon=icon,
             auth_type=auth_type,
             type=KnowledgeTypeEnum.SPACE.value,
-            model=workbench_llm.embedding_model.id,
+            model=selected_model_id,
+            processing_defaults=defaults.model_dump(mode="json") if defaults is not None else None,
             is_released=is_released,
             auto_tag_enabled=False,
             auto_tag_library_id=None,
@@ -1304,6 +1334,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         created = True
         try:
+            if web_creation_context is not None:
+                await KnowledgeCreationPolicy.revalidate(web_creation_context)
             knowledge_space = await self._create_space_with_model(db_knowledge)
         except IntegrityError:
             # A concurrent request with the same durable key won the insert.
@@ -1478,6 +1510,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_library_id: int | None,
         auto_tag_custom_tags: list[str] | None,
         initial_permissions: InitialPermissionsRequest | None,
+        embedding_model_id: int | None = None,
+        processing_defaults: ProcessingDefaults | None = None,
     ) -> str:
         payload = {
             "name": name,
@@ -1490,6 +1524,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "auto_tag_custom_tags": auto_tag_custom_tags,
             "initial_permissions": None,
         }
+        # Omitted fields retain the legacy command hash for durable retries.
+        if embedding_model_id is not None:
+            payload["embedding_model_id"] = embedding_model_id
+        if processing_defaults is not None:
+            payload["processing_defaults"] = processing_defaults.model_dump(mode="json")
         if initial_permissions is not None:
             grants = sorted(
                 (
@@ -2053,6 +2092,137 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             members = [member for member in members if int(member.business_id) not in department_space_ids]
         return await self._format_member_spaces(members, order_by)
+
+    def _is_management_super_actor(self, actor: PermissionActor, tenant_id: int) -> bool:
+        """Keep the original identity while using one trusted management tenant."""
+        return (
+            actor.subject_type == "user"
+            and actor.subject_id == self.login_user.user_id
+            and actor.current_tenant_id == self.login_user.tenant_id
+            and actor.super_admin
+            and actor.data_scope == DATA_SCOPE_ALL
+            and get_is_management_api()
+            and get_admin_scope_tenant_id() == tenant_id == get_current_tenant_id()
+        )
+
+    async def list_admin_spaces(
+        self, *, keyword: str | None = None, page: int = 1, page_size: int = 20
+    ) -> "PageData[KnowledgeSpaceListItemResp]":
+        """List one trusted management tenant without ordinary visibility filters."""
+        from bisheng.common.schemas.api import PageData
+
+        if type(page) is not int or page < 1 or type(page_size) is not int or not 1 <= page_size <= 200:
+            raise ValueError("page and page_size must be positive and page_size at most 200")
+        tenant_id = get_admin_scope_tenant_id()
+        if type(tenant_id) is not int or tenant_id <= 0:
+            raise AdminScopeTenantRequiredError()
+        actor = await self._permission_actor()
+        if (
+            tenant_id != get_current_tenant_id()
+            or (actor.current_tenant_id != tenant_id and not self._is_management_super_actor(actor, tenant_id))
+            or actor.subject_type != "user"
+            or actor.data_scope != DATA_SCOPE_ALL
+            or not (actor.super_admin or tenant_id in actor.tenant_admin_tenant_ids)
+        ):
+            raise PermissionDeniedError()
+        rows, total = await self.space_listing_repository.alist_admin(keyword=keyword, page=page, page_size=page_size)
+        if any(row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value for row in rows):
+            raise SpaceNotFoundError()
+        return PageData[KnowledgeSpaceListItemResp](
+            data=[KnowledgeSpaceListItemResp.model_validate(row) for row in rows], total=total
+        )
+
+    async def list_visible_spaces(
+        self, *, keyword: str | None = None, page_size: int = 20, cursor: str | None = None
+    ) -> "PageInfiniteCursorData[KnowledgeSpaceListItemResp]":
+        """Consume at most 1000 SQL candidates, independently of visible density."""
+        from bisheng.common.cursor import decode_cursor, encode_cursor
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+
+        if type(page_size) is not int or not 1 <= page_size <= 200:
+            raise ValueError("page_size must contain 1..200 items")
+        tenant_id = get_current_tenant_id()
+        actor = await self._permission_actor()
+        management_super = self._is_management_super_actor(actor, tenant_id)
+        if (
+            type(tenant_id) is not int
+            or tenant_id <= 0
+            or (actor.current_tenant_id != tenant_id and not management_super)
+        ):
+            raise PermissionDeniedError()
+        keyword = keyword.strip() if keyword is not None else None
+        context = (
+            "knowledge-space-visible|"
+            + sha256(
+                json.dumps([tenant_id, actor.fga_subject, actor.data_scope, keyword or "", page_size]).encode()
+            ).hexdigest()
+        )
+        try:
+            decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
+            after = None
+            if decoded is not None:
+                timestamp, ident = decoded
+                if type(ident) is not int or ident <= 0 or (timestamp is not None and not isinstance(timestamp, str)):
+                    raise ValueError("invalid space seek key")
+                timestamp = datetime.fromisoformat(timestamp) if timestamp is not None else None
+                if timestamp is not None and timestamp.tzinfo is not None:
+                    raise ValueError("space seek timestamps use the database's naive time")
+                after = (timestamp, ident)
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise KnowledgeSpaceInvalidCursorError() from exc
+
+        items: list[KnowledgeSpaceListItemResp] = []
+        consumed = 0
+        last_key = after
+        adapter = self.f048_permission_adapter or await self._resource_adapter("knowledge_space")
+
+        def result(has_more):
+            return PageInfiniteCursorData[KnowledgeSpaceListItemResp](
+                data=items,
+                page_size=page_size,
+                has_more=has_more,
+                next_cursor=encode_cursor(last_key, context=context) if has_more else None,
+            )
+
+        while consumed < 1000:
+            limit = min(100, 1000 - consumed)
+            batch = await self.space_listing_repository.alist_candidates(keyword=keyword, after=after, limit=limit)
+            if not batch:
+                return result(False)
+            if any(row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value for row in batch):
+                raise SpaceNotFoundError()
+            # The repository released its data connection before permission I/O.
+            targets = await adapter.resolve_permission_targets_from_rows(
+                rows=batch, resource_type="knowledge_space", actor=actor
+            )
+            if management_super:
+                # The system shortcut accepts only IDs that passed this loaded
+                # business/snapshot validation, never the raw SQL candidates.
+                actions = await self._batch_actions(
+                    "knowledge_space", [target.resource_id for target in targets], ("visible",)
+                )
+                visible = {("knowledge_space", ident): "visible" in codes for ident, codes in actions.items()}
+            else:
+                visible = await batch_check_verified_business_visible(actor=actor, targets=targets)
+            for row in batch:
+                if len(items) == page_size:
+                    # This row has not been consumed and must remain on the next page.
+                    return result(True)
+                consumed += 1
+                last_key = (row.update_time, row.id)
+                if visible.get(("knowledge_space", str(row.id)), False):
+                    items.append(
+                        KnowledgeSpaceListItemResp.model_validate(row).model_copy(update={"actions": ["visible"]})
+                    )
+            after = last_key
+            if len(batch) < limit:
+                return result(False)
+            if len(items) == page_size or consumed == 1000:
+                # A one-row, unconsumed SQL probe distinguishes EOF. It neither
+                # checks permission nor advances the consumption cursor/budget.
+                pending = await self.space_listing_repository.alist_candidates(keyword=keyword, after=after, limit=1)
+                return result(bool(pending))
+        return result(False)
 
     @staticmethod
     async def _complete_visible_space_ids(actor: PermissionActor, runtime) -> list[int]:
