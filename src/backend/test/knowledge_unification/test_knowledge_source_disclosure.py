@@ -1,5 +1,6 @@
 """Actual Knowledge SQL projections and loaded-target permissions for metadata."""
 
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -40,7 +41,15 @@ async def metadata(store, monkeypatch):
     actor = PermissionActor(user_id=7, tenant_id=101)
     token = set_current_permission_actor(actor)
     user = UserPayload(user_id=7, tenant_id=101, user_role=[])
-    facts = SimpleNamespace(queries=[], checks=[], snapshots=[], allowed={10, 12, 13}, action_error=None)
+    facts = SimpleNamespace(
+        queries=[],
+        checks=[],
+        snapshots=[],
+        allowed={10, 12, 13},
+        action_error=None,
+        snapshot_changes={},
+        missing_snapshots=False,
+    )
 
     @sa.event.listens_for(engine.sync_engine, "before_cursor_execute")
     def observe(_connection, _cursor, statement, parameters, _context, _many):
@@ -49,7 +58,16 @@ async def metadata(store, monkeypatch):
 
     async def snapshots(keys):
         facts.snapshots.append(keys)
-        return {k: PermissionResourceSnapshot(*k, 3, "ctx", "CUSTOM", None, None, "READY") for k in keys}
+        return (
+            {}
+            if facts.missing_snapshots
+            else {
+                k: replace(
+                    PermissionResourceSnapshot(*k, 3, "ctx", "CUSTOM", None, None, "CURRENT"), **facts.snapshot_changes
+                )
+                for k in keys
+            }
+        )
 
     async def check(received_actor, targets, action):
         assert received_actor is actor and action == "visible"
@@ -63,10 +81,12 @@ async def metadata(store, monkeypatch):
         permission=SimpleNamespace(),
     )
     monkeypatch.setattr(module, "get_f048_resource_adapter", AsyncMock(return_value=adapter), raising=False)
+    runtime = SimpleNamespace(batch_check_actions=check, get_permission_snapshots=snapshots)
+    monkeypatch.setattr(module, "get_f048_runtime", AsyncMock(return_value=runtime), raising=False)
     monkeypatch.setattr(
         business_authorization,
         "get_f048_runtime",
-        AsyncMock(return_value=SimpleNamespace(batch_check_actions=check)),
+        AsyncMock(return_value=runtime),
     )
     try:
         yield SimpleNamespace(
@@ -219,3 +239,20 @@ async def test_pending_primary_key_changes_match_original_identity_and_remain_pe
         assert sa.inspect(cached).identity == (10,)
         assert sa.inspect(cached).attrs.id.history.deleted == [10]
         await session.rollback()
+
+
+@pytest.mark.parametrize(
+    "changes", [{"mode": "INHERIT"}, {"parent_type": "knowledge_space", "parent_id": "11"}, {"version": 0}]
+)
+async def test_current_invalid_permission_metadata_is_not_qualified_or_normally_hidden(metadata, changes):
+    metadata.facts.snapshot_changes = changes
+    async with AsyncSession(metadata.engine) as session, session.begin():
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await metadata.owner.adisclose_sources(session, identity=metadata.user, source_keys=(key(10),))
+
+
+async def test_current_missing_permission_snapshot_is_not_normally_hidden(metadata):
+    metadata.facts.missing_snapshots = True
+    async with AsyncSession(metadata.engine) as session, session.begin():
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await metadata.owner.adisclose_sources(session, identity=metadata.user, source_keys=(key(10),))
