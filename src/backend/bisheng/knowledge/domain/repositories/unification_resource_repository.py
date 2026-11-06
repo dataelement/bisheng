@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Integer, and_, case, cast, or_, select
+from sqlalchemy import Integer, and_, case, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
@@ -550,6 +550,22 @@ class UnificationResourceRepository:
                 .where(or_(source.c.tenant_id.is_(None), source.c.tenant_id <= 0, tenant.c.id.is_(None))),
                 f"invalid_tenant_{model.__tablename__}",
             )
+        creation = Knowledge.__table__.alias("m2_projected_creation")
+        target_type = case((creation.c.type == 0, 3), else_=creation.c.type)
+        # The database column's collation defines the actual UNIQUE semantics.
+        # Empty and padded strings remain keys; only SQL NULL is exempt.
+        await self._probe(
+            session,
+            select(func.min(creation.c.id).label("id"))
+            .where(
+                creation.c.type.in_((0, 3)),
+                creation.c.user_id.is_not(None),
+                creation.c.creation_request_id.is_not(None),
+            )
+            .group_by(creation.c.tenant_id, creation.c.user_id, target_type, creation.c.creation_request_id)
+            .having(func.count() > 1),
+            "projected_creation_conflict",
+        )
         physical, space = KnowledgeFile.__table__.alias("m2_file_row"), Knowledge.__table__.alias("m2_file_parent")
         await self._probe(
             session,
