@@ -275,14 +275,36 @@ class MetadataExecutionRepository:
         )
 
     @staticmethod
-    def _assert_no_pending_target_changes(session, job, item):
+    async def _assert_no_pending_target_changes(session, job, item):
+        pending = {id(row): row for collection in (session.new, session.dirty, session.deleted) for row in collection}
+        if not pending:
+            return
+        primary_version, primary_file = None, None
+        if any(
+            isinstance(row, (KnowledgeFile, KnowledgeDocument, KnowledgeDocumentVersion)) for row in pending.values()
+        ):
+            # This exact document/primary PK read covers the shared chain of a
+            # historical item without scanning its sibling versions or files.
+            version = KnowledgeDocumentVersion.__table__
+            query = (
+                select(Knowledge.id, KnowledgeDocument.primary_version_id, version.c.knowledge_file_id)
+                .select_from(Knowledge)
+                .join(KnowledgeDocument, KnowledgeDocument.knowledge_id == Knowledge.id)
+                .outerjoin(version, version.c.id == KnowledgeDocument.primary_version_id)
+                .where(Knowledge.id == job.space_id, KnowledgeDocument.id == item.document_id)
+            )
+            with session.no_autoflush, strict_tenant_filter():
+                row = (await session.execute(query)).one_or_none()
+            if row is None:
+                _conflict("physical_chain_changed")
+            primary_version, primary_file = row.primary_version_id, row.knowledge_file_id
         ids = {
-            Knowledge: job.space_id,
-            KnowledgeFile: item.file_id,
-            KnowledgeDocument: item.document_id,
-            KnowledgeDocumentVersion: item.version_id,
-            KnowledgeProcessingJob: job.id,
-            KnowledgeProcessingItem: item.id,
+            Knowledge: {job.space_id},
+            KnowledgeFile: {item.file_id, primary_file},
+            KnowledgeDocument: {item.document_id},
+            KnowledgeDocumentVersion: {item.version_id, primary_version},
+            KnowledgeProcessingJob: {job.id},
+            KnowledgeProcessingItem: {item.id},
         }
         critical = {
             Knowledge: {
@@ -316,32 +338,34 @@ class MetadataExecutionRepository:
             KnowledgeDocument: {"id", "knowledge_id", "primary_version_id", "file_level_path", "level"},
             KnowledgeDocumentVersion: {"id", "document_id", "knowledge_file_id", "version_no", "is_primary"},
         }
-        for collection in (session.new, session.dirty, session.deleted):
-            for row in collection:
-                state = inspect(row)
+        for row in pending.values():
+            state = inspect(row)
+            related = type(row) in ids and ids[type(row)].intersection((state.dict.get("id"), *(state.identity or ())))
+            if isinstance(row, KnowledgeDocumentVersion):
+                related = related or item.file_id in (
+                    state.dict.get("knowledge_file_id"),
+                    *state.attrs.knowledge_file_id.history.added,
+                    *state.attrs.knowledge_file_id.history.deleted,
+                )
+            if related:
+                fields = critical.get(type(row), state.attrs.keys())
+                # A historical item relies on the primary's ownership chain,
+                # while that primary's unrelated payload/remark stays caller-owned.
+                if isinstance(row, KnowledgeFile) and item.file_id not in (
+                    state.dict.get("id"),
+                    *(state.identity or ()),
+                ):
+                    fields = {"id", "tenant_id", "knowledge_id", "file_type"}
                 if (
-                    isinstance(row, KnowledgeDocumentVersion)
-                    and item.file_id
-                    in (
-                        state.dict.get("knowledge_file_id"),
-                        *state.attrs.knowledge_file_id.history.added,
-                        *state.attrs.knowledge_file_id.history.deleted,
-                    )
-                    and row in session.new
+                    row in session.new
+                    or row in session.deleted
+                    or any(state.attrs[name].history.has_changes() for name in fields)
                 ):
                     _conflict("pending_target_change")
-                if type(row) in ids and ids[type(row)] in (state.dict.get("id"), *(state.identity or ())):
-                    fields = critical.get(type(row), state.attrs.keys())
-                    if (
-                        row in session.new
-                        or row in session.deleted
-                        or any(state.attrs[name].history.has_changes() for name in fields)
-                    ):
-                        _conflict("pending_target_change")
 
     async def awrite_values(self, session, job, item, *, lease) -> bool:
         self._context(session, job.space_id)
-        self._assert_no_pending_target_changes(session, job, item)
+        await self._assert_no_pending_target_changes(session, job, item)
         configuration = await self._configuration(session, job.space_id, lock=True)
         with session.no_autoflush:
             guarded = await self.jobs._guard_item(session, lease, configuration)

@@ -20,6 +20,7 @@ from uuid import uuid4
 from weakref import WeakKeyDictionary
 
 from sqlalchemy import and_, func, inspect, or_
+from sqlalchemy.orm import defer
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -330,19 +331,38 @@ class ProcessingJobRepository:
         if row is None or row.tenant_id != tenant_id:
             raise SpaceNotFoundError()
 
-    async def _job(self, session: AsyncSession, job_id: str, *, lock: bool) -> KnowledgeProcessingJob:
+    async def _job(
+        self, session: AsyncSession, job_id: str, *, lock: bool, include_manifest: bool = True
+    ) -> KnowledgeProcessingJob:
         tenant_id = self._tenant_id()
         statement = select(KnowledgeProcessingJob).where(KnowledgeProcessingJob.id == job_id)
+        if not include_manifest:
+            cached = session.identity_map.get(inspect(KnowledgeProcessingJob).identity_key_from_primary_key((job_id,)))
+            if cached is not None and inspect(cached).dict.get("kind") == "metadata_schema_change":
+                # A prior query may have loaded the manifest in this Session.
+                # Expire only that immutable execution-irrelevant attribute so
+                # the explicit raiseload option cannot reuse its cached JSON.
+                session.expire(cached, ["scope_manifest"])
+            statement = statement.options(defer(KnowledgeProcessingJob.scope_manifest, raiseload=True))
+            statement = statement.execution_options(populate_existing=True)
         if lock:
             statement = statement.with_for_update().execution_options(populate_existing=True)
         with strict_tenant_filter():
             row = (await session.exec(statement)).one_or_none()
         if row is None or row.tenant_id != tenant_id:
             raise KnowledgeProcessingJobNotFoundError()
+        if not include_manifest and row.kind != "metadata_schema_change":
+            # Existing kinds retain their complete historical manifest. Only
+            # metadata uses the explicit bounded execution representation.
+            with strict_tenant_filter():
+                await session.refresh(row, attribute_names=["scope_manifest"])
         return row
 
     async def aget(self, session: AsyncSession, job_id: str) -> KnowledgeProcessingJob:
         return await self._job(session, job_id, lock=False)
+
+    async def aget_execution(self, session: AsyncSession, job_id: str) -> KnowledgeProcessingJob:
+        return await self._job(session, job_id, lock=False, include_manifest=False)
 
     async def aget_by_request_key(
         self, session: AsyncSession, kind: str, idempotency_key: str, *, lock: bool = False
@@ -409,7 +429,7 @@ class ProcessingJobRepository:
         state: str | None = None,
     ) -> ItemPage:
         offset = self._page(page, page_size)
-        job = await self._job(session, job_id, lock=False)
+        job = await self._job(session, job_id, lock=False, include_manifest=False)
         ids = tuple(dict.fromkeys(visible_file_ids))
         if any(type(value) is not int or value <= 0 for value in ids):
             raise ValueError("visible scope requires positive file identities")
@@ -436,7 +456,7 @@ class ProcessingJobRepository:
         return ItemPage(tuple(rows), total)
 
     async def alatest_retry_actor(self, session: AsyncSession, job_id: str) -> dict:
-        job = await self._job(session, job_id, lock=False)
+        job = await self._job(session, job_id, lock=False, include_manifest=False)
         with strict_tenant_filter():
             receipt = (
                 await session.exec(
@@ -472,7 +492,11 @@ class ProcessingJobRepository:
                 or_(KnowledgeProcessingJob.lease_until.is_(None), KnowledgeProcessingJob.lease_until <= now),
             ),
         )
-        statement = select(KnowledgeProcessingJob).where(active, KnowledgeProcessingJob.next_dispatch_at <= now)
+        statement = (
+            select(KnowledgeProcessingJob)
+            .options(defer(KnowledgeProcessingJob.scope_manifest, raiseload=True))
+            .where(active, KnowledgeProcessingJob.next_dispatch_at <= now)
+        )
         if after_id is not None:
             statement = statement.where(KnowledgeProcessingJob.id > after_id)
         with strict_tenant_filter():
@@ -493,7 +517,7 @@ class ProcessingJobRepository:
     ) -> bool:
         if type(expected_revision) is not int or expected_revision < 0 or type(published) is not bool:
             raise ValueError("dispatch acknowledgement requires an expected revision and boolean result")
-        job = await self._job(session, job_id, lock=True)
+        job = await self._job(session, job_id, lock=True, include_manifest=False)
         if job.revision != expected_revision or (
             not (job.state == "accepted" and job.pending_dispatch)
             and not (job.state == "running" and (job.lease_until is None or job.lease_until <= self._now()))
@@ -622,7 +646,26 @@ class ProcessingJobRepository:
             idempotency_key=idempotency_key,
             request_hash=request_hash,
             parameters=payload,
-            scope_manifest=manifest,
+            scope_manifest=(
+                [
+                    {
+                        **{
+                            key: value[key]
+                            for key in (
+                                "file_id",
+                                "document_id",
+                                "version_id",
+                                "expected_space_id",
+                                "expected_parent_id",
+                            )
+                        },
+                        "processing_snapshot_digest": _digest(value["processing_snapshot"]),
+                    }
+                    for value in manifest
+                ]
+                if kind == "metadata_schema_change"
+                else manifest
+            ),
             expected_model_config_revision=configuration.model_config_revision,
             accepted_model_config_revision=configuration.model_config_revision,
             expected_index_generation=configuration.index_generation,
@@ -707,7 +750,7 @@ class ProcessingJobRepository:
             raise ValueError("lease_seconds must be positive")
         if expected_job_revision is not None and (type(expected_job_revision) is not int or expected_job_revision < 0):
             raise ValueError("expected_job_revision must be a non-negative integer")
-        job = await self._job(session, job_id, lock=True)
+        job = await self._job(session, job_id, lock=True, include_manifest=False)
         if expected_job_revision is not None and job.revision != expected_job_revision:
             return None
         now = self._now()
@@ -740,7 +783,7 @@ class ProcessingJobRepository:
     ) -> JobLease | None:
         if type(lease_seconds) is not int or lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
-        job = await self._job(session, lease.job_id, lock=True)
+        job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease):
             return None
         if not self._check_configuration(job, configuration):
@@ -754,7 +797,7 @@ class ProcessingJobRepository:
     async def aclaim_next_item(
         self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration
     ) -> ClaimedItem | None:
-        job = await self._job(session, lease.job_id, lock=True)
+        job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease):
             return None
         if not self._check_configuration(job, configuration):
@@ -762,19 +805,25 @@ class ProcessingJobRepository:
             return None
         now = self._now()
         # Job-row locking serializes item leasing; no dialect-specific SKIP LOCKED.
-        with strict_tenant_filter():
-            candidates = (
-                await session.exec(
-                    select(KnowledgeProcessingItem)
-                    .where(
-                        KnowledgeProcessingItem.job_id == job.id,
-                        KnowledgeProcessingItem.state.in_(["pending", "running"]),
-                    )
-                    .order_by(KnowledgeProcessingItem.file_id, KnowledgeProcessingItem.version_id)
-                    .with_for_update()
-                    .execution_options(populate_existing=True)
+        query = select(KnowledgeProcessingItem).where(
+            KnowledgeProcessingItem.job_id == job.id,
+            KnowledgeProcessingItem.state.in_(["pending", "running"]),
+        )
+        if job.kind == "metadata_schema_change":
+            query = query.where(
+                or_(
+                    KnowledgeProcessingItem.state == "pending",
+                    KnowledgeProcessingItem.lease_until.is_(None),
+                    KnowledgeProcessingItem.lease_until <= now,
                 )
-            ).all()
+            ).limit(1)
+        query = (
+            query.order_by(KnowledgeProcessingItem.file_id, KnowledgeProcessingItem.version_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        with strict_tenant_filter():
+            candidates = (await session.exec(query)).all()
         for row in candidates:
             if row.tenant_id != job.tenant_id:
                 raise KnowledgeProcessingJobNotFoundError()
@@ -806,7 +855,7 @@ class ProcessingJobRepository:
     async def _guard_item(
         self, session: AsyncSession, lease: ItemLease, configuration: ProcessingConfiguration
     ) -> tuple[KnowledgeProcessingJob, KnowledgeProcessingItem] | None:
-        job = await self._job(session, lease.job.job_id, lock=True)
+        job = await self._job(session, lease.job.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease.job):
             return None
         row = await self._item(session, job, lease.item_id)
@@ -869,19 +918,21 @@ class ProcessingJobRepository:
             ).all()
         counts = dict(rows)
         total = sum(counts.values())
-        if total != len(job.scope_manifest):
+        expected_count = job.total_count if job.kind == "metadata_schema_change" else len(job.scope_manifest)
+        if total != expected_count:
             raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
         return counts
 
     async def aretry_eligibility(self, session: AsyncSession, job_id: str) -> RetryEligibility:
-        job = await self._job(session, job_id, lock=False)
+        job = await self._job(session, job_id, lock=False, include_manifest=False)
         counts = await self._item_counts(session, job)
         terminal_failure = job.state in {"failed", "partial_failed"}
+        expected_count = job.total_count if job.kind == "metadata_schema_change" else len(job.scope_manifest)
         finalize_only = (
             terminal_failure
             and job.error_code is not None
-            and bool(job.scope_manifest)
-            and counts.get("succeeded", 0) == len(job.scope_manifest)
+            and expected_count > 0
+            and counts.get("succeeded", 0) == expected_count
         )
         return RetryEligibility(
             terminal_failure and (bool(counts.get("failed", 0) + counts.get("pending", 0)) or finalize_only),
@@ -1020,9 +1071,9 @@ class ProcessingJobRepository:
             raise ResourceReferenceInvalidError(reason="processing_attempt_background_required")
         if type(expected_job_revision) is not int or expected_job_revision < 0 or type(error_code) is not int:
             raise ValueError("failure requires the observed revision and a public error code")
-        candidate = await self._job(session, job_id, lock=False)
+        candidate = await self._job(session, job_id, lock=False, include_manifest=False)
         root = await KnowledgeModelReferenceRepository().aget(session, candidate.space_id, for_update=True)
-        job = await self._job(session, job_id, lock=True)
+        job = await self._job(session, job_id, lock=True, include_manifest=False)
         if job.state not in {"accepted", "running"}:
             return None
         if lease is not None:
@@ -1075,7 +1126,7 @@ class ProcessingJobRepository:
     async def afinalize(
         self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration
     ) -> KnowledgeProcessingJob | None:
-        job = await self._job(session, lease.job_id, lock=True)
+        job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease):
             return None
         if not self._check_configuration(job, configuration):
@@ -1103,7 +1154,7 @@ class ProcessingJobRepository:
         actor_reference: Mapping[str, Any],
         configuration: ProcessingConfiguration,
     ) -> JobRequestResult:
-        job = await self._job(session, job_id, lock=True)
+        job = await self._job(session, job_id, lock=True, include_manifest=False)
         key = self._key(idempotency_key)
         actor = self._actor(actor_user_id, actor_reference)
         if type(expected_job_revision) is not int or expected_job_revision < 0:
@@ -1139,11 +1190,13 @@ class ProcessingJobRepository:
         if not self._check_configuration(job, configuration):
             await session.flush()
             return JobRequestResult(job, False)
+        retry_query = select(KnowledgeProcessingItem)
+        if job.kind == "metadata_schema_change":
+            retry_query = retry_query.options(defer(KnowledgeProcessingItem.processing_snapshot, raiseload=True))
         with strict_tenant_filter():
             rows = (
                 await session.exec(
-                    select(KnowledgeProcessingItem)
-                    .where(
+                    retry_query.where(
                         KnowledgeProcessingItem.job_id == job.id,
                         KnowledgeProcessingItem.state.in_(["failed", "pending"]),
                     )
