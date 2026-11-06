@@ -1,5 +1,8 @@
 import {
   knowledgeQueryKeys,
+  useCreateKnowledgeSpace,
+  useKnowledgeCreationSettings,
+  useKnowledgeVisibleSpaces,
   useKnowledgeAdminSpaces,
   useKnowledgeProcessingActions,
   useKnowledgeProcessingItems,
@@ -71,6 +74,9 @@ const plan: OperationPrecheck = {
 
 function apiPort() {
   return {
+    listVisibleSpaces: vi.fn().mockResolvedValue({ data: [], page_size: 20, has_more: false, next_cursor: null }),
+    getCreationSettings: vi.fn().mockResolvedValue({ embedding_model: null, system_defaults: settings.effective_defaults }),
+    createSpace: vi.fn().mockResolvedValue({ id: 8, name: "Created" }),
     getSpaceInfo: vi.fn().mockResolvedValue({ id: 7, name: "Space" }),
     listChildren: vi.fn().mockResolvedValue({
       data: [],
@@ -133,6 +139,96 @@ afterEach(() => {
 });
 
 describe("knowledge query scope", () => {
+  it("continues from an empty visible page using the opaque server cursor", async () => {
+    const api = apiPort();
+    api.listVisibleSpaces.mockResolvedValueOnce({ data: [], page_size: 20, has_more: true, next_cursor: "opaque/+==" });
+    const query = { keyword: "same", page_size: 20 };
+    const { result } = renderHook(() => useKnowledgeVisibleSpaces(scope, query, api), queryHost());
+    await waitFor(() => expect(result.current.hasNextPage).toBe(true));
+    await act(async () => { await result.current.fetchNextPage(); });
+    expect(api.listVisibleSpaces.mock.calls).toEqual([[query], [{ ...query, cursor: "opaque/+==" }]]);
+    expect(result.current.hasNextPage).toBe(false);
+    expect(result.current.data?.pages).toHaveLength(2);
+    expect(knowledgeQueryKeys.visible(scope, query)).not.toEqual(knowledgeQueryKeys.visible(scope, { ...query, keyword: "other" }));
+  });
+
+  it("does not fetch ordinary pages from the admin view", () => {
+    const api = apiPort();
+    renderHook(() => useKnowledgeVisibleSpaces({ ...scope, view: "admin" }, {}, api), queryHost());
+    expect(api.listVisibleSpaces).not.toHaveBeenCalled();
+  });
+
+  it("does not expose a previous scope's late creation settings", async () => {
+    const first = deferred<Awaited<ReturnType<KnowledgeSpaceApi["getCreationSettings"]>>>();
+    const api = apiPort();
+    api.getCreationSettings.mockReturnValueOnce(first.promise);
+    const host = queryHost();
+    const { result, rerender } = renderHook(({ value }) => useKnowledgeCreationSettings(value, api), { ...host, initialProps: { value: scope } });
+    await waitFor(() => expect(api.getCreationSettings).toHaveBeenCalledTimes(1));
+    rerender({ value: { ...scope, managementTenantId: 202 } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await act(async () => first.resolve({ embedding_model: { id: "old", name: "Old" }, system_defaults: settings.effective_defaults }));
+    expect(result.current.data?.embedding_model).toBeNull();
+    expect(host.client.getQueriesData({ queryKey: knowledgeQueryKeys.scope(scope) })).toEqual([]);
+  });
+
+  it("preserves bootstrap ApiError and never substitutes fabricated defaults", async () => {
+    const api = apiPort();
+    const error = { status_code: 19000, data: { reason: "creation" } };
+    api.getCreationSettings.mockRejectedValue(error);
+    const { result } = renderHook(() => useKnowledgeCreationSettings(scope, api), queryHost());
+    await waitFor(() => expect(result.current.error).toBe(error));
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it("retains equal scope values and invalidates only issuing lists after creation", async () => {
+    const api = apiPort(), host = queryHost();
+    const other = { ...scope, managementTenantId: 202 };
+    const keys = [knowledgeQueryKeys.visible(scope, { keyword: "x" }), knowledgeQueryKeys.admin(scope, { page: 1, page_size: 20 }), knowledgeQueryKeys.visible(other, {})];
+    keys.forEach(key => host.client.setQueryData(key, { data: [] }));
+    const detail = knowledgeQueryKeys.info(scope, 7);
+    host.client.setQueryData(detail, { id: 7 });
+    const { result, rerender } = renderHook(({ value }) => useCreateKnowledgeSpace(value, api), { ...host, initialProps: { value: scope } });
+    const original = result.current;
+    rerender({ value: { ...scope } });
+    expect(await original.createSpace({ name: "Created", embedding_model_id: 19 })).toEqual({ id: 8, name: "Created" });
+    expect(api.createSpace).toHaveBeenCalledWith({ name: "Created", embedding_model_id: 19 }, 101);
+    expect(keys.map(key => host.client.getQueryState(key)?.isInvalidated)).toEqual([true, true, false]);
+    expect(host.client.getQueryState(detail)?.isInvalidated).toBe(false);
+  });
+
+  it.each([
+    { ...scope, identityKey: "user:8" }, { ...scope, tenantId: 202 },
+    { ...scope, managementTenantId: 202 }, { ...scope, view: "admin" as const },
+  ])("rejects a stale creation result without enabling navigation or touching new lists: %j", async (nextScope) => {
+    const api = apiPort(), host = queryHost(), response = deferred<{ id: number; name: string }>();
+    api.createSpace.mockReturnValueOnce(response.promise);
+    const nextKey = knowledgeQueryKeys.visible(nextScope, {});
+    host.client.setQueryData(nextKey, { data: [] });
+    const navigate = vi.fn();
+    const { result, rerender } = renderHook(({ value }) => useCreateKnowledgeSpace(value, api), { ...host, initialProps: { value: scope } });
+    const old = result.current;
+    const pending = old.createSpace({ name: "Late" }).then(navigate);
+    const rejected = expect(pending).rejects.toMatchObject({ code: "knowledge_scope_changed" });
+    rerender({ value: nextScope });
+    await act(async () => response.resolve({ id: 8, name: "Late" }));
+    await rejected;
+    expect(navigate).not.toHaveBeenCalled();
+    expect(host.client.getQueryState(nextKey)?.isInvalidated).toBe(false);
+    rerender({ value: scope });
+    await expect(old.createSpace({ name: "Old handler" })).rejects.toMatchObject({ code: "knowledge_scope_changed" });
+    expect(api.createSpace).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves creation errors and performs no list invalidation on failure", async () => {
+    const api = apiPort(), host = queryHost();
+    const error = { status_code: 18001, data: null }, key = knowledgeQueryKeys.visible(scope, {});
+    host.client.setQueryData(key, { data: [] });
+    api.createSpace.mockRejectedValue(error);
+    const { result } = renderHook(() => useCreateKnowledgeSpace(scope, api), host);
+    await expect(result.current.createSpace({ name: "Failed" })).rejects.toBe(error);
+    expect(host.client.getQueryState(key)?.isInvalidated).toBe(false);
+  });
   it("separates identity, current tenant, management tenant, view and request filters", () => {
     const scopes = [
       scope,
