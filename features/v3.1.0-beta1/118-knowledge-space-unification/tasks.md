@@ -4938,7 +4938,7 @@
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/application/processing_owner.py`\
   **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
-  **依赖**：T620, T623\
+  **依赖**：T620, T623, T637, T641, T643\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：运行配对T620及真实Owner组合；相关原回归不退化。
 
@@ -4970,7 +4970,7 @@
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
   **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
-  **依赖**：T624\
+  **依赖**：T624, T637, T641\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：运行配对T624及真实Owner组合；相关原回归不退化。
 
@@ -5059,6 +5059,72 @@
   **依赖**：T634\
   **配对测试**：T634\
   **验证 / 完成条件**：配对测试/既有单head/结构测试与Ruff通过；真实双库后续T202实测。
+
+## W6 PROC 原始审计及真实范围接缝
+
+- [ ] **T636 · 任务原始接受修订审计测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_job_acceptance_revision.py`\
+  **逻辑 / 测试上下文**：创建显式保存接受R，expected_R合法推进/重试不覆盖原始R；缺证据拒绝、不由历史参数伪造。\
+  **依赖**：T611\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T637 · 任务原始接受修订模型**
+  **类型 / Owner**：基础设施 / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_processing_job.py`\
+  **逻辑 / 测试上下文**：仅新增accepted_model_config_revision可空审计列；正常创建赋值由T625同一repo叶完成，不加独立模型绑定。\
+  **依赖**：T636\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T638 · 任务接受修订结构升级测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_job_acceptance_migration.py`\
+  **逻辑 / 测试上下文**：结构只加nullable审计列、无data copy，幂等且parent为实际唯一head。\
+  **依赖**：T635\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T639 · 任务接受修订结构升级**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`src/backend/bisheng/core/database/alembic/versions/f118_processing_acceptance.py`\
+  **逻辑 / 测试上下文**：挂f118_metadata_schema，仅DDL guard add column，无在线/隐式数据回填。\
+  **依赖**：T638, T637\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T640 · 任务自身切换域内收据测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_cutover_receipts.py`\
+  **逻辑 / 测试上下文**：伪造receipt、跨事务/job/operation/旧lease/重复消费拒绝，合法同事务Owner切换收据可消费。\
+  **依赖**：T613\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T641 · 任务自身切换域内收据窄能力**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/processing_cutover_receipts.py`\
+  **逻辑 / 测试上下文**：域内共享私有登记/消费能力，Owner完成实际R2与job guard才签发，Repository不反向依赖application。\
+  **依赖**：T640\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T642 · 处理任务真实版本范围仓储测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_owner_repository.py`\
+  **逻辑 / 测试上下文**：真实document/version/file正确JOIN及所有版本、指定版本不扩、跨tenant拒绝、外部Session回滚；多文档版本无笛卡尔积。\
+  **依赖**：T611\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T643 · 处理任务真实版本范围仓储**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_owner_repository.py`\
+  **逻辑 / 测试上下文**：aload_scope原生Session返回真实整版本manifest/稳定顺序，当前租户查询，不自commit或拼独立列表。\
+  **依赖**：T642\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
 
 ## 自动化覆盖索引
 
