@@ -256,3 +256,57 @@ def test_actual_celery_environment_broker_override_is_used_without_opening_a_con
 def test_message_and_decoded_body_budgets_fail_closed(codec):
     with pytest.raises(KnowledgeOperationPlanConflictError):
         codec.decode_broker_message(b"x" * (16 * 1024 * 1024 + 1))
+
+
+@pytest.mark.parametrize("driver", ["memory", "pyamqp", "custom.transport:Driver"])
+def test_actual_celery_transport_override_cannot_be_mistaken_for_redis(codec, driver):
+    script = "from celery import Celery; import json,sys; app=Celery('offline',broker='redis://localhost:6379/3'); app.conf.broker_transport=sys.argv[1]; print(json.dumps(app.connection_for_read().transport_cls))"
+    actual = json.loads(
+        subprocess.run([sys.executable, "-c", script, driver], capture_output=True, text=True, check=True).stdout
+    )
+    assert actual == driver  # Metadata construction only; no connect/channel.
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        codec.BrokerReadConfiguration.from_conf(conf(broker_transport=driver))
+
+
+def test_explicit_broker_ssl_dictionary_controls_the_real_tls_source(codec):
+    tls = {"ssl_cert_reqs": "required", "ssl_ca_certs": "private-ca-file", "ssl_check_hostname": False}
+    script = "from celery import Celery; import json,sys; app=Celery('offline',broker='redis://localhost:6379/3'); app.conf.broker_use_ssl=json.loads(sys.argv[1]); print(json.dumps(app.connection_for_read().ssl))"
+    actual = json.loads(
+        subprocess.run(
+            [sys.executable, "-c", script, json.dumps(tls)], capture_output=True, text=True, check=True
+        ).stdout
+    )
+    assert actual == tls
+    options = codec.BrokerReadConfiguration.from_conf(conf(broker_use_ssl=tls)).connection_options()
+    assert options["url"].startswith("rediss:") and options["ssl_ca_certs"] == "private-ca-file"
+    assert options["ssl_check_hostname"] is False
+
+
+def test_rediss_original_kombu_policy_and_url_override_are_not_silently_replaced(codec):
+    actual = codec.BrokerReadConfiguration.from_conf(conf(broker_url="rediss://localhost/3"))
+    assert actual.connection_options()["ssl_cert_reqs"] == 0
+    overridden = codec.BrokerReadConfiguration.from_conf(
+        conf(
+            broker_url="rediss://localhost/3?ssl_cert_reqs=required",
+            broker_use_ssl={"ssl_ca_certs": "ignored-by-kombu"},
+        )
+    )
+    assert overridden.connection_options()["ssl_cert_reqs"] == 2
+    assert "ssl_ca_certs" not in overridden.connection_options()
+
+
+def test_ambiguous_boolean_ssl_does_not_invent_an_effective_connection(codec):
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        codec.BrokerReadConfiguration.from_conf(conf(broker_use_ssl=True))
+
+
+def test_sentinel_master_tls_is_retained_independently_of_monitor_acl(codec):
+    config = conf(
+        broker_url="sentinel://a:26379/2",
+        broker_transport_options={"master_name": "actual-master", "sentinel_kwargs": {"password": "private-monitor"}},
+        broker_use_ssl={"ssl_cert_reqs": "required", "ssl_ca_certs": "private-master-ca"},
+    )
+    options = codec.BrokerReadConfiguration.from_conf(config).connection_options()
+    assert options["ssl"] is True and options["ssl_ca_certs"] == "private-master-ca"
+    assert options["sentinel_kwargs"] == {"password": "private-monitor"}
