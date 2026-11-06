@@ -28,67 +28,126 @@ def auth_jwt_instance(monkeypatch):
 
     mock_cookie = MagicMock()
     mock_cookie.jwt_token_expire_time = 3600
-    mock_cookie.jwt_iss = 'bisheng-test'
+    mock_cookie.jwt_iss = "bisheng-test"
     mock_settings = SimpleNamespace(
-        jwt_secret='unit-test-secret',
+        jwt_secret="unit-test-secret",
         cookie_conf=mock_cookie,
     )
-    monkeypatch.setattr(cs, 'settings', mock_settings)
-    monkeypatch.setattr(auth_mod, 'settings', mock_settings)
+    monkeypatch.setattr(cs, "settings", mock_settings)
+    monkeypatch.setattr(auth_mod, "settings", mock_settings)
 
     return auth_mod.AuthJwt()
 
 
 class TestJWTPayload:
-
     def test_token_version_embedded_in_subject(self, auth_jwt_instance):
         """Payload JSON contains ``token_version``."""
         payload = {
-            'user_id': 100, 'user_name': 'alice',
-            'tenant_id': 5, 'token_version': 3,
+            "user_id": 100,
+            "user_name": "alice",
+            "tenant_id": 5,
+            "token_version": 3,
         }
         token = auth_jwt_instance.create_access_token(subject=payload)
         decoded = jwt.decode(
-            token, 'unit-test-secret',
-            issuer='bisheng-test', algorithms=['HS256'],
+            token,
+            "unit-test-secret",
+            issuer="bisheng-test",
+            algorithms=["HS256"],
         )
-        subject = json.loads(decoded['sub'])
-        assert subject['token_version'] == 3
-        assert subject['tenant_id'] == 5
+        subject = json.loads(decoded["sub"])
+        assert subject["token_version"] == 3
+        assert subject["tenant_id"] == 5
 
     def test_decode_jwt_token_preserves_fields(self, auth_jwt_instance):
         payload = {
-            'user_id': 101, 'user_name': 'bob',
-            'tenant_id': 7, 'token_version': 9,
+            "user_id": 101,
+            "user_name": "bob",
+            "tenant_id": 7,
+            "token_version": 9,
         }
         token = auth_jwt_instance.create_access_token(subject=payload)
         subject = auth_jwt_instance.decode_jwt_token(token)
-        assert subject['token_version'] == 9
+        assert subject["token_version"] == 9
 
 
 class TestRequestSubject:
     def test_bearer_is_used_when_cookie_is_missing(self, auth_jwt_instance):
         token = auth_jwt_instance.create_access_token(
-            subject={'user_id': 1, 'user_name': 'admin', 'tenant_id': 1},
+            subject={"user_id": 1, "user_name": "admin", "tenant_id": 1},
         )
         auth_jwt_instance.req = SimpleNamespace(
             cookies={},
-            headers={'Authorization': f'Bearer {token}'},
+            headers={"Authorization": f"Bearer {token}"},
         )
-        assert auth_jwt_instance.get_subject()['user_id'] == 1
+        assert auth_jwt_instance.get_subject()["user_id"] == 1
 
     def test_cookie_is_preferred_over_bearer(self, auth_jwt_instance):
         cookie_token = auth_jwt_instance.create_access_token(
-            subject={'user_id': 2, 'user_name': 'cookie', 'tenant_id': 1},
+            subject={"user_id": 2, "user_name": "cookie", "tenant_id": 1},
         )
         bearer_token = auth_jwt_instance.create_access_token(
-            subject={'user_id': 9, 'user_name': 'bearer', 'tenant_id': 1},
+            subject={"user_id": 9, "user_name": "bearer", "tenant_id": 1},
         )
         auth_jwt_instance.req = SimpleNamespace(
-            cookies={'access_token_cookie': cookie_token},
-            headers={'Authorization': f'Bearer {bearer_token}'},
+            cookies={"access_token_cookie": cookie_token},
+            headers={"Authorization": f"Bearer {bearer_token}"},
         )
-        assert auth_jwt_instance.get_subject()['user_id'] == 2
+        assert auth_jwt_instance.get_subject()["user_id"] == 2
+
+
+class TestLoginUserCredential:
+    async def test_bearer_without_cookie_keeps_runtime_credential(self, auth_jwt_instance, monkeypatch):
+        from bisheng.user.domain.services import auth as auth_mod
+
+        async def init_login_user(user_id, user_name, tenant_id=None, token_version=0, role_ids=None):
+            return auth_mod.LoginUser(
+                user_id=user_id,
+                user_name=user_name,
+                user_role=[],
+                tenant_id=tenant_id or 1,
+                token_version=token_version,
+            )
+
+        monkeypatch.setattr(auth_mod.LoginUser, "init_login_user", init_login_user)
+        token = auth_jwt_instance.create_access_token(
+            subject={"user_id": 1, "user_name": "admin", "tenant_id": 1},
+        )
+        auth_jwt_instance.req = SimpleNamespace(
+            cookies={},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        user = await auth_mod.LoginUser.get_login_user(auth_jwt_instance)
+
+        assert user.user_id == 1
+        assert user._runtime_credential_reference["kind"] == "web_session"
+        assert user._runtime_credential_reference["expires_at"]
+
+    async def test_cookie_still_sets_runtime_credential(self, auth_jwt_instance, monkeypatch):
+        from bisheng.user.domain.services import auth as auth_mod
+
+        async def init_login_user(user_id, user_name, tenant_id=None, token_version=0, role_ids=None):
+            return auth_mod.LoginUser(
+                user_id=user_id,
+                user_name=user_name,
+                user_role=[],
+                tenant_id=tenant_id or 1,
+                token_version=token_version,
+            )
+
+        monkeypatch.setattr(auth_mod.LoginUser, "init_login_user", init_login_user)
+        token = auth_jwt_instance.create_access_token(
+            subject={"user_id": 2, "user_name": "cookie", "tenant_id": 1},
+        )
+        auth_jwt_instance.req = SimpleNamespace(
+            cookies={"access_token_cookie": token},
+            headers={},
+        )
+
+        user = await auth_mod.LoginUser.get_login_user(auth_jwt_instance)
+
+        assert user._runtime_credential_reference["user_id"] == 2
 
 
 class TestLoginUserField:
@@ -97,24 +156,28 @@ class TestLoginUserField:
     def test_defaults_zero_when_absent(self, monkeypatch):
         # Stub UserRoleDao so __init__ does not touch the DB.
         from bisheng.user.domain.services import auth as auth_mod
+
         monkeypatch.setattr(
             auth_mod.UserRoleDao,
-            'get_user_roles',
+            "get_user_roles",
             lambda user_id: [],
         )
-        user = auth_mod.LoginUser(user_id=200, user_name='cara', user_role=[1])
+        user = auth_mod.LoginUser(user_id=200, user_name="cara", user_role=[1])
         assert user.token_version == 0
 
     def test_reads_explicit_value(self, monkeypatch):
         from bisheng.user.domain.services import auth as auth_mod
+
         monkeypatch.setattr(
             auth_mod.UserRoleDao,
-            'get_user_roles',
+            "get_user_roles",
             lambda user_id: [],
         )
         user = auth_mod.LoginUser(
-            user_id=201, user_name='dan',
-            user_role=[1], token_version=42,
+            user_id=201,
+            user_name="dan",
+            user_role=[1],
+            token_version=42,
         )
         assert user.token_version == 42
 
@@ -124,56 +187,89 @@ class TestCreateAccessTokenClassmethod:
 
     def test_reads_token_version_from_user(self, auth_jwt_instance, monkeypatch):
         from bisheng.user.domain.services import auth as auth_mod
+
         monkeypatch.setattr(
-            auth_mod.UserRoleDao, 'get_user_roles', lambda uid: [],
+            auth_mod.UserRoleDao,
+            "get_user_roles",
+            lambda uid: [],
         )
         fake_user = SimpleNamespace(
-            user_id=300, user_name='eve', token_version=7,
+            user_id=300,
+            user_name="eve",
+            token_version=7,
         )
         token = auth_mod.LoginUser.create_access_token(
-            user=fake_user, auth_jwt=auth_jwt_instance, tenant_id=5,
+            user=fake_user,
+            auth_jwt=auth_jwt_instance,
+            tenant_id=5,
         )
-        subject = json.loads(jwt.decode(
-            token, 'unit-test-secret',
-            issuer='bisheng-test', algorithms=['HS256'],
-        )['sub'])
-        assert subject['token_version'] == 7
-        assert subject['tenant_id'] == 5
+        subject = json.loads(
+            jwt.decode(
+                token,
+                "unit-test-secret",
+                issuer="bisheng-test",
+                algorithms=["HS256"],
+            )["sub"]
+        )
+        assert subject["token_version"] == 7
+        assert subject["tenant_id"] == 5
 
     def test_default_zero_when_user_missing_field(
-        self, auth_jwt_instance, monkeypatch,
+        self,
+        auth_jwt_instance,
+        monkeypatch,
     ):
         """v2.5.0 User objects without ``token_version`` → payload carries 0."""
         from bisheng.user.domain.services import auth as auth_mod
+
         monkeypatch.setattr(
-            auth_mod.UserRoleDao, 'get_user_roles', lambda uid: [],
+            auth_mod.UserRoleDao,
+            "get_user_roles",
+            lambda uid: [],
         )
-        fake_user = SimpleNamespace(user_id=301, user_name='frank')
+        fake_user = SimpleNamespace(user_id=301, user_name="frank")
         token = auth_mod.LoginUser.create_access_token(
-            user=fake_user, auth_jwt=auth_jwt_instance,
+            user=fake_user,
+            auth_jwt=auth_jwt_instance,
         )
-        subject = json.loads(jwt.decode(
-            token, 'unit-test-secret',
-            issuer='bisheng-test', algorithms=['HS256'],
-        )['sub'])
-        assert subject['token_version'] == 0
+        subject = json.loads(
+            jwt.decode(
+                token,
+                "unit-test-secret",
+                issuer="bisheng-test",
+                algorithms=["HS256"],
+            )["sub"]
+        )
+        assert subject["token_version"] == 0
 
     def test_explicit_token_version_overrides_user_attr(
-        self, auth_jwt_instance, monkeypatch,
+        self,
+        auth_jwt_instance,
+        monkeypatch,
     ):
         from bisheng.user.domain.services import auth as auth_mod
+
         monkeypatch.setattr(
-            auth_mod.UserRoleDao, 'get_user_roles', lambda uid: [],
+            auth_mod.UserRoleDao,
+            "get_user_roles",
+            lambda uid: [],
         )
         fake_user = SimpleNamespace(
-            user_id=302, user_name='grace', token_version=3,
+            user_id=302,
+            user_name="grace",
+            token_version=3,
         )
         token = auth_mod.LoginUser.create_access_token(
-            user=fake_user, auth_jwt=auth_jwt_instance,
+            user=fake_user,
+            auth_jwt=auth_jwt_instance,
             token_version=99,
         )
-        subject = json.loads(jwt.decode(
-            token, 'unit-test-secret',
-            issuer='bisheng-test', algorithms=['HS256'],
-        )['sub'])
-        assert subject['token_version'] == 99
+        subject = json.loads(
+            jwt.decode(
+                token,
+                "unit-test-secret",
+                issuer="bisheng-test",
+                algorithms=["HS256"],
+            )["sub"]
+        )
+        assert subject["token_version"] == 99
