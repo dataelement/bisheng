@@ -462,3 +462,18 @@ async def test_recovery_detects_allocated_primary_key_drift_even_when_templates_
                 ),
             )
     assert await native.snapshot(database) == before
+
+
+def test_conversion_service_does_not_execute_sql_outside_the_repository(module):
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(module))
+    direct_sql = [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"execute", "exec", "scalar", "scalars"}
+    ]
+    assert direct_sql == [], f"C1: SQL belongs to the Repository, found Service calls at {direct_sql}"
