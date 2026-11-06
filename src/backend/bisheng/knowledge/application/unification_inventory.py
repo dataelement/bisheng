@@ -301,6 +301,8 @@ class UnificationInventoryApplication:
             if value["tenant_id"] != tenant:
                 _blocked("physical_tenant")
             if record.record_type == "physical_index":
+                if value["identifier_compatible"] is not True:
+                    _blocked("incompatible_physical_identifiers")
                 original = expected_indices.pop(value["space_id"], None)
                 if (
                     original is None
