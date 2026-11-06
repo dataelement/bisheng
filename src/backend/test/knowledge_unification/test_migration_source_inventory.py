@@ -379,6 +379,8 @@ async def test_401_unique_model_targets_are_grouped_not_queried_per_source(modul
         "app_state",
         "app_capabilities",
         "default",
+        "json_null_default",
+        "json_empty_default",
         "transition",
         "assistant_link",
     ],
@@ -406,8 +408,9 @@ async def test_unknown_or_malformed_original_facts_fail_without_ready_or_writes(
                 await session.execute(update(App).where(App.id == "app").values(state="unknown"))
             else:
                 session.add(version("v1", "app", {"models": [{"id": 11}]}))
-        elif bad == "default":
-            session.add(TenantSystemModelConfig(tenant_id=101, key="knowledge_llm", value="[]"))
+        elif bad in {"default", "json_null_default", "json_empty_default"}:
+            value = {"default": "[]", "json_null_default": "null", "json_empty_default": '""'}[bad]
+            session.add(TenantSystemModelConfig(tenant_id=101, key="knowledge_llm", value=value))
         else:
             session.add(AssistantLink(tenant_id=101, assistant_id="missing", knowledge_id=40))
     async with AsyncSession(database) as session, session.begin(), sharing() as (reader, _):
