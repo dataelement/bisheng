@@ -41,7 +41,7 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
 
 ![BISHENG Desktop enterprise introduction page on the official website](docs/images/readme/bisheng-desktop-enterprise.png)
 
-[Download BISHENG Desktop](https://dshdesktop.com/zh/enterprise/) · [GitHub repository](https://github.com/dataelement/bisheng-desktop)
+[Download BISHENG Desktop](https://dshdesktop.com/zh/enterprise/) · [Client GitHub repository](https://github.com/dataelement/bisheng-desktop)
 
 > Enterprise integration capabilities, configuration requirements, and open-source and commercial edition availability depend on the relevant release documentation.
 
@@ -51,7 +51,7 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
 
 **17k stars** on GitHub.
 
-[Website and downloads](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
+[DSH Desktop](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
 
 ## Features
 
@@ -104,17 +104,18 @@ BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on o
 
 6. **🛠️ Application Workshop: publish Vibe Apps for your team**
 
-   - **From local development to team use**: Submit an application developed locally or with a Coding Agent. After preflight checks, secret scanning, build and release approval, publish it to the Application Center for authorized users.
-   - **Reuse platform capabilities**: Applications can use platform identity, models and knowledge resources as needed, reducing duplicate infrastructure. Capabilities and configuration requirements depend on the relevant release documentation.
+   - **Turn business needs into applications**: Build dedicated pages for registration forms, project registers or department dashboards, and let colleagues open them from the Application Center.
+   - **From local development to team use**: Submit an application developed locally or with a Coding Agent. After preflight checks, secret scanning, build and release approval, set its access scope and publish it to the Application Center.
+   - **Reuse platform capabilities**: Applications can reuse platform sign-in and visitor identity, and access models and knowledge resources as needed, reducing duplicate infrastructure. Capabilities and configuration requirements depend on the relevant release documentation.
 
 7. **🏢 Enterprise-grade features: the controls that enterprise AI needs**
 
-   - **Department and user management**: Manage the organization structure and users. Roles control which feature menus are available and set quotas.
-   - **RBAC + ReBAC permission model**: Roles control which features a user can use. ReBAC controls which resources a user can access, down to a single file.
+   - **Department and user management**: Maintain the organization structure, users and quotas.
+   - **Separate feature and resource permissions**: RBAC roles control feature menus and actions. ReBAC controls access to knowledge spaces, folders and individual files, with grants to individuals, departments (including sub-departments) or user groups. Folders and files inherit parent permissions by default and can also be configured independently.
    - **Approvals**: Joining a knowledge space, subscribing to a channel, requesting menu permissions and other actions can require approval. You can customize approval flows and nodes.
    - **Audit**: Records conversation content and system operation logs, searchable by user, time and module.
    - **Dashboards** (commercial edition): Preset dashboards for user activity, application usage, token usage, knowledge base usage and more.
-   - **Open API**: Call applications, knowledge bases and other APIs with service accounts and API keys, or call them on behalf of an employee with that employee's own permissions.
+   - **API key permission boundaries**: Administrators issue keys for service accounts, set expiration and interface permissions, and grant access to specific applications, knowledge bases and other resources. Interface permissions determine which actions are allowed; resource grants determine where those actions apply. Possessing a key does not grant access to the entire platform.
    - **Xinchuang (domestic IT stack) support**: Supports both MySQL and Dameng DM8.
    - Also: SSO/LDAP, high-availability deployment, content security review, traffic control, monitoring and statistics, and vulnerability scanning and fixes.
    <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>

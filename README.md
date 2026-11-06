@@ -41,7 +41,7 @@ BISHENG是一款 <b>开源的企业级一站式 Agent 平台</b>，专注办公�
 
 ![BISHENG 客户端官网企业版介绍页面截图](docs/images/readme/bisheng-desktop-enterprise.png)
 
-[下载 BISHENG 客户端](https://dshdesktop.com/zh/enterprise/) · [GitHub 仓库](https://github.com/dataelement/bisheng-desktop)
+[下载 BISHENG 客户端](https://dshdesktop.com/zh/enterprise/) · [客户端 Github 仓库](https://github.com/dataelement/bisheng-desktop)
 
 > 企业接入能力、配置要求及开源与商业版范围，以对应版本说明为准。
 
@@ -51,7 +51,7 @@ BISHENG是一款 <b>开源的企业级一站式 Agent 平台</b>，专注办公�
 
 GitHub 已获 **17k Star**。
 
-[官网与下载](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
+[DSH 客户端](https://dshdesktop.com/zh/) · [GitHub](https://github.com/dataelement/dsh-desktop)
 
 ## 特点
 
@@ -104,17 +104,18 @@ GitHub 已获 **17k Star**。
 
 6. **🛠️ 应用工场：把 Vibe App 发布给团队**
 
-   - **从本地开发到团队使用**：提交本地或由 Coding Agent 辅助开发的应用，经预检、密钥扫描、构建和发布审批后，按授权范围发布到应用中心。
-   - **复用平台能力**：应用可按需接入平台身份、模型和知识资源，减少重复建设；具体能力与配置要求以对应版本说明为准。
+   - **把业务需求做成应用**：将报名表、项目台账、部门看板等需求做成专门的页面，让同事从应用中心打开使用。
+   - **从本地开发到团队使用**：提交本地或由 Coding Agent 辅助开发的应用，经预检、密钥扫描、构建和发布审批后，再设置使用范围，发布到应用中心。
+   - **复用平台能力**：应用可按需复用平台登录与访问者身份，接入模型和知识资源，减少重复建设；具体能力与配置要求以对应版本说明为准。
 
 7. **🏢 企业级特性：企业 AI 落地需要的管控能力**
 
-   - **部门和用户管理**：组织架构管理和人员设置，支持按角色开放功能菜单和设置配额。
-   - **RBAC + ReBAC 双权限模型**：角色控制能用哪些功能，ReBAC 控制能访问哪份资源（精确到单个文件）。
+   - **部门和用户管理**：维护组织架构、用户和配额。
+   - **功能与资源权限分开管理**：RBAC 通过角色控制功能菜单与操作；ReBAC 控制知识空间、文件夹和单个文件的访问，可按个人、部门（含下级部门）或用户组授权。文件夹和文件默认继承上级权限，也可独立设置。
    - **操作审批**：知识空间加入、频道订阅、菜单权限申请等操作可以走审批，审批流程和节点可自定义。
    - **审计**：记录会话内容和系统操作日志，可按人、时间、模块追溯。
    - **统计看板**（商业版）：预置用户活跃度、应用使用、token 用量、知识库使用等数据看板。
-   - **API 开放能力**：通过服务账号和 API 密钥调用应用、知识库等接口，也可以按员工本人权限代表用户调用。
+   - **API Key 权限边界**：管理员为服务账号签发密钥，配置有效期、接口权限，并授予可访问的应用、知识库等资源。接口权限决定能做什么，资源授权决定能对哪些资源操作；获得密钥不等于拥有整个平台权限。
    - **信创适配**：同时支持 MySQL 和达梦 DM8。
    - 以及 SSO/LDAP、高可用部署方案、安全审查、流量控制、监控统计、漏洞扫描修复。
    <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>
