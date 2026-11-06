@@ -1,3 +1,5 @@
+> 源自中国匠心，希望我们能像 [Deepseek]、[黑神话：悟空] 团队一样，给世界带来更多美好。
+
 <img src="https://dataelem.com/bs/face.png" alt="Bisheng banner">
 
 <p align="center">
@@ -60,7 +62,7 @@ GitHub 已获 **17k Star**。
    - **模型与积分集中管理**：管理员统一配置模型授权、月度积分和调用记录；Chat 与 Work 的企业模型调用共用当前用户的积分账本，用户可查看余额与用量。
    - **企业扩展统一分发**：管理员集中导入插件和工作台，员工按企业配置与授权获取使用。
 
-   [客户端使用与版本说明](https://dataelem.feishu.cn/wiki/Q9fYwAGXOiwPV5kqREfcDzyQnkF)。具体能力、部署要求及开源与企业版范围，以对应版本说明为准。
+   具体能力、部署要求及开源与企业版范围，以对应版本说明为准。
 
    ![BISHENG 网页端、桌面端与手机端展示](docs/images/readme/bisheng-platform-overview.png)
 
