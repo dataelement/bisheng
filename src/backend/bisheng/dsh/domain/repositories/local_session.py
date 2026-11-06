@@ -1,5 +1,6 @@
 """Short SQL transactions for desktop credential rotation and ownership."""
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from uuid import uuid4
 
@@ -7,7 +8,12 @@ from loguru import logger
 from sqlmodel import select
 
 from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
-from bisheng.dsh.domain.models.local_session import DshRefreshToken, DshSession
+from bisheng.dsh.domain.models.local_session import (
+    ABSOLUTE_SESSION_POLICY,
+    SLIDING_SESSION_POLICY,
+    DshRefreshToken,
+    DshSession,
+)
 
 
 class DshSessionRepository:
@@ -38,7 +44,9 @@ class DshSessionRepository:
             statement = statement.with_for_update().execution_options(populate_existing=True)
         return self.session.exec(statement).one_or_none()
 
-    def create(self, *, tenant_id, user_id, auth_id, device_label, client_version, expires_at, digest, now):
+    def create(
+        self, *, tenant_id, user_id, auth_id, device_label, client_version, expires_at, digest, now, idle_seconds=None
+    ):
         row = DshSession(
             session_id=str(uuid4()),
             tenant_id=tenant_id,
@@ -48,6 +56,9 @@ class DshSessionRepository:
             client_version=client_version,
             created_at=now,
             expires_at=expires_at,
+            expiry_policy=SLIDING_SESSION_POLICY if idle_seconds is not None else ABSOLUTE_SESSION_POLICY,
+            idle_ttl_seconds=idle_seconds,
+            last_activity_at=now if idle_seconds is not None else None,
         )
         self.session.add(row)
         self.session.add(
@@ -64,16 +75,46 @@ class DshSessionRepository:
 
     @strict_tenant_filter()
     def revoke(self, row):
+        # The session is the authority for every generation. Do not load an
+        # indefinitely growing token chain into a logout/replay transaction.
         row.state = "REVOKED"
         self.session.add(row)
-        for token in self.session.exec(
-            select(DshRefreshToken).where(DshRefreshToken.session_id == row.session_id)
-        ).all():
-            token.state = "REVOKED"
-            self.session.add(token)
 
     @strict_tenant_filter()
-    def rotate(self, session_id: str, digest: str, next_digest: str, now: datetime, grace_seconds: int = 0):
+    def record_activity(self, principal, clock: Callable[[], datetime], *, idle_seconds: int, migrate_existing: bool):
+        row = self.get(principal.session_id, lock=True)
+        now = clock()
+        if row is None or (str(row.user_id), row.version) != (principal.user_id, principal.session_version):
+            return None, "invalid_access_token"
+        if row.state != "ACTIVE":
+            return None, "session_revoked"
+        if now >= row.expires_at:
+            return None, "session_expired"
+        if row.expiry_policy == ABSOLUTE_SESSION_POLICY:
+            if not migrate_existing:
+                return self.snapshot(row), None
+            row.expiry_policy = SLIDING_SESSION_POLICY
+            row.idle_ttl_seconds = idle_seconds
+        if row.expiry_policy != SLIDING_SESSION_POLICY or not row.idle_ttl_seconds or row.idle_ttl_seconds < 1:
+            raise ValueError("Invalid stored desktop session expiry policy")
+        row.last_activity_at = max(row.last_activity_at or now, now)
+        row.expires_at = row.last_activity_at + timedelta(seconds=row.idle_ttl_seconds)
+        self.session.add(row)
+        for token in self.session.exec(
+            select(DshRefreshToken).where(
+                DshRefreshToken.session_id == row.session_id,
+                DshRefreshToken.state == "ACTIVE",
+            )
+        ).all():
+            token.expires_at = row.expires_at
+            self.session.add(token)
+        self.session.flush()
+        return self.snapshot(row), None
+
+    @strict_tenant_filter()
+    def rotate(
+        self, session_id: str, digest: str, next_digest: str, clock: Callable[[], datetime], grace_seconds: int = 0
+    ):
         row = self.get(session_id, lock=True)
         token = self.session.exec(
             select(DshRefreshToken)
@@ -83,8 +124,16 @@ class DshSessionRepository:
             )
             .execution_options(populate_existing=True)
         ).one_or_none()
+        # Waiting for the row lock must not let a pre-expiry timestamp revive an
+        # already expired session or extend a consumed-token recovery window.
+        now = clock()
         if row is None or token is None:
             return None, "invalid_refresh_token"
+        # Check the shared authority before handling any historical generation.
+        if row.state != "ACTIVE":
+            return None, "session_revoked"
+        if now >= row.expires_at:
+            return None, "session_expired"
         if token.state == "USED":
             if self._return_unspent_successor(row, token, next_digest, now, grace_seconds):
                 logger.info(
@@ -95,9 +144,7 @@ class DshSessionRepository:
                 return self.snapshot(row), None
             self.revoke(row)
             return None, "refresh_token_reused"
-        if row.state != "ACTIVE":
-            return None, "session_revoked"
-        if now >= row.expires_at or now >= token.expires_at:
+        if row.expiry_policy == ABSOLUTE_SESSION_POLICY and now >= token.expires_at:
             return None, "session_expired"
         if token.state != "ACTIVE" or token.generation >= 9223372036854775807:
             return None, "invalid_refresh_token"
@@ -128,7 +175,7 @@ class DshSessionRepository:
             or now - token.used_at > timedelta(seconds=grace_seconds)
             or row.state != "ACTIVE"
             or now >= row.expires_at
-            or now >= token.expires_at
+            or (row.expiry_policy == ABSOLUTE_SESSION_POLICY and now >= token.expires_at)
         ):
             return False
         successor = self.session.exec(

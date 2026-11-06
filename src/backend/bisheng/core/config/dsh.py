@@ -36,7 +36,20 @@ class DshSettings(BaseModel):
         default=300, ge=60, le=600, description="Lifetime in seconds of a native DSH access token."
     )
     session_ttl_seconds: int = Field(
-        default=2592000, ge=600, le=2592000, description="Absolute lifetime in seconds of a native desktop session."
+        default=2592000,
+        ge=600,
+        le=2592000,
+        description="Legacy absolute-session lifetime; new sessions use the separate idle lifetime.",
+    )
+    session_idle_ttl_seconds: int = Field(
+        default=1209600,
+        ge=600,
+        le=2592000,
+        description="Business inactivity lifetime for new desktop sessions; refresh and polling do not renew it.",
+    )
+    session_idle_migrate_existing: bool = Field(
+        default=False,
+        description="Convert valid absolute sessions on their next admitted business activity. Never revives expired sessions.",
     )
     refresh_reuse_grace_seconds: int = Field(
         default=86400,

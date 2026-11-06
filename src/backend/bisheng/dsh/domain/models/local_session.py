@@ -7,6 +7,9 @@ from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
 
+ABSOLUTE_SESSION_POLICY = "ABSOLUTE_V1"
+SLIDING_SESSION_POLICY = "SLIDING_IDLE_V1"
+
 
 class DshSession(SQLModelSerializable, table=True):
     __tablename__ = "dsh_session"
@@ -26,6 +29,12 @@ class DshSession(SQLModelSerializable, table=True):
     client_version: str | None = Field(default=None, sa_column=Column(String(64)))
     created_at: datetime = Field(sa_column=Column(DateTime, nullable=False))
     expires_at: datetime = Field(sa_column=Column(DateTime, nullable=False))
+    expiry_policy: str = Field(
+        default=ABSOLUTE_SESSION_POLICY,
+        sa_column=Column(String(32), nullable=False, server_default=ABSOLUTE_SESSION_POLICY),
+    )
+    last_activity_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
+    idle_ttl_seconds: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
 
 
 class DshRefreshToken(SQLModelSerializable, table=True):
@@ -33,6 +42,7 @@ class DshRefreshToken(SQLModelSerializable, table=True):
     __table_args__ = (
         UniqueConstraint("session_id", "generation", name="uq_dsh_local_refresh_generation"),
         Index("ix_dsh_local_refresh_session", "tenant_id", "session_id"),
+        Index("ix_dsh_refresh_active", "tenant_id", "session_id", "state"),
         CheckConstraint("state IN ('ACTIVE','USED','REVOKED')", name="ck_dsh_local_refresh_state"),
         CheckConstraint("generation >= 1", name="ck_dsh_local_refresh_generation"),
     )

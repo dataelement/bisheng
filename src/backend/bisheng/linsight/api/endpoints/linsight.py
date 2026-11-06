@@ -17,7 +17,7 @@ from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
 from bisheng.citation.domain.services.citation_prompt_helper import strip_citation_markers
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.linsight import (
@@ -357,6 +357,8 @@ async def continue_conversation(
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
+    await record_business_activity(login_user)
+
     # Flip back to IN_PROGRESS BEFORE enqueue so the worker's pre-flight
     # non-terminal guard accepts the continue item.
     await LinsightSessionVersionDao.batch_update_session_versions_status(
@@ -432,6 +434,7 @@ async def user_input(
     already_completed = existing_task is not None and existing_task.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
     if not already_completed:
+        await record_business_activity(login_user)
         # Legacy parked sessions created before the pseudo-task row existed have
         # no row for a session-level clarify; the resume reads the answer from the
         # queue item, so persistence is best-effort there (skip when no row).

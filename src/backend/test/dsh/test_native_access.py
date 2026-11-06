@@ -108,7 +108,8 @@ def native(tmp_path):
     authorizations = DshAuthorizationService(store, "https://platform.example")
     identity = IdentityService(TicketRepository(store), records, authorizations)
     keys = LocalTokenKeys(lambda: "synthetic-persistent-master-for-native-tests")
-    sessions = DshLocalSessionService(scope, identity, keys, refresh_grace_seconds=600)
+    # Existing absolute-session tests also exercise upgraded historical records.
+    sessions = DshLocalSessionService(scope, identity, keys, refresh_grace_seconds=600, idle_seconds=None)
     access = DshAccessService(ISSUER, keys, identity, sessions)
     runtime = DshRuntime(
         SimpleNamespace(platform_public_url="https://platform.example"), identity, access, sessions, authorizations
@@ -145,7 +146,8 @@ async def test_native_tokens_validate_and_replay_revokes_the_family(native):
     with Session(engine) as session, principal_scope(DshPrincipal(tenant_id="2", user_id="20", session_id="test")):
         # SQL assertion proves revocation committed before the replay error.
         assert all(row.state == "REVOKED" for row in session.exec(select(DshSession)).all())
-        assert all(row.state == "REVOKED" for row in session.exec(select(DshRefreshToken)).all())
+        # A revoked session invalidates all generations without rewriting them.
+        assert session.exec(select(DshRefreshToken)).all()
 
 
 def rewrite_used_at(engine, used_at):

@@ -62,6 +62,8 @@ async def get_logout_runtime(request: Request, config: DshSettings = Depends(get
             access_seconds=config.access_ttl_seconds,
             session_seconds=config.session_ttl_seconds,
             refresh_grace_seconds=config.refresh_reuse_grace_seconds,
+            idle_seconds=config.session_idle_ttl_seconds,
+            migrate_idle_sessions=config.session_idle_migrate_existing,
         )
         access = DshAccessService(ISSUER, keys, identity, sessions)
         runtime = DshRuntime(config, identity, access, sessions, authorizations)

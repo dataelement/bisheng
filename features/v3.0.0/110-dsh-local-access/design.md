@@ -1,6 +1,6 @@
 # Design: DSH 本地登录与部门额度
 
-关联：[spec.md](./spec.md) · [tasks.md](./tasks.md) · [已确认评估](../../../docs/dsh-seat-removal-impact.md)。版本 v3.0.0，更新于 2026-11-05。
+关联：[spec.md](./spec.md) · [tasks.md](./tasks.md) · [已确认评估](../../../docs/dsh-seat-removal-impact.md)。版本 v3.0.0，更新于 2026-11-06。
 
 ## 1. 目标与边界
 
@@ -28,6 +28,12 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 
 标准路径和旧路径使用同一 handler，避免双会话真相。历史事件的 seat_id/grant_version 保留可空，不生成虚拟席位。正文采集、树结构、标题、审计密钥和后台归并任务继续运行。改变协议版本或缩小旧客户端范围时再移除别名。
 
+### 决策 5：按设备业务活动滑动续期
+
+新登录采用 SLIDING_IDLE_V1，默认 14 天闲置期限固化在 idle_ttl_seconds；last_activity_at 使用服务端时间，expires_at 是权威截止时间，不再有原始 30 天上限。鉴权、刷新、cookie 换发/校验和目录轮询不续期。模型额度准入和工具准入后记录活动，内嵌工作区通过已验证 cookie 的私有回调绑定精确设备。锁后重新读取时间，避免排队跨过截止点后复活。拒绝按所有鉴权成功保活，因为后台轮询会导致永不过期。
+
+历史 ABSOLUTE_V1 保留原截止时间，session_idle_migrate_existing 默认 false，开启后仅在有效业务活动时转换。撤销以设备会话状态统一阻断所有代数，不在退出事务中遍历历史。详细增量设计与验证见 [idle-sessions/design.md](./idle-sessions/design.md) 和 [idle-sessions/verification.md](./idle-sessions/verification.md)。客户端 1.3.0 优化尚未实施；未来需要强制绝对上限或不同活跃规则时重新评审。
+
 ## 4. 系统现状
 
 ### 4.1 数据流
@@ -46,7 +52,7 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 | 标准 / 旧路径 | 上述三接口分别位于 /api/v1/dsh 和 /api/dsh；旧别名由应用根路由注册 |
 | 响应 | token_type、access_token、expires_in、refresh_token、refresh_expires_in、session_id、session_expires_at、user、tenant；无席位 |
 | access JWT | iss/aud/sub/tenant_id/session_id/session_version/iat/exp/jti；默认 300 秒，最大 600 秒 |
-| 设备会话 | dsh_session；默认绝对 30 天，刷新不延期；dsh_refresh_token 仅保存摘要、代际、状态、过期时间及 nullable used_at；恢复窗口不是登录有效期 |
+| 设备会话 | dsh_session；新登录默认闲置 14 天，业务活动续期、刷新不续期；历史绝对模式默认 30 天。新增 expiry_policy/last_activity_at/idle_ttl_seconds；refresh 仅存摘要等字段，恢复窗口独立 |
 | UsageEvent / dsh_model_call | 席位和 grant_version 可空；历史正版本保持可读；其他用量、版本、epoch 字段维持原契约 |
 | 个人策略 | enabled=true + monthly_token_limit=0 为显式拒绝；enabled=false 为恢复继承 |
 
@@ -100,9 +106,11 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 
 ## 8. 后续边界
 
-不删除历史审计和旧操作记录，不迁移 Gateway SSO，不重置已用量。过期本地会话和 refresh 摘要的运营清理应在绝对过期后执行；USED 摘要不能在有效期内提前清理，否则失去重放检测证据。
+不删除历史审计和旧操作记录，不迁移 Gateway SSO，不重置已用量。过期本地会话和 refresh 摘要的运营清理应在设备会话实际失效并满足保留策略后执行；USED 摘要不能在有效期内提前清理，否则失去重放检测证据。
 
 ## 修订历史
 
 - 2026-10-20：按用户确认的方案实施本地认证、去席位、个人优先及部门独立额度；记录序列化和精确租户范围两个实际发现，保持模型审计协议。
 - 2026-11-05：合入确定性后继与 24 小时恢复窗口，补齐当前 130 分支的迁移 head 合并；客户端稳定性后续方案单列，不代表已实施或部署。
+
+- 2026-11-06：服务端实现按设备业务活动的 14 天滑动续期、受控旧会话转换和常量规模撤销，保留 1.2.0 协议；实际安装包与 MySQL/DM8 验收待发布前完成。

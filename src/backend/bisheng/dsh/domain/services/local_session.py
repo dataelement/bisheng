@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import jwt
+from loguru import logger
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from bisheng.common.errcode.dsh import (
@@ -33,11 +34,15 @@ class DshLocalSessionService:
         access_seconds=300,
         session_seconds=2592000,
         refresh_grace_seconds=0,
+        idle_seconds=1209600,
+        migrate_idle_sessions=False,
         now=None,
     ):
         self.repository_scope, self.identities, self.keys = repository_scope, identities, keys
         self.access_seconds, self.session_seconds = access_seconds, session_seconds
         self.refresh_grace_seconds = refresh_grace_seconds
+        self.idle_seconds = idle_seconds
+        self.migrate_idle_sessions = migrate_idle_sessions
         self.now = now or (lambda: datetime.now(UTC).replace(tzinfo=None))
 
     async def run(self, action):
@@ -72,9 +77,10 @@ class DshLocalSessionService:
                     auth_id=auth_id,
                     device_label=authorization.get("device_name"),
                     client_version=authorization.get("client_version"),
-                    expires_at=now + timedelta(seconds=self.session_seconds),
+                    expires_at=now + timedelta(seconds=self.idle_seconds or self.session_seconds),
                     digest=self.digest(refresh),
                     now=now,
+                    idle_seconds=self.idle_seconds,
                 )
             )
         return await self.response(identity, row, refresh)
@@ -99,7 +105,7 @@ class DshLocalSessionService:
                     principal.session_id,
                     digest,
                     self.digest(next_refresh),
-                    self.now(),
+                    self.now,
                     self.refresh_grace_seconds,
                 )
             )
@@ -107,6 +113,30 @@ class DshLocalSessionService:
         if error:
             raise ERROR_BY_CLIENT_CODE[error]()
         return await self.response(identity, row, next_refresh)
+
+    async def record_activity(self, principal):
+        """Called only after business admission, never by authentication or refresh."""
+        with principal_scope(principal):
+            identity = await self.identities.check(principal.tenant_id, principal.user_id)
+            if not identity.active:
+                raise DshUserDisabledError()
+            row, error = await self.run(
+                lambda repository: repository.record_activity(
+                    principal,
+                    self.now,
+                    idle_seconds=self.idle_seconds or self.session_seconds,
+                    migrate_existing=self.migrate_idle_sessions,
+                )
+            )
+        if error:
+            raise ERROR_BY_CLIENT_CODE[error]()
+        logger.info(
+            "dsh business activity session_id={} policy={} expires_at={}",
+            principal.session_id,
+            row["expiry_policy"],
+            row["expires_at"],
+        )
+        return row
 
     async def response(self, identity, row, refresh):
         now = int(self.now().replace(tzinfo=UTC).timestamp())
@@ -173,7 +203,9 @@ class DshLocalSessionService:
                 "state": row["state"],
                 "expires_at": row["expires_at"].replace(tzinfo=UTC).isoformat(),
                 "created_at": row["created_at"].replace(tzinfo=UTC).isoformat(),
-                "last_seen_at": None,
+                "last_seen_at": row["last_activity_at"].replace(tzinfo=UTC).isoformat()
+                if row["last_activity_at"]
+                else None,
             }
             for row in page["items"]
         ]
