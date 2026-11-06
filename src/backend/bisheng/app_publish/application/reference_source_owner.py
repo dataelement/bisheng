@@ -2,6 +2,7 @@
 
 import json
 import time
+from dataclasses import dataclass
 from datetime import date, datetime
 from types import SimpleNamespace
 
@@ -39,6 +40,7 @@ from bisheng.resource_reference.application.contracts import (
     SourceType,
     TargetKey,
     TargetType,
+    TransactionIdentity,
     reference_set_digest,
 )
 from bisheng.resource_reference.application.source_contracts import (
@@ -64,12 +66,68 @@ def _invalid(reason="app_reference_source_invalid"):
     return ResourceReferenceInvalidError(reason=reason)
 
 
+@dataclass(slots=True)
+class _SourcePlan:
+    snapshot: AuthorizedSourceSnapshot
+    plan: object
+    identity: object
+    request: SourceReadRequest
+    transaction: TransactionIdentity
+    admitted: bool = False
+
+
 class HostedAppReferenceSourceOwner:
     def __init__(self, repository=None, authorization_context=None):
         self.repository = repository if repository is not None else HostedAppReferenceSourceRepository()
         self.authorization_context = authorization_context
         self.references = ReferenceRepository()
         self._plans = object()
+        self._admission_authority = None
+
+    def _install_admission_authority(self, authority):
+        if self._admission_authority is not None:
+            raise _invalid("app_source_authority_already_installed")
+        self._admission_authority = authority
+
+    def _registered_plan(self, session, snapshot, identity):
+        registered = session.info.get(self._plans, {}).get(id(snapshot))
+        if registered is None or registered.snapshot is not snapshot or registered.identity is not identity:
+            raise _invalid("app_source_snapshot_invalid")
+        try:
+            registered.transaction.assert_current(session)
+        except ValueError as error:
+            raise _invalid("app_source_snapshot_invalid") from error
+        return registered
+
+    def _mark_admitted(self, authority, session, snapshot, identity):
+        if self._admission_authority is None or authority is not self._admission_authority:
+            raise _invalid("app_source_authority_invalid")
+        registered = self._registered_plan(session, snapshot, identity)
+        if registered.request.purpose != "execute":
+            raise _invalid("app_source_execution_required")
+        registered.admitted = True
+
+    async def assert_model_binding_current(self, session, snapshot, identity, requested, resolved):
+        registered = self._registered_plan(session, snapshot, identity)
+        if not registered.admitted or registered.request.purpose != "execute" or registered.plan is None:
+            raise _invalid("app_source_execution_required")
+        names = get_model_name_resolution_port()
+        current = await names.resolve_model_alias_current(
+            session, snapshot.source_key.tenant_id, requested, identity=identity, plan=registered.plan
+        )
+        model_ids = tuple(
+            sorted(
+                {int(ref.target.target_id) for ref in snapshot.references if ref.target.target_type == TargetType.MODEL}
+            )
+        )
+        frozen = await names.aresolve_frozen_model_identities(
+            session, snapshot.source_key.tenant_id, model_ids, identity=identity
+        )
+        if (current.model_id, current.server_id) != (resolved.model_id, resolved.server_id) or (
+            current.model_id,
+            current.server_id,
+        ) not in {(one.model_id, one.server_id) for one in frozen}:
+            raise KnowledgeOperationPlanConflictError(reason="model_binding_identity_changed")
 
     async def _management_context(self, session, root, version, identity, *, for_update):
         context = self.authorization_context
@@ -269,14 +327,14 @@ class HostedAppReferenceSourceOwner:
         ):
             raise _invalid()
         # Consume only the original target/name plan before taking the business root.
-        if prepared is not None and prepared[1] is not None:
-            old = prepared[0]
+        if prepared is not None and prepared.plan is not None:
+            old = prepared.snapshot
             await resolve_app_references(
                 session,
                 CapabilityDeclaration.model_validate(json.loads(old.payload_json)["capabilities"]),
                 identity=identity,
                 source_tenant_id=old.source_key.tenant_id,
-                model_name_plan=prepared[1],
+                model_name_plan=prepared.plan,
                 frozen_references=old.references,
             )
         root = await self.repository.aget_root(session, request.source_id, for_update=for_update)
@@ -342,7 +400,7 @@ class HostedAppReferenceSourceOwner:
             if identity.authorization_subject_id != ceiling or identity.preview_capability_user_id != ceiling:
                 raise OpenApiCredentialInvalidError()
         key, declaration, references = await self._frozen(session, root, version)
-        plan = prepared[1] if prepared is not None else None
+        plan = prepared.plan if prepared is not None else None
         if request.purpose == "execute" and prepared is None:
             names = get_model_name_resolution_port()
             frozen = await names.aresolve_frozen_model_identities(
@@ -397,20 +455,17 @@ class HostedAppReferenceSourceOwner:
             key, references, APP_REFERENCE_EXTRACTOR_VERSION, payload_digest(payload), payload
         )
         if prepared is None:
-            session.info.setdefault(self._plans, {})[id(snapshot)] = (snapshot, plan, identity, request)
+            session.info.setdefault(self._plans, {})[id(snapshot)] = _SourcePlan(
+                snapshot, plan, identity, request, TransactionIdentity.capture(session)
+            )
         return snapshot
 
     async def aresolve_source(self, session, request, identity):
         return await self._load(session, request, identity, for_update=False)
 
     async def arevalidate_source(self, session, request, identity, expected):
-        registered = session.info.get(self._plans, {}).get(id(expected))
-        if (
-            registered is None
-            or registered[0] is not expected
-            or registered[2] is not identity
-            or registered[3] != request
-        ):
+        registered = self._registered_plan(session, expected, identity)
+        if registered.request != request:
             raise _invalid("app_source_snapshot_invalid")
         try:
             current = await self._load(session, request, identity, for_update=True, prepared=registered)
