@@ -203,6 +203,26 @@ async def test_missing_model_never_uses_prepared_or_snapshot_model(files):
     files.provider.assert_not_called()
 
 
+async def test_actual_source_replacement_rejects_prepared_documents(files):
+    prepared = prepare(files)
+    async with files.context.sessions() as session:
+        (await session.get(KnowledgeFile, 81)).object_name = "replacement/81.txt"
+        await session.commit()
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        write(files, prepared)
+    files.provider.assert_not_called()
+    files.vector.col.delete.assert_not_called()
+
+
+def test_store_failure_returns_actual_failure_and_cleans_only_selected_file(files):
+    prepared = prepare(files)
+    files.es.add_documents.side_effect = RuntimeError("ES write failed")
+    result = write(files, prepared)
+    assert result.status == 3 and not result.succeeded and result.chunk_count == len(prepared.documents)
+    assert files.vector.col.delete.call_count == 2
+    files.vector.col.drop.assert_not_called()
+
+
 def test_empty_parse_is_real_failed_outcome_without_store_write(files):
     files.source.write_text("", encoding="utf-8")
     result = write(files, prepare(files))
