@@ -21,6 +21,7 @@ from bisheng.core.context.tenant import (
     bypass_tenant_filter,
     current_tenant_id,
     set_current_tenant_id,
+    tenant_execution_scope,
     visible_tenant_ids,
 )
 from bisheng.core.database import tenant_filter
@@ -283,6 +284,7 @@ async def test_read_only_pages_preserve_owner_pending_writes_and_transaction(rep
         page = await getattr(repo, method)(session, **METHODS[method][1])
         assert page.items == () and page.next_after is None
         await repo.avalidate_global_orphans(session)
+        await repo.avalidate_tenant_orphans(session)
         assert pending in session.new and pending.tenant_id is None and not flushes
         assert session.get_transaction() is transaction
 
@@ -357,8 +359,9 @@ async def test_global_orphan_probe_checks_only_existence_and_preserves_owner_pen
         pending = Assistant(id="pending")
         session.add(pending)
         statements = record_queries(session)
+        method = "avalidate_tenant_orphans" if table.startswith("assistant_") else "avalidate_global_orphans"
         with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
-            await repo.avalidate_global_orphans(session)
+            await getattr(repo, method)(session)
         assert "foreign-private-value" not in str(caught.value)
         assert pending in session.new and pending.tenant_id is None
         assert all(int(query._limit_clause.value) == 1 for query in statements)
@@ -411,8 +414,42 @@ async def test_orphan_probe_does_not_reclassify_valid_foreign_children_or_scan_f
         await session.flush()
         statements = record_queries(session)
         await repo.avalidate_global_orphans(session)
+        await repo.avalidate_tenant_orphans(session)
         assert len(statements) == 3
         assert all(len(query.selected_columns) == 1 and int(query._limit_clause.value) == 1 for query in statements)
+
+
+async def test_formal_inventory_probes_global_children_once_and_each_tenant_once_without_cached_proofs(repo, storage):
+    async with AsyncSession(storage) as session, session.begin():
+        statements = record_queries(session)
+        await repo.avalidate_global_orphans(session)
+        # The global method must contain only the two ownerless-child probes;
+        # a third SELECT here would still merge global and tenant stages.
+        assert len(statements) == 2
+        for tenant_id in range(101, 106):
+            with tenant_execution_scope(tenant_id):
+                await repo.avalidate_tenant_orphans(session)
+        selected_tables = [next(iter(query.selected_columns)).table.name for query in statements]
+        print({"tenants": 5, "probe_reads": {table: selected_tables.count(table) for table in set(selected_tables)}})
+        assert selected_tables.count("app_version") == selected_tables.count("channel_knowledge_sync") == 1
+        assert selected_tables.count("assistantlink") == 5
+        assert len(statements) == 7
+    # A later run/transaction must execute fresh checks. No process cache may
+    # turn a previous clean scan into a reusable readiness proof.
+    async with AsyncSession(storage) as session, session.begin():
+        statements = record_queries(session)
+        await repo.avalidate_global_orphans(session)
+        await repo.avalidate_tenant_orphans(session)
+        assert len(statements) == 3
+
+
+@pytest.mark.parametrize("method", ["avalidate_global_orphans", "avalidate_tenant_orphans"])
+async def test_both_probe_stages_reject_bypass_before_sql(repo, storage, method):
+    async with AsyncSession(storage) as session, session.begin():
+        statements = record_queries(session)
+        with bypass_tenant_filter(), pytest.raises(KnowledgeOperationPlanConflictError):
+            await getattr(repo, method)(session)
+        assert not statements
 
 
 async def test_raw_json_and_default_values_are_frozen_closed_rows_with_hidden_payloads(repo, storage):
@@ -466,8 +503,9 @@ async def test_every_entry_requires_native_session_and_existing_concrete_transac
         for method, (_, kwargs) in METHODS.items():
             with pytest.raises(KnowledgeOperationPlanConflictError):
                 await getattr(repo, method)(session, **kwargs)
-        with pytest.raises(KnowledgeOperationPlanConflictError):
-            await repo.avalidate_global_orphans(session)
+        for method in ("avalidate_global_orphans", "avalidate_tenant_orphans"):
+            with pytest.raises(KnowledgeOperationPlanConflictError):
+                await getattr(repo, method)(session)
     token = set_current_tenant_id(None)
     try:
         async with AsyncSession(storage) as session, session.begin():
