@@ -7,6 +7,7 @@ import pytest
 
 from bisheng.app_runtime.domain.services import entry_authz_service as module
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.context.tenant import current_tenant_id
 
 
 @pytest.fixture
@@ -33,9 +34,20 @@ def entry(monkeypatch):
     token = Mock(return_value=("signed-original-obo", 5000))
     monkeypatch.setattr(module, "_issue_obo_token", token)
     monkeypatch.setattr(module, "schedule_access_record", Mock())
-    return SimpleNamespace(
-        user=user, app=app, subject=subject, session=session, load=load, action=action, token=token, material=material
-    )
+    tenant_token = current_tenant_id.set(101)
+    try:
+        yield SimpleNamespace(
+            user=user,
+            app=app,
+            subject=subject,
+            session=session,
+            load=load,
+            action=action,
+            token=token,
+            material=material,
+        )
+    finally:
+        current_tenant_id.reset(tenant_token)
 
 
 async def test_visible_only_visitor_enters_without_use_or_edit(entry):
