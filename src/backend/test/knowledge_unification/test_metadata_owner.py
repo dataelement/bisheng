@@ -30,7 +30,7 @@ processing, application, metadata = fixtures.processing, fixtures.application, f
 def owner(metadata, monkeypatch):
     auth = AsyncMock()
     monkeypatch.setattr(module, "require_business_action", auth)
-    return SimpleNamespace(app=metadata, owner=MetadataProcessingOwner(), auth=auth)
+    return SimpleNamespace(app=metadata, owner=MetadataProcessingOwner(model_owner=metadata.owner), auth=auth)
 
 
 async def preview(fixture, session):
@@ -226,3 +226,20 @@ async def test_empty_receipt_preserves_unrelated_pending_name_and_allows_only_re
     async with owner.app.context.sessions() as session:
         assert (await session.get(Knowledge, 40)).name == "pending business name"
         assert (await session.get(Knowledge, 40)).metadata_schema_revision == 1
+
+
+async def test_default_model_read_uses_actual_runtime_without_constructing_an_outer_processing_owner(
+    owner, monkeypatch
+):
+    from bisheng.knowledge.application import processing_owner as model_module
+
+    actual = await model_module.get_knowledge_model_read_runtime()
+    read = AsyncMock(return_value=actual)
+    monkeypatch.setattr(module, "get_knowledge_model_read_runtime", read, raising=False)
+    original = MetadataProcessingOwner()
+    async with owner.app.context.sessions() as session:
+        plan = await original.apreview(
+            session, 40, identity=owner.app.context.user, parameters=fixtures.parameters(fixtures.rename())
+        )
+        assert plan.configuration.model_config_revision == 0 and plan.configuration.metadata_schema_revision == 1
+    read.assert_awaited_once()
