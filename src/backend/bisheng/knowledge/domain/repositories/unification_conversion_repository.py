@@ -41,6 +41,7 @@ KINDS = {
     DefaultConversionCommand: "default_conversion",
 }
 DEFAULT_COLUMNS = tuple(DefaultRow.__dataclass_fields__)
+RESOURCE_PROJECTION = raw.RESOURCE_COLUMNS + raw.NEUTRAL_COLUMNS
 
 
 def _blocked(reason):
@@ -164,7 +165,7 @@ class UnificationConversionRepository:
             _blocked("duplicate_command")
         run = await self.runs._required(session, run_id, writer_contract_version)
         self.runs._expected(run, "converting", baseline_hash, plan_hash)
-        value = await self._load(session, commands)
+        value = await self._load(session, commands, False)
         scope = LockedConversionScope(
             run_id, writer_contract_version, tenant, baseline_hash, plan_hash, digest([asdict(cmd) for cmd in commands])
         )
@@ -178,13 +179,14 @@ class UnificationConversionRepository:
         self._parents(scope, value)
         return scope
 
-    async def _load(self, session, commands):
+    async def _load(self, session, commands, root_values=True):
         resources = {cmd.knowledge_id for cmd in commands if type(cmd) is ResourceConversionCommand}
         roots = {cmd.knowledge_id for cmd in commands if hasattr(cmd, "knowledge_id")}
         root_rows = await self._rows(session, Knowledge, ("id", "tenant_id", "type"), roots)
-        root_rows.update(await self._rows(session, Knowledge, raw.RESOURCE_COLUMNS + raw.NEUTRAL_COLUMNS, resources))
+        if root_values:
+            root_rows.update(await self._rows(session, Knowledge, RESOURCE_PROJECTION, resources))
         file_ids = {cmd.file_id for cmd in commands if hasattr(cmd, "file_id")}
-        version_ids = []
+        version_ids = set()
         for start in range(0, len(file_ids), 200):
             counts = await self._read(
                 session,
@@ -194,10 +196,7 @@ class UnificationConversionRepository:
             )
             if any(row["count"] != 1 for row in counts):
                 _blocked("multiple_file_versions")
-            version_ids.extend(row["id"] for row in counts)
-        # Discover only scalar relationship PKs before acquiring the fixed
-        # File -> Document -> Version union locks. Revalidate after locking.
-        version_ids = set(version_ids)
+            version_ids.update(row["id"] for row in counts)
         discovered = await self._rows(session, Version, ("id", "document_id"), version_ids, lock=False)
         doc_ids = {row["document_id"] for row in discovered.values()}
         headers = await self._rows(session, Document, ("id", "primary_version_id"), doc_ids, lock=False)
@@ -209,7 +208,7 @@ class UnificationConversionRepository:
         )
         files = await self._rows(session, File, raw.FILE_COLUMNS, file_ids)
         documents = await self._rows(session, Document, raw.DOCUMENT_COLUMNS, doc_ids)
-        all_versions = await self._rows(session, Version, raw.VERSION_COLUMNS, set(version_ids) | primary_ids)
+        all_versions = await self._rows(session, Version, raw.VERSION_COLUMNS, version_ids | primary_ids)
         versions = {key: row for key, row in all_versions.items() if key in version_ids}
         primaries = {key: row for key, row in all_versions.items() if key in primary_ids}
         v1_files = {cmd.file_id for cmd in commands if type(cmd) is InitializeV1Command}
@@ -519,7 +518,12 @@ class UnificationConversionRepository:
                         await session.flush()
                         await session.execute(
                             update(Document.__table__)
-                            .where(Document.id == doc.id)
+                            .where(
+                                Document.id == doc.id,
+                                Document.knowledge_id.in_(
+                                    select(Knowledge.id).where(Knowledge.tenant_id == scope.tenant_id)
+                                ),
+                            )
                             .values(primary_version_id=version.id, update_time=cmd.planned_at)
                         )
                 await session.flush()
