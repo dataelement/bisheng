@@ -5480,6 +5480,24 @@
   **覆盖 AC**: AC-09, AC-14, AC-51\
   **验证 / 完成条件**：按冻结接口先独立真实红测/首绿再生产，≤2叶，记录实际相关组合与未运行项；不以局部helper替代完整调用链。
 
+## W6重建状态检索旧夹具对齐
+
+- [ ] **T686 · 原检索权限与主版本夹具对齐**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge/test_knowledge_file_visibility_batch.py`；`src/backend/test/knowledge/test_knowledge_file_visibility_primary_filter.py`\
+  **逻辑 / 测试上下文**：T672增实际root状态检查后原mock补显式idle态和精确root读取边界，root SQL计数1→2仅限实际新增一次状态读；保100批量/峰值IO、F048/primary全部断言，不在生产回退缺字段。\
+  **依赖**：T672\
+  **覆盖 AC**: AC-08, AC-35, AC-48, AC-51\
+  **验证 / 完成条件**：记录旧batch5红9绿及相关主版fixture实际差异；同选集新旧检索边界通过，不删原拒绝断言。
+
+- [ ] **T687 · 保源检索SQL夹具补实际空间根**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_rebuild_failed_visibility.py`\
+  **逻辑 / 测试上下文**：原真实file/doc/version SQLite补真实Knowledge表和idle root，精确pin原DAO Session；保成功/失败/primary/FGA原断言，不连中间件或用mock替代实际SQL。\
+  **依赖**：T672\
+  **覆盖 AC**: AC-35, AC-48, AC-51, AC-53\
+  **验证 / 完成条件**：原真实SQL保源/状态过滤与新重建暂停组合通过。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
