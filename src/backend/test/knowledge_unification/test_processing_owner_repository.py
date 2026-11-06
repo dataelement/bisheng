@@ -137,6 +137,9 @@ async def test_broken_version_link_does_not_silently_reduce_full_scope(scope_ses
 
 
 async def leased_file(session):
+    file = await session.get(KnowledgeFile, 8)
+    file.status = 2
+    await session.flush()
     connection = await session.connection()
     await connection.run_sync(
         lambda active: SQLModel.metadata.create_all(
@@ -178,12 +181,12 @@ async def test_file_status_and_item_completion_share_guarded_transaction(scope_s
     item = await scope_session.get(KnowledgeProcessingItem, lease.item_id)
     assert item.state == ("succeeded" if succeeded else "failed")
     await scope_session.rollback()
-    assert (await scope_session.exec(select(KnowledgeFile.status).where(KnowledgeFile.id == 8))).one() == 5
+    assert (await scope_session.exec(select(KnowledgeFile.status).where(KnowledgeFile.id == 8))).one() == 2
     await scope_session.refresh(item)
     assert item.state == "running"
 
 
-@pytest.mark.parametrize("invalid", ["lease", "generation", "parent"])
+@pytest.mark.parametrize("invalid", ["lease", "generation", "parent", "unsafe", "inflight"])
 async def test_stale_or_rebound_item_cannot_write_file_status(scope_session, invalid):
     repo, jobs, lease = await leased_file(scope_session)
     if invalid == "lease":
@@ -195,10 +198,22 @@ async def test_stale_or_rebound_item_cannot_write_file_status(scope_session, inv
         await scope_session.flush()
         assert not await repo.acomplete_file(scope_session, lease, jobs=jobs, succeeded=True)
         assert (await jobs.aget(scope_session, lease.job.job_id)).state == "obsolete"
-    else:
+    elif invalid == "parent":
         file = await scope_session.get(KnowledgeFile, 8)
         file.file_level_path = "/3/5"
         await scope_session.flush()
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await repo.acomplete_file(scope_session, lease, jobs=jobs, succeeded=True)
-    assert (await scope_session.exec(select(KnowledgeFile.status).where(KnowledgeFile.id == 8))).one() == 5
+    else:
+        file = await scope_session.get(KnowledgeFile, 8)
+        file.status = 7 if invalid == "unsafe" else 1
+        await scope_session.flush()
+        from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
+
+        with pytest.raises(KnowledgeProcessingConflictError):
+            await repo.acomplete_file(scope_session, lease, jobs=jobs, succeeded=True)
+        assert (
+            await scope_session.exec(select(KnowledgeFile.status).where(KnowledgeFile.id == 8))
+        ).one() == file.status
+        return
+    assert (await scope_session.exec(select(KnowledgeFile.status).where(KnowledgeFile.id == 8))).one() == 2
