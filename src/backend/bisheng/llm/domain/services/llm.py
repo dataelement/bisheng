@@ -1126,41 +1126,55 @@ class LLMService:
         await cls._save_model_default(key.value, data, tenant_id=tenant_id, login_user=login_user, session=session)
         return data
 
+    @staticmethod
+    def _dispatch_model_default_commands(commands):
+        from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
+
+        for command in commands:
+            task = rebuild_qa_knowledge_celery if command.type == 1 else rebuild_knowledge_celery
+            task.apply_async(
+                args=(command.knowledge_id, None, command.actor_user_id),
+                kwargs={
+                    "operation_id": command.operation_id,
+                    "expected_model_config_revision": command.expected_model_config_revision,
+                    "expected_index_generation": command.expected_index_generation,
+                },
+                headers={"tenant_id": command.tenant_id},
+            )
+
     @classmethod
     async def _save_model_default(cls, key, data, *, tenant_id=None, login_user=None, session=None):
         current_model_default_tenant(tenant_id)
 
-        async def save(active):
-            old = (
-                await ModelDefaultRepository().aresolve(active, key)
-                if key == ConfigKeyEnum.LINSIGHT_LLM.value
-                else None
-            )
-            result = await ModelDefaultApplication.asave(active, key, data, login_user=login_user)
-            if key == ConfigKeyEnum.LINSIGHT_LLM.value and result.embedding_model is not None:
-                previous = WorkbenchModelConfig.model_validate_json(old.payload_json)
-                old_id = previous.embedding_model.id if previous.embedding_model else None
-                if result.embedding_model.id != old_id:
-                    embeddings = await cls.get_bisheng_embedding(
-                        model_id=result.embedding_model.id,
-                        app_id=ApplicationTypeEnum.LINSIGHT.value,
-                        app_name=ApplicationTypeEnum.LINSIGHT.value,
-                        app_type=ApplicationTypeEnum.LINSIGHT,
-                        user_id=login_user.user_id,
-                    )
-                    try:
-                        await embeddings.aembed_query("test")
-                    except Exception as error:
-                        logger.exception("workbench embedding model probe failed")
-                        raise to_llm_invoke_error(embeddings, error) from error
+        async def save(active, *, command_owner):
+            if command_owner:
+                result = await ModelDefaultApplication.asave_with_commands(active, key, data, login_user=login_user)
+            else:
+                result = await ModelDefaultApplication._asave(active, key, data, login_user=login_user)
+            if result.embedding_changed:
+                embeddings = await cls.get_bisheng_embedding(
+                    model_id=result.config.embedding_model.id,
+                    app_id=ApplicationTypeEnum.LINSIGHT.value,
+                    app_name=ApplicationTypeEnum.LINSIGHT.value,
+                    app_type=ApplicationTypeEnum.LINSIGHT,
+                    user_id=login_user.user_id,
+                )
+                try:
+                    await embeddings.aembed_query("test")
+                except Exception as error:
+                    logger.exception("workbench embedding model probe failed")
+                    raise to_llm_invoke_error(embeddings, error) from error
             return result
 
         if session is not None:
-            return await save(session)
+            return (await save(session, command_owner=False)).config
         async with get_async_db_session() as active:
-            result = await save(active)
+            result = await save(active, command_owner=True)
             await active.commit()
-            return result
+        if result.commands:
+            cls._dispatch_model_default_commands(result.commands)
+        return result.config
 
     @classmethod
     async def update_knowledge_llm(

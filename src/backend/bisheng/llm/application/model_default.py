@@ -1,6 +1,7 @@
 """Default configurations and R2 bindings share the caller's transaction."""
 
 import json
+from dataclasses import dataclass
 
 from pydantic import BaseModel
 
@@ -29,6 +30,7 @@ from bisheng.public_endpoints.application.access_context import get_current_publ
 from bisheng.resource_reference.application.access import get_reference_binding_runtime
 from bisheng.resource_reference.application.contracts import (
     ReferenceSpec,
+    SourceBindingChange,
     SourceKey,
     TargetKey,
     canonical_target_id,
@@ -50,6 +52,13 @@ def current_model_default_tenant(expected=None):
     ):
         raise ResourceReferenceInvalidError(reason="model_default_tenant_required")
     return tenant
+
+
+@dataclass(frozen=True, slots=True)
+class ModelDefaultSaveResult:
+    config: BaseModel
+    commands: tuple
+    embedding_changed: bool = False
 
 
 class ModelDefaultApplication:
@@ -130,13 +139,20 @@ class ModelDefaultApplication:
             raise ReferenceCoverageNotReadyError(reason="source_configuration_drift")
         return False
 
+    @staticmethod
+    def _embedding_id(config):
+        return canonical_target_id(config.embedding_model.id) if config.embedding_model is not None else None
+
     @classmethod
-    async def asave(cls, session, key, payload, *, login_user):
+    async def _asave(cls, session, key, payload, *, login_user, operation_id=None, allow_commands=False):
         tenant = current_model_default_tenant()
         await cls._authorize(login_user, tenant)
         repository = ModelDefaultRepository()
         own = await repository.aget_own(session, key)
-        config = cls._config(key, payload, own)
+        effective = await repository.aresolve(session, key) if key == "linsight_llm" else None
+        if effective is not None and effective.own != own:
+            raise KnowledgeOperationPlanConflictError(reason="model_default_changed")
+        config = cls._config(key, payload, effective.source if effective is not None else own)
         try:
             references = extract_model_default_references(key, config)
         except (TypeError, ValueError) as error:
@@ -144,24 +160,61 @@ class ModelDefaultApplication:
         source = SourceKey(tenant, "model_default", key, "current")
         runtime = await get_reference_binding_runtime()
         new_source = await cls._old_source(session, runtime, source, own)
+        batch, knowledge = None, None
+        embedding_changed = False
+        if effective is not None:
+            original = MODEL_DEFAULT_SCHEMAS[key].model_validate_json(effective.payload_json)
+            selected = cls._embedding_id(config)
+            embedding_changed = selected is not None and selected != cls._embedding_id(original)
+            if embedding_changed:
+                from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
+
+                knowledge = KnowledgeModelReferenceApplication
+                batch = await knowledge.aplan_workbench_model_changes(
+                    session, selected, login_user=login_user, operation_id=operation_id
+                )
+                if batch.commands and not allow_commands:
+                    raise ResourceReferenceInvalidError(reason="workbench_model_change_requires_command_owner")
 
         async def lock_root(active_session):
+            if batch is not None:
+                await batch.alock_inventory(active_session)
             current = await repository.alock_root(active_session, key)
             await cls._authorize(login_user, tenant)
             if current != own:
                 raise KnowledgeOperationPlanConflictError(reason="model_default_changed")
+            if effective is not None and await repository.aresolve(active_session, key, for_update=True) != effective:
+                raise KnowledgeOperationPlanConflictError(reason="model_default_changed")
 
-        prepared = await runtime.aprepare_source_bindings(
-            session,
-            source,
-            references,
-            extractor_version=MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
-            lock_source_root=lock_root,
-            new_source=new_source,
-        )
+        if batch is None:
+            prepared = await runtime.aprepare_source_bindings(
+                session,
+                source,
+                references,
+                extractor_version=MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
+                lock_source_root=lock_root,
+                new_source=new_source,
+            )
+        else:
+            change = SourceBindingChange(
+                source, references, MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION, lock_root, new_source=new_source
+            )
+            prepared_sources = await runtime.aprepare_mixed_source_bindings(session, (*batch.changes, change))
+            await knowledge.aapply_workbench_model_changes(session, batch, prepared_sources)
+            prepared = next(item for item in prepared_sources if item.source_key == source)
         await repository.aput(session, key, canonical_payload_json(config.model_dump(mode="json")))
         await runtime.aapply_source_bindings(session, prepared)
-        return config
+        return ModelDefaultSaveResult(config, batch.commands if batch is not None else (), embedding_changed)
+
+    @classmethod
+    async def asave(cls, session, key, payload, *, login_user):
+        return (await cls._asave(session, key, payload, login_user=login_user)).config
+
+    @classmethod
+    async def asave_with_commands(cls, session, key, payload, *, login_user, operation_id=None):
+        return await cls._asave(
+            session, key, payload, login_user=login_user, operation_id=operation_id, allow_commands=True
+        )
 
     @classmethod
     async def arestore_inheritance(cls, session, key, *, login_user):
