@@ -21,9 +21,11 @@ from bisheng.llm.application import model_default_read as defaults
 from bisheng.llm.application.model_default_read_identity import ModelDefaultReadIdentityPort
 from bisheng.llm.application.model_default_source_owner import ModelDefaultSourceOwner
 from bisheng.llm.application.source_read_target_owner import ModelSourceReadTargetOwner
+from bisheng.llm.domain.models.llm_server import LLMModel
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
 from bisheng.resource_reference.application.source_read import ReferenceSourceReadRuntime
 from bisheng.resource_reference.application.source_verification import SourceReadVerifier
+from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
 from test.knowledge_unification import test_model_default_native_target as native
 from test.knowledge_unification import test_model_reference_owner as models
@@ -107,11 +109,25 @@ async def test_invalid_optional_model_blocks_entire_key_and_all_slots(reads, nat
         native.seed_default(
             session,
             key="linsight_llm",
-            payload={"chat_title_llm": {"id": "11", "name": "ok"}, "models": [{"id": "99", "name": "invalid"}]},
+            payload={"chat_title_llm": {"id": "22", "name": "ok"}, "models": [{"id": "11", "name": "invalid"}]},
         )
-        native.seed_default(session, key="evaluation_llm", payload={"model_id": 11})
+        native.seed_default(session, key="evaluation_llm", payload={"model_id": 22})
+        session.execute(delete(LLMModel).where(LLMModel.tenant_id == 101, LLMModel.id == 11))
+        session.add(
+            ResourceReferenceTombstone(
+                tenant_id=101,
+                target_tenant_id=101,
+                target_type="model",
+                target_id="11",
+                operation_id="delete-old",
+                operation_type="force_delete_model",
+                actor_type="user",
+                actor_id="7",
+                stage="deleted",
+            )
+        )
     raw = reads.facade.get_default("linsight_llm") if native_sync else await reads.facade.aget_default("linsight_llm")
-    assert json.loads(raw.payload_json)["models"][0]["id"] == "99"
+    assert json.loads(raw.payload_json)["models"][0]["id"] == "11"
     with pytest.raises(ResourceReferenceInvalidError):
         if native_sync:
             reads.facade.require_default_slot("linsight_llm", "chat_title_llm.id")
@@ -122,7 +138,7 @@ async def test_invalid_optional_model_blocks_entire_key_and_all_slots(reads, nat
         if native_sync
         else await reads.facade.arequire_default("evaluation_llm")
     )
-    assert json.loads(other.payload_json)["model_id"] == 11
+    assert json.loads(other.payload_json)["model_id"] == 22
 
 
 @pytest.mark.parametrize("native_sync", [False, True])
