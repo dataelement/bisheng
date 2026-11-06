@@ -133,7 +133,7 @@ W5本地100路径2852测试/15子测试通过，当前137待办；平台typechec
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史856编号：737已完成/历史交付、117当前待办、2外移；原137队列已完成36项、剩101项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史858编号：739已完成/历史交付、117当前待办、2外移；原137队列已完成36项、剩101项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -177,3 +177,8 @@ W6持续实施；历史856编号：737已完成/历史交付、117当前待办�
 ## Celery broker只读端口已联装（2026-11-07）
 
 候选主树c4f911d0db7a2f42c3b292d03ee595ada8033383已独立复查并通过八路径230项。正式盘点同时要求原SQL/fair scheduler与实际Celery raw broker，不能互相替代；依据运行worker真实生效配置读取，遇未知driver/格式/ACL/归属矛盾明确失败。只读端口不ACK、重投、清理队列或检测停服。LRANGE逐条、目标批查≤200；HSCAN响应接收后64MiB检查不等于分配前硬限制。109实际端口读取另录准备证据；当前CLI与联合权限计划尚未完整，不发布正式执行命令。
+
+
+## M3时间保留的静态数据库前置
+
+新V1时间在正式M2统一为可表示UTC整秒（§50），禁止M3临时改冻结计划或旧业务时间。DM实库验证按用户要求免除；当前连接层managed updater无条件更新update_time，正式停服维护时须在中性DDL之后、M3事务之外，保存涉及表对应managed trigger的原定义摘要/启用状态，仅临时禁用需保留旧时间的updater，最后逐项恢复原状态并核验；原disabled/absent保持，不触FK/其他trigger，不再bootstrap/Alembic。DDL存在隐式提交，禁止在业务事务中操作；失败保持维护，不能据事务rollback声称trigger已恢复。具体白名单随最终M3命令冻结，尚不提供猜测DDL命令。依据[DM官方触发器](https://eco.dameng.com/document/dm/zh-cn/pm/trigger)、[DM事务管理](https://eco.dameng.com/document/dm/zh-cn/pm/management-affairs.html)；MySQL原DateTime精度见[官方小数秒说明](https://dev.mysql.com/doc/refman/8.0/en/fractional-seconds.html)。

@@ -217,3 +217,10 @@ root原T151/152固定af8b90142仅workstation recent/pin及open workflow invoke�
 PROC固定40f40e2cf、root消费者366df1bc经两个非作者分别复查后，正常合主树c4f911d0db7a2f42c3b292d03ee595ada8033383。主树实际八路径230 passed、3612 warnings、12.91秒，日志/JUnit /private/tmp/f118-root-main-broker-integrated.log/.xml；作者完整15路径577绿、独立producer及额外原反例104绿、消费者原133绿及真实reader联装/取消清理33绿均为各自选集，不相加。旧生产controller/queue不变，required broker与scheduler独立；真实配置/严格JSON、SQL归属、原始只读队列、全run一次及冻结重放已联装。
 
 独立发现并关闭Job父空间跨tenant漏检及含glob前缀漏盘两个P2，原反例由发现者重跑通过；保DeleteJob目标已删的合法账本。10001消息实际102 SQL/10002 LRANGE、单消息10000目标150 SQL/2 LRANGE，无消息×目标笛卡尔积；原消息零写。LRANGE1、HSCAN接收后64MiB预算的真实内存边界已补合同，不伪报Redis响应分配前硬上限。T823–830及T840按本范围闭合，尚未把准备阶段读取称为正式M2/转换/恢复或E2E；联合namespace/Catalog计划、真实M3/Coverage与CLI仍待办。
+
+
+## Domain协议与broker完整本地选集（2026-11-07）
+
+PROC51a15e81db的七DTO及纯模板已从App迁至Domain，App显式同对象重导出；作者八路径旧生产230绿+11缺模块→241绿；非作者不同八路径336绿，并逐一比较8定义及App剩余AST、全新进程验证Domain无反向依赖，无确认缺陷。主树合流后受测5ea9f9251cb89e2e104afc92f4be8e47e66e43ca，完整test/knowledge_unification除明确未收集TCP监听mock合同单模块 **3803 passed、55240 warnings、140.95秒**，无fail/skip。日志/JUnit /private/tmp/f118-root-native-broker-domain.log/.xml；与此前3640不同快照，不累计。T841842闭合，非M3执行或E2E证明。
+
+后继M3静态审计发现新V1 planned_at含微秒而MySQL原DateTime默认fsp0；§50只在M2计划生产处统一整秒，先测试后修复。现DM updater无条件覆盖旧update_time亦已核实，升级须业务TX外独立保存/禁用/恢复涉及的原updater状态，M3显式保时间并读回严格摘要；不改全局ORM、不把DM免实测解释为忽略C2。

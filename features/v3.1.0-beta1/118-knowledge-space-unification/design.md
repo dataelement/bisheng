@@ -832,7 +832,7 @@ Skill的可见性不能兼任全局enabled状态：真实使用/选择边界avai
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史856编号：737已完成/历史交付、117当前待办、2外移；原137队列已完成36项、剩101项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史858编号：739已完成/历史交付、117当前待办、2外移；原137队列已完成36项、剩101项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -852,3 +852,6 @@ W6持续实施；历史856编号：737已完成/历史交付、117当前待办�
 实现前实际SSOT审计发现：同一权限模型从旧library目标改为SPACE目标时，全局非use selected/effective动作和等级可完全不变，但目标可适用动作发生变化。默认editor由旧库{use,edit}变为{edit,create_folder,upload_file}；manager/owner另适用原share；custom{use,upload_file}变为{upload_file}，不新增edit/rename/download。仅use模型继续只有原可见与撤销，不加其他动作。真实Catalog/ModelSnapshot/GrantService两例验证等级/allow_same与管理边界不变。
 
 用户异步确认待答：是否按同模型的现有SPACE能力执行并列为namespace预期适用变化，或严格保旧库动作、遇新增能力阻断。现spec AC-80仍保原“非use动作效果不变”文字，答复前不修改其语义，不冻结依赖此选择的联合权限计划、不执行namespace/FGA发布。已完成SQL阶段计划和broker/无关开发继续；问题确认后同步spec/design/升级/HTML。不是以新动作、改全局scope、替换model_key或增加文件edit解决此冲突。
+
+
+M3数据库时间保留的静态边界见[W6§50](./wave6-completion-contract.md#50-m2新建v1可表示时间-v1已冻结)：新V1统一可表示整秒，旧time严格保留与读回。DM原managed updater的临时运维窗口处于业务事务外，保存并恢复原状态，不能在业务TX里ALTER或扩展全局ORM语义；具体执行链随M3/CLI后继冻结。DM免实测不免该兼容要求。

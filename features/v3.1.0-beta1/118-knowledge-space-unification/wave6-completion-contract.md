@@ -734,3 +734,10 @@ Runtime使用现AuthenticatedSourceReadIdentity捕获原身份并在批次后核
 | T855/856 | PROC后继 | llm/application/model_default_source_owner.py、llm/domain/repositories/model_default_repository.py | test_defaults_source_disclosure.py |
 
 同组先真实红后实现；所有新叶≤600、每实现≤2生产叶。用原数据库和原资格拼装，至少含401源/重复slot预算、foreign无读、非当前WF/APP历史、原资格变化/IO失败、无完整配置列和无写证明。无真实Coverage adapter时影响核心仍拒绝，本波端口不创建ready状态。
+
+
+## 50. M2新建V1可表示时间 V1：已冻结
+
+现Doc/Version为通用DateTime无MySQL fsp，不能冻结带微秒新建时间再由数据库舍入。INT独占T857单新测试叶test_migration_plan_time.py、T858原unification_inventory.py单生产叶；正式M2仅全run一次unification_now()后去microsecond再交所有tenant builder（UTC整秒）。原业务时间从SQL读出后保持，Domain模板/字段/codec/canonical/digest不改，不变更Model/DDL，也不在M3临时归一已冻结材料；旧微秒计划不满足可写前置时应明确失败/重新正式规划，不能同run静默替换。实际微秒clock+跨tenant新V1命令、模板hash及整秒clock均须回归。
+
+M3时间保留另有C2静态前置：DM当前managed updater会无条件覆盖update_time，故停服且中性DDL完成后，在业务事务之外独立运维连接仅对白名单涉及表updater保存原定义摘要与启用状态、临时禁用；原disabled/absent不更改，不触FK/其他trigger；阶段结束恢复原状态并核验，失败保持维护，不再执行bootstrap/Alembic重建触发器。DM DDL前隐式commit，绝不能在M3业务Session里ALTER。M3本体显式写原time并flush后真实重读摘要校验；未做好前置就回滚，不能放宽hash或假设DDL回滚。此处是运维要求，不扩展自动触发器管理协议/代码；DM实测继续免除。
