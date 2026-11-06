@@ -5,6 +5,7 @@ import importlib
 import json
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from datetime import datetime
 from types import SimpleNamespace
 
 import httpx
@@ -490,3 +491,70 @@ async def test_compatible_absent_empty_or_different_native_counts_do_not_gain_ne
     async with AsyncSession(complete.engine) as session, session.begin():
         result = await application(module, transport, physical_reader=Compatible()).arun(session, **transport.inputs)
     assert result.tenant_ids == (1, 101, 202) and await count_runs(complete.engine) == 3
+
+
+async def test_full_m2_refuses_final_creation_collision_without_writing_run(module, complete, transport):
+    await complete.insert(
+        resources.Knowledge,
+        [
+            resources.resource(9100, creation_request_id="collision"),
+            resources.resource(9101, type=3, creation_request_id="collision"),
+        ],
+    )
+    async with AsyncSession(complete.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await application(module, transport).arun(session, **transport.inputs)
+    assert await count_runs(complete.engine) == 0
+
+
+async def test_full_m2_frozen_v1_commands_use_one_run_timestamp_across_tenants(
+    module, complete, transport, monkeypatch
+):
+    planned = datetime(2026, 11, 7, 3, 4, 5)
+    calls = []
+
+    def clock():
+        calls.append(True)
+        return planned
+
+    monkeypatch.setattr(module, "unification_now", clock, raising=False)
+    await complete.insert(resources.Knowledge, [resources.resource(1000, 1, model=None)])
+    await complete.insert(resources.KnowledgeFile, [resources.file(2, 1, knowledge_id=1000)])
+    async with AsyncSession(complete.engine) as session, session.begin():
+        await application(module, transport).arun(session, **transport.inputs)
+    commands = [
+        row
+        for content in transport.objects.values()
+        for row in json.loads(content)["records"]
+        if row.get("record_type") == "initialize_v1"
+    ]
+    assert {row["tenant_id"] for row in commands} == {1, 101}
+    assert {row["planned_at"] for row in commands} == {planned.isoformat()} and calls == [True]
+
+
+async def test_full_m2_keeps_original_default_sources_and_freezes_safe_after_commands(module, complete, transport):
+    value = '{"models":[{"id":"11"}],"task_model":{"id":"11"},"private":"never export"}'
+    await complete.insert(
+        raw.TenantSystemModelConfig, [{"id": 701, "tenant_id": 101, "key": "linsight_llm", "value": value}]
+    )
+    complete.queries.clear()
+    async with AsyncSession(complete.engine) as session, session.begin():
+        await application(module, transport).arun(session, **transport.inputs)
+    pages = [json.loads(content) for content in transport.objects.values()]
+    command = next(row for page in pages for row in page["records"] if row.get("record_type") == "default_conversion")
+    assert command["selected_linsight_id"] == "11" and command["selected_chat_id"] == "11"
+    assert any(
+        row.get("record_type") == "source" and row["source_key"]["source_type"] == "model_default"
+        for page in pages
+        for row in page["records"]
+    )
+    assert all(b"never export" not in content for content in transport.objects.values())
+    # Each tenant: one original NameCatalog projection, one preflight own row
+    # projection and one original source projection; none is repeated per slot.
+    assert sum("FROM tenant_system_model_config" in sql for sql, _ in complete.queries) == 9
+    async with complete.engine.connect() as connection:
+        assert (
+            await connection.execute(
+                sa.select(raw.TenantSystemModelConfig.value).where(raw.TenantSystemModelConfig.id == 701)
+            )
+        ).scalar_one() == value

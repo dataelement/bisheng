@@ -370,3 +370,51 @@ async def test_root_and_source_headers_are_closed_digests_and_repeated_original_
             assert re.fullmatch("[0-9a-f]{64}", record.business_revision_digest)
             assert not hasattr(record, "references") and not hasattr(record, "payload_json")
         assert original.PRIVATE not in repr(first)
+
+
+async def test_shared_knowledge_revision_helper_matches_real_headers_and_raw_resource_projection(module, populated):
+    async with AsyncSession(populated) as session, session.begin(), original.sharing() as (reader, _):
+        inventory = module.UnificationSourceInventory(sharing_reader=reader)
+        context = await inventory.aprepare_tenant_context(session, **RUN)
+        headers = await collect(inventory, session, context=context)
+        raw = next(row for row in context.knowledge_rows if row.id == 40)
+        resource = next(
+            row for row in (await UnificationResourceRepository().alist_resources(session)).items if row.id == 40
+        )
+        expected = selected(module, headers, "knowledge", "40", "current").business_revision_digest
+        assert module.knowledge_business_revision_digest(raw) == expected
+        assert module.knowledge_business_revision_digest(resource) == expected
+        assert module.knowledge_business_revision_digest(replace(resource, type=3, is_released=False)) != expected
+        assert (
+            module.knowledge_business_revision_digest(
+                replace(resource, neutral=replace(resource.neutral, migration_origin="same-run"))
+            )
+            == expected
+        )
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            module.knowledge_business_revision_digest({"id": 40})
+
+
+async def test_inventory_revision_is_distinct_from_the_actual_source_owner_configuration_digest(module, populated):
+    from bisheng.knowledge.application.reference_source_owner import KnowledgeReferenceSourceOwner
+    from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
+
+    async with AsyncSession(populated) as session, session.begin():
+        resource = next(
+            row for row in (await UnificationResourceRepository().alist_resources(session)).items if row.id == 40
+        )
+        actual = await KnowledgeModelReferenceRepository().aload_source(session, 40)
+        owner = KnowledgeReferenceSourceOwner._snapshot(actual).configuration_digest
+        before = module.knowledge_business_revision_digest(resource)
+        changed_description = replace(resource, description="private changed description")
+        assert module.knowledge_business_revision_digest(changed_description) == before
+        assert (
+            KnowledgeReferenceSourceOwner._snapshot(
+                actual | {"description": changed_description.description}
+            ).configuration_digest
+            != owner
+        )
+        assert (
+            module.knowledge_business_revision_digest(replace(resource, is_released=not resource.is_released)) != before
+        )
+        assert KnowledgeReferenceSourceOwner._snapshot(actual).configuration_digest == owner
