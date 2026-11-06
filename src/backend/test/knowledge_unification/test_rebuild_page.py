@@ -106,7 +106,7 @@ def test_legacy_partial_failure_retains_es_retry_source_after_real_owner_finaliz
 
 
 def test_j1_single_file_entry_reads_current_business_model_and_never_finalizes(rebuild):
-    file = SimpleNamespace(id=701, tenant_id=101, knowledge_id=40)
+    file = SimpleNamespace(id=701, tenant_id=101, knowledge_id=40, status=2)
     rebuild.file_dao.query_by_id_sync.return_value = file
     rebuild.vector.col.delete = Mock()
     result = module.rebuild_processing_file(701, space_id=40, invoke_user_id=987, **rebuild.arguments)
