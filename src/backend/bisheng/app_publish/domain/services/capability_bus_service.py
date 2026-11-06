@@ -44,6 +44,7 @@ Three decisions worth not re-litigating:
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Sequence
 from contextlib import contextmanager
@@ -51,25 +52,33 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 
+from bisheng.app_publish.application.reference_access import (
+    get_hosted_app_reference_runtime,
+    get_hosted_app_user_reference_runtime,
+)
+from bisheng.app_publish.domain.repositories.reference_source_repository import HostedAppReferenceSourceRepository
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
 from bisheng.app_publish.domain.services.app_credential_service import (
     HOSTED_APP_TOKEN_ENV,
     AppRuntimeCredentialService,
 )
-from bisheng.app_runtime.domain.constants import AppState
+from bisheng.app_publish.domain.services.reference_extractor import extract_app_reference_requests
 from bisheng.common.errcode.app_publish import (
     AppCapabilityNotDeclaredError,
     AppCapabilityRevokedError,
 )
 from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.common.errcode.mcp_face import KnowledgeCapabilityRevokedError
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id
+from bisheng.core.context.tenant import current_tenant_id
 from bisheng.core.database import get_async_db_session
-from bisheng.database.models.app import AppDao
-from bisheng.database.models.app_version import AppVersionDao
+from bisheng.llm.application.model_name_resolution import get_model_name_resolution_port
+from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.scopes import is_scope_issuable
 from bisheng.open_api.domain.services.public_base_url import MODEL_GATEWAY_BASE_PATH
+from bisheng.resource_reference.application.contracts import SourceType, TargetType
+from bisheng.resource_reference.application.source_contracts import SourceReadRequest
 
 #: API capability kinds. Secret references grant no Open API scope.
 CAPABILITY_KIND_MODEL = "model"
@@ -131,15 +140,10 @@ class EffectiveDeclaration:
 
     @property
     def knowledge_whitelist(self) -> list[int]:
-        """The ids the facade is allowed to look at. Unresolvable entries drop out.
-
-        Dropping rather than failing is what keeps AC-53's "the application as a
-        whole stays usable" true: one deleted knowledge base must not take the
-        other five down with it. The drop is visible — :func:`capability_status`
-        reports it and a call that names the dead one gets 16273.
-        """
-
-        return [one.knowledge_id for one in self.knowledge if one.resolved]
+        """Runtime uses the entire saved source; invalid references cannot drop out."""
+        if any(not one.resolved for one in self.knowledge):
+            raise ResourceReferenceInvalidError(reason="app_knowledge_reference_invalid")
+        return [one.knowledge_id for one in self.knowledge]
 
     def is_empty(self) -> bool:
         return not self.models and not self.knowledge
@@ -184,53 +188,187 @@ def parse_declaration(capabilities) -> CapabilityDeclaration:
         return CapabilityDeclaration()
 
 
-async def load_effective_declaration(app_id: str) -> EffectiveDeclaration | None:
-    """The declaration of the version this application is **running**, or ``None``.
-
-    ``None`` means "cannot tell right now" — the application is missing, deleted,
-    not online, or has no current version — and every caller must treat it as a
-    refusal. It is never the same as "declared nothing", which is an
-    :class:`EffectiveDeclaration` whose fields are empty.
-
-    Reads ``app.current_version_id`` rather than the newest row: the newest
-    version may be waiting for approval, and honouring its declaration would let
-    an owner grant themselves a capability by submitting, without anyone
-    approving it.
-    """
-
+async def _read_effective_source(session, app_id, principal, *, purpose):
     from bisheng.open_api.application.access_context import get_current_open_api_principal
 
-    principal = get_current_open_api_principal()
-    preview = None
-    if principal is not None and principal.actor_kind == "hosted_app" and principal.preview_session_id:
-        from bisheng.open_api.domain.services.preview_context import revalidate_preview
-
-        preview = await revalidate_preview(principal)
-        if preview.app_id != app_id:
-            return None
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            app = await AppDao.aget(session, app_id)
-            if app is None or app.state == AppState.DELETED.value:
-                return None
-            if preview is None and (app.state != AppState.ONLINE.value or not app.current_version_id):
-                return None
-            version = await AppVersionDao.aget(
-                session, app_id, preview.version_id if preview else app.current_version_id
-            )
-    if version is None:
-        return None
-
-    declaration = parse_declaration(version.capabilities)
-    knowledge = await _resolve_knowledge_refs(declaration, tenant_id=int(app.tenant_id or 0))
-    return EffectiveDeclaration(
-        app_id=app.id,
-        tenant_id=int(app.tenant_id or 0),
-        version_id=version.id,
-        app_name=app.name or "",
-        models=tuple(dict.fromkeys(ref.name for ref in declaration.models if ref.name)),
-        knowledge=knowledge,
+    actual = get_current_open_api_principal()
+    principal = actual if principal is None else principal
+    if (
+        not isinstance(principal, OpenApiPrincipal)
+        or principal is not actual
+        or principal.actor_kind != "hosted_app"
+        or principal.subject_ref != app_id
+    ):
+        raise ResourceReferenceInvalidError(reason="app_runtime_principal_required")
+    runtime = await get_hosted_app_reference_runtime()
+    scope = await runtime.verifier.aissue_scope(
+        session, SourceReadRequest(SourceType.HOSTED_APP_VERSION, app_id, purpose=purpose), principal
     )
+    result = (
+        await runtime.arequire_source_valid(session, scope, principal)
+        if purpose == "execute"
+        else await runtime.ainspect_source(session, scope, principal)
+    )
+    return runtime, result, principal
+
+
+async def _knowledge_names(session, snapshot):
+    # Names decorate already-admitted exact IDs; this observation adds no locks
+    # or authority and never participates in the frozen configuration digest.
+    knowledge_ids = tuple(
+        int(one.target.target_id) for one in snapshot.references if one.target.target_type == TargetType.KNOWLEDGE_SPACE
+    )
+    if not knowledge_ids:
+        return {}
+    return {
+        str(row["id"]): row["name"]
+        for row in await HostedAppReferenceSourceRepository().aget_knowledge_candidates(session, ids=knowledge_ids)
+    }
+
+
+async def _effective_from_source(session, result):
+    snapshot = result.snapshot
+    payload = json.loads(snapshot.payload_json)
+    declaration = CapabilityDeclaration.model_validate(payload["capabilities"])
+    frozen = {one.slot_key: one.target for one in snapshot.references}
+    facts = {one.key: one for one in result.target_states}
+    labels = _declaration_labels(declaration)
+    named = await _knowledge_names(session, snapshot)
+    knowledge = []
+    for request in _ordered_requests(declaration):
+        if request.target_type != TargetType.KNOWLEDGE_SPACE:
+            continue
+        target = frozen[request.slot_key]
+        fact = facts[target]
+        knowledge.append(
+            DeclaredKnowledge(
+                label=labels[request.slot_key],
+                knowledge_id=int(target.target_id),
+                knowledge_name=named.get(target.target_id) or request.requested_name or "",
+                reason=REASON_OK if fact.is_valid else REASON_REVOKED,
+            )
+        )
+    return EffectiveDeclaration(
+        app_id=snapshot.source_key.source_id,
+        tenant_id=snapshot.source_key.tenant_id,
+        version_id=snapshot.source_key.source_version,
+        app_name=payload["root"]["name"] or "",
+        models=tuple(dict.fromkeys(ref.name for ref in declaration.models if ref.name)),
+        knowledge=tuple(knowledge),
+    )
+
+
+async def load_effective_declaration(app_id: str, *, principal=None, purpose="execute", session=None):
+    """Read the actual credential's saved version and frozen IDs, without re-resolution.
+
+    Execute validates every reference. Inspection is metadata only and retains invalid IDs.
+    An external Session must already have a transaction; its caller owns finalization.
+    """
+    if session is not None:
+        _, result, _ = await _read_effective_source(session, app_id, principal, purpose=purpose)
+        return await _effective_from_source(session, result)
+    async with get_async_db_session() as owned, owned.begin():
+        _, result, _ = await _read_effective_source(owned, app_id, principal, purpose=purpose)
+        return await _effective_from_source(owned, result)
+
+
+def _declaration_labels(declaration):
+    labels = {}
+    for one in declaration.models:
+        for request in extract_app_reference_requests(CapabilityDeclaration(models=[one])):
+            labels.setdefault(request.slot_key, one.name)
+    for one in declaration.knowledge_bases:
+        for request in extract_app_reference_requests(CapabilityDeclaration(knowledge_bases=[one])):
+            labels.setdefault(request.slot_key, (one.id or one.name or "").strip())
+    return labels
+
+
+def _ordered_requests(declaration):
+    requests = {one.slot_key: one for one in extract_app_reference_requests(declaration)}
+    return tuple(requests[slot] for slot in _declaration_labels(declaration))
+
+
+def unready_saved_capabilities(capabilities):
+    """Retain declaration rows when its index/catalog cannot be inspected; never invent IDs."""
+    try:
+        declaration = CapabilityDeclaration.model_validate(capabilities or {})
+        labels = _declaration_labels(declaration)
+        requests = _ordered_requests(declaration)
+    except (TypeError, ValueError):
+        return (CapabilityStatus("configuration", "capabilities", "capabilities", True, "not_ready"),)
+    return tuple(
+        CapabilityStatus(
+            CAPABILITY_KIND_MODEL if one.target_type == TargetType.MODEL else CAPABILITY_KIND_KNOWLEDGE,
+            labels[one.slot_key],
+            labels[one.slot_key],
+            True,
+            "not_ready",
+            {"target_id": one.target_id, "target_type": one.target_type.value, "state": "not_ready"},
+        )
+        for one in requests
+    )
+
+
+async def inspect_saved_capabilities(app_id, version_id, identity, *, session=None):
+    """Observe a real saved source and its frozen IDs, without execution authority."""
+    if session is None:
+        async with get_async_db_session() as owned, owned.begin():
+            return await inspect_saved_capabilities(app_id, version_id, identity, session=owned)
+    runtime = await get_hosted_app_user_reference_runtime()
+    scope = await runtime.verifier.aissue_scope(
+        session, SourceReadRequest(SourceType.HOSTED_APP_VERSION, app_id, version_id, purpose="inspect"), identity
+    )
+    result = await runtime.ainspect_source(session, scope, identity)
+    snapshot = result.snapshot
+    declaration = CapabilityDeclaration.model_validate(json.loads(snapshot.payload_json)["capabilities"])
+    references = {one.slot_key: one.target for one in snapshot.references}
+    states = {one.key: one for one in result.target_states}
+    requests = _ordered_requests(declaration)
+    labels = _declaration_labels(declaration)
+    knowledge_names = await _knowledge_names(session, snapshot)
+    requested_names = tuple(sorted({one.requested_name for one in requests if one.target_type == TargetType.MODEL}))
+    unavailable = False
+    try:
+        observations = {
+            one.requested: one
+            for one in await get_model_name_resolution_port().ainspect_model_names_current(
+                session, snapshot.source_key.tenant_id, requested_names, identity=identity
+            )
+        }
+    except Exception:
+        logger.exception("app_publish.saved_capability_observation_failed app_id={} version_id={}", app_id, version_id)
+        observations, unavailable = {}, True
+    rows = []
+    for request in requests:
+        target = references[request.slot_key]
+        fact = states[target]
+        model = request.target_type == TargetType.MODEL
+        reason = REASON_OK if fact.is_valid else fact.state.value
+        revoked = not fact.is_valid
+        if model:
+            observed = observations.get(request.requested_name)
+            if observed is None:
+                unavailable = True
+            elif observed.status != "valid":
+                revoked, reason = True, observed.status
+            elif observed.resolved.model_id != int(target.target_id):
+                revoked, reason = True, "binding_identity_changed"
+        label = labels[request.slot_key]
+        rows.append(
+            CapabilityStatus(
+                CAPABILITY_KIND_MODEL if model else CAPABILITY_KIND_KNOWLEDGE,
+                label,
+                knowledge_names.get(target.target_id, label) if not model and fact.is_valid else label,
+                revoked,
+                reason,
+                {"target_id": target.target_id, "target_type": target.target_type.value, "state": fact.state.value},
+            )
+        )
+    if unavailable:
+        return tuple(
+            CapabilityStatus(row.kind, row.label, row.display_name, True, "not_ready", row.detail) for row in rows
+        )
+    return tuple(rows)
 
 
 async def _resolve_knowledge_refs(
@@ -329,10 +467,19 @@ class HostedAppDeclarationAdapter:
     """
 
     async def declared_model_names(self, app_id: str, tenant_id: int) -> frozenset[str] | None:
-        declaration = await load_effective_declaration(app_id)
+        declaration = await load_effective_declaration(app_id, purpose="inspect")
         if declaration is None or declaration.tenant_id != int(tenant_id):
             return None
         return declaration.model_names
+
+    async def assert_model_binding(self, principal, requested, resolved) -> None:
+        async with get_async_db_session() as session, session.begin():
+            runtime, result, original = await _read_effective_source(
+                session, principal.subject_ref, principal, purpose="execute"
+            )
+            await runtime.source_owner.assert_model_binding_current(
+                session, result.snapshot, original, requested, resolved
+            )
 
 
 def derive_scopes(declaration: CapabilityDeclaration) -> list[str]:
@@ -479,6 +626,7 @@ class CapabilityBusService:
         tag_filters: dict | None = None,
         credential_id: int | None = None,
         version_repo=None,
+        principal=None,
     ):
         """Search, as the access user, inside the application's declared scope.
 
@@ -497,7 +645,7 @@ class CapabilityBusService:
         from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalIdentity, RetrievalRequest
         from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
 
-        declaration = await cls._require_declaration(app_id)
+        declaration = await cls._require_declaration(app_id, principal=principal)
         whitelist = declaration.knowledge_whitelist
 
         started = time.monotonic()
@@ -549,7 +697,7 @@ class CapabilityBusService:
         return result
 
     @classmethod
-    async def accessible_knowledge(cls, *, app_id: str, access_user_id: int | None):
+    async def accessible_knowledge(cls, *, app_id: str, access_user_id: int | None, principal=None):
         """The declared knowledge bases this access user can actually reach.
 
         Same two-sided narrowing as :meth:`retrieve`, which is what makes AC-50's
@@ -560,7 +708,7 @@ class CapabilityBusService:
         from bisheng.knowledge.domain.schemas.retrieval_facade import RetrievalIdentity
         from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
 
-        declaration = await cls._require_declaration(app_id)
+        declaration = await cls._require_declaration(app_id, principal=principal)
         identity = None
         if access_user_id:
             identity = await RetrievalIdentity.from_user(int(access_user_id), declaration.tenant_id)
@@ -616,8 +764,8 @@ class CapabilityBusService:
         )
 
     @staticmethod
-    async def _require_declaration(app_id: str) -> EffectiveDeclaration:
-        declaration = await load_effective_declaration(app_id)
+    async def _require_declaration(app_id: str, *, principal=None) -> EffectiveDeclaration:
+        declaration = await load_effective_declaration(app_id, principal=principal)
         if declaration is None:
             # The application is not online, or vanished between the request
             # arriving and this read. Either way it holds no capability now.

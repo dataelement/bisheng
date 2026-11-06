@@ -94,13 +94,23 @@ class AppManagementSourceReadIdentity:
             or not isinstance(actor, PermissionActor)
             or (actor.subject_type, actor.subject_id, actor.tenant_id)
             != (identity.authorization_subject_type, identity.authorization_subject_id, identity.tenant_id)
-            or not isinstance(context, dict)
-            or context.get("schema") != 1
-            or context.get("origin_kind") != "user_request"
-            or context.get("mode") != identity.mode
-            or reference != {"kind": "api_credential", "credential_id": identity.credential_id, "tenant_id": tenant_id}
-            or context.get("actor")
-            != {"subject_type": actor.subject_type, "subject_id": actor.subject_id, "tenant_id": actor.tenant_id}
+            or (
+                context is not None
+                and (
+                    not isinstance(context, dict)
+                    or context.get("schema") != 1
+                    or context.get("origin_kind") != "user_request"
+                    or context.get("mode") != identity.mode
+                    or reference
+                    != {"kind": "api_credential", "credential_id": identity.credential_id, "tenant_id": tenant_id}
+                    or context.get("actor")
+                    != {
+                        "subject_type": actor.subject_type,
+                        "subject_id": actor.subject_id,
+                        "tenant_id": actor.tenant_id,
+                    }
+                )
+            )
         ):
             raise ResourceReferenceInvalidError(reason="app_management_identity_invalid")
         visible = get_visible_tenant_ids()

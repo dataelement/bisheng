@@ -340,3 +340,46 @@ async def test_original_publish_only_service_account_uses_frozen_operation_witho
     finally:
         reset_current_permission_actor(actor_token)
         reset_current_open_api_principal(token)
+
+
+@pytest.mark.parametrize("kind,subject", [("service_account", "service_account"), ("natural_person", "user")])
+async def test_ordinary_management_inspection_keeps_original_sak_pat_and_rechecks_credential(
+    application, kind, subject
+):
+    from datetime import datetime
+
+    original = principal(
+        actor_kind=kind,
+        actor_id=77,
+        subject_ref=None,
+        scopes=frozenset({"app:manage"}),
+        authorization_subject_type=subject,
+        authorization_subject_id=77,
+    )
+    token = set_current_open_api_principal(original)
+    actor_token = set_current_permission_actor(PermissionActor(subject_type=subject, subject_id=77, tenant_id=101))
+    try:
+        async with AsyncSession(application.engine) as session, session.begin():
+            await session.execute(
+                sa.update(ApiCredential)
+                .where(ApiCredential.id == 9)
+                .values(subject_kind=kind, subject_id=77, scopes=["app:manage"])
+            )
+            owner = module.HostedAppReferenceSourceOwner()
+            asked = request(HISTORY, purpose="inspect")
+            snapshot = await owner.aresolve_source(session, asked, original)
+            assert snapshot.source_key.source_version == HISTORY
+            assert application.auth.await_args.args[0] is original
+            assert application.auth.await_args.args[2] == "management_read"
+            with pytest.raises(ResourceReferenceInvalidError):
+                await owner.aresolve_source(session, request(HISTORY), original)
+            with pytest.raises(ResourceReferenceInvalidError):
+                await owner.aresolve_source(session, asked, original.model_copy())
+            await session.execute(
+                sa.update(ApiCredential).where(ApiCredential.id == 9).values(revoked_at=datetime.utcnow())
+            )
+            with pytest.raises(OpenApiCredentialInvalidError):
+                await owner.arevalidate_source(session, asked, original, snapshot)
+    finally:
+        reset_current_permission_actor(actor_token)
+        reset_current_open_api_principal(token)

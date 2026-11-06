@@ -144,3 +144,19 @@ async def test_management_principal_requires_original_capability_and_context(aut
 
     with pytest.raises(ResourceReferenceInvalidError):
         await AppManagementSourceReadIdentity().acapture(authenticated)
+
+
+@pytest.mark.parametrize("change", ["admin", "data_scope"])
+async def test_real_actor_authorization_facts_change_fingerprint(authenticated, change):
+    adapter = AppSourceReadIdentity()
+    before = await adapter.acapture(authenticated)
+    values = {"subject_type": "user", "subject_id": 4, "tenant_id": 101}
+    if change == "admin":
+        values["tenant_admin_tenant_ids"] = frozenset({101})
+    else:
+        values["data_scope"] = None
+    token = set_current_permission_actor(PermissionActor(**values))
+    try:
+        assert (await adapter.acapture(authenticated)).fingerprint != before.fingerprint
+    finally:
+        reset_current_permission_actor(token)
