@@ -319,3 +319,24 @@ async def test_no_participant_produces_no_fake_file_or_job(application):
         assert not plan.can_execute and not plan.valid_items
         assert plan.impact["skipped_version_count"] == 2
         assert not (await session.exec(select(KnowledgeProcessingJob))).all()
+
+
+async def test_detail_retryability_matches_actual_finalize_only_eligibility(application):
+    app = application
+    async with app.context.sessions() as session:
+        plan = await precheck(app, session)
+        accepted = await create(app, session, plan)
+        job = await app.owner.jobs.aget(session, accepted.job_id)
+        current = await app.owner.aread_current(session, 40, job=job)
+        lease = await app.owner.jobs.aclaim(session, job.id, configuration=current.configuration)
+        for _ in range(2):
+            item = await app.owner.jobs.aclaim_next_item(session, lease, configuration=current.configuration)
+            await app.owner.jobs.acomplete_item(
+                session, item.lease, configuration=current.configuration, succeeded=True
+            )
+        job.state = "failed"
+        await session.flush()
+        assert not (await app.app.aget(session, 40, job.id, identity=app.context.user)).retryable
+        job.error_code = 10994
+        await session.flush()
+        assert (await app.app.aget(session, 40, job.id, identity=app.context.user)).retryable
