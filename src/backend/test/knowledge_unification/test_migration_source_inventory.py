@@ -6,6 +6,7 @@ DM8 runtime verification is waived; the production composition stays portable.
 
 import importlib
 import json
+import re
 from contextlib import asynccontextmanager
 from dataclasses import FrozenInstanceError, asdict, fields
 from unittest.mock import AsyncMock
@@ -241,6 +242,7 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
         actual = tuple(ReferenceSpec(row.slot_key, row.target) for row in references if row.source_key == key)
         assert header.reference_count == len(actual) and header.reference_digest == reference_set_digest(actual)
         assert len(header.configuration_digest) == 64 and not hasattr(header, "references")
+        assert re.fullmatch(r"[0-9a-f]{64}", header.business_revision_digest)
     app_refs = [row for row in references if row.source_key.source_type == "hosted_app_version"]
     assert {(row.target, row.origin) for row in app_refs} == {
         (TargetKey("model", 21), "resolved_name"),
@@ -276,6 +278,7 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
         "reference_digest",
         "reference_count",
         "lifecycle",
+        "business_revision_digest",
     ]
 
 
