@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.admin_scope import AdminScopeTenantRequiredError
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.core.context.tenant import management_tenant_scope
@@ -12,6 +13,7 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.services import knowledge_space_service as module
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL
+from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 
 
@@ -102,3 +104,59 @@ async def test_admin_list_internal_pagination_is_bounded(listing, query):
     with management_tenant_scope(101), pytest.raises(ValueError):
         await service.list_admin_spaces(**query)
     repository.alist_admin.assert_not_awaited()
+
+
+async def test_real_super_actor_keeps_home_tenant_while_listing_a_selected_management_tenant(listing):
+    _, repository = listing
+    user = UserPayload(user_id=7, tenant_id=1, user_role=[], is_global_super=True)
+    service = KnowledgeSpaceService(None, user, space_listing_repository=repository)
+    token = set_current_permission_actor(None)
+    try:
+        with management_tenant_scope(101):
+            actor = await service._permission_actor()
+            assert actor.current_tenant_id == 1 and actor.super_admin
+            result = await service.list_admin_spaces()
+            assert await service._permission_actor() is actor
+        assert result.total == 17 and result.data[0].tenant_id == 101
+        assert user.tenant_id == 1 and actor.current_tenant_id == 1
+    finally:
+        reset_current_permission_actor(token)
+
+
+@pytest.mark.parametrize("home,allowed", [(101, True), (202, False)])
+async def test_real_tenant_admin_actor_cannot_adopt_another_management_tenant(listing, monkeypatch, home, allowed):
+    from bisheng.permission.application import relation_api
+
+    _, repository = listing
+    user = UserPayload(user_id=7, tenant_id=home, user_role=[], is_global_super=False)
+    monkeypatch.setattr(relation_api, "is_tenant_admin", AsyncMock(return_value=True))
+    service = KnowledgeSpaceService(None, user, space_listing_repository=repository)
+    token = set_current_permission_actor(None)
+    try:
+        with management_tenant_scope(101):
+            if allowed:
+                assert (await service.list_admin_spaces()).total == 17
+            else:
+                with pytest.raises(PermissionDeniedError):
+                    await service.list_admin_spaces()
+                repository.alist_admin.assert_not_awaited()
+        actor = await service._permission_actor()
+        assert actor.current_tenant_id == home and actor.tenant_admin_tenant_ids == frozenset({home})
+        assert user.tenant_id == home
+    finally:
+        reset_current_permission_actor(token)
+
+
+async def test_real_narrowed_super_actor_does_not_inherit_selected_tenant_admin_list(listing):
+    _, repository = listing
+    user = UserPayload(user_id=7, tenant_id=1, user_role=[], is_global_super=True)
+    original = PermissionActor(user_id=7, current_tenant_id=1, super_admin=True, data_scope=DATA_SCOPE_PERSONAL)
+    service = KnowledgeSpaceService(None, user, space_listing_repository=repository)
+    token = set_current_permission_actor(original)
+    try:
+        with management_tenant_scope(101), pytest.raises(PermissionDeniedError):
+            await service.list_admin_spaces()
+        assert await service._permission_actor() is original
+        repository.alist_admin.assert_not_awaited()
+    finally:
+        reset_current_permission_actor(token)
