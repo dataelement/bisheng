@@ -138,3 +138,11 @@ T760/T761按事实仓储实际范围闭合。九页独立主键seek、每页≤2
 Root读T740真实factory及相对真实merge-base a46be00ae的14叶差异后正常合1c55绿前缀为be946808e287756447c397d79016bd465dc73e14。该主树整个F118目录除未改的TCP监听mock合同模块外，**3136 passed、45445 warnings、103.64秒**，无fail/skip；日志`/private/tmp/f118-root-native-all-metadata.log/.xml`。唯一明确未收集模块test_mock_upstreams_contract.py本轮需监听本地端口，不能把历史53绿算进这次；不称完整中间件/E2E/CI。T733–T740及T766据实际范围闭合，T071/T072仍待旧双协议桥接/实际DI和完整独立复查。T767/T768三语单键已提交848678063/8624416c8，旧key/value语义全保，pnpm check-i18n通过，consumer仍T756/T757。
 
 M2只读审进一步确认现在线LegacyEvidence要求已有BRR、仅target_missing，不能首导入造original解环；Root已撤共享但物理存在的原关系用原valid/new_binding_allowed=False及读取is_valid=False表达，不伪造missing/新增reason。完整首次回填需真实冻结来源证明、业务行锁/原或计划后摘要及精确幂等；当前helper不放行Coverage。已冻结§31补原来源业务修订与一次实际准备上下文，仍不执行转换。
+
+## 双协议元数据、来源证据与真实详情集成收口（2026-11-07）
+
+主树6e90bf5bb09339943393a486fe12986b71e550d8已正常合入4a2d8eac1旧metadata真实双DI桥接、cfa5a65e0原来源上下文、c16adf6f严格来源codec及3adca868平台真实详情。T071/T072、T741/T742/T748、T756/T757、T769–T773按实际链及固定非作者复核闭合；正式M2、完整上传/版本和整特性尚未完成。
+
+metadata主树五路径70通过，EDGE固定独立复核77项及S/D只读scope空操作拒绝6项通过；v1原字段可带真实只读任务状态，v2原data=True保持，空旧请求不制造job/CAS/commit。实际原身份及一次schema+J1事务装配闭环，不以HTTP200称索引完成。来源上下文主树四路径162通过，EDGE组合165含跨TX/savepoint反例；codec独立发现193字符slot被错误放行，按真实ReferenceSpec上限192修复，原七反例全部通过，主树四路径136通过。保完整原业务修订，排除中性新增列；不将编码器当正式冻结。
+
+平台独立发现同parent SPA查询fileStatus变化未重建Files，固定3adc通过原六反例及组合129项；主树七路径146通过。T774官方lint:prune退出0，仅移除detail与Header共13行旧抑制。主树strict与冻结基线精确同22条，新增/移除均0，未宣称全库typecheck通过。以上均为本地native/组件验证；未将其计为MySQL升级、CI或浏览器E2E。当前原137队列完成28项、剩109项，当前接缝卡全部闭合；后续必要接缝仍须先冻结并登记。

@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史773编号：650已完成/历史交付、121当前待办、2外移；原137队列已完成26项、剩111项，另10张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史774编号：663已完成/历史交付、109当前待办、2外移；原137队列已完成28项、剩109项，另0张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -589,7 +589,7 @@
   **配对测试**：T069\
   **验证 / 完成条件**：运行配对测试 T069；验证本卡预期，相关范围检查通过。
 
-- [ ] **T071 · 元数据结构任务：先写测试**
+- [x] **T071 · 元数据结构任务：先写测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_metadata_job.py`（拟新增）\
   **逻辑 / 测试上下文**：新增空值、取消零改动；rename/drop 错误不报成功，指定 version 值更新结果正确且不可见详情裁剪。\
@@ -597,7 +597,7 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T072 · 元数据结构任务**
+- [x] **T072 · 元数据结构任务**
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/metadata_processing_service.py`（拟新增）\
   **逻辑 / 测试上下文**：新增字段历史为空，rename/drop 冻结前后 schema 与范围且二次确认，SQL/索引实际结果计 item，不用 accepted 冒充完成；仍原容器 edit，失败可恢复。\
@@ -5978,7 +5978,7 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
   **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
 
-- [ ] **T741 · 旧metadata SPACE协议事务桥接测试**
+- [x] **T741 · 旧metadata SPACE协议事务桥接测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_metadata_legacy.py`\
   **逻辑 / 测试上下文**：原三个操作请求/响应字段，SPACE同TX schema+job，不派旧BackgroundTask，空空间无伪文件且实际SQL完成，QA保持。\
@@ -5986,7 +5986,7 @@
   **覆盖 AC**: AC-33, AC-34, AC-47, AC-49, AC-50, AC-53, AC-54, AC-86, AC-87\
   **验证 / 完成条件**：先真实红/首绿、配对与原kind相关组合，逐叶arch/ruff、native SQL预算和固定独立复核；E2E另验证，未接齐不勾原T072。
 
-- [ ] **T742 · 旧metadata业务入口实际桥接**
+- [x] **T742 · 旧metadata业务入口实际桥接**
   **类型 / Owner**：后端 Application/Service / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/application/metadata_legacy.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_metadata_service.py`\
   **逻辑 / 测试上下文**：W6§24原UserPayload/容器edit，同TX准备接受schema+J1再commit；原协议加只读实际job状态，不以接受报索引完成。\
@@ -6042,7 +6042,7 @@
 
 ## W6元数据双协议原DI实际装配
 
-- [ ] **T748 · 原metadata依赖工厂装配真实SPACE writer**
+- [x] **T748 · 原metadata依赖工厂装配真实SPACE writer**
   **类型 / Owner**：后端 API组合 / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/api/dependencies.py`；`src/backend/bisheng/open_endpoints/api/dependencies.py`\
   **逻辑 / 测试上下文**：W6§24.3两个真实API DI调用唯一application组合工厂注入writer，Domain只依赖窄port，v1/v2皆经原facade；保v2原principal及data=True，不走无账本BackgroundTask。\
@@ -6114,7 +6114,7 @@
   **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
   **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
 
-- [ ] **T756 · SPACE详情真实挂载与受控标题测试**
+- [x] **T756 · SPACE详情真实挂载与受控标题测试**
   **类型 / Owner**：测试 / PLATFORM\
   **写入文件**：`src/frontend/platform/src/test/f118SpaceDetail.test.tsx`\
   **逻辑 / 测试上下文**：实际路由/scope/父子目录，子树不叠root visible，不读unscoped历史标题，保旧QA Header兼容。\
@@ -6122,7 +6122,7 @@
   **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
   **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
 
-- [ ] **T757 · SPACE详情与受控Header实际挂载**
+- [x] **T757 · SPACE详情与受控Header实际挂载**
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/detail.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/Header.tsx`\
   **逻辑 / 测试上下文**：W6§27挂实际目录scope/API，SPACE真实标题/面包屑，旧Paragraphs高级与版本/上传另卡，不冒充T177全完。\
@@ -6232,7 +6232,7 @@
 
 ## W6正式盘点准备上下文及原业务修订
 
-- [ ] **T769 · 六来源准备上下文与原业务修订测试**
+- [x] **T769 · 六来源准备上下文与原业务修订测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_source_context.py`\
   **逻辑 / 测试上下文**：W6§31实际SQL/原共享目录一次准备、跨TX/scope拒绝、六源原update_time及业务状态修订摘要，与neutral独立；无授权或freeze副作用。\
@@ -6240,7 +6240,7 @@
   **覆盖 AC**: AC-56, AC-57, AC-58, AC-63, AC-64, AC-85, AC-93\
   **验证 / 完成条件**：真实红/首绿、原六源及MIG组合、实际SQL预算、逐叶静态和固定独立审，不以context完成完整M2。
 
-- [ ] **T770 · 六来源原生准备上下文与业务修订事实**
+- [x] **T770 · 六来源原生准备上下文与业务修订事实**
   **类型 / Owner**：后端 Application / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_sources.py`\
   **逻辑 / 测试上下文**：W6§31同原TX的实际目录/共享事实复用及闭集header business_revision_digest，配置/引用/neutral语义分别保留，不改线上绑定。\
@@ -6251,7 +6251,7 @@
 
 ## W6原来源新增修订事实及分页artifact闭集
 
-- [ ] **T771 · 原source header闭集断言补真实业务修订字段**
+- [x] **T771 · 原source header闭集断言补真实业务修订字段**
   **类型 / Owner**：测试夹具 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_source_inventory.py`\
   **逻辑 / 测试上下文**：W6§31只扩原fields精确列表的真实新增business_revision_digest，保全部旧事实和秘密/冻结断言。\
@@ -6259,7 +6259,7 @@
   **覆盖 AC**: AC-56, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：原单叶红真实定位新增字段断言，最小适配后原20与新context组合绿，不造业务事实。
 
-- [ ] **T772 · 六来源闭集artifact分页编码测试**
+- [x] **T772 · 六来源闭集artifact分页编码测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_source_codec.py`\
   **逻辑 / 测试上下文**：W6§32四真实record/双Fact canonical roundtrip、tenant/index/count/闭集/199边界与16MiB、现持久store组合，无授权或M2放行。\
@@ -6267,7 +6267,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：真实缺模块红、实际DTO合同组合绿、固定独立审与静态；不加旧缺字段兼容/不以编码器完成M2。
 
-- [ ] **T773 · 六来源闭集canonical分页编码器**
+- [x] **T773 · 六来源闭集canonical分页编码器**
   **类型 / Owner**：后端 Application / INT\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_source_codec.py`\
   **逻辑 / 测试上下文**：W6§32严格纯编解码供正式M2/回填，现四DTO显式字段、原真实Key及双Fact，零DB/网络/ready副作用。\
@@ -6275,6 +6275,13 @@
   **配对测试**：T772\
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：真实缺模块红、实际DTO合同组合绿、固定独立审与静态；不加旧缺字段兼容/不以编码器完成M2。
+
+- [x] **T774 · 详情与受控Header替换后的官方静态抑制清理**
+  **类型 / Owner**：静态集成 / INT\
+  **写入文件**：`src/frontend/platform/eslint-suppressions.json`\
+  **逻辑 / 测试上下文**：T757替换旧Header后运行原lint:prune，只删除已失效的detail与Header抑制，不新增或扩大其他抑制。\
+  **依赖**：T757\
+  **验证 / 完成条件**：官方prune退出0；Header空抑制检查零诊断，平台strict与既有22条基线精确比较无新增，目标路径回归通过。
 
 ## 自动化覆盖索引
 
