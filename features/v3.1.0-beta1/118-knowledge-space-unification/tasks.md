@@ -526,7 +526,7 @@
   **写入文件**：`src/backend/test/knowledge_unification/test_job_service.py`（拟新增）\
   **逻辑 / 测试上下文**：提交不报完成；故障可恢复且不重复；无合法配置/已删模型明确失败，不回退历史参数。\
   **范围限制**：仅知识处理任务，复用现有 Celery/Beat；不建设全平台任务系统或 worker 在途 I/O 一致性机制。\
-  **依赖**：T062, T026, T243, T244, T609, T611, T613\
+  **依赖**：T062, T026, T243, T244, T609, T611, T613, T621, T625\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -1550,21 +1550,21 @@
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/components/bs-comp/permission/PermissionGrantTab.tsx`；`src/frontend/platform/src/components/bs-comp/permission/PermissionListTab.tsx`\
   **逻辑 / 测试上下文**：当前动作不显示use；纯可见模型虽动作数组为空仍展示有效主体、原Source与可撤销能力，等级按服务端；普通非法空模型不允许授予。\
-  **依赖**：T186, T022\
+  **依赖**：T631, T632, T022\
   **验证 / 完成条件**：所有资源权限弹窗use-only迁移授权可授予/列出/撤销，其他Source仍生效，file rename不被edit替代；关联规格：AC-78, AC-81, AC-83。
 
 - [ ] **T193 · 平台全员与托管应用动作**
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/components/bs-comp/permission/AllMembersPermission.tsx`；`src/frontend/platform/src/pages/BuildPage/hostedApp/appActions.ts`\
   **逻辑 / 测试上下文**：全员纯可见和 APP 原使用按钮按服务端 visible 解释，不再独立 use；发布、分享、编辑、删除与管理按钮使用各自服务端动作结果，不能由 visible 推断；保护原管理等级和可撤销性。\
-  **依赖**：T192, T136\
+  **依赖**：T192, T136, T633\
   **验证 / 完成条件**：全员Source撤销/其他来源并集，app可见但无编辑动作按钮矩阵；历史审计文字不改写；关联规格：AC-78, AC-79, AC-81, AC-83。
 
 - [ ] **T194 · 客户端通用授权展示**
   **类型 / Owner**：前端 Client / CLIENT\
   **写入文件**：`src/frontend/client/src/components/permission/PermissionListTab.tsx`；`src/frontend/client/src/components/permission/UnifiedPermissionControls.tsx`\
   **逻辑 / 测试上下文**：当前模型动作去use，合法纯可见主体及Source继续显示、管理和撤销；保既有管理能力/等级，继承模式统一解析。\
-  **依赖**：T191, T022\
+  **依赖**：T628, T629, T022\
   **验证 / 完成条件**：仅use迁移后列表不消失、可撤单来源，其他来源仍有效；view不能edit/download/rename；关联规格：AC-30, AC-31, AC-78, AC-81, AC-83。
 
 - [ ] **T195 · 客户端纯可见授予选择**
@@ -4938,7 +4938,7 @@
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/application/processing_owner.py`\
   **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
-  **依赖**：T620, T623\
+  **依赖**：T620, T623, T637, T641, T643\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：运行配对T620及真实Owner组合；相关原回归不退化。
 
@@ -4970,9 +4970,161 @@
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
   **逻辑 / 测试上下文**：按W6真实Owner补充合同；同Session实际业务模型读取、显式同模型新操作、原lease/R/G核验及私有事务收据消费。不允许任意before/after推进、不加物理staging、不联动默认Embedding。\
-  **依赖**：T624\
+  **依赖**：T624, T637, T641\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：运行配对T624及真实Owner组合；相关原回归不退化。
+
+## W6 平台高级写管理头接缝
+
+- [ ] **T626 · 平台高级命令管理头路径测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/frontend/platform/src/test/f118ProcessingManagementScope.test.ts`\
+  **逻辑 / 测试上下文**：按后端T221路径配对断言advanced允许携带原管理snapshot；所有普通文件写、GET及v2保持原边界，不扩大网页头要求。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-04, AC-05, AC-33, AC-35, AC-84\
+  **验证 / 完成条件**：测试先独立提交再实现，同选集及原具体租户回归全绿；真实API联调另验。
+
+- [ ] **T627 · 平台高级命令管理头路径接线**
+  **类型 / Owner**：前端 Platform / INT\
+  **写入文件**：`src/frontend/platform/src/controllers/managementScope.ts`\
+  **逻辑 / 测试上下文**：仅补与后端一致的两个精准路径正则；复用已有request/response范围snapshot，不改身份/tenant权威来源。\
+  **依赖**：T626\
+  **覆盖 AC**: AC-04, AC-05, AC-33, AC-35, AC-84\
+  **验证 / 完成条件**：测试先独立提交再实现，同选集及原具体租户回归全绿；真实API联调另验。
+
+## W6 两端通用授权独立验证接缝
+
+- [ ] **T628 · 客户端纯可见授权真实组件回归**
+  **类型 / Owner**：测试 / CLIENT\
+  **写入文件**：`src/frontend/client/src/components/permission/PermissionGrantTab.test.tsx`；`src/frontend/client/src/components/permission/PermissionListTab.test.tsx`\
+  **逻辑 / 测试上下文**：使用真实Grant/List组件，服务器pure模型保原等级、可选可撤/精确Source版本；撤一源保其他源，管理/受保护/继承/停用边界不放宽。\
+  **依赖**：T187\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+- [ ] **T629 · 客户端纯可见模型只读DTO**
+  **类型 / Owner**：前端 Client / CLIENT\
+  **写入文件**：`src/frontend/client/src/api/permissionTypes.ts`\
+  **逻辑 / 测试上下文**：GrantablePermissionModel只补visibility_only?:boolean，原wrapper/Controls无缺陷则不改，不新增actions空过滤或写请求字段。\
+  **依赖**：T628\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+- [ ] **T630 · 平台纯可见只读DTO协议回归**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f048PermissionApi.test.ts`\
+  **逻辑 / 测试上下文**：复用catalog/grantable/assignee wire mocks，验证只读字段保真且不自动进入mutation，不改变版本/原错误协议。\
+  **依赖**：T175\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+- [ ] **T631 · 平台纯可见模型只读DTO**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/controllers/API/permission.ts`\
+  **逻辑 / 测试上下文**：CatalogModel补visibility_only_resource_types/visibility_level，Grantable模型补visibility_only，均optional；server grantable列表权威。\
+  **依赖**：T630\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+- [ ] **T632 · 平台纯可见授予及来源列表组件回归**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/f048PermissionGrantTab.test.tsx`；`src/frontend/platform/src/test/f048PermissionRoster.test.tsx`\
+  **逻辑 / 测试上下文**：纯可见原等级授予、inactive撤销、精确assignee/version和其他Source保留；原manage/protected/LOCAL/editable保持，首绿如实记。\
+  **依赖**：T631\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+- [ ] **T633 · 平台全员来源及APP动作组件回归**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/components/bs-comp/permission/AllMembersPermission.test.tsx`；`src/frontend/platform/src/test/f114AppActions.test.tsx`\
+  **逻辑 / 测试上下文**：全员pure模型沿服务端key ADD、仅REMOVE服务器来源ID/version；失败不伪成功、无管理不得操作，visible不推导各管理动作。\
+  **依赖**：T192\
+  **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
+  **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
+
+## W6 元数据结构CAS必要存储接缝
+
+- [ ] **T634 · 元数据结构独立修订结构测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_metadata_schema_revision.py`\
+  **逻辑 / 测试上下文**：对应既有expected_schema_revision协议，独立整数server/Python默认0、排除旧响应、DDL幂等且无数据转换、唯一head父链。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-34, AC-49, AC-54\
+  **验证 / 完成条件**：测试先独立红测提交，不能以本卡声称元数据旧写端已接线。
+
+- [ ] **T635 · 元数据结构独立修订SQLModel及DDL**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge.py`；`src/backend/bisheng/core/database/alembic/versions/f118_metadata_schema.py`\
+  **逻辑 / 测试上下文**：仅加私有metadata_schema_revision非空Integer/default0，与模型/默认配置修订分离；新结构revision挂实际唯一head，guard已有列，不回填内容或重写旧迁移。\
+  **依赖**：T634\
+  **配对测试**：T634\
+  **验证 / 完成条件**：配对测试/既有单head/结构测试与Ruff通过；真实双库后续T202实测。
+
+## W6 PROC 原始审计及真实范围接缝
+
+- [ ] **T636 · 任务原始接受修订审计测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_job_acceptance_revision.py`\
+  **逻辑 / 测试上下文**：创建显式保存接受R，expected_R合法推进/重试不覆盖原始R；缺证据拒绝、不由历史参数伪造。\
+  **依赖**：T611\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T637 · 任务原始接受修订模型**
+  **类型 / Owner**：基础设施 / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_processing_job.py`\
+  **逻辑 / 测试上下文**：仅新增accepted_model_config_revision可空审计列；正常创建赋值由T625同一repo叶完成，不加独立模型绑定。\
+  **依赖**：T636\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T638 · 任务接受修订结构升级测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_job_acceptance_migration.py`\
+  **逻辑 / 测试上下文**：结构只加nullable审计列、无data copy，幂等且parent为实际唯一head。\
+  **依赖**：T635\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T639 · 任务接受修订结构升级**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`src/backend/bisheng/core/database/alembic/versions/f118_processing_acceptance.py`\
+  **逻辑 / 测试上下文**：挂f118_metadata_schema，仅DDL guard add column，无在线/隐式数据回填。\
+  **依赖**：T638, T637\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T640 · 任务自身切换域内收据测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_cutover_receipts.py`\
+  **逻辑 / 测试上下文**：伪造receipt、跨事务/job/operation/旧lease/重复消费拒绝，合法同事务Owner切换收据可消费。\
+  **依赖**：T613\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T641 · 任务自身切换域内收据窄能力**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/processing_cutover_receipts.py`\
+  **逻辑 / 测试上下文**：域内共享私有登记/消费能力，Owner完成实际R2与job guard才签发，Repository不反向依赖application。\
+  **依赖**：T640\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T642 · 处理任务真实版本范围仓储测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_processing_owner_repository.py`\
+  **逻辑 / 测试上下文**：真实document/version/file正确JOIN及所有版本、指定版本不扩、跨tenant拒绝、外部Session回滚；多文档版本无笛卡尔积。\
+  **依赖**：T611\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
+
+- [ ] **T643 · 处理任务真实版本范围仓储**
+  **类型 / Owner**：后端 Domain / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_owner_repository.py`\
+  **逻辑 / 测试上下文**：aload_scope原生Session返回真实整版本manifest/稳定顺序，当前租户查询，不自commit或拼独立列表。\
+  **依赖**：T642\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先测试再实现，记录真实红/首绿；同Session/真实Owner组合验证，不以fake范围替代生产。
 
 ## 自动化覆盖索引
 
