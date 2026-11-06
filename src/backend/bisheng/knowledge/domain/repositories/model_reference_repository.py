@@ -10,6 +10,7 @@ from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_b
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, QAKnowledge
+from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob, deletion_now
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.resource_reference.application.contracts import ReferenceState, TargetType
 
@@ -59,6 +60,52 @@ class KnowledgeModelReferenceRepository:
                 .one_or_none()
             )
         return deepcopy(dict(row)) if row is not None else None
+
+    def load_cleanup_identity(self, session, knowledge_id, *, deletion_job=None):
+        tenant = self._tenant_id()
+        if deletion_job is None:
+            row = self.load_source(session, knowledge_id)
+            if row is None or row["tenant_id"] != tenant:
+                raise ResourceReferenceInvalidError(reason="knowledge_cleanup_resource_not_owned")
+            return row
+        if not isinstance(deletion_job, KnowledgeSpaceDeleteJob):
+            raise ResourceReferenceInvalidError(reason="knowledge_cleanup_persisted_job_required")
+        model = KnowledgeSpaceDeleteJob
+        query = select(
+            model.id,
+            model.tenant_id,
+            model.space_id,
+            model.manifest,
+            model.state,
+            model.lease_token,
+            model.lease_until,
+            model.attempts,
+        ).where(model.id == deletion_job.id)
+        with session.no_autoflush, strict_tenant_filter():
+            row = session.execute(query).mappings().one_or_none()
+        if (
+            row is None
+            or row["tenant_id"] != tenant
+            or deletion_job.tenant_id != tenant
+            or row["space_id"] != knowledge_id
+            or deletion_job.space_id != knowledge_id
+            or row["state"] != "RUNNING"
+            or not row["lease_token"]
+            or row["lease_token"] != deletion_job.lease_token
+            or row["attempts"] != deletion_job.attempts
+            or row["lease_until"] is None
+            or row["lease_until"] <= deletion_now()
+            or row["manifest"] != deletion_job.manifest
+        ):
+            raise ResourceReferenceInvalidError(reason="knowledge_cleanup_job_changed")
+        knowledge = row["manifest"].get("knowledge") if isinstance(row["manifest"], dict) else None
+        if (
+            not isinstance(knowledge, dict)
+            or knowledge.get("id") != knowledge_id
+            or knowledge.get("tenant_id") != tenant
+        ):
+            raise ResourceReferenceInvalidError(reason="knowledge_cleanup_manifest_target_changed")
+        return deepcopy(knowledge)
 
     def _embedding_queries(self, session, verifier, source_key, context):
         self._tenant_id()
