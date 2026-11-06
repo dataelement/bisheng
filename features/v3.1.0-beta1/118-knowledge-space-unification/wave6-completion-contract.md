@@ -67,7 +67,7 @@ T642/643实际版本范围仓储`aload_scope(session,space_id,targets=None,for_u
 
 INT统一合同、任务、locale、共享装配与合流；各lane从冻结提交建立独立worktree，只写登记叶子。测试先提交，再实现，已有正确行为如实记首绿。禁止repo-wide stash/reset/clean/无path restore及整文件theirs；不覆盖其他worktree。不push、不自动合入发版线。
 
-用户后续确认109:3005属于中粮定制分支，要求另部署全新标准环境。此前3005仅做只读巡检、零数据或部署写入，现不再用它验证本功能。INT在109另建独立端口、网络、数据库及卷，使用标准版本源码；同机其他部署不得改动。凭据不入仓库/报告。停服升级须先一致备份再正式盘点冻结，脚本不探测/控制停服。完整双库、中间件、浏览器E2E及备份恢复需实际证据，不能用单元测试或HTTP健康替代。
+用户后续确认109:3005属于中粮定制分支，要求另部署全新标准环境。此前3005仅做只读巡检、零数据或部署写入，现不再用它验证本功能。INT在109另建独立端口、网络、数据库及卷，使用标准版本源码；同机其他部署不得改动。凭据不入仓库/报告。停服升级须先一致备份再正式盘点冻结，脚本不探测/控制停服。用户已明确本轮免除DM8实测，Model/Repository/DDL继续按C2规范开发和静态复核；实际MySQL、中间件、浏览器E2E及备份恢复需证据，不能用单元测试或HTTP健康替代。上游模型/ETL按用户选择使用专用mock，不声称真实provider验证。
 
 ## 4. KN 生命周期、创建与清单子合同 V1：已冻结
 
@@ -122,3 +122,26 @@ REF在原ReferenceRepository补`alist_inbound_for_owner_page(session,issued_scop
 若实际所有items已成功，仅Owner/R2 finalize因凭据或投影故障未提交，job保明确global error且failed。此窄场景允许人工retry重置0个item：仅failed/partial_failed、持久error、所有实际items succeeded、pending/failed为0；succeeded/obsolete终态仍禁止。同job新revision/原身份receipt记item_count=0，成功items/attempt/checkpoint完全不动。新claim后只续原Owner.afinalize_and_ack，仍核真实R/G/operation/acceptedR/新lease；不重跑provider或重置索引。Service详情和retry资格复用同一判断，不能按钮和写端冲突。
 
 T660/661只将retry receipt的ck_kpr_revision里item_count>0放宽为>=0，其他tenant/actor/accepted revision条件保持；业务窄例外由实际Repo/Owner判定，不因DDL放宽就允许任意0项retry。T662/663由INT将结构revision挂实际head f118_processing_acceptance，复用现get_check_constraint与table_exists，识别已有新定义为no-op、仅替已知旧定义、未知定义fail closed。DDL-only，不复制任务数据或改最初接受R。
+
+## 7. MIG 持久账本 V1：已冻结
+
+T159/160实现仅依T011，移除T158假串行；正式M2全平台盘点与冻结总装仍等T158，且全部转换写入前先冻结正式基线。唯一类KnowledgeUnificationRunRepository，外部native AsyncSession，只add/flush，不begin/commit/rollback，不ObjectStore/FGA/网络，不停服检测/控制。无新Model/DDL/HTTP。
+
+所有入口使用当前可信具体tenant+strict_tenant_filter，无tenant/bypass入参；首次create/freeze先精确锁该真实Tenant.id（含停用但保配置者），再锁run。不允许同tenant/同writer另起不同migration run重冻转换后数据；origin=empty_tenant不能冒作migration。结构预检只select现模型列limit0，缺结构失败，不建表/补值。
+
+精确async接口（session首参，除schema外run_id、writer_contract_version为关键字必填）：aschema_precheck(session)；aget(session,*,run_id,writer_contract_version)；aget_or_create(session,*,run_id,writer_contract_version)；afreeze(session,*,run_id,writer_contract_version,baseline_ref,plan_ref)；aadvance(session,*,run_id,writer_contract_version,baseline_hash,plan_hash,expected_phase,next_phase)；acheckpoint(session,*,run_id,writer_contract_version,baseline_hash,plan_hash,expected_phase,checkpoint_key,expected_checkpoint,checkpoint)；afail(session,*,run_id,writer_contract_version,baseline_hash,plan_hash,expected_phase,error_code,error_reason)；aresume(session,*,run_id,writer_contract_version,baseline_hash,plan_hash)。
+
+Descriptor严格{object_key,sha256}，hash小写64hex且列值从descriptor派生，与现legacy Reader同形；key非空、非/绝对路径、非file:、无://URI。ObjectStore上层实际上传返回指针，Repo不验bytes、不存本机路径/signedURL/完整配置/秘密。已冻结相同refs/hash幂等，不同值拒绝且不重置阶段。
+
+阶段preparing仅afreeze进入baseline_frozen，然后converting→backfilling→verifying→verified→completed，不跳阶倒退，completed终态。锁行后核expected_phase/writer/原hash。checkpoint为phase内key，值严格{cursor:str|null,processed_count:int>=0,digest:64hex|null,complete:bool}，expected_checkpoint精确CAS，同值重投幂等、count/complete不倒退，不收任意config。afail保全部refs/hash/业务checkpoint并内部记录failed_from_phase；aresume只同原hash恢复原阶段（pre-freeze只回preparing），不能提交新baseline/目标phase。phase不意味着Coverage ready，source_coverage/verification_report写入与发布须后续真实M4合同，不开放任意dict setter。现错误复用10998/10994。
+
+## 8. 专用mock模型/ETL上游 V1：已冻结
+
+用户选择mock模型/ETL，本轮DM8实测免除；DB/FGA/ES/Milvus/MinIO/队列仍真实，mock只属E2E辅助，不是生产新协议。两叶：test/e2e/helpers/f118_mock_upstreams.py与test/knowledge_unification/test_mock_upstreams_contract.py。helper仅stdlib+现FastAPI/uvicorn，无bisheng/config/DB导入，CLI显式host/port、单worker，独立私有测试网络。测试真实现有SDK/loader+loopback或ASGI，不访问远端。
+
+- POST /v1/embeddings：只f118-embed-8/f118-embed-16，固定真实8/16维、非零有限确定float32；input为str/list[str]。省略/base64编码返回base64 float32，float返回数组；dimensions不匹配400，不静默改变真实维度。响应按真实OpenAI list/data/index/model/usage wire，实际SDK默认base64须解码验证。
+- POST /v1/chat/completions：只f118-chat；非stream标准chat.completion，stream为SSE role/content delta→stop→按include_usage发空choices usage帧→[DONE]。支持真实messages/现有可选推理字段，不扩tools/Responses/视觉协议。
+- POST /v1/etl4llm/predict：这是mock自选完整ETL配置URL，生产loader不拼路径。实际JSON filename+b64_data:[base64]、mode=partition及原OCR/formula/header/parameters/request_kwargs字段。标准status_code=200与合法text/partition响应，真实Etl4lmLoader须得到非空Document正文；有partitions/text优先级时按真实loader消费，不强塞空partitions造成空结果。txt/md实际走本地loader，ETL调用数0；ETL链用合法小PDF或image样本，保真实MinIO下载，不新增multipart/文件GET。
+- GET /healthz；GET /__control/stats返回embedding/chat_nonstream/chat_stream/etl总数、按model+input_sha256及filename+content_sha256的attempts/failed与pending_failure，不存原文/密钥/header。POST /__control/reset清状态；POST /__control/fail-next只kind(embedding/etl)、非空marker、可选embedding模型，一次一个规则、原子只消费一次。Embedding目标marker一次HTTP400标准OpenAI error（避免SDK自动重试吞掉任务失败），ETL目标filename一次503，后续正常；探针不命中规则。
+
+模型保存合法probe会调用hello/Test text等，不以全局调用数不增判断默认Embedding联动。E2E按旧文件输入hash/model分桶，结合实际space.model/ref/revision、job数与真Milvus schema/数据证明未重建。上游合同单测不替代后续真实中间件、HTTP/浏览器和升级恢复。

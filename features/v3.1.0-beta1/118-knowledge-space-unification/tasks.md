@@ -1299,7 +1299,7 @@
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_ledger.py`（拟新增）\
   **逻辑 / 测试上下文**：重复run同计划幂等；hash变化拒绝，M2前不能M3，转换中断沿原checkpoint，无停服检测参数。\
-  **依赖**：T158, T011\
+  **依赖**：T011\
   **覆盖 AC**: AC-56, AC-63, AC-64, AC-85, AC-89, AC-93\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -1618,13 +1618,13 @@
   **依赖**：T197, T195, T199, T187, T191\
   **验证 / 完成条件**：客户端lint/类型检查及构建；真实接口管理员/普通/独立文件授权、处理状态和强删矩阵，记录环境。
 
-- [ ] **T202 · 双库事务/投影/并发回归执行**
+- [ ] **T202 · MySQL事务/投影/并发实测与C2规范复核**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_cross_domain_integration.py`（拟新增）\
-  **逻辑 / 测试上下文**：按固定锁序覆盖保存vs普通/强删、服务清单原子性、同来源多版本CAS、FGA失败/SQL失败/清理失败分阶段恢复；执行MySQL及项目集中DM8回归，真实中间件证据分别记录。\
+  **逻辑 / 测试上下文**：按固定锁序覆盖保存vs普通/强删、服务清单原子性、同来源多版本CAS、FGA失败/SQL失败/清理失败分阶段恢复；新MySQL环境真实执行，Model/Repository/DDL保C2静态规范复核。2026-11-06用户明确本轮免除DM8实测，不将免验或静态核对标成真实DM8通过。\
   **依赖**：T200, T201, T174\
   **覆盖 AC**: AC-28, AC-29, AC-30, AC-31, AC-32, AC-33, AC-34, AC-35, AC-36, AC-37, AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-85, AC-86, AC-87, AC-88, AC-89, AC-90, AC-91, AC-92, AC-93, AC-94\
-  **验证 / 完成条件**：不得以mock通过声称双库集成通过；未配置环境明确待执行，失败修复先补独立叶子任务。
+  **验证 / 完成条件**：真实MySQL/中间件证据与C2静态核对分别记录；用户免验DM8不作环境阻塞，不以mock或免验声称双库实测通过。失败修复先补独立叶子任务。
 
 - [ ] **T203 · 升级说明与迁移演练**
   **类型 / Owner**：测试 / MIG\
@@ -5291,6 +5291,22 @@
   **依赖**：T662, T661\
   **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
   **验证 / 完成条件**：先真实红再实现，原正负约束回归保留；仅finalize恢复必须真实Owner组合验证，不伪改成功item。
+
+- [ ] **T664 · 专用模型ETL mock上游wire契约测试**
+  **类型 / Owner**：测试 / MOCK\
+  **写入文件**：`src/backend/test/knowledge_unification/test_mock_upstreams_contract.py`\
+  **逻辑 / 测试上下文**：真实SDK float32/base64 8/16维、chat两态、真实ETL loader Document、txt/md本地不调ETL、并发一次失败/计数分桶；无远端/DB依赖。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-06, AC-38, AC-48, AC-49, AC-50, AC-52, AC-53, AC-54\
+  **验证 / 完成条件**：先提交实际红再实现，不以测试上游替真实中间件或provider质量验收。
+
+- [ ] **T665 · 专用模型ETL mock上游辅助进程**
+  **类型 / Owner**：测试基础设施 / MOCK\
+  **写入文件**：`src/backend/test/e2e/helpers/f118_mock_upstreams.py`\
+  **逻辑 / 测试上下文**：按W6§8既有wire实现单worker FastAPI/uvicorn CLI、确定embedding/chat/ETL、最小内存控制/计数，不导入业务config/DB，不建通用mock平台。\
+  **依赖**：T664\
+  **配对测试**：T664\
+  **验证 / 完成条件**：真实客户端合同全绿，部署与真实中间件/E2E由INT后续验证；只私有测试网络。
 
 ## 自动化覆盖索引
 
