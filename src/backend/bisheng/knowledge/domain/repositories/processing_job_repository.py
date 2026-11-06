@@ -112,6 +112,12 @@ class JobDispatch:
     revision: int
 
 
+@dataclass(frozen=True)
+class RetryEligibility:
+    retryable: bool
+    finalize_only: bool
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -646,7 +652,7 @@ class ProcessingJobRepository:
         current_job_lease = JobLease(job.id, job.lease_token, job.claim_generation, job.lease_until)
         return ItemLease(current_job_lease, row.id, row.lease_token, row.claim_generation, row.lease_until)
 
-    async def _refresh_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> None:
+    async def _item_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> dict[str, int]:
         with strict_tenant_filter():
             rows = (
                 await session.exec(
@@ -659,6 +665,26 @@ class ProcessingJobRepository:
         total = sum(counts.values())
         if total != len(job.scope_manifest):
             raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
+        return counts
+
+    async def aretry_eligibility(self, session: AsyncSession, job_id: str) -> RetryEligibility:
+        job = await self._job(session, job_id, lock=False)
+        counts = await self._item_counts(session, job)
+        terminal_failure = job.state in {"failed", "partial_failed"}
+        finalize_only = (
+            terminal_failure
+            and job.error_code is not None
+            and bool(job.scope_manifest)
+            and counts.get("succeeded", 0) == len(job.scope_manifest)
+        )
+        return RetryEligibility(
+            terminal_failure and (bool(counts.get("failed", 0) + counts.get("pending", 0)) or finalize_only),
+            finalize_only,
+        )
+
+    async def _refresh_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> None:
+        counts = await self._item_counts(session, job)
+        total = sum(counts.values())
         job.total_count = total
         job.succeeded_count = counts.get("succeeded", 0)
         job.failed_count = counts.get("failed", 0)
@@ -850,7 +876,7 @@ class ProcessingJobRepository:
                     .execution_options(populate_existing=True)
                 )
             ).all()
-        if not rows:
+        if not rows and not (await self.aretry_eligibility(session, job.id)).finalize_only:
             raise KnowledgeProcessingJobNotRetryableError()
         for row in rows:
             if row.tenant_id != job.tenant_id:
