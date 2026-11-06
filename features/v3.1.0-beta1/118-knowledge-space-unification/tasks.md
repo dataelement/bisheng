@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史838编号：715已完成/历史交付、121当前待办、2外移；原137队列已完成32项、剩105项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史839编号：715已完成/历史交付、122当前待办、2外移；原137队列已完成32项、剩105项，另17张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -6789,6 +6789,13 @@
   **依赖**：T837\
   **配对测试**：T837\
   **验证 / 完成条件**：原生数据及真实Owner摘要红绿、分页/多版本/碰撞零写、旧来源完整回归与独立复核；不将纯计划计为M3/正式升级完成。
+
+- [ ] **T839 · 原工作台pin回归夹具与可见性断言对齐**
+  **类型 / Owner**：测试夹具 / INT\
+  **写入文件**：`src/backend/test/workstation/test_workstation_apps_rebac.py`、`src/backend/test/workstation/test_used_app_pin.py`\
+  **逻辑 / 测试上下文**：W6§46实际旧回归：仅原use gate断言改visible，真实union已读App的SQLite夹具补空App表，保所有原pin/取消/跨tenant/offline/hidden业务断言。先固定未改生产对照旧失败，不将夹具失败算产品红。\
+  **依赖**：T151\
+  **验证 / 完成条件**：两旧叶与新入口/原v2身份/invoke组合通过，独立复核不削断言或替真实DAO。
 
 ## 自动化覆盖索引
 
