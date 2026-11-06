@@ -22,8 +22,6 @@ from bisheng.common.errcode.llm import (
     ServerAddError,
     ServerExistError,
     SpeechCredentialError,
-    WorkbenchChatDefaultModelError,
-    WorkbenchEmbeddingError,
 )
 from bisheng.common.errcode.llm_tenant import (
     LLMModelNotAccessibleError,
@@ -45,13 +43,15 @@ from bisheng.core.context.tenant import (
     get_current_tenant_id,
     strict_tenant_filter,
 )
+from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
+from bisheng.llm.application.model_default import ModelDefaultApplication, current_model_default_tenant
 from bisheng.llm.domain.const import LLMModelStatus, LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfigDao
+from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.schemas import (
     AssistantLLMConfig,
     AssistantLLMItem,
@@ -64,7 +64,6 @@ from bisheng.llm.domain.schemas import (
     WSModel,
 )
 from bisheng.llm.domain.services.context_window import ContextWindowService
-from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
 from bisheng.llm.domain.utils import invalidate_llm_info_cache, to_llm_invoke_error, usable_proxy_url
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
@@ -878,7 +877,7 @@ class LLMService:
             model_info = await LLMDao.aget_model_by_type(LLMModelType(one.model_type))
             # Determine if this is the firstllmorembeddingModels
             if model_info.id == one.id:
-                await cls.set_default_model(model_info)
+                await cls.set_default_model(model_info, login_user=login_user)
         await cls.probe_models_in_background(server.models, login_user)
         return True
 
@@ -968,67 +967,59 @@ class LLMService:
             await bisheng_rerank.acompress_documents(documents=[Document(page_content="hello world")], query="hello")
 
     @classmethod
-    async def set_default_model(cls, model: LLMModel | LLMModelInfo):
-        """Set default model configuration"""
-        # Set defaultllmmodel config
+    async def set_default_model(cls, model: LLMModel | LLMModelInfo, *, login_user=None):
+        tenant = current_model_default_tenant()
+        await ModelDefaultApplication._authorize(login_user, tenant)
+
+        async def original(key, schema):
+            async with get_async_db_session() as active:
+                resolved = await ModelDefaultRepository().aresolve(active, key.value)
+            # Adding a provider does not convert an active inherited default
+            # into a partial Child override or copy Root's configured IDs.
+            if resolved.inherited_from_root:
+                return None
+            return schema.model_validate_json(resolved.own.payload_json) if resolved.own is not None else schema()
+
         if model.model_type == LLMModelType.LLM.value:
-            # Set default model configuration for knowledge base
-            knowledge_llm = await cls.aget_knowledge_llm()
-            knowledge_change = False
-            if not knowledge_llm.extract_title_model_id:
-                knowledge_llm.extract_title_model_id = model.id
-                knowledge_change = True
-            if not knowledge_llm.source_model_id:
-                knowledge_llm.source_model_id = model.id
-                knowledge_change = True
-            if not knowledge_llm.qa_similar_model_id:
-                knowledge_llm.qa_similar_model_id = model.id
-                knowledge_change = True
-            if knowledge_change:
-                await cls.update_knowledge_llm(knowledge_llm)
-
-            # Set default model configuration for reviews
-            evaluation_llm = await cls.get_evaluation_llm()
-            if not evaluation_llm.model_id:
-                evaluation_llm.model_id = model.id
-                await cls.update_evaluation_llm(evaluation_llm)
-
-            # Setting the default model configuration for the assistant
-            assistant_llm = await cls.get_assistant_llm()
-            assistant_change = False
-            if not assistant_llm.auto_llm:
-                assistant_llm.auto_llm = AssistantLLMItem(model_id=model.id)
-                assistant_change = True
-            if not assistant_llm.llm_list:
-                assistant_change = True
-                assistant_llm.llm_list = [AssistantLLMItem(model_id=model.id, default=True)]
-            if assistant_change:
-                await cls.update_assistant_llm(assistant_llm)
-
-            workbench_llm = await cls.get_workbench_llm()
-            workbench_change = False
-            if not workbench_llm.chat_title_llm:
-                workbench_llm.chat_title_llm = WSModel(id=str(model.id), name=model.model_name)
-                workbench_change = True
-            if workbench_change:
-                await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
-
+            knowledge = await original(ConfigKeyEnum.KNOWLEDGE_LLM, KnowledgeLLMConfig)
+            if knowledge is not None:
+                changed = False
+                for field in ("extract_title_model_id", "source_model_id", "qa_similar_model_id"):
+                    if getattr(knowledge, field) is None:
+                        setattr(knowledge, field, model.id)
+                        changed = True
+                if changed:
+                    await cls.update_knowledge_llm(knowledge, login_user=login_user)
+            evaluation = await original(ConfigKeyEnum.EVALUATION_LLM, EvaluationLLMConfig)
+            if evaluation is not None and evaluation.model_id is None:
+                evaluation.model_id = model.id
+                await cls.update_evaluation_llm(evaluation, login_user=login_user)
+            assistant = await original(ConfigKeyEnum.ASSISTANT_LLM, AssistantLLMConfig)
+            if assistant is not None:
+                changed = False
+                if assistant.auto_llm is None:
+                    assistant.auto_llm = AssistantLLMItem(model_id=model.id)
+                    changed = True
+                if not assistant.llm_list:
+                    assistant.llm_list = [AssistantLLMItem(model_id=model.id, default=True)]
+                    changed = True
+                if changed:
+                    await cls.update_assistant_llm(assistant, login_user=login_user)
+            workbench = await original(ConfigKeyEnum.LINSIGHT_LLM, WorkbenchModelConfig)
+            if workbench is not None and workbench.chat_title_llm is None:
+                workbench.chat_title_llm = WSModel(id=str(model.id), name=model.model_name)
+                await cls.update_workbench_llm(login_user.user_id, workbench, BackgroundTasks(), login_user=login_user)
         elif model.model_type == LLMModelType.EMBEDDING.value:
-            knowledge_llm = cls.get_knowledge_llm()
-            if not knowledge_llm.embedding_model_id:
-                knowledge_llm.embedding_model_id = model.id
-                await cls.update_knowledge_llm(knowledge_llm)
-
-        elif model.model_type == LLMModelType.TTS.value:
-            workbench_llm = await cls.get_workbench_llm()
-            if not workbench_llm.tts_model or not workbench_llm.tts_model.id:
-                workbench_llm.tts_model = WSModel(id=str(model.id), name=model.model_name)
-                await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
-        elif LLMModelType.is_speech(model.model_type):
-            workbench_llm = await cls.get_workbench_llm()
-            if not workbench_llm.asr_model or not workbench_llm.asr_model.id:
-                workbench_llm.asr_model = WSModel(id=str(model.id), name=model.model_name)
-                await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
+            knowledge = await original(ConfigKeyEnum.KNOWLEDGE_LLM, KnowledgeLLMConfig)
+            if knowledge is not None and knowledge.embedding_model_id is None:
+                knowledge.embedding_model_id = model.id
+                await cls.update_knowledge_llm(knowledge, login_user=login_user)
+        elif model.model_type == LLMModelType.TTS.value or LLMModelType.is_speech(model.model_type):
+            workbench = await original(ConfigKeyEnum.LINSIGHT_LLM, WorkbenchModelConfig)
+            field = "tts_model" if model.model_type == LLMModelType.TTS.value else "asr_model"
+            if workbench is not None and getattr(workbench, field) is None:
+                setattr(workbench, field, WSModel(id=str(model.id), name=model.model_name))
+                await cls.update_workbench_llm(login_user.user_id, workbench, BackgroundTasks(), login_user=login_user)
 
     @classmethod
     async def update_llm_server(
@@ -1126,7 +1117,7 @@ class LLMService:
         to_probe = []
         for one in new_server_info.models:
             if one.id not in old_model_dict:
-                await cls.set_default_model(one)
+                await cls.set_default_model(one, login_user=login_user)
             # The new model, or the model name or type has changed
             if (
                 one.id not in old_model_dict
@@ -1278,50 +1269,54 @@ class LLMService:
 
     @classmethod
     async def _base_update_llm_config(
-        cls,
-        data: dict,
-        key: ConfigKeyEnum,
-        tenant_id: int | None = None,
-    ) -> dict:
-        """Persist ``data`` under ``key`` for ``tenant_id``.
-
-        Routes to ``tenant_system_model_config`` (F022). Callers should
-        pass an explicit ``tenant_id`` when handling Celery payloads or
-        cross-tenant admin actions; otherwise the ContextVar / Root
-        fallback in ``_resolve_tenant_id`` applies.
-        """
-        target = _resolve_tenant_id(tenant_id)
-        await TenantSystemModelConfigDao.aupsert(
-            tenant_id=target,
-            key=key.value,
-            value=json.dumps(data, ensure_ascii=False),
-        )
+        cls, data: dict, key: ConfigKeyEnum, tenant_id=None, *, login_user=None, session=None
+    ):
+        await cls._save_model_default(key.value, data, tenant_id=tenant_id, login_user=login_user, session=session)
         return data
 
     @classmethod
+    async def _save_model_default(cls, key, data, *, tenant_id=None, login_user=None, session=None):
+        current_model_default_tenant(tenant_id)
+
+        async def save(active):
+            old = (
+                await ModelDefaultRepository().aresolve(active, key)
+                if key == ConfigKeyEnum.LINSIGHT_LLM.value
+                else None
+            )
+            result = await ModelDefaultApplication.asave(active, key, data, login_user=login_user)
+            if key == ConfigKeyEnum.LINSIGHT_LLM.value and result.embedding_model is not None:
+                previous = WorkbenchModelConfig.model_validate_json(old.payload_json)
+                old_id = previous.embedding_model.id if previous.embedding_model else None
+                if result.embedding_model.id != old_id:
+                    embeddings = await cls.get_bisheng_embedding(
+                        model_id=result.embedding_model.id,
+                        app_id=ApplicationTypeEnum.LINSIGHT.value,
+                        app_name=ApplicationTypeEnum.LINSIGHT.value,
+                        app_type=ApplicationTypeEnum.LINSIGHT,
+                        user_id=login_user.user_id,
+                    )
+                    try:
+                        await embeddings.aembed_query("test")
+                    except Exception as error:
+                        logger.exception("workbench embedding model probe failed")
+                        raise to_llm_invoke_error(embeddings, error) from error
+            return result
+
+        if session is not None:
+            return await save(session)
+        async with get_async_db_session() as active:
+            result = await save(active)
+            await active.commit()
+            return result
+
+    @classmethod
     async def update_knowledge_llm(
-        cls,
-        data: KnowledgeLLMConfig,
-        tenant_id: int | None = None,
+        cls, data: KnowledgeLLMConfig, tenant_id=None, *, login_user=None, session=None
     ) -> KnowledgeLLMConfig:
-        """Update default model configuration for knowledge base"""
-        target = _resolve_tenant_id(tenant_id)
-        await avalidate_system_model_refs(
-            [
-                data.embedding_model_id,
-                data.source_model_id,
-                data.extract_title_model_id,
-                data.qa_similar_model_id,
-                data.asr_model_id,
-            ],
-            target,
+        return await cls._save_model_default(
+            ConfigKeyEnum.KNOWLEDGE_LLM.value, data, tenant_id=tenant_id, login_user=login_user, session=session
         )
-        await cls._base_update_llm_config(
-            data=data.model_dump(),
-            key=ConfigKeyEnum.KNOWLEDGE_LLM,
-            tenant_id=tenant_id,
-        )
-        return data
 
     @classmethod
     async def get_assistant_llm(cls, tenant_id: int | None = None) -> AssistantLLMConfig:
@@ -1351,22 +1346,11 @@ class LLMService:
 
     @classmethod
     async def update_assistant_llm(
-        cls,
-        data: AssistantLLMConfig,
-        tenant_id: int | None = None,
+        cls, data: AssistantLLMConfig, tenant_id=None, *, login_user=None, session=None
     ) -> AssistantLLMConfig:
-        """Update default model configurations related to the assistant"""
-        target = _resolve_tenant_id(tenant_id)
-        ids = [item.model_id for item in (data.llm_list or [])]
-        if data.auto_llm:
-            ids.append(data.auto_llm.model_id)
-        await avalidate_system_model_refs(ids, target)
-        await cls._base_update_llm_config(
-            data=data.model_dump(),
-            key=ConfigKeyEnum.ASSISTANT_LLM,
-            tenant_id=tenant_id,
+        return await cls._save_model_default(
+            ConfigKeyEnum.ASSISTANT_LLM.value, data, tenant_id=tenant_id, login_user=login_user, session=session
         )
-        return data
 
     @classmethod
     async def get_evaluation_llm(cls, tenant_id: int | None = None) -> EvaluationLLMConfig:
@@ -1505,35 +1489,19 @@ class LLMService:
 
     @classmethod
     async def update_evaluation_llm(
-        cls,
-        data: EvaluationLLMConfig,
-        tenant_id: int | None = None,
+        cls, data: EvaluationLLMConfig, tenant_id=None, *, login_user=None, session=None
     ) -> EvaluationLLMConfig:
-        """Update default model configuration for review feature"""
-        target = _resolve_tenant_id(tenant_id)
-        await avalidate_system_model_refs([data.model_id], target)
-        await cls._base_update_llm_config(
-            data=data.model_dump(),
-            key=ConfigKeyEnum.EVALUATION_LLM,
-            tenant_id=tenant_id,
+        return await cls._save_model_default(
+            ConfigKeyEnum.EVALUATION_LLM.value, data, tenant_id=tenant_id, login_user=login_user, session=session
         )
-        return data
 
     @classmethod
     async def update_workflow_llm(
-        cls,
-        data: EvaluationLLMConfig,
-        tenant_id: int | None = None,
+        cls, data: EvaluationLLMConfig, tenant_id=None, *, login_user=None, session=None
     ) -> EvaluationLLMConfig:
-        """Update workflow Default Model Configuration for"""
-        target = _resolve_tenant_id(tenant_id)
-        await avalidate_system_model_refs([data.model_id], target)
-        await cls._base_update_llm_config(
-            data=data.model_dump(),
-            key=ConfigKeyEnum.WORKFLOW_LLM,
-            tenant_id=tenant_id,
+        return await cls._save_model_default(
+            ConfigKeyEnum.WORKFLOW_LLM.value, data, tenant_id=tenant_id, login_user=login_user, session=session
         )
-        return data
 
     @classmethod
     async def get_workflow_llm(cls, tenant_id: int | None = None) -> EvaluationLLMConfig:
@@ -1589,126 +1557,19 @@ class LLMService:
     @classmethod
     async def update_workbench_llm(
         cls,
-        invoke_user_id: int,
+        invoke_user_id,
         config_obj: WorkbenchModelConfig,
-        background_tasks: BackgroundTasks,
-        tenant_id: int | None = None,
+        background_tasks,
+        tenant_id=None,
+        *,
+        login_user=None,
+        session=None,
     ):
-        """
-        Update Invisible Model Configuration
-        :param invoke_user_id:
-        :param config_obj:
-        :param background_tasks:
-        :param tenant_id: Owner tenant for the system config row;
-            ``None`` falls back to the admin-scope ContextVar then Root.
-        :return:
-        """
-        if config_obj.embedding_model is not None:
-            embedding_model_id = _coerce_model_id(config_obj.embedding_model.id)
-            if embedding_model_id is None:
-                raise WorkbenchEmbeddingError()
-            config_obj.embedding_model.id = str(embedding_model_id)
-
-        # Delay imports to avoid looping imports
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-
-        target = _resolve_tenant_id(tenant_id)
-        await avalidate_system_model_refs(
-            [
-                # linsight_default_model_id is already a model-id string (F035),
-                # not a WSModel; pass it directly alongside the WSModel ids.
-                config_obj.linsight_default_model_id,
-                config_obj.chat_default_model_id,
-                *(
-                    (ws.id if ws else None)
-                    for ws in (
-                        config_obj.embedding_model,
-                        config_obj.asr_model,
-                        config_obj.tts_model,
-                        config_obj.chat_title_llm,
-                        config_obj.image_read_model,
-                    )
-                ),
-            ],
-            target,
+        if login_user is not None and invoke_user_id != login_user.user_id:
+            raise LLMSystemConfigForbiddenError()
+        return await cls._save_model_default(
+            ConfigKeyEnum.LINSIGHT_LLM.value, config_obj, tenant_id=tenant_id, login_user=login_user, session=session
         )
-        old_value, _, _ = await TenantSystemModelConfigDao.aresolve(
-            tenant_id=target,
-            key=ConfigKeyEnum.LINSIGHT_LLM.value,
-        )
-        config_old_obj = WorkbenchModelConfig(**json.loads(old_value)) if old_value else WorkbenchModelConfig()
-
-        # Guard against a partial/legacy POST wiping the whole dialogue-model list.
-        # This setter persists ``config_obj`` wholesale (no field-level merge), so a
-        # body that omits ``models`` arrives as ``models=None`` and would blow away
-        # every configured model — the exact way a stale admin page nulled the Root
-        # config in prod. The picker always sends the full array and there is no
-        # "clear all models" flow, so treat a missing/None ``models`` as "no change"
-        # and keep the previously stored list. (``asr_model`` / ``tts_model`` /
-        # ``chat_title_llm`` legitimately use None to clear, so they are left as-is;
-        # an explicit ``models: []`` still clears.)
-        if config_obj.models is None:
-            config_obj.models = config_old_obj.models
-
-        # chat_default_model_id must come from the configured (and, per the
-        # avalidate call above, accessible) daily-chat model list.
-        if config_obj.chat_default_model_id is not None:
-            chat_default_id = _coerce_model_id(config_obj.chat_default_model_id)
-            selectable_ids = {
-                model_id
-                for model_id in (_coerce_model_id(one.id) for one in (config_obj.models or []))
-                if model_id is not None
-            }
-            if chat_default_id is None or chat_default_id not in selectable_ids:
-                raise WorkbenchChatDefaultModelError()
-
-        if config_obj.embedding_model:
-            # Determine consistency
-            if (
-                config_obj.embedding_model.id and config_old_obj.embedding_model is None
-            ) or config_obj.embedding_model.id != (
-                config_old_obj.embedding_model.id if config_old_obj.embedding_model else None
-            ):
-                embeddings = await cls.get_bisheng_embedding(
-                    model_id=config_obj.embedding_model.id,
-                    app_id=ApplicationTypeEnum.LINSIGHT.value,
-                    app_name=ApplicationTypeEnum.LINSIGHT.value,
-                    app_type=ApplicationTypeEnum.LINSIGHT,
-                    user_id=invoke_user_id,
-                )
-                try:
-                    await embeddings.aembed_query("test")
-                except Exception as e:
-                    logger.exception("workbench embedding model probe failed")
-                    raise to_llm_invoke_error(embeddings, e) from e
-
-                # Update Personal Knowledge Base
-                # 1.Upgrading alltypeare2(Private Repository)right of privacyknowledgeStatus and Model
-                private_knowledges = await KnowledgeDao.aget_all_knowledge(knowledge_type=KnowledgeTypeEnum.SPACE)
-
-                updated_count = 0
-                for knowledge in private_knowledges:
-                    # Update status is rebuilding, model is newmodel_id
-                    knowledge.state = KnowledgeState.REBUILDING.value
-                    knowledge.model = config_obj.embedding_model.id
-                    await KnowledgeDao.aupdate_one(knowledge)
-                    updated_count += 1
-
-                    # 3. For eachknowledgeStart asynchronous task
-                    rebuild_knowledge_celery.delay(knowledge.id, int(knowledge.model), invoke_user_id)
-                    logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={knowledge.model}")
-
-                logger.info(
-                    f"Updated {updated_count} private knowledge bases to use new embedding model {config_obj.embedding_model.id}"
-                )
-
-        await TenantSystemModelConfigDao.aupsert(
-            tenant_id=target,
-            key=ConfigKeyEnum.LINSIGHT_LLM.value,
-            value=json.dumps(config_obj.model_dump(), ensure_ascii=False),
-        )
-
-        return config_obj
 
     @classmethod
     async def get_workbench_llm(cls, tenant_id: int | None = None) -> WorkbenchModelConfig:

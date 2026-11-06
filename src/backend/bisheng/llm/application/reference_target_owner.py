@@ -6,9 +6,11 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.common.errcode.permission import PermissionServiceUnavailableError
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.llm.domain.repositories.reference_target_repository import ModelReferenceTargetRepository
 from bisheng.permission.application import PermissionSubject, get_permission_relation_api
+from bisheng.permission.application.relation_api import get_permission_relation_api_sync
 from bisheng.resource_reference.application.contracts import LegacyEvidence, TargetLockReceipt, TransactionIdentity
 from bisheng.resource_reference.application.target_state import resolve_target_state
 
@@ -32,23 +34,37 @@ class DefaultModelReferenceSharing:
     def __init__(self, repository: ModelReferenceTargetRepository):
         self.repository = repository
 
+    @staticmethod
+    def _shared_ids(shared):
+        if not isinstance(shared, (tuple, list)) or any(
+            not isinstance(value, str) or not value.isascii() or not value.isdecimal() or int(value) <= 0
+            for value in shared
+        ):
+            raise ResourceReferenceInvalidError(reason="model_reference_share_result_invalid")
+        return frozenset(int(value) for value in shared)
+
     def get_shared_server_ids(self, session, tenant_id, server_ids):
-        # No event-loop nesting or blocking permission transport in sync callers.
-        # Maintenance may inject a native, trusted frozen-snapshot implementation.
-        raise ReferenceCoverageNotReadyError(reason="model_reference_sync_share_unavailable")
+        try:
+            permissions = get_permission_relation_api_sync()
+        except PermissionServiceUnavailableError as error:
+            if error.kwargs.get("reason") != "permission_runtime_not_ready":
+                raise
+            # No READY native application means no complete sharing evidence.
+            # Backend query errors below propagate without an own-only fallback.
+            raise ReferenceCoverageNotReadyError(reason="model_reference_sync_share_unavailable") from error
+        shared = permissions.list_resource_ids_sync(
+            subject=PermissionSubject("tenant", str(tenant_id)), relation="shared_with", resource_type="llm_server"
+        )
+        inherited = self.repository.get_inherited_default_server_ids(session, tenant_id)
+        return frozenset(server_ids) & (self._shared_ids(shared) | inherited)
 
     async def aget_shared_server_ids(self, session, tenant_id, server_ids):
         permissions = await get_permission_relation_api()
         shared = await permissions.list_resource_ids(
             subject=PermissionSubject("tenant", str(tenant_id)), relation="shared_with", resource_type="llm_server"
         )
-        shared_ids = {
-            int(value)
-            for value in shared
-            if isinstance(value, str) and value.isascii() and value.isdecimal() and int(value) > 0
-        }
         inherited = await self.repository.aget_inherited_default_server_ids(session, tenant_id)
-        return frozenset(server_ids) & (shared_ids | inherited)
+        return frozenset(server_ids) & (self._shared_ids(shared) | inherited)
 
 
 class ModelReferenceTargetOwner:
@@ -70,6 +86,10 @@ class ModelReferenceTargetOwner:
     async def aprelock_targets(self, session, target_keys, source_keys) -> None:
         TransactionIdentity.capture(session)
         await self.repository.aprelock_targets(session, target_keys, source_keys)
+
+    async def aprelock_mixed_targets(self, session, target_keys, source_keys) -> None:
+        TransactionIdentity.capture(session)
+        await self.repository.aprelock_mixed_targets(session, target_keys, source_keys)
 
     @staticmethod
     def _shared_servers(observations):
