@@ -436,3 +436,29 @@ async def test_real_tag_link_retag_and_duplicate_drop_survivors_remain_valid_acr
             session, batch=await issue(checker, session, commands, expected_checkpoint=current, mode="verify", eof=True)
         )
         assert verified.verification_complete and verified.progress == current
+
+
+async def test_recovery_detects_allocated_primary_key_drift_even_when_templates_still_match(service, database, module):
+    async with AsyncSession(database.engine) as session, session.begin():
+        await service.aapply_batch(session, batch=await issue(service, session, database.commands, eof=True))
+    async with database.engine.begin() as connection:
+        await connection.execute(
+            sa.update(native.raw.KnowledgeDocument.__table__).where(native.raw.KnowledgeDocument.id == 1).values(id=999)
+        )
+        await connection.execute(
+            sa.update(native.raw.KnowledgeDocumentVersion.__table__)
+            .where(native.raw.KnowledgeDocumentVersion.document_id == 1)
+            .values(document_id=999)
+        )
+    before = await native.snapshot(database)
+    checker = module.UnificationConversionService()
+    async with AsyncSession(database.engine) as session, session.begin():
+        goal = await progress(checker, session)
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await checker.averify_committed_page(
+                session,
+                batch=await issue(
+                    checker, session, database.commands, expected_checkpoint=goal, mode="verify", eof=True
+                ),
+            )
+    assert await native.snapshot(database) == before
