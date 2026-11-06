@@ -87,6 +87,10 @@ class ModelReferenceTargetOwner:
         TransactionIdentity.capture(session)
         await self.repository.aprelock_targets(session, target_keys, source_keys)
 
+    async def aprelock_mixed_targets(self, session, target_keys, source_keys) -> None:
+        TransactionIdentity.capture(session)
+        await self.repository.aprelock_mixed_targets(session, target_keys, source_keys)
+
     @staticmethod
     def _shared_servers(observations):
         tenant_id = _resolve_tenant_id()

@@ -117,18 +117,30 @@ class ModelReferenceTargetRepository:
             raise ResourceReferenceInvalidError(reason="reference_batch_root_mismatch")
         return tuple(sorted(source_keys, key=lambda key: key.source_version))
 
+    @staticmethod
+    def _mixed_sources(source_keys):
+        if not isinstance(source_keys, tuple) or not source_keys:
+            raise ResourceReferenceInvalidError(reason="reference_mixed_sources_required")
+        for key in source_keys:
+            _tenant(key, "bind")
+            if (
+                key.source_type not in (SourceType.KNOWLEDGE, SourceType.MODEL_DEFAULT)
+                or key.source_version != "current"
+            ):
+                raise ResourceReferenceInvalidError(reason="reference_mixed_source_scope_invalid")
+        if len(set(source_keys)) != len(source_keys):
+            raise ResourceReferenceInvalidError(reason="reference_mixed_source_duplicate")
+        return tuple(sorted(source_keys, key=lambda key: (key.source_type.value, key.source_id, key.source_version)))
+
     def _prelock_proof(self, session, source_key, operation):
         proof = session.info.get(self._prelock_key)
         if operation != "bind" or proof is None or proof[0] is not TransactionIdentity.capture(session).transaction:
             return None
-        if (source_key.tenant_id, source_key.source_type, source_key.source_id) != (
-            proof[1][0].tenant_id,
-            proof[1][0].source_type,
-            proof[1][0].source_id,
-        ):
-            return None
         if source_key not in proof[1]:
-            raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
+            roots = {(key.tenant_id, key.source_type, key.source_id) for key in proof[1]}
+            if len(roots) > 1 or (source_key.tenant_id, source_key.source_type, source_key.source_id) in roots:
+                raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
+            return None
         return proof
 
     @staticmethod
@@ -275,7 +287,16 @@ class ModelReferenceTargetRepository:
         if needs_sharing:
             candidate_topology = {row.id: row for row in (yield self._topology_statement(tenant_id, lock=False), True)}
             candidate_configs = yield self._config_statement(tenant_id, lock=False), True
-        inherited_ids = self._binding_inherited_ids(candidate_topology, candidate_configs, tenant_id, source_key)
+        inherited_ids = (
+            frozenset().union(
+                *(
+                    self._binding_inherited_ids(candidate_topology, candidate_configs, tenant_id, source)
+                    for source in sources
+                )
+            )
+            if prelock_sources is not None
+            else self._binding_inherited_ids(candidate_topology, candidate_configs, tenant_id, source_key)
+        )
         all_ids = ids | inherited_ids
         all_candidates = yield self._business_statement(LLMModel, all_ids, owners, lock=False), True
         mapping = {row.id: row.server_id for row in all_candidates}
@@ -294,7 +315,14 @@ class ModelReferenceTargetRepository:
         if needs_sharing:
             topology = {row.id: row for row in (yield self._topology_statement(tenant_id, lock=True), True)}
             configs = yield self._config_statement(tenant_id, lock=True), True
-            if self._binding_inherited_ids(topology, configs, tenant_id, source_key) != inherited_ids:
+            current_inherited = (
+                frozenset().union(
+                    *(self._binding_inherited_ids(topology, configs, tenant_id, source) for source in sources)
+                )
+                if prelock_sources is not None
+                else self._binding_inherited_ids(topology, configs, tenant_id, source_key)
+            )
+            if current_inherited != inherited_ids:
                 raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
             inherited_servers = frozenset(
                 row.server_id
@@ -419,6 +447,12 @@ class ModelReferenceTargetRepository:
 
     async def aprelock_targets(self, session, target_keys, source_keys):
         sources = self._sources(source_keys)
+        await self._adrive(
+            session, self._lock_plan(target_keys, sources[0], "bind", session=session, prelock_sources=sources)
+        )
+
+    async def aprelock_mixed_targets(self, session, target_keys, source_keys):
+        sources = self._mixed_sources(source_keys)
         await self._adrive(
             session, self._lock_plan(target_keys, sources[0], "bind", session=session, prelock_sources=sources)
         )
