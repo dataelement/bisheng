@@ -5,7 +5,7 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 
-from sqlalchemy import update
+from sqlalchemy import inspect, update
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -154,6 +154,8 @@ class MetadataProcessingRepository:
             raw = {column.name: mapping[column] for column in physical.c}
             doc = {column.name: mapping[column] for column in document.c}
             ver = {column.name: mapping[column] for column in version.c}
+            if raw["tenant_id"] != tenant:
+                raise KnowledgeOperationPlanConflictError(reason="metadata_version_scope_incomplete")
             if raw["file_type"] == FileType.DIR.value:
                 if ver["id"] is not None:
                     raise KnowledgeOperationPlanConflictError(reason="metadata_version_scope_incomplete")
@@ -225,9 +227,127 @@ class MetadataProcessingRepository:
             tuple(items),
         )
 
+    async def _assert_no_pending_scope_changes(self, session, scope):
+        native = session.sync_session
+        candidates = {
+            id(row): (row, inspect(row)) for rows in (native.new, native.dirty, native.deleted) for row in rows
+        }
+        if not candidates:
+            return
+        new, deleted = {id(row) for row in native.new}, {id(row) for row in native.deleted}
+        file_ids = {item.target.file_id for item in scope.items}
+        document_ids = {item.target.document_id for item in scope.items}
+        version_ids = {item.target.version_id for item in scope.items}
+
+        def values(state, name):
+            history = state.attrs[name].history
+            return (state.dict.get(name), *history.added, *history.deleted)
+
+        def identities(state):
+            return (*values(state, "id"), *(state.identity or ()))
+
+        def changed(state, fields):
+            return any(state.attrs[name].history.has_changes() for name in fields)
+
+        unknown_files, file_types = set(), {}
+        for row, state in candidates.values():
+            if isinstance(row, KnowledgeFile):
+                keys = {value for value in identities(state) if type(value) is int and value > 0}
+                if scope.space_id in values(state, "knowledge_id"):
+                    file_ids.update(keys)
+                    file_types.update({key: state.dict.get("file_type") for key in keys})
+                unknown_files.update(keys - file_ids)
+            elif isinstance(row, KnowledgeDocumentVersion):
+                unknown_files.update(
+                    value
+                    for value in values(state, "knowledge_file_id")
+                    if type(value) is int and value > 0 and value not in file_ids
+                )
+        # Directories are deliberately absent from item payloads. Resolve only
+        # pending FK candidates through this owned root so a new orphan version
+        # cannot hide behind an otherwise legal, unattached directory.
+        physical = KnowledgeFile.__table__
+        unknown_files = sorted(unknown_files)
+        with session.no_autoflush, strict_tenant_filter():
+            for offset in range(0, len(unknown_files), 500):
+                query = (
+                    select(Knowledge.id, physical.c.id, physical.c.file_type)
+                    .select_from(Knowledge)
+                    .join(physical, physical.c.knowledge_id == Knowledge.id)
+                    .where(Knowledge.id == scope.space_id, physical.c.id.in_(unknown_files[offset : offset + 500]))
+                )
+                for _, key, kind in (await session.execute(query)).all():
+                    file_ids.add(key)
+                    file_types[key] = kind
+        root_fields = (
+            "id",
+            "tenant_id",
+            "type",
+            "metadata_fields",
+            "metadata_schema_revision",
+            "model",
+            "model_config_revision",
+            "index_generation",
+            "state",
+            "model_transition",
+            "index_name",
+            "collection_name",
+        )
+        file_fields = (
+            "id",
+            "tenant_id",
+            "knowledge_id",
+            "file_type",
+            "file_source",
+            "object_name",
+            "md5",
+            "file_size",
+            "file_name",
+            "file_level_path",
+            "status",
+            "user_metadata",
+        )
+        for key, (row, state) in candidates.items():
+            reject = False
+            if isinstance(row, Knowledge) and scope.space_id in identities(state):
+                reject = key in new or key in deleted or changed(state, root_fields)
+            elif isinstance(row, KnowledgeFile) and (
+                file_ids.intersection(identities(state)) or scope.space_id in values(state, "knowledge_id")
+            ):
+                kind = state.dict.get(
+                    "file_type", next((file_types[value] for value in identities(state) if value in file_types), None)
+                )
+                if kind == FileType.DIR.value:
+                    reject = (key in new and state.dict.get("tenant_id") not in (None, scope.tenant_id)) or (
+                        key not in new and changed(state, ("id", "tenant_id", "knowledge_id", "file_type"))
+                    )
+                else:
+                    reject = key in new or key in deleted or changed(state, file_fields)
+            elif isinstance(row, KnowledgeDocument) and (
+                document_ids.intersection(identities(state)) or scope.space_id in values(state, "knowledge_id")
+            ):
+                reject = (
+                    key in new
+                    or key in deleted
+                    or changed(state, ("id", "knowledge_id", "primary_version_id", "file_level_path", "level"))
+                )
+            elif isinstance(row, KnowledgeDocumentVersion) and (
+                version_ids.intersection(identities(state))
+                or document_ids.intersection(values(state, "document_id"))
+                or file_ids.intersection(values(state, "knowledge_file_id"))
+            ):
+                reject = (
+                    key in new
+                    or key in deleted
+                    or changed(state, ("id", "document_id", "knowledge_file_id", "version_no", "is_primary"))
+                )
+            if reject:
+                raise KnowledgeOperationPlanConflictError(reason="metadata_pending_scope_change")
+
     async def areplace_schema(self, session, scope: MetadataScope, *, after_schema: tuple[dict, ...]) -> MetadataScope:
         self._context(session, scope.space_id)
         current = await self.aload_scope(session, scope.space_id, for_update=True)
+        await self._assert_no_pending_scope_changes(session, current)
         if current != scope:
             raise KnowledgeOperationPlanConflictError(reason="metadata_scope_changed")
         fields = deepcopy(list(after_schema))
