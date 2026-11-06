@@ -119,6 +119,26 @@ async def test_unknown_type_or_globally_absent_creator_blocks(module, native, ch
             await collect(module, session)
 
 
+async def test_converted_type0_without_original_creator_proof_cannot_produce_frozen_commands(module, native):
+    await native.insert(original.Knowledge, [original.resource(9000, user_id=None)])
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await collect(module, session)
+        assert not session.new and not session.dirty
+    async with native.engine.connect() as connection:
+        row = (await connection.execute(sa.select(original.Knowledge.type, original.Knowledge.user_id))).one()
+    assert tuple(row) == (0, None)
+
+
+@pytest.mark.parametrize("kind", [1, 2, 3])
+async def test_null_creator_on_nonconverted_resource_does_not_invent_new_conversion_gate(module, native, kind):
+    await native.insert(original.Knowledge, [original.resource(9000, type=kind, user_id=None)])
+    async with AsyncSession(native.engine) as session, session.begin():
+        records = await collect(module, session)
+    assert [item.data["type"] for _, item in records if item.record_type == "resource"] == [kind]
+    assert not any(item.record_type == "resource_conversion" for _, item in records)
+
+
 async def test_legacy_overdeep_chain_and_null_empty_paths_are_preserved_not_new_write_capped(module, native):
     await native.insert(original.Knowledge, [original.resource(9000)])
     folders = [
