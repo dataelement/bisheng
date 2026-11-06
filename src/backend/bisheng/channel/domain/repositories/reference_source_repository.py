@@ -1,6 +1,8 @@
 """Exact current channel snapshots without managed ORM or child-tenant guesses."""
 
 from copy import deepcopy
+from dataclasses import dataclass
+from datetime import datetime
 
 from sqlmodel import select
 
@@ -8,6 +10,7 @@ from bisheng.channel.domain.models.channel import Channel
 from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSync
 from bisheng.channel.domain.repositories.reference_binding_repository import ChannelReferenceBindingRepository
 from bisheng.common.errcode.channel import ChannelNotFoundError
+from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
@@ -21,7 +24,47 @@ from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFi
 from bisheng.resource_reference.application.contracts import canonical_target_id
 
 
+@dataclass(frozen=True, slots=True)
+class ChannelDisclosureFact:
+    id: str
+    tenant_id: int
+    name: str
+    creator_user_id: int
+    is_shared: bool
+    update_time: datetime | None
+
+
 class ChannelReferenceSourceRepository:
+    async def aload_disclosure(self, session, source_keys) -> tuple[ChannelDisclosureFact, ...]:
+        if not source_keys:
+            return ()
+        tenant = ChannelReferenceBindingRepository._tenant_id()
+        if len(source_keys) > 200 or not session.in_transaction():
+            raise ReferenceCoverageNotReadyError(reason="channel_disclosure_batch_or_transaction_invalid")
+        ids = tuple(dict.fromkeys(key.source_id for key in source_keys))
+        query = select(
+            Channel.id, Channel.tenant_id, Channel.name, Channel.user_id, Channel.is_shared, Channel.update_time
+        ).where(Channel.id.in_(ids))
+        with session.no_autoflush, strict_tenant_filter():
+            rows = {row.id: row for row in (await session.execute(query)).all()}
+        result = []
+        for key in source_keys:
+            row = rows.get(key.source_id)
+            if (
+                row is None
+                or row.tenant_id != tenant
+                or row.tenant_id != key.tenant_id
+                or type(row.name) is not str
+                or type(row.user_id) is not int
+                or row.user_id <= 0
+                or type(row.is_shared) is not bool
+            ):
+                raise ReferenceCoverageNotReadyError(reason="channel_disclosure_metadata_incomplete")
+            result.append(
+                ChannelDisclosureFact(row.id, row.tenant_id, row.name, row.user_id, row.is_shared, row.update_time)
+            )
+        return tuple(result)
+
     async def aload(self, session, channel_id: str, *, for_update: bool = False):
         tenant_id = ChannelReferenceBindingRepository._tenant_id()
         query = select(*Channel.__table__.columns).where(Channel.id == channel_id)
