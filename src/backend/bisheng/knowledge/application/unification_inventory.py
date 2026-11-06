@@ -29,6 +29,7 @@ from bisheng.knowledge.application.unification_sources import (
     SourceInventoryRecord,
     UnificationSourceInventory,
 )
+from bisheng.knowledge.domain.models.knowledge_unification_run import unification_now
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
 from bisheng.knowledge.domain.repositories.unification_run_repository import (
     FrozenGlobalInventoryResult,
@@ -64,7 +65,15 @@ _SECTIONS = {
     "physical": {"physical_index", "physical_object"},
     "tasks": {"queued_task", "queued_task_orphan"},
     "fga": {"fga_tuple"},
-    "conversion": {"conversion_plan", "permission_plan", "source_decision"},
+    "conversion": {
+        "resource_conversion",
+        "initialize_v1",
+        "tag_conversion",
+        "tag_link_conversion",
+        "default_conversion",
+        "permission_plan",
+        "source_decision",
+    },
 }
 _OBJECT_FIELDS = (
     ("object_name", "original"),
@@ -175,7 +184,7 @@ class UnificationInventoryApplication:
         self.runs = KnowledgeUnificationRunRepository()
         self.raw = UnificationInventoryRepository()
         self.permissions = PermissionMigrationSnapshotRepository()
-        self.preflight = UnificationPreflight(permissions=self.permissions)
+        self.preflight = UnificationPreflight(permissions=self.permissions, inventory=self.raw)
 
     async def _materials(
         self, *, run_id, writer_contract_version, environment, tenant_ids, backup_ref, schema_ref, current
@@ -327,11 +336,13 @@ class UnificationInventoryApplication:
         if expected_indices or expected_objects:
             _blocked("incomplete_physical_inventory")
 
-    async def _tenant(self, session, pages, source_inventory, catalog_plan, tenant, identity):
+    async def _tenant(self, session, pages, source_inventory, catalog_plan, tenant, identity, planned_at):
         context = await source_inventory.aprepare_tenant_context(session, **identity)
         resource_requests, object_requests = [], []
         spaces = {}
-        async for section, record in self.preflight.aiter_tenant(session, catalog_plan=catalog_plan):
+        async for section, record in self.preflight.aiter_tenant(
+            session, catalog_plan=catalog_plan, planned_at=planned_at
+        ):
             await pages.add(section, tenant, record, kind="plan" if section == "conversion" else "baseline")
             if record.record_type == "resource":
                 value = record.data
@@ -465,9 +476,10 @@ class UnificationInventoryApplication:
                         record_from_values("fga_tuple", user=fact.user, relation=fact.relation, object=fact.object),
                     )
                 source_inventory = UnificationSourceInventory(repository=self.raw, sharing_reader=reader)
+                planned_at = unification_now()
                 for tenant in tenant_ids:
                     with tenant_execution_scope(tenant):
-                        await self._tenant(session, pages, source_inventory, catalog_plan, tenant, identity)
+                        await self._tenant(session, pages, source_inventory, catalog_plan, tenant, identity, planned_at)
                         await pages.finish()
             async for record in self.queued.aiter_facts(tenant_ids=tenant_ids):
                 _section("tasks", record)
