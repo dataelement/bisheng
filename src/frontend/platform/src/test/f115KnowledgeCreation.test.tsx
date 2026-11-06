@@ -40,6 +40,10 @@ vi.mock("@/controllers/API", () => ({
   copyQaDatabase: vi.fn(),
   deleteFileLib: vi.fn(),
 }));
+vi.mock("@/controllers/API/knowledgeSpace", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/controllers/API/knowledgeSpace")>();
+  return { ...actual, knowledgeSpaceApi: { ...actual.knowledgeSpaceApi, listVisibleSpaces: vi.fn().mockResolvedValue({ data: [], page_size: 20, has_more: false, next_cursor: null }) } };
+});
 vi.mock("@/util/hook", () => ({
   useInfiniteCursorTable: () => ({
     data: [],
@@ -158,6 +162,7 @@ beforeEach(() => {
 it.each([KnowledgeFile, KnowledgeQa])(
   "exposes creation to a tenant admin without a create menu",
   (Page) => {
+    const page = Page === KnowledgeFile ? <KnowledgeFile {...{ scope, toolbarTarget: undefined }} /> : <KnowledgeQa />;
     const view = render(
       <userContext.Provider
         value={
@@ -166,7 +171,7 @@ it.each([KnowledgeFile, KnowledgeQa])(
           } as never
         }
       >
-        <Page />
+        {page}
       </userContext.Provider>,
       { wrapper: Wrapper },
     );
@@ -179,7 +184,7 @@ it.each([KnowledgeFile, KnowledgeQa])(
           } as never
         }
       >
-        <Page />
+        {page}
       </userContext.Provider>,
     );
     expect(screen.queryByRole("button", { name: "create" })).toBeNull();
