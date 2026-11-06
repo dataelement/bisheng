@@ -1,0 +1,13 @@
+{
+  "inventory_sha256": "13458d7c8062461e95eaa5ac631b0707bdbd8556d6310559bc9162c915f9f794",
+  "applied": false,
+  "results": [
+    {
+      "app_id": "7dcca9caca5b4a2b8d50405717ddcc5c",
+      "version_id": "ea1cf255b9344560837b5d7b2722b43e",
+      "can_import": true,
+      "running": true,
+      "requires_rebind": true
+    }
+  ]
+}

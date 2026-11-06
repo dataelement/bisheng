@@ -95,7 +95,7 @@ interface AiMessageBubbleProps {
         homepage/task chat opts in; the lightweight knowledge/file/article docks
         and the share view leave it off. */
     allowExport?: boolean;
-    /** F072: copying an answer also drops unresolved [Sn] citation handles.
+    /** F075: copying an answer also drops unresolved [Sn] citation handles.
         Only the daily chat (and its share view) opts in; knowledge / channel
         docks never produce handles and keep their copy text as is. */
     stripCitationHandlesOnCopy?: boolean;

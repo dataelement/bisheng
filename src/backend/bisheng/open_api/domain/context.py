@@ -14,16 +14,29 @@ class OpenApiPrincipal(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     credential_id: int
-    actor_kind: Literal["service_account", "natural_person"]
+    actor_kind: Literal["service_account", "natural_person", "hosted_app"]
     actor_id: int
     actor_name: str
     tenant_id: int
+    # The subject's non-integer identity, when its kind has one. ``hosted_app``
+    # is the only such kind today: ``actor_id`` is the ``hosted_app_subject``
+    # surrogate (``subject_id`` is an integer column) while the application is
+    # addressed everywhere else by its uuid ``app.id``, which is what this
+    # carries. Defaulted so a principal cached by an older release still
+    # validates.
+    subject_ref: str | None = None
     resource_owner_user_id: int | None
     scopes: frozenset[str]
     mode: Literal["S", "D"] = "S"
     authorization_subject_type: Literal["service_account", "user"]
     authorization_subject_id: int
     effective_user_id: int | None
+    preview_session_id: str | None = None
+    preview_version_id: str | None = None
+    preview_purpose: str | None = None
+    preview_viewer_user_id: int | None = None
+    preview_capability_user_id: int | None = None
+    preview_obo_expires_at: int | None = None
     on_behalf_of_user_id: int | None = None
     end_user_id: str | None = None
 
@@ -36,12 +49,18 @@ class OpenApiExecutionSnapshot(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     tenant_id: int
-    actor_kind: Literal["service_account", "natural_person"]
+    actor_kind: Literal["service_account", "natural_person", "hosted_app"]
     actor_id: int
     authorization_subject_type: Literal["service_account", "user"]
     authorization_subject_id: int
     resource_owner_user_id: int | None
     effective_user_id: int | None
+    preview_session_id: str | None = None
+    preview_version_id: str | None = None
+    preview_purpose: str | None = None
+    preview_viewer_user_id: int | None = None
+    preview_capability_user_id: int | None = None
+    preview_obo_expires_at: int | None = None
     mode: Literal["S", "D"]
     credential_id: int | None
     trace_id: str
@@ -69,6 +88,12 @@ class OpenApiExecutionSnapshot(BaseModel):
             credential_id=principal.credential_id,
             trace_id=trace_id,
             channel="open_api_v2",
+            preview_session_id=principal.preview_session_id,
+            preview_version_id=principal.preview_version_id,
+            preview_purpose=principal.preview_purpose,
+            preview_viewer_user_id=principal.preview_viewer_user_id,
+            preview_capability_user_id=principal.preview_capability_user_id,
+            preview_obo_expires_at=principal.preview_obo_expires_at,
         )
 
 

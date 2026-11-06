@@ -23,7 +23,12 @@ vi.mock('axios', () => ({
         }),
     },
 }))
-vi.mock('@/components/bs-ui/toast/use-toast', () => ({ toast: captured.toast }))
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({ toast: captured.toast }))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 vi.mock('i18next', () => ({ default: { t: (key: string) => key } }))
 import './request'
 import { consumeLoginReturnTo, rememberDesktopLoginReturnTo } from '@/utils/loginReturnTo'
@@ -33,17 +38,17 @@ beforeEach(() => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 afterEach(() => vi.unstubAllGlobals())
-describe('opt-in preservation after shared request handling', () => {
-    it('preserves business rejection evidence without changing legacy callers', async () => {
+describe('structured errors after shared request handling', () => {
+    it('preserves business rejection evidence for every caller', async () => {
         const response = { status: 200, config: {}, data: { status_code: 26130, status_message: 'conflict' } }
-        await expect(captured.success!(response)).rejects.toBe('conflict')
+        await expect(captured.success!(response)).rejects.toMatchObject({ status_code: 26130, httpStatus: 200, message: 'conflict' })
         const rejected = await captured.success!({ ...response, config: { preserveError: true } }).catch(error => error)
-        expect(rejected).toHaveProperty('response', { status: 200, data: response.data })
+        expect(rejected).toMatchObject({ response })
         expect(isDshRequestRejected(rejected)).toBe(true)
         expect(isDshRequestRejected({ response: { status: 200, data: { status_code: 26125 } } })).toBe(false)
         expect(isDshRequestRejected({ response: { status: 503 } })).toBe(false)
     })
-    it('keeps the default null rejection and shared toast', async () => {
+    it('retains full default rejection and shared toast', async () => {
         const failure = {
             config: {},
             response: {
@@ -51,10 +56,10 @@ describe('opt-in preservation after shared request handling', () => {
                 data: { status_code: 29003, status_message: 'conflict' },
             },
         }
-        await expect(captured.failed!(failure)).rejects.toBeNull()
+        await expect(captured.failed!(failure)).rejects.toMatchObject({ status_code: 29003, httpStatus: 409 })
         expect(captured.toast).toHaveBeenCalledTimes(1)
     })
-    it('preserves only opted-in transport evidence with the same toast', async () => {
+    it('preserves transport evidence with the deprecated option too', async () => {
         const failure = {
             config: { preserveError: true },
             response: {
@@ -62,12 +67,12 @@ describe('opt-in preservation after shared request handling', () => {
                 data: { status_code: 29003, status_message: 'conflict' },
             },
         }
-        await expect(captured.failed!(failure)).rejects.toBe(failure)
+        await expect(captured.failed!(failure)).rejects.toMatchObject({ cause: failure })
         expect(captured.toast).toHaveBeenCalledTimes(1)
     })
     it('retains cancellation behavior', async () => {
         const failure = { config: {}, code: 'ERR_CANCELED' }
-        await expect(captured.failed!(failure)).rejects.toBe(failure)
+        await expect(captured.failed!(failure)).rejects.toMatchObject({ cause: failure })
         expect(captured.toast).not.toHaveBeenCalled()
     })
 })

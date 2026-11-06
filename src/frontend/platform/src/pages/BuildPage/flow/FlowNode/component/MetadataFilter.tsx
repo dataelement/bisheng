@@ -1,21 +1,16 @@
 // @ts-strict-ignore
-import { Badge } from "@/components/bs-ui/badge";
-import { Button } from "@/components/bs-ui/button";
-import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
-import { Input } from "@/components/bs-ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Switch } from "@/components/bs-ui/switch";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { Button, Select, type SelectOption } from '@bisheng/ui';
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { getKnowledgeDetailApi } from "@/controllers/API";
-import { format } from "date-fns";
-import { ChevronDown, CircleQuestionMark, Clock3, Hash, RefreshCcw, Search, Trash2, Type } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Tooltip as SharedTooltip,Switch } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { Hash,Type } from "lucide-react";
+import { useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import NumberInput from "./NumberInput";
-import SelectVar from "./SelectVar";
-
-interface MetadataCondition {
+import { MetadataValueInput } from "./MetadataValueInput";
+export interface MetadataCondition {
   id: string;
   metadataField: string;
   operator: string;
@@ -23,7 +18,6 @@ interface MetadataCondition {
   value: string;
   valueLabel: string;
 }
-
 interface MetadataField {
   id: string;
   name: string;
@@ -33,25 +27,20 @@ interface MetadataField {
   icon: React.ReactNode;
   isDefault: boolean;
 }
-
 type KnowledgeSelectionType = "knowledge" | "space" | "tmp";
-
 interface KnowledgeSelectionItem {
   id: string;
   label: string;
 }
-
 interface KnowledgeSelection {
   type: KnowledgeSelectionType;
   items: KnowledgeSelectionItem[];
 }
-
 interface DefaultMetadataFieldDefinition {
   name: string;
   type: "String" | "Number" | "Time";
   icon: "text" | "number" | "time";
 }
-
 const DEFAULT_METADATA_FIELDS: DefaultMetadataFieldDefinition[] = [
   { name: "document_id", type: "Number", icon: "number" },
   { name: "document_name", type: "String", icon: "text" },
@@ -60,7 +49,6 @@ const DEFAULT_METADATA_FIELDS: DefaultMetadataFieldDefinition[] = [
   { name: "uploader", type: "String", icon: "text" },
   { name: "updater", type: "String", icon: "text" },
 ];
-
 interface MetadataFilterProps {
   data: any;
   onChange: (value: any) => void;
@@ -71,7 +59,6 @@ interface MetadataFilterProps {
   onVarEvent?: (validateFunc: () => Promise<string>) => void;
   i18nPrefix: string
 }
-
 const MetadataFilter = ({
   data,
   onChange,
@@ -82,11 +69,9 @@ const MetadataFilter = ({
   onVarEvent,
   i18nPrefix
 }: MetadataFilterProps) => {
-
   const isInitialMount = useRef(true);
   const isUpdatingFromExternal = useRef(false);
   const { t } = useTranslation('flow')
-
   const [isEnabled, setIsEnabled] = useState(data.value?.enabled ?? false);
   const [conditions, setConditions] = useState<MetadataCondition[]>(() => {
     if (data.value?.conditions && Array.isArray(data.value.conditions)) {
@@ -106,22 +91,17 @@ const MetadataFilter = ({
   const [relation, setRelation] = useState<"and" | "or">(() => {
     return data.value?.operator === "or" ? "or" : "and";
   });
-  const [searchTerm, setSearchTerm] = useState("");
   const [required, setRequired] = useState(false);
   const [availableMetadataState, setAvailableMetadataState] = useState<MetadataField[]>([]);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
-  const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
   const [error, setError] = useState(false)
-
-
   // 用 ref 存储最新状态，绕开闭包问题
   const stateRef = useRef({
     conditions: conditions,
     availableMetadataState: availableMetadataState,
     isLoadingMetadata: isLoadingMetadata
   });
-
   // 状态变化时同步更新 ref
   useEffect(() => {
     stateRef.current = {
@@ -130,7 +110,6 @@ const MetadataFilter = ({
       isLoadingMetadata
     };
   }, [conditions, availableMetadataState, isLoadingMetadata]);
-
   const knowledgeParam = node?.group_params
     ?.flatMap(group => group.params || [])
     .find(param => param.type === "knowledge_select_multi");
@@ -144,7 +123,6 @@ const MetadataFilter = ({
     ? knowledgeValue.value.map(item => ({ id: String(item.key), label: item.label || "" }))
     : selectedKnowledgeIds().map(id => ({ id: String(id), label: "" }));
   const knowledgeSelectionKey = JSON.stringify({ type: knowledgeType, items: knowledgeItems });
-
   const operatorConfig = {
     String: ["equals", "not_equals", "contains", "not_contains", "is_empty", "is_not_empty", "starts_with", "ends_with"],
     Number: ["equals", "not_equals", "greater_than", "less_than", "greater_than_or_equal", "less_than_or_equal"],
@@ -165,7 +143,6 @@ const MetadataFilter = ({
     greater_than_or_equal: "≥",
     less_than_or_equal: "≤",
   };
-
   const fetchAndPrepareMetadata = useCallback(async (selection: KnowledgeSelection) => {
     let availableMetadata: MetadataField[] = [];
     try {
@@ -179,7 +156,6 @@ const MetadataFilter = ({
       } else if (selection.type === "knowledge" && selection.items.length > 0) {
         knowledgeDetails = await getKnowledgeDetailApi(selection.items.map(item => item.id));
       }
-
       if (knowledgeDetails.length > 0) {
         knowledgeDetails.forEach((detail: any) => {
           const kbLabel = detail.name || detail.label || t('unknownKnowledgeBase');
@@ -192,7 +168,7 @@ const MetadataFilter = ({
             icon: field.icon === "number"
               ? <Hash size={14} />
               : field.icon === "time"
-                ? <Clock3 size={14} />
+                ? <Outlined.Time size={14} />
                 : <Type size={14} />,
             isDefault: true
           }));
@@ -205,7 +181,7 @@ const MetadataFilter = ({
                 icon = <Hash size={14} />;
                 type = "Number";
               } else if (field.field_type === "time") {
-                icon = <Clock3 size={14} />;
+                icon = <Outlined.Time size={14} />;
                 type = "Time";
               }
               return {
@@ -225,7 +201,6 @@ const MetadataFilter = ({
     } catch (error) {
       console.error("Error loading metadata:", error);
     }
-
     availableMetadata.sort((a, b) => {
       if (a.isDefault && !b.isDefault) return 1;
       if (!a.isDefault && b.isDefault) return -1;
@@ -234,15 +209,12 @@ const MetadataFilter = ({
     });
     return availableMetadata;
   }, [t]);
-
   useEffect(() => {
     let ignoreResult = false;
-
     if (!isEnabled) {
       setIsLoadingMetadata(false);
       return;
     }
-
     setIsLoadingMetadata(true);
     const selection = JSON.parse(knowledgeSelectionKey) as KnowledgeSelection;
     fetchAndPrepareMetadata(selection).then((availableMetadata) => {
@@ -250,12 +222,10 @@ const MetadataFilter = ({
       setAvailableMetadataState(availableMetadata);
       setIsLoadingMetadata(false);
     });
-
     return () => {
       ignoreResult = true;
     };
   }, [isEnabled, knowledgeSelectionKey, fetchAndPrepareMetadata]);
-
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -289,20 +259,16 @@ const MetadataFilter = ({
       return;
     }
   }, [data.value]);
-
   // 校验函数直接从 ref 拿最新状态
   const checkAllFieldsValidity = useCallback(() => {
     const { conditions, availableMetadataState, isLoadingMetadata } = stateRef.current;
     if (isLoadingMetadata) return;
-
     const newFieldErrors = { ...fieldErrors };
-
     conditions.forEach(cond => {
       if (!cond.metadataField) {
         if (newFieldErrors[cond.id]) delete newFieldErrors[cond.id];
         return;
       }
-
       const isFieldValid = availableMetadataState.some(meta => meta.id === cond.metadataField);
       if (!isFieldValid) {
         newFieldErrors[cond.id] = t('invalidOrDeletedMetadataField');
@@ -310,58 +276,50 @@ const MetadataFilter = ({
         delete newFieldErrors[cond.id];
       }
     });
-
     if (JSON.stringify(newFieldErrors) !== JSON.stringify(fieldErrors)) {
       setFieldErrors(newFieldErrors);
     }
   }, [fieldErrors]);
-
   // validateFunc 从 ref 拿最新 conditions
   const validateFunc = useCallback(() => {
     const { conditions, availableMetadataState } = stateRef.current;
     const errors = [];
     conditions.forEach((cond, index) => {
-
       if (!cond.metadataField) errors.push(t('selectMetadataField', { index: index + 1 }));
       if (!cond.operator) errors.push(t('selectOperator', { index: index + 1 }));
-
       // Real-time fetch of field type
       const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
+      if (meta?.type === "String" && cond.valueType !== "reference" && String(cond.value ?? "").length > 255) { errors.push(t("bs:sharedUi.maximum", { max: 255 })); }
       if (meta?.type === "Number" && !cond.valueLabel && cond.valueType === "reference") {
         errors.push(t('enterValue', { index: index + 1 }));
       }
     });
     return errors.length > 0 ? errors.join('; ') : false;
   }, []);
-
   const validateConditionsUI = useCallback(() => {
     const { conditions } = stateRef.current;
     const isValid = conditions.every(cond => {
       if (!cond.metadataField || !cond.operator) return false;
       if ([`is_empty`, `is_not_empty`].includes(cond.operator)) return true;
-
       const meta = stateRef.current.availableMetadataState.find(m => m.id === cond.metadataField);
+      if (meta?.type === "String" && cond.valueType !== "reference" && String(cond.value ?? "").length > 255) return false;
       if (meta?.type === "Number") {
         return !!cond.value;
       }
       return true;
     });
-
     setRequired(!isValid);
     return isValid;
   }, []);
-
   useLayoutEffect(() => {
     if (!isEnabled) {
       onChange({ enabled: false });
       onValidate(() => false);
       return;
     }
-
     checkAllFieldsValidity();
     validateConditionsUI();
     onValidate(validateFunc);
-
     const filterData = {
       enabled: true,
       operator: relation,
@@ -383,7 +341,6 @@ const MetadataFilter = ({
   }, [isEnabled, relation, conditions, checkAllFieldsValidity, validateConditionsUI, validateFunc, onChange, onValidate]);
   const validateVars = useCallback(async (): Promise<string> => {
     if (!isEnabled) return "";
-
     try {
       const selection = JSON.parse(knowledgeSelectionKey) as KnowledgeSelection;
       if (selection.items.length === 0 || selection.type === "tmp") return "";
@@ -400,7 +357,6 @@ const MetadataFilter = ({
           DEFAULT_METADATA_FIELDS.forEach(field => {
             validFieldIds.add(`${detail.id}-${field.name}`);
           });
-
           if (detail.metadata_fields) {
             detail.metadata_fields.forEach((field: any) => {
               validFieldIds.add(`${detail.id}-${field.field_name}`);
@@ -408,7 +364,6 @@ const MetadataFilter = ({
           }
         });
       }
-
       const { conditions } = stateRef.current;
       for (const condition of conditions) {
         if (!condition.metadataField) continue;
@@ -427,7 +382,6 @@ const MetadataFilter = ({
       return t('metadataFieldValidationError');
     }
   }, [isEnabled, knowledgeSelectionKey, node?.name, t]);
-
   useEffect(() => {
     if (onVarEvent) {
       onVarEvent(validateVars);
@@ -438,16 +392,26 @@ const MetadataFilter = ({
       }
     };
   }, [onVarEvent, validateVars]);
-
-  const filteredMetadata = useMemo(() => {
-    const term = searchTerm.toLowerCase().trim();
-    if (!term) return availableMetadataState;
-    return availableMetadataState.filter(meta =>
-      meta.name.toLowerCase().includes(term) ||
-      meta.knowledgeBase.toLowerCase().includes(term)
-    );
-  }, [availableMetadataState, searchTerm]);
-
+  const selectLabels = useSelectLabels();
+  const metadataOptions = useMemo<SelectOption[]>(() => availableMetadataState
+    .filter(meta => meta.id)
+    .map(meta => ({
+      value: meta.id,
+      label: meta.name,
+      icon: meta.icon,
+      description: `${meta.type} · ${meta.knowledgeBase}`,
+    })), [availableMetadataState]);
+  // Old panel search matched the field name or its knowledge base name.
+  const filterMetadataOption = useCallback((keyword: string, option: SelectOption) => {
+    const term = keyword.toLowerCase().trim();
+    const meta = availableMetadataState.find(m => m.id === option.value);
+    return option.label.toLowerCase().includes(term)
+      || (meta?.knowledgeBase || "").toLowerCase().includes(term);
+  }, [availableMetadataState]);
+  const valueTypeOptions = useMemo<SelectOption[]>(() => [
+    { value: "reference", label: t('reference') },
+    { value: "input", label: t('input') },
+  ], [t]);
   const addCondition = () => {
     setConditions(prev => [...prev, {
       id: generateUUID(8),
@@ -458,7 +422,6 @@ const MetadataFilter = ({
       valueLabel: ""
     }]);
   };
-
   const deleteCondition = (id: string) => {
     setConditions(prev => prev.filter(c => c.id !== id));
     // 立即清除错误，同时触发副作用校验
@@ -468,13 +431,11 @@ const MetadataFilter = ({
       return newErrors;
     });
   };
-
   const updateCondition = (id: string, field: keyof MetadataCondition, value: string) => {
     setConditions(prev => {
       const newConditions = prev.map(condition => {
         if (condition.id === id) {
           let updated = { ...condition, [field]: value };
-
           if (field === "metadataField") {
             const selectedMeta = availableMetadataState.find(m => m.id === value);
             setFieldErrors(prev => {
@@ -508,12 +469,10 @@ const MetadataFilter = ({
               valueLabel: ""
             };
           }
-
           return updated;
         }
         return condition;
       });
-
       // 更新 stateRef
       stateRef.current.conditions = newConditions;
       return newConditions;
@@ -522,49 +481,7 @@ const MetadataFilter = ({
   const handleRelationChange = () => {
     setRelation(prev => prev === "and" ? "or" : "and");
   };
-
-  const renderValueInput = (condition: MetadataCondition) => {
-    const metadataType = stateRef.current.availableMetadataState.find(m => m.id === condition.metadataField)?.type;
-    const isEmptyOperator = [`is_empty`, `is_not_empty`].includes(condition.operator);
-
-    if (isEmptyOperator) return <Input placeholder={t('noInputNeeded')} value="" disabled className="bg-gray-100 h-8" />;
-
-    if (condition.valueType === "reference") {
-      const selectedLabel = condition.valueLabel
-        ? condition.valueLabel.split('.').reduce((acc, part, index, array) => index === array.length - 1 ? `${acc}/${part}` : `${acc}.${part}`)
-        : "";
-      return (
-        <div className="flex items-center gap-1 min-w-0">
-          <SelectVar
-            className="max-w-40 flex-1"
-            nodeId={nodeId}
-            itemKey={condition.id}
-            onSelect={(E: any, v: any) => {
-              updateCondition(condition.id, "value", `${E.id}.${v.value}`);
-              updateCondition(condition.id, "valueLabel", `${E.name}/${v.label}`);
-            }}
-          >
-            <div className="no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
-              <span className="flex items-center flex-1 truncate">{selectedLabel || t('selectOption')}</span>
-              <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
-            </div>
-          </SelectVar>
-        </div>
-      );
-    }
-
-    if (metadataType === "String") return <Input placeholder={t('enterValue2')} value={condition.value} onChange={(e) => updateCondition(condition.id, "value", e.target.value)} maxLength={255} className="h-8" />;
-    if (metadataType === "Number") return (
-      <div className="w-full mt-2">
-        <NumberInput value={condition.value} onChange={(value) => updateCondition(condition.id, "value", value)} />
-      </div>
-    );
-    if (metadataType === "Time") return <DatePicker value={condition.value ? new Date(condition.value) : undefined} placeholder={t('selectTime')} showTime onChange={(d) => updateCondition(condition.id, "value", d ? format(d, "yyyy-MM-dd'T'HH:mm:ss") : "")} />;
-    return <Input placeholder={t('enterValue2')} value={condition.value} onChange={(e) => updateCondition(condition.id, "value", e.target.value)} className="h-8" />;
-  };
-
-  return (
-    <div className="space-y-4 rounded-lg min-w-0 mb-4">
+  return (<div className="space-y-4 rounded-lg min-w-0 mb-4">
       <div className="flex items-center justify-between min-w-0">
         <div className="flex items-center gap-2"><span className="text-sm font-medium text-gray-500">{t(`${i18nPrefix}label`)}</span></div>
         <Switch checked={isEnabled} onCheckedChange={setIsEnabled} />
@@ -575,9 +492,9 @@ const MetadataFilter = ({
             {conditions.length > 1 && (
               <div className="absolute left-1 top-0 w-4 h-full py-4">
                 <div className="h-full border border-foreground border-dashed border-r-0 rounded-l-sm">
-                  <Badge variant="outline" className="absolute top-1/2 left-0.5 -translate-x-1/2 -translate-y-1/2 px-1 py-0 text-primary bg-[#E6ECF6] cursor-pointer z-10" onClick={handleRelationChange}>
-                    {relation} <RefreshCcw size={12} />
-                  </Badge>
+                  <Button size="small" variant="text" className="absolute top-1/2 left-0.5 -translate-x-1/2 -translate-y-1/2 px-1 py-0 text-primary cursor-pointer z-10" onClick={handleRelationChange} color="default">
+                    {relation} <Outlined.Refresh size={12} />
+                  </Button>
                 </div>
               </div>
             )}
@@ -585,124 +502,90 @@ const MetadataFilter = ({
               const metadataType = stateRef.current.availableMetadataState.find(m => m.id === condition.metadataField)?.type;
               const isTimeType = metadataType === "Time";
               const hasError = !!fieldErrors[condition.id];
-
               const selectedMeta = stateRef.current.availableMetadataState.find(m => m.id === condition.metadataField);
               const displayName = selectedMeta ? selectedMeta.name : condition.metadataField.split("-").pop() || t('unknownField');
               const displayIcon = selectedMeta ? selectedMeta.icon : null;
-
               return (
                 <div key={condition.id} className="relative group pl-10">
                   <div className="flex gap-2 items-center min-w-0">
                     <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[15%]' : 'max-w-[25%]'}`}>
-                      <Select
-                        value={condition.metadataField}
-                        onValueChange={(value) => updateCondition(condition.id, "metadataField", value)}
-                        onOpenChange={setIsSelectOpen}
+                      <SharedTooltip
+                        content={hasError ? fieldErrors[condition.id] : displayName}
+                        disabled={!condition.metadataField}
                       >
-                        <SelectTrigger className={`h-8 min-w-0 ${error ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
-                          <SelectValue placeholder={t('selectVariable')}>
-                            {condition.metadataField && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center gap-1" style={{ pointerEvents: 'auto' }}>
-                                      {displayIcon}
-                                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {displayName}
-                                      </span>
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-[200px] whitespace-normal z-50" style={{ whiteSpace: 'normal', wordBreak: 'break-word', pointerEvents: 'none' }}>
-                                    {hasError ? fieldErrors[condition.id] : displayName}
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <div className="max-h-60 overflow-y-auto">
-                            {isLoadingMetadata ? (
-                              <div className="p-4 text-center text-sm text-gray-500">{t('loadingMetadataFields')}</div>
-                            ) : (
-                              <>
-                                <div className="p-2 border-b">
-                                  <div className="relative">
-                                    <Search className="absolute left-3 top-2 h-3 w-3 text-muted-foreground" />
-                                    <input type="text" placeholder={t('searchMetadata')} className="w-full pl-8 pr-2 py-1 text-[12px] border rounded" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onClick={(e) => e.stopPropagation()} />
-                                  </div>
-                                </div>
-                                {filteredMetadata.length > 0 ? (
-                                  filteredMetadata.map((meta) => (
-                                    <SelectItem key={meta.id} value={meta.id} showIcon={false} customContent={true} className="pr-2 w-full max-w-[200px]">
-                                      <div className="flex items-center justify-between w-full gap-1 min-w-0">
-                                        <div className="flex items-center gap-1 min-w-0 flex-1">
-                                          <span className="flex-shrink-0 text-xs">{meta.icon}</span>
-                                          <span className="text-xs text-muted-foreground flex-shrink-0">{meta.type}</span>
-                                          <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="truncate text-xs min-w-0 flex-1">{meta.name}</span></TooltipTrigger><TooltipContent className="max-w-[200px] break-words"><p className="text-xs">{meta.name}</p></TooltipContent></Tooltip></TooltipProvider>
-                                        </div>
-                                        <TooltipProvider><Tooltip><TooltipTrigger asChild><span className="text-xs text-gray-500 truncate max-w-[60px] text-right flex-shrink-0 ml-1">{meta.knowledgeBase}</span></TooltipTrigger><TooltipContent className="max-w-[200px] break-words"><p className="text-xs">{meta.knowledgeBase}</p></TooltipContent></Tooltip></TooltipProvider>
-                                      </div>
-                                    </SelectItem>
-                                  ))
-                                ) : (
-                                  <div className="p-2 text-center text-xs text-gray-500">{t('noMetadataFields')}</div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </SelectContent>
-                      </Select>
+                        <div className="min-w-0">
+                          <Select
+                            {...selectLabels}
+                            options={selectedMeta || !condition.metadataField
+                              ? metadataOptions
+                              // Keep a deleted / unknown field readable in the trigger.
+                              : [...metadataOptions, { value: condition.metadataField, label: displayName }]}
+                            value={condition.metadataField || null}
+                            onChange={(value) => updateCondition(condition.id, "metadataField", value == null ? "" : String(value))}
+                            placeholder={t('selectVariable')}
+                            aria-label={t('selectVariable')}
+                            showSearch
+                            filterOption={filterMetadataOption}
+                            loading={isLoadingMetadata}
+                            loadingText={t('loadingMetadataFields')}
+                            emptyText={t('noMetadataFields')}
+                            noMatchText={t('noMetadataFields')}
+                            status={error || hasError ? 'error' : 'default'}
+                            className="nodrag w-full min-w-0"
+                          />
+                        </div>
+                      </SharedTooltip>
                     </div>
                     <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[15%]' : 'max-w-[20%]'}`}>
-                      <Select value={condition.operator} onValueChange={(value) => updateCondition(condition.id, "operator", value)} disabled={!condition.metadataField}>
-                        <SelectTrigger className="h-8 min-w-0"><SelectValue placeholder={t('selectCondition')} /></SelectTrigger>
-                        <SelectContent>
-                          {metadataType && operatorConfig[metadataType].map((op) => (
-                            <SelectItem key={op} value={op}>{operatorLabels[op]}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Select
+                        {...selectLabels}
+                        options={metadataType ? operatorConfig[metadataType].map((op) => ({ value: op, label: operatorLabels[op] })) : []}
+                        value={condition.operator || null}
+                        onChange={(value) => updateCondition(condition.id, "operator", value == null ? "" : String(value))}
+                        disabled={!condition.metadataField}
+                        placeholder={t('selectCondition')}
+                        aria-label={t('selectCondition')}
+                        className="nodrag w-full min-w-0"
+                      />
                     </div>
                     {
                       ![`is_empty`, `is_not_empty`].includes(condition.operator) && (
                         <>
                           <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[16%]' : 'max-w-[20%]'}`}>
-                            <Select value={condition.valueType} onValueChange={(value: "reference" | "input") => updateCondition(condition.id, "valueType", value)}>
-                              <SelectTrigger className="h-8 min-w-0">
-                                <div className="flex items-center justify-between w-full">
-                                  <span>{condition.valueType === "reference" ? t('reference') : t('input')}</span>
-                                  {condition.valueType === "reference" && metadataType === "Time" && (
-                                    <div className="relative group/info flex-shrink-0">
-                                      <CircleQuestionMark size={16} className="text-gray-400" />
-                                      <div className="absolute bottom-full right-0 mb-2 hidden group-hover/info:block p-2 bg-black text-white text-xs rounded z-10">{t('referenceFormatTip')}</div>
-                                    </div>
-                                  )}
-                                </div>
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="reference">{t('reference')}</SelectItem>
-                                <SelectItem value="input">{t('input')}</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <Select
+                                {...selectLabels}
+                                options={valueTypeOptions}
+                                value={condition.valueType}
+                                onChange={(value) => value != null && updateCondition(condition.id, "valueType", String(value))}
+                                aria-label={t('valueType')}
+                                className="nodrag flex-1 min-w-0"
+                              />
+                              {condition.valueType === "reference" && metadataType === "Time" && (
+                                <SharedTooltip content={t('referenceFormatTip')}>
+                                  <span className="flex-shrink-0" tabIndex={0}>
+                                    <Outlined.Question size={16} className="text-gray-400" />
+                                  </span>
+                                </SharedTooltip>
+                              )}
+                            </div>
                           </div>
-                          <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[45%]' : 'max-w-[25%]'}`}>{renderValueInput(condition)}</div>
+                          <div className={`flex-1 min-w-0 ${isTimeType ? 'max-w-[45%]' : 'max-w-[25%]'}`}>{<MetadataValueInput condition={condition} metadataType={stateRef.current.availableMetadataState.find(m => m.id === condition.metadataField)?.type} nodeId={nodeId} updateCondition={updateCondition} />}</div>
                         </>
                       )
                     }
                     <div className={`flex-shrink-0 ${isTimeType ? 'max-w-[10%]' : 'max-w-[10%]'} flex justify-center`}>
-                      <Trash2 size={18} onClick={() => deleteCondition(condition.id)} className="hover:text-red-600 cursor-pointer group-hover:opacity-100 opacity-0" />
+                      <Outlined.Delete size={18} onClick={() => deleteCondition(condition.id)} className="hover:text-red-600 cursor-pointer group-hover:opacity-100 opacity-0" />
                     </div>
                   </div >
                 </div >
               );
             })}
           </div >
-          <Button onClick={addCondition} variant="outline" className="border-primary text-primary mt-2 h-8">{t('+ Add Condition')}</Button>
+          <Button onClick={addCondition} variant="outlined" className="border-primary text-primary mt-2 h-8" color="default">{t('+ Add Condition')}</Button>
         </div >
       )}
     </div >
   );
 };
-
 export default MetadataFilter;

@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 "use client"
 
+import { loadDiagramLibrary } from '@bisheng/diagram-runtime';
 import { ChartType, ComponentConfig, ComponentStyleConfig } from '@/pages/Dashboard/types/dataConfig'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -8,29 +9,7 @@ import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
 import { ChartDataResponse } from '../../types/chartData'
 import { unitConversion } from './MetricCard'
 
-// Dynamic loading of ECharts.
-const loadECharts = async () => {
-  if ((window as any).echarts) {
-    return (window as any).echarts
-  }
-
-  const script = document.createElement('script')
-  script.src = `${__APP_ENV__?.BASE_URL || ''}/echarts.min.js`
-  script.type = 'module'
-
-  return new Promise((resolve, reject) => {
-    script.onload = () => {
-      const checkECharts = setInterval(() => {
-        if ((window as any).echarts) {
-          clearInterval(checkECharts)
-          resolve((window as any).echarts)
-        }
-      }, 100)
-    }
-    script.onerror = reject
-    document.head.appendChild(script)
-  })
-}
+const loadECharts = () => loadDiagramLibrary('echarts', { baseUrl: __APP_ENV__?.BASE_URL || '' });
 
 interface BaseChartProps {
   data: ChartDataResponse

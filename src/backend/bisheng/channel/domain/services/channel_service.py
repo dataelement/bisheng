@@ -109,7 +109,10 @@ from bisheng.permission.domain.services.permission_action_service import (
 )
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
-from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
+    DEFAULT_AUTO_REPLY,
+    SensitiveWordPolicyService,
+)
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 
@@ -257,6 +260,13 @@ class ChannelService:
         return set(action_map.get(str(channel_id), frozenset()))
 
     @staticmethod
+    async def _has_channel_subscription_access(channel_id: str, login_user: UserPayload) -> bool:
+        # Match the square's business visibility check. Administrative access
+        # permits inspection, but must not impersonate a subscription grant.
+        visible = await batch_check_business_visible(login_user, resource_type="channel", resource_ids=(channel_id,))
+        return visible.get(str(channel_id), False)
+
+    @staticmethod
     def _resolve_subscription_status(
         membership_status: MembershipStatusEnum | None,
         update_time: datetime | None = None,
@@ -329,6 +339,9 @@ class ChannelService:
         can_view_sensitive: bool,
     ) -> ArticleSensitiveReview:
         violated = bool(hits)
+        # Existing policies share the upload default; article readers need reading-specific wording.
+        if auto_reply == DEFAULT_AUTO_REPLY:
+            auto_reply = "该文章未通过安全审查，无法查看详情"  # noqa: RUF001
         return ArticleSensitiveReview(
             enabled=enabled,
             violated=violated,
@@ -1639,8 +1652,7 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        actions = await self._get_channel_actions(req.channel_id, login_user)
-        if "visible" in actions:
+        if await self._has_channel_subscription_access(req.channel_id, login_user):
             return SubscriptionStatusEnum.SUBSCRIBED
 
         if channel.visibility == ChannelVisibilityEnum.PRIVATE:
@@ -1718,9 +1730,8 @@ class ChannelService:
             if gate_result.decision == ApprovalGateDecision.PASS:
                 # ApprovalGate dispatches the durable outbox for automatic approvals too.
                 # Its handler owns activation; report the access that has actually landed.
-                actions = await self._get_channel_actions(req.channel_id, login_user)
                 return self._resolve_effective_subscription_status(
-                    can_read="visible" in actions,
+                    can_read=await self._has_channel_subscription_access(req.channel_id, login_user),
                     approval_required=True,
                     membership_status=MembershipStatusEnum.PENDING,
                 )
@@ -2067,7 +2078,7 @@ class ChannelService:
 
         # Subscription presentation follows effective access; membership tracks application progress.
         subscription_status = self._resolve_effective_subscription_status(
-            can_read="visible" in actions,
+            can_read=await self._has_channel_subscription_access(channel_id, login_user),
             approval_required=channel.visibility == ChannelVisibilityEnum.REVIEW,
             membership_status=status_membership.status if status_membership else None,
             update_time=status_membership.update_time if status_membership else None,

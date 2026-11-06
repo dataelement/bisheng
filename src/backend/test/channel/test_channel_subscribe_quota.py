@@ -5,7 +5,11 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_subscribe_channel_uses_role_quota_service():
+async def test_subscribe_channel_uses_role_quota_service(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.channel.domain.services.channel_service.batch_check_business_visible",
+        AsyncMock(return_value={"channel-1": False}),
+    )
     from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
     from bisheng.channel.domain.schemas.channel_manager_schema import (
         SubscribeChannelRequest,

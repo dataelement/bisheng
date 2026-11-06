@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button } from '@/components/bs-ui/button';
+import { Button } from '@bisheng/ui';
+
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
 import { useState } from 'react';
 import { useTranslation } from "react-i18next";
@@ -162,11 +163,11 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* Dialog Footer */}
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outline" className="px-11" type="button">
+                    <Button variant="outlined" type="button" color="default">
                         {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>
-                <Button className="px-11" type="submit">
+                <Button type="submit">
                     {t('save', { ns: 'bs' })}
                 </Button>
             </DialogFooter>

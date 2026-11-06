@@ -15,6 +15,7 @@ export interface ServiceAccountDelegateScope {
 export interface ServiceAccountItem {
   id: number
   tenant_id: number
+  tenant_name?: string | null
   name: string
   description: string | null
   status: ServiceAccountStatus

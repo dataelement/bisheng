@@ -22,9 +22,10 @@ class Etl4lmLoader(BaseBishengLoader):
         force_ocr: bool = True,
         filter_page_header_footer: bool = False,
         start: int = 0,
-        n: int = None,
+        n: int | None = None,
         timeout: int = 60,
         retain_images: bool = True,
+        request_kwargs: dict | None = None,
         *args,
         **kwargs,
     ):
@@ -38,6 +39,7 @@ class Etl4lmLoader(BaseBishengLoader):
         self.n = n
         self.timeout = timeout
         self.retain_images = retain_images
+        self.request_kwargs = dict(request_kwargs or {})
 
     def parse_bbox_list(self, partitions: list[dict]):
         """Resolve BuildbboxCorrespondence with text"""
@@ -71,16 +73,17 @@ class Etl4lmLoader(BaseBishengLoader):
             "n": self.n,
             "filter_page_header_footer": self.filter_page_header_footer,
         }
-        payload = dict(
-            filename=self.file_name,
-            b64_data=[b64_data],
-            mode="partition",
-            force_ocr=self.force_ocr,
-            enable_formula=self.enable_formular,
-            filter_page_header_footer=self.filter_page_header_footer,
-            ocr_sdk_url=self.ocr_sdk_url,
-            parameters=parameters,
-        )
+        payload = {
+            "filename": self.file_name,
+            "b64_data": [b64_data],
+            "mode": "partition",
+            "force_ocr": self.force_ocr,
+            "enable_formula": self.enable_formular,
+            "filter_page_header_footer": self.filter_page_header_footer,
+            "ocr_sdk_url": self.ocr_sdk_url,
+            "parameters": parameters,
+            **self.request_kwargs,
+        }
         try:
             resp = requests.post(self.url, json=payload, timeout=self.timeout)
         except requests.Timeout as e:
@@ -215,7 +218,7 @@ class Etl4lmLoader(BaseBishengLoader):
         is_first_elem = True
         last_label = ""
         prev_length = 0
-        metadata = dict(bboxes=[], pages=[], indexes=[], types=[])
+        metadata = {"bboxes": [], "pages": [], "indexes": [], "types": []}
 
         for part in partitions:
             label, text = part["type"], part["text"]
@@ -251,7 +254,7 @@ class Etl4lmLoader(BaseBishengLoader):
                         doc_content.append(text_elem_sep + text)
 
             last_label = label
-            metadata["bboxes"].extend(list(map(lambda x: list(map(int, x)), extra_data["bboxes"])))
+            metadata["bboxes"].extend([[int(value) for value in bbox] for bbox in extra_data["bboxes"]])
             metadata["pages"].extend(extra_data["pages"])
             metadata["types"].extend(extra_data["types"])
 

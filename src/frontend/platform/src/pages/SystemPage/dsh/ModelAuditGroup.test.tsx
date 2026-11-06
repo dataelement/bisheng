@@ -127,14 +127,14 @@ it("request cards do not offer redundant user or parent conversation navigation"
   expect(screen.queryByRole("button", { name: "dsh.modelAuditView.sources.parent" })).toBeNull();
   expect(api.requests).not.toHaveBeenCalled();
   expect(
-    screen.getByRole("button", { name: "dsh.modelAuditView.views.groups" }),
-  ).toHaveAttribute("aria-pressed", "true");
+    screen.getByRole("radio", { name: "dsh.modelAuditView.views.groups" }),
+  ).toHaveAttribute("aria-checked", "true");
 });
 it("AC-QC-06: unassociated requests use a separate exact query without loading all conversations", async () => {
   render(<ModelAuditRequests tenantId={2} />);
   await screen.findByText(/session-main/);
   fireEvent.click(
-    screen.getByRole("button", {
+    screen.getByRole("radio", {
       name: "dsh.modelAuditView.views.unassociated",
     }),
   );

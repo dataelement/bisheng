@@ -1,5 +1,5 @@
 /**
- * F071: the draggable split between the report and its cited source.
+ * F074: the draggable split between the report and its cited source.
  *
  * The split is a ratio of the container, applied as a CSS clamp() so the panes
  * follow the container while it animates open (the chat column handing over its

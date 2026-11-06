@@ -172,7 +172,13 @@ class WorkCapabilitiesService:
         if skill is None or skill.content_hash != version:
             raise HTTPException(409, "Skill changed or is unavailable; refresh the catalog")
         # Reuse the current runtime's complete, binary-safe bundle verification.
-        files = await asyncio.to_thread(SkillService()._load_existing_bundle, self.user.tenant_id, skill.name, version)
+        files = await asyncio.to_thread(
+            SkillService()._load_existing_bundle,
+            self.user.tenant_id,
+            skill.name,
+            version,
+            owner_user_id=skill.owner_user_id,
+        )
         metadata, _ = parse_skill_md(files["SKILL.md"].decode("utf-8"))
         dependencies = self._dependencies(metadata)
         if not set(dependencies).issubset(await self._tools()):
@@ -201,11 +207,15 @@ class WorkCapabilitiesService:
         from bisheng.linsight.domain.services.skill_store import SkillStore, bundle_content_hash, parse_skill_md
 
         store = SkillStore()
-        entries = store.list_files(self.user.tenant_id, skill.name, skill.content_hash)
+        entries = store.list_files(
+            self.user.tenant_id, skill.name, skill.content_hash, owner_user_id=skill.owner_user_id
+        )
         if len(entries) > MAX_BUNDLE_FILES or sum(entry["size"] for entry in entries) > MAX_BUNDLE_BYTES:
             raise HTTPException(413, "Skill exceeds Desktop bundle limits")
         files = {
-            entry["path"]: store.read_bytes(self.user.tenant_id, skill.name, skill.content_hash, entry["path"])
+            entry["path"]: store.read_bytes(
+                self.user.tenant_id, skill.name, skill.content_hash, entry["path"], owner_user_id=skill.owner_user_id
+            )
             for entry in entries
         }
         if sum(len(data) for data in files.values()) > MAX_BUNDLE_BYTES:

@@ -9,6 +9,8 @@ const VISION_IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.gif';
 
 const OFD_SUFFIX = '.ofd';
 
+
+
 const MEDIA_ACCEPT = MEDIA_SUFFIXES.join(',').toLowerCase();
 
 /**
@@ -51,6 +53,9 @@ export function isFileNameAccepted(fileName: string, accepts: string): boolean {
 export interface BuildChatAcceptOptions {
     enableMedia: boolean;
     includeOfd: boolean;
+    /** Allow image attachments that a selected vision model can consume directly. */
+    enableVision?: boolean;
+    enableEtl4lm?: boolean;
     /** Task mode additionally accepts data/config/source files. */
     taskMode?: boolean;
 }
@@ -61,6 +66,11 @@ export function buildChatAccept(opts: BuildChatAcceptOptions): string {
     let base = `${BASE_ACCEPT},${IMAGE_ACCEPT}`;
     if (opts.includeOfd) {
         base = `${base},${OFD_SUFFIX}`;
+    }
+    if (opts.enableVision) {
+        const accepted = new Set(base.split(','));
+        for (const ext of VISION_IMAGE_ACCEPT.split(',')) accepted.add(ext);
+        base = [...accepted].join(',');
     }
     if (opts.enableMedia) {
         base = `${base},${MEDIA_ACCEPT}`;

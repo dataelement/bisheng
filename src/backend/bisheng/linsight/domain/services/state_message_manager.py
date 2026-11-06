@@ -167,7 +167,7 @@ class LinsightStateMessageManager:
         for task_id in list(self._pending_history):
             history = self._pending_history.pop(task_id)
             try:
-                await LinsightExecuteTaskDao.update_by_id(task_id, history=history)
+                await LinsightExecuteTaskDao.update_fields_by_id(task_id, history=history)
                 self._last_history_db_flush[task_id] = asyncio.get_event_loop().time()
             except Exception as e:
                 self._logger.error(f"Failed to flush pending history for task {task_id}: {e}")
@@ -317,7 +317,7 @@ class LinsightStateMessageManager:
                 await pipe.execute()
 
             # Database updating
-            await LinsightExecuteTaskDao.update_by_id(
+            await LinsightExecuteTaskDao.update_fields_by_id(
                 task_id,
                 status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED,
                 history=task_model.history,
@@ -374,7 +374,7 @@ class LinsightStateMessageManager:
 
             task_key = f"{self._keys['execution_tasks']}{task_id}"
             await self._redis_client.aset(task_key, task_model.model_dump(), expiration=self.DEFAULT_EXPIRATION)
-            await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
+            await LinsightExecuteTaskDao.update_fields_by_id(task_id, history=task_model.history)
             self._logger.info(f"Re-stamped {answer_idx} clarify answer(s) onto task {task_id} history")
         except Exception as e:
             # Non-critical: live rendering is unaffected; only the refreshed view
@@ -488,7 +488,7 @@ class LinsightStateMessageManager:
             if is_thinking_delta and recently_flushed:
                 self._pending_history[task_id] = task_model.history
             else:
-                await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
+                await LinsightExecuteTaskDao.update_fields_by_id(task_id, history=task_model.history)
                 self._last_history_db_flush[task_id] = now
                 self._pending_history.pop(task_id, None)
 

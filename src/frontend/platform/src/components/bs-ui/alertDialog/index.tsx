@@ -1,8 +1,8 @@
-"use client"
+import { buttonVariants } from '@bisheng/ui';
 
 import * as React from "react"
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
-import { buttonVariants } from "@/components/bs-ui/button"
+
 import { cname } from "../utils"
 
 const AlertDialog = AlertDialogPrimitive.Root

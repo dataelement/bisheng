@@ -62,7 +62,7 @@
 | 投影 | `shadow-popup` 浮层投影 |
 | 底色 | 页面底色 `bg-page`：浅色模式为白，暗色模式随主题变深 |
 | 边框 | 浅色模式无；**暗色模式加 1px 中性描边 `border-base`** |
-| 图标 | 20px，左上角，取对应类型的功能色主色；与标题（无标题时与描述）首行居中对齐；与文字间距 12px |
+| 图标 | 16px，左上角，取对应类型的功能色主色，与轻提示同尺寸；与标题（无标题时与描述）首行居中对齐；与文字间距 12px |
 | 标题 | `text-body`（14/22），字重 500，主文字色 `text-1` |
 | 描述 | `text-body`（14/22），字重 400；有标题时取次要文字色 `text-2`，无标题时取主文字色 `text-1` |
 | 标题与描述间距 | 4px |
@@ -157,7 +157,7 @@
 4. 时长：`duration` 缺省 `5000`，`actions` 非空时缺省 `10000`，`0` 为不自动关闭；展开全文后强制转为 `0`。`mouseenter` / `focusin` 清计时器，`mouseleave` / `focusout` 以完整时长重新起算。
 5. 描述截断：`-webkit-line-clamp: 3`；挂载后比较 `scrollHeight > clientHeight` 判断是否溢出，溢出才渲染「展开」按钮。展开后去掉 line-clamp，卡片 `max-height: calc(100vh - 48px)`，描述区 `overflow-y: auto`，滚动条样式见 [基础-滚动条规范.md](基础-滚动条规范.md)。
 6. 标题截断：单行 `text-overflow: ellipsis`，右侧为关闭按钮预留 16 + 12 = 28px。
-7. 样式 token：`w-[360px] p-4 rounded-xl shadow-popup bg-page`；暗色 `dark:border dark:border-border-base`；标题 `text-body font-medium text-text-1`；描述 `text-body text-text-2`（无标题时 `text-text-1`）；图标 20px 取功能色主色（成功 / 危险 / 警告）与品牌色（信息），类名以 `packages/ui/design-token.cjs` 的 FUNCTIONAL / BRAND 导出为准；关闭按钮 `text-text-4 hover:text-text-2`。禁止裸 hex、禁止 Tailwind 预设投影。
+7. 样式 token：`w-[360px] p-4 rounded-xl shadow-popup bg-page`；暗色 `dark:border dark:border-border-base`；标题 `text-body font-medium text-text-1`；描述 `text-body text-text-2`（无标题时 `text-text-1`）；图标 16px 取功能色主色（成功 / 危险 / 警告）与品牌色（信息），类名以 `packages/ui/design-token.cjs` 的 FUNCTIONAL / BRAND 导出为准；关闭按钮 `text-text-4 hover:text-text-2`。禁止裸 hex、禁止 Tailwind 预设投影。
 8. 操作行：`flex items-center gap-2 mt-3`；「展开」用 `primary × link` small 放最左并 `mr-auto`；主动作 `primary × filled` small，次动作 `default × text` small（Button 规范 §2.2 / §3）。点击任一 action 后调用其 `onClick` 并关闭。
 9. 动效：进场 `translateX(16px) → 0` + opacity，240ms；出场反向 200ms；补位与展开高度过渡 240ms；曲线 `cubic-bezier(0.2, 0, 0, 1)`。进场起始态用读一次布局强制刷新，不用 rAF（Toast 落地踩过后台标签页冻结的坑，见 Toast §11.1）。时长与曲线写成预设的具名值 `duration-240` / `duration-160` / `ease-notice`（`tailwind-preset.cjs`），不写 `duration-[240ms]` 这类任意值——client 同时装了 tailwindcss-animate，它也注册 `duration-*` / `ease-*`，任意值会同时命中两个工具类而被 Tailwind 整条丢弃，动效悄悄退回 150ms 默认曲线（Toast 原先的 `ease-[…]` / `duration-[160ms]` 就是这样失效的，本次一并改掉）。
 10. 无障碍按 §9，`role` 按类型放在每条通知的根节点上。
@@ -168,7 +168,7 @@
 ## 11. 待决策清单
 
 - [x] z-index：两者都已走预设 `z-toast`（1200），不存在回填问题（2026-10-14 落地时核实）
-- [ ] 类型图标尺寸：§4 定 20px，落地时前端要求改为 **16px**（与轻提示同尺寸）并已按 16px 实现；待设计师确认后回填 §4，或改回 20px
+- [x] ~~类型图标尺寸：§4 定 20px，落地时前端要求改为 **16px**（与轻提示同尺寸）并已按 16px 实现；待设计师确认后回填 §4，或改回 20px~~ → 2026-10-21 设计师拍板 16px，§4 已回填
 - [ ] 关闭按钮：落地为 Button 的 `default × text` small 单图标款（24px 热区、16px 图标，图标仍距右 16px、与首行居中），比 §4 的裸 16px 图标多了悬停底色；标题右侧预留随之改为 24 + 12 = 36px。待设计师确认后回填 §4 / §10.6
 - [ ] 是否需要「通知中心」（历史记录入口）：通知停几秒就走，错过即丢。若后续产品做消息中心，通知提醒应与之联动（弹出 + 入列），届时 §1「不进历史」的前提要改
 - [ ] 移动端：v1 不做（§8），出现真实场景再定位置（顶部全宽 vs 底部）以及与轻提示的共存规则
@@ -179,5 +179,6 @@
 
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
+| 2026-10-21 | 图标尺寸 20px → 16px（§4、§10 token 行），与轻提示、警告提示统一；设计师 2026-10-21 随 Alert 规范一并拍板，§11 对应待决策项勾销。其余规则未增未减未改 | 待 committer 窗口提交 |
 | 2026-10-14 | 基准组件落地：`@bisheng/ui` 新增 `Notifier` 容器 + `notification.open / success / error / warning / info / close / closeAll`，队列核心与 Toast 共用 `utils/noticeQueue.ts`；demo 页 `docs/components/notification.mdx` 上线并挂侧栏；client 根节点挂 `<Notification />`（`~/components/ui/Notification.tsx`，文案键 `com_ui_close_notification` / `com_ui_expand`）。偏离规范两处（图标 16px、关闭按钮用 iconOnly 文字按钮）记入 §11 待设计师拍板；预设新增 `duration-160/240`、`ease-notice` 并修正 Toast 任意值失效 | 待 committer 窗口提交 |
 | 2026-10-14 | 建档 v1：先调研 antd / Arco / Semi / TDesign / Apple HIG 五家，再由设计师拍板九项——四类型（不做无图标款）、右上固定距边 24px、固定宽 360px、描述必填标题选填且长文不截字只限显示行数（超 3 行给「展开」且展开后停止计时）、默认 5 秒带按钮 10 秒、最多 3 条堆叠顶掉最旧、白底 + 浮层投影（暗色加描边）兼顾深浅色、层级与轻提示同档 1200、移动端 v1 不做。共 9 节展示层 + 落地与待决策两节隐藏区 | 待 committer 窗口提交 |

@@ -1,8 +1,7 @@
+import { Dropdown } from "@bisheng/ui";
 import { Breadcrumb, type BreadcrumbItem } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace } from "~/api/knowledge";
-import { DropdownMenu, DropdownMenuTrigger } from "~/components/ui/DropdownMenu";
-import { ActionMenuContent } from "~/components/ActionMenu";
 import { SpaceActionMenuItems } from "./SpaceActionMenuItems";
 import { useLocalize } from "~/hooks";
 
@@ -63,17 +62,7 @@ export function SpaceBreadcrumb({
     ];
 
     const spaceMenu = (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <button
-                    type="button"
-                    aria-label={localize("com_knowledge.space_actions")}
-                    className="inline-flex size-6 shrink-0 items-center justify-center rounded text-text-3 outline-none transition-colors hover:bg-fill-2 hover:text-text-1 data-[state=open]:bg-fill-2 data-[state=open]:text-text-1"
-                >
-                    <Outlined.Down className="size-4" />
-                </button>
-            </DropdownMenuTrigger>
-            <ActionMenuContent align="start" width={180}>
+        <Dropdown  align="start" menu={<>
                 <SpaceActionMenuItems
                     showInfo
                     space={space}
@@ -85,8 +74,15 @@ export function SpaceBreadcrumb({
                     canDeleteSpace={canDeleteSpace}
                     canLeaveSpace={canLeaveSpace}
                 />
-            </ActionMenuContent>
-        </DropdownMenu>
+             </>}>
+                <button
+                    type="button"
+                    aria-label={localize("com_knowledge.space_actions")}
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded text-text-3 outline-none transition-colors hover:bg-fill-2 hover:text-text-1 data-[state=open]:bg-fill-2 data-[state=open]:text-text-1"
+                >
+                    <Outlined.Down className="size-4" />
+                </button>
+             </Dropdown>
     );
 
     /* The menu always trails the SPACE, never the folder you happen to be in:

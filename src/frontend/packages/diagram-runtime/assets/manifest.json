@@ -1,0 +1,12 @@
+{
+  "echarts.min.js": {
+    "sha256": "0ff3236103347d4ae255cde530dc33bc13761c953d1e6e93a91cd8a21208fa12",
+    "source": "Existing BiSheng public vendor snapshot, unchanged",
+    "version": null
+  },
+  "mermaid.min.js": {
+    "sha256": "9fd79a9d157f600665ce139f750dd2d3a1d582d326fd55a705e116d651be5b0f",
+    "source": "Existing BiSheng public vendor snapshot, unchanged",
+    "version": null
+  }
+}

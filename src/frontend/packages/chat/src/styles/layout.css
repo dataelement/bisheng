@@ -1,0 +1,288 @@
+.bs-mkdown.bisheng-chat-markdown :where(table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    /* A table wider than the message must never be silently cut off. Making the table itself the
+       horizontal scroll container works regardless of what any ancestor does with overflow (the
+       chat bubble sets overflow-hidden), and covers every surface that renders `.bs-mkdown.bisheng-chat-markdown`.
+       - display:block turns the bordered frame into the scroll viewport; the grid is re-wrapped
+         in an anonymous table box inside it.
+       - fit-content, not 100%: with a block box a 100% width would leave the frame wider than the
+         grid it draws around. fit-content keeps frame and grid aligned at every width.
+       - max-width caps it to the message width, so the page itself never shifts sideways. */
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
+    table-layout: auto;
+    text-align: left;
+    margin-top: 2em;
+    margin-bottom: 2em;
+    font-size: 14px;
+    line-height: 1.7142857;
+    /* separate (not collapse) so border-radius on the outer frame is honored;
+       inner grid lines are drawn by per-cell right/bottom borders below.
+       --mk-table-border drives the frame + all grid lines; cascades to th/td. */
+    --mk-table-border: #E0E0E0;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--mk-table-border);
+    border-radius: 6px;
+}
+
+/* Table border color in dark mode: subtle light tint instead of #E0E0E0 */
+.dark .bs-mkdown.bisheng-chat-markdown :where(table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    --mk-table-border: hsl(0 0% 100% / 0.12);
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(thead th):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    color: var(--tw-prose-headings);
+    font-weight: 600;
+    vertical-align: bottom;
+    /* Kept: header text stays on one line so columns keep a readable width. Letting headers wrap
+       instead was measured on a 9-column table and squeezed it to ~59px per column — everything
+       "visible" but unreadable. A too-wide table scrolls (see the table rule) rather than squeeze. */
+    white-space: nowrap;
+    background-color: rgb(var(--fill-3));
+    padding-top: 0.5714286em;
+    padding-right: 0.5714286em;
+    padding-bottom: 0.5714286em;
+    padding-left: 0.5714286em;
+    border-right: 1px solid var(--mk-table-border);
+    border-bottom: 1px solid var(--mk-table-border);
+}
+
+/* Drop the right border on the last header cell so it doesn't double the frame */
+.bs-mkdown.bisheng-chat-markdown :where(thead th:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    border-right: 0;
+}
+
+/* Round the top corners so the header fill follows the 4px frame */
+.bs-mkdown.bisheng-chat-markdown :where(thead th:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    border-top-left-radius: 6px;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(thead th:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    border-top-right-radius: 6px;
+}
+
+/* Header background in dark mode: subtle light tint instead of #FBFBFB */
+.dark .bs-mkdown.bisheng-chat-markdown :where(thead th):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    background-color: hsl(0 0% 100% / 0.04);
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(tbody tr):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    border-bottom-width: 1px;
+    border-bottom-color: var(--tw-prose-td-borders);
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(tbody td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    vertical-align: baseline;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(tfoot):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    border-top-width: 1px;
+    border-top-color: var(--tw-prose-td-borders);
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(tfoot td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    vertical-align: top;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(figure > *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(figcaption):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    color: var(--tw-prose-captions);
+    font-size: 0.875em;
+    line-height: 1.4285714;
+    margin-top: 0.8571429em;
+}
+
+.bs-mkdown.bisheng-chat-markdown {
+    --tw-prose-body: #374151;
+    --tw-prose-headings: #111827;
+    --tw-prose-lead: #4b5563;
+    --tw-prose-links: #111827;
+    --tw-prose-bold: #111827;
+    --tw-prose-counters: #6b7280;
+    --tw-prose-bullets: #d1d5db;
+    --tw-prose-hr: #e5e7eb;
+    --tw-prose-quotes: #111827;
+    --tw-prose-quote-borders: #e5e7eb;
+    --tw-prose-captions: #6b7280;
+    --tw-prose-kbd: #111827;
+    --tw-prose-kbd-shadows: 17 24 39;
+    --tw-prose-code: #111827;
+    --tw-prose-pre-code: #e5e7eb;
+    --tw-prose-pre-bg: #1f2937;
+    --tw-prose-th-borders: #d1d5db;
+    --tw-prose-td-borders: #e5e7eb;
+    --tw-prose-invert-body: #d1d5db;
+    --tw-prose-invert-headings: #fff;
+    --tw-prose-invert-lead: #9ca3af;
+    --tw-prose-invert-links: #fff;
+    --tw-prose-invert-bold: #fff;
+    --tw-prose-invert-counters: #9ca3af;
+    --tw-prose-invert-bullets: #4b5563;
+    --tw-prose-invert-hr: #374151;
+    --tw-prose-invert-quotes: #f3f4f6;
+    --tw-prose-invert-quote-borders: #374151;
+    --tw-prose-invert-captions: #9ca3af;
+    --tw-prose-invert-kbd: #fff;
+    --tw-prose-invert-kbd-shadows: 255 255 255;
+    --tw-prose-invert-code: #fff;
+    --tw-prose-invert-pre-code: #d1d5db;
+    --tw-prose-invert-pre-bg: rgb(0 0 0 / 50%);
+    --tw-prose-invert-th-borders: #4b5563;
+    --tw-prose-invert-td-borders: #374151;
+    font-size: 1rem;
+    line-height: 1.75;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(picture > img):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(video):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 2em;
+    margin-bottom: 2em;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0.1em;
+    margin-bottom: 0.1em;
+    line-height: 1.6;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(ol > li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    padding-left: 0.375em;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(ul > li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    padding-left: 0.375em;
+}
+
+/* List-item paragraphs: no own vertical margin; spacing is owned by the mb-2
+   class on the custom <p> in Markdown.tsx (8px). */
+.bs-mkdown.bisheng-chat-markdown :where(.bs-mkdown.bisheng-chat-markdown > ul > li p):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(.bs-mkdown.bisheng-chat-markdown > ol > li p):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(.bs-mkdown.bisheng-chat-markdown > ul > li > *:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(.bs-mkdown.bisheng-chat-markdown > ul > li > *:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-bottom: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(.bs-mkdown.bisheng-chat-markdown > ol > li > *:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(.bs-mkdown.bisheng-chat-markdown > ol > li > *:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-bottom: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(ul ul, ul ol, ol ul, ol ol):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0.75em;
+    margin-bottom: 0.75em;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(dl):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 1.25em;
+    margin-bottom: 1.25em;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(dd):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0.5em;
+    padding-left: 1.625em;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(hr + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(h2 + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(h3 + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(h4 + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+}
+
+/* Tables need breathing room below a heading; keep it after the hX + * resets above so it wins */
+.bs-mkdown.bisheng-chat-markdown :where(h1 + table, h2 + table, h3 + table, h4 + table, h5 + table, h6 + table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0.875em;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(tbody td, tfoot td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    padding-top: 0.5714286em;
+    padding-right: 0.5714286em;
+    padding-bottom: 0.5714286em;
+    padding-left: 0.5714286em;
+    border-right: 1px solid var(--mk-table-border);
+    border-bottom: 1px solid var(--mk-table-border);
+}
+
+/* Drop the right border on the last column so it doesn't double the frame */
+.bs-mkdown.bisheng-chat-markdown :where(tbody td:last-child, tfoot td:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    border-right: 0;
+}
+
+/* Drop the bottom border on the last row so it doesn't double the frame */
+.bs-mkdown.bisheng-chat-markdown :where(tbody tr:last-child td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    border-bottom: 0;
+}
+
+/* Zebra striping: even body rows get the light gray; odd rows stay white */
+.bs-mkdown.bisheng-chat-markdown :where(tbody tr:nth-child(even) td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    background-color: #F6F8FA;
+}
+
+.dark .bs-mkdown.bisheng-chat-markdown :where(tbody tr:nth-child(even) td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    background-color: hsl(0 0% 100% / 0.03);
+}
+
+/* Round the bottom corners so a striped last row follows the 6px frame */
+.bs-mkdown.bisheng-chat-markdown :where(tbody tr:last-child td:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    border-bottom-left-radius: 6px;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(tbody tr:last-child td:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    border-bottom-right-radius: 6px;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(figure):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 2em;
+    margin-bottom: 2em;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(.bs-mkdown.bisheng-chat-markdown > :first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-top: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown :where(.bs-mkdown.bisheng-chat-markdown > :last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+    margin-bottom: 0;
+}
+
+.bs-mkdown.bisheng-chat-markdown svg g[data-mml-node="merror"],
+.bs-mkdown.bisheng-chat-markdown .mathjax-error {
+    opacity: 0;
+}
+
+.bisheng-chat-markdown .anwser-souce span {
+    color: #347ef9;
+    cursor: pointer;
+}

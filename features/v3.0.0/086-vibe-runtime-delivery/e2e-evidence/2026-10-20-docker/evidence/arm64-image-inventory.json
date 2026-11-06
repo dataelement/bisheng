@@ -1,0 +1,51 @@
+[
+  {
+    "name": "runtime-manager",
+    "tag": "e2e-f086-runtime-manager:arm64-20261020",
+    "id": "sha256:ff883a988e88b98b137872e916cf3a40505775b0cbcee48235e638f00afe4aa2",
+    "os": "linux",
+    "architecture": "arm64"
+  },
+  {
+    "name": "app-proxy",
+    "tag": "e2e-f086-app-proxy:arm64-20261020",
+    "id": "sha256:ce1549d7c62a3699d64eedf023ea0f7121b9e435a5a4c24b9f139046730a6a36",
+    "os": "linux",
+    "architecture": "arm64"
+  },
+  {
+    "name": "app-python",
+    "tag": "e2e-f086-app-python:arm64-20261020",
+    "id": "sha256:e926712fec434b7e43c6a210ba8eeccd4493f28479126b1e7d806c55f696a6ad",
+    "os": "linux",
+    "architecture": "arm64"
+  },
+  {
+    "name": "app-python-preparer",
+    "tag": "e2e-f086-app-python-preparer:arm64-20261020",
+    "id": "sha256:fe32e77d56079c534bc1fc4bb7882740301fff9adb45ecc7d3100cc7cff27b72",
+    "os": "linux",
+    "architecture": "arm64"
+  },
+  {
+    "name": "app-node",
+    "tag": "e2e-f086-app-node:arm64-20261020",
+    "id": "sha256:020842ef3f9019c6748e320faeb2f1c025e8144260c87197ac2edc35de3123a4",
+    "os": "linux",
+    "architecture": "arm64"
+  },
+  {
+    "name": "app-node-preparer",
+    "tag": "e2e-f086-app-node-preparer:arm64-20261020",
+    "id": "sha256:2b23eafa1df36269d6f1ae4467a13d31d8d47268b5fcfffc2892dd0c707179ba",
+    "os": "linux",
+    "architecture": "arm64"
+  },
+  {
+    "name": "app-static",
+    "tag": "e2e-f086-app-static:arm64-20261020",
+    "id": "sha256:3ba790705fe23642a38dce37329ee8a89c1831677ffccf8cfb6a6ef6715cf05d",
+    "os": "linux",
+    "architecture": "arm64"
+  }
+]

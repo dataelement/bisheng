@@ -16,7 +16,7 @@ export interface UseAdminScopeOptions {
 export interface UseAdminScopeResult {
     scope: AdminScopeResponse
     loading: boolean
-    setScope: (tenantId: number | null) => Promise<void>
+    setScope: (tenantId: number) => Promise<void>
     refresh: () => Promise<void>
 }
 
@@ -45,7 +45,7 @@ export function useAdminScope(options?: UseAdminScopeOptions): UseAdminScopeResu
         }
     }, [enabled])
 
-    const setScope = useCallback(async (tenantId: number | null): Promise<void> => {
+    const setScope = useCallback(async (tenantId: number): Promise<void> => {
         if (!enabled) return
         setLoading(true)
         try {
@@ -57,7 +57,7 @@ export function useAdminScope(options?: UseAdminScopeOptions): UseAdminScopeResu
     }, [enabled])
 
     useEffect(() => {
-        if (enabled) void refresh()
+        if (enabled) void refresh().catch(() => undefined)
     }, [enabled, refresh])
 
     return { scope, loading, setScope, refresh }

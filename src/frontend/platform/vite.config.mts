@@ -1,4 +1,6 @@
-import react from "@vitejs/plugin-react-swc";
+import { diagramAssetTargets } from '../config/diagramAssets';
+import { createFrontendProxy, frontendEnvDefinitions, loadFrontendEnv, resolveApiTarget } from '../config/vite';
+import react from "@vitejs/plugin-react";
 import fs from "fs";
 import path from "path";
 import { createRequire } from "node:module";
@@ -168,8 +170,8 @@ function resolveMinioProxyTarget(env: Record<string, string>): string {
 export default defineConfig(({ command, mode }) => {
   // 必须从 .env.development.local 等文件加载；仅用 process.env 时配置阶段读不到 VITE_ 变量，会回落到 7860，
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
-  const env = loadEnv(mode, path.resolve(__dirname), "");
-  const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860/";
+  const env = loadFrontendEnv(mode, __dirname);
+  const target = resolveApiTarget(env);
   // Gateway-owned `/api/license/*` (F037/F067 status). Must not fall through to
   // FastAPI. Override with VITE_GATEWAY_PROXY_TARGET when 115 is not the lab GW.
   const gatewayTarget = env.VITE_GATEWAY_PROXY_TARGET || "http://127.0.0.1:8098";
@@ -194,13 +196,20 @@ export default defineConfig(({ command, mode }) => {
   };
 
   const proxyLog = env.VITE_PROXY_LOG === '1';
-  const apiProxyConfig = createProxyConfig(target, true, false, proxyLog);
-  const gatewayProxyConfig = createProxyConfig(gatewayTarget, true, false, proxyLog);
-  const fileServiceProxyConfig = createProxyConfig(fileServiceTarget, true, true, proxyLog);
-  const proxyTargets: Record<string, ReturnType<typeof createProxyConfig>> = {};
+  const rewrite = (url: string) => app_env.BASE_URL && url.startsWith(app_env.BASE_URL) ? url.slice(app_env.BASE_URL.length) : url;
+  const apiProxyConfig = createFrontendProxy(target, { rewrite, verbose: proxyLog });
+  const gatewayProxyConfig = createFrontendProxy(gatewayTarget, { rewrite, verbose: proxyLog });
+  const fileServiceProxyConfig = createFrontendProxy(fileServiceTarget, { rewrite, verbose: proxyLog, minioEnvName: 'VITE_MINIO_PROXY_TARGET' });
+  const proxyTargets: Record<string, ReturnType<typeof createFrontendProxy>> = {};
   // More specific than `/api/` and must be registered first, otherwise Vite's
   // prefix match sends `/api/license/status` to FastAPI (404 in open-source).
   proxyTargets[`${app_env.BASE_URL}/api/license`] = gatewayProxyConfig;
+  // This target must expose the app entry (nginx/gateway/app-proxy), not only
+  // FastAPI. Keep the browser URL on the current origin, including WebSockets.
+  proxyTargets[`${app_env.BASE_URL}/apps/`] = createFrontendProxy(
+    env.VITE_APP_PROXY_TARGET || target,
+    { rewrite, verbose: proxyLog },
+  );
   apiRoutes.forEach(route => {
     proxyTargets[`${app_env.BASE_URL}${route}`] = apiProxyConfig;
   });
@@ -230,7 +239,8 @@ export default defineConfig(({ command, mode }) => {
               if (/[\\/](xlsx|mammoth|xmlbuilder|@xmldom|bluebird|lop|underscore)[\\/]/.test(id)) {
                 return 'vendor-xlsx';
               }
-              if (/[\\/](react-ace|ace-builds|react-syntax-highlighter|vditor|refractor|highlight\.js|prismjs)[\\/]/.test(id)) {
+              // lowlight registers languages eagerly; keep it beside highlight.js to avoid a chunk initialization cycle.
+              if (/[\\/](react-ace|ace-builds|react-syntax-highlighter|vditor|refractor|lowlight|highlight\.js|prismjs)[\\/]/.test(id)) {
                 return 'vendor-editor';
               }
               if (
@@ -245,8 +255,8 @@ export default defineConfig(({ command, mode }) => {
         }
       }
     },
-    // Prebundle workspace UI with its own dependency graph; the app pins a different merge version.
-    optimizeDeps: { include: ["@bisheng/ui"] },
+    // Serve workspace UI as source so component edits participate in HMR.
+    optimizeDeps: { exclude: ["@bisheng/ui"] },
     resolve: {
       // Workspace viewers must use the app's initialized i18n hook instance.
       dedupe: ['react-i18next'],
@@ -271,6 +281,7 @@ export default defineConfig(({ command, mode }) => {
       }),
       viteStaticCopy({
         targets: [
+          ...diagramAssetTargets(),
           {
             src: [
               'node_modules/ace-builds/src-min-noconflict/ace.js',
@@ -297,11 +308,15 @@ export default defineConfig(({ command, mode }) => {
       }),
     ],
     define: {
+      ...frontendEnvDefinitions(env),
+      // react-draggable reads this flag on every drag/resize start in the browser.
+      'process.env.DRAGGABLE_DEBUG': 'false',
       __APP_ENV__: JSON.stringify(app_env_define)
     },
     server: {
       host: '0.0.0.0',
       port: 3001,
+      strictPort: true,
       proxy: {
         ...proxyTargets,
       },

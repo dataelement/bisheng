@@ -41,6 +41,7 @@ export function KnowledgeHomePage({
                 page edge; the list re-centres its content into the 1000px column itself. */}
             <div className="mt-4 min-h-0 w-[calc(100%+24px)] flex-1 overflow-hidden">
                 <KnowledgeSpaceSidebar
+                    onActiveSpaceUpdate={() => undefined}
                     mobilePageMode
                     pageGrid
                     onSpaceSelect={onSpaceSelect}

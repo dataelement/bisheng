@@ -181,6 +181,45 @@ def _is_unmodified_leftover(
     return bool(start_md5) and bool(current_md5) and start_md5 == current_md5
 
 
+# Text deliverables whose body can link to sibling files (charts, images).
+_REFERENCING_EXTS = frozenset({".md", ".markdown", ".html", ".htm"})
+# Reports are small; the cap only guards against a pathological file.
+_REFERENCE_SCAN_LIMIT = 2 * 1024 * 1024
+
+
+def _leftovers_referenced_by(fresh: list[dict], leftovers: list[dict]) -> list[dict]:
+    """Leftover files that a fresh markdown/html deliverable links to.
+
+    Matched by the leftover's path relative to the referencing file's directory
+    (``charts/x.png`` from ``output/report.md``) or by its workspace-relative path.
+    """
+    if not leftovers:
+        return []
+    texts: list[tuple[str, str]] = []
+    for info in fresh:
+        path = info.get("file_path") or ""
+        if os.path.splitext(path)[1].lower() not in _REFERENCING_EXTS:
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as f:
+                texts.append((os.path.dirname(info.get("rel_path") or ""), f.read(_REFERENCE_SCAN_LIMIT)))
+        except OSError:
+            continue
+    if not texts:
+        return []
+    referenced = []
+    for info in leftovers:
+        rel_path = (info.get("rel_path") or "").replace(os.sep, "/")
+        if not rel_path:
+            continue
+        for base_dir, text in texts:
+            relative = os.path.relpath(rel_path, base_dir or ".").replace(os.sep, "/")
+            if relative in text or rel_path in text:
+                referenced.append(info)
+                break
+    return referenced
+
+
 def _zone_of(rel_path: str) -> str:
     """First path segment of a workspace-relative path ('' for root-level files)."""
     head = rel_path.replace(os.sep, "/").split("/", 1)
@@ -404,12 +443,13 @@ def select_deliverables(
     1. **The ``output/`` zone** — the delivery contract every writer is pointed at
        (the code interpreter now relocates root-level writes into it, and the
        kernel prompt tells ``write_file`` to use it). A follow-up turn inherits
-       the previous ``output/``; if every file there is an unmodified leftover
-       (same path + md5 as the start-of-run fingerprint dict), the zone is
-       treated as empty so a missing ``write_file`` falls through to fallback
-       instead of republishing last turn's report. A path-only ``set`` baseline
-       cannot tell overwrite from leftover, so this filter is skipped for that
-       shape (older callers / tests).
+       the previous ``output/``, so an unmodified leftover (same path + md5 as
+       the start-of-run fingerprint dict) is not this run's deliverable, unless
+       a fresh markdown/html deliverable links to it. If nothing there is fresh,
+       the zone is treated as empty so a missing ``write_file`` falls through to
+       fallback instead of republishing last turn's report. A path-only ``set``
+       baseline cannot tell overwrite from leftover, so this filter is skipped
+       for that shape (older callers / tests).
     2. **Files this run created**, when ``output/`` came up empty — a deliverable
        written to an off-contract path is still a deliverable. Requires the task's
        start-of-run ``baseline_paths``; without it this criterion is skipped rather
@@ -445,12 +485,16 @@ def select_deliverables(
         candidates.append((file_info, zone))
 
     selected = [info for info, zone in candidates if zone == OUTPUT_ZONE]
-    # Fingerprint dict only: if this run wrote or overwrote anything in output/,
-    # keep the whole zone (leftover charts next to a new report still belong
-    # together). If every output/ file is an unmodified leftover, drop them.
+    # Fingerprint dict only: deliver what this run wrote or overwrote, per file.
+    # A follow-up turn inherits the whole previous output/, so keeping the zone
+    # whenever anything in it changed republished every earlier deliverable (a
+    # turn asking for one docx came back with the previous turns' pptx/html/xlsx
+    # too). Leftovers a fresh report links to stay: the preview resolves a
+    # markdown image against the delivered file list, so dropping one breaks it.
     if selected and isinstance(baseline_paths, dict):
-        if not any(not _is_unmodified_leftover(info, baseline_paths) for info in selected):
-            selected = []
+        fresh = [info for info in selected if not _is_unmodified_leftover(info, baseline_paths)]
+        leftovers = [info for info in selected if _is_unmodified_leftover(info, baseline_paths)]
+        selected = fresh + _leftovers_referenced_by(fresh, leftovers) if fresh else []
 
     path_set = _baseline_path_set(baseline_paths)
     if not selected and path_set is not None:
@@ -754,6 +798,8 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
 
             tasks_to_terminate = []
             user_ids_to_rollback = set()
+            # Sessions whose owner still had a heartbeat key on the first look.
+            looks_alive: list[tuple[Any, str]] = []
 
             for session in incomplete_tasks:
                 session_id = session.id
@@ -762,25 +808,34 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
                 owner_key = f"linsight:task:owner:{session_id}"
                 owner_node_id = await redis_client.aget(owner_key)
 
-                should_terminate = False
-
                 if not owner_node_id:
                     # No owned node, task needs to be cleaned up.
-                    should_terminate = True
                     logger.warning(f"Task {session_id} has no owner in Redis. Marking as failed.")
-                else:
-                    # There is an owned node, check if the node is alive
-                    is_alive = await node_manager.is_node_alive(owner_node_id)
-                    if not is_alive:
-                        # Node is dead, task needs to be cleaned up.
-                        should_terminate = True
-                        logger.warning(f"Task {session_id} owner {owner_node_id} is dead. Marking as failed.")
-                    else:
-                        # Node is alive, skip cleanup
-                        logger.info(f"Task {session_id} is running on active node {owner_node_id}. Skipping.")
-
-                if should_terminate:
                     tasks_to_terminate.append(session_id)
+                    user_ids_to_rollback.add(session.user_id)
+                elif not await node_manager.is_node_alive(owner_node_id):
+                    # Node is dead, task needs to be cleaned up.
+                    logger.warning(f"Task {session_id} owner {owner_node_id} is dead. Marking as failed.")
+                    tasks_to_terminate.append(session_id)
+                    user_ids_to_rollback.add(session.user_id)
+                else:
+                    looks_alive.append((session, owner_node_id))
+
+            # A heartbeat key outlives its node by up to one TTL. A replacement pod
+            # usually starts within seconds of the old one being killed (eviction:
+            # old pod ended 15:07:20, new one started 15:07:24), so on the first
+            # look the dead node's key is still there and its tasks were skipped
+            # for good: this sweep runs once, and nothing else ever fails them.
+            # Wait one TTL and look again. A live node refreshes its key every
+            # ``interval`` seconds and is still there; a dead node's key is gone.
+            if looks_alive:
+                await asyncio.sleep(node_manager.ttl + 1)
+                for session, owner_node_id in looks_alive:
+                    if await node_manager.is_node_alive(owner_node_id):
+                        logger.info(f"Task {session.id} is running on active node {owner_node_id}. Skipping.")
+                        continue
+                    logger.warning(f"Task {session.id} owner {owner_node_id} stopped its heartbeat. Marking as failed.")
+                    tasks_to_terminate.append(session.id)
                     user_ids_to_rollback.add(session.user_id)
 
             # 3. Batch-terminate only the sessions selected above.

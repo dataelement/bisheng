@@ -1,3 +1,4 @@
+import copy
 import functools
 import json
 from inspect import signature
@@ -162,12 +163,35 @@ class ToolExecutor(BaseTool):
         )
 
     @staticmethod
+    def _coerce_preset_extra(raw) -> dict:
+        """Turn a stored extra payload into a new dict (never the ORM object).
+
+        deepcopy, not a JSON round trip: callers such as the task-mode code
+        interpreter put runtime objects (E2B ``WriteEntry`` file lists) into the
+        dict before it reaches here, and ``json.dumps`` rejects them.
+        """
+        if not raw:
+            return {}
+        if isinstance(raw, dict):
+            return copy.deepcopy(raw)
+        if isinstance(raw, str):
+            loaded = json.loads(raw)
+            return loaded if isinstance(loaded, dict) else {}
+        return {}
+
+    @staticmethod
     def parse_preset_extra(tool: GptsTools, tool_type: GptsToolsType | None) -> dict:
-        """Resolve the tool override or category configuration into a fresh object."""
-        extra = tool.extra or (tool_type.extra if tool_type else None)
-        if isinstance(extra, str):
-            return json.loads(extra)
-        return json.loads(json.dumps(extra or {}))
+        """Preset-tool extra: tool row first, category extra only when the row is empty.
+
+        Matches the built-in-tool config save path, which writes ``t_gpts_tools_type.extra``
+        and NULLs ``t_gpts_tools.extra``. Callers must not stuff a placeholder dict onto
+        ``tool.extra`` before this runs — a non-empty dict blocks the category fallback.
+        """
+        if tool.extra:
+            return ToolExecutor._coerce_preset_extra(tool.extra)
+        if tool_type is not None and tool_type.extra:
+            return ToolExecutor._coerce_preset_extra(tool_type.extra)
+        return {}
 
     @staticmethod
     def parse_preset_tool_params(tool: GptsTools, tool_type: GptsToolsType) -> dict:
@@ -198,22 +222,6 @@ class ToolExecutor(BaseTool):
     @classmethod
     def _init_preset_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
         params = cls.parse_preset_tool_params(tool, tool_type)
-        if tool.tool_key == "bisheng_code_interpreter" and params.get("type") == "container":
-            from bisheng.tool.infrastructure.container_executor import ContainerExecutor
-            from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
-
-            config = params.get("config", {}).get("container", {})
-            # Runner addresses and credentials come exclusively from host settings.
-            executor = ContainerExecutor(
-                minio=params.get("minio"),
-                sandbox_conf=settings.sandbox_conf,
-                **{
-                    key: config[key]
-                    for key in ("local_sync_path", "workspace_prefix", "keep_session", "timeout")
-                    if key in config
-                },
-            )
-            return CodeInterpreterTool(executor=executor, description=executor.description)
         tool_name_param = {tool.tool_key: params}
         tool_langchain = load_tools(tool_params=tool_name_param, **kwargs)
         if not tool_langchain:

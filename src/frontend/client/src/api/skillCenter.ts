@@ -1,51 +1,221 @@
-import request from './request';
-import { SkillError, type CenterSkill, type PersonalSkill, type PlatformSkill } from '~/components/Skills/types';
+import { isApiError, normalizeApiError } from '@bisheng/api-client';
+import request, { translateApiErrorMessage } from './request';
+import { type SkillRecord } from '~/components/Skills/types';
 
-interface ApiResponse<T> { status_code: number; data: T }
+const SKILL_API = '/api/v1/linsight/skill';
+
+interface Envelope<T> {
+  status_code: number;
+  status_message?: string;
+  data: T;
+}
+
+interface ApiCard {
+  id: number;
+  name: string;
+  display_name: string;
+  description: string;
+  enabled: boolean;
+  content_hash: string;
+  bundle_missing: boolean;
+  builtin_key?: string | null;
+  update_time?: string | null;
+  preview?: string;
+  source_text?: string;
+  files?: { path: string }[];
+}
+
+export interface SkillCenterData {
+  personal: SkillRecord[];
+  enterprise: SkillRecord[];
+  personalCount: number;
+  enterpriseCount: number;
+}
+
+export interface SkillUsage {
+  count: number;
+  usedBytes: number;
+  countLimit: number;
+  bytesLimit: number;
+}
+
+function toRecord(row: ApiCard, source: SkillRecord['source']): SkillRecord {
+  return {
+    id: row.id,
+    name: row.name,
+    displayName: row.display_name || row.name,
+    description: row.description || '',
+    source,
+    enabled: Boolean(row.enabled),
+    ...(source === 'platform' ? { builtinKey: row.builtin_key } : {}),
+    contentHash: row.content_hash,
+    bundleMissing: Boolean(row.bundle_missing),
+    updatedAt: row.update_time || '',
+    preview: row.preview || '',
+    sourceText: row.source_text || '',
+    files: (row.files || []).map((file) => file.path),
+  };
+}
+
+function unwrap<T>(body: Envelope<T>): T {
+  if (body?.status_code !== 200) {
+    throw normalizeApiError(body, { message: translateApiErrorMessage(body) });
+  }
+  return body.data;
+}
+
+export async function getSkillCenter(keyword?: string, tab: 'personal' | 'enterprise' = 'personal'): Promise<SkillCenterData> {
+  const response = await request.get<Envelope<{
+    personal: ApiCard[];
+    enterprise: ApiCard[];
+    personal_count: number;
+    enterprise_count: number;
+  }>>(SKILL_API + '/center', { params: { tab, keyword: keyword || undefined } });
+  const data = unwrap(response);
+  return {
+    personal: (data.personal || []).map((row) => toRecord(row, 'personal')),
+    enterprise: (data.enterprise || []).map((row) => toRecord(row, 'platform')),
+    personalCount: data.personal_count,
+    enterpriseCount: data.enterprise_count,
+  };
+}
+
+export async function getSkillDetail(skillId: number): Promise<SkillRecord> {
+  // A missing bundle is one skill, not a service outage. The dialog explains it.
+  const response = await request.get<Envelope<ApiCard>>(`${SKILL_API}/personal/${skillId}`, {
+    skipMaintenance: true,
+  });
+  const row = unwrap(response);
+  return toRecord(row, 'personal');
+}
+
+/** Raw text of one file in the bundle. Enterprise and personal skills share this path. */
+export async function getSkillFile(skillId: number, path: string): Promise<string> {
+  const response = await request.get<Envelope<{ path: string; content: string }>>(
+    `${SKILL_API}/personal/${skillId}/file`,
+    { params: { path }, showError: false, skip403Redirect: true, skipMaintenance: true },
+  );
+  return unwrap(response).content ?? '';
+}
+
+export async function getPersonalSkillUsage(): Promise<SkillUsage> {
+  const response = await request.get<Envelope<{
+    count: number;
+    used_bytes: number;
+    count_limit: number;
+    bytes_limit: number;
+  }>>(`${SKILL_API}/personal/usage`);
+  const data = unwrap(response);
+  return {
+    count: data.count,
+    usedBytes: data.used_bytes,
+    countLimit: data.count_limit,
+    bytesLimit: data.bytes_limit,
+  };
+}
+
+export async function findPersonalSkillByImport(importId: string): Promise<SkillRecord | null> {
+  try {
+    const response = await request.get<Envelope<ApiCard>>(
+      `${SKILL_API}/personal/import/${encodeURIComponent(importId)}`,
+      { showError: false },
+    );
+    if (response?.status_code === 11053) return null;
+    return toRecord(unwrap(response), 'personal');
+  } catch (error) {
+    if (isApiError(error) && error.status_code === 11053) return null;
+    throw error;
+  }
+}
+
+export interface SkillUploadCheck {
+  name: string;
+  displayName: string;
+  description: string;
+  size: number;
+  files: string[];
+}
+
+/** Parse and validate one file. A passing result is not saved. */
+export async function checkPersonalSkill(file: File, skillId?: number): Promise<SkillUploadCheck> {
+  const form = new FormData();
+  form.append('file', file);
+  if (skillId) form.append('skill_id', String(skillId));
+  const response = await request.postMultiPart(
+    `${SKILL_API}/personal/check`,
+    form,
+    { showError: false },
+  ) as Envelope<{
+    name: string;
+    display_name: string;
+    description: string;
+    size: number;
+    files?: { path: string }[];
+  }>;
+  const data = unwrap(response);
+  return {
+    name: data.name,
+    displayName: data.display_name || data.name,
+    description: data.description || '',
+    size: data.size,
+    files: (data.files || []).map((item) => item.path),
+  };
+}
+
+function skillForm(file: File, importId: string, expectedHash?: string): FormData {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('import_id', importId);
+  if (expectedHash) form.append('expected_content_hash', expectedHash);
+  return form;
+}
+
+export async function createPersonalSkill(file: File, importId: string): Promise<SkillRecord> {
+  const response = await request.postMultiPart(
+    `${SKILL_API}/personal`,
+    skillForm(file, importId),
+    { showError: false },
+  ) as Envelope<ApiCard>;
+  return toRecord(unwrap(response), 'personal');
+}
+
+export async function overwritePersonalSkill(
+  skillId: number,
+  file: File,
+  importId: string,
+  expectedHash: string,
+): Promise<SkillRecord> {
+  const response = await request.postMultiPart(
+    `${SKILL_API}/personal/${skillId}/overwrite`,
+    skillForm(file, importId, expectedHash),
+    { showError: false },
+  ) as Envelope<ApiCard>;
+  return toRecord(unwrap(response), 'personal');
+}
+
+export async function setPersonalSkillEnabled(skillId: number, enabled: boolean): Promise<SkillRecord> {
+  // A denied toggle stays on this page. The interceptor explains a 403; bouncing
+  // to the new-chat route would hide the skill the person was just changing.
+  const response = await request.patch<Envelope<ApiCard>>(
+    `${SKILL_API}/personal/${skillId}/status`,
+    { enabled },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- skip403Redirect is an ErrorOptions extra
+    { skip403Redirect: true } as any,
+  );
+  return toRecord(unwrap(response), 'personal');
+}
+
+export async function deletePersonalSkill(skillId: number): Promise<void> {
+  unwrap(await request.delete<Envelope<Record<string, never>>>(`${SKILL_API}/personal/${skillId}`));
+}
 
 export async function getSkillScope(userId: string): Promise<string> {
-  const response = await request.get<ApiResponse<{ leaf_tenant_id: number }>>('/api/v1/user/current-tenant');
-  if (response.status_code !== 200 || !Number.isSafeInteger(response.data?.leaf_tenant_id)) {
-    throw new SkillError('identity');
-  }
-  return JSON.stringify([response.data.leaf_tenant_id, String(userId)]);
+  const body = await request.get<Envelope<{ leaf_tenant_id: number }>>("/api/v1/user/current-tenant");
+  const data = unwrap(body);
+  if (!Number.isSafeInteger(data.leaf_tenant_id)) throw new Error("Invalid tenant identity");
+  return JSON.stringify([data.leaf_tenant_id, String(userId)]);
 }
 
-interface SkillRecord {
-  id: number; name: string; display_name: string; description: string; enabled: boolean;
-  source: 'platform' | 'personal'; content_hash: string; updated_at: string;
-  instructions?: string; files?: string[];
-}
-
-export async function getCenterSkills(): Promise<CenterSkill[]> {
-  const response = await request.get<ApiResponse<SkillRecord[]>>('/api/v1/dsh/skills');
-  if (response.status_code !== 200 || !Array.isArray(response.data)) throw new SkillError('platform');
-  return response.data.map(row => {
-    const shared = { id: `${row.source}:${row.source === 'platform' ? row.name : row.id}`, resourceId: row.id,
-      name: row.name, displayName: row.display_name, description: row.description, enabled: row.enabled };
-    return row.source === 'platform' ? { ...shared, source: 'platform' } : { ...shared, source: 'personal',
-      scope: '', updatedAt: row.updated_at, revision: row.content_hash, instructions: row.instructions ?? '',
-      files: row.files ?? [], fileName: `${row.display_name}.zip`, size: 0, file: new Blob() };
-  });
-}
-export async function getAvailableCenterSkills(): Promise<PlatformSkill[]> {
-  return (await getCenterSkills()).filter((row): row is PlatformSkill => row.source === 'platform');
-}
-export async function setSkillAvailability(skill: CenterSkill, enabled: boolean) {
-  const response = await request.put(`/api/v1/dsh/skills/${skill.resourceId}/availability`, { enabled });
-  if (response.status_code !== 200) throw new SkillError('storage');
-}
-export async function uploadPersonalSkill(file: Blob, fileName: string, target?: PersonalSkill, clientId: string = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')) {
-  const form = new FormData(); form.append('file', file, fileName); form.append('client_id', clientId);
-  const response = await request.postMultiPart(`/api/v1/dsh/skills/personal${target ? `/${target.resourceId}` : ''}`, form);
-  if (response.status_code !== 200) throw new SkillError('storage');
-  return response.data.id as number;
-}
-export async function deletePersonalSkill(skill: PersonalSkill) {
-  const response = await request.delete<ApiResponse<unknown>>(`/api/v1/dsh/skills/personal/${skill.resourceId}`);
-  if (response.status_code !== 200) throw new SkillError('storage');
-}
-export async function downloadPersonalSkill(skill: PersonalSkill): Promise<Blob> {
-  const response = await request.getResponse<{ data: Blob }>(`/api/v1/dsh/skills/personal/${skill.resourceId}/bundle`, { responseType: 'blob' });
-  return response.data;
+export async function setSkillAvailability(skill: SkillRecord, enabled: boolean): Promise<void> {
+  unwrap(await request.put(`/api/v1/dsh/skills/${skill.id}/availability`, { enabled }));
 }

@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-25",
+  "command": "bash features/v3.0.0/089-shared-preview-citation/browser-smoke/regression.sh",
+  "sourceCommit": "3b735de9bfe402763e545318ac593a06fa4f90c0",
+  "groups": {
+    "chat": 71,
+    "file-viewers": 31,
+    "diagram-runtime": 7,
+    "api-client": 19,
+    "config": 37,
+    "platform": 32,
+    "client": 144
+  },
+  "passed": 341,
+  "scope": "Feature regression only; full-repository baseline failures remain documented"
+}

@@ -590,6 +590,11 @@ type knowledge_space
 
 ## 12. 数据迁移：现有数据从哪里来
 
+仍使用旧 RBAC 的环境必须先升级到包含 F006 的 2.5.x 版本，按该版本说明完成
+RBAC→ReBAC 迁移及验证，再升级到后续目标版本执行 F048。F048 不直接转换旧
+`roleaccess`；当前版本不恢复 F006，也不得在 F048 环境运行旧迁移脚本。已经完成 F006
+的旧 ReBAC 环境无需重复这一中间阶段。
+
 迁移需要同时读取三类来源：
 
 ### 12.1 OpenFGA 旧 tuple
@@ -628,6 +633,7 @@ type knowledge_space
 | 与 CREATOR 不同的 space/channel `user_id` | 所有者标准模型普通 assignee | 保留 F018 后仍有效的新 owner，不删除旧 CREATOR |
 | 其他直接 `owner` | binding 指向模型或所有者标准模型的普通 assignee | 可以存在多个；分别保留，不因已有 protected owner 而删除 |
 | `manager` | binding 指向模型或管理者标准模型 | 保留用户、部门、用户组主体 |
+| `user_group:{id}#admin` 的 `manager/can_manage` | 退役审计项，不生成授权 | 新用户组不再单独授予管理员资源管理权限；不转授给全组成员，已有成员授权和创建者权限照常迁移 |
 | `editor` | binding 指向模型或编辑者标准模型 | 同上 |
 | `viewer` | binding 指向模型或查看者标准模型 | 同上 |
 | `can_read / can_edit / can_manage / can_delete` | 不迁移 | 它们是计算结果，不是直接 tuple |

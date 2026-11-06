@@ -1,16 +1,17 @@
 // @ts-strict-ignore
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
-import { Button } from "@/components/bs-ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { Button } from '@bisheng/ui';
+import { Accordion,AccordionContent,AccordionItem,AccordionTrigger } from "@/components/bs-ui/accordion";
+
+import { Tooltip as SharedTooltip,Tabs } from "@bisheng/ui";
+
 import { getToolsApi } from "@/controllers/API/tools";
 import { getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { getToolTree } from "@/util/flowUtils";
 import { cloneDeep } from "lodash-es";
 import { ListVideo } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "react-query";
+import { useQuery } from "@tanstack/react-query";
 import NodeLogo from "./FlowNode/NodeLogo";
 
 const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
@@ -30,9 +31,7 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
         <AccordionContent className="pb-2">
             {
                 sortData.map(el =>
-                    <Tooltip key={el.name}>
-                        <TooltipTrigger className="block w-full">
-                            <div key={el.name}
+                    <SharedTooltip key={el.name} side="right" disabled={!(el.description)} content={(el.description) ? <><div className="max-w-96 text-left break-all whitespace-normal">{temp.is_preset === 1 ? t(`tools.${el.tool_key}.desc`) : el.description}</div></> : null}><span tabIndex={0} className="block w-full"><div key={el.name}
                                 className={`flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200`}
                                 onMouseEnter={(event) => {
                                     if (!event.currentTarget.classList.contains('border-gray-200')) {
@@ -60,12 +59,7 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
                             >
                                 <NodeLogo type="tool" colorStr={el.name} />
                                 <span className="text-sm truncate">{temp.is_preset === 1 ? t(`tools.${el.tool_key}.name`) : el.name}</span>
-                            </div>
-                        </TooltipTrigger>
-                        {el.description && <TooltipContent side="right">
-                            <div className="max-w-96 text-left break-all whitespace-normal">{temp.is_preset === 1 ? t(`tools.${el.tool_key}.desc`) : el.description}</div>
-                        </TooltipContent>}
-                    </Tooltip>
+                            </div></span></SharedTooltip>
                 )
             }
         </AccordionContent>
@@ -75,7 +69,7 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
 export default function Sidebar({ dropdown = false, disabledNodes = [], onInitStartNode = (node: any) => { }, onClick = (k) => { } }) {
     const { t } = useTranslation('flow')
     const { data: tempData, refetch } = useQuery({
-        queryKey: "QueryWorkFlowTempKey",
+        queryKey: ["QueryWorkFlowTempKey"],
         queryFn: () => getWorkflowNodeTemplate(),
         cacheTime: 0
     });
@@ -119,7 +113,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
 
     // tool
     const { data: toolTempData } = useQuery({
-        queryKey: "QueryToolsKey",
+        queryKey: ["QueryToolsKey"],
         queryFn: () => getToolsApi('all'),
         cacheTime: 0
     });
@@ -135,6 +129,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
     }, [toolTempData])
 
     const [expand, setExpand] = useState(true)
+    const [activeTab, setActiveTab] = useState('base')
 
     function onDragStart(
         event: React.DragEvent<any>,
@@ -155,24 +150,21 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
     return <div className={`${dropdown ? 'relative' : 'absolute'} max-w-60 z-40 h-full transition-transform ${expand ? 'p-2' : 'py-2 translate-x-[-200px]'}`}>
         <div className="bg-background rounded-2xl shadow-md h-full p-2">
             {/* tab */}
-            <Tabs defaultValue="base" className="h-full" onValueChange={handleLoadTools}>
+            <div className="h-full">
                 <div className="flex gap-1">
-                    <TabsList className="">
-                        <TabsTrigger className="min-w-20" value="base">{t('basicNodes')}</TabsTrigger>
-                        <TabsTrigger className="min-w-20" value="tool">{t('toolNodes')}</TabsTrigger>
-                    </TabsList>
-                    {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] dark:bg-gray-950 top-2 rounded-full size-8`} onClick={() => setExpand(!expand)}>
+                    <Tabs activeKey={activeTab} onChange={value => { setActiveTab(value); handleLoadTools(value) }} items={[
+                        { key: 'base', label: t('basicNodes') },
+                        { key: 'tool', label: t('toolNodes') },
+                    ]} />
+                    {!dropdown && <Button size="medium" variant="filled" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] dark:bg-gray-950 top-2 rounded-full size-8`} onClick={() => setExpand(!expand)} color="default" iconOnly>
                         <ListVideo className={`size-4 ${expand ? 'rotate-180' : ''}`} />
                     </Button>}
                 </div>
                 {/* base */}
-                <TabsContent value="base">
-                    <TooltipProvider delayDuration={100}>
-                        {
+                {activeTab === 'base' && <div>
+                    <>{
                             nodeTemps.map((item, index) =>
-                                <Tooltip key={item.type}>
-                                    <TooltipTrigger className="block w-full">
-                                        <div key={item.type}
+                                <SharedTooltip key={item.type} side="right" content={<><div className="max-w-96 text-left break-all whitespace-normal">{item.desc}</div></>}><span tabIndex={0} className="block w-full"><div key={item.type}
                                             className={`flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200 dark:hover:border-gray-800`}
                                             onMouseEnter={(event) => {
                                                 // 如果正在拖拽，不移除hover样式
@@ -202,21 +194,14 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                                         >
                                             {item.icon}
                                             <span className="text-sm text-left">{item.name}</span>
-                                        </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right">
-                                        <div className="max-w-96 text-left break-all whitespace-normal">{item.desc}</div>
-                                    </TooltipContent>
-                                </Tooltip>
+                                        </div></span></SharedTooltip>
                             )
-                        }
-                    </TooltipProvider>
-                </TabsContent>
+                        }</>
+                </div>}
                 {/* tool */}
-                <TabsContent value="tool" className="nowheel overflow-y-auto h-[calc(100vh-10rem)] max-w-44 relative">
+                {activeTab === 'tool' && <div className="nowheel overflow-y-auto h-[calc(100vh-10rem)] max-w-44 relative">
                     <Accordion type="multiple" className="w-full">
-                        <TooltipProvider delayDuration={100}>
-                            {toolTemps.map((temp, index) =>
+                        <>{toolTemps.map((temp, index) =>
                                 <ToolItem
                                     key={temp.id}
                                     temp={temp}
@@ -232,11 +217,10 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                                         onClick({ type, node })
                                     }}
                                 />
-                            )}
-                        </TooltipProvider>
+                            )}</>
                     </Accordion>
-                </TabsContent>
-            </Tabs>
+                </div>}
+            </div>
             {/* 搜索 */}
             {/* <div className="side-bar-search-div-placement">
             <input type="text" name="search" id="search" placeholder={t('flow.searchComponent')} className="input-search rounded-full"

@@ -168,8 +168,41 @@ class GrantService:
     ) -> tuple[GrantModelSnapshot, ...]:
         """Apply the Grant level policy without requiring a resource target."""
 
+        return self._models_for_capabilities(
+            models=models,
+            capabilities=capabilities,
+            system_authorized=system_authorized,
+            require_active=True,
+        )
+
+    def manageable_models_for_capabilities(
+        self,
+        *,
+        models: tuple[GrantModelSnapshot, ...],
+        capabilities: tuple[GrantCapability, ...],
+        system_authorized: bool = False,
+    ) -> tuple[GrantModelSnapshot, ...]:
+        """Apply the same level policy to existing, possibly inactive bindings."""
+
+        return self._models_for_capabilities(
+            models=models,
+            capabilities=capabilities,
+            system_authorized=system_authorized,
+            require_active=False,
+        )
+
+    def _models_for_capabilities(
+        self,
+        *,
+        models: tuple[GrantModelSnapshot, ...],
+        capabilities: tuple[GrantCapability, ...],
+        system_authorized: bool,
+        require_active: bool,
+    ) -> tuple[GrantModelSnapshot, ...]:
         available = tuple(
-            model for model in models if model.active and model.derived_level is not None and model.action_codes
+            model
+            for model in models
+            if (model.active or not require_active) and model.derived_level is not None and model.action_codes
         )
         if system_authorized:
             return tuple(

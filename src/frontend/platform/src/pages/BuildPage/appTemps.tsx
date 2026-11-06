@@ -1,11 +1,14 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { AppType } from "@/types/app";
-import { useEffect, useState } from "react";
-import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { useContext, useEffect, useRef, useState } from "react";
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
-import { Button } from "../../components/bs-ui/button";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { userContext } from '@/contexts/userContext';
+import { canManageAppTemplates } from './templatePermissions';
+
 import {
     Table,
     TableBody,
@@ -15,11 +18,14 @@ import {
     TableRow
 } from "../../components/bs-ui/table";
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { showApiError } from "../../controllers/request";
 import { SelectType } from "./apps";
 
 export default function Templates() {
     const navigate = useNavigate()
+    const { user } = useContext(userContext);
+    const canManageTemplates = canManageAppTemplates(user);
+    const generation = useRef(0);
 
     const onChange = () => { }
     const { t } = useTranslation('flow')
@@ -27,14 +33,33 @@ export default function Templates() {
     const { type } = useParams()
     const [temps, setTemps] = useState([])
     useEffect(() => {
-        readTempsDatabase(type).then(setTemps)
-    }, [type])
+        let active = true;
+        const load = () => {
+            const request = ++generation.current;
+            setTemps([]);
+            if (!canManageTemplates) return;
+            readTempsDatabase(type).then(rows => {
+                if (active && request === generation.current) setTemps(rows);
+            }).catch(error => {
+                if (active && request === generation.current) showApiError(error);
+            });
+        };
+        load();
+        window.addEventListener('bisheng:management-scope-changed', load);
+        const invalidate = () => { active = false; ++generation.current; };
+        return () => {
+            invalidate();
+            window.removeEventListener('bisheng:management-scope-changed', load);
+        };
+    }, [type, canManageTemplates, user?.tenant_id])
 
     const handleDragEnd = ({ source, destination }: any) => {
         if (!destination || source.index === destination.index) {
             return;
         }
-        const updatedList = [...temps];
+        const previousList = temps;
+        const request = generation.current;
+        const updatedList = temps.map(temp => ({ ...temp }));
         const [removed] = updatedList.splice(source.index, 1);
         updatedList.splice(destination.index, 0, removed);
         setTemps(updatedList);
@@ -52,12 +77,16 @@ export default function Templates() {
 
         const currentItem = updatedList[destination.index]
         currentItem.order_num = sort
-        const { name, description, order_num } = currentItem
+        const { order_num } = currentItem
 
-        captureAndAlertRequestErrorHoc(updateTempApi(currentItem.id, { name, description, order_num }).then(onChange))
+        updateTempApi(currentItem.id, { order_num }).then(onChange).catch(error => {
+            if (request === generation.current) setTemps(previousList)
+            showApiError(error)
+        })
     }
 
     const handleDelTemp = (index: number, id: number) => {
+        const request = generation.current;
         const nameMap = {
             [AppType.FLOW]: t('workflow'),
             [AppType.ASSISTANT]: t('assistant')
@@ -67,20 +96,23 @@ export default function Templates() {
             desc: t('confirmDeleteTemplate', { type: labelName }),
             okTxt: t('delete'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteTempApi(id).then((res) => {
+                if (request !== generation.current) { next(); return; }
+                return deleteTempApi(id).then((res) => {
                     onChange(res)
-                    setTemps(temps.filter((temp, i) => index !== i));
+                    if (request === generation.current) setTemps(rows => rows.filter(temp => temp.id !== id));
                     next()
-                }))
+                })
             }
         })
     }
+
+    if (!canManageTemplates) return <Navigate to="/403" replace />;
 
     return <div className="px-2 py-4 h-full relative">
         <div className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide">
             <div className="flex justify-between">
                 <SelectType defaultValue={type} onChange={(v) => navigate(`/build/temps/${v}`)} />
-                <Button size="sm" onClick={() => navigate('/build/apps')}>{t('returnToAppList')}</Button>
+                <Button size="small" onClick={() => navigate('/build/apps')}>{t('returnToAppList')}</Button>
             </div>
             <Table className="mb-[50px]">
                 <TableHeader>
@@ -110,12 +142,13 @@ export default function Templates() {
                                                 <TableCell className="font-medium min-w-[400px]">{temp.name}</TableCell>
                                                 <TableCell className={snapshot.isDragging ? 'break-words' : `max-w-0 break-words`}>{temp.description}</TableCell>
                                                 <TableCell className="text-right pr-5">
-                                                    <Button variant="link" className="text-destructive" onClick={() => handleDelTemp(index, temp.id)}>{t('delete')}</Button>
+                                                    <Button size="small" variant="link" color="danger" onClick={() => handleDelTemp(index, temp.id)}>{t('delete')}</Button>
                                                 </TableCell>
                                             </tr>
                                         )}
                                     </Draggable>
                                 )}
+                                {provided.placeholder}
                             </TableBody>
                         )}
                     </Droppable>

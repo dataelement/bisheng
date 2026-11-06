@@ -17,6 +17,10 @@ wrong or cannot express the construct at all:
 * A table of contents, page numbers, and a horizontal rule are all field codes
   or borders with no python-docx API at all.
 
+**Following a user's template is a different job:** open the template itself
+and copy its paragraphs with ``clone_paragraph`` / ``copy_table``. Those two
+never consult the profile — the template's own direct formatting is the spec.
+
 **Which face and size a helper renders in lives in ``style_profiles.py``, not
 here.** Call ``apply_chinese_defaults(doc)`` once — it selects the GB/T 9704
 公文 profile by default — and every helper below follows it. Pass an explicit
@@ -25,12 +29,15 @@ here.** Call ``apply_chinese_defaults(doc)`` once — it selects the GB/T 9704
 
 import os
 import sys
+from copy import deepcopy
 
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 
 try:
     from style_profiles import active_profile, heading_spec, resolve_profile, set_active_profile
@@ -551,3 +558,103 @@ def add_signature_block(doc, org: str | None = None, date: str | None = None, bl
         set_run_font(paragraph.add_run(text), body["font"], body["pt"], color=body.get("color"))
         paragraphs.append(paragraph)
     return paragraphs
+
+
+# --------------------------------------------------------------------------- #
+# Following a reference document (template / 范文)
+# --------------------------------------------------------------------------- #
+
+
+def _run_text(run_element) -> str:
+    return "".join(t.text or "" for t in run_element.iter(qn("w:t")))
+
+
+def clone_paragraph(proto, text: str, after=None, keep_leading: bool = True):
+    """Copy a reference paragraph — layout and all — and put ``text`` in it.
+
+    Customer templates set face, size, indent and line spacing as direct
+    formatting on each paragraph and run, under a bare ``Normal`` style. Adding
+    a fresh paragraph to the template therefore inherits none of it; copying
+    the template's own paragraph of the same role is the only way to keep it.
+
+    The first run that carries text donates its run formatting (templates put
+    the specimen first and a filling note after it). ``keep_leading`` re-applies
+    the prototype's leading spaces — templates align their info blocks with
+    spaces, and dropping them shifts the block to the margin. Inserted after
+    ``after`` (default: after ``proto``).
+    """
+    new_p = deepcopy(proto._p)
+    donor = next((r for r in new_p.iter(qn("w:r")) if _run_text(r).strip()), None)
+    rpr = donor.find(qn("w:rPr")) if donor is not None else None
+    rpr = deepcopy(rpr) if rpr is not None else None
+    for child in list(new_p):
+        if child.tag != qn("w:pPr"):
+            new_p.remove(child)
+    lead = proto.text[: len(proto.text) - len(proto.text.lstrip(" \u3000"))] if keep_leading else ""
+    if text[:1] in (" ", "\u3000"):
+        lead = ""
+    run = OxmlElement("w:r")
+    if rpr is not None:
+        run.append(rpr)
+    t = OxmlElement("w:t")
+    t.set(qn("xml:space"), "preserve")
+    t.text = lead + text
+    run.append(t)
+    new_p.append(run)
+    anchor = after if after is not None else proto
+    anchor_el = anchor._p if isinstance(anchor, Paragraph) else anchor._tbl
+    anchor_el.addnext(new_p)
+    return Paragraph(new_p, proto._parent)
+
+
+def copy_table(table, after, font: str | None = None, size_pt: float | None = None):
+    """Copy a table (e.g. from the source document) to sit after ``after``.
+
+    Pass the reference document's body face and size to re-font every cell;
+    leave them ``None`` to keep the table exactly as it was. Works across two
+    ``Document`` objects as long as the table holds no images.
+
+    Column widths are scaled down proportionally when they exceed the target's
+    text width: the source usually has narrower margins than the template, and
+    a verbatim copy runs off the right edge of the page.
+    """
+    new_tbl = deepcopy(table._tbl)
+    anchor_el = after._p if isinstance(after, Paragraph) else after._tbl
+    anchor_el.addnext(new_tbl)
+    new_table = Table(new_tbl, after._parent)
+    if font or size_pt is not None:
+        for row in new_table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        set_run_font(run, font, size_pt)
+    _fit_table_width(new_tbl, content_width_cm(after.part.document.sections[0]))
+    return new_table
+
+
+def _dxa_widths(root, tag: str):
+    return [e for e in root.iter(qn(tag)) if e.get(qn("w:w")) and e.get(qn("w:type")) in (None, "dxa")]
+
+
+def _fit_table_width(tbl, usable_cm: float):
+    """Shrink every width in a table's XML by one factor so it fits ``usable_cm``.
+
+    Word lays a table out from the cell widths when they disagree with the grid,
+    so the wider of the two decides whether it overflows.
+    """
+    first_row = tbl.find(qn("w:tr"))
+    row_twips = sum(int(e.get(qn("w:w"))) for e in _dxa_widths(first_row, "w:tcW")) if first_row is not None else 0
+    grid_twips = sum(int(g.get(qn("w:w"))) for g in _dxa_widths(tbl, "w:gridCol"))
+    total_twips = max(row_twips, grid_twips)
+    limit_twips = usable_cm / 2.54 * 1440
+    if not total_twips or total_twips <= limit_twips:
+        return
+    factor = limit_twips / total_twips
+    for element in _dxa_widths(tbl, "w:gridCol") + _dxa_widths(tbl, "w:tcW") + _dxa_widths(tbl, "w:tblW"):
+        element.set(qn("w:w"), str(int(int(element.get(qn("w:w"))) * factor)))
+
+
+def delete_paragraph(paragraph):
+    """Remove a paragraph (template instructions, placeholder lines) from the document."""
+    element = paragraph._p
+    element.getparent().remove(element)

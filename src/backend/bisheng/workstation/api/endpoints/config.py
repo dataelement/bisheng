@@ -19,7 +19,7 @@ router = APIRouter()
 
 @router.get("/config", summary="Get workbench configuration", response_model=UnifiedResponseModel)
 async def get_config(request: Request, login_user=LoginUserDep):
-    ret = await WorkStationService.get_daily_chat_config()
+    ret = await WorkStationService.get_daily_chat_config(for_picker=True)
     if bisheng_settings.dsh.enabled:
         from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
 
@@ -33,7 +33,7 @@ async def get_config(request: Request, login_user=LoginUserDep):
     ret = ret.model_dump(exclude_unset=True) if ret else {}
     from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
 
-    ret["tools"] = await CapabilityCatalogService(login_user).picker_tools()
+    ret["tools"] = await CapabilityCatalogService(login_user).picker_tools(configured_tools=ret.get("tools") or [])
     ret["skillEntry"] = {"enabled": True}
     # Organization knowledge bases in this user-facing payload seed default
     # selections and expose display metadata. Filter by `visible` intentionally;

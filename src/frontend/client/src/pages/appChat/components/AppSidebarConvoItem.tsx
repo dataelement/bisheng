@@ -2,6 +2,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Check, X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
+import { Dropdown, DropdownItem, DropdownSeparator } from '@bisheng/ui';
 import type { MouseEvent, FocusEvent, KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
@@ -17,20 +18,6 @@ import { QueryKeys } from '~/types/chat';
 import { chatsState, runningState } from '~/pages/appChat/store/atoms';
 import { closeAppChatWebSocket } from '~/pages/appChat/useWebsocket';
 
-import {
-    DropdownMenu,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '~/components/ui/DropdownMenu';
-import {
-    SidebarListMoreMenuContent,
-    sidebarListMoreMenuDangerIconClassName,
-    sidebarListMoreMenuDangerItemClassName,
-    sidebarListMoreMenuDangerLabelClassName,
-    sidebarListMoreMenuIconClassName,
-    sidebarListMoreMenuItemClassName,
-    sidebarListMoreMenuLabelClassName,
-} from '~/components/SidebarListMoreMenu';
 import TodayItemIcon from '~/components/ui/icon/TodayItem';
 import LingsiIcon from '~/components/ui/icon/Lingsi';
 
@@ -243,48 +230,43 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
             >
                 {!renaming && (
                     <>
-                        <DropdownMenu open={isPopoverActive} onOpenChange={setIsPopoverActive}>
-                            <DropdownMenuTrigger asChild>
-                                <button
-                                    ref={deleteButtonRef}
-                                    type="button"
-                                    className={cn(
-                                        'z-10 flex size-7 shrink-0 items-center justify-center rounded-md text-text-2 outline-none transition-colors hover:bg-black/5',
-                                        isActive || isPopoverActive
-                                            ? 'opacity-100'
-                                            : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 coarse-pointer:opacity-100',
-                                    )}
-                                    onClick={(e) => e.stopPropagation()}
-                                    aria-label={localize('com_ui_more')}
-                                >
-                                    <Outlined.More className="size-4" />
-                                </button>
-                            </DropdownMenuTrigger>
-                            <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                                <DropdownMenuItem
-                                    className={sidebarListMoreMenuItemClassName}
-                                    onClick={handleRenameStart}
-                                >
-                                    <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
-                                    <span className={sidebarListMoreMenuLabelClassName}>
+                        <Dropdown
+                            align="end"
+                            open={isPopoverActive}
+                            onOpenChange={setIsPopoverActive}
+                            menu={
+                                <>
+                                    <DropdownItem icon={<Outlined.Edit />} onSelect={() => handleRenameStart()}>
                                         {localize('com_ui_rename')}
-                                    </span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    className={sidebarListMoreMenuDangerItemClassName}
-                                    onSelect={(e) => {
-                                        e.preventDefault();
-                                        setIsPopoverActive(false);
-                                        handleDeleteClick();
-                                    }}
-                                >
-                                    <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
-                                    <span className={sidebarListMoreMenuDangerLabelClassName}>
+                                    </DropdownItem>
+                                    <DropdownSeparator />
+                                    <DropdownItem
+                                        danger
+                                        icon={<Outlined.Delete />}
+                                        onSelect={() => {
+                                            setIsPopoverActive(false);
+                                            handleDeleteClick();
+                                        }}
+                                    >
                                         {localize('com_ui_delete')}
-                                    </span>
-                                </DropdownMenuItem>
-                            </SidebarListMoreMenuContent>
-                        </DropdownMenu>
+                                    </DropdownItem>
+                                </>
+                            }
+                        >
+                            <button
+                                ref={deleteButtonRef}
+                                type="button"
+                                className={cn(
+                                    'z-10 flex size-7 shrink-0 items-center justify-center rounded-md text-text-2 outline-none transition-colors hover:bg-black/5',
+                                    isActive || isPopoverActive
+                                        ? 'opacity-100'
+                                        : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 coarse-pointer:opacity-100',
+                                )}
+                                aria-label={localize('com_ui_more')}
+                            >
+                                <Outlined.More className="size-4" />
+                            </button>
+                        </Dropdown>
                     </>
                 )}
             </div>

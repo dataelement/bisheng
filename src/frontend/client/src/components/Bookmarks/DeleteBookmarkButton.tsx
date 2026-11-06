@@ -1,7 +1,8 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useCallback, useState } from 'react';
 import type { FC } from 'react';
-import { Label, OGDialog, OGDialogTrigger, TooltipAnchor } from '~/components/ui';
+import { Label, OGDialog, OGDialogTrigger } from '~/components/ui';
 import { useDeleteConversationTagMutation } from '~/hooks/queries/data-provider';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { NotificationSeverity } from '~/common';
@@ -48,21 +49,7 @@ const DeleteBookmarkButton: FC<{
   return (
     <>
       <OGDialog open={open} onOpenChange={setOpen}>
-        <OGDialogTrigger asChild>
-          <TooltipAnchor
-            role="button"
-            aria-label={localize('com_ui_bookmarks_delete')}
-            description={localize('com_ui_delete')}
-            className="flex size-7 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-surface-hover"
-            tabIndex={tabIndex}
-            onFocus={onFocus}
-            onBlur={onBlur}
-            onClick={() => setOpen(!open)}
-            onKeyDown={handleKeyDown}
-          >
-            <TrashIcon className="size-4" />
-          </TooltipAnchor>
-        </OGDialogTrigger>
+        <SharedTooltip  content={localize('com_ui_delete')}  ><OGDialogTrigger asChild><div role="button" aria-label={localize('com_ui_bookmarks_delete')} className="flex size-7 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-surface-hover" tabIndex={tabIndex} onFocus={onFocus} onBlur={onBlur} onClick={() => setOpen(!open)} onKeyDown={handleKeyDown}  ><TrashIcon className="size-4" /></div></OGDialogTrigger></SharedTooltip>
         <OGDialogTemplate
           showCloseButton={false}
           title={localize('com_ui_bookmarks_delete')}

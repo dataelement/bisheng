@@ -32,7 +32,31 @@ async def build_runtime_handler(scenario_code: str) -> Any:
             update_member=SpaceChannelMemberDao.update,
             sync_permissions=KnowledgeSpaceService.sync_direct_space_user_permissions,
         )
+    if scenario_code == "app_publish_request":
+        # Imported inside the branch: the factory is reached from the API
+        # process, the Celery worker and the withdraw path, and only one of
+        # those has any reason to pull in the publish pipeline.
+        #
+        # A **new instance every call** is load bearing, not tidiness: the
+        # handler carries the self-approval flag of the request it resolved
+        # (F055 design D7), and a shared instance would leak it between two
+        # concurrent releases.
+        from bisheng.app_publish.domain.services.app_publish_scenario_handler import AppPublishScenarioHandler
+
+        return AppPublishScenarioHandler()
     raise KeyError(f"handler not registered for scenario_code={scenario_code}")
+
+
+async def read_current_scenario_detail(instance, login_user, *, management: bool = False) -> dict:
+    """Optional current decoration, called only after the existing read guards."""
+    if instance.scenario_code != "app_publish_request":
+        return {}
+    handler = await build_runtime_handler(instance.scenario_code)
+    return {
+        "current_visibility": await handler.read_current_detail(
+            instance=instance, login_user=login_user, management=management
+        )
+    }
 
 
 class _AsyncSpaceChannelMembershipAdapter:
@@ -54,3 +78,28 @@ class _AsyncSpaceChannelMembershipAdapter:
         async with get_async_db_session() as session:
             repository = SpaceChannelMemberRepositoryImpl(session)
             return await repository.delete(membership_id)
+
+
+async def eligible_scenario_candidates(instance, candidate_ids):
+    if instance.scenario_code != "app_publish_request":
+        return list(candidate_ids)
+    from types import SimpleNamespace
+
+    handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+    req = SimpleNamespace(
+        tenant_id=instance.tenant_id,
+        applicant_user_id=instance.applicant_user_id,
+        business_key=instance.business_key,
+        payload_snapshot=instance.payload_snapshot or {},
+    )
+    result = await handler.validate_approver_candidates(req, candidate_ids)
+    return result
+
+
+async def validate_scenario_candidates(instance, candidate_ids):
+    from bisheng.common.errcode.approval import ApprovalRequestPermissionDeniedError
+
+    result = await eligible_scenario_candidates(instance, candidate_ids)
+    if set(result) != set(candidate_ids):
+        raise ApprovalRequestPermissionDeniedError()
+    return result

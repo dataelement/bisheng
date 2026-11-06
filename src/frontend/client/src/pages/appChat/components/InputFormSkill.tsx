@@ -1,15 +1,16 @@
 // @ts-strict-ignore
 
+import { Select } from "@bisheng/ui";
 import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { getVariablesApi } from "~/api/apps";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import useSelectCopy from "~/hooks/useSelectCopy";
 import InputComponent from "./InputComponent";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/Select";
 import InputFileComponent from "./InputFileComponent";
 import { Button } from "~/components";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
-import { MessageWarper } from "./MessageBsChoose";
+import { MessageFrame } from '@bisheng/chat';
 
 /**
  * @component 会话报告生成专用表单
@@ -21,6 +22,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
     const vid = 0
     const { showToast } = useToastContext();
     const localize = useLocalize()
+    const selectCopy = useSelectCopy()
 
     useImperativeHandle(ref, () => ({
         submit: () => {
@@ -86,7 +88,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
 
     if (items.length === 0) return null
 
-    return <MessageWarper flow={flow} logo={logo}>
+    return <MessageFrame title={flow.name} logo={logo}>
         <div className="">
             <div className="max-h-[520px] overflow-y-auto space-y-2 px-1">
                 {items.map((item, i) => <div key={item.id} className="w-full text-sm">
@@ -100,18 +102,15 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
                             onChange={(val) => handleChange(i, val)}
                         /> :
                             item.type === 'select' ?
-                                <Select onValueChange={(val) => handleChange(i, val)}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectGroup>
-                                            {
-                                                item.options.map(el => <SelectItem key={el.value} value={el.value}>{el.value}</SelectItem>)
-                                            }
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select> :
+                                <Select
+                                    {...selectCopy}
+                                    options={(item.options || [])
+                                        .filter(el => el.value != null && el.value !== '')
+                                        .map(el => ({ value: el.value, label: String(el.value) }))}
+                                    placeholder={localize('com_ui_please_select')}
+                                    aria-label={item.name}
+                                    onChange={(val) => handleChange(i, val ?? '')}
+                                /> :
                                 item.type === 'file' ?
                                     <InputFileComponent
                                         isSSO
@@ -134,7 +133,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
                 <Button size="sm" className="mt-4 h-8 px-4" onClick={handleStart}>{localize('com_ui_start')}</Button>
             </div>}
         </div>
-    </MessageWarper>
+    </MessageFrame>
 });
 
 export default InputFormSkill

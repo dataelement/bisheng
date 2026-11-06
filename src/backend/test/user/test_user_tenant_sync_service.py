@@ -9,6 +9,8 @@ in isolation:
   - ``AuditLogDao.ainsert_v2``
   - Redis client (cache invalidation)
   - ``_count_owned_resources`` (replaced with an AsyncMock)
+  - ``PersonalTokenService.migrate_tenant`` (F053 D19: a PAT follows its
+    holder to the new tenant; the real one hits ``api_credential`` directly)
 
 Covers spec §5.2 (sync flow), AC-03 / AC-04 / AC-05 / AC-06 / AC-07 of F012.
 """
@@ -22,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from bisheng.common.errcode.tenant_resolver import TenantRelocateBlockedError
+from bisheng.open_api.domain.services.personal_token_service import PersonalTokenService
 from bisheng.tenant.domain.constants import (
     TenantAuditAction,
     UserTenantSyncTrigger,
@@ -60,6 +63,7 @@ def patches(monkeypatch):
     count_mock = AsyncMock(name="_count_owned_resources")
     invalidate_mock = AsyncMock(name="_invalidate_redis_caches")
     notify_mock = AsyncMock(name="_notify_resource_owner_relocation")
+    migrate_token_mock = AsyncMock(name="migrate_tenant", return_value=0)
 
     monkeypatch.setattr(
         uts_module.TenantResolver,
@@ -106,6 +110,10 @@ def patches(monkeypatch):
         "_notify_resource_owner_relocation",
         notify_mock,
     )
+    # ``_migrate_relocated_personal_token`` imports the service lazily, so the
+    # class attribute is the only seam; patching the private method instead
+    # would hide whether the D19 call is still wired.
+    monkeypatch.setattr(PersonalTokenService, "migrate_tenant", migrate_token_mock)
 
     return SimpleNamespace(
         resolve=resolver_mock,
@@ -117,6 +125,7 @@ def patches(monkeypatch):
         count_owned=count_mock,
         invalidate=invalidate_mock,
         notify=notify_mock,
+        migrate_token=migrate_token_mock,
     )
 
 
@@ -148,6 +157,9 @@ class TestNoChange:
         patches.increment.assert_not_awaited()
         patches.apply_changes.assert_not_awaited()
         patches.audit.assert_not_awaited()
+        # D19: the cheap exit still reconciles the PAT tenant, so a token that
+        # missed an earlier relocation catches up on the next sync.
+        patches.migrate_token.assert_awaited_once_with(user_id=100, tenant_id=5)
 
 
 # -------------------------------------------------------------------------
@@ -173,6 +185,8 @@ class TestRelocateHappy:
         patches.increment.assert_awaited_once_with(100)
         patches.apply_changes.assert_awaited_once()
         patches.invalidate.assert_awaited_once_with(100)
+        # D19: the PAT follows its holder to the new leaf, after the swap.
+        patches.migrate_token.assert_awaited_once_with(user_id=100, tenant_id=7)
 
         # audit_log.action = user.tenant_relocated
         audit_kwargs = patches.audit.call_args.kwargs
@@ -283,10 +297,11 @@ class TestBlocked:
         assert audit_kwargs["action"] == TenantAuditAction.USER_TENANT_RELOCATE_BLOCKED.value
         assert audit_kwargs["metadata"]["owned_count"] == 2
 
-        # No swap / no token bump / no permission changes.
+        # No swap / no token bump / no permission changes / no PAT move.
         patches.activate.assert_not_awaited()
         patches.increment.assert_not_awaited()
         patches.apply_changes.assert_not_awaited()
+        patches.migrate_token.assert_not_awaited()
 
     def test_not_blocked_when_enforce_true_but_no_owned_resources(
         self,

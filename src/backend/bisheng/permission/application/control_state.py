@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from sqlalchemy import update
 from sqlmodel import col, select
@@ -13,6 +13,7 @@ from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
 )
+from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.permission.application.sql_runtime import (
     stable_assignee_id,
@@ -30,6 +31,7 @@ from bisheng.permission.domain.models import (
     PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
+from bisheng.permission.domain.repositories.grant_repository import GrantRepository, ResourcePermissionModeRepository
 from bisheng.permission.domain.schemas import (
     VerifiedPermissionTarget,
     VisibleSourceProjectionDTO,
@@ -384,6 +386,42 @@ class SqlPermissionControlState:
             )
         return tuple(result)
 
+    async def resolve_business_source_version(
+        self,
+        *,
+        target: VerifiedPermissionTarget,
+        source: GrantSourceRecord,
+    ) -> GrantSourceRecord:
+        """Resolve an inactive stable source's next version before planning tuples.
+
+        The resource version fence and _upsert_assignee recheck this snapshot
+        during prepare, before any OpenFGA write.
+        """
+        async with get_async_db_session() as session:
+            row = (
+                (
+                    await session.execute(
+                        select(PermissionGrantAssignee)
+                        .join(PermissionGrant, PermissionGrant.id == PermissionGrantAssignee.grant_id)
+                        .where(
+                            PermissionGrant.tenant_id == target.tenant_id,
+                            PermissionGrant.resource_type == target.resource_type,
+                            PermissionGrant.resource_id == target.resource_id,
+                            PermissionGrantAssignee.tenant_id == target.tenant_id,
+                            PermissionGrantAssignee.id == source.source_id,
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+        if row is None:
+            return source
+        historical = self._source_snapshot(row)
+        if row.state != "INACTIVE" or replace(historical, active=True, version=source.version) != source:
+            raise PermissionVersionConflictError(msg="Business permission source changed before reactivation")
+        return replace(source, version=historical.version + 1)
+
     async def load_visible_sources(
         self,
         *,
@@ -455,6 +493,47 @@ class SqlPermissionControlState:
             ),
         )
 
+    async def source_read_stamp(self, *, target, models):
+        """Pin every mode and Grant involved in a complete trusted source read."""
+        current = (target.resource_type, target.resource_id)
+        visited, stamp = set(), []
+        known = {model.model_key for model in models}
+        with tenant_execution_scope(target.tenant_id), strict_tenant_filter():
+            while current not in visited:
+                if len(visited) >= 128:
+                    raise PermissionPublishNotReadyError(reason="inheritance_limit")
+                visited.add(current)
+                mode = await ResourcePermissionModeRepository().aget_mode(
+                    resource_type=current[0], resource_id=current[1]
+                )
+                if mode is None or mode.tenant_id != target.tenant_id or mode.projection_state != "CURRENT":
+                    raise PermissionPublishNotReadyError(reason="projection_unavailable")
+                grants = await GrantRepository().alist_resource_grants(resource_type=current[0], resource_id=current[1])
+                if len(grants) > 5000:
+                    raise PermissionPublishNotReadyError(reason="summary_limit")
+                for grant in grants:
+                    if grant.state not in {"ACTIVE", "INACTIVE"} or (
+                        grant.state == "ACTIVE"
+                        and (grant.projection_state != "CURRENT" or grant.model_key not in known)
+                    ):
+                        raise PermissionPublishNotReadyError(reason="grant_projection_unavailable")
+                stamp.append(
+                    (
+                        current,
+                        mode.version,
+                        mode.mode,
+                        mode.parent_type,
+                        mode.parent_id,
+                        tuple(sorted((g.model_key, g.version, g.state, g.projection_state) for g in grants)),
+                    )
+                )
+                if mode.mode == "CUSTOM":
+                    return tuple(stamp)
+                if mode.mode != "INHERIT" or mode.parent_type is None or mode.parent_id is None:
+                    break
+                current = (mode.parent_type, mode.parent_id)
+        raise PermissionPublishNotReadyError(reason="inheritance_unavailable")
+
     async def load_source_page(
         self,
         *,
@@ -469,7 +548,8 @@ class SqlPermissionControlState:
         if after_id < 0 or limit <= 0:
             raise ValueError("Permission source cursor bounds are invalid")
         normalized_mode = mode.upper()
-        model_by_key = {model.model_key: model for model in models if model.active}
+        # Model deactivation only prevents new assignments; existing sources remain effective.
+        model_by_key = {model.model_key: model for model in models}
         if not model_by_key:
             return (), False
         fetch_limit = limit + 1
@@ -1493,6 +1573,10 @@ class SqlPermissionControlState:
             )
             if signature != expected:
                 raise PermissionVersionConflictError(msg="Permission source fingerprint collision")
+            expected_version = row.version + (1 if row.state == "INACTIVE" else 0)
+            if source.version != expected_version:
+                raise PermissionVersionConflictError(msg="Permission source version changed before projection")
+            row.version = source.version
             row.state = state
         return row
 

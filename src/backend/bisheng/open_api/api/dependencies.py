@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -13,40 +14,30 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.llm_tenant import LLMModelSharedReadonlyError
 from bisheng.common.errcode.open_api import (
-    OpenApiAuthDependencyUnavailableError,
     OpenApiAuthError,
-    OpenApiDelegationModeUnsupportedError,
     OpenApiEndpointUnregisteredError,
     OpenApiRemovedIdentityInputError,
-    OpenApiScopeMissingError,
-    PersonalTokenDisabledError,
+    ServiceAccountOperationForbiddenError,
 )
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID, current_tenant_id, visible_tenant_ids
 from bisheng.open_api.domain.context import (
     OpenApiPrincipal,
     get_current_open_api_principal,
-    reset_current_open_api_principal,
-    set_current_open_api_principal,
 )
 from bisheng.open_api.domain.scopes import get_open_api_scope_marker
+from bisheng.open_api.domain.services.access_context import (
+    OPEN_API_PRINCIPAL_SCOPE_KEY,
+)
+from bisheng.open_api.domain.services.access_context import (
+    open_api_access_context as shared_open_api_access_context,
+)
 from bisheng.open_api.domain.services.credential_validator import validate_bearer
 from bisheng.open_api.domain.services.credential_watcher import watch_websocket_credential
-from bisheng.open_api.domain.services.identity_service import (
-    assert_no_removed_identity_headers,
-    resolve_request_identity,
-)
+from bisheng.open_api.domain.services.service_account_scope_service import ServiceAccountScopeService
 from bisheng.open_api.domain.services.tenant_setting_service import TenantSettingService
-from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
-from bisheng.permission.application.identity import (
-    reset_current_permission_actor,
-    set_current_permission_actor,
-)
-from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.user.domain.services.auth import AuthJwt
 
 WS_POLICY_VIOLATION = 1008
-_SCOPE_PRINCIPAL_KEY = "open_api_principal"
 
 
 async def verify_open_api_access(conn: HTTPConnection) -> AsyncIterator[OpenApiPrincipal]:
@@ -63,93 +54,27 @@ async def open_api_access_context(
     """Share admission checks with failures raised before dependency execution."""
 
     try:
-        principal = await validate_bearer(conn.headers.get("Authorization"))
-    except OpenApiAuthError as exc:
-        _raise_for_connection(conn, exc)
-        raise AssertionError("unreachable")
-
-    tenant_token = current_tenant_id.set(principal.tenant_id)
-    # A credential is always tenant-scoped. Root-owned shared rows remain
-    # visible through the standard tenant filter, but administrator facts on a
-    # natural-person PAT must never widen this set to another child tenant.
-    visible_token = visible_tenant_ids.set(frozenset({DEFAULT_TENANT_ID, principal.tenant_id}))
-    principal_token = None
-    permission_token = None
-    conn.scope[_SCOPE_PRINCIPAL_KEY] = principal
-    pat_data_scope = DATA_SCOPE_ALL
-    try:
-        if principal.actor_kind == "natural_person":
-            if not settings.open_api.pat_enabled:
-                raise PersonalTokenDisabledError()
-            try:
-                tenant_policy = await TenantSettingService.get_policy(principal.tenant_id)
-            except OpenApiAuthError:
-                raise
-            except Exception as exc:
-                raise OpenApiAuthDependencyUnavailableError() from exc
-            if not tenant_policy.enabled:
-                raise PersonalTokenDisabledError()
-            # F066: reuse this policy read — no second lookup on the hot path.
-            pat_data_scope = tenant_policy.data_scope
-
-        marker = get_open_api_scope_marker(conn.scope.get("endpoint"))
-        if marker is None:
-            raise OpenApiEndpointUnregisteredError()
-        if marker.scope is not None and not principal.has_scope(marker.scope):
-            raise OpenApiScopeMissingError(required=marker.scope)
-
-        assert_no_removed_identity_headers(conn.headers.items())
-        await _assert_no_removed_identity_input(conn, inspect_body=inspect_body)
-        principal = await resolve_request_identity(
-            principal,
+        async with shared_open_api_access_context(
+            authorization=conn.headers.get("Authorization"),
+            headers=conn.headers.items(),
+            marker=get_open_api_scope_marker(conn.scope.get("endpoint")),
             on_behalf_of=conn.headers.get("X-On-Behalf-Of"),
             end_user=conn.headers.get("X-End-User"),
-        )
-        conn.scope[_SCOPE_PRINCIPAL_KEY] = principal
-        if principal.mode not in marker.modes:
-            raise OpenApiDelegationModeUnsupportedError()
-
-        super_admin = False
-        tenant_admin_tenant_ids: frozenset[int] = frozenset()
-        if principal.actor_kind == "natural_person":
-            from bisheng.permission.application.relation_api import is_tenant_admin
-            from bisheng.utils.http_middleware import _check_is_global_super
-
-            try:
-                super_admin = await _check_is_global_super(principal.actor_id)
-                if not super_admin and await is_tenant_admin(principal.actor_id, principal.tenant_id):
-                    tenant_admin_tenant_ids = frozenset({principal.tenant_id})
-            except OpenApiAuthError:
-                raise
-            except Exception as exc:
-                raise OpenApiAuthDependencyUnavailableError() from exc
-
-        actor = PermissionActor(
-            subject_type=principal.authorization_subject_type,
-            subject_id=principal.authorization_subject_id,
-            tenant_id=principal.tenant_id,
-            super_admin=super_admin,
-            tenant_admin_tenant_ids=tenant_admin_tenant_ids,
-            data_scope=pat_data_scope,
-        )
-        principal_token = set_current_open_api_principal(principal)
-        permission_token = set_current_permission_actor(actor)
-        yield principal
+            connection_scope=conn.scope,
+            before_identity_check=lambda: _assert_no_removed_identity_input(conn, inspect_body=inspect_body),
+            credential_validator=validate_bearer,
+            settings_obj=settings,
+            tenant_setting_service=TenantSettingService,
+        ) as principal:
+            yield principal
     except OpenApiAuthError as exc:
         _raise_for_connection(conn, exc)
-    finally:
-        if permission_token is not None:
-            reset_current_permission_actor(permission_token)
-        if principal_token is not None:
-            reset_current_open_api_principal(principal_token)
-        visible_tenant_ids.reset(visible_token)
-        current_tenant_id.reset(tenant_token)
 
 
 def get_open_api_execution(conn: HTTPConnection) -> OpenApiPrincipal:
     """Return the principal installed by the router dependency."""
 
-    principal = conn.scope.get(_SCOPE_PRINCIPAL_KEY) or get_current_open_api_principal()
+    principal = conn.scope.get(OPEN_API_PRINCIPAL_SCOPE_KEY) or get_current_open_api_principal()
     if not isinstance(principal, OpenApiPrincipal):
         raise OpenApiEndpointUnregisteredError()
     return principal
@@ -162,6 +87,40 @@ async def get_service_account_admin(auth_jwt: AuthJwt = Depends()) -> UserPayloa
         return await UserPayload.get_tenant_admin_user(auth_jwt)
     except LLMModelSharedReadonlyError as exc:
         raise UnAuthorizedError() from exc
+
+
+_SERVICE_ACCOUNT_WRITES = (
+    ("POST", r"/api/v1/service-accounts"),
+    ("PATCH", r"/api/v1/service-accounts/\d+"),
+    ("DELETE", r"/api/v1/service-accounts/\d+"),
+    ("POST", r"/api/v1/service-accounts/\d+/(?:enable|disable|resource-grants:mutate)"),
+    ("POST", r"/api/v1/service-accounts/\d+/keys(?:/revoke-all|/\d+/revoke)?"),
+    ("PATCH", r"/api/v1/service-accounts/\d+/keys/\d+"),
+)
+
+
+def is_service_account_write(method: str, path: str) -> bool:
+    path = path.rstrip("/")
+    if method in {"GET", "HEAD", "OPTIONS"}:
+        return False
+    if method == "POST" and re.fullmatch(r"/api/v1/service-accounts/\d+/delegate-candidates:filter", path):
+        return False
+    if any(method == verb and re.fullmatch(pattern, path) for verb, pattern in _SERVICE_ACCOUNT_WRITES):
+        return True
+    # A new mutation must explicitly join the business-write inventory.
+    raise ServiceAccountOperationForbiddenError()
+
+
+async def get_service_account_manager(
+    request: Request,
+    admin: UserPayload = Depends(get_service_account_admin),
+) -> AsyncIterator[UserPayload]:
+    async with ServiceAccountScopeService.bind_request(
+        admin,
+        expected_tenant=request.headers.get("X-Service-Account-Tenant"),
+        writing=is_service_account_write(request.method, request.url.path),
+    ):
+        yield admin
 
 
 def _raise_for_connection(conn: HTTPConnection, exc: OpenApiAuthError) -> None:
@@ -182,8 +141,10 @@ async def _assert_no_removed_identity_input(conn: HTTPConnection, *, inspect_bod
         if "user_id" in form:
             raise OpenApiRemovedIdentityInputError()
         return
-    if content_type and content_type != "application/json" and not (
-        content_type.startswith("application/") and content_type.endswith("+json")
+    if (
+        content_type
+        and content_type != "application/json"
+        and not (content_type.startswith("application/") and content_type.endswith("+json"))
     ):
         return
     body = await conn.body()

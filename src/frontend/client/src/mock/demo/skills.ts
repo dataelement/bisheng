@@ -6,8 +6,7 @@
  * interaction; their switch is a session-only override and the detail dialog keeps replace / delete off.
  */
 import type { PersonalSkill } from '~/components/Skills/types';
-import { DEMO_ID_PREFIX } from './ids';
-import { isDemoDataEnabled } from './index';
+import { DEMO_ID_PREFIX, isDemoDataEnabled } from './ids';
 import skills from './skills.json';
 
 export function demoPersonalSkills(scope: string): PersonalSkill[] {

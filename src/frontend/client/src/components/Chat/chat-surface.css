@@ -73,7 +73,7 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 .dsh-history-time { flex:none; font-size:10px; color:rgb(var(--text-3)); white-space:nowrap; }
 .dsh-history-row:has(.dsh-history-options:hover) .dsh-history-time,
 .dsh-history-row:hover .dsh-history-time,
-.dsh-history-row:focus-within .dsh-history-time { display:none; }
+.dsh-history-row:has(:focus-visible) .dsh-history-time { display:none; }
 .dsh-web-chat .dsh-history-sidebar .dsh-history-row[data-active=true] { background:rgb(var(--fill-2)); }
 .dsh-web-chat .dsh-history-sidebar .dsh-history-row a:focus-visible { outline:2px solid rgb(var(--brand-500)); outline-offset:2px; border-radius:4px; }
 @media (hover:hover) and (pointer:fine) {
@@ -101,7 +101,7 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 .dsh-chat-hero .dsh-chat-composer .dsh-composer-editor { font-size:14px; }
 .dsh-chat-hero .dsh-chat-composer .dsh-composer-editor[data-empty=true]::before { color:var(--dsh-hero-placeholder); }
 .dsh-chat-hero .dsh-composer-submit { background:#4176e6; }
-.dsh-chat-hero .dsh-composer-submit:disabled { background:#4176e6; opacity:.4; }
+.dsh-chat-hero .dsh-composer-submit:disabled { background:rgb(var(--fill-3)); color:rgb(var(--text-3)); opacity:1; }
 .dsh-chat-hero .dsh-composer-submit:hover:enabled { background:#7aaaff; }
 .dsh-chat-hero .dsh-chat-composer .dsh-composer-editor { min-height:52px; }
 .dsh-chat-surface .dsh-composer-toolbar .input-bottom-left { flex:1 1 auto; gap:12px; overflow:visible; }

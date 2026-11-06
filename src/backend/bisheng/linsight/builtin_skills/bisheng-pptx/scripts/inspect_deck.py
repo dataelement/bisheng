@@ -21,6 +21,12 @@ box is clearly too small.
 Usage:
     python skills/bisheng-pptx/scripts/inspect_deck.py output/deck.pptx
     python skills/bisheng-pptx/scripts/inspect_deck.py output/deck.pptx --checks-only
+    python skills/bisheng-pptx/scripts/inspect_deck.py output/deck.pptx --manifest scratch/deck.manifest.json
+
+A deck built with ``deck_template.Deck`` leaves ``scratch/<name>.manifest.json``;
+it is picked up automatically and enables the template checks in ``deck_checks``
+(capacity, leftover samples, repeated layouts) plus a baseline diff against the
+prototype pages.
 
 Always exits 0, including on a fatal error — see the comment in main().
 """
@@ -38,11 +44,14 @@ from dataclasses import dataclass
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE
+from pptx.util import Length
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # --- tunables -------------------------------------------------------------
 #
 # House rule for every threshold below: the checker sits ONE NOTCH LOOSER than
-# the authoring spec (SKILL.md §7 and references/design-zh.md), and only shouts
+# the authoring spec (references/design-zh.md and references/freeform.md), and only shouts
 # on a clear violation. Rationale: an ERROR here is a hard delivery gate, so a
 # threshold set at the spec value would block decks that are merely at the edge
 # of the recommended range (e.g. design-zh allows 10-12pt captions — an ERROR at
@@ -192,9 +201,11 @@ def _para_line_height_pt(para, size_pt: float) -> float:
     spacing = para.line_spacing
     if spacing is None:
         return size_pt * DEFAULT_LINE_SPACING
-    if isinstance(spacing, (int, float)):
-        return size_pt * float(spacing)
-    return _pt(spacing)  # Length: exact leading
+    # Length subclasses int, so test it first: an exact leading (spcPts) read as a
+    # multiplier inflates the height by ~12700x and fakes an overflow ERROR.
+    if isinstance(spacing, Length):
+        return _pt(spacing)
+    return size_pt * float(spacing)
 
 
 def _estimate_text_height_pt(shape, layout_sizes: dict) -> tuple[float, float]:
@@ -533,6 +544,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Dump and health-check a .pptx")
     parser.add_argument("pptx", help="路径，相对工作区根，例如 output/deck.pptx")
     parser.add_argument("--checks-only", action="store_true", help="只输出体检，不 dump 内容")
+    parser.add_argument("--manifest", help="Deck.save 写出的模板清单；不传时自动找 scratch/<文件名>.manifest.json")
     args = parser.parse_args()
 
     if not os.path.exists(args.pptx):
@@ -544,7 +556,7 @@ def main() -> int:
     # interpreter returns stderr and throws stdout away, which would delete this
     # whole report. A traceback printed to stdout is far more useful than that.
     try:
-        run_report(args.pptx, checks_only=args.checks_only)
+        run_report(args.pptx, checks_only=args.checks_only, manifest_path=args.manifest)
     except Exception:
         print("[FATAL] 读取 / 体检 .pptx 时出错：")
         traceback.print_exc(file=sys.stdout)
@@ -553,20 +565,57 @@ def main() -> int:
     return 0
 
 
-def run_report(path: str, checks_only: bool) -> None:
+def _load_deck_checks():
+    """Import the template checks here, not at module level: an import failure
+    must still leave the basic report on stdout (see main)."""
+    try:
+        import deck_checks
+
+        return deck_checks, None
+    except Exception as exc:
+        return None, f"[FATAL] 模板检查模块加载失败（{type(exc).__name__}: {exc}）→ 只做基础体检"
+
+
+def run_report(path: str, checks_only: bool, manifest_path: str | None = None) -> None:
     prs = Presentation(path)
     slide_w, slide_h = _pt(prs.slide_width), _pt(prs.slide_height)
 
     if not checks_only:
         dump_content(prs)
 
-    findings: list[Finding] = []
+    by_slide: dict[int, list[Finding]] = {}
     slide_count = 0
     for i, slide in enumerate(prs.slides, start=1):
         slide_count = i
-        findings.extend(check_slide(slide, i, slide_w, slide_h))
+        by_slide[i] = check_slide(slide, i, slide_w, slide_h)
+
+    manifest, note = None, "未找到模板清单：按从零生成的文稿检查（容量与示例残留检查只看「示例」字样）"
+    deck_checks, load_error = _load_deck_checks()
+    if deck_checks is None:
+        note = load_error
+    else:
+        found = deck_checks.find_manifest(path, manifest_path)
+        if found:
+            manifest, note = deck_checks.load_manifest(found, prs)
+        elif manifest_path:
+            note = f"指定的模板清单 {manifest_path} 不存在 → 按从零生成的文稿检查"
+    suppressed = 0
+    if manifest is not None:
+        suppressed = deck_checks.apply_baseline(by_slide, manifest, check_slide, slide_w, slide_h)
+    findings = [f for i in sorted(by_slide) for f in by_slide[i]]
+
+    cover_sizes = _layout_placeholder_sizes(prs.slides[0]) if slide_count else {}
+
+    def size_of(shape, para, run):
+        return _resolve_size_pt(run, para, shape, cover_sizes)
+
+    if deck_checks is not None:
+        findings.extend(deck_checks.template_checks(prs, manifest, Finding, size_of, slide_w, slide_h))
 
     print(f"\n=== 体检 ===  ({slide_count} 页, 画布 {slide_w:.0f}×{slide_h:.0f}pt)")
+    print(note)
+    if suppressed:
+        print(f"（已按模板原型页扣除 {suppressed} 条模板自带的结构性提示）")
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}
     for finding in sorted(findings, key=lambda f: (order[f.level], f.slide)):
         print(finding.render())
@@ -579,7 +628,7 @@ def run_report(path: str, checks_only: bool) -> None:
         print(f"结论: 不通过 —— 有 {errors} 项必须修复。改构建脚本重新生成，再跑一次本脚本。")
     else:
         print("结论: 通过 —— 无必须修复项。WARN 逐条复核后即可交付。")
-    print("提示：体检阈值比 SKILL.md §7 / design-zh 的规范松一档，只在明显违规时出声；")
+    print("提示：体检阈值比 design-zh 的排版规范松一档，只在明显违规时出声；")
     print("      没报 ERROR 不等于完全合规，排版仍以规范为准。溢出为估算值，不必为 WARN 反复调参。")
 
 

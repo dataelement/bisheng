@@ -1,7 +1,10 @@
-import { Loader2 } from "lucide-react"
-import { useEffect, useRef } from "react"
-import { useTranslation } from "react-i18next"
-import type { ListStatus } from "./useOpenApiList"
+import { Button } from '@bisheng/ui';
+
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useRef } from "react";
+import { useTranslation } from "react-i18next";
+import type { ListStatus } from "./useOpenApiList";
 
 interface OpenApiListFooterProps {
   status: ListStatus
@@ -37,13 +40,13 @@ export function OpenApiListFooter({ status, itemCount, onLoadMore, onRetry }: Op
     <div ref={sentinel} role="status" aria-live="polite" aria-busy={status === "loading"}
       className={`flex h-10 w-full items-center justify-center gap-2 text-muted-foreground ${status === "done" ? "text-xs" : "text-sm"}`}>
       {status === "loading" ? <>
-        <Loader2 aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-pulse" />
+        <Outlined.Loading aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-pulse" />
         {t("openApiManagement.list.loading")}
       </> : null}
       {status === "error" ? (
-        <button type="button" className="h-full w-full hover:text-foreground" onClick={onRetry}>
+        <Button variant="text" size="small" type="button" className="h-full w-full hover:text-foreground" onClick={onRetry} color="default">
           {t("openApiManagement.list.retry")}
-        </button>
+        </Button>
       ) : null}
       {status === "done" && itemCount > 0 ? t("openApiManagement.list.done") : null}
     </div>

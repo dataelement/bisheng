@@ -1,27 +1,35 @@
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { Outlined } from 'bisheng-icons';
-import { ComposerSubmenu } from '~/components/Chat/Input/ComposerSubmenu';
 import { PlusMenuSub } from '~/components/Chat/Input/PlusMenuSub';
 import { DropdownMenuItem } from '~/components/ui';
 import { useLocalize } from '~/hooks';
-import { skillCenterPreviewEnabled } from './types';
-import { SkillMenuPanel } from './SkillMenuPanel';
 import type { TaskModeSkill } from '~/store/linsight';
+import { SkillMenuPanel } from './SkillMenuPanel';
 
-interface SkillMenuEntriesProps {
-  onOpenMobile?: () => void;
-  inline?: boolean;
-  selected: TaskModeSkill[];
-  onChange: (skills: TaskModeSkill[]) => void;
+const UploadDialog = lazy(() => import('./SkillUploadDialog').then((module) => ({ default: module.SkillUploadDialog })));
+
+interface SkillUploadHostProps { children: (openUpload: () => void) => ReactNode }
+
+/** Keep the modal outside the menu portal so closing a menu cannot unmount it. */
+export function SkillUploadHost({ children }: SkillUploadHostProps) {
+  const [open, setOpen] = useState(false);
+  return <>
+    {children(() => setOpen(true))}
+    {open && <Suspense fallback={null}><UploadDialog open onOpenChange={setOpen} /></Suspense>}
+  </>;
 }
 
-export function SkillMenuEntries({ onOpenMobile, inline, selected, onChange }: SkillMenuEntriesProps) {
+interface SkillMenuEntriesProps {
+  selected: TaskModeSkill[];
+  onChange: (skills: TaskModeSkill[]) => void;
+  onUpload: () => void;
+  onOpenMobile?: () => void;
+}
+
+export function SkillMenuEntries({ selected, onChange, onUpload, onOpenMobile }: SkillMenuEntriesProps) {
   const localize = useLocalize();
-  if (!skillCenterPreviewEnabled) return null;
   const icon = <Outlined.Skill size={16} className="text-text-2" />;
   const label = localize('com_skill_center_menu');
-  if (inline) return <ComposerSubmenu icon={icon} label={label}>
-    <SkillMenuPanel selected={selected} onChange={onChange} />
-  </ComposerSubmenu>;
   if (onOpenMobile) return (
     <DropdownMenuItem onSelect={(event) => { event.preventDefault(); onOpenMobile(); }} className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none">
       <div className="flex min-w-0 items-center gap-2">
@@ -31,8 +39,8 @@ export function SkillMenuEntries({ onOpenMobile, inline, selected, onChange }: S
     </DropdownMenuItem>
   );
   return (
-    <PlusMenuSub icon={icon} label={label} panelClassName="w-[280px] max-w-[calc(100vw-24px)] gap-0 pb-1">
-      <SkillMenuPanel selected={selected} onChange={onChange} />
+    <PlusMenuSub icon={icon} label={label} panelClassName="w-[280px] max-w-[calc(100vw-24px)] gap-0 pb-3">
+      <SkillMenuPanel selected={selected} onChange={onChange} onUpload={onUpload} />
     </PlusMenuSub>
   );
 }

@@ -1,0 +1,152 @@
+---
+status: done
+component: Slider
+---
+
+# 滑块 Slider
+
+在**一个有边界的区间里调一个大致的值**，拖动时实时看到效果——音量、透明度、模型的随机性参数。组件库 `@bisheng/ui` 导出 **`Slider`**。规范全文见「文档 → 组件规范 → 滑块 Slider」。
+
+**组件把规范写死的部分**：只有一档尺寸（轨道 4px、滑块 16px，悬停与拖动放大到 18px、刻度点 8px）；滑块白底 + 品牌色描边环，已覆盖段品牌色，颜色跟随主题；控件 32px 高，和 medium 档输入框、按钮同排对齐；键盘 ← / → 一步、Shift + 方向键十步、Home / End 到两端；滚轮不改值；触屏热区 44px。这些没有 prop。
+
+区间太大（1～10000）拖不准、太小（1～3）不值得拖，都别用滑块：前者用数字输入框，后者用单选或分段控制器。
+
+## 基础用法
+
+默认用**数值气泡**显示当前值：悬停、拖动、键盘聚焦时出现在滑块正上方。适合只看效果、不在乎具体数的值。
+
+```tsx
+import { Slider } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ maxWidth: 360 }}>
+    <Slider defaultValue={40} formatValue={(v) => `${v}%`} thumbLabel="音量" />
+  </div>
+);
+```
+
+## 并排数字输入框
+
+值要被准确记住或复用（模型温度、阈值）时，用 `valueDisplay="input"`：右侧放一个 **small 档**数字输入框（固定，不随 `inputProps` 改），与滑块行垂直居中，两边双向同步。数字框里输入越界值，按数字输入框的规则报错，**滑块停在最后一个合法值上不动**。单位、步进按钮的读屏名称、报错文案经 `inputProps` 传给数字框。
+
+```tsx
+import { Slider } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ maxWidth: 420 }}>
+    <Slider
+      valueDisplay="input"
+      min={0}
+      max={2}
+      step={0.1}
+      defaultValue={0.7}
+      thumbLabel="温度"
+      inputProps={{
+        increaseLabel: '增加',
+        decreaseLabel: '减少',
+        errorMessage: (e) => (e.type === 'range' ? `请输入 ${e.min}～${e.max} 之间的数` : `最多保留 ${e.precision} 位小数`),
+      }}
+    />
+  </div>
+);
+```
+
+## 范围
+
+`value` 传一对数就是范围滑块，**两个滑块之间**是品牌色。两个滑块不能交叉，拖到重合就停住；点击轨道时，离得近的那个移过去。要精确值时两端各放一个数字框，左下限、右上限。
+
+```tsx
+import { Slider } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24, maxWidth: 480 }}>
+    <Slider defaultValue={[100, 500]} min={0} max={1000} step={10} formatValue={(v) => `¥${v}`} thumbLabel={['最低价', '最高价']} />
+    <Slider
+      valueDisplay="input"
+      defaultValue={[20, 80]}
+      thumbLabel={['下限', '上限']}
+      inputProps={{ suffix: '%', increaseLabel: '增加', decreaseLabel: '减少' }}
+    />
+  </div>
+);
+```
+
+## 刻度与标签
+
+只标两端和少数关键值，标签在轨道下方，两端的标签与轨道端点对齐。`marks` 传数组时标签用 `formatValue` 格式化，传对象可以逐个写标签。
+
+值只有几个固定档位时加 `snapToMarks`：拖动中滑块自由移动，**松手吸附到最近的刻度**，`onValueChange` 只会报刻度上的值；键盘方向键一次跳一个刻度。
+
+```tsx
+import { Slider } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24, maxWidth: 360 }}>
+    <Slider defaultValue={0.5} min={0} max={1} step={0.01} marks={[0, 0.5, 1]} thumbLabel="随机性" />
+    <Slider
+      defaultValue={1}
+      min={0.5}
+      max={2}
+      marks={[0.5, 1, 1.5, 2]}
+      snapToMarks
+      formatValue={(v) => `${v}x`}
+      thumbLabel="播放速度"
+    />
+  </div>
+);
+```
+
+## 实时预览，松手才生效
+
+`onValueChange` 拖动中每一步都触发，只用来预览；保存、发请求放 **`onValueCommit`**——松手或键盘抬起时只触发一次。
+
+```tsx
+import React from 'react';
+import { Slider } from '@bisheng/ui';
+
+export default () => {
+  const [preview, setPreview] = React.useState(60);
+  const [saved, setSaved] = React.useState(60);
+
+  return (
+    <div style={{ display: 'grid', gap: 12, maxWidth: 360 }}>
+      <Slider value={preview} onValueChange={setPreview} onValueCommit={setSaved} formatValue={(v) => `${v}%`} thumbLabel="透明度" />
+      <div style={{ height: 40, borderRadius: 6, background: 'rgb(var(--brand-500))', opacity: preview / 100 }} />
+      <span style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>预览 {preview}% · 已保存 {saved}%（拖动中不变，松手才更新）</span>
+    </div>
+  );
+};
+```
+
+## 禁用
+
+已覆盖段与滑块描边转灰，「禁止」光标；并排的数字框一起禁用。滑块本身**没有报错态**，范围校验交给并排的数字框。
+
+```tsx
+import { Slider } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24, maxWidth: 420 }}>
+    <Slider disabled defaultValue={30} />
+    <Slider disabled valueDisplay="input" defaultValue={30} />
+  </div>
+);
+```
+
+## API
+
+| prop | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `value` / `defaultValue` | `number \| [number, number]` | — | 一个数是单值，一对数是范围；回调的形状跟它一致 |
+| `onValueChange` | `(value) => void` | — | 拖动中实时触发，只做预览 |
+| `onValueCommit` | `(value) => void` | — | 松手 / 键盘抬起时触发一次，保存和请求放这里 |
+| `min` / `max` / `step` | `number` | `0` / `100` / `1` | |
+| `marks` | `number[] \| Record<number, ReactNode>` | — | 刻度；对象形式可逐个写标签 |
+| `snapToMarks` | `boolean` | `false` | 只能停在刻度上（`step` 失效），松手吸附 |
+| `valueDisplay` | `'tooltip' \| 'input'` | `'tooltip'` | 数值气泡或并排数字框，二选一 |
+| `formatValue` | `(value: number) => ReactNode` | — | 气泡与默认刻度标签共用的格式 |
+| `inputProps` | `InputNumberProps` 的子集 | — | 传给并排数字框：`suffix`、`increaseLabel` / `decreaseLabel`、`errorMessage` 等 |
+| `thumbLabel` | `string \| [string, string]` | — | 滑块的无障碍名称；范围传一对（下限、上限） |
+| `disabled` | `boolean` | `false` | 数字框一起禁用 |
+| `name` | `string` | — | 表单字段名 |
+| `className` | `string` | — | 落在最外层 |

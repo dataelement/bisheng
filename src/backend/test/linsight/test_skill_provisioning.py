@@ -258,8 +258,7 @@ class TestEnumerationLoop:
     async def test_copied_skill_is_enumerated_and_path_resolves(self, monkeypatch, store, backend):
         """Full Fork X loop: copy → real SkillsMiddleware enumerates → path consistency."""
         from deepagents.backends.filesystem import FilesystemBackend
-        from deepagents.middleware.skills import SkillsMiddleware
-
+        from bisheng.linsight.domain.services.skills_prompt import LinsightSkillsMiddleware
         from bisheng.linsight.domain.services.workspace_backend import normalize_workspace_path
 
         _patch_enabled(monkeypatch, ENABLED, store)
@@ -267,7 +266,7 @@ class TestEnumerationLoop:
 
         # Enumerate via a FilesystemBackend over the same cache dir the copy wrote to —
         # this is exactly what agent_factory attaches when skills_present is True.
-        mw = SkillsMiddleware(
+        mw = LinsightSkillsMiddleware(
             backend=FilesystemBackend(root_dir=str(backend.file_dir), virtual_mode=True),
             sources=[(f"/{WORKSPACE_SKILLS_DIR}/", "Skills")],
         )

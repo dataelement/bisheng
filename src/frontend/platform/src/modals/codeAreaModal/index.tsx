@@ -1,3 +1,4 @@
+import { Button } from '@bisheng/ui';
 import { DialogTitle } from "@radix-ui/react-dialog";
 import "ace-builds/src-noconflict/ace";
 import "ace-builds/src-noconflict/ext-language_tools";
@@ -8,12 +9,12 @@ import { TerminalSquare } from "lucide-react";
 import { useContext, useState } from "react";
 import AceEditor from "react-ace";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../components/bs-ui/button";
+
 import { alertContext } from "../../contexts/alertContext";
 import { darkContext } from "../../contexts/darkContext";
 import { PopUpContext } from "../../contexts/popUpContext";
 import { postValidateCode } from "../../controllers/API";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
+import { showApiError } from "../../controllers/request";
 import { APIClassType } from "../../types/api";
 import BaseModal from "../baseModal";
 
@@ -40,7 +41,7 @@ export default function CodeAreaModal({
   }
 
   function handleClick() {
-    captureAndAlertRequestErrorHoc(postValidateCode(code)
+    postValidateCode(code)
       .then((apiReturn) => {
         if (apiReturn) {
           const importsErrors = apiReturn.imports.errors;
@@ -68,7 +69,7 @@ export default function CodeAreaModal({
             title: t('code.errorOccurred'),
           });
         }
-      }));
+      }).catch(showApiError);
   }
 
   return (

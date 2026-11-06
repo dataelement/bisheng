@@ -1,7 +1,10 @@
+import { Button, SearchInput } from '@bisheng/ui';
+import { useSubjectSearch } from "./useSubjectSearch"
+import { SubjectBusinessId, SubjectSearchStatus } from "./SubjectSearchStatus"
 import { useLazyDepartmentTree } from "@/components/bs-comp/department"
-import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkBox"
-import { SearchInput } from "@/components/bs-ui/input"
+
+import { Checkbox } from '@bisheng/ui';
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import {
   getDepartmentChildrenApi,
@@ -10,22 +13,28 @@ import {
   searchGlobalMembersApi,
 } from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { showApiError } from "@/controllers/request"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { Building2, ChevronDown, ChevronRight, Loader2, User as UserIcon, X } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 export type DepartmentUserOption = {
   label: string
   value: number
-  /** Login credential (external_id). Falls back to value (user_id) when absent. */
+  /** Business ID for display; the internal value remains the submission identity. */
   external_id?: string | null
   /** Resolved from the organization tree for immediate display in edit forms. */
   department_path?: string
 }
 
+export interface DepartmentUserCandidateSource {
+  cacheKey: string
+  fetchPage: (keyword: string, page: number, signal: AbortSignal) => Promise<{ data: UserListItem[]; total: number }>
+}
+
 interface DepartmentUsersSelectProps {
+  candidateSource?: DepartmentUserCandidateSource
   value: DepartmentUserOption[]
   onChange: (v: DepartmentUserOption[]) => void
   multiple?: boolean
@@ -69,17 +78,12 @@ export default function DepartmentUsersSelect({
   rootDeptId,
   emptyMessage,
   filterUserIds,
+  candidateSource,
 }: DepartmentUsersSelectProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const [keyword, setKeyword] = useState("")
-  const [searchingUsers, setSearchingUsers] = useState(false)
-  const [searchedUsers, setSearchedUsers] = useState<UserListItem[]>([])
   const [deptUsersMap, setDeptUsersMap] = useState<Record<number, DepartmentUserOption[]>>({})
   const [loadingDeptIds, setLoadingDeptIds] = useState<Set<number>>(new Set())
-
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const searchAbortRef = useRef<AbortController | null>(null)
 
   // F038: lazy department tree (browse). When rootDeptId is set, the root layer
   // is that department itself (resolved via path-tree), so the picker is scoped
@@ -87,7 +91,7 @@ export default function DepartmentUsersSelect({
   const tree = useLazyDepartmentTree(
     rootDeptId != null
       ? {
-          autoLoad: open,
+          autoLoad: open && !candidateSource,
           autoExpandRoots: true,
           cacheKey: `dept-users:${rootDeptId}`,
           fetchChildren: async (parentId) => {
@@ -104,7 +108,7 @@ export default function DepartmentUsersSelect({
           fetchSearch: () => Promise.resolve({ roots: [], total_matches: 0, truncated: false }),
           fetchPathTree: (id) => getDepartmentPathTreeApi(id, false),
         }
-      : { autoLoad: open, autoExpandRoots: true, cacheKey: "dept-users" }
+      : { autoLoad: open && !candidateSource, autoExpandRoots: true, cacheKey: "dept-users" }
   )
 
   const selectedMap = useMemo(() => {
@@ -130,14 +134,14 @@ export default function DepartmentUsersSelect({
         const users = (res?.data || []).map((u) => ({
           value: Number(u.user_id),
           label: u.user_name,
-          external_id: u.person_id ?? null,
+          external_id: u.external_id ?? u.person_id ?? null,
         }))
         const allowed = filterUserIds ? new Set(await filterUserIds(users.map((u) => u.value))) : null
         setDeptUsersMap((prev) => ({ ...prev, [did]: allowed ? users.filter((u) => allowed.has(u.value)) : users }))
       } catch (error) {
         // Never expose unvalidated candidates or retry indefinitely from render.
         setDeptUsersMap((prev) => ({ ...prev, [did]: [] }))
-        await captureAndAlertRequestErrorHoc(Promise.reject(error))
+        showApiError(error)
       } finally {
         setLoadingDeptIds((prev) => {
           const next = new Set(prev)
@@ -149,67 +153,30 @@ export default function DepartmentUsersSelect({
     [deptUsersMap, loadingDeptIds, rootDeptId, filterUserIds],
   )
 
-  const runUserSearch = useCallback(async (q: string) => {
-    searchAbortRef.current?.abort()
-    const ac = new AbortController()
-    searchAbortRef.current = ac
-    setSearchingUsers(true)
-    setSearchedUsers([])
-    try {
-      let users: UserListItem[]
-      if (rootDeptId != null) {
-        const res = await searchGlobalMembersApi(
-          { keyword: q, page: 1, limit: 50, rootDeptId },
-          { signal: ac.signal },
-        )
-        users = (res?.data || []).map((u) => ({
-          user_id: u.user_id,
-          user_name: u.user_name,
-          external_id: u.external_id,
-          department_path: u.primary_department_path,
-        }))
-      } else {
-        const res = await getUsersApi(
-          { name: q, page: 1, pageSize: 200, withDepartmentPath: true },
-          { signal: ac.signal },
-        )
-        users = (res?.data || []) as UserListItem[]
-      }
-      if (ac.signal.aborted) return
-      const allowed = filterUserIds
-        ? new Set(await filterUserIds(users.map((u) => u.user_id), ac.signal))
-        : null
-      if (!ac.signal.aborted) setSearchedUsers(allowed ? users.filter((u) => allowed.has(u.user_id)) : users)
-    } catch (error) {
-      if (!ac.signal.aborted) await captureAndAlertRequestErrorHoc(Promise.reject(error))
-    } finally {
-      if (!ac.signal.aborted) setSearchingUsers(false)
-    }
-  }, [rootDeptId, filterUserIds])
-
-  const handleKeywordChange = (next: string) => {
-    setKeyword(next)
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-    searchAbortRef.current?.abort()
-    setSearchedUsers([])
-    if (!next.trim()) {
-      setSearchingUsers(false)
-      return
-    }
-    setSearchingUsers(true)
-    searchTimerRef.current = setTimeout(() => void runUserSearch(next.trim()), 300)
-  }
-
-  useEffect(() => {
-    return () => {
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
-      searchAbortRef.current?.abort()
-    }
-  }, [])
+  const search = useSubjectSearch<UserListItem>({
+    enabled: open,
+    emptyByDefault: !candidateSource,
+    scopeKey: candidateSource?.cacheKey ?? String(rootDeptId ?? "all"),
+    fetchPage: async (keyword, page, signal) => {
+      if (candidateSource) return candidateSource.fetchPage(keyword, page, signal)
+      const result = rootDeptId != null
+        ? await searchGlobalMembersApi({ keyword, page, limit: 50, rootDeptId }, { signal })
+        : await getUsersApi({ name: keyword, page, pageSize: 50, withDepartmentPath: true }, { signal })
+      const users: UserListItem[] = (result?.data || []).map(user => ({ ...user,
+        department_path: "primary_department_path" in user ? String(user.primary_department_path ?? "") : user.department_path,
+      }))
+      const allowed = filterUserIds ? new Set(await filterUserIds(users.map(user => user.user_id), signal)) : null
+      return { data: allowed ? users.filter(user => allowed.has(user.user_id)) : users, total: result.total, consumed: users.length }
+    },
+  })
+  const searchingUsers = search.loading
+  const searchedUsers = search.rows
+  const changeSearchKeyword = search.changeKeyword
+  useEffect(() => { if (!open) changeSearchKeyword("") }, [open, changeSearchKeyword])
 
   const setPicked = (user: DepartmentUserOption, departmentPath: string) => {
     const id = Number(user.value)
-    if (lockedSet.has(id)) return
+    if (lockedSet.has(id) || search.loading || search.tooLong || search.failed) return
     const row: DepartmentUserOption = {
       value: id,
       label: user.label,
@@ -236,7 +203,7 @@ export default function DepartmentUsersSelect({
     return `${placeholder || t("system.selectUser")} (${value.length})`
   }, [placeholder, t, value])
 
-  const keywordTrim = keyword.trim()
+  const keywordTrim = search.normalized
 
   const renderUserRow = (u: DepartmentUserOption, depth: number, departmentPath: string) => {
     const selected = selectedMap.has(Number(u.value))
@@ -250,10 +217,10 @@ export default function DepartmentUsersSelect({
         onClick={() => setPicked(u, departmentPath)}
       >
         <div className="relative shrink-0 self-stretch" style={{ width: depth * TREE_INDENT_PER_LEVEL }} aria-hidden />
-        <Checkbox checked={selected} disabled={locked} onClick={(e) => e.stopPropagation()} onCheckedChange={() => setPicked(u, departmentPath)} />
+        <Checkbox className="peer" checked={selected} disabled={locked} onClick={(e) => e.stopPropagation()} onCheckedChange={() => setPicked(u, departmentPath)} />
         <UserIcon className="mx-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate">{u.label}</span>
-        <span className="ml-1 shrink-0 text-xs text-muted-foreground">（{u.external_id ?? u.value}）</span>
+        <SubjectBusinessId value={u.external_id} />
       </div>
     )
   }
@@ -311,7 +278,7 @@ export default function DepartmentUsersSelect({
               deptUsersMap[did] &&
               users.length === 0 && (
                 <div className="px-2 py-3 text-center text-sm text-muted-foreground">
-                  {emptyMessage || t("system.treeDepartmentSelectEmpty")}
+                  {emptyMessage || t("subjectSearch.emptyUsers")}
                 </div>
               )}
             {childNodes.map((c) => renderDeptNode(c, depth + 1, [...ancestorNames, node.name]))}
@@ -329,12 +296,7 @@ export default function DepartmentUsersSelect({
     <Popover open={open} onOpenChange={setOpen} modal={false}>
       <div className={`w-full ${className}`.trim()}>
         <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            className="h-auto min-h-9 w-full justify-between px-3 py-1.5 font-normal"
-          >
+          <Button type="button" variant="outlined" disabled={disabled} className="h-auto min-h-9 w-full justify-between px-3 py-1.5 font-normal" color="default">
             <span className="min-w-0 flex-1 truncate text-left">{displayText}</span>
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
           </Button>
@@ -346,7 +308,7 @@ export default function DepartmentUsersSelect({
                 key={v.value}
                 className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 text-xs text-foreground"
               >
-                {v.label}（{v.external_id ?? v.value}）
+                {v.label} <SubjectBusinessId value={v.external_id} />
                 {!disabled && !lockedSet.has(Number(v.value)) && (
                   <X
                     className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground"
@@ -373,28 +335,28 @@ export default function DepartmentUsersSelect({
           className="flex min-h-0 flex-col gap-2 overflow-hidden"
           style={{ maxHeight: "min(504px, calc(var(--radix-popover-content-available-height, 520px) - 1rem))" }}
         >
-          <SearchInput
-            placeholder={searchPlaceholder || t("system.searchUser")}
-            className="mb-1 shrink-0"
-            value={keyword}
-            onChange={(e) => handleKeywordChange(e.target.value)}
-          />
+          <SearchInput placeholder={searchPlaceholder || t("subjectSearch.userPlaceholder")} {...search.inputProps} className={"mb-1 shrink-0"} />
           <div
             className="min-h-0 flex-1 overflow-y-auto rounded-md border"
             // Radix popover portaled outside the Dialog's react-remove-scroll
             // shard preventDefaults wheel; drive scrollTop manually.
+            onScroll={(event) => {
+              const element = event.currentTarget
+              if ((keywordTrim || candidateSource) && element.scrollTop + element.clientHeight >= element.scrollHeight - 40) search.loadMore()
+            }}
             onWheel={(e) => {
               e.currentTarget.scrollTop += e.deltaY
+              if ((keywordTrim || candidateSource) && e.currentTarget.scrollTop + e.currentTarget.clientHeight >= e.currentTarget.scrollHeight - 40) search.loadMore()
             }}
           >
-            {keywordTrim ? (
+            {search.tooLong || search.failed ? <SubjectSearchStatus tooLong={search.tooLong} failed={search.failed} onRetry={search.retry} /> : keywordTrim || candidateSource ? (
               // Search mode: a flat list of matched users (by name), each labeled
               // with its resolved department path (lazy, no full tree to bucket into).
               searchingUsers ? (
                 <div className="px-2 py-4 text-center text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</div>
               ) : searchedUsers.length === 0 ? (
                 <div className="py-4 text-center text-sm text-muted-foreground">
-                  {emptyMessage || t("system.treeDepartmentSelectEmpty")}
+                  {emptyMessage || t("subjectSearch.emptyUsers")}
                 </div>
               ) : (
                 searchedUsers.map((u) => {
@@ -409,7 +371,7 @@ export default function DepartmentUsersSelect({
                         setPicked({ value: u.user_id, label: u.user_name, external_id: u.external_id }, deptLabel)
                       }
                     >
-                      <Checkbox
+                      <Checkbox className="peer"
                         checked={selectedMap.has(Number(u.user_id))}
                         disabled={lockedSet.has(Number(u.user_id))}
                         onClick={(e) => e.stopPropagation()}
@@ -419,7 +381,7 @@ export default function DepartmentUsersSelect({
                       />
                       <UserIcon className="mx-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <span className="truncate">{u.user_name}</span>
-                      <span className="ml-1 shrink-0 text-xs text-muted-foreground">（{u.external_id ?? u.user_id}）</span>
+                      <SubjectBusinessId value={u.external_id} />
                       {deptLabel && <span className="ml-auto truncate pl-2 text-xs text-muted-foreground">{deptLabel}</span>}
                     </div>
                   )
@@ -429,12 +391,13 @@ export default function DepartmentUsersSelect({
               <div className="py-4 text-center text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</div>
             ) : browseRoots.length === 0 ? (
               <div className="py-4 text-center text-sm text-muted-foreground">
-                {emptyMessage || t("system.treeDepartmentSelectEmpty")}
+                {emptyMessage || t("subjectSearch.emptyUsers")}
               </div>
             ) : (
               browseRoots.map((n) => renderDeptNode(n, 0, []))
             )}
           </div>
+          {!!(keywordTrim || candidateSource) && !search.loading && !search.failed && !search.tooLong && searchedUsers.length < search.total && <button type="button" onClick={search.loadMore}>{t("subjectSearch.loadMore")}</button>}
         </div>
       </PopoverContent>
     </Popover>

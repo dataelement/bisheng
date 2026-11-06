@@ -1,7 +1,6 @@
 import userEvent from "@testing-library/user-event"
-import type { InputHTMLAttributes } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+import { notification } from '@bisheng/ui';
 import {
   listServiceAccountGrantableResourcesApi,
   listServiceAccountKeysApi,
@@ -14,7 +13,8 @@ import {
 } from "@/controllers/API/permission"
 import { ResourceGrantDialog } from "@/pages/SystemPage/components/ServiceAccount/ResourceGrantDialog"
 import { ResourceGrantsTab } from "@/pages/SystemPage/components/ServiceAccount/ResourceGrantsTab"
-import { render, screen, waitFor, within } from "@/test/test-utils"
+import { screen, waitFor, within } from "@/test/test-utils"
+import { renderWithServiceAccountScope as render, testServiceAccountScope } from "@/test/serviceAccountTestScope"
 import type { ServiceAccountResourceGrant } from "@/types/api/openApi"
 
 vi.mock("@/controllers/API/serviceAccount", () => ({
@@ -29,19 +29,23 @@ vi.mock("@/controllers/API/permission", () => ({
   getResourcePermissionContextApi: vi.fn(),
 }))
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: async (request: Promise<unknown>) =>
     request.catch(() => false),
 }))
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   message: vi.fn(),
   toast: vi.fn(),
-}))
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-}))
+
 
 vi.mock("@/components/bs-icons", () => ({
   LoadIcon: () => <span />,
@@ -139,10 +143,11 @@ describe("service-account grant mutations over HTTP", () => {
         expected_catalog_release_id: 9,
         changes: [{ op: "ADD", model_key: "editor", subject: { type: "service_account", id: "7" } }],
       },
+      testServiceAccountScope,
     )
     expect(onGranted).toHaveBeenCalledOnce()
     expect(onGranted.mock.invocationCallOrder[0]).toBeLessThan(onOpenChange.mock.invocationCallOrder[0])
-    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "success" }))
+    expect(notification.open).toHaveBeenCalledWith(expect.objectContaining({ type: "success" }))
   })
 
   it("updates a grant from the dialog without randomUUID", async () => {
@@ -153,6 +158,7 @@ describe("service-account grant mutations over HTTP", () => {
       7, "knowledge_library", "13", expect.objectContaining({
         changes: [{ op: "MOVE", assignee_id: "grant-13", expected_assignee_version: 3, target_model_key: "editor" }],
       }),
+      testServiceAccountScope,
     )
   })
 
@@ -161,11 +167,12 @@ describe("service-account grant mutations over HTTP", () => {
     const { user, onOpenChange, onGranted } = await openGrantDialog()
     const submit = screen.getByRole("button", { name: "openApiManagement.grants.confirmGrant" })
     await user.click(submit)
-    await waitFor(() => expect(onGranted).toHaveBeenCalledOnce())
+    await waitFor(() => expect(submit).toBeEnabled())
+    expect(onGranted).not.toHaveBeenCalled()
     expect(onOpenChange).not.toHaveBeenCalled()
     expect(screen.getByRole("checkbox")).toBeChecked()
     expect(submit).toBeEnabled()
-    expect(toast).not.toHaveBeenCalled()
+    expect(notification.open).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }))
   })
 
   it("updates the permission tier from the resource list without randomUUID", async () => {
@@ -179,6 +186,7 @@ describe("service-account grant mutations over HTTP", () => {
       7, "knowledge_library", "13", expect.objectContaining({
         changes: [{ op: "MOVE", assignee_id: "grant-13", expected_assignee_version: 3, target_model_key: "editor" }],
       }),
+      testServiceAccountScope,
     )
   })
 
@@ -197,6 +205,7 @@ describe("service-account grant mutations over HTTP", () => {
       7, "knowledge_library", "13", expect.objectContaining({
         changes: [{ op: "REMOVE", assignee_id: "grant-13", expected_assignee_version: 3 }],
       }),
+      testServiceAccountScope,
     )
     expect(listServiceAccountResourceGrantsApi).toHaveBeenCalledTimes(2)
   })

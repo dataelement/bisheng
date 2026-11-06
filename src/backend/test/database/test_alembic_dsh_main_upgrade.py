@@ -20,32 +20,14 @@ def test_main_migrations_are_byte_for_byte_unchanged():
         assert hashlib.sha256((VERSIONS / filename).read_bytes()).hexdigest() == expected, filename
 
 
-def test_main_upgrade_preserves_native_auth_credits_and_safety_ancestry():
-    """Coverage AC: AC-52, AC-53."""
+def test_main_upgrade_keeps_work110_revision_on_original_main_baseline():
     scripts = _script_directory()
-    assert len(scripts.get_heads()) == 1
-    steps = scripts._upgrade_revs("head", MANIFEST["head"])
-    chain = [(step.revision.revision, step.revision.down_revision) for step in steps]
-    assert chain[:4] == [
+    steps = scripts._upgrade_revs("work110_dsh_local_sessions", MANIFEST["head"])
+    assert [(step.revision.revision, step.revision.down_revision) for step in steps] == [
         ("work110_dsh_local_sessions", MANIFEST["head"]),
-        ("f062_unified_model_access", "work110_dsh_local_sessions"),
-        ("f062_credit_multiplier", "f062_unified_model_access"),
-        ("f111_dsh_content_safety", "f062_credit_multiplier"),
     ]
-    # Future descendants may extend the line, but every added file must be on it.
-    assert {file.name for file in VERSIONS.glob("*.py")} - MANIFEST["files"].keys() == {
-        Path(step.revision.path).name for step in steps
-    }
-
-
-def test_published_credit_revisions_are_byte_for_byte_unchanged():
-    """Keep published credit DDL intact when extending its migration head."""
-    expected = {
-        "f062_unified_model_access.py": "9ccbd5156e5c060ca415d200ee530c36551e2233ecf0da184e75f594473e9146",
-        "f062_credit_multiplier.py": "cfb8105f7b5ad4fa13aca0f3db962de8380e6f18589cf628ccb31d004f2dd194",
-    }
-    for filename, digest in expected.items():
-        assert hashlib.sha256((VERSIONS / filename).read_bytes()).hexdigest() == digest, filename
+    assert "v3_0_0_work110_dsh_local_sessions.py" not in MANIFEST["files"]
+    assert "work110_dsh_local_sessions" in {revision.revision for revision in scripts.walk_revisions()}
 
 
 @pytest.mark.parametrize("uppercase", [False, True])
@@ -75,6 +57,44 @@ def test_seat_ddl_preserves_mysql_and_dm_reflected_identifier_case(monkeypatch, 
     assert "grant_version IS NULL" in operations.create_check_constraint.call_args.args[2]
     operations.create_table.assert_not_called()
     operations.execute.assert_not_called()
+
+
+def test_main_upgrade_preserves_native_auth_credits_and_safety_ancestry():
+    """Coverage AC: AC-52, AC-53."""
+    scripts = _script_directory()
+    assert len(scripts.get_heads()) == 1
+    steps = scripts._upgrade_revs("head", MANIFEST["head"])
+    chain = [(step.revision.revision, step.revision.down_revision) for step in steps]
+    assert [
+        item
+        for item in chain
+        if item[0]
+        in {
+            "work110_dsh_local_sessions",
+            "f062_unified_model_access",
+            "f062_credit_multiplier",
+            "f111_dsh_content_safety",
+        }
+    ] == [
+        ("work110_dsh_local_sessions", MANIFEST["head"]),
+        ("f062_unified_model_access", "work110_dsh_local_sessions"),
+        ("f062_credit_multiplier", "f062_unified_model_access"),
+        ("f111_dsh_content_safety", "f062_credit_multiplier"),
+    ]
+    # Future descendants may extend the line, but every added file must be on it.
+    assert {file.name for file in VERSIONS.glob("*.py")} - MANIFEST["files"].keys() == {
+        Path(step.revision.path).name for step in steps
+    }
+
+
+def test_published_credit_revisions_are_byte_for_byte_unchanged():
+    """Keep published credit DDL intact when extending its migration head."""
+    expected = {
+        "f062_unified_model_access.py": "9ccbd5156e5c060ca415d200ee530c36551e2233ecf0da184e75f594473e9146",
+        "f062_credit_multiplier.py": "cfb8105f7b5ad4fa13aca0f3db962de8380e6f18589cf628ccb31d004f2dd194",
+    }
+    for filename, digest in expected.items():
+        assert hashlib.sha256((VERSIONS / filename).read_bytes()).hexdigest() == digest, filename
 
 
 def _f111():

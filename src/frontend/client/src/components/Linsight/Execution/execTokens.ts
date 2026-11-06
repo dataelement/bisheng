@@ -36,6 +36,7 @@ export const HAIRLINE = '#E8EAED';
  */
 export const ACTIVITY_I18N: Record<ActivityCategory, string> = {
     web_search: 'com_linsight_act_web_search',
+    web_fetch: 'com_linsight_act_web_fetch',
     knowledge: 'com_linsight_act_knowledge',
     read_file: 'com_linsight_act_read_file',
     write_file: 'com_linsight_act_write_file',

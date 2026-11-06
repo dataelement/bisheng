@@ -1,10 +1,12 @@
+import { Tooltip, TooltipProvider } from '@bisheng/ui'
+import { Info } from 'lucide-react'
 import UsersSelect from '@/components/bs-comp/selectComponent/Users'
 import type { DepartmentUserOption } from '@/components/bs-comp/selectComponent/DepartmentUsersSelect'
-import { Button } from '@/components/bs-ui/button'
-import { Checkbox } from '@/components/bs-ui/checkBox'
-import { Input } from '@/components/bs-ui/input'
+import { Button } from "@bisheng/ui";
+import { Checkbox } from "@bisheng/ui";
+import { Input } from "@bisheng/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select'
-import { Tabs, TabsList, TabsTrigger } from '@/components/bs-ui/tabs'
+import { Segmented } from "@bisheng/ui"
 import { getCreditRules, getPolicySubjects, saveCreditRule, type CreditRule, type PolicySubject, type PolicySubjectOption } from '@/controllers/API/dshUnified'
 import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import { MAX_MONTHLY_CREDITS, isValidMonthlyCredits } from '@/utils/dshCreditAmount'
@@ -73,27 +75,28 @@ export function CreditRulesView() {
             className={validCredits ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
             {t('dsh.unified.creditRangeHint', { max: MAX_MONTHLY_CREDITS })}
         </p>
+        {!draft.isNew && <label className="flex items-center gap-2 text-sm">
+            <Checkbox disabled={pending} checked={draft.enabled}
+                onCheckedChange={checked => setDraft({ ...draft, enabled: checked === true })} />
+            {t('dsh.unified.enabled')}
+        </label>}
     </div>
-    const enabledInput = draft && <Checkbox aria-label={t('dsh.unified.enabled')} disabled={pending} checked={draft.enabled}
-        onCheckedChange={checked => setDraft({ ...draft, enabled: checked === true })} />
     const actions = <div className="flex items-center justify-end gap-2">
         <Button disabled={!draft?.subject || !validCredits || pending} onClick={save}>{t(pending ? 'dsh.unified.saving' : 'dsh.unified.save')}</Button>
-        <Button variant="ghost" disabled={pending} onClick={cancel}>{t('dsh.unified.cancel')}</Button>
+        <Button variant="text" disabled={pending} onClick={cancel}>{t('dsh.unified.cancel')}</Button>
     </div>
     return <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
-            <Tabs value={kind} onValueChange={value => {
-                if (value === 'USER' || value === 'DEPARTMENT' || value === 'ROLE') { setKind(value); cancel() }
-            }}>
-                <TabsList aria-label={t('dsh.unified.scope')} className="border bg-background p-0">
-                    {(['USER', 'DEPARTMENT', 'ROLE'] as const).map(value => <TabsTrigger key={value} value={value} disabled={pending}
-                        className="h-full rounded-none px-5 text-foreground data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">
-                        {t(value === 'USER' ? 'dsh.unified.userTab' : `dsh.unified.${value}`)}
-                    </TabsTrigger>)}
-                </TabsList>
-            </Tabs>
+            <Segmented value={kind} disabled={pending} onChange={value => {
+              if (value === 'USER' || value === 'DEPARTMENT' || value === 'ROLE') { setKind(value); cancel(); }
+            }} aria-label={t('dsh.unified.scope')}
+              options={[
+                { value: 'USER', label: t('dsh.byUser') },
+                { value: 'DEPARTMENT', label: t('dsh.byDepartment') },
+                { value: 'ROLE', label: t('dsh.byRole') },
+              ]} />
             <div className="flex gap-2">
-                <Button variant="outline" disabled={pending} onClick={() => { cancel(); setRevision(old => old + 1) }}>{t('dsh.refresh')}</Button>
+                <Button variant="outlined" disabled={pending} onClick={() => { cancel(); setRevision(old => old + 1) }}>{t('dsh.refresh')}</Button>
                 <Button disabled={pending || !loaded} onClick={() => {
                     setError(null); setUsers([]); setDraft({ subject: null, name: '', version: 0, credits: '500', enabled: true, isNew: true })
                 }}>{t('dsh.unified.addCredits')}</Button>
@@ -105,8 +108,19 @@ export function CreditRulesView() {
             <table className="w-full text-left text-sm">
                 <thead><tr className="border-b">
                     <th className="py-3 font-medium">{t(kind === 'USER' ? 'dsh.unified.userTab' : `dsh.unified.${kind}`)}</th>
-                    <th className="w-56 font-medium">{t('dsh.unified.monthlyCredits')}</th>
-                    <th className="w-32 font-medium">{t('dsh.unified.enabled')}</th>
+                    <th className="w-56 font-medium">
+                        <span className="inline-flex items-center gap-1">
+                            {t('dsh.unified.monthlyCredits')}
+                            <TooltipProvider>
+                                <Tooltip content={t('dsh.unified.monthlyCreditsHelp')}>
+                                    <button type="button" aria-label={t('dsh.unified.monthlyCreditsHelpLabel')}
+                                        className="inline-flex text-muted-foreground">
+                                        <Info className="h-4 w-4" aria-hidden="true" />
+                                    </button>
+                                </Tooltip>
+                            </TooltipProvider>
+                        </span>
+                    </th>
                     <th className="w-40" />
                 </tr></thead>
                 <tbody>
@@ -126,21 +140,23 @@ export function CreditRulesView() {
                                 </SelectContent>
                             </Select>}
                         </td>
-                        <td>{creditInput}</td><td>{enabledInput}</td><td>{actions}</td>
+                        <td>{creditInput}</td><td>{actions}</td>
                     </tr>}
                     {visibleRules.map(rule => {
                         const editing = draft && !draft.isNew && draft.subject?.kind === rule.subject_type && draft.subject.id === rule.subject_id
                         return <tr className="border-b" key={`${rule.subject_type}:${rule.subject_id}`}>
                             <td className="py-4 pr-4">{rule.name ?? rule.subject_id}</td>
-                            <td>{editing ? creditInput : rule.monthly_credits}</td>
-                            <td>{editing ? enabledInput : t(rule.enabled ? 'dsh.unified.yes' : 'dsh.unified.no')}</td>
-                            <td>{editing ? actions : <div className="flex justify-end"><Button variant="ghost" disabled={pending} onClick={() => {
+                            <td>{editing ? creditInput : <span className="inline-flex items-center gap-2">
+                                {rule.monthly_credits}
+                                {!rule.enabled && <span className="text-xs text-muted-foreground">{t('dsh.unified.no')}</span>}
+                            </span>}</td>
+                            <td>{editing ? actions : <div className="flex justify-end"><Button variant="text" disabled={pending} onClick={() => {
                                 setError(null); setDraft({ subject: { kind: rule.subject_type, id: rule.subject_id }, name: rule.name ?? String(rule.subject_id),
                                     credits: rule.monthly_credits, enabled: rule.enabled, version: rule.version, isNew: false })
                             }}>{t('dsh.unified.edit')}</Button></div>}</td>
                         </tr>
                     })}
-                    {visibleRules.length === 0 && !draft?.isNew && <tr><td colSpan={4} className="py-12 text-center text-muted-foreground">{t('dsh.unified.emptyCredits')}</td></tr>}
+                    {visibleRules.length === 0 && !draft?.isNew && <tr><td colSpan={3} className="py-12 text-center text-muted-foreground">{t('dsh.unified.emptyCredits')}</td></tr>}
                 </tbody>
             </table>
         </div>}

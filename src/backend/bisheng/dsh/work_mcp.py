@@ -22,7 +22,10 @@ from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesServic
 current_work_service: ContextVar[WorkCapabilitiesService] = ContextVar("current_work_service")
 
 
-def work_transport_security(public_url: str) -> TransportSecuritySettings:
+def work_transport_security(public_url: str | None) -> TransportSecuritySettings:
+    if not public_url:
+        # DSH is optional. Keep startup available and reject every unconfigured origin.
+        return TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=[], allowed_origins=[])
     public_origin = normalize_dsh_origin(public_url)
     origin = urlsplit(public_origin)
     # Existing ingress installations may forward the hostname without its port.

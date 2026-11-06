@@ -4,6 +4,14 @@ from unittest.mock import AsyncMock, call, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def no_business_subscription_by_default(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.channel.domain.services.channel_service.batch_check_business_visible",
+        AsyncMock(return_value={"channel-1": False}),
+    )
+
+
 @pytest.mark.asyncio
 async def test_review_channel_subscription_uses_approval_gate_pending():
     from bisheng.channel.domain.models.channel import ChannelVisibilityEnum

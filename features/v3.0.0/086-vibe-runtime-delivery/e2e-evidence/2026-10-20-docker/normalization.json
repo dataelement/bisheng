@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-21",
+  "purpose": "Preserve validation content while removing trailing whitespace before Git checkpoint",
+  "files": {
+    "evidence/docker-cleanup.json": {
+      "original_sha256": "4df80e8bb9764aef0b0f64383cb37e8b6ef88b7dd590276844d6d4511b8594ac",
+      "normalized_sha256": "a719cd8ade2d1cd7a3a8769b5e9541fc51847b615ae108a0ed6de7448c321fe3",
+      "method": "trim line-ending spaces and tabs only"
+    },
+    "logs/backend-local-final.log": {
+      "original_sha256": "272dfaf662dedbeb3d94759c7a343e21b5bebff486a58b22c2e5ccdac9bc6998",
+      "normalized_sha256": "099b2a9eb89db43b67e4ffb358ec751678d2abacc3fbd5be115126f4ae776d0d",
+      "method": "trim line-ending spaces and tabs only"
+    },
+    "sha256-export.json": {
+      "original_sha256": "119610c5bdbda4f2a7f74f495b7f7ba876148b8cf3b64a7c0cc9061431e0d1c5",
+      "normalized_sha256": "b86a233742f4cc52e9f9d312d84075637fd6d511a5e430dd69f1dfc0c465c538",
+      "method": "trim line-ending spaces and tabs only"
+    }
+  }
+}

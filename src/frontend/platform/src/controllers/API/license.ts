@@ -5,7 +5,7 @@ export type LicenseSeverity = 'normal' | 'warning' | 'critical' | 'expired' | 'u
 export type CommercialDisplayState = 'normal' | 'expiring' | 'expired' | 'unknown'
 
 // Mirrors the gateway LicenseStatusHolder.LicenseStatus record (snake_case via the gateway's
-// global SnakeCaseStrategy ObjectMapper). Feature 037 / F067 report body.
+// global SnakeCaseStrategy ObjectMapper). Feature 037 / F070 report body.
 export interface LicenseStatus {
     version: string | null
     expire_day: string | null

@@ -1,3 +1,4 @@
+import { SubjectSelectionSummary } from "./SubjectSelectionSummary";
 import { permissionModelLabel } from "./permissionModelLabel";
 import { Outlined } from "bisheng-icons";
 // `LockKeyhole` stays on lucide: bisheng-icons has no lock glyph.
@@ -17,10 +18,12 @@ import type {
   SelectedSubject,
   SubjectType,
 } from "~/api/permission";
-import { Button, Checkbox } from "~/components/ui";
+import { Button } from "~/components/ui";
+import { Checkbox } from '@bisheng/ui';
 import { useLocalize } from "~/hooks";
 import { canMutatePermissionAssignee } from "./assigneePolicy";
 import { SourceBadge } from "./SourceBadge";
+import { PermissionModelStatus } from "./PermissionModelStatus";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
@@ -147,6 +150,31 @@ export function PermissionGrantTab({
     ],
     [assignees, queuedAdds, subjectType],
   );
+  const disabledDepartmentSubtreeRootIds = useMemo(
+    () => [
+      ...assignees
+        .filter(
+          (assignee) =>
+            assignee.subject.type === "department"
+            && assignee.scope === "LOCAL"
+            && assignee.source.include_children,
+        )
+        .map((assignee) => Number(assignee.subject.id))
+        .filter(Number.isFinite),
+      ...queuedAdds
+        .filter(
+          (change) =>
+            change.op === "ADD"
+            && change.subject.type === "department"
+            && change.subject.include_children,
+        )
+        .map((change) =>
+          change.op === "ADD" ? Number(change.subject.id) : Number.NaN,
+        )
+        .filter(Number.isFinite),
+    ],
+    [assignees, queuedAdds],
+  );
 
   // The badge names which model they already hold, so a locked row explains
   // itself rather than just refusing to be clicked.
@@ -244,10 +272,6 @@ export function PermissionGrantTab({
   const canEdit =
     context.mode === "CUSTOM" && context.can_manage_permission;
 
-  const subjectLabel = localize(`f048_permission.subject.${subjectType}`);
-  const selectedSummaryText = selectedSubjects
-    .map((subject) => subject.name)
-    .join("、");
   const subjectPicker = (
     <>
       {subjectType === "user" && (
@@ -268,6 +292,7 @@ export function PermissionGrantTab({
           resourceId={resourceId}
           includeChildren={includeChildren}
           disabledIds={disabledSubjectIds}
+          disabledSubtreeRootIds={disabledDepartmentSubtreeRootIds}
           grantedLabels={grantedModelLabels}
         />
       )}
@@ -306,7 +331,7 @@ export function PermissionGrantTab({
         {subjectType === "department" &&
           !hideDepartmentIncludeChildrenControl && (
             <label className="mt-3 flex h-10 shrink-0 items-center gap-2 text-sm">
-              <Checkbox
+              <Checkbox className="peer"
                 checked={includeChildren}
                 onCheckedChange={(checked) =>
                   handleIncludeChildrenChange(checked === true)
@@ -319,11 +344,9 @@ export function PermissionGrantTab({
         <div className="mt-4 flex h-10 shrink-0 items-center gap-4 pr-1">
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
             <span className="shrink-0 text-sm font-normal leading-[22px] text-[#999999]">
-              {`${localize("com_permission.selected_prefix")}${subjectLabel}:`}
+              {`${localize("com_permission.selected_prefix")}:`}
             </span>
-            <span className="truncate text-sm leading-[22px] text-[#4E5969]">
-              {selectedSummaryText}
-            </span>
+            <SubjectSelectionSummary subjects={selectedSubjects} />
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -410,6 +433,7 @@ export function PermissionGrantTab({
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[#818181]">
                     <SourceBadge source={assignee.source} />
+                    <PermissionModelStatus active={assignee.model.active} />
                     {assignee.protected && (
                       <span className="ml-2 inline-flex items-center gap-1">
                         <LockKeyhole aria-hidden="true" className="size-3" />
@@ -487,7 +511,6 @@ export function PermissionGrantTab({
                   className="min-h-10 rounded px-3 text-sm text-[#818181] aria-pressed:bg-white aria-pressed:text-blue-500"
                   onClick={() => {
                     setSubjectType(type);
-                    setSelectedSubjects([]);
                   }}
                 >
                   {localize(`f048_permission.subject.${type}`)}
@@ -499,10 +522,11 @@ export function PermissionGrantTab({
           <div className="min-h-40">
             {subjectPicker}
           </div>
+          <SubjectSelectionSummary subjects={selectedSubjects} />
 
           {subjectType === "department" && (
             <label className="flex min-h-10 items-center gap-2 text-sm">
-              <Checkbox
+              <Checkbox className="peer"
                 checked={includeChildren}
                 onCheckedChange={(checked) =>
                   handleIncludeChildrenChange(checked === true)

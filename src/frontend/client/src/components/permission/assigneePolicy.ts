@@ -15,6 +15,6 @@ export function canMutatePermissionAssignee(
     assignee.scope === "LOCAL" &&
     assignee.editable &&
     !assignee.protected &&
-    grantableModels.some((model) => model.key === assignee.model.key)
+    (assignee.model.active === false || grantableModels.some((model) => model.key === assignee.model.key))
   );
 }

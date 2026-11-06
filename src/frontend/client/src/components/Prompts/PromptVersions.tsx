@@ -1,22 +1,18 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import React from 'react';
 import { format } from 'date-fns';
 import { Layers3, Crown, Zap } from 'lucide-react';
 import type { TPrompt, TPromptGroup } from '~/types/chat';
-import { Tag, TooltipAnchor, Label } from '~/components/ui';
+import { Label } from '~/components/ui';
+import { Tag } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
 const CombinedStatusIcon = ({ description }: { description: string }) => (
-  <TooltipAnchor
-    description={description}
-    aria-label={description}
-    render={
-      <div className="flex items-center justify-center">
+  <SharedTooltip  content={description}  ><div aria-label={description}  ><div className="flex items-center justify-center">
         <Crown className="h-4 w-4 text-amber-500" />
-      </div>
-    }
-  ></TooltipAnchor>
+      </div></div></SharedTooltip>
 );
 
 const VersionTags = ({ tags }: { tags: string[] }) => {
@@ -34,48 +30,19 @@ const VersionTags = ({ tags }: { tags: string[] }) => {
   return (
     <span className="flex gap-1 text-sm">
       {tags.map((tag, i) => (
-        <TooltipAnchor
-          description={
+        <SharedTooltip key={`${tag}-${i}`} content={tag === 'production'
+              ? localize('com_ui_currently_production')
+              : localize('com_ui_latest_version')}  ><div aria-label={
             tag === 'production'
               ? localize('com_ui_currently_production')
               : localize('com_ui_latest_version')
-          }
-          key={`${tag}-${i}`}
-          aria-label={
-            tag === 'production'
-              ? localize('com_ui_currently_production')
-              : localize('com_ui_latest_version')
-          }
-          render={
-            <Tag
-              label={tag}
-              className={cn(
-                'w-24 justify-center border border-transparent',
-                tag === 'production'
-                  ? 'bg-green-100 text-green-500 dark:border-green-500 dark:bg-transparent dark:text-green-500'
-                  : 'bg-blue-100 text-blue-500 dark:border-blue-500 dark:bg-transparent dark:text-blue-500',
-              )}
-              labelClassName="flex items-center m-0 justify-center gap-1"
-              LabelNode={(() => {
-                if (tag === 'production') {
-                  return (
-                    <div className="flex items-center">
-                      <span className="slow-pulse size-2 rounded-full bg-green-400" />
-                    </div>
-                  );
-                }
-                if (tag === 'latest') {
-                  return (
-                    <div className="flex items-center">
-                      <Zap className="size-4" />
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-            />
-          }
-        ></TooltipAnchor>
+          }  ><Tag
+              color={tag === 'production' ? 'success' : 'default'}
+              dot={tag === 'production'}
+              icon={tag === 'latest' ? <Zap className="size-3.5" /> : undefined}
+            >
+              {tag}
+            </Tag></div></SharedTooltip>
       ))}
     </span>
   );

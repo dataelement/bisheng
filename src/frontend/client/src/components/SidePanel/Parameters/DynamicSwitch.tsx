@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { OptionTypes } from '~/types/chat';
 import type { DynamicSettingProps } from '~/types/chat';
-import { Label, Switch, HoverCard, HoverCardTrigger } from '~/components/ui';
+import { Label, HoverCard, HoverCardTrigger } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { TranslationKeys, useLocalize, useParameterEffects } from '~/hooks';
 import { useChatContext } from '~/Providers';
 import OptionHover from './OptionHover';
@@ -79,7 +80,7 @@ function DynamicSwitch({
             checked={selectedValue}
             onCheckedChange={handleCheckedChange}
             disabled={readonly}
-            className="flex"
+            className="peer flex"
           />
         </HoverCardTrigger>
         {description && (

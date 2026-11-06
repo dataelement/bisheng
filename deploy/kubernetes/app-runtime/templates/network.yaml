@@ -1,0 +1,163 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: runtime-default-deny, namespace: {{ .Values.execution.namespace }}}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: runtime-entry, namespace: {{ .Values.execution.namespace }}}
+spec:
+  podSelector: {matchLabels: {bisheng.managed: v2}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ .Values.services.namespace }}}}
+          podSelector: {matchLabels: {app: app-proxy}}
+      ports: [{protocol: TCP, port: http}]
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ .Values.services.namespace }}}}
+          podSelector: {matchLabels: {app: runtime-manager}}
+      ports: [{protocol: TCP, port: http}, {protocol: TCP, port: data-control}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: runtime-egress-only, namespace: {{ .Values.execution.namespace }}}
+spec:
+  podSelector: {matchLabels: {bisheng.managed: v2}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ .Values.services.namespace }}}}
+          podSelector: {matchLabels: {app: egress-proxy}}
+      ports: [{protocol: TCP, port: 3128}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: runtime-system-default-deny, namespace: {{ .Values.services.namespace }}}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: runtime-system-ingress, namespace: {{ .Values.services.namespace }}}
+spec:
+  podSelector: {matchLabels: {app: runtime-manager}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+{{- range .Values.network.controlAllowedCidrs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+{{- end }}
+      ports: [{protocol: TCP, port: 8091}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: entry-system-ingress, namespace: {{ .Values.services.namespace }}}
+spec:
+  podSelector: {matchLabels: {app: app-proxy}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+{{- range .Values.network.entryAllowedCidrs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+{{- end }}
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: admission-system-ingress, namespace: {{ .Values.services.namespace }}}
+spec:
+  podSelector: {matchLabels: {app: runtime-admission}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+{{- range .Values.network.kubernetesApiCidrs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+{{- end }}
+      ports: [{protocol: TCP, port: 8443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: proxy-system-ingress, namespace: {{ .Values.services.namespace }}}
+spec:
+  podSelector: {matchLabels: {app: egress-proxy}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ .Values.execution.namespace }}}}
+          podSelector: {matchLabels: {bisheng.managed: v2}}
+      ports: [{protocol: TCP, port: 3128}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: runtime-system-dns, namespace: {{ .Values.services.namespace }}}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+{{- range .Values.network.dnsCidrs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+{{- end }}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: runtime-system-platform, namespace: {{ .Values.services.namespace }}}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+{{- range .Values.network.backendCidrs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+{{- end }}
+      ports:
+{{- range .Values.network.backendPorts }}
+        - {protocol: TCP, port: {{ . }}}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: runtime-manager-cluster, namespace: {{ .Values.services.namespace }}}
+spec:
+  podSelector: {matchLabels: {app: runtime-manager}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+{{- range .Values.network.kubernetesApiCidrs }}
+        - ipBlock: {cidr: {{ . | quote }}}
+{{- end }}
+      ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 6443}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ .Values.execution.namespace }}}}
+          podSelector: {matchLabels: {bisheng.managed: v2}}
+      ports: [{protocol: TCP, port: http}, {protocol: TCP, port: data-control}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: entry-upstream, namespace: {{ .Values.services.namespace }}}
+spec:
+  podSelector: {matchLabels: {app: app-proxy}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ .Values.execution.namespace }}}}
+          podSelector: {matchLabels: {bisheng.managed: v2}}
+      ports: [{protocol: TCP, port: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: proxy-outbound, namespace: {{ .Values.services.namespace }}}
+spec:
+  podSelector: {matchLabels: {app: egress-proxy}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{ipBlock: {cidr: 0.0.0.0/0}}, {ipBlock: {cidr: "::/0"}}]
+      ports:
+{{- range .Values.network.egressPorts }}
+        - {protocol: TCP, port: {{ . }}}
+{{- end }}

@@ -8,6 +8,13 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.outputs import ChatGenerationChunk, ChatResult
 from langchain_openai import ChatOpenAI
 
+from .reasoning_passback import attach_reasoning
+
+
+def _is_official_openai(base_url: str | None) -> bool:
+    """No base URL means the SDK default, api.openai.com."""
+    return not base_url or "api.openai.com" in base_url
+
 
 def _get_reasoning_content(message: dict[str, Any]) -> str | None:
     if (reasoning_content := message.get("reasoning_content")) is not None:
@@ -65,7 +72,10 @@ class ChatOpenAIReasoning(ChatOpenAI):
     ) -> dict:
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
         _normalize_openai_image_content(payload)
-        return payload
+        if _is_official_openai(self.openai_api_base):
+            # OpenAI's own endpoint is not known to accept the field; leave it untouched.
+            return payload
+        return attach_reasoning(payload, self._convert_input(input_).to_messages())
 
     def _convert_chunk_to_generation_chunk(
         self,
@@ -81,16 +91,10 @@ class ChatOpenAIReasoning(ChatOpenAI):
         if (choices := chunk.get("choices")) and generation_chunk:
             top = choices[0]
             if isinstance(generation_chunk.message, AIMessageChunk):
-                if (
-                    reasoning_content := top.get("delta", {}).get("reasoning_content")
-                ) is not None:
-                    generation_chunk.message.additional_kwargs["reasoning_content"] = (
-                        reasoning_content
-                    )
+                if (reasoning_content := top.get("delta", {}).get("reasoning_content")) is not None:
+                    generation_chunk.message.additional_kwargs["reasoning_content"] = reasoning_content
                 elif (reasoning := top.get("delta", {}).get("reasoning")) is not None:
-                    generation_chunk.message.additional_kwargs["reasoning_content"] = (
-                        reasoning
-                    )
+                    generation_chunk.message.additional_kwargs["reasoning_content"] = reasoning
 
         return generation_chunk
 

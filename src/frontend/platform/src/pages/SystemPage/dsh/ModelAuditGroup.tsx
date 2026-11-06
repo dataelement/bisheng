@@ -1,4 +1,4 @@
-import { Button } from "@/components/bs-ui/button";
+import { Button } from "@bisheng/ui";
 import "@/style/dsh-content-safety.css";
 import { Badge, Tag } from "@bisheng/ui";
 import type {
@@ -37,8 +37,8 @@ export function ModelAuditGroup({
       <header className="flex flex-wrap items-center gap-2 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
         <Button
           type="button"
-          variant="ghost"
-          size="sm"
+          variant="text" color="default"
+          size="small"
           className="h-auto min-h-8 w-full min-w-0 flex-none justify-start whitespace-normal break-all text-left text-sm md:w-auto md:flex-1 [@media(pointer:coarse)]:min-h-11"
           aria-expanded={expanded}
           aria-controls={expanded ? id : undefined}

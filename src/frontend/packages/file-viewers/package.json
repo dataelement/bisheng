@@ -7,22 +7,52 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./html": "./src/html/sandboxedHtml.ts",
+    "./resource": "./src/usePreviewResource.ts",
+    "./types": "./src/types.ts",
+    "./docx": "./src/viewers/DocxViewer.tsx",
+    "./text": "./src/viewers/TextViewer.tsx",
+    "./markdown": "./src/viewers/MarkdownViewer.tsx",
+    "./html-viewer": "./src/viewers/HtmlViewer.tsx",
+    "./image": "./src/viewers/ImageViewer.tsx",
+    "./media": "./src/viewers/MediaViewer.tsx",
+    "./media-player": "./src/viewers/MediaPlayer.tsx",
+    "./transcript": "./src/viewers/MediaTranscriptTabs.tsx",
+    "./locale": "./src/usePreviewLocale.ts",
+    "./viewer-types": "./src/viewerTypes.ts",
+    "./sanitize": "./src/html/sanitizeHtml.ts",
+    "./formats": "./src/formats.ts",
+    "./pdf": "./src/pdf/index.ts"
   },
   "scripts": {
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --maxWorkers=1 --minWorkers=1"
   },
   "peerDependencies": {
     "react": ">=18",
     "react-i18next": ">=13"
   },
   "dependencies": {
-    "xlsx": "^0.18.5",
-    "xlsx-populate": "^1.21.0"
+    "xlsx": "catalog:",
+    "xlsx-populate": "^1.21.0",
+    "mammoth": "1.12.0",
+    "dompurify": "catalog:",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "rehype-highlight": "^6.0.0",
+    "bisheng-icons": "catalog:",
+    "@bisheng/ui": "workspace:*",
+    "pdfjs-dist": "3.10.111"
   },
   "devDependencies": {
     "@types/react": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "@testing-library/react": "^16.0.0",
+    "@types/react-dom": "catalog:",
+    "react-dom": "^18.2.0",
+    "jsdom": "^25.0.0"
   }
 }

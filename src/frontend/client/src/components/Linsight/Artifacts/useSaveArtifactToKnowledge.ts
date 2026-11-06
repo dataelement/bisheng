@@ -1,3 +1,5 @@
+import { isApiError } from '@bisheng/api-client';
+import { showApiError } from '~/api/request';
 /**
  * Save a task deliverable into a knowledge space, reusing the platform's normal
  * staged-upload pipeline (fetch the artifact's bytes → stage → register).
@@ -224,7 +226,8 @@ export function useSaveArtifactToKnowledge(
             } catch (e) {
                 console.error('save artifact to knowledge space failed:', e);
                 const error = e as LocalizedError;
-                showToast({
+                if (isApiError(e)) showApiError(e);
+                else showToast({
                     // Only a staging rejection carries localized copy; a failed
                     // artifact fetch would otherwise surface raw English.
                     message: (error?.localized && error.message)

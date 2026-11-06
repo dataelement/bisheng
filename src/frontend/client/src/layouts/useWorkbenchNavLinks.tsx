@@ -2,7 +2,7 @@ import { Filled, Outlined } from 'bisheng-icons';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
-import { skillCenterPath, skillCenterPreviewEnabled } from '~/components/Skills/types';
+import { skillCenterPath } from '~/components/Skills/types';
 import { useAuthContext, useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from '~/hooks';
 import { canOpenWorkbench, canShowPlatformAdminEntry } from '~/utils/platformAccess';
 import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
@@ -147,7 +147,7 @@ export function useWorkbenchNavLinks(): { links: WorkbenchNavLink[]; showAdminEn
         closeDrawerOnNavigate: true,
       },
     ];
-    return all.filter((link) => canShow(link.plugin) && (link.section !== 'skills' || skillCenterPreviewEnabled));
+    return all.filter((link) => canShow(link.plugin));
     // Menu names are read field-by-field: the hook returns a fresh object each render.
   }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, menuApprovalMode, pluginsKey,
     menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps, skillCenterLabel]);

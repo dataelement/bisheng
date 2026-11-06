@@ -204,6 +204,40 @@ def test_researcher_subagent_prompt_tracks_kb_tool_presence():
     assert "search_knowledge_base" not in spec_without["system_prompt"]
 
 
+def test_main_prompt_guides_per_source_delegation():
+    """Multi-source tasks: one task per source, batches of at most 3, and a
+    distinct scratch/ notes dir named in each description. The rule must reach
+    every prompt variant, and the unattended variant must still never mention
+    ask_user (it is not bound there)."""
+    from bisheng.linsight.domain.services.agent_factory import _build_linsight_system_prompt
+
+    variants = {
+        "kb": _build_linsight_system_prompt(True),
+        "no_kb": _build_linsight_system_prompt(False),
+        "unattended": _build_linsight_system_prompt(False, unattended=True),
+    }
+    for name, prompt in variants.items():
+        assert "【多份资料按份委派】" in prompt, name
+        assert "一份资料对应一个 task" in prompt, name
+        assert "同一轮最多同时发出 5 个 task" in prompt, name
+        assert "scratch/<子任务短名>/" in prompt, name
+        assert "不得重名" in prompt, name
+    assert "ask_user" not in variants["unattended"]
+
+
+def test_researcher_prompt_writes_notes_to_assigned_scratch_dir():
+    """The researcher writes full notes under the scratch/ dir named in its
+    description, names the notes path in its last message, and still never
+    writes output/ (deliverables stay with the main graph)."""
+    for tools in ([_FakeTool("search_knowledge_base")], [_FakeTool("my_mcp_tool")]):
+        spec = _build_researcher_subagent(tools)
+        prompt = spec["system_prompt"]
+        assert "description 指定的笔记目录" in prompt
+        assert "最后一条消息末尾写明笔记文件路径" in prompt
+        assert "绝不写 output/" in prompt
+        assert "一份资料交给一个子代理" in spec["description"]
+
+
 # --------------------------------------------------------------------------
 # 3. stream mapper drops a subagent's namespaced write_todos (design §5.2a)
 # --------------------------------------------------------------------------

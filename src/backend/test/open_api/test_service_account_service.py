@@ -3,7 +3,12 @@ from types import SimpleNamespace
 import pytest
 from sqlmodel import select
 
-from bisheng.common.errcode.open_api import ServiceAccountNotFoundError, ServiceAccountOwnerInvalidError
+from bisheng.common.errcode.open_api import (
+    ServiceAccountManagementScopeChangedError,
+    ServiceAccountNameTakenError,
+    ServiceAccountNotFoundError,
+    ServiceAccountOwnerInvalidError,
+)
 from bisheng.core.context.tenant import current_tenant_id
 from bisheng.database.models.tenant import UserTenant
 from bisheng.open_api.domain.models.api_credential import SUBJECT_KIND_SERVICE_ACCOUNT, ApiCredential
@@ -54,17 +59,17 @@ async def test_owner_must_be_active_and_in_same_tenant(open_api_db, fake_redis, 
         )
 
 
-async def test_global_super_without_scope_derives_tenant_from_owner(open_api_db, fake_redis, audit_events):
+async def test_global_super_without_scope_cannot_create_from_owner(open_api_db, fake_redis, audit_events):
     await seed_user(open_api_db, 10, 2)
     token = current_tenant_id.set(None)
     try:
-        row = await ServiceAccountService.create(
-            actor(tenant_id=1, is_global_super=True),
-            ServiceAccountCreate(name="child-integration", resource_owner_user_id=10),
-        )
+        with pytest.raises(ServiceAccountManagementScopeChangedError):
+            await ServiceAccountService.create(
+                actor(tenant_id=1, is_global_super=True),
+                ServiceAccountCreate(name="child-integration", resource_owner_user_id=10),
+            )
     finally:
         current_tenant_id.reset(token)
-    assert row.tenant_id == 2
 
 
 async def test_update_disable_enable_delete_and_key_invalidation(open_api_db, fake_redis, audit_events):
@@ -145,3 +150,40 @@ async def test_list_exposes_creator_and_delegate_summary(open_api_db, fake_redis
         "subject_id": 11,
         "subject_name": "user-11",
     }
+
+
+async def test_a_taken_name_is_a_business_error_not_a_500(open_api_db, fake_redis, audit_events):
+    """Live and deleted accounts both hold their name (found on 114: the
+    re-create after a delete hit the unique constraint and answered 500)."""
+    await seed_user(open_api_db, 10, 1)
+    live = await ServiceAccountService.create(actor(), ServiceAccountCreate(name="sync", resource_owner_user_id=10))
+    with pytest.raises(ServiceAccountNameTakenError) as same_live:
+        await ServiceAccountService.create(actor(), ServiceAccountCreate(name="sync", resource_owner_user_id=10))
+    assert same_live.value.code == 26070
+
+    gone = await ServiceAccountService.create(actor(), ServiceAccountCreate(name="old", resource_owner_user_id=10))
+    await ServiceAccountService.delete(actor(), gone.id)
+    with pytest.raises(ServiceAccountNameTakenError):
+        await ServiceAccountService.create(actor(), ServiceAccountCreate(name="old", resource_owner_user_id=10))
+
+    with pytest.raises(ServiceAccountNameTakenError):
+        await ServiceAccountService.update(actor(), live.id, ServiceAccountUpdate(name="old"))
+    kept = await ServiceAccountService.update(
+        actor(), live.id, ServiceAccountUpdate(name="sync", description="same name")
+    )
+    assert kept.name == "sync" and kept.description == "same name"
+
+
+async def test_the_same_name_is_free_in_another_tenant(open_api_db, fake_redis, audit_events):
+    await seed_user(open_api_db, 10, 1)
+    await seed_user(open_api_db, 20, 2)
+    await ServiceAccountService.create(actor(), ServiceAccountCreate(name="sync", resource_owner_user_id=10))
+    token = current_tenant_id.set(2)
+    try:
+        other = await ServiceAccountService.create(
+            actor(tenant_id=2),
+            ServiceAccountCreate(name="sync", resource_owner_user_id=20),
+        )
+    finally:
+        current_tenant_id.reset(token)
+    assert other.tenant_id == 2

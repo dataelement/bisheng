@@ -27,7 +27,8 @@ export function SourceBadge({ source }: SourceBadgeProps) {
   const SourceIcon =
     SOURCE_ICONS[normalizedType as keyof typeof SOURCE_ICONS] ?? GitBranch;
 
-  // 组件-Tag标签.md: a roster line takes the small rung (§4); `brand` keeps the
+  // Tag component spec (packages/ui/docs, the Tag page): a roster line takes
+  // the small rung (§4); `brand` keeps the
   // 7% brand tint the badge already had (and it follows the blue⇄green theme).
   // The icon is sized by the Tag itself (12px on small, §5) — no className here.
   return (

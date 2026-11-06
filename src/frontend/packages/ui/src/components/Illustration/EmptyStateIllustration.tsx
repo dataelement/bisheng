@@ -12,7 +12,7 @@ import React, { useId } from 'react';
  * Colour mapping (§5):
  *   #19B476 (main green)  → rgb(var(--illus-500))
  *   #BDE6D3 (light green) → rgb(var(--illus-100))
- *   #D9D9D9 (mask alpha) / white → kept as-is
+ *   #D9D9D9 (mask alpha) → kept; white → currentColor = rgb(var(--bg-page))
  */
 export const EmptyStateIllustration = ({ className, grey, ...props }: React.SVGProps<SVGSVGElement> & { grey?: boolean }) => {
     const uid = useId();
@@ -23,7 +23,7 @@ export const EmptyStateIllustration = ({ className, grey, ...props }: React.SVGP
     const fill500a = { fill: 'rgb(var(--illus-500))', fillOpacity: 0.6 } as React.CSSProperties;
 
     return (
-        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={['brand-illustration', grey && 'illus-grey', className].filter(Boolean).join(' ')} {...props}>
+        <svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" className={['brand-illustration', grey && 'illus-grey', className].filter(Boolean).join(' ')} {...props} style={{ color: 'rgb(var(--bg-page))', ...props.style }}>
             <mask id={maskId} style={{ maskType: 'alpha' }} maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="400">
                 <rect width="400" height="400" fill="#D9D9D9" />
             </mask>
@@ -33,9 +33,9 @@ export const EmptyStateIllustration = ({ className, grey, ...props }: React.SVGP
                 <path d="M305.658 99.6524C305.327 99.3389 305.115 98.9553 305.064 98.5416C305.013 98.1281 305.126 97.7053 305.371 97.3206C305.616 96.9385 305.974 96.6267 306.372 96.4981C306.638 96.4129 306.903 96.3277 307.169 96.2426C311.953 94.71 316.737 93.1761 321.521 91.6435C321.787 91.5584 322.053 91.4731 322.319 91.388C323.6 90.9741 324.896 91.1198 325.938 91.937C326.98 92.7457 327.684 94.1596 327.877 95.7229C328.07 97.2866 327.732 98.8303 326.918 99.8683C326.106 100.915 324.885 101.371 323.542 101.281C323.264 101.263 322.984 101.245 322.706 101.227C317.693 100.905 312.68 100.583 307.666 100.261C307.388 100.243 307.108 100.224 306.83 100.206C306.413 100.178 305.989 99.9633 305.658 99.6524Z" style={fill500} />
                 <path d="M136.279 157.719C138.843 146.551 148.782 138.635 160.241 138.635H319.815C332.982 138.635 342.73 150.876 339.783 163.709L312.112 284.213C309.547 295.38 299.608 303.296 288.15 303.296H128.575C115.409 303.296 105.66 291.055 108.607 278.222L136.279 157.719Z" style={fill100} />
                 <path d="M114.044 121.142C115.064 108.363 125.732 98.512 138.552 98.512H266.077C278.035 98.512 287.452 108.71 286.5 120.63L276.754 242.764C275.734 255.543 265.066 265.394 252.246 265.394H124.721C112.763 265.394 103.346 255.196 104.297 243.276L114.044 121.142Z" style={fill500a} />
-                <path d="M112.91 137.657H58.3175C47.0597 137.657 39.1531 148.745 42.8218 159.388L89.8931 295.945C92.7419 304.21 100.521 309.756 109.263 309.756H292.017C302.794 309.756 310.638 299.534 307.848 289.124L279.018 181.525C276.618 172.568 268.501 166.34 259.228 166.34H150.763C144.907 166.34 139.496 163.216 136.568 158.145L130.654 147.901C126.994 141.562 120.23 137.657 112.91 137.657Z" style={fill500} stroke="white" strokeWidth="6.81227" />
-                <path opacity="0.6" d="M122.412 280.236H196.212" stroke="white" strokeWidth="12" strokeLinecap="round" />
-                <path opacity="0.4" d="M111 253H151.874" stroke="white" strokeWidth="12" strokeLinecap="round" />
+                <path d="M112.91 137.657H58.3175C47.0597 137.657 39.1531 148.745 42.8218 159.388L89.8931 295.945C92.7419 304.21 100.521 309.756 109.263 309.756H292.017C302.794 309.756 310.638 299.534 307.848 289.124L279.018 181.525C276.618 172.568 268.501 166.34 259.228 166.34H150.763C144.907 166.34 139.496 163.216 136.568 158.145L130.654 147.901C126.994 141.562 120.23 137.657 112.91 137.657Z" style={fill500} stroke="currentColor" strokeWidth="6.81227" />
+                <path opacity="0.6" d="M122.412 280.236H196.212" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
+                <path opacity="0.4" d="M111 253H151.874" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
             </g>
         </svg>
     );

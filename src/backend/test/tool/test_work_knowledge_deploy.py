@@ -14,9 +14,10 @@ import pytest
 def deploy(tmp_path, request):
     root = Path(__file__).resolve().parents[4]
     directory = tmp_path / getattr(request, "param", "deployment")
-    directory.mkdir()
-    script = directory / "deploy.sh"
-    shutil.copy2(root / "docker/deploy.sh", script)
+    (directory / "scripts").mkdir(parents=True)
+    (directory / "docker").mkdir()
+    script = directory / "scripts/deploy.sh"
+    shutil.copy2(root / "scripts/deploy.sh", script)
     log = tmp_path / "calls.jsonl"
     docker = tmp_path / "docker"
     docker.write_text(
@@ -48,7 +49,7 @@ def deploy(tmp_path, request):
         )
         calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
         for call in calls:
-            assert call[:3] == ["compose", "-f", str(directory / "docker-compose.yml")]
+            assert call[:3] == ["compose", "-f", str(directory / "docker/docker-compose.yml")]
         return result, [call[3:] for call in calls]
 
     return run

@@ -1,0 +1,385 @@
+{
+  "slug": "e2e-vibe-k8s-20261025",
+  "events": [
+    {
+      "event": "runtime-catalog-configured",
+      "at": 1792938134.5826523,
+      "platform": "linux/amd64",
+      "official": false
+    },
+    {
+      "event": "runtime-observed",
+      "at": 1792938134.6935134,
+      "executor": "kubernetes",
+      "ready": false,
+      "available_mb": 4096
+    },
+    {
+      "event": "business-flow-not-started",
+      "at": 1792938134.6938388,
+      "reason": "configured-only"
+    },
+    {
+      "event": "runtime-catalog-configured",
+      "at": 1792938879.09368,
+      "platform": "linux/amd64",
+      "official": false
+    },
+    {
+      "event": "runtime-observed",
+      "at": 1792938879.2507253,
+      "executor": "kubernetes",
+      "ready": false,
+      "available_mb": 4096
+    },
+    {
+      "event": "mainflow-error",
+      "at": 1792938879.253054,
+      "error_type": "AssertionError",
+      "reason": "runtime installation has not passed readiness",
+      "locations": [
+        {
+          "function": "run",
+          "line": 118
+        },
+        {
+          "function": "run_until_complete",
+          "line": 654
+        },
+        {
+          "function": "main",
+          "line": 39
+        }
+      ]
+    },
+    {
+      "event": "runtime-catalog-configured",
+      "at": 1792938973.704902,
+      "platform": "linux/amd64",
+      "official": false
+    },
+    {
+      "event": "runtime-observed",
+      "at": 1792938973.8237011,
+      "executor": "kubernetes",
+      "ready": true,
+      "available_mb": 4096
+    },
+    {
+      "event": "deployment-accepted",
+      "at": 1792938974.6527858,
+      "app_id": "c63121a2f58441df953762501fdc62d3",
+      "deployment_id": "3685d71782c546f69a10e0adf3670495",
+      "version_id": "b8dba3399b3d467e8006e66edc36a408"
+    },
+    {
+      "event": "deployment-progress",
+      "at": 1792938974.7755468,
+      "status": "running",
+      "state": "draft"
+    },
+    {
+      "event": "deployment-progress",
+      "at": 1792938997.3296766,
+      "status": "failed",
+      "state": "draft"
+    },
+    {
+      "event": "deployment-failed",
+      "at": 1792938997.3301513,
+      "code": 16227,
+      "stage": "precheck_build"
+    },
+    {
+      "event": "temporary-deploy-credential-revoked",
+      "at": 1792938997.4207375
+    },
+    {
+      "event": "mainflow-error",
+      "at": 1792938997.423008,
+      "error_type": "RuntimeError",
+      "reason": "deployment failed",
+      "locations": [
+        {
+          "function": "run",
+          "line": 118
+        },
+        {
+          "function": "run_until_complete",
+          "line": 654
+        },
+        {
+          "function": "main",
+          "line": 59
+        }
+      ]
+    },
+    {
+      "event": "runtime-catalog-configured",
+      "at": 1792942693.9684994,
+      "platform": "linux/amd64",
+      "official": false
+    },
+    {
+      "event": "runtime-observed",
+      "at": 1792942694.088782,
+      "executor": "kubernetes",
+      "ready": true,
+      "available_mb": 4096
+    },
+    {
+      "event": "retry-failed-deployment",
+      "at": 1792942694.3505647,
+      "app_id": "c63121a2f58441df953762501fdc62d3",
+      "previous_deployment_id": "3685d71782c546f69a10e0adf3670495"
+    },
+    {
+      "event": "deployment-accepted",
+      "at": 1792942694.5136333,
+      "app_id": "c63121a2f58441df953762501fdc62d3",
+      "deployment_id": "3a41496861c340c1b455071452090e76",
+      "version_id": "64420d08e6e44ca2a38d7131f95afd3e"
+    },
+    {
+      "event": "deployment-progress",
+      "at": 1792942694.631636,
+      "status": "running",
+      "state": "draft"
+    },
+    {
+      "event": "deployment-progress",
+      "at": 1792942719.3805442,
+      "status": "failed",
+      "state": "draft"
+    },
+    {
+      "event": "deployment-failed",
+      "at": 1792942719.3810406,
+      "code": 16227,
+      "stage": "precheck_build"
+    },
+    {
+      "event": "temporary-deploy-credential-revoked",
+      "at": 1792942719.470533
+    },
+    {
+      "event": "mainflow-error",
+      "at": 1792942719.472946,
+      "error_type": "RuntimeError",
+      "reason": "deployment failed",
+      "locations": [
+        {
+          "function": "run",
+          "line": 118
+        },
+        {
+          "function": "run_until_complete",
+          "line": 654
+        },
+        {
+          "function": "main",
+          "line": 63
+        }
+      ]
+    },
+    {
+      "event": "runtime-catalog-configured",
+      "at": 1792942951.6576405,
+      "platform": "linux/amd64",
+      "official": false
+    },
+    {
+      "event": "runtime-observed",
+      "at": 1792942951.78467,
+      "executor": "kubernetes",
+      "ready": true,
+      "available_mb": 4096
+    },
+    {
+      "event": "retry-failed-deployment",
+      "at": 1792942952.02366,
+      "app_id": "c63121a2f58441df953762501fdc62d3",
+      "previous_deployment_id": "3a41496861c340c1b455071452090e76"
+    },
+    {
+      "event": "deployment-accepted",
+      "at": 1792942952.1247234,
+      "app_id": "c63121a2f58441df953762501fdc62d3",
+      "deployment_id": "4f599876e25e4bcdaee8e1a213f183b0",
+      "version_id": "24fcb79a0b394e6d9634e952375f8091"
+    },
+    {
+      "event": "deployment-progress",
+      "at": 1792942952.248616,
+      "status": "running",
+      "state": "draft"
+    },
+    {
+      "event": "deployment-progress",
+      "at": 1792943100.6226368,
+      "status": "waiting_approval",
+      "state": "draft"
+    },
+    {
+      "event": "approval-confirmed",
+      "at": 1792943100.8656135,
+      "instance_id": 1
+    },
+    {
+      "event": "temporary-deploy-credential-revoked",
+      "at": 1792943553.444028
+    },
+    {
+      "event": "mainflow-error",
+      "at": 1792943553.4489405,
+      "error_type": "TimeoutError",
+      "reason": "single deployment did not reach online",
+      "locations": [
+        {
+          "function": "run",
+          "line": 118
+        },
+        {
+          "function": "run_until_complete",
+          "line": 654
+        },
+        {
+          "function": "main",
+          "line": 74
+        }
+      ]
+    },
+    {
+      "event": "runtime-catalog-configured",
+      "at": 1792943717.5486763,
+      "platform": "linux/amd64",
+      "official": false
+    },
+    {
+      "event": "runtime-observed",
+      "at": 1792943717.663652,
+      "executor": "kubernetes",
+      "ready": true,
+      "available_mb": 4096
+    },
+    {
+      "event": "approval-execution-retry-requested",
+      "at": 1792943718.0166128,
+      "instance_id": 1,
+      "exception_id": 1
+    },
+    {
+      "event": "approval-execution-retry-returned",
+      "at": 1792943809.3155162,
+      "instance_id": 1
+    },
+    {
+      "event": "deployment-progress",
+      "at": 1792943809.4644253,
+      "status": "succeeded",
+      "state": "online"
+    },
+    {
+      "event": "temporary-deploy-credential-revoked",
+      "at": 1792943812.5661318
+    },
+    {
+      "event": "mainflow-error",
+      "at": 1792943812.5688274,
+      "error_type": "AssertionError",
+      "reason": "('application-entry', 503)",
+      "locations": [
+        {
+          "function": "run",
+          "line": 118
+        },
+        {
+          "function": "run_until_complete",
+          "line": 654
+        },
+        {
+          "function": "main",
+          "line": 78
+        }
+      ]
+    },
+    {
+      "event": "runtime-catalog-configured",
+      "at": 1792943907.4887767,
+      "platform": "linux/amd64",
+      "official": false
+    },
+    {
+      "event": "runtime-observed",
+      "at": 1792943907.622679,
+      "executor": "kubernetes",
+      "ready": true,
+      "available_mb": 2944
+    },
+    {
+      "event": "deployment-progress",
+      "at": 1792943907.9696195,
+      "status": "succeeded",
+      "state": "online"
+    },
+    {
+      "event": "temporary-deploy-credential-revoked",
+      "at": 1792944061.5865147
+    },
+    {
+      "event": "mainflow-error",
+      "at": 1792944061.590177,
+      "error_type": "AssertionError",
+      "reason": "('application-entry', 503)",
+      "locations": [
+        {
+          "function": "run",
+          "line": 118
+        },
+        {
+          "function": "run_until_complete",
+          "line": 654
+        },
+        {
+          "function": "main",
+          "line": 82
+        }
+      ]
+    },
+    {
+      "event": "runtime-catalog-configured",
+      "at": 1792944198.9897182,
+      "platform": "linux/amd64",
+      "official": false
+    },
+    {
+      "event": "runtime-observed",
+      "at": 1792944199.1507697,
+      "executor": "kubernetes",
+      "ready": true,
+      "available_mb": 2944
+    },
+    {
+      "event": "deployment-progress",
+      "at": 1792944199.4989026,
+      "status": "succeeded",
+      "state": "online"
+    },
+    {
+      "event": "mainflow-passed",
+      "at": 1792944199.632141,
+      "app_id": "c63121a2f58441df953762501fdc62d3",
+      "version_id": "24fcb79a0b394e6d9634e952375f8091",
+      "entry": "http://192.168.106.189:30101/apps/e2e-vibe-k8s-20261025/",
+      "http_status": 200,
+      "tier": "light"
+    },
+    {
+      "event": "temporary-deploy-credential-revoked",
+      "at": 1792944199.6852221
+    }
+  ],
+  "app_id": "c63121a2f58441df953762501fdc62d3",
+  "deployment_id": "4f599876e25e4bcdaee8e1a213f183b0",
+  "version_id": "24fcb79a0b394e6d9634e952375f8091"
+}

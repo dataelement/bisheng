@@ -1,141 +1,96 @@
-// @ts-strict-ignore
-import { MultiSelect } from "@/components/bs-ui/multiSelect.tsx";
-import { getGroupsApi } from "@/controllers/API/log";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Select } from '@bisheng/ui';
+import { getGroupsApi } from '@/controllers/API/log';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useSelectLabels } from '../formFields/useSelectLabels';
 
 interface AppOption {
     label: string;
     value: string;
+}
+interface AppResource {
+    id?: string | number | null;
+    name?: string | null;
+}
+interface FilterByAppProps {
+    value: string[];
     placeholder?: string;
+    onChange: (value: string[]) => void;
+}
+const PAGE_SIZE = 10;
+function mapApps(data: AppResource[]): AppOption[] {
+    return data.flatMap(item => item.id == null || item.id === '' ? [] : [{ label: String(item.name ?? item.id), value: String(item.id) }]);
 }
 
-export default function FilterByApp({ value, placeholder = 'App Name', onChange }) {
-    const { apps, loadApps, searchApps, loadMoreApps } = useApps();
+export function FilterByApp({ value, placeholder, onChange }: FilterByAppProps) {
+    const { t } = useTranslation();
+    const labels = useSelectLabels();
+    const { apps, loadApps, loadMoreApps } = useApps();
+    const label = placeholder ?? t('log.appName');
+    useEffect(() => { void loadApps(''); }, [loadApps]);
 
-    useEffect(() => {
-        loadApps("");
-    }, [])
-
-    return (
-        <div className="w-[200px] relative">
-            <MultiSelect
-                multiple
-                value={value}
-                options={apps}
-                onValueChange={onChange}
-                hasMore
-                onSearch={searchApps}
-                onLoadMore={loadMoreApps}
-                contentClassName="max-w-[320px]"
-                placeholder={placeholder}
-            />
-        </div>
-    );
+    return <Select {...labels} multiple showSearch filterOption={false}
+        className="w-[200px]" panelClassName="max-w-[320px]"
+        value={value} options={apps} placeholder={label} aria-label={label}
+        onChange={values => onChange(values.map(String))}
+        onSearch={loadApps} onLoadMore={loadMoreApps} />;
 }
+export default FilterByApp;
 
-/**
- * 自定义 Hook：用于管理应用列表的数据加载逻辑
- */
-const useApps = () => {
-    const [apps, setApps] = useState<AppOption[]>([]); // 应用列表数据
-    const pageRef = useRef(1); // 当前页码
-    const hasMoreRef = useRef(true); // 是否还有更多数据
-    const loadLock = useRef(false); // 加载锁，防止重复请求
-    const keywordRef = useRef(""); // 当前搜索关键词
-    const abortControllerRef = useRef<AbortController>(); // 用于取消请求
+/** Preserve the existing application endpoint, page size and scroll-load contract. */
+function useApps() {
+    const [apps, setApps] = useState<AppOption[]>([]);
+    const pageRef = useRef(1);
+    const hasMoreRef = useRef(true);
+    const loadLock = useRef(false);
+    const keywordRef = useRef('');
+    const abortControllerRef = useRef<AbortController>();
 
-    /**
-     * 将 API 返回的数据映射为选项格式
-     */
-    const mapApiData = (data: any[]): AppOption[] =>
-        data.map((item) => ({ label: item.name, value: item.id }));
-
-    /**
-     * 发起 API 请求获取数据
-     */
-    const fetchData = async (params: {
-        keyword: string;
-        page: number;
-        pageSize: number;
-    }) => {
-        // 取消之前的请求
+    const fetchData = useCallback(async (keyword: string, page: number): Promise<AppResource[]> => {
         abortControllerRef.current?.abort();
         abortControllerRef.current = new AbortController();
-
         try {
-            const res = await getGroupsApi(
-                {
-                    keyword: params.keyword,
-                    page: params.page,
-                    page_size: params.pageSize,
-                },
-                { signal: abortControllerRef.current.signal } // 绑定 AbortController
-            );
-            return res.data;
+            // The legacy API declaration returns an array, but its actual envelope contains data.
+            const response = await getGroupsApi({ keyword, page, page_size: PAGE_SIZE }, { signal: abortControllerRef.current.signal }) as unknown as { data: AppResource[] };
+            return response.data;
         } catch (error) {
-            if (error.name === "AbortError") return []; // 忽略取消请求的错误
-            throw error; // 抛出其他错误
-        }
-    };
-
-    /**
-     * 加载应用列表（初始加载或搜索）
-     */
-    const loadApps = useCallback(async (keyword: string) => {
-        if (loadLock.current) return; // 如果正在加载，则直接返回
-
-        loadLock.current = true; // 加锁
-        keywordRef.current = keyword; // 更新搜索关键词
-
-        try {
-            const data = await fetchData({
-                keyword,
-                page: 1,
-                pageSize: 10,
-            });
-
-            setApps(mapApiData(data)); // 更新应用列表
-            pageRef.current = 1; // 重置页码
-            hasMoreRef.current = data.length === 10; // 判断是否还有更多数据
-        } catch (error) {
-            console.error("加载应用列表失败:", error);
-        } finally {
-            loadLock.current = false; // 解锁
+            if (error instanceof Error && error.name === 'AbortError') return [];
+            throw error;
         }
     }, []);
 
-    /**
-     * 加载更多应用（滚动加载）
-     */
+    const loadApps = useCallback(async (keyword: string) => {
+        if (loadLock.current) return;
+        loadLock.current = true;
+        keywordRef.current = keyword;
+        try {
+            const data = await fetchData(keyword, 1);
+            setApps(mapApps(data));
+            pageRef.current = 1;
+            hasMoreRef.current = data.length === PAGE_SIZE;
+        } catch (error) {
+            console.error('Failed to load applications', error);
+        } finally {
+            loadLock.current = false;
+        }
+    }, [fetchData]);
+
     const loadMoreApps = useCallback(async () => {
-        if (!hasMoreRef.current || loadLock.current) return; // 如果没有更多数据或正在加载，则直接返回
-
-        loadLock.current = true; // 加锁
-
+        if (!hasMoreRef.current || loadLock.current) return;
+        loadLock.current = true;
         try {
             const nextPage = pageRef.current + 1;
-            const data = await fetchData({
-                keyword: keywordRef.current,
-                page: nextPage,
-                pageSize: 10,
-            });
-
-            setApps((prev) => [...prev, ...mapApiData(data)]); // 追加新数据
-            pageRef.current = nextPage; // 更新页码
-            hasMoreRef.current = data.length === 10; // 判断是否还有更多数据
+            const data = await fetchData(keywordRef.current, nextPage);
+            setApps(previous => [...previous, ...mapApps(data)]);
+            pageRef.current = nextPage;
+            hasMoreRef.current = data.length === PAGE_SIZE;
         } catch (error) {
-            console.error("加载更多应用失败:", error);
+            console.error('Failed to load more applications', error);
         } finally {
-            loadLock.current = false; // 解锁
+            loadLock.current = false;
         }
-    }, []);
+    }, [fetchData]);
 
-    /**
-     * 组件卸载时取消未完成的请求
-     */
-    useEffect(() => {
-        return () => abortControllerRef.current?.abort();
-    }, []);
-
-    return { apps, loadApps, searchApps: loadApps, loadMoreApps };
-};
+    useEffect(() => () => abortControllerRef.current?.abort(), []);
+    return { apps, loadApps, loadMoreApps };
+}

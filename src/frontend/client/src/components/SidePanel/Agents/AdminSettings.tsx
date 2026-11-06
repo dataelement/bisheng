@@ -6,7 +6,8 @@ import { Permissions, SystemRoles, roleDefaults, PermissionTypes } from '~/types
 import type { Control, UseFormSetValue, UseFormGetValues } from 'react-hook-form';
 import { OGDialog, OGDialogTitle, OGDialogContent, OGDialogTrigger } from '~/components/ui';
 import { useUpdateAgentPermissionsMutation } from '~/hooks/queries/data-provider';
-import { Button, Switch, DropdownPopup } from '~/components/ui';
+import { Button, DropdownPopup } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useLocalize, useAuthContext } from '~/hooks';
 import { useToastContext } from '~/Providers';
 
@@ -44,7 +45,7 @@ const LabelController: React.FC<LabelControllerProps> = ({
       name={agentPerm}
       control={control}
       render={({ field }) => (
-        <Switch
+        <Switch className="peer"
           {...field}
           checked={field.value}
           onCheckedChange={field.onChange}

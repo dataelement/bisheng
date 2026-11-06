@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useState, useCallback, useMemo } from 'react';
 import {
   TrashIcon,
@@ -11,18 +12,7 @@ import {
 } from 'lucide-react';
 import type { TConversation } from '~/types/chat';
 import { SearchInput } from '@bisheng/ui';
-import {
-  Table,
-  Button,
-  TableRow,
-  Skeleton,
-  Separator,
-  TableCell,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TooltipAnchor,
-} from '~/components';
+import { Table, Button, TableRow, Skeleton, Separator, TableCell, TableBody, TableHead, TableHeader } from '~/components';
 import { useConversationsInfiniteQuery, useArchiveConvoMutation } from '~/hooks/queries/data-provider';
 import { useDeleteConversationConfirm } from '~/components/Conversations/ConvoOptions';
 import { useAuthContext, useLocalize, usePrefersMobileLayout } from '~/hooks';
@@ -184,10 +174,7 @@ export default function ArchivedChatsTable() {
                       isSmallScreen ? 'justify-end' : 'justify-end gap-2',
                     )}
                   >
-                    <TooltipAnchor
-                      description={localize('com_ui_unarchive')}
-                      render={
-                        <Button
+                    <SharedTooltip  content={localize('com_ui_unarchive')}  ><Button
                           type="button"
                           aria-label="Unarchive conversation"
                           variant="ghost"
@@ -202,14 +189,9 @@ export default function ArchivedChatsTable() {
                           }}
                         >
                           <ArchiveRestore className={cn('size-4', isSmallScreen && 'size-3.5')} />
-                        </Button>
-                      }
-                    />
+                        </Button></SharedTooltip>
 
-                    <TooltipAnchor
-                      description={localize('com_ui_delete')}
-                      render={
-                        <Button
+                    <SharedTooltip  content={localize('com_ui_delete')}  ><Button
                           type="button"
                           aria-label="Delete archived conversation"
                           variant="ghost"
@@ -224,9 +206,7 @@ export default function ArchivedChatsTable() {
                           }
                         >
                           <TrashIcon className={cn('size-4', isSmallScreen && 'size-3.5')} />
-                        </Button>
-                      }
-                    />
+                        </Button></SharedTooltip>
                   </TableCell>
                 </TableRow>
               ))}

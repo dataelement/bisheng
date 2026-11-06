@@ -70,6 +70,18 @@ _admin_scope_tenant_id: ContextVar[int | None] = ContextVar(
     default=None,
 )
 
+_management_all_tenants: ContextVar[bool] = ContextVar("_management_all_tenants", default=False)
+
+
+def is_management_all_tenants() -> bool:
+    """Only verified browser super administrators may select the global view."""
+    return False  # F114: browser management never has a whole-platform data view.
+
+
+def set_management_all_tenants(value: bool):
+    return _management_all_tenants.set(value)
+
+
 _is_management_api: ContextVar[bool] = ContextVar(
     "_is_management_api",
     default=False,
@@ -92,7 +104,7 @@ def get_current_tenant_id() -> int | None:
     2. Otherwise — return ``current_tenant_id.get()`` (JWT leaf tenant).
     """
     scope = _admin_scope_tenant_id.get()
-    if scope is not None:
+    if scope is not None and _is_management_api.get():
         return scope
     return current_tenant_id.get()
 
@@ -202,3 +214,49 @@ def get_is_management_api() -> bool:
 def set_is_management_api(value: bool):
     """Set the management-api flag. Returns a reset token."""
     return _is_management_api.set(value)
+
+
+@contextmanager
+def tenant_execution_scope(tenant_id: int):
+    """Bind a verified tenant for background work and restore ambient request state.
+
+    A business actor's tenant field does not bind SQLAlchemy's ContextVars.
+    Bootstrap and reconciliation must also clear an inherited admin override,
+    visible-tenant set and bypass flag while projecting one tenant's resources.
+    This scope provides isolation only; callers still authorize the operation.
+    """
+    if isinstance(tenant_id, bool) or not isinstance(tenant_id, int) or tenant_id <= 0:
+        raise ValueError("tenant_id must be a positive integer")
+    bindings = (
+        (current_tenant_id, tenant_id),
+        (visible_tenant_ids, frozenset({tenant_id})),
+        (_admin_scope_tenant_id, None),
+        (_bypass_tenant_filter, False),
+        (_is_management_api, False),
+        (_management_all_tenants, False),
+    )
+    tokens = [(variable, variable.set(value)) for variable, value in bindings]
+    try:
+        yield
+    finally:
+        for variable, token in reversed(tokens):
+            variable.reset(token)
+
+
+@contextmanager
+def management_tenant_scope(tenant_id: int):
+    """Pin one verified view while preserving the authenticated membership."""
+    if type(tenant_id) is not int or tenant_id <= 0:
+        raise ValueError("tenant_id must be a positive integer")
+    bindings = (
+        (_is_management_api, True),
+        (_admin_scope_tenant_id, tenant_id),
+        (visible_tenant_ids, frozenset({tenant_id})),
+        (_management_all_tenants, False),
+    )
+    tokens = [(variable, variable.set(value)) for variable, value in bindings]
+    try:
+        yield
+    finally:
+        for variable, token in reversed(tokens):
+            variable.reset(token)

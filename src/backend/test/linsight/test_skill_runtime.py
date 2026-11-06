@@ -18,7 +18,10 @@ def runtime_permission_scope(monkeypatch):
     from bisheng.linsight.domain.services.user_skills import SkillAvailabilityRepository
     from test.linsight.test_skill_service import FakeSkillDao
 
-    monkeypatch.setattr(LinsightSkillDao, "list_enabled", FakeSkillDao.list_enabled)
+    async def enabled(*, owner_user_id=0):
+        return [row for row in await FakeSkillDao.list_enabled() if getattr(row, "owner_user_id", 0) == owner_user_id]
+
+    monkeypatch.setattr(LinsightSkillDao, "list_enabled", enabled)
     monkeypatch.setattr(SkillAvailabilityRepository, "disabled_ids", AsyncMock(return_value=set()))
     monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", AsyncMock(return_value=False))
     allowed = {"enabled": True}

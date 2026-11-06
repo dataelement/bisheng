@@ -1,6 +1,8 @@
-import { Button } from '@/components/bs-ui/button';
-import { CircleAlert } from 'lucide-react';
-import { useRouteError } from 'react-router-dom';
+import { Button } from '@bisheng/ui';
+
+import { Outlined } from "bisheng-icons";
+
+import { useRouteError } from "react-router-dom";
 
 interface UserAgentData {
     getHighEntropyValues(hints: string[]): Promise<{ platform: string; platformVersion: string }>;
@@ -13,7 +15,7 @@ type PlatformInfo = {
 
 const formatStackTrace = (stack: string) => {
     return stack
-        .split('\n')
+        .split("\n")
         .map((line) => line.trim())
         .filter(Boolean)
         .map((line, i) => ({
@@ -23,39 +25,39 @@ const formatStackTrace = (stack: string) => {
 };
 
 const getPlatformInfo = async (): Promise<PlatformInfo> => {
-    if ('userAgentData' in navigator) {
+    if ("userAgentData" in navigator) {
         try {
             const ua = navigator.userAgentData as UserAgentData;
-            const highEntropyValues = await ua.getHighEntropyValues(['platform', 'platformVersion']);
+            const highEntropyValues = await ua.getHighEntropyValues(["platform", "platformVersion"]);
             return {
                 os: highEntropyValues.platform,
                 version: highEntropyValues.platformVersion,
             };
         } catch (e) {
-            console.warn('Failed to get high entropy values');
+            console.warn("Failed to get high entropy values");
             console.error(e);
         }
     }
 
     const userAgent = navigator.userAgent.toLowerCase();
 
-    if (userAgent.includes('mac')) {
-        return { os: 'macOS' };
+    if (userAgent.includes("mac")) {
+        return { os: "macOS" };
     }
-    if (userAgent.includes('win')) {
-        return { os: 'Windows' };
+    if (userAgent.includes("win")) {
+        return { os: "Windows" };
     }
-    if (userAgent.includes('linux')) {
-        return { os: 'Linux' };
+    if (userAgent.includes("linux")) {
+        return { os: "Linux" };
     }
-    if (userAgent.includes('android')) {
-        return { os: 'Android' };
+    if (userAgent.includes("android")) {
+        return { os: "Android" };
     }
-    if (userAgent.includes('ios') || userAgent.includes('iphone') || userAgent.includes('ipad')) {
-        return { os: 'iOS' };
+    if (userAgent.includes("ios") || userAgent.includes("iphone") || userAgent.includes("ipad")) {
+        return { os: "iOS" };
     }
 
-    return { os: 'Unknown' };
+    return { os: "Unknown" };
 };
 
 const getBrowserInfo = async () => {
@@ -79,7 +81,7 @@ export default function RouteErrorBoundary() {
     };
 
     const errorDetails = {
-        message: typedError.message ?? 'An unexpected error occurred',
+        message: typedError.message ?? "An unexpected error occurred",
         stack: typedError.stack,
         status: typedError.status,
         statusText: typedError.statusText,
@@ -95,15 +97,15 @@ export default function RouteErrorBoundary() {
                 error: {
                     ...errorDetails,
                     stack:
-                        errorDetails.stack != null && errorDetails.stack.trim() !== ''
+                        errorDetails.stack != null && errorDetails.stack.trim() !== ""
                             ? formatStackTrace(errorDetails.stack)
                             : undefined,
                 },
             };
 
-            const blob = new Blob([JSON.stringify(errorLog, null, 2)], { type: 'application/json' });
+            const blob = new Blob([JSON.stringify(errorLog, null, 2)], { type: "application/json" });
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
+            const a = document.createElement("a");
             a.href = url;
             a.download = `error-log-${new Date().toISOString()}.json`;
             document.body.appendChild(a);
@@ -111,13 +113,13 @@ export default function RouteErrorBoundary() {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         } catch (e) {
-            console.warn('Failed to download error logs:');
+            console.warn("Failed to download error logs:");
             console.error(e);
         }
     };
 
     const handleCopyStack = async () => {
-        if (errorDetails.stack != null && errorDetails.stack !== '') {
+        if (errorDetails.stack != null && errorDetails.stack !== "") {
             await navigator.clipboard.writeText(errorDetails.stack);
         }
     };
@@ -128,8 +130,8 @@ export default function RouteErrorBoundary() {
             className="flex min-h-screen flex-col items-center justify-center bg-surface-primary bg-gradient-to-br"
         >
             <div className="bg-surface-primary/60 mx-4 w-11/12 max-w-4xl rounded-2xl border border-border-light p-8 shadow-2xl">
-                <div className='w-20 h-20 mx-auto mb-2 bg-orange-200 rounded-full text-white flex items-center justify-center'>
-                    <CircleAlert size={80} />
+                <div className="w-20 h-20 mx-auto mb-2 bg-orange-200 rounded-full text-white flex items-center justify-center">
+                    <Outlined.Attention size={80} />
                 </div>
                 <h2 className="mb-6 text-center text-3xl font-medium tracking-tight text-text-primary">
                     Oops! Something Unexpected Occurred
@@ -144,29 +146,23 @@ export default function RouteErrorBoundary() {
                 </div>
 
                 {/* Status Information */}
-                {(typeof errorDetails.status === 'number' ||
-                    typeof errorDetails.statusText === 'string') && (
-                        <div className="mb-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-sm text-text-primary">
-                            <h3 className="mb-2 font-medium">Status:</h3>
-                            <p className="text-text-primary">
-                                {typeof errorDetails.status === 'number' && `${errorDetails.status} `}
-                                {typeof errorDetails.statusText === 'string' && errorDetails.statusText}
-                            </p>
-                        </div>
-                    )}
+                {(typeof errorDetails.status === "number" || typeof errorDetails.statusText === "string") && (
+                    <div className="mb-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-sm text-text-primary">
+                        <h3 className="mb-2 font-medium">Status:</h3>
+                        <p className="text-text-primary">
+                            {typeof errorDetails.status === "number" && `${errorDetails.status} `}
+                            {typeof errorDetails.statusText === "string" && errorDetails.statusText}
+                        </p>
+                    </div>
+                )}
 
                 {/* Stack Trace - Collapsible */}
-                {errorDetails.stack != null && errorDetails.stack.trim() !== '' && (
+                {errorDetails.stack != null && errorDetails.stack.trim() !== "" && (
                     <details className="group mb-4 rounded-xl border border-border-light p-4">
                         <summary className="mb-2 flex cursor-pointer items-center justify-between text-sm font-medium text-text-primary">
                             <span>Stack Trace</span>
                             <div className="flex items-center">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handleCopyStack}
-                                    className="ml-2 px-2 py-1 text-xs"
-                                >
+                                <Button variant="outlined" size="small" onClick={handleCopyStack} className="ml-2" color="default">
                                     Copy
                                 </Button>
                             </div>
@@ -175,7 +171,7 @@ export default function RouteErrorBoundary() {
                             {formatStackTrace(errorDetails.stack).map(({ number, content }) => (
                                 <div key={number} className="flex">
                                     <span className="select-none pr-4 font-mono text-xs text-text-secondary">
-                                        {String(number).padStart(3, '0')}
+                                        {String(number).padStart(3, "0")}
                                     </span>
                                     <pre className="flex-1 font-mono text-xs leading-relaxed text-text-primary">
                                         {content}
@@ -191,7 +187,7 @@ export default function RouteErrorBoundary() {
                     <details className="group mb-4 rounded-xl border border-border-light p-4">
                         <summary className="mb-2 flex cursor-pointer items-center justify-between text-sm font-medium text-text-primary">
                             <span>Additional Details</span>
-                            <span className="transition-transform group-open:rotate-90">{'>'}</span>
+                            <span className="transition-transform group-open:rotate-90">{">"}</span>
                         </summary>
                         <pre className="whitespace-pre-wrap text-xs font-light leading-relaxed text-text-primary">
                             {JSON.stringify(errorDetails.data, null, 2)}
@@ -208,12 +204,8 @@ export default function RouteErrorBoundary() {
                         <li>Contact the Admin if the issue persists</li>
                     </ul>
                     <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-                        <Button
-                            onClick={() => window.location.reload()}
-                        >
-                            Refresh Page
-                        </Button>
-                        <Button variant="outline" onClick={handleDownloadLogs} className="w-full sm:w-auto">
+                        <Button onClick={() => window.location.reload()}>Refresh Page</Button>
+                        <Button variant="outlined" onClick={handleDownloadLogs} className="w-full" color="default">
                             Download Error Logs
                         </Button>
                     </div>

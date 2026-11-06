@@ -2,6 +2,8 @@ import asyncio
 import json
 import time
 from collections import defaultdict
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from queue import Queue
 from typing import Any
 
@@ -11,11 +13,12 @@ from loguru import logger
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.schemas import ChatMessage, FileResponse
-from bisheng.common.chat.client import ChatClient
+from bisheng.common.chat.client import ChatClient, ChatMessageExecution
 from bisheng.common.chat.clients.workflow_client import WorkflowClient
 from bisheng.common.chat.types import IgnoreException, WorkType
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.public_endpoints import PublicGuestAccessDisabledError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData
 from bisheng.common.services import telemetry_service
@@ -204,6 +207,31 @@ class ChatManager:
             action="use",
         )
 
+    async def _dispatch_message(
+        self,
+        chat_client,
+        payload,
+        *,
+        login_user,
+        work_type,
+        client_id,
+        message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
+    ) -> bool:
+        async def deliver(execution=None):
+            operator = execution.operator if execution is not None else login_user
+            if not await self._has_use_action(operator, work_type, client_id):
+                return False
+            if execution is None:
+                await chat_client.handle_message(payload)
+            else:
+                await chat_client.handle_message(payload, execution_context=execution)
+            return True
+
+        if message_admission is None:
+            return await deliver()
+        async with message_admission() as execution:
+            return await deliver(execution)
+
     async def dispatch_client(
         self,
         request: Request | WebSocket,  # Raw request body
@@ -215,6 +243,7 @@ class ChatManager:
         graph_data: dict | None = None,
         session_subject=None,
         execution_snapshot: dict | None = None,
+        message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
     ):
         start_time = time.time()
         client_key = generate_uuid()
@@ -260,10 +289,13 @@ class ChatManager:
                 # clientHandle your own business logic internally
                 # TODO zgq: Here you can increase the thread pool to prevent blocking
                 try:
-                    if not await self._has_use_action(
-                        login_user,
-                        work_type,
-                        client_id,
+                    if not await self._dispatch_message(
+                        chat_client,
+                        payload,
+                        login_user=login_user,
+                        work_type=work_type,
+                        client_id=client_id,
+                        message_admission=message_admission,
                     ):
                         logger.warning(
                             "close_client permission_revoked client_key={} client_id={} user_id={}",
@@ -294,7 +326,15 @@ class ChatManager:
                         reason=str(exc.code),
                     )
                     break
-                await chat_client.handle_message(payload)
+                except BaseErrorCode as exc:
+                    if message_admission is None:
+                        raise
+                    try:
+                        await websocket.send_json({"category": "error", "type": "end", "message": exc.to_dict()})
+                    except (RuntimeError, WebSocketDisconnect):
+                        logger.opt(exception=True).debug("message admission error frame not delivered")
+                    await self.close_client(client_key, code=status.WS_1008_POLICY_VIOLATION, reason=str(exc.code))
+                    break
         except WebSocketDisconnect as e:
             logger.info("act=rcv_client_disconnect {}", str(e))
         except IgnoreException:

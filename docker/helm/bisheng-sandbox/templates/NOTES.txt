@@ -1,0 +1,10 @@
+bisheng-sandbox {{ .Chart.Version }}
+
+Headless Service: {{ include "bisheng-sandbox.fullname" . }}
+Replicas:         {{ .Values.replicaCount }}
+List each Pod URL in the platform chart sandbox.endpoints (do not use the Service name as a VIP):
+
+  BS_SANDBOX_CONF__TOKEN=<same as this chart's token>
+
+Example Pod DNS:
+  {{ include "bisheng-sandbox.fullname" . }}-0.{{ include "bisheng-sandbox.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}

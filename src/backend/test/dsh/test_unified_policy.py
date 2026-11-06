@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from bisheng.dsh.domain.schemas.unified_policy import (
+    UNLIMITED_TOKEN_LIMIT,
     CreditRuleInput,
     ModelVisibilityInput,
     PolicySubject,
@@ -16,7 +17,7 @@ from bisheng.dsh.domain.schemas.unified_policy import (
 def test_visibility_is_independent_of_credit_balance():
     visibility = ModelVisibilityInput(version=0, subjects=[PolicySubject(kind="ROLE", id=8)])
     assert visibility.permits(user_id=3, departments=set(), roles={8})
-    assert effective_token_limit(user_id=3, departments=set(), roles={8}, rules=[]) == 0
+    assert effective_token_limit(user_id=3, departments=set(), roles={8}, rules=[]) == UNLIMITED_TOKEN_LIMIT
     assert not visibility.permits(user_id=3, departments={8}, roles=set())
 
 
@@ -55,7 +56,14 @@ def test_only_enabled_matching_allowances_contribute():
     ]
     assert effective_token_limit(user_id=3, departments={4}, roles={8}, rules=rules) == 8000
     assert effective_token_limit(user_id=3, departments={4}, roles=set(), rules=rules) == 5000
-    assert effective_token_limit(user_id=3, departments=set(), roles=set(), rules=rules) == 0
+    assert effective_token_limit(user_id=3, departments=set(), roles=set(), rules=rules) == UNLIMITED_TOKEN_LIMIT
+
+
+def test_unconfigured_user_is_uncapped_but_a_matching_zero_still_denies():
+    zero = [{"subject_type": "USER", "subject_id": 3, "enabled": True, "monthly_token_limit": 0}]
+    assert effective_token_limit(user_id=3, departments=set(), roles=set(), rules=zero) == 0
+    disabled = [{**zero[0], "enabled": False}]
+    assert effective_token_limit(user_id=3, departments=set(), roles=set(), rules=disabled) == UNLIMITED_TOKEN_LIMIT
 
 
 def test_conversion_preserves_small_usage_and_clamps_display_balance():
@@ -64,6 +72,8 @@ def test_conversion_preserves_small_usage_and_clamps_display_balance():
     assert credit_balance(limit=500_000_000, used=499_000_001)["remaining"] == "0.999999"
     assert credit_balance(limit=0, used=1)["remaining"] == "0"
     assert credit_balance(limit=100, used=None)["remaining"] is None
+    assert credit_balance(limit=100, used=1)["unlimited"] is False
+    assert credit_balance(limit=UNLIMITED_TOKEN_LIMIT, used=1)["unlimited"] is True
 
 
 def test_ambiguous_or_duplicate_scope_is_rejected():

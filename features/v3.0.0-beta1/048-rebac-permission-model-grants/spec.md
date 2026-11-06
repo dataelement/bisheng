@@ -408,6 +408,9 @@
 - **AC-71** — WHEN Alembic schema upgrade 已成功且全部权限读写进程停止, THE SYSTEM SHALL
   由 `src/backend/scripts/` 专用脚本启动唯一正式 data migration run，先校验 schema、源环境、
   迁移锁和旧数据完整性，再直接写入规范化关系表与现有 Store；不要求先执行独立 dry-run。
+  IF 源环境仍为旧 RBAC、尚未完成 F006, THEN THE OPERATOR SHALL 先升级到包含 F006 的
+  2.5.x 版本完成迁移及验证，再升级到后续版本执行 F048；当前版本不恢复 F006，F048 不直接
+  转换旧 `roleaccess`，已完成 F006 的旧 ReBAC 环境无需重复中间阶段。
 - **AC-72** — THE SYSTEM SHALL 在数据迁移脚本的源校验阶段盘点旧动作、四档关系、自定义模型、
   Config binding、资源授权 tuple、直接/部门/用户组来源、受保护所有者、资源父级和异常记录。
 - **AC-73** — THE SYSTEM SHALL 输出旧动作到新动作、旧系统/自定义模型到新模型、旧授权到目标 Grant、资源到目标权限模式的可追溯映射。
@@ -544,6 +547,7 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 | 业务表/成员事实确认的受保护创建者 | 进入“资源 + 新所有者标准模型”的 Grant，并标记为受保护 assignee；缺少直接 tuple 但事实唯一时审计修复 |
 | 其他资源直接 `owner` | 有唯一匹配 binding 时使用其迁移后模型，否则进入新所有者标准模型 Grant |
 | 资源直接 `manager` | 进入“资源 + 新管理者标准模型”的 Grant；保留原 userset 主体 |
+| `user_group:{id}#admin` 的旧 `manager/can_manage` | 退役并记录审计差异；不创建 Grant，不改授给用户组成员 |
 | 资源直接 `editor` | 进入“资源 + 新编辑者标准模型”的 Grant；保留原 userset 主体 |
 | 资源直接 `viewer` | 进入“资源 + 新查看者标准模型”的 Grant；保留原 userset 主体 |
 | 有匹配 binding 的四档 tuple | 不按四档默认模型迁移，改用 binding 指向的已迁移 PermissionModel |
@@ -555,7 +559,7 @@ OpenFGA Authorization Model 不可原地修改；每次发布都会产生新的 
 - **AC-118** — WHEN 读取非受保护的旧 `owner/manager/editor/viewer` tuple, THE SYSTEM SHALL 先按资源、主体、relation 和范围查找唯一匹配的旧 binding；有 binding 时使用其 model_id，无 binding 时才映射到对应标准模型。
 - **AC-119** — THE SYSTEM SHALL 只为直接 tuple 创建 Grant assignee，不得把 owner 蕴含 manager/editor/viewer、manager 蕴含 editor/viewer 或 `parent` 继承得到的用户物化为新 assignee。
 - **AC-120** — WHEN 迁移资源创建者或其他受保护 owner, THE SYSTEM SHALL 结合资源业务表和既有成员事实识别它，并映射到所有者标准模型的受保护 assignee；仅凭 relation 名称不能推断所有 owner 都受保护。IF canonical 事实唯一但缺少直接 owner tuple, THEN THE SYSTEM SHALL 补建受保护来源并记录修复；IF 存在多个 CREATOR、主体冲突或冲突 binding, THEN THE SYSTEM SHALL 阻断迁移。knowledge_space/channel 的唯一 CREATOR 与 `user_id` 因既有 F018 不一致时，迁移须保留 CREATOR 为 protected、差异 `user_id` 为 ordinary 并登记差异，不得静默删除任一当前有效 owner 来源。
-- **AC-121** — WHEN 旧主体为 `department:{id}#member`、`user_group:{id}#member` 或 `user_group:{id}#admin`, THE SYSTEM SHALL 原样保留主体类型与 userset 语义，不展开为用户。
+- **AC-121** — WHEN 旧主体为 `department:{id}#member` 或 `user_group:{id}#member`, THE SYSTEM SHALL 原样保留主体类型与 userset 语义，不展开为用户。WHEN 旧资源授权为 `user_group:{id}#admin` 的 `manager/can_manage`, THE SYSTEM SHALL 将其记为退役审计差异，不创建 Grant 或 visible contribution，也不得改授给 `#member`；普通成员授权和受保护创建者权限继续按原规则迁移。
 - **AC-122** — WHEN 旧部门 binding 标记 `include_children=true`, THE SYSTEM SHALL 以 binding 中的根部门和范围作为唯一业务授权来源；历史上为子部门展开出的多个 tuple 不得被误迁为多个独立授权。
 - **AC-123** — WHEN 旧 tuple 找不到资源、主体或合法租户，或者一个 tuple 匹配多个互相冲突的 binding, THE SYSTEM SHALL 将其列为阻断项，不得猜测目标模型。
 - **AC-124** — WHEN binding 存在但对应直接 tuple 不存在, THE SYSTEM SHALL 把它标记为孤儿 binding 审计项，不创建有效 Grant，也不得仅凭 Config 恢复已不存在的授权；该项本身不阻断迁移。

@@ -246,6 +246,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
             // Model selector value rides along with the submission (F035).
             model,
             skills: skills.map((s) => s.name),
+            skill_ids: skills.flatMap((s) => (typeof s.id === 'number' ? [s.id] : [])),
             enableWebSearch: false,
             useKnowledgeBase: context.knowledge.length > 0,
             // F035: continue the current session on follow-up rounds. conversationId

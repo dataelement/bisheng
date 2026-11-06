@@ -327,6 +327,7 @@ export function Notifier({ className, closeLabel = 'Close', expandLabel = 'Expan
   // could bury it under a dialog regardless of z-index (Toast §11.1).
   return createPortal(
     <div
+      data-bisheng-notice=""
       className={cn(
         // §3: top-right, 24px from both edges, same tier as Toast (1200); the
         // two never overlap, so no separate layer. §8: 16px from the right on

@@ -1,8 +1,9 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { Button } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import { sanitizeHtml } from "~/utils/sanitizeHtml";
 import { Outlined } from "bisheng-icons";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 import { useEffect, useState } from "react";
 import { Article } from "~/api/channels";
 import { useArticleShare } from "../hooks/useArticleShare";
@@ -250,9 +251,7 @@ export function ArticleCard({
                             {showArticleActions && canViewArticle && (
                                 <div className="absolute right-0 flex items-center gap-1 max-[767px]:static max-[767px]:gap-2">
                                     {hasKnowledge && (
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button
+                                        <SharedTooltip  content={localize("com_subscription.add_to_knowledge_space")} ><Button
                                                     color="default"
                                                     variant="text"
                                                     size="small"
@@ -262,14 +261,9 @@ export function ArticleCard({
                                                     className={cardActionBtnClassName}
                                                 >
                                                     <Outlined.AddToKnowledgeBase />
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>{localize("com_subscription.add_to_knowledge_space")}</TooltipContent>
-                                        </Tooltip>
+                                                </Button></SharedTooltip>
                                     )}
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button
+                                    <SharedTooltip  content={localize("com_subscription.share")} ><Button
                                                 color="default"
                                                 variant="text"
                                                 size="small"
@@ -286,10 +280,7 @@ export function ArticleCard({
                                                 className={cardActionBtnClassName}
                                             >
                                                 <Outlined.Share />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>{localize("com_subscription.share")}</TooltipContent>
-                                    </Tooltip>
+                                            </Button></SharedTooltip>
                                 </div>
                             )}
                         </div>

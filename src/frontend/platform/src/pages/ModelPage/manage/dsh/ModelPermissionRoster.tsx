@@ -3,9 +3,9 @@ import { SubjectSearchDepartment } from '@/components/bs-comp/permission/Subject
 import { SubjectSearchUser } from '@/components/bs-comp/permission/SubjectSearchUser'
 import { SubjectSearchUserGroup } from '@/components/bs-comp/permission/SubjectSearchUserGroup'
 import type { SelectedSubject, SubjectType } from '@/components/bs-comp/permission/types'
-import { Button } from '@/components/bs-ui/button'
+import { Button } from "@bisheng/ui";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog'
-import { Tabs, TabsContent } from '@/components/bs-ui/tabs'
+
 import type { ModelVisibility, PolicySubjectOption } from '@/controllers/API/dshUnified'
 import { getUsersApi } from '@/controllers/API/user'
 import { Search, Trash2 } from 'lucide-react'
@@ -57,13 +57,13 @@ export function ModelPermissionRoster({ model, value, options, disabled, onChang
         setSelection([])
     }
     return <>
-        <Tabs value={tab} onValueChange={next => { setTab(next as SubjectType); setSearch('') }} className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-center justify-between gap-3">
-                <PermissionSubjectTabs tabs={tabs} />
+                <PermissionSubjectTabs tabs={tabs} value={tab} onChange={next => { setTab(next); setSearch(''); }} />
                 <Button type="button" disabled={disabled} className="h-8 shrink-0 rounded-[6px] px-3 text-[14px] leading-[22px]"
                     onClick={() => { setGrantTab(tab); setSelection([]); setAdding(true) }}>{permission('dialog.tabGrant')}</Button>
             </div>
-            <TabsContent value={tab} className="mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-0">
+            <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-0">
                 <div className="relative shrink-0">
                     <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
                     <input type="search" aria-label={searchLabel(tab)} placeholder={searchLabel(tab)} value={search} onChange={event => setSearch(event.target.value)}
@@ -74,7 +74,7 @@ export function ModelPermissionRoster({ model, value, options, disabled, onChang
                         <PermissionSubjectIdentity type={tab} name={subjectName(subject.kind, subject.id)}
                             metadata={subject.kind === 'DEPARTMENT' ? permission('source.includeChildren') : undefined} />
                         <span className="text-sm text-muted-foreground">{t('dsh.unified.canUse')}</span>
-                        <Button type="button" variant="ghost" size="icon" disabled={disabled}
+                        <Button type="button" variant="text" iconOnly disabled={disabled}
                             aria-label={`${permission('grant.remove')} ${subjectName(subject.kind, subject.id)}`}
                             onClick={() => onChange({ ...value, subjects: value.subjects.filter(item => item.kind !== subject.kind || item.id !== subject.id) })}>
                             <Trash2 aria-hidden="true" className="size-4 text-muted-foreground" />
@@ -82,8 +82,8 @@ export function ModelPermissionRoster({ model, value, options, disabled, onChang
                     </article>)}
                     {!rows.length && <p className="py-10 text-center text-sm text-muted-foreground">{permission(search ? 'empty.searchResults' : 'list.emptyForSubject')}</p>}
                 </div>
-            </TabsContent>
-        </Tabs>
+            </div>
+        </div>
         <Dialog open={adding} onOpenChange={setAdding}>
             <DialogContent ref={grantContentRef} className={`${permissionDialogClassName} p-5`} onOpenAutoFocus={event => {
                 event.preventDefault()
@@ -112,7 +112,7 @@ export function ModelPermissionRoster({ model, value, options, disabled, onChang
                 </div>
                 <div className="mt-4 flex shrink-0 items-center justify-between border-t pt-4">
                     <p className="text-sm text-muted-foreground" aria-live="polite">{t('dsh.unified.selectedSubjects', { count: selection.length })}</p>
-                    <div className="flex gap-2"><Button variant="outline" onClick={() => setAdding(false)}>{t('dsh.unified.cancel')}</Button>
+                    <div className="flex gap-2"><Button variant="outlined" onClick={() => setAdding(false)}>{t('dsh.unified.cancel')}</Button>
                         <Button disabled={!selection.length} onClick={add}>{t('dsh.unified.addToDraft')}</Button></div>
                 </div>
             </DialogContent>

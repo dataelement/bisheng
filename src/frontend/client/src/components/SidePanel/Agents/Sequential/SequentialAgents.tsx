@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { Plus, X } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 import { Transition } from 'react-transition-group';
 import { Constants } from '~/types/chat';
 import { cn, defaultTextProps, removeFocusOutlines } from '~/utils';
-import { TooltipAnchor } from '~/components/ui';
+
 import HideSequential from './HideSequential';
 
 interface SequentialAgentsProps {
@@ -86,14 +87,7 @@ const SequentialAgents: React.FC<SequentialAgentsProps> = ({ field }) => {
               type="text"
               maxLength={64}
             />
-            <TooltipAnchor
-              side="top"
-              description={'Remove agent ID'}
-              className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-surface-hover"
-              onClick={() => handleDeleteAgentId(index)}
-            >
-              <X className="size-4" />
-            </TooltipAnchor>
+            <SharedTooltip  content={'Remove agent ID'} side="top"  ><div className="absolute right-1 top-1 flex size-7 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-surface-hover" onClick={() => handleDeleteAgentId(index)}  ><X className="size-4" /></div></SharedTooltip>
           </div>
         ))}
         {/* Input for new agent at the bottom */}
@@ -133,15 +127,7 @@ const SequentialAgents: React.FC<SequentialAgentsProps> = ({ field }) => {
                 }}
                 className="absolute right-1 top-1"
               >
-                <TooltipAnchor
-                  side="top"
-                  description={hasReachedMax ? 'Max agents reached' : 'Add agent ID'}
-                  className="flex size-7 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-surface-hover"
-                  onClick={handleAddAgentId}
-                  disabled={hasReachedMax}
-                >
-                  <Plus className="size-4" />
-                </TooltipAnchor>
+                <SharedTooltip  content={hasReachedMax ? 'Max agents reached' : 'Add agent ID'} side="top"  ><div className="flex size-7 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-surface-hover" onClick={handleAddAgentId} disabled={hasReachedMax}  ><Plus className="size-4" /></div></SharedTooltip>
               </div>
             )}
           </Transition>

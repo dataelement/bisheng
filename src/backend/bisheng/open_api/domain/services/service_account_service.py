@@ -5,7 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Protocol
 
-from bisheng.common.errcode.open_api import ServiceAccountNotFoundError, ServiceAccountOwnerInvalidError
+from bisheng.common.errcode.open_api import (
+    ServiceAccountManagementScopeChangedError,
+    ServiceAccountNameTakenError,
+    ServiceAccountNotFoundError,
+    ServiceAccountOwnerInvalidError,
+)
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import (
     DEFAULT_TENANT_ID,
@@ -14,6 +19,7 @@ from bisheng.core.context.tenant import (
     visible_tenant_ids,
 )
 from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.database.models.tenant import TenantDao
 from bisheng.open_api.domain.models.api_credential import (
     REVOKE_REASON_SUBJECT_DELETED,
     SUBJECT_KIND_SERVICE_ACCOUNT,
@@ -34,6 +40,7 @@ from bisheng.open_api.domain.schemas.service_account import (
     ServiceAccountUpdate,
 )
 from bisheng.open_api.domain.services.credential_service import CredentialService
+from bisheng.open_api.domain.services.service_account_scope_service import ServiceAccountScopeService
 
 AUDIT_TARGET_TYPE = "service_account"
 
@@ -45,6 +52,13 @@ class ManagementActor(Protocol):
 
 
 class ServiceAccountService:
+    @classmethod
+    async def owner_candidates(cls, *, keyword: str | None, page: int, page_size: int):
+        tenant_id = ServiceAccountScopeService.admitted_tenant()
+        if tenant_id is None:
+            raise ServiceAccountManagementScopeChangedError()
+        return await OwnerRepository.list_management_owners(tenant_id, keyword=keyword, page=page, page_size=page_size)
+
     @classmethod
     async def get_row(cls, service_account_id: int, *, include_deleted: bool = False) -> ServiceAccount:
         """Load one account, refusing anything outside the caller's tenant.
@@ -70,6 +84,8 @@ class ServiceAccountService:
         tenant_id = cls._creation_tenant(operator, owner)
         if owner.tenant_id != tenant_id:
             raise ServiceAccountOwnerInvalidError()
+        if await ServiceAccountRepository.name_taken(tenant_id, data.name):
+            raise ServiceAccountNameTakenError()
         tenant_token = current_tenant_id.set(tenant_id)
         visible_token = visible_tenant_ids.set(frozenset({tenant_id}))
         try:
@@ -101,7 +117,9 @@ class ServiceAccountService:
             if owner.tenant_id != row.tenant_id:
                 raise ServiceAccountOwnerInvalidError()
             row.resource_owner_user_id = owner.user_id
-        if data.name is not None:
+        if data.name is not None and data.name != row.name:
+            if await ServiceAccountRepository.name_taken(row.tenant_id, data.name, exclude_id=row.id):
+                raise ServiceAccountNameTakenError()
             row.name = data.name
         if "description" in data.model_fields_set:
             row.description = data.description
@@ -160,14 +178,16 @@ class ServiceAccountService:
             page=page,
             page_size=page_size,
         )
+        tenants = await TenantDao.aget_by_ids(list({row.tenant_id for row in rows})) if rows else []
+        tenant_names = {tenant.id: tenant.tenant_name for tenant in tenants}
         return ServiceAccountPage(
-            data=[await cls._to_item(row) for row in rows],
+            data=[await cls._to_item(row, tenant_name=tenant_names.get(row.tenant_id)) for row in rows],
             total=total,
             idle_days=settings.open_api.service_account_idle_days,
         )
 
     @classmethod
-    async def _to_item(cls, row: ServiceAccount) -> ServiceAccountItem:
+    async def _to_item(cls, row: ServiceAccount, *, tenant_name: str | None = None) -> ServiceAccountItem:
         owner = await OwnerRepository.get_active_natural_person(row.resource_owner_user_id)
         keys = await CredentialService.list_by_subject(SUBJECT_KIND_SERVICE_ACCOUNT, row.id)
         active_keys = [key for key in keys if key.is_valid]
@@ -192,15 +212,14 @@ class ServiceAccountService:
         return ServiceAccountItem(
             id=row.id,
             tenant_id=row.tenant_id,
+            tenant_name=tenant_name,
             name=row.name,
             description=row.description,
             status=cls.status(row),
             resource_owner=ServiceAccountOwner(
                 user_id=row.resource_owner_user_id,
                 user_name=(
-                    owner.user_name
-                    if owner
-                    else await OwnerRepository.get_user_name(row.resource_owner_user_id)
+                    owner.user_name if owner else await OwnerRepository.get_user_name(row.resource_owner_user_id)
                 ),
                 disabled=owner is None,
             ),
@@ -225,17 +244,21 @@ class ServiceAccountService:
 
     @staticmethod
     async def _resolve_owner(user_id: int) -> NaturalPersonRecord:
-        owner = await OwnerRepository.get_active_natural_person(user_id)
+        owner = await OwnerRepository.get_unique_management_owner(user_id)
         if owner is None:
             raise ServiceAccountOwnerInvalidError()
         return owner
 
     @staticmethod
     def _creation_tenant(operator: ManagementActor, owner: NaturalPersonRecord) -> int:
-        scoped_tenant = get_current_tenant_id()
-        if bool(getattr(operator, "is_global_super", False)) and scoped_tenant is None:
-            return owner.tenant_id
-        return int(scoped_tenant or operator.tenant_id or DEFAULT_TENANT_ID)
+        if not settings.multi_tenant.enabled:
+            return DEFAULT_TENANT_ID
+        if bool(getattr(operator, "is_global_super", False)):
+            tenant = ServiceAccountScopeService.admitted_tenant()
+            if tenant is None:
+                raise ServiceAccountManagementScopeChangedError()
+            return tenant
+        return int(operator.tenant_id)
 
     @classmethod
     async def _audit(cls, operator: ManagementActor, action: str, row: ServiceAccount) -> None:

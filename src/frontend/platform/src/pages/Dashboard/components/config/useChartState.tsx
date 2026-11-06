@@ -1,11 +1,11 @@
 // @ts-strict-ignore
+import { notification } from '@bisheng/ui';
 // useChartState.tsx
-"use client"
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { ChartType, ComponentStyleConfig, DashboardComponent, DataConfig } from "../../types/dataConfig"
 import { generateUUID } from "@/components/bs-ui/utils"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
+
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { useTranslation } from "react-i18next"
 
@@ -27,7 +27,7 @@ export function useChartState(initialComponent: DashboardComponent) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [sortPriorityOrder, setSortPriorityOrder] = useState<string[]>([])
   const [filterGroup, setFilterGroup] = useState<any>(null)
-  const { toast } = useToast()
+
   const { updateEditingComponent } = useComponentEditorStore();
   const { refreshChart } = useEditorDashboardStore();
   const setStyleConfig = useCallback((newConfig: ComponentStyleConfig) => {
@@ -322,10 +322,7 @@ export function useChartState(initialComponent: DashboardComponent) {
         if (sourceSection === 'category' && section === 'stack') {
           // 检查堆叠维度是否已满
           if (stackDimensions.length >= 1) {
-            toast({
-              description: t('useChartState.warn.maxStackDimension'),
-              variant: "warning",
-            });
+            notification.open({ type: "warning", description: String(t('useChartState.warn.maxStackDimension') ?? '') });
             setDragOverSection(null);
             return;
           }
@@ -359,10 +356,7 @@ export function useChartState(initialComponent: DashboardComponent) {
         if (sourceSection === 'stack' && section === 'category') {
           // 检查类别维度是否已满
           if (categoryDimensions.length >= 2) {
-            toast({
-              description: t('useChartState.warn.maxCategoryDimensions'),
-              variant: "warning",
-            });
+            notification.open({ type: "warning", description: String(t('useChartState.warn.maxCategoryDimensions') ?? '') });
             setDragOverSection(null);
             return;
           }
@@ -402,15 +396,9 @@ export function useChartState(initialComponent: DashboardComponent) {
       ) {
         console.warn(`字段类型 ${fieldTypeText} 不能拖拽到 ${sectionText} 区域`)
         if (!isMetricCard) {
-          toast({
-            description: t("componentConfigDrawer.toast.metricReached"),
-            variant: "warning"
-          })
+          notification.open({ type: "warning", description: String(t("componentConfigDrawer.toast.metricReached") ?? '') })
         } else {
-          toast({
-            description: t('useChartState.warn.invalidFieldType', { fieldType: fieldTypeText, section: sectionText }),
-            variant: "warning",
-          })
+          notification.open({ type: "warning", description: String(t('useChartState.warn.invalidFieldType', { fieldType: fieldTypeText, section: sectionText }) ?? '') })
         }
         setDragOverSection(null)
         return
@@ -419,10 +407,7 @@ export function useChartState(initialComponent: DashboardComponent) {
       // 堆叠维度只能有一个
       if (section === 'stack' && stackDimensions.length >= 1) {
         console.warn('堆叠维度只能有一个，请先删除现有的堆叠维度')
-        toast({
-          description: t('useChartState.warn.maxStackDimension'),
-          variant: "warning",
-        })
+        notification.open({ type: "warning", description: String(t('useChartState.warn.maxStackDimension') ?? '') })
         setDragOverSection(null)
         return
       }
@@ -433,10 +418,7 @@ export function useChartState(initialComponent: DashboardComponent) {
       //指标维度只能有一个
       if (section === 'value' && valueDimensions.length >= maxMetricCount) {
         console.warn('指标维度只能有一个，请先删除现有的指标维度')
-        toast({
-          description: t('useChartState.warn.metricLimitReached'),
-          variant: "warning",
-        })
+        notification.open({ type: "warning", description: String(t('useChartState.warn.metricLimitReached') ?? '') })
         setDragOverSection(null)
         return
       }
@@ -452,10 +434,7 @@ export function useChartState(initialComponent: DashboardComponent) {
       const alreadyExists = currentDimensions.some(dim => dim.fieldId === fieldId)
       if (alreadyExists) {
         console.warn('该字段已存在')
-        toast({
-          description: t('useChartState.warn.fieldExists'),
-          variant: "warning",
-        })
+        notification.open({ type: "warning", description: String(t('useChartState.warn.fieldExists') ?? '') })
         setDragOverSection(null)
         return
       }
@@ -466,10 +445,7 @@ export function useChartState(initialComponent: DashboardComponent) {
           const existsInStack = stackDimensions.some(dim => dim.fieldId === fieldId)
           if (existsInStack) {
             console.warn('该字段已在堆叠维度中添加')
-            toast({
-              description: t("useChartState.warn.fieldExists"),
-              variant: "warning"
-            })
+            notification.open({ type: "warning", description: String(t("useChartState.warn.fieldExists") ?? '') })
             setDragOverSection(null)
             return
           }
@@ -480,10 +456,7 @@ export function useChartState(initialComponent: DashboardComponent) {
         )
         if (otherCategories.some(dim => dim.fieldId === fieldId)) {
           console.warn('该字段已在其他分类维度中添加')
-          toast({
-            description: t("useChartState.warn.fieldExists"),
-            variant: "warning",
-          })
+          notification.open({ type: "warning", description: String(t("useChartState.warn.fieldExists") ?? '') })
           setDragOverSection(null)
           return
         }
@@ -508,10 +481,7 @@ export function useChartState(initialComponent: DashboardComponent) {
       if (section === 'category') {
         if (categoryDimensions.length >= 2) {
           console.warn('类别维度最多只能有 2 个')
-          toast({
-            description: t('useChartState.warn.maxCategoryDimensions'),
-            variant: "warning",
-          })
+          notification.open({ type: "warning", description: String(t('useChartState.warn.maxCategoryDimensions') ?? '') })
           setDragOverSection(null)
           return
         }
@@ -527,7 +497,7 @@ export function useChartState(initialComponent: DashboardComponent) {
     } catch (error) {
       console.error('拖拽数据解析失败:', error)
     }
-  }, [categoryDimensions, stackDimensions, valueDimensions, toast, t, chartType])
+  }, [categoryDimensions, stackDimensions, valueDimensions, t, chartType])
 
   const handleDeleteDimension = useCallback((section: 'category' | 'stack' | 'value', dimensionId: string) => {
     if (section === 'category') {

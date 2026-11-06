@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { updateToolApi } from "@/controllers/API/tools";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,12 +16,12 @@ import TianyanchaToolForm from "./builtInTool/Tianyancha";
 import WebSearchForm from "./builtInTool/WebSearchFrom";
 import { useWebSearchStore } from './webSearchStore';
 import FinancialDataToolForm from "./builtInTool/FinancialData";
-import { ImageViewForm } from "./builtInTool/ImageView";
+import { WebFetchForm } from "./builtInTool/WebFetchForm";
 const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const [open, setOpen] = useState(false);
     const { t } = useTranslation();
     const [formData, setFormData] = useState(null)
-    const { message } = useToast();
+
     // {
     //     provider: 'openai',
     //     openai_api_key: '',
@@ -36,6 +36,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     // });
     const idRef = useRef('');
     const [name, setName] = useState('');
+    const [toolKeys, setToolKeys] = useState<string[]>([]);
     const { setConfig } = useWebSearchStore()
 
     useImperativeHandle(ref, () => ({
@@ -43,6 +44,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
         edit: (item) => {
 
             setName(item.name);
+            setToolKeys((item.children || []).map((child) => child.tool_key));
             idRef.current = item.id;
             let config = {};
             try {
@@ -95,6 +97,9 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     };
 
     const renderFormContent = () => {
+        if (toolKeys.includes('web_fetch')) {
+            return <WebFetchForm formData={formData} onSubmit={handleSubmit} />;
+        }
         switch (name) {
             case 'Dalle3绘画':
                 return <Dalle3ToolForm formData={formData} onSubmit={handleSubmit} />;
@@ -118,8 +123,6 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                 return <CodeExecutor formData={formData} onSubmit={handleSubmit} />;
             case '经济金融数据':
                 return <FinancialDataToolForm formData={formData} onSubmit={handleSubmit} />;
-            case 'Image View':
-                return <ImageViewForm formData={formData} onSubmit={handleSubmit} />;
             default:
                 return null;
         }

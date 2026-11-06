@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { userContext } from "@/contexts/userContext";
 import type { ContextType } from "react";
 import type { AuditUserPage } from "@/types/dshModelAudit";
@@ -307,22 +308,16 @@ describe("unified audit filters", () => {
       </userContext.Provider>,
     );
     await screen.findByText("First tenant (first)");
-    fireEvent.click(
-      screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
-    );
-    fireEvent.click(await screen.findByRole("option", { name: "Alice" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }));
+    await user.click(await screen.findByRole("option", { name: "Alice" }));
     const signal = api.users.mock.calls[0][1] as AbortSignal;
-    fireEvent.keyDown(
-      screen.getByRole("combobox", { name: "dsh.modelAuditView.selectTenant" }),
-      { key: "ArrowDown" },
-    );
-    fireEvent.click(
-      await screen.findByRole("option", { name: "Second tenant (second)" }),
-    );
+    await user.click(screen.getByRole("combobox", { name: "dsh.modelAuditView.selectTenant" }));
+    await user.click(await screen.findByRole("option", { name: "Second tenant (second)" }));
     expect(signal.aborted).toBe(true);
-    expect(
+    await waitFor(() => expect(
       screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
-    ).toHaveTextContent("dsh.modelAuditView.allUsers");
+    ).toHaveTextContent("dsh.modelAuditView.allUsers"));
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
         { tenant_id: 2, limit: 20 },

@@ -3,12 +3,13 @@ import { cname } from "../utils"
 
 const Table = React.forwardRef<
     HTMLTableElement,
-    React.HTMLAttributes<HTMLTableElement> & { noScroll?: boolean }
->(({ className, noScroll, ...props }, ref) => (
+    React.HTMLAttributes<HTMLTableElement> & { noScroll?: boolean; containerClassName?: string }
+>(({ className, noScroll, containerClassName, ...props }, ref) => (
     <div
         className={cname(
             "relative w-full max-w-full",
-            noScroll ? "overflow-x-auto" : "overflow-auto"
+            noScroll ? "overflow-x-auto" : "overflow-auto",
+            containerClassName
         )}
     >
         <table

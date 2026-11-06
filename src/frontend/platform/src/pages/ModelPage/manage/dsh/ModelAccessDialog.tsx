@@ -1,6 +1,6 @@
 import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
-import { Button } from '@/components/bs-ui/button'
-import { Switch } from '@/components/bs-ui/switch'
+import { Button } from "@bisheng/ui";
+import { Switch } from "@bisheng/ui";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog'
 import {
     getModelVisibility, getPolicySubjects, saveModelVisibility,
@@ -68,7 +68,7 @@ export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
         <DialogContent className="flex max-h-[calc(100dvh-48px)] w-[calc(100vw-48px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-y-auto p-5">
             <DialogHeader className="mb-4"><DialogTitle>{t('dsh.unified.visibility')} · {model?.name}</DialogTitle><DialogDescription className="sr-only">{t('dsh.unified.visibilityHelp')}</DialogDescription></DialogHeader>
             {error && <p role="alert">{t(error)}</p>}
-            {!value ? <Button variant="outline" onClick={() => setRevision(old => old + 1)}>
+            {!value ? <Button variant="outlined" onClick={() => setRevision(old => old + 1)}>
                 {t(error ? 'dsh.refresh' : 'dsh.loading')}
             </Button> : <>
                 <div className="flex shrink-0 items-center justify-between gap-4 rounded-lg border px-4 py-3">
@@ -89,7 +89,7 @@ export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
                         onChange={next => { setValue(next); setDirty(true) }} />
                 </section>}
                 <div className="mt-4 flex shrink-0 justify-end gap-2">
-                    <Button variant="outline" onClick={close} disabled={saving}>{t('dsh.unified.cancel')}</Button>
+                    <Button variant="outlined" onClick={close} disabled={saving}>{t('dsh.unified.cancel')}</Button>
                     <Button onClick={save} disabled={saving || !dirty}>
                         {t(saving ? 'dsh.unified.saving' : 'dsh.unified.save')}
                     </Button>

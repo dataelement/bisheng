@@ -27,7 +27,6 @@ class ToolMigrationRow:
     status: str
     owner_user_id: int | None
     preset: bool
-    system_allowlisted: bool
     source_version: str = "1"
 
 
@@ -81,7 +80,6 @@ class SqlToolMigrationRepository:
                 status="ACTIVE",
                 owner_user_id=row.user_id,
                 preset=row.is_preset == ToolPresetType.PRESET.value,
-                system_allowlisted=(row.is_preset == ToolPresetType.PRESET.value and row.user_id is None),
                 source_version=(row.update_time.isoformat() if row.update_time is not None else "0"),
             )
             for row in selected
@@ -91,7 +89,7 @@ class SqlToolMigrationRepository:
 
 
 class ToolPermissionMigrationSource:
-    """Require both preset truth and an explicit code allowlist predicate."""
+    """Classify system-owned tools solely by the persisted preset type."""
 
     def __init__(self, repository: ToolMigrationRepositoryPort) -> None:
         self._repository = repository
@@ -110,7 +108,7 @@ class ToolPermissionMigrationSource:
         )
         items: list[PermissionMigrationResourceDTO] = []
         for row in rows:
-            system_owned = row.preset and row.system_allowlisted
+            system_owned = row.preset
             items.append(
                 PermissionMigrationResourceDTO(
                     tenant_id=row.tenant_id,

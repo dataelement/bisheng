@@ -1,13 +1,7 @@
 import { Column } from '@tanstack/react-table';
 import { ListFilter, FilterX } from 'lucide-react';
 import { ArrowDownIcon, ArrowUpIcon, CaretSortIcon } from '@radix-ui/react-icons';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '~/components/ui/DropdownMenu';
+import { Dropdown, DropdownItem, DropdownSeparator } from '@bisheng/ui';
 import { Button } from '~/components/ui/Button';
 import { useLocalize, TranslationKeys } from '~/hooks';
 import { cn } from '~/utils';
@@ -33,91 +27,76 @@ export function SortFilterHeader<TData, TValue>({
 
   return (
     <div className={cn('flex items-center space-x-2', className)}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            className="px-2 py-0 text-xs hover:bg-surface-hover data-[state=open]:bg-surface-hover sm:px-2 sm:py-2 sm:text-sm"
-          >
-            <span>{title}</span>
-            {column.getIsFiltered() ? (
-              <ListFilter className="icon-sm ml-2 text-muted-foreground/70" />
-            ) : (
-              <ListFilter className="icon-sm ml-2 opacity-30" />
+      <Dropdown
+        menu={
+          <>
+            <DropdownItem icon={<ArrowUpIcon />} onSelect={() => column.toggleSorting(false)}>
+              {localize('com_ui_ascending')}
+            </DropdownItem>
+            <DropdownItem icon={<ArrowDownIcon />} onSelect={() => column.toggleSorting(true)}>
+              {localize('com_ui_descending')}
+            </DropdownItem>
+            {filters && <DropdownSeparator />}
+            {filters &&
+              Object.entries(filters).map(([key, values]) =>
+                values.map((value?: string | number) => {
+                  const translationKey = valueMap?.[value ?? ''];
+                  const filterValue =
+                    translationKey != null && translationKey.length
+                      ? localize(translationKey)
+                      : String(value);
+                  if (!filterValue) {
+                    return null;
+                  }
+                  return (
+                    <DropdownItem
+                      key={`${key}-${value}`}
+                      icon={<ListFilter />}
+                      onSelect={() => {
+                        column.setFilterValue(value);
+                      }}
+                    >
+                      {filterValue}
+                    </DropdownItem>
+                  );
+                }),
+              )}
+            {filters && (
+              <DropdownItem
+                icon={<FilterX />}
+                disabled={!column.getIsFiltered()}
+                onSelect={() => {
+                  column.setFilterValue(undefined);
+                }}
+              >
+                {localize('com_ui_show_all')}
+              </DropdownItem>
             )}
-            {(() => {
-              const sortState = column.getIsSorted();
-              if (sortState === 'desc') {
-                return <ArrowDownIcon className="icon-sm ml-2" />;
-              }
-              if (sortState === 'asc') {
-                return <ArrowUpIcon className="icon-sm ml-2" />;
-              }
-              return <CaretSortIcon className="icon-sm ml-2" />;
-            })()}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="z-[1001] dark:border-gray-700 dark:bg-gray-850"
+          </>
+        }
+      >
+        <Button
+          variant="ghost"
+          className="px-2 py-0 text-xs hover:bg-surface-hover data-[state=open]:bg-surface-hover sm:px-2 sm:py-2 sm:text-sm"
         >
-          <DropdownMenuItem
-            onClick={() => column.toggleSorting(false)}
-            className="cursor-pointer text-text-primary"
-          >
-            <ArrowUpIcon className="mr-2 h-3.5 w-3.5 text-muted-foreground/70" />
-            {localize('com_ui_ascending')}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => column.toggleSorting(true)}
-            className="cursor-pointer text-text-primary"
-          >
-            <ArrowDownIcon className="mr-2 h-3.5 w-3.5 text-muted-foreground/70" />
-            {localize('com_ui_descending')}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator className="dark:bg-gray-500" />
-          {filters &&
-            Object.entries(filters).map(([key, values]) =>
-              values.map((value?: string | number) => {
-                const translationKey = valueMap?.[value ?? ''];
-                const filterValue =
-                  translationKey != null && translationKey.length
-                    ? localize(translationKey)
-                    : String(value);
-                if (!filterValue) {
-                  return null;
-                }
-                return (
-                  <DropdownMenuItem
-                    className="cursor-pointer text-text-primary"
-                    key={`${key}-${value}`}
-                    onClick={() => {
-                      column.setFilterValue(value);
-                    }}
-                  >
-                    <ListFilter className="mr-2 h-3.5 w-3.5 text-muted-foreground/70" />
-                    {filterValue}
-                  </DropdownMenuItem>
-                );
-              }),
-            )}
-          {filters && (
-            <DropdownMenuItem
-              className={
-                column.getIsFiltered()
-                  ? 'cursor-pointer dark:text-white dark:hover:bg-gray-800'
-                  : 'pointer-events-none opacity-30'
-              }
-              onClick={() => {
-                column.setFilterValue(undefined);
-              }}
-            >
-              <FilterX className="mr-2 h-3.5 w-3.5 text-muted-foreground/70" />
-              {localize('com_ui_show_all')}
-            </DropdownMenuItem>
+          <span>{title}</span>
+          {column.getIsFiltered() ? (
+            <ListFilter className="icon-sm ml-2 text-muted-foreground/70" />
+          ) : (
+            <ListFilter className="icon-sm ml-2 opacity-30" />
           )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+          {(() => {
+            const sortState = column.getIsSorted();
+            if (sortState === 'desc') {
+              return <ArrowDownIcon className="icon-sm ml-2" />;
+            }
+            if (sortState === 'asc') {
+              return <ArrowUpIcon className="icon-sm ml-2" />;
+            }
+            return <CaretSortIcon className="icon-sm ml-2" />;
+          })()}
+        </Button>
+      </Dropdown>
     </div>
   );
 }

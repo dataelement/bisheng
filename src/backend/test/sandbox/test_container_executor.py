@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import ast
-import json
 import socket
 from pathlib import Path
 
 import pytest
-from fake_runner import FakeRunnerClient, _tar_gz
+from fake_runner import FakeRunnerClient as _BaseFakeRunnerClient
+from fake_runner import _tar_gz
 
 from bisheng.common.errcode.sandbox import (
     SandboxCapacityExceededError,
@@ -16,10 +16,19 @@ from bisheng.common.errcode.sandbox import (
     SandboxProtocolError,
     SandboxUnreachableError,
 )
-from bisheng.tool.infrastructure.container_executor import ContainerExecutor
+from bisheng_langchain.gpts.tools.code_interpreter.container_executor import ContainerExecutor
 from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
 
-_SHUFFLE_MODULE = "bisheng.tool.infrastructure.container_executor.random.shuffle"
+_SHUFFLE_MODULE = "bisheng_langchain.gpts.tools.code_interpreter.container_executor.random.shuffle"
+
+
+class FakeRunnerClient(_BaseFakeRunnerClient):
+    """The executor streams copy-in bodies; join them before the shared fake parses them."""
+
+    def request(self, method, url, *, content=None, **kwargs):
+        if content is not None and not isinstance(content, (bytes, bytearray)):
+            content = b"".join(content)
+        return super().request(method, url, content=content, **kwargs)
 
 
 def _exe(fake: FakeRunnerClient, **kwargs) -> ContainerExecutor:
@@ -44,11 +53,13 @@ def test_fake_respects_path_params_across_sessions():
     headers = {"Authorization": "Bearer test-token"}
     a = fake.request("POST", "http://runner-a:8080/v1/sessions", headers=headers).json()
     b = fake.request("POST", "http://runner-a:8080/v1/sessions", headers=headers).json()
+    tar = _tar_gz({"only-a.txt": b"secret-a", "output/sub/nested.txt": b"deep"})
+    manifest = b"{}"
     fake.request(
         "PUT",
         f"http://runner-a:8080/v1/sessions/{a['session_id']}/files",
         headers={"X-Lease-Token": a["lease_token"]},
-        content=_tar_gz({"only-a.txt": b"secret-a", "output/sub/nested.txt": b"deep"}),
+        content=len(manifest).to_bytes(4, "big") + manifest + tar,
     )
     files_a = fake.session_files(a["session_id"])
     files_b = fake.session_files(b["session_id"])
@@ -200,7 +211,14 @@ def test_description_lists_isolation_libraries():
 
 
 def test_container_executor_has_no_orchestrator_imports_or_discover():
-    path = Path(__file__).resolve().parents[2] / "bisheng" / "tool" / "infrastructure" / "container_executor.py"
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "bisheng_langchain"
+        / "gpts"
+        / "tools"
+        / "code_interpreter"
+        / "container_executor.py"
+    )
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source)
     banned = {"docker", "kubernetes"}
@@ -223,9 +241,11 @@ def test_copy_in_keeps_chinese_paths_and_ascii_manifest(tmp_path):
     result = exe.run("print('ok')")
     assert result["exitcode"] == 0
     assert rel in fake.last_put_members
-    header = json.dumps({rel: "deadbeef"}, ensure_ascii=True)
-    header.encode("ascii")
-    assert "\\u" in header
+    size = int.from_bytes(fake.last_put_body[:4], "big")
+    raw = fake.last_put_body[4 : 4 + size]
+    text = raw.decode("ascii")
+    assert "\\u" in text
+    assert "工作台" not in text
 
 
 def test_execute_code_without_work_dir_does_not_copy_cwd(tmp_path, monkeypatch):

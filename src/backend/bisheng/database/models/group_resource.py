@@ -1,15 +1,13 @@
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
 
-from sqlalchemy import Column, DateTime, Integer, text, delete
+from sqlalchemy import Column, DateTime, Integer, delete, text
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session
-
-
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 
 class ResourceTypeEnum(Enum):
     KNOWLEDGE = 1
@@ -20,35 +18,40 @@ class ResourceTypeEnum(Enum):
     WORKSTATION = 7  # Workstation
     SPACE_FILE = 8  # Knowledge Space File
     KNOWLEDGE_FILE = 9  # Knowledge Base File
+    HOSTED_APP = 10  # F054 hosted application — the tag system's third app type
 
 
 class GroupResourceBase(SQLModelSerializable):
     group_id: str = Field(index=True)
     third_id: str = Field(index=False)
-    type: int = Field(index=False, description='Resource categories for knowledge, assistant, tools, workflow, dashboard and workstation')
-    tenant_id: Optional[int] = Field(
-        default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
+    type: int = Field(
+        index=False,
+        description="Resource categories for knowledge, assistant, tools, workflow, dashboard and workstation",
     )
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    tenant_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
+    )
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
 
 class GroupResource(GroupResourceBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
 
 
 class GroupResourceRead(GroupResourceBase):
-    id: Optional[int] = None
-    group_admins: Optional[List[Dict]] = None
+    id: int | None = None
+    group_admins: list[dict] | None = None
 
 
 class GroupResourceUpdate(GroupResourceBase):
-    role_name: Optional[str] = None
-    remark: Optional[str] = None
+    role_name: str | None = None
+    remark: str | None = None
 
 
 class GroupResourceCreate(GroupResourceBase):
@@ -56,7 +59,6 @@ class GroupResourceCreate(GroupResourceBase):
 
 
 class GroupResourceDao(GroupResourceBase):
-
     @classmethod
     def insert_group(cls, group_resource: GroupResource) -> GroupResource:
         with get_sync_db_session() as session:
@@ -66,58 +68,62 @@ class GroupResourceDao(GroupResourceBase):
             return group_resource
 
     @classmethod
-    def insert_group_batch(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
+    def insert_group_batch(cls, group_resources: list[GroupResource]) -> list[GroupResource]:
         with get_sync_db_session() as session:
             session.add_all(group_resources)
             session.commit()
             return group_resources
 
     @classmethod
-    async def ainsert_group_batch(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
+    async def ainsert_group_batch(cls, group_resources: list[GroupResource]) -> list[GroupResource]:
         async with get_async_db_session() as session:
             session.add_all(group_resources)
             await session.commit()
             return group_resources
 
     @classmethod
-    def get_group_resource(cls,
-                           group_id: int,
-                           resource_type: ResourceTypeEnum,
-                           name: str = None,
-                           page_size: int = None,
-                           page_num: int = None) -> list[GroupResource]:
+    def get_group_resource(
+        cls,
+        group_id: int,
+        resource_type: ResourceTypeEnum,
+        name: str = None,
+        page_size: int = None,
+        page_num: int = None,
+    ) -> list[GroupResource]:
         with get_sync_db_session() as session:
-            statement = select(GroupResource).where(GroupResource.group_id == group_id,
-                                                    GroupResource.type == resource_type.value)
+            statement = select(GroupResource).where(
+                GroupResource.group_id == group_id, GroupResource.type == resource_type.value
+            )
             if name:
-                statement = statement.where(GroupResource.third_id.like(f'%{name}%'))
+                statement = statement.where(GroupResource.third_id.like(f"%{name}%"))
             if page_num and page_size:
                 statement = statement.offset(page_size * (page_num - 1)).limit(page_size)
             return session.exec(statement).all()
 
     @classmethod
-    async def aget_group_resources(cls, group_id: int, resource_type: ResourceTypeEnum) -> List[GroupResource]:
+    async def aget_group_resources(cls, group_id: int, resource_type: ResourceTypeEnum) -> list[GroupResource]:
         statement = select(GroupResource).where(
-            GroupResource.group_id == group_id,
-            GroupResource.type == resource_type.value
+            GroupResource.group_id == group_id, GroupResource.type == resource_type.value
         )
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
-    async def get_groups_resource(cls,
-                                  group_ids: List[int],
-                                  resource_types: List[ResourceTypeEnum] = None,
-                                  name: str = None,
-                                  page_size: int = None,
-                                  page_num: int = None) -> list[GroupResource]:
+    async def get_groups_resource(
+        cls,
+        group_ids: list[int],
+        resource_types: list[ResourceTypeEnum] = None,
+        name: str = None,
+        page_size: int = None,
+        page_num: int = None,
+    ) -> list[GroupResource]:
         async with get_async_db_session() as session:
             statement = select(GroupResource).where(GroupResource.group_id.in_(group_ids))
             if resource_types:
                 statement = statement.where(GroupResource.type.in_([r.value for r in resource_types]))
             if name:
-                statement = statement.where(GroupResource.third_id.like(f'%{name}%'))
+                statement = statement.where(GroupResource.third_id.like(f"%{name}%"))
             if page_num and page_size:
                 statement = statement.offset(page_size * (page_num - 1)).limit(page_size)
 
@@ -130,8 +136,9 @@ class GroupResourceDao(GroupResourceBase):
         Get the group to which the resource belongs
         """
         with get_sync_db_session() as session:
-            statement = select(GroupResource).where(GroupResource.third_id == third_id,
-                                                    GroupResource.type == resource_type.value)
+            statement = select(GroupResource).where(
+                GroupResource.third_id == third_id, GroupResource.type == resource_type.value
+            )
             return session.exec(statement).all()
 
     @classmethod
@@ -140,13 +147,14 @@ class GroupResourceDao(GroupResourceBase):
         Get the group to which the resource belongs
         """
         async with get_async_db_session() as session:
-            statement = select(GroupResource).where(GroupResource.third_id == third_id,
-                                                    GroupResource.type == resource_type.value)
+            statement = select(GroupResource).where(
+                GroupResource.third_id == third_id, GroupResource.type == resource_type.value
+            )
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
-    def get_resources_group(cls, resource_type: ResourceTypeEnum | None, third_ids: List[str]) -> list[GroupResource]:
+    def get_resources_group(cls, resource_type: ResourceTypeEnum | None, third_ids: list[str]) -> list[GroupResource]:
         """
         Get the grouping to which the bulk resource belongs
         """
@@ -158,32 +166,33 @@ class GroupResourceDao(GroupResourceBase):
 
     @classmethod
     def delete_group_resource_by_third_id(cls, third_id: str, resource_type: ResourceTypeEnum) -> None:
-        with (get_sync_db_session() as session):
-            statement = delete(GroupResource).where(
-                GroupResource.third_id == third_id).where(
-                GroupResource.type == resource_type.value)
+        with get_sync_db_session() as session:
+            statement = (
+                delete(GroupResource)
+                .where(GroupResource.third_id == third_id)
+                .where(GroupResource.type == resource_type.value)
+            )
             session.exec(statement)
             session.commit()
 
     @classmethod
     def delete_group_resource_by_group_id(cls, group_id: int):
-        with (get_sync_db_session() as session):
+        with get_sync_db_session() as session:
             statement = delete(GroupResource).where(GroupResource.group_id == group_id)
             session.exec(statement)
             session.commit()
 
     @classmethod
-    def get_group_all_resource(cls, group_id: int) -> List[GroupResource]:
+    def get_group_all_resource(cls, group_id: int) -> list[GroupResource]:
         """
         Get all resources under a group
         """
         with get_sync_db_session() as session:
-            return session.exec(
-                select(GroupResource).where(GroupResource.group_id == group_id)).all()
+            return session.exec(select(GroupResource).where(GroupResource.group_id == group_id)).all()
 
     @classmethod
-    def update_group_resource(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
-        with (get_sync_db_session() as session):
+    def update_group_resource(cls, group_resources: list[GroupResource]) -> list[GroupResource]:
+        with get_sync_db_session() as session:
             session.add_all(group_resources)
             session.commit()
         return group_resources

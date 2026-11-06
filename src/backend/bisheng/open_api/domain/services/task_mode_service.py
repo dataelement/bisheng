@@ -193,14 +193,21 @@ class OpenTaskModeService:
 
     @staticmethod
     async def enabled_skill_rows(login_user: UserPayload) -> list:
-        from bisheng.linsight.domain.models.linsight_skill import LinsightSkillDao
-        from bisheng.permission.application.business_authorization import batch_check_business_actions
+        import tempfile
+        from pathlib import Path
 
-        rows = [row for row in await LinsightSkillDao.list_enabled() if row.source != "personal"]
-        actions = await batch_check_business_actions(
-            login_user, resource_type="linsight_skill", resource_ids=(row.id for row in rows), actions=("use",)
-        )
-        return [row for row in rows if "use" in actions.get(str(row.id), ())]
+        from bisheng.linsight.domain.services.personal_skill_service import PersonalSkillService
+        from bisheng.linsight.domain.services.skill_store import SkillStore
+
+        # Listing names does not read bundles. Skip the configured cache root so
+        # a config lookup is not required just to answer which skills exist.
+        store = SkillStore(root=Path(tempfile.gettempdir()) / "linsight-skill-list")
+        rows = list(await PersonalSkillService(store=store).list_candidates(login_user.user_id))
+        from bisheng.linsight.domain.services.user_skills import UserSkillsService
+
+        return [
+            row for row, _ in await UserSkillsService(login_user.user_id).records(candidates=rows, actor=login_user)
+        ]
 
     @classmethod
     async def check_skills(cls, names: list[str] | None, login_user: UserPayload) -> None:

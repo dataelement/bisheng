@@ -12,7 +12,12 @@ from bisheng.dsh.domain.models.unified_policy import (
 )
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.unified_policy import UnifiedPolicyRepository
-from bisheng.dsh.domain.schemas.unified_policy import CreditRuleInput, ModelVisibilityInput, PolicySubject
+from bisheng.dsh.domain.schemas.unified_policy import (
+    UNLIMITED_TOKEN_LIMIT,
+    CreditRuleInput,
+    ModelVisibilityInput,
+    PolicySubject,
+)
 from bisheng.dsh.domain.services.legacy_credit_migration import migrate_legacy_credits
 from test.dsh.test_subject_policy import subject_store as subject_store
 
@@ -38,7 +43,8 @@ def test_nested_department_and_role_use_one_personal_allowance(store):
         assert policy.allowed_model_ids == [7, 8]
         assert policy.monthly_token_limit == 800_000_000
         assert repo.effective(21).allowed_model_ids == [8]
-        assert repo.effective(21).monthly_token_limit == 0
+        # User 21 matches no rule, so it is not capped.
+        assert repo.effective(21).monthly_token_limit == UNLIMITED_TOKEN_LIMIT
         repo.save_rule(PolicySubject(kind="USER", id=20), 20, CreditRuleInput(version=0, monthly_credits="0"))
         assert repo.effective(20).monthly_token_limit == 800_000_000
         assert repo.effective(20).allowed_model_ids == [7, 8]

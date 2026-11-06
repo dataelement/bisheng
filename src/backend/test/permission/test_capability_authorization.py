@@ -160,3 +160,27 @@ async def test_default_grant_uses_tenant_members_and_migration_deletes_public_ma
         ("user:*", "system_use_marker", "DELETE"),
     }
     assert kwargs["changes"][0].source.projected_subject == "tenant:7#member"
+
+
+async def test_migration_inventory_accepts_preset_with_historical_creator(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from scripts import migrate_capability_authorization as migration
+
+    tool = SimpleNamespace(id=294, tenant_id=1, user_id=1)
+    session = SimpleNamespace(
+        exec=AsyncMock(
+            side_effect=[
+                SimpleNamespace(all=lambda: [tool]),
+                SimpleNamespace(all=lambda: []),
+            ]
+        )
+    )
+
+    @asynccontextmanager
+    async def database_session():
+        yield session
+
+    monkeypatch.setattr(migration, "get_async_db_session", database_session)
+    assert await migration.inventory() == [(1, "tool", "294", None)]
+    assert tool.user_id == 1

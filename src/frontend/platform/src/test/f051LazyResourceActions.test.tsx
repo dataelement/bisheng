@@ -13,9 +13,14 @@ vi.mock("@/controllers/API/permission", () => ({
     getMyResourcePermissionsApi(...args),
 }))
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   toast: vi.fn(),
-}))
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 
 function Probe() {
   const { actions, errors, loading, load } = useLazyResourceActions(

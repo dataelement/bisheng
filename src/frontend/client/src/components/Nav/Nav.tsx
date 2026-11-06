@@ -1,3 +1,4 @@
+import { ApiRequestFailure } from '~/components/ApiRequestFailure';
 import type { ConversationListResponse } from '~/types/chat';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchContext } from '~/Providers';
@@ -12,6 +13,7 @@ import {
   useNavScrolling,
 } from '~/hooks';
 import { cn } from '~/utils';
+import NavToggle from './NavToggle';
 import { Outlined } from 'bisheng-icons';
 import { Button } from '~/components/ui';
 import NewChat from './NewChat';
@@ -33,7 +35,7 @@ const Nav = ({
 
   const { pageNumber, searchQuery, setPageNumber, searchQueryRes } = useSearchContext();
   const [tags, setTags] = useState<string[]>([]);
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
+  const { data, error, isError, isSuccess, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
     useConversationsInfiniteQuery(
       {
         pageNumber: pageNumber.toString(),
@@ -50,7 +52,7 @@ const Nav = ({
   }, [tags]);
   const { containerRef, moveToTop } = useNavScrolling<ConversationListResponse>({
     setShowLoading,
-    hasNextPage: searchQuery ? searchQueryRes?.hasNextPage : hasNextPage,
+    hasNextPage: searchQuery ? searchQueryRes?.hasNextPage : hasNextPage && !isError,
     fetchNextPage: searchQuery ? searchQueryRes?.fetchNextPage : fetchNextPage,
     isFetchingNextPage: searchQuery
       ? searchQueryRes?.isFetchingNextPage ?? false
@@ -163,12 +165,19 @@ const Nav = ({
                       ref={containerRef}
                       onScroll={updateScrollShadows}
                     >
-                      {/* Conversation history list */}
-                      <Conversations
+                      {!searchQuery && isError ? <ApiRequestFailure
+                        error={error}
+                        onRetry={() => refetch()}
+                      /> : null}
+                      {!searchQuery && isSuccess && conversations.length === 0 ? (
+                        <p className="text-body-sm text-text-3">{localize('com_app_chat_sidebar_empty')}</p>
+                      ) : null}
+                      {/* Keep available rows visible when a background load fails. */}
+                      {(searchQuery || conversations.length > 0) && <Conversations
                         conversations={conversations}
                         moveToTop={moveToTop}
                         toggleNav={itemToggleNav}
-                      />
+                      />}
                       {(isFetchingNextPage || showLoading) && (
                         <Spinner className={cn('m-1 mx-auto mb-4 h-4 w-4 text-text-primary')} />
                       )}

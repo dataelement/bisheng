@@ -1,0 +1,83 @@
+{
+  "release": "v3.0.0-test-vibe",
+  "host": "192.168.106.109",
+  "checks": {
+    "manager_health": {
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "version": "3.0.0"
+      }
+    },
+    "proxy_health": {
+      "status": 200,
+      "body": {
+        "status": "ok"
+      }
+    },
+    "service_access": {
+      "uid": 10001,
+      "manager_health": 200,
+      "unsigned_control": 403,
+      "legacy_control": 410,
+      "backend_unavailable_entry": 503
+    },
+    "engine_via_socket_proxy": {
+      "engine_id": "c2fa2d5d-7f72-438c-9c24-705fd91079cd",
+      "ping": true,
+      "container_listing_denied": 403
+    },
+    "e2e-f086-ci-20261021-manager": {
+      "running": true,
+      "host_ports": false,
+      "docker_socket_mounted": false,
+      "read_only_rootfs": true
+    },
+    "e2e-f086-ci-20261021-proxy": {
+      "running": true,
+      "host_ports": false,
+      "docker_socket_mounted": false,
+      "read_only_rootfs": true
+    }
+  },
+  "images": {
+    "runtime-manager": {
+      "reference": "dataelement/bisheng-runtime-manager:v3.0.0-test-vibe-amd64",
+      "image_id": "sha256:fc7e0987ecabec0b3a59b59926cad93a278a76863513b2d7d2c16f4c9a1e6ce4",
+      "architecture": "amd64",
+      "user": "",
+      "command": [
+        "python",
+        "-m",
+        "uvicorn",
+        "runtime_manager.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8091",
+        "--workers",
+        "1",
+        "--no-access-log"
+      ]
+    },
+    "app-proxy": {
+      "reference": "dataelement/bisheng-app-proxy:v3.0.0-test-vibe-amd64",
+      "image_id": "sha256:9787b6e0ddbc9128d60b08df83d78b8b1ab78f6fea1721c1aa70a618192499fa",
+      "architecture": "amd64",
+      "user": "appproxy",
+      "command": [
+        "python",
+        "-m",
+        "uvicorn",
+        "app_proxy.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8090",
+        "--no-access-log"
+      ]
+    }
+  },
+  "passed": true,
+  "test_containers_remaining": []
+}

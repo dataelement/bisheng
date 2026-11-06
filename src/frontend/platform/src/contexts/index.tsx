@@ -1,6 +1,7 @@
+import { TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { ReactNode } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { TooltipProvider } from "../components/bs-ui/tooltip";
+
 import { SSEProvider } from "./SSEContext";
 import { AlertProvider } from "./alertContext";
 import { DarkProvider } from "./darkContext";
@@ -15,8 +16,7 @@ export default function ContextWrapper({ children }: { children: ReactNode }) {
   //element to wrap all context
   return (
     <>
-      <TooltipProvider>
-        <ReactFlowProvider>
+      <SharedTooltipProvider ><ReactFlowProvider>
           <DarkProvider>
             <TypesProvider>
               <LocationProvider>
@@ -34,8 +34,7 @@ export default function ContextWrapper({ children }: { children: ReactNode }) {
               </LocationProvider>
             </TypesProvider>
           </DarkProvider>
-        </ReactFlowProvider>
-      </TooltipProvider>
+        </ReactFlowProvider></SharedTooltipProvider>
     </>
   );
 }

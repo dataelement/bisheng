@@ -1,0 +1,15 @@
+{
+  "app_id": "7dcca9caca5b4a2b8d50405717ddcc5c",
+  "current_version_id": "ea1cf255b9344560837b5d7b2722b43e",
+  "pending_version_id": "7e3c58d636b8461eb6e81d79f3acecfa",
+  "entry": {
+    "version": 101,
+    "value": "retained"
+  },
+  "sdk_011": "passed",
+  "historical_versions_unchanged": true,
+  "historical_version_count": 2,
+  "frozen_version_sha256": "0b8a4a80cb01481609b90f901a6cce8e8c887f46473f069a1ba533f8e1faa055",
+  "delivery_mode": "source-image",
+  "node_id": "e2e-f086-node"
+}

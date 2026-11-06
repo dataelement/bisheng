@@ -23,6 +23,8 @@ interface UseSpaceActionsOptions {
     joinedSpaces: KnowledgeSpace[];
     departmentSpaces: KnowledgeSpace[];
     onSpaceSelect: (space: KnowledgeSpace | null) => void;
+    /** Refresh the active space's fields in place — keeps the folder being browsed. */
+    onActiveSpaceUpdate: (space: KnowledgeSpace) => void;
 }
 
 /**
@@ -39,6 +41,7 @@ export function useSpaceActions({
     joinedSpaces,
     departmentSpaces,
     onSpaceSelect,
+    onActiveSpaceUpdate,
 }: UseSpaceActionsOptions) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -70,7 +73,7 @@ export function useSpaceActions({
         // Optimistic update
         updateAllCaches(list => list.map(s => s.id === space.id ? space : s));
         if (activeSpaceId === space.id) {
-            onSpaceSelect(space);
+            onActiveSpaceUpdate(space);
         }
 
         try {
@@ -199,7 +202,7 @@ export function useSpaceActions({
 
         if (activeSpaceId === spaceId) {
             const space = targetList.find(s => s.id === spaceId);
-            if (space) onSpaceSelect({ ...space, isPinned: pinned });
+            if (space) onActiveSpaceUpdate({ ...space, isPinned: pinned });
         }
 
         try {
@@ -212,7 +215,7 @@ export function useSpaceActions({
             updateAllCaches(rollback);
             if (activeSpaceId === spaceId) {
                 const space = targetList.find(s => s.id === spaceId);
-                if (space) onSpaceSelect({ ...space, isPinned: !pinned });
+                if (space) onActiveSpaceUpdate({ ...space, isPinned: !pinned });
             }
             showToast({ message: localize("com_knowledge.operation_failed"), severity: NotificationSeverity.WARNING });
         }

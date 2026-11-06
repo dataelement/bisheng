@@ -65,6 +65,12 @@ export default function Conversation({
   const [titleInput, setTitleInput] = useState(title);
   const [renaming, setRenaming] = useState(false);
   const [isPopoverActive, setIsPopoverActive] = useState(false);
+  // Keep the anchor measurable until the floating panel finishes fading out.
+  const [isPopoverPresent, setIsPopoverPresent] = useState(false);
+  const handlePopoverOpenChange = (open: boolean) => {
+    setIsPopoverActive(open);
+    if (open) setIsPopoverPresent(true);
+  };
   const isSmallScreen = usePrefersMobileLayout();
   const localize = useLocalize();
   const navigate = useNavigate();
@@ -207,7 +213,7 @@ export default function Conversation({
         // options menu or the rename input — since the pointer leaves the row
         // (into the menu) long before the interaction is over. Never promoted
         // to the active row's fill: this row is not the open conversation.
-        !isActiveConvo && (renaming || isPopoverActive) && "bg-fill-1",
+        !isActiveConvo && (renaming || isPopoverPresent) && "bg-fill-1",
         // Renaming chrome matches the chat input surface (AiChatInput): 1px
         // #ECECEC hairline + soft drop shadow, both as shadows so the row
         // keeps its borderless box size.
@@ -301,10 +307,10 @@ export default function Conversation({
           isSmallScreen
             ? "flex w-[48px] justify-end items-center shrink-0"
             : // While running, keep the slot visible so the spinner shows without
-              // hover; otherwise reveal the options menu on hover / when active.
-              isPopoverActive || isActiveConvo || isTaskRunning
+              // hover; otherwise reveal the options menu on hover or keyboard focus.
+              isPopoverPresent || isTaskRunning
               ? "flex items-center"
-              : "hidden items-center group-focus-within:flex group-hover:flex",
+              : "hidden items-center group-has-[:focus-visible]:flex group-hover:flex",
           "coarse-pointer:flex",
         )}
       >
@@ -315,9 +321,9 @@ export default function Conversation({
             size={16}
             className={cn(
               "shrink-0 animate-spin",
-              isPopoverActive
+              isPopoverPresent
                 ? "hidden"
-                : "group-hover:hidden group-focus-within:hidden",
+                : "group-hover:hidden group-has-[:focus-visible]:hidden",
             )}
             style={{ color: "#1A1A1A" }}
           />
@@ -326,8 +332,8 @@ export default function Conversation({
           className={cn(
             // When running, the menu is hover-only so it swaps in for the
             // spinner; otherwise it always fills this (already hover-gated) slot.
-            isTaskRunning && !isPopoverActive
-              ? "hidden group-focus-within:flex group-hover:flex"
+            isTaskRunning && !isPopoverPresent
+              ? "hidden group-has-[:focus-visible]:flex group-hover:flex"
               : "flex",
           )}
         >
@@ -335,10 +341,10 @@ export default function Conversation({
             title={title}
             retainView={retainView}
             renameHandler={renameHandler}
-            isActiveConvo={isActiveConvo}
             conversationId={conversationId}
             isPopoverActive={isPopoverActive}
-            setIsPopoverActive={setIsPopoverActive}
+            setIsPopoverActive={handlePopoverOpenChange}
+            onMenuExit={() => setIsPopoverPresent(false)}
           />
         </div>
       </div>

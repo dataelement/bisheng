@@ -1,11 +1,10 @@
+import { Dropdown, DropdownItem } from "@bisheng/ui";
 import { Tooltip } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import type { MouseEvent, ReactElement, ReactNode } from 'react';
 import { cloneElement } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ActionMenuContent, ActionMenuItem } from '~/components/ActionMenu';
 import { useStartNewChat } from '~/components/Nav/NewChat';
-import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { cn } from '~/utils';
@@ -134,8 +133,18 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
           />
         ))}
         {moreEntries.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <Dropdown  align="start" menu={<>
+              {moreEntries.map((entry) => (
+                <DropdownItem
+                  key={entry.id}
+                  icon={entry.icon}
+
+                  onSelect={() => {
+                    if (entry.to !== pathname) navigate(entry.to);
+                  }}
+                >{entry.label}</DropdownItem>
+              ))}
+             </>}>
               <button
                 type="button"
                 className={cn(NAV_ROW, 'data-[state=open]:bg-fill-1', moreActive && 'bg-fill-2 hover:bg-fill-2')}
@@ -143,25 +152,12 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
                 <Outlined.More className="size-4 shrink-0" />
                 <span className="min-w-0 flex-1 truncate py-px">{localize('com_workbench_sidebar.more')}</span>
               </button>
-            </DropdownMenuTrigger>
-            <ActionMenuContent align="start" width={216}>
-              {moreEntries.map((entry) => (
-                <ActionMenuItem
-                  key={entry.id}
-                  icon={entry.icon}
-                  label={entry.label}
-                  onSelect={() => {
-                    if (entry.to !== pathname) navigate(entry.to);
-                  }}
-                />
-              ))}
-            </ActionMenuContent>
-          </DropdownMenu>
+             </Dropdown>
         )}
       </nav>
 
       {homeLink && homeGranted ? (
-        <SidebarConversationList leading={<SidebarProjects />} />
+        <SidebarConversationList leading={<SidebarProjects onStartChat={startNewChat} />} />
       ) : (
         <div className="min-h-0 flex-1" />
       )}

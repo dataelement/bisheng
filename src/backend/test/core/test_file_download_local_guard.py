@@ -1,4 +1,4 @@
-"""F068: ``file_download`` / ``async_file_download`` accept bare local paths only
+"""F072: ``file_download`` / ``async_file_download`` accept bare local paths only
 inside the process's own download directories.
 
 ``POST /finetune/job/file/preset`` handed the user-supplied ``files`` string

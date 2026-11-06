@@ -4,6 +4,7 @@ export type SelectedOrgKb = {
   id: string;
   name: string;
   type: string;
+  tag?: { id: number; name: string };
 };
 
 // v2.5 Agent-mode: the subset of WorkstationConfig.tools the user has toggled on.

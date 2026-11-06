@@ -1,6 +1,7 @@
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import type { ReactNode } from "react";
 import { useRef, useState } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
 
 interface TruncatedTooltipProps {
   /** Full text, shown only when the rendered element is actually clipped. */
@@ -36,13 +37,6 @@ export function TruncatedTooltip({
   };
 
   return (
-    <Tooltip open={open} onOpenChange={handleOpenChange}>
-      <TooltipTrigger asChild>
-        <Tag ref={ref} className={className}>{children}</Tag>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="z-[120] max-w-xs break-all">
-        {content}
-      </TooltipContent>
-    </Tooltip>
+    <SharedTooltip open={open} onOpenChange={handleOpenChange} content={content} side="top" ><Tag ref={ref} className={className}>{children}</Tag></SharedTooltip>
   );
 }

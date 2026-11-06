@@ -1,0 +1,374 @@
+"""The forward itself: resolve → strip → inject → stream.
+
+Streaming in both directions is not an optimisation here. Hosted apps serve
+SSE, long polls and file downloads; buffering a response would turn a live
+stream into a stall, and buffering a request would cap uploads at whatever
+memory the proxy is willing to hold.
+
+The one retry (D5.1) is narrow on purpose: **connection-level failures only,
+exactly once, after invalidating the cached address**. A refused connection
+means the address is stale — the container was replaced or died — so asking the
+manager again is the fix. A 500 from the app is the app's own answer and is
+passed through untouched; retrying it would silently duplicate non-idempotent
+requests.
+
+The helpers that describe the visitor to the app (:func:`external_proto_and_host`,
+:func:`forwarded_for`, :func:`log_forged_headers`) take an ``HTTPConnection``
+rather than a ``Request`` because the WebSocket upgrade path
+(:mod:`app_proxy.websocket`) describes the same visitor to the same app and
+must not grow a second copy of the rules.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+
+import httpx
+from starlette.background import BackgroundTask
+from starlette.requests import HTTPConnection, Request
+from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+
+from app_proxy.authz import Verdict
+from app_proxy.config import get_config
+from app_proxy.headers import build_upstream_headers, is_platform_header
+from app_proxy.observability import log_fallback, log_header_strip, log_request
+from app_proxy.pages import (
+    PAGE_DEPLOYING,
+    PAGE_HTTP_STATUS,
+    PAGE_RECOVERING,
+    RETRY_FIRST_SECONDS,
+    error_payload,
+    json_status,
+    render_page,
+)
+from app_proxy.routing import entry_prefix_for, resolve_upstream, restore_entry_prefix, strip_entry_prefix
+
+logger = logging.getLogger(__name__)
+
+#: Response headers that describe *this* hop and must not be replayed onto the
+#: next one. ``content-length`` and ``content-encoding`` are deliberately kept:
+#: we forward raw bytes, so the body is exactly what the upstream produced.
+_RESPONSE_HOP_BY_HOP = frozenset(
+    {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+    }
+)
+
+_transport: httpx.AsyncBaseTransport | None = None
+_client: httpx.AsyncClient | None = None
+
+
+def set_upstream_transport(transport: httpx.AsyncBaseTransport | None) -> None:
+    """Test / bootstrap seam. Swapping the transport rebuilds the client."""
+    global _transport, _client
+    _transport = transport
+    _client = None
+
+
+def get_upstream_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        config = get_config()
+        _client = httpx.AsyncClient(
+            transport=_transport,
+            timeout=httpx.Timeout(
+                connect=config.upstream_connect_timeout_seconds,
+                read=config.upstream_read_timeout_seconds,
+                write=config.upstream_read_timeout_seconds,
+                pool=config.upstream_connect_timeout_seconds,
+            ),
+            # A proxy passes redirects to the browser; following them here would
+            # hide the app's own navigation and rewrite the URL bar's meaning.
+            follow_redirects=False,
+        )
+    return _client
+
+
+def external_proto_and_host(connection: HTTPConnection) -> tuple[str, str]:
+    """What the visitor typed, as best we can know it (D5.2).
+
+    ``APP_PROXY_ENTRY_BASE_URL`` wins when configured — that is the only fully
+    trustworthy answer and the recommended deployment setting.
+
+    Otherwise the **host** comes from the ``Host`` header and never from
+    ``X-Forwarded-Host``: nginx rewrites ``Host`` to the original, while
+    ``X-Forwarded-Host`` may be whatever the visitor sent, and an app that
+    builds links from a forged host hands out working phishing URLs.
+
+    The **scheme** is the asymmetric case: nginx→app-proxy is plain HTTP on
+    loopback, so ``X-Forwarded-Proto`` from the immediate peer is the only
+    carrier of "the visitor came over TLS". The documented nginx location
+    overwrites it with ``$scheme``; set ``entry_base_url`` where that guarantee
+    does not hold. A WebSocket upgrade's own scheme is ``ws``/``wss``, which the
+    app must read as the HTTP scheme it derives links from.
+    """
+    config = get_config()
+    if config.entry_base_url:
+        parsed = httpx.URL(config.entry_base_url)
+        return parsed.scheme, parsed.netloc.decode("ascii")
+
+    host = connection.headers.get("Host", "")
+    own = {"ws": "http", "wss": "https"}.get(connection.url.scheme, connection.url.scheme)
+    proto = connection.headers.get("X-Forwarded-Proto", "").split(",")[0].strip() or own
+    return proto, host
+
+
+def forwarded_for(connection: HTTPConnection) -> str | None:
+    existing = connection.headers.get("X-Forwarded-For", "").strip()
+    peer = connection.client.host if connection.client else None
+    if not peer:
+        return existing or None
+    return f"{existing}, {peer}" if existing else peer
+
+
+def log_forged_headers(connection: HTTPConnection, request_id: str, slug: str) -> None:
+    forged = [name for name in connection.headers if is_platform_header(name)]
+    if forged:
+        # §7 asks for this signal by name: a client that sends identity headers
+        # is either a misconfigured integration or someone probing AC-32, and
+        # both are worth seeing before they become an incident.
+        log_header_strip(logger, request_id=request_id, slug=slug, stripped=sorted(forged))
+
+
+def _response_header(
+    name: bytes, value: bytes, *, slug: str, entry_prefix: str, upstream_base: str
+) -> tuple[bytes, bytes]:
+    """One upstream response header, with ``Location`` put back under the entry prefix.
+
+    Every other header leaves byte for byte (see the ``raw`` note in
+    :func:`forward`). ``Location`` is the one the strip breaks: see
+    :func:`app_proxy.routing.restore_entry_prefix`.
+    """
+    if name.lower() != b"location":
+        return name, value
+    try:
+        location = value.decode("latin-1")
+    except UnicodeDecodeError:  # pragma: no cover - latin-1 decodes every byte
+        return name, value
+    rewritten = restore_entry_prefix(location, slug, entry_prefix, upstream_base)
+    return name, rewritten.encode("latin-1")
+
+
+def upstream_headers_for(connection: HTTPConnection, verdict: Verdict, *, slug: str, request_id: str) -> list:
+    """The one header list both the HTTP and the WS path send upstream (AC-31 / AC-32)."""
+    config = get_config()
+    proto, host = external_proto_and_host(connection)
+    headers = build_upstream_headers(
+        connection.headers.items(),
+        verdict.material,
+        slug=slug,
+        request_id=request_id,
+        obo_token=verdict.obo_token,
+        proto=proto,
+        host=host,
+        app_id=verdict.app_id,
+        entry_prefix=config.entry_prefix,
+    )
+    chain = forwarded_for(connection)
+    if chain:
+        headers = [(name, value) for name, value in headers if name.lower() != "x-forwarded-for"]
+        headers.append(("X-Forwarded-For", chain))
+    return headers
+
+
+def transition_response(request: Request, kind: str, request_id: str, app_name: str | None) -> Response:
+    """AC-36 / AC-48: a transitional window is a retrying page, never a 502.
+
+    ``kind`` is :data:`PAGE_DEPLOYING` or :data:`PAGE_RECOVERING`; which one
+    is the manager's call (T083), not a guess from the failure mode. Both
+    renderings carry ``Retry-After`` — the page for its own reload, the JSON
+    for an in-app client that wants to back off. Imported lazily to keep
+    :mod:`app_proxy.login_handoff` out of this module's import cycle.
+    """
+    from app_proxy.login_handoff import is_navigation
+
+    accept_language = request.headers.get("Accept-Language")
+    retry_after = {"Retry-After": str(RETRY_FIRST_SECONDS)}
+    if not is_navigation(request):
+        return JSONResponse(
+            error_payload(kind, request_id, accept_language=accept_language),
+            status_code=json_status(kind),
+            headers=retry_after,
+        )
+    return HTMLResponse(
+        render_page(
+            kind,
+            app_name=app_name,
+            square_url=get_config().square_url,
+            request_id=request_id,
+            accept_language=accept_language,
+        ),
+        status_code=PAGE_HTTP_STATUS,
+        headers=retry_after,
+    )
+
+
+async def forward(
+    request: Request,
+    *,
+    slug: str,
+    tail: str,
+    verdict: Verdict,
+    request_id: str,
+    started: float | None = None,
+) -> Response:
+    """Everything after "allow": one hop, at most one re-resolve."""
+    started = started if started is not None else time.monotonic()
+    config = get_config()
+    app_id = verdict.app_id
+    if not app_id:
+        # The backend allowed a request but told us nothing to forward to. Not
+        # a user-visible fault of theirs — render the transient page, log loudly.
+        log_request(
+            logger,
+            request_id=request_id,
+            slug=slug,
+            user_id=verdict.visitor_id,
+            decision=verdict.decision,
+            reason="allow_without_app_id",
+            cache_hit=verdict.cache_hit,
+            upstream_status=None,
+            latency_ms=(time.monotonic() - started) * 1000,
+            level=logging.ERROR,
+        )
+        log_fallback(logger, request_id=request_id, slug=slug, kind=PAGE_RECOVERING, reason="allow_without_app_id")
+        return transition_response(request, PAGE_RECOVERING, request_id, verdict.app_name)
+
+    log_forged_headers(request, request_id, slug)
+
+    upstream_path = strip_entry_prefix(request.url.path, slug, config.entry_prefix)
+    headers = upstream_headers_for(request, verdict, slug=slug, request_id=request_id)
+
+    client = get_upstream_client()
+    query = request.url.query
+    kind = PAGE_RECOVERING
+    # Why the fallback page was rendered, carried through the loop so the two
+    # §7 events agree on the cause instead of each guessing it.
+    fallback_reason = "no_route"
+
+    # An approval-time preview is addressed by session, not by app id: it has
+    # no desired-state record in the manager (F055 AC-26). Everything else on
+    # this path — the strip, the injection, the retry, the fallback pages — is
+    # the same code, which is the point.
+    route_id = verdict.preview_session or app_id
+    is_preview = bool(verdict.preview_session)
+
+    for attempt in (0, 1):
+        upstream = await resolve_upstream(route_id, refresh=attempt == 1, preview=is_preview)
+        if upstream is None:
+            break
+        if upstream.starting:
+            # A deploy is in flight and nothing serves yet: the honest page is
+            # 「发布中」, and there is no address to retry against.
+            kind = PAGE_DEPLOYING
+            fallback_reason = "deploy_in_flight"
+            break
+
+        url = httpx.URL(f"{upstream.base_url}{upstream_path}")
+        if query:
+            url = url.copy_with(query=query.encode("ascii"))
+
+        try:
+            # Only forward a request body when the request actually has one.
+            # For a bodyless request (GET/HEAD/most navigations) httpx would
+            # still read the ASGI receive channel to drain ``request.stream()``,
+            # and that read races Starlette's own disconnect-watcher on the SAME
+            # receive channel. The race intermittently delivers a spurious
+            # ``http.disconnect`` that cancels ``stream_response`` mid-body, so a
+            # large upstream response is silently truncated — a 10 MB hosted-app
+            # page dropped its tail on roughly a third of requests. Passing no
+            # content leaves the receive channel to the disconnect-watcher alone.
+            has_body = bool(request.headers.get("content-length") or request.headers.get("transfer-encoding"))
+            outbound = client.build_request(
+                request.method,
+                url,
+                headers=headers,
+                content=request.stream() if has_body else None,
+            )
+            response = await client.send(outbound, stream=True)
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            # Stale address: drop the cached entry and resolve once more. Any
+            # later failure is the app's problem, not the route table's.
+            logger.info(
+                "app_proxy.upstream_retry request_id=%s slug=%s upstream=%s connect_failed=%s attempt=%s",
+                request_id,
+                slug,
+                upstream.base_url,
+                exc,
+                attempt,
+            )
+            continue
+        except (httpx.HTTPError, RuntimeError) as exc:
+            # RuntimeError covers "stream consumed" — a retry after the request
+            # body was partially written cannot be replayed honestly.
+            logger.warning("app_proxy.upstream_error request_id=%s slug=%s error=%s", request_id, slug, exc)
+            fallback_reason = "upstream_error"
+            break
+
+        log_request(
+            logger,
+            request_id=request_id,
+            slug=slug,
+            user_id=verdict.visitor_id,
+            decision=verdict.decision,
+            reason=verdict.reason,
+            cache_hit=verdict.cache_hit,
+            upstream_status=response.status_code,
+            latency_ms=(time.monotonic() - started) * 1000,
+            generation=upstream.generation,
+        )
+        # ``raw``, not ``multi_items()`` or a dict. Both alternatives lose
+        # information a hosted app depends on:
+        #
+        # * a Mapping keeps ONE value per name, and ``Set-Cookie`` is the header
+        #   that is legitimately repeated — an app that sets a session cookie and
+        #   a CSRF cookie in the same response would have one of them silently
+        #   dropped, and the symptom ("cannot log in" / "form POST 403") shows up
+        #   with clean logs on both sides;
+        # * ``multi_items()`` keeps the duplicates but hands back ``str``, which
+        #   httpx decoded with its own guessed charset; re-encoding that as
+        #   latin-1 for ASGI can raise on a header the upstream sent as UTF-8.
+        #
+        # The raw byte pairs are exactly what arrived, so they are exactly what
+        # leaves. ``raw_headers`` is assigned after construction because
+        # ``StreamingResponse(headers=...)`` only accepts a Mapping.
+        proxied = StreamingResponse(
+            response.aiter_raw(),
+            status_code=response.status_code,
+            background=BackgroundTask(response.aclose),
+        )
+        proxied.raw_headers = [
+            _response_header(name, value, slug=slug, entry_prefix=config.entry_prefix, upstream_base=upstream.base_url)
+            for name, value in response.headers.raw
+            if name.lower().decode("latin-1") not in _RESPONSE_HOP_BY_HOP
+        ]
+        return proxied
+
+    log_request(
+        logger,
+        request_id=request_id,
+        slug=slug,
+        user_id=verdict.visitor_id,
+        decision=verdict.decision,
+        reason=fallback_reason,
+        cache_hit=verdict.cache_hit,
+        upstream_status=None,
+        latency_ms=(time.monotonic() - started) * 1000,
+    )
+    log_fallback(
+        logger,
+        request_id=request_id,
+        slug=slug,
+        kind=kind,
+        reason=fallback_reason,
+        prefix=entry_prefix_for(slug, config.entry_prefix),
+    )
+    return transition_response(request, kind, request_id, verdict.app_name)

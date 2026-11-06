@@ -1,0 +1,1118 @@
+{
+  "date": "2026-10-21",
+  "scope": "static SQLModel/DDL-helper review only; no DM8 connection, driver or live DDL/concurrency verification",
+  "user_decision": "DM8 live tests are deferred; verify existing model definitions, conventions and constraints for this feature",
+  "tables": [
+    {
+      "table": "runtime_profile",
+      "tenant_scoped": false,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "code": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "revision": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "language": {
+          "type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "contract_version": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "status": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "created_by": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "definition": {
+          "type": "CLOB",
+          "nullable": false
+        },
+        "content_digest": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_profile_revision": [
+          "code",
+          "revision"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_profile_code": [
+          "code"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_profile (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tcode VARCHAR(64) NOT NULL, \n\trevision INTEGER NOT NULL, \n\tlanguage VARCHAR(32) NOT NULL, \n\tcontract_version INTEGER NOT NULL, \n\tstatus VARCHAR(24) NOT NULL, \n\tcreated_by INTEGER NOT NULL, \n\tdefinition CLOB NOT NULL, \n\tcontent_digest VARCHAR(64) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_profile_revision UNIQUE (code, revision)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_profile_code ON runtime_profile (code)"
+      ]
+    },
+    {
+      "table": "runtime_profile_default",
+      "tenant_scoped": false,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "language": {
+          "type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "profile_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "generation": {
+          "type": "INTEGER",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_profile_default": [
+          "language"
+        ]
+      },
+      "indexes": {},
+      "helper_branch_ddl": "\nCREATE TABLE runtime_profile_default (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tlanguage VARCHAR(32) NOT NULL, \n\tprofile_id VARCHAR(36) NOT NULL, \n\tgeneration INTEGER NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_profile_default UNIQUE (language)\n)\n\n",
+      "index_ddl": []
+    },
+    {
+      "table": "runtime_artifact",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "scope_key": {
+          "type": "VARCHAR(128)",
+          "nullable": false
+        },
+        "kind": {
+          "type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "visibility": {
+          "type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "sha256": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "size_bytes": {
+          "type": "BIGINT",
+          "nullable": false
+        },
+        "object_key": {
+          "type": "VARCHAR(512)",
+          "nullable": false
+        },
+        "platform": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "producer_operation_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "state": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "retained_until": {
+          "type": "DATETIME",
+          "nullable": true
+        },
+        "confirmed_at": {
+          "type": "DATETIME",
+          "nullable": true
+        },
+        "metadata": {
+          "type": "CLOB",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_artifact_content": [
+          "scope_key",
+          "kind",
+          "sha256"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_artifact_app_id": [
+          "app_id"
+        ],
+        "ix_runtime_artifact_tenant_id": [
+          "tenant_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_artifact (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\tscope_key VARCHAR(128) NOT NULL, \n\tkind VARCHAR(32) NOT NULL, \n\tvisibility VARCHAR(16) NOT NULL, \n\tsha256 VARCHAR(64) NOT NULL, \n\tsize_bytes BIGINT NOT NULL, \n\tobject_key VARCHAR(512) NOT NULL, \n\tplatform VARCHAR(64) NOT NULL, \n\tproducer_operation_id VARCHAR(36) NOT NULL, \n\tstate VARCHAR(24) NOT NULL, \n\tretained_until DATETIME, \n\tconfirmed_at DATETIME, \n\tmetadata CLOB NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_artifact_content UNIQUE (scope_key, kind, sha256)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_artifact_app_id ON runtime_artifact (app_id)",
+        "CREATE INDEX ix_runtime_artifact_tenant_id ON runtime_artifact (tenant_id)"
+      ]
+    },
+    {
+      "table": "runtime_delivery",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "version_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "execution_mode": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "profile_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "resolved_platform": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "delivery_digest": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "content": {
+          "type": "CLOB",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_delivery_version": [
+          "version_id"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_delivery_tenant_id": [
+          "tenant_id"
+        ],
+        "ix_runtime_delivery_app_id": [
+          "app_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_delivery (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\tversion_id VARCHAR(36) NOT NULL, \n\texecution_mode VARCHAR(24) NOT NULL, \n\tprofile_id VARCHAR(36) NOT NULL, \n\tresolved_platform VARCHAR(64) NOT NULL, \n\tdelivery_digest VARCHAR(64) NOT NULL, \n\tcontent CLOB NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_delivery_version UNIQUE (version_id)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_delivery_tenant_id ON runtime_delivery (tenant_id)",
+        "CREATE INDEX ix_runtime_delivery_app_id ON runtime_delivery (app_id)"
+      ]
+    },
+    {
+      "table": "runtime_operation",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "scope_key": {
+          "type": "VARCHAR(128)",
+          "nullable": false
+        },
+        "idempotency_key": {
+          "type": "VARCHAR(128)",
+          "nullable": false
+        },
+        "request_digest": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "deployment_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "version_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "kind": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "node_id": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "generation": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "owner_epoch": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "stage": {
+          "type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "status": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "cleanup_status": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "deadline": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "payload": {
+          "type": "CLOB",
+          "nullable": false
+        },
+        "failure": {
+          "type": "CLOB",
+          "nullable": false
+        },
+        "diagnostics_until": {
+          "type": "DATETIME",
+          "nullable": true
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_operation_request": [
+          "scope_key",
+          "idempotency_key"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_operation_diagnostics_until": [
+          "diagnostics_until"
+        ],
+        "ix_runtime_operation_app_id": [
+          "app_id"
+        ],
+        "ix_runtime_operation_tenant_id": [
+          "tenant_id"
+        ],
+        "ix_runtime_operation_node_id": [
+          "node_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_operation (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\tscope_key VARCHAR(128) NOT NULL, \n\tidempotency_key VARCHAR(128) NOT NULL, \n\trequest_digest VARCHAR(64) NOT NULL, \n\tdeployment_id VARCHAR(36) NOT NULL, \n\tversion_id VARCHAR(36) NOT NULL, \n\tkind VARCHAR(24) NOT NULL, \n\tnode_id VARCHAR(64) NOT NULL, \n\tgeneration INTEGER NOT NULL, \n\towner_epoch INTEGER NOT NULL, \n\tstage VARCHAR(32) NOT NULL, \n\tstatus VARCHAR(24) NOT NULL, \n\tcleanup_status VARCHAR(24) NOT NULL, \n\tdeadline DATETIME NOT NULL, \n\tpayload CLOB NOT NULL, \n\tfailure CLOB NOT NULL, \n\tdiagnostics_until DATETIME, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_operation_request UNIQUE (scope_key, idempotency_key)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_operation_diagnostics_until ON runtime_operation (diagnostics_until)",
+        "CREATE INDEX ix_runtime_operation_app_id ON runtime_operation (app_id)",
+        "CREATE INDEX ix_runtime_operation_tenant_id ON runtime_operation (tenant_id)",
+        "CREATE INDEX ix_runtime_operation_node_id ON runtime_operation (node_id)"
+      ]
+    },
+    {
+      "table": "runtime_assignment",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "node_id": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "generation": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "owner_epoch": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "active_operation_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_assignment_app": [
+          "app_id"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_assignment_app_id": [
+          "app_id"
+        ],
+        "ix_runtime_assignment_tenant_id": [
+          "tenant_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_assignment (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\tnode_id VARCHAR(64) NOT NULL, \n\tgeneration INTEGER NOT NULL, \n\towner_epoch INTEGER NOT NULL, \n\tactive_operation_id VARCHAR(36) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_assignment_app UNIQUE (app_id)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_assignment_app_id ON runtime_assignment (app_id)",
+        "CREATE INDEX ix_runtime_assignment_tenant_id ON runtime_assignment (tenant_id)"
+      ]
+    },
+    {
+      "table": "runtime_node",
+      "tenant_scoped": false,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "engine_id": {
+          "type": "VARCHAR(128)",
+          "nullable": false
+        },
+        "platform": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "memory_budget_mb": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "cpu_budget_millicores": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "heartbeat_at": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "generation": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "status": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_node_engine": [
+          "engine_id"
+        ]
+      },
+      "indexes": {},
+      "helper_branch_ddl": "\nCREATE TABLE runtime_node (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tengine_id VARCHAR(128) NOT NULL, \n\tplatform VARCHAR(64) NOT NULL, \n\tmemory_budget_mb INTEGER NOT NULL, \n\tcpu_budget_millicores INTEGER NOT NULL, \n\theartbeat_at DATETIME NOT NULL, \n\tgeneration INTEGER NOT NULL, \n\tstatus VARCHAR(24) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_node_engine UNIQUE (engine_id)\n)\n\n",
+      "index_ddl": []
+    },
+    {
+      "table": "runtime_capacity_reservation",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "operation_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "node_id": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "purpose": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "memory_mb": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "cpu_millicores": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "state": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_capacity_operation": [
+          "operation_id"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_capacity_reservation_app_id": [
+          "app_id"
+        ],
+        "ix_runtime_capacity_reservation_node_id": [
+          "node_id"
+        ],
+        "ix_runtime_capacity_reservation_tenant_id": [
+          "tenant_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_capacity_reservation (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\toperation_id VARCHAR(36) NOT NULL, \n\tnode_id VARCHAR(64) NOT NULL, \n\tpurpose VARCHAR(24) NOT NULL, \n\tmemory_mb INTEGER NOT NULL, \n\tcpu_millicores INTEGER NOT NULL, \n\tstate VARCHAR(24) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_capacity_operation UNIQUE (operation_id)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_capacity_reservation_app_id ON runtime_capacity_reservation (app_id)",
+        "CREATE INDEX ix_runtime_capacity_reservation_node_id ON runtime_capacity_reservation (node_id)",
+        "CREATE INDEX ix_runtime_capacity_reservation_tenant_id ON runtime_capacity_reservation (tenant_id)"
+      ]
+    },
+    {
+      "table": "runtime_execution_fact",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "operation_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "sequence": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "node_id": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "generation": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "owner_epoch": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "exec_ref": {
+          "type": "VARCHAR(128)",
+          "nullable": false
+        },
+        "phase": {
+          "type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "detail": {
+          "type": "CLOB",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_fact_sequence": [
+          "operation_id",
+          "sequence"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_execution_fact_tenant_id": [
+          "tenant_id"
+        ],
+        "ix_runtime_execution_fact_app_id": [
+          "app_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_execution_fact (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\toperation_id VARCHAR(36) NOT NULL, \n\tsequence INTEGER NOT NULL, \n\tnode_id VARCHAR(64) NOT NULL, \n\tgeneration INTEGER NOT NULL, \n\towner_epoch INTEGER NOT NULL, \n\texec_ref VARCHAR(128) NOT NULL, \n\tphase VARCHAR(32) NOT NULL, \n\tdetail CLOB NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_fact_sequence UNIQUE (operation_id, sequence)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_execution_fact_tenant_id ON runtime_execution_fact (tenant_id)",
+        "CREATE INDEX ix_runtime_execution_fact_app_id ON runtime_execution_fact (app_id)"
+      ]
+    },
+    {
+      "table": "runtime_route",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "operation_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "route_key": {
+          "type": "VARCHAR(128)",
+          "nullable": false
+        },
+        "version_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "node_id": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "exec_ref": {
+          "type": "VARCHAR(128)",
+          "nullable": false
+        },
+        "generation": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "owner_epoch": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "route_epoch": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "status": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "target": {
+          "type": "CLOB",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_route_key": [
+          "route_key"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_route_tenant_id": [
+          "tenant_id"
+        ],
+        "ix_runtime_route_app_id": [
+          "app_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_route (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\toperation_id VARCHAR(36) NOT NULL, \n\troute_key VARCHAR(128) NOT NULL, \n\tversion_id VARCHAR(36) NOT NULL, \n\tnode_id VARCHAR(64) NOT NULL, \n\texec_ref VARCHAR(128) NOT NULL, \n\tgeneration INTEGER NOT NULL, \n\towner_epoch INTEGER NOT NULL, \n\troute_epoch INTEGER NOT NULL, \n\tstatus VARCHAR(24) NOT NULL, \n\ttarget CLOB NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_route_key UNIQUE (route_key)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_route_tenant_id ON runtime_route (tenant_id)",
+        "CREATE INDEX ix_runtime_route_app_id ON runtime_route (app_id)"
+      ]
+    },
+    {
+      "table": "runtime_egress_policy",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "principal_id": {
+          "type": "VARCHAR(128)",
+          "nullable": false
+        },
+        "version_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "operation_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "phase": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "policy_epoch": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "not_after": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "revoked_at": {
+          "type": "DATETIME",
+          "nullable": true
+        },
+        "credential_hash": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "destinations": {
+          "type": "CLOB",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_policy_principal": [
+          "principal_id"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_egress_policy_app_id": [
+          "app_id"
+        ],
+        "ix_runtime_egress_policy_tenant_id": [
+          "tenant_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_egress_policy (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\tprincipal_id VARCHAR(128) NOT NULL, \n\tversion_id VARCHAR(36) NOT NULL, \n\toperation_id VARCHAR(36) NOT NULL, \n\tphase VARCHAR(24) NOT NULL, \n\tpolicy_epoch INTEGER NOT NULL, \n\tnot_after DATETIME NOT NULL, \n\trevoked_at DATETIME, \n\tcredential_hash VARCHAR(64) NOT NULL, \n\tdestinations CLOB NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_policy_principal UNIQUE (principal_id)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_egress_policy_app_id ON runtime_egress_policy (app_id)",
+        "CREATE INDEX ix_runtime_egress_policy_tenant_id ON runtime_egress_policy (tenant_id)"
+      ]
+    },
+    {
+      "table": "runtime_transfer",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "operation_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "artifact_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "node_id": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "action": {
+          "type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "ticket_hash": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "expires_at": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "offset": {
+          "type": "BIGINT",
+          "nullable": false
+        },
+        "parts": {
+          "type": "CLOB",
+          "nullable": false
+        },
+        "state": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_transfer_action": [
+          "operation_id",
+          "artifact_id",
+          "action"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_transfer_app_id": [
+          "app_id"
+        ],
+        "ix_runtime_transfer_tenant_id": [
+          "tenant_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_transfer (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\toperation_id VARCHAR(36) NOT NULL, \n\tartifact_id VARCHAR(36) NOT NULL, \n\tnode_id VARCHAR(64) NOT NULL, \n\taction VARCHAR(16) NOT NULL, \n\tticket_hash VARCHAR(64) NOT NULL, \n\texpires_at DATETIME NOT NULL, \n\t\"offset\" BIGINT NOT NULL, \n\tparts CLOB NOT NULL, \n\tstate VARCHAR(24) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_transfer_action UNIQUE (operation_id, artifact_id, action)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_transfer_app_id ON runtime_transfer (app_id)",
+        "CREATE INDEX ix_runtime_transfer_tenant_id ON runtime_transfer (tenant_id)"
+      ]
+    },
+    {
+      "table": "runtime_storage_binding",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "version_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "operation_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "namespace": {
+          "type": "VARCHAR(128)",
+          "nullable": false
+        },
+        "object_prefix": {
+          "type": "VARCHAR(512)",
+          "nullable": false
+        },
+        "credential_hash": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "state": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "expires_at": {
+          "type": "DATETIME",
+          "nullable": true
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_storage_credential": [
+          "credential_hash"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_storage_binding_app_id": [
+          "app_id"
+        ],
+        "ix_runtime_storage_binding_tenant_id": [
+          "tenant_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_storage_binding (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\tversion_id VARCHAR(36) NOT NULL, \n\toperation_id VARCHAR(36) NOT NULL, \n\tnamespace VARCHAR(128) NOT NULL, \n\tobject_prefix VARCHAR(512) NOT NULL, \n\tcredential_hash VARCHAR(64) NOT NULL, \n\tstate VARCHAR(24) NOT NULL, \n\texpires_at DATETIME, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_storage_credential UNIQUE (credential_hash)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_storage_binding_app_id ON runtime_storage_binding (app_id)",
+        "CREATE INDEX ix_runtime_storage_binding_tenant_id ON runtime_storage_binding (tenant_id)"
+      ]
+    },
+    {
+      "table": "runtime_dependency_plan",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "scope_key": {
+          "type": "VARCHAR(128)",
+          "nullable": false
+        },
+        "input_key": {
+          "type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "operation_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "artifact_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "state": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_dependency_input": [
+          "scope_key",
+          "input_key"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_dependency_plan_app_id": [
+          "app_id"
+        ],
+        "ix_runtime_dependency_plan_tenant_id": [
+          "tenant_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_dependency_plan (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\tscope_key VARCHAR(128) NOT NULL, \n\tinput_key VARCHAR(64) NOT NULL, \n\toperation_id VARCHAR(36) NOT NULL, \n\tartifact_id VARCHAR(36) NOT NULL, \n\tstate VARCHAR(24) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_dependency_input UNIQUE (scope_key, input_key)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_dependency_plan_app_id ON runtime_dependency_plan (app_id)",
+        "CREATE INDEX ix_runtime_dependency_plan_tenant_id ON runtime_dependency_plan (tenant_id)"
+      ]
+    },
+    {
+      "table": "runtime_credential_binding",
+      "tenant_scoped": true,
+      "columns": {
+        "id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "create_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "update_time": {
+          "type": "DATETIME",
+          "nullable": false
+        },
+        "tenant_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "app_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "operation_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "version_id": {
+          "type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "credential_id": {
+          "type": "INTEGER",
+          "nullable": false
+        },
+        "state": {
+          "type": "VARCHAR(24)",
+          "nullable": false
+        }
+      },
+      "unique_constraints": {
+        "uq_runtime_credential_operation": [
+          "operation_id"
+        ]
+      },
+      "indexes": {
+        "ix_runtime_credential_binding_credential_id": [
+          "credential_id"
+        ],
+        "ix_runtime_credential_binding_app_id": [
+          "app_id"
+        ],
+        "ix_runtime_credential_binding_tenant_id": [
+          "tenant_id"
+        ]
+      },
+      "helper_branch_ddl": "\nCREATE TABLE runtime_credential_binding (\n\tid VARCHAR(36) NOT NULL, \n\tcreate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\tupdate_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, \n\ttenant_id INTEGER NOT NULL, \n\tapp_id VARCHAR(36) NOT NULL, \n\toperation_id VARCHAR(36) NOT NULL, \n\tversion_id VARCHAR(36) NOT NULL, \n\tcredential_id INTEGER NOT NULL, \n\tstate VARCHAR(24) NOT NULL, \n\tPRIMARY KEY (id), \n\tCONSTRAINT uq_runtime_credential_operation UNIQUE (operation_id)\n)\n\n",
+      "index_ddl": [
+        "CREATE INDEX ix_runtime_credential_binding_credential_id ON runtime_credential_binding (credential_id)",
+        "CREATE INDEX ix_runtime_credential_binding_app_id ON runtime_credential_binding (app_id)",
+        "CREATE INDEX ix_runtime_credential_binding_tenant_id ON runtime_credential_binding (tenant_id)"
+      ]
+    }
+  ],
+  "table_count": 15,
+  "scoped_table_count": 12,
+  "global_table_count": 3,
+  "finding_fixed": "runtime_artifact.size_bytes and runtime_transfer.offset widened from INTEGER to BIGINT for 2 GiB materials and 10 GiB snapshots",
+  "migration_head": "f086_runtime_byte_counters",
+  "checks": {
+    "model_discovery": "pass",
+    "tenant_registration": "pass",
+    "JsonType_CLOB_branch": "pass",
+    "shared_update_time_defaults": "pass",
+    "bounded_strings": "pass",
+    "nonnullable_unique_columns": "pass",
+    "one_alembic_head": "pass"
+  },
+  "new_fix_files": {
+    "src/backend/bisheng/app_runtime/domain/models/runtime_delivery.py": "9528e794cc697ed43ca0a920c7f1db1d3f005f0e8dfd692dfd95c09be98b87a5",
+    "src/backend/bisheng/core/database/alembic/versions/f086_runtime_byte_counters.py": "41f9343e6416da09302e40dea79e799dd30f2971d18afd2b0c36147d861a7f44",
+    "src/backend/test/app_runtime/test_runtime_model_contracts.py": "41faf1de224f00ae226e214b037c66a6e096568ba9acfd745c6c623800f54979"
+  }
+}

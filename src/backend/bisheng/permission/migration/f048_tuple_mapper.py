@@ -427,6 +427,23 @@ def map_legacy_tuples(
             )
         )
         matched_binding_keys.update(binding.binding_key for binding in matches)
+        if (
+            subject_type == "user_group"
+            and userset_relation == "admin"
+            and STANDARD_RELATION_MODELS.get(source.relation) == "manager"
+        ):
+            # Legacy groupresource grants target a retired group-admin role.
+            # Never turn them into grants for every member of the group.
+            retired.append(source.key)
+            differences.append(
+                TupleMappingDifference(
+                    tuple_key=source.key,
+                    difference_type="LEGACY_USER_GROUP_ADMIN_MANAGER_RETIRED",
+                    message="user groups no longer grant resource management to administrators separately",
+                    severity="INFO",
+                )
+            )
+            continue
         if len(matches) > 1:
             differences.append(
                 TupleMappingDifference(

@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Textarea } from "@/components/bs-ui/input";
+import { Textarea } from '@bisheng/ui';
+
 import { Label } from "@/components/bs-ui/label";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,7 +8,7 @@ import { useTranslation } from "react-i18next";
 export const WebSearchConfig = ({
     config,
     onChange,
-    errors = {}
+    errors = {},
 }: {
     config: {
         tool: string;
@@ -25,32 +26,28 @@ export const WebSearchConfig = ({
 
     // Store parameters for all tools separately
     const [toolsParams, setToolsParams] = useState<Record<string, any>>({
-        bing: { api_key: '', base_url: '' },
-        bocha: { api_key: '', base_url: '' },
-        jina: { api_key: '', base_url: '' },
-        serp: { api_key: '', engine: '', base_url: '' },
-        tavily: { api_key: '', base_url: '' }
+        bing: { api_key: "", base_url: "" },
+        bocha: { api_key: "", base_url: "" },
+        jina: { api_key: "", base_url: "" },
+        serp: { api_key: "", engine: "", base_url: "" },
+        tavily: { api_key: "", base_url: "" },
     });
 
     // Initialize toolsParams with existing config
     useEffect(() => {
         if (config.tool && config.params) {
-            setToolsParams(prev => ({
+            setToolsParams((prev) => ({
                 ...prev,
-                [config.tool]: { ...prev[config.tool], ...config.params }
+                [config.tool]: { ...prev[config.tool], ...config.params },
             }));
         }
     }, [config]);
 
     return (
         <>
-            <Label className="bisheng-label">{t('bench.webSearchPrompt')}</Label>
+            <Label className="bisheng-label">{t("bench.webSearchPrompt")}</Label>
             <div className="mt-3">
-                <Textarea
-                    value={config.prompt || config}
-                    className="min-h-48"
-                    onChange={(e) => onChange('prompt', e.target.value)}
-                />
+                <Textarea value={config.prompt || config} onChange={(e) => onChange("prompt", e.target.value)} textareaClassName={"min-h-48"} />
             </div>
         </>
     );

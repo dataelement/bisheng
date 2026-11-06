@@ -1,186 +1,45 @@
-// @ts-strict-ignore
+import { MessageFrame, WorkflowFileField, WorkflowForm } from '@bisheng/chat';
+import { normalizeFormFields, type RawMessage } from '@bisheng/chat/core';
+import type { ReactNode } from 'react';
+import { useRecoilValue } from 'recoil';
+import { Select } from '@bisheng/ui';
+import useSelectCopy from '~/hooks/useSelectCopy';
+import { useToastContext } from '~/Providers';
+import { useLocalize } from '~/hooks';
+import { emitAreaTextEvent, EVENT_TYPE } from '../useAreaText';
+import { fileAcceptToInputAccept, normalizeFileAccept } from '../fileAcceptUtils';
+import { bishengConfState } from '../store/atoms';
+import InputFileComponent from './InputFileComponent';
 
-import { useRef, useState } from "react";
-import { useRecoilValue } from "recoil";
-import { Button } from "~/components";
-import MultiSelect from "~/components/ui/MultiSelect";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/Select";
-import { useToastContext } from "~/Providers";
-import { useLocalize } from "~/hooks";
-import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
-import { fileAcceptToInputAccept, normalizeFileAccept } from "../fileAcceptUtils";
-import { bishengConfState } from "../store/atoms";
-import InputComponent from "./InputComponent";
-import InputFileComponent from "./InputFileComponent";
-import { MessageWarper } from "./MessageBsChoose";
-
-const enum FormItemType {
-    Text = 'text',
-    File = 'file',
-    Select = 'select'
-}
-
-interface WorkflowNodeParam {
-    /** Unique key */
-    key: string;
-    /** Optional display */
-    label?: string;
-    /** type */
-    type: string;
-    /** value */
-    value: any;
-    /** placeholder */
-    placeholder?: string;
-    /** help text */
-    help?: string;
-    /** tab */
-    tab?: string;
-    /** required*/
-    required?: boolean;
-    /**  multiple value */
-    multi?: boolean;
-    /** Array of options */
-    options?: any[];
-    test?: string,
-    hidden?: boolean;
-}
-
-const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any }) => {
-    const localize = useLocalize()
-    const bishengConfig = useRecoilValue(bishengConfState)
-    const formDataRef = useRef(data.value.reduce((map, item) => {
-        map[item.key] = { key: item.key, type: item.type, label: item.value, fileName: '', value: '' }
-        return map
-    }, {}))
-
-    const handleChange = (item, value) => {
-        if (item.type === FormItemType.File) {
-            formDataRef.current[item.key].value = Array.isArray(value) ? value : [value]
-        } else {
-            formDataRef.current[item.key].value = value
-        }
-    }
-
-    const updataFileName = (item, fileName) => {
-        formDataRef.current[item.key].fileName = fileName
-    }
-
+interface InputFormProps { data: RawMessage; flow: { name: string }; logo?: ReactNode }
+export function InputForm({ data, flow, logo }: InputFormProps) {
+    const localize = useLocalize();
+    const selectCopy = useSelectCopy();
+    const config = useRecoilValue(bishengConfState);
     const { showToast } = useToastContext();
-    const submit = () => {
-        const valuesObject = {}
-        let stringObject = ""
-        const errors: string[] = []
-
-        Object.keys(formDataRef.current).forEach((key: string) => {
-            const fieldData = formDataRef.current[key]
-            const required = data.value.find(item => item.key === key).required
-            if (required && !fieldData.value) {
-                errors.push(localize('com_ui_required_field', { field: fieldData.label }));
-            }
-            valuesObject[key] = fieldData.value
-            stringObject += `${fieldData.label}:${fieldData.type === FormItemType.File ? fieldData.fileName : fieldData.value}\n`
-        })
-
-        if (errors.length) {
-            return showToast({ message: errors.join('\n'), status: 'warning' });
-        }
-        emitAreaTextEvent({
-            action: EVENT_TYPE.FORM_SUBMIT,
-            data: valuesObject,
-            nodeId: data.node_id,
-            message: stringObject
-        })
-    }
-
-    const [multiVal, setMultiVal] = useState([])
-    return <MessageWarper flow={flow} logo={logo}>
-        <div className="max-h-[520px] overflow-y-auto space-y-2">
-            {
-                data.value.map((item, i) => (
-                    <div key={item.id} className="w-full text-sm bisheng-label">
-                        {item.value}
-                        {item.required && <span className="text-red-500">*</span>}
-                        {/* <span className="text-status-red">{item.required ? " *" : ""}</span> */}
-                        <div className="mb-2">
-                            {(() => {
-                                switch (item.type) {
-                                    case FormItemType.Text:
-                                        return (
-                                            <InputComponent
-                                                type="textarea"
-                                                password={false}
-                                                maxLength={10000}
-                                                flow={flow}
-                                                onChange={(val) => handleChange(item, val)}
-                                            />
-                                        )
-                                    case FormItemType.Select:
-                                        return (
-                                            item.multiple ?
-                                                <MultiSelect
-                                                    multiple
-                                                    className={''}
-                                                    value={multiVal[item.key] || []}
-                                                    options={
-                                                        item.options.map(el => ({
-                                                            label: el.text,
-                                                            value: el.text
-                                                        }))
-                                                    }
-                                                    placeholder={localize('com_ui_please_select')}
-                                                    onChange={(v) => {
-                                                        setMultiVal(prev => ({ ...prev, [item.key]: v }));
-                                                        handleChange(item, v.join(','))
-                                                    }}
-                                                >
-                                                    {/* {children?.(reload)} */}
-                                                </MultiSelect>
-                                                : <Select onValueChange={(val) => handleChange(item, val)}>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-white">
-                                                        <SelectGroup>
-                                                            {item.options.map(el => (
-                                                                <SelectItem key={el.text} value={el.text}>
-                                                                    {el.text}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectGroup>
-                                                    </SelectContent>
-                                                </Select>
-                                        )
-                                    case FormItemType.File:
-                                        return (
-                                            <InputFileComponent
-                                                isSSO
-                                                disabled={false}
-                                                placeholder={localize('com_file_current_empty')}
-                                                value={''}
-                                                multiple={item.multiple}
-                                                onChange={(name) => updataFileName(item, name)}
-                                                // fileTypes={FileTypes[item.file_type.toUpperCase()]}
-                                                suffixes={fileAcceptToInputAccept(
-                                                    normalizeFileAccept(item.file_type, {
-                                                        mediaEnabled: !!bishengConfig?.enable_media_upload,
-                                                    }),
-                                                )}
-                                                onFileChange={(val) => handleChange(item, val)}
-                                            />
-                                        )
-                                    default:
-                                        return null
-                                }
-                            })()}
-                        </div>
-                    </div>
-                ))
-            }
-            <div className="flex justify-end">
-                <Button size="sm" className="h-8 px-4" onClick={submit}>{localize('com_ui_start')}</Button>
-            </div>
-        </div>
-    </MessageWarper>
-};
-
-export default InputForm
+    return <MessageFrame title={flow.name} logo={logo}>
+        <WorkflowForm key={String(data.node_id)} fields={normalizeFormFields(data.value)} canExecute
+            submitLabel={localize('com_ui_start')}
+            requiredMessage={field => localize('com_ui_required_field', { field })}
+            onInvalid={errors => showToast({ message: errors.join('\n'), status: 'warning' })}
+            onSubmit={(values, message) => emitAreaTextEvent({ action: EVENT_TYPE.FORM_SUBMIT, data: values, nodeId: data.node_id, message })}
+            renderField={({ id, field, value, disabled, onChange, onFileNameChange }) => {
+                if (field.type === 'file') return <InputFileComponent isSSO disabled={disabled}
+                    renderControl={props => <WorkflowFileField {...props} id={id} />}
+                    placeholder={localize('com_file_current_empty')} value="" multiple={field.multiple}
+                    onChange={onFileNameChange}
+                    suffixes={fileAcceptToInputAccept(normalizeFileAccept(field.raw.file_type, { mediaEnabled: !!config?.enable_media_upload }))}
+                    onFileChange={value => onChange(Array.isArray(value) ? value : value ? [value] : [])} />;
+                if (field.type !== 'select') return null;
+                const options = field.options.map(text => ({ label: text, value: text }));
+                if (field.multiple) return <Select {...selectCopy} multiple disabled={disabled}
+                    value={typeof value === 'string' ? value.split(',').filter(Boolean) : []}
+                    options={options} placeholder={localize('com_ui_please_select')} aria-label={field.label}
+                    onChange={values => onChange(values.join(','))} />;
+                return <Select {...selectCopy} disabled={disabled} value={typeof value === 'string' ? value : null}
+                    options={options} placeholder={localize('com_ui_please_select')} aria-label={field.label}
+                    onChange={value => onChange(value ?? '')} />;
+            }} />
+    </MessageFrame>;
+}
+export default InputForm;

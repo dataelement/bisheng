@@ -4,7 +4,7 @@ import request from './request';
 export type VoiceTarget = { version: 'v1' } | { version: 'v3'; flowId: string };
 
 export type VoiceModels = {
-  asr_model?: { id?: string | null } | null;
+  asr_model?: { id?: string | null; realtime?: boolean } | null;
   tts_model?: { id?: string | null } | null;
 };
 

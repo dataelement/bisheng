@@ -41,32 +41,13 @@ vi.mock("@/controllers/API/permission", () => ({
   getGrantSubjectUserGroupsApi: vi.fn(),
 }));
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => promise),
 }));
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: ({ value, onChange, placeholder }: any) => (
-    <input value={value} onChange={onChange} placeholder={placeholder} />
-  ),
-}));
 
-vi.mock("@/components/bs-ui/checkBox", () => ({
-  // Stop propagation like the real Radix checkbox so a row click does not also
-  // toggle the row's onSelect (which would cancel out the change).
-  Checkbox: ({ checked, disabled, onCheckedChange }: any) => (
-    <input
-      type="checkbox"
-      readOnly
-      checked={!!checked}
-      disabled={!!disabled}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!disabled) onCheckedChange?.(!checked);
-      }}
-    />
-  ),
-}));
+
 
 const mockedDeptChildren = vi.mocked(getDepartmentChildrenApi);
 const mockedDeptSearch = vi.mocked(searchDepartmentsApi);

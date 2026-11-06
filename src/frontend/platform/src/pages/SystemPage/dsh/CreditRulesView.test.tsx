@@ -15,12 +15,12 @@ beforeEach(() => {
     vi.mocked(getPolicySubjects).mockResolvedValue([{ kind: 'DEPARTMENT', id: 10, name: 'Engineering', depth: 0 }])
     vi.mocked(saveCreditRule).mockResolvedValue({ subject_type: 'DEPARTMENT', subject_id: 10, version: 1, enabled: true, monthly_credits: '500' })
 })
-function switchTab(name: string) {
-    fireEvent.mouseDown(screen.getByRole('tab', { name }), { button: 0, ctrlKey: false })
+function selectScope(name: string) {
+    fireEvent.click(screen.getByRole('radio', { name }))
 }
 async function addDepartment() {
     await waitFor(() => expect(screen.getByRole('button', { name: 'dsh.unified.addCredits' })).toBeEnabled())
-    switchTab('dsh.unified.DEPARTMENT')
+    selectScope('dsh.byDepartment')
     fireEvent.click(screen.getByRole('button', { name: 'dsh.unified.addCredits' }))
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'dsh.unified.selectSubject' }), { key: 'ArrowDown' })
     fireEvent.click(await screen.findByRole('option', { name: 'Engineering' }))
@@ -62,10 +62,10 @@ it('separates scopes and saves edits within their original row', async () => {
     await waitFor(() => expect(saveCreditRule).toHaveBeenCalledWith({ kind: 'USER', id: 2 }, { version: 4, enabled: true, monthly_credits: '10000' }))
     await waitFor(() => expect(within(row).queryByRole('textbox')).toBeNull())
     expect(within(row).getByText('10000')).toBeInTheDocument()
-    switchTab('dsh.unified.DEPARTMENT')
+    selectScope('dsh.byDepartment')
     expect(screen.getByText('Engineering')).toBeInTheDocument()
     expect(screen.queryByText('Alice')).toBeNull()
-    switchTab('dsh.unified.ROLE')
+    selectScope('dsh.byRole')
     expect(screen.getByText('Editors')).toBeInTheDocument()
     expect(screen.queryByText('Engineering')).toBeNull()
 })

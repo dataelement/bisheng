@@ -7,14 +7,14 @@
  * body / footer each own px-5 (20px). Mobile: width calc(100%-48px),
  * centered title, full-width button pair.
  *
- * The textarea is uncontrolled and reset on every open, so every close
+ * The textarea draft is controlled and reset on every open, so every close
  * path (cancel / ESC / overlay click) discards the draft. Submitting does
  * NOT auto-close — the caller owns `open` and closes when its side effect
  * settles (sync callers close immediately; async ones close on success).
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './Dialog';
-import { Textarea } from './Textarea';
+import { Textarea } from '@bisheng/ui';
 import { Button } from './Button';
 import { useLocalize } from '~/hooks';
 
@@ -41,12 +41,14 @@ export function CommentDialog({
   onSubmit,
 }: CommentDialogProps) {
   const localize = useLocalize();
-  const commentRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const [comment, setComment] = useState('');
+  const overLimit = comment.length > 9999;
 
   // Reset the draft on every open so all close paths discard it alike.
   useEffect(() => {
-    if (open && commentRef.current) {
-      commentRef.current.value = '';
+    if (open) {
+      setComment('');
     }
   }, [open]);
 
@@ -65,10 +67,12 @@ export function CommentDialog({
         <div className="px-5">
           {/* Focus chrome mirrors the app-center search box (ExpandableSearchField). */}
           <Textarea
-            ref={commentRef}
             maxLength={9999}
+            showCount
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
             placeholder={placeholder}
-            className="bg-white border-border-base shadow-none transition-[border-color,box-shadow] duration-200 focus:border-border-deep focus:shadow-focus placeholder:text-sm placeholder:text-text-3"
+
           />
         </div>
         <DialogFooter className="flex-row justify-end gap-3 space-x-0 sm:space-x-0 px-5 py-4">
@@ -81,8 +85,8 @@ export function CommentDialog({
           </Button>
           <Button
             className="h-8 px-4 rounded-md text-sm font-normal flex-1 sm:flex-none"
-            disabled={submitting}
-            onClick={() => onSubmit(commentRef.current?.value?.trim() ?? '')}
+            disabled={submitting || overLimit}
+            onClick={() => { if (!overLimit) onSubmit(comment.trim()); }}
           >
             {submitting ? (submittingText ?? localize('com_ui_submit')) : localize('com_ui_submit')}
           </Button>

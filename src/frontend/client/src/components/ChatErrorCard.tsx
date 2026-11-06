@@ -45,10 +45,21 @@ interface ChatErrorCardProps {
 const KNOWN_TYPES = new Set([
     'content_filter',
     'quota_exhausted',
+    // The user's own monthly credits on this platform (client module) are used
+    // up — the remedy is the admin's credit settings, not the provider account.
+    'credit_exhausted',
     'rate_limit',
     'service_unavailable',
     'network_timeout',
     'auth_error',
+    // The content no longer fits the model's context window (F087). Terminal: a
+    // retry would send the same content again.
+    'context_overflow',
+    // Task mode only: condensing earlier steps into a summary failed (F087).
+    'context_compress_failed',
+    // Task mode only: the model spent its whole output budget (usually on
+    // reasoning) without a tool call or an answer, even after one retry.
+    'output_truncated',
     // Attachment parsing (OCR / ETL) — daily-mode chat only.
     'file_parse_busy',
     'file_parse_failed',

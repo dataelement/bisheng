@@ -1,0 +1,41 @@
+{
+  "deployment": {
+    "deployment_id": "8e261f9a12684e16b13a497497c43d2d",
+    "app_id": "749df2ba5e7c46689acd28f13fc62304",
+    "version_id": "dc69ad803628482db2ad0f15d52a88b1",
+    "version_no": 1,
+    "stage": "approval_created",
+    "status": "waiting_approval",
+    "failure": null,
+    "approval": {
+      "instance_id": 4,
+      "status": "pending",
+      "version_id": "dc69ad803628482db2ad0f15d52a88b1",
+      "submitted_at": "2026-10-21T04:02:00",
+      "decided_at": null,
+      "reject_reason": null,
+      "approver_names": [
+        "e2e-f086-approver"
+      ]
+    },
+    "app_state": "draft",
+    "entry_url": "http://nginx:3001/apps/e2e-f086-restart",
+    "scan_result": {
+      "hits": [],
+      "blocked": false,
+      "skipped": [],
+      "files_scanned": 3,
+      "files_skipped": 0
+    }
+  },
+  "operation": {
+    "id": "2490b1d0b3ba4c708ea588b1ed651549",
+    "kind": "probe",
+    "stage": "completed",
+    "status": "completed",
+    "cleanup_status": "complete",
+    "failure": {},
+    "version_id": "dc69ad803628482db2ad0f15d52a88b1",
+    "generation": 1
+  }
+}

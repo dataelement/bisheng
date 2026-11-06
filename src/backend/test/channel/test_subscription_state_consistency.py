@@ -14,6 +14,12 @@ from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.models.space_channel_member import MembershipStatusEnum, UserRoleEnum
 
 
+@pytest.fixture(autouse=True)
+def no_business_subscription_by_default(monkeypatch):
+    monkeypatch.setattr(mod, "batch_check_business_visible", AsyncMock(return_value={"channel-1": False}))
+
+
+@pytest.mark.parametrize("super_admin", [False, True])
 @pytest.mark.parametrize(
     "status,visible,expected",
     [
@@ -27,7 +33,7 @@ from bisheng.common.models.space_channel_member import MembershipStatusEnum, Use
         (None, False, "not_subscribed"),
     ],
 )
-async def test_detail_square_and_followed_share_effective_access(monkeypatch, status, visible, expected):
+async def test_detail_square_and_followed_share_effective_access(monkeypatch, status, visible, expected, super_admin):
     now = datetime.now()
     channel = SimpleNamespace(
         id="channel-1",
@@ -66,7 +72,7 @@ async def test_detail_square_and_followed_share_effective_access(monkeypatch, st
         space_channel_member_repository=members,
         channel_info_source_repository=SimpleNamespace(),
     )
-    service._get_channel_actions = AsyncMock(return_value={"visible"} if visible else set())
+    service._get_channel_actions = AsyncMock(return_value={"visible"} if visible or super_admin else set())
     monkeypatch.setattr(mod.ArticleCountCache, "get_main_count", AsyncMock(return_value=22))
     monkeypatch.setattr(mod.ArticleCountCache, "get_main_counts", AsyncMock(return_value={channel.id: 22}))
     monkeypatch.setattr(mod.ArticleCountCache, "set_main_counts", AsyncMock())
@@ -78,14 +84,14 @@ async def test_detail_square_and_followed_share_effective_access(monkeypatch, st
         )
     )
     monkeypatch.setattr(mod, "get_f048_runtime", AsyncMock(return_value=runtime))
-    user = SimpleNamespace(user_id=42, tenant_id=7)
+    user = SimpleNamespace(user_id=42, tenant_id=7, super_admin=super_admin)
 
     detail = await service.get_channel_detail(channel.id, user)
     square = await service._build_square_items([(channel, status, now, 1)], user)
     followed = await service._get_followed_channels(user, set())
 
     assert detail.subscription_status == square[0].subscription_status == expected
-    assert ("visible" in detail.actions) == visible
+    assert ("visible" in detail.actions) == (visible or super_admin)
     assert [item.id for item in followed] == ([channel.id] if visible else [])
 
 
@@ -117,8 +123,53 @@ async def test_approval_requires_permission_synchronizer():
     repo.update.assert_not_awaited()
 
 
+async def test_super_admin_public_subscription_creates_real_membership(monkeypatch):
+    membership = None
+    granted = False
+    created = []
+
+    async def visible(*_args, **_kwargs):
+        return {"channel-1": granted}
+
+    async def add_member(**kwargs):
+        nonlocal membership
+        membership = SimpleNamespace(status=kwargs["status"], user_role=kwargs["role"])
+        created.append(membership)
+        return membership
+
+    async def sync_permissions(*_args, **_kwargs):
+        nonlocal granted
+        granted = True
+
+    service = ChannelService(
+        channel_repository=SimpleNamespace(
+            find_channels_by_ids=AsyncMock(
+                return_value=[SimpleNamespace(id="channel-1", visibility=ChannelVisibilityEnum.PUBLIC)]
+            )
+        ),
+        space_channel_member_repository=SimpleNamespace(
+            find_membership=AsyncMock(return_value=None), add_member=add_member, update=AsyncMock()
+        ),
+        channel_info_source_repository=SimpleNamespace(),
+    )
+    service._get_channel_actions = AsyncMock(return_value={"visible", "edit"})
+    monkeypatch.setattr(mod, "batch_check_business_visible", visible)
+    monkeypatch.setattr(mod.QuotaService, "check_quota", AsyncMock())
+    monkeypatch.setattr(ChannelService, "sync_direct_channel_user_permissions", sync_permissions)
+    user = SimpleNamespace(user_id=1, tenant_id=7, super_admin=True)
+    request = SubscribeChannelRequest(channel_id="channel-1")
+
+    assert await service.subscribe_channel(request, user) == "subscribed"
+    assert membership is not None
+    assert membership.status == MembershipStatusEnum.ACTIVE
+    assert granted
+    assert await service.subscribe_channel(request, user) == "subscribed"
+    assert len(created) == 1
+
+
 @pytest.mark.parametrize("visibility", [ChannelVisibilityEnum.PUBLIC, ChannelVisibilityEnum.REVIEW])
-async def test_stale_active_member_can_resubscribe_with_current_approval_rules(monkeypatch, visibility):
+@pytest.mark.parametrize("super_admin", [False, True])
+async def test_stale_active_member_can_resubscribe_with_current_approval_rules(monkeypatch, visibility, super_admin):
     member = SimpleNamespace(id=1, status=MembershipStatusEnum.ACTIVE, user_id=42, user_role=UserRoleEnum.MEMBER)
     states = []
     repo = SimpleNamespace(
@@ -136,7 +187,7 @@ async def test_stale_active_member_can_resubscribe_with_current_approval_rules(m
         channel_info_source_repository=SimpleNamespace(),
         approval_gate=gate,
     )
-    service._get_channel_actions = AsyncMock(return_value=set())
+    service._get_channel_actions = AsyncMock(return_value={"visible"} if super_admin else set())
     sync = AsyncMock()
     monkeypatch.setattr(ChannelService, "sync_direct_channel_user_permissions", sync)
     monkeypatch.setattr(

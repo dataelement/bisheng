@@ -44,12 +44,12 @@ test('refreshes a cleared alias on focus within the old five-minute cache and pr
     .mockImplementationOnce(async () => response(''))
     .mockImplementationOnce(async () => response('Renamed'));
   const { onChange } = mount();
-  await screen.findByRole('button', { name: 'Previous' });
+  await screen.findByText('Previous');
   await act(async () => { focusManager.setFocused(false); focusManager.setFocused(true); });
-  await screen.findByRole('button', { name: 'qwen-max' });
+  await screen.findByText('qwen-max');
   expect(screen.queryByText('Previous')).toBeNull();
   await act(async () => { focusManager.setFocused(false); focusManager.setFocused(true); });
-  await screen.findByRole('button', { name: 'Renamed' });
+  await screen.findByText('Renamed');
   expect(onChange).toHaveBeenCalledTimes(0);
   expect(fetch).toHaveBeenCalledTimes(3);
 });
@@ -61,12 +61,12 @@ test('keeps the current label on a failed read and applies the next successful e
     .mockImplementationOnce(async () => response('   '));
   const log = jest.spyOn(console, 'error').mockImplementation(() => undefined);
   mount();
-  await screen.findByRole('button', { name: 'Previous' });
+  await screen.findByText('Previous');
   await act(async () => { focusManager.setFocused(false); focusManager.setFocused(true); });
   await waitFor(() => expect(client.getQueryState([QueryKeys.bishengConfig])?.status).toBe('error'));
-  expect(screen.getByRole('button', { name: 'Previous' })).toBeInTheDocument();
+  expect(screen.getByText('Previous')).toBeInTheDocument();
   await act(async () => { focusManager.setFocused(false); focusManager.setFocused(true); });
-  await screen.findByRole('button', { name: 'qwen-max' });
+  await screen.findByText('qwen-max');
   log.mockRestore();
 });
 
@@ -77,8 +77,8 @@ test('refreshes the selected label after 30 seconds while the same conversation 
   fetch.mockImplementationOnce(async () => response('Previous'))
     .mockImplementation(async () => response(''));
   const { onChange } = mount();
-  await screen.findByRole('button', { name: 'Previous' });
+  await screen.findByText('Previous');
   await act(async () => { jest.advanceTimersByTime(30_000); });
-  await screen.findByRole('button', { name: 'qwen-max' });
+  await screen.findByText('qwen-max');
   expect(onChange).toHaveBeenCalledTimes(0);
 });

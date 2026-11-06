@@ -1,6 +1,7 @@
+import { Input, Textarea } from '@bisheng/ui';
 import React, { ChangeEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Input, Textarea } from "../../components/bs-ui/input";
+
 import { Label } from "../../components/bs-ui/label";
 
 type InputProps = {
@@ -40,29 +41,11 @@ export const EditFlowSettings: React.FC<InputProps> = ({
             <span className="edit-flow-span">{t('flow.nameTooLong')}</span>
           )}
         </div>
-        <Input
-          className="mt-2 font-normal"
-          onChange={handleNameChange}
-          type="text"
-          name="name"
-          value={name ?? ""}
-          placeholder="File name"
-          id="name"
-          maxLength={maxLength}
-          showCount
-        />
+        <Input onChange={handleNameChange} type="text" name="name" value={name ?? ""} placeholder="File name" id="name" maxLength={maxLength} showCount className={"mt-2 font-normal"} />
       </Label>
       <Label>
         <span className="font-medium">{t('flow.skillDescription')}</span>
-        <Textarea
-          name="description"
-          id="description"
-          onChange={handleDescriptionChange}
-          value={description ?? ""}
-          placeholder="Flow description"
-          className="mt-2 max-h-[100px] font-normal"
-          rows={3}
-        />
+        <Textarea name="description" id="description" onChange={handleDescriptionChange} value={description ?? ""} placeholder="Flow description" rows={3} textareaClassName={"mt-2 max-h-[100px] font-normal"} />
       </Label>
     </>
   );

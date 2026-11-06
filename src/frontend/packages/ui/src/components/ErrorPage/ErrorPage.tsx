@@ -128,7 +128,7 @@ export function ErrorPage({
   return (
     <div
       role="alert"
-      className={cn('flex min-h-full flex-col items-center justify-center gap-16 bg-white px-4 pt-4', className)}
+      className={cn('flex min-h-full flex-col items-center justify-center gap-16 bg-bg-page px-4 pt-4', className)}
     >
       <div className="flex flex-col items-center gap-4">
         {illustration}
@@ -156,11 +156,11 @@ export function ErrorPage({
 
       <div className="relative flex w-full max-w-[600px] flex-col gap-4 rounded-xl border border-border-base p-4">
         {/* Straddles the border so the card reads as one region to screenshot. */}
-        <span className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-[32px] border border-border-base bg-white px-3 py-1 text-caption text-text-1/80">
+        <span className="absolute -top-4 left-1/2 -translate-x-1/2 rounded-[32px] border border-border-base bg-bg-page px-3 py-1 text-caption text-text-1/80">
           {labels.screenshotHint}
         </span>
         {/* Room for the code plus its inset, so a long value never runs under it. */}
-        <div className="flex flex-col gap-4 pr-32">
+        <div className="flex flex-col gap-4 pr-[136px]">
           {rows.map((row) => (
             <DiagnosticRow key={row.label} label={row.label} value={row.value} />
           ))}
@@ -176,7 +176,7 @@ export function ErrorPage({
             — the first is the light backing plate behind the modules. */}
         <QRCodeSVG
           value={buildQrPayload(diagnostics)}
-          size={80}
+          size={120}
           level="L"
           className="absolute right-4 top-4 [&>path:last-of-type]:fill-blue-500"
         />
