@@ -33,6 +33,16 @@ model_owner_tenant = defaults.model_owner_tenant
 REQUEST = SourceReadRequest("model_default", "evaluation_llm", "current")
 
 
+@pytest.fixture(autouse=True)
+def no_implicit_deployment_role_lookup(monkeypatch):
+    from bisheng.user.domain.models.user_role import UserRoleDao
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("isolated identities must explicitly provide actual fixture roles")
+
+    monkeypatch.setattr(UserRoleDao, "get_user_roles", forbidden)
+
+
 def graph():
     identity = ModelDefaultReadIdentityPort()
     owner = ModelDefaultSourceOwner(identity_port=identity)
@@ -72,7 +82,7 @@ def test_domain_identity_is_private_and_exactly_bound_to_ambient_context(store, 
     if kind == "copy":
         original = copy(original)
     elif kind == "raw_user":
-        original = UserPayload(user_id=7, user_name="raw", tenant_id=101)
+        original = UserPayload(user_id=7, user_name="raw", tenant_id=101, user_role=[])
     with Session(store) as session:
         if kind == "bypass":
             with bypass_tenant_filter(), pytest.raises(ResourceReferenceInvalidError):
