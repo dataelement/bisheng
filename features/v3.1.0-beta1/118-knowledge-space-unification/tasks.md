@@ -5563,6 +5563,42 @@
   **覆盖 AC**: AC-55, AC-56, AC-63, AC-64, AC-70, AC-71, AC-80, AC-85, AC-87, AC-88, AC-89, AC-93\
   **验证 / 完成条件**：配对及既有ledger/permission原采集组合通过，C2静态保持；未集成正式M2/FGA/CLI前不勾完整T162。
 
+## W6平台普通清单与创建真实初值接缝
+
+- [ ] **T695 · 创建初值真实HTTP与窄投影测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_creation_settings.py`\
+  **逻辑 / 测试上下文**：真实路由经原创建Policy、原identity与外部Session读取工作台原配置；无配置/失效默认保ID、系统规则来自真实schema，错误原样传播且零写、无执行模型准入。\
+  **依赖**：T078, T694\
+  **覆盖 AC**: AC-06, AC-07, AC-38, AC-39, AC-40, AC-87\
+  **验证 / 完成条件**：按冻结合同测试先行、≤2叶；目标检查与既有诊断基线比较，真实HTTP/环境E2E另行举证。
+
+- [ ] **T696 · 后台创建初值真实应用与静态路由**
+  **类型 / Owner**：后端 Application / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/application/creation_settings.py`；`src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py`\
+  **逻辑 / 测试上下文**：按W6§14返回闭集ID/名称与系统默认；复用真实Policy及raw default runtime，不跨层查询、不伪资源授权、不返回其他配置。\
+  **依赖**：T695\
+  **配对测试**：T695\
+  **覆盖 AC**: AC-06, AC-07, AC-38, AC-39, AC-40, AC-87\
+  **验证 / 完成条件**：按冻结合同测试先行、≤2叶；目标检查与既有诊断基线比较，真实HTTP/环境E2E另行举证。
+
+- [ ] **T697 · 平台普通清单与创建scope合同测试**
+  **类型 / Owner**：测试 / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/test/knowledgeSpaceContract.test.ts`；`src/frontend/platform/src/test/knowledgeQueryScope.test.tsx`\
+  **逻辑 / 测试上下文**：精确新list/bootstrap/create序列化和conditional管理头，opaque空页继续、身份tenant隔离、迟到mutation不落新scope或跳转、异常保留。\
+  **依赖**：T692\
+  **覆盖 AC**: AC-02, AC-03, AC-05, AC-06, AC-07, AC-87\
+  **验证 / 完成条件**：按冻结合同测试先行、≤2叶；目标检查与既有诊断基线比较，真实HTTP/环境E2E另行举证。
+
+- [ ] **T698 · 平台普通清单与创建API及hook**
+  **类型 / Owner**：前端 Platform / PLATFORM\
+  **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeSpace.ts`；`src/frontend/platform/src/controllers/hooks/knowledge.ts`\
+  **逻辑 / 测试上下文**：按W6§14三方法和scope hooks，现wrapped axios、useInfiniteQuery，普通简化创建不加管理头，高级提交仅捕获的具体管理tenant。\
+  **依赖**：T697, T696\
+  **配对测试**：T697\
+  **覆盖 AC**: AC-02, AC-03, AC-05, AC-06, AC-07, AC-87\
+  **验证 / 完成条件**：按冻结合同测试先行、≤2叶；目标检查与既有诊断基线比较，真实HTTP/环境E2E另行举证。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。

@@ -223,3 +223,13 @@ Root页保零版本/零links，版本及子页不按current/online/enabled/termi
 FlowVersion/AssistantLink使用真实父+tenant+类型键核验，坏父显式报10998，不靠INNER过滤吞掉。APPVersion/ChannelSync无tenant列，正常页经真实父ORM JOIN隔离；另`avalidate_global_orphans(session)->None`只做无payload LIMIT1缺父存在性探针，发现孤儿报机器reason，不读取其他tenant内容。model页核真实server父及tenant相同。模型目录每tenant完整分页一次，不按声明槽重复；Root共享/默认继承名称候选资格及已保存旧名解析仍须后续冻结的真实M2协议，raw全目录不授予跨tenant引用。后续Service只编排分页/既有extractors/精确Target预检与闭集artifact，不写SQL或猜原ID。
 
 孤儿完整性补充：同一`avalidate_global_orphans`还须对当前tenant的AssistantLink作一次LEFT raw父的无payload LIMIT1存在性检查，缺父或父tenant不一致明确失败；仅从合法root批取links不能证明无此类孤儿。该探针每tenant一次，不每root/子页重扫；不新增方法或跨tenant配置读取。
+
+## 14. 平台普通清单、创建初值与 scope 子合同 V1：已冻结
+
+先补原T176/T178真实前置，不增加产品能力。`GET /knowledge/space/creation-settings`为静态路由，沿原`KnowledgeCreationPolicy.prepare(login_user)`核原web凭据和创建菜单/角色，不将普通创建改为仅管理员。应用用例`get_space_creation_settings(login_user, *, session)`用外部native Session读取真实`model_default_read`的`aget_default(linsight_llm, login_user=原identity, session=原session)`；这是修复/显示原配置的读取，不调用严格执行准入或先核所有默认模型。返回闭集`{embedding_model:{id:string,name:string}|null,system_defaults:ProcessingDefaults}`，只投影工作台Embedding原ID/名称；保留已失效原ID供显式修复，不回退其他默认、不选第一个模型、不输出provider/其他配置。系统规则复用已有`system_processing_defaults(0)`纯schema投影；0不作资源查询、授权或持久化。此GET零SQL写/无FGA变更/无任务/无模型执行，普通读取不加管理租户写头。
+
+平台API新增`listVisibleSpaces({keyword?,page_size?,cursor?}={}) -> CursorPage<KnowledgeSpaceInfo>`（列表缺详情字段允许省略，不补造计数），`getCreationSettings() -> SpaceCreationSettings`，`createSpace(body:KnowledgeSpaceCreateRequest,expectedManagementTenantId:number|null) -> KnowledgeSpaceInfo & {initial_permission_result?:现原始结果}`。创建body严格镜像现有KnowledgeSpaceCreateReq，使用embedding_model_id/processing_defaults；无tenant/admin/type/旧model别名。任一高级字段非null时，API必须使用发起时捕获的正整数managementTenantId签`X-Management-Tenant`，缺失则拒绝发送；普通简化创建保持原无头路径。后端仍独立重验当前管理scope。无新通用request路由分类，不将所有普通POST空间操作改为管理操作。
+
+hook新增`useKnowledgeVisibleSpaces(scope,queryWithoutCursor,api?)`（useInfiniteQuery，next_cursor保不透明，空data且has_more=true仍可继续）、`useKnowledgeCreationSettings(scope,api?)`、`useCreateKnowledgeSpace(scope,api?)`。query key带原identity/tenant/managementTenant/view和筛选；mutation开始捕获scope及管理tenant，切scope后旧返回不得给新scope写cache、跳转或返回可被新页面消费的成功值；仅成功后失效发起scope列表，失败保原ApiError。测试port扩相同方法，不设生产mock开关。
+
+后续创建表单只在原ID为正整数字符串时转number；失效/非数字默认显示待修复并要求有效显式选择，禁止NaN→null触发默认回退。T178先做受控规则编辑/父级草稿边界，系统初值必须来自此GET；先不改T179旧上传到默认接线完成。T176拆为列表shell、单叶create、detail另卡，T177目录/版本另冻结；locale由INT统一三语提交，不全局替换仍并列的旧selector标签。
