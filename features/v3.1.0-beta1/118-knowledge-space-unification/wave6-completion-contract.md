@@ -115,6 +115,12 @@ REF在原ReferenceRepository补`alist_inbound_for_owner_page(session,issued_scop
 
 模型确认补充：operation显式必填并由create/get/consume一致核验；target_revisions精确覆盖model:<id>和单server:<id>，值由真实Owner事实规范为64hash，不能把裸hash当目标授权。可信身份捕获排trace，仓储拒trace和秘密，不默默吞非法字段。
 
+### 模型确认稳定身份闭集 V1：已冻结
+
+实际LLM PUT/DELETE仅Web租户管理员入口，本轮不引入API凭据或复用PROC恢复框架。T655/T656原两叶修订为闭集：actor顶层必需`tenant_id,actor_user_id,credential_reference,data_scope`，仅可选`management_tenant_id`，未知键拒绝。执行tenant为当前具体tenant；actor ID正int且非bool；data_scope只现常量`all_visible/personal_only`，不收非真实`all`。management pin如有须等当前执行tenant。
+
+credential严格真实Web五字段`kind,user_id,tenant_id,token_version,expires_at`，kind固定web_session；user_id等actor_user_id，home tenant正int保持原值，token_version非负int，expires_at可解析ISO datetime字符串；不接受嵌套dict/list或任意额外键。home不同于执行tenant必须存在明确相同管理pin，是否真实超管/可信pin由上层原身份重验，仓储不发资格。仓储只校形状，不拿expiry字段替代实际登录有效性；当前权限、原凭据和管理scope在公开命令执行时重新核验。create/get/consume及加载校验统一此闭集，拒provider key的所有别名、任意扩展键与trace/body；不靠可绕过的秘密名称黑名单。
+
 ## 6. J1 全局失败与仅finalize恢复补充 V1：已冻结
 
 原凭据在claim前或受控步骤失效不能使job永远pending重投。原JobRepo增加afail_attempt(session,job_id,*,expected_job_revision,error_code,lease=None)：可信BG与具体tenant、原revision/lease CAS，锁内读取实际Knowledge R/G；相关配置失配持久obsolete，不信任外来configuration。仍未完成的pending/running项失败、保checkpoint/attempt，成功/obsolete不改，重算实际failed/partial_failed并停止本轮dispatch/lease；不从audit重造身份，不擅自完成模型切换。人工retry用新原凭据重验，保持同job/原冻结scope。
