@@ -5,6 +5,8 @@ from copy import deepcopy
 import pytest
 
 from bisheng.api.v1.schemas import ExcelRule, FileProcessBase, KnowledgeFileProcess
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
 from bisheng.knowledge.application.file_processing_adapter import (
     capture_legacy_processing_overrides,
     legacy_rule_from_snapshot,
@@ -138,3 +140,43 @@ def test_new_historical_operation_applies_explicit_overrides_to_old_actual_rules
     )
     assert table.effective_rule.slice_length == 40
     assert old["chunk_size"] == 333 and old["excel_rule"]["slice_length"] == 12
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_web_display_extension_does_not_replace_real_markdown_loader_capability(system_defaults, legacy):
+    rule = FileProcessBase(knowledge_id=40, split_mode="hierarchical")
+    actual = KnowledgeFilePipeline(
+        7,
+        KnowledgeFile(
+            id=81, knowledge_id=40, file_name="Wiki.html", file_source="web_link", split_rule=rule.model_dump_json()
+        ),
+    )
+    assert actual.file_extension == "md" and actual.should_use_hierarchical_split()
+    result = resolve(
+        system_defaults,
+        file_name="Wiki.html",
+        file_source="web_link",
+        legacy_split_rule=rule.model_dump(mode="json") if legacy else None,
+        batch_overrides=None if legacy else {"document": {"split_mode": "hierarchical"}},
+    )
+    assert result.effective_rule.split_mode == actual.split_mode
+    assert result.effective_rule.separator[-1] == "" and result.effective_rule.chunk_overlap == 0
+
+
+def test_saved_null_excel_headers_preserve_real_legacy_loader_fallback(system_defaults):
+    rule = FileProcessBase(knowledge_id=40, excel_rule=ExcelRule(header_start_row=None, header_end_row=None))
+    actual = KnowledgeFilePipeline(
+        7, KnowledgeFile(id=81, knowledge_id=40, file_name="old.xlsx", split_rule=rule.model_dump_json())
+    )
+    assert actual._excel_header_row_indices() == [0, 0]
+    result = resolve(system_defaults, file_name="old.xlsx", legacy_split_rule=rule.model_dump(mode="json"))
+    assert result.effective_rule.header_start_row == result.effective_rule.header_end_row == 1
+
+
+def test_saved_null_append_header_remains_false_like_real_excel_renderer(system_defaults):
+    from bisheng.knowledge.rag.pipeline.loader.utils.md_from_excel import _chunk_fixed_prefix_len
+
+    rule = FileProcessBase(knowledge_id=40, excel_rule=ExcelRule(append_header=None))
+    assert _chunk_fixed_prefix_len([["header"]], 1, rule.excel_rule.append_header) == _chunk_fixed_prefix_len([["header"]], 1, False)
+    result = resolve(system_defaults, file_name="old.xlsx", legacy_split_rule=rule.model_dump(mode="json"))
+    assert result.effective_rule.append_header == 0
