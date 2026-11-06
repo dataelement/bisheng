@@ -711,3 +711,26 @@ ASGI真实默认/use/visible及两sort分支、非法action422，Manager两WorkT
 本前置不依赖待答AC80，不执行namespace/M3。PROC独占T841新test_migration_conversion_schema.py；T842仅新knowledge/domain/schemas/unification_conversion.py及原application/unification_conversion_plan.py两生产叶。根核真实七个dataclass为ConversionCommand、ResourceConversionCommand、InitializeV1Command、TagConversionCommand、TagLinkConversionCommand、DefaultSlotProvenance、DefaultConversionCommand；不是把ConversionPlanBuilder当第八DTO。字段/默认值/frozen/slots/继承完全不变、同一class对象唯一SSOT，纯initial_version_templates同移并显式re-export；App生产者原公开导出和COMMAND_RECORD_TYPES入口保持，原codec lazy type映射不动。新Domain仅stdlib dataclasses/datetime，不反向import App/IO；不复制canonical/hash算法、不镜像协议、不新增SQL/DDL/权限或新业务用例。
 
 新测试缺模块真实红、逐旧公开对象identity/字段与模板实际canonical字节保持，原转换/codec/source/原app消费完整回归；任何老fixture/相同测试初绿如实，不造红。两生产叶固定后交INT/非作者验证再合流。M3实际service/repo/verified batch/恢复outcome仍仅候选，DM原无条件update_time触发器与保时间的实现前置未解，不授权本卡修改trigger/Model/DDL或开始转换。
+
+
+## 49. 六业务来源批量安全展示 V1：已冻结
+
+原T111/112已有目标锁/全租户真实计数/完整摘要，但尚无按原读取资格的展示。此波只补内部批量展示端口与六Owner，不提前关闭原卡，不接公开DELETE/PUT，不补假Coverage ready或任务模型引用。先协议，再六业务可并行；核心消费/HTTP来源分页留后续明确接口。与namespace/AC-80选择无依赖。
+
+唯一frozen slots DTO `SourceDisclosure(source:SourceKey,name:str,version_label:str|None,entry:str|None)`；Port/Runtime与六Owner同名方法 `adisclose_sources(session,*,identity,source_keys:tuple[SourceKey,...])->tuple[SourceDisclosure|None,...]`。每次≤200、输入tuple、空批零SQL/FGA/身份IO，输出数量/顺序一一对应，重复key保原位置，任何展示对象的完整SourceKey须精确匹配输入；不收任意dict。None仅原资格不允许展示（含当前具体tenant之外），当前tenant缺真实业务/版本或元数据坏链不能伪装隐藏，应10994/fail closed。名称/版本来自当前业务安全列，entry只原已存在页面，未知深链给None，不拼假version路由。此DTO仅内部，后续HTTP不得序列化隐藏来源Key/名称/URL。
+
+Runtime使用现AuthenticatedSourceReadIdentity捕获原身份并在批次后核对，保当前具体tenant/context/scope/凭据；foreign source不切ContextVar、不冒充来源tenant、该部分业务SQL/FGA为0，仍由影响核心完整计数阻删除。按SourceType分派，每Owner用真实批量轻投影（不读graph/config/manifest/provider设置）及原loaded-target F048 batch能力，空页不查、不得逐ID调用aresolve_source。资格正常拒绝回None，FGA/SQL/解析异常传递明确失败，不能降格成可删除。禁止新permission层、newadminshortcut、写锁/commit及跨租户新读取权。
+
+协议生产仅新resource_reference/application/source_disclosure.py、新resource_reference/disclosure_composition.py；后者纯构造六Owner和singleton get_runtime，不改现bootstrap，不进行IO。每业务只原Owner与Repo两叶，数据轻DTO放对应Repo；WF visible且非当前另edit；AS原assistant.visible；APP原management_read（不能用根visible替代版本管理资格）；CH原channel.visible、停同步仍展示/计数；KN按实际type对应space/library.visible；defaults沿现own/Root五原key的管理员读取条件，保原存储来源、不复制继承来源。均保持原PublicApiPrincipal/管理边界，不接分享token。
+
+| 卡 | Owner | 实际生产叶（src/backend/bisheng/） | 单测试叶（src/backend/test/knowledge_unification/） |
+| --- | --- | --- | --- |
+| T843/844 | EDGE | resource_reference/application/source_disclosure.py、resource_reference/disclosure_composition.py | test_source_disclosure.py |
+| T845/846 | EDGE | workflow/application/reference_source_owner.py、workflow/domain/repositories/reference_source_repository.py | test_workflow_source_disclosure.py |
+| T847/848 | PERM | assistant/application/reference_source_owner.py、assistant/domain/repositories/reference_source_repository.py | test_assistant_source_disclosure.py |
+| T849/850 | PERM | app_publish/application/reference_source_owner.py、app_publish/domain/repositories/reference_source_repository.py | test_app_source_disclosure.py |
+| T851/852 | EDGE后继 | channel/application/reference_source_owner.py、channel/domain/repositories/reference_source_repository.py | test_channel_source_disclosure.py |
+| T853/854 | root后继 | knowledge/application/reference_source_owner.py、knowledge/domain/repositories/model_reference_repository.py | test_knowledge_source_disclosure.py |
+| T855/856 | PROC后继 | llm/application/model_default_source_owner.py、llm/domain/repositories/model_default_repository.py | test_defaults_source_disclosure.py |
+
+同组先真实红后实现；所有新叶≤600、每实现≤2生产叶。用原数据库和原资格拼装，至少含401源/重复slot预算、foreign无读、非当前WF/APP历史、原资格变化/IO失败、无完整配置列和无写证明。无真实Coverage adapter时影响核心仍拒绝，本波端口不创建ready状态。
