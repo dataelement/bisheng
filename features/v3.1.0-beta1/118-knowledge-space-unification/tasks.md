@@ -5250,6 +5250,48 @@
   **配对测试**：T657\
   **验证 / 完成条件**：配对与原visibility/检索回归全绿，真实ES/Milvus行为由后续E2E验，不先标T102全量完成。
 
+- [ ] **T659 · 检索成功态边界旧fixture对齐**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge/test_knowledge_file_visibility_primary_filter.py`；`src/backend/test/knowledge/test_knowledge_file_visibility_batch.py`\
+  **逻辑 / 测试上下文**：原仅权限/主版本的单测补_successful_file_ids成功集合边界，保原FGA/primary拒绝断言；真实SQL状态由T657覆盖，不连接中间件或绕生产过滤。\
+  **依赖**：T658\
+  **覆盖 AC**: AC-35, AC-48, AC-49, AC-52, AC-53\
+  **验证 / 完成条件**：明确原2失败为新增SQL边界缺fixture，新旧同选集全绿；仅两旧测试叶。
+
+## W6 J1 全局finalize恢复必要结构接缝
+
+- [ ] **T660 · finalize-only重试收据结构测试**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_finalize_retry_receipt_schema.py`\
+  **逻辑 / 测试上下文**：真实SQL CHECK允许0项恢复receipt但负数/非法身份/修订仍拒绝；业务窄资格由query/job Service测试另验。\
+  **依赖**：T645\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先真实红再实现，原正负约束回归保留；仅finalize恢复必须真实Owner组合验证，不伪改成功item。
+
+- [ ] **T661 · finalize-only重试收据模型约束**
+  **类型 / Owner**：基础设施 / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_processing_retry.py`\
+  **逻辑 / 测试上下文**：仅ck_kpr_revision item_count>=0，其余身份与修订约束不变，不把0项伪报1项。\
+  **依赖**：T660\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先真实红再实现，原正负约束回归保留；仅finalize恢复必须真实Owner组合验证，不伪改成功item。
+
+- [ ] **T662 · finalize-only收据结构升级测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_finalize_retry_receipt_migration.py`\
+  **逻辑 / 测试上下文**：DDL-only/实际唯一parent、DM大小写反射、新定义no-op、已知旧check替换、未知定义拒绝，不读写业务数据。\
+  **依赖**：T639\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先真实红再实现，原正负约束回归保留；仅finalize恢复必须真实Owner组合验证，不伪改成功item。
+
+- [ ] **T663 · finalize-only收据结构升级**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`src/backend/bisheng/core/database/alembic/versions/f118_finalize_retry.py`\
+  **逻辑 / 测试上下文**：挂f118_processing_acceptance，仅幂等替换已知check为item_count>=0，复用共享DDL guard，真实双库由202验证。\
+  **依赖**：T662, T661\
+  **覆盖 AC**: AC-34, AC-49, AC-50, AC-54, AC-86\
+  **验证 / 完成条件**：先真实红再实现，原正负约束回归保留；仅finalize恢复必须真实Owner组合验证，不伪改成功item。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。

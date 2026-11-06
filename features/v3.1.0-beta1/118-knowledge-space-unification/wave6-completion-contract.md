@@ -109,6 +109,16 @@ REF在原ReferenceRepository补`alist_inbound_for_owner_page(session,issued_scop
 
 内部impact核心不伪造SourceReader或隐藏名称。批量来源名称/版本入口和逐业务读取资格仍待独立接缝，尚无合法展示资格的来源只计restricted数量；不能仅凭APP根visible展示历史私有版本。最终公开影响接口在后续接线前必须补齐真实Reader。
 
-新ModelDeletePlanRepository独立处理model manifest，复用既有KnowledgeOperationPlan存储但space_id=None、operation=model_update_server/model_delete_server；不把模型ID伪装file/space，不改PROC已冻三元manifest。`acreate_model_delete_plan(session,*,actor_reference,command_digest,targets,target_revisions,inbound_digest,coverage_epoch,inventory_hash,expires_at)`及`aget_model_delete_plan_for_execution(session,*,confirmation_id,actor_reference,command_digest,plan_digest)`/同operation consume，只flush，绑定tenant/稳定原身份/全部目标修订/完整影响摘要/到期时间。身份排除trace_id，不持久化bearer、API key或整个服务请求，仅存规范请求hash；最终当前原资格仍重验。更新清单和删服务才是真实HTTP两变体，单/批模型移除是PUT清单差集，不新增伪既有单模型路由。
+新ModelDeletePlanRepository独立处理model manifest，复用既有KnowledgeOperationPlan存储但space_id=None、operation=model_update_server/model_delete_server；不把模型ID伪装file/space，不改PROC已冻三元manifest。`acreate_model_delete_plan(session,*,operation,actor_reference,command_digest,targets,target_revisions,inbound_digest,coverage_epoch,inventory_hash,expires_at)`及`aget_model_delete_plan_for_execution(session,*,operation,confirmation_id,actor_reference,command_digest,plan_digest)`/同operation consume，只flush，绑定tenant/稳定原身份/全部目标修订/完整影响摘要/到期时间。身份排除trace_id，不持久化bearer、API key或整个服务请求，仅存规范请求hash；最终当前原资格仍重验。更新清单和删服务才是真实HTTP两变体，单/批模型移除是PUT清单差集，不新增伪既有单模型路由。
 
 普通/force执行、原分享prepare→projection→finalize同原生事务、精确公开precheck路径/DTO、批量SourceReader和正式Coverage adapter仍pending。未冻结这些边界前不得改服务清单写入口或声称模型删除已闭合；普通删除任一有效业务引用整次零修改，force只跳已确认引用阻断、保原配置ID与失效绑定的业务规则保持。
+
+模型确认补充：operation显式必填并由create/get/consume一致核验；target_revisions精确覆盖model:<id>和单server:<id>，值由真实Owner事实规范为64hash，不能把裸hash当目标授权。可信身份捕获排trace，仓储拒trace和秘密，不默默吞非法字段。
+
+## 6. J1 全局失败与仅finalize恢复补充 V1：已冻结
+
+原凭据在claim前或受控步骤失效不能使job永远pending重投。原JobRepo增加afail_attempt(session,job_id,*,expected_job_revision,error_code,lease=None)：可信BG与具体tenant、原revision/lease CAS，锁内读取实际Knowledge R/G；相关配置失配持久obsolete，不信任外来configuration。仍未完成的pending/running项失败、保checkpoint/attempt，成功/obsolete不改，重算实际failed/partial_failed并停止本轮dispatch/lease；不从audit重造身份，不擅自完成模型切换。人工retry用新原凭据重验，保持同job/原冻结scope。
+
+若实际所有items已成功，仅Owner/R2 finalize因凭据或投影故障未提交，job保明确global error且failed。此窄场景允许人工retry重置0个item：仅failed/partial_failed、持久error、所有实际items succeeded、pending/failed为0；succeeded/obsolete终态仍禁止。同job新revision/原身份receipt记item_count=0，成功items/attempt/checkpoint完全不动。新claim后只续原Owner.afinalize_and_ack，仍核真实R/G/operation/acceptedR/新lease；不重跑provider或重置索引。Service详情和retry资格复用同一判断，不能按钮和写端冲突。
+
+T660/661只将retry receipt的ck_kpr_revision里item_count>0放宽为>=0，其他tenant/actor/accepted revision条件保持；业务窄例外由实际Repo/Owner判定，不因DDL放宽就允许任意0项retry。T662/663由INT将结构revision挂实际head f118_processing_acceptance，复用现get_check_constraint与table_exists，识别已有新定义为no-op、仅替已知旧定义、未知定义fail closed。DDL-only，不复制任务数据或改最初接受R。
