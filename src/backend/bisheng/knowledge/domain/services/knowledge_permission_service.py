@@ -763,22 +763,9 @@ class F048KnowledgeContainerPermissionAdapter:
         resource_type: str,
         resource_id: str,
     ) -> VerifiedPermissionTarget:
-        reason = _container_rejection(
-            record,
-            actor,
-            resource_type,
-            resource_id,
-            allowed_statuses={"PUBLISHED"},
-        )
-        if reason is not None:
-            raise _reject_container(reason, resource_type, resource_id)
-        return VerifiedPermissionTarget.from_business_service(
-            tenant_id=record.tenant_id,
-            resource_type=record.resource_type,
-            resource_id=record.resource_id,
-            resource_version=record.permission_version,
-            context_version=record.context_version,
-        )
+        # Processing state is not an authorization lifecycle. Conflict gates
+        # belong to the owning use case, independently of its exact F048 action.
+        return F048KnowledgeContainerPermissionAdapter._lifecycle_target(record, actor, resource_type, resource_id)
 
     @staticmethod
     def _lifecycle_target(
