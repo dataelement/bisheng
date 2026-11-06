@@ -1,5 +1,6 @@
 """T865: preserve the original creator exception while bounding native SQL."""
 
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from math import ceil
 from types import SimpleNamespace
@@ -7,8 +8,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.permission import AuthorizationModelMismatchError, PermissionPublishNotReadyError
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.app import App
 from bisheng.database.models.app_version import AppVersion
 from bisheng.open_api.domain.context import (
@@ -16,6 +19,7 @@ from bisheng.open_api.domain.context import (
     reset_current_open_api_principal,
     set_current_open_api_principal,
 )
+from bisheng.permission.application import control_state
 from bisheng.permission.application.identity import (
     PermissionActor,
     reset_current_permission_actor,
@@ -169,7 +173,9 @@ async def test_actual_app_disclosure_creator_semantics_and_bounded_permission_sq
     assert all(len(values) <= 100 for values in case.checks)
 
 
-@pytest.mark.parametrize("changed", [None, "source_revoked", "grant_revoked", "editor", "other_subject", "direct"])
+@pytest.mark.parametrize(
+    "changed", [None, "source_revoked", "grant_revoked", "editor", "other_subject", "direct", "userset", "user_source"]
+)
 async def test_original_custom_creator_roster_policy_stays_identical(batch_case, changed):
     case = batch_case
     await seed(case, 1)
@@ -184,6 +190,10 @@ async def test_original_custom_creator_roster_policy_stays_identical(batch_case,
             await conn.execute(sa.update(PermissionGrantAssignee).values(subject_id="45"))
         elif changed == "direct":
             await conn.execute(sa.update(PermissionGrantAssignee).values(source_type="DIRECT"))
+        elif changed == "userset":
+            await conn.execute(sa.update(PermissionGrantAssignee).values(userset_relation="member"))
+        elif changed == "user_source":
+            await conn.execute(sa.update(PermissionGrantAssignee).values(subject_type="user"))
     original = await case.runtime.check_action(case.actor, target("bulk-0"), "delete")
     assert original is (changed is None)
     assert await case.runtime.batch_check_actions(case.actor, (target("bulk-0"),) * 30, "delete") == (original,) * 30
@@ -421,3 +431,34 @@ async def test_many_sources_of_one_grant_are_complete_and_sql_result_pages_are_b
     assert select_count(case, "permission_grant ") == 1
     assert select_count(case, "permission_grant_assignee") == 3
     assert all("LIMIT" in sql.upper() for sql, _ in case.queries if "FROM permission_grant_assignee" in sql)
+
+
+async def test_batch_repository_has_no_bypass_or_read_side_flush(batch_case, monkeypatch):
+    case = batch_case
+    await seed(case, 1)
+    catalog = await case.runtime.current_catalog()
+    manager = tuple(row.snapshot for row in catalog.models if row.snapshot.model_key == "manager")
+    case.queries.clear()
+    with bypass_tenant_filter():
+        with pytest.raises(PermissionPublishNotReadyError):
+            await case.runtime._state.load_grants_batch(targets=(target("bulk-0"),), models=manager)
+    assert not case.queries
+    async with AsyncSession(case.engine, autoflush=True) as session, session.begin():
+        pending = PermissionGrant(id=9000, resource_type="app", resource_id="pending", model_key="manager")
+        session.add(pending)
+
+        @asynccontextmanager
+        async def original_session():
+            yield session
+
+        monkeypatch.setattr(control_state, "get_async_db_session", original_session)
+        result = await case.runtime._state.load_grants_batch(targets=(target("bulk-0"),), models=manager)
+        assert result[(101, "app", "bulk-0")][0].active
+        assert pending in session.new and pending.tenant_id is None and session.in_transaction()
+        await session.rollback()
+    async with case.engine.connect() as conn:
+        assert (
+            await conn.execute(
+                sa.select(sa.func.count()).select_from(PermissionGrant).where(PermissionGrant.id == 9000)
+            )
+        ).scalar_one() == 0
