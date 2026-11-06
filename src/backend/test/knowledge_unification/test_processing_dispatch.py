@@ -16,7 +16,7 @@ from sqlmodel import Session, select
 
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.common.errcode.permission import PermissionDeniedError
-from bisheng.knowledge.application import model_reference_read, processing_identity
+from bisheng.knowledge.application import model_reference_read, processing_identity, processing_owner
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models import knowledge_file as file_module
 from bisheng.knowledge.domain.models.knowledge import Knowledge
@@ -48,7 +48,7 @@ async def dispatch(application, monkeypatch):
         job = await app.owner.jobs.aget(session, accepted.job_id)
         revision = job.revision
         await session.commit()
-    runtime = await app.owner.aread_current.__globals__["get_knowledge_model_read_runtime"]()
+    runtime = await processing_owner.get_knowledge_model_read_runtime()
 
     @contextmanager
     def sessions():
@@ -83,7 +83,7 @@ async def dispatch(application, monkeypatch):
         "hits": {"hits": deepcopy(sources[body["query"]["match"]["metadata.document_id"]])},
     }
     es.client.scroll.return_value = {"hits": {"hits": []}}
-    vector = SimpleNamespace(col=SimpleNamespace(delete=Mock(), drop=Mock()), add_texts=Mock())
+    vector = SimpleNamespace(col=Mock(spec=handler.Collection), add_texts=Mock())
     provider = Mock(return_value=Mock())
     monkeypatch.setattr(KnowledgeRag, "init_es_vectorstore_sync", lambda *args, **kwargs: es)
     monkeypatch.setattr(KnowledgeRag, "init_milvus_vectorstore", lambda *args, **kwargs: vector)
@@ -123,7 +123,7 @@ async def test_real_handler_finishes_items_and_file_status_then_model_owner_once
         assert (await session.exec(select(KnowledgeFile.status).where(KnowledgeFile.id.in_((81, 82))))).all() == [2, 2]
     assert dispatch.vector.add_texts.call_count == 2
     assert {call.kwargs["model_id"] for call in dispatch.provider.call_args_list} == {11}
-    dispatch.vector.col.drop.assert_not_called()
+    dispatch.vector.col.drop.assert_called_once()
     dispatch.es.client.delete_by_query.assert_not_called()
     await module._execute_processing_job(dispatch.job_id, dispatch.revision)
     assert dispatch.vector.add_texts.call_count == 2
@@ -173,6 +173,7 @@ async def test_partial_real_failure_keeps_source_and_retry_processes_only_failed
     assert dispatch.vector.add_texts.call_count == 2
     assert (await module._execute_processing_job(dispatch.job_id, revision))["state"] == "succeeded"
     assert dispatch.vector.add_texts.call_count == 3
+    dispatch.vector.col.drop.assert_called_once()
 
 
 async def test_revoked_original_credential_fails_durably_without_external_work(dispatch, monkeypatch):
