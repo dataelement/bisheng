@@ -39,13 +39,19 @@ admission = read_fixtures.admission
 
 
 @pytest.fixture
-async def rebuild(admission, monkeypatch):
+async def rebuild(admission, monkeypatch, request):
     context, runtime, _, _ = admission
     with Session(context.sync) as session, session.begin():
         session.execute(
             sa.update(Knowledge)
             .where(Knowledge.id == 40, Knowledge.tenant_id == 101)
-            .values(index_name="idx40", collection_name="col40")
+            .values(
+                index_name="idx40",
+                collection_name="col40",
+                type=1
+                if getattr(request.node, "callspec", SimpleNamespace(params={})).params.get("kind") == "qa"
+                else 3,
+            )
         )
     async with context.sessions() as session:
         change = await App.aprepare_model_change(session, 40, 12, login_user=context.user, operation_id="build-1")
@@ -74,10 +80,9 @@ async def rebuild(admission, monkeypatch):
     monkeypatch.setattr(document.KnowledgeDao, "query_by_id", load)
     monkeypatch.setattr(document.KnowledgeDao, "update_one", save)
     monkeypatch.setattr(read_module, "get_sync_db_session", sessions)
-    for module in (document, qa):
-        # New worker imports use the same original external Session factory.
-        monkeypatch.setattr(module, "get_sync_db_session", sessions, raising=False)
-        monkeypatch.setattr(module, "get_knowledge_model_read_runtime_sync", lambda: runtime, raising=False)
+    # The worker's finalization borrows this same isolated Session factory.
+    monkeypatch.setattr(document, "get_sync_db_session", sessions, raising=False)
+    monkeypatch.setattr(document, "get_knowledge_model_read_runtime_sync", lambda: runtime, raising=False)
 
     events = []
     files = [SimpleNamespace(id=701, status=2, remark=None), SimpleNamespace(id=702, status=2, remark=None)]
@@ -236,7 +241,15 @@ def test_full_source_or_stage_failure_precedes_files_vectors_and_provider(rebuil
             session.execute(sa.delete(LLMModel).where(LLMModel.id == 11, LLMModel.tenant_id == 101))
             session.add(
                 ResourceReferenceTombstone(
-                    target_type="model", target_id="11", tenant_id=101, operation_id="delete-a", stage="deleted"
+                    target_type="model",
+                    target_id="11",
+                    tenant_id=101,
+                    target_tenant_id=101,
+                    operation_id="delete-a",
+                    operation_type="model_delete",
+                    stage="deleted",
+                    actor_type="user",
+                    actor_id="7",
                 )
             )
         elif damage == "no_stage":
@@ -342,3 +355,29 @@ def test_obsolete_after_processing_cannot_publish_or_release_current_stage(rebui
     assert row["model"] == "11" and row["state"] == 3
     assert row["model_transition"]["operation_id"] == "new-build"
     assert state["business_resource_reference"] == rebuild.before["business_resource_reference"]
+
+
+def test_expired_actual_background_lifecycle_cannot_finalize_successful_io(rebuild, monkeypatch):
+    def expire(*args):
+        workers.reset_tenant_context(sender=rebuild.sender)
+        return True
+
+    monkeypatch.setattr(document, "_process_single_file", expire)
+    with pytest.raises(ResourceReferenceInvalidError):
+        execute(rebuild, "document")
+    assert_stage_preserved(rebuild)
+
+
+def test_global_missing_source_index_does_not_become_controlled_partial_success(rebuild):
+    rebuild.es.client.indices.exists.return_value = False
+    with pytest.raises(RuntimeError, match="does not exist"):
+        execute(rebuild, "document")
+    assert_stage_preserved(rebuild)
+
+
+def test_failed_partial_cleanup_preserves_stage_instead_of_publishing_inconsistent_files(rebuild, monkeypatch):
+    monkeypatch.setattr(document, "_process_single_file", Mock(return_value=False))
+    rebuild.es.client.delete_by_query.side_effect = RuntimeError("cleanup unavailable")
+    with pytest.raises(RuntimeError, match="cleanup unavailable"):
+        execute(rebuild, "document")
+    assert_stage_preserved(rebuild)
