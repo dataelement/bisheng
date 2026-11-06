@@ -170,10 +170,14 @@ beforeEach(() => {
     actions: [],
   }));
   mocks.children.mockResolvedValue(page());
-  mocks.parents.mockImplementation(async (_sid: number, id: number) => [
-    { id: 8, file_name: "Parent" },
-    { id, file_name: `Child ${id}` },
-  ]);
+  mocks.parents.mockImplementation(async (_sid: number, id: number) =>
+    id === 8
+      ? [{ id: 8, file_name: "Parent" }]
+      : [
+          { id: 8, file_name: "Parent" },
+          { id, file_name: `Child ${id}` },
+        ],
+  );
   mocks.preview.mockResolvedValue({
     original_url: "https://objects.test/read.pdf",
     preview_url: "",
@@ -276,7 +280,7 @@ it("updates only parent_id for folder and breadcrumb navigation and keeps the ol
   await waitFor(() => expect(mocks.parents).toHaveBeenCalledWith(7, 8));
   fireEvent.click(
     within(
-      screen.getByRole("navigation", { name: "f118.current_folder" }),
+      await screen.findByRole("navigation", { name: "f118.current_folder" }),
     ).getByRole("button", { name: "f118.spaces" }),
   );
   await waitFor(() =>
@@ -402,4 +406,17 @@ it("does not fill a hidden root shell from legacy title storage", async () => {
   expect(screen.queryByText("Unscoped private title")).not.toBeInTheDocument();
   expect(screen.queryByText("Persisted private title")).not.toBeInTheDocument();
   expect(localStorage.getItem("libname")).toBe("Persisted private title");
+});
+it("preserves the server's numeric fallback for a missing ancestor", async () => {
+  mocks.parents.mockResolvedValue([
+    { id: 8, file_name: 8 },
+    { id: 9, file_name: "Current" },
+  ]);
+  mount("/filelib/7?parent_id=9");
+  const nav = await screen.findByRole("navigation", {
+    name: "f118.current_folder",
+  });
+  expect(within(nav).getByRole("button", { name: "8" })).toBeInTheDocument();
+  expect(await screen.findAllByText("Current")).not.toHaveLength(0);
+  expect(mocks.info).not.toHaveBeenCalled();
 });
