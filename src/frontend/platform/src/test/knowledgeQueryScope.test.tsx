@@ -147,7 +147,7 @@ describe("knowledge query scope", () => {
     await waitFor(() => expect(result.current.hasNextPage).toBe(true));
     await act(async () => { await result.current.fetchNextPage(); });
     expect(api.listVisibleSpaces.mock.calls).toEqual([[query], [{ ...query, cursor: "opaque/+==" }]]);
-    expect(result.current.hasNextPage).toBe(false);
+    await waitFor(() => expect(result.current.hasNextPage).toBe(false));
     expect(result.current.data?.pages).toHaveLength(2);
     expect(knowledgeQueryKeys.visible(scope, query)).not.toEqual(knowledgeQueryKeys.visible(scope, { ...query, keyword: "other" }));
   });
