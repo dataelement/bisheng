@@ -451,21 +451,33 @@
     "emptyTags": "暂无标签"
   },
   "f118": {
+    "advanced_settings": "高级设置",
+    "create_space": "新建空间",
     "defaults_title": "默认解析与切分",
     "documents": "普通文档",
+    "edit_space": "编辑空间",
+    "embedding_model": "Embedding模型",
     "future_uploads_only": "修改仅用于后续上传，不会重新处理已有文件。",
     "header_end": "表头结束行",
     "header_start": "表头起始行",
     "integer_at_least": "请输入不小于{{min}}的整数",
     "integer_between": "请输入{{min}}至{{max}}之间的整数",
     "invalid_defaults": "请检查两类规则的必填项和参数范围。",
+    "invalid_embedding_model": "请选择有效的Embedding模型。",
     "load_failed": "加载默认设置失败，请重试。",
     "loading_defaults": "正在加载默认设置…",
+    "loading_space": "正在加载空间设置…",
+    "manage_spaces": "知识空间管理",
     "move_down": "下移",
     "move_up": "上移",
     "pending_separator": "请先添加或清空输入的分隔规则。",
+    "scope_changed": "当前租户或登录身份已变化，请重新打开表单。",
+    "scope_unavailable": "无法确定当前管理租户，请重试。",
     "separator_pattern": "分隔规则{{index}}",
     "separator_position": "规则{{index}}的切分位置",
+    "space_description": "空间描述",
+    "space_name": "空间名称",
+    "spaces": "知识空间",
     "tables": "表格"
   }
 }

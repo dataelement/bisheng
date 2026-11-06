@@ -451,21 +451,33 @@
     "emptyTags": "No tags"
   },
   "f118": {
+    "advanced_settings": "Advanced settings",
+    "create_space": "Create space",
     "defaults_title": "Parsing and splitting defaults",
     "documents": "Documents",
+    "edit_space": "Edit space",
+    "embedding_model": "Embedding model",
     "future_uploads_only": "Applies to future uploads; existing files stay unchanged.",
     "header_end": "Header end row",
     "header_start": "Header start row",
     "integer_at_least": "Enter a whole number of at least {{min}}",
     "integer_between": "Enter a whole number between {{min}} and {{max}}",
     "invalid_defaults": "Check required values and ranges in both rule types.",
+    "invalid_embedding_model": "Select a valid embedding model.",
     "load_failed": "Could not load defaults. Try again.",
     "loading_defaults": "Loading defaults…",
+    "loading_space": "Loading space settings…",
+    "manage_spaces": "Space management",
     "move_down": "Move down",
     "move_up": "Move up",
     "pending_separator": "Add or clear the entered separator rule first.",
+    "scope_changed": "Your tenant or sign-in changed. Reopen the form.",
+    "scope_unavailable": "Could not determine the current management tenant. Try again.",
     "separator_pattern": "Separator rule {{index}}",
     "separator_position": "Split position for rule {{index}}",
+    "space_description": "Space description",
+    "space_name": "Space name",
+    "spaces": "Knowledge spaces",
     "tables": "Tables"
   }
 }
