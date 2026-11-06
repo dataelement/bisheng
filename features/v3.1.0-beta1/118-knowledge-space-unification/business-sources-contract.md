@@ -210,3 +210,7 @@ KnowledgeModelReadRuntime是内部配置消费门面，不是知识数据读取A
 混合批次的所有模型均为 own，或者完整模型 union 为空时，仍由模型 Target Owner 在 source root 前锁 Root/current Tenant 拓扑；空 union 不能跳过该辅助锁阶段。顺序为模型服务→模型→Tenant→KN/默认业务 root；无关默认 JSON 不作为该 own 资格的读取依赖。SQLite 用例核对发出的语句顺序，真实 MySQL/DM8 并发锁行为仍须中央环境验证。
 
 T500 的 Repository 第二叶专供清理 index 身份核验。清理可读取当前 own Knowledge 的真实 index；持久删除 job 在资源行已消失时，只允许同 tenant 的实际 RUNNING job、当前 lease_token 与未过期租约以及冻结 manifest 的 knowledge/index/collection 全部匹配，再返回持久事实。不能从 caller DTO/isFake 取得执行许可；不调用模型或供应商，也不把完整入向 R3 删除协调器标作完成。T551 把实际领取的 job 交给该读取口。
+
+### 旧重建消息的升级边界（T501/T502）
+
+新重建命令必须具有真实当前 transition/pending 和显式 operation/config_revision/index_generation 期望，并核真实后台身份。旧消息仅带 knowledge_id/modelHint/auditUser，缺期望或业务已无 stage 时，在外部 IO 前明确 10998（缺可信身份为 10996）；不能从任务 model 选型，也不能从当下配置补造该旧消息的操作证明。保留业务、队列及诊断，不偷偷改模型/state。本波不新增 legacy metadata-only finalize 框架；M2 正式盘点该类待执行消息，未来 M3 受控转换或运维按新业务操作恢复，相关升级适配未完成前不称全特性可升级。其他已有合法消费任务仍依既有入口，不一概拒绝所有队列。
