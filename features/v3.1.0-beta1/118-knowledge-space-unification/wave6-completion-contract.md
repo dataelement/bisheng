@@ -493,3 +493,6 @@ T762测试→T763唯一生产`knowledge/domain/repositories/unification_control_
 §27详情URL与Breadcrumb词条补充（已冻结）：维持现`/filelib/:id`，可选`?parent_id=<positive safe decimal integer>`表示当前目录；无该参数才是根。新query键不是授权证明，只定位真实后端parent；存在但为空、重复、非法格式、非正数或超safe integer时页面明确无效且不请求root/children，不静默退回根。点击folder或真实breadcrumb仅设置/删除parent_id，保fileStatus及其他原query；切目录沿真实完整scope重新读，不能复活旧行。直达合法子目录只读实际breadcrumb/children，不以root info或root.visible作前置；root info错误不阻止独立目录结果。Header新增可选受控title/description，空字符串仍受控，不以window/storage补SPACE权威；未提供props的原QA分支保兼容。
 
 复用当前@bisheng/ui Breadcrumb折叠能力，ariaLabel用现f118.current_folder；新增唯一键f118.expand_folders（须保{{count}}），中文“展开省略的 {{count}} 层目录”、英文“Show {{count}} hidden folder levels”、日文“省略された {{count}} 階層のフォルダーを表示”。locale由INT独写，T767中英/T768日文，原所有key/value不变；不新建UI组件或设计风格。
+
+
+§24.3旧空操作兼容补充（已冻结）：原legacy add/update/delete允许空字段列表。仅该协议writer对解析后changes=[]保原no-op：仍核实际ambient身份、真实SPACE/tenant和原容器edit等原业务准入，返回实际原schema，不把None改为空数组；不建Plan/J1/虚假item、不推进schema或R/G修订，不生成accepted/completed假任务。新processing precheck DTO的changes min_length=1保持。非空原完整schema+J1同TX逻辑不变；T741原叶先加三操作的空请求、无权限拒绝/SQL零写及两协议原响应测试，再在T742原writer叶窄实现。
