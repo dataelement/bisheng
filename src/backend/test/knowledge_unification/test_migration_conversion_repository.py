@@ -60,7 +60,7 @@ async def database(resource_native, monkeypatch):
         raw.KnowledgeFile,
         [raw.file(1, status=3), raw.file(2, knowledge_id=9001), raw.file(3, file_type=0), raw.file(4, status=7)],
     )
-    await resource_native.insert(raw.Tag, [raw.data("tags", 1), raw.data("tags", 2)])
+    await resource_native.insert(raw.Tag, [raw.data("tags", 1), raw.data("tags", 2) | {"name": "second original tag"}])
     await resource_native.insert(
         raw.TagLink,
         [
