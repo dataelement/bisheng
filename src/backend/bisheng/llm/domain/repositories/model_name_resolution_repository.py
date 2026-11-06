@@ -186,6 +186,9 @@ class ModelNameResolutionRepository:
                 raise ResourceReferenceInvalidError(reason="model_name_provider_owner_mismatch")
         return NameCatalog(tenant_id, topology, configs, servers, models, visible, inherited)
 
+    async def ainspect_catalog(self, session, tenant_id, shared_ids):
+        return await self._catalog(session, tenant_id, shared_ids, ())
+
     async def aprepare_catalog(self, session, tenant_id, shared_ids, frozen_models):
         candidate = await self._catalog(session, tenant_id, shared_ids, frozen_models)
         try:
