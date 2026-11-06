@@ -24,8 +24,11 @@ from bisheng.resource_reference.application.contracts import (
     BindingWriteContext,
     ReferenceSpec,
     ReferenceState,
+    SourceBindingChange,
     SourceKey,
+    SourceType,
     TargetKey,
+    TargetType,
     TransactionIdentity,
     VerifiedReferenceSet,
     normalize_references,
@@ -186,6 +189,62 @@ class ReferenceBindingRuntime:
         return self._prepared(
             session, source_key, candidate, locked, normalized, receipts, targets, extractor_version, effective
         )
+
+    async def aprepare_mixed_source_bindings(
+        self, session: AsyncSession, changes: tuple[SourceBindingChange, ...]
+    ) -> tuple[PreparedSourceBindings, ...]:
+        """Prepare independent roots after one complete physical model lock plan."""
+        if (
+            not isinstance(changes, tuple)
+            or not changes
+            or any(not isinstance(c, SourceBindingChange) for c in changes)
+        ):
+            raise ResourceReferenceInvalidError(reason="reference_mixed_sources_required")
+        tenant_id = self.repository.current_tenant_id()
+        if len({c.source_key for c in changes}) != len(changes) or any(
+            c.source_key.tenant_id != tenant_id
+            or c.source_key.source_type not in (SourceType.MODEL_DEFAULT, SourceType.KNOWLEDGE)
+            or c.source_key.source_version != "current"
+            or any(ref.target.target_type != TargetType.MODEL for ref in c.references)
+            for c in changes
+        ):
+            raise ResourceReferenceInvalidError(reason="reference_mixed_source_scope_invalid")
+        ordered = sorted(
+            changes, key=lambda c: (c.source_key.source_type.value, c.source_key.source_id, c.source_key.source_version)
+        )
+        candidates = []
+        for change in ordered:
+            candidate = await self._aread(session, change.source_key)
+            normalized, targets = self._inputs(
+                candidate, change.references, change.new_source, change.effective, change.lock_source_root
+            )
+            candidates.append((change, candidate, normalized, targets))
+        receipts = await self.verifier.averify_mixed_source_targets(
+            session, tuple((change.source_key, targets) for change, _, _, targets in candidates)
+        )
+        for values in receipts.values():
+            self._check_deleting(values)
+        prepared = []
+        for change, candidate, references, targets in candidates:
+            result = change.lock_source_root(session)
+            if not inspect.isawaitable(result):
+                raise TypeError("async preparation requires an asynchronous root lock")
+            await result
+            locked = await self._aread(session, change.source_key, lock=True)
+            prepared.append(
+                self._prepared(
+                    session,
+                    change.source_key,
+                    candidate,
+                    locked,
+                    references,
+                    receipts[change.source_key],
+                    targets,
+                    change.extractor_version,
+                    change.effective,
+                )
+            )
+        return tuple(prepared)
 
     def apply_source_bindings(self, session: Session, prepared: PreparedSourceBindings):
         return self.bindings.replace_source_bindings(

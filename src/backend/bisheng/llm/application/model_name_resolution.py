@@ -316,6 +316,21 @@ class ModelNameResolutionPort:
     async def assert_plan_current(self, session, tenant_id, *, identity, plan, range=None):
         await self._validate_plan(session, tenant_id, identity=identity, plan=plan, range=range)
 
+    async def resolve_model_alias_current(self, session, tenant_id, requested, *, identity, plan, range=None):
+        resolutions = await self._validate_plan(session, tenant_id, identity=identity, plan=plan, range=range)
+        allowed_aliases = {
+            alias for item in resolutions for alias in (item.resolved.model_name, item.resolved.qualified_name)
+        }
+        if not isinstance(requested, str) or requested not in allowed_aliases:
+            raise _invalid()
+        registered = self._issued[plan]
+        resolved = self._resolve(registered.catalog, requested, registered.scope)
+        if (resolved.model_id, resolved.server_id) not in {
+            (item.resolved.model_id, item.resolved.server_id) for item in resolutions
+        }:
+            raise _invalid()
+        return resolved
+
     async def resolve_model_name_current(self, session, tenant_id, requested, *, identity, plan, range=None):
         resolutions = await self._validate_plan(session, tenant_id, identity=identity, plan=plan, range=range)
         match = next((item.resolved for item in resolutions if item.requested == requested), None)

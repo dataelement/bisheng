@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, SessionTransaction
@@ -113,6 +114,26 @@ class SourceKey:
         _text(self.source_version, "source version", 64)
         if self.source_version == ROOT_GUARD_VERSION:
             raise ValueError("root guard version is reserved for the binding Repository")
+
+
+@dataclass(frozen=True, slots=True)
+class SourceBindingChange:
+    """Internal immutable business command; the caller owns its transaction."""
+
+    source_key: SourceKey
+    references: tuple[ReferenceSpec, ...]
+    extractor_version: str
+    lock_source_root: Callable[[AsyncSession], Any] = field(repr=False, compare=False)
+    new_source: bool = False
+    effective: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.source_key, SourceKey):
+            raise TypeError("a real source key is required")
+        object.__setattr__(self, "references", normalize_references(tuple(self.references)))
+        _text(self.extractor_version, "extractor version", 64)
+        if not callable(self.lock_source_root) or type(self.new_source) is not bool or type(self.effective) is not bool:
+            raise ValueError("trusted source lifecycle and root-lock callback are required")
 
 
 @dataclass(frozen=True, slots=True)
