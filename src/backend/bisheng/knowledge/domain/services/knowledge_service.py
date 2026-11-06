@@ -54,11 +54,13 @@ from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
 from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.models.group_resource import (
     ResourceTypeEnum,
 )
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao
+from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
@@ -890,16 +892,21 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.index_name = generate_knowledge_index_name()
         db_knowledge.collection_name = db_knowledge.index_name
 
-        # Insert into Database
         db_knowledge.user_id = login_user.user_id
-        db_knowledge.tenant_id = login_user.tenant_id
-        db_knowledge = KnowledgeDao.insert_one(db_knowledge)
+        db_knowledge.tenant_id = get_current_tenant_id()
 
-        # The permission mirror is what makes the resource reachable, so it is
-        # built before any external store and the row is removed again if it
-        # cannot be built. See `_project_created_or_undo`.
-        if not skip_hook:
-            cls._project_created_or_undo_sync(login_user, db_knowledge)
+        def project_created(actual):
+            if not skip_hook:
+                run_async_safe(cls._project_library_created(login_user, actual), timeout=60)
+
+        # The actual flushed row drives projection. Knowledge and outgoing
+        # bindings share one SQL transaction; a projection failure rolls both
+        # back without invoking a compensating DAO in another Session.
+        with get_sync_db_session() as session:
+            KnowledgeModelReferenceApplication.create(
+                session, db_knowledge, login_user=login_user, project_created=project_created
+            )
+            session.commit()
 
         # qa knowledge builds its index lazily on first Q&A add (different schema)
         cls._init_knowledge_indices_sync(login_user.user_id, db_knowledge)
@@ -908,28 +915,6 @@ class KnowledgeService(KnowledgeUtils):
         if not skip_hook:
             cls.create_knowledge_hook(request, login_user, db_knowledge)
         return db_knowledge
-
-    @classmethod
-    def _project_created_or_undo_sync(cls, login_user: UserPayload, knowledge: Knowledge) -> None:
-        """Build the permission mirror, or take the knowledge row back out.
-
-        The business row and the permission mirror are written to different
-        places and cannot share a transaction, so the row used to survive a
-        failed mirror. What that leaves behind is a knowledge base that exists
-        in the list and answers every permission question with "projection is
-        not current" — it cannot be opened, and it cannot be deleted either,
-        because deleting also asks the permission layer first.
-
-        A live tenant collected seven of these in one afternoon while the
-        permission runtime was refusing to start after an authorization-model
-        change. Creating them looked like it failed; the rows stayed.
-        """
-        try:
-            run_async_safe(cls._project_library_created(login_user, knowledge), timeout=60)
-        except Exception:
-            logger.exception("knowledge permission projection failed, undoing knowledge_id={}", knowledge.id)
-            KnowledgeDao.delete_knowledge(int(knowledge.id))
-            raise
 
     @classmethod
     def _init_knowledge_indices_sync(cls, invoke_user_id: int, db_knowledge: Knowledge) -> None:
@@ -970,13 +955,17 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.index_name = generate_knowledge_index_name()
         db_knowledge.collection_name = db_knowledge.index_name
         db_knowledge.user_id = login_user.user_id
-        db_knowledge.tenant_id = login_user.tenant_id
-        db_knowledge = await KnowledgeDao.async_insert_one(db_knowledge)
+        db_knowledge.tenant_id = get_current_tenant_id()
 
-        # Same ordering as the sync path: the mirror decides whether the row
-        # survives, so it runs before any external store is touched.
-        if not skip_hook:
-            await cls._aproject_created_or_undo(login_user, db_knowledge)
+        async def project_created(actual):
+            if not skip_hook:
+                await cls._project_library_created(login_user, actual)
+
+        async with get_async_db_session() as session:
+            await KnowledgeModelReferenceApplication.acreate(
+                session, db_knowledge, login_user=login_user, project_created=project_created
+            )
+            await session.commit()
 
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             try:
@@ -1012,17 +1001,6 @@ class KnowledgeService(KnowledgeUtils):
                 db_knowledge,
             )
         return db_knowledge
-
-    @classmethod
-    async def _aproject_created_or_undo(cls, login_user: UserPayload, knowledge: Knowledge) -> None:
-        """Async twin of `_project_created_or_undo_sync`; same contract."""
-
-        try:
-            await cls._project_library_created(login_user, knowledge)
-        except Exception:
-            logger.exception("knowledge permission projection failed, undoing knowledge_id={}", knowledge.id)
-            await KnowledgeDao.async_delete_knowledge(int(knowledge.id))
-            raise
 
     @classmethod
     def create_knowledge_hook(cls, request: Request, login_user: UserPayload, knowledge: Knowledge):
