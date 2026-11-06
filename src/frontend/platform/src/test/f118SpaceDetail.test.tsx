@@ -1,0 +1,405 @@
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { userContext } from "@/contexts/userContext";
+import type { User } from "@/types/api/user";
+import FilesPage from "@/pages/KnowledgePage/detail";
+import Header from "@/pages/KnowledgePage/components/Header";
+
+const mocks = vi.hoisted(() => ({
+  get: vi.fn(),
+  info: vi.fn(),
+  children: vi.fn(),
+  parents: vi.fn(),
+  permissions: vi.fn(),
+  legacyPermission: vi.fn(),
+  legacy: vi.fn(),
+  management: vi.fn(),
+  error: vi.fn(),
+  preview: vi.fn(),
+}));
+vi.mock("@/controllers/request", () => ({
+  default: { get: mocks.get },
+  showApiError: mocks.error,
+}));
+vi.mock("@/controllers/API/permission", () => ({
+  getMyResourcePermissionsApi: mocks.permissions,
+  checkResourceActionApi: mocks.legacyPermission,
+}));
+vi.mock("@/controllers/API", () => ({ updateKnowledgeApi: mocks.legacy }));
+vi.mock("@/contexts/userContext", async () => ({
+  userContext: (await import("react")).createContext({ user: null }),
+}));
+vi.mock("@/hooks/useAdminScope", () => ({ useAdminScope: mocks.management }));
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+    i18n: { resolvedLanguage: "en", loadNamespaces: vi.fn() },
+  }),
+}));
+vi.mock("@/pages/KnowledgePage/components/Paragraphs", () => ({
+  default: () => <output data-testid="legacy-chunks" />,
+}));
+vi.mock("@/pages/KnowledgePage/useKnowledgeStore", () => ({
+  default: () => ({ isEditable: true }),
+}));
+vi.mock("@/pages/KnowledgePage/components/PreviewFile", () => ({
+  default: () => <output data-testid="original-preview" />,
+}));
+
+let user: Partial<User> | null;
+let management: {
+  scope: { scope_tenant_id: number | null; expires_at: null };
+  loading: boolean;
+  refresh: ReturnType<typeof vi.fn>;
+};
+const clients: QueryClient[] = [];
+const child = (id = 11, name = "report.pdf", file_type = 1) => ({
+  id,
+  knowledge_id: 7,
+  file_name: name,
+  file_type,
+  status: 2,
+});
+const page = (data = [child(), child(9, "Folder", 0)]) => ({
+  data,
+  page_size: 40,
+  has_more: false,
+  next_cursor: null,
+});
+const permission = (actions: string[] = []) => ({
+  actions,
+  mode: "INHERIT",
+  sources: [],
+  roster_complete: true,
+});
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => {
+    resolve = yes;
+  });
+  return { promise, resolve };
+}
+function mount(path = "/filelib/7") {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  clients.push(client);
+  let navigate!: ReturnType<typeof useNavigate>;
+  function Navigation() {
+    navigate = useNavigate();
+    const location = useLocation();
+    return (
+      <output data-testid="location">
+        {location.pathname}
+        {location.search}
+      </output>
+    );
+  }
+  const view = () => (
+    <userContext.Provider
+      value={{
+        user,
+        setUser: vi.fn(),
+        savedComponents: [],
+        addSavedComponent: async () => undefined,
+        checkComponentsName: () => false,
+        delComponent: vi.fn(),
+      }}
+    >
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[path]}>
+          <Navigation />
+          <Routes>
+            <Route path="/filelib/:id" element={<FilesPage />} />
+            <Route path="/filelib" element={<p>space-list</p>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </userContext.Provider>
+  );
+  const result = render(view());
+  return {
+    client,
+    go: (next: string) => act(() => navigate(next)),
+    refresh: () => result.rerender(view()),
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    clear: () => storage.clear(),
+    key: (index: number) => [...storage.keys()][index] ?? null,
+    get length() {
+      return storage.size;
+    },
+  });
+  user = { user_id: 7, tenant_id: 1, leaf_tenant_id: 101 };
+  management = {
+    scope: { scope_tenant_id: 202, expires_at: null },
+    loading: false,
+    refresh: vi.fn().mockResolvedValue(undefined),
+  };
+  mocks.management.mockImplementation(() => management);
+  mocks.legacyPermission.mockResolvedValue({ allowed: true });
+  mocks.permissions.mockResolvedValue(permission());
+  mocks.info.mockImplementation(async (id: number) => ({
+    id,
+    name: `Server ${id}`,
+    description: `Description ${id}`,
+    actions: [],
+  }));
+  mocks.children.mockResolvedValue(page());
+  mocks.parents.mockImplementation(async (_sid: number, id: number) => [
+    { id: 8, file_name: "Parent" },
+    { id, file_name: `Child ${id}` },
+  ]);
+  mocks.preview.mockResolvedValue({
+    original_url: "https://objects.test/read.pdf",
+    preview_url: "",
+  });
+  mocks.get.mockImplementation(
+    (url: string, options?: { params?: unknown }) => {
+      const info = url.match(/space\/(\d+)\/info$/);
+      if (info) return mocks.info(Number(info[1]));
+      const parents = url.match(/space\/(\d+)\/folders\/(\d+)\/parent$/);
+      if (parents) return mocks.parents(Number(parents[1]), Number(parents[2]));
+      if (url.endsWith("/children"))
+        return mocks.children(url, options?.params);
+      if (url.endsWith("/preview")) return mocks.preview(url);
+      throw new Error(`unexpected API read: ${url}`);
+    },
+  );
+  Object.assign(window, {
+    libname: ["Unscoped private title", "Unscoped private description"],
+  });
+  localStorage.setItem("libname", "Persisted private title");
+  localStorage.setItem("libdesc", "Persisted private description");
+});
+afterEach(() => {
+  cleanup();
+  clients.splice(0).forEach((client) => client.clear());
+  Reflect.deleteProperty(window, "libname");
+  localStorage.removeItem("libname");
+  localStorage.removeItem("libdesc");
+  vi.unstubAllGlobals();
+});
+
+it.each([false, true])(
+  "mounts ordinary SPACE APIs with actual scope, super=%s",
+  async (superAdmin) => {
+    user = { ...user, is_global_super: superAdmin };
+    const view = mount();
+    expect(await screen.findByText("Server 7")).toBeInTheDocument();
+    expect(screen.getByText("Description 7")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "report.pdf" }),
+    ).toBeInTheDocument();
+    const key = view.client
+      .getQueryCache()
+      .findAll()
+      .map((query) => query.queryKey);
+    expect(JSON.stringify(key)).toContain(superAdmin ? "202" : "101");
+    expect(JSON.stringify(key)).toContain("ordinary");
+    expect(user?.tenant_id).toBe(1);
+    expect(mocks.legacyPermission).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText("Unscoped private title"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Persisted private title"),
+    ).not.toBeInTheDocument();
+    expect(mocks.legacy).not.toHaveBeenCalled();
+  },
+);
+it("mounts visible-only child content when root info fails and never enters legacy chunks", async () => {
+  const error = { status_code: 19000, marker: "original error" };
+  mocks.info.mockRejectedValue(error);
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
+  expect(await screen.findByTestId("original-preview")).toBeInTheDocument();
+  await waitFor(() => expect(mocks.error).toHaveBeenCalledWith(error));
+  expect(
+    mocks.get.mock.calls.every(([url]) => !String(url).endsWith("/download")),
+  ).toBe(true);
+  expect(screen.queryByTestId("legacy-chunks")).not.toBeInTheDocument();
+  expect(mocks.legacyPermission).not.toHaveBeenCalled();
+});
+it("direct child admission uses current folder facts without a root info or visible precondition", async () => {
+  mount("/filelib/7?parent_id=9");
+  expect(
+    await screen.findByRole("button", { name: "report.pdf" }),
+  ).toBeInTheDocument();
+  expect(await screen.findAllByText("Child 9")).not.toHaveLength(0);
+  expect(mocks.parents).toHaveBeenCalledWith(7, 9);
+  expect(mocks.children).toHaveBeenCalledWith(
+    "/api/v1/knowledge/space/7/children",
+    expect.objectContaining({ parent_id: 9 }),
+  );
+  expect(mocks.permissions).toHaveBeenCalledWith("folder", "9");
+  expect(mocks.permissions).not.toHaveBeenCalledWith("knowledge_space", "7");
+  expect(mocks.info).not.toHaveBeenCalled();
+  expect(mocks.legacyPermission).not.toHaveBeenCalled();
+});
+it("updates only parent_id for folder and breadcrumb navigation and keeps the old status filter", async () => {
+  mount("/filelib/7?fileStatus=abnormal");
+  fireEvent.click(await screen.findByRole("button", { name: "Folder" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "fileStatus=abnormal&parent_id=9",
+    ),
+  );
+  const nav = await screen.findByRole("navigation", {
+    name: "f118.current_folder",
+  });
+  fireEvent.click(within(nav).getByRole("button", { name: "Parent" }));
+  await waitFor(() => expect(mocks.parents).toHaveBeenCalledWith(7, 8));
+  fireEvent.click(
+    within(
+      screen.getByRole("navigation", { name: "f118.current_folder" }),
+    ).getByRole("button", { name: "f118.spaces" }),
+  );
+  await waitFor(() =>
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/filelib/7?fileStatus=abnormal",
+    ),
+  );
+  expect(
+    mocks.children.mock.calls.every(
+      ([, query]) => query.file_status?.join() === "3,6,7",
+    ),
+  ).toBe(true);
+});
+it.each([
+  "/filelib/0",
+  "/filelib/nope",
+  "/filelib/7?parent_id=",
+  "/filelib/7?parent_id=-1",
+  "/filelib/7?parent_id=9&parent_id=9",
+  "/filelib/7?parent_id=9007199254740992",
+  "/filelib/7?parent_id=1e2",
+])("rejects invalid route identifiers before any read: %s", async (path) => {
+  mount(path);
+  expect(await screen.findByText("f118.scope_unavailable")).toBeInTheDocument();
+  expect(mocks.get).not.toHaveBeenCalled();
+  expect(mocks.permissions).not.toHaveBeenCalled();
+  expect(mocks.legacyPermission).not.toHaveBeenCalled();
+});
+it("waits for a trusted super management tenant before issuing any resource request", async () => {
+  user = { ...user, is_global_super: true };
+  management = {
+    ...management,
+    scope: { ...management.scope, scope_tenant_id: null },
+    loading: true,
+  };
+  const view = mount();
+  expect(mocks.get).not.toHaveBeenCalled();
+  management = {
+    ...management,
+    scope: { ...management.scope, scope_tenant_id: 202 },
+    loading: false,
+  };
+  view.refresh();
+  expect(await screen.findByText("Server 7")).toBeInTheDocument();
+});
+it("retires delayed info through route ABA instead of reusing a previous opening's title", async () => {
+  const old = deferred<{ id: number; name: string }>();
+  mocks.info
+    .mockReturnValueOnce(old.promise)
+    .mockResolvedValueOnce({ id: 8, name: "Current eight" })
+    .mockResolvedValue({ id: 7, name: "New seven" });
+  const view = mount();
+  await waitFor(() => expect(mocks.info).toHaveBeenCalledWith(7));
+  await view.go("/filelib/8");
+  expect(await screen.findByText("Current eight")).toBeInTheDocument();
+  await view.go("/filelib/7");
+  expect(await screen.findByText("New seven")).toBeInTheDocument();
+  await act(async () => old.resolve({ id: 7, name: "Retired seven" }));
+  expect(screen.queryByText("Retired seven")).not.toBeInTheDocument();
+  expect(mocks.info).toHaveBeenCalledTimes(3);
+});
+it("retires delayed breadcrumb names across folder ABA", async () => {
+  const old = deferred<{ id: number; file_name: string }[]>();
+  mocks.parents
+    .mockReturnValueOnce(old.promise)
+    .mockResolvedValueOnce([{ id: 42, file_name: "Current folder" }])
+    .mockResolvedValue([{ id: 9, file_name: "New nine" }]);
+  const view = mount("/filelib/7?parent_id=9");
+  await waitFor(() => expect(mocks.parents).toHaveBeenCalledWith(7, 9));
+  await view.go("/filelib/7?parent_id=42");
+  expect(await screen.findAllByText("Current folder")).not.toHaveLength(0);
+  await view.go("/filelib/7?parent_id=9");
+  expect(await screen.findAllByText("New nine")).not.toHaveLength(0);
+  await act(async () => old.resolve([{ id: 9, file_name: "Retired nine" }]));
+  expect(screen.queryByText("Retired nine")).not.toBeInTheDocument();
+  expect(mocks.info).not.toHaveBeenCalled();
+});
+it("keeps an empty controlled Header authoritative while old consumers retain their legacy title", async () => {
+  const view = render(
+    <MemoryRouter>
+      <Header fileTitle title="" description="" />
+    </MemoryRouter>,
+  );
+  expect(screen.queryByText("Unscoped private title")).not.toBeInTheDocument();
+  expect(localStorage.getItem("libname")).toBe("Persisted private title");
+  view.rerender(
+    <MemoryRouter>
+      <Header fileTitle />
+    </MemoryRouter>,
+  );
+  expect(await screen.findByText("Unscoped private title")).toBeInTheDocument();
+});
+it.each(["tenant", "identity"])(
+  "does not consume an old title after a %s partition change",
+  async (change) => {
+    const old = deferred<{ id: number; name: string }>();
+    mocks.info
+      .mockReturnValueOnce(old.promise)
+      .mockResolvedValue({ id: 7, name: "Current scoped title" });
+    const view = mount();
+    await waitFor(() => expect(mocks.info).toHaveBeenCalledOnce());
+    user =
+      change === "tenant"
+        ? { ...user, leaf_tenant_id: 202 }
+        : { ...user, user_id: 8 };
+    view.refresh();
+    expect(await screen.findByText("Current scoped title")).toBeInTheDocument();
+    await act(async () => old.resolve({ id: 7, name: "Retired scoped title" }));
+    expect(screen.queryByText("Retired scoped title")).not.toBeInTheDocument();
+  },
+);
+it("does not fill a hidden root shell from legacy title storage", async () => {
+  mocks.info.mockResolvedValue({
+    id: 7,
+    name: "",
+    description: "",
+    actions: [],
+  });
+  mount();
+  expect(
+    await screen.findByRole("button", { name: "report.pdf" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Unscoped private title")).not.toBeInTheDocument();
+  expect(screen.queryByText("Persisted private title")).not.toBeInTheDocument();
+  expect(localStorage.getItem("libname")).toBe("Persisted private title");
+});
