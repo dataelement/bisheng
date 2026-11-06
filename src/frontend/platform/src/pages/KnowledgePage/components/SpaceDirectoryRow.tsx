@@ -1,12 +1,19 @@
 import { Button, Dropdown, DropdownItem } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
+import { useContext, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FileIcon, type FileType } from "@/components/bs-icons/file";
 import { TableCell, TableRow } from "@/components/bs-ui/table";
 import type { KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
+import { locationContext } from "@/contexts/locationContext";
+import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { StatusIndicator } from "./KnowledgeFileStatus";
+import { SpaceVersionHistorySheet } from "./SpaceVersionHistorySheet";
 
 interface SpaceDirectoryRowProps {
+  scope: KnowledgeQueryScope;
+  spaceId: number;
+  parentId: number | null;
   item: KnowledgeSpaceChild;
   open: boolean;
   actions: readonly string[];
@@ -19,6 +26,9 @@ interface SpaceDirectoryRowProps {
   onDownload: () => void;
 }
 export function SpaceDirectoryRow({
+  scope,
+  spaceId,
+  parentId,
   item,
   open,
   actions,
@@ -31,8 +41,35 @@ export function SpaceDirectoryRow({
   onDownload,
 }: SpaceDirectoryRowProps) {
   const { t } = useTranslation("knowledge");
+  const { appConfig } = useContext(locationContext);
   const folder = item.file_type === 0;
   const known = folder || item.file_type === 1;
+  const historyEnabled =
+    appConfig.versionManagementEnabled === true &&
+    item.file_type === 1 &&
+    item.is_multi_version === true;
+  const { identityKey, tenantId, managementTenantId, view } = scope;
+  // Every scope/target/feature transition retires the previous opening forever.
+  const epoch = useMemo(
+    () => ({
+      scope: { identityKey, tenantId, managementTenantId, view },
+      spaceId,
+      parentId,
+      fileId: item.id,
+      enabled: historyEnabled,
+    }),
+    [
+      identityKey,
+      tenantId,
+      managementTenantId,
+      view,
+      spaceId,
+      parentId,
+      item.id,
+      historyEnabled,
+    ],
+  );
+  const [history, setHistory] = useState<typeof epoch | null>(null);
   return (
     <TableRow>
       <TableCell>
@@ -86,6 +123,14 @@ export function SpaceDirectoryRow({
                 {!loading && !error && actions.includes("rename") && (
                   <DropdownItem onSelect={onRename}>{t("rename")}</DropdownItem>
                 )}
+                {historyEnabled &&
+                  !loading &&
+                  !error &&
+                  actions.includes("visible") && (
+                    <DropdownItem onSelect={() => setHistory(epoch)}>
+                      {t("f118.version_history")}
+                    </DropdownItem>
+                  )}
                 {!folder &&
                   !loading &&
                   !error &&
@@ -107,6 +152,16 @@ export function SpaceDirectoryRow({
             </Button>
           </Dropdown>
         )}
+        <SpaceVersionHistorySheet
+          scope={epoch.scope}
+          spaceId={epoch.spaceId}
+          parentId={epoch.parentId}
+          fileId={epoch.fileId}
+          open={epoch.enabled && history === epoch}
+          onOpenChange={(next) => {
+            if (!next) setHistory(null);
+          }}
+        />
       </TableCell>
     </TableRow>
   );
