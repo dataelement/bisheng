@@ -55,11 +55,7 @@ interface DirectoryProps extends FilesProps {
 }
 type Epoch = { prefix: readonly unknown[] };
 type RowLifetime = { retired: boolean };
-type Target = {
-  epoch: Epoch;
-  item: KnowledgeSpaceChild;
-  rowLifetime?: RowLifetime;
-};
+type Target = Edit & { item: KnowledgeSpaceChild };
 type Menu = {
   token: Target;
   actions: string[];
@@ -199,14 +195,17 @@ function Directory({
   });
   const active = keyword ? search : ordinary;
   const hasMore = keyword ? search.data?.has_more : ordinary.hasNextPage;
-  const rows = [
-    ...new Map(
-      (keyword
-        ? (search.data?.data ?? [])
-        : (ordinary.data?.pages.flatMap((result) => result.data) ?? [])
-      ).map((item) => [item.id, item]),
-    ).values(),
-  ];
+  const rows = useMemo(
+    () => [
+      ...new Map(
+        (keyword
+          ? (search.data?.data ?? [])
+          : (ordinary.data?.pages.flatMap((result) => result.data) ?? [])
+        ).map((item) => [item.id, item]),
+      ).values(),
+    ],
+    [keyword, search.data, ordinary.data],
+  );
   const rowLifetimes = useRef(new Map<string, RowLifetime>());
   const rowKeys = new Set(rows.map(rowKey));
   for (const [key, lifetime] of rowLifetimes.current) {
