@@ -1,14 +1,17 @@
 """T610: real SQL query boundaries, retry provenance and broker recovery CAS."""
 
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 
-from bisheng.common.errcode.knowledge import KnowledgeProcessingJobNotFoundError
+from bisheng.common.errcode.knowledge import KnowledgeProcessingJobNotFoundError, ResourceReferenceInvalidError
 from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.repositories.processing_job_repository import ProcessingConfiguration
+from bisheng.worker import tenant_context as workers
 from test.knowledge_unification.test_job_repo import (
     clock as clock,
 )
@@ -45,6 +48,81 @@ def job_query_tenant_filters(monkeypatch):
     monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
     monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", names)
     tenant_filter.register_tenant_filter_events()
+
+
+@pytest.fixture
+def actual_processing_task(job_tenant, monkeypatch):
+    sender = SimpleNamespace(
+        name="bisheng.worker.knowledge.processing_jobs.execute_processing_job",
+        request=SimpleNamespace(id="actual-attempt", headers={"tenant_id": 101}, called_directly=False),
+    )
+    monkeypatch.setattr(workers, "current_task", SimpleNamespace(_get_current_object=lambda: sender))
+    workers.restore_tenant_context(sender=sender)
+    try:
+        yield sender
+    finally:
+        workers.reset_tenant_context(sender=sender)
+
+
+async def test_failed_attempt_records_actual_counts_and_can_retry_fresh_actor(
+    job_session, repository, configuration, actual_processing_task
+):
+    root = await job_session.get(Knowledge, 1)
+    root.index_generation = configuration.index_generation
+    await job_session.flush()
+    result = await create(repository, job_session, configuration)
+    lease = await repository.aclaim(job_session, result.job.id, configuration=configuration)
+    first = await repository.aclaim_next_item(job_session, lease, configuration=configuration)
+    await repository.acomplete_item(job_session, first.lease, configuration=configuration, succeeded=True)
+    second = await repository.aclaim_next_item(job_session, lease, configuration=configuration)
+    await repository.asave_checkpoint(
+        job_session, second.lease, configuration=configuration, step="page", checkpoint={"page": 2}
+    )
+    failed = await repository.afail_attempt(
+        job_session, result.job.id, expected_job_revision=result.job.revision, error_code=201, lease=lease
+    )
+    assert failed.state == "partial_failed" and (failed.succeeded_count, failed.failed_count, failed.pending_count) == (
+        1,
+        1,
+        0,
+    )
+    assert second.item.state == "failed" and second.item.checkpoint == {"page": 2}
+    assert not failed.pending_dispatch
+    retry = await repository.aretry_failed(
+        job_session,
+        failed.id,
+        idempotency_key="new-authority",
+        expected_job_revision=failed.revision,
+        actor_user_id=12,
+        actor_reference={"actor_id": 12},
+        configuration=configuration,
+    )
+    assert retry.job.state == "accepted" and first.item.state == "succeeded" and second.item.state == "pending"
+
+
+async def test_failure_cas_reads_actual_configuration_and_never_rebases_from_caller(
+    job_session, repository, configuration, actual_processing_task
+):
+    result = await create(repository, job_session, configuration)
+    root = await job_session.get(Knowledge, 1)
+    root.model_config_revision = configuration.model_config_revision + 1
+    await job_session.flush()
+    assert (
+        await repository.afail_attempt(
+            job_session, result.job.id, expected_job_revision=result.job.revision + 1, error_code=201
+        )
+        is None
+    )
+    obsolete = await repository.afail_attempt(
+        job_session, result.job.id, expected_job_revision=result.job.revision, error_code=201
+    )
+    assert obsolete.state == "obsolete" and not obsolete.pending_dispatch
+
+
+async def test_failure_requires_actual_background_proof(job_session, repository, configuration):
+    result = await create(repository, job_session, configuration)
+    with pytest.raises(ResourceReferenceInvalidError):
+        await repository.afail_attempt(job_session, result.job.id, expected_job_revision=0, error_code=201)
 
 
 async def test_job_pages_are_complete_and_stable_for_tied_acceptance_time(job_session, repository, configuration):
