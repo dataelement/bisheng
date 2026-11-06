@@ -286,9 +286,10 @@ async def test_original_super_shortcut_is_current_tenant_only_and_narrowed_actor
         PermissionActor(user_id=11, tenant_id=101, super_admin=True, data_scope="personal_only")
     )
     native.identity = UserPayload(user_id=11, tenant_id=101, user_role=[])
+    native.decisions.allowed = False  # Channel keeps its existing FGA policy, outside knowledge-only scope governance.
     try:
         assert await read(native, (source(),)) == (None,)
-        assert not native.decisions.calls
+        assert len(native.decisions.calls) == 1  # A narrowed super must not use the existing unconditional shortcut.
     finally:
         reset_current_permission_actor(actor_token)
 
