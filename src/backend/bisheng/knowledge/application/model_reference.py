@@ -170,8 +170,54 @@ class KnowledgeModelReferenceApplication:
             row,
             runtime,
         )
-        _issued[plan] = (ref(plan), TransactionIdentity.capture(session), cls._facts(row), deepcopy(transition))
+        _issued[plan] = (
+            ref(plan),
+            TransactionIdentity.capture(session),
+            cls._facts(row),
+            cls._plan_values(plan),
+            bindings,
+            runtime,
+            row,
+        )
         return plan
+
+    @staticmethod
+    def _plan_values(plan):
+        bindings = plan.bindings
+        verified = bindings.verified
+        context = verified.context
+        # Frozen DTOs carry values, not authority. Keep a detached manifest of
+        # every consumed value, including the original complete receipt plan.
+        return deepcopy(
+            (
+                plan.knowledge_id,
+                plan.tenant_id,
+                plan.operation_id,
+                plan.model,
+                plan.transition,
+                plan.expected_revision,
+                plan.expected_generation,
+                plan.new_generation,
+                plan.changed,
+                bindings.source_key,
+                bindings.expected_revision,
+                bindings.new_revision,
+                bindings.effective,
+                verified.references,
+                verified.extractor_version,
+                context.source_key,
+                context.expected_root_revision,
+                context.locked_root_revision,
+                context.locked_targets,
+                context.old_references_digest,
+                context.receipt_schema_version,
+                id(context.transaction),
+                tuple(
+                    (id(receipt), receipt.source_key, receipt.target, id(receipt.issuer), receipt.schema_version)
+                    for receipt in context.receipts
+                ),
+            )
+        )
 
     @classmethod
     def _check_plan(cls, session, plan):
@@ -182,7 +228,14 @@ class KnowledgeModelReferenceApplication:
             issued[1].assert_current(session)
         except (TypeError, ValueError) as error:
             raise ResourceReferenceInvalidError(reason="knowledge_model_plan_transaction") from error
-        if cls._facts(plan.row) != issued[2] or plan.transition != issued[3]:
+        if (
+            plan.bindings is not issued[4]
+            or plan.runtime is not issued[5]
+            or plan.row is not issued[6]
+            or cls._plan_values(plan) != issued[3]
+        ):
+            raise ResourceReferenceInvalidError(reason="knowledge_model_plan_not_issued")
+        if cls._facts(plan.row) != issued[2]:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_model_plan_changed")
         cls.repository._bound(session, plan.row)
 
