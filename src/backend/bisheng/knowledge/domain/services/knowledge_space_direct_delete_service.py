@@ -118,7 +118,9 @@ class KnowledgeSpaceDirectDeleteService:
 
         knowledge = Knowledge(**manifest["knowledge"])
         if step == "es":
-            store = await asyncio.to_thread(KnowledgeRag.init_knowledge_es_vectorstore_sync, knowledge=knowledge)
+            store = await asyncio.to_thread(
+                KnowledgeRag.init_knowledge_es_cleanup_sync, knowledge=knowledge, deletion_job=job
+            )
             if await asyncio.to_thread(store.client.indices.exists, index=knowledge.index_name):
                 query = {"terms": {"metadata.document_id": file_ids}}
                 result = await asyncio.to_thread(store.client.delete_by_query, index=knowledge.index_name, query=query)
@@ -130,10 +132,8 @@ class KnowledgeSpaceDirectDeleteService:
                     raise RuntimeError("knowledge deletion left Elasticsearch chunks")
             return
         if step == "milvus":
-            from bisheng.core.ai import FakeEmbeddings
-
             store = await asyncio.to_thread(
-                KnowledgeRag.init_knowledge_milvus_vectorstore_sync, 0, knowledge=knowledge, embeddings=FakeEmbeddings()
+                KnowledgeRag.init_knowledge_milvus_cleanup_sync, knowledge=knowledge, deletion_job=job
             )
             if store.col is not None:
                 expression = f"document_id in {file_ids}"
