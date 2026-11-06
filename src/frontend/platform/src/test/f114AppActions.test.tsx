@@ -16,10 +16,31 @@ it('separates basic management from private content and never uses owner identit
   expect(appActionState([]).management).toBe(false)
 })
 
-it.each(['use', 'unknown'])('does not infer management from unexpected wire action %s', action => {
+it.each(['use', 'unknown', 'share', 'owner'])('does not infer management from unexpected wire action %s', action => {
   const state = appActionState([action as HostedAppAction])
   expect(state).toEqual({ management: false, edit: false, publish: false,
     unpublish: false, delete: false, managePermission: false, rebuild: false })
+})
+
+it.each([
+  ['edit', 'edit'],
+  ['publish', 'publish'],
+  ['unpublish', 'unpublish'],
+  ['delete', 'delete'],
+  ['manage_permission', 'managePermission'],
+] as const)('visible plus %s grants only that independent management action', (action, stateKey) => {
+  expect(appActionState(['visible', action])).toEqual({
+    management: true, edit: false, publish: false, unpublish: false,
+    delete: false, managePermission: false, rebuild: false,
+    [stateKey]: true,
+  })
+})
+
+it('visible together with an unknown action grants no management action', () => {
+  expect(appActionState(['visible', 'share' as HostedAppAction])).toEqual({
+    management: false, edit: false, publish: false, unpublish: false,
+    delete: false, managePermission: false, rebuild: false,
+  })
 })
 
 
