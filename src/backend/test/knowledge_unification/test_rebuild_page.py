@@ -142,3 +142,19 @@ def test_empty_source_never_turns_unparsed_failure_into_success(status, expected
         is expected
     )
     vector.add_texts.assert_not_called()
+
+
+def test_actual_target_reset_uses_business_scope_without_provider_or_owner_finalize(rebuild):
+    rebuild.vector.col = Mock(spec=module.Collection)
+    assert module.reset_processing_target(space_id=40, invoke_user_id=987, **rebuild.arguments)
+    rebuild.vector.col.drop.assert_called_once()
+    module.LLMService.get_bisheng_knowledge_embedding_sync.assert_not_called()
+    fixtures.assert_stage_preserved(rebuild)
+
+
+def test_target_reset_rejects_obsolete_generation_before_vector_io(rebuild):
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        module.reset_processing_target(
+            space_id=40, invoke_user_id=987, **{**rebuild.arguments, "expected_index_generation": "obsolete"}
+        )
+    assert rebuild.events == []
