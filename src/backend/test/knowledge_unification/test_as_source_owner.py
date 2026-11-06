@@ -17,6 +17,7 @@ from bisheng.common.errcode.assistant import AssistantNotExistsError
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.core.context.tenant import set_visible_tenant_ids
+from bisheng.core.database import tenant_filter
 from bisheng.core.database.tenant_filter import register_tenant_filter_events
 from bisheng.database.models.assistant import Assistant, AssistantLink
 from bisheng.database.models.session import MessageSession
@@ -36,6 +37,15 @@ def source_tenant(tenant_context):
 
 @pytest.fixture
 async def source_db(tmp_path, source_tenant, monkeypatch):
+    # Other isolated source fixtures restrict discovery to their own tables.
+    # The global listener is registered once, so this fixture must declare its
+    # actual isolation tables independently of collection/execution order.
+    models = (Assistant, AssistantLink, ShareLink, MessageSession)
+    monkeypatch.setattr(
+        tenant_filter,
+        "_tenant_aware_tables",
+        tenant_filter._tenant_aware_tables | {model.__tablename__ for model in models},
+    )
     register_tenant_filter_events()
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'source.db'}")
     async with engine.begin() as connection:
