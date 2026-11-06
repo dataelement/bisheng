@@ -40,6 +40,8 @@ async def test_unconfigured_factories_fail_closed():
 async def test_actual_existing_register_installs_separate_authorities_without_io():
     composition.register()
     hosted = await access.get_hosted_app_reference_runtime()
+    composition.register()
+    assert await access.get_hosted_app_reference_runtime() is hosted
     user = await access.get_hosted_app_user_reference_runtime()
     q = PreviewQualification(101, "actual-app", "version", 22, "approval", 1, 2)
     review = await access.get_hosted_app_user_reference_runtime(q)
