@@ -6414,7 +6414,7 @@
 
 - [ ] **T791 · 目录当前容器上传入口测试**
   **类型 / Owner**：测试 / PLATFORM\
-  **写入文件**：`src/frontend/platform/src/test/f118SpaceDirectory.test.tsx`\
+  **写入文件**：`src/frontend/platform/src/test/f118SpaceDirectoryUpload.test.tsx`\
   **逻辑 / 测试上下文**：W6§36实际暂存→SPACE注册→按真实ID状态，原容器upload_file、scope/parent/ABA退休，不经legacy处理或新增edit。\
   **依赖**：T790\
   **覆盖 AC**: AC-03, AC-09, AC-10, AC-11, AC-30, AC-31, AC-43, AC-55, AC-86\

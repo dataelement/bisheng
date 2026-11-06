@@ -574,3 +574,5 @@ T795先测试→T796只扩现`permission/application/migration_read.py`，新增
 每个真实tuple key严格恰user/relation/object三个非空字符串（各有界4096，不含NUL）；condition或未知权威字段阻断，不静默删除。每yield前重验reader仍open、客户端仍原store/model；输出闭集fact，不泄露raw key至错误文本。普通共享读取aget_shared_server_ids及原tenant/native TX限制完全保持。全Store事实供§34同run原基线，不代表全主体×资源授权矩阵已核；M4仍按原冻结SQL/compiler及实际既定用例验证。
 
 §34全局freeze续跑澄清：原子性要求不能存在preparing/未冻与已冻混合；不要求M3/M4各tenant后继阶段锁步。全部tenant已冻结、tenant集合/writer/原baseline及plan完全一致、无failed时，合法baseline_frozen/converting/backfilling/verifying/verified/completed阶段差异仍返回同一原global proof并零flush，不重盘点/重冻/倒退阶段。任一failed沿原显式恢复协议，不借getter恢复；未解释的证据/集合差异继续拒绝。
+
+§36测试叶澄清：原f118SpaceDirectory.test.tsx已达600行，T791采用新f118SpaceDirectoryUpload.test.tsx单叶，复用实际Files/FilesUpload与wrapped API验证入口全链；原22目录断言保持并列入必跑回归，不压缩或移除原断言以腾行。生产Owner与5叶范围不变。
