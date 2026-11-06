@@ -498,15 +498,22 @@ class KnowledgeUtils(BaseService):
     @classmethod
     async def process_rebuild_file(cls, db_file, req_data, login_user_id: int, login_user_name: str):
         """Shared logic to rebuild a knowledge file with new rules."""
-        from bisheng.common.errcode.knowledge import KnowledgeNotExistError
+        from bisheng.common.errcode.http_error import NotFoundError
+        from bisheng.common.errcode.knowledge import KnowledgeNotExistError, KnowledgeProcessingConflictError
         from bisheng.knowledge.application.file_processing_adapter import legacy_rule_from_snapshot
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+        from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
         from bisheng.worker.knowledge import file_worker
 
+        if db_file.knowledge_id != req_data.knowledge_id:
+            raise NotFoundError.http_exception()
         knowledge = await KnowledgeDao.aquery_by_id(db_file.knowledge_id)
         if knowledge is None:
             raise KnowledgeNotExistError()
+        require_space_processing_idle(knowledge, operation="legacy_file_rebuild")
+        if db_file.status in {1, 4, 5}:
+            raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
         actual = cls.processing_snapshot_for_legacy_request(
             req_data,
             knowledge=knowledge,
