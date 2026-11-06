@@ -616,3 +616,14 @@ T811/T812由MIG在原codec两叶补闭集：queued_task_orphan仅tasks/global/te
 §37目标模板纯协议补充：T813/T814在现permission.application.migration_read公开无参`target_authorization_model_checksum()->str`，内部只对仓库SSOT build_authorization_model_f048()计算authorization_model_checksum，不IO/seed/bootstrap、不读旧pin或接收CLI裸hash。M2 app经permission application协议取得目标模板checksum，禁止Knowledge application直接import core.openfga（C4/RULE-9）。旧pin仍是原基线授权模型，不能冒目标版本。
 
 §39旧read夹具T815单叶已授权：test_knowledge_version_service_read.py原3项保原业务断言，补真实身份/tenant/loaded-target fixture，不以假Reader整返回绕新门禁。原Service.list_versions_for_file仅将新read的SpaceFileNotFound窄译回既有HTTP404及原version chain not found说明；PermissionDenied等保持真实错误，不将全部异常伪装404，不动其他write。原7路径控制另13项既有异常/无tenant失败如实保留。
+
+
+## 41. 平台真实文件行只读版本历史子合同 V1：已冻结
+
+由T816–T821三组测试/实现接线，INT独占T822三语词条。A仅types/api/app.ts与contexts/locationContext.tsx：映射实际env `knowledges.version_management.enabled`，缺失/false默认关闭，仅严格true开启；AppConfig类型可保原simhash_similarity_threshold，不消费或制造新开关。B仅新controllers/API/knowledgeVersions.ts与pages/KnowledgePage/components/SpaceVersionHistorySheet.tsx；C仅原Files.tsx与SpaceDirectoryRow.tsx。每实现卡最多两生产叶，Files只透传完整scope/space/parent，不在596行文件加面板状态；context旧过长不扩张为新业务Owner。所有新叶≤600行，读当前设计规范和已落地组件；不引入库、样式体系或strict/lint抑制。
+
+沿旧client实际历史入口条件：featureEnabled && 非folder && is_multi_version，并由现lazy getMyPermissions(knowledge_file,id)确认visible才展示。历史不要求SUCCESS/管理员/file.edit/space或root可见；管理入口原资格不动。Dropdown关闭清actions不能当作权限撤销立即关面板。行点击捕获可信target/open token，后端仍以实际file.visible逐条裁剪。只typed GET原 `/api/v1/knowledge/space/file/{fid}/versions`，正安全整数及AbortSignal，保原ApiError；完整镜像VersionListResponse/VersionEntry的nullable code/uploader/time/status/current_primary_version_no，不造值。不接版本删除/链接/合并/set-primary/预览/下载动作，不改client或后端。
+
+Sheet props为scope:KnowledgeQueryScope、spaceId、parentId:number|null、fileId:number|null、open、onOpenChange及同形测试readPort。仅open读取，复用现bs-ui Sheet与TanStack Query；key含完整scope/space/parent/file及每opening/实例epoch，queryFn消费AbortSignal。关闭/卸载/切scope/parent/file/行消失/flag关闭永久退休该opening，只取消自己的请求；A→空→A不复活旧响应。不得共享全局key或用cancelRefetch:false绕过隔离，结果不能异步重开Sheet。标题来自当前真实DTO，hidden primary只按后端visible anchor/current_primary_version_no=null显示；空/未知字段中性占位，错误不显示旧缓存metadata，原ApiError保留供重试。
+
+四新测试叶：knowledgeVersionFeature.test.tsx、knowledgeVersionsContract.test.ts、f118SpaceVersionHistory.test.tsx、f118SpaceDirectoryHistory.test.tsx（路径若现测试组织不同可在首提交前精确纠正，不扩生产叶）。覆盖flag缺失/false/true、仅子树visible、custom历史裁剪/hidden primary/null、读错重试、完整scope/parent/file/open ABA及abort、菜单关闭不误退休、实际row→Sheet→API、原rename/download/QA回归。原目录600行测试保持不加字。INT新增f118.version_history/version_no/primary_version/version_uploader/version_upload_time/no_visible_versions/document_code七三语键，其他loading/retry/fileName/status/bs:close复用原键。此slice仅原T177后继，完整版本写入与其他高级功能保持待办。

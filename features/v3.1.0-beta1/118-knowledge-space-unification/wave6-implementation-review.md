@@ -155,3 +155,14 @@ metadata主树五路径70通过，EDGE固定独立复核77项及S/D只读scope�
 实际从`v310b1_f004_workflow_soft_delete`升级到`f118_finalize_retry`，180张旧业务表共1617行的原列计数及确定摘要前后完全相同，8张新增账本表均为0行。正式证据在独立项目`evidence/preparatory-clone-neutral-ddl.json`，SHA256 `c10677f9c6d610e53514f5e34b083de1cff93b3f1b45a6a21989585839af31ad`；无凭据的执行脚本同目录`preparatory-clone-neutral-ddl-probe.py`。原后端仍是旧标准镜像，启动时间2026-11-06T12:16:13.795554937Z，未重启。
 
 这是准备阶段克隆演练，不是停服一致备份、正式M2冻结、M3转换/回填、恢复或新版E2E；T161–T174、T202/T203继续待办。正式维护仍按§26停服后重新备份、盘点并冻结，不复用本次克隆摘要作正式基线。
+
+
+## 原生读取、M2编排与版本读取联装（2026-11-07）
+
+受测主树 `44712aff422e8b87f9d7dd41ea90b93d1623c558`，本次整个test/knowledge_unification除明确未收集的TCP监听mock合同模块，**3582 passed、52910 warnings、127.16秒**，无fail/skip。日志/JUnit `/private/tmp/f118-root-native-all-readers.log`、`/private/tmp/f118-root-native-all-readers.xml`。旧版本读取/endpoint/repository与旧move四路径另34 passed；不同选集不累计。平台上传实际11路径234通过，strict与冻结基线精确同22条；本轮不宣称全量typecheck通过。
+
+已固定合入：纯目标模板checksum cfdc67fc6、真实原Store全量tuple d8b7a458、普通上传batch sparse overrides cdb30cf3f与平台实际上传261e2f883、原生move双索引适配8e552f984、原生ES/Milvus/受限MinIO读取5f1865c4、M2正式全租户原事实编排342c2035e、SQL/Redis原调度任务只读efd040dc2、实际file.visible历史读取与有界候选页1e4a946806。合流采用正常merge；主工作区及无关临时树保持，未push。
+
+独立复核实际闭合三类反例：全租户重复freeze允许合法不同M3阶段且零flush；物理reader在真实Task.cancel或native close抛Cancelled时等待全部owned client创建/清理再传播取消（原发现者相关108项及3个额外取消边界绿）；M2此前误收identifier_compatible=False，原发现者同反例与外部TX commit验证修复后拒绝且Run为0，相关101项绿。SQL/Redis reader独立42项及4个大SCAN/cluster cursor/旧孤儿/pipeline失败边界绿，无队列写。以上是本地native/组件证据，不能代替实际109物理端口、停服正式盘点/转换/恢复或浏览器E2E。
+
+§33–40实际交付卡按范围闭合，包括T779/780/783/784、T799–812及T815；原137队列仍28完成/109待办。完整M2尚缺真实broker、精确可执行转换计划及CLI；M3/R2初始回填/Coverage、实际move Owner/J1和source删除保护、完整上传/高级写/删除等继续待办。原版本Service其他11个写/管理方法AST未改，旧7路径控制原13个失败保持，不扩原edit或版本写口。下一批只读历史入口按§41冻结后实施。

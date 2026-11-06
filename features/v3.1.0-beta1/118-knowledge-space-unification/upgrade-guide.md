@@ -133,7 +133,7 @@ W5本地100路径2852测试/15子测试通过，当前137待办；平台typechec
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史815编号：685已完成/历史交付、128当前待办、2外移；原137队列已完成28项、剩109项，另19张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史822编号：704已完成/历史交付、116当前待办、2外移；原137队列已完成28项、剩109项，另7张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -153,3 +153,8 @@ W6持续实施；历史815编号：685已完成/历史交付、128当前待办�
 实际从`v310b1_f004_workflow_soft_delete`升级到`f118_finalize_retry`，180张旧业务表共1617行的原列计数及确定摘要前后完全相同，8张新增账本表均为0行。正式证据在独立项目`evidence/preparatory-clone-neutral-ddl.json`，SHA256 `c10677f9c6d610e53514f5e34b083de1cff93b3f1b45a6a21989585839af31ad`；无凭据的执行脚本同目录`preparatory-clone-neutral-ddl-probe.py`。原后端仍是旧标准镜像，启动时间2026-11-06T12:16:13.795554937Z，未重启。
 
 这是准备阶段克隆演练，不是停服一致备份、正式M2冻结、M3转换/回填、恢复或新版E2E；T161–T174、T202/T203继续待办。正式维护仍按§26停服后重新备份、盘点并冻结，不复用本次克隆摘要作正式基线。
+
+
+## M2只读端口联装状态（2026-11-07）
+
+主树44712aff4已接原Store tuple、原生ES/Milvus/object stat和受限artifact、SQL与fair scheduler Redis原任务事实；M2拒identifier_compatible=False、全部tenant同TX冻结、相同proof重入可保合法不同阶段且零写。本地3582项通过仅说明联装；真实Celery broker盘点、完整精确M3转换计划/初始引用回填、CLI与实际维护演练尚未完成，当前不发布可执行正式迁移命令、不启动新版线上runtime。正式停服/排空/一致备份、中性DDL、重新盘点并freeze顺序保持；DM8免实测，C2静态及MySQL/恢复验证保留。

@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史815编号：685已完成/历史交付、128当前待办、2外移；原137队列已完成28项、剩109项，另19张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史822编号：704已完成/历史交付、116当前待办、2外移；原137队列已完成28项、剩109项，另7张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -6316,7 +6316,7 @@
   **配对测试**：T777\
   **验证 / 完成条件**：配对真实红绿、固定独立复核与静态；仅完成实际接缝，原完整功能须真实装配/验收后另闭合。
 
-- [ ] **T779 · 正式M2确定事实完整预检测试**
+- [x] **T779 · 正式M2确定事实完整预检测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_preflight.py`\
   **逻辑 / 测试上下文**：W6§34完整正式M2入口的确定接缝；显式闭集、全租户/原TX、线性聚合、失败封闭，不把required假port当正式freeze。\
@@ -6324,7 +6324,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：配对真实红绿、固定独立复核与静态；仅完成实际接缝，原完整功能须真实装配/验收后另闭合。
 
-- [ ] **T780 · 正式M2确定事实完整预检**
+- [x] **T780 · 正式M2确定事实完整预检**
   **类型 / Owner**：后端 Application/Repository / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_preflight.py`、`src/backend/bisheng/permission/domain/repositories/f118_migration_snapshot_repository.py`\
   **逻辑 / 测试上下文**：W6§34完整正式M2入口的确定接缝；显式闭集、全租户/原TX、线性聚合、失败封闭，不把required假port当正式freeze。\
@@ -6348,7 +6348,7 @@
   **配对测试**：T781\
   **验证 / 完成条件**：配对真实红绿、固定独立复核与静态；仅完成实际接缝，原完整功能须真实装配/验收后另闭合。
 
-- [ ] **T783 · 完整M2应用编排及required事实失败测试**
+- [x] **T783 · 完整M2应用编排及required事实失败测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_inventory_application.py`\
   **逻辑 / 测试上下文**：W6§34完整正式M2入口的确定接缝；显式闭集、全租户/原TX、线性聚合、失败封闭，不把required假port当正式freeze。\
@@ -6356,7 +6356,7 @@
   **覆盖 AC**: AC-56, AC-63, AC-78, AC-85, AC-93\
   **验证 / 完成条件**：配对真实红绿、固定独立复核与静态；仅完成实际接缝，原完整功能须真实装配/验收后另闭合。
 
-- [ ] **T784 · 完整M2应用入口组合与冻结编排**
+- [x] **T784 · 完整M2应用入口组合与冻结编排**
   **类型 / Owner**：后端 Application / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_inventory.py`\
   **逻辑 / 测试上下文**：W6§34完整正式M2入口的确定接缝；显式闭集、全租户/原TX、线性聚合、失败封闭，不把required假port当正式freeze。\
@@ -6472,7 +6472,7 @@
   **依赖**：T766\
   **验证 / 完成条件**：实际登记范围验证、独立复核与静态；不得将fixture/adapter绿计作正式迁移或E2E。
 
-- [ ] **T799 · M2原生物理只读及受限artifact存储测试**
+- [x] **T799 · M2原生物理只读及受限artifact存储测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_physical_inventory.py`、`src/backend/test/knowledge_unification/test_migration_minio.py`\
   **逻辑 / 测试上下文**：W6§38真实native调用形状、tenant/身份/分页/对象预算/错误/close、无建桶建索引或模型IO。\
@@ -6480,7 +6480,7 @@
   **覆盖 AC**: AC-55, AC-56, AC-58, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：实际登记范围验证、独立复核与静态；不得将fixture/adapter绿计作正式迁移或E2E。
 
-- [ ] **T800 · M2原生物理只读及受限artifact存储适配**
+- [x] **T800 · M2原生物理只读及受限artifact存储适配**
   **类型 / Owner**：后端 Application / INT\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_physical.py`、`src/backend/bisheng/knowledge/application/unification_minio.py`\
   **逻辑 / 测试上下文**：W6§38同shape真实ES/Milvus/stat及私有受限artifact get-put，readonly配置和完整native生命周期。\
@@ -6488,7 +6488,7 @@
   **配对测试**：T799\
   **验证 / 完成条件**：实际登记范围验证、独立复核与静态；不得将fixture/adapter绿计作正式迁移或E2E。
 
-- [ ] **T801 · 版本读取原生链与批量候选仓储测试**
+- [x] **T801 · 版本读取原生链与批量候选仓储测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_version_read_repository.py`\
   **逻辑 / 测试上下文**：W6§39实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6496,7 +6496,7 @@
   **覆盖 AC**: AC-09, AC-14, AC-15, AC-16, AC-30, AC-31, AC-55, AC-86\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T802 · 版本读取原生链仓储与候选页DTO**
+- [x] **T802 · 版本读取原生链仓储与候选页DTO**
   **类型 / Owner**：后端 Repository/Schema / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/knowledge_version_read_repository.py`、`src/backend/bisheng/knowledge/domain/schemas/knowledge_version_schema.py`\
   **逻辑 / 测试上下文**：W6§39实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6504,7 +6504,7 @@
   **配对测试**：T801\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T803 · 版本读取真实可见性裁剪与兼容测试**
+- [x] **T803 · 版本读取真实可见性裁剪与兼容测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_version_read.py`\
   **逻辑 / 测试上下文**：W6§39实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6512,7 +6512,7 @@
   **覆盖 AC**: AC-09, AC-14, AC-15, AC-16, AC-30, AC-31, AC-55, AC-86\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T804 · 版本读取真实权限服务及旧读委托**
+- [x] **T804 · 版本读取真实权限服务及旧读委托**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_version_read_service.py`、`src/backend/bisheng/knowledge/domain/services/knowledge_version_service.py`\
   **逻辑 / 测试上下文**：W6§39实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6520,7 +6520,7 @@
   **配对测试**：T803\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T805 · 版本读取实际DI与新旧HTTP合同测试**
+- [x] **T805 · 版本读取实际DI与新旧HTTP合同测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_version_read_http.py`\
   **逻辑 / 测试上下文**：W6§39实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6528,7 +6528,7 @@
   **覆盖 AC**: AC-09, AC-14, AC-15, AC-16, AC-30, AC-31, AC-55, AC-86\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T806 · 版本读取实际依赖装配与候选页入口**
+- [x] **T806 · 版本读取实际依赖装配与候选页入口**
   **类型 / Owner**：后端 API / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/api/dependencies.py`、`src/backend/bisheng/knowledge/api/endpoints/knowledge_version.py`\
   **逻辑 / 测试上下文**：W6§39实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6536,7 +6536,7 @@
   **配对测试**：T805\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T807 · M2原SQL任务只读仓储测试**
+- [x] **T807 · M2原SQL任务只读仓储测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_task_repository.py`\
   **逻辑 / 测试上下文**：W6§40实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6544,7 +6544,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-86, AC-93\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T808 · M2原SQL任务只读仓储**
+- [x] **T808 · M2原SQL任务只读仓储**
   **类型 / Owner**：后端 Repository / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_task_repository.py`\
   **逻辑 / 测试上下文**：W6§40实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6552,7 +6552,7 @@
   **配对测试**：T807\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T809 · M2原Redis调度器及SQL任务真实消费测试**
+- [x] **T809 · M2原Redis调度器及SQL任务真实消费测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_tasks.py`\
   **逻辑 / 测试上下文**：W6§40实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6560,7 +6560,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-86, AC-93\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T810 · M2原Redis调度器及SQL任务只读reader**
+- [x] **T810 · M2原Redis调度器及SQL任务只读reader**
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_tasks.py`\
   **逻辑 / 测试上下文**：W6§40实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6568,7 +6568,7 @@
   **配对测试**：T809\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T811 · M2来源manifest材料与全局任务诊断闭集测试**
+- [x] **T811 · M2来源manifest材料与全局任务诊断闭集测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§40实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6576,7 +6576,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-63, AC-85, AC-86, AC-93\
   **验证 / 完成条件**：配对真实红绿、独立复核/静态，完整旧协议回归与真实入口组合；本卡不代替未完成后继验收。
 
-- [ ] **T812 · M2来源manifest材料与全局任务诊断闭集**
+- [x] **T812 · M2来源manifest材料与全局任务诊断闭集**
   **类型 / Owner**：后端 Application / MIG\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§40实际确定接缝；原身份/tenant、批量有界读取、明确兼容和失败语义，不假完整功能/正式M2。\
@@ -6600,12 +6600,67 @@
   **配对测试**：T813\
   **验证 / 完成条件**：配对及旧pin/tuple回归、逐叶arch绿，无runtime或外部副作用。
 
-- [ ] **T815 · 旧版本读取三项夹具接真实新读口**
+- [x] **T815 · 旧版本读取三项夹具接真实新读口**
   **类型 / Owner**：测试夹具 / EDGE\
   **写入文件**：`src/backend/test/knowledge/test_knowledge_version_service_read.py`\
   **逻辑 / 测试上下文**：W6§39已复现新旧控制恰3个新read夹具失败；真实UserPayload/tenant/native factory/loaded F048边界替代MagicMock身份，保原三项业务断言及无链404旧协议。\
   **依赖**：T804\
   **验证 / 完成条件**：三原读断言不削减，实际新read组合与原write控制对比无新增失败；其他13原失败继续如实报告，不顺带改旧写权限或异常语义。
+
+- [ ] **T816 · 平台历史功能实际开关映射测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/frontend/platform/src/__tests__/knowledgeVersionFeature.test.tsx`\
+  **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
+  **依赖**：T806\
+  **覆盖 AC**: AC-09, AC-14, AC-15, AC-30, AC-31\
+  **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
+
+- [ ] **T817 · 平台历史功能实际开关映射**
+  **类型 / Owner**：前端 Context/API类型 / EDGE\
+  **写入文件**：`src/frontend/platform/src/types/api/app.ts`、`src/frontend/platform/src/contexts/locationContext.tsx`\
+  **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
+  **依赖**：T816\
+  **配对测试**：T816\
+  **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
+
+- [ ] **T818 · 平台只读版本API与历史面板测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/frontend/platform/src/__tests__/knowledgeVersionsContract.test.ts`、`src/frontend/platform/src/__tests__/f118SpaceVersionHistory.test.tsx`\
+  **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
+  **依赖**：T817\
+  **覆盖 AC**: AC-09, AC-14, AC-15, AC-30, AC-31\
+  **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
+
+- [ ] **T819 · 平台只读版本API与历史面板**
+  **类型 / Owner**：前端 API/组件 / EDGE\
+  **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeVersions.ts`、`src/frontend/platform/src/pages/KnowledgePage/components/SpaceVersionHistorySheet.tsx`\
+  **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
+  **依赖**：T818, T822\
+  **配对测试**：T818\
+  **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
+
+- [ ] **T820 · 平台真实文件行历史入口测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/frontend/platform/src/__tests__/f118SpaceDirectoryHistory.test.tsx`\
+  **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
+  **依赖**：T819\
+  **覆盖 AC**: AC-09, AC-14, AC-15, AC-30, AC-31\
+  **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
+
+- [ ] **T821 · 平台真实文件行历史入口**
+  **类型 / Owner**：前端入口 / EDGE\
+  **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`、`src/frontend/platform/src/pages/KnowledgePage/components/SpaceDirectoryRow.tsx`\
+  **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
+  **依赖**：T820\
+  **配对测试**：T820\
+  **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
+
+- [ ] **T822 · 平台只读版本历史三语词条**
+  **类型 / Owner**：国际化 / INT\
+  **写入文件**：`src/frontend/platform/public/locales/{en-US,zh-Hans,ja}/knowledge.json`\
+  **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
+  **依赖**：T806\
+  **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
 
 ## 自动化覆盖索引
 
@@ -6621,13 +6676,13 @@
 | AC-06 | T079, T121, T205, T646, T648, T664, T695, T697, T720, T750, T752, T754, T756 |
 | AC-07 | T079, T121, T205, T646, T648, T683, T695, T697, T706, T720, T722 |
 | AC-08 | T077, T101, T121, T204, T686, T750, T752, T754, T756 |
-| AC-09 | T083, T205, T669, T685, T750, T752, T754, T756, T765, T775, T787, T789, T791, T801, T803, T805 |
+| AC-09 | T083, T205, T669, T685, T750, T752, T754, T756, T765, T775, T787, T789, T791, T801, T803, T805, T816, T818, T820 |
 | AC-10 | T067, T083, T125, T205, T669, T673, T677, T765, T775, T787, T789, T791 |
 | AC-11 | T083, T205, T750, T752, T754, T756, T775, T787, T789, T791 |
 | AC-12 | T085, T105, T205, T607 |
 | AC-13 | T085, T105, T205, T607 |
-| AC-14 | T079, T083, T121, T165, T205, T685, T765, T801, T803, T805 |
-| AC-15 | T079, T121, T205, T801, T803, T805 |
+| AC-14 | T079, T083, T121, T165, T205, T685, T765, T801, T803, T805, T816, T818, T820 |
+| AC-15 | T079, T121, T205, T801, T803, T805, T816, T818, T820 |
 | AC-16 | T205, T750, T752, T754, T756, T801, T803, T805 |
 | AC-17 | T087, T089, T206, T669 |
 | AC-18 | T087, T089, T206 |
@@ -6642,8 +6697,8 @@
 | AC-27 | T095, T206 |
 | AC-28 | T103, T105, T109, T202, T206 |
 | AC-29 | T103, T105, T107, T109, T202, T206 |
-| AC-30 | T023, T077, T101, T202, T204, T239, T240, T241, T242, T251, T628, T630, T632, T633, T650, T750, T752, T754, T756, T787, T789, T791, T801, T803, T805 |
-| AC-31 | T023, T077, T085, T099, T157, T202, T204, T239, T240, T241, T242, T251, T628, T630, T632, T633, T650, T667, T669, T681, T750, T752, T754, T756, T787, T789, T791, T801, T803, T805 |
+| AC-30 | T023, T077, T101, T202, T204, T239, T240, T241, T242, T251, T628, T630, T632, T633, T650, T750, T752, T754, T756, T787, T789, T791, T801, T803, T805, T816, T818, T820 |
+| AC-31 | T023, T077, T085, T099, T157, T202, T204, T239, T240, T241, T242, T251, T628, T630, T632, T633, T650, T667, T669, T681, T750, T752, T754, T756, T787, T789, T791, T801, T803, T805, T816, T818, T820 |
 | AC-32 | T077, T121, T202, T204, T750, T752, T754, T756 |
 | AC-33 | T071, T077, T097, T099, T123, T202, T204, T220, T626, T646, T648, T650, T683, T699, T701, T714, T718, T720, T733, T735, T737, T741 |
 | AC-34 | T063, T071, T097, T123, T202, T204, T593, T596, T608, T610, T612, T614, T616, T618, T620, T622, T624, T634, T636, T638, T640, T642, T644, T660, T662, T675, T699, T701, T714, T733, T735, T737, T741, T750, T752, T754, T756 |
