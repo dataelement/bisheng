@@ -541,7 +541,7 @@
 
 - [ ] **T065 · 重建全量分页保留源分段：先写测试**
   **类型 / Owner**：测试 / PROC\
-  **写入文件**：`src/backend/test/knowledge_unification/test_rebuild_page.py`（拟新增）\
+  **写入文件**：`src/backend/test/knowledge_unification/test_rebuild_page.py`（拟新增）；`src/backend/test/knowledge_unification/test_kn_worker_model_source.py`\
   **逻辑 / 测试上下文**：10001+ Chunk 数量及内容一致，失败源仍在；另一空间不阻塞；tenant headers 缺失拒绝，重试只失败项且配置过期拒绝。\
   **依赖**：T064\
   **覆盖 AC**: AC-48, AC-49, AC-52, AC-53, AC-54, AC-86\
@@ -5249,6 +5249,14 @@
   **依赖**：T657\
   **配对测试**：T657\
   **验证 / 完成条件**：配对与原visibility/检索回归全绿，真实ES/Milvus行为由后续E2E验，不先标T102全量完成。
+
+- [ ] **T659 · 检索成功态边界旧fixture对齐**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge/test_knowledge_file_visibility_primary_filter.py`；`src/backend/test/knowledge/test_knowledge_file_visibility_batch.py`\
+  **逻辑 / 测试上下文**：原仅权限/主版本的单测补_successful_file_ids成功集合边界，保原FGA/primary拒绝断言；真实SQL状态由T657覆盖，不连接中间件或绕生产过滤。\
+  **依赖**：T658\
+  **覆盖 AC**: AC-35, AC-48, AC-49, AC-52, AC-53\
+  **验证 / 完成条件**：明确原2失败为新增SQL边界缺fixture，新旧同选集全绿；仅两旧测试叶。
 
 ## 自动化覆盖索引
 
