@@ -5,6 +5,7 @@ import type { SkillRecord } from '~/components/Skills/types';
 import { useLocalize } from '~/hooks';
 import { DemoTag } from '~/mock/demo/DemoTag';
 import { cn } from '~/utils';
+import { MODULE_HOME_GROUPS } from '~/components/ModuleHome';
 
 export type SkillSort = 'recent' | 'name';
 
@@ -126,7 +127,7 @@ export function SkillList({ skills, sort, createdCount, providedCount, extraProv
   const provided = skills.filter((skill) => skill.source === 'platform').sort(compare);
 
   return (
-    <div className="flex w-full flex-col gap-6">
+    <div className={cn(MODULE_HOME_GROUPS, 'flex w-full flex-col gap-6')}>
       {(created.length > 0 || createdEmptyHint) && (
         <SkillGroup title={localize('com_skill_center_group_created')} count={createdCount ?? created.length}>
           {created.length > 0 ? (

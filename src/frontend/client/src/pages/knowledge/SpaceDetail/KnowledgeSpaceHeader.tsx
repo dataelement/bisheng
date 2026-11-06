@@ -16,6 +16,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import { useRecoilValue } from "recoil";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
+import desktopLayout from "./KnowledgeSpaceLayout.module.css";
 
 /**
  * Space header: location trail (space anchor + folder path, with the space action
@@ -261,7 +262,7 @@ export function KnowledgeSpaceHeader({
   );
 
   return (
-    <div className="flex min-h-8 items-center justify-between gap-3 px-4 pb-4 pt-4 max-[767px]:gap-2 max-[767px]:pb-3">
+    <div className={`${desktopLayout.header} flex min-h-8 items-center justify-between gap-3 px-4 pb-4 pt-4 max-[767px]:gap-2 max-[767px]:pb-3`}>
       {/* 左侧：返回 + 位置面包屑。首段永远是空间本身，空间级操作挂在它的下拉里，
                 所以下钻到任意层级都不会丢失「我在哪个空间」和空间级操作（设计稿 11772:70584） */}
       {/* -ml-2 pulls the whole group 8px left on its own, without touching the

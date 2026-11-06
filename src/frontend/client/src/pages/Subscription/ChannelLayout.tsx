@@ -34,7 +34,7 @@ const MIN_RIGHT_WIDTH = 480;
 // Geometry of ArticleList's two-column browse grid. The default split width is
 // derived from these so the left column's article width stays identical whether
 // the detail panel is open or closed. Keep in sync with ArticleList: the grid
-// wrapper uses px-6 gutters, the row grid uses gap-x-4 with a 1px divider column.
+// wrapper uses px-6 gutters in the browser, the row grid uses gap-x-4 with a 1px divider.
 const LIST_GUTTER = 24; // px-6 horizontal padding on each side of the list
 const GRID_GAP = 16; // gap-x-4 between grid columns
 const GRID_DIVIDER = 1; // 1px vertical divider column between the two cards
@@ -43,13 +43,19 @@ const GRID_DIVIDER = 1; // 1px vertical divider column between the two cards
  * Width the left list should take so its single column matches the FIRST column
  * of the two-column browse grid.
  *
- * Two-column card width = (containerWidth − 2·gutter − 2·gap − divider) / 2.
- * In split mode the list keeps the same px-6 gutters, so the panel width is
- * that card width plus both gutters back.
+ * Card width = (browse content width − 2·gap − divider) / 2. The browser's
+ * content uses 24px gutters; desktop browsing uses the shared 960px column.
+ * Reading keeps px-6 gutters, so the panel adds those around one browse card.
  */
-const getDefaultLeftWidth = (containerWidth: number) => {
-  const columnWidth =
-    (containerWidth - LIST_GUTTER * 2 - GRID_GAP * 2 - GRID_DIVIDER) / 2;
+const getDefaultLeftWidth = (containerWidth: number, desktop = false) => {
+  // Keep the desktop browse geometry in sync with ModuleHome.module.css. Reading
+  // retains its 24px gutters, adding them back around one browse card below.
+  const viewportWidth = typeof window === "undefined" ? containerWidth : window.innerWidth;
+  const desktopGutter = Math.min(48, Math.max(24, viewportWidth * 0.04));
+  const browseContentWidth = desktop
+    ? Math.min(960, Math.max(0, containerWidth - desktopGutter * 2))
+    : containerWidth - LIST_GUTTER * 2;
+  const columnWidth = (browseContentWidth - GRID_GAP * 2 - GRID_DIVIDER) / 2;
   return columnWidth + LIST_GUTTER * 2;
 };
 
@@ -97,7 +103,7 @@ export function ChannelLayout({
     minRightWidth: MIN_RIGHT_WIDTH,
     containerRef,
     enabled: Boolean(selectedArticle),
-    defaultLeftWidth: getDefaultLeftWidth,
+    defaultLeftWidth: (width) => getDefaultLeftWidth(width, runtimeChannel === "desktop"),
   });
 
   const handleArticleSelect = useCallback(

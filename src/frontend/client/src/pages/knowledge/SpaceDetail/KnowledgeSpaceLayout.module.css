@@ -1,0 +1,26 @@
+/* The embedded detail page shares its outer frame with the module home. */
+@media (min-width: 768px) {
+  :global(html[data-bisheng-surface='desktop']) .frame {
+    --module-page-bottom-spacing: 0px;
+    align-items: center;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame > .column {
+    width: 100%;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .header {
+    padding: 0 0 16px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .header > :first-child {
+    margin-left: 0;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .toolbar,
+  :global(html[data-bisheng-surface='desktop']) .frame .grid,
+  :global(html[data-bisheng-surface='desktop']) .frame .dock,
+  :global(html[data-bisheng-surface='desktop']) .frame [data-knowledge-file-item] {
+    padding-inline: 0;
+  }
+}

@@ -16,6 +16,8 @@ import {
 import { NotificationSeverity } from "~/common";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeHomePage } from "./KnowledgeHomePage";
+import { MODULE_PAGE_DESKTOP_COLUMN, MODULE_PAGE_DESKTOP_FRAME } from "~/components/ModuleHome";
+import desktopLayout from "./SpaceDetail/KnowledgeSpaceLayout.module.css";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
 import { KnowledgeAiBottomDock } from "./SpaceDetail/AiChat/KnowledgeAiBottomDock";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
@@ -269,6 +271,8 @@ export function KnowledgePageContent({ model }: KnowledgePageContentProps) {
         <div
           className={cn(
             "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+            MODULE_PAGE_DESKTOP_FRAME,
+            desktopLayout.frame,
             // Mobile needs a DEFINITE viewport height (the KeepAlive shell is h-auto,
             // so percentage chains collapse): without it the content grows with the
             // file count and the absolute-bottom AI dock drifts / the layout cramps.
@@ -277,7 +281,13 @@ export function KnowledgePageContent({ model }: KnowledgePageContentProps) {
         >
           {/* Mobile top bar now lives inside KnowledgeSpaceContent (it owns search/sort/upload). */}
           {/* `relative` anchors the bottom AI dock; the content scrolls within its own container while the dock overlays the bottom. */}
-          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white shadow-[0px_4px_20px_0px_rgba(0,17,147,0.05)]">
+          <div
+            className={cn(
+              MODULE_PAGE_DESKTOP_COLUMN,
+              desktopLayout.column,
+              "relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white shadow-[0px_4px_20px_0px_rgba(0,17,147,0.05)]",
+            )}
+          >
             <KnowledgeSpaceContent
               space={activeSpace}
               files={fileManager.files}

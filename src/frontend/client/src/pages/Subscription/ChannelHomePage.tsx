@@ -2,7 +2,7 @@ import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { Badge, Button } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import type { Channel } from "~/api/channels";
-import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
+import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_GROUPS, ModuleHomeHeader } from "~/components/ModuleHome";
 import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { DemoTag } from "~/mock/demo/DemoTag";
 import { cn } from "~/utils";
@@ -130,8 +130,8 @@ export function ChannelHomePage({
                     </Button>
                 </ModuleHomeHeader>
             )}
-            <div className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
-                <div className={cn(MODULE_HOME_COLUMN, "flex min-w-0 flex-col gap-6 pb-3 pt-4", isMobile && "px-4")}>
+            <div className={cn(MODULE_HOME_BODY, "scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto")}>
+                <div className={cn(MODULE_HOME_COLUMN, MODULE_HOME_GROUPS, "flex min-w-0 flex-col gap-6 pb-3 pt-4", isMobile && "px-4")}>
                     {sections.map((section) => (
                         <section key={section.key} className="flex flex-col gap-3">
                             <h2 className="flex h-8 min-w-0 items-center truncate text-body font-medium text-text-1">{section.title}</h2>

@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Pagination, Button, Select } from '@bisheng/ui';
+import { Pagination, Button, Input, Select } from '@bisheng/ui';
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
@@ -105,6 +105,7 @@ type FilterKeys = {
     targetAppId: string
     tenantId: string
     org: OrgSelection
+    note: string
 }
 
 const init: FilterKeys = {
@@ -117,6 +118,7 @@ const init: FilterKeys = {
     targetAppId: '',
     tenantId: '',
     org: EMPTY_ORG_SELECTION,
+    note: '',
 }
 
 // What the backend receives for one set of controls — the list and the
@@ -131,6 +133,7 @@ const toFilters = (keys: FilterKeys): AuditLogFilters => ({
     targetAppId: keys.targetAppId,
     tenantId: keys.tenantId ? Number(keys.tenantId) : undefined,
     org: keys.org,
+    note: keys.note.trim(),
 })
 
 export default function SystemLog() {
@@ -261,6 +264,13 @@ export default function SystemLog() {
                     options={tenants.filter(tenant => tenant.id != null).map(tenant => ({ value: String(tenant.id), label: tenant.tenant_name }))}
                     value={keys.tenantId || null} onOpenChange={open => { if (open) loadTenants() }}
                     onChange={value => setKeys({ ...keys, tenantId: value == null ? '' : String(value) })} />}
+                <Input
+                    className="w-[200px]"
+                    aria-label={t('log.remark')}
+                    placeholder={t('log.remark')}
+                    value={keys.note}
+                    onChange={(event) => setKeys({ ...keys, note: event.target.value.slice(0, 200) })}
+                />
                 <div className="flex items-center gap-2">
                     <Button size="medium" onClick={handleSearch}>
                         {t('log.searchButton')}

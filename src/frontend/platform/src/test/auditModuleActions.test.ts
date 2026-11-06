@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { getActionsApi, getActionsByModuleApi } from "@/controllers/API/log";
+import auditCopy from "./fixtures/auditCopy.json";
 
 const ADDED = [
   "update_sandbox_conf",
@@ -72,6 +73,29 @@ describe("the five added actions", () => {
         expect(caption, `${locale} ${action}`).toBeTruthy();
         expect(caption).not.toBe(action);
       }
+    }
+  });
+});
+
+// The 17 sensitive actions and the organisation column use the wording from
+// 审计功能优化. The fourth usage type is shown as 深度研究: the requirements
+// document says 任务模式, and the audit page was later confirmed to use the
+// product name instead. The stored filter value stays `task`.
+const SENSITIVE_CAPTIONS: Record<string, Record<string, string>> = auditCopy.sensitiveCaptions;
+
+const ORG_COLUMN: Record<string, string> = auditCopy.orgColumn;
+
+const USAGE_TASK: Record<string, string> = auditCopy.usageTask;
+
+describe("sensitive-action and organisation copy", () => {
+  it("pins the 17 action captions, the organisation column and the usage-type label", () => {
+    for (const [locale, captions] of Object.entries(SENSITIVE_CAPTIONS)) {
+      const bs = JSON.parse(readFileSync(resolve(__dirname, `../../public/locales/${locale}/bs.json`), "utf-8"));
+      expect(bs.log.eventTypeEnum).toEqual(expect.objectContaining(captions));
+      expect(bs.log.org.column).toBe(ORG_COLUMN[locale]);
+      expect(bs.log.csvHeaders.org).toBe(ORG_COLUMN[locale]);
+      expect(bs.log.runtime.fields.operator_dept_path).toBe(ORG_COLUMN[locale]);
+      expect(bs.log.usageType.task).toBe(USAGE_TASK[locale]);
     }
   });
 });
