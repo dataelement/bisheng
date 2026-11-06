@@ -158,3 +158,36 @@ class ModelDefaultApplication:
         await repository.aput(session, key, canonical_payload_json(config.model_dump(mode="json")))
         await runtime.aapply_source_bindings(session, prepared)
         return config
+
+    @classmethod
+    async def arestore_inheritance(cls, session, key, *, login_user):
+        tenant = current_model_default_tenant()
+        if tenant == ROOT_TENANT_ID:
+            raise LLMSystemConfigForbiddenError()
+        await cls._authorize(login_user, tenant)
+        repository = ModelDefaultRepository()
+        own = await repository.aget_own(session, key)
+        source = SourceKey(tenant, "model_default", key, "current")
+        runtime = await get_reference_binding_runtime()
+        new_source = await cls._old_source(session, runtime, source, own)
+        if own is None and new_source:
+            # A consumer that only inherits Root never acquires its own index.
+            return await repository.aresolve(session, key)
+
+        async def lock_root(active_session):
+            current = await repository.alock_root(active_session, key)
+            await cls._authorize(login_user, tenant)
+            if current != own:
+                raise KnowledgeOperationPlanConflictError(reason="model_default_changed")
+
+        prepared = await runtime.aprepare_source_bindings(
+            session,
+            source,
+            (),
+            extractor_version=MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
+            lock_source_root=lock_root,
+            effective=False,
+        )
+        await repository.adelete_override(session, key)
+        await runtime.aapply_source_bindings(session, prepared)
+        return await repository.aresolve(session, key)
