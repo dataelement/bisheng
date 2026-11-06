@@ -33,7 +33,11 @@ export const unitConversion = (value, dataConfig) => {
       break;
     }
     case 'percent': {
-      formattedNumber = formattedNumber * 100;
+      // Snap to the displayed decimal first, so a value already on a 0.1% grid cannot
+      // fall into the next tenth when toFixed runs.
+      const places = Math.min(Math.max(decimalPlaces, 0), 5);
+      const units = Math.round(formattedNumber * 100 * (10 ** places));
+      formattedNumber = units / (10 ** places);
       unitLabel = '%';
       break;
     }

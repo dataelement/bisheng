@@ -86,6 +86,40 @@ describe("知识贡献占比显示配平", () => {
     })
   })
 
+  it("九等分时合计行显示 100.0，而不是各自四舍五入的 99.9", () => {
+    const columns = 9
+    const share = 1 / columns
+    expect(Number((share * 100).toFixed(1)) * columns).toBeCloseTo(99.9, 5)
+    const reconciled = reconcileShareRatios({
+      cells: [Array(columns).fill(share)],
+      rowTotals: [1],
+      columnTotals: Array(columns).fill(share),
+      grandTotal: 1,
+    }, PLACES)!
+    const footer = reconciled.columnTotals.reduce((total, value) => total + displayed(value), 0)
+    expect(Number(footer.toFixed(1))).toBe(100)
+    expect(displayed(reconciled.grandTotal)).toBe(100)
+  })
+
+  it("格子和行合计有偏差时，合计行仍然配成 100.0", () => {
+    const columns = 9
+    const share = 1 / columns
+    const cells = Array(columns).fill(share)
+    cells[0] -= 0.002
+    const reconciled = reconcileShareRatios({
+      cells: [cells],
+      rowTotals: [cells.reduce((total: number, value: number) => total + value, 0)],
+      columnTotals: Array(columns).fill(share),
+      grandTotal: 1,
+    }, PLACES)!
+    const footer = reconciled.columnTotals.map(displayed)
+    expect(Number(footer.reduce((total, value) => total + value, 0).toFixed(1))).toBe(100)
+    expect(displayed(reconciled.grandTotal)).toBe(100)
+    footer.forEach((value, column) => {
+      expect(displayed(reconciled.cells[0][column])).toBe(value)
+    })
+  })
+
   it("随机份数表的行、列和总计都能对上", () => {
     let seed = 17
     const next = () => {
