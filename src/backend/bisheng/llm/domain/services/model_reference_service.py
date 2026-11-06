@@ -105,6 +105,7 @@ class ModelReferenceService:
                 raise ReferenceCoverageNotReadyError(reason="model_reference_coverage_unconfigured")
             before = await coverage.arequire_global_ready()
             await coverage.arequire_ready()
+            owners = {receipt.target.key: receipt.target.target_tenant_id for receipt in receipts}
             sources = {kind: set() for kind in SourceType}
             slots = dict.fromkeys(SourceType, 0)
             observed_tenants, hashes, cursor = set(), [], None
@@ -113,6 +114,12 @@ class ModelReferenceService:
                 if not page:
                     break
                 for row in page:
+                    if (
+                        row.target_tenant_id != owners[TargetKey(row.target_type, row.target_id)]
+                        or row.target_space_id is not None
+                        or row.legacy_invalid_reason is not None
+                    ):
+                        raise ReferenceCoverageNotReadyError(reason="reference_inbound_target_inconsistent")
                     kind = SourceType(row.source_type)
                     sources[kind].add((row.tenant_id, row.source_type, row.source_id, row.source_version))
                     slots[kind] += 1
