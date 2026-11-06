@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.core.context import tenant as tenant_context
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.permission.application.identity import (
     PermissionActor,
@@ -157,6 +158,29 @@ async def test_identity_change_fails_after_successful_business_read(active, grap
     identity.acapture.side_effect = (ReadIdentityFacts(101, "original"), ReadIdentityFacts(101, "changed"))
     with pytest.raises(ReferenceCoverageNotReadyError):
         await runtime.adisclose_sources(active, identity="original", source_keys=(key(),))
+
+
+@pytest.mark.parametrize("changed", ["pin", "management", "both"])
+async def test_real_identity_does_not_hide_same_tenant_management_context_change(active, changed):
+    user = UserPayload(user_id=7, tenant_id=101, user_role=[])
+    actor_token = set_current_permission_actor(PermissionActor(user_id=7, tenant_id=101))
+    tokens = []
+
+    async def disclose(session, *, identity, source_keys):
+        if changed in {"pin", "both"}:
+            tokens.append((tenant_context._admin_scope_tenant_id, tenant_context.set_admin_scope_tenant_id(101)))
+        if changed in {"management", "both"}:
+            tokens.append((tenant_context._is_management_api, tenant_context.set_is_management_api(True)))
+        return (SourceDisclosure(source_keys[0], "name", None, None),)
+
+    runtime = SourceDisclosureRuntime({kind: SimpleNamespace(adisclose_sources=disclose) for kind in SourceType})
+    try:
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await runtime.adisclose_sources(active, identity=user, source_keys=(key(),))
+    finally:
+        for variable, token in reversed(tokens):
+            variable.reset(token)
+        reset_current_permission_actor(actor_token)
 
 
 async def test_401_sources_are_bounded_to_three_explicit_batches(active, graph):
