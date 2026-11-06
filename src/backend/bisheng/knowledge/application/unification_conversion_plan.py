@@ -466,7 +466,9 @@ class ConversionPlanBuilder:
         for ident, row in self._links.items():
             tag = self._tags.get(row["tag_id"])
             if tag is None:
-                _blocked("tag_parent_missing")
+                if row["resource_type"] in (8, 9):
+                    _blocked("tag_parent_missing")
+                continue
             links_by_tag.setdefault(row["tag_id"], []).append((ident, row))
             if row["resource_type"] in (8, 9):
                 if (
