@@ -211,8 +211,6 @@ class MetadataExecutionRepository:
                 document.c.knowledge_id,
                 document.c.primary_version_id,
                 *version.c,
-                valid_primary.label("valid_primary"),
-                duplicate_file.label("duplicate_file"),
             )
             .select_from(Knowledge)
             .join(physical, physical.c.knowledge_id == Knowledge.id)
@@ -223,6 +221,8 @@ class MetadataExecutionRepository:
                 physical.c.id == target.file_id,
                 document.c.id == target.document_id,
                 version.c.id == target.version_id,
+                valid_primary,
+                ~duplicate_file,
             )
             .with_for_update()
         )
@@ -237,8 +237,6 @@ class MetadataExecutionRepository:
             or raw["status"] not in {2, 3, 6, 7}
             or row._mapping[document.c.knowledge_id] != job.space_id
             or row._mapping[version.c.version_no] <= 0
-            or not row.valid_primary
-            or row.duplicate_file
             or bool(row._mapping[version.c.is_primary])
             != (row._mapping[document.c.primary_version_id] == target.version_id)
             or MetadataProcessingRepository._parent(raw["file_level_path"]) != saved_item["expected_parent_id"]
