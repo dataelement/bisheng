@@ -178,3 +178,31 @@ API 取消两个默认 JSON 在线 backfill。正式升级必须由运维停服/
 新增test_linsight_reference_bootstrap.py直接执行真实run入口和真实composition，隔离Redis/权限transport/heartbeat：enabled开关两种冷启动及两类失败共4项，修复前4红、修后4绿。与既有native/bootstrap/composition/default读取及Linsight stranded/HITL/deferred、F048 API/worker组合11路径109 passed；两Python文件Ruff/format及arch-guard通过。该结果是定向本地回归，不替代前述W4全组历史结果或真实进程/中间件E2E。
 
 同次评审的ASR响应问题随后修复：普通GET /llm/workbench在既有用户目录投影后，复制响应配置并按实际asr_rt模型类型派生realtime，不信持久化的旧布尔值；模型/服务已删除或ID格式无效时保留原ID、能力为False，查询故障明确传播，不初始化provider。GET /llm/workbench/settings继续无模型查询的raw读取，不改存储或全来源执行校验。新增9项行为覆盖，修前8红/原空ASR1绿，修后相关默认配置组合72项通过；测试中对冻结DSH配置的错误修改已改为隔离外部目录投影边界，不算业务红。
+
+
+## ASR兼容修复与临时开发工作区收束
+
+ASR修复bb65647c9与此前Linsight修复b949fb70b均已提交至功能主分支codex/3.1.0-beta1/118-knowledge-space-unification。盘点16个临时分支时仅权限lane的1d1ea80ed（文件尾空行整理）尚不在祖先链，已正常合并为06e8de1fe；该merge树差异为空。其他15个临时分支头均已包含，不重复覆盖其后修正。
+
+统一受测源码06e8de1fe27f5461db9a40c4a0e5863088c54937：原81路径组合2403 passed、6 subtests passed（54.49秒），无fail/skip；含新增Linsight启动4项和ASR响应9项。172个改动Python文件format通过，Ruff/架构新增问题0，55条原诊断按既有基线核对。属于本地SQLite/Port回归，不包含真实ASR WebSocket/provider、双库、中间件或部署验证。
+
+已刷新远端引用，并确认这些F118分支均无同名远端。删除前两次检查暂存/未暂存/未跟踪内容均为空，忽略内容仅缓存；16个提交头全部为功能主分支祖先。逐个使用git worktree remove与git branch -d，未强制删除，工作区路径和分支引用已不存在；提交仍由功能主分支完整保留。保留功能主工作区，不检出或合并发版线，不推送远端。
+
+| 已清理本地分支 | 保留在功能主分支中的原提交头 |
+| --- | --- |
+| `codex/3.1.0-beta1/118-perm` | `1d1ea80ed359f7c817a9f480596d567c7441d6ed` |
+| `codex/3.1.0-beta1/118-proc` | `ff2672e983d8bb32faa98d11438cf5cf82a31d47` |
+| `codex/3.1.0-beta1/118-ref` | `ac5e8739a95ca568b7f6c5539ffd1459f7a9bd34` |
+| `codex/3.1.0-beta1/118-wave2-as` | `a05de576b701bcd2449a7f1845c2469ded0e5612` |
+| `codex/3.1.0-beta1/118-wave2-targets` | `9f1711d2dc0039de415013c4a90027e63930cb89` |
+| `codex/3.1.0-beta1/118-wave2-wf` | `ba4fab0433b9fa7b933cf62bebcba790fa1cb66c` |
+| `codex/3.1.0-beta1/118-wave3-as` | `98a23538e3b7bd07d8616fe8b7d9d3e7f4dd549e` |
+| `codex/3.1.0-beta1/118-wave3-eval` | `71c47536aff36124102d106f9c029396553694f2` |
+| `codex/3.1.0-beta1/118-wave3-proof` | `87180449242a78f933e5501e4182a886b1807f6c` |
+| `codex/3.1.0-beta1/118-wave3-ref` | `9dccf1ef7b3c9e709a6cd20449e784eae32c91d2` |
+| `codex/3.1.0-beta1/118-wave3-wf` | `57c1b17efb5dd2acfd96eff21dba96cf2c997fe0` |
+| `codex/3.1.0-beta1/118-wave4-app` | `eae516a95353dcf7c91dfe656a7cb40e1221be38` |
+| `codex/3.1.0-beta1/118-wave4-ch` | `6b4ae63efb0893e5dd225a4c8469b0985c322fa5` |
+| `codex/3.1.0-beta1/118-wave4-kn` | `883ced1815d96bb867a300bf13193459dea34c40` |
+| `codex/3.1.0-beta1/118-wave4-llm` | `3ab5ab61fcdb25d8a02dab74a877d482ae45fb1e` |
+| `codex/3.1.0-beta1/118-wave4-worker` | `d3617ccf0059e595b8cf2eadf80c93e42ff55dfe` |
