@@ -1,6 +1,7 @@
 """T673: real model/source/version/rule reads and atomic item/file writes."""
 
 import json
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -260,3 +261,39 @@ async def test_unknown_patch_zero_success_and_late_source_change_never_finalize(
                 session, item.lease, jobs=files.owner.jobs, outcome=outcome(item)
             )
         assert item.item.state == "running"
+
+
+async def test_file_item_takeover_rejects_old_lease_without_touching_new_attempt(files):
+    clock = [datetime.now(UTC).replace(tzinfo=None)]
+    files.owner.jobs.clock = lambda: clock[0]
+    async with files.context.sessions() as session:
+        job, prepared = await accept(files, session)
+        old_job = await files.owner.jobs.aclaim(session, job.id, configuration=prepared.configuration, lease_seconds=1)
+        old = await files.owner.jobs.aclaim_next_item(session, old_job, configuration=prepared.configuration)
+        await files.owner.scope.astart_processed_file(session, old.lease, jobs=files.owner.jobs)
+        clock[0] += timedelta(seconds=2)
+        new_job = await files.owner.jobs.aclaim(session, job.id, configuration=prepared.configuration)
+        new = await files.owner.jobs.aclaim_next_item(session, new_job, configuration=prepared.configuration)
+        assert not await files.owner.scope.acomplete_processed_file(
+            session, old.lease, jobs=files.owner.jobs, outcome=outcome(old)
+        )
+        assert (await session.get(KnowledgeFile, 81)).status == 1 and new.item.state == "running"
+        assert await files.owner.scope.acomplete_processed_file(
+            session, new.lease, jobs=files.owner.jobs, outcome=outcome(new)
+        )
+
+
+async def test_related_revision_change_persists_obsolete_without_mutating_new_file_state(files):
+    async with files.context.sessions() as session:
+        job, prepared = await accept(files, session)
+        _, item = await claim(files, session, job, prepared)
+        root = await session.get(Knowledge, 40)
+        root.model_config_revision += 1
+        await session.flush()
+        assert not await files.owner.scope.acomplete_processed_file(
+            session, item.lease, jobs=files.owner.jobs, outcome=outcome(item)
+        )
+        assert job.state == "obsolete" and (await session.get(KnowledgeFile, 81)).status == 1
+        await session.commit()
+    async with files.context.sessions() as session:
+        assert (await files.owner.jobs.aget(session, job.id)).state == "obsolete"

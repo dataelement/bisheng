@@ -5,13 +5,13 @@ from copy import deepcopy
 import pytest
 
 from bisheng.api.v1.schemas import ExcelRule, FileProcessBase, KnowledgeFileProcess
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
 from bisheng.knowledge.application.file_processing_adapter import (
     capture_legacy_processing_overrides,
     legacy_rule_from_snapshot,
     resolve_file_processing_snapshot,
 )
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
 from test.knowledge_unification import test_settings_repo as fixtures
 
 system_defaults = fixtures.system_defaults
@@ -177,6 +177,8 @@ def test_saved_null_append_header_remains_false_like_real_excel_renderer(system_
     from bisheng.knowledge.rag.pipeline.loader.utils.md_from_excel import _chunk_fixed_prefix_len
 
     rule = FileProcessBase(knowledge_id=40, excel_rule=ExcelRule(append_header=None))
-    assert _chunk_fixed_prefix_len([["header"]], 1, rule.excel_rule.append_header) == _chunk_fixed_prefix_len([["header"]], 1, False)
+    assert _chunk_fixed_prefix_len([["header"]], 1, rule.excel_rule.append_header) == _chunk_fixed_prefix_len(
+        [["header"]], 1, False
+    )
     result = resolve(system_defaults, file_name="old.xlsx", legacy_split_rule=rule.model_dump(mode="json"))
     assert result.effective_rule.append_header == 0
