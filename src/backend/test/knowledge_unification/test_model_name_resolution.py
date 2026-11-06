@@ -257,3 +257,25 @@ async def test_frozen_model_hint_must_be_current_real_fact(ctx):
     async with AsyncSession(ctx[0]) as session:
         with pytest.raises(ResourceReferenceInvalidError):
             await prepare(ctx, session, ("alpha",), frozen_models=(names.FrozenModelIdentity(11, 2),))
+
+
+@pytest.mark.parametrize("requested", [(), ("alpha",)])
+async def test_empty_and_nonempty_plans_have_one_explicit_current_assertion(ctx, requested):
+    async with AsyncSession(ctx[0]) as session:
+        plan = await prepare(ctx, session, requested)
+        assert await ctx[2].assert_plan_current(session, 101, identity=ctx[1], plan=plan) is None
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].assert_plan_current(session, 101, identity=ctx[1], plan=replace(plan))
+        await session.rollback()
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ctx[2].assert_plan_current(session, 101, identity=ctx[1], plan=plan)
+
+
+async def test_original_plan_public_fields_are_not_the_private_name_binding(ctx):
+    async with AsyncSession(ctx[0]) as session:
+        plan = await prepare(ctx, session, ("alpha",))
+        other = await prepare(ctx, session, ("root/same",))
+        object.__setattr__(plan, "requested_names", other.requested_names)
+        object.__setattr__(plan, "resolutions", other.resolutions)
+        with pytest.raises(ResourceReferenceInvalidError):
+            await resolve(ctx, session, plan, "root/same")
