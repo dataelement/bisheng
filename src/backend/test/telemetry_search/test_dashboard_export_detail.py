@@ -192,7 +192,7 @@ def test_qa_detail_lists_source_and_ids_without_asker_id():
 
 def test_login_event_columns_follow_the_row_grain():
     day_metrics = (
-        MetricConfig(field="logged_in_employee_count", name="实际登录人数", is_virtual=True),
+        MetricConfig(field="logged_in_employee_count", name="实际登录人次", is_virtual=True),
         MetricConfig(field="login_count", name="实际登录次数"),
     )
     person_metrics = (
