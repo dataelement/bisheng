@@ -79,6 +79,7 @@ async def test_preview_and_cancel_have_no_business_reference_or_file_writes(meta
 
 async def test_add_clears_stale_same_named_values_without_touching_other_fields(metadata):
     async with metadata.context.sessions() as session:
+        (await session.get(KnowledgeFile, 82)).user_metadata = None
         row = await session.get(KnowledgeFile, 81)
         row.user_metadata = {
             **row.user_metadata,
@@ -213,6 +214,23 @@ async def test_plan_is_consumed_once_and_cannot_cross_same_session_transaction(m
         await session.get(Knowledge, 40)
         with pytest.raises(ResourceReferenceInvalidError):
             await service.aaccept(session, plan)
+
+
+@pytest.mark.parametrize("kind", ["next_transaction", "other_session"])
+async def test_unconsumed_plan_is_bound_to_original_session_and_transaction(metadata, kind):
+    service = MetadataProcessingService()
+    async with metadata.context.sessions() as session:
+        plan = await preview(metadata, session, service)
+        if kind == "next_transaction":
+            await session.rollback()
+            await session.get(Knowledge, 40)
+            with pytest.raises(ResourceReferenceInvalidError):
+                await service.aaccept(session, plan)
+        else:
+            async with metadata.context.sessions() as second:
+                await second.get(Knowledge, 40)
+                with pytest.raises(ResourceReferenceInvalidError):
+                    await service.aaccept(second, plan)
 
 
 @pytest.mark.parametrize("drift", ["schema", "generation", "values", "source"])
