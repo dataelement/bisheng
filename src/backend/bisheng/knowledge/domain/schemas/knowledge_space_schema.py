@@ -41,6 +41,7 @@ class KnowledgeSpaceListItemResp(KnowledgeBase):
 
     id: int = Field(..., description="Knowledge Space ID")
     user_name: str = Field(default="", description="Knowledge Space creator name")
+    has_abnormal_files: bool = Field(default=False, description="Whether this space contains abnormal FILE rows")
     actions: list[str] | None = Field(
         default=None,
         description="Effective F048 actions the current identity holds on this space",
