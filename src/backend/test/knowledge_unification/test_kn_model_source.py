@@ -74,7 +74,7 @@ async def admission(business, monkeypatch):
 
 
 async def test_real_source_snapshot_contains_private_business_model_configuration(admission):
-    context, runtime, _, _ = admission
+    context, runtime, source, _ = admission
     async with context.sessions() as session:
         result = await runtime.arequire(40, login_user=context.user, session=session)
         assert result.model_id == 11 and result.tenant_id == 101 and result.slot_key == "model"
@@ -82,7 +82,10 @@ async def test_real_source_snapshot_contains_private_business_model_configuratio
         facts = json.loads(snapshot.payload_json)["knowledge"]
         assert facts["model"] == "11" and facts["model_config_revision"] == 0
         assert facts["index_generation"] == "g0" and facts["model_transition"] is None
-        owner_module.require_business_action.assert_awaited_with(
+        owner_module.require_business_action.assert_not_awaited()
+        # Generic raw User access retains its original visible authorization.
+        await source.aresolve_source(session, SourceReadRequest(SourceType.KNOWLEDGE, "40"), context.user)
+        owner_module.require_business_action.assert_awaited_once_with(
             context.user, resource_type="knowledge_space", resource_id=40, action="visible"
         )
         assert all(not isinstance(row, Knowledge) for row in session.identity_map.values())
@@ -166,9 +169,7 @@ async def test_private_actor_scope_is_same_original_and_current_transaction_only
 
             reset_current_permission_actor(token)
         assert (await runtime.arequire(40, session=session)).model_id == 11
-        owner_module.require_business_action.assert_awaited_with(
-            None, resource_type="knowledge_space", resource_id=40, action="visible", actor=original_actor
-        )
+        owner_module.require_business_action.assert_not_awaited()
 
 
 async def test_private_actor_scope_never_uses_user_id_to_read_foreign_knowledge(admission):
@@ -222,9 +223,8 @@ async def test_private_scope_preserves_original_principal_and_actual_visitor_act
             private = await identity.aissue(session, 40)
             result = await runtime.arequire(40, session=session)
             assert result.model_id == 11
-            owner_module.require_business_action.assert_awaited_with(
-                None, resource_type="knowledge_space", resource_id=40, action="visible", actor=original_actor
-            )
+            assert get_current_permission_actor() is original_actor
+            owner_module.require_business_action.assert_not_awaited()
             # A value-equal replacement is not the same authenticated object.
             replacement = setter(principal.model_copy())
             try:
@@ -254,7 +254,9 @@ async def test_actual_owned_source_can_consume_root_shared_model_and_rejects_rev
             await runtime.arequire(41, session=session)
 
 
-async def test_actorless_read_requires_actual_background_task_and_expires_after_postrun(admission, monkeypatch):
+async def test_config_read_without_actor_keeps_actual_scope_and_binds_existing_background_lifecycle(
+    admission, monkeypatch
+):
     from bisheng.permission.application.identity import reset_current_permission_actor
 
     context, runtime, _, identity = admission
@@ -266,8 +268,10 @@ async def test_actorless_read_requires_actual_background_task_and_expires_after_
     actor_token = set_current_permission_actor(None)
     try:
         async with context.sessions() as session:
-            with tenant_execution_scope(101), pytest.raises(ResourceReferenceInvalidError):
-                await identity.aissue(session, 40)
+            with tenant_execution_scope(101):
+                # Reading model configuration is not a data-access permit and
+                # must also work in an already-authorized synchronous caller.
+                assert (await runtime.arequire(40, session=session)).model_id == 11
             workers.restore_tenant_context(sender=sender)
             try:
                 private = await identity.aissue(session, 40)
@@ -279,3 +283,43 @@ async def test_actorless_read_requires_actual_background_task_and_expires_after_
                 await identity.acapture(private)
     finally:
         reset_current_permission_actor(actor_token)
+
+
+async def test_config_only_scope_is_not_a_raw_user_or_http_inspection_permit(admission):
+    from bisheng.common.errcode.http_error import UnAuthorizedError
+
+    context, runtime, source, identity = admission
+    owner_module.require_business_action.side_effect = UnAuthorizedError()
+    async with context.sessions() as session:
+        # knowledge_auth=False keeps its existing upstream delegation; model
+        # configuration admission must not add a second KN visible decision.
+        assert (await runtime.arequire(40, login_user=context.user, session=session)).model_id == 11
+        owner_module.require_business_action.assert_not_awaited()
+        private = await identity.aissue(session, 40, login_user=context.user)
+        with pytest.raises(ResourceReferenceInvalidError):
+            await source.aresolve_source(
+                session, SourceReadRequest(SourceType.KNOWLEDGE, "40", purpose="inspect"), private
+            )
+        with pytest.raises(ResourceReferenceInvalidError):
+            await KnowledgeReferenceSourceOwner().aresolve_source(
+                session, SourceReadRequest(SourceType.KNOWLEDGE, "40"), private
+            )
+        with pytest.raises(UnAuthorizedError):
+            await source.aresolve_source(session, SourceReadRequest(SourceType.KNOWLEDGE, "40"), context.user)
+
+
+async def test_config_only_scope_requires_explicit_tenant_and_original_user_object(admission):
+    from bisheng.core.context.tenant import current_tenant_id
+
+    context, runtime, _, identity = admission
+    async with context.sessions() as session:
+        private = await identity.aissue(session, 40, login_user=context.user)
+        object.__setattr__(private, "login_user", context.user.model_copy())
+        with pytest.raises(ResourceReferenceInvalidError):
+            await identity.acapture(private)
+        token = current_tenant_id.set(None)
+        try:
+            with pytest.raises(ResourceReferenceInvalidError):
+                await runtime.arequire(40, login_user=context.user, session=session)
+        finally:
+            current_tenant_id.reset(token)
