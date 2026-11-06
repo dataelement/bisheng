@@ -60,7 +60,7 @@ it("accepts hierarchy six and preserves fractional/cleared drafts instead of coe
   expect(onChange).toHaveBeenLastCalledWith({ ...document, split_mode: "hierarchical", hierarchy_level: 1.5 });
   view.rerender(<DocumentProcessingDefaultsFields value={{ ...document, split_mode: "hierarchical", hierarchy_level: null }} onChange={onChange} />);
   expect(hierarchy).toHaveValue("");
-  fireEvent.click(screen.getByRole("checkbox", { name: "appendTitlePath" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "appendTitle" }));
   expect(onChange.mock.lastCall?.[0].append_title).toBe(true);
 });
 
