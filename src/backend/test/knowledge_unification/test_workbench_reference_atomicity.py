@@ -261,3 +261,87 @@ def test_dispatch_uses_frozen_business_expectations_and_actual_tenant_header(mon
             },
             headers={"tenant_id": 101},
         )
+
+
+async def test_same_canonical_embedding_has_no_rebuild_probe_or_hidden_commands(workbench, monkeypatch):
+    async with workbench.sessions() as session, session.begin():
+        await defaults.ModelDefaultApplication.asave(session, "linsight_llm", config("11"), login_user=workbench.user)
+    await fixtures.add(workbench, 40)
+    before = snapshot_state(workbench)["knowledge"]
+    plan = AsyncMock(side_effect=AssertionError("unchanged embedding planned a rebuild"))
+    monkeypatch.setattr(knowledge.KnowledgeModelReferenceApplication, "aplan_workbench_model_changes", plan)
+    result = await save(workbench, ident="011")
+    assert result.embedding_model.id == "11" and snapshot_state(workbench)["knowledge"] == before
+    plan.assert_not_awaited()
+    workbench.probe.assert_not_awaited()
+    assert not workbench.queued
+
+
+async def test_clearing_default_embedding_preserves_independent_space_configuration(workbench):
+    async with workbench.sessions() as session, session.begin():
+        await defaults.ModelDefaultApplication.asave(session, "linsight_llm", config("11"), login_user=workbench.user)
+    await fixtures.add(workbench, 40)
+    before = snapshot_state(workbench)["knowledge"]
+    result = await service.LLMService.update_workbench_llm(
+        7, WorkbenchModelConfig(models=[]), BackgroundTasks(), login_user=workbench.user
+    )
+    assert result.embedding_model is None and snapshot_state(workbench)["knowledge"] == before
+    assert not workbench.queued
+    workbench.probe.assert_not_awaited()
+
+
+async def test_any_space_action_denial_prevents_default_save_and_provider_io(workbench, monkeypatch):
+    await fixtures.add(workbench, 40)
+    await fixtures.add(workbench, 41)
+    before = snapshot_state(workbench)
+
+    async def permission(user, *, resource_type, resource_id, action):
+        assert user is workbench.user and resource_type == "knowledge_space" and action == "edit"
+        if resource_id == 41:
+            raise ResourceReferenceInvalidError(reason="test_space_edit_denied")
+
+    monkeypatch.setattr(knowledge, "require_business_action", permission)
+    with pytest.raises(ResourceReferenceInvalidError):
+        await save(workbench)
+    assert snapshot_state(workbench) == before and not workbench.queued
+    workbench.probe.assert_not_awaited()
+
+
+async def test_service_override_repairs_old_root_binding_using_post_override_sharing(workbench, monkeypatch):
+    from sqlalchemy import update
+
+    from bisheng.database.models.tenant import Tenant
+    from bisheng.knowledge.application.reference_legacy_evidence import KnowledgeLegacyReferenceEvidence
+    from bisheng.llm.application import reference_target_owner as model_module
+    from bisheng.llm.application.reference_target_owner import ModelReferenceTargetOwner
+    from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
+    from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
+    from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
+
+    await fixtures.add(workbench, 40, "22")
+    async with workbench.sessions() as session, session.begin():
+        await session.execute(update(Tenant).where(Tenant.id == 1).values(share_default_to_children=1))
+        session.add(TenantSystemModelConfig(tenant_id=1, key="linsight_llm", value='{"embedding_model":{"id":"22"}}'))
+    monkeypatch.setattr(
+        model_module,
+        "get_permission_relation_api",
+        AsyncMock(return_value=SimpleNamespace(list_resource_ids=AsyncMock(return_value=()))),
+    )
+    verifier = ReferenceTargetVerifier(
+        {"model": ModelReferenceTargetOwner(legacy_evidence=KnowledgeLegacyReferenceEvidence())}
+    )
+    runtime = ReferenceBindingRuntime(ReferenceRepository(verifier=verifier), verifier)
+    monkeypatch.setattr(defaults, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+    monkeypatch.setattr(knowledge, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+    await save(workbench)
+    state = snapshot_state(workbench)
+    row = next(row for row in state["knowledge"] if row["id"] == 40)
+    assert row["model"] == "12" and row["model_transition"]["current_model_id"] == "12"
+    refs = [row for row in state["business_resource_reference"] if row["source_type"] == "knowledge"]
+    assert {row["target_id"] for row in refs} == {"12"}
+    assert (
+        json.loads(next(row["value"] for row in state["tenant_system_model_config"] if row["tenant_id"] == 1))[
+            "embedding_model"
+        ]["id"]
+        == "22"
+    )
