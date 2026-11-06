@@ -49,13 +49,13 @@ def test_rule_names_use_exact_runtime_matching_without_trim_or_casefold():
     assert all(slot.startswith("sub.") and len(slot) < 192 for slot, _, _ in values)
 
 
-@pytest.mark.parametrize("space", [None, "", "missing", "0", "-1", True, "١٠", [], 1.5])
+@pytest.mark.parametrize("space", [None, "", "missing", "0", "-1", True, "\u0661\u0660", [], 1.5])
 def test_invalid_space_ids_are_not_silently_dropped(space):
     with pytest.raises((TypeError, ValueError)):
         extract_channel_sync_references([row(space)])
 
 
-@pytest.mark.parametrize("folder", ["", "missing", "0", "-1", True, "١٠", [], 1.5])
+@pytest.mark.parametrize("folder", ["", "missing", "0", "-1", True, "\u0661\u0660", [], 1.5])
 def test_populated_invalid_folder_cannot_fall_back_to_root(folder):
     with pytest.raises((TypeError, ValueError)):
         extract_channel_sync_references([row(folder=folder)])
