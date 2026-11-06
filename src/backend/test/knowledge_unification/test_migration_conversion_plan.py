@@ -278,3 +278,11 @@ def test_finish_seals_inputs_before_lazy_iterator_is_consumed(module):
     with pytest.raises(KnowledgeOperationPlanConflictError):
         builder.finish()
     assert tuple(commands) == ()
+
+
+async def test_unrelated_nonknowledge_orphan_links_are_not_new_conversion_blockers(module, native):
+    await native.insert(
+        original.TagLink,
+        [original.data("tag_links", 1) | {"tag_id": 999, "resource_type": 10, "resource_id": "opaque-app"}],
+    )
+    assert build(module, await acquire(native))[1] == ()
