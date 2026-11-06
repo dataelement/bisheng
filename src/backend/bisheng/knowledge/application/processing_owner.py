@@ -159,6 +159,26 @@ class KnowledgeProcessingOwner:
         await self.aread_current(session, job.space_id, identity=identity, job=job)
         await self.scope.abegin_retry_fence(session, job, jobs=self.jobs)
 
+    async def aretry_failed(
+        self, session, job_id, *, identity, idempotency_key, expected_job_revision, actor_user_id, actor_reference
+    ):
+        # Keep the established business-resource -> job locking order. The
+        # SourceOwner revalidates the real current binding in this transaction.
+        _, job = await self.scope._attempt(session, job_id, self.jobs)
+        current = await self.aread_current(session, job.space_id, identity=identity)
+        result = await self.jobs.aretry_failed(
+            session,
+            job_id,
+            idempotency_key=idempotency_key,
+            expected_job_revision=expected_job_revision,
+            actor_user_id=actor_user_id,
+            actor_reference=actor_reference,
+            configuration=current.configuration,
+        )
+        if not result.reused and result.job.state == "accepted":
+            await self.abegin_retry_fence(session, result.job, identity=identity)
+        return result
+
     async def afail_attempt(self, session, job_id, *, expected_job_revision, error_code, lease=None):
         return await self.scope.afail_attempt(
             session,

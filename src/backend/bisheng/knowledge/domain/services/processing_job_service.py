@@ -298,15 +298,14 @@ class ProcessingJobService:
         actor = await capture_processing_actor(
             identity, space_id=space_id, required_action="edit", entry_kind=entry_kind
         )
-        current = await self.owner.aread_current(session, space_id, identity=identity)
-        result = await self.jobs.aretry_failed(
+        result = await self.owner.aretry_failed(
             session,
             job_id,
             idempotency_key=request.idempotency_key,
             expected_job_revision=request.expected_job_revision,
             actor_user_id=actor.actor_user_id,
             actor_reference=actor.reference,
-            configuration=current.configuration,
+            identity=identity,
         )
         if result.job.state == "obsolete":
             return ProcessingRetryOutcome(error=KnowledgeProcessingObsoleteError())
