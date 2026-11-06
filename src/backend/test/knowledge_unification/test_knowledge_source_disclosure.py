@@ -207,3 +207,15 @@ async def test_pending_orm_source_changes_are_not_disclosed_or_discarded(metadat
             await metadata.owner.adisclose_sources(session, identity=metadata.user, source_keys=(key(10),))
         assert cached.name == "unflushed name" and cached.type == 0 and cached in session.dirty
         await session.rollback()
+
+
+async def test_pending_primary_key_changes_match_original_identity_and_remain_pending(metadata):
+    async with AsyncSession(metadata.engine) as session, session.begin():
+        cached = await session.get(Knowledge, 10)
+        cached.id = 99
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await metadata.owner.adisclose_sources(session, identity=metadata.user, source_keys=(key(10),))
+        assert cached.id == 99 and cached in session.dirty
+        assert sa.inspect(cached).identity == (10,)
+        assert sa.inspect(cached).attrs.id.history.deleted == [10]
+        await session.rollback()
