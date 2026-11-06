@@ -82,7 +82,9 @@ async def test_existing_inconsistent_runs_are_rejected_before_any_flush(repo, le
             rows[-1].checkpoints = {"_failed_from_phase": "baseline_frozen"}
             rows[-1].error_code, rows[-1].error_reason = 10998, "failed"
         elif state == "mixed":
-            rows[-1].phase = "converting"
+            rows[-1].phase = "preparing"
+            rows[-1].baseline_ref = rows[-1].plan_ref = {}
+            rows[-1].baseline_hash = rows[-1].plan_hash = None
         elif state == "writer":
             rows[-1].writer_contract_version = "other-writer"
         elif state == "other_run":
@@ -149,3 +151,21 @@ async def test_native_transaction_and_non_bypassed_scope_are_required(repo, ledg
         await session.begin()
         with bypass_tenant_filter(), pytest.raises(KnowledgeOperationPlanConflictError):
             await freeze(repo, session)
+
+
+@pytest.mark.parametrize("later_phase", ["converting", "backfilling", "verifying", "verified", "completed"])
+async def test_same_frozen_proof_survives_independent_tenant_progress_without_reinventory(repo, ledger, later_phase):
+    async with AsyncSession(ledger) as session, session.begin():
+        result = await freeze(repo, session)
+        with bypass_tenant_filter():
+            row = (
+                await session.execute(select(KnowledgeUnificationRun).where(KnowledgeUnificationRun.tenant_id == 202))
+            ).scalar_one()
+        row.phase = later_phase
+        await session.flush()
+    async with AsyncSession(ledger) as session, session.begin():
+        flushes = []
+        event.listen(session.sync_session, "before_flush", lambda *args: flushes.append(True))
+        assert await get(repo, session) == result
+        assert await freeze(repo, session) == result
+        assert flushes == []
