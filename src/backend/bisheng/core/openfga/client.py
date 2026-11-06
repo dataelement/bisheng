@@ -572,6 +572,46 @@ class FGAClient:
             raise FGAClientError(f"OpenFGA {resp.status_code}: {detail}")
         return resp.json()
 
+    def list_objects_sync(self, *, user: str, relation: str, type: str) -> list[str]:
+        """Native transport for the one non-contextual tenant sharing query.
+
+        The permission application checks readiness before exposing this port.
+        Other relation reads retain the asynchronous contextual-provider path.
+        """
+        tenant = user.removeprefix("tenant:") if isinstance(user, str) else ""
+        if (
+            not isinstance(user, str)
+            or not user.startswith("tenant:")
+            or not tenant.isascii()
+            or not tenant.isdecimal()
+            or int(tenant) <= 0
+            or relation != "shared_with"
+            or type != "llm_server"
+        ):
+            raise FGAModelError("Native relation query is not supported")
+        if self.require_contextual_provider and (
+            self._affected_relations is None or (type, relation) in self._affected_relations
+        ):
+            raise FGAModelError("Native contextual relation queries are not supported")
+        data = self._post_sync(
+            f"/stores/{self._store_id}/list-objects",
+            {
+                "authorization_model_id": self._model_id,
+                "user": user,
+                "relation": relation,
+                "type": type,
+                "consistency": "HIGHER_CONSISTENCY",
+            },
+        )
+        objects = data.get("objects") if isinstance(data, dict) else None
+        prefix = f"{type}:"
+        if not isinstance(objects, list) or any(
+            not isinstance(value, str) or not value.startswith(prefix) or not value.removeprefix(prefix)
+            for value in objects
+        ):
+            raise FGAClientError("OpenFGA returned an incomplete native relation result")
+        return objects
+
     async def _get(self, path: str) -> dict:
         """GET and return parsed response."""
         try:

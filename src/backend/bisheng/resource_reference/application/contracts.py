@@ -86,6 +86,20 @@ def canonical_target_id(value: str | int) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class SourceRootKey:
+    """A real business root, including resources without any saved version."""
+
+    tenant_id: int
+    source_type: SourceType
+    source_id: str
+
+    def __post_init__(self) -> None:
+        _positive_integer(self.tenant_id, "source tenant")
+        object.__setattr__(self, "source_type", SourceType(self.source_type))
+        _text(self.source_id, "source ID", 64)
+
+
+@dataclass(frozen=True, slots=True)
 class SourceKey:
     tenant_id: int
     source_type: SourceType

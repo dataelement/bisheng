@@ -161,6 +161,33 @@ class PermissionRelationApplication(PermissionRelationPort):
     def __init__(self, client: FGAClient) -> None:
         self._client = client
 
+    def list_resource_ids_sync(
+        self, *, subject: PermissionSubject, relation: str, resource_type: str
+    ) -> tuple[str, ...]:
+        """Native tenant sharing only; never a general action-runtime bypass."""
+        if (
+            not isinstance(subject, PermissionSubject)
+            or subject.subject_type != "tenant"
+            or subject.relation is not None
+            or not subject.subject_id.isascii()
+            or not subject.subject_id.isdecimal()
+            or int(subject.subject_id) <= 0
+            or relation != "shared_with"
+            or resource_type != "llm_server"
+        ):
+            raise ValueError("Native permission relations support only tenant llm_server sharing")
+        try:
+            objects = self._client.list_objects_sync(user=subject._backend_key(), relation=relation, type=resource_type)
+            prefix = f"{resource_type}:"
+            if not isinstance(objects, list) or any(
+                not isinstance(value, str) or not value.startswith(prefix) or not value.removeprefix(prefix)
+                for value in objects
+            ):
+                raise ValueError("incomplete native permission relation result")
+            return tuple(dict.fromkeys(value.removeprefix(prefix) for value in objects))
+        except Exception as exc:
+            raise PermissionServiceUnavailableError(exception=exc) from exc
+
     async def check(
         self,
         *,
@@ -392,6 +419,28 @@ async def get_permission_relation_api() -> PermissionRelationPort:
     if relations is None:
         raise PermissionServiceUnavailableError(msg="Permission relation application is unavailable")
     return relations
+
+
+def get_permission_relation_api_sync() -> PermissionRelationApplication:
+    """Use an already READY process composition, without lazy sync bootstrap."""
+    from bisheng.core.context.manager import app_context
+    from bisheng.permission.application.process_runtime import F048_PERMISSION_RUNTIME_CONTEXT
+
+    try:
+        context = app_context.get_context(F048_PERMISSION_RUNTIME_CONTEXT)
+        if not context.is_ready():
+            raise PermissionServiceUnavailableError(msg="Permission runtime is not ready")
+        process = context.sync_get_instance()
+        runtime = process.runtime
+        components = getattr(runtime, "components", runtime)
+        relations = getattr(components, "relations", None)
+        if not callable(getattr(relations, "list_resource_ids_sync", None)):
+            raise PermissionServiceUnavailableError(msg="Native permission relation application is unavailable")
+        return relations
+    except PermissionServiceUnavailableError:
+        raise
+    except Exception as exc:
+        raise PermissionServiceUnavailableError(exception=exc) from exc
 
 
 def _permission_relation_from_legacy_tuple(
