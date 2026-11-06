@@ -5042,6 +5042,24 @@
   **覆盖 AC**: AC-30, AC-31, AC-78, AC-79, AC-81, AC-83\
   **验证 / 完成条件**：测试先独立提交，记录真实红/首绿，再按配对生产叶验证；不以mock证明真实FGA/跨租户。
 
+## W6 元数据结构CAS必要存储接缝
+
+- [ ] **T634 · 元数据结构独立修订结构测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_metadata_schema_revision.py`\
+  **逻辑 / 测试上下文**：对应既有expected_schema_revision协议，独立整数server/Python默认0、排除旧响应、DDL幂等且无数据转换、唯一head父链。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-34, AC-49, AC-54\
+  **验证 / 完成条件**：测试先独立红测提交，不能以本卡声称元数据旧写端已接线。
+
+- [ ] **T635 · 元数据结构独立修订SQLModel及DDL**
+  **类型 / Owner**：基础设施 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge.py`；`src/backend/bisheng/core/database/alembic/versions/f118_metadata_schema.py`\
+  **逻辑 / 测试上下文**：仅加私有metadata_schema_revision非空Integer/default0，与模型/默认配置修订分离；新结构revision挂实际唯一head，guard已有列，不回填内容或重写旧迁移。\
+  **依赖**：T634\
+  **配对测试**：T634\
+  **验证 / 完成条件**：配对测试/既有单head/结构测试与Ruff通过；真实双库后续T202实测。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
