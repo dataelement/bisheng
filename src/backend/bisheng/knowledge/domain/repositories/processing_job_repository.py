@@ -1114,16 +1114,32 @@ class ProcessingJobRepository:
             job.obsolete_reason = "owning_space_missing"
             job.error_code = KnowledgeProcessingObsoleteError.Code
         elif not self._check_configuration(
-            job, ProcessingConfiguration(root.model_config_revision, root.index_generation)
+            job,
+            ProcessingConfiguration(
+                root.model_config_revision,
+                root.index_generation,
+                **(
+                    {
+                        "metadata_schema_revision": root.metadata_schema_revision,
+                        "metadata_schema_digest": _digest(root.metadata_fields or []),
+                    }
+                    if job.kind == "metadata_schema_change"
+                    else {}
+                ),
+            ),
         ):
             await session.flush()
             return job
         else:
+            unfinished_query = select(KnowledgeProcessingItem)
+            if job.kind == "metadata_schema_change":
+                unfinished_query = unfinished_query.options(
+                    defer(KnowledgeProcessingItem.processing_snapshot, raiseload=True)
+                )
             with strict_tenant_filter():
                 unfinished = (
                     await session.exec(
-                        select(KnowledgeProcessingItem)
-                        .where(
+                        unfinished_query.where(
                             KnowledgeProcessingItem.job_id == job.id,
                             KnowledgeProcessingItem.state.in_(("pending", "running")),
                         )
