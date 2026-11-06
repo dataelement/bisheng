@@ -19,6 +19,7 @@ from bisheng.common.errcode.knowledge import KnowledgeNoEmbeddingError
 from bisheng.knowledge.api.endpoints import knowledge as api
 from bisheng.knowledge.domain.services import knowledge_service as service_module
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.models.llm_server import LLMModel
 from test.knowledge_unification import test_kn_model_lifecycle_transaction as fixtures
 
@@ -39,7 +40,7 @@ def consumer(lifecycle, monkeypatch):
 
     monkeypatch.setattr(service_module, "get_sync_db_session", sessions)
     # Legacy calls must fail locally rather than use unrelated real middleware.
-    monkeypatch.setattr(api.LLMDao, "get_model_by_id", Mock(return_value=SimpleNamespace(model_type="embedding")))
+    monkeypatch.setattr(LLMDao, "get_model_by_id", Mock(return_value=SimpleNamespace(model_type="embedding")))
     for method in ("query_by_id", "update_one", "delete_knowledge"):
         monkeypatch.setattr(
             service_module.KnowledgeDao, method, Mock(side_effect=AssertionError("separate DAO transaction"))
