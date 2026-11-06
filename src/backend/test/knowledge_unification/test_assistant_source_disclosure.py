@@ -9,7 +9,6 @@ import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.api.services.f048_application_permission import F048ApplicationPermissionAdapter
-from bisheng.assistant.application.reference_source_owner import AssistantReferenceSourceOwner
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.core.database import tenant_filter
 from bisheng.database.models.assistant import Assistant
@@ -285,3 +284,73 @@ async def test_owner_read_preserves_pending_rows_and_does_not_commit(disclosure)
                 sa.select(sa.func.count()).select_from(Assistant).where(Assistant.id == "caller-pending")
             )
         ).scalar_one() == 0
+
+
+async def test_original_full_scope_super_shortcut_is_not_extended_to_narrowed_tokens(disclosure):
+    case = disclosure
+    for scope, allowed in (("all_visible", True), ("personal_only", False)):
+        token = set_current_permission_actor(
+            PermissionActor(user_id=9, tenant_id=101, super_admin=True, data_scope=scope)
+        )
+        try:
+            result = await disclose(case, (key(),))
+            assert (result[0] is not None) is allowed
+        finally:
+            reset_current_permission_actor(token)
+
+
+async def test_public_identity_only_reuses_exact_original_assistant_guest_qualification(disclosure, monkeypatch):
+    from bisheng.common.errcode.public_endpoints import PublicGuestAccessDisabledError
+    from bisheng.public_endpoints.domain.context import (
+        PublicApiPrincipal,
+        reset_current_public_api_principal,
+        set_current_public_api_principal,
+    )
+    from bisheng.public_endpoints.domain.services import guest_policy
+
+    case = disclosure
+    async with case.engine.begin() as conn:
+        await conn.execute(sa.insert(Assistant).values(id="unrelated", tenant_id=101, user_id=9, name="unrelated"))
+        await conn.execute(
+            sa.insert(ResourcePermissionMode).values(
+                id=10,
+                tenant_id=101,
+                resource_type="assistant",
+                resource_id="unrelated",
+                mode="CUSTOM",
+                version=1,
+                projection_state="CURRENT",
+            )
+        )
+    gate = AsyncMock()
+    monkeypatch.setattr(guest_policy, "ensure_guest_link_enabled", gate)
+    public = PublicApiPrincipal(
+        tenant_id=101, operator_user_id=9, operator_name="actor", resource_type="assistant", resource_id="owned"
+    )
+    token = set_current_public_api_principal(public)
+    try:
+        result = await disclose(case, (key(), key("unrelated"), key()))
+        assert result[0] is not None and result[2] == result[0] and result[1] is None
+        gate.assert_awaited_once_with("assistant", "owned")
+        gate.side_effect = PublicGuestAccessDisabledError()
+        assert await disclose(case, (key(),)) == (None,)
+    finally:
+        reset_current_public_api_principal(token)
+
+
+async def test_owner_direct_detects_original_actor_mutation_during_permission_io(disclosure):
+    case = disclosure
+    original = case.fga.batch_check.side_effect
+    token = set_current_permission_actor(case.actor)
+
+    async def changed(values, **options):
+        result = await original(values, **options)
+        set_current_permission_actor(PermissionActor(user_id=77, tenant_id=101))
+        return result
+
+    case.fga.batch_check.side_effect = changed
+    try:
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await disclose(case, (key(),))
+    finally:
+        reset_current_permission_actor(token)
