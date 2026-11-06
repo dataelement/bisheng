@@ -187,3 +187,25 @@ async def test_401_actual_sources_use_three_sql_batches_and_five_permission_batc
     assert len(metadata.facts.queries) == 3
     assert [len(batch) for batch in metadata.facts.checks] == [100, 100, 100, 100, 1]
     assert len(metadata.facts.snapshots) == 3
+
+
+async def test_preloaded_clean_orm_metadata_is_refreshed_from_actual_sql(metadata):
+    async with AsyncSession(metadata.engine) as session, session.begin():
+        cached = await session.get(Knowledge, 10)
+        await session.execute(
+            sa.update(Knowledge.__table__).where(Knowledge.id == 10).values(name="current SQL name")
+        )
+        assert cached.name == "10" and not session.dirty
+        result = await metadata.owner.adisclose_sources(session, identity=metadata.user, source_keys=(key(10),))
+        assert result[0].name == "current SQL name"
+
+
+async def test_pending_orm_source_changes_are_not_disclosed_or_discarded(metadata):
+    async with AsyncSession(metadata.engine) as session, session.begin():
+        cached = await session.get(Knowledge, 10)
+        cached.name = "unflushed name"
+        cached.type = 0
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await metadata.owner.adisclose_sources(session, identity=metadata.user, source_keys=(key(10),))
+        assert cached.name == "unflushed name" and cached.type == 0 and cached in session.dirty
+        await session.rollback()
