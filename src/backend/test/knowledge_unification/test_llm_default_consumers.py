@@ -6,7 +6,7 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlmodel import Session
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -26,6 +26,10 @@ model_owner_tenant = reading.model_owner_tenant
 @pytest.fixture
 async def consumers(reads, monkeypatch):
     monkeypatch.setattr(defaults, "_runtime", reads.facade)
+    monkeypatch.setattr(
+        "bisheng.dsh.domain.services.model_catalog.project_workbench_config",
+        AsyncMock(side_effect=lambda config, user_id: config),
+    )
     # A missing new admission call must fail locally instead of touching the
     # deployment database through the old self-session DAO.
     monkeypatch.setattr(
@@ -144,3 +148,108 @@ async def test_workbench_management_raw_settings_preserves_invalid_asr_without_p
 async def test_strict_default_getter_does_not_accept_explicit_other_tenant(consumers):
     with pytest.raises(ResourceReferenceInvalidError):
         await service.LLMService.get_evaluation_llm(tenant_id=202)
+
+
+@pytest.mark.parametrize(
+    "model_type,missing,stored_realtime,expected",
+    [
+        ("asr_rt", None, False, True),
+        ("asr", None, True, False),
+        ("asr_rt", "model", True, False),
+        ("asr_rt", "server", True, False),
+    ],
+)
+async def test_workbench_runtime_derives_asr_capability_without_changing_raw_settings(
+    consumers, monkeypatch, model_type, missing, stored_realtime, expected
+):
+    import json
+
+    from bisheng.llm.api import router as api
+    from bisheng.llm.domain.models.llm_server import LLMServer
+
+    payload = {
+        "models": [{"id": "777", "name": "still-needs-repair"}],
+        "asr_model": {"id": "11", "realtime": stored_realtime},
+    }
+    with Session(consumers.engine, expire_on_commit=False) as session, session.begin():
+        session.add(TenantSystemModelConfig(tenant_id=101, key="linsight_llm", value=json.dumps(payload)))
+        model = session.get(LLMModel, 11)
+        model.model_type = model_type
+        server = session.get(LLMServer, model.server_id)
+    lookup = AsyncMock(return_value=(None if missing == "model" else model, None if missing == "server" else server))
+    monkeypatch.setattr(service.BishengASR, "get_model_server_info", lookup)
+    provider = AsyncMock(side_effect=AssertionError("capability projection must not initialize ASR"))
+    monkeypatch.setattr(service.LLMService, "get_bisheng_asr", provider)
+    user = UserPayload(user_id=7, user_name="admin", tenant_id=101, user_role=[])
+
+    result = await api.get_workbench_llm(request=None, login_user=user)
+    assert result.data["data"]["asr_model"]["id"] == "11"
+    assert result.data["data"]["asr_model"]["realtime"] is expected
+    assert result.data["data"]["models"][0]["id"] == "777"
+    assert result.data["inherited_from_root"] is False and result.data["fallback_blocked"] is False
+    lookup.assert_awaited_once_with(11)
+    provider.assert_not_awaited()
+
+    lookup.reset_mock()
+    monkeypatch.setattr(api, "_assert_can_write_system_config", AsyncMock())
+    raw = await api.get_workbench_settings(login_user=user)
+    assert raw.data["data"]["asr_model"]["realtime"] is stored_realtime
+    assert raw.data["data"]["models"][0]["id"] == "777"
+    lookup.assert_not_awaited()
+    with Session(consumers.engine) as session:
+        stored = session.execute(
+            select(TenantSystemModelConfig).where(TenantSystemModelConfig.key == "linsight_llm")
+        ).scalar_one()
+        assert json.loads(stored.value) == payload
+
+
+@pytest.mark.parametrize("invalid_id", ["not-a-model", "0", "-1"])
+async def test_workbench_runtime_keeps_malformed_asr_id_without_trusting_saved_realtime(
+    consumers, monkeypatch, invalid_id
+):
+    import json
+
+    from bisheng.llm.api import router as api
+
+    with Session(consumers.engine) as session, session.begin():
+        session.add(
+            TenantSystemModelConfig(
+                tenant_id=101,
+                key="linsight_llm",
+                value=json.dumps({"asr_model": {"id": invalid_id, "realtime": True}}),
+            )
+        )
+    lookup = AsyncMock(side_effect=AssertionError("invalid ID must not be resolved"))
+    monkeypatch.setattr(service.BishengASR, "get_model_server_info", lookup)
+    result = await api.get_workbench_llm(
+        request=None, login_user=UserPayload(user_id=7, user_name="user", tenant_id=101, user_role=[])
+    )
+    assert result.data["data"]["asr_model"]["id"] == invalid_id
+    assert result.data["data"]["asr_model"]["realtime"] is False
+    lookup.assert_not_awaited()
+
+
+async def test_workbench_runtime_without_asr_never_resolves_a_model(consumers, monkeypatch):
+    from bisheng.llm.api import router as api
+
+    lookup = AsyncMock(side_effect=AssertionError("empty ASR must not be resolved"))
+    monkeypatch.setattr(service.BishengASR, "get_model_server_info", lookup)
+    result = await api.get_workbench_llm(
+        request=None, login_user=UserPayload(user_id=7, user_name="user", tenant_id=101, user_role=[])
+    )
+    assert result.data["data"]["asr_model"] is None
+    lookup.assert_not_awaited()
+
+
+async def test_workbench_runtime_does_not_hide_asr_metadata_backend_failure(consumers, monkeypatch):
+    from bisheng.llm.api import router as api
+
+    with Session(consumers.engine) as session, session.begin():
+        session.add(TenantSystemModelConfig(tenant_id=101, key="linsight_llm", value='{"asr_model":{"id":"11"}}'))
+    error = RuntimeError("model catalog unavailable")
+    monkeypatch.setattr(service.BishengASR, "get_model_server_info", AsyncMock(side_effect=error))
+    with pytest.raises(RuntimeError) as raised:
+        await api.get_workbench_llm(
+            request=None, login_user=UserPayload(user_id=7, user_name="user", tenant_id=101, user_role=[])
+        )
+    assert raised.value is error

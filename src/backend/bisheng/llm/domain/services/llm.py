@@ -64,6 +64,7 @@ from bisheng.llm.domain.schemas import (
 )
 from bisheng.llm.domain.services.context_window import ContextWindowService
 from bisheng.llm.domain.utils import invalidate_llm_info_cache, to_llm_invoke_error, usable_proxy_url
+from bisheng.resource_reference.application.contracts import canonical_target_id
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -1476,6 +1477,20 @@ class LLMService:
         cls, tenant_id: int | None = None
     ) -> tuple[WorkbenchModelConfig, bool, bool]:
         return await cls._aget_typed_with_meta(ConfigKeyEnum.LINSIGHT_LLM, WorkbenchModelConfig, tenant_id)
+
+    @classmethod
+    async def project_workbench_runtime_capabilities(cls, config: WorkbenchModelConfig) -> WorkbenchModelConfig:
+        """Derive client capabilities without changing the stored repair metadata."""
+        projected = config.model_copy(deep=True)
+        if projected.asr_model is not None:
+            projected.asr_model.realtime = False
+            try:
+                model_id = int(canonical_target_id(projected.asr_model.id))
+            except (TypeError, ValueError):
+                return projected
+            model, server = await BishengASR.get_model_server_info(model_id)
+            projected.asr_model.realtime = BishengASR.uses_realtime(model, server)
+        return projected
 
     @classmethod
     def get_workbench_llm_sync(

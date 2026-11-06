@@ -251,6 +251,7 @@ async def get_workbench_llm(request: Request, login_user: UserPayload = Depends(
     from bisheng.dsh.domain.services.model_catalog import project_workbench_config
 
     cfg = await project_workbench_config(cfg, login_user.user_id)
+    cfg = await LLMService.project_workbench_runtime_capabilities(cfg)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 

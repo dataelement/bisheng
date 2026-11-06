@@ -177,4 +177,4 @@ API 取消两个默认 JSON 在线 backfill。正式升级必须由运维停服/
 
 新增test_linsight_reference_bootstrap.py直接执行真实run入口和真实composition，隔离Redis/权限transport/heartbeat：enabled开关两种冷启动及两类失败共4项，修复前4红、修后4绿。与既有native/bootstrap/composition/default读取及Linsight stranded/HITL/deferred、F048 API/worker组合11路径109 passed；两Python文件Ruff/format及arch-guard通过。该结果是定向本地回归，不替代前述W4全组历史结果或真实进程/中间件E2E。
 
-同次评审的ASR realtime响应回归仍待处理：专用asr_rt类型保持不变；默认配置只保存id，旧运行响应按实际类型派生realtime供前端。切换为保留失效ID的原始配置读取时误删了能力派生；恢复方向为普通workbench响应补回派生，管理settings保raw。此轮只修进程装配并解释该差异，没有改变ASR接口。
+同次评审的ASR响应问题随后修复：普通GET /llm/workbench在既有用户目录投影后，复制响应配置并按实际asr_rt模型类型派生realtime，不信持久化的旧布尔值；模型/服务已删除或ID格式无效时保留原ID、能力为False，查询故障明确传播，不初始化provider。GET /llm/workbench/settings继续无模型查询的raw读取，不改存储或全来源执行校验。新增9项行为覆盖，修前8红/原空ASR1绿，修后相关默认配置组合72项通过；测试中对冻结DSH配置的错误修改已改为隔离外部目录投影边界，不算业务红。
