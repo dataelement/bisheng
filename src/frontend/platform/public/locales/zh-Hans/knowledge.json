@@ -478,6 +478,12 @@
     "space_description": "空间描述",
     "space_name": "空间名称",
     "spaces": "知识空间",
-    "tables": "表格"
+    "tables": "表格",
+    "create_folder": "新建文件夹",
+    "folder_name": "文件夹名称",
+    "current_folder": "当前文件夹",
+    "loading_directory": "正在加载目录…",
+    "directory_empty": "此文件夹中暂无可显示内容",
+    "more_files": "加载更多"
   }
 }

@@ -478,6 +478,12 @@
     "space_description": "Space description",
     "space_name": "Space name",
     "spaces": "Knowledge spaces",
-    "tables": "Tables"
+    "tables": "Tables",
+    "create_folder": "New folder",
+    "folder_name": "Folder name",
+    "current_folder": "Current folder",
+    "loading_directory": "Loading folder…",
+    "directory_empty": "No items to show in this folder.",
+    "more_files": "Load more"
   }
 }
