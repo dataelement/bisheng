@@ -76,6 +76,9 @@ async def admission(request, catalog, monkeypatch):
     monkeypatch.setattr(knowledge_module, "get_async_db_session", catalog.repository._session_factory)
     monkeypatch.setattr(business, "get_f048_runtime", AsyncMock(return_value=runtime))
     monkeypatch.setattr(business, "get_f048_resource_registry", AsyncMock(return_value=registry))
+    monkeypatch.setattr(
+        "bisheng.permission.application.access.get_f048_resource_adapter", AsyncMock(return_value=adapter)
+    )
     monkeypatch.setattr(knowledge_space_service, "KnowledgeSpaceListingRepository", lambda: catalog.repository)
     monkeypatch.setattr(KnowledgeSpaceService, "_resource_adapter", staticmethod(AsyncMock(return_value=adapter)))
     monkeypatch.setattr(
@@ -98,30 +101,128 @@ async def admission(request, catalog, monkeypatch):
         reset_current_open_api_principal(principal_token)
 
 
-async def test_library_slot_groups_original_and_migrated_ids_once_using_visible(admission, monkeypatch):
+async def test_library_slot_groups_original_and_migrated_loaded_rows_once_using_visible(admission):
     await admission.catalog.seed([row(1, kind=0), row(2)])
     admission.allowed.update(
         {(admission.actor.fga_subject, "knowledge_library:1"), (admission.actor.fga_subject, "knowledge_space:2")}
     )
-    original = business.batch_check_business_actions
-    calls = []
-
-    async def batch(login_user, **options):
-        assert login_user is admission.operator
-        calls.append(options)
-        return await original(login_user, **options)
-
-    monkeypatch.setattr(business, "batch_check_business_actions", batch)
     await OpenTaskModeService.check_knowledge_libraries(admission.operator, [1, 2, 2, 1])
-    assert [(call["resource_type"], tuple(call["resource_ids"]), call["actions"]) for call in calls] == [
-        ("knowledge_library", (1,), ("visible",)),
-        ("knowledge_space", (2,), ("visible",)),
+    assert admission.catalog.facts.snapshots == [
+        ((101, "knowledge_library", "1"),),
+        ((101, "knowledge_space", "2"),),
     ]
-    assert len(admission.catalog.facts.queries) == 3  # one candidates query plus two distinct verified-target reads
+    assert len(admission.catalog.facts.queries) == 1
     assert {check["object"] for check in admission.checks} == {"knowledge_library:1", "knowledge_space:2"}
     assert all(
         check["user"] == admission.actor.fga_subject and check["relation"] == "visible" for check in admission.checks
     )
+
+
+@pytest.mark.parametrize("slot", ["knowledge_ids", "knowledge_space_ids"])
+@pytest.mark.parametrize("unique_count,repeats", [(25, 2), (50, 1)])
+async def test_legal_maximum_task_selection_has_constant_knowledge_sql_budget(admission, slot, unique_count, repeats):
+    rows = [row(ident, kind=0 if slot == "knowledge_ids" and ident % 2 else 3) for ident in range(1, unique_count + 1)]
+    await admission.catalog.seed(rows)
+    for item in rows:
+        namespace = "knowledge_library" if item.type == 0 else "knowledge_space"
+        admission.allowed.add((admission.actor.fga_subject, f"{namespace}:{item.id}"))
+    req = _req(**{slot: list(range(1, unique_count + 1)) * repeats})
+    check = (
+        OpenTaskModeService.check_knowledge_libraries
+        if slot == "knowledge_ids"
+        else OpenTaskModeService.check_knowledge_spaces
+    )
+    await check(admission.operator, getattr(req, slot))
+    assert len(admission.catalog.facts.queries) <= 3
+    assert len(admission.checks) == unique_count
+    assert len({check["object"] for check in admission.checks}) == unique_count
+    assert admission.fga.batch_check.await_count == (2 if slot == "knowledge_ids" else 1)
+    assert all(
+        check["user"] == admission.actor.fga_subject and check["relation"] == "visible" for check in admission.checks
+    )
+
+
+async def test_two_legal_task_slots_total_100_targets_use_two_candidate_reads(admission):
+    await admission.catalog.seed([row(ident, kind=0 if ident <= 50 else 3) for ident in range(1, 101)])
+    admission.allowed.update(
+        (admission.actor.fga_subject, f"{'knowledge_library' if ident <= 50 else 'knowledge_space'}:{ident}")
+        for ident in range(1, 101)
+    )
+    req = _req(knowledge_ids=list(range(1, 51)), knowledge_space_ids=list(range(51, 101)))
+    await OpenTaskModeService.check_knowledge_libraries(admission.operator, req.knowledge_ids)
+    await OpenTaskModeService.check_knowledge_spaces(admission.operator, req.knowledge_space_ids)
+    assert len(admission.catalog.facts.queries) <= 4
+    assert len(admission.checks) == 100 and admission.fga.batch_check.await_count == 2
+    assert len(admission.catalog.facts.snapshots) == 2
+
+
+async def test_internal_duplicate_mixed_100_targets_do_not_reload_each_id(admission):
+    await admission.catalog.seed([row(ident, kind=0 if ident <= 50 else 3) for ident in range(1, 101)])
+    admission.allowed.update(
+        (admission.actor.fga_subject, f"{'knowledge_library' if ident <= 50 else 'knowledge_space'}:{ident}")
+        for ident in range(1, 101)
+    )
+    await OpenTaskModeService.check_knowledge_libraries(admission.operator, list(range(1, 101)) * 4)
+    assert len(admission.catalog.facts.queries) <= 3
+    assert len(admission.checks) == 100 and admission.fga.batch_check.await_count == 2
+    assert len(admission.catalog.facts.snapshots) == 2
+
+
+@pytest.mark.parametrize(
+    "slot,error", [("knowledge_ids", PermissionDeniedError), ("knowledge_space_ids", SpacePermissionDeniedError)]
+)
+async def test_loaded_task_target_without_permission_snapshot_is_denied(admission, slot, error, monkeypatch):
+    await admission.catalog.seed([row(1)])
+    admission.allowed.add((admission.actor.fga_subject, "knowledge_space:1"))
+    versions = admission.catalog.service.f048_permission_adapter._loader._versions
+    monkeypatch.setattr(versions, "get_permission_snapshots", AsyncMock(return_value={}))
+    check = (
+        OpenTaskModeService.check_knowledge_libraries
+        if slot == "knowledge_ids"
+        else OpenTaskModeService.check_knowledge_spaces
+    )
+    with pytest.raises(error):
+        await check(admission.operator, [1])
+    admission.fga.batch_check.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "slot,error", [("knowledge_ids", PermissionDeniedError), ("knowledge_space_ids", SpacePermissionDeniedError)]
+)
+@pytest.mark.parametrize("invalid", [None, "snapshot", "state"])
+async def test_only_original_library_super_shortcut_survives_loaded_validation(
+    admission, slot, error, invalid, monkeypatch
+):
+    item = row(1)
+    if invalid == "state":
+        item.state = -1
+    await admission.catalog.seed([item])
+    if invalid == "snapshot":
+        versions = admission.catalog.service.f048_permission_adapter._loader._versions
+        monkeypatch.setattr(versions, "get_permission_snapshots", AsyncMock(return_value={}))
+    actor = PermissionActor(
+        subject_type=admission.actor.subject_type,
+        subject_id=admission.actor.subject_id,
+        tenant_id=101,
+        super_admin=True,
+    )
+    token = set_current_permission_actor(actor)
+    try:
+        check = (
+            OpenTaskModeService.check_knowledge_libraries
+            if slot == "knowledge_ids"
+            else OpenTaskModeService.check_knowledge_spaces
+        )
+        if actor.super_admin and slot == "knowledge_ids" and invalid is None:
+            await check(admission.operator, [1])
+            admission.fga.batch_check.assert_not_awaited()
+        else:
+            with pytest.raises(error):
+                await check(admission.operator, [1])
+            if invalid:
+                admission.fga.batch_check.assert_not_awaited()
+    finally:
+        reset_current_permission_actor(token)
 
 
 @pytest.mark.parametrize("kind", [1, 2, 99])
