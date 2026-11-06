@@ -163,3 +163,11 @@ async def test_same_root_batch_contract_is_not_weakened(components):
     with pytest.raises(ResourceReferenceInvalidError):
         await runtime.verifier.averify_batch_targets(session, tuple((key, ()) for key in KEYS))
     assert events == []
+
+
+async def test_empty_model_union_still_enters_owner_auxiliary_lock_plan(components):
+    session, runtime, _owner, events = components
+    items = tuple(replace(item, references=()) for item in changes(events))
+    await runtime.aprepare_mixed_source_bindings(session, items)
+    assert events[0] == ("prelock", (), tuple(reversed(KEYS)))
+    assert [event[0] for event in events] == ["prelock", "root", "root"]
