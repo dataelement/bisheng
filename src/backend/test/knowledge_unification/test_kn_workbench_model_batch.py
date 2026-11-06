@@ -14,6 +14,7 @@ import pytest
 import sqlalchemy as sa
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.core.database import tenant_filter
 from bisheng.knowledge.application import model_reference as module
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication as App
 from bisheng.knowledge.application.reference_legacy_evidence import KnowledgeLegacyReferenceEvidence
@@ -38,7 +39,10 @@ business = fixtures.business
 
 
 @pytest.fixture
-async def spaces(business):
+async def spaces(business, monkeypatch):
+    names = tenant_filter._tenant_aware_tables | {TenantSystemModelConfig.__tablename__}
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", names)
+    monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
     async with business.sessions() as session, session.begin():
         await session.execute(sa.delete(Knowledge).where(Knowledge.tenant_id == 101, Knowledge.type == 3))
     return business
