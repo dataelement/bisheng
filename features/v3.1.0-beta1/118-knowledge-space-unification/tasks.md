@@ -7001,7 +7001,7 @@
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/permission/test_creator_delete_batch.py`\
   **逻辑 / 测试上下文**：W6§54原SQL/F048Runtime 50全拒508及creator-only556 SELECT反例，原策略保持，批量预算与来源撤销/pin/scope。\
-  **依赖**：T850\
+  **依赖**：T844\
   **覆盖 AC**: AC-71, AC-72, AC-73, AC-75, AC-76, AC-89\
   **验证 / 完成条件**：原行为首绿与预算真红分别记录，使用真实SQL/FGA运输边界，不镜像授权实现。
 

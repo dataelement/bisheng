@@ -188,5 +188,5 @@
 | T862 | M3原生SQL精确转换与写后核验 | 后端 Domain / PROC | T861 |
 | T863 | M3受控批次与原事务进度测试 | 测试 / PROC | T862 |
 | T864 | M3受控批次与原事务进度 | 后端 Domain / PROC | T863 |
-| T865 | APP来源SA创建者例外原生预算测试 | 测试 / PERM | T850 |
+| T865 | APP来源SA创建者例外原生预算测试 | 测试 / PERM | T844 |
 | T866 | APP来源SA创建者例外批量读取 | 后端 Permission / PERM | T865 |
