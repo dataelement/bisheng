@@ -417,3 +417,32 @@ async def test_original_native_scope_and_transaction_are_required_and_pending_bu
         async with session.begin():
             with pytest.raises(KnowledgeOperationPlanConflictError):
                 reader._current()
+
+
+@pytest.mark.parametrize("mode", ["redis", "rediss", "sentinel"])
+async def test_owned_builder_uses_actual_native_client_pool_without_connecting(module, original, monkeypatch, mode):
+    from redis.asyncio.connection import AbstractConnection, SSLConnection
+    from redis.asyncio.sentinel import SentinelConnectionPool
+
+    async def forbidden_connect(*args, **kwargs):
+        raise AssertionError("offline builder must never connect")
+
+    monkeypatch.setattr(AbstractConnection, "connect", forbidden_connect)
+    config = messages.conf(broker_url=mode + "://u:private-pass@localhost:6379/3")
+    if mode == "sentinel":
+        config.broker_transport_options = {
+            "master_name": "original-master",
+            "sentinel_kwargs": {"password": "private-monitor"},
+        }
+    reader = module.RedisBrokerInventoryReader(None, configuration=BrokerReadConfiguration.from_conf(config))
+    client = await reader._open()
+    assert client.connection_pool.connection_kwargs["db"] == 3
+    assert client.connection_pool.connection_kwargs["password"] == "private-pass"
+    if mode == "rediss":
+        assert client.connection_pool.connection_class is SSLConnection
+    elif mode == "sentinel":
+        assert isinstance(client.connection_pool, SentinelConnectionPool)
+        assert client.connection_pool.service_name == "original-master"
+        assert len(reader._owned_clients) == 2
+    await reader.aclose()
+    assert reader._owned_clients == []
