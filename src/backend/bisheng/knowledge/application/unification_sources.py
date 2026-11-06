@@ -8,9 +8,10 @@ and canonical digests. Nothing freezes a run, writes bindings or marks ready.
 import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Literal
+from weakref import WeakSet
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +33,10 @@ from bisheng.channel.domain.services.reference_extractor import (
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
 from bisheng.knowledge.application.unification_names import UnificationNameIndex
-from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
+from bisheng.knowledge.domain.repositories.unification_inventory_repository import (
+    KnowledgeRow,
+    UnificationInventoryRepository,
+)
 from bisheng.knowledge.domain.repositories.unification_target_repository import (
     KnowledgeMigrationTargetFact,
     KnowledgeMigrationTargetRepository,
@@ -45,7 +49,7 @@ from bisheng.llm.domain.repositories.migration_target_repository import (
     ModelMigrationTargetFact,
     ModelMigrationTargetRepository,
 )
-from bisheng.llm.domain.repositories.model_name_resolution_repository import ModelNameResolutionRepository
+from bisheng.llm.domain.repositories.model_name_resolution_repository import ModelNameResolutionRepository, NameCatalog
 from bisheng.llm.domain.services.default_reference_extractor import (
     MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
     extract_model_default_references,
@@ -68,6 +72,30 @@ from bisheng.workflow.domain.services.reference_extractor import (
 
 Lifecycle = tuple[str | int | bool | None, ...]
 PhysicalFact = KnowledgeMigrationTargetFact | ModelMigrationTargetFact
+_KN_NEUTRAL_FIELDS = frozenset(
+    {
+        "model_transition_json",
+        "model_config_revision",
+        "index_generation",
+        "processing_config_version",
+        "metadata_schema_revision",
+        "migration_origin",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
+class PreparedSourceInventoryContext:
+    """Instance-issued, nonpersistent facts for one original SQL transaction."""
+
+    tenant_id: int
+    run_id: str
+    writer_contract_version: str
+    transaction: TransactionIdentity = field(repr=False)
+    shared_server_ids: frozenset[int]
+    catalog: NameCatalog = field(repr=False)
+    knowledge_rows: tuple[KnowledgeRow, ...] = field(repr=False)
+    name_index: UnificationNameIndex = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +105,7 @@ class RootInventoryRecord:
     lifecycle: Lifecycle
     configuration_digest: str
     retained_version_count: int
+    business_revision_digest: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +116,7 @@ class SourceInventoryRecord:
     reference_digest: str
     reference_count: int
     lifecycle: Lifecycle
+    business_revision_digest: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +134,7 @@ class RetiredInventoryRecord:
     source_key: SourceKey | None
     lifecycle: Lifecycle
     configuration_digest: str
+    business_revision_digest: str
 
 
 def _blocked(reason):
@@ -151,6 +182,7 @@ class UnificationSourceInventory:
             knowledge_targets if knowledge_targets is not None else KnowledgeMigrationTargetRepository()
         )
         self.model_targets = model_targets if model_targets is not None else ModelMigrationTargetRepository()
+        self._contexts: WeakSet[PreparedSourceInventoryContext] = WeakSet()
 
     async def _pages(self, session, method, **kwargs):
         after = None
@@ -168,7 +200,7 @@ class UnificationSourceInventory:
             return
         active = [entry for entry in entries if not isinstance(entry, RetiredInventoryRecord)]
         unseen = tuple(
-            dict.fromkeys(ref.target for _, _, _, refs, _, _ in active for ref in refs if ref.target not in cache)
+            dict.fromkeys(ref.target for _, _, _, refs, _, _, _ in active for ref in refs if ref.target not in cache)
         )
         for owner, keys in (
             (self.model_targets, tuple(key for key in unseen if key.target_type == TargetType.MODEL)),
@@ -184,9 +216,15 @@ class UnificationSourceInventory:
             if isinstance(entry, RetiredInventoryRecord):
                 yield entry
                 continue
-            key, extractor, configuration, references, lifecycle, origins = entry
+            key, extractor, configuration, references, lifecycle, origins, revision = entry
             yield SourceInventoryRecord(
-                key, extractor, _digest(configuration), reference_set_digest(references), len(references), lifecycle
+                key,
+                extractor,
+                _digest(configuration),
+                reference_set_digest(references),
+                len(references),
+                lifecycle,
+                revision,
             )
             for ref in references:
                 yield ReferenceInventoryRecord(
@@ -219,6 +257,7 @@ class UnificationSourceInventory:
                 if parent not in roots:
                     _blocked("missing_version_parent")
                 root, _, _, _, root_deleted = roots[parent]
+                revision = _digest({"root": roots[parent][3], "version": asdict(row)})
                 key = SourceKey(tenant, kind, parent, str(row.id))
                 if workflow:
                     deleted = _flag(row.is_delete, nullable=True)
@@ -239,7 +278,7 @@ class UnificationSourceInventory:
                     payload = {"capabilities": json.loads(row.capabilities_json)}
                     extractor = APP_REFERENCE_EXTRACTOR_VERSION
                 if root_deleted or deleted:
-                    entries.append(RetiredInventoryRecord(root, key, lifecycle, _digest(payload)))
+                    entries.append(RetiredInventoryRecord(root, key, lifecycle, _digest(payload), revision))
                     continue
                 origins = {}
                 if workflow:
@@ -249,15 +288,17 @@ class UnificationSourceInventory:
                     requests = extract_app_reference_requests(declaration)
                     references = extract_app_references(declaration, resolved_targets=index.resolve(requests))
                     origins = {request.slot_key: "resolved_name" for request in requests if request.target_id is None}
-                entries.append((key, extractor, payload, normalize_references(references), lifecycle, origins))
+                entries.append(
+                    (key, extractor, payload, normalize_references(references), lifecycle, origins, revision)
+                )
                 counts[parent] += 1
             async for record in self._sources(session, entries, cache):
                 yield record
         for ident, (root, creator, lifecycle, digest, deleted) in roots.items():
             if deleted:
-                yield RetiredInventoryRecord(root, None, lifecycle, digest)
+                yield RetiredInventoryRecord(root, None, lifecycle, digest, digest)
             else:
-                yield RootInventoryRecord(root, creator, lifecycle, digest, counts[ident])
+                yield RootInventoryRecord(root, creator, lifecycle, digest, counts[ident], digest)
 
     async def _linked(self, session, tenant, kind, cache):
         assistant = kind == SourceType.ASSISTANT
@@ -302,11 +343,14 @@ class UnificationSourceInventory:
                     extractor = CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION
                     references = extract_channel_sync_references(links)
                 digest = _digest(configuration)
+                revision = _digest({"root": asdict(row), "links": links})
                 if deleted:
-                    root_records.append(RetiredInventoryRecord(root, None, lifecycle, digest))
+                    root_records.append(RetiredInventoryRecord(root, None, lifecycle, digest, revision))
                 else:
-                    root_records.append(RootInventoryRecord(root, row.user_id, lifecycle, digest, 1))
-                    entries.append((key, extractor, configuration, normalize_references(references), lifecycle, {}))
+                    root_records.append(RootInventoryRecord(root, row.user_id, lifecycle, digest, 1, revision))
+                    entries.append(
+                        (key, extractor, configuration, normalize_references(references), lifecycle, {}, revision)
+                    )
             for record in root_records:
                 yield record
             async for record in self._sources(session, entries, cache):
@@ -326,12 +370,13 @@ class UnificationSourceInventory:
             }
             lifecycle = (row.type, row.state, row.is_released)
             digest = _digest(configuration)
+            revision = _digest({key: value for key, value in asdict(row).items() if key not in _KN_NEUTRAL_FIELDS})
             if row.type == 2:
-                yield RetiredInventoryRecord(root, None, lifecycle, digest)
+                yield RetiredInventoryRecord(root, None, lifecycle, digest, revision)
                 continue
             key = SourceKey(tenant, SourceType.KNOWLEDGE, str(row.id), "current")
             refs = extract_knowledge_model_references(**configuration)
-            yield RootInventoryRecord(root, row.user_id, lifecycle, digest, 1)
+            yield RootInventoryRecord(root, row.user_id, lifecycle, digest, 1, revision)
             entries.append(
                 (
                     key,
@@ -340,6 +385,7 @@ class UnificationSourceInventory:
                     normalize_references(refs),
                     lifecycle,
                     {},
+                    revision,
                 )
             )
         async for record in self._sources(session, entries, cache):
@@ -353,7 +399,8 @@ class UnificationSourceInventory:
                 refs = () if empty else extract_model_default_references(row.key, value)
                 root = SourceRootKey(tenant, SourceType.MODEL_DEFAULT, row.key)
                 key = SourceKey(tenant, SourceType.MODEL_DEFAULT, row.key, "current")
-                yield RootInventoryRecord(root, None, lifecycle, _digest(configuration), 1)
+                revision = _digest(asdict(row))
+                yield RootInventoryRecord(root, None, lifecycle, _digest(configuration), 1, revision)
                 entries.append(
                     (
                         key,
@@ -362,12 +409,14 @@ class UnificationSourceInventory:
                         normalize_references(refs),
                         lifecycle,
                         {},
+                        revision,
                     )
                 )
             async for record in self._sources(session, entries, cache):
                 yield record
 
-    async def aiter_tenant_source_records(self, session, *, run_id, writer_contract_version):
+    @staticmethod
+    def _identity(session, run_id, writer_contract_version):
         tenant = get_current_tenant_id()
         if (
             not isinstance(session, AsyncSession)
@@ -384,28 +433,91 @@ class UnificationSourceInventory:
                 or len(value) > maximum
             ):
                 _blocked("invalid_run_identity")
-        transaction = TransactionIdentity.capture(session)
+        try:
+            transaction = TransactionIdentity.capture(session)
+        except (TypeError, ValueError):
+            _blocked("native_tenant_transaction_required")
+        return tenant, transaction
 
-        def current():
-            actual_tenant = get_current_tenant_id()
-            if (
-                not session.in_transaction()
-                or type(actual_tenant) is not int
-                or actual_tenant != tenant
-                or is_tenant_filter_bypassed()
-            ):
-                _blocked("iterator_scope_changed")
+    @staticmethod
+    def _current(session, tenant, transaction):
+        actual_tenant = get_current_tenant_id()
+        if (
+            not session.in_transaction()
+            or type(actual_tenant) is not int
+            or actual_tenant != tenant
+            or is_tenant_filter_bypassed()
+        ):
+            _blocked("iterator_scope_changed")
+        try:
             transaction.assert_current(session)
+        except (TypeError, ValueError):
+            _blocked("iterator_transaction_changed")
+
+    def _context(self, session, context, run_id, writer_contract_version):
+        tenant, _ = self._identity(session, run_id, writer_contract_version)
+        if (
+            not isinstance(context, PreparedSourceInventoryContext)
+            or context not in self._contexts
+            or (context.tenant_id, context.run_id, context.writer_contract_version)
+            != (tenant, run_id, writer_contract_version)
+        ):
+            _blocked("prepared_context_mismatch")
+        self._current(session, tenant, context.transaction)
+        return context
+
+    async def aprepare_tenant_context(
+        self, session: AsyncSession, *, run_id: str, writer_contract_version: str
+    ) -> PreparedSourceInventoryContext:
+        tenant, transaction = self._identity(session, run_id, writer_contract_version)
 
         try:
             await self.repository.avalidate_tenant_orphans(session)
+            self._current(session, tenant, transaction)
             shared = await self.sharing_reader.aget_shared_server_ids(session, tenant)
-            current()
+            self._current(session, tenant, transaction)
             catalog = await self.model_names.ainspect_catalog(session, tenant, shared)
+            self._current(session, tenant, transaction)
             knowledge = []
             async for page in self._pages(session, "alist_knowledge"):
+                self._current(session, tenant, transaction)
                 knowledge.extend(page)
-            index, cache = UnificationNameIndex(catalog, tuple(knowledge)), {}
+            rows = tuple(knowledge)
+            context = PreparedSourceInventoryContext(
+                tenant,
+                run_id,
+                writer_contract_version,
+                transaction,
+                shared,
+                catalog,
+                rows,
+                UnificationNameIndex(catalog, rows),
+            )
+            self._contexts.add(context)
+            return context
+        except (TypeError, ValueError, KeyError) as error:
+            raise KnowledgeOperationPlanConflictError(reason="unification_sources_malformed_configuration") from error
+
+    async def aiter_tenant_source_records(
+        self,
+        session: AsyncSession,
+        *,
+        run_id: str,
+        writer_contract_version: str,
+        context: PreparedSourceInventoryContext | None = None,
+    ):
+        if context is None:
+            context = await self.aprepare_tenant_context(
+                session, run_id=run_id, writer_contract_version=writer_contract_version
+            )
+
+        def current():
+            self._context(session, context, run_id, writer_contract_version)
+
+        current()
+        tenant, index, knowledge = context.tenant_id, context.name_index, context.knowledge_rows
+        cache = {}
+        try:
             for kind in (SourceType.WORKFLOW_VERSION, SourceType.HOSTED_APP_VERSION):
                 async for record in self._versioned(session, tenant, kind, index, cache):
                     current()
