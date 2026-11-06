@@ -977,11 +977,6 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_lo
         # Return502Status codes and corresponding prompts
         raise KnowledgeRebuildingError()
     if private_knowledge.state == KnowledgeState.FAILED.value:
-        # Delay imports to avoid looping imports
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-
-        rebuild_knowledge_celery.delay(private_knowledge.id, int(private_knowledge.model), login_user.user_id)
-        # Return502Status codes and corresponding prompts
         raise KnowledgeRebuildingError()
 
     # Knowledge base status is OK, go back200

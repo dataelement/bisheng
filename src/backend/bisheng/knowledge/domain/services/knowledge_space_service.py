@@ -1687,9 +1687,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
         try:
-            with measure_stage("prepare"):
-                from bisheng.worker import rebuild_knowledge_celery
-
             with measure_stage("auth"):
                 space, has_content_permission = await self._require_space_info_permission(space_id)
 
@@ -1755,23 +1752,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self._decorate_auto_tag_for_info(result)
 
             with measure_stage("rebuild"):
-                if space.state != KnowledgeState.PUBLISHED.value:
-                    current_tid = get_current_tenant_id()
-                    if space.tenant_id is None or current_tid in (None, space.tenant_id):
-                        rebuild_knowledge_celery.delay(
-                            space_id,
-                            new_model_id=space.model,
-                            invoke_user_id=self.login_user.user_id,
-                        )
-                    else:
-                        logger.warning(
-                            "skip knowledge space rebuild across tenant boundary: "
-                            "space_id={} space_tenant_id={} current_tenant_id={} user_id={}",
-                            space.id,
-                            space.tenant_id,
-                            current_tid,
-                            self.login_user.user_id,
-                        )
+                # This query only observes rebuild status. An explicit model
+                # change owns operation proof, SQL/R2 and subsequent dispatch.
+                result.state = space.state
         except Exception as exc:
             emit_info_metric(status="error", error_type=type(exc).__name__)
             raise
