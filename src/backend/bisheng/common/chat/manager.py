@@ -205,7 +205,7 @@ class ChatManager:
             login_user,
             resource_type=object_type,
             resource_id=client_id,
-            action="use",
+            action="visible",
         )
 
     async def _dispatch_message(

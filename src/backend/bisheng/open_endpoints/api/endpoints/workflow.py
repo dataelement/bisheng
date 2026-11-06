@@ -38,7 +38,7 @@ async def invoke_workflow(body: OpenWorkflowInvokeRequest):
         login_user,
         resource_type="workflow",
         resource_id=workflow_id,
-        action="use",
+        action="visible",
     )
 
     principal = get_current_open_api_principal()

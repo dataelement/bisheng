@@ -166,3 +166,38 @@ metadata主树五路径70通过，EDGE固定独立复核77项及S/D只读scope�
 独立复核实际闭合三类反例：全租户重复freeze允许合法不同M3阶段且零flush；物理reader在真实Task.cancel或native close抛Cancelled时等待全部owned client创建/清理再传播取消（原发现者相关108项及3个额外取消边界绿）；M2此前误收identifier_compatible=False，原发现者同反例与外部TX commit验证修复后拒绝且Run为0，相关101项绿。SQL/Redis reader独立42项及4个大SCAN/cluster cursor/旧孤儿/pipeline失败边界绿，无队列写。以上是本地native/组件证据，不能代替实际109物理端口、停服正式盘点/转换/恢复或浏览器E2E。
 
 §33–40实际交付卡按范围闭合，包括T779/780/783/784、T799–812及T815；原137队列仍28完成/109待办。完整M2尚缺真实broker、精确可执行转换计划及CLI；M3/R2初始回填/Coverage、实际move Owner/J1和source删除保护、完整上传/高级写/删除等继续待办。原版本Service其他11个写/管理方法AST未改，旧7路径控制原13个失败保持，不扩原edit或版本写口。下一批只读历史入口按§41冻结后实施。
+
+
+## 原生物理/任务端口准备实测（2026-11-07）
+
+以已提交候选95f1279be归档（SHA256 `6b418fca86a1698af2d62002800315f551df22b2cc5d4b1232c68413dde94c0b`）在109独立项目临时只读容器执行，不替换原API/worker。仅SQL克隆库bisheng_f118_probe_20261107，SQL守卫拒DML/DDL/其他库；13条SQL读取3个实际租户、2个统一目标及5个文件。原生ES/Milvus分别回读空间1计数16/49、空间3计数5/6，标识schema兼容均true；8个原文件对象均存在。两种索引原有计数不同按各自原事实保留，不伪造相等或以此误阻迁移。正式前后对账应分别比较对应索引的原摘要/计数。
+
+新版受限MinIO adapter写/回读准备盘点artifact SHA256 `8e7366b92b94ec511e5426a4571a9598da6da09d8c5b2423e93eb34d46b24d81`；无建桶、授权策略、模型或解析IO。真实SQL/fair Redis任务reader返回0项（这是该环境当时事实，不代表已盘点Celery broker）；knowledge_unification_run/processing_job/processing_item仍0行。证据`evidence/preparatory-native-ports.json` SHA256 `72981605007d6e3e2e4b8831dbbc35a663f3aaf24c3964fcced7badcabcf000f`，无凭据脚本同目录`preparatory-native-ports-probe.py`。这不是M1停服一致备份/正式M2 freeze/M3转换/恢复/E2E，3005保持不动。
+
+
+## 平台真实文件行只读版本历史（2026-11-07）
+
+EDGE固定ce4c7c81b（六生产叶/四新测试叶），主agent读全部入口/面板及实际scope协议后正常合入47b6ad7a0。开关映射原knowledges.version_management.enabled，历史入口沿非folder/is_multi_version/实际file.visible；hidden primary仍nullable、按opening隔离并取消旧响应，无版本写/预览/下载扩围。原大目录测试不改，Files只加三透传props、现599行。
+
+实际红绿：T81610行为红→10绿，T818缺API/Sheet两模块collection error→24绿；测试localStorage夹具修复不计产品红；T8207实际行为红6首绿→13绿，未删异步observer断言。主agent固定ce4与合流主树各11路径161通过（同选集两次不相加），主树日志/private/tmp/f118-root-main-history-ui.log。strict主树与原22条精确诊断相等；旧locationContext空suppression10诊断的rule/message多集相等，新增叶空suppression lint0，无新抑制。T816–T821按真实范围闭合，整个T177及高级写仍待办。APP T139/140另核已有生产，补真实preview与删Model两条证据后再决定原卡闭合。
+
+
+## 原APP模型绑定任务闭合（2026-11-07）
+
+T139/T140既有生产已由W4 694859943→2a4e7e991及SourceOwner/Core接线实现。独立EDGE只读确认provider前核实时alias ID/server与当前UUID版本冻结槽；原SDK卡T134并非调用依赖，按§45改为真实T136/T447。固定8315b03071仅在原test_app_model_binding.py补两条真实回归：实际删LLMModel+tombstone后命中旧catalog cache仍ModelRevoked且零provider；真实signed OBO/PreviewCapabilityProvider、credential/operation/route/approval与不同active/pending版本全链，preview仅准当前pending模型；同名漂移及逐项撤销分别拒绝且零provider。未改生产/SDK/审批业务，旧断言保持，新测试可运行时首绿；夹具缺composition/删除事实/唯一键恢复顺序问题不计产品红。
+
+主agent逐段复核实际接线和新增fixture后正常merge，主树四路径42 passed、2090 warnings、2.30秒，日志/JUnit /private/tmp/f118-root-app-model-binding.log/.xml。原两任务据实际完整模型绑定范围闭合，不代表SDK/所有开放入口/模型公开删除或E2E完成。
+
+
+## 迁移来源个人配额原任务闭合（2026-11-07）
+
+INT固定71cfbc884，两生产叶只15行新增/3行替换：同一私有纯COUNT谓词接KnowledgeDao原sync/async创建计数及QuotaService user分支。非空migration_origin持续个人豁免，NULL/空串仍计；原tenant总量、部门排除开关、普通列表、全局per-user显示口径、文件source/status/SUM与错误处理均未改，无Model/DDL变更。T165测试3ba71→fec格式后实测9行为红4首绿→13绿，初夹具API名错误/网络依赖不计产品红。原test/quota及新叶组合96绿，主树合流后同组合再96绿，日志/private/tmp/f118-root-main-quota.log/.xml。
+
+EDGE固定archive独立复核无行动项：原96绿，额外2格native SQL（2400行、换owner/nonempty标记、lists不隐藏、原跨tenant/global口径）通过；每个sync/async/user/tenant计数各1条COUNT，无行装载/N+1。Ruff两个legacy叶相对原同config rule/message多集24/7完全相同，新增0；新叶Ruff/format与两prod arch均绿。原T165166按count-only交付闭合，正式M3转换后MySQL/配额联验仍由T203完成，不能以SQLite证明正式升级。
+
+
+## 聊天入口与完整本地知识选集（2026-11-07）
+
+EDGE a2d779bf0交原T141142：新HTTP默认visible、旧use在HTTP边界归一，Manager仅原action字面改visible，保私有方法名、fresh admission、execution.operator/消息/执行快照/源与旧tenant重验。5实际HTTP行为红、23首绿→新增28及原18组合46绿；没有为原F048已支持的可见行为伪造红。主agent逐段复核三处变更与新测试、正常merge后与工作台/开放工作流原回归9路径98 passed，日志/private/tmp/f118-root-entry-chat-integrated.log/.xml。两个旧prod arch同基线：chat RULE3 warning、manager RULE1两既有输出，新增0；未扩大旧层重构。
+
+主树受测源码194edb3f46f5719b4925e3d8bd6fd50c5314e5dd，整个test/knowledge_unification（明确未收集TCP监听mock合同单模块）**3640 passed、53431 warnings、130.11秒**，无fail/skip。日志/JUnit /private/tmp/f118-root-native-all-entries.log/.xml。前次447的3582是此前快照，不相加；本次包含已合APP预览/删Model、个人配额、聊天和新workstation/RPC测试。T141142按原范围闭合；root T151152/T839已有15/52/98绿及未改生产archive对照，仍等非作者短复核再勾。以上为本地native/HTTP/组件证据，未称CI、正式M2/M3或完整E2E。

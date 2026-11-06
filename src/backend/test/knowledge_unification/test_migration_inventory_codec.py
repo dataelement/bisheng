@@ -400,3 +400,122 @@ def test_evidence_cannot_borrow_other_authority_or_tenant_page(codec, changes):
     args = {"section": "evidence", "scope": "global", "tenant_id": None, "kind": "verification"} | changes
     with pytest.raises(KnowledgeOperationPlanConflictError):
         encode(codec, (material(codec),), **args)
+
+
+async def test_conversion_commands_are_closed_plan_only_records_with_matching_run(codec, resource_native):
+    plan = importlib.import_module("bisheng.knowledge.application.unification_conversion_plan")
+    from test.knowledge_unification.test_migration_conversion_plan import IDENTITY, acquire, build, default
+
+    await resource_native.insert(original.Knowledge, [original.resource(9000)])
+    await resource_native.insert(original.KnowledgeFile, [original.file(1)])
+    await resource_native.insert(original.Tag, [original.data("tags", 1)])
+    await resource_native.insert(original.TagLink, [original.data("tag_links", 1)])
+    commands = build(
+        plan, await acquire(resource_native), (default({"models": [{"id": "11"}], "task_model": {"id": "11"}}),)
+    )[1]
+    assert len(commands) == 5
+    for command in commands:
+        record = codec.record_from_row(command)
+        content = codec.encode_inventory_page(
+            run_id=IDENTITY["run_id"],
+            section="conversion",
+            scope="tenant",
+            tenant_id=101,
+            page_index=0,
+            records=(record,),
+            kind="plan",
+        )
+        assert codec.decode_inventory_page(
+            content,
+            run_id=IDENTITY["run_id"],
+            section="conversion",
+            scope="tenant",
+            tenant_id=101,
+            page_index=0,
+            kind="plan",
+        ).records == (record,)
+        assert b"private-" not in content
+        for changes in ({"kind": "baseline"}, {"run_id": "wrong-run"}, {"section": "resources"}):
+            args = {
+                "run_id": IDENTITY["run_id"],
+                "section": "conversion",
+                "scope": "tenant",
+                "tenant_id": 101,
+                "page_index": 0,
+                "records": (record,),
+                "kind": "plan",
+            } | changes
+            with pytest.raises(KnowledgeOperationPlanConflictError):
+                codec.encode_inventory_page(**args)
+    resource = next(item for item in commands if isinstance(item, plan.ResourceConversionCommand))
+    for changes in ({"target_type": True}, {"target_type": 0}, {"target_is_released": True}, {"schema_version": True}):
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            codec.record_from_row(replace(resource, **changes))
+
+
+def broker_fact(codec, **changes):
+    return codec.record_from_values(
+        "broker_task",
+        **(
+            {
+                "tenant_id": 101,
+                "task_kind": "bisheng.worker.knowledge.file_worker.parse_knowledge_file_celery",
+                "task_id": "original-message:occurrence-1",
+                "space_id": 9000,
+                "file_id": 1,
+                "document_id": None,
+                "version_id": None,
+                "state": "queued",
+                "configuration_digest": DIGEST,
+                "record_digest": DIGEST,
+                "header_tenant_id": None,
+            }
+            | changes
+        ),
+    )
+
+
+@pytest.mark.parametrize("state", ["queued", "unacked", "legacy_requires_reissue", "obsolete"])
+def test_broker_known_tenant_facts_round_trip_only_in_exact_task_scope(codec, state):
+    record = broker_fact(codec, state=state)
+    assert decode(codec, encode(codec, (record,), section="tasks"), section="tasks").records == (record,)
+    for override in ({"section": "resources"}, {"scope": "global", "tenant_id": None}, {"tenant_id": 202}):
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            encode(codec, (record,), **({"section": "tasks"} | override))
+
+
+@pytest.mark.parametrize("state", ["global_control", "target_missing", "unacked_metadata_orphan"])
+def test_broker_global_facts_keep_header_claim_without_assigning_it_authority(codec, state):
+    record = broker_fact(
+        codec,
+        tenant_id=None,
+        task_kind=None
+        if state == "unacked_metadata_orphan"
+        else "bisheng.worker.knowledge.scheduler.trigger_dispatch_task",
+        state=state,
+        header_tenant_id=202,
+    )
+    arguments = {"section": "tasks", "scope": "global", "tenant_id": None}
+    assert decode(codec, encode(codec, (record,), **arguments), **arguments).records == (record,)
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        encode(codec, (record,), section="tasks")
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"state": "running"},
+        {"tenant_id": None},
+        {"task_kind": None},
+        {"task_kind": "workflow.user.task"},
+        {"state": "global_control"},
+        {"header_tenant_id": True},
+        {"file_id": 0},
+        {"task_id": ""},
+        {"body": "private prompt"},
+        {"model_id": 11},
+    ],
+)
+def test_broker_codec_rejects_unknown_state_claims_ids_and_raw_payload(codec, changes):
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        broker_fact(codec, **changes)

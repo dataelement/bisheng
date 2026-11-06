@@ -8,7 +8,7 @@ and canonical digests. Nothing freezes a run, writes bindings or marks ready.
 import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from typing import Literal
 from weakref import WeakSet
@@ -37,6 +37,7 @@ from bisheng.knowledge.domain.repositories.unification_inventory_repository impo
     KnowledgeRow,
     UnificationInventoryRepository,
 )
+from bisheng.knowledge.domain.repositories.unification_resource_repository import ResourceRow
 from bisheng.knowledge.domain.repositories.unification_target_repository import (
     KnowledgeMigrationTargetFact,
     KnowledgeMigrationTargetRepository,
@@ -151,6 +152,15 @@ def _digest(value):
         value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False, default=timestamp
     )
     return hashlib.sha256(data.encode()).hexdigest()
+
+
+def knowledge_business_revision_digest(row: KnowledgeRow | ResourceRow) -> str:
+    """Original inventory revision, distinct from online SourceOwner payloads."""
+    if type(row) not in (KnowledgeRow, ResourceRow):
+        _blocked("knowledge_revision_row_required")
+    return _digest(
+        {item.name: getattr(row, item.name) for item in fields(KnowledgeRow) if item.name not in _KN_NEUTRAL_FIELDS}
+    )
 
 
 def _flag(value, *, nullable=False):
@@ -370,7 +380,7 @@ class UnificationSourceInventory:
             }
             lifecycle = (row.type, row.state, row.is_released)
             digest = _digest(configuration)
-            revision = _digest({key: value for key, value in asdict(row).items() if key not in _KN_NEUTRAL_FIELDS})
+            revision = knowledge_business_revision_digest(row)
             if row.type == 2:
                 yield RetiredInventoryRecord(root, None, lifecycle, digest, revision)
                 continue
