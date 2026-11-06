@@ -13,7 +13,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.llm.application import model_default_read as defaults
 from bisheng.llm.domain.models.llm_server import LLMModel
-from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
+from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig, TenantSystemModelConfigDao
 from bisheng.llm.domain.services import llm as service
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from test.knowledge_unification import test_llm_default_read as reading
@@ -29,10 +29,10 @@ async def consumers(reads, monkeypatch):
     # A missing new admission call must fail locally instead of touching the
     # deployment database through the old self-session DAO.
     monkeypatch.setattr(
-        service.TenantSystemModelConfigDao, "resolve", Mock(side_effect=AssertionError("legacy default DAO bypass"))
+        TenantSystemModelConfigDao, "resolve", Mock(side_effect=AssertionError("legacy default DAO bypass"))
     )
     monkeypatch.setattr(
-        service.TenantSystemModelConfigDao,
+        TenantSystemModelConfigDao,
         "aresolve",
         AsyncMock(side_effect=AssertionError("legacy default DAO bypass")),
     )
