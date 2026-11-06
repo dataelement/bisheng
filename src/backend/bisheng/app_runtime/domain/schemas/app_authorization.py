@@ -3,8 +3,8 @@
 from enum import StrEnum
 from typing import Literal, TypedDict
 
-APP_ACTIONS = ("use", "edit", "manage_permission", "delete", "publish", "unpublish")
-MANAGEMENT_ACTIONS = frozenset(APP_ACTIONS) - {"use"}
+APP_ACTIONS = ("visible", "edit", "manage_permission", "delete", "publish", "unpublish")
+MANAGEMENT_ACTIONS = frozenset(APP_ACTIONS) - {"visible"}
 
 
 class AppOperation(StrEnum):

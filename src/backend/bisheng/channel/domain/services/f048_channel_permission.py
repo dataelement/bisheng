@@ -26,7 +26,7 @@ from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
 
-READ_ONLY_CHANNEL_ACTIONS = frozenset({"visible", "use"})
+READ_ONLY_CHANNEL_ACTIONS = frozenset({"visible"})
 
 
 @dataclass(frozen=True, slots=True)
