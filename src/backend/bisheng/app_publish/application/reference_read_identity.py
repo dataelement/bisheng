@@ -41,6 +41,7 @@ class AppSourceReadIdentity:
             or is_tenant_filter_bypassed()
             or get_current_public_api_principal() is not None
             or not isinstance(actor, PermissionActor)
+            or actor.current_tenant_id != tenant_id
             or (actor.subject_type, actor.subject_id, actor.tenant_id)
             != (identity.authorization_subject_type, identity.authorization_subject_id, identity.tenant_id)
         ):
@@ -52,6 +53,7 @@ class AppSourceReadIdentity:
                 "subject_type": actor.subject_type,
                 "subject_id": actor.subject_id,
                 "tenant_id": actor.tenant_id,
+                "current_tenant_id": actor.current_tenant_id,
                 "super_admin": actor.super_admin,
                 "tenant_admin_ids": sorted(actor.tenant_admin_tenant_ids),
                 "data_scope": actor.data_scope,
@@ -92,6 +94,7 @@ class AppManagementSourceReadIdentity:
             or is_tenant_filter_bypassed()
             or get_current_public_api_principal() is not None
             or not isinstance(actor, PermissionActor)
+            or actor.current_tenant_id != tenant_id
             or (actor.subject_type, actor.subject_id, actor.tenant_id)
             != (identity.authorization_subject_type, identity.authorization_subject_id, identity.tenant_id)
             or not isinstance(context, dict)
@@ -111,6 +114,7 @@ class AppManagementSourceReadIdentity:
                 "subject_type": actor.subject_type,
                 "subject_id": actor.subject_id,
                 "tenant_id": actor.tenant_id,
+                "current_tenant_id": actor.current_tenant_id,
                 "super_admin": actor.super_admin,
                 "tenant_admin_ids": sorted(actor.tenant_admin_tenant_ids),
                 "data_scope": actor.data_scope,
