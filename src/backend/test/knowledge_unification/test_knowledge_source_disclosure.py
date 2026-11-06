@@ -206,7 +206,7 @@ async def test_401_actual_sources_use_three_sql_batches_and_five_permission_batc
     assert found == [None] * 401
     assert len(metadata.facts.queries) == 3
     assert [len(batch) for batch in metadata.facts.checks] == [100, 100, 100, 100, 1]
-    assert len(metadata.facts.snapshots) == 3
+    assert len(metadata.facts.snapshots) == 6  # Native preflight plus the unchanged loaded-target loader.
 
 
 async def test_preloaded_clean_orm_metadata_is_refreshed_from_actual_sql(metadata):

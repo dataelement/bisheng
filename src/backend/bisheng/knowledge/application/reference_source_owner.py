@@ -13,7 +13,7 @@ from bisheng.knowledge.domain.services.model_reference_extractor import (
     KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
     extract_knowledge_model_references,
 )
-from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
 from bisheng.permission.application.business_authorization import (
     batch_check_verified_business_visible,
     require_business_action,
@@ -78,6 +78,25 @@ class KnowledgeReferenceSourceOwner:
                 # The same full-scope shortcut used by check_business_action.
                 visible = {str(row.id): True for row in rows}
             else:
+                runtime = await get_f048_runtime()
+                snapshots = await runtime.get_permission_snapshots(
+                    tuple(
+                        (tenant, "knowledge_space" if row.type == 3 else "knowledge_library", str(row.id))
+                        for row in rows
+                    )
+                )
+                for row in rows:
+                    resource_type = "knowledge_space" if row.type == 3 else "knowledge_library"
+                    snapshot = snapshots.get((tenant, resource_type, str(row.id)))
+                    if (
+                        snapshot is None
+                        or snapshot.mode != "CUSTOM"
+                        or snapshot.parent_type is not None
+                        or snapshot.parent_id is not None
+                        or type(snapshot.version) is not int
+                        or snapshot.version <= 0
+                    ):
+                        raise ReferenceCoverageNotReadyError(reason="knowledge_disclosure_permission_incomplete")
                 for kind, resource_type in ((3, "knowledge_space"), (0, "knowledge_library")):
                     selected = [row for row in rows if (row.type == 3) == (kind == 3)]
                     if not selected:
@@ -86,6 +105,11 @@ class KnowledgeReferenceSourceOwner:
                     targets = await adapter.resolve_permission_targets_from_rows(
                         rows=selected, resource_type=resource_type, actor=actor
                     )
+                    if {target.resource_id for target in targets} != {str(row.id) for row in selected} or any(
+                        target.resource_version != snapshots[(tenant, resource_type, target.resource_id)].version
+                        for target in targets
+                    ):
+                        raise ReferenceCoverageNotReadyError(reason="knowledge_disclosure_permission_incomplete")
                     decisions = await batch_check_verified_business_visible(actor=actor, targets=targets)
                     visible.update({ident: allowed for (_, ident), allowed in decisions.items()})
             if await identity_port.acapture(identity) != before:
