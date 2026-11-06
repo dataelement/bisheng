@@ -47,6 +47,13 @@ async def native(resource_native, monkeypatch):
             table.c.tenant_id.nullable = True
         if model is UserRole:
             table.c.id.autoincrement = False
+    # Preserve real FK definitions when copying the native fixture metadata.
+    pending = [foreign.column.table for model in models for foreign in model.__table__.foreign_keys]
+    while pending:
+        table = pending.pop()
+        if table.name not in metadata.tables:
+            table.to_metadata(metadata)
+            pending.extend(foreign.column.table for foreign in table.foreign_keys)
     async with resource_native.engine.begin() as connection:
         await connection.run_sync(metadata.create_all)
         await connection.execute(
