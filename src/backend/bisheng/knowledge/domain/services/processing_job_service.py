@@ -25,6 +25,7 @@ from bisheng.knowledge.domain.repositories.processing_owner_repository import Pr
 from bisheng.knowledge.domain.repositories.processing_settings_repository import ProcessingSettingsRepository
 from bisheng.knowledge.domain.schemas.processing_job import (
     JobAccepted,
+    MetadataSchemaParameters,
     OperationItem,
     ProcessingCreateRequest,
     ProcessingItemRead,
@@ -49,7 +50,12 @@ class ProcessingJobService:
         self.scope = scope if scope is not None else ProcessingOwnerRepository()
         self.settings = settings if settings is not None else ProcessingSettingsRepository()
         # File/metadata/move/copy require their own actual handlers and Owners.
-        self.available_kinds = frozenset(available_kinds) & {"embedding_rebuild", "file_reprocess", "file_resplit"}
+        self.available_kinds = frozenset(available_kinds) & {
+            "embedding_rebuild",
+            "file_reprocess",
+            "file_resplit",
+            "metadata_schema_change",
+        }
 
     def _kind(self, kind):
         if kind not in self.available_kinds:
@@ -94,6 +100,29 @@ class ProcessingJobService:
             identity, space_id=space_id, required_action="edit", entry_kind=entry_kind
         )
         parameters = request.parameters.model_dump(mode="json")
+        if request.kind == "metadata_schema_change":
+            preview = await self.owner.metadata.apreview(
+                session, space_id, identity=identity, parameters=request.parameters
+            )
+            plan = await self.plans.acreate(
+                session,
+                operation=request.kind,
+                space_id=space_id,
+                actor_reference=actor.reference,
+                targets=[item.target for item in preview.core_plan.items],
+                target_revisions=preview.source_revisions["versions"],
+                source_revisions=preview.source_revisions,
+                parameters=parameters,
+                impact={
+                    "whole_version_count": len(preview.core_plan.items),
+                    "preserves_chunks": True,
+                    "retrieval_paused": False,
+                },
+                expires_at=self.plans.clock() + timedelta(minutes=5),
+            )
+            return plan.model_copy(
+                update={"can_execute": True, "valid_items": [OperationItem(id=space_id, type="space")]}
+            )
         if request.kind in {"file_reprocess", "file_resplit"}:
             preview = await self.owner.apreview_file_processing(
                 session,
@@ -193,6 +222,8 @@ class ProcessingJobService:
             return JobAccepted(job_id=existing.id, state=existing.state, reused=True)
         if plan.operation_id is not None:
             raise KnowledgeIdempotencyConflictError()
+        if plan.operation == "metadata_schema_change":
+            return await self._acreate_metadata(session, space_id, request, plan, identity)
         if not plan.target_manifest:
             raise KnowledgeOperationConfirmationRequiredError()
         if plan.operation in {"file_reprocess", "file_resplit"}:
@@ -242,6 +273,42 @@ class ProcessingJobService:
                 )
                 for row in participants
             ],
+        )
+        await self.plans.aconsume(session, plan.id, operation_id=result.job.id, expected_digest=plan.plan_digest)
+        return self._accepted(result)
+
+    async def _acreate_metadata(self, session, space_id, request, plan, identity):
+        try:
+            prepared = await self.owner.metadata.apreview(
+                session,
+                space_id,
+                identity=identity,
+                parameters=MetadataSchemaParameters.model_validate(plan.parameters),
+            )
+            if (
+                prepared.source_revisions != plan.source_revisions
+                or [item.target.model_dump(mode="json") for item in prepared.core_plan.items] != plan.target_manifest
+            ):
+                raise KnowledgeOperationPlanChangedError()
+            accepted = await self.owner.metadata.aaccept(session, prepared, identity=identity)
+        except KnowledgeOperationPlanConflictError as error:
+            raise KnowledgeOperationPlanChangedError() from error
+        result = await self.jobs.acreate(
+            session,
+            space_id=space_id,
+            kind=plan.operation,
+            idempotency_key=request.idempotency_key,
+            actor_user_id=accepted.actor_user_id,
+            actor_reference=accepted.actor_reference,
+            parameters={
+                **accepted.parameters,
+                "operation_id": plan.id,
+                "confirmation_id": plan.id,
+                "plan_digest": plan.plan_digest,
+            },
+            configuration=accepted.configuration,
+            items=accepted.items,
+            metadata_acceptance=accepted.metadata_acceptance,
         )
         await self.plans.aconsume(session, plan.id, operation_id=result.job.id, expected_digest=plan.plan_digest)
         return self._accepted(result)
