@@ -181,7 +181,7 @@ async def test_empty_budget_page_advances_and_legacy_array_remains_complete_beyo
 async def test_cursor_rejects_context_changes_without_becoming_an_authority(reads, changed):
     await reads.catalog.seed([space(), *chain(1), *chain(2), *chain(3)])
     reads.facts.allowed.update({10001, 20001, 30001})
-    options = dict(knowledge_id=10, keyword="", current_file_id=10001, page_size=1)
+    options = {"knowledge_id": 10, "keyword": "", "current_file_id": 10001, "page_size": 1}
     first = await reads.service.search_candidates_page(**options)
     assert first.next_cursor
     token = principal_token = None
@@ -309,3 +309,12 @@ async def test_old_service_three_reads_delegate_without_touching_original_writes
     assert (await service.list_versions_for_file(10001)).document_id == 1
     assert [entry.document_id for entry in await service.search_associable_documents(10, "", 10001)] == [2]
     assert [entry.document_id for entry in await service.search_version_sources(10, "", 10001)] == [2]
+
+
+async def test_old_history_service_preserves_the_original_missing_chain_http_404(reads):
+    from fastapi import HTTPException
+
+    service = KnowledgeVersionService(None, reads.user, None, None, None, version_read_service=reads.service)
+    with pytest.raises(HTTPException) as failure:
+        await service.list_versions_for_file(999)
+    assert failure.value.status_code == 404
