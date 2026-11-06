@@ -53,7 +53,8 @@ async def test_original_creation_menu_can_read_initial_values_without_admin_or_e
     assert set(result["data"]) == {"embedding_model", "system_defaults"}
     assert result["data"]["embedding_model"] is None
     defaults = result["data"]["system_defaults"]
-    assert set(defaults) == {"document", "table"}
+    assert set(defaults) == {"schema_version", "document", "table"}
+    assert defaults["schema_version"] == 1
     assert defaults["document"]["force_ocr"] == 1
     assert defaults["document"]["chunk_size"] == 1000
     initial.web.menu.assert_awaited_once()
