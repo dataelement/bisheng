@@ -278,6 +278,36 @@ async def test_pending_critical_target_change_rejected_before_flush(execution, p
         assert (await session.get(KnowledgeDocumentVersion, 181)).knowledge_file_id == 81
 
 
+@pytest.mark.parametrize("pending", ["existing_other_version", "historical_primary_file"])
+async def test_pending_related_version_or_primary_payload_rejected_before_completion(execution, pending):
+    async with execution.context.sessions() as session:
+        job, item = await loaded(session, execution)
+        if pending == "existing_other_version":
+            (await session.get(KnowledgeDocumentVersion, 182)).knowledge_file_id = 81
+        else:
+            item = await session.get(KnowledgeProcessingItem, "item-82")
+            (await session.get(KnowledgeFile, 81)).knowledge_id = 999
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await MetadataExecutionRepository().awrite_values(session, job, item, lease=lease(job, item))
+        await session.rollback()
+    async with execution.context.sessions() as session:
+        assert (await session.get(KnowledgeDocumentVersion, 182)).knowledge_file_id == 82
+        assert (await session.get(KnowledgeFile, 81)).knowledge_id == 40
+        job = await session.get(KnowledgeProcessingJob, execution.job_id)
+        assert job.succeeded_count == 0
+
+
+async def test_unrelated_primary_payload_remark_is_not_a_chain_mutation(execution):
+    async with execution.context.sessions() as session:
+        job, _ = await loaded(session, execution)
+        item = await session.get(KnowledgeProcessingItem, "item-82")
+        (await session.get(KnowledgeFile, 81)).remark = "caller-owned primary note"
+        assert await MetadataExecutionRepository().awrite_values(session, job, item, lease=lease(job, item))
+        await session.commit()
+    async with execution.context.sessions() as session:
+        assert (await session.get(KnowledgeFile, 81)).remark == "caller-owned primary note"
+
+
 async def test_completion_refusal_cannot_leave_file_values_written(execution):
     async with execution.context.sessions() as session:
         job, item = await loaded(session, execution)

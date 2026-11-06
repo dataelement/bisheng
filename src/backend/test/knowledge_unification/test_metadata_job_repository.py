@@ -1,10 +1,17 @@
 """T735: schema revision/digest participate in actual J1 leases and recovery."""
 
+import json
 from dataclasses import replace
 
 import pytest
+from sqlalchemy import event, update
+from sqlalchemy.exc import InvalidRequestError
+from sqlmodel import select
 
-from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import KnowledgeIdempotencyConflictError, ResourceReferenceInvalidError
+from bisheng.core.database.dialect_helpers import JsonType
+from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
+from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.repositories.processing_job_repository import ProcessingConfiguration
 from test.knowledge_unification import test_job_repo as fixtures
 
@@ -152,3 +159,144 @@ async def test_old_trial_metadata_without_object_evidence_is_persistently_obsole
     await job_session.flush()
     assert await repository.aclaim(job_session, job.id, configuration=config) is None
     assert job.state == "obsolete" and job.obsolete_reason == "metadata_schema_evidence_missing"
+
+
+@pytest.fixture
+def json_meter(monkeypatch):
+    counts = {"manifest_bytes": 0, "manifest_reads": 0, "snapshot_bytes": 0, "snapshot_reads": 0}
+    original = JsonType.process_result_value
+
+    def measured(self, value, dialect):
+        parsed = original(self, value, dialect)
+        size = len(value.encode()) if isinstance(value, str) else len(json.dumps(value).encode())
+        if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict) and "expected_space_id" in parsed[0]:
+            counts["manifest_bytes"] += size
+            counts["manifest_reads"] += 1
+        elif isinstance(parsed, dict) and parsed.get("mode") == "metadata_schema_change":
+            counts["snapshot_bytes"] += size
+            counts["snapshot_reads"] += 1
+        return parsed
+
+    monkeypatch.setattr(JsonType, "process_result_value", measured)
+    return counts
+
+
+def large_items(count=401):
+    return [
+        replace(
+            fixtures.item(number),
+            processing_snapshot={"mode": "metadata_schema_change", "body": "frozen-" + "x" * 4096},
+        )
+        for number in range(1, count + 1)
+    ]
+
+
+async def create_large(repository, session):
+    config = metadata_configuration()
+    result = await fixtures.create(
+        repository,
+        session,
+        config,
+        kind="metadata_schema_change",
+        items=large_items(),
+        parameters={"metadata_schema_revision": 1, "metadata_schema_digest": "a" * 64},
+    )
+    return result.job, config
+
+
+async def test_metadata_manifest_retains_ids_and_snapshot_digest_without_duplicate_value_payload(
+    job_session, repository
+):
+    job, config = await create_large(repository, job_session)
+    manifest = (
+        await job_session.exec(select(KnowledgeProcessingJob.scope_manifest).where(KnowledgeProcessingJob.id == job.id))
+    ).one()
+    assert len(manifest) == 401
+    assert all(
+        set(value)
+        == {
+            "file_id",
+            "document_id",
+            "version_id",
+            "expected_space_id",
+            "expected_parent_id",
+            "processing_snapshot_digest",
+        }
+        for value in manifest
+    )
+    assert len(json.dumps(manifest).encode()) < 401 * 260
+    stored = (
+        await job_session.exec(select(KnowledgeProcessingItem).where(KnowledgeProcessingItem.job_id == job.id).limit(1))
+    ).one()
+    assert stored.processing_snapshot == large_items()[0].processing_snapshot
+    changed = large_items()
+    changed[0] = replace(changed[0], processing_snapshot={"mode": "metadata_schema_change", "body": "changed"})
+    with pytest.raises(KnowledgeIdempotencyConflictError):
+        await fixtures.create(
+            repository, job_session, config, kind="metadata_schema_change", items=changed, parameters=job.parameters
+        )
+
+
+async def test_metadata_execution_transitions_never_transfer_full_manifest_or_remaining_snapshots(
+    job_session, repository, json_meter
+):
+    job, config = await create_large(repository, job_session)
+    job_id = job.id
+    await job_session.commit()
+    job_session.expunge_all()
+    statements = []
+    engine = job_session.bind.sync_engine
+
+    def capture(connection, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        json_meter.update(dict.fromkeys(json_meter, 0))
+        lease = await repository.aclaim(job_session, job_id, configuration=config)
+        for number in range(10):
+            lease = await repository.arenew(job_session, lease, configuration=config)
+            claimed = await repository.aclaim_next_item(job_session, lease, configuration=config)
+            renewed = await repository.arenew_item(job_session, claimed.lease, configuration=config)
+            assert renewed is not None
+            assert await repository.asave_checkpoint(
+                job_session, renewed, configuration=config, step="indexed", checkpoint={"count": number}
+            )
+            assert await repository.acomplete_item(
+                job_session, renewed, configuration=config, succeeded=number != 9, error_code=10915
+            )
+        await job_session.exec(
+            update(KnowledgeProcessingItem)
+            .where(KnowledgeProcessingItem.job_id == job_id, KnowledgeProcessingItem.state == "pending")
+            .values(state="failed")
+        )
+        finished = await repository.afinalize(job_session, lease, configuration=config)
+        assert finished.state == "partial_failed"
+        assert (await repository.aretry_eligibility(job_session, job_id)).retryable
+        retried = await repository.aretry_failed(
+            job_session,
+            job_id,
+            idempotency_key="large-retry",
+            expected_job_revision=finished.revision,
+            actor_user_id=11,
+            actor_reference=finished.actor_reference,
+            configuration=config,
+        )
+        assert retried.job.state == "accepted"
+        await repository.alatest_retry_actor(job_session, job_id)
+        assert json_meter["manifest_reads"] == 0, json_meter
+        assert json_meter["snapshot_reads"] <= 10 * 5, json_meter
+        assert json_meter["snapshot_bytes"] < 10 * 5 * 5000, json_meter
+        assert all("knowledge_processing_job.scope_manifest" not in sql for sql in statements)
+        print({"items": 401, "processed": 10, **json_meter})
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+
+async def test_execution_read_raiseloads_manifest_even_after_same_session_full_read(job_session, repository):
+    job, _ = await create_large(repository, job_session)
+    assert len(job.scope_manifest) == 401
+    light = await repository.aget_execution(job_session, job.id)
+    with pytest.raises(InvalidRequestError):
+        _ = light.scope_manifest
