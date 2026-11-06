@@ -25,6 +25,8 @@ KN最后三叶worker及旧可用性测试显式转交空闲LLM agent的WORKER新
 
 上表为各固定快照，测试通过数不相加。旧已删应用只允许当前真实 assignment/operation 销毁清理事实，保操作 ID 和 cleanup_pending 诊断；不声称 runtime-manager 已有自动 destroy 恢复或 Docker/K8s 实机证明。
 
+最终文档由独立agent对固定提交 `265e985917a4cbdc2e2414a6764d13e1d395b2fc` 只读复核 **LGTM**：与spec及实际交付口径一致，任务597/完成438/未完159和本波新增190项独立核对；contract/design/upgrade/HTML/report/导航/并行任务一致，94AC/140QA/13SVG保留，未将本地回归写成全特性/L2/E2E或部署通过。其后仅补本条复核记录，受测源码不变。
+
 ## 事务、执行与观察的边界
 
 1. APP业务检索保持原0/3，通用KN目标的0/1/3不扩大QA能力；历史QA配置保ID标不可用，whole-source在provider前拒。APP 使用真实 AppVersion.id，不用 version_no/自增行或虚构 current；零保存版本根用 SourceRootKey 盘点全部 set/raw。终态历史不重新创建来源。
