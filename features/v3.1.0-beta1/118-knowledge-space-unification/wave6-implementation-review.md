@@ -173,3 +173,10 @@ metadata主树五路径70通过，EDGE固定独立复核77项及S/D只读scope�
 以已提交候选95f1279be归档（SHA256 `6b418fca86a1698af2d62002800315f551df22b2cc5d4b1232c68413dde94c0b`）在109独立项目临时只读容器执行，不替换原API/worker。仅SQL克隆库bisheng_f118_probe_20261107，SQL守卫拒DML/DDL/其他库；13条SQL读取3个实际租户、2个统一目标及5个文件。原生ES/Milvus分别回读空间1计数16/49、空间3计数5/6，标识schema兼容均true；8个原文件对象均存在。两种索引原有计数不同按各自原事实保留，不伪造相等或以此误阻迁移。正式前后对账应分别比较对应索引的原摘要/计数。
 
 新版受限MinIO adapter写/回读准备盘点artifact SHA256 `8e7366b92b94ec511e5426a4571a9598da6da09d8c5b2423e93eb34d46b24d81`；无建桶、授权策略、模型或解析IO。真实SQL/fair Redis任务reader返回0项（这是该环境当时事实，不代表已盘点Celery broker）；knowledge_unification_run/processing_job/processing_item仍0行。证据`evidence/preparatory-native-ports.json` SHA256 `72981605007d6e3e2e4b8831dbbc35a663f3aaf24c3964fcced7badcabcf000f`，无凭据脚本同目录`preparatory-native-ports-probe.py`。这不是M1停服一致备份/正式M2 freeze/M3转换/恢复/E2E，3005保持不动。
+
+
+## 平台真实文件行只读版本历史（2026-11-07）
+
+EDGE固定ce4c7c81b（六生产叶/四新测试叶），主agent读全部入口/面板及实际scope协议后正常合入47b6ad7a0。开关映射原knowledges.version_management.enabled，历史入口沿非folder/is_multi_version/实际file.visible；hidden primary仍nullable、按opening隔离并取消旧响应，无版本写/预览/下载扩围。原大目录测试不改，Files只加三透传props、现599行。
+
+实际红绿：T81610行为红→10绿，T818缺API/Sheet两模块collection error→24绿；测试localStorage夹具修复不计产品红；T8207实际行为红6首绿→13绿，未删异步observer断言。主agent固定ce4与合流主树各11路径161通过（同选集两次不相加），主树日志/private/tmp/f118-root-main-history-ui.log。strict主树与原22条精确诊断相等；旧locationContext空suppression10诊断的rule/message多集相等，新增叶空suppression lint0，无新抑制。T816–T821按真实范围闭合，整个T177及高级写仍待办。APP T139/140另核已有生产，补真实preview与删Model两条证据后再决定原卡闭合。

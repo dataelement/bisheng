@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史838编号：705已完成/历史交付、131当前待办、2外移；原137队列已完成28项、剩109项，另22张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史838编号：711已完成/历史交付、125当前待办、2外移；原137队列已完成28项、剩109项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -6607,7 +6607,7 @@
   **依赖**：T804\
   **验证 / 完成条件**：三原读断言不削减，实际新read组合与原write控制对比无新增失败；其他13原失败继续如实报告，不顺带改旧写权限或异常语义。
 
-- [ ] **T816 · 平台历史功能实际开关映射测试**
+- [x] **T816 · 平台历史功能实际开关映射测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/frontend/platform/src/test/knowledgeVersionFeature.test.tsx`\
   **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
@@ -6615,7 +6615,7 @@
   **覆盖 AC**: AC-09, AC-14, AC-15, AC-30, AC-31\
   **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
 
-- [ ] **T817 · 平台历史功能实际开关映射**
+- [x] **T817 · 平台历史功能实际开关映射**
   **类型 / Owner**：前端 Context/API类型 / EDGE\
   **写入文件**：`src/frontend/platform/src/types/api/app.ts`、`src/frontend/platform/src/contexts/locationContext.tsx`\
   **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
@@ -6623,7 +6623,7 @@
   **配对测试**：T816\
   **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
 
-- [ ] **T818 · 平台只读版本API与历史面板测试**
+- [x] **T818 · 平台只读版本API与历史面板测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/frontend/platform/src/test/knowledgeVersionsContract.test.ts`、`src/frontend/platform/src/test/f118SpaceVersionHistory.test.tsx`\
   **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
@@ -6631,7 +6631,7 @@
   **覆盖 AC**: AC-09, AC-14, AC-15, AC-30, AC-31\
   **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
 
-- [ ] **T819 · 平台只读版本API与历史面板**
+- [x] **T819 · 平台只读版本API与历史面板**
   **类型 / Owner**：前端 API/组件 / EDGE\
   **写入文件**：`src/frontend/platform/src/controllers/API/knowledgeVersions.ts`、`src/frontend/platform/src/pages/KnowledgePage/components/SpaceVersionHistorySheet.tsx`\
   **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
@@ -6639,7 +6639,7 @@
   **配对测试**：T818\
   **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
 
-- [ ] **T820 · 平台真实文件行历史入口测试**
+- [x] **T820 · 平台真实文件行历史入口测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/frontend/platform/src/test/f118SpaceDirectoryHistory.test.tsx`\
   **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
@@ -6647,7 +6647,7 @@
   **覆盖 AC**: AC-09, AC-14, AC-15, AC-30, AC-31\
   **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
 
-- [ ] **T821 · 平台真实文件行历史入口**
+- [x] **T821 · 平台真实文件行历史入口**
   **类型 / Owner**：前端入口 / EDGE\
   **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`、`src/frontend/platform/src/pages/KnowledgePage/components/SpaceDirectoryRow.tsx`\
   **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
