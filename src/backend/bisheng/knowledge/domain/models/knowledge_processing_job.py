@@ -41,6 +41,9 @@ class KnowledgeProcessingJob(SQLModelSerializable, table=True):
     # Only the relevant model/index revision determines obsolescence.
     # space_config_version is provenance for frozen parsing defaults instead.
     expected_model_config_revision: int
+    # Immutable acceptance evidence. Older trial rows may lack this fact;
+    # never infer it from the expected revision after an operation cutover.
+    accepted_model_config_revision: int | None = Field(default=None)
     expected_index_generation: str | None = Field(default=None, max_length=64)
     space_config_version: int = Field(default=0)
     claim_generation: int = Field(default=0)

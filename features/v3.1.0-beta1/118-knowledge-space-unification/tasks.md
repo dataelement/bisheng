@@ -551,7 +551,7 @@
   **类型 / Owner**：Worker / PROC\
   **写入文件**：`src/backend/bisheng/worker/knowledge/rebuild_knowledge_worker.py`\
   **逻辑 / 测试上下文**：复用现有 Chunk/metadata，分页超过 10000；失败保留 ES 重试源、只切成功文件检索，不重切分/丢人工修改。tenant_id 从 Celery headers 注入 ContextVar，使用业务模型配置。\
-  **依赖**：T065\
+  **依赖**：T065, T658\
   **配对测试**：T065\
   **验证 / 完成条件**：运行配对测试 T065；验证本卡预期，相关范围检查通过。
 
@@ -913,7 +913,7 @@
   **类型 / Owner**：测试 / LLM\
   **写入文件**：`src/backend/test/knowledge_unification/test_llm_refs.py`（拟新增）\
   **逻辑 / 测试上下文**：五类模型及共享两租户依赖均计数；仅历史聊天审计不阻；检查失败与未ready不能当无引用，不能泄露名称。\
-  **依赖**：T058, T104\
+  **依赖**：T058, T652, T654\
   **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-75, AC-76, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
@@ -5178,11 +5178,77 @@
 
 - [ ] **T650 · 已知生命周期旧adapter回归对齐**
   **类型 / Owner**：测试 / KN\
-  **写入文件**：`src/backend/test/permission/test_f048_knowledge_space_adapter.py`\
-  **逻辑 / 测试上下文**：原COPYING非法资源断言改为真实未知/已删除态；保租户缺失/错误type/隐藏响应及原FGA拒绝断言，不按新已知生命周期误拒。\
+  **写入文件**：`src/backend/test/permission/test_f048_knowledge_space_adapter.py`；`src/backend/test/knowledge/test_managed_spaces_visible_edit.py`\
+  **逻辑 / 测试上下文**：原COPYING/FAILED非法资源断言改为真实未知/已删除态；保租户缺失/错误type/快照/隐藏响应及原FGA拒绝断言，不按新已知生命周期误拒。\
   **依赖**：T078\
   **覆盖 AC**: AC-30, AC-31, AC-33, AC-35, AC-48\
   **验证 / 完成条件**：记录语义退休差异，配新旧adapter/preview/download同选集全绿；不得通过删拒绝测试实现。
+
+## W6 LLM 精确影响核心真实接缝
+
+- [ ] **T651 · 受信Owner有界入向引用查询测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_reference_owner_paging.py`\
+  **逻辑 / 测试上下文**：真实native Session、issued owner scope/transaction/目标全集、稳定页跨tenant与多来源多slot、分页总量无截断/无Cartesian，裸target/跨事务拒绝。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T652 · 受信Owner有界入向引用仓储**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/resource_reference/domain/repositories/reference_repository.py`\
+  **逻辑 / 测试上下文**：仅扩原REF仓储的受信scope seek分页及必要聚合；不开放任意tenant查询，不改R2写协议。\
+  **依赖**：T651\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T653 · 模型删除目标归属原生仓储测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_model_deletion_repository.py`\
+  **逻辑 / 测试上下文**：模型/服务真实归属、具体tenant/固定锁序、retained ID完整性，跨其他Child/异server注入拒绝，读锁无share副作用。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T654 · 模型删除目标归属原生仓储**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/repositories/model_deletion_repository.py`\
+  **逻辑 / 测试上下文**：外部Session读取/锁服务及模型完整集合，真实owner验证，不沿用旧bulk无tenant漏口；写DML留后续执行合同。\
+  **依赖**：T653\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T655 · 模型独立持久确认仓储测试**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_model_delete_plan_repo.py`\
+  **逻辑 / 测试上下文**：模型manifest/space_id=None、稳定原actor排trace、命令/修订/inbound/Coverage/到期绑定、consume幂等和秘密拒绝。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T656 · 模型独立持久确认仓储**
+  **类型 / Owner**：后端 Domain / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/repositories/model_delete_plan_repository.py`\
+  **逻辑 / 测试上下文**：复用现plan表且模型协议独立于PROC，外部Session仅flush；不存API key/服务完整body，不用modelID冒充文件。\
+  **依赖**：T655\
+  **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-74, AC-75, AC-76, AC-77, AC-85, AC-89\
+  **验证 / 完成条件**：先真实红/首绿测试再实现，每卡≤2叶；无真实Coverage不能假ready，后续执行/HTTP另验。
+
+- [ ] **T657 · 保留失败重建源的检索隔离测试**
+  **类型 / Owner**：测试 / KN\
+  **写入文件**：`src/backend/test/knowledge_unification/test_rebuild_failed_visibility.py`\
+  **逻辑 / 测试上下文**：真实SQL文件状态下，保留ES源但空间候选/post-filter排除失败与处理中，仅成功合法版本参与；F048/QA/原显式版本语义及预览下载保持。\
+  **依赖**：T605\
+  **覆盖 AC**: AC-35, AC-48, AC-49, AC-52, AC-53, AC-54\
+  **验证 / 完成条件**：先提交真实状态回归，不能以删ES文本或只清Milvus代替检索裁剪。
+
+- [ ] **T658 · 保留失败重建源的检索隔离接线**
+  **类型 / Owner**：后端 Domain / KN\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_file_visibility_service.py`\
+  **逻辑 / 测试上下文**：空间候选与post_filter按现真实成功状态裁剪检索，保权限/primary及原显式版本/QA语义，不扩大edit或禁止预览下载；与066后组合验证。\
+  **依赖**：T657\
+  **配对测试**：T657\
+  **验证 / 完成条件**：配对与原visibility/检索回归全绿，真实ES/Milvus行为由后续E2E验，不先标T102全量完成。
 
 ## 自动化覆盖索引
 

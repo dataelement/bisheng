@@ -89,4 +89,26 @@ KnowledgeSpaceListingRepository新增alist_candidates(keyword?,after?,limit)和a
 
 T063/064是可组合接收用例，不得把未装配kind接受成永远pending；T614/615的真实闭环前置增加T065/066。先实现既有rebuild_knowledge_worker.py超过10000的完整分页，失败保ES文本和人工Chunk/metadata；同文件中实际单file处理能力供J1逐item调用，返回实际处理结果，不伪造成功。J1业务Owner负责租约/代际与SQL finalize；旧task入口不伪装成job，也不让整库旧worker自行finalize新job。tenant/proof/原业务模型来源保持当前合同，不新增physical staging、外部CAS或任务模型绑定。
 
+失败保ES必须配合T657/658真实retrieval过滤：在现knowledge_file_visibility_service的空间候选和post_filter路径，按当前SQL真实文件成功状态排除处理中/失败文件，保现F048、primary/显式版本和QA既有语义；只裁检索，不据此禁止目录/预览/下载。不能只清Milvus而让失败ES源继续召回。T066完成依赖此过滤，最后真实API/E2E验证保源可重试、成功项可检索、失败项不可检索。
+
+PROC原ProcessingOwnerRepository允许补受控文件状态写端（原643叶及原测试叶），必须在当前item/job lease、R/G和归属核验之后，同外部native Session按真实file ID/tenant/expected space更新status及已脱敏错误，不调用自commit旧DAO；结果提交与子项终态原子落地。preview/download仍沿原资格。
+
+原Owner增加apreview(session,space_id,*,identity,parameters,operation_id=None,expected_configuration=None)只prepare现ModelReference计划、不apply新业务/R2配置；旧invalid模型显式repair只验新合法目标。JobRepo增加aget_by_request_key(session,kind,idempotency_key,*,lock=False)用于幂等优先检查，但始终重新鉴权，异plan/规范请求/actor不得复用。
+
 T078已知生命周期放行使原adapter测试把COPYING视为非法的断言退休；T650只将该例改为未知/已删除的非法态，保原租户、类型和隐藏断言，不放宽任何权限。
+
+## 5. LLM 目标影响与持久计划核心 V1：已冻结
+
+T111/112移除T104功能串行，依赖T652/T654；T113/114的T110串行待后续sharing/执行合同补齐后再解除。本子合同只交付真实Owner核验、完整影响快照与模型专用确认仓储，不提前改现有llm.py/DAO/sharing/公开路由。
+
+REF在原ReferenceRepository补`alist_inbound_for_owner_page(session,issued_scope,*,after_id=None,limit=200)`：scope必须来自当前真实Owner目标全集/同SQL事务，不能接受HTTP任意target/tenant或无界bypass。按真实reference ID稳定seek，limit严格有界；源集合JOIN完整tenant/type/id/version键，当前有效来源的原绑定状态不被随意裁掉。计数/摘要覆盖全部批次，不能只统计首屏或用独立多列IN拼成笛卡尔积。必要的count/group聚合仍在同受信scope中完成，distinct SourceKey/version与多slot明细数量区分。后续tombstone写入仍须真实持锁Owner receipt，不能从裸ID制造目标租户。
+
+新ModelDeletionRepository接外部native Session，仅flush；服务/模型按已冻结target锁顺序核真实owner tenant和当前具体管理scope。retained模型ID必须全部属于当前server及owner，重复/异服务ID拒绝，server实际全部model集合锁后重取。禁止沿用旧DAO只有server_id/model.id的跨tenant bulk DML；本阶段只做读/锁，无share副作用。
+
+`ModelReferenceService.ainspect_removed_models(session,*,identity,server_id,retained_model_ids,delete_server=False)`先验证原管理员/共享只读规则和真实Model Owner，再核同一完整Coverage证明，最后有界读取精确removed目标的完整入向集合，返回内部不可变inspection：真实targets/revisions、完整inbound_digest、distinct source数量/slot数量分组、coverage_epoch/inventory_hash。六源/含停用但仍有配置的完整tenant inventory缺项、epoch/hash不符或未装配真实Coverage时10994；异常不能当零引用。模型目录按有界tenant批量读取，不按每个slot重复扫。只针对已保存业务配置来源，job/聊天/审计不入表。
+
+内部impact核心不伪造SourceReader或隐藏名称。批量来源名称/版本入口和逐业务读取资格仍待独立接缝，尚无合法展示资格的来源只计restricted数量；不能仅凭APP根visible展示历史私有版本。最终公开影响接口在后续接线前必须补齐真实Reader。
+
+新ModelDeletePlanRepository独立处理model manifest，复用既有KnowledgeOperationPlan存储但space_id=None、operation=model_update_server/model_delete_server；不把模型ID伪装file/space，不改PROC已冻三元manifest。`acreate_model_delete_plan(session,*,actor_reference,command_digest,targets,target_revisions,inbound_digest,coverage_epoch,inventory_hash,expires_at)`及`aget_model_delete_plan_for_execution(session,*,confirmation_id,actor_reference,command_digest,plan_digest)`/同operation consume，只flush，绑定tenant/稳定原身份/全部目标修订/完整影响摘要/到期时间。身份排除trace_id，不持久化bearer、API key或整个服务请求，仅存规范请求hash；最终当前原资格仍重验。更新清单和删服务才是真实HTTP两变体，单/批模型移除是PUT清单差集，不新增伪既有单模型路由。
+
+普通/force执行、原分享prepare→projection→finalize同原生事务、精确公开precheck路径/DTO、批量SourceReader和正式Coverage adapter仍pending。未冻结这些边界前不得改服务清单写入口或声称模型删除已闭合；普通删除任一有效业务引用整次零修改，force只跳已确认引用阻断、保原配置ID与失效绑定的业务规则保持。

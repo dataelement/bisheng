@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -33,7 +33,8 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEn
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
-from bisheng.knowledge.domain.schemas.processing_job import ProcessingKind, ResourceVersionTarget
+from bisheng.knowledge.domain.schemas.processing_job import ItemState, JobState, ProcessingKind, ResourceVersionTarget
+from bisheng.knowledge.domain.services.processing_cutover_receipts import consume_cutover_receipt
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,27 @@ class ClaimedItem:
     lease: ItemLease
 
 
+@dataclass(frozen=True)
+class JobPage:
+    rows: tuple[KnowledgeProcessingJob, ...]
+    total: int
+
+
+@dataclass(frozen=True)
+class ItemPage:
+    rows: tuple[KnowledgeProcessingItem, ...]
+    total: int
+
+
+@dataclass(frozen=True)
+class JobDispatch:
+    job_id: str
+    tenant_id: int
+    space_id: int
+    kind: str
+    revision: int
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -125,16 +147,13 @@ class ProcessingJobRepository:
         _digest(copied)  # Reject non-JSON references before any write.
         return copied
 
-    async def _space(self, session: AsyncSession, space_id: int) -> None:
+    async def _space(self, session: AsyncSession, space_id: int, *, lock: bool = True) -> None:
         tenant_id = self._tenant_id()
+        statement = select(Knowledge).where(Knowledge.id == space_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value)
+        if lock:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
         with strict_tenant_filter():
-            row = (
-                await session.exec(
-                    select(Knowledge)
-                    .where(Knowledge.id == space_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value)
-                    .with_for_update()
-                )
-            ).one_or_none()
+            row = (await session.exec(statement)).one_or_none()
         if row is None or row.tenant_id != tenant_id:
             raise SpaceNotFoundError()
 
@@ -151,6 +170,154 @@ class ProcessingJobRepository:
 
     async def aget(self, session: AsyncSession, job_id: str) -> KnowledgeProcessingJob:
         return await self._job(session, job_id, lock=False)
+
+    @staticmethod
+    def _page(page: int, page_size: int) -> int:
+        if type(page) is not int or page < 1 or type(page_size) is not int or not 1 <= page_size <= 200:
+            raise ValueError("page must be positive and page_size must be 1..200")
+        return (page - 1) * page_size
+
+    async def alist_jobs(
+        self,
+        session: AsyncSession,
+        space_id: int,
+        *,
+        page: int,
+        page_size: int,
+        kind: str | None = None,
+        state: str | None = None,
+    ) -> JobPage:
+        offset = self._page(page, page_size)
+        await self._space(session, space_id, lock=False)
+        filters = [KnowledgeProcessingJob.space_id == space_id]
+        if kind is not None:
+            filters.append(KnowledgeProcessingJob.kind == ProcessingKind(kind).value)
+        if state is not None:
+            filters.append(KnowledgeProcessingJob.state == JobState(state).value)
+        with strict_tenant_filter():
+            total = (await session.exec(select(func.count()).select_from(KnowledgeProcessingJob).where(*filters))).one()
+            rows = (
+                await session.exec(
+                    select(KnowledgeProcessingJob)
+                    .where(*filters)
+                    .order_by(KnowledgeProcessingJob.accepted_at.desc(), KnowledgeProcessingJob.id.desc())
+                    .offset(offset)
+                    .limit(page_size)
+                )
+            ).all()
+        if any(row.tenant_id != self._tenant_id() for row in rows):
+            raise KnowledgeProcessingJobNotFoundError()
+        return JobPage(tuple(rows), total)
+
+    async def alist_items(
+        self,
+        session: AsyncSession,
+        job_id: str,
+        *,
+        page: int,
+        page_size: int,
+        visible_file_ids: Sequence[int],
+        state: str | None = None,
+    ) -> ItemPage:
+        offset = self._page(page, page_size)
+        job = await self._job(session, job_id, lock=False)
+        ids = tuple(dict.fromkeys(visible_file_ids))
+        if any(type(value) is not int or value <= 0 for value in ids):
+            raise ValueError("visible scope requires positive file identities")
+        filters = [KnowledgeProcessingItem.job_id == job.id, KnowledgeProcessingItem.file_id.in_(ids)]
+        if state is not None:
+            filters.append(KnowledgeProcessingItem.state == ItemState(state).value)
+        with strict_tenant_filter():
+            total = (
+                await session.exec(select(func.count()).select_from(KnowledgeProcessingItem).where(*filters))
+            ).one()
+            rows = (
+                await session.exec(
+                    select(KnowledgeProcessingItem)
+                    .where(*filters)
+                    .order_by(
+                        KnowledgeProcessingItem.file_id, KnowledgeProcessingItem.version_id, KnowledgeProcessingItem.id
+                    )
+                    .offset(offset)
+                    .limit(page_size)
+                )
+            ).all()
+        if any(row.tenant_id != job.tenant_id for row in rows):
+            raise KnowledgeProcessingJobNotFoundError()
+        return ItemPage(tuple(rows), total)
+
+    async def alatest_retry_actor(self, session: AsyncSession, job_id: str) -> dict:
+        job = await self._job(session, job_id, lock=False)
+        with strict_tenant_filter():
+            receipt = (
+                await session.exec(
+                    select(KnowledgeProcessingRetryReceipt)
+                    .where(KnowledgeProcessingRetryReceipt.job_id == job.id)
+                    .order_by(
+                        KnowledgeProcessingRetryReceipt.accepted_job_revision.desc(),
+                        KnowledgeProcessingRetryReceipt.id.desc(),
+                    )
+                    .limit(1)
+                )
+            ).one_or_none()
+        if receipt is not None and receipt.tenant_id != job.tenant_id:
+            raise KnowledgeProcessingJobNotFoundError()
+        return deepcopy(receipt.actor_reference if receipt is not None else job.actor_reference)
+
+    async def adispatch_candidates(
+        self,
+        session: AsyncSession,
+        *,
+        now: datetime,
+        after_id: str | None = None,
+        limit: int = 200,
+    ) -> tuple[JobDispatch, ...]:
+        tenant = self._tenant_id()
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise ValueError("dispatch batch must be 1..200")
+        now = now.astimezone(UTC).replace(tzinfo=None) if now.tzinfo is not None else now
+        active = or_(
+            and_(KnowledgeProcessingJob.state == "accepted", KnowledgeProcessingJob.pending_dispatch == True),  # noqa: E712
+            and_(
+                KnowledgeProcessingJob.state == "running",
+                or_(KnowledgeProcessingJob.lease_until.is_(None), KnowledgeProcessingJob.lease_until <= now),
+            ),
+        )
+        statement = select(KnowledgeProcessingJob).where(active, KnowledgeProcessingJob.next_dispatch_at <= now)
+        if after_id is not None:
+            statement = statement.where(KnowledgeProcessingJob.id > after_id)
+        with strict_tenant_filter():
+            rows = (await session.exec(statement.order_by(KnowledgeProcessingJob.id).limit(limit))).all()
+        if any(row.tenant_id != tenant for row in rows):
+            raise KnowledgeProcessingJobNotFoundError()
+        return tuple(JobDispatch(row.id, row.tenant_id, row.space_id, row.kind, row.revision) for row in rows)
+
+    async def arecord_dispatch(
+        self,
+        session: AsyncSession,
+        job_id: str,
+        *,
+        expected_revision: int,
+        published: bool,
+        next_at: datetime,
+        error_code: int | None = None,
+    ) -> bool:
+        if type(expected_revision) is not int or expected_revision < 0 or type(published) is not bool:
+            raise ValueError("dispatch acknowledgement requires an expected revision and boolean result")
+        job = await self._job(session, job_id, lock=True)
+        if job.revision != expected_revision or (
+            not (job.state == "accepted" and job.pending_dispatch)
+            and not (job.state == "running" and (job.lease_until is None or job.lease_until <= self._now()))
+        ):
+            return False
+        job.dispatch_attempts += 1
+        job.dispatch_error_code = None if published else error_code
+        job.next_dispatch_at = next_at.astimezone(UTC).replace(tzinfo=None) if next_at.tzinfo is not None else next_at
+        job.update_time = self._now()
+        # A successful broker publish may still lose its acknowledgement or
+        # delivery. Only a real claim clears pending_dispatch.
+        await session.flush()
+        return True
 
     async def _item(self, session: AsyncSession, job: KnowledgeProcessingJob, item_id: str) -> KnowledgeProcessingItem:
         with strict_tenant_filter():
@@ -247,6 +414,7 @@ class ProcessingJobRepository:
             parameters=payload,
             scope_manifest=manifest,
             expected_model_config_revision=configuration.model_config_revision,
+            accepted_model_config_revision=configuration.model_config_revision,
             expected_index_generation=configuration.index_generation,
             space_config_version=space_config_version,
             total_count=len(manifest),
@@ -301,11 +469,16 @@ class ProcessingJobRepository:
         job_id: str,
         *,
         configuration: ProcessingConfiguration,
+        expected_job_revision: int | None = None,
         lease_seconds: int = 900,
     ) -> JobLease | None:
         if type(lease_seconds) is not int or lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
+        if expected_job_revision is not None and (type(expected_job_revision) is not int or expected_job_revision < 0):
+            raise ValueError("expected_job_revision must be a non-negative integer")
         job = await self._job(session, job_id, lock=True)
+        if expected_job_revision is not None and job.revision != expected_job_revision:
+            return None
         now = self._now()
         if job.state not in {"accepted", "running"}:
             return None
@@ -500,6 +673,18 @@ class ProcessingJobRepository:
         await session.flush()
         # Actual business/index cutover precedes the explicit afinalize call.
         return True
+
+    async def aacknowledge_cutover(self, session: AsyncSession, lease: JobLease, *, receipt):
+        job = await self._job(session, lease.job_id, lock=True)
+        if not self._active_job_lease(job, lease):
+            return None
+        revision, generation = consume_cutover_receipt(session, receipt, job, lease)
+        job.expected_model_config_revision = revision
+        job.expected_index_generation = generation
+        job.revision += 1
+        job.update_time = self._now()
+        await session.flush()
+        return job
 
     async def afinalize(
         self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration

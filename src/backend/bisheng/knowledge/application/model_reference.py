@@ -170,9 +170,21 @@ class KnowledgeModelReferenceApplication:
         return current, selected, transition, proposed
 
     @classmethod
-    def _freeze(cls, session, row, runtime, bindings, selected, transition, repair, *, new_generation=None):
+    def _freeze(
+        cls,
+        session,
+        row,
+        runtime,
+        bindings,
+        selected,
+        transition,
+        repair,
+        *,
+        new_generation=None,
+        explicit_rebuild=False,
+    ):
         current = canonical_target_id(row.model) if row.model else None
-        changed = current != selected or row.model_transition is not None
+        changed = explicit_rebuild or current != selected or row.model_transition is not None
         if repair or current is None:
             transition = {**transition, "current_model_id": selected}
         model = selected if repair or current is None else row.model
@@ -361,6 +373,7 @@ class KnowledgeModelReferenceApplication:
         expected_model_config_revision=None,
         expected_index_generation=None,
         operation_id=None,
+        _explicit_rebuild=False,
     ):
         cls._user(login_user)
         row = cls.repository.get(session, knowledge_id)
@@ -385,7 +398,9 @@ class KnowledgeModelReferenceApplication:
         )
         kinds = cls.repository.model_kinds(session, runtime.verifier, cls._source(row), bindings.verified.context)
         repair = cls._validate_configuration(row, bindings, kinds, selected)
-        return cls._freeze(session, row, runtime, bindings, selected, transition, repair)
+        return cls._freeze(
+            session, row, runtime, bindings, selected, transition, repair, explicit_rebuild=_explicit_rebuild
+        )
 
     @classmethod
     async def aprepare_model_change(
@@ -398,6 +413,7 @@ class KnowledgeModelReferenceApplication:
         expected_model_config_revision=None,
         expected_index_generation=None,
         operation_id=None,
+        _explicit_rebuild=False,
     ):
         cls._user(login_user)
         row = await cls.repository.aget(session, knowledge_id)
@@ -424,7 +440,22 @@ class KnowledgeModelReferenceApplication:
             session, runtime.verifier, cls._source(row), bindings.verified.context
         )
         repair = cls._validate_configuration(row, bindings, kinds, selected)
-        return cls._freeze(session, row, runtime, bindings, selected, transition, repair)
+        return cls._freeze(
+            session, row, runtime, bindings, selected, transition, repair, explicit_rebuild=_explicit_rebuild
+        )
+
+    @classmethod
+    def prepare_rebuild(cls, session, knowledge_id, new_model_id, *, login_user, **expected):
+        """Explicit work creates an operation even when the embedding is unchanged."""
+        return cls.prepare_model_change(
+            session, knowledge_id, new_model_id, login_user=login_user, _explicit_rebuild=True, **expected
+        )
+
+    @classmethod
+    async def aprepare_rebuild(cls, session, knowledge_id, new_model_id, *, login_user, **expected):
+        return await cls.aprepare_model_change(
+            session, knowledge_id, new_model_id, login_user=login_user, _explicit_rebuild=True, **expected
+        )
 
     @classmethod
     def apply_model_change(cls, session, prepared):
