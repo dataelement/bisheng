@@ -5,6 +5,7 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass
 
+from loguru import logger
 from sqlalchemy import and_, or_, update
 from sqlmodel import select
 
@@ -42,9 +43,204 @@ class ProcessingScopeVersion:
     status: int | None
     split_rule: str | None
     revision: str
+    source_revision: str
+    file_source: str | None
 
 
 class ProcessingOwnerRepository:
+    _file_kinds = frozenset({"file_reprocess", "file_resplit"})
+    _file_patch_fields = frozenset(
+        {
+            "parse_type",
+            "preview_file_object_name",
+            "bbox_object_name",
+            "abstract",
+            "user_metadata",
+            "simhash",
+            "similar_status",
+            "file_encoding",
+            "thumbnails",
+        }
+    )
+
+    async def aassert_file_processing_available(self, session, space_id, scope, *, exclude_job_id=None):
+        root = await KnowledgeModelReferenceRepository().aget(session, space_id, for_update=True)
+        if root is None or root.state != KnowledgeState.PUBLISHED.value or root.model_transition is not None:
+            raise KnowledgeProcessingConflictError(reason="processing_space_not_ready")
+        if not scope or any(row.status not in {2, 3, 6, 7} for row in scope):
+            raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
+        item, job = KnowledgeProcessingItem, KnowledgeProcessingJob
+        pairs = [(row.target.file_id, row.target.version_id) for row in scope]
+        base = (
+            select(job.id)
+            .join(item, and_(item.job_id == job.id, item.tenant_id == job.tenant_id))
+            .where(
+                job.space_id == space_id,
+                job.state.in_(("accepted", "running")),
+            )
+        )
+        if exclude_job_id is not None:
+            base = base.where(job.id != exclude_job_id)
+        for offset in range(0, len(pairs), 200):
+            query = base.where(
+                or_(
+                    *(
+                        and_(item.file_id == file_id, item.version_id == version_id)
+                        for file_id, version_id in pairs[offset : offset + 200]
+                    )
+                )
+            )
+            with strict_tenant_filter():
+                conflict = (await session.exec(query.limit(1))).first()
+            if conflict is not None:
+                raise KnowledgeProcessingConflictError(reason="processing_target_job_active")
+        return root
+
+    async def _file(self, session, space_id, file_id):
+        with strict_tenant_filter():
+            row = (
+                await session.exec(
+                    select(KnowledgeFile)
+                    .where(KnowledgeFile.id == file_id, KnowledgeFile.knowledge_id == space_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).one_or_none()
+        if row is None or row.tenant_id != get_current_tenant_id() or row.file_type != 1:
+            raise KnowledgeOperationPlanConflictError(reason="processing_file_owner_changed")
+        return row
+
+    async def aqueue_file_processing(self, session, space_id, items, *, rules, actor_user_id):
+        for item in items:
+            row = await self._file(session, space_id, item.target.file_id)
+            if row.status not in {2, 3, 6, 7}:
+                raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
+            row.status, row.remark, row.split_rule, row.updater_id = 5, "", rules[item.target.file_id], actor_user_id
+        await session.flush()
+
+    async def _processing_file(self, session, job, item):
+        if job.kind not in self._file_kinds or item.expected_space_id != job.space_id:
+            raise KnowledgeOperationPlanConflictError(reason="processing_file_kind_changed")
+        scope = await self.aload_scope(
+            session,
+            job.space_id,
+            targets=[{"file_id": item.file_id, "document_id": item.document_id, "version_id": item.version_id}],
+            for_update=True,
+        )
+        if (
+            len(scope) != 1
+            or scope[0].parent_id != item.expected_parent_id
+            or scope[0].source_revision != item.processing_snapshot.get("source_revision")
+        ):
+            raise KnowledgeOperationPlanConflictError(reason="processing_file_source_changed")
+        return await self._file(session, job.space_id, item.file_id)
+
+    async def aqueue_retry_file_processing(self, session, job, *, jobs):
+        root, actual = await self._attempt(session, job.id, jobs)
+        if (
+            actual is not job
+            or root is None
+            or root.state != 1
+            or root.model_transition is not None
+            or (root.model_config_revision, root.index_generation)
+            != (job.expected_model_config_revision, job.expected_index_generation)
+        ):
+            raise KnowledgeProcessingConflictError(reason="processing_file_retry_conflict")
+        with strict_tenant_filter():
+            items = (
+                await session.exec(
+                    select(KnowledgeProcessingItem)
+                    .where(KnowledgeProcessingItem.job_id == job.id, KnowledgeProcessingItem.state == "pending")
+                    .with_for_update()
+                )
+            ).all()
+        scope = await self.aload_scope(
+            session,
+            job.space_id,
+            targets=[
+                {"file_id": item.file_id, "document_id": item.document_id, "version_id": item.version_id}
+                for item in items
+            ],
+            for_update=True,
+        )
+        if items:
+            await self.aassert_file_processing_available(session, job.space_id, scope, exclude_job_id=job.id)
+        for item in items:
+            row = await self._processing_file(session, job, item)
+            if row.status not in {3, 6, 7}:
+                raise KnowledgeProcessingConflictError(reason="processing_file_retry_conflict")
+            row.status, row.remark = 5, ""
+        await session.flush()
+
+    async def aguard_processed_file(self, session, lease, *, jobs):
+        root, _ = await self._attempt(session, lease.job.job_id, jobs)
+        if root is None:
+            raise KnowledgeOperationPlanConflictError(reason="processing_owner_missing")
+        guarded = await jobs._guard_item(
+            session, lease, ProcessingConfiguration(root.model_config_revision, root.index_generation)
+        )
+        if guarded is None:
+            return None
+        job, item = guarded
+        if root.model_transition is not None or root.state != 1:
+            raise KnowledgeProcessingConflictError(reason="processing_space_not_ready")
+        row = await self._processing_file(session, job, item)
+        if row.status not in {1, 5}:
+            raise KnowledgeProcessingConflictError(reason="processing_file_state_changed")
+        return job, item, row
+
+    async def astart_processed_file(self, session, lease, *, jobs):
+        guarded = await self.aguard_processed_file(session, lease, jobs=jobs)
+        if guarded is None:
+            return False
+        guarded[2].status = 1
+        await session.flush()
+        return True
+
+    async def acomplete_processed_file(self, session, lease, *, jobs, outcome):
+        if (
+            type(outcome.status) is not int
+            or outcome.status not in {2, 3, 7}
+            or type(outcome.chunk_count) is not int
+            or outcome.chunk_count < 0
+            or (outcome.status == 2 and outcome.chunk_count == 0)
+            or not isinstance(outcome.file_patch, dict)
+            or set(outcome.file_patch) - self._file_patch_fields
+        ):
+            raise KnowledgeOperationPlanConflictError(reason="processing_file_outcome_invalid")
+        guarded = await self.aguard_processed_file(session, lease, jobs=jobs)
+        if guarded is None:
+            return False
+        job, item, row = guarded
+        if outcome.file_id != item.file_id or outcome.source_revision != item.processing_snapshot["source_revision"]:
+            raise KnowledgeOperationPlanConflictError(reason="processing_file_outcome_changed")
+        current = ProcessingConfiguration(job.expected_model_config_revision, job.expected_index_generation)
+        if not await jobs.acomplete_item(
+            session,
+            lease,
+            configuration=current,
+            succeeded=outcome.status == 2,
+            result={"chunk_count": outcome.chunk_count, "file_status": outcome.status},
+            error_code=outcome.error_code,
+        ):
+            return False
+        row.status = outcome.status
+        row.remark = (
+            ""
+            if outcome.status == 2
+            else json.dumps(
+                {
+                    "code": outcome.error_code or KnowledgeFileFailedError.Code,
+                    **({"reason": "sensitive_check"} if outcome.status == 7 else {}),
+                }
+            )
+        )
+        if outcome.status == 2:
+            for key, value in outcome.file_patch.items():
+                setattr(row, key, deepcopy(value))
+        await session.flush()
+        return True
+
     async def _attempt(self, session, job_id, jobs):
         candidate = await jobs.aget(session, job_id)
         root = await KnowledgeModelReferenceRepository().aget(session, candidate.space_id, for_update=True)
@@ -193,6 +389,19 @@ class ProcessingOwnerRepository:
 
     async def afail_attempt(self, session, job_id, *, jobs, expected_job_revision, error_code, lease=None):
         root, job = await self._attempt(session, job_id, jobs)
+        unfinished = ()
+        if job.kind in self._file_kinds:
+            with strict_tenant_filter():
+                unfinished = (
+                    await session.exec(
+                        select(KnowledgeProcessingItem)
+                        .where(
+                            KnowledgeProcessingItem.job_id == job.id,
+                            KnowledgeProcessingItem.state.in_(("pending", "running")),
+                        )
+                        .with_for_update()
+                    )
+                ).all()
         release = await self._owned_retry_fence(
             session, root, job, jobs=jobs, lease=lease, expected_job_revision=expected_job_revision
         )
@@ -201,6 +410,20 @@ class ProcessingOwnerRepository:
         )
         if release and failed is not None and failed.state in {"failed", "partial_failed"}:
             root.state = KnowledgeState.PUBLISHED.value
+            await session.flush()
+        if failed is not None and failed.state in {"failed", "partial_failed"}:
+            for item in unfinished:
+                try:
+                    row = await self._processing_file(session, job, item)
+                except KnowledgeOperationPlanConflictError:
+                    # A replaced/deleted source is no longer owned by this
+                    # attempt. Persist its job failure without mutating it.
+                    logger.warning(
+                        "Processing failure leaves changed source untouched job={} file={}", job.id, item.file_id
+                    )
+                    continue
+                if row.status in {1, 5}:
+                    row.status, row.remark = 3, json.dumps({"code": error_code})
             await session.flush()
         return failed
 
@@ -372,6 +595,32 @@ class ProcessingOwnerRepository:
             digest = hashlib.sha256(
                 json.dumps(facts, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
             ).hexdigest()
+            source_facts = {
+                "file": {
+                    key: getattr(physical, key)
+                    for key in (
+                        "id",
+                        "tenant_id",
+                        "knowledge_id",
+                        "file_type",
+                        "file_source",
+                        "object_name",
+                        "md5",
+                        "file_size",
+                        "file_name",
+                        "file_level_path",
+                        "user_metadata",
+                    )
+                },
+                "document_id": document.id,
+                "version_id": version.id,
+                "version_no": version.version_no,
+            }
+            source_digest = hashlib.sha256(
+                json.dumps(
+                    source_facts, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+                ).encode()
+            ).hexdigest()
             result.append(
                 ProcessingScopeVersion(
                     target,
@@ -383,6 +632,8 @@ class ProcessingOwnerRepository:
                     physical.status,
                     physical.split_rule,
                     digest,
+                    source_digest,
+                    physical.file_source,
                 )
             )
         if requested is not None:

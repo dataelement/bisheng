@@ -8,8 +8,17 @@ import json
 from dataclasses import dataclass
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    KnowledgeProcessingConflictError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.core.context.background_execution import get_current_background_task
+from bisheng.knowledge.application.file_processing_adapter import (
+    legacy_rule_from_snapshot,
+    resolve_file_processing_snapshot,
+    system_processing_defaults,
+)
 from bisheng.knowledge.application.model_reference import (
     KnowledgeModelReferenceApplication,
     PreparedKnowledgeModelChange,
@@ -17,11 +26,14 @@ from bisheng.knowledge.application.model_reference import (
 from bisheng.knowledge.application.model_reference_read import AdmittedKnowledgeModel, get_knowledge_model_read_runtime
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.repositories.processing_job_repository import (
+    NewProcessingItem,
     ProcessingConfiguration,
     ProcessingJobRepository,
 )
 from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
+from bisheng.knowledge.domain.repositories.processing_settings_repository import ProcessingSettingsRepository
 from bisheng.knowledge.domain.schemas.processing_job import EmbeddingRebuildParameters
+from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults
 from bisheng.knowledge.domain.services.processing_cutover_receipts import _ProcessingCutoverAuthority
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.open_api.domain.context import OpenApiPrincipal
@@ -46,6 +58,13 @@ class ProcessingBusinessState:
         return ProcessingConfiguration(self.admitted.model_config_revision, self.admitted.index_generation)
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedFileProcessingPlan:
+    configuration: ProcessingConfiguration
+    source_revisions: dict
+    items: tuple[NewProcessingItem, ...]
+
+
 class _CutoverNotReady(Exception):
     """The locking read rejected this worker before any business mutation."""
 
@@ -55,6 +74,83 @@ class KnowledgeProcessingOwner:
         self.jobs = jobs if jobs is not None else ProcessingJobRepository()
         self.scope = ProcessingOwnerRepository()
         self._cutovers = _ProcessingCutoverAuthority(self)
+
+    async def apreview_file_processing(self, session, space_id, *, identity, kind, targets, overrides):
+        if kind not in {"file_reprocess", "file_resplit"}:
+            raise KnowledgeProcessingConflictError(reason="processing_kind_unavailable")
+        await self._operator(identity)
+        await require_business_action(identity, resource_type="knowledge_space", resource_id=space_id, action="edit")
+        scope = await self.scope.aload_scope(session, space_id, targets=targets, for_update=True)
+        await self.scope.aassert_file_processing_available(session, space_id, scope)
+        current = await self.aread_current(session, space_id, identity=identity)
+        settings = await ProcessingSettingsRepository().aget(session, space_id)
+        defaults = (
+            ProcessingDefaults.model_validate(settings.saved_defaults) if settings.saved_defaults is not None else None
+        )
+        items = []
+        for row in scope:
+            effective = resolve_file_processing_snapshot(
+                file_name=row.file_name,
+                file_source=row.file_source,
+                system_defaults=system_processing_defaults(space_id),
+                space_defaults=defaults,
+                space_config_version=settings.config_version,
+                batch_overrides=overrides,
+                legacy_split_rule=row.split_rule,
+            )
+            items.append(
+                NewProcessingItem(
+                    target=row.target,
+                    expected_space_id=space_id,
+                    expected_parent_id=row.parent_id,
+                    processing_snapshot={
+                        "schema_version": 1,
+                        "mode": kind,
+                        "original_status": row.status,
+                        "effective_processing": effective.model_dump(mode="json"),
+                        "source_revision": row.source_revision,
+                    },
+                )
+            )
+        revisions = {
+            "model_config_revision": current.configuration.model_config_revision,
+            "index_generation": current.configuration.index_generation,
+            "processing_config_version": settings.config_version,
+            "versions": {f"{row.target.file_id}:{row.target.version_id}": row.revision for row in scope},
+        }
+        return PreparedFileProcessingPlan(current.configuration, revisions, tuple(items))
+
+    async def aprepare_file_processing(
+        self,
+        session,
+        space_id,
+        *,
+        identity,
+        kind,
+        targets,
+        overrides,
+        expected_configuration,
+        expected_source_revisions,
+        operation_id,
+    ):
+        if not isinstance(operation_id, str) or not operation_id:
+            raise KnowledgeOperationPlanConflictError(reason="processing_file_operation_required")
+        plan = await self.apreview_file_processing(
+            session, space_id, identity=identity, kind=kind, targets=targets, overrides=overrides
+        )
+        if plan.configuration != expected_configuration or plan.source_revisions != expected_source_revisions:
+            raise KnowledgeOperationPlanConflictError(reason="processing_file_plan_changed")
+        operator = await self._operator(identity)
+        rules = {
+            item.target.file_id: legacy_rule_from_snapshot(
+                item.processing_snapshot["effective_processing"], space_id=space_id
+            ).model_dump_json()
+            for item in plan.items
+        }
+        await self.scope.aqueue_file_processing(
+            session, space_id, plan.items, rules=rules, actor_user_id=operator.user_id
+        )
+        return plan.items
 
     @staticmethod
     async def _operator(identity):
@@ -162,6 +258,11 @@ class KnowledgeProcessingOwner:
     async def aretry_failed(
         self, session, job_id, *, identity, idempotency_key, expected_job_revision, actor_user_id, actor_reference
     ):
+        await self._operator(identity)
+        job = await self.jobs.aget(session, job_id)
+        await require_business_action(
+            identity, resource_type="knowledge_space", resource_id=job.space_id, action="edit"
+        )
         # Keep the established business-resource -> job locking order. The
         # SourceOwner revalidates the real current binding in this transaction.
         _, job = await self.scope._attempt(session, job_id, self.jobs)
@@ -176,7 +277,10 @@ class KnowledgeProcessingOwner:
             configuration=current.configuration,
         )
         if not result.reused and result.job.state == "accepted":
-            await self.abegin_retry_fence(session, result.job, identity=identity)
+            if result.job.kind in {"file_reprocess", "file_resplit"}:
+                await self.scope.aqueue_retry_file_processing(session, result.job, jobs=self.jobs)
+            else:
+                await self.abegin_retry_fence(session, result.job, identity=identity)
         return result
 
     async def afail_attempt(self, session, job_id, *, expected_job_revision, error_code, lease=None):
