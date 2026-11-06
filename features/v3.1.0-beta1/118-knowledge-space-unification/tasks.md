@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史839编号：715已完成/历史交付、122当前待办、2外移；原137队列已完成32项、剩105项，另17张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史839编号：717已完成/历史交付、120当前待办、2外移；原137队列已完成34项、剩103项，另17张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -1153,7 +1153,7 @@
   **配对测试**：T139\
   **验证 / 完成条件**：运行配对测试 T139；验证本卡预期，相关范围检查通过。
 
-- [ ] **T141 · 聊天准入与管理器：先写测试**
+- [x] **T141 · 聊天准入与管理器：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_edge_chat.py`（拟新增）\
   **逻辑 / 测试上下文**：W6§47实际online HTTP默认/legacy use规范化与两sort分支；Manager原execution.operator、fresh消息准入和visible gate，旧tenant重验保持；不写历史/引用。\
@@ -1161,7 +1161,7 @@
   **覆盖 AC**: AC-35, AC-79, AC-82, AC-83, AC-91\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T142 · 聊天准入与管理器**
+- [x] **T142 · 聊天准入与管理器**
   **类型 / Owner**：后端 API / EDGE\
   **写入文件**：`src/backend/bisheng/api/v1/chat.py`；`src/backend/bisheng/common/chat/manager.py`\
   **逻辑 / 测试上下文**：原使用准入显式改visible并保持原actor/tenant/凭证、资源业务状态；失效配置明确错误，不能以兼容为由静默fallback。\

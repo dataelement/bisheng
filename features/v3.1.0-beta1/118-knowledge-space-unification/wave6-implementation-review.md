@@ -194,3 +194,10 @@ T139/T140既有生产已由W4 694859943→2a4e7e991及SourceOwner/Core接线实�
 INT固定71cfbc884，两生产叶只15行新增/3行替换：同一私有纯COUNT谓词接KnowledgeDao原sync/async创建计数及QuotaService user分支。非空migration_origin持续个人豁免，NULL/空串仍计；原tenant总量、部门排除开关、普通列表、全局per-user显示口径、文件source/status/SUM与错误处理均未改，无Model/DDL变更。T165测试3ba71→fec格式后实测9行为红4首绿→13绿，初夹具API名错误/网络依赖不计产品红。原test/quota及新叶组合96绿，主树合流后同组合再96绿，日志/private/tmp/f118-root-main-quota.log/.xml。
 
 EDGE固定archive独立复核无行动项：原96绿，额外2格native SQL（2400行、换owner/nonempty标记、lists不隐藏、原跨tenant/global口径）通过；每个sync/async/user/tenant计数各1条COUNT，无行装载/N+1。Ruff两个legacy叶相对原同config rule/message多集24/7完全相同，新增0；新叶Ruff/format与两prod arch均绿。原T165166按count-only交付闭合，正式M3转换后MySQL/配额联验仍由T203完成，不能以SQLite证明正式升级。
+
+
+## 聊天入口与完整本地知识选集（2026-11-07）
+
+EDGE a2d779bf0交原T141142：新HTTP默认visible、旧use在HTTP边界归一，Manager仅原action字面改visible，保私有方法名、fresh admission、execution.operator/消息/执行快照/源与旧tenant重验。5实际HTTP行为红、23首绿→新增28及原18组合46绿；没有为原F048已支持的可见行为伪造红。主agent逐段复核三处变更与新测试、正常merge后与工作台/开放工作流原回归9路径98 passed，日志/private/tmp/f118-root-entry-chat-integrated.log/.xml。两个旧prod arch同基线：chat RULE3 warning、manager RULE1两既有输出，新增0；未扩大旧层重构。
+
+主树受测源码194edb3f46f5719b4925e3d8bd6fd50c5314e5dd，整个test/knowledge_unification（明确未收集TCP监听mock合同单模块）**3640 passed、53431 warnings、130.11秒**，无fail/skip。日志/JUnit /private/tmp/f118-root-native-all-entries.log/.xml。前次447的3582是此前快照，不相加；本次包含已合APP预览/删Model、个人配额、聊天和新workstation/RPC测试。T141142按原范围闭合；root T151152/T839已有15/52/98绿及未改生产archive对照，仍等非作者短复核再勾。以上为本地native/HTTP/组件证据，未称CI、正式M2/M3或完整E2E。
