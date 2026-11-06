@@ -84,7 +84,7 @@ REF唯一拥有scope/verifier/scoped索引与实际target读取/legacy适配；W
 
 临时快照payload_json保canonical执行输入原文（graph及可选node_input），不混入客户端无从提供的root字段；实际resource_id/owner_tenant_id及target后的真实root edit/current重授权仍验证。saved快照保graph/root/version完整执行事实。
 
-助手token只授权既有Info查看，来源root候选仍遵原C3可见/pin；真token不新开Root/任意Child源业务bypass。WORKBENCH_CHAT必须读真实MessageSession而非meta.flowId，核chat_id/flow_id/type/未删、tokenTenant=sessionTenant、issuer=sessionUser；用户叶会话tenant不等资源ownerTenant是合法事实。Direct ASSISTANT维持原ACTIVE+实际resource_id映射及原C3范围。已确认旧生成接口未校验资源share动作，这是独立发行前安全待办T404/T405，不以本波查看绑定核验声称签发授权已修，也不私自给旧token新增撤销联动或expiry规则。
+助手token只授权既有Info查看，来源root候选仍遵原C3可见/pin；真token不新开Root/任意Child源业务bypass。WORKBENCH_CHAT必须读真实MessageSession而非meta.flowId，核chat_id/flow_id/type/未删、tokenTenant=sessionTenant、issuer=sessionUser；用户叶会话tenant不等资源ownerTenant是合法事实。Direct ASSISTANT维持原ACTIVE+实际resource_id映射及原C3范围。已确认旧生成接口未校验资源share动作，原 T404/T405 已按用户决定移出 F118，单列[签发授权独立待办](../../../docs/backlog/share-link-issuance-authorization.md)，不作为本次依赖或验收条件；既有查看绑定/真实来源约束保持，不声称签发端已修，也不修改旧 token 的撤销联动或 expiry 语义。
 
 GET Info填完整knowledge_ids/reference_states；create/update写响应填已知原IDs，reference_states=None表示未执行状态查询；禁止SQL已commit后再inspect失败而向调用者伪称保存失败。
 

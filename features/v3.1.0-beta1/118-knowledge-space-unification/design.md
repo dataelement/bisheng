@@ -771,7 +771,7 @@ W2最终集成：166/342项完成（本波新增80项）；主agent在411d4f4614
 
 WF保存版本运行使用真实指定或业务解析版本；客户端图必须匹配完整nodes/edges。未保存全图/单节点仅原edit授权后走临时目标准入；全部目标后重验真实root/edit/current及canonical输入，不读取或要求来源index/coverage/legacy，也不建来源。public禁止preview，v2保原channel门槛；运行override仅允许不改变引用槽的深拷贝参数。所有WS动作保可信连接根，实际执行Port先于会话/Redis/WAITING/queue；10994/10996/10998原码保留。
 
-AS共用Agent init/run/stream及缓存复用都读取实际snapshot配置/links；首次init成功才缓存，配置变化10998清旧缓存供下次重建，publish共用调用者原SQL事务。GET Info保完整knowledge_ids和裁剪reference_states，knowledge_list仅真实可展示目标；写响应reference_states=None表示未查询，不在已commit后补inspect导致伪保存失败。ACTIVE分享token只inspect，WORKBENCH_CHAT核真实MessageSession，不信meta且不扩大来源C3视图；签发授权T404/T405是独立发行前待办。
+AS共用Agent init/run/stream及缓存复用都读取实际snapshot配置/links；首次init成功才缓存，配置变化10998清旧缓存供下次重建，publish共用调用者原SQL事务。GET Info保完整knowledge_ids和裁剪reference_states，knowledge_list仅真实可展示目标；写响应reference_states=None表示未查询，不在已commit后补inspect导致伪保存失败。ACTIVE分享token只inspect，WORKBENCH_CHAT核真实MessageSession，不信meta且不扩大来源C3视图；签发授权 T404/T405 已由用户移出本次需求，单列于 [独立待办](../../../docs/backlog/share-link-issuance-authorization.md)，不作为 F118 前置；既有 token 的来源读取约束和兼容保持。
 
 评测传原JWT对象，homeTenant与管理pin分开核，原owner/tenant在调度和任务入口各检查；每题重新准入真实保存version再入队，AS复用同一每次guard链。不建立任务模型绑定或治理已排除的worker在途外部IO竞态。WeakKey/WeakSet相关scope/旧R2 proof另加私有weakref原对象is核验，防重载相等性的子类clone借用登记。
 
@@ -808,4 +808,14 @@ W4最终验证：d4d02e48b7d724c9ffe31d9650b75951eeb94e14，81路径2390 passed�
 
 ## 15.8 本轮修订与剩余范围（2026-11-06）
 
-独立评审两项热点已按用户确认处理：撤销默认 Embedding 的全空间联动，APP 改为每阶段一次目录复核。若未来增加明确的管理员批量换模型功能，应另行设计显式范围、确认与批次校验，不能恢复默认设置隐式联动。任务账面仍为 438/597 完成、159 待办，完整分组及逐条编号见 [pending-tasks.md](./pending-tasks.md)。本地回归不代表完整特性或升级验收。
+独立评审两项热点已按用户确认处理：撤销默认 Embedding 的全空间联动，APP 改为每阶段一次目录复核。若未来增加明确的管理员批量换模型功能，应另行设计显式范围、确认与批次校验，不能恢复默认设置隐式联动。历史597编号中438已完成/历史交付、157当前待办、2外移（T404/T405），完整分组及逐条编号见 [pending-tasks.md](./pending-tasks.md)。本地回归不代表完整特性或升级验收。
+
+## 15.9 剩余任务范围校正（2026-11-06）
+
+用户明确排除分享链接签发授权加固，原 T404/T405 保留编号追溯但移出本特性及其验收条件，见 [独立待办](../../../docs/backlog/share-link-issuance-authorization.md)。F118 仍兼容既有分享读取并维持原身份、真实来源、当前状态与引用准入；不修改生成端、旧 token 撤销联动或有效期，不扩大 token 的来源访问范围。
+
+逐项核对原159个待办后，其余157项仍由已确认 AC 支撑；详细依据见 [范围复核](./scope-review.md)。原 T127–T156 的30项分别为22项 use→visible、6项旧知识协议兼容、2项冻结模型引用核验，不能以全平台适配为名改造聊天/工具/DSH/SDK 的其他业务。
+
+应用只将原 use 使用检查及其枚举改为可见性。发布动作、分享动作、owner/管理资格、编辑/删除、凭据范围和生命周期继续使用原条件；来源可见也不替代应用自身发布权限。UI 各动作来自对应服务端结果。T135/T136/T193 的过宽表述已修正，不更改已确认 AC。
+
+QA 仅兼容和维护原模型引用，不接入空间高级功能；SDK/MCP 只适配本次 type/ID/use，不升级协议；知识任务恢复不扩成通用任务系统；type=2 不复活且不顺带清理数据；升级入口仅运维 CLI，不建在线迁移 HTTP API或停服控制。默认 Embedding 仍只初始化新空间，worker 在途 I/O 竞态仍排除。已交付能力先复用，任务未验证闭合前不重复开发或自动勾选。

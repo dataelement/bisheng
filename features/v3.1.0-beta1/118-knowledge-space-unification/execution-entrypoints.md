@@ -20,4 +20,4 @@
 
 保存版在全部目标后核真实业务root/版本/links，并重验guard/source/raw和完整配置。临时预览在全部目标准入后核真实root/edit/current及canonical输入，不读取或要求来源index、coverage、legacy证据，也不创建来源。原scope与R2收据私有登记额外核原对象is，读取事实不可用于写绑定。详细接口与错误见[运行合同](./execution-read-contract.md)，交付/独立复核见[W3记录](./wave3-implementation-review.md)。
 
-其余四类来源、Coverage实际适配/全量回填、目标删除协调和两端页面仍待实施；分享生成授权T404/T405独立待办。任务不建立模型绑定，worker在途IO与用户后续修改竞态仍按用户确认范围暂不治理。
+其余四类来源、Coverage实际适配/全量回填、目标删除协调和两端页面仍待实施；原分享生成授权 T404/T405 已移出本特性，见[独立待办](../../../docs/backlog/share-link-issuance-authorization.md)，不计入本次交付前置。任务不建立模型绑定，worker在途IO与用户后续修改竞态仍按用户确认范围暂不治理。
