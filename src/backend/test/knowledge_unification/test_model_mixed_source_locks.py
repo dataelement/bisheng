@@ -224,3 +224,81 @@ async def test_all_mixed_sources_exclude_defaults_being_overridden_from_prospect
         old = next(receipt.target for receipt in receipts[SPACE] if receipt.target.key.target_id == "22")
         assert old.state == "valid" and old.new_binding_allowed is other_inherited_key
         assert all(receipt.target.new_binding_allowed for receipt in receipts[DEFAULT])
+
+
+async def test_mixed_all_own_models_prelock_real_tenant_topology_before_knowledge_root(mixed_models, monkeypatch):
+    from sqlalchemy import select
+
+    from bisheng.core.database import tenant_filter
+    from bisheng.database.models.tenant import Tenant
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+    from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
+    from bisheng.resource_reference.application.contracts import ReferenceSpec, SourceBindingChange
+    from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
+    from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+    from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
+
+    async with mixed_models.begin() as connection:
+        for table in (Knowledge.__table__, BusinessReferenceSet.__table__):
+            await connection.run_sync(lambda active, table=table: table.create(active))
+    monkeypatch.setattr(
+        tenant_filter,
+        "_tenant_aware_tables",
+        tenant_filter._tenant_aware_tables | {Knowledge.__tablename__, BusinessReferenceSet.__tablename__},
+    )
+    async with AsyncSession(mixed_models) as session, session.begin():
+        # An unrelated malformed default must not become a dependency of own targets.
+        session.add(TenantSystemModelConfig(tenant_id=1, key="evaluation_llm", value="{invalid-json"))
+    owner = ModelReferenceTargetOwner()
+    verifier = ReferenceTargetVerifier({"model": owner})
+    runtime = ReferenceBindingRuntime(ReferenceRepository(verifier=verifier), verifier)
+    calls = []
+    async with AsyncSession(mixed_models) as session:
+        session.add(Knowledge(id=1, tenant_id=101, user_id=7, name="new space", type=3, model="11"))
+        await session.flush()
+
+        def record(state):
+            if state.is_select and state.statement._for_update_arg is not None:
+                entities = {item.get("entity") for item in state.statement.column_descriptions}
+                for model, label in (
+                    (LLMServer, "server"),
+                    (LLMModel, "model"),
+                    (Tenant, "topology"),
+                    (Knowledge, "knowledge"),
+                ):
+                    if model in entities:
+                        calls.append(label)
+
+        event.listen(session.sync_session, "do_orm_execute", record)
+
+        async def knowledge_root(active):
+            return (
+                await active.execute(
+                    select(Knowledge.id, Knowledge.tenant_id).where(Knowledge.id == 1).with_for_update()
+                )
+            ).one()
+
+        async def default_root(active):
+            return await ModelDefaultRepository().alock_root(active, "linsight_llm")
+
+        changes = (
+            SourceBindingChange(
+                SPACE,
+                (ReferenceSpec("model", TargetKey("model", "11")),),
+                "test-knowledge-v1",
+                knowledge_root,
+                new_source=True,
+            ),
+            SourceBindingChange(
+                DEFAULT,
+                (ReferenceSpec("embedding_model.id", TargetKey("model", "11")),),
+                "model-default-v1",
+                default_root,
+                new_source=True,
+            ),
+        )
+        prepared = await runtime.aprepare_mixed_source_bindings(session, changes)
+        assert len(prepared) == 2 and calls.index("server") < calls.index("model") < calls.index(
+            "topology"
+        ) < calls.index("knowledge")
+        await session.rollback()
