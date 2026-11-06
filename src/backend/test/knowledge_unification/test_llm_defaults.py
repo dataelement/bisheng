@@ -197,3 +197,82 @@ async def test_only_original_super_or_tenant_admin_can_write(business, case):
         with pytest.raises(LLMSystemConfigForbiddenError):
             await ModelDefaultApplication.asave(session, "evaluation_llm", {"model_id": 11}, login_user=user)
         assert not session.new and not session.dirty
+
+
+async def test_passive_model_creation_does_not_materialize_inherited_root_defaults(business, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from bisheng.llm.domain.const import LLMModelType
+    from bisheng.llm.domain.services import llm as service
+
+    async with AsyncSession(business.engine) as session, session.begin():
+        session.add_all(
+            [
+                TenantSystemModelConfig(tenant_id=1, key=key, value=value)
+                for key, value in [
+                    ("knowledge_llm", '{"source_model_id":22,"extract_title_model_id":22,"qa_similar_model_id":22}'),
+                    ("evaluation_llm", '{"model_id":22}'),
+                    ("assistant_llm", '{"auto_llm":{"model_id":22},"llm_list":[{"model_id":22}]}'),
+                    (
+                        "linsight_llm",
+                        '{"chat_title_llm":{"id":"22","name":"root"},"models":[{"id":"22","name":"root"}]}',
+                    ),
+                ]
+            ]
+        )
+
+    @asynccontextmanager
+    async def sessions():
+        async with AsyncSession(business.engine) as session:
+            yield session
+
+    monkeypatch.setattr(service, "get_async_db_session", sessions)
+    await service.LLMService.set_default_model(
+        SimpleNamespace(id=12, model_type=LLMModelType.LLM.value, model_name="other"), login_user=business.user
+    )
+    async with AsyncSession(business.engine) as check:
+        rows = [
+            await ModelDefaultRepository().aget_own(check, key)
+            for key in ("knowledge_llm", "evaluation_llm", "assistant_llm", "linsight_llm")
+        ]
+        assert all(row is None for row in rows)
+        assert not (await check.execute(select(BusinessReferenceSet))).all()
+
+
+async def test_workbench_partial_post_keeps_saved_models_in_same_atomic_writer(business, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from fastapi import BackgroundTasks
+
+    from bisheng.llm.domain.schemas import WorkbenchModelConfig
+    from bisheng.llm.domain.services import llm as service
+
+    async with AsyncSession(business.engine) as session, session.begin():
+        await ModelDefaultApplication.asave(
+            session,
+            "linsight_llm",
+            {"models": [{"id": "11", "name": "one"}, {"id": "12", "name": "two"}]},
+            login_user=business.user,
+        )
+
+    @asynccontextmanager
+    async def sessions():
+        async with AsyncSession(business.engine) as session:
+            yield session
+
+    monkeypatch.setattr(service, "get_async_db_session", sessions)
+    result = await service.LLMService.update_workbench_llm(
+        7, WorkbenchModelConfig(), BackgroundTasks(), login_user=business.user
+    )
+    assert [one.id for one in result.models] == ["11", "12"]
+    async with AsyncSession(business.engine) as check:
+        saved = await ModelDefaultRepository().aget_own(check, "linsight_llm")
+        assert '"id":"11"' in saved.value and '"id":"12"' in saved.value
+        assert (
+            len(
+                await business.runtime.repository.alist_source_references(
+                    check, SourceKey(101, "model_default", "linsight_llm", "current")
+                )
+            )
+            == 2
+        )
