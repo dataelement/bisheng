@@ -7,7 +7,11 @@ from dataclasses import dataclass
 from sqlalchemy import and_, or_, update
 from sqlmodel import select
 
-from bisheng.common.errcode.knowledge import KnowledgeFileFailedError, KnowledgeOperationPlanConflictError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeFileFailedError,
+    KnowledgeOperationPlanConflictError,
+    KnowledgeProcessingConflictError,
+)
 from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
@@ -73,6 +77,8 @@ class ProcessingOwnerRepository:
         )
         if len(versions) != 1 or versions[0].parent_id != item.expected_parent_id:
             raise KnowledgeOperationPlanConflictError(reason="processing_file_parent_changed")
+        if versions[0].status not in {2, 3, 6}:
+            raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
         if not await jobs.acomplete_item(
             session, lease, configuration=current, succeeded=succeeded, error_code=error_code
         ):
