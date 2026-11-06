@@ -2,6 +2,7 @@
 
 import importlib
 from dataclasses import replace
+from datetime import datetime
 
 import pytest
 import sqlalchemy as sa
@@ -16,6 +17,7 @@ from bisheng.database.models.user_role import UserRole
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
 from bisheng.knowledge.domain.repositories.unification_target_repository import KnowledgeMigrationTargetRepository
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
+from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
 from bisheng.llm.domain.repositories.migration_target_repository import ModelMigrationTargetRepository
 from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
     PermissionMigrationSnapshotRepository,
@@ -37,7 +39,7 @@ def module():
 
 @pytest.fixture
 async def native(resource_native, monkeypatch):
-    models = (User, UserTenant, Role, UserRole, LLMServer, LLMModel, *snapshot.TABLES)
+    models = (User, UserTenant, Role, UserRole, LLMServer, LLMModel, TenantSystemModelConfig, *snapshot.TABLES)
     names = {model.__tablename__ for model in models if "tenant_id" in model.__table__.c} - {"user_tenant"}
     monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | names)
     previous = tenant_filter._discover_tenant_aware_tables()
@@ -69,7 +71,12 @@ def catalog_plan():
 
 
 async def collect(module, session):
-    return [item async for item in module.UnificationPreflight().aiter_tenant(session, catalog_plan=catalog_plan())]
+    return [
+        item
+        async for item in module.UnificationPreflight().aiter_tenant(
+            session, catalog_plan=catalog_plan(), planned_at=datetime(2026, 11, 7, 2, 3, 4)
+        )
+    ]
 
 
 async def test_real_original_type_retirement_creator_and_quota_facts_preserve_history(module, native):
@@ -91,16 +98,12 @@ async def test_real_original_type_retirement_creator_and_quota_facts_preserve_hi
         plans = [
             item.data
             for section, item in items
-            if section == "conversion"
-            and item.record_type == "conversion_plan"
-            and item.data["action"] != "register_v1"
+            if section == "conversion" and item.record_type == "resource_conversion"
         ]
-        assert [(item["resource_id"], item["target_type"], item["action"]) for item in plans] == [
-            (9000, 3, "convert_type0"),
-            (9001, 1, "inventory_only"),
-            (9002, 2, "inventory_only"),
-            (9003, 3, "retain_space"),
+        assert [(item["knowledge_id"], item["target_type"], item["target_migration_origin"]) for item in plans] == [
+            (9000, 3, "formal-run")
         ]
+        assert [item.data["type"] for _, item in items if item.record_type == "resource"] == [0, 1, 2, 3]
         creators = [item.data for section, item in items if item.record_type == "creator"]
         assert creators == [{"user_id": 7, "exists": True, "delete": 1}]
         usage = next(item.data for _, item in items if item.record_type == "quota_usage")
@@ -114,6 +117,26 @@ async def test_unknown_type_or_globally_absent_creator_blocks(module, native, ch
     async with AsyncSession(native.engine) as session, session.begin():
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await collect(module, session)
+
+
+async def test_converted_type0_without_original_creator_proof_cannot_produce_frozen_commands(module, native):
+    await native.insert(original.Knowledge, [original.resource(9000, user_id=None)])
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await collect(module, session)
+        assert not session.new and not session.dirty
+    async with native.engine.connect() as connection:
+        row = (await connection.execute(sa.select(original.Knowledge.type, original.Knowledge.user_id))).one()
+    assert tuple(row) == (0, None)
+
+
+@pytest.mark.parametrize("kind", [1, 2, 3])
+async def test_null_creator_on_nonconverted_resource_does_not_invent_new_conversion_gate(module, native, kind):
+    await native.insert(original.Knowledge, [original.resource(9000, type=kind, user_id=None)])
+    async with AsyncSession(native.engine) as session, session.begin():
+        records = await collect(module, session)
+    assert [item.data["type"] for _, item in records if item.record_type == "resource"] == [kind]
+    assert not any(item.record_type == "resource_conversion" for _, item in records)
 
 
 async def test_legacy_overdeep_chain_and_null_empty_paths_are_preserved_not_new_write_capped(module, native):
@@ -160,11 +183,7 @@ async def test_doc_version_primary_chain_and_unregistered_file_plan_are_distinct
     await native.insert(original.KnowledgeDocumentVersion, [original.data("versions", 1)])
     async with AsyncSession(native.engine) as session, session.begin():
         records = await collect(module, session)
-        assert [
-            item.data["resource_id"]
-            for _, item in records
-            if item.record_type == "conversion_plan" and item.data["action"] == "register_v1"
-        ] == [2]
+        assert [item.data["file_id"] for _, item in records if item.record_type == "initialize_v1"] == [2]
     async with native.engine.begin() as connection:
         await connection.execute(sa.update(original.KnowledgeDocument).values(primary_version_id=999))
     async with AsyncSession(native.engine) as session, session.begin():
@@ -272,3 +291,27 @@ async def test_original_global_role_and_revoked_root_numeric_model_are_not_new_a
         role = next(item for _, item in records if item.record_type == "role_fact")
         assert role.data["exists"] and role.data["tenant_id"] == 1
         assert not session.new and not session.dirty
+
+
+async def test_preflight_real_creation_projection_collision_blocks_before_plan_is_frozen(module, native):
+    await native.insert(
+        original.Knowledge,
+        [original.resource(40, creation_request_id="same"), original.resource(41, type=3, creation_request_id="same")],
+    )
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await collect(module, session)
+        assert not session.new and not session.dirty
+
+
+async def test_preflight_default_commands_share_original_transaction_and_keep_raw_value(module, native):
+    value = '{"models":[{"id":"11"}],"task_model":{"id":"11"},"private":"never export"}'
+    await native.insert(TenantSystemModelConfig, [{"id": 1, "tenant_id": 101, "key": "linsight_llm", "value": value}])
+    native.queries.clear()
+    async with AsyncSession(native.engine) as session, session.begin():
+        records = await collect(module, session)
+        plan = next(item.data for _, item in records if item.record_type == "default_conversion")
+        assert plan["selected_linsight_id"] == plan["selected_chat_id"] == "11"
+        assert "never export" not in repr(records)
+        assert not session.new and not session.dirty
+    assert sum("FROM tenant_system_model_config" in sql for sql, _ in native.queries) == 1

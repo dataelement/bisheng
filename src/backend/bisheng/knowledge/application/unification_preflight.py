@@ -5,9 +5,11 @@ from collections import defaultdict
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.knowledge.application.unification_conversion_plan import ConversionPlanBuilder
 from bisheng.knowledge.application.unification_inventory_codec import digest, record_from_row, record_from_values
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
 from bisheng.knowledge.domain.repositories.unification_control_repository import UnificationControlRepository
+from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
 from bisheng.knowledge.domain.repositories.unification_resource_repository import UnificationResourceRepository
 from bisheng.llm.domain.repositories.migration_target_repository import ModelMigrationTargetFact
 from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
@@ -86,8 +88,9 @@ def source_decision(record, *, tenant_id):
 
 
 class UnificationPreflight:
-    def __init__(self, *, resources=None, controls=None, permissions=None):
+    def __init__(self, *, resources=None, controls=None, permissions=None, inventory=None):
         self.resources = resources if resources is not None else UnificationResourceRepository()
+        self.inventory = inventory if inventory is not None else UnificationInventoryRepository()
         self.controls = controls if controls is not None else UnificationControlRepository()
         self.permissions = permissions if permissions is not None else PermissionMigrationSnapshotRepository()
 
@@ -116,12 +119,17 @@ class UnificationPreflight:
                 _blocked("non_advancing_page")
             after = page.next_after
 
-    async def aiter_tenant(self, session, *, catalog_plan):
+    async def aiter_tenant(self, session, *, catalog_plan, planned_at):
         tenant = get_current_tenant_id()
+        builder = ConversionPlanBuilder(
+            run_id=catalog_plan.run_id,
+            writer_contract_version=catalog_plan.writer_contract_version,
+            planned_at=planned_at,
+        )
         tenant_fact = await self.controls.aget_tenant(session)
         yield "control", record_from_row(tenant_fact)
         seen_creators = set()
-        spaces, files, documents, versions, departments = {}, {}, {}, {}, set()
+        spaces, files, departments = {}, {}, set()
         role_keys, relationship_rows = set(), []
         storage_bytes = 0
 
@@ -147,6 +155,8 @@ class UnificationPreflight:
             "department_spaces",
         ):
             async for rows in self._pages(self.resources, "alist_" + method, session):
+                if method in {"resources", "files", "documents", "versions", "tags", "tag_links"}:
+                    getattr(builder, "add_" + method)(rows)
                 creators = set()
                 for row in rows:
                     record = record_from_row(row)
@@ -154,32 +164,17 @@ class UnificationPreflight:
                     if method == "resources":
                         if row.type not in {0, 1, 2, 3}:
                             _blocked("unknown_knowledge_type")
+                        if row.type == 0 and row.user_id is None:
+                            _blocked("creator_missing")
                         spaces[row.id] = data
-                        action = {0: "convert_type0", 1: "inventory_only", 2: "inventory_only", 3: "retain_space"}[
-                            row.type
-                        ]
-                        yield (
-                            "conversion",
-                            record_from_values(
-                                "conversion_plan",
-                                tenant_id=tenant,
-                                resource_id=row.id,
-                                original_type=row.type,
-                                target_type=3 if row.type == 0 else row.type,
-                                action=action,
-                                business_digest=row.old_business_digest,
-                            ),
-                        )
                     elif method == "files":
                         if row.file_type not in {0, 1} or row.knowledge_id not in spaces:
                             _blocked("invalid_file_parent")
-                        files[row.id] = data
+                        files[row.id] = {
+                            name: data[name] for name in ("id", "knowledge_id", "file_type", "level", "file_level_path")
+                        }
                         if row.file_source in {"channel", "space_upload"}:
                             storage_bytes += row.file_size or 0
-                    elif method == "documents":
-                        documents[row.id] = data
-                    elif method == "versions":
-                        versions[row.id] = data
                     elif method == "department_spaces":
                         departments.add(row.space_id)
                         if row.space_id not in spaces:
@@ -223,48 +218,10 @@ class UnificationPreflight:
                 ):
                     _blocked("invalid_ancestor_parent")
 
-        by_document, registered = defaultdict(list), set()
-        for item in versions.values():
-            doc, physical = documents.get(item["document_id"]), files.get(item["knowledge_file_id"])
-            if (
-                doc is None
-                or physical is None
-                or physical["file_type"] != 1
-                or doc["knowledge_id"] != physical["knowledge_id"]
-                or item["knowledge_file_id"] in registered
-                or item["version_no"] < 1
-            ):
-                _blocked("invalid_version_chain")
-            registered.add(item["knowledge_file_id"])
-            by_document[item["document_id"]].append(item)
-        for ident, doc in documents.items():
-            children = by_document[ident]
-            primary = [item for item in children if item["is_primary"]]
-            if (
-                not children
-                or len({item["version_no"] for item in children}) != len(children)
-                or len(primary) != 1
-                or doc["primary_version_id"] != primary[0]["id"]
-            ):
-                _blocked("invalid_primary_version")
-        for item in files.values():
-            if (
-                item["file_type"] == 1
-                and item["id"] not in registered
-                and spaces[item["knowledge_id"]]["type"] in {0, 3}
-            ):
-                yield (
-                    "conversion",
-                    record_from_values(
-                        "conversion_plan",
-                        tenant_id=tenant,
-                        resource_id=item["id"],
-                        original_type=1,
-                        target_type=1,
-                        action="register_v1",
-                        business_digest=item["row_digest"],
-                    ),
-                )
+        async for rows in self._pages(self.inventory, "alist_model_defaults", session):
+            builder.add_defaults(rows)
+        for command in builder.finish():
+            yield "conversion", record_from_row(command)
 
         for method in ("memberships", "departments", "roles", "user_roles"):
             async for rows in self._pages(self.controls, "alist_" + method, session):

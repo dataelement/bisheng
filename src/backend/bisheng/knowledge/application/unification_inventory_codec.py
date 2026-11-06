@@ -95,6 +95,20 @@ def _value(value, spec):
     elif spec == "source":
         _validate("source_contribution", value)
         return
+    elif spec == "provenance":
+        if type(value) is not list or len(value) > 2:
+            _invalid()
+        for item in value:
+            if (
+                type(item) is not dict
+                or set(item) != {"source_slot", "target_slot", "target_id"}
+                or item["target_slot"] not in {"linsight_default_model_id", "chat_default_model_id"}
+                or type(item["target_id"]) is not str
+                or re.fullmatch(r"[1-9][0-9]{0,63}", item["target_id"]) is None
+                or item["source_slot"] != f"models.{item['target_id']}.id"
+            ):
+                _invalid()
+        return
     else:
         _invalid()
     if not valid:
@@ -210,6 +224,19 @@ _SCHEMAS = {
     ),
 }
 
+_CONVERSION_COMMON = _spec(
+    "schema_version:int run_id:str writer_contract_version:str tenant_id:positive command_key:hash operation:str"
+)
+_CONVERSION_FIELDS = {
+    "resource_conversion": "knowledge_id:positive before_business_digest:hash after_business_digest:hash before_neutral_digest:hash after_neutral_digest:hash after_inventory_business_revision_digest:hash after_owner_configuration_digest:hash target_type:int target_is_released:bool target_migration_origin:str",
+    "initialize_v1": "knowledge_id:positive file_id:positive file_business_digest:hash before_relation_digest:hash natural_key:hash document_template_digest:hash version_template_digest:hash file_level_path:str? level:int? planned_at:str",
+    "tag_conversion": "tag_id:positive knowledge_id:positive before_digest:hash after_digest:hash from_business_type:str to_business_type:str",
+    "tag_link_conversion": "link_id:positive file_id:positive knowledge_id:positive tag_id:positive before_digest:hash after_digest:hash? from_type:int to_type:int action:str survivor_link_id:positive survivor_digest:hash",
+    "default_conversion": "row_id:positive key:str before_raw_row_digest:hash before_configuration_digest:hash after_configuration_digest:hash after_business_revision_digest:hash before_refs_digest:hash after_refs_digest:hash action:str selected_linsight_id:str? selected_chat_id:str? drop_task_model:bool drop_executor_mode:bool algorithm_version:str provenance:provenance",
+}
+for _tag, _fields in _CONVERSION_FIELDS.items():
+    _SCHEMAS[_tag] = _CONVERSION_COMMON | _spec(_fields)
+
 
 def _validate(tag, data):
     schema = _SCHEMAS.get(tag)
@@ -217,6 +244,42 @@ def _validate(tag, data):
         _invalid()
     for name, spec in schema.items():
         _value(data[name], spec)
+    if tag in _CONVERSION_FIELDS:
+        _identity(data["run_id"], "conversion", "tenant", data["tenant_id"], 0, "plan")
+        if (
+            data["schema_version"] != 1
+            or data["operation"] != tag
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,31}", data["writer_contract_version"]) is None
+        ):
+            _invalid()
+        if tag == "resource_conversion" and (
+            data["target_type"] != 3
+            or data["target_is_released"] is not False
+            or data["target_migration_origin"] != data["run_id"]
+        ):
+            _invalid()
+        if tag == "initialize_v1":
+            try:
+                datetime.fromisoformat(data["planned_at"])
+            except ValueError:
+                _invalid()
+        if tag == "tag_conversion" and (data["from_business_type"], data["to_business_type"]) != (
+            "knowledge",
+            "knowledge_space",
+        ):
+            _invalid()
+        if tag == "tag_link_conversion" and (
+            (data["from_type"], data["to_type"]) != (9, 8)
+            or data["action"] not in {"retag", "drop_duplicate"}
+            or (data["after_digest"] is None) != (data["action"] == "drop_duplicate")
+        ):
+            _invalid()
+        if tag == "default_conversion" and (
+            data["key"] != "linsight_llm"
+            or data["algorithm_version"] != "sql-default-conversion-v1"
+            or data["action"] not in {f"{a}:{b}" for a in ("skip", "kept", "first", "empty") for b in ("skip", "last")}
+        ):
+            _invalid()
     if tag == "physical_object" and data["object_kind"] not in OBJECT_KINDS:
         _invalid()
     if tag == "queued_task_orphan" and data["reason"] not in {"file_missing", "space_missing", "unresolved_tenant"}:
@@ -306,11 +369,29 @@ _ROWS = {
 def record_from_row(row):
     definition = _ROWS.get(type(row))
     if definition is None:
+        from bisheng.knowledge.application.unification_conversion_plan import COMMAND_RECORD_TYPES
+
+        tag = COMMAND_RECORD_TYPES.get(type(row))
+        if tag is not None:
+            definition = (tag, tuple(_SCHEMAS[tag]))
+    if definition is None:
         _invalid()
     tag, names = definition
     if {item.name for item in fields(row)} != set(names):
         _invalid()
     original = _original(row, names)
+    if tag == "default_conversion":
+        from bisheng.knowledge.application.unification_conversion_plan import DefaultSlotProvenance
+
+        if type(row.provenance) is not tuple or any(
+            type(item) is not DefaultSlotProvenance
+            or {part.name for part in fields(item)} != {"source_slot", "target_slot", "target_id"}
+            for item in row.provenance
+        ):
+            _invalid()
+        original["provenance"] = [
+            _original(item, ("source_slot", "target_slot", "target_id")) for item in row.provenance
+        ]
     values = {name: original[name] for name in _SCHEMAS[tag] if name in original}
     if tag == "resource":
         if {item.name for item in fields(row.neutral)} != set(resource.NEUTRAL_COLUMNS):
@@ -377,6 +458,10 @@ def encode_inventory_page(*, run_id, section, scope, tenant_id, page_index, reco
     facts = []
     for record in records:
         if type(record) is not InventoryRecord:
+            _invalid()
+        if record.record_type in _CONVERSION_FIELDS and (
+            section != "conversion" or kind != "plan" or record.data["run_id"] != run_id
+        ):
             _invalid()
         if record.record_type == "queued_task_orphan" and (section != "tasks" or scope != "global"):
             _invalid()

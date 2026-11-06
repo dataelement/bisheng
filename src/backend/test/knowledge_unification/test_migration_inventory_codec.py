@@ -400,3 +400,54 @@ def test_evidence_cannot_borrow_other_authority_or_tenant_page(codec, changes):
     args = {"section": "evidence", "scope": "global", "tenant_id": None, "kind": "verification"} | changes
     with pytest.raises(KnowledgeOperationPlanConflictError):
         encode(codec, (material(codec),), **args)
+
+
+async def test_conversion_commands_are_closed_plan_only_records_with_matching_run(codec, resource_native):
+    plan = importlib.import_module("bisheng.knowledge.application.unification_conversion_plan")
+    from test.knowledge_unification.test_migration_conversion_plan import IDENTITY, acquire, build, default
+
+    await resource_native.insert(original.Knowledge, [original.resource(9000)])
+    await resource_native.insert(original.KnowledgeFile, [original.file(1)])
+    await resource_native.insert(original.Tag, [original.data("tags", 1)])
+    await resource_native.insert(original.TagLink, [original.data("tag_links", 1)])
+    commands = build(
+        plan, await acquire(resource_native), (default({"models": [{"id": "11"}], "task_model": {"id": "11"}}),)
+    )[1]
+    assert len(commands) == 5
+    for command in commands:
+        record = codec.record_from_row(command)
+        content = codec.encode_inventory_page(
+            run_id=IDENTITY["run_id"],
+            section="conversion",
+            scope="tenant",
+            tenant_id=101,
+            page_index=0,
+            records=(record,),
+            kind="plan",
+        )
+        assert codec.decode_inventory_page(
+            content,
+            run_id=IDENTITY["run_id"],
+            section="conversion",
+            scope="tenant",
+            tenant_id=101,
+            page_index=0,
+            kind="plan",
+        ).records == (record,)
+        assert b"private-" not in content
+        for changes in ({"kind": "baseline"}, {"run_id": "wrong-run"}, {"section": "resources"}):
+            args = {
+                "run_id": IDENTITY["run_id"],
+                "section": "conversion",
+                "scope": "tenant",
+                "tenant_id": 101,
+                "page_index": 0,
+                "records": (record,),
+                "kind": "plan",
+            } | changes
+            with pytest.raises(KnowledgeOperationPlanConflictError):
+                codec.encode_inventory_page(**args)
+    resource = next(item for item in commands if isinstance(item, plan.ResourceConversionCommand))
+    for changes in ({"target_type": True}, {"target_type": 0}, {"target_is_released": True}, {"schema_version": True}):
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            codec.record_from_row(replace(resource, **changes))
