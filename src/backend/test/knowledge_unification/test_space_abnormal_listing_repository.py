@@ -51,7 +51,7 @@ async def store(concrete_tenant, monkeypatch):
     @sa.event.listens_for(engine.sync_engine, "before_cursor_execute")
     def capture(connection, cursor, statement, parameters, context, executemany):
         if statement.lstrip().upper().startswith("SELECT"):
-            facts.selects.append((statement, parameters))
+            facts.selects.append((statement, parameters, context.compiled.params))
 
     @asynccontextmanager
     async def sessions():
@@ -130,6 +130,10 @@ async def test_final_page_marker_one_exists_query_for_200_ids_and_large_success_
         file(20006, 201, tenant=202),
         file(20007, 202),
     )
+    # Native fixture statistics keep SQLite's cost estimate independent of
+    # Python's unordered index-creation order; production uses its own planner.
+    async with store.engine.begin() as connection:
+        await connection.exec_driver_sql("ANALYZE")
     token = set_visible_tenant_ids(frozenset({101, 202}))
     try:
         found = await store.repository.aexists_abnormal_files(space_ids=list(range(1, 201)))
@@ -139,13 +143,13 @@ async def test_final_page_marker_one_exists_query_for_200_ids_and_large_success_
         tenant.visible_tenant_ids.reset(token)
     assert found == {2, 3, 4}
     assert len(store.facts.selects) == 1 and store.facts.open_sessions == 0
-    statement, parameters = store.facts.selects[0]
+    statement, parameters, _ = store.facts.selects[0]
     sql = statement.lower()
     assert "exists" in sql and "join" not in sql and "count(" not in sql
     assert "knowledgefile.tenant_id = knowledge.tenant_id" in sql
     async with store.engine.connect() as connection:
         plan = (await connection.exec_driver_sql("EXPLAIN QUERY PLAN " + statement, parameters)).all()
-    assert any("ix_knowledgefile_kb_status_type" in str(row) for row in plan)
+    assert any("ix_knowledgefile_kb_status_type" in str(row) for row in plan), plan
 
 
 async def test_empty_marker_does_not_open_connection(store):

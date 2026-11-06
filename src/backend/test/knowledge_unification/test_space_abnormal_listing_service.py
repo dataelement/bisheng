@@ -72,7 +72,7 @@ async def test_final_visible_page_marks_only_returned_spaces_in_one_native_batch
     assert page.has_more and page.next_cursor and "total" not in page.model_dump()
     markers = marker_reads(listing.store)
     assert len(markers) == 1
-    assert set(markers[0][1]) >= {5, 7} and 6 not in markers[0][1]
+    assert markers[0][2]["id_1"] == [7, 5]
     assert all(len(batch) <= 100 for batch in listing.checked)
 
 
