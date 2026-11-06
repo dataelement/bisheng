@@ -481,6 +481,7 @@ class KnowledgeModelReferenceApplication:
             operation_id=operation_id,
         )
         scope = await ProcessingOwnerRepository().aassert_empty_model_change(session, knowledge_id)
+        cls._check_plan(session, prepared)
         selected = canonical_target_id(new_model_id)
         references = extract_knowledge_model_references(model=selected, model_transition=None)
         bindings = replace(prepared.bindings, verified=replace(prepared.bindings.verified, references=references))
@@ -519,6 +520,7 @@ class KnowledgeModelReferenceApplication:
         cls._check_plan(session, prepared)
         if prepared.purpose == "empty_change":
             scope = await ProcessingOwnerRepository().aassert_empty_model_change(session, prepared.knowledge_id)
+            cls._check_plan(session, prepared)
             if scope != _empty_scopes.get(prepared):
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_model_empty_scope_changed")
         if prepared.changed:
