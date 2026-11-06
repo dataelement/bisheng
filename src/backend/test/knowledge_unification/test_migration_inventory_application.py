@@ -17,7 +17,12 @@ from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.database import tenant_filter
 from bisheng.core.openfga.client import FGAClient
 from bisheng.knowledge.application.unification_artifacts import UnificationArtifactStore
-from bisheng.knowledge.application.unification_inventory_codec import digest, encode_inventory_page, record_from_values
+from bisheng.knowledge.application.unification_inventory_codec import (
+    InventoryRecord,
+    digest,
+    encode_inventory_page,
+    record_from_values,
+)
 from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun
 from bisheng.permission.application.migration_read import PinnedMigrationPermissionReader
 from test.knowledge_unification import test_migration_inventory_repository as raw
@@ -438,3 +443,50 @@ async def test_actual_reader_must_be_bound_to_the_same_sql_catalog_pin(module, c
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await application(module, transport, sharing_reader_factory=different).arun(session, **transport.inputs)
     assert await count_runs(complete.engine) == 0
+
+
+@pytest.mark.parametrize("compatibility", [False, 0, "false"])
+async def test_incompatible_or_malformed_physical_identifiers_cannot_freeze(module, complete, transport, compatibility):
+    class Incompatible(Physical):
+        async def aiter_facts(self, **kwargs):
+            async for fact in super().aiter_facts(**kwargs):
+                if fact.record_type == "physical_index":
+                    yield InventoryRecord(
+                        "physical_index",
+                        json.dumps(
+                            fact.data | {"identifier_compatible": compatibility}, sort_keys=True, separators=(",", ":")
+                        ),
+                    )
+                else:
+                    yield fact
+
+    async with AsyncSession(complete.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await application(module, transport, physical_reader=Incompatible()).arun(session, **transport.inputs)
+    assert await count_runs(complete.engine) == 0
+
+
+@pytest.mark.parametrize("absent", [True, False])
+async def test_compatible_absent_empty_or_different_native_counts_do_not_gain_new_gate(
+    module, complete, transport, absent
+):
+    class Compatible(Physical):
+        async def aiter_facts(self, **kwargs):
+            async for fact in super().aiter_facts(**kwargs):
+                if fact.record_type == "physical_index":
+                    value = fact.data | {
+                        "es_exists": not absent,
+                        "milvus_exists": not absent,
+                        "es_count": None if absent else 0,
+                        "milvus_count": None if absent else 1,
+                        "es_mapping_digest": None if absent else "a" * 64,
+                        "milvus_schema_digest": None if absent else "b" * 64,
+                        "identifier_compatible": True,
+                    }
+                    yield record_from_values("physical_index", **value)
+                else:
+                    yield fact
+
+    async with AsyncSession(complete.engine) as session, session.begin():
+        result = await application(module, transport, physical_reader=Compatible()).arun(session, **transport.inputs)
+    assert result.tenant_ids == (1, 101, 202) and await count_runs(complete.engine) == 3
