@@ -4581,6 +4581,30 @@
   **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
   **验证 / 完成条件**：旧基线同失败集归因明确，新fixture独立复查及相同argv主组合通过。
 
+- [ ] **T579 · 旧默认配置service回归迁移至真实读取门面**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/llm/test_llm_system_config_service.py`\
+  **逻辑 / 测试上下文**：旧测试直连已退役DAO/名称/signature的夹具迁移；保typed配置、管理envelope、调用tenant、局部更新和合法空models的原业务断言。裸tenant覆盖当前上下文及缺tenant回Root的旧口径与冻结合同冲突，明确改为当前tenant一致/10996拒绝并记录，不恢复生产fallback。\
+  **依赖**：T479, T473\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：原失败与新合同差异有记录，固定提交复查及相同argv主组合通过，无生产代码改动。
+
+- [ ] **T580 · 旧工作台局部更新回归迁移至同事务writer**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/llm/test_workbench_update_merge.py`\
+  **逻辑 / 测试上下文**：旧测试直连已退役DAO/名称/signature的夹具迁移；保typed配置、管理envelope、调用tenant、局部更新和合法空models的原业务断言。裸tenant覆盖当前上下文及缺tenant回Root的旧口径与冻结合同冲突，明确改为当前tenant一致/10996拒绝并记录，不恢复生产fallback。\
+  **依赖**：T481\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：原失败与新合同差异有记录，固定提交复查及相同argv主组合通过，无生产代码改动。
+
+- [ ] **T581 · 旧默认配置消费形状回归对齐冻结入口**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/llm/test_llm_system_config_consumers.py`\
+  **逻辑 / 测试上下文**：旧测试直连已退役DAO/名称/signature的夹具迁移；保typed配置、管理envelope、调用tenant、局部更新和合法空models的原业务断言。裸tenant覆盖当前上下文及缺tenant回Root的旧口径与冻结合同冲突，明确改为当前tenant一致/10996拒绝并记录，不恢复生产fallback。\
+  **依赖**：T479\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：原失败与新合同差异有记录，固定提交复查及相同argv主组合通过，无生产代码改动。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
