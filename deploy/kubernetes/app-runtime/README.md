@@ -173,7 +173,28 @@ TCP 前置通过后，原外部 installer 使用同版本离线供应的 `crane`
 
 canary 通过受保护的 ConfigMap 声明固定模板，plan 只有 1 小时以内寿命。无业务 Secret、源码或生产卷。installer 观察实际 UID 后更新授权，删除携带 UID/resourceVersion/宽限期；只有 fresh 同 UID 的终态或受保护的未调度删除证据才移除 finalizer。404、NodeLost、超时、同名替换一律保留，不能按名字强删。
 
-清理失败会发布失败报告并返回非零。崩溃后可显式运行 `--cleanup-expired`，只处理当前安装已过期且 UID 已确认的 preflight 资源；不接管活跃探测，不操作业务应用。缺 UID、对象丢失或替换时停止，需管理员核对后处理。
+清理失败会发布失败报告并返回非零。崩溃后可显式运行 `--cleanup-expired`，只处理当前安装已过期且 UID 已确认的 preflight 资源；不接管活跃探测，不操作业务应用。缺 UID、对象丢失或替换时保留该对象/计划并记录失败，继续处理其它独立且已确认安全的对象。每个 PVC 删除前重新检查实际 Pod 引用，并保留所有未证明安全的旧 writer 冻结模板中的卷关联，涵盖未过期、缺 UID 和未被采纳的计划；API 已404或出现同名新 UID 也不代表旧进程已停止。关联无法确定时保守阻断 PVC 自动回收，不能因 API 列表缺少旧 Pod 而释放卷。
+
+### 预检资源回收与 Unknown 维护恢复
+
+使用相同安装的 context、namespace 与 probe plan，单独执行恢复命令：
+
+```sh
+python scripts/verify_k8s_runtime.py --context <context> --control-namespace <control-namespace> --execution-namespace <execution-namespace> --probe-plan /secure/deploy/runtime-probes.json --cleanup-expired
+```
+
+此命令不签发 ready 报告。退出码非零表示至少一个对象仍未安全回收，即使其它独立对象已清理成功；日志保留每项安全原因，不输出 kubectl 原始响应、凭据或私有配置。确认问题排除后重新运行即可，不能把部分成功当作全部成功。
+
+停止证明需要同时检查 Pod 及普通、init、ephemeral 容器状态。`Failed`、`DeadlineExceeded` 或占位 `exitCode=137` 不能证明进程已经退出；`Unknown`、`NodeLost`、`ContainerStatusUnknown`、没有终止记录却仍有 containerID 等状态会继续阻断 finalizer 解除。已失败 init 后从未启动且无 containerID 的应用容器可保留 waiting 状态；真正终止的容器必须具有合法整数 exitCode。未绑定节点的删除中 Pod 仍需按该 UID 重新取得 API-server 拒绝 binding 的证据。
+
+当 API 保持 Unknown，但运维认为节点进程已经停止时，标准恢复命令仍不会自动放行。现有准入协议没有节点 CRI 证明的授权接口；不要伪造 Pod status、仅去除 finalizer、普遍允许管理员删除或全局停用 Webhook。需要使用独立、经审核的维护处置：
+
+1. 保存当前 release、Webhook 和目标 Pod/plan 的 namespace、name、UID、resourceVersion、nodeName、finalizers 及原始状态；列出其所有 PVC 引用。仅限本安装的历史 `preflight-*`，同名新 UID、活跃探测、业务 Pod/PVC 均不进入操作清单。
+2. 在绑定节点以可信运维身份核验精确 Pod UID 的 CRI 容器、sandbox 与宿主进程状态，记录节点身份、核验时间和证据。节点不可达、CRI 不可信或仍有进程时继续保留对象和卷，不能以控制面租约过期替代停止证明。
+3. 只在证据仍新鲜且目标身份未变化时，对资源 Webhook 设置有明确撤销步骤的临时维护条件，限制精确 UID、namespace、维护身份、Failed 状态和 UPDATE/DELETE；UPDATE 仅解除该对象的停止 finalizer，并保持 spec/status、标签、注解、ownerReferences 不变。保留 status Webhook、`failurePolicy` 与其它对象全部准入检查。先做服务端 dry-run，实际写入使用 UID/resourceVersion 并发条件；每个对象操作前重新检查证据时效。
+4. 在成功、失败或重试前撤销本次临时条件，按最新 resourceVersion 保留并发配置；核对 Webhook 业务正文已恢复。确认目标原 UID 已不存在、业务服务及构建未受影响后，归档审计证据。独立确认 writer 不存在后再按 Retain 策略处理专用临时卷，不能将业务数据清理附带进此操作。
+
+以上是异常维护的范围与验收要求，不是自动回收的兜底授权。采用新的节点证据接口或长期维护身份机制，应另行设计、测试并评审其信任边界。
 
 ### 报告刷新与结果边界
 

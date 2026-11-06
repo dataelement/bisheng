@@ -596,6 +596,14 @@ class RuntimeOperationService:
             from bisheng.app_runtime.domain.services.runtime_secret_diagnostics import safe_diagnostic_tail
 
             body.detail["diagnostic_tail"] = safe_diagnostic_tail(body.detail["diagnostic_tail"], op)
+        if "quota" in body.detail:
+            from bisheng.app_runtime.domain.services.runtime_public_diagnostics import quota_details
+
+            quota = quota_details(body.detail["quota"])
+            if quota:
+                body.detail["quota"] = quota
+            else:
+                body.detail.pop("quota")
         async with self.repo.transaction() as session:
             if op.kind == "preview":
                 from bisheng.app_publish.application.preview_runtime import lock_operation_version
@@ -704,6 +712,7 @@ class RuntimeOperationService:
                             "diagnostic_tail",
                             "image_role",
                             "image_ref",
+                            "quota",
                         }
                     }
                     if body.phase != "completed"

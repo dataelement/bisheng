@@ -548,6 +548,10 @@ def pod_template(plan: PodPlan) -> dict:
                     "failureThreshold": 3,
                 }
             containers.append(container)
+    if not init:
+        # Core/v1 PodSpec.InitContainers is omitempty. Freeze the same shape
+        # that the API returns instead of persisting an empty-only difference.
+        spec.pop("initContainers")
     return {"apiVersion": "v1", "kind": "Pod", "metadata": meta, "spec": spec}
 
 

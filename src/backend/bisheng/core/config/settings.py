@@ -1019,7 +1019,6 @@ class Settings(BaseModel):
     redis_url: Union[str, dict] | None = None
     celery_redis_url: Union[str, dict] | None = None
     redis: dict | None = None
-    admin: dict = {}
     cache: str = "InMemoryCache"
     remove_api_keys: bool = False
     bisheng_rt: dict = {}

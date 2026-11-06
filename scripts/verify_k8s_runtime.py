@@ -82,6 +82,7 @@ _SAFE_PROBE_REASONS = frozenset(
         "platform_unsigned_probe_accepted",
         "preflight_absence_unconfirmed",
         "preflight_cleanup_identity_changed",
+        "preflight_cleanup_incomplete",
         "preflight_create_refused",
         "preflight_delete_identity_changed",
         "preflight_delete_refused",
@@ -130,24 +131,55 @@ class ProbeRunFailure(RuntimeError):
 
     def __init__(self, probe_error, cleanup_error, report=None):
         super().__init__("probe_run_failed")
-        self.probe_error, self.cleanup_error, self.report = probe_error, cleanup_error, report
+        self.probe_error, self.cleanup_error, self.report = (
+            probe_error,
+            cleanup_error,
+            report,
+        )
+
+
+class ProbeCleanupFailure(ProbeError):
+    """Collect independent recovery failures after attempting other safe objects."""
+
+    def __init__(self, errors):
+        super().__init__("preflight_cleanup_incomplete")
+        self.errors = tuple(errors)
+
+
+def raise_cleanup_failures(errors):
+    if len(errors) == 1:
+        raise errors[0]
+    if errors:
+        raise ProbeCleanupFailure(errors)
 
 
 def safe_exception_type(name):
-    return name if isinstance(name, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", name) else "Exception"
+    return (
+        name
+        if isinstance(name, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", name)
+        else "Exception"
+    )
 
 
 def safe_failure(error):
     # Inspect only the exact constant argument; never invoke an exception's
     # __str__ or copy command output, response bodies, headers, or objects.
-    reason = error.args[0] if isinstance(error, ProbeError) and len(error.args) == 1 else None
+    reason = (
+        error.args[0]
+        if isinstance(error, ProbeError) and len(error.args) == 1
+        else None
+    )
     return {
-        "reason": reason if isinstance(reason, str) and reason in _SAFE_PROBE_REASONS else "probe_failed",
+        "reason": reason
+        if isinstance(reason, str) and reason in _SAFE_PROBE_REASONS
+        else "probe_failed",
         "exception_type": safe_exception_type(type(error).__name__),
     }
 
 
 def failure_details(error):
+    if isinstance(error, ProbeCleanupFailure):
+        return [{"phase": "cleanup", **safe_failure(item)} for item in error.errors]
     if not isinstance(error, ProbeRunFailure):
         return [{"phase": "probe", **safe_failure(error)}]
     failures = []
@@ -171,7 +203,10 @@ def failure_details(error):
         nested = row.get("failures")
         if exception_type == "ProbeRunFailure" and isinstance(nested, list):
             for step in nested[:2]:
-                if not isinstance(step, dict) or step.get("phase") not in {"probe", "cleanup"}:
+                if not isinstance(step, dict) or step.get("phase") not in {
+                    "probe",
+                    "cleanup",
+                }:
                     continue
                 step_type = safe_exception_type(step.get("exception_type"))
                 step_reason = step.get("reason")
@@ -188,13 +223,19 @@ def failure_details(error):
                         "exception_type": step_type,
                     }
                 )
-    failures.append({"phase": "cleanup", **safe_failure(error.cleanup_error)})
+    if isinstance(error.cleanup_error, ProbeCleanupFailure):
+        failures.extend(failure_details(error.cleanup_error))
+    elif error.cleanup_error is not None:
+        failures.append({"phase": "cleanup", **safe_failure(error.cleanup_error)})
     return failures
 
 
 def log_failures(failures):
     print(
-        json.dumps({"event": "runtime_installation_verification_failed", "failures": failures}, sort_keys=True),
+        json.dumps(
+            {"event": "runtime_installation_verification_failed", "failures": failures},
+            sort_keys=True,
+        ),
         file=sys.stderr,
         flush=True,
     )
@@ -230,14 +271,20 @@ def check_result(name, raw, uid):
         raise ValueError("probe_result_invalid")
     if name == "storage-sqlite":
         passed = (
-            all(raw.get(key) is True for key in ("locking", "fsync", "sqlite_integrity"))
+            all(
+                raw.get(key) is True for key in ("locking", "fsync", "sqlite_integrity")
+            )
             and raw.get("filesystem") in {"ext4", "xfs"}
             and type(raw.get("capacity_bytes")) is int
             and raw["capacity_bytes"] > 0
         )
     elif name.startswith("network-"):
         rows = raw.get("checks")
-        passed = isinstance(rows, list) and bool(rows) and all(row.get("ok") is True for row in rows)
+        passed = (
+            isinstance(rows, list)
+            and bool(rows)
+            and all(row.get("ok") is True for row in rows)
+        )
     else:
         passed = raw.get("verified") is True
     if not passed:
@@ -251,25 +298,57 @@ def stop_confirmed(pod, *, binding_evidence=None):
         pod.get("spec", {}),
         pod.get("status", {}),
     )
-    if not meta.get("name", "").startswith("preflight-") or not meta.get("uid") or not meta.get("deletionTimestamp"):
+    if (
+        not meta.get("name", "").startswith("preflight-")
+        or not meta.get("uid")
+        or not meta.get("deletionTimestamp")
+    ):
         return False
-    if status.get("reason") in {"NodeLost", "Unknown"} or status.get("phase") == "Unknown":
+    if (
+        status.get("reason") in {"NodeLost", "Unknown"}
+        or status.get("phase") == "Unknown"
+    ):
         return False
-    states = [
-        row.get("state", {})
-        for key in (
-            "containerStatuses",
-            "initContainerStatuses",
-            "ephemeralContainerStatuses",
-        )
-        for row in status.get(key, [])
-    ]
+    states = []
+    # Match admission's container-level stop proof. A terminal Pod phase alone
+    # cannot turn a kubelet's synthetic Unknown/exit137 into confirmed stopping.
+    for key in (
+        "containerStatuses",
+        "initContainerStatuses",
+        "ephemeralContainerStatuses",
+    ):
+        rows = status.get(key, [])
+        if not isinstance(rows, list):
+            return False
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get("state", {}), dict):
+                return False
+            state = row.get("state", {})
+            if set(state) - {"terminated", "waiting"} or len(state) > 1:
+                return False
+            if "terminated" in state:
+                terminated = state["terminated"]
+                if (
+                    not isinstance(terminated, dict)
+                    or type(terminated.get("exitCode")) is not int
+                    or terminated.get("reason")
+                    in {"Unknown", "NodeLost", "ContainerStatusUnknown"}
+                ):
+                    return False
+            elif (
+                row.get("containerID")
+                or ("waiting" in state and not isinstance(state["waiting"], dict))
+                or state.get("waiting", {}).get("reason")
+                in {"Unknown", "NodeLost", "ContainerStatusUnknown"}
+            ):
+                return False
+            states.append(state)
     bound_evidence = isinstance(binding_evidence, dict) and all(
         meta.get(key) and binding_evidence.get(key) == meta[key]
         for key in ("namespace", "name", "uid", "deletionTimestamp")
     )
-    return not any("running" in state for state in states) and (
-        (not spec.get("nodeName") and not states and bound_evidence) or status.get("phase") in {"Succeeded", "Failed"}
+    return (not spec.get("nodeName") and not states and bound_evidence) or (
+        bool(spec.get("nodeName")) and status.get("phase") in {"Succeeded", "Failed"}
     )
 
 
@@ -314,7 +393,10 @@ def offline_inventory(manifest, document, dependencies=()):
         raise ValueError("offline_release_schema_invalid")
     if "platforms" in manifest:
         images = manifest["platforms"].get(platform, {})
-    elif manifest.get("platform") == platform and manifest.get("state") == "published-native-verified":
+    elif (
+        manifest.get("platform") == platform
+        and manifest.get("state") == "published-native-verified"
+    ):
         images = manifest.get("images", {})
     else:
         raise ValueError("offline_release_platform_unverified")
@@ -341,13 +423,19 @@ def offline_inventory(manifest, document, dependencies=()):
             raise ValueError("offline_release_digest_or_native_unverified")
         known.add(image["image"])
     selected = [document["helper_image"], document.get("assembler_image", "")]
-    selected += [profile["runtime_image"] for profile in document.get("canary_profiles", [])]
+    selected += [
+        profile["runtime_image"] for profile in document.get("canary_profiles", [])
+    ]
     if any(image and image not in known for image in selected):
         raise ValueError("offline_descriptor_release_mismatch")
     checked = []
     for item in dependencies:
         path = Path(item["path"])
-        if path.is_symlink() or not path.is_file() or not re.fullmatch(r"[a-f0-9]{64}", item.get("sha256", "")):
+        if (
+            path.is_symlink()
+            or not path.is_file()
+            or not re.fullmatch(r"[a-f0-9]{64}", item.get("sha256", ""))
+        ):
             raise ValueError("offline_dependency_inventory_invalid")
         digest = hashlib.sha256()
         with path.open("rb") as source:
@@ -427,7 +515,9 @@ class Kubectl:
         )["items"]
 
     def raw(self, method, path, *, document=None, manager=False, accepted=(0,)):
-        verb = {"GET": "get", "POST": "create", "PUT": "replace", "DELETE": "delete"}[method]
+        verb = {"GET": "get", "POST": "create", "PUT": "replace", "DELETE": "delete"}[
+            method
+        ]
         return self.call(
             [verb, "--raw", path] + (["-f", "-"] if method != "GET" else []),
             document=document,
@@ -447,7 +537,9 @@ class Kubectl:
 class InstallationVerifier:
     def __init__(self, api, *, options, timeout=180):
         self.api, self.options, self.timeout = api, options, timeout
-        self.cm = api.get("configmap", "runtime-deployment-descriptor", namespace=api.control)
+        self.cm = api.get(
+            "configmap", "runtime-deployment-descriptor", namespace=api.control
+        )
         self.document = json.loads(self.cm["data"]["descriptor.json"])
         self.namespace = api.execution
         if self.document.get("namespace") != self.namespace or not _IMAGE.fullmatch(
@@ -455,18 +547,23 @@ class InstallationVerifier:
         ):
             raise ValueError("descriptor_scope_or_digest_invalid")
         self.created, self.control_created, self.idle = [], [], None
+        self.unconfirmed_writer_plans = {}
 
     def baseline(self):
         namespace = self.api.get("namespace", self.namespace)
         quota = self.api.get("resourcequota", "runtime-budget")
-        webhooks = self.api.get("validatingwebhookconfiguration", self.options["webhook_name"])
+        webhooks = self.api.get(
+            "validatingwebhookconfiguration", self.options["webhook_name"]
+        )
         return {
             "namespace_uid": namespace["metadata"]["uid"],
             "quota_uid": quota["metadata"]["uid"],
             "webhook_uid": webhooks["metadata"]["uid"],
             "descriptor_digest": descriptor_digest(self.document),
             "images": {
-                key: self.document[key] for key in ("helper_image", "assembler_image") if self.document.get(key)
+                key: self.document[key]
+                for key in ("helper_image", "assembler_image")
+                if self.document.get(key)
             },
             "live_probes_executed": False,
             "offline_inventory": self._offline_inventory(),
@@ -476,14 +573,22 @@ class InstallationVerifier:
         path = self.options.get("release_manifest")
         return (
             offline_inventory(
-                json.loads(Path(path).read_text()), self.document, self.options.get("dependency_files", [])
+                json.loads(Path(path).read_text()),
+                self.document,
+                self.options.get("dependency_files", []),
             )
             if path
             else {"verified": False, "reason": "release_manifest_not_supplied"}
         )
 
     def _path(self, resource, name=""):
-        return "/api/v1/namespaces/" + self.namespace + "/" + resource + ("/" + name if name else "")
+        return (
+            "/api/v1/namespaces/"
+            + self.namespace
+            + "/"
+            + resource
+            + ("/" + name if name else "")
+        )
 
     def _wait(self, predicate):
         end = time.monotonic() + self.timeout
@@ -495,9 +600,14 @@ class InstallationVerifier:
         raise ProbeError("probe_deadline_exceeded")
 
     def _plans(self, ref, plan=None, *, remove=False):
-        cm = self.api.get("configmap", "runtime-canary-plans", namespace=self.api.control)
+        cm = self.api.get(
+            "configmap", "runtime-canary-plans", namespace=self.api.control
+        )
         document = json.loads(cm["data"]["plans.json"])
-        if set(document) - {"schema_version", "plans", "profile_images"} or document["schema_version"] != 1:
+        if (
+            set(document) - {"schema_version", "plans", "profile_images"}
+            or document["schema_version"] != 1
+        ):
             raise ProbeError("preflight_plans_invalid")
         if remove:
             document["plans"].pop(ref, None)
@@ -515,7 +625,9 @@ class InstallationVerifier:
                 raise ValueError()
         except (KeyError, TypeError, ValueError):
             raise ProbeError("admission_refresh_revision_unconfirmed") from None
-        cm["data"]["plans.json"] = json.dumps(document, sort_keys=True, separators=(",", ":"))
+        cm["data"]["plans.json"] = json.dumps(
+            document, sort_keys=True, separators=(",", ":")
+        )
         response = self.api.call(["replace", "-f", "-", "-o", "json"], document=cm)
         try:
             saved = json.loads(response.stdout)
@@ -533,7 +645,9 @@ class InstallationVerifier:
                 raise ValueError()
             # The annotation contains only an opaque public revision, never
             # canary templates or any credential/configuration bytes.
-            revision = hashlib.sha256((observed["uid"] + "\0" + observed["resourceVersion"]).encode()).hexdigest()
+            revision = hashlib.sha256(
+                (observed["uid"] + "\0" + observed["resourceVersion"]).encode()
+            ).hexdigest()
         except (KeyError, TypeError, ValueError):
             raise ProbeError("admission_refresh_revision_unconfirmed") from None
         self._refresh_admission_plans(revision)
@@ -561,8 +675,14 @@ class InstallationVerifier:
         volumes = set()
         for volume in pod.get("spec", {}).get("volumes", []):
             references = [volume.get("configMap", {})]
-            references += [source.get("configMap", {}) for source in volume.get("projected", {}).get("sources", [])]
-            if any(reference.get("name") == "runtime-canary-plans" for reference in references):
+            references += [
+                source.get("configMap", {})
+                for source in volume.get("projected", {}).get("sources", [])
+            ]
+            if any(
+                reference.get("name") == "runtime-canary-plans"
+                for reference in references
+            ):
                 volumes.add(volume.get("name"))
         mounted = any(
             mount.get("name") in volumes
@@ -585,7 +705,16 @@ class InstallationVerifier:
         # https://github.com/kubernetes/website/blob/release-1.28/content/en/docs/tasks/configure-pod-container/configure-pod-configmap.md#mounted-configmaps-are-updated-automatically
         try:
             response = self.api.call(
-                ["get", "pods", "-n", self.api.control, "-l", "app=runtime-admission", "-o", "json"]
+                [
+                    "get",
+                    "pods",
+                    "-n",
+                    self.api.control,
+                    "-l",
+                    "app=runtime-admission",
+                    "-o",
+                    "json",
+                ]
             )
             pods = json.loads(response.stdout)["items"]
         except Exception:
@@ -596,21 +725,41 @@ class InstallationVerifier:
         for listed in pods:
             previous = self._admission_refresh_target(listed)
             try:
-                current = self.api.get("pod", previous["name"], namespace=self.api.control)
+                current = self.api.get(
+                    "pod", previous["name"], namespace=self.api.control
+                )
             except Exception:
                 raise ProbeError("admission_refresh_refused") from None
             metadata = self._admission_refresh_target(current)
-            if metadata["uid"] != previous["uid"] or metadata["name"] != previous["name"]:
+            if (
+                metadata["uid"] != previous["uid"]
+                or metadata["name"] != previous["name"]
+            ):
                 raise ProbeError("admission_refresh_identity_changed")
             patch = [
                 {"op": "test", "path": "/metadata/uid", "value": metadata["uid"]},
-                {"op": "test", "path": "/metadata/resourceVersion", "value": metadata["resourceVersion"]},
+                {
+                    "op": "test",
+                    "path": "/metadata/resourceVersion",
+                    "value": metadata["resourceVersion"],
+                },
             ]
             if metadata.get("annotations") is None:
-                patch.append({"op": "add", "path": "/metadata/annotations", "value": {annotation: revision}})
+                patch.append(
+                    {
+                        "op": "add",
+                        "path": "/metadata/annotations",
+                        "value": {annotation: revision},
+                    }
+                )
             else:
                 patch.append(
-                    {"op": "add", "path": "/metadata/annotations/" + annotation.replace("/", "~1"), "value": revision}
+                    {
+                        "op": "add",
+                        "path": "/metadata/annotations/"
+                        + annotation.replace("/", "~1"),
+                        "value": revision,
+                    }
                 )
             try:
                 response = self.api.call(
@@ -654,7 +803,9 @@ class InstallationVerifier:
             "expires_at": int(time.time()) + 3500,
         }
         self._plans(plan["resource_ref"], plan)
-        resource = {"Pod": "pods", "PersistentVolumeClaim": "persistentvolumeclaims"}[template["kind"]]
+        resource = {"Pod": "pods", "PersistentVolumeClaim": "persistentvolumeclaims"}[
+            template["kind"]
+        ]
 
         def attempt():
             result = self.api.raw(
@@ -674,7 +825,12 @@ class InstallationVerifier:
             return None
 
         observed = self._wait(attempt)
-        plan.update(uid=observed["metadata"]["uid"], allow_create=False, allow_update=True, allow_delete=True)
+        plan.update(
+            uid=observed["metadata"]["uid"],
+            allow_create=False,
+            allow_update=True,
+            allow_delete=True,
+        )
         self.created.append(
             {
                 "plan": plan,
@@ -686,7 +842,17 @@ class InstallationVerifier:
         self._plans(plan["resource_ref"], plan)
         return observed
 
-    def _pod(self, action, *, targets=None, pvc="", unschedulable=False, image="", command=(), runtime_class=""):
+    def _pod(
+        self,
+        action,
+        *,
+        targets=None,
+        pvc="",
+        unschedulable=False,
+        image="",
+        command=(),
+        runtime_class="",
+    ):
         helper = self.document["helper_image"]
         plan = PodPlan(
             namespace=self.namespace,
@@ -701,18 +867,23 @@ class InstallationVerifier:
             status_policy_revision=self.document["status_policy_revision"],
             image=image or helper,
             helper_image=helper,
-            command=tuple(command) or ("python", "-I", "-m", "runtime_manager.k8s_capabilities", action),
+            command=tuple(command)
+            or ("python", "-I", "-m", "runtime_manager.k8s_capabilities", action),
             memory_mb=128,
             cpu_millicores=50,
             mode="image",
-            deadline_seconds=600 if action == "idle" and not command else min(self.timeout + 60, 600),
+            deadline_seconds=600
+            if action == "idle" and not command
+            else min(self.timeout + 60, 600),
             health_path="/healthz",
             runtime_class=runtime_class,
         )
         pod = pod_template(plan)
         pod["metadata"]["name"] = "preflight-" + uuid4().hex[:20]
         if unschedulable:
-            pod["spec"]["nodeSelector"]["runtime.bisheng.io/preflight-unassigned"] = uuid4().hex
+            pod["spec"]["nodeSelector"]["runtime.bisheng.io/preflight-unassigned"] = (
+                uuid4().hex
+            )
         app = pod["spec"]["containers"][0]
         for key in ("readinessProbe", "livenessProbe", "startupProbe"):
             app.pop(key, None)
@@ -728,8 +899,12 @@ class InstallationVerifier:
                 }
             ]
         if pvc:
-            pod["spec"]["volumes"].append({"name": "probe-volume", "persistentVolumeClaim": {"claimName": pvc}})
-            app["volumeMounts"].append({"name": "probe-volume", "mountPath": "/probe-volume"})
+            pod["spec"]["volumes"].append(
+                {"name": "probe-volume", "persistentVolumeClaim": {"claimName": pvc}}
+            )
+            app["volumeMounts"].append(
+                {"name": "probe-volume", "mountPath": "/probe-volume"}
+            )
         return self._create(pod)
 
     def _observe(self, pod, *, running=False):
@@ -758,9 +933,18 @@ class InstallationVerifier:
             ],
             manager=True,
         )
-        if self.api.get("pod", pod["metadata"]["name"], manager=True)["metadata"]["uid"] != current["metadata"]["uid"]:
+        if (
+            self.api.get("pod", pod["metadata"]["name"], manager=True)["metadata"][
+                "uid"
+            ]
+            != current["metadata"]["uid"]
+        ):
             raise ProbeError("preflight_log_identity_changed")
-        rows = [line[len(_RESULT) :] for line in response.stdout.splitlines() if line.startswith(_RESULT)]
+        rows = [
+            line[len(_RESULT) :]
+            for line in response.stdout.splitlines()
+            if line.startswith(_RESULT)
+        ]
         if len(rows) != 1:
             raise ProbeError("preflight_result_missing")
         return json.loads(rows[0])
@@ -772,7 +956,9 @@ class InstallationVerifier:
     def _namespace_budget(self):
         namespace = self.api.get("namespace", self.namespace)
         if (
-            namespace["metadata"].get("labels", {}).get("runtime.bisheng.io/installation")
+            namespace["metadata"]
+            .get("labels", {})
+            .get("runtime.bisheng.io/installation")
             != self.options["installation_id"]
         ):
             raise ProbeError("namespace_ownership_unconfirmed")
@@ -803,9 +989,13 @@ class InstallationVerifier:
             ("get", "configmaps", self.namespace),
             ("patch", "pods/status", self.namespace),
         ]
-        if not self.api.can("list", "pods", self.namespace) or any(self.api.can(*row) for row in denied):
+        if not self.api.can("list", "pods", self.namespace) or any(
+            self.api.can(*row) for row in denied
+        ):
             raise ProbeError("rbac_scope_unconfirmed")
-        return self._proof(self.api.get("serviceaccount", self.api.account, namespace=self.api.control))
+        return self._proof(
+            self.api.get("serviceaccount", self.api.account, namespace=self.api.control)
+        )
 
     def _no_exec(self):
         if any(
@@ -815,17 +1005,22 @@ class InstallationVerifier:
             raise ProbeError("rbac_exec_allowed")
         denied_call = self.api.raw(
             "POST",
-            self._path("pods", self.idle["metadata"]["name"]) + "/exec?command=true&stdout=true&stderr=true",
+            self._path("pods", self.idle["metadata"]["name"])
+            + "/exec?command=true&stdout=true&stderr=true",
             document={},
             manager=True,
             accepted=(0, 1),
         )
         if not denied_call.returncode or "Forbidden" not in denied_call.stderr:
             raise ProbeError("rbac_exec_api_not_refused")
-        return self._proof(self.api.get("serviceaccount", self.api.account, namespace=self.api.control))
+        return self._proof(
+            self.api.get("serviceaccount", self.api.account, namespace=self.api.control)
+        )
 
     def _admission_negative(self, *, psa=False):
-        original = next(row["plan"] for row in self.created if row["resource"] == "pods")
+        original = next(
+            row["plan"] for row in self.created if row["resource"] == "pods"
+        )
         plan = copy.deepcopy(original)
         ref = str(uuid4())
         plan.update(
@@ -844,13 +1039,19 @@ class InstallationVerifier:
             # Keep the payload schema-valid so the real restricted PSA check,
             # rather than the API's contradictory-security-context validator,
             # must refuse the dry-run request.
-            pod["spec"]["containers"][0]["securityContext"].update(privileged=True, allowPrivilegeEscalation=True)
+            pod["spec"]["containers"][0]["securityContext"].update(
+                privileged=True, allowPrivilegeEscalation=True
+            )
         else:
             pod["spec"]["containers"][0]["image"] = "unauthorized.invalid/image:latest"
 
         def denied():
             response = self.api.raw(
-                "POST", self._path("pods") + "?dryRun=All", document=pod, manager=True, accepted=(0, 1)
+                "POST",
+                self._path("pods") + "?dryRun=All",
+                document=pod,
+                manager=True,
+                accepted=(0, 1),
             )
             if not response.returncode:
                 # A successful server dry-run persisted no Pod. It is still a
@@ -889,9 +1090,14 @@ class InstallationVerifier:
             document=forged,
             accepted=(0, 1),
         )
-        if not response.returncode or "admission_terminal_source_refused" not in response.stderr:
+        if (
+            not response.returncode
+            or "admission_terminal_source_refused" not in response.stderr
+        ):
             raise ProbeError("status_negative_unconfirmed")
-        return self._proof(current, policy_revision=self.document["status_policy_revision"])
+        return self._proof(
+            current, policy_revision=self.document["status_policy_revision"]
+        )
 
     @staticmethod
     def _unbound_deleting(pod):
@@ -918,12 +1124,19 @@ class InstallationVerifier:
         name, uid = metadata["name"], metadata["uid"]
         fresh = self.api.get("pod", name, namespace=namespace, manager=manager)
         before = fresh["metadata"]
-        if before.get("uid") != uid or before.get("namespace") != namespace or not self._unbound_deleting(fresh):
+        if (
+            before.get("uid") != uid
+            or before.get("namespace") != namespace
+            or not self._unbound_deleting(fresh)
+        ):
             raise ProbeError("binding_deletion_observation_invalid")
         binding = {
             "apiVersion": "v1",
             "kind": "Binding",
-            "metadata": {key: before[key] for key in ("name", "namespace", "uid", "resourceVersion")},
+            "metadata": {
+                key: before[key]
+                for key in ("name", "namespace", "uid", "resourceVersion")
+            },
             "target": {
                 "apiVersion": "v1",
                 "kind": "Node",
@@ -944,10 +1157,13 @@ class InstallationVerifier:
         observed = self.api.get("pod", name, namespace=namespace, manager=manager)
         after = observed["metadata"]
         if any(
-            after.get(key) != before[key] for key in ("namespace", "name", "uid", "deletionTimestamp")
+            after.get(key) != before[key]
+            for key in ("namespace", "name", "uid", "deletionTimestamp")
         ) or not self._unbound_deleting(observed):
             raise ProbeError("binding_deletion_observation_invalid")
-        return {key: after[key] for key in ("namespace", "name", "uid", "deletionTimestamp")}
+        return {
+            key: after[key] for key in ("namespace", "name", "uid", "deletionTimestamp")
+        }
 
     def _binding_fence(self):
         pod = self._pod("idle", unschedulable=True)
@@ -957,22 +1173,42 @@ class InstallationVerifier:
         if current["spec"].get("nodeName"):
             raise ProbeError("binding_canary_already_scheduled")
         self._delete_request(current, "pods")
-        evidence = self._binding_stop_evidence(current, namespace=self.namespace, manager=True)
-        record = next(row for row in self.created if row["resource"] == "pods" and row["uid"] == evidence["uid"])
+        evidence = self._binding_stop_evidence(
+            current, namespace=self.namespace, manager=True
+        )
+        record = next(
+            row
+            for row in self.created
+            if row["resource"] == "pods" and row["uid"] == evidence["uid"]
+        )
         record["binding_stop_evidence"] = evidence
         return self._proof(self.api.get("pod", evidence["name"], manager=True))
 
     def _stop_observation(self, record, *, namespace, manager):
-        fresh = self.api.get("pod", record["name"], namespace=namespace, manager=manager)
+        fresh = self.api.get(
+            "pod", record["name"], namespace=namespace, manager=manager
+        )
         if fresh["metadata"]["uid"] != record["uid"]:
             raise ProbeError("preflight_cleanup_identity_changed")
         evidence = record.get("binding_stop_evidence")
-        if not stop_confirmed(fresh, binding_evidence=evidence) and self._unbound_deleting(fresh):
-            record["binding_stop_evidence"] = self._binding_stop_evidence(fresh, namespace=namespace, manager=manager)
-            fresh = self.api.get("pod", record["name"], namespace=namespace, manager=manager)
+        if not stop_confirmed(
+            fresh, binding_evidence=evidence
+        ) and self._unbound_deleting(fresh):
+            record["binding_stop_evidence"] = self._binding_stop_evidence(
+                fresh, namespace=namespace, manager=manager
+            )
+            fresh = self.api.get(
+                "pod", record["name"], namespace=namespace, manager=manager
+            )
             if fresh["metadata"]["uid"] != record["uid"]:
                 raise ProbeError("preflight_cleanup_identity_changed")
-        return fresh if stop_confirmed(fresh, binding_evidence=record.get("binding_stop_evidence")) else None
+        return (
+            fresh
+            if stop_confirmed(
+                fresh, binding_evidence=record.get("binding_stop_evidence")
+            )
+            else None
+        )
 
     def _delete_request(self, current, resource):
         expected_uid, name = current["metadata"]["uid"], current["metadata"]["name"]
@@ -987,9 +1223,18 @@ class InstallationVerifier:
                 "apiVersion": "v1",
                 "kind": "DeleteOptions",
                 "gracePeriodSeconds": 5,
-                "preconditions": {"uid": expected_uid, "resourceVersion": fresh["metadata"]["resourceVersion"]},
+                "preconditions": {
+                    "uid": expected_uid,
+                    "resourceVersion": fresh["metadata"]["resourceVersion"],
+                },
             }
-            result = self.api.raw("DELETE", self._path(resource, name), document=body, manager=True, accepted=(0, 1))
+            result = self.api.raw(
+                "DELETE",
+                self._path(resource, name),
+                document=body,
+                manager=True,
+                accepted=(0, 1),
+            )
             if result.returncode and not any(
                 reason in result.stderr
                 for reason in (
@@ -1007,7 +1252,9 @@ class InstallationVerifier:
 
     def _storage(self):
         storage = self.document.get("storage", {})
-        if storage.get("sqlite_compatible") is not True or storage.get("filesystem") not in {"ext4", "xfs"}:
+        if storage.get("sqlite_compatible") is not True or storage.get(
+            "filesystem"
+        ) not in {"ext4", "xfs"}:
             raise ProbeError("storage_not_qualified")
         pvc = {
             "apiVersion": "v1",
@@ -1031,7 +1278,11 @@ class InstallationVerifier:
                 "accessModes": ["ReadWriteOnce"],
                 "storageClassName": storage.get("class", ""),
                 "volumeMode": "Filesystem",
-                "resources": {"requests": {"storage": str(self.options.get("storage_size_mb", 1024)) + "Mi"}},
+                "resources": {
+                    "requests": {
+                        "storage": str(self.options.get("storage_size_mb", 1024)) + "Mi"
+                    }
+                },
             },
         }
         if storage.get("static_pool"):
@@ -1046,16 +1297,24 @@ class InstallationVerifier:
         result = self._result(pod)
         expected = int(self.options.get("storage_size_mb", 1024)) * 1024 * 1024
         capacity = result.get("capacity_bytes", 0)
-        if type(capacity) is not int or not 0.8 * expected <= capacity <= 1.1 * expected:
+        if (
+            type(capacity) is not int
+            or not 0.8 * expected <= capacity <= 1.1 * expected
+        ):
             raise ProbeError("storage_capacity_not_bounded")
         return check_result("storage-sqlite", result, pod["metadata"]["uid"])
 
     def _image_one(self, observed, expected_image):
         rows = observed.get("status", {}).get("containerStatuses", [])
-        if not rows or any(not row.get("imageID") or "sha256:" not in row["imageID"] for row in rows):
+        if not rows or any(
+            not row.get("imageID") or "sha256:" not in row["imageID"] for row in rows
+        ):
             raise ProbeError("cri_image_identity_unconfirmed")
         node = self.api.get("node", observed["spec"]["nodeName"])
-        if "linux/" + node["status"]["nodeInfo"]["architecture"] != self.document["platform"]:
+        if (
+            "linux/" + node["status"]["nodeInfo"]["architecture"]
+            != self.document["platform"]
+        ):
             raise ProbeError("cri_architecture_mismatch")
         if observed["spec"]["containers"][0]["image"] != expected_image:
             raise ProbeError("cri_requested_image_changed")
@@ -1087,14 +1346,20 @@ class InstallationVerifier:
                 raise ProbeError("runtime_profile_invalid")
             pod = self._pod("idle", image=profile["runtime_image"], command=command)
             observed = self._observe(pod)
-            result["observations"].extend(self._image_one(observed, profile["runtime_image"])["observations"])
+            result["observations"].extend(
+                self._image_one(observed, profile["runtime_image"])["observations"]
+            )
         return result
 
     def _sandbox(self, level):
-        runtime_class = self.document.get("sandbox", {}).get("runtime_classes", {}).get(level, "")
+        runtime_class = (
+            self.document.get("sandbox", {}).get("runtime_classes", {}).get(level, "")
+        )
         if not runtime_class:
             raise ProbeError("optional_runtime_class_not_configured")
-        pod = self._observe(self._pod("idle", runtime_class=runtime_class), running=True)
+        pod = self._observe(
+            self._pod("idle", runtime_class=runtime_class), running=True
+        )
         return self._proof(pod, profile=level)
 
     @staticmethod
@@ -1104,7 +1369,8 @@ class InstallationVerifier:
 
             probe = {
                 "targets": [
-                    {key: row[key] for key in ("name", "host", "port")} | {"expected": "allowed", "protocol": "udp-dns"}
+                    {key: row[key] for key in ("name", "host", "port")}
+                    | {"expected": "allowed", "protocol": "udp-dns"}
                 ]
             }
             if not all(item["ok"] for item in network_checks(probe)["checks"]):
@@ -1119,17 +1385,20 @@ class InstallationVerifier:
             if target.get("name") == "other-app" and target.get("host") == "@preflight":
                 target["host"] = self.idle["status"]["podIP"]
         if group == "network-direct-denied":
-            if not {"backend", "minio", "kubernetes-api", "other-app"} <= {row.get("name") for row in targets} or any(
-                row.get("expected") != "denied" for row in targets
-            ):
+            if not {"backend", "minio", "kubernetes-api", "other-app"} <= {
+                row.get("name") for row in targets
+            } or any(row.get("expected") != "denied" for row in targets):
                 raise ProbeError("direct_denial_targets_incomplete")
         elif group == "network-dns-denied":
             if not targets or any(
-                row.get("expected") != "denied" or row.get("protocol") != "udp-dns" for row in targets
+                row.get("expected") != "denied" or row.get("protocol") != "udp-dns"
+                for row in targets
             ):
                 raise ProbeError("dns_denial_target_invalid")
         else:
-            service = self.api.get("service", "egress-proxy", namespace=self.api.control)
+            service = self.api.get(
+                "service", "egress-proxy", namespace=self.api.control
+            )
             if not targets or any(
                 row.get("expected") != "allowed"
                 or row.get("host") != service["spec"].get("clusterIP")
@@ -1149,11 +1418,19 @@ class InstallationVerifier:
         return check_result(group, result, pod["metadata"]["uid"])
 
     def _control_probe(self, role, targets):
-        if role not in {"app-proxy", "runtime-manager", "egress-proxy", "preflight-untrusted"}:
+        if role not in {
+            "app-proxy",
+            "runtime-manager",
+            "egress-proxy",
+            "preflight-untrusted",
+        }:
             raise ProbeError("control_probe_role_invalid")
         if role != "preflight-untrusted":
             service = self.api.get("service", role, namespace=self.api.control)
-            if service.get("spec", {}).get("publishNotReadyAddresses", False) is not False:
+            if (
+                service.get("spec", {}).get("publishNotReadyAddresses", False)
+                is not False
+            ):
                 raise ProbeError("control_probe_service_not_isolated")
         plan = PodPlan(
             namespace=self.api.control,
@@ -1183,13 +1460,19 @@ class InstallationVerifier:
         pod = pod_template(plan)
         # Reuse the real policy label without serving traffic through its Service.
         # No controller populates this condition; phase Succeeded is still observable.
-        pod["spec"]["readinessGates"] = [{"conditionType": "runtime.bisheng.io/preflight-not-serving"}]
+        pod["spec"]["readinessGates"] = [
+            {"conditionType": "runtime.bisheng.io/preflight-not-serving"}
+        ]
         pod["metadata"]["name"] = "preflight-" + uuid4().hex[:20]
         pod["metadata"]["labels"] = {
             "app": role,
-            "runtime.bisheng.io/preflight-installation": self.options["installation_id"],
+            "runtime.bisheng.io/preflight-installation": self.options[
+                "installation_id"
+            ],
         }
-        pod["metadata"]["annotations"]["runtime.bisheng.io/preflight-expiry"] = str(int(time.time()) + 3500)
+        pod["metadata"]["annotations"]["runtime.bisheng.io/preflight-expiry"] = str(
+            int(time.time()) + 3500
+        )
         app = pod["spec"]["containers"][0]
         app["env"] = [
             {
@@ -1204,12 +1487,18 @@ class InstallationVerifier:
         self.control_created.append(observed)
 
         def finished():
-            current = self.api.get("pod", observed["metadata"]["name"], namespace=self.api.control)
+            current = self.api.get(
+                "pod", observed["metadata"]["name"], namespace=self.api.control
+            )
             if current["metadata"]["uid"] != observed["metadata"]["uid"]:
                 raise ProbeError("control_probe_identity_changed")
             if current.get("status", {}).get("phase") == "Failed":
                 raise ProbeError("control_probe_failed")
-            return current if current.get("status", {}).get("phase") == "Succeeded" else None
+            return (
+                current
+                if current.get("status", {}).get("phase") == "Succeeded"
+                else None
+            )
 
         self._wait(finished)
         response = self.api.call(
@@ -1223,11 +1512,17 @@ class InstallationVerifier:
                 "--limit-bytes=65536",
             ]
         )
-        rows = [line[len(_RESULT) :] for line in response.stdout.splitlines() if line.startswith(_RESULT)]
+        rows = [
+            line[len(_RESULT) :]
+            for line in response.stdout.splitlines()
+            if line.startswith(_RESULT)
+        ]
         if len(rows) != 1:
             raise ProbeError("control_probe_result_missing")
         try:
-            check_result("network-ingress", json.loads(rows[0]), observed["metadata"]["uid"])
+            check_result(
+                "network-ingress", json.loads(rows[0]), observed["metadata"]["uid"]
+            )
         except (ValueError, TypeError, KeyError):
             raise ProbeError("control_probe_failed") from None
         return observed
@@ -1260,7 +1555,12 @@ class InstallationVerifier:
 
         base = self.options["platform_origin"]
         parsed = urlsplit(base)
-        if parsed.scheme != "https" or parsed.username or parsed.password or parsed.path not in {"", "/"}:
+        if (
+            parsed.scheme != "https"
+            or parsed.username
+            or parsed.password
+            or parsed.path not in {"", "/"}
+        ):
             raise ProbeError("platform_origin_invalid")
         path = "/api/v1/internal/app-runtime/v2/nodes/plan"
         key_id, secret = (
@@ -1276,7 +1576,9 @@ class InstallationVerifier:
                 base.rstrip("/") + path,
                 headers=signed_headers("GET", path, b"", key_id=key_id, secret=secret),
             )
-            if response.status_code != 200 or not isinstance(response.json().get("node"), dict):
+            if response.status_code != 200 or not isinstance(
+                response.json().get("node"), dict
+            ):
                 raise ProbeError("platform_authenticated_probe_refused")
             if client.get(base.rstrip("/") + path).status_code not in {401, 403}:
                 raise ProbeError("platform_unsigned_probe_accepted")
@@ -1337,20 +1639,31 @@ class InstallationVerifier:
         if not current["metadata"].get("deletionTimestamp"):
             self._delete_request(current, record["resource"])
         if record["resource"] == "pods":
-            self._wait(lambda: self._stop_observation(record, namespace=self.namespace, manager=True))
-            record["plan"]["stop_state"] = "confirmed"
+            self._wait(
+                lambda: self._stop_observation(
+                    record, namespace=self.namespace, manager=True
+                )
+            )
+            record["plan"].update(stop_state="confirmed", stop_confirmed=True)
             self._plans(record["plan"]["resource_ref"], record["plan"])
 
             def release():
                 fresh = self.api.get("pod", record["name"], manager=True)
                 if fresh["metadata"]["uid"] != record["uid"]:
                     raise ProbeError("preflight_cleanup_identity_changed")
-                if not stop_confirmed(fresh, binding_evidence=record.get("binding_stop_evidence")):
+                if not stop_confirmed(
+                    fresh, binding_evidence=record.get("binding_stop_evidence")
+                ):
                     raise ProbeError("preflight_stop_unconfirmed")
                 patch = {
                     "metadata": {
+                        "uid": fresh["metadata"]["uid"],
                         "resourceVersion": fresh["metadata"]["resourceVersion"],
-                        "finalizers": [x for x in fresh["metadata"].get("finalizers", []) if x != STOP_FINALIZER],
+                        "finalizers": [
+                            x
+                            for x in fresh["metadata"].get("finalizers", [])
+                            if x != STOP_FINALIZER
+                        ],
                     }
                 }
                 result = self.api.call(
@@ -1380,11 +1693,28 @@ class InstallationVerifier:
 
             self._wait(release)
 
+        self._wait_absent(record, namespace=self.namespace, manager=True)
+        self._plans(record["plan"]["resource_ref"], remove=True)
+        self.created.remove(record)
+
+    def _wait_absent(
+        self,
+        record,
+        *,
+        namespace,
+        manager,
+        identity_reason="preflight_cleanup_identity_changed",
+    ):
         def absent():
             response = self.api.raw(
                 "GET",
-                self._path(record["resource"], record["name"]),
-                manager=True,
+                "/api/v1/namespaces/"
+                + namespace
+                + "/"
+                + record["resource"]
+                + "/"
+                + record["name"],
+                manager=manager,
                 accepted=(0, 1),
             )
             if response.returncode:
@@ -1393,12 +1723,10 @@ class InstallationVerifier:
                 raise ProbeError("preflight_absence_unconfirmed")
             observed = json.loads(response.stdout)
             if observed["metadata"]["uid"] != record["uid"]:
-                raise ProbeError("preflight_cleanup_identity_changed")
+                raise ProbeError(identity_reason)
             return False
 
         self._wait(absent)
-        self._plans(record["plan"]["resource_ref"], remove=True)
-        self.created.remove(record)
 
     def _cleanup_control(self, pod):
         name, uid = pod["metadata"]["name"], pod["metadata"]["uid"]
@@ -1417,12 +1745,21 @@ class InstallationVerifier:
         path = "/api/v1/namespaces/" + self.api.control + "/pods/" + name
         self.api.raw("DELETE", path, document=body)
 
-        record = {"name": name, "uid": uid}
-        fresh = self._wait(lambda: self._stop_observation(record, namespace=self.api.control, manager=False))
+        record = {"resource": "pods", "name": name, "uid": uid}
+        fresh = self._wait(
+            lambda: self._stop_observation(
+                record, namespace=self.api.control, manager=False
+            )
+        )
         patch = {
             "metadata": {
+                "uid": fresh["metadata"]["uid"],
                 "resourceVersion": fresh["metadata"]["resourceVersion"],
-                "finalizers": [x for x in fresh["metadata"].get("finalizers", []) if x != STOP_FINALIZER],
+                "finalizers": [
+                    x
+                    for x in fresh["metadata"].get("finalizers", [])
+                    if x != STOP_FINALIZER
+                ],
             }
         }
         self.api.call(
@@ -1437,61 +1774,182 @@ class InstallationVerifier:
                 json.dumps(patch),
             ]
         )
+        self._wait_absent(
+            record,
+            namespace=self.api.control,
+            manager=False,
+            identity_reason="control_cleanup_identity_changed",
+        )
         self.control_created.remove(pod)
 
+    def _frozen_template(self, plan, kind):
+        if not isinstance(plan, dict) or not isinstance(plan.get("template"), dict):
+            return None
+        template = plan["template"]
+        metadata = template.get("metadata", {})
+        if (
+            plan.get("kind") != kind
+            or plan.get("namespace") != self.namespace
+            or template.get("kind") != kind
+            or not isinstance(metadata, dict)
+            or metadata.get("namespace") != self.namespace
+            or metadata.get("name") != plan.get("name")
+            or not isinstance(template.get("spec"), dict)
+        ):
+            return None
+        return template
+
+    def _held_pvc_names(self):
+        plans = [row.get("plan") for row in self.created if row["resource"] == "pods"]
+        plans.extend(getattr(self, "unconfirmed_writer_plans", {}).values())
+        names = set()
+        for plan in plans:
+            # API absence/replacement is not stopping evidence for the former
+            # writer. Its frozen volume references remain authoritative here.
+            template = self._frozen_template(plan, "Pod")
+            if template is None or not isinstance(
+                template["spec"].get("volumes"), list
+            ):
+                return None
+            for volume in template["spec"]["volumes"]:
+                if not isinstance(volume, dict):
+                    return None
+                if "persistentVolumeClaim" not in volume:
+                    continue
+                claim = volume["persistentVolumeClaim"]
+                if not isinstance(claim, dict) or not isinstance(
+                    claim.get("claimName"), str
+                ):
+                    return None
+                if not _NAME.fullmatch(claim["claimName"]):
+                    return None
+                names.add(claim["claimName"])
+        return names
+
     def cleanup(self):
+        errors = []
         for pod in list(self.control_created):
-            self._cleanup_control(pod)
+            try:
+                self._cleanup_control(pod)
+            except Exception as error:
+                errors.append(error)
         for row in list(reversed(self.created)):
             if row["resource"] == "pods":
-                self._cleanup_one(row)
+                try:
+                    self._cleanup_one(row)
+                except Exception as error:
+                    errors.append(error)
         for row in list(reversed(self.created)):
-            if any(
-                v.get("persistentVolumeClaim", {}).get("claimName") == row["name"]
-                for pod in self.api.list("pods", manager=True)
-                for v in pod.get("spec", {}).get("volumes", [])
-            ):
-                raise ProbeError("preflight_pvc_writer_unconfirmed")
-            self._cleanup_one(row)
+            if row["resource"] == "pods":
+                continue
+            try:
+                held = self._held_pvc_names()
+                if held is None or row["name"] in held:
+                    raise ProbeError("preflight_pvc_writer_unconfirmed")
+                # Frozen evidence above also covers old writers no longer in
+                # this API list; re-list for newly visible current references.
+                if any(
+                    v.get("persistentVolumeClaim", {}).get("claimName") == row["name"]
+                    for pod in self.api.list("pods", manager=True)
+                    for v in pod.get("spec", {}).get("volumes", [])
+                ):
+                    raise ProbeError("preflight_pvc_writer_unconfirmed")
+                self._cleanup_one(row)
+            except Exception as error:
+                errors.append(error)
+        raise_cleanup_failures(errors)
 
     def recover_expired(self):
-        cm = self.api.get("configmap", "runtime-canary-plans", namespace=self.api.control)
+        cm = self.api.get(
+            "configmap", "runtime-canary-plans", namespace=self.api.control
+        )
         document = json.loads(cm["data"]["plans.json"])
+        if not isinstance(document, dict) or not isinstance(
+            document.get("plans"), dict
+        ):
+            raise ProbeError("preflight_plans_invalid")
         now = time.time()
+        errors = []
+        held = getattr(self, "unconfirmed_writer_plans", {})
+        self.unconfirmed_writer_plans = held
         for ref, plan in document.get("plans", {}).items():
-            if plan.get("expires_at", now + 1) > now:
-                continue
-            if (
-                str(UUID(ref)) != ref
-                or plan.get("resource_ref") != ref
-                or plan.get("namespace") != self.namespace
-                or not plan.get("name", "").startswith("preflight-")
-            ):
-                raise ProbeError("preflight_recovery_scope_invalid")
-            resource = {"Pod": "pods", "PersistentVolumeClaim": "persistentvolumeclaims"}.get(plan.get("kind"))
-            if not resource or not plan.get("uid"):
-                raise ProbeError("preflight_recovery_uid_unconfirmed")
-            fresh = self.api.get(resource, plan["name"], manager=True)
-            if (
-                fresh["metadata"]["uid"] != plan["uid"]
-                or fresh["metadata"].get("labels", {}).get(RESOURCE_LABEL) != ref
-            ):
-                raise ProbeError("preflight_recovery_identity_changed")
-            plan["expires_at"] = int(now) + 3500
-            self._plans(ref, plan)
-            self.created.append({"plan": plan, "resource": resource, "name": plan["name"], "uid": plan["uid"]})
-        for pod in self.api.list("pods", namespace=self.api.control):
-            meta = pod["metadata"]
-            expiry = meta.get("annotations", {}).get("runtime.bisheng.io/preflight-expiry", "")
-            if (
-                meta.get("name", "").startswith("preflight-")
-                and meta.get("labels", {}).get("runtime.bisheng.io/preflight-installation")
-                == self.options["installation_id"]
-                and expiry.isdecimal()
-                and int(expiry) <= now
-            ):
-                self.control_created.append(pod)
-        self.cleanup()
+            # Include active and unadoptable Pod plans before attempting any
+            # resource recovery. Missing evidence must not make its PVC free.
+            frozen_pvc = self._frozen_template(plan, "PersistentVolumeClaim")
+            if frozen_pvc is None:
+                held[ref] = copy.deepcopy(plan)
+            try:
+                if (
+                    not isinstance(plan, dict)
+                    or type(plan.get("expires_at")) is not int
+                ):
+                    raise ProbeError("preflight_recovery_scope_invalid")
+                if plan["expires_at"] > now:
+                    continue
+                if (
+                    str(UUID(ref)) != ref
+                    or plan.get("resource_ref") != ref
+                    or plan.get("namespace") != self.namespace
+                    or not plan.get("name", "").startswith("preflight-")
+                ):
+                    raise ProbeError("preflight_recovery_scope_invalid")
+                resource = {
+                    "Pod": "pods",
+                    "PersistentVolumeClaim": "persistentvolumeclaims",
+                }.get(plan.get("kind"))
+                if not resource or not plan.get("uid"):
+                    raise ProbeError("preflight_recovery_uid_unconfirmed")
+                if resource == "persistentvolumeclaims" and frozen_pvc is None:
+                    raise ProbeError("preflight_recovery_scope_invalid")
+                fresh = self.api.get(resource, plan["name"], manager=True)
+                if (
+                    fresh["metadata"]["uid"] != plan["uid"]
+                    or fresh["metadata"].get("labels", {}).get(RESOURCE_LABEL) != ref
+                ):
+                    raise ProbeError("preflight_recovery_identity_changed")
+                plan["expires_at"] = int(now) + 3500
+                self._plans(ref, plan)
+                self.created.append(
+                    {
+                        "plan": plan,
+                        "resource": resource,
+                        "name": plan["name"],
+                        "uid": plan["uid"],
+                    }
+                )
+                held.pop(ref, None)
+            except Exception as error:
+                errors.append(error)
+        try:
+            control_pods = self.api.list("pods", namespace=self.api.control)
+        except Exception as error:
+            errors.append(error)
+            control_pods = []
+        for pod in control_pods:
+            try:
+                meta = pod["metadata"]
+                expiry = meta.get("annotations", {}).get(
+                    "runtime.bisheng.io/preflight-expiry", ""
+                )
+                if (
+                    meta.get("name", "").startswith("preflight-")
+                    and meta.get("labels", {}).get(
+                        "runtime.bisheng.io/preflight-installation"
+                    )
+                    == self.options["installation_id"]
+                    and expiry.isdecimal()
+                    and int(expiry) <= now
+                ):
+                    self.control_created.append(pod)
+            except Exception as error:
+                errors.append(error)
+        try:
+            self.cleanup()
+        except ProbeCleanupFailure as error:
+            errors.extend(error.errors)
+        except Exception as error:
+            errors.append(error)
+        raise_cleanup_failures(errors)
 
     def _registry_targets(self):
         from runtime_manager.executors.protocol import ExecutorError
@@ -1501,7 +1959,10 @@ class InstallationVerifier:
             profiles = self.document.get("canary_profiles", [])
             if not isinstance(profiles, list) or len(profiles) > 32:
                 raise ValueError()
-            bases = [self.document["helper_image"], *[profile["runtime_image"] for profile in profiles]]
+            bases = [
+                self.document["helper_image"],
+                *[profile["runtime_image"] for profile in profiles],
+            ]
             origins = set()
             for base in bases:
                 origins.update(
@@ -1549,7 +2010,13 @@ class InstallationVerifier:
             if len(targets) > 32:
                 raise ProbeError("registry_probe_targets_exceeded")
         return [
-            {"name": f"registry-{index}", "host": host, "port": port, "expected": "allowed", "protocol": "tcp"}
+            {
+                "name": f"registry-{index}",
+                "host": host,
+                "port": port,
+                "expected": "allowed",
+                "protocol": "tcp",
+            }
             for index, (host, port) in enumerate(sorted(targets))
         ]
 
@@ -1565,7 +2032,9 @@ class InstallationVerifier:
         command += ["--platform", self.document["platform"]]
 
         def run(args):
-            result = subprocess.run(command + args, capture_output=True, text=True, timeout=180, check=False)
+            result = subprocess.run(
+                command + args, capture_output=True, text=True, timeout=180, check=False
+            )
             if result.returncode:
                 raise ProbeError("registry_probe_failed")
             return result.stdout.strip()
@@ -1581,12 +2050,16 @@ class InstallationVerifier:
         return self._proof(canary, digest=expected)
 
     def publish(self, report):
-        cm = self.api.get("configmap", "runtime-deployment-descriptor", namespace=self.api.control)
+        cm = self.api.get(
+            "configmap", "runtime-deployment-descriptor", namespace=self.api.control
+        )
         document = json.loads(cm["data"]["descriptor.json"])
         if descriptor_digest(document) != report["descriptor_digest"]:
             raise ProbeError("descriptor_changed_during_probe")
         document["probe_report"] = report
-        cm["data"]["descriptor.json"] = json.dumps(document, sort_keys=True, separators=(",", ":"))
+        cm["data"]["descriptor.json"] = json.dumps(
+            document, sort_keys=True, separators=(",", ":")
+        )
         self.api.call(["replace", "-f", "-"], document=cm)
 
 
@@ -1606,8 +2079,12 @@ def main(argv=None):
         parser.error("--cleanup-expired is a separate recovery operation")
     if args.write_report and not args.live:
         parser.error("--write-report requires --live")
-    if args.repeat_seconds and (not args.live or not args.write_report or args.repeat_seconds != 21600):
-        parser.error("periodic refresh requires --live --write-report --repeat-seconds 21600")
+    if args.repeat_seconds and (
+        not args.live or not args.write_report or args.repeat_seconds != 21600
+    ):
+        parser.error(
+            "periodic refresh requires --live --write-report --repeat-seconds 21600"
+        )
     options = json.loads(args.probe_plan.read_text())
     api = Kubectl(
         context=args.context,
@@ -1634,20 +2111,27 @@ def main(argv=None):
                 "failures": failures,
                 "observed_at": time.time(),
                 "descriptor_digest": descriptor_digest(verifier.document),
-                "checks": [{"name": name, "ok": False, **summary, "evidence": {}} for name in sorted(REQUIRED_CHECKS)],
+                "checks": [
+                    {"name": name, "ok": False, **summary, "evidence": {}}
+                    for name in sorted(REQUIRED_CHECKS)
+                ],
             }
             if args.write_report:
                 try:
                     verifier.publish(report)
                 except Exception as publish_error:
-                    report["failures"].append({"phase": "publish", **safe_failure(publish_error)})
+                    report["failures"].append(
+                        {"phase": "publish", **safe_failure(publish_error)}
+                    )
             log_failures(report["failures"])
             print(json.dumps(report, sort_keys=True), flush=True)
             return 1
         if args.write_report:
             verifier.publish(report)
         print(json.dumps(report, sort_keys=True), flush=True)
-        if not all(row["ok"] for row in report["checks"] if row["name"] in REQUIRED_CHECKS):
+        if not all(
+            row["ok"] for row in report["checks"] if row["name"] in REQUIRED_CHECKS
+        ):
             return 1
         if not args.repeat_seconds:
             return 0

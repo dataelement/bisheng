@@ -95,6 +95,8 @@
 
 ### D8：namespace 内运行权限与安装权限分开
 
+**资源拒绝诊断修正（2026-11-06 / R3）**：配额已由部署端治理，产品负责保留可行动的拒绝原因。选择从明确的 Kubernetes Forbidden/`exceeded quota` 响应提取资源数量白名单（6.2），不透传原 API 错误或笼统把403认作容量不足；这样可覆盖原生与 KubeSphere 包装，同时保留认证/准入错误的独立语义。新集群若返回不同格式，先增加可核验样例与负例再扩展解析，不以放宽原文输出代替适配。
+
 - **备选**：manager cluster-admin；manager 动态部署自己的 RBAC/准入；安装者管理集群基线，manager 只操作预置运行命名空间。
 - **选定**：第三种。安装者供应 Namespace、PV/StorageClass、PSA、WebhookConfiguration、Role/RoleBinding 及只读部署描述；运行时不改变它们。K8s 1.28 使用稳定的 validating webhook，不以 CEL 新特性为前置。
 - **原因**：可以创建 Pod 仍是强权限，不能因“没有 root/socket”判断其权限小。独立的无集群身份准入进程限定 manager 的可创建资源；宿主盘目录创建由安装者完成，不交给 manager。
@@ -347,6 +349,8 @@ CREATE兼容仅接受API正常默认的Pending及按正常/init容器资源计�
 
 应用主容器 requests/limits 等于冻结档位；data-helper 等平台开销单列预占，不从用户主容器额度暗扣。设置 namespace ResourceQuota、LimitRange 和并发上限；镜像、材料、准入和卷错误不归类容量。无法满足拓扑/配额/资源的调度失败按 AC-08 分阶段处理。
 
+配额拒绝须保留到既有操作失败事实与发布失败五元组；明确的 quota 拒绝使用容量类错误，普通403保持普通 API 拒绝。该归因修正不增加排队、扩额、自动重试或新的资源预约规则。
+
 | 初始执行参数（拟定默认值） | 值 / 用途 |
 | --- | --- |
 | heartbeat / reconcile | 10 秒 / 15 秒；控制器租约 30 秒，每 10 秒续约 |
@@ -421,6 +425,7 @@ Docker诊断通过既有 `PlatformClient.node_snapshot()` 读取权威capacity�
 | manager 重启时旧 holder 租约未到期，正常 409 不属于业务失败 | 错误进入业务失败清理并在自然交接后杀掉原在途安装 | `operations.py` 在 claim/执行及业务失败处理前取得 controller；T272/T273 与 R32 同 UID/CID 续办实证 |
 | CI 并发锁若按 ref 分组，而发布标签只按版本产生 | 不同入口同时发布同一版本，存在性检查不能阻止检查后覆盖竞争 | `.github/workflows/runtime-images.yml` 按 `inputs.version || github.ref_name` 分组；仅约束此仓库工作流，仓库外写入仍需权限/不可变策略 |
 | v2预检容量拒绝为16125而legacy为16226 | CLI若只登记legacy码将容量不足显示为未知错误并exit19 | `bisheng_cli/errors.py`两码映射既有EXIT_CAPACITY；实际分发wheel及manifest已同步，T264/T265已实现 |
+| 原生或 KubeSphere 的配额拒绝都是403，但403也可能表示RBAC或其它准入拒绝 | 丢失配额原因会误报依赖构建失败；只按403归因又会误导权限故障 | `k8s_quota_diagnostics.py`仅从明确 Status/Forbidden 配额数量提取；`operations.py`、backend失败事实与CLI保留同一安全原因，R3跨层合同测试验证 |
 | 原 Protocol 是 Docker API 形状，目录逻辑散落在多个模块 | 加 K8s 文件后仍然访问 manager 本机路径或 Docker | 新 `executors/`；原 operations/preparer/data API 统一依赖能力接口 |
 | RWO 是单节点挂载，不是单 Pod 或进程写锁 | 同节点新旧应用或维护并发写生产库 | `executors/kubernetes.py`、资源账本、停止确认及固定生产位置准入 |
 | ClusterIP 不能默认由集群外平台主机访问 | 平台与 Pod 均健康，发布唤醒/应用访问却超时 | 安装 values 的共享 entry/control 私网接入及端到端连通性探测 |
@@ -489,7 +494,9 @@ class RuntimeExecutor(Protocol):
 | `RuntimeTransfer` 扩展 | authorization_kind、authorization_id | 历史 authorization_id 暂可为 NULL，独立运维回填 operation/id；新旧 ORM 插入默认沿 operation_id 生成授权范围。复合唯一约束改为授权范围＋材料＋动作；deployment-init 不再强制检查 completed 操作；原 operation 分支保持终态拒绝 |
 | `RuntimeAssignment` 扩展 | data_operation_id | 在同一应用行锁下持久互斥；数据会话不占用 serving active_operation_id、generation 和路由 |
 | `RuntimeOperation` 内部扩展 | kind=data、request_id、action/parameters_digest、actor_ref、target_exec_ref/UID、deadline、result/cleanup 状态 | 原业务 Service 授权创建；每应用数据/维护互斥，不改 serving 代次，不向 CLI 暴露新业务动作 |
-| 操作事实 detail 扩展 | resource_ref、UID/namespace、镜像身份、stopped 证据、failure stage | 通过已鉴权 manager 提交；不接收业务容器自报成功 |
+| 操作事实 detail 扩展 | resource_ref、UID/namespace、镜像身份、stopped 证据、failure stage；`reason=k8s_quota_exceeded` 与受限 `quota` 资源数量 | 通过已鉴权 manager 提交；不接收业务容器自报成功，不保存原始配额 API 响应 |
+
+**R3 配额诊断字段**：`quota` 为资源键到 `{requested, used, limit}` 的映射；只允许 CPU、内存、Pod/PVC数量及请求存储的固定资源键，值为最长32字符的非负 Kubernetes Quantity 字符串。manager只在HTTP403、JSON Status/Forbidden且明确匹配`exceeded quota`及三组有效数量时产生该原因；名称、路径、头、任意message和其它字段全部丢弃。backend事实入库及公开投影再次过滤，终态清理重试保留原始quota和失败原因，日志保留期限与停止证明保持。准备阶段映射既有16226，其它操作映射既有16125；CLI两者使用EXIT_CAPACITY=14，展示数量与平台管理员处理提示。无已创建Pod的配额拒绝不伪造运行日志，不引导修改依赖文件。
 
 节点心跳兼容扩展executor_kind/capabilities/probe_report，node plan返回控制器快照；K8s facts的detail.controller必须匹配当前holder/epoch及未过期租约。ready引用同操作/代次的Pod/Service UID，目标等于受限observed_state；stopped必须账本停止证据，事实/终态/容量释放在同一SQL事务。硬前置失效阻断入口和新建，仍可取清理租约；状态/绑定保护断档不可事后抹除。
 
@@ -849,3 +856,5 @@ T242–T245已实现并本地L1通过，源6f254f337（backend992905292、runtim
 2026-10-23 在途重启控制器准入（T272/T273）：189单次SIGKILL后的新进程在旧holder租约尚未到期时收到正常409/controller_lease_held；该异常错误进入业务_failure，错误处理跨到自然到期后取得新epoch并清理原安装。真实双执行器与后端Service最小复现已区分于模板/epoch资源复用问题。按4.6既有续办合同，在operation claim/执行和业务失败处理之前核当前K8s控制器租约；拒绝当前动作，原操作/阶段事实/资源和deadline保持，下一轮正常对账再试。不放宽后端围栏，不改Docker、冻结模板、原失败记录或截止时间；本地4行准入门及定向配对/独立L1已完成；189 R32同在途prepare经一次SIGKILL/controller30→31、原安装同UID/CID自然240秒完成、原deadline/阶段结果保持、资源自然清理已通过；见fault-upgrade的R32定向证据。
 
 2026-10-23 开发整合修订：刷新 R32/268-of-272 当前快照、owner 数据与初始化实证；已知坑同步控制器交接与 CI 发布锁。按用户先开发收尾合并并推送的授权执行，未改变规格、存储/安全合同或未验事项。
+
+2026-11-06 R3：修正既有AC-08/09配额故障归因的实现快照，补齐Forbidden白名单数量→manager终态事实→backend持久化/发布五元组→CLI容量提示。原生、KubeSphere包装、普通403、非法数量、终态清理重试及跨层合同测试通过；CLI兼容补丁版3.0.0.post3的wheel/manifest同步，干净venv及新登录shell验收通过。此处记录代码与分发产物验证，不代表镜像已更新或线上已部署。

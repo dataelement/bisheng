@@ -127,6 +127,27 @@ def test_full_image_has_no_code_materialization_and_can_use_image_entrypoint(pla
     assert not any(v["name"] in {"code", "environment"} for v in app["volumeMounts"])
 
 
+def test_image_check_matches_core_v1_omitempty_without_empty_init_containers(plan):
+    from runtime_manager.k8s_templates import pod_template
+
+    spec = pod_template(
+        replace(
+            plan,
+            purpose="image-check",
+            image=plan.helper_image,
+            mode="image",
+            command=("python", "-I", "-m", "runtime_manager.image_check"),
+            deadline_seconds=60,
+            pvc_name="",
+            material_secret="",
+            env={},
+        )
+    )["spec"]
+    assert "initContainers" not in spec
+    assert [c["name"] for c in spec["containers"]] == ["image-check"]
+    assert spec["activeDeadlineSeconds"] == 60
+
+
 def test_service_is_internal_and_selects_the_exact_resource(plan):
     from runtime_manager.k8s_templates import service_template
 
