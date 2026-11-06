@@ -4565,6 +4565,22 @@
   **配对测试**：T575\
   **验证 / 完成条件**：定向与主组合通过，真实MySQL/DM8竞争另验。
 
+- [ ] **T577 · 旧启动能力环境夹具补真实身份和空来源**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/app_runtime/test_capability_env_injection.py`\
+  **逻辑 / 测试上下文**：固定旧2a4基线同4失败，显式legacy v1、真实原身份/Session及合法空SourceSet/rootGuard，保provider版本、环境优先级、失败拒绝和零deploy断言，不改生产guard。\
+  **依赖**：T445, T050\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：旧基线同失败集归因明确，新fixture独立复查及相同argv主组合通过。
+
+- [ ] **T578 · 旧应用凭据测试明确legacy及Session隔离**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/app_publish/test_app_credential.py`\
+  **逻辑 / 测试上下文**：固定旧2a4基线同21失败，显式legacy v1并注入实际preview异步及guard同步Session；保真实issuer/validate_bearer、prefix、撤销缓存、停用恢复与租户所有断言，不改生产代码。\
+  **依赖**：T052\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
+  **验证 / 完成条件**：旧基线同失败集归因明确，新fixture独立复查及相同argv主组合通过。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
