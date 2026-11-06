@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | W0/W1、W2及W3运行准入已合流，完整特性仍在开发 | 248 / 421 项；独立复查/组合测试见[W3记录](./wave3-implementation-review.md)，未运行迁移 |
+| 实现 | W0/W1、W2及W3运行准入已合流，完整特性仍在开发 | 250 / 512 项；W4来源合同先冻结、按依赖实施中；独立复查/组合测试见[W3记录](./wave3-implementation-review.md)，未运行迁移 |
 
 ## 领取与执行规则
 
@@ -240,16 +240,16 @@
 
 - [ ] **T029 · 应用声明名称到真实目标合同：先写测试**
   **类型 / Owner**：测试 / APP\
-  **写入文件**：`src/backend/test/knowledge_unification/test_app_resolve.py`（拟新增）\
-  **逻辑 / 测试上下文**：同名歧义拒绝，唯一名称解析与运行一致；历史 manifest 不修改；无法解析旧目标不得猜 ID 标为存量失效；冻结后名称重新指向另一ID时运行/预览失败，不调用未绑定目标。\
-  **依赖**：T016, T026, T258\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_resolve.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：同名歧义拒绝，唯一名称解析与运行一致；历史 manifest 不修改；无法解析旧目标不得猜 ID 标为存量失效；冻结后名称重新指向另一ID时运行/预览失败，不调用未绑定目标。\
+  **依赖**：T016, T026, T258, T422\
   **覆盖 AC**: AC-37, AC-68, AC-71, AC-87, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
 - [ ] **T030 · 应用声明名称到真实目标合同**
   **类型 / Owner**：后端 Domain / APP\
-  **写入文件**：`src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`；`src/backend/bisheng/app_publish/domain/services/reference_extractor.py`（拟新增）\
-  **逻辑 / 测试上下文**：复用运行 name/id 解析，CapabilityModelRef name 与 knowledge name/id 均解析真实稳定 ID；歧义失败，冻结版本绑定依真实 ID，保留 manifest 原文；输出 B2；该版本解析真实ID随引用集合冻结，运行/预览必须逐槽匹配已登记ID，名字后续改名/重名不得漂移，解析不一致明确失败。\
+  **写入文件**：`src/backend/bisheng/app_publish/domain/services/reference_extractor.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：复用运行 name/id 解析，CapabilityModelRef name 与 knowledge name/id 均解析真实稳定 ID；歧义失败，冻结版本绑定依真实 ID，保留 manifest 原文；输出 B2；该版本解析真实ID随引用集合冻结，运行/预览必须逐槽匹配已登记ID，名字后续改名/重名不得漂移，解析不一致明确失败。\
   **依赖**：T029\
   **配对测试**：T029\
   **验证 / 完成条件**：运行配对测试 T029；验证本卡预期，相关范围检查通过。
@@ -384,96 +384,96 @@
 
 - [ ] **T047 · 不可变应用版本插入同事务：先写测试**
   **类型 / Owner**：测试 / APP\
-  **写入文件**：`src/backend/test/knowledge_unification/test_app_snapshot.py`（拟新增）\
-  **逻辑 / 测试上下文**：绑定错误版本行不落盘；历史管理预览版本保护；新版本只修新配置，旧绑定继续存在。\
-  **依赖**：T030, T018, T258\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_snapshot.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：绑定错误版本行不落盘；历史管理预览版本保护；新版本只修新配置，旧绑定继续存在。\
+  **依赖**：T439, T443, T512, T018, T258\
   **覆盖 AC**: AC-68, AC-71, AC-87, AC-88, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
 - [ ] **T048 · 不可变应用版本插入同事务**
   **类型 / Owner**：后端 Domain / APP\
   **写入文件**：`src/backend/bisheng/app_publish/domain/services/version_service.py`\
-  **逻辑 / 测试上下文**：_insert_version 建立 app/version 引用集合并同事务提交；新版本/复制/导入应用新配置拒绝非法目标；历史保存版本均计引用，不按 terminal/current 过滤，不改写 AppVersion 内容。\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：_insert_version 建立 app/version 引用集合并同事务提交；新版本/复制/导入应用新配置拒绝非法目标；历史保存版本均计引用，不按 terminal/current 过滤，不改写 AppVersion 内容。\
   **依赖**：T047\
   **配对测试**：T047\
   **验证 / 完成条件**：运行配对测试 T047；验证本卡预期，相关范围检查通过。
 
 - [ ] **T049 · 应用删除解除与历史预览失效：先写测试**
   **类型 / Owner**：测试 / APP\
-  **写入文件**：`src/backend/test/knowledge_unification/test_app_lifecycle.py`（拟新增）\
-  **逻辑 / 测试上下文**：停止不解除，真正删除才解除；旧历史引用失效可见，预览失败不fallback，不因评测结果拦删除。\
-  **依赖**：T048, T258\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_lifecycle.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：停止不解除，真正删除才解除；旧历史引用失效可见，预览失败不fallback，不因评测结果拦删除。\
+  **依赖**：T048, T441\
   **覆盖 AC**: AC-71, AC-75, AC-88, AC-91, AC-92\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
 - [ ] **T050 · 应用删除解除与历史预览失效**
   **类型 / Owner**：后端 Domain / APP\
   **写入文件**：`src/backend/bisheng/app_runtime/domain/services/app_state_service.py`；`src/backend/bisheng/app_publish/domain/services/preview_instance_service.py`\
-  **逻辑 / 测试上下文**：沿现有应用删除生命周期解除被真正删除来源；停止应用不解除。预览/重新启用保留不可变历史并检测失效；不新增历史编辑/退役。\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：沿现有应用删除生命周期解除被真正删除来源；停止应用不解除。预览/重新启用保留不可变历史并检测失效；不新增历史编辑/退役。\
   **依赖**：T049\
   **配对测试**：T049\
   **验证 / 完成条件**：运行配对测试 T049；验证本卡预期，相关范围检查通过。
 
 - [ ] **T051 · 应用能力执行可见准入：先写测试**
   **类型 / Owner**：测试 / APP\
-  **写入文件**：`src/backend/test/knowledge_unification/test_app_entry.py`（拟新增）\
-  **逻辑 / 测试上下文**：仅可见主体可调用但超 capability/scope 拒绝；旧 manifest 不要求重新发布。\
-  **依赖**：T050, T026\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_entry.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：仅可见主体可调用但超 capability/scope 拒绝；旧 manifest 不要求重新发布。\
+  **依赖**：T050, T445, T026\
   **覆盖 AC**: AC-35, AC-68, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
 - [ ] **T052 · 应用能力执行可见准入**
   **类型 / Owner**：后端 Domain / APP\
   **写入文件**：`src/backend/bisheng/app_runtime/domain/services/entry_authz_service.py`\
-  **逻辑 / 测试上下文**：应用入口原 use 改 visible，能力执行仍保持 OBO/SAK/PAT、声明范围、子项权限；历史旧知识类型运行兼容。\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：应用入口原 use 改 visible，能力执行仍保持 OBO/SAK/PAT、声明范围、子项权限；历史旧知识类型运行兼容。\
   **依赖**：T051\
   **配对测试**：T051\
   **验证 / 完成条件**：运行配对测试 T051；验证本卡预期，相关范围检查通过。
 
 - [ ] **T053 · 频道配置来源维护：先写测试**
   **类型 / Owner**：测试 / CH\
-  **写入文件**：`src/backend/test/knowledge_unification/test_ch_bindings.py`（拟新增）\
-  **逻辑 / 测试上下文**：暂停依然有引用；删除同步目标/解散才解除；原调用自动清目标不得破坏失效槽，部分修复可保存。\
-  **依赖**：T018, T026, T258\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ch_bindings.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：暂停依然有引用；删除同步目标/解散才解除；原调用自动清目标不得破坏失效槽，部分修复可保存。\
+  **依赖**：T018, T026, T258, T453\
   **覆盖 AC**: AC-71, AC-87, AC-88, AC-91, AC-92\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
 - [ ] **T054 · 频道配置来源维护**
   **类型 / Owner**：后端 Domain / CH\
-  **写入文件**：`src/backend/bisheng/channel/domain/services/channel_service.py`；`src/backend/bisheng/channel/domain/models/channel_knowledge_sync.py`\
-  **逻辑 / 测试上下文**：_save/_load_knowledge_sync/dismiss_channel 同事务绑定，使用稳定频道配置来源键不依赖重建 sync 行 ID；关闭保留，解除/解散移除；强删不自动清配置。\
+  **写入文件**：`src/backend/bisheng/channel/domain/services/channel_service.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：_save/_load_knowledge_sync/dismiss_channel 同事务绑定，使用稳定频道配置来源键不依赖重建 sync 行 ID；关闭保留，解除/解散移除；强删不自动清配置。\
   **依赖**：T053\
   **配对测试**：T053\
   **验证 / 完成条件**：运行配对测试 T053；验证本卡预期，相关范围检查通过。
 
 - [ ] **T055 · 租户/Root 默认槽位绑定：先写测试**
   **类型 / Owner**：测试 / LLM\
-  **写入文件**：`src/backend/test/knowledge_unification/test_llm_defaults.py`（拟新增）\
-  **逻辑 / 测试上下文**：五类业务默认全部覆盖；共享模型跨租户有真实原始来源，替换只改本槽；绑定失败不保存默认。\
-  **依赖**：T018, T258\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_defaults.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：五类业务默认全部覆盖；共享模型跨租户有真实原始来源，替换只改本槽；绑定失败不保存默认。\
+  **依赖**：T018, T258, T467\
   **覆盖 AC**: AC-71, AC-74, AC-87, AC-88, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
 - [ ] **T056 · 租户/Root 默认槽位绑定**
   **类型 / Owner**：后端 Domain / LLM\
-  **写入文件**：`src/backend/bisheng/llm/domain/services/default_reference_extractor.py`（拟新增）；`src/backend/bisheng/llm/domain/services/llm.py`\
-  **逻辑 / 测试上下文**：覆盖 knowledge/assistant/workflow/evaluation/workbench 默认保存，原始 Root 槽位及租户 override 同事务；继承消费者不复制绑定，不把评测任务当来源。暂不接删除服务逻辑。\
+  **写入文件**：`src/backend/bisheng/llm/application/model_default.py`；`src/backend/bisheng/llm/domain/services/llm.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：覆盖 knowledge/assistant/workflow/evaluation/workbench 默认保存，原始 Root 槽位及租户 override 同事务；继承消费者不复制绑定，不把评测任务当来源。暂不接删除服务逻辑。\
   **依赖**：T055\
   **配对测试**：T055\
   **验证 / 完成条件**：运行配对测试 T055；验证本卡预期，相关范围检查通过。
 
 - [ ] **T057 · 恢复默认继承入口：先写测试**
   **类型 / Owner**：测试 / LLM\
-  **写入文件**：`src/backend/test/knowledge_unification/test_llm_inherit.py`（拟新增）\
-  **逻辑 / 测试上下文**：恢复继承不删 Root/其他租户默认；默认与绑定故障同回滚。\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_inherit.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：恢复继承不删 Root/其他租户默认；默认与绑定故障同回滚。\
   **依赖**：T056\
   **覆盖 AC**: AC-71, AC-87, AC-88\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
 - [ ] **T058 · 恢复默认继承入口**
   **类型 / Owner**：后端 Domain / LLM\
-  **写入文件**：`src/backend/bisheng/llm/api/router.py`\
-  **逻辑 / 测试上下文**：恢复继承经 LLM 应用服务只解除该租户 override，恢复有效默认解析；Endpoint 不查 ORM/不单独写引用，事务由服务持有。\
+  **写入文件**：`src/backend/bisheng/llm/application/model_default.py`；`src/backend/bisheng/llm/api/router.py`\
+  **逻辑 / 测试上下文**：W4按真实入口核对；拆出额外叶子见新卡，不扩大旧卡：恢复继承经 LLM 应用服务只解除该租户 override，恢复有效默认解析；Endpoint 不查 ORM/不单独写引用，事务由服务持有。\
   **依赖**：T057\
   **配对测试**：T057\
   **验证 / 完成条件**：运行配对测试 T057；验证本卡预期，相关范围检查通过。
@@ -3331,6 +3331,728 @@
   **覆盖 AC**: AC-68, AC-79, AC-83, AC-91\
   **验证 / 完成条件**：固定基线归因、14项绿、主agent复核单叶diff与最终组合，真实服务/E2E单列。
 
+- [x] **T422 · W4四类来源及跨域接口合同冻结**
+  **类型 / Owner**：文档 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/business-sources-contract.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/contracts.md`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T391\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [x] **T423 · W4依赖与唯一叶子登记**
+  **类型 / Owner**：文档 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/tasks.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/parallel-development.md`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T424 · 原生同步scope与当前读红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_source_read_native.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T425 · 原生同步scope私有发行及target-plan**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/source_verification.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T424\
+  **配对测试**：T424\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T426 · 原生同步索引及完整来源Runtime**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/resource_reference/domain/repositories/source_read_repository.py`；`src/backend/bisheng/resource_reference/application/source_read.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T425\
+  **配对测试**：T424\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T427 · 原生同步冻结legacy证据红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_source_read_native_legacy.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T426\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T428 · 原生同步来源legacy Reader**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/application/reference_read_legacy_evidence.py`；`src/backend/bisheng/knowledge/domain/repositories/reference_read_legacy_evidence_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T427\
+  **配对测试**：T427\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T429 · 原生同步共享关系transport红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_openfga_native_shared_query.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T430 · pinned FGA原生同步窄关系查询**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/core/openfga/client.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T429\
+  **配对测试**：T429\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T431 · READY同步关系应用边界红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_permission_native_relation.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T430\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T432 · 同步窄共享关系唯一应用Port**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/permission/application/relation_api.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T431\
+  **配对测试**：T431\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T433 · 默认与多空间混合root原子准备红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ref_mixed_sources.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T434 · 混合来源变更值合同**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/contracts.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T433\
+  **配对测试**：T433\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T435 · 同tenant默认及空间混合root准备**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/resource_reference/application/target_verification.py`；`src/backend/bisheng/resource_reference/application/write_runtime.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T434\
+  **配对测试**：T433\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T436 · 应用版本与凭据事实外部事务红测**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T437 · 应用真实根版本和凭据Repository**
+  **类型 / Owner**：实现 / APP\
+  **写入文件**：`src/backend/bisheng/app_publish/domain/repositories/reference_source_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T436\
+  **配对测试**：T436\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T438 · APP同Session解析及完整名称计划红测**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_resolution.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T030, T437, T477\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T439 · APP模型知识真实ID冻结解析**
+  **类型 / Owner**：实现 / APP\
+  **写入文件**：`src/backend/bisheng/app_publish/application/reference_resolution.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T438\
+  **配对测试**：T438\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T440 · 应用真实来源及原principal红测**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_source_owner.py`；`src/backend/test/knowledge_unification/test_app_read_identity.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T439\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T441 · 应用来源Owner与原principal身份适配**
+  **类型 / Owner**：实现 / APP\
+  **写入文件**：`src/backend/bisheng/app_publish/application/reference_source_owner.py`；`src/backend/bisheng/app_publish/application/reference_read_identity.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T440\
+  **配对测试**：T440\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T442 · APP专属实际authority装配红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_reference_composition.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T441, T377, T379\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T443 · APP只读显式access和生产装配**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/app_publish/application/reference_access.py`；`src/backend/bisheng/app_publish/composition.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T442\
+  **配对测试**：T442\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T444 · APP能力总线完整来源准入红测**
+  **类型 / Owner**：测试 / APP\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_model_binding.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T443, T048\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T445 · APP能力总线按冻结版本准入**
+  **类型 / Owner**：实现 / APP\
+  **写入文件**：`src/backend/bisheng/app_publish/domain/services/capability_bus_service.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T444\
+  **配对测试**：T444\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T446 · 实际provider实例化前冻结ID红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_gateway_binding.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T445\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T447 · 模型gateway与range最终ID核验**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/open_api/domain/services/model_gateway_service.py`；`src/backend/bisheng/open_api/domain/services/model_range_policy.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T446\
+  **配对测试**：T446\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T448 · 托管知识调用透传原principal红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_filelib_identity.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T445\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T449 · 托管知识入口原principal接线**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/api/v1/endpoints/filelib.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T448\
+  **配对测试**：T448\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T450 · 频道稳定语义槽提取红测**
+  **类型 / Owner**：测试 / CH\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ch_extractor.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T451 · 频道真实配置稳定槽提取器**
+  **类型 / Owner**：实现 / CH\
+  **写入文件**：`src/backend/bisheng/channel/domain/services/reference_extractor.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T450\
+  **配对测试**：T450\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T452 · 频道外部事务及无tenant子表红测**
+  **类型 / Owner**：测试 / CH\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ch_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T451\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T453 · 频道根及完整同步配置Repository**
+  **类型 / Owner**：实现 / CH\
+  **写入文件**：`src/backend/bisheng/channel/domain/repositories/reference_binding_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T452\
+  **配对测试**：T452\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T454 · 频道真实source锁后重授权红测**
+  **类型 / Owner**：测试 / CH\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ch_source_owner.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T453, T054\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T455 · 频道SourceOwner和列投影**
+  **类型 / Owner**：实现 / CH\
+  **写入文件**：`src/backend/bisheng/channel/application/reference_source_owner.py`；`src/backend/bisheng/channel/domain/repositories/reference_source_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T454\
+  **配对测试**：T454\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T456 · 频道自动化真实当前身份红测**
+  **类型 / Owner**：测试 / CH\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ch_automation_identity.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T457 · 频道域恢复真实自动化身份**
+  **类型 / Owner**：实现 / CH\
+  **写入文件**：`src/backend/bisheng/channel/application/automation_identity.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T456\
+  **配对测试**：T456\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T458 · 频道完整来源执行前准入红测**
+  **类型 / Owner**：测试 / CH\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ch_execution_admission.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T455, T457\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T459 · 频道自动delivery准入facade**
+  **类型 / Owner**：实现 / CH\
+  **写入文件**：`src/backend/bisheng/channel/application/execution_admission.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T458\
+  **配对测试**：T458\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T460 · 实际派发旧UUID及拒绝零副作用红测**
+  **类型 / Owner**：测试 / CH\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ch_delivery_admission.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T459\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T461 · 频道delivery及worker实际接线**
+  **类型 / Owner**：实现 / CH\
+  **写入文件**：`src/backend/bisheng/channel/domain/services/information_knowledge_delivery_service.py`；`src/backend/bisheng/worker/information/knowledge_delivery.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T460\
+  **配对测试**：T460\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T462 · 频道失效原选择项展示红测**
+  **类型 / Owner**：测试 / CH\
+  **写入文件**：`src/backend/test/knowledge_unification/test_ch_reference_view.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T455\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T463 · 频道完整失效原ID及裁剪状态**
+  **类型 / Owner**：实现 / CH\
+  **写入文件**：`src/backend/bisheng/channel/domain/schemas/channel_manager_schema.py`；`src/backend/bisheng/channel/domain/services/channel_service.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T462, T054\
+  **配对测试**：T462\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T464 · 真实五key默认模型槽红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_default_extractor.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T465 · 五key实际默认槽提取器**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/services/default_reference_extractor.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T464\
+  **配对测试**：T464\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T466 · 默认own原始与真实继承SQL红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_default_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T465\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T467 · 默认模型外部事务Repository**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/repositories/model_default_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T466\
+  **配对测试**：T466\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T468 · 默认原ambient及SourceOwner红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_default_source.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T467\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T469 · 默认模型双模式身份与Owner**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/application/model_default_read_identity.py`；`src/backend/bisheng/llm/application/model_default_source_owner.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T468\
+  **配对测试**：T468\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T470 · 原生同步真实Model目标红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_model_default_native_target.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T426, T432\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T471 · Model只读Owner原生同步适配**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/application/source_read_target_owner.py`；`src/backend/bisheng/llm/domain/repositories/source_read_target_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T470\
+  **配对测试**：T470\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T472 · 默认全源严格双模式读取红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_default_read.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T469, T471, T428\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T473 · 默认原始与执行读取facade**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/application/model_default_read.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T472\
+  **配对测试**：T472\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T474 · 混合来源MODEL物理预锁红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_model_mixed_source_locks.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T435\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T475 · MODEL混合root纯物理预锁**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/application/reference_target_owner.py`；`src/backend/bisheng/llm/domain/repositories/reference_target_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T474\
+  **配对测试**：T474\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T476 · APP同Session完整名称计划红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_model_name_resolution.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T477 · LLM唯一uncached名称计划Port**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/application/model_name_resolution.py`；`src/backend/bisheng/llm/domain/repositories/model_name_resolution_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T476\
+  **配对测试**：T476\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T478 · 默认实际消费不回退原ID红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_llm_default_consumers.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T473, T056\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T479 · LLM默认管理与运行消费者接线**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/domain/services/llm.py`；`src/backend/bisheng/llm/api/router.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T478, T058\
+  **配对测试**：T478\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T480 · 工作台默认与空间模型全事务联动红测**
+  **类型 / Owner**：测试 / LLM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_workbench_reference_atomicity.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T475, T489, T056\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T481 · 工作台默认统一知识业务联动**
+  **类型 / Owner**：实现 / LLM\
+  **写入文件**：`src/backend/bisheng/llm/application/model_default.py`；`src/backend/bisheng/llm/domain/services/llm.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T480, T479\
+  **配对测试**：T480\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T482 · 空间QA实际及阶段模型槽红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_model_extractor.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T483 · 空间QA模型业务槽提取**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/model_reference_extractor.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T482\
+  **配对测试**：T482\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T484 · 知识模型外部事务Repository红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_reference_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T483\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T485 · 知识模型配置原子存储**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/model_reference_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T484\
+  **配对测试**：T484\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T486 · 知识模型来源唯一写口红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_model_bindings.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T485, T435\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T487 · 知识模型来源创建变更应用用例**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/application/model_reference.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T486\
+  **配对测试**：T486\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T488 · 完整空间清单及默认联动计划红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_workbench_model_batch.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T487, T475\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T489 · 知识空间完整清单批量模型计划**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/application/model_reference.py`；`src/backend/bisheng/knowledge/domain/repositories/model_reference_repository.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T488\
+  **配对测试**：T488\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T490 · 旧库QA空间创建同事务来源红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_model_creation.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T487\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T491 · 真实知识创建接入模型来源**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T490\
+  **配对测试**：T490\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T492 · 旧embedding更新及清空出向来源红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_model_mutation.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T491\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T493 · QA旧库embedding及删除来源接线**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`；`src/backend/bisheng/knowledge/api/endpoints/knowledge.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T492\
+  **配对测试**：T492\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T494 · 空间模型出向删除及保频道失效红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_space_reference_lifecycle.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T493, T054\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T495 · 空间模型来源及移除自动清频道**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T494\
+  **配对测试**：T494\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T496 · 知识完整模型双模式读取红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_model_source.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T487, T426, T471, T428\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T497 · Knowledge模型SourceOwner与身份**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/application/reference_source_owner.py`；`src/backend/bisheng/knowledge/application/reference_read_identity.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T496\
+  **配对测试**：T496\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T498 · Knowledge模型执行读取facade**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/application/model_reference_read.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T497\
+  **配对测试**：T496\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T499 · 实际RAG消费模型原配置准入红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_rag_model_admission.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T498\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T500 · 知识RAG原生模型来源准入**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/knowledge_rag.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T499\
+  **配对测试**：T499\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T501 · 模型任务从业务配置及过期拒绝红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_worker_model_source.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T498, T493\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T502 · 旧重建worker读取业务模型并finalize**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/worker/knowledge/rebuild_knowledge_worker.py`；`src/backend/bisheng/worker/knowledge/qa.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T501\
+  **配对测试**：T501\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T503 · API启动不得在线转换默认JSON红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_default_startup_migration_boundary.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T504 · 取消默认配置在线自动转换**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/main.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T503\
+  **配对测试**：T503\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T505 · 四类来源真实生产装配红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_business_sources_composition.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T455, T498, T443, T473\
+  **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-86, AC-87, AC-88, AC-89, AC-91, AC-92\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T506 · 完整来源API与worker实际装配**
+  **类型 / Owner**：实现 / INT\
+  **写入文件**：`src/backend/bisheng/resource_reference/read_composition.py`；`src/backend/bisheng/resource_reference/composition.py`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T505\
+  **配对测试**：T505\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T507 · W4真实来源合同和设计同步**
+  **类型 / Owner**：文档 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/business-sources-contract.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/design.md`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T506, T502, T481, T050, T052, T447, T449, T461, T463\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T508 · W4任务及并行交付同步**
+  **类型 / Owner**：文档 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/tasks.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/parallel-development.md`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T507\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T509 · W4升级及导航同步**
+  **类型 / Owner**：文档 / INT\
+  **写入文件**：`features/v3.1.0-beta1/118-knowledge-space-unification/upgrade-guide.md`；`features/v3.1.0-beta1/118-knowledge-space-unification/README.md`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T508, T504\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T510 · W4 HTML与固定提交验证**
+  **类型 / Owner**：文档 / INT\
+  **写入文件**：`docs/architecture/review/2026-11-03-bisheng-knowledge-unification-technical-review.html`；`features/v3.1.0-beta1/118-knowledge-space-unification/wave4-implementation-review.md`\
+  **逻辑 / 测试上下文**：按W4业务来源合同，原身份/tenant不切换，外部Session及完整来源；固定红绿/复核/集成，未运行真实环境不声称完成。\
+  **依赖**：T509\
+  **验证 / 完成条件**：实际红绿或无行为接口核验、固定提交独立复核及主集成；未做迁移/真实环境验收不得标通过。
+
+- [ ] **T511 · 版本写原冻结凭据上下文红测**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_app_runtime_authorization_context.py`\
+  **逻辑 / 测试上下文**：保既有真实credential_ref恢复语义，原yield身份贯穿外部事务；失效凭据拒，退出还原Context，不按owner ID造人。\
+  **依赖**：T422\
+  **覆盖 AC**: AC-68, AC-79, AC-83, AC-87, AC-89\
+  **验证 / 完成条件**：实际红绿、固定SHA复核及组合；不是HTTP权限令牌或新actor框架。
+
+- [ ] **T512 · 导出原后台授权上下文薄Port**
+  **类型 / Owner**：后端 Application / INT\
+  **写入文件**：`src/backend/bisheng/app_runtime/application/runtime_authorization.py`\
+  **逻辑 / 测试上下文**：user_authorization_context(context,app,version_id)沿既有可信恢复manager；只导出不更改原授权/tenant/凭据规则。\
+  **依赖**：T511\
+  **配对测试**：T511\
+  **验证 / 完成条件**：真实上下文/失败/恢复测试及APP固定SHA消费者复核。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
@@ -3373,7 +4095,7 @@
 | AC-34 | T063, T071, T097, T123, T202, T204 |
 | AC-35 | T025, T051, T101, T123, T129, T131, T133, T141, T147, T149, T151, T196, T202, T204, T210, T220, T222, T226, T229, T265 |
 | AC-36 | T101, T202, T204, T222 |
-| AC-37 | T029, T037, T041, T045, T101, T129, T137, T169, T202, T203, T204, T222, T281, T282, T297, T315, T321, T329, T355, T359, T364, T366, T367, T369, T375, T380, T382 |
+| AC-37 | T029, T037, T041, T045, T101, T129, T137, T169, T202, T203, T204, T222, T281, T282, T297, T315, T321, T329, T355, T359, T364, T366, T367, T369, T375, T380, T382, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505 |
 | AC-38 | T059, T123, T207 |
 | AC-39 | T059, T069, T207, T233 |
 | AC-40 | T059, T069, T207 |
@@ -3404,10 +4126,10 @@
 | AC-65 | T093, T125, T196, T210, T228, T267 |
 | AC-66 | T069, T125, T131, T133, T151, T196, T210, T222, T226, T228, T229, T233, T265, T267 |
 | AC-67 | T101, T125, T131, T210, T228 |
-| AC-68 | T029, T037, T039, T041, T045, T047, T051, T125, T129, T131, T133, T137, T139, T147, T149, T151, T210, T222, T267, T281, T282, T284, T286, T294, T296, T297, T298, T305, T307, T309, T317, T321, T325, T331, T334, T353, T357, T359, T362, T364, T366, T367, T369, T375, T380, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421 |
+| AC-68 | T029, T037, T039, T041, T045, T047, T051, T125, T129, T131, T133, T137, T139, T147, T149, T151, T210, T222, T267, T281, T282, T284, T286, T294, T296, T297, T298, T305, T307, T309, T317, T321, T325, T331, T334, T353, T357, T359, T362, T364, T366, T367, T369, T375, T380, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511 |
 | AC-69 | T125, T133, T210 |
 | AC-70 | T093, T111, T113, T115, T119, T202, T209 |
-| AC-71 | T029, T031, T035, T037, T043, T045, T047, T049, T053, T055, T057, T093, T111, T139, T167, T202, T209, T276, T286, T319 |
+| AC-71 | T029, T031, T035, T037, T043, T045, T047, T049, T053, T055, T057, T093, T111, T139, T167, T202, T209, T276, T286, T319, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505 |
 | AC-72 | T013, T103, T111, T113, T117, T119, T202, T209 |
 | AC-73 | T111, T113, T115, T117, T119, T202, T209, T276, T319 |
 | AC-74 | T055, T093, T097, T109, T115, T202, T209, T276 |
@@ -3415,20 +4137,20 @@
 | AC-76 | T111, T113, T115, T117, T119, T202, T209, T229 |
 | AC-77 | T113, T115, T117, T119, T202, T209 |
 | AC-78 | T019, T021, T025, T027, T127, T135, T153, T155, T157, T202, T204, T215, T217, T224, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T273, T323 |
-| AC-79 | T023, T025, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T202, T204, T210, T222, T224, T226, T239, T240, T241, T242, T271, T282, T305, T307, T315, T323, T329, T337, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421 |
+| AC-79 | T023, T025, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T202, T204, T210, T222, T224, T226, T239, T240, T241, T242, T271, T282, T305, T307, T315, T323, T329, T337, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511 |
 | AC-80 | T019, T023, T027, T153, T157, T161, T169, T173, T202, T203, T204, T211, T215, T217, T228, T235, T239, T240, T241, T242, T249, T251, T263, T264, T269, T271, T272, T323 |
 | AC-81 | T019, T021, T023, T027, T135, T153, T157, T202, T203, T204, T211, T215, T217, T224, T228, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T323 |
 | AC-82 | T019, T025, T041, T051, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T155, T202, T204, T210, T222, T226, T239, T240, T241, T242 |
-| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210, T215, T217, T222, T224, T226, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T272, T273, T282, T315, T323, T329, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421 |
+| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210, T215, T217, T222, T224, T226, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T272, T273, T282, T315, T323, T329, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511 |
 | AC-84 | T081, T095, T109, T121, T202, T204, T220, T265 |
 | AC-85 | T075, T157, T159, T161, T173, T202, T203, T211 |
-| AC-86 | T061, T063, T065, T067, T073, T075, T097, T149, T202, T208 |
-| AC-87 | T013, T015, T029, T031, T033, T035, T039, T043, T045, T047, T053, T055, T057, T079, T091, T093, T095, T097, T109, T139, T167, T202, T209, T253, T256, T274, T276, T279, T284, T286, T290, T298, T300, T303, T305, T307, T309, T311, T315, T317, T325, T326, T329, T331, T334, T337, T346, T350, T353, T359, T371, T373, T380, T386, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419 |
-| AC-88 | T013, T015, T031, T033, T035, T037, T039, T043, T045, T047, T049, T053, T055, T057, T091, T093, T109, T167, T202, T209, T253, T256, T257, T274, T279, T284, T286, T290, T296, T298, T300, T303, T305, T307, T309, T311, T317, T325, T326, T331, T334, T337, T367 |
-| AC-89 | T013, T015, T017, T029, T033, T039, T047, T055, T093, T103, T111, T159, T167, T169, T171, T173, T202, T203, T209, T211, T228, T229, T253, T256, T257, T274, T276, T279, T281, T284, T286, T288, T290, T294, T300, T303, T309, T311, T317, T319, T321, T334, T337, T346, T348, T353, T362, T364, T371, T373, T375, T378, T380, T386, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419 |
+| AC-86 | T061, T063, T065, T067, T073, T075, T097, T149, T202, T208, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505 |
+| AC-87 | T013, T015, T029, T031, T033, T035, T039, T043, T045, T047, T053, T055, T057, T079, T091, T093, T095, T097, T109, T139, T167, T202, T209, T253, T256, T274, T276, T279, T284, T286, T290, T298, T300, T303, T305, T307, T309, T311, T315, T317, T325, T326, T329, T331, T334, T337, T346, T350, T353, T359, T371, T373, T380, T386, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511 |
+| AC-88 | T013, T015, T031, T033, T035, T037, T039, T043, T045, T047, T049, T053, T055, T057, T091, T093, T109, T167, T202, T209, T253, T256, T257, T274, T279, T284, T286, T290, T296, T298, T300, T303, T305, T307, T309, T311, T317, T325, T326, T331, T334, T337, T367, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505 |
+| AC-89 | T013, T015, T017, T029, T033, T039, T047, T055, T093, T103, T111, T159, T167, T169, T171, T173, T202, T203, T209, T211, T228, T229, T253, T256, T257, T274, T276, T279, T281, T284, T286, T288, T290, T294, T300, T303, T309, T311, T317, T319, T321, T334, T337, T346, T348, T353, T362, T364, T371, T373, T375, T378, T380, T386, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511 |
 | AC-90 | T017, T103, T109, T117, T119, T171, T202, T209, T229, T257, T279 |
-| AC-91 | T015, T017, T037, T039, T041, T045, T049, T053, T103, T109, T117, T129, T139, T141, T167, T202, T209, T253, T256, T257, T274, T279, T281, T282, T288, T294, T297, T309, T315, T321, T326, T329, T331, T346, T353, T355, T357, T359, T364, T366, T367, T369, T375, T378, T380, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421 |
-| AC-92 | T015, T037, T039, T045, T049, T053, T109, T117, T202, T209, T257, T279, T281, T294, T315, T329, T331, T364, T375, T380 |
+| AC-91 | T015, T017, T037, T039, T041, T045, T049, T053, T103, T109, T117, T129, T139, T141, T167, T202, T209, T253, T256, T257, T274, T279, T281, T282, T288, T294, T297, T309, T315, T321, T326, T329, T331, T346, T353, T355, T357, T359, T364, T366, T367, T369, T375, T378, T380, T382, T384, T392, T394, T395, T397, T399, T401, T403, T404, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505 |
+| AC-92 | T015, T037, T039, T045, T049, T053, T109, T117, T202, T209, T257, T279, T281, T294, T315, T329, T331, T364, T375, T380, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505 |
 | AC-93 | T017, T159, T161, T167, T169, T173, T202, T203, T209, T211, T288, T378 |
 | AC-94 | T085, T103, T105, T107, T202, T206, T209 |
 
@@ -3486,3 +4208,8 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 先冻结[执行/读取合同](./execution-read-contract.md)，WF/AS/REF独立lane并行，INT统一common、原身份与实际API/worker装配；后续评测与原R2 clone加固按显式交接独占叶子。固定SHA交叉复核后主agent合流。T041/T042/T283/T294/T295及T343–T421除T404/T405外完成，当前248/421项，本波较W2新增82项完成；签发ACL与其他未完成业务不勾选。
 
 受测源码0c2587dbe5ec93135e06a45ed7615253a6a46ef1，1199 passed、6 subtests passed（46个pytest路径），无fail/skip；Ruff/格式70文件通过，架构新增违规0且既有6条RULE-1/2条RULE-3已单列。红绿、等价fixture、任务级L1及限制见[W3集成记录](./wave3-implementation-review.md)。W1/W2验证为历史快照，不累计。主工作区保持原ac65c2fc5；无push/部署/迁移，真实双库/FGA/队列/检索/模型/浏览器E2E和CI均未运行。
+
+
+## W4剩余来源启动（2026-11-06）
+
+基线24481f0ca，421卡248done。三agent只读审计APP/CH/LLM，INT核KN；实际UUID、默认五keys、无tenant同步子表、原principal及真实自动化身份、原生sync和混合root锁序均先在[W4合同](./business-sources-contract.md)冻结。旧T029/T030、T047–T058保编号并按实际叶子补依赖，新增卡承接拆出的文件；不删spec AC，不将旧审批/删除/处理/UI/迁移等前置整体标完成。

@@ -146,3 +146,10 @@ WF/AS/TARGET固定提交由其他agent只读archive复查；主agent只合入已
 WF57c1b17ef、AS03ec42355（真实Target测试补98a23538e）、REF9dccf1ef7、PROOF871804492、EVAL6de5acd2e均经其他agent固定SHA独立复核；INT公共装配/common也经REF复核，状态切root补449ee813d。主agent按依赖正常merge，主工作区ac65c2fc5及其其他worktree保持不变；不宣称发版线远端最新。
 
 本波完成248/421项（较W2新增82项）；实际受测源码0c2587dbe5ec93135e06a45ed7615253a6a46ef1，1199 passed、6 subtests passed（46个pytest路径）。新增接缝保留红绿提交及等价fixture解释，T404/T405分享签发授权保未完成。最终独立复核、架构delta和真实环境限制见[W3集成记录](./wave3-implementation-review.md)；W1/W2统计保持历史语境，不累计测试次数。未推送、部署或运行数据迁移。
+
+
+## 11. W4剩余业务来源
+
+从24481f0ca延续，先三agent只读核APP/CH/LLM，INT核KN，再冻结[W4合同](./business-sources-contract.md)及T422–T512单叶卡。APP/CH/LLM从同一合同checkpoint建独立worktree，先独立extractor/Repository；INT先交原生REF sync、窄权限sync、mixed源核心及APP后台授权Port，LLM接真实Target/名称计划后APP再接；KN批业务前置就绪后LLM接全空间默认联动。每卡1–2叶，Owner热点串行，不在不同lane直接改同文件，不将fake装生产。INT独占KN及generic REF/权限/glue/composition/main/docs；LLM新增native Model read及mixed Model physical四个现有叶由INT显式交接，其他REF叶不转交。
+
+遵既有AC92全源strict，不增加subset授权；旧清失效ID/drop配置不沿用。旧worktree/主工作区保持，禁止repo-wide stash/reset/clean/pathlessrestore及checkout--theirs。固定提交由他人交叉复核后INT按依赖正常merge；无push/部署/真实迁移。
