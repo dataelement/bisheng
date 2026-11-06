@@ -54,8 +54,16 @@ function ProcessingDefaultsContent({
   const { t } = useTranslation("knowledge");
   const client = useQueryClient();
   const query = useKnowledgeProcessingSettings(scope, spaceId, api);
-  const key = JSON.stringify(knowledgeQueryKeys.settings(scope, spaceId));
-  const epoch = useMemo(() => ({ key, api }), [key, api]);
+  const { identityKey, tenantId, managementTenantId, view } = scope;
+  const queryKey = useMemo(
+    () =>
+      knowledgeQueryKeys.settings(
+        { identityKey, tenantId, managementTenantId, view },
+        spaceId,
+      ),
+    [identityKey, tenantId, managementTenantId, view, spaceId],
+  );
+  const epoch = useMemo(() => ({ queryKey, api }), [queryKey, api]);
   const current = useRef<typeof epoch | null>(epoch);
   current.current = epoch;
   const [loaded, setLoaded] = useState<{
@@ -106,8 +114,16 @@ function ProcessingDefaultsContent({
         });
     return () => {
       if (current.current === epoch) current.current = null;
+      // Retire an unobserved read so reopening cannot join its old promise.
+      // Another active reader still owns the shared request and its cache.
+      const retired = client
+        .getQueryCache()
+        .find({ queryKey: epoch.queryKey, exact: true });
+      if (retired?.getObserversCount() === 0) {
+        void client.cancelQueries({ queryKey: epoch.queryKey, exact: true });
+      }
     };
-  }, [epoch, refetch, canLoad]);
+  }, [epoch, refetch, canLoad, client]);
   const active = loaded?.epoch === epoch ? loaded : null;
   const pending = saving === epoch;
   const validation = active
