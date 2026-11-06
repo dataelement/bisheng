@@ -113,3 +113,35 @@ async def test_owner_rejects_unowned_space_and_parameter_model_is_never_a_read_f
             await owner.aread_current(session, 20)
         with pytest.raises(ReferenceCoverageNotReadyError):
             await owner.aread_current(session, 40)
+
+
+async def test_preview_validates_new_target_without_applying_business_or_r2(processing):
+    context, owner = processing
+    before = fixtures.fixtures.state(context)
+    async with context.sessions() as session:
+        preview = await owner.apreview(session, 40, identity=context.user, parameters={"embedding_model_id": 12})
+        assert preview.expected_revision == 0 and preview.expected_generation == "g0"
+        assert preview.transition["pending_model_id"] == "12"
+        await session.commit()
+    assert fixtures.fixtures.state(context) == before
+
+
+async def test_preview_allows_new_valid_target_to_repair_revoked_old_shared_model(processing):
+    context, owner = processing
+    async with context.sessions() as session:
+        # Recreate a separate actual source so this scenario has no in-flight
+        # rebuild. No source/R2 mutation is bypassed for the tested request.
+        await Models.acreate(
+            session,
+            Knowledge(id=41, tenant_id=101, user_id=7, name="shared", type=3, model="22", index_generation="g0"),
+            login_user=context.user,
+            project_created=AsyncMock(),
+        )
+        await session.commit()
+    context.sharing.allowed = frozenset()
+    before = fixtures.fixtures.state(context)
+    async with context.sessions() as session:
+        preview = await owner.apreview(session, 41, identity=context.user, parameters={"embedding_model_id": 12})
+        assert preview.model == "12" and preview.transition["current_model_id"] == "12"
+        await session.commit()
+    assert fixtures.fixtures.state(context) == before

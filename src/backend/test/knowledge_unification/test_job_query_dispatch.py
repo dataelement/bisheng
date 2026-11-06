@@ -61,6 +61,18 @@ async def test_job_pages_are_complete_and_stable_for_tied_acceptance_time(job_se
     assert not (await repository.alist_jobs(job_session, 1, page=1, page_size=2, state="failed")).rows
 
 
+async def test_request_key_lookup_uses_real_tenant_kind_and_key(job_session, repository, configuration):
+    job = (await create(repository, job_session, configuration)).job
+    assert await repository.aget_by_request_key(job_session, "embedding_rebuild", "request-1", lock=True) is job
+    assert await repository.aget_by_request_key(job_session, "embedding_rebuild", "missing") is None
+    assert await repository.aget_by_request_key(job_session, "file_reprocess", "request-1") is None
+    token = set_current_tenant_id(202)
+    try:
+        assert await repository.aget_by_request_key(job_session, "embedding_rebuild", "request-1") is None
+    finally:
+        current_tenant_id.reset(token)
+
+
 async def test_item_query_applies_current_visible_scope_before_pagination(job_session, repository, configuration):
     job = (await create(repository, job_session, configuration, items=[item(9), item(8), item(10)])).job
     first = await repository.alist_items(job_session, job.id, page=1, page_size=1, visible_file_ids=(8, 10))
