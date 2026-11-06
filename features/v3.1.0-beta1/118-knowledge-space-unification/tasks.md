@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史864编号：745已完成/历史交付、117当前待办、2外移；原137队列已完成36项、剩101项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史864编号：749已完成/历史交付、113当前待办、2外移；原137队列已完成36项、剩101项，另12张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -6853,7 +6853,7 @@
   **配对测试**：T845\
   **验证 / 完成条件**：原资格/native SQL/规模及新旧选集通过，独立复核后集成；不代替完整原T112或公开删除。
 
-- [ ] **T847 · 助手来源批量展示测试**
+- [x] **T847 · 助手来源批量展示测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_assistant_source_disclosure.py`\
   **逻辑 / 测试上下文**：W6§49≤200轻列与原业务资格，隐藏/foreign零泄露、当前坏链失败、原身份前后重验，无配置整图/N+1/写。\
@@ -6861,7 +6861,7 @@
   **覆盖 AC**: AC-71, AC-72, AC-73, AC-75, AC-76, AC-89\
   **验证 / 完成条件**：记录真实红阶段，夹具错误不计产品红。
 
-- [ ] **T848 · 助手来源批量展示**
+- [x] **T848 · 助手来源批量展示**
   **类型 / Owner**：后端 Application/Repository / PERM\
   **写入文件**：`src/backend/bisheng/assistant/application/reference_source_owner.py`、`src/backend/bisheng/assistant/domain/repositories/reference_source_repository.py`\
   **逻辑 / 测试上下文**：W6§49≤200轻列与原业务资格，隐藏/foreign零泄露、当前坏链失败、原身份前后重验，无配置整图/N+1/写。\
@@ -6901,7 +6901,7 @@
   **配对测试**：T851\
   **验证 / 完成条件**：原资格/native SQL/规模及新旧选集通过，独立复核后集成；不代替完整原T112或公开删除。
 
-- [ ] **T853 · 知识空间模型来源批量展示测试**
+- [x] **T853 · 知识空间模型来源批量展示测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_knowledge_source_disclosure.py`\
   **逻辑 / 测试上下文**：W6§49≤200轻列与原业务资格，隐藏/foreign零泄露、当前坏链失败、原身份前后重验，无配置整图/N+1/写。\
@@ -6909,7 +6909,7 @@
   **覆盖 AC**: AC-71, AC-72, AC-73, AC-75, AC-76, AC-89\
   **验证 / 完成条件**：记录真实红阶段，夹具错误不计产品红。
 
-- [ ] **T854 · 知识空间模型来源批量展示**
+- [x] **T854 · 知识空间模型来源批量展示**
   **类型 / Owner**：后端 Application/Repository / INT\
   **写入文件**：`src/backend/bisheng/knowledge/application/reference_source_owner.py`、`src/backend/bisheng/knowledge/domain/repositories/model_reference_repository.py`\
   **逻辑 / 测试上下文**：W6§49≤200轻列与原业务资格，隐藏/foreign零泄露、当前坏链失败、原身份前后重验，无配置整图/N+1/写。\
@@ -6918,7 +6918,7 @@
   **验证 / 完成条件**：原资格/native SQL/规模及新旧选集通过，独立复核后集成；不代替完整原T112或公开删除。
 
 - [ ] **T855 · 默认配置模型来源批量展示测试**
-  **类型 / Owner**：测试 / PROC\
+  **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_defaults_source_disclosure.py`\
   **逻辑 / 测试上下文**：W6§49≤200轻列与原业务资格，隐藏/foreign零泄露、当前坏链失败、原身份前后重验，无配置整图/N+1/写。\
   **依赖**：T844\
@@ -6926,7 +6926,7 @@
   **验证 / 完成条件**：记录真实红阶段，夹具错误不计产品红。
 
 - [ ] **T856 · 默认配置模型来源批量展示**
-  **类型 / Owner**：后端 Application/Repository / PROC\
+  **类型 / Owner**：后端 Application/Repository / INT\
   **写入文件**：`src/backend/bisheng/llm/application/model_default_source_owner.py`、`src/backend/bisheng/llm/domain/repositories/model_default_repository.py`\
   **逻辑 / 测试上下文**：W6§49≤200轻列与原业务资格，隐藏/foreign零泄露、当前坏链失败、原身份前后重验，无配置整图/N+1/写。\
   **依赖**：T855\

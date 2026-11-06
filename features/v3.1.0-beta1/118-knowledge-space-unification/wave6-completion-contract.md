@@ -721,7 +721,7 @@ ASGI真实默认/use/visible及两sort分支、非法action422，Manager两WorkT
 
 Runtime使用现AuthenticatedSourceReadIdentity捕获原身份并在批次后核对，保当前具体tenant/context/scope/凭据；foreign source不切ContextVar、不冒充来源tenant、该部分业务SQL/FGA为0，仍由影响核心完整计数阻删除。按SourceType分派，每Owner用真实批量轻投影（不读graph/config/manifest/provider设置）及原loaded-target F048 batch能力，空页不查、不得逐ID调用aresolve_source。资格正常拒绝回None，FGA/SQL/解析异常传递明确失败，不能降格成可删除。禁止新permission层、newadminshortcut、写锁/commit及跨租户新读取权。
 
-协议生产仅新resource_reference/application/source_disclosure.py、新resource_reference/disclosure_composition.py；后者纯构造六Owner和singleton get_runtime，不改现bootstrap，不进行IO。每业务只原Owner与Repo两叶，数据轻DTO放对应Repo；WF visible且非当前另edit；AS原assistant.visible；APP原management_read（不能用根visible替代版本管理资格）；CH原channel.visible、停同步仍展示/计数；KN按实际type对应space/library.visible；defaults沿现own/Root五原key的管理员读取条件，保原存储来源、不复制继承来源。均保持原PublicApiPrincipal/管理边界，不接分享token。
+协议生产仅新resource_reference/application/source_disclosure.py、新resource_reference/disclosure_composition.py；后者纯构造六Owner和singleton get_runtime，不改现bootstrap，不进行IO。每业务只原Owner与Repo两叶，数据轻DTO放对应Repo；WF visible且非当前另edit；AS原assistant.visible；APP原management_read（不能用根visible替代版本管理资格）；CH原channel.visible、停同步仍展示/计数；KN按实际type对应space/library.visible；defaults按下列§53已核实际读取入口资格，保原own/Root存储来源、不复制继承来源。均保持原PublicApiPrincipal/管理边界，不接分享token。
 
 | 卡 | Owner | 实际生产叶（src/backend/bisheng/） | 单测试叶（src/backend/test/knowledge_unification/） |
 | --- | --- | --- | --- |
@@ -731,7 +731,7 @@ Runtime使用现AuthenticatedSourceReadIdentity捕获原身份并在批次后核
 | T849/850 | PERM | app_publish/application/reference_source_owner.py、app_publish/domain/repositories/reference_source_repository.py | test_app_source_disclosure.py |
 | T851/852 | EDGE后继 | channel/application/reference_source_owner.py、channel/domain/repositories/reference_source_repository.py | test_channel_source_disclosure.py |
 | T853/854 | root后继 | knowledge/application/reference_source_owner.py、knowledge/domain/repositories/model_reference_repository.py | test_knowledge_source_disclosure.py |
-| T855/856 | PROC后继 | llm/application/model_default_source_owner.py、llm/domain/repositories/model_default_repository.py | test_defaults_source_disclosure.py |
+| T855/856 | INT | llm/application/model_default_source_owner.py、llm/domain/repositories/model_default_repository.py | test_defaults_source_disclosure.py |
 
 同组先真实红后实现；所有新叶≤600、每实现≤2生产叶。用原数据库和原资格拼装，至少含401源/重复slot预算、foreign无读、非当前WF/APP历史、原资格变化/IO失败、无完整配置列和无写证明。无真实Coverage adapter时影响核心仍拒绝，本波端口不创建ready状态。
 
@@ -765,3 +765,12 @@ after业务/neutral核全部实际SQL事实；新Doc/Version实际互指ID归一
 原Run converting.checkpoints键sql_conversion仅四字段；cursor为sql-v1:<已处理命令ordinal>:<末command_key>、processed_count为该tenant实际命令数、digest=前digest与本批命令/实际after/分配ID的闭集滚动hash，complete只已验frozen EOF。初值/编码/空EOF固定在单一service，不放Outcome全量JSON、不新表。锁内核原expected checkpoint，业务写后核验成功才同TX写新checkpoint；旧bare批重投拒，getter零写。恢复只启动时按≤200分页线性重核已提交prefix并累计同digest，后续新批不每次重扫prefix（禁N²）；实际ID漂移、半链/unknown commit须凭真实checkpoint与完整prefix证明，不猜已执行。SQL complete仅子步，不推进Run backfilling/ready。
 
 最小真实测试含0→3及其他type不变、真实自增与互指、半链/多版本/foreign拒、Tag survivor精确处理、File逐列快照、Default五key与继承、SQL触发器覆盖旧time后真实读回失败且外TX rollback；签发/跨TX/phase/hash/cursor/取消/外rollback、401/10001恢复线性预算、每查询ID上限。DM实库免测，使用SQLite触发器反例和MySQL/DM编译检查静态边界，真实MySQL/升级事务仍需后继环境证明。
+
+
+## 53. M3批次原子性及默认来源原读取资格补充：已冻结
+
+§52原子性精确补充：Service在拒任何caller new/dirty/deleted pending后开启本批begin_nested SAVEPOINT（避免其隐式auto-flush caller），将业务和checkpoint同包；Repo单独aapply_and_read_after亦以自有savepoint保护写后核验失败。失败/取消仅rollback各自savepoint，成功仅release，均不commit/rollback caller原事务、不丢caller pending；外层catch再commit也不能留下半批业务或游标。原生savepoint项目已有使用，DM官方确认SAVEPOINT/ROLLBACK TO/RELEASE；macOS当前未安装被marker排除的DM dialect，不伪报其实际编译/执行通过，不安装。SQLite测试显式真正parent BEGIN规避legacy driver的savepoint释放即提交行为，产品无SQLite特判。原MySQL事务验证仍保留。
+
+INT接手T855856两已登记默认来源叶，以让PROC专注M3，生产边界不变。实际原router GET /llm/knowledge、assistant、evaluation、workflow均get_login_user；原GET /llm/workbench为用户可选投影，原始metadata GET /llm/workbench/settings另需get_tenant_admin_user及_assert_can_write_system_config。故本port四普通key沿已认证UserPayload/原actor与scope可读；linsight_llm原始来源名称按现设置管理资格（super或当前非Root tenantadmin）裁剪。四普通key的管理入口仅同资格用户给出，其他entry=None，不凭链接授予管理权。源name使用实际原key字符串，无虚构数据库显示名或新hardcoded翻译。入口tabs沿现SystemModelConfig的knowledge/assis/evaluation/workflow/workbench；不修改/workbench投影或公开API/认证。
+
+仅本current tenant的实际TenantSystemModelConfig五key轻投影id/tenant/key，单批≤200且unique最多5，空/foreign不查；不读value、不解析模型、不走resolve Root fallback、不复制继承来源。自身无原行即bad metadata fail10994，foreign Root来源在当前Child只记restricted，需原Root concrete view才可展示。原ModelReferenceService全平台删除影响入口的管理员准入不变，这不是新增默认配置访问权。Owner用现ModelDefaultReadIdentityPort绑定原UserPayload/actor/current scope前后，不接伪造private身份；Default新port不影响原私有执行读取五key。

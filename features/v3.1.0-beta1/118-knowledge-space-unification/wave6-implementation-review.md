@@ -231,3 +231,12 @@ PROC51a15e81db的七DTO及纯模板已从App迁至Domain，App显式同对象重
 109独立项目实际broker读取已完成：候选5ea9f9251源码archive SHA256 e6d9dde5326f348d032d1ae99ab49b1e024b44814b45c7daebc51a1390893c5d，临时read-only容器从原worker筛选生效CELERY/BROKER配置、克隆MySQL范围3tenant；XDG缓存只tmpfs。实际Redis DB2，当时0 broker消息，SQL4条、Redis只SCAN2/SSCAN5/TYPE32，客户端owned关闭完成，三个账本表仍0。受控Redis execute白名单禁止队列写，原API启动时间2026-11-06T12:16:13.795554937Z未变，3005未操作。证据evidence/preparatory-native-broker.json SHA256 f86ca4a28cd1f19862c35708ebaa7e2216b80e03df8a8194171dde4ec9dc9433，无凭据脚本同目录。初次只读rootfs导入cache路径失败后仅修临时XDG位置，不计产品bug；没有把原API换成新版。这是准备端口证明，非正式M2/M3/升级恢复/E2E。
 
 T857新微秒时钟两行为红/整秒一首绿→T858六路径122绿，非作者原3加2边界绿：原业务微秒完整保留，frozen replay零新clock/ports调用，Domain模板仍原样。T859860三纯指纹函数原样Domain迁移，作者同19路径旧627绿+29缺模块error/2缺模块fail→新658绿；root AST核三定义完全相同、四路径139绿后正常merge。原codec闭集/成功字节/拒绝不改。主树ebf6148ae已合最终协议scope guard与WF、KN，十路径213绿；WF待真实Fence边界复核、KN待独立P2修正后再勾，不据组合绿掩盖。T843844/857858/859860按各自已验证范围闭合；六业务端口未全完、原111112及公开删除仍待办。
+
+
+## 助手与知识来源展示的独立闭合（2026-11-07）
+
+AS固定c2ea0f44b只原两生产叶/新测试，root审实际原资格及轻列后正常合main a58f5c4ad，五路径87绿（比作者84多最终协议scope三格），日志/private/tmp/f118-root-assistant-disclosure.log/.xml。原15缺方法红→真实SqlFence坏mode/parent两红18首绿→20配对绿；native401 unique+200重复实际Assistant SELECT4/Mode SELECT10，共14、FGA6批402check，无完整prompt/config。保guest精确根、fullscope super/narrowed、SA/home/selected原身份和无关pending。T847848按内部展示闭合，非模型公开删除。
+
+root KN原807db33be的13缺方法红→13绿，cached clean/dirty两反例2红13绿→15绿；独立PROC对05f实证P2：仅查当前row.id会漏未提交PK变化，populate_existing覆盖caller修改。6b628原反例一红15绿后6fe1a40ab按原persistent identity+当前PK窄拒，原发现者逐字应拒/无关pending/原super/narrowed四绿并确认pending ID99/history保留，主树相关七路径115绿。读实际SQL安全列、raiseload配置，401源3 SELECT/5权限批，File/业务无写。T853854据修复复验闭合，不全Session禁写、不扩文件edit。独立发现者日志/private/tmp/f118-proc-kn-6fe-independent.log，root/private/tmp/f118-t854-pk-fixed.log/.xml。
+
+WF真实SqlFence后续审计确认bad parent/mode/version三格未fail closed，原作者正在原叶窄修，T845846继续待办；不能因原组合213绿提前关闭。CH已交固定待独立审，APP仍在原两叶推进；defaults按§53纠正原GET资格并交INT，不误改原workbench用户投影。
