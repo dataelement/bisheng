@@ -562,8 +562,8 @@ async def test_actual_preview_gateway_binds_pending_version_and_current_preview_
             )
         native_gateway.provider.assert_not_awaited()
         async with AsyncSession(native_gateway.engine) as session, session.begin():
-            await session.execute(sa.update(LLMModel).where(LLMModel.id == 11).values(model_name="alpha"))
             await session.execute(sa.update(LLMModel).where(LLMModel.id == 13).values(model_name="root/slash"))
+            await session.execute(sa.update(LLMModel).where(LLMModel.id == 11).values(model_name="alpha"))
         model_catalog.invalidate_catalog()
         # Each current fact is independently required; restoring it permits the
         # next check to reach its own real credential/operation/route/task query.
