@@ -1882,14 +1882,6 @@
       "count": 1
     }
   },
-  "src/pages/KnowledgePage/KnowledgeFile.tsx": {
-    "no-console": {
-      "count": 8
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/pages/KnowledgePage/KnowledgeQa.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 1
