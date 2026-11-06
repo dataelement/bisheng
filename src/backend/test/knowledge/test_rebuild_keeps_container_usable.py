@@ -8,7 +8,6 @@ No provider, vectorstore, queue or deployed database is contacted.
 """
 
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
@@ -33,7 +32,6 @@ def _run(rebuild, monkeypatch, *, success, failed, raise_on_rebuild=None):
         return list(success), list(failed)
 
     monkeypatch.setattr(worker, "_rebuild_embeddings", process)
-    monkeypatch.setattr(worker, "_delete_es_files", Mock())
     try:
         fixtures.execute(rebuild, "document")
     except Exception as error:
