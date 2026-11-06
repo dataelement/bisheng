@@ -6,15 +6,52 @@ from sqlalchemy import inspect, update
 from sqlmodel import select
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
-from bisheng.core.context.tenant import is_tenant_filter_bypassed, strict_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
+from bisheng.resource_reference.application.contracts import ReferenceState, TargetType
 
 
 class KnowledgeModelReferenceRepository:
     """No Session factory, begin, commit or rollback; both modes are native."""
 
     _protected = ("model", "model_transition", "model_config_revision", "index_generation")
+
+    def _embedding_queries(self, session, verifier, source_key, context):
+        self._tenant_id()
+        # Only original, current-transaction Owner receipts authorize this exact
+        # cross-tenant column projection. Targets were locked before the root;
+        # this must not acquire a new parent/server lock afterwards.
+        targets = verifier.validate_binding_receipts(session, source_key, context.receipts, context.locked_targets)
+        return tuple(
+            (
+                target.key,
+                select(LLMModel.model_type)
+                .join(LLMServer, LLMServer.id == LLMModel.server_id)
+                .where(
+                    LLMModel.id == int(target.key.target_id),
+                    LLMModel.server_id == int(target.model_server_id),
+                    LLMModel.tenant_id == target.target_tenant_id,
+                    LLMServer.id == int(target.model_server_id),
+                    LLMServer.tenant_id == target.target_tenant_id,
+                ),
+            )
+            for target in targets
+            if target.key.target_type == TargetType.MODEL
+            and target.state == ReferenceState.VALID
+            and target.new_binding_allowed
+        )
+
+    def model_kinds(self, session, verifier, source_key, context):
+        queries = self._embedding_queries(session, verifier, source_key, context)
+        with session.no_autoflush, bypass_tenant_filter():
+            return {key: session.exec(query).one_or_none() for key, query in queries}
+
+    async def amodel_kinds(self, session, verifier, source_key, context):
+        queries = self._embedding_queries(session, verifier, source_key, context)
+        with session.no_autoflush, bypass_tenant_filter():
+            return {key: (await session.exec(query)).one_or_none() for key, query in queries}
 
     @staticmethod
     def _tenant_id():
