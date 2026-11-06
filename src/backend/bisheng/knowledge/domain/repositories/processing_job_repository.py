@@ -26,13 +26,16 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeProcessingJobNotFoundError,
     KnowledgeProcessingJobNotRetryableError,
     KnowledgeProcessingObsoleteError,
+    ResourceReferenceInvalidError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
+from bisheng.core.context.background_execution import get_current_background_task
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
+from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
 from bisheng.knowledge.domain.schemas.processing_job import ItemState, JobState, ProcessingKind, ResourceVersionTarget
 from bisheng.knowledge.domain.services.processing_cutover_receipts import consume_cutover_receipt
 
@@ -699,6 +702,72 @@ class ProcessingJobRepository:
         job.expected_index_generation = generation
         job.revision += 1
         job.update_time = self._now()
+        await session.flush()
+        return job
+
+    async def afail_attempt(
+        self,
+        session: AsyncSession,
+        job_id: str,
+        *,
+        expected_job_revision: int,
+        error_code: int,
+        lease: JobLease | None = None,
+    ) -> KnowledgeProcessingJob | None:
+        background = get_current_background_task()
+        if background is None or background.tenant_id != self._tenant_id():
+            raise ResourceReferenceInvalidError(reason="processing_attempt_background_required")
+        if type(expected_job_revision) is not int or expected_job_revision < 0 or type(error_code) is not int:
+            raise ValueError("failure requires the observed revision and a public error code")
+        candidate = await self._job(session, job_id, lock=False)
+        root = await KnowledgeModelReferenceRepository().aget(session, candidate.space_id, for_update=True)
+        job = await self._job(session, job_id, lock=True)
+        if job.state not in {"accepted", "running"}:
+            return None
+        if lease is not None:
+            if not self._active_job_lease(job, lease):
+                return None
+        elif job.revision != expected_job_revision or (
+            job.state == "running" and job.lease_until is not None and job.lease_until > self._now()
+        ):
+            return None
+        if root is None:
+            job.state = "obsolete"
+            job.obsolete_reason = "owning_space_missing"
+            job.error_code = KnowledgeProcessingObsoleteError.Code
+        elif not self._check_configuration(
+            job, ProcessingConfiguration(root.model_config_revision, root.index_generation)
+        ):
+            await session.flush()
+            return job
+        else:
+            with strict_tenant_filter():
+                unfinished = (
+                    await session.exec(
+                        select(KnowledgeProcessingItem)
+                        .where(
+                            KnowledgeProcessingItem.job_id == job.id,
+                            KnowledgeProcessingItem.state.in_(("pending", "running")),
+                        )
+                        .with_for_update()
+                        .execution_options(populate_existing=True)
+                    )
+                ).all()
+            for item in unfinished:
+                if item.tenant_id != job.tenant_id:
+                    raise KnowledgeProcessingJobNotFoundError()
+                item.state = "failed"
+                item.error_code = error_code
+                item.lease_token = item.lease_until = None
+                item.finished_at = item.update_time = self._now()
+            await session.flush()
+            await self._refresh_counts(session, job)
+            job.state = "partial_failed" if job.succeeded_count and job.failed_count else "failed"
+            job.error_code = error_code
+        job.pending_dispatch = False
+        job.lease_token = job.lease_until = None
+        job.finished_at = job.update_time = self._now()
+        job.revision += 1
         await session.flush()
         return job
 
