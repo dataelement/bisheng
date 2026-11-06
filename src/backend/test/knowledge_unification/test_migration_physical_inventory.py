@@ -290,3 +290,64 @@ async def test_explicit_close_inside_factory_context_does_not_close_owned_client
         await reader.aclose()
     native.es.close.assert_awaited_once()
     native.mv.close.assert_called_once()
+
+
+async def test_cancelled_constructor_closes_the_late_client_and_preserves_cancel(module, native, monkeypatch):
+    import asyncio
+    import threading
+
+    started = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+
+    def create(**kwargs):
+        loop.call_soon_threadsafe(started.set)
+        assert release.wait(2)
+        return native.mv
+
+    monkeypatch.setattr(module, "AsyncElasticsearch", Mock(return_value=native.es))
+    monkeypatch.setattr(module, "MilvusClient", create)
+    config = VectorStores(
+        milvus={"connection_args": {"uri": "http://private.invalid:19530"}},
+        elasticsearch={"url": "http://private.invalid:9200"},
+    )
+
+    async def run():
+        async with module.PhysicalInventoryReader.aopen(config, storage=native.storage):
+            pytest.fail("cancelled construction must not yield a reader")
+
+    task = asyncio.create_task(run())
+    try:
+        await asyncio.wait_for(started.wait(), 1)
+        task.cancel("original cancellation")
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        native.es.close.assert_awaited_once()
+        native.mv.close.assert_called_once()
+    finally:
+        release.set()
+
+
+async def test_cancel_during_close_finishes_both_owned_clients_before_propagating(module, native):
+    import asyncio
+
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def close():
+        started.set()
+        await release.wait()
+
+    native.es.close.side_effect = close
+    reader = module.PhysicalInventoryReader(
+        es_client=native.es, milvus_client=native.mv, storage=native.storage, owns_clients=True
+    )
+    task = asyncio.create_task(reader.aclose())
+    await asyncio.wait_for(started.wait(), 1)
+    task.cancel("original cancellation")
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await reader.aclose()
+    native.es.close.assert_awaited_once()
+    native.mv.close.assert_called_once()
