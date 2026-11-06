@@ -428,3 +428,18 @@ T756测试→T757 detail.tsx+Header.tsx实际挂上述目录，用实际info/bre
 
 
 §27文件API导出固定为listSpaceFolderParents(spaceId,folderId)、createSpaceFolder(spaceId,{name,parent_id?})、renameSpaceFolder(spaceId,folderId,{name})、renameSpaceFile(spaceId,fileId,{name})、getSpaceFilePreview(spaceId,fileId)、getSpaceFileDownload(spaceId,fileId)、searchSpaceChildren(spaceId,SpaceSearchQuery)。query与返回保持上文真实wire。locale只有已冻结业务用语无API依赖，T758/T759可先于其consumer准备，实际页面通过后再计入口闭合。
+
+
+## 28. M2原资源/物理树/版本/标签有界只读事实子合同 V1：已冻结
+
+T760测试→T761唯一生产knowledge/domain/repositories/unification_resource_repository.py:UnificationResourceRepository。全部读口外部native AsyncSession+已开原TX、可信具体正整数tenant、strict/no_autoflush、拒ambient bypass，不开Session、不flush/commit、不写任何业务/ledger/FGA/对象/index，不探测停服；没有creator、quota或在线引用资格判断。本slice只读事实，不等于原T161/T162完整M2，完整artifact/预检/全部tenant正式freeze另接。
+
+九个alist_resources/alist_files/alist_documents/alist_versions/alist_qa/alist_tags/alist_tag_links/alist_tag_libraries/alist_department_spaces(session,*,after_id:int|None=None,limit:int=200)->现InventoryPage[对应frozen/slots Row]，全部真实INTEGER id seek+limit+1（≤201）及确定next_after，各表独立连续分页不按每root重扫。九模型实际为Knowledge/KnowledgeFile/KnowledgeDocument/KnowledgeDocumentVersion/QAKnowledge/Tag/TagLink/KnowledgeSpaceTagLibrary/DepartmentKnowledgeSpace，TagLibrary与DeptSpace也按真实id。QA1/type2原事实保留，未知type不偷偷过滤；Repo不恢复或purge、不补V1、不转换标签。Tag/TagLink只读原事实，后续转换只能知识业务目标，不能扩大其他标签写范围。
+
+ResourceRow显式旧20列：user_id,tenant_id,name,type,description,model,collection_name,index_name,state,is_released,auth_type,is_shared,auto_tag_enabled,auto_tag_library_id,metadata_fields,create_time,update_time,id,creation_request_id,creation_payload_hash（两个creation列在a1b已存在）。单列NeutralKnowledgeFacts保存processing_defaults/processing_config_version/metadata_schema_revision/model_config_revision/model_transition/index_generation/migration_origin七新增列，不混入old_business_digest。旧列全部参与确定canonical原业务摘要，非有限/非法JSON明确失败；原metadata/body只内存repr=False，不直接输出artifact。FileRow显式现真实KnowledgeFileBase旧列+id（无全ORM dump），split_rule/user_metadata/abstract/remark/其他原文只内存repr=False；Doc/Version/QA/Tag/Link/Library/Dept各按真实已核字段闭集，日期标准ISO摘要，禁止输出provider配置或raw异常内容。
+
+Doc/Version无tenant，通过其真实父Knowledge锚定并保raw关系/父tenant/space/file-type scalar事实；不得INNER静默吞掉坏链。avalidate_global_integrity(session)为整个run一次的只读LIMIT1探针：七个有tenant表的NULL/<=0/找不到Tenant，File→Knowledge存在及归属、Doc→Knowledge、Version→Doc/File/各Knowledge存在同归属和FILE类型；只诊断闭集ID/reason，不读foreign名称/内容。内部跨scope窗口仅这些明确全局完整性探针和下述精确PK事实，不能拿其当授权或缺失legacy证据。完全无Doc/Version的旧物理FILE不是孤儿，保留给M2按design7.2列补V1计划；已有部分/多重/错误主指针/链必须可见于事实或明确拒绝，不能靠空JOIN当空空间。
+
+ainspect_file_ancestors(session,*,file_ids:tuple[int,...])->tuple[FileAncestorFact,...]：positive非bool、去重≤500，内部每批≤200，空输入0SQL，按去重输入顺序返。Fact闭集{id,exists,tenant_id,knowledge_id,file_type,level,file_level_path,update_time}；只有全局PK真不存在才exists=False，foreign也返其真实tenant/type/path scalar，不读名称/内容/配置，入口仍拒ambient bypass。file_level_path是**祖先ID链、不含自身**，原NULL/''/'/'和path/level原样保留不normalize。现MAX_FOLDER_LEVEL9只管新写；存量level10+保持可访问/移动，不在M2设新上限/截断/flatten。后续coordinator聚合真实unique ancestor键按有界批查、验证无环/实际DIR/tenant/space/prefix一致，不逐file逐层SQL；本repo不签发preflight通过或自动修树。
+
+本slice测试须真实native SQL覆盖401分页、完整旧20/neutral7区分、tenant NULL/未知/错误父/foreign链、未建V1事实、legacy overdeep原样、祖先500输入3批且重复IDs不重查、空0SQL及外部TX零写/no-autoflush/原pending保留；大root/多版本只线性PK页，不独立列表相乘或按tenant重跑global探针。标准SQLAlchemy/现JsonType保持C2，MySQL克隆实测尚待审批通路恢复，DM8实库免测不免静态。固定独立审+真实后续consumer之前不将helper记作正式M2完成。

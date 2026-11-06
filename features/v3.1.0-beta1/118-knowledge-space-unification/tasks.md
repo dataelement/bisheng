@@ -6145,6 +6145,25 @@
   **覆盖 AC**: AC-02, AC-06, AC-08, AC-09, AC-11, AC-16, AC-30, AC-31, AC-32, AC-34, AC-51, AC-87\
   **验证 / 完成条件**：先真实红/首绿、实际consumer/旧回归组合，目标lint/strict新增0、每叶≤600、i18n与固定独立审；浏览器/E2E另验证。
 
+## W6正式M2原资源只读事实前置
+
+- [ ] **T760 · M2原资源物理树与标签分页测试**
+  **类型 / Owner**：测试 / MIG\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_resource_repository.py`\
+  **逻辑 / 测试上下文**：W6§28真实9表PK分页/父链、旧20与neutral7、global异常、未建V1、legacy overdeep、祖先≤500分200、零写/原TX/noauto及大数据查询预算。\
+  **依赖**：T717, T704\
+  **覆盖 AC**: AC-56, AC-57, AC-58, AC-59, AC-60, AC-62, AC-63, AC-64, AC-85, AC-93\
+  **验证 / 完成条件**：真实红/首绿，native SQL/分页/查询预算与敏感字段repr验证，不把原模型事实当新授权或正式M2全验收。
+
+- [ ] **T761 · M2资源物理树与标签只读仓储**
+  **类型 / Owner**：后端 Repository / MIG\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_resource_repository.py`\
+  **逻辑 / 测试上下文**：W6§28闭集Row与9分页、一次global完整性和精确ancestor事实；原数据完整保留且不转换、不猜creator/配额或ready。\
+  **依赖**：T760\
+  **配对测试**：T760\
+  **覆盖 AC**: AC-56, AC-57, AC-58, AC-59, AC-60, AC-62, AC-63, AC-64, AC-85, AC-93\
+  **验证 / 完成条件**：配对/原SourceInventory及MIG相关组合、C2/逐叶arch/ruff、固定独立审；全M2正式artifact/freeze后续另验。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
