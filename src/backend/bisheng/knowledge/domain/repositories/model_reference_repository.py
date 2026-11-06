@@ -6,6 +6,12 @@ from sqlalchemy import delete, inspect, update
 from sqlmodel import select
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.common.models.space_channel_member import (
+    BusinessTypeEnum,
+    MembershipStatusEnum,
+    SpaceChannelMember,
+    UserRoleEnum,
+)
 from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
@@ -200,6 +206,22 @@ class KnowledgeModelReferenceRepository:
         self._new(session, row)
         await session.flush()
         return row
+
+    async def aadd_space_creator(self, session, row, *, user_id):
+        """A creator belongs to this actual newly flushed, owned SPACE parent."""
+        self._bound(session, row)
+        if row.type != KnowledgeTypeEnum.SPACE.value or type(user_id) is not int or row.user_id != user_id:
+            raise ResourceReferenceInvalidError(reason="knowledge_space_creator_parent_invalid")
+        member = SpaceChannelMember(
+            business_id=str(row.id),
+            business_type=BusinessTypeEnum.SPACE,
+            user_id=user_id,
+            user_role=UserRoleEnum.CREATOR,
+            status=MembershipStatusEnum.ACTIVE,
+        )
+        session.add(member)
+        await session.flush()
+        return member
 
     def _bound(self, session, row):
         state = inspect(row)

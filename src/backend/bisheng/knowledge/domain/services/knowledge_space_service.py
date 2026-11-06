@@ -52,7 +52,6 @@ from bisheng.common.errcode.knowledge_space import (
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.models.space_channel_member import (
-    BusinessTypeEnum,
     MembershipStatusEnum,
     SpaceChannelMember,
     SpaceChannelMemberDao,
@@ -65,6 +64,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao
+from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
@@ -148,7 +148,7 @@ from bisheng.permission.application.prospective_grant import ProspectiveGrantApp
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import generate_uuid, get_request_ip
+from bisheng.utils import generate_knowledge_index_name, generate_uuid, get_request_ip
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
@@ -1304,9 +1304,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         created = True
         try:
-            knowledge_space = KnowledgeService.create_knowledge_base(
-                self.request, self.login_user, db_knowledge, skip_hook=True
-            )
+            knowledge_space = await self._create_space_with_model(db_knowledge)
         except IntegrityError:
             # A concurrent request with the same durable key won the insert.
             # Only that exact command may be resumed; a different hash conflicts.
@@ -1322,7 +1320,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 auto_tag_library_id=auto_tag_library_id,
                 auto_tag_custom_tags=auto_tag_custom_tags,
                 user_id=self.login_user.user_id,
-                tenant_id=self.login_user.tenant_id,
+                tenant_id=knowledge_space.tenant_id,
             )
             if resolved_enabled or resolved_library_id is not None:
                 knowledge_space.auto_tag_enabled = resolved_enabled
@@ -1333,19 +1331,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             knowledge_space,
             creation_request_id=creation_request_id,
             initial_permissions=initial_permissions,
+            project_created=not created,
         )
 
         if not created:
             return result
-
-        member = SpaceChannelMember(
-            business_id=str(knowledge_space.id),
-            business_type=BusinessTypeEnum.SPACE,
-            user_id=self.login_user.user_id,
-            user_role=UserRoleEnum.CREATOR,
-            status=MembershipStatusEnum.ACTIVE,
-        )
-        await SpaceChannelMemberDao.async_insert_member(member)
 
         # Audit log for knowledge space creation
         await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
@@ -1354,13 +1344,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return result
 
-    async def _complete_knowledge_creation(
-        self,
-        knowledge_space: Knowledge,
-        *,
-        creation_request_id: str | None,
-        initial_permissions: InitialPermissionsRequest | None,
-    ) -> KnowledgeSpaceCreateResp:
+    async def _create_space_with_model(self, knowledge_space: Knowledge) -> Knowledge:
+        """Persist the actual SPACE, creator and outgoing references together."""
+        knowledge_space.index_name = generate_knowledge_index_name()
+        knowledge_space.collection_name = knowledge_space.index_name
+        knowledge_space.user_id = self.login_user.user_id
+        knowledge_space.tenant_id = KnowledgeModelReferenceApplication.repository._tenant_id()
+        async with get_async_db_session() as session:
+
+            async def project_created(actual):
+                await KnowledgeModelReferenceApplication.repository.aadd_space_creator(
+                    session, actual, user_id=self.login_user.user_id
+                )
+                await self._project_space_created(actual)
+
+            await KnowledgeModelReferenceApplication.acreate(
+                session, knowledge_space, login_user=self.login_user, project_created=project_created
+            )
+            await session.commit()
+        await asyncio.to_thread(KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, knowledge_space)
+        return knowledge_space
+
+    async def _project_space_created(self, knowledge_space: Knowledge) -> None:
         container_adapter = await self._resource_adapter("knowledge_space")
         actor = await self._permission_actor()
         await container_adapter.authorize_created(
@@ -1376,6 +1381,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ),
             actor=actor,
         )
+
+    async def _complete_knowledge_creation(
+        self,
+        knowledge_space: Knowledge,
+        *,
+        creation_request_id: str | None,
+        initial_permissions: InitialPermissionsRequest | None,
+        project_created: bool = True,
+    ) -> KnowledgeSpaceCreateResp:
+        container_adapter = await self._resource_adapter("knowledge_space")
+        actor = await self._permission_actor()
+        if project_created:
+            await self._project_space_created(knowledge_space)
         permission_result = None
         if initial_permissions is not None and initial_permissions.grants:
             if self.initial_grant_application is None or creation_request_id is None:
@@ -1439,7 +1457,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if creation_request_id is None:
             return None
         existing = await KnowledgeDao.aget_by_creation_request(
-            tenant_id=int(self.login_user.tenant_id),
+            tenant_id=KnowledgeModelReferenceApplication.repository._tenant_id(),
             user_id=int(self.login_user.user_id),
             knowledge_type=KnowledgeTypeEnum.SPACE.value,
             creation_request_id=creation_request_id,
@@ -1769,21 +1787,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         members, space-level FGA tuples and tag library — i.e. name/description/id
         and membership survive, only the files/folders inside are removed.
         """
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-        await self._require_action("knowledge_space", space_id, "delete")
-        child_resources = await self._list_space_child_resources(space_id)
-        child_permission_records = await self._load_resource_permission_records(child_resources)
-        await self._project_resource_deletes(child_permission_records)
+        async with get_async_db_session() as session:
+            space = await KnowledgeModelReferenceApplication.repository.aget(session, space_id)
+            if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+                raise SpaceNotFoundError()
+            prepared = await KnowledgeModelReferenceApplication.aprepare_removal(
+                session, space_id, login_user=self.login_user, only_clear=True
+            )
+            child_resources = await self._list_space_child_resources(space_id)
+            child_permission_records = await self._load_resource_permission_records(child_resources)
+            await self._project_resource_deletes(child_permission_records)
 
-        # Cleaned vector + ES data
-        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
-        # Cleaned minio data
-        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
-
-        # Remove child file/folder rows only (only_clear keeps the space row).
-        await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id, only_clear=True)
+            # Preserve the existing projection → external purge → SQL order.
+            await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
+            await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
+            await KnowledgeModelReferenceApplication.aapply_removal(session, prepared)
+            await session.commit()
         self._dispatch_knowledge_chat_rehome(
             source_space_id=space_id,
             resources=child_resources,
@@ -1795,36 +1814,33 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await asyncio.to_thread(KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, space)
 
     async def delete_space(self, space_id: int) -> None:
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-        await self._require_action("knowledge_space", space_id, "delete")
-        child_resources = await self._list_space_child_resources(space_id)
-        original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
-        original_member_ids = {member.user_id for member in original_members}
-        original_member_ids.update(await self._authorized_space_user_ids(space_id))
-        child_permission_records = await self._load_resource_permission_records(child_resources)
-        container_adapter = await self._resource_adapter("knowledge_space")
-        container_record = await container_adapter.load_permission_record(
-            resource_type="knowledge_space",
-            resource_id=str(space_id),
-        )
-        if container_record is None:
-            raise SpaceNotFoundError()
-        actor = await self._permission_actor()
-        await self._project_resource_deletes(child_permission_records)
-        await container_adapter.project_delete(
-            record=container_record,
-            actor=actor,
-        )
+        async with get_async_db_session() as session:
+            space = await KnowledgeModelReferenceApplication.repository.aget(session, space_id)
+            if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+                raise SpaceNotFoundError()
+            prepared = await KnowledgeModelReferenceApplication.aprepare_removal(
+                session, space_id, login_user=self.login_user
+            )
+            child_resources = await self._list_space_child_resources(space_id)
+            original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
+            original_member_ids = {member.user_id for member in original_members}
+            original_member_ids.update(await self._authorized_space_user_ids(space_id))
+            child_permission_records = await self._load_resource_permission_records(child_resources)
+            container_adapter = await self._resource_adapter("knowledge_space")
+            container_record = await container_adapter.load_permission_record(
+                resource_type="knowledge_space",
+                resource_id=str(space_id),
+            )
+            if container_record is None:
+                raise SpaceNotFoundError()
+            actor = await self._permission_actor()
+            await self._project_resource_deletes(child_permission_records)
+            await container_adapter.project_delete(record=container_record, actor=actor)
 
-        # Cleaned vectorData in
-        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
-
-        # CleanedminioData
-        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
-
-        await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
+            await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
+            await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
+            await KnowledgeModelReferenceApplication.aapply_removal(session, prepared)
+            await session.commit()
         await self._send_space_event_notification(
             action_code=SPACE_DELETED_MESSAGE,
             receiver_user_ids=sorted(original_member_ids),
@@ -1846,23 +1862,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # delete space channel memeber
         await SpaceChannelMemberDao.clean_space_member(space_id)
-
-        # TC-040: prune channel ➜ knowledge-space sync bindings that target
-        # this space so the channel UI and the Celery sync worker stop
-        # referencing a tombstone. Import lazily to avoid pulling the channel
-        # module into the knowledge module's import graph.
-        from bisheng.channel.domain.models.channel_knowledge_sync import (
-            ChannelKnowledgeSyncDao,
-        )
-
-        try:
-            await ChannelKnowledgeSyncDao.adelete_by_space_id(str(space_id))
-        except Exception as e:
-            _logger.warning(
-                "Failed to cleanup channel knowledge sync bindings for space %s: %s",
-                space_id,
-                e,
-            )
 
         # Audit log and telemetry
         await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(self.login_user, self.request, space)
@@ -3465,21 +3464,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             reason="delete_folder",
         )
 
-        # Prune channel ➜ knowledge-folder sync bindings that target the deleted
-        # folders so the Celery sync worker stops referencing a tombstone.
-        from bisheng.channel.domain.models.channel_knowledge_sync import (
-            ChannelKnowledgeSyncDao,
-        )
-
-        try:
-            await ChannelKnowledgeSyncDao.adelete_by_folder_ids(manifest["folder_ids"])
-        except Exception as e:
-            _logger.warning(
-                "Failed to cleanup channel knowledge sync bindings for folders %s: %s",
-                manifest["folder_ids"],
-                e,
-            )
-
         await self.update_folder_update_time(folder.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
 
@@ -4880,24 +4864,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     resources=[(item["resource_type"], item["resource_id"]) for item in manifest["fga_resources"]],
                     reason="batch_delete_files",
                 )
-        # Prune channel ➜ knowledge-folder sync bindings for the top-level
-        # folders deleted in this batch so the Celery sync worker stops
-        # referencing a tombstone. Per-folder cascades are pruned by
-        # delete_folder() above.
-        if folder_ids:
-            from bisheng.channel.domain.models.channel_knowledge_sync import (
-                ChannelKnowledgeSyncDao,
-            )
-
-            try:
-                await ChannelKnowledgeSyncDao.adelete_by_folder_ids(folder_ids)
-            except Exception as e:
-                _logger.warning(
-                    "Failed to cleanup channel knowledge sync bindings for folders %s: %s",
-                    folder_ids,
-                    e,
-                )
-
         if file_ids:
             await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)
 
