@@ -105,12 +105,9 @@ async def test_real_original_type_retirement_creator_and_quota_facts_preserve_hi
 @pytest.mark.parametrize("change", [{"type": 99}, {"user_id": 888}])
 async def test_unknown_type_or_globally_absent_creator_blocks(module, native, change):
     await native.insert(original.Knowledge, [original.resource(9000, **change)])
-    async with (
-        AsyncSession(native.engine) as session,
-        session.begin(),
-        pytest.raises(KnowledgeOperationPlanConflictError),
-    ):
-        await collect(module, session)
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await collect(module, session)
 
 
 async def test_legacy_overdeep_chain_and_null_empty_paths_are_preserved_not_new_write_capped(module, native):
@@ -145,12 +142,9 @@ async def test_real_ancestor_bad_chains_are_explicitly_rejected(
             original.file(2, file_level_path=path, level=level),
         ],
     )
-    async with (
-        AsyncSession(native.engine) as session,
-        session.begin(),
-        pytest.raises(KnowledgeOperationPlanConflictError),
-    ):
-        await collect(module, session)
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await collect(module, session)
 
 
 async def test_doc_version_primary_chain_and_unregistered_file_plan_are_distinct(module, native):
@@ -167,12 +161,9 @@ async def test_doc_version_primary_chain_and_unregistered_file_plan_are_distinct
         ] == [2]
     async with native.engine.begin() as connection:
         await connection.execute(sa.update(original.KnowledgeDocument).values(primary_version_id=999))
-    async with (
-        AsyncSession(native.engine) as session,
-        session.begin(),
-        pytest.raises(KnowledgeOperationPlanConflictError),
-    ):
-        await collect(module, session)
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await collect(module, session)
 
 
 async def test_native_401_files_use_bounded_pages_and_unique_creator_ancestor_reads(module, native):
@@ -216,8 +207,9 @@ async def test_global_permission_integrity_never_hides_orphan_rows(native, bad):
                 )
             )
         )
-    async with AsyncSession(native.engine) as session, session.begin(), pytest.raises(PermissionMigrationBlockedError):
-        await PermissionMigrationSnapshotRepository().avalidate_global_integrity(session)
+    async with AsyncSession(native.engine) as session, session.begin():
+        with pytest.raises(PermissionMigrationBlockedError):
+            await PermissionMigrationSnapshotRepository().avalidate_global_integrity(session)
 
 
 async def test_explicit_missing_is_not_foreign_retired_or_existing_offline_and_no_proof_is_created(module, native):
