@@ -4568,7 +4568,7 @@
 - [ ] **T577 · 旧启动能力环境夹具补真实身份和空来源**
   **类型 / Owner**：测试 / APP\
   **写入文件**：`src/backend/test/app_runtime/test_capability_env_injection.py`\
-  **逻辑 / 测试上下文**：固定旧2a4基线同4失败，显式legacy v1、真实原身份/Session及合法空SourceSet/rootGuard，保provider版本、环境优先级、失败拒绝和零deploy断言，不改生产guard。\
+  **逻辑 / 测试上下文**：固定旧2a4基线同4失败，trace确认legacy capability_env provider已无生产调用方；仅测试改验实际RuntimeDeliveryCoordinator的事务stage、将运行版本derive scopes、平台/存储/应用身份环境、reserved覆盖及失败不保存sealed_env/不wake。旧env={}和provider callback契约明确退役，不能伪造旧调用通过，不改生产guard。\
   **依赖**：T445, T050\
   **覆盖 AC**: AC-37, AC-68, AC-71, AC-79, AC-83, AC-87, AC-88, AC-89, AC-92\
   **验证 / 完成条件**：旧基线同失败集归因明确，新fixture独立复查及相同argv主组合通过。
