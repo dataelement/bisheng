@@ -60,6 +60,7 @@ async def dispatch(application, monkeypatch):
     monkeypatch.setattr(module, "_active_tenant_ids", AsyncMock(return_value=[101]))
     monkeypatch.setattr(module, "require_business_action", AsyncMock())
     monkeypatch.setattr(processing_identity, "resolve_web_runtime_identity", AsyncMock(return_value=app.context.user))
+    monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", AsyncMock(return_value=False))
     monkeypatch.setattr(handler, "get_sync_db_session", sessions)
     monkeypatch.setattr(file_module, "get_sync_db_session", sessions)
     monkeypatch.setattr(model_reference_read, "_runtime", runtime)
@@ -166,6 +167,7 @@ async def test_partial_real_failure_keeps_source_and_retry_processes_only_failed
             entry_kind="web",
         )
         assert retry.error is None
+        assert (await session.get(Knowledge, 40)).state == 3
         revision = job.revision
         await session.commit()
     dispatch.vector.add_texts.side_effect = None
@@ -174,6 +176,8 @@ async def test_partial_real_failure_keeps_source_and_retry_processes_only_failed
     assert (await module._execute_processing_job(dispatch.job_id, revision))["state"] == "succeeded"
     assert dispatch.vector.add_texts.call_count == 3
     dispatch.vector.col.drop.assert_called_once()
+    async with dispatch.app.context.sessions() as session:
+        assert (await session.get(Knowledge, 40)).state == 1
 
 
 async def test_revoked_original_credential_fails_durably_without_external_work(dispatch, monkeypatch):
@@ -183,7 +187,9 @@ async def test_revoked_original_credential_fails_durably_without_external_work(d
     assert (await module._execute_processing_job(dispatch.job_id, dispatch.revision))["state"] == "failed"
     async with dispatch.app.context.sessions() as session:
         job = await dispatch.app.owner.jobs.aget(session, dispatch.job_id)
-        assert not job.pending_dispatch and job.pending_count == 2 and job.succeeded_count == 0
+        assert (
+            not job.pending_dispatch and job.pending_count == 0 and job.failed_count == 2 and job.succeeded_count == 0
+        )
     dispatch.provider.assert_not_called()
 
 

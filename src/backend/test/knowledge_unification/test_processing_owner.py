@@ -298,3 +298,46 @@ async def test_rejected_preclaim_releases_only_its_current_retry_and_can_restart
     async with fixture.context.sessions() as session:
         await begin_retry(fixture, session, key="fresh-authority")
         assert (await Models.repository.aget(session, 40)).state == 3
+
+
+async def test_owner_retry_coordinates_actual_resource_lock_ledger_and_fence(retry_fence):
+    fixture = retry_fence
+    async with fixture.context.sessions() as session:
+        job = await fixture.owner.jobs.aget(session, fixture.job_id)
+        result = await fixture.owner.aretry_failed(
+            session,
+            job.id,
+            identity=fixture.context.user,
+            idempotency_key="coordinated",
+            expected_job_revision=job.revision,
+            actor_user_id=7,
+            actor_reference={"actor_id": 7},
+        )
+        assert not result.reused and result.job.state == "accepted"
+        assert (await Models.repository.aget(session, 40)).state == 3
+
+
+async def test_current_retry_normal_completion_releases_owned_fence(retry_fence):
+    fixture = retry_fence
+    async with fixture.context.sessions() as session:
+        job = await begin_retry(fixture, session)
+        lease = await fixture.owner.jobs.aclaim(session, job.id, configuration=fixture.configuration)
+        item = await fixture.owner.jobs.aclaim_next_item(session, lease, configuration=fixture.configuration)
+        checkpoint = dict(item.item.checkpoint)
+        await fixture.owner.jobs.acomplete_item(
+            session, item.lease, configuration=fixture.configuration, succeeded=True
+        )
+        result = await fixture.owner.afinalize_and_ack(session, job, lease)
+        assert result.state == "succeeded" and item.item.checkpoint == checkpoint
+        assert (await Models.repository.aget(session, 40)).state == 1
+
+
+async def test_failure_never_releases_another_business_operation(retry_fence):
+    fixture = retry_fence
+    async with fixture.context.sessions() as session:
+        job = await begin_retry(fixture, session)
+        root = await Models.repository.aget(session, 40)
+        root.model_transition = {"operation_id": "other-operation"}
+        await session.flush()
+        await fixture.owner.afail_attempt(session, job.id, expected_job_revision=job.revision, error_code=25001)
+        assert root.state == 3 and root.model_transition == {"operation_id": "other-operation"}
