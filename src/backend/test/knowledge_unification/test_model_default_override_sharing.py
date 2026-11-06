@@ -136,3 +136,35 @@ def test_root_original_default_remains_own_and_never_queries_child_sharing(
         )[0]
         assert receipt.target.new_binding_allowed
     api.assert_not_called()
+
+
+def test_native_accessor_only_unready_reason_maps_to_reference_coverage(f118_engine, model_owner_tenant, monkeypatch):
+    from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+    from bisheng.common.errcode.permission import PermissionServiceUnavailableError
+
+    engine = native_store(f118_engine)
+    unavailable = PermissionServiceUnavailableError(reason="permission_runtime_not_ready")
+    monkeypatch.setattr(module, "get_permission_relation_api_sync", Mock(side_effect=unavailable))
+    with Session(engine) as session, session.begin():
+        with pytest.raises(ReferenceCoverageNotReadyError) as observed:
+            ModelReferenceTargetOwner().lock_and_verify(
+                session, TARGETS, SourceKey(101, "knowledge", "1", "current"), "bind"
+            )
+        assert observed.value.__cause__ is unavailable
+    broken_ready = PermissionServiceUnavailableError(msg="READY component is malformed")
+    monkeypatch.setattr(module, "get_permission_relation_api_sync", Mock(side_effect=broken_ready))
+    with Session(engine) as session, session.begin():
+        with pytest.raises(PermissionServiceUnavailableError) as observed:
+            ModelReferenceTargetOwner().lock_and_verify(
+                session, TARGETS, SourceKey(101, "knowledge", "1", "current"), "bind"
+            )
+        assert observed.value is broken_ready
+
+
+async def test_malformed_backend_membership_cannot_be_ignored_in_favor_of_inheritance(db):
+    db[1].list_resource_ids.return_value = ("not-a-server-id",)
+    async with AsyncSession(db[0]) as session, session.begin():
+        with pytest.raises(ResourceReferenceInvalidError):
+            await ModelReferenceTargetOwner().alock_and_verify(
+                session, TARGETS, SourceKey(101, "knowledge", "1", "current"), "bind"
+            )
