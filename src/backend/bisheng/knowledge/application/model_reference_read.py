@@ -97,7 +97,7 @@ class KnowledgeModelReadRuntime:
                     expected_model_config_revision=expected_model_config_revision,
                     expected_index_generation=expected_index_generation,
                 )
-        identity = login_user if login_user is not None else self.identity_port.issue(session, knowledge_id)
+        identity = self.identity_port.issue(session, knowledge_id, login_user=login_user)
         scope = self.core.verifier.issue_scope(
             session, SourceReadRequest(SourceType.KNOWLEDGE, str(knowledge_id), "current"), identity
         )
@@ -128,7 +128,7 @@ class KnowledgeModelReadRuntime:
                     expected_model_config_revision=expected_model_config_revision,
                     expected_index_generation=expected_index_generation,
                 )
-        identity = login_user if login_user is not None else await self.identity_port.aissue(session, knowledge_id)
+        identity = await self.identity_port.aissue(session, knowledge_id, login_user=login_user)
         scope = await self.core.verifier.aissue_scope(
             session, SourceReadRequest(SourceType.KNOWLEDGE, str(knowledge_id), "current"), identity
         )
