@@ -227,7 +227,7 @@ class ProcessingJobService:
         return frozenset(value for value in ids if "visible" in grants.get(str(value), ()))
 
     @staticmethod
-    def _read(job, visible):
+    def _read(job, visible, *, retryable):
         return ProcessingJobRead(
             id=job.id,
             space_id=job.space_id,
@@ -242,20 +242,29 @@ class ProcessingJobService:
             failed_count=job.failed_count,
             pending_count=job.pending_count,
             hidden_item_count=sum(row["file_id"] not in visible for row in job.scope_manifest),
-            retryable=job.state in {"partial_failed", "failed"},
+            retryable=retryable,
             obsolete_reason=job.obsolete_reason,
             error_code=job.error_code,
         )
 
     async def aget(self, session, space_id, job_id, *, identity):
         job = await self._job(session, space_id, job_id, identity)
-        return self._read(job, await self._visible(identity, job))
+        eligibility = await self.jobs.aretry_eligibility(session, job.id)
+        return self._read(job, await self._visible(identity, job), retryable=eligibility.retryable)
 
     async def alist(self, session, space_id, *, identity, page=1, page_size=20, kind=None, state=None):
         await self._authorize(identity, space_id)
         result = await self.jobs.alist_jobs(session, space_id, page=page, page_size=page_size, kind=kind, state=state)
         return PageData[ProcessingJobRead](
-            data=[self._read(job, await self._visible(identity, job)) for job in result.rows], total=result.total
+            data=[
+                self._read(
+                    job,
+                    await self._visible(identity, job),
+                    retryable=(await self.jobs.aretry_eligibility(session, job.id)).retryable,
+                )
+                for job in result.rows
+            ],
+            total=result.total,
         )
 
     async def alist_items(self, session, space_id, job_id, *, identity, page=1, page_size=20, state=None):
