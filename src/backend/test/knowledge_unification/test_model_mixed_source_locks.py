@@ -3,6 +3,7 @@
 覆盖 AC: AC-68, AC-71, AC-87, AC-88, AC-89, AC-91, AC-92
 """
 
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import event, update
@@ -167,3 +168,54 @@ async def test_mixed_prelock_mapping_drift_rejects_without_appending_new_target_
         await session.rollback()
     async with AsyncSession(mixed_models) as session, session.begin():
         assert changed and (await session.get(LLMModel, 11)).server_id == 1
+
+
+@pytest.mark.parametrize("other_inherited_key", [False, True])
+async def test_all_mixed_sources_exclude_defaults_being_overridden_from_prospective_sharing(
+    mixed_models, monkeypatch, other_inherited_key
+):
+    from types import SimpleNamespace
+
+    from bisheng.llm.application import reference_target_owner as owner_module
+
+    async with AsyncSession(mixed_models) as session, session.begin():
+        session.add(
+            TenantSystemModelConfig(
+                tenant_id=1, key="linsight_llm", value='{"embedding_model":{"id":"22","name":"root-embedding"}}'
+            )
+        )
+        if other_inherited_key:
+            session.add(TenantSystemModelConfig(tenant_id=1, key="workflow_llm", value='{"model_id":22}'))
+        session.add(
+            BusinessResourceReference(
+                tenant_id=101,
+                source_type="knowledge",
+                source_id="1",
+                source_version="current",
+                slot_key="model",
+                target_type="model",
+                target_id="22",
+                target_tenant_id=1,
+                source_revision=1,
+            )
+        )
+    monkeypatch.setattr(
+        owner_module,
+        "get_permission_relation_api",
+        AsyncMock(return_value=SimpleNamespace(list_resource_ids=AsyncMock(return_value=()))),
+    )
+    owner = ModelReferenceTargetOwner()
+    async with AsyncSession(mixed_models) as session, session.begin():
+        # Unchanged single-source semantics may still consume the current Root default.
+        original = (
+            await ReferenceTargetVerifier({"model": owner}).averify_targets(session, SPACE, (TargetKey("model", "22"),))
+        )[0]
+        assert original.target.new_binding_allowed
+    async with AsyncSession(mixed_models) as session, session.begin():
+        receipts = await ReferenceTargetVerifier({"model": owner}).averify_mixed_source_targets(
+            session,
+            ((SPACE, (TargetKey("model", "22"), TargetKey("model", "11"))), (DEFAULT, (TargetKey("model", "11"),))),
+        )
+        old = next(receipt.target for receipt in receipts[SPACE] if receipt.target.key.target_id == "22")
+        assert old.state == "valid" and old.new_binding_allowed is other_inherited_key
+        assert all(receipt.target.new_binding_allowed for receipt in receipts[DEFAULT])
