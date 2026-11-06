@@ -143,3 +143,12 @@ async def test_other_kinds_do_not_expire_on_metadata_changes(job_session, reposi
     job = (await fixtures.create(repository, job_session, configuration)).job
     lease = await repository.aclaim(job_session, job.id, configuration=metadata_configuration(99, "b" * 64))
     assert lease is not None and job.state == "running"
+
+
+@pytest.mark.parametrize("evidence", [{}, [], "legacy-text"])
+async def test_old_trial_metadata_without_object_evidence_is_persistently_obsolete(job_session, repository, evidence):
+    job, config = await created(repository, job_session)
+    job.parameters = evidence
+    await job_session.flush()
+    assert await repository.aclaim(job_session, job.id, configuration=config) is None
+    assert job.state == "obsolete" and job.obsolete_reason == "metadata_schema_evidence_missing"
