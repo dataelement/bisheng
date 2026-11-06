@@ -435,3 +435,8 @@ WF generic metadata_filter.document_id不是实际physical file选择器，不�
 ## W3运行与共享来源只读合同V1
 
 [execution-read-contract.md](./execution-read-contract.md)已冻结实际SourceOwner、私有只读scope、临时预览、绑定WS Port、Agent外部事务/缓存、Info裁剪与评测身份合同。SourceOwnerTenant与原请求身份分开；不恢复业务Root默认共享、不以share-token授予运行、不放宽R2。原ONLINE及召回策略保持。下一波实现以该精确合同为依赖。
+
+
+## W4剩余业务来源合同
+
+[业务来源合同V1](./business-sources-contract.md)冻结四类真实来源、完整执行/原生sync、APP名字到真实ID与原principal、频道自动化身份、空间模型配置及默认多root原子联动。W3通用UserPayload/async合同不放宽；同root批协议保留，新mixed只同tenant默认/空间及MODEL。已确认94AC不变，正式基线冻结后才转换，本波不执行迁移。

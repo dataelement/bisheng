@@ -1,0 +1,134 @@
+# W4 剩余业务来源接线合同 V1
+
+状态：2026-11-06 冻结供并行实现。基线 `24481f0ca12ce1a1ef666e194356e7620c7f2c0a`，421 卡中 248 项完成。延续已确认 spec 94 AC、R1/R2 与 W3 运行读取合同，不修改需求；本波补 `hosted_app_version/channel_sync/knowledge/model_default` 四类来源的真实增删改、读取及执行接线。
+
+## 1. 全部 Owner 的共同边界
+
+- source 取实际业务根/版本/租户，不接受 HTTP 自报 SourceKey、ownerTenant、receipt、ready 或 identity。原 ContextTenant、actor、OpenAPI/Public principal、credential scope、管理 pin 与 trace 保持；不靠改 ContextTenant、裸 user_id 或 owner 身份换人。
+- 同一外部 SQL Session：读旧完整配置与索引 → 全部旧/新 targets 统一锁序 → 真实业务 root/版本/子行 current-read 并重授权 → 旧配置摘要与 set/raw 一致 → 业务保存及 R2 apply → 唯一 commit。新资源可为真实 ID 首次 flush；不得先 commit 业务再补绑定。Repository 不 begin/commit/rollback，读用 no_autoflush；批量 DML 显式可信 tenant/parent 边界。
+- 现 `averify_batch_targets` 只支持同 root，不放宽其语义。默认+多空间跨 root 联动新增 `runtime.aprepare_mixed_source_bindings(session, changes)->tuple[PreparedSourceBindings,...]`，只允许同可信 tenant 的 model_default/knowledge 来源及 MODEL 目标；`SourceBindingChange` 含 source_key/references/extractor_version/lock_source_root/new_source/effective（回调不进 repr/HTTP）。Core 先候选读每个 source，再由新 `verifier.averify_mixed_source_targets` 一次全局纯物理预锁 MODEL server全组→model全组，并逐 source 单独发行原槽/legacy收据；各真实 root 按稳定类型/ID序当前锁并重验，各 guard/source CAS仍独立。同source重复、异tenant、其他target拒10996，任何集合漂移10998整Txn回滚，不在root后追加反序锁。返回按source_type/source_id/source_version规范序，各自root修订独立，不使用单base_root_revision批次。LLM Model Owner/Repository提供 `aprelock_mixed_targets(session,target_keys,source_keys)->None`，仅物理锁；旧同root `_sources` 保持严格。
+- 新来源即使零引用也建 ready 的完整 source set。existing 来源缺 index/guard、版本不完整、未知 raw 或配置/索引漂移 10994，不在线自动 bootstrap。旧失效同 source/version/slot 原样保留或解除；新 slot/copy/version 仍需合法目标。deleting 冻结写，强删及存量失效证据沿既有协议。
+- 按已确认 AC-92，**每个来源完整执行严格检查**，不增加 subset/slot 执行通道，不借 inspect 结果授执行许可。APP 每个版本、频道 current、各默认 key/current、空间 current 分别独立；同一来源尚有失效项不能执行/发布。管理读取可展示失效原 ID，不能静默丢项、sanitize 或换首个有效模型。
+- 显式选择知识的新引用沿真实 0/1→library、3→space 和原主体/凭据检查原业务选择条件；旧同槽可逐项修复。不扩文件 edit，不更改 rename，也不新增 use、任务模型绑定或 worker 在途外部 IO 一致性方案。
+- 真实双库/FGA/队列/检索/模型服务/E2E/迁移/部署单列，SQLite/SQL 形状不作其证明。所有实现逐卡红绿、单卡至多两个叶子、唯一文件 Owner、固定 SHA 交叉复查后主 agent 合流，无远端 push。
+
+## 2. 来源键与完整提取范围
+
+| 来源 | 固定身份 | 提取 / 生命周期 |
+| --- | --- | --- |
+| 托管应用 | 实际 App.tenant_id；source_id=App.id；source_version=实际 AppVersion.id UUID | 全部保存版本，不按 current/terminal/approval 状态清关系；原 manifest/capabilities 不改写。真正应用删除后解除所有版本，stop 不解除。版本号 version_no 只是业务编号。 |
+| 频道 | 实际 Channel.tenant_id；source_id=Channel.id；version=current | 全部保留同步选项，关闭也保留。主槽 main.space/main.folder，子槽 sub.<sha256(canonical JSON exact rule name)>.space/folder；不 trim/casefold、不用每次替换重建的 sync UUID。相同槽可有多个 target。 |
+| 空间/QA/旧库 | 实际 Knowledge.tenant_id；source_id=Knowledge.id；version=current | 当前实体真实 embedding 槽 `model`；存在业务切换时保留明确的 current/pending 模型槽。processing_defaults 目前只有处理规则，没有模型 ID，不扫描任意 JSON。clear 保留，实际删除 SQL finalize 才解除。 |
+| 默认模型 | 实际原始存储 tenant；source_id=真实 key；version=current | 五 key 为 knowledge_llm/assistant_llm/evaluation_llm/workflow_llm/linsight_llm。工作台沿 linsight_llm，不能发明 workbench key。Root 继承只维护 Root 原始来源，Child 不复制引用。 |
+
+默认槽：knowledge 的 embedding_model_id/source_model_id/extract_title_model_id/qa_similar_model_id/asr_model_id；assistant 的 auto_llm.model_id 和 llm_list.<modelID>.model_id；evaluation/workflow 的 model_id；linsight_llm 的 models.<ID>.id、linsight_default_model_id、chat_default_model_id、embedding_model.id/asr_model.id/tts_model.id/chat_title_llm.id/image_read_model.id。列表成员槽按真实 ID 稳定，不用数组下标；原配置列表和名字不重写。
+
+## 3. 原生同步读取及权限关系只读 Port（INT 前置）
+
+W3 async 调用和 UserPayload 身份合同不变。以下代码仅列方法名，不是可绕过 Runtime 的执行时序；全部真实 TargetOwner完成且私有target-plan登记后才能revalidate。INT 给同一 source authority 增加原生同步保存来源方法：
+
+```python
+scope = verifier.issue_scope(session, SourceReadRequest(...), identity)
+snapshot = verifier.get_source_snapshot(session, scope, identity)
+verifier.assert_target_keys(session, scope, identity, keys, allowed_types=...)
+verifier.revalidate_scope(session, scope, identity)
+index = repository.read_source(session, scope, identity, for_update=False)
+result = runtime.inspect_source(session, scope, identity)
+result = runtime.require_source_valid(session, scope, identity)
+```
+
+同步 identity Port 用 `capture`，业务 Owner 用 `resolve_source/revalidate_source`，TargetOwner 用 `inspect_source_targets`。同步/异步 scope 都绑定原对象、原 identity、完整 fingerprint、原 Session/transaction、用途和同 authority 的全部真实 target-plan；跨模式/换事务/clone 拒 10996。不实现同步临时 preview，不把 async DB 工作塞进 asyncio.run、另一个线程 Session 或租户切换。INT 为既有 legacy Reader/Repository 补 native `resolve`，LLM Owner 为两个既有 Model read Owner/Repository 补 native 方法。
+
+原生 FGA 关系读由权限唯一应用边界提供：`get_permission_relation_api_sync().list_resource_ids_sync(subject=PermissionSubject("tenant", id), relation="shared_with", resource_type="llm_server")`。只允许该窄查询，要求 permission_runtime 已 READY，沿当前 pinned store/model 的原生 HTTP `_post_sync`；不初始化另一个 runtime、不绕过 contextual 要求、不把连接/不完整响应当空许可。业务 LLM 模块不得直导 FGA。所有共享读取仍结合真实 Root→Child 继承默认 server SQL；无静态 Root/is_shared 许可。
+
+## 4. APP 声明冻结、版本及最终模型选择
+
+APP 唯一维护纯提取器、同 Session resolver/Repository、SourceOwner/APP 原 principal identity、version/bus/state/preview/entry。LLM 唯一维护同 Session uncached 模型名称解析；INT 维护显式 access/composition、gateway/range 与 filelib 原 principal 透传。
+
+```python
+plan = await names.aprepare_model_names_current(
+    session, tenant_id, requested_names, identity=identity, frozen_models=frozen_models, range=model_range,
+)
+refs = await resolve_app_references(
+    session, declaration, identity=identity, source_tenant_id=trusted_tenant, model_name_plan=plan,
+)
+resolved = await names.resolve_model_name_current(
+    session, tenant_id, requested, identity=identity, plan=plan, range=model_range,
+)
+await assert_resolved_model(identity, requested_name=..., resolved_model_id=..., resolved_server_id=...)
+```
+
+值DTO明确为 `FrozenModelIdentity(model_id:int, server_id:int)`（正整数，仅物理锁输入）及 `NameResolution(requested:str, resolved:既有ResolvedModel)`；requested_names按精确原字符串去重、字典序，不trim或改名。`resolve_app_references` 显式接 `model_name_plan`，只消费传入的原完整NamePlan，不能另行逐名准备、开Session、cache或补锁；完整模型计划位于KN目标及任何业务root之前。`get_model_name_resolution_port()` 返回LLM进程内同一Port实例，prepare与resolver/最终resolve必须使用该实例消费原Plan，不另造registry。名字 Port 返回既有 model_catalog.ResolvedModel；保持 bare exact 优先（含 slash）、多匹配歧义、qualified 及原可调用范围。prepare 对完整名字候选和冻结模型 ID 的 union 一次 server 全组→model 全组预锁；`PreparedModelNamePlan` 公开只读 tenant_id/requested_names/resolutions，私有保存原 weakref、SessionTxn、原 identity/principal/range、完整候选及 frozen_models。最终 resolve 只能消费该 plan，变更 10998 回滚重算，不在 root 后追加锁。不存在/离线/歧义/范围错误沿原 26511/26512/26514/26515；目录不完整 26516，scope 伪造 10996。不以 60 秒目录缓存作冻结事实。
+
+frozen_models从持久冻结模型ID出发，server_id只可由真实当前模型事实派生或核验hint，目标已删且无server事实时不得猜server来凑DTO，沿原失效/Owner结果明确拒。知识按原数值 ID 优先、否则唯一 exact name，不能解析的历史 name 不编 ID 或假空 ready。slot 由声明语义稳定 hash，不用数组位置。名称后续改名/重名/改指另一 ID 必须失败，不能运行新目标；原不可变 manifest 留原文。
+
+版本插入必须补真实 App 根锁；不是现有 max(version_no)+1 查询就已持锁。targets/名字计划在 App root 前，锁后重核原 authorization_context，再以真实 UUID insert 版本并 R2 一次提交；保既有 approval 失败撤销协议。应用删除完整盘点实际所有版本、全部 set 及全部 raw；缺 set 或未知 raw 在任何资产销毁前拒，stop 不解除。FGA 投影成功在 SQL finalize 前；外部资产销毁沿原持久生命周期，不伪装可 SQL 回滚。
+
+运行身份：APP 原 OpenApiPrincipal 必须是当前认证 Context/连接 scope 中同一个对象，完整核 credential/HostedAppSubject/app/version/运行 route+credential binding 或真实 preview session/operation/viewer/capability/expiry；这些事实在同 Session 读，不调用内开 Session helper 假称原子。不能转为 owner/visitor 的 UserPayload。APP 独立 Runtime/Verifier/Model+Knowledge TargetOwner/Legacy 各实例同 authority；管理/审批预览保原 UserPayload/已发行 qualified authorization，不把 q 当 HTTP 自报许可，也不要求 viewer 等于 capability ceiling。
+
+APP access冻结两个独立factory：运行principal用 `get_hosted_app_reference_runtime()`，身份为AppSourceReadIdentity；用户管理/审批用 `get_hosted_app_user_reference_runtime(authorization_context=None)`；`HostedAppReferenceSourceOwner(repository=None, authorization_context=None)` 为明确构造合同，未改W3 UserPayload identity，SourceOwner绑定原真实qualification并同Session当前重验。INT独占reference_access/composition，各authority必须独立实际Target/Legacy实例；两者不得相互替代。
+
+版本写入发生后台时，在完整NamePlan/R2事务外围保持既有 `RuntimeAuthorizationService.user_context` 活跃，从真实deployment.authorization_context的frozen credential_ref恢复并传其yield的原UserPayload/OpenApiPrincipal。INT在既有 `app_runtime/application/runtime_authorization.py` 导出薄 `user_authorization_context(context,app,*,version_id)`；不从owner/submitted_by造人，锁后再核真实App/required_actions。该既有已验证来源的后台tenant_execution_scope属于可信恢复，必须还原上下文；不是请求自报tenant切换或W3身份放宽。
+
+Gateway 在实际 resolve 后、provider `_instantiate` 前，必须比较 **实际 resolved ID/server、当下 uncached 结果、该 app/UUID 版本冻结 slot ID** 三者一致。filelib hosted retrieval 把原 principal 传 bus；不能仅返回一个名字白名单又自由解析。整个版本 strict，旧 drop 坏知识选项逻辑退出执行链，原 OBO/SAK/PAT、scope/可见性/子项规则保持。
+
+## 5. 频道写入、展示及自动化身份
+
+Channel、全部同步行及 R2 同一 Session，一次提交；同步表无 tenant_id，Repository 必须由真实 Channel parent 锚定，不以为 C3 会自动隔离无 tenant 列的表。候选读不改 ORM；配置替换、create 幂等、initial grants、member/folder/space 校验和 dismiss 只在拥有者编排。
+
+新选目标保原“当前操作者创建的空间”等原业务门槛及真实 folder 属于所选 space；旧同槽失效保留/移除可保存。非数字 folder 不能回退根目录。仅改 filter_rules 而未提交 knowledge_sync 时保留原选项，不因当前不路由而清关系。查询保原 space/folder ID、开关和选项，返回裁剪状态，不伪造目标名称。
+
+```python
+prepared = await ChannelSyncExecutionAdmission.prepare(
+    identity, channel_id, sync_config_id, detected_at, session=None,
+)
+```
+
+自动delivery以恢复的同一身份校验当前频道visible，并沿现有add_articles_to_knowledge_space/add_file执行目标原写授权及当前folder→space归属；身份恢复、tenant相等、R2目标合法均不替代资源授权，不扩file edit。手动加文章保持原动作；自动 delivery 先读真实 Channel+sync，恢复真实当前 active user/唯一 active tenant membership/完整角色（可复用 resolve_preview_person 的实际当前身份语义），再核 root/config/header/current tenant、config.user_id 与原恢复对象一致。拒 ambient open/public 或冲突 actor，不清空 Context 降格，不伪造 web_session，也不用裸 user_id 构造空角色 UserPayload。每次执行使用实际快照、is_enabled/规则/时间与目标；旧 sync UUID 已替换则拒该旧队列，不猜新配置。全 channel/current strict 后才副作用。
+
+INT 给普通 UserPayload 来源读图注册 Channel Owner；内部 automation facade 保本次恢复对象与完整环境指纹。KN 独占移除 delete_space/delete_folder/batch_delete 主动 `adelete_by_space_id/adelete_by_folder_ids` 清同步配置的三处调用，保失效选项和引用；CH 不越权修改 KN。
+
+## 6. 空间/QA 模型业务配置与默认联动（KN/INT）
+
+KN 新提取器与外部 Session Repository/应用用例是唯一出向模型绑定写口，接真实 create_knowledge_base/acreate_knowledge_base、QA/space 真删除/clear、旧改 embedding 接口及工作台默认 embedding 联动；原 permission 投影成功顺序不反转。创建模型验证/权限失败不得留下 Knowledge 或引用，索引创建等外部 IO 在 SQL/投影资格之后。metadata 修改不重置模型/索引修订；不改变 file edit/rename。
+
+```python
+prepared = await KnowledgeModelReferenceApplication.aprepare_model_change(
+    session, knowledge_id, new_model_id, login_user=login_user,
+    expected_model_config_revision=None, expected_index_generation=None,
+    operation_id=None,
+)
+await KnowledgeModelReferenceApplication.aapply_model_change(session, prepared)
+```
+
+多空间前置另提供 `aplan_workbench_model_changes(session,new_model_id,*,login_user,operation_id=None)->KnowledgeModelChangeBatch`，含 `.changes:tuple[SourceBindingChange,...]`、`.alock_inventory(session)`、已冻结业务命令。inventory在第一个knowledge root回调（无空间时default root回调）按当前tenant/type和稳定ID锁完整空间清单，比候选全集，变化10998整体回滚不增补计划；各回调只用已核当前行。LLM将default change与batch.changes交新mixed Core一次prepare，再由 `aapply_workbench_model_changes(session,batch,prepared_sources)` 保存KN业务及对应R2，LLM保存default及对应R2，同一外部事务唯一commit；commit后使用原业务命令派发。
+
+prepare 不 commit/入队/外部 IO，targets 后当前锁 Knowledge，校验旧 source/index/model 与原动作并冻结结果。多空间联动先全部 source 预锁并在锁后核完整空间清单，默认来源与所有空间变更在同一调用者事务提交；失败不部分保存默认或空间。commit 后才逐资源派发，不声称派发失败可回滚已提交业务；重试用原业务 operation/revision，不能重新切一次模型。
+
+需要阶段配置时 `model_transition` 仅识别明确 schema_version=1、operation_id、current_model_id、pending_model_id；两模型均为资源业务槽，未知形状拒 10994，不递归猜 ID。current 实际选择 `Knowledge.model`，变更单调推进 model_config_revision/索引 generation，名称/说明不推进。worker 从当前真实业务配置选模型，task 原 model_id 仅兼容校验提示；新派发携业务 operation/revision/generation 期望，缺有效业务或被后续操作替换则在外部 IO 前拒，不能恢复任务历史模型。资源 transition finalize 与 R2 同事务解除旧业务槽；任务本身没有引用。完整分代重建/处理任务框架仍按原任务依赖推进，不把本波接线当成该处理框架完成。
+
+KN 的原 UserPayload 读取沿 W3；内部原生 sync/async 模型消费可用域私有、限真实 Knowledge ID/当前可信 tenant 的 ambient 身份，保原 actor/principal 和 scope，不能造人或作为 HTTP 许可。完整模型绑定/source 当前重验后，RAG/worker 才消费实际配置；外租户不得仅凭内部身份读取。
+
+## 7. 默认保存、继承及读取
+
+```python
+await ModelDefaultApplication.asave(session, key, payload, login_user=login_user)
+await ModelDefaultApplication.arestore_inheritance(session, key, login_user=login_user)
+resolved = await reads.aget_default(key, login_user=None, session=None)
+admitted = await reads.arequire_default_slot(key, slot_key, login_user=None, session=None)
+# native 同语义 get_default/require_default_slot，不开替代 Session 桥
+```
+
+管理 raw getter 返回原配置供修复，不清失效 ID。运行读取全 key/current strict 后才取原 slot；slot 不是 subset 授权。Root 原始配置、Child override 和真实 root→child/share_default_to_children 条件分开；恢复继承只删除叶 override，并将叶 source 更新 inactive 零集合，不改 Root。现无恢复继承 API，本波新增沿 settings 路径/原管理员授权，保原 envelope/五 key alias，不接受任意配置 key。
+
+私有 DefaultReadIdentity 捕获原 ambient tenant/visible/management/actor/OpenAPI/Public/trace，给原 UserPayload 时保持其对象；无 UserPayload 只内部域发行，不伪造个人或浏览器 session。多租户缺 current tenant 拒 10996，显式 tenant 参数只能校验相等而不能补授权；单租户沿 core 默认语义。独立 default Runtime/Verifier/Model Target/Legacy 同 authority，同步异步同根重验，不改 W3 用户身份接口。
+
+所有五 setter、_base_update、set_default_model 均走唯一 writer。自动补默认只取 own 原始配置的真正空槽，不把 Root 继承配置复制成 override，不替换已有失效非空 ID。workbench embedding 更新不再 LLM 自行逐 KnowledgeDao commit/入队，改调用 KN 外部事务接口及全局批锁。
+
+API 启动取消 linsight_default_model_backfill/chat_default_model_backfill 的自动 DB 转换；未来只能纳入 M3 **停服、备份、正式盘点及冻结 baseline/plan 之后** 的受控转换。脚本不检测停服；本波不运行迁移，也不以 read/write 装配标记全量 Coverage ready。
+
+## 8. 交付与唯一文件责任
+
+APP：app_publish 域上述业务源文件与 app_runtime state/entry；CH：channel 域及原 knowledge_delivery worker；LLM：默认模型业务、同 Session 名称 Port、两个 native Model target 叶；KN/INT：knowledge 域、REF native-sync、权限窄 sync Port、APP access/composition/gateway/filelib、所有生产装配、main 启动及文档。所有 Agent 不写他人热点，新增接缝先登记叶子卡；INT 先交精确接口 checkpoint，消费者再接，fake 不进生产。
+
+三个 W4 worktree从同一冻结合同 checkpoint创建；WF/AS/REF旧 worktree及主工作区不修改，不中途合入其他并发发版线变化。每组先测后实现，依赖具体 SHA，独立 reviewer 固定快照检查，INT 组合回归/架构增量/Ruff/文档完整性后勾选。其余权限消费面、目标删除协调、处理框架、两端 UI、正式回填/Coverage/迁移及完整 E2E 不因本波来源接线自动完成。
