@@ -5498,6 +5498,25 @@
   **覆盖 AC**: AC-35, AC-48, AC-51, AC-53\
   **验证 / 完成条件**：原真实SQL保源/状态过滤与新重建暂停组合通过。
 
+## W6迁移持久artifact接缝
+
+- [ ] **T688 · 原基线计划artifact完整性测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_migration_artifacts.py`\
+  **逻辑 / 测试上下文**：现MinIO async IO边界验证canonical bytes/hash/key、写后读回、已有内容幂等/损坏拒绝、跨run/kind/路径注入拒绝、持久非tmp及有界页面，不以put返回值猜hash。\
+  **依赖**：T160\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-85, AC-93\
+  **验证 / 完成条件**：先独立真实红，再薄adapter实现；单元边界与后续真实MinIO集成证据分开。
+
+- [ ] **T689 · 原基线计划持久artifact适配**
+  **类型 / Owner**：后端 Application / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/application/unification_artifacts.py`\
+  **逻辑 / 测试上下文**：实现W6§12精确现MinIO三async方法，无新存储框架/HTTP/SQL/停服控制；只已读回核验指针交ledger，完整tenant冻结由后续编排同TX完成。\
+  **依赖**：T688\
+  **配对测试**：T688\
+  **覆盖 AC**: AC-56, AC-63, AC-64, AC-85, AC-93\
+  **验证 / 完成条件**：配对、旧ledger/legacy descriptor组合通过；真实MinIO写读后单列证据，不伪称M2正式冻结已完成。
+
 ## 自动化覆盖索引
 
 以下仅映射 spec → 本任务清单的测试任务；不引用 QA 表生成开发任务。已完成项见各卡与实施记录；该映射不代表对应业务AC已完成端到端验收。
