@@ -166,3 +166,10 @@ metadata主树五路径70通过，EDGE固定独立复核77项及S/D只读scope�
 独立复核实际闭合三类反例：全租户重复freeze允许合法不同M3阶段且零flush；物理reader在真实Task.cancel或native close抛Cancelled时等待全部owned client创建/清理再传播取消（原发现者相关108项及3个额外取消边界绿）；M2此前误收identifier_compatible=False，原发现者同反例与外部TX commit验证修复后拒绝且Run为0，相关101项绿。SQL/Redis reader独立42项及4个大SCAN/cluster cursor/旧孤儿/pipeline失败边界绿，无队列写。以上是本地native/组件证据，不能代替实际109物理端口、停服正式盘点/转换/恢复或浏览器E2E。
 
 §33–40实际交付卡按范围闭合，包括T779/780/783/784、T799–812及T815；原137队列仍28完成/109待办。完整M2尚缺真实broker、精确可执行转换计划及CLI；M3/R2初始回填/Coverage、实际move Owner/J1和source删除保护、完整上传/高级写/删除等继续待办。原版本Service其他11个写/管理方法AST未改，旧7路径控制原13个失败保持，不扩原edit或版本写口。下一批只读历史入口按§41冻结后实施。
+
+
+## 原生物理/任务端口准备实测（2026-11-07）
+
+以已提交候选95f1279be归档（SHA256 `6b418fca86a1698af2d62002800315f551df22b2cc5d4b1232c68413dde94c0b`）在109独立项目临时只读容器执行，不替换原API/worker。仅SQL克隆库bisheng_f118_probe_20261107，SQL守卫拒DML/DDL/其他库；13条SQL读取3个实际租户、2个统一目标及5个文件。原生ES/Milvus分别回读空间1计数16/49、空间3计数5/6，标识schema兼容均true；8个原文件对象均存在。两种索引原有计数不同按各自原事实保留，不伪造相等或以此误阻迁移。正式前后对账应分别比较对应索引的原摘要/计数。
+
+新版受限MinIO adapter写/回读准备盘点artifact SHA256 `8e7366b92b94ec511e5426a4571a9598da6da09d8c5b2423e93eb34d46b24d81`；无建桶、授权策略、模型或解析IO。真实SQL/fair Redis任务reader返回0项（这是该环境当时事实，不代表已盘点Celery broker）；knowledge_unification_run/processing_job/processing_item仍0行。证据`evidence/preparatory-native-ports.json` SHA256 `72981605007d6e3e2e4b8831dbbc35a663f3aaf24c3964fcced7badcabcf000f`，无凭据脚本同目录`preparatory-native-ports-probe.py`。这不是M1停服一致备份/正式M2 freeze/M3转换/恢复/E2E，3005保持不动。
