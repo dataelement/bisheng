@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史822编号：704已完成/历史交付、116当前待办、2外移；原137队列已完成28项、剩109项，另7张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史822编号：705已完成/历史交付、115当前待办、2外移；原137队列已完成28项、剩109项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -6609,7 +6609,7 @@
 
 - [ ] **T816 · 平台历史功能实际开关映射测试**
   **类型 / Owner**：测试 / EDGE\
-  **写入文件**：`src/frontend/platform/src/__tests__/knowledgeVersionFeature.test.tsx`\
+  **写入文件**：`src/frontend/platform/src/test/knowledgeVersionFeature.test.tsx`\
   **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
   **依赖**：T806\
   **覆盖 AC**: AC-09, AC-14, AC-15, AC-30, AC-31\
@@ -6625,7 +6625,7 @@
 
 - [ ] **T818 · 平台只读版本API与历史面板测试**
   **类型 / Owner**：测试 / EDGE\
-  **写入文件**：`src/frontend/platform/src/__tests__/knowledgeVersionsContract.test.ts`、`src/frontend/platform/src/__tests__/f118SpaceVersionHistory.test.tsx`\
+  **写入文件**：`src/frontend/platform/src/test/knowledgeVersionsContract.test.ts`、`src/frontend/platform/src/test/f118SpaceVersionHistory.test.tsx`\
   **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
   **依赖**：T817\
   **覆盖 AC**: AC-09, AC-14, AC-15, AC-30, AC-31\
@@ -6641,7 +6641,7 @@
 
 - [ ] **T820 · 平台真实文件行历史入口测试**
   **类型 / Owner**：测试 / EDGE\
-  **写入文件**：`src/frontend/platform/src/__tests__/f118SpaceDirectoryHistory.test.tsx`\
+  **写入文件**：`src/frontend/platform/src/test/f118SpaceDirectoryHistory.test.tsx`\
   **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\
   **依赖**：T819\
   **覆盖 AC**: AC-09, AC-14, AC-15, AC-30, AC-31\
@@ -6655,7 +6655,7 @@
   **配对测试**：T820\
   **验证 / 完成条件**：实际入口、nullable主版本和失败/取消/ABA红绿；独立复核、原目录行为及静态无新增；不代替T177完整高级功能或浏览器E2E。
 
-- [ ] **T822 · 平台只读版本历史三语词条**
+- [x] **T822 · 平台只读版本历史三语词条**
   **类型 / Owner**：国际化 / INT\
   **写入文件**：`src/frontend/platform/public/locales/{en-US,zh-Hans,ja}/knowledge.json`\
   **逻辑 / 测试上下文**：W6§41真实只读历史入口，原feature flag及文件visible，完整scope/parent/file/open隔离；无版本写入或额外空间权限。\

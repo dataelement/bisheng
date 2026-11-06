@@ -490,6 +490,13 @@
     "upload_registered": "已提交处理",
     "upload_cancelled": "已取消",
     "upload_status_unavailable": "暂时无法获取处理状态，请重试",
-    "upload_may_continue": "停止跟踪不会撤销已提交的文件处理。"
+    "upload_may_continue": "停止跟踪不会撤销已提交的文件处理。",
+    "document_code": "文档编码",
+    "no_visible_versions": "暂无可见版本",
+    "primary_version": "主版本",
+    "version_history": "历史版本",
+    "version_no": "版本",
+    "version_upload_time": "上传时间",
+    "version_uploader": "上传者"
   }
 }
