@@ -108,3 +108,29 @@ async def test_selected_management_tenant_not_identity_home_owns_created_source(
     row, actual = await create(context, asynchronous=asynchronous)
     assert actual is row and row.tenant_id == 101
     assert context.user.tenant_id == 1
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_external_index_initialization_observes_committed_resource_and_bindings(creation, asynchronous):
+    context, projection = creation
+    observed = []
+
+    def verify_committed(knowledge):
+        facts = fixtures.state(context)
+        assert any(row["id"] == knowledge.id for row in facts["knowledge"])
+        assert any(row["source_id"] == str(knowledge.id) for row in facts["business_resource_reference"])
+        projection.assert_awaited_once_with(context.user, knowledge)
+        observed.append(knowledge.id)
+
+    def native_indices(user_id, knowledge):
+        verify_committed(knowledge)
+
+    async def vector_init(user_id, *, knowledge, **kwargs):
+        verify_committed(knowledge)
+        return Mock()
+
+    module.KnowledgeRag.init_knowledge_es_vectorstore.return_value = Mock()
+    KnowledgeService._init_knowledge_indices_sync.side_effect = native_indices
+    module.KnowledgeRag.init_knowledge_milvus_vectorstore.side_effect = vector_init
+    row, _ = await create(context, asynchronous=asynchronous, kind=0)
+    assert observed == [row.id]
