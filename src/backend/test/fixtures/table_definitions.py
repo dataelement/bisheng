@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
     metadata_fields JSON,
     processing_defaults JSON,
     processing_config_version INTEGER NOT NULL DEFAULT 0,
+    metadata_schema_revision INTEGER NOT NULL DEFAULT 0,
     model_config_revision INTEGER NOT NULL DEFAULT 0,
     model_transition JSON,
     index_generation VARCHAR(64),
