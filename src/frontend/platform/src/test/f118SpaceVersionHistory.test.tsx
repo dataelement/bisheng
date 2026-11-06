@@ -245,7 +245,11 @@ it("unmount cancels only this opening, preserving a concurrent reader", async ()
     .mockReturnValueOnce(first.promise)
     .mockReturnValueOnce(second.promise);
   const a = mount({ api: { getSpaceFileVersions: read } });
-  mount({ api: { getSpaceFileVersions: read } });
+  render(
+    <QueryClientProvider client={a.client}>
+      <SpaceVersionHistorySheet {...a.props} />
+    </QueryClientProvider>,
+  );
   await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
   const one: AbortSignal = read.mock.calls[0][1];
   const two: AbortSignal = read.mock.calls[1][1];
