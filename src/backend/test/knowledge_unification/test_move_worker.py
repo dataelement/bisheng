@@ -506,6 +506,29 @@ async def test_wrong_embedding_dimension_cannot_be_verified_as_usable_target(nat
     assert "source_delete" not in native.events
 
 
+async def test_native_insert_counter_must_cover_the_complete_batch(native):
+    native.target_mv.insert_count = 1
+    with pytest.raises(KnowledgeFileFailedError):
+        await apply(native)
+    assert native.checkpoint is None
+    assert len(native.source_es.rows) == 3
+    assert "source_delete" not in native.events
+
+
+async def test_native_delete_counter_cannot_claim_source_cleaned(native):
+    native.source_es.delete_result = {
+        "total": 2,
+        "deleted": 1,
+        "version_conflicts": 0,
+        "timed_out": False,
+        "failures": [],
+    }
+    with pytest.raises(KnowledgeFileFailedError):
+        await apply(native)
+    assert [checkpoint.step for checkpoint in native.saved] == ["move_target_verified"]
+    assert len(native.target_mv.rows) == 2
+
+
 @pytest.mark.parametrize("primary", [False, True])
 async def test_all_owned_es_clients_close_even_when_first_client_close_raises(native, primary):
     close_error = RuntimeError("source client close failed")
