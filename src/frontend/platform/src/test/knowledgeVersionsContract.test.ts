@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   getSpaceFileVersions,
   type SpaceVersionHistory,
@@ -7,6 +7,7 @@ import {
 const request = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("@/controllers/request", () => ({ default: request }));
 beforeEach(() => vi.resetAllMocks());
+afterEach(() => vi.unstubAllGlobals());
 
 it("reads the exact existing file history endpoint with cancellation and nullable facts", async () => {
   const history: SpaceVersionHistory = {
@@ -60,6 +61,7 @@ it("preserves the original ApiError object for read failures", async () => {
 });
 
 it("uses the wrapped request transport and leaves backend error normalization intact", async () => {
+  vi.stubGlobal("localStorage", { getItem: () => null });
   const actual = await vi.importActual<typeof import("@/controllers/request")>(
     "@/controllers/request",
   );
