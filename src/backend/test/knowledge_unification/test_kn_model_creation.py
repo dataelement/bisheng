@@ -5,6 +5,7 @@ External model/index transports are doubles; SQL, target verification and the
 legacy service entry points are real. No middleware connection is permitted.
 """
 
+import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import AsyncMock, Mock
 
@@ -58,7 +59,7 @@ async def create(context, *, asynchronous, model="11", kind=1):
     if asynchronous:
         actual = await KnowledgeService.acreate_knowledge_base(None, context.user, row)
     else:
-        actual = KnowledgeService.create_knowledge_base(None, context.user, row)
+        actual = await asyncio.to_thread(KnowledgeService.create_knowledge_base, None, context.user, row)
     return row, actual
 
 
