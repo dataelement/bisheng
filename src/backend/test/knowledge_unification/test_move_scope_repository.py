@@ -538,3 +538,33 @@ async def test_foreign_unversioned_descendant_directory_cannot_hide_behind_tenan
     async with AsyncSession(moving.engine) as session:
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await load(moving, session)
+
+
+@pytest.mark.parametrize("root_path", [None, ""])
+async def test_nested_ancestor_preserves_both_existing_empty_root_path_encodings(moving, root_path):
+    with Session(moving.sync) as session:
+        session.get(KnowledgeFile, 50).file_level_path = root_path
+        session.add(
+            KnowledgeFile(
+                id=52,
+                tenant_id=101,
+                knowledge_id=10,
+                file_type=0,
+                file_name="nested",
+                file_level_path="/50",
+                level=1,
+            )
+        )
+        for key in (81, 82):
+            row = session.get(KnowledgeFile, key)
+            row.file_level_path, row.level = "/50/52", 2
+            mode = session.get(ResourcePermissionMode, key)
+            mode.parent_id = "52"
+        document = session.get(KnowledgeDocument, 80)
+        document.file_level_path, document.level = "/50/52", 2
+        session.commit()
+    async with AsyncSession(moving.engine) as session:
+        scope = await load(moving, session, (MoveRoot("file", 81),))
+        assert {leaf.target.file_id for leaf in scope.leaves} == {81, 82}
+        assert len(scope.versions) == 2
+        assert (await session.get(KnowledgeFile, 50)).file_level_path == root_path
