@@ -328,3 +328,14 @@ ef7adef App357行由root逐段复核正常合入；原33缺接口红、factory-a
 实际rg调用链再核v2 filelib与MCP的两个自行构造Service工厂也调用add_file；§69/T908909只17行原工厂补App，原resolved operator/ambient principal及wire保留，两真缺factory红。6d275b654九路径146绿（1093 warnings/6.63秒，/private/tmp/f118-root-open-upload-timestamp-integrated.log/.xml），含原MCP/v2参数与默认模型回归。filelib RULE-5是原knowledge.api.dependencies跨API导入，准确父与新诊断逐字相同（/private/tmp/f118-open-factory-arch-baseline.txt），新增0；不称该旧文件架构全绿，不加抑制或借本卡扩全局依赖重构。
 
 EDGE fe683e6 Repo523行经root全源码/原业务链非作者审阅后合入；31新native含403/1003链26/44 SELECT及规范ID批，无按版本SQL；每查询至多200 IDs外加显式tenant参数，非声称整查询200参数。主树五路径129绿（1002 warnings/5.56秒，/private/tmp/f118-root-version-mutation-repository-final.log/.xml）。T902903按同TX整链仓储闭合，新App/旧Svc/DI仍未交。初次root128绿/1失配为旧idle对照未声明新upload port；T910仅两行fixture声明必需port/prepare副作用哨兵，原busy/idle断言不改，失配不当产品缺陷或Repo红。
+
+
+## 原上传接线独立出口与历史入口整合（2026-11-07）
+
+PERM固定archive非作者复核2dca：原四路径79绿，独立6native格绿（/private/tmp/test_f118_space_wiring_2dca_independent.py），含第二文件超quota限定回收已ACK前缀、ordinary/narrowed/SA跨home即使运输allow也零新链/Blob/FGA、scheduler unknown保完整链不逆投影、同批重复一条链一次dispatch及rawTenant恢复。6d275三叶独审S/D×v2/MCP四格绿，实际原身份同对象、构造/身份捕获0SQL；原相关5路径80绿/2旧失败，精确parent4路径78绿/同2失败，为v2 clear旧_FakeUser不被原ModelReference._user接受，新增0；旧RULE5诊断亦逐字相同。T899901/T908909及纯fixture910按各自真实范围闭合（含T900）。
+
+固定源码4fba791dbd126e5809c9ffe2d58f22027aec20ab完整test/knowledge_unification（仍明确不收集TCP mock合同单模块）加原权限/SA/APP三路径：**4554 passed、7 skipped、97412 warnings、239.90秒**，日志/JUnit /private/tmp/f118-root-upload-version-full.log/.xml。此快照含SourcePlan/索引readonly、Upload App+v1/v2/MCP、时间触发器修正及Version Repo；不含后继Version App/入口。7项仍原中间件placeholder，不计完整E2E。4314是此前快照不累计。
+
+Root读c340版本App177行发现两层owned context exit可能让二次rollback/close覆盖原业务/unknown异常；作者真实native复现2红（原commit RuntimeError→secondary OSError、原18061→rollback OSError），a524仅App+test窄修保原异常实例并记录二次失败，不重试/补偿。最终App204行/40native、原9路径274绿，root逐段复核后正常合入。T904905按应用前置闭合。
+
+原三写Svc+唯一生产DI接线bcdd7733b退役旧多次selfcommit，其他read/similar/delete-version方法AST及原资格不改；新测试4真实缺接线红后扩原HTTP/disabled/busy/commitunknown。初次扩展188绿/1断言错把有gap版本号当行数，已516bea按实际旧行数修正，非产品红。最终8路径**189 passed、1336 warnings、7.61秒**（/private/tmp/f118-root-version-wiring-corrected.log/.xml），含真实HTTP→原Svc→实际App/Repo与原写入口。root提前保存了该失败断言的bcdd提交，随后显式修正重跑，未将T911–913计完成；固定非作者复核仍进行。

@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史913编号：799已完成/历史交付、112当前待办、2外移；原137队列已完成36项、剩101项，另11张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史913编号：807已完成/历史交付、104当前待办、2外移；原137队列已完成36项、剩101项，另3张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7269,7 +7269,7 @@
   **配对测试**：T897\
   **验证 / 完成条件**：先真实红再实现、原native组合/静态、新叶≤600、非作者固定复核与主集成；整项与真实E2E继续单列。
 
-- [ ] **T899 · 原SPACE上传入口与真实DI接线测试**
+- [x] **T899 · 原SPACE上传入口与真实DI接线测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_space_upload_wiring.py`\
   **逻辑 / 测试上下文**：W6§66原入口+真实App/Repo/Prepared及DI，原权限与队列tenant、配额前置/未知结果/限定补偿。\
@@ -7277,7 +7277,7 @@
   **覆盖 AC**: AC-02, AC-09, AC-10, AC-14, AC-43, AC-49\
   **验证 / 完成条件**：真实缺接线红、native组合与非作者复核；外部运输fake不计E2E。
 
-- [ ] **T900 · 原SPACE普通上传原子链与应用DI接线**
+- [x] **T900 · 原SPACE普通上传原子链与应用DI接线**
   **类型 / Owner**：后端 Domain / INT\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`、`src/backend/bisheng/knowledge/api/dependencies.py`\
   **逻辑 / 测试上下文**：W6§66两叶接原App factory，不扩动作/格式/审批/worker race；目录网页历史后继。\
@@ -7285,7 +7285,7 @@
   **配对测试**：T899\
   **验证 / 完成条件**：原运输及snapshot语义保留、两叶static新增0、固定非作者复核及主集成。
 
-- [ ] **T901 · 原上传共享fixture装配实际事务应用**
+- [x] **T901 · 原上传共享fixture装配实际事务应用**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_upload.py`、`src/backend/test/knowledge_unification/test_kn_upload_overrides.py`\
   **逻辑 / 测试上下文**：W6§66对齐明确factory依赖，保真实SQL/原准备与原业务断言，仅同upload_file重复复核调用次数按真实入口对齐。\
@@ -7309,7 +7309,7 @@
   **配对测试**：T902\
   **验证 / 完成条件**：新叶≤600/static、原生规模、非作者固定复核与主组合；入口后继未接不计完成。
 
-- [ ] **T904 · 历史版本单次提交应用测试**
+- [x] **T904 · 历史版本单次提交应用测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_version_mutation_application.py`\
   **逻辑 / 测试上下文**：W6§67仅原link/merge/set-primary整链原子性，原资格及错误不扩。\
@@ -7317,7 +7317,7 @@
   **覆盖 AC**: AC-02, AC-10, AC-11, AC-31, AC-43, AC-51\
   **验证 / 完成条件**：真实缺接口/多提交反例与native整链回归、固定独审。
 
-- [ ] **T905 · 历史版本单次提交应用**
+- [x] **T905 · 历史版本单次提交应用**
   **类型 / Owner**：后端 Application / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/application/knowledge_version_mutation.py`\
   **逻辑 / 测试上下文**：W6§67同TX私有锁事实、整链唯一提交，非Blob/权限新gate。\
@@ -7341,7 +7341,7 @@
   **配对测试**：T906\
   **验证 / 完成条件**：原生红绿/static/非作者固定审及主集成，迁移时间规则不变。
 
-- [ ] **T908 · 原v2与MCP普通上传实际工厂测试**
+- [x] **T908 · 原v2与MCP普通上传实际工厂测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_open_upload_wiring.py`\
   **逻辑 / 测试上下文**：W6§69真实构造函数消费原operator，独立新App/Session factory，不改wire。\
@@ -7349,7 +7349,7 @@
   **覆盖 AC**: AC-02, AC-10, AC-65, AC-68, AC-70\
   **验证 / 完成条件**：准确旧factory红/原调用方组合与static。
 
-- [ ] **T909 · 原v2与MCP普通上传原子应用工厂接线**
+- [x] **T909 · 原v2与MCP普通上传原子应用工厂接线**
   **类型 / Owner**：后端 API / INT\
   **写入文件**：`src/backend/bisheng/open_endpoints/api/endpoints/filelib.py`、`src/backend/bisheng/open_mcp/application.py`\
   **逻辑 / 测试上下文**：W6§69只两工厂配同一App，原SA/D/operator保真。\
@@ -7357,7 +7357,7 @@
   **配对测试**：T908\
   **验证 / 完成条件**：真实factory/运输边界组合与非作者审，T126132134完整wire仍待后继。
 
-- [ ] **T910 · 原重建冲突用例显式装配上传前置**
+- [x] **T910 · 原重建冲突用例显式装配上传前置**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_rebuild_write_entries.py`\
   **逻辑 / 测试上下文**：W6§66追加，保原busy/idle断言，新必需port与prepare副作用哨兵显式声明。\
