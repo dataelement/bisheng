@@ -1047,3 +1047,14 @@ _build_web_link_split_rule改内部实际Knowledge/file_name输入，唯一Knowl
 root对3e09361ca独立native反例确认：源schema合法含html_snapshot_object_name:string而目标无时，Scope按removed_fields直接pop会丢WEB_LINK历史文件的快照指针（`/private/tmp/f118-move-web-key-private-probe.log`）。这是§73保系统键的修正，不增字段命名禁令或新产品政策。PROC T937/T938新增纯Domain knowledge/domain/services/move_metadata_policy.py并改原move_scope_repository.py（两生产叶）；原test_move_scope_repository.py补真实反例。
 
 WEB_LINK_SYSTEM_KEYS唯一定义原实际六键source_type/source_url/final_url/web_title/imported_at/html_snapshot_object_name；effective_move_removed_fields(*,file_source,removed_fields:tuple[str,...])->tuple[str,...]只在原WEB_LINK来源剔除这六键，其余来源保持原集合/顺序。无SQL/IO/hash/授权/字段名禁令。Scope每实际row用该helper执行pop；同名非Web自定义字段仍按AC21清理，Web系统键始终保留。后继MoveOwner对单item用同helper构造原MoveMetadataPolicy，来源为已与冻结row/revision核实的实际File.file_source，不假定当前MoveLeaf有file_source属性，不先改DTO/worker/热Svc。Scope仍原digest/类型/DTO同对象/锁序，helper不是第二metadata算法或新版worker policy。Native覆盖六键与Web/普通对照，现Scope/Schema及Cutover真实P1组合保留。
+
+
+## 79. 移动任务原主体索引 J0 前置 V1：已冻结
+
+[Job合同候选](./move-job-contract.md)原157行来自PERM只读af6e467091fda348cf3f5f2597aba24032a2deb2d15a5b4a8c04b8efbac8e524，root已全读。本次仅§1/J0a/J0b/J0c授权；reserved/ready/execution/worker/query仍候选，不提前开放move kind。Job.actor_user_id只是审计用户；F048 operator原alias等实际subject_id，S不能用auditUser代替。为有界可移植membership增加窄标量事实，不在JSON上查主体/每change扫重试历史，不新增任务模型绑定。
+
+PERM T939/T940新domain/schemas/processing_actor_subject.py及既有application/processing_identity.py（两叶）：ProcessingActorSubject frozen类型/processing_actor_subject(reference,*,tenant_id,actor_user_id,source_space_id)只解析原FrozenProcessingActor闭集的主体事实。校验外层schema/执行tenant/audit/sourceSpace/action move/entry与嵌套actor形状/严格正int和原data_scope管理集合；不将nested actor.home tenant与执行tenant强制相等，保原合法全量超管home1选tenant101；不将subject_id与audit_user_id强制相等。原credential/token/expiry/ceiling/capture/restore算法不复制，历史membership不以旧credential过期否定真实曾接受事实。原move capture/restore只改主体提取委托同SSOT，原payload字节/原身份scope规则保留；四原kind不新增主体gate。
+
+PERM T941/T942只既有models/knowledge_processing_job.py和knowledge_processing_retry.py：各nullable/exclude actor_subject_type String32及actor_subject_id BigInteger，无user/0默认；Job按PK读不增subject索引；Retry非唯一ix_kpr_job_subject(tenant_id,job_id,actor_subject_id,actor_subject_type,accepted_job_revision,id)。普通四kind允许NULL并保原恢复/鉴权；实际move写口后继J1只从同FrozenReference decoder生成，不以模型字段本身授予权限。
+
+INT T943/T944只新Alembic revision单叶：实施前live alembic heads确定唯一parent、实施后单head/offline测试，4 nullable列+1索引DDL-only，沿现helper幂等/create_all已有列索引兼容；不在DDL解析JSON/回填业务。旧正式a1b无三Processing表、当前service/worker均未接move是已核Git事实，不能代实际库COUNT。启用前只读盘点move Job及相关Retry的subject NULL/非法数；存在无法证明主体的trial行failclosed/运维判断，不按audit猜、不在线回填。原四kind NULL不被阻。DM8免实测，C2静态保留。实际J1 accept/ready等待K1私有receipt固定再单独冻，两种request hash不混。
