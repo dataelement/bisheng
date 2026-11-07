@@ -945,3 +945,12 @@ App构造session_factory与原require_version_management_enabled回调；alink_f
 后端原三write实际只有login dependency+功能开关/业务状态，前端CREATOR/ADMIN按钮不是后端既有gate。本组只整链事务化，沿现入口资格，不新增file.edit/Space.edit/visible或角色门槛，不将缺失的后台权限声称已存在；此处不扩大文件edit适用范围。跨tenant非法链按C3拒，不能借无tenant的Version/Doc访问foreign。事务内新Version、target pointer、旧primary demote、原独立Source Doc/V1清理、similar_status=2一次完成；原File目录/解析快照/对象/索引/BRR均不改，不悄做move。primary保持唯一，foreign/破链/非法多引用原子拒绝。
 
 唯一commit ACK后返回最小结果（document_id/new_version_no或new_primary_version_no及原审计所需space/file名），原Service后继沿原Telemetry。commit unknown停止/保原异常+安全进度，不自动重试或补偿，不能凭返回前异常猜未提交；无外部IO/审计跨业务锁。测试实际native每写阶段失败/外层rollback/唯一primary、缺链/foreign/MD5/次序/开关、401+有界查询及实际App同TX；旧版本测试与精确基线矛盾单列，不删断言假绿。此组辅助原子能力不提前完成T083084或整历史入口/E2E。
+
+
+## 68. 新上传初始物化时间的双库静态闭合 V1：已冻结
+
+PERM T906/907仅原upload_registration_repository.py与新test_kn_upload_database_timestamp.py（每新叶≤600），测试原SQLite真实UPDATE trigger模拟已有DM updater的“任何UPDATE覆写update_time”，不是DM实库验证。用户只免DM实跑，并未免C2开发规范。原connection.py的无条件updater是现有部署事实，不能为普通上传依赖停用它或借本卡改全平台trigger。
+
+areserve/aset_materialized仅本次独立新File；key登记UPDATE后将真实数据库返回的File.update_time纳入新receipt，原期望其他全部列/Doc/V1/链保持核验。不得把普通上传物化的旧时间逐字不变要求套在既有无条件updater上；不重写历史、迁移M3保持原业务时间及§50运维规则不变。File对象key/metadata仍精确，非时间任意trigger改值须fail closed，当前事务/savepoint/issuer/私有ACK/重绑定边界不变。Doc primary初始化后真实时间也沿原实际重读，不猜server timezone/时钟单调。
+
+测试必须在精确父5e真实失败，再新Repo触发器绿，原47/42+App45+入口组合保留。真实C2 SQLModel/Repository/通用SQL，不判断dialect走分支或加migration-only开关；作者先确认事实，再只窄修新File时间校验且固定交root非作者审。
