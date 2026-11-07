@@ -375,3 +375,26 @@ async def test_partial_sql_error_rolls_back_own_savepoint_even_if_caller_commits
     async with built.sessions() as session:
         assert hit and (await session.get(KnowledgeFile, 81)).knowledge_id == 10
         assert (await session.get(KnowledgeFile, 50)).knowledge_id == 10
+
+
+@pytest.mark.parametrize("change", ["new-child", "new-tag"])
+async def test_accepted_before_scope_cannot_quietly_lose_new_children_or_tags(moving, monkeypatch, change):
+    import sqlalchemy as sa
+    from bisheng.database.models.tag import TagLink
+
+    built = await pipeline(moving, monkeypatch)
+    async with built.sessions() as session:
+        current, evidence = await prepared(session, built)
+        if change == "new-child":
+            await session.execute(
+                sa.insert(KnowledgeFile).values(
+                    id=83, tenant_id=101, knowledge_id=10, file_name="arrived", file_level_path="/50", level=1, status=3
+                )
+            )
+        else:
+            await session.execute(
+                sa.insert(TagLink).values(id=2, tenant_id=101, tag_id=1, resource_id="82", resource_type=8)
+            )
+        with pytest.raises(KnowledgeOperationPlanChangedError):
+            await built.repo.aapply_logical(session, prepared=current, projection_evidence=evidence)
+        assert (await session.get(KnowledgeFile, 50)).knowledge_id == 10
