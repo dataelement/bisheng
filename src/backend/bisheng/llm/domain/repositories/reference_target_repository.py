@@ -402,9 +402,12 @@ class ModelReferenceTargetRepository:
                     overridden_keys,
                 ),
             )
+        originals_by_target = {}
+        for original in originals:
+            originals_by_target.setdefault(original.target_id, []).append(original)
         facts = []
         for key in keys:
-            row, original = models.get(int(key.target_id)), _original(originals, key)
+            row, original = models.get(int(key.target_id)), _original(originals_by_target.get(key.target_id, ()), key)
             server = servers.get(row.server_id) if row else None
             if row is not None and (
                 server is None
