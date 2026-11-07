@@ -832,7 +832,7 @@ DTO NewUploadFile(frozen slots)仅原file_name/file_size/md5/split_rule/file_sou
 
 首版本沿原initial version事实/状态/时间及原File等待处理语义；effective processing snapshot作为原split_rule完整保存，不在Repo重新resolve。永久key由旧KnowledgeUtils按实际FileID的唯一算法在后继应用计算；Repo仅接已物化object_name，不调用MinIO/FGA/queue/provider。materialize/cleanup只对本Repo发行、同Session/事务、仍匹配本次独立V1链和当前File事实的receipt生效，不能删历史或别次同ID；失败/cancel局部savepoint整笔回滚。rollback_created仅补偿本次新链SQL，不宣称分布式原子性。跨TX receipt需求须先交root冻结，禁止自行放松成裸ID。
 
-native测试含实际autoincrement+全链互指、真实SQL触发器打断Doc/V1/物化写后外层catch再commit无半链、foreign/跨parent/坏path/空批/超批/pending拒且caller修改不丢、伪receipt/换TX/链被历史化拒补偿、200项有界查询与非笛卡尔积。原已有版本重链原生触发器反例确认两个primary的事务缺口，后继须另冻原子link Repo/Service/DI；其原权限动作尚未冻结，不能猜file.edit或扩大权限。原审批skip参数当前未消费，不凭任务标题新增审批行为；格式/实大小/配额在注册前检查、解析后内容安全失败保留原可见失败状态，两类不混称无残留。
+native测试含实际autoincrement+全链互指、真实SQL触发器打断Doc/V1/物化写后外层catch再commit无半链、foreign/跨parent/坏path/空批/超批/pending拒且caller修改不丢、伪receipt/换TX/链被历史化拒补偿、200项有界查询与非笛卡尔积。原已有版本重链原生触发器反例确认两个primary的事务缺口，后继须另冻原子link Repo/Service/DI；其原权限动作尚未冻结，不能猜file.edit或扩大权限。原审批skip参数当前未消费，不凭任务标题新增审批行为；实际大小/配额按原限额在注册前核对。格式沿原FileExtensionMap及原解析阶段，不前移白名单/另造guard；unsupported及解析后内容安全失败按原状态保留File与完整版本链。无残留仅禁止孤立Version/半链，不承诺所有解析失败零File/版本。
 
 
 ## 59. 原上传staging与有效规则唯一生产者 V1：已冻结

@@ -280,3 +280,6 @@ EDGE ba079原KnowledgeService准备段提取经root逐段审阅并正常合13b12
 root T885测试672eda7fa原生401/1001目标各3slot，两预算真红/3语义首绿；前版误用error字符串断言修正为原kwargs.reason后重跑为2红3绿，未当产品红。8c202ffd0仅Repo四增一替换，非union分支对原已读BRR按target ID一次分组，原_original/SQL/权限/锁序不变。原helper候选扫描分别482403→1203、3006003→3003，分组本身另需一次B扫描，整体O(B+M)而非宣称只读B次或常数内存。root十四路径**243 passed、1790 warnings、8.96秒**（/private/tmp/f118-model-original-green.log/.xml）。
 
 非作者EDGE固定archive复核：全部其余方法AST相同，原五路径52绿；独立同步/异步foreign、来源类型/ID/version及target-type同ID隔离四格，原5+额外4组合9绿，无确认行动项。日志/private/tmp/f118-edge-original-evidence-fixed.log与-independent-final.log，probe /private/tmp/test_f118_original_evidence_independent.py。T885886按真实线性匹配范围闭合。以上均不计实际M4 Coverage、公开模型删除、正式升级/恢复或E2E；待答AC80仍保持原Spec。
+
+
+范围再核：Spec AC09/14只要求沿原格式/大小/部门/内容规则且两端一致；实际unsupported由base_file_pipeline.run的原FileExtensionMap在解析期识别。故修正T083/084及§58过严的“格式前置零版本”实现文字，不改Spec或生产格式规则；解析失败保完整失败链，无孤立版本。上传真实依赖改为已冻原准备/原子注册T884/T882，不以初始上传虚构新J1 kind/edit门槛。此项是约束开发范围，并非新需求或已接线证明。
