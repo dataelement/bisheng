@@ -385,3 +385,18 @@ T921/T922/T923固定非作者复核闭合：EDGE全读8aac6e4b6及5940a3c72旧fi
 - T932–936与原Backend上传/整版本注册T083/T084闭合：普通文件、版本link/merge/primary、folder整批、Web新建/覆写及原v1/v2/MCP共用已装配后端用例。此为后端卡完成，不代表前端改造、94AC完整验收、正式迁移或真实E2E完成。
 - 扩展开放回归尝试首次误写不存在test_filelib_upload_overrides路径，收集为0不计验证。实际3路径（kn_open_upload_wiring、v2_filelib_unified、open_mcp/upload）为38 passed/2 failed；2个失败是QA/旧type0 clear FakeUser在既有ModelReference._user拒绝，`/private/tmp/f118-root-web-open-regression-corrected.log`。六涉事删除/prepare/_user/旧fixture函数与8aac基线AST逐项不变，未重跑实库基线故不声称基线已通过。完整QA/旧删除clear卡T093/T094、T125/T126仍待办，后继必须适配真实身份及R2；不为本上传波放宽生产门槛或跳过测试。
 - Scope系统Web键丢失由root实际native独立反例1红确认，按§78纯helper修至d44ef后原probe原样1绿（12warnings/.32s），`/private/tmp/f118-move-web-key-private-fixed.log`。Scope/K1尚未主合；相关卡仍待真正Cutover固定与主组合，不提前关闭移动任务。
+
+
+### 移动主体中性前置及最新完整选集（2026-11-07）
+
+- J0a 6dd7653c4及J0b 58ff40797已root逐段复核正常合流。纯subject decoder只解析原FrozenReference的主体事实，保home/执行tenant、S/D/audit分离及原credential/expiry/scope算法；原move capture/restore仅委托同decoder。Root新61+原18共79绿（/private/tmp/f118-root-move-actor-subject.log），两Model nullable/exclude标准String32/BigInteger和Retry非唯一索引原组合191绿（/private/tmp/f118-root-move-actor-models.log）。四原kind允许NULL，不据此推断user或授予权限。T939–942闭合；实际move accept/ready/worker未装配。
+- T943实际缺revision文件7真红（b826c6b01；/private/tmp/f118-t943-subject-ddl-red-fixed.log）；2116636cd中性DDL后33绿/7 warnings/.22秒（/private/tmp/f118-t944-subject-ddl-corrected.log/.xml）。唯一head由f118_finalize_retry推进f118_move_actor_subject，四nullable列+一Retry索引，只DDL、无JSON回填。首次实现后3失败是测试把自身verification SELECT算入migration SQL，固定instrumentation边界后通过，生产未为此放宽。PERM固定211663独立archive补仅Job/仅Retry部分升级两例，原33+新2为35绿（/private/tmp/f118-perm-ddl-211-review.log），保旧值与重复升级；T943944闭合。未执行真实数据库该revision升级，不能替代正式演练。
+- 固定源码2116636cd283e908ad1c842040be03fabb590f57：全knowledge_unification（仅TCP mock单模块另跑）+三原权限回归+旧folder/API+旧Web dedup/fetch共4890 passed /7原F054中间件占位skip /99386 warnings /269.73秒。/private/tmp/f118-root-web-subject-full.log/.xml，含P1、实际Web入口、J0和DDL，不含尚未合流PROC K1。旧4715/4554为历史选集，不累计。
+- 当前TCP mock模块独立真实loopback端口39 passed /9 warnings /1.41秒（/private/tmp/f118-root-mock-loopback-current.log/.xml）；真实OpenAI/LC Embedding/Chat/ETL client对接本地确定性mock，不等于外部provider或完整E2E。旧53为其他历史选集，本次实际39。
+
+### Folder/Web真实MySQL组件一次执行（2026-11-07）
+
+- Root完整复核1149行probe、受限launcher及六精确模块后，只执行一次已审批独立克隆库命令。固定App源码12eae69858d1e3796484f267d6bada91a8e73b0e，复用44f5bc87a2838a1a8a355742492ad0842df89c67经AST及实际import验证的依赖；不冒称整包211663或新版部署。probe SHA256 73ffc90127fc418304e413f5f0244ffd21169719414790986b188da8282c13cd；launcher fcc68355bae4d4f786402e6634a4a2843ed4ae4918be4b44f152307eaa73f03a；依赖对账d165cd1b820556272f54e0787dfad3732bc8bad8ff7880183ffc4f0cc7b6309b。packet位于独立109 evidence/f118-folder-web-mysql-12eae，不含凭据；复用现有镜像无pull/重启/配置修改，3005不操作。
+- MySQL bisheng_f118_probe_20261107 八例全部通过：nested Folder+Web File/Doc/V1及file先于folder逆删；空HTML不误删；第二对象写后故障仅清理自有attempted keys；原取消+补偿；异App子项阻止空目录清理；commit前后unknown均不猜ACK/不PUT；坏管理pin零SQL/原User不变；真实两连接3138/3140 FOR UPDATE等待及释放。原App/Repo/observer/identity与F048记录adapter是真实代码；admission、FGA/Blob运输隔离，User非JWT，未测HTTP/queue，不是E2E。
+- 11表全部原行/列摘要逐项相等，自己分配的File12/Doc7/V7已清理或回滚，Run0；AI分别File20→32/Doc16→23/Version25→32，不重置、不宣称物理还原。SQL705 SELECT/26 INSERT/15 UPDATE/23 DELETE及29 savepoint/release包含全量harness前后快照，不能当生产性能指标；App无SQL Session跨Blob/FGA。容器/启动时间及配置前后完全相等，旧标准API未替换。
+- 结果evidence/f118-folder-web-mysql-12eae/folder-web-result.json SHA256 18bd41b28371946b6fd37be1cf23a0849186647e0757a1cbbeeaf4ed2b3df40f；自有清理清单00ffb2d5c7dd86add1b52966025e4052e6f2a94c6d048509bcbc81560eda9870；root本地核验摘要/private/tmp/f118-root-folder-web-mysql-evidence/reviewed-summary.json。此为数据库组件证明，正式停服/基线冻结/转换/引用回填/恢复及浏览器E2E仍待实施。

@@ -216,3 +216,11 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 
 
 网页初始上传已复用同一短事务注册和私有提交收据，Markdown/HTML实际key及metadata与File/Doc/V1一起提交；释放Session后才对象/FGA，预派发失败按收据核链并逆序清理。网页覆写保原FileID/完整DocV关系及原对象覆盖失败语义，只先核现完整链并使用实际空间规则/预览缓存指纹；不承诺Blob覆盖自动恢复。目录整批统一派发及初始上传后端已独立复核，真实迁移/恢复和完整E2E仍待实施。证据见W6记录。
+
+
+移动任务主体前置已合入：原FrozenReference解析和两Model可空标量只记录主体事实，审计用户不代替S/D主体；原四kind允许NULL。中性DDL f118_move_actor_subject（parent f118_finalize_retry）仅四nullable列与一Retry索引，无JSON解析/回填。固定211663本地完整选集4890 passed/7旧占位skip，独立TCP mock39绿；实际move闭集/Owner/worker仍待装配。独立109克隆MySQL的Folder/Web八组件例全部通过，11表原数据摘要与容器配置不变、自增仍推进；运输隔离且未测JWT/HTTP/queue，不计正式升级或E2E。固定源码、摘要及边界见[W6记录](./wave6-implementation-review.md)。
+
+
+### 中性DDL后的移动主体启用前检查
+
+正式维护顺序仍为停服/排空/一致备份→中性DDL→只读盘点并冻结正式基线。启用move前，按实际库盘点move Job及其相关Retry主体字段为NULL/非法、原frozen reference与标量不一致或无法证明原主体的trial记录；实际reader及检查命令随J1/最终升级入口冻结。本次旧a1b源码无Processing表、现service未开放move仅是源码事实，不能代实际库COUNT。存在无法确认主体的试用数据时保持维护并failclosed，由运维按备份/试用数据处置流程判断；不按actor_user_id猜主体、不做在线JSON回填。普通四kind历史NULL不因该检查被阻断。DM8实测依用户决定免除，SQLModel/Repository/DDL的C2静态兼容继续执行；MySQL正式升级、恢复演练和E2E不免除。
