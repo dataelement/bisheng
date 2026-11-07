@@ -526,6 +526,9 @@ class UploadRegistrationRepository:
                 )
                 expected = deepcopy(facts)
                 expected[0].update(changes)
+                # Initial File registration accepts its real DB updater time;
+                # every other File/Doc/V1 fact remains exact, including create_time.
+                expected[0]["update_time"] = current[0]["update_time"]
                 if not all(_same(a, b) for a, b in zip(current, expected, strict=True)):
                     _blocked("materialized_chain_changed")
                 receipt = self._receipt(current)
