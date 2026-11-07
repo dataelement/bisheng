@@ -82,18 +82,20 @@ async def database(monkeypatch):
         await connection.run_sync(
             lambda active: SQLModel.metadata.create_all(active, tables=[Head.__table__, Binding.__table__])
         )
-    statements = []
+    statements, selects = [], []
 
     @sa.event.listens_for(engine.sync_engine, "before_cursor_execute")
-    def seen(_connection, _cursor, statement, parameters, _context, _many):
+    def seen(_connection, _cursor, statement, parameters, context, _many):
         statements.append((statement, parameters))
+        if context.compiled is not None and isinstance(context.compiled.statement, sa.sql.Select):
+            selects.append(context.compiled.statement)
 
     async def insert(model, rows):
         async with engine.begin() as connection:
             await connection.execute(model.__table__.insert(), rows)
 
     try:
-        yield SimpleNamespace(engine=engine, statements=statements, insert=insert)
+        yield SimpleNamespace(engine=engine, statements=statements, selects=selects, insert=insert)
     finally:
         visible_tenant_ids.reset(visible)
         current_tenant_id.reset(tenant)
@@ -177,6 +179,7 @@ async def test_10001_actual_ids_with_gaps_seek_complete_rows_and_the_same_digest
     async with AsyncSession(database.engine) as session, session.begin():
         repo, after = api().ReferenceBackfillRepository(), 0
         database.statements.clear()
+        database.selects.clear()
         while True:
             page = await repo.alist_source_rows(session, source_key=source, after_id=after, limit=page_size)
             for item in page.items:
@@ -189,10 +192,11 @@ async def test_10001_actual_ids_with_gaps_seek_complete_rows_and_the_same_digest
             after = page.next_after
         assert observed == [row["id"] for row in rows] and actual.digest() == expected.digest()
         assert len(database.statements) == (10001 + page_size - 1) // page_size
-        assert all(
-            "OFFSET" not in sql.upper() and "COUNT(" not in sql.upper() and "ORDER BY" in sql.upper()
-            for sql, _ in database.statements
-        )
+        # SQLite compiles a bare LIMIT into LIMIT ? OFFSET 0. Reject actual
+        # offset pagination on the executed Select rather than that dialect text.
+        assert len(database.selects) == len(database.statements)
+        assert all(statement._offset_clause is None for statement in database.selects)
+        assert all("COUNT(" not in sql.upper() and "ORDER BY" in sql.upper() for sql, _ in database.statements)
         assert not session.identity_map
 
 
