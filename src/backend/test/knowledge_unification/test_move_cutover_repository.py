@@ -509,3 +509,38 @@ async def test_logical_receipt_is_original_one_use_and_same_transaction(moving, 
         await session.execute(sa.text("SELECT 1"))
         with pytest.raises(KnowledgeOperationPlanConflictError):
             built.repo.assert_logical_current(receipt, session)
+
+
+@pytest.mark.parametrize("change", ["root", "file"])
+async def test_reservation_consume_rechecks_actual_before_facts_in_the_original_transaction(moving, change):
+    import sqlalchemy as sa
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+
+    repo = MoveCutoverRepository(scope_repository=moving.repo)
+    async with AsyncSession(moving.engine) as session:
+        scope = await fixtures.load(moving, session)
+        plan = await confirmation(session, scope)
+        await session.commit()
+        receipt = await repo.aprepare_reservation(
+            session,
+            scope=scope,
+            confirmation_id=plan.confirmation_id,
+            plan_digest=plan.plan_digest,
+            actor_user_id=7,
+            actor_reference=ACTOR,
+        )
+        if change == "root":
+            await session.execute(
+                sa.update(Knowledge)
+                .where(Knowledge.id == 10, Knowledge.tenant_id == 101)
+                .values(model_config_revision=99)
+            )
+        else:
+            await session.execute(
+                sa.update(KnowledgeFile)
+                .where(KnowledgeFile.id == 81, KnowledgeFile.tenant_id == 101)
+                .values(md5="replaced-source")
+            )
+        with pytest.raises(KnowledgeOperationPlanChangedError):
+            await repo.aconsume_reservation(session, receipt)
+        assert (await session.get(KnowledgeOperationPlan, plan.confirmation_id)).operation_id is None
