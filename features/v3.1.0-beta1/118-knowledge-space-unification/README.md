@@ -10,7 +10,7 @@
 - [Spec：94 条验收标准](./spec.md)
 - [技术设计：迁移、策略统一、业务绑定维护和强制删除](./design.md)
 - [实施任务：接口、依赖、文件 Owner 与验证](./tasks.md)
-- [剩余110项：需求分组、逐项编号和依赖](./pending-tasks.md)
+- [剩余112项：需求分组、逐项编号和依赖](./pending-tasks.md)
 - [剩余任务范围复核：AC依据、授权边界与外移记录](./scope-review.md)
 - [独立待办：分享链接签发授权（已移出F118）](../../../docs/backlog/share-link-issuance-authorization.md)
 - [多 agent 并行开发：边界、耦合与合流协议](./parallel-development.md)
@@ -94,6 +94,6 @@ APP真实保存版本、频道完整当前配置、Knowledge自身模型和五�
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史936编号：824已完成/历史交付、110当前待办、2外移；原137队列已完成36项、剩101项，另9张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史938编号：824已完成/历史交付、112当前待办、2外移；原137队列已完成36项、剩101项，另11张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。

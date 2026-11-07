@@ -1040,3 +1040,10 @@ INT T934/T935只既有knowledge/domain/services/knowledge_space_service.py及新
 _build_web_link_split_rule改内部实际Knowledge/file_name输入，唯一KnowledgeUtils.processing_snapshot_for_legacy_request(FileProcessBase(id),knowledge,file_name,file_source=WEB_LINK)及现legacy_rule_from_snapshot生成原legacy字段和_effective_processing；不把默认参数当显式覆盖，system→space/config_version沿SSOT，Web最终11separators/after/overlap0仍原专用规则。新建实际PreparedWebLink→同factory.acreate_web_link，pre-dispatch失败同App自有补偿且保主错误；telemetry在成功返回之后。原scheduler/callback保持，preview改现preview_cache_key_for_split_rule以实际保存rule+原content_hash，队列unknown不回收。现DI无新增生产改动。仅Web新建旧自commit writer与专用cleanup/helper若实际无生产caller则移除；其他旧入口不顺带清理。
 
 覆写只窄接线：用现KnowledgeVersionReadRepository.aget_anchor（独立短只读Session）验证实际duplicate完整File/Doc/V/SPACE同tenant与同当前Root，不新增动作、不自行建V1。原File ID/DocV IDs/统计/primary以及旧两个key覆盖和Blob失败语义保留，不套初始receipt或逆删旧对象、不增备份/revision keys/分布式原子性。原单File字段更新→必要parent project_move→scheduler顺序保留，沿实际新规则快照/preview fingerprint。Doc.path不借此移动全历史，不扩大版本移动业务。原Parent/owner/updater语义保留。新HTTP/native组合含规则变更/cache、dedup/权限/pin/unknown、完整初始链、覆写primary及historical/坏链及旧对象失败边界；原rebuild早拒和普通/目录上传回归。未装配新App前不改原Service，更不提前闭T083/T084。
+
+
+## 78. 移动保留网页系统元数据的唯一过滤 V1：已冻结
+
+root对3e09361ca独立native反例确认：源schema合法含html_snapshot_object_name:string而目标无时，Scope按removed_fields直接pop会丢WEB_LINK历史文件的快照指针（`/private/tmp/f118-move-web-key-private-probe.log`）。这是§73保系统键的修正，不增字段命名禁令或新产品政策。PROC T937/T938新增纯Domain knowledge/domain/services/move_metadata_policy.py并改原move_scope_repository.py（两生产叶）；原test_move_scope_repository.py补真实反例。
+
+WEB_LINK_SYSTEM_KEYS唯一定义原实际六键source_type/source_url/final_url/web_title/imported_at/html_snapshot_object_name；effective_move_removed_fields(*,file_source,removed_fields:tuple[str,...])->tuple[str,...]只在原WEB_LINK来源剔除这六键，其余来源保持原集合/顺序。无SQL/IO/hash/授权/字段名禁令。Scope每实际row用该helper执行pop；同名非Web自定义字段仍按AC21清理，Web系统键始终保留。后继MoveOwner对单item用同helper构造原MoveMetadataPolicy，来源为已与冻结row/revision核实的实际File.file_source，不假定当前MoveLeaf有file_source属性，不先改DTO/worker/热Svc。Scope仍原digest/类型/DTO同对象/锁序，helper不是第二metadata算法或新版worker policy。Native覆盖六键与Web/普通对照，现Scope/Schema及Cutover真实P1组合保留。
