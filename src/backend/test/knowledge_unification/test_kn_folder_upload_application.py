@@ -5,7 +5,13 @@ import sqlalchemy as sa
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, KnowledgeProcessingConflictError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.core.context import tenant as context
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState
+from bisheng.permission.application.identity import (
+    PermissionActor,
+    reset_current_permission_actor,
+    set_current_permission_actor,
+)
 from test.knowledge_unification import test_kn_space_upload_application as original
 
 native = original.native
@@ -179,3 +185,20 @@ async def test_actual_locked_root_busy_prevents_new_folder_before_projection(cas
         await folder(application, case)
     assert await original.original.snapshot(case.database) == before
     case.adapter._permission.authorize_created.assert_not_awaited()
+
+
+async def test_selected_super_folder_keeps_original_home_actor_and_receipt_tenant(case, monkeypatch):
+    case.user.tenant_id, case.user.is_global_super = 1, True
+    case.actor = PermissionActor(user_id=7, tenant_id=1, super_admin=True)
+    actor_token = set_current_permission_actor(case.actor)
+    flag, pin = context.set_is_management_api(True), context.set_admin_scope_tenant_id(101)
+    try:
+        application = original.app(case, monkeypatch)
+        row = await folder(application, case)
+        assert row.tenant_id == 101 and case.user.tenant_id == case.actor.current_tenant_id == 1
+        await application.arollback_created()
+        assert case.adapter._permission.authorize_created.await_args.kwargs["actor"] is case.actor
+    finally:
+        context._admin_scope_tenant_id.reset(pin)
+        context._is_management_api.reset(flag)
+        reset_current_permission_actor(actor_token)
