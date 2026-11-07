@@ -160,22 +160,35 @@ class UploadRegistrationRepository:
             return
         state = self._root_commits[root] = {"commits": WeakSet(), "ended": False}
         native, root_ref = transaction.session.sync_session, ref(root)
+        native_ref = ref(native)
 
         def committed(current):
             actual = current.get_nested_transaction() or current.get_transaction()
             if actual is not None and _root(actual) is root_ref():
                 state["commits"].add(actual)
 
-        def remove():
-            sa.event.remove(native, "after_commit", committed)
-            sa.event.remove(native, "after_transaction_end", ended)
+        def remove(_finished=None):
+            task_ref = state.pop("cleanup_task", None)
+            task = task_ref() if task_ref else None
+            if task is not None:
+                task.remove_done_callback(remove)
+            target = native_ref()
+            if target is not None:
+                for name, listener in (("after_commit", committed), ("after_transaction_end", ended)):
+                    if sa.event.contains(target, name, listener):
+                        sa.event.remove(target, name, listener)
 
         def ended(_current, actual):
             if actual is root_ref():
                 state["ended"] = True
-                # Do not mutate SQLAlchemy's listener deque during dispatch.
-                asyncio.get_running_loop().call_soon(remove)
+                # Later caller hooks may yield through the async SQL bridge.
+                # Only owner-task completion proves their dispatch stack ended.
+                task = asyncio.current_task()
+                if task is not None:
+                    state["cleanup_task"] = ref(task)
+                    task.add_done_callback(remove)
 
+        state["retire"] = remove
         sa.event.listen(native, "after_commit", committed)
         sa.event.listen(native, "after_transaction_end", ended)
 
@@ -351,6 +364,7 @@ class UploadRegistrationRepository:
             or len(registrations) > 200
         ):
             _blocked("invalid_acknowledgement")
+        retire = {}
         for receipt in registrations:
             issued = self._original(receipt)
             transaction = issued.transaction.transaction
@@ -367,6 +381,10 @@ class UploadRegistrationRepository:
                 if transaction.is_active or transaction not in state["commits"]:
                     _blocked("original_root_commit_required")
                 transaction = transaction.parent
+            retire[id(state)] = state["retire"]
+        # The App calls only after its awaited commit returned a definite ACK.
+        for remove in retire.values():
+            remove()
         self._acknowledged.update(registrations)
 
     async def _arebind_committed_initial(
