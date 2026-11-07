@@ -146,6 +146,7 @@ async def test_locked_real_rebuilding_space_keeps_entire_chain_and_audit_unchang
 
 
 async def test_commit_ack_loss_propagates_original_exception_without_false_audit_or_relink_retry(wired):
+    before = await native_tests.snapshot(wired.database)
     failure = RuntimeError("commit ACK unknown")
     calls = []
 
@@ -166,7 +167,8 @@ async def test_commit_ack_loss_propagates_original_exception_without_false_audit
     assert caught.value is failure and calls == [1]
     after = await native_tests.snapshot(wired.database)
     versions = [row for row in after["knowledge_document_version"] if row["document_id"] == 20]
-    assert len(versions) == 4 and len([row for row in versions if row["is_primary"]]) == 1
+    old_count = sum(row["document_id"] == 20 for row in before["knowledge_document_version"])
+    assert len(versions) == old_count + 1 and len([row for row in versions if row["is_primary"]]) == 1
     assert next(row for row in versions if row["is_primary"])["knowledge_file_id"] == 101
     wired.audit_link.assert_not_called()
     wired.audit_primary.assert_not_called()
