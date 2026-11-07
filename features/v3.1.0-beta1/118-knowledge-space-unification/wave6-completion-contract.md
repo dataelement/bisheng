@@ -1020,3 +1020,6 @@ build_web_link_objects(prepared,*,file_id:真实正int)->WebLinkObjectPlan返回
 ## 75. 移动闭集纯 Domain DTO 前置 V1：已冻结
 
 T930/T931由PROC在K1实施前抽取新knowledge/domain/schemas/move_processing.py，仅Scope/闭集/ParentState窄口所需的纯DTO、类型与值校验。ScopeRepo显式reexport同一class对象供既冻消费者使用；不复制原digest、projection协议或metadata算法，不引入SQL、Session、App或权限控制面行为。此纯前置作为独立一生产叶卡，Scope和Cutover继续原两生产叶/每叶≤600，不压行、不为行数造反向依赖。真实native Scope/401与10001历史、source-input guard、P1实际证据组合覆盖原样保留。原P1/K1边界和后继未授权范围不变；actor.operator沿原PermissionActor.user_id实际subject事实，S为服务账号ID，不以Job自然人owner替代。
+
+
+§73 P1恢复窄口补充：原Runtime.parent_change的prepare已提交但mark_projecting前退出时，仅native PREPARED且完整原plan/id/key/checksum已核、实际Mode仍CURRENT且before parent/mode/expected version精确相符，bridge可用原components.state.mark_projecting（原old_target/opid/after parent/实际runtime Catalog release_id）补完原保留步骤，再原reconcile。禁止换actor重建plan。其他nonfinalized先核Mode确属本op和冻结parent/version，不能把其他op blanket fail_closed；特定ProjectionFailed后仅fresh重读同id/key/checksum确FAILED_CLOSED才原inspect/confirmation/recover。原Runtime/State不改，无新投影协议或worker竞态框架。真实prepare-only、不同op、错误parent/version/取消和S/D原operator必须覆盖。
