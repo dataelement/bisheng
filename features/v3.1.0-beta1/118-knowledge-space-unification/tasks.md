@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史956编号：839已完成/历史交付、115当前待办、2外移；原137队列已完成38项、剩99项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史956编号：847已完成/历史交付、107当前待办、2外移；原137队列已完成38项、剩99项，另8张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7517,7 +7517,7 @@
   **配对测试**：T928\
   **验证 / 完成条件**：新叶≤600/static、固定非作者复核和主组合；App/Svc后继未接不验收Web。
 
-- [ ] **T930 · 移动闭集纯 Domain DTO 同一类型与边界测试**
+- [x] **T930 · 移动闭集纯 Domain DTO 同一类型与边界测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_processing_schema.py`\
   **逻辑 / 测试上下文**：W6§75同一DTO reexport、纯值校验、不复制hash/协议；原native闭集与source guard测试保留。\
@@ -7525,7 +7525,7 @@
   **覆盖 AC**: AC-13, AC-43, AC-83\
   **验证 / 完成条件**：真实缺模块红或明确首绿，native组合与无新IO/authority。
 
-- [ ] **T931 · 移动闭集纯 Domain DTO 前置**
+- [x] **T931 · 移动闭集纯 Domain DTO 前置**
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/schemas/move_processing.py`\
   **逻辑 / 测试上下文**：W6§75只DTO/类型校验，Scope显式同对象reexport；不为600行制造反向依赖。\
@@ -7573,7 +7573,7 @@
   **覆盖 AC**: AC-09, AC-43\
   **验证 / 完成条件**：真实红绿或首绿明确记录，固定非作者复核及相关native组合；不以局部证明冒整卡/E2E。
 
-- [ ] **T937 · 跨空间移动保留网页系统键的真实反例**
+- [x] **T937 · 跨空间移动保留网页系统键的真实反例**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_scope_repository.py`\
   **逻辑 / 测试上下文**：W6§78源schema同名字段被移除时Web六系统键仍保，普通同名自定义值仍清；不扩字段禁令。\
@@ -7581,7 +7581,7 @@
   **覆盖 AC**: AC-18, AC-21, AC-43\
   **验证 / 完成条件**：root独立真实1红及作者六键native反例，纯helper/Scope与后继policy共享，固定复核。
 
-- [ ] **T938 · 移动网页系统键唯一过滤**
+- [x] **T938 · 移动网页系统键唯一过滤**
   **类型 / Owner**：后端 Domain / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/move_metadata_policy.py`；`src/backend/bisheng/knowledge/domain/repositories/move_scope_repository.py`\
   **逻辑 / 测试上下文**：W6§78纯helper+Scope两叶，后继Owner同helper构造原MoveMetadataPolicy，原DTO/hash/Worker不改。\
@@ -7637,7 +7637,7 @@
   **配对测试**：T943\
   **验证 / 完成条件**：真实红绿/首绿分列、固定非作者复核及相关组合，新叶≤600；不提前验收move/J1/正式升级。
 
-- [ ] **T945 · 移动 owned Root 锚与坏后代闭集反例**
+- [x] **T945 · 移动 owned Root 锚与坏后代闭集反例**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_scope_repository.py`；`src/backend/test/knowledge_unification/test_move_row_repository.py`\
   **逻辑 / 测试上下文**：W6§80实际全局tenant filter下foreign子目录/缺File或Doc/目录被版本引用等不隐藏，原Scope/Schema规模和真P1证据保留。\
@@ -7645,7 +7645,7 @@
   **覆盖 AC**: AC-17, AC-18, AC-43, AC-83, AC-85\
   **验证 / 完成条件**：作者独立真实1红固化，不以旧foreign-root例替代；只读零DML及固定非作者复验。
 
-- [ ] **T946 · 移动真实 owned Root FK 读取**
+- [x] **T946 · 移动真实 owned Root FK 读取**
   **类型 / Owner**：后端 Repository / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/move_row_repository.py`；`src/backend/bisheng/knowledge/domain/repositories/move_scope_repository.py`\
   **逻辑 / 测试上下文**：W6§80提取具体FK reader，Scope同签名消费，原Hash/DTO/权限/worker不变，无bypass/假Root锚。\
@@ -7669,7 +7669,7 @@
   **配对测试**：T947\
   **验证 / 完成条件**：预算红转绿、现有Owner/native组合与固定非作者复核，不顺改OR/IN/original_for或读侧叶。
 
-- [ ] **T949 · 移动祖先NULL根路径真实反例**
+- [x] **T949 · 移动祖先NULL根路径真实反例**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_scope_repository.py`\
   **逻辑 / 测试上下文**：W6§82合法nested tree的Root NULL/空串控制，原路径错误/权限/闭集断言保留。\
@@ -7677,7 +7677,7 @@
   **覆盖 AC**: AC-18, AC-19, AC-43, AC-83\
   **验证 / 完成条件**：真实NULL红及空串首绿分列，独立原反例复验。
 
-- [ ] **T950 · 移动祖先路径使用原解析语义**
+- [x] **T950 · 移动祖先路径使用原解析语义**
   **类型 / Owner**：后端 Repository / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/move_scope_repository.py`\
   **逻辑 / 测试上下文**：W6§82仅沿唯一path_ids规范比较，保原持久编码/DTO/hash/worker，无新路径政策。\

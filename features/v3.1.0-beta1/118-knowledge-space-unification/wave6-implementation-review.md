@@ -410,3 +410,8 @@ Root实际source-authorized read native基线：KN files401/1001为402/1002次RR
 
 
 T947948已主合df816b67f，Root完整读唯一Repo diff/测试矩阵，六路径84 passed/532 warnings/2.83s（/private/tmp/f118-root-kn-tombstone-batch.log/.xml），独立AST核15个原authority/revision/source/proof/consumer函数不变。真实6个预算红及缺producer/异常结果红转绿，原缺owner/刷新/late-parent控制保留；445生产行/276测试行。只闭tombstone批锁接缝，单版10001旧OR错误、稀疏版本×目标查询和读侧M×B均明确仍待§84或后继，不提前验收引用性能整卡。
+
+
+移动接缝分项验收：Root完整读269行纯Schema/同对象reexport、15行Web系统键过滤、115行真实FK reader与Scope对应消费；原9path237及原作者外foreign子目录1绿、Web系统键原独立1红→1绿已满足T930931/T937938/T945946，分别闭合，不冒整K1。独立两个P2仍由T949–952显式承接。
+
+T949950 fixed4b6baf81f真实NULL1红/空串1首绿→作者九路径239绿/40.27秒，原独立nested两格2绿。Root逐行复核4b6仅4增3删，沿唯一path_ids比较、不改持久编码，正常合入8d4c6981b；主树Scope+原独立NULL格共51 passed/2历史格明确deselected/650 warnings/4.54秒（/private/tmp/f118-root-null-path-fixed-corrected.log/.xml）。首次组合错误重复-p test.conftest注册、0实际测试，不算产品红，移除重复注册后上述通过。仅NULL接缝闭合；历史folder格T951952仍待修，T926927整K1保持待办。
