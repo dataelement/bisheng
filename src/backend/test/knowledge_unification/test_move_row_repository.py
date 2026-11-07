@@ -7,7 +7,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import bypass_tenant_filter
-from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import TagLink
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
@@ -46,12 +45,8 @@ async def test_owned_root_does_not_hide_foreign_children_or_parent_job(moving, k
             session.add(KnowledgeFile(id=90, tenant_id=202, knowledge_id=10, file_name="foreign", file_type=0))
             model, key = KnowledgeFile, 90
         elif kind == "tag":
-            session.add(
-                TagLink(
-                    id=90, tenant_id=202, tag_id=1, resource_id="81", resource_type=ResourceTypeEnum.SPACE_FILE.value
-                )
-            )
-            model, key = TagLink, 90
+            session.get(TagLink, 1).tenant_id = 202
+            model, key = TagLink, 1
         elif kind == "job":
             job.tenant_id = 202
             model, key = KnowledgeProcessingJob, "job"

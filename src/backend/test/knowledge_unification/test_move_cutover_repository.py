@@ -515,6 +515,7 @@ async def test_logical_receipt_is_original_one_use_and_same_transaction(moving, 
 @pytest.mark.parametrize("change", ["root", "file"])
 async def test_reservation_consume_rechecks_actual_before_facts_in_the_original_transaction(moving, change):
     import sqlalchemy as sa
+
     from bisheng.knowledge.domain.models.knowledge import Knowledge
 
     repo = MoveCutoverRepository(scope_repository=moving.repo)
