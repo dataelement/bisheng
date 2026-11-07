@@ -106,7 +106,7 @@ async def test_native_mutator_rejects_caller_pending_before_savepoint_autoflush(
         assert other in session.dirty and other.remark == "caller-owned-pending"
 
 
-async def pipeline(moving, monkeypatch):
+async def pipeline(moving, monkeypatch, *, zero=None, count=2):
     """Actual P1 runtime + SQL finalizer; only Catalog result/FGA transport isolated."""
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
@@ -127,6 +127,38 @@ async def pipeline(moving, monkeypatch):
         async with AsyncSession(moving.engine, expire_on_commit=False) as session:
             yield session
 
+    from bisheng.database.models.tag import TagLink
+    from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+    from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+    from bisheng.knowledge.domain.models.knowledge_processing_job import processing_now
+
+    async with sessions() as session:
+        if zero == "empty":
+            for model in (TagLink, KnowledgeDocumentVersion, KnowledgeDocument):
+                await session.execute(sa.delete(model.__table__))
+            await session.execute(
+                sa.delete(KnowledgeFile).where(KnowledgeFile.id.in_((81, 82)), KnowledgeFile.tenant_id == 101)
+            )
+        elif zero == "all-skipped":
+            await session.execute(
+                sa.update(KnowledgeFile).where(KnowledgeFile.id == 81, KnowledgeFile.tenant_id == 101).values(status=3)
+            )
+        for n in range(3, count + 1):
+            session.add(
+                KnowledgeFile(
+                    id=1000 + n,
+                    tenant_id=101,
+                    knowledge_id=10,
+                    file_name=str(n),
+                    file_level_path="/50",
+                    level=1,
+                    status=2,
+                )
+            )
+            session.add(
+                KnowledgeDocumentVersion(id=20000 + n, document_id=80, knowledge_file_id=1000 + n, version_no=n)
+            )
+        await session.commit()
     repo = MoveCutoverRepository(scope_repository=moving.repo)
     async with sessions() as session:
         scope = await fixtures.load(moving, session)
@@ -142,7 +174,7 @@ async def pipeline(moving, monkeypatch):
         )
         job_id = receipt.job_id
         await repo.aconsume_reservation(session, receipt)
-        until = datetime.now() + timedelta(minutes=10)
+        until = processing_now() + timedelta(minutes=10)
         session.add(
             KnowledgeProcessingJob(
                 id=job_id,
@@ -160,20 +192,24 @@ async def pipeline(moving, monkeypatch):
                 claim_generation=1,
                 lease_token="lease-token",
                 lease_until=until,
-                total_count=1,
+                total_count=sum(leaf.participates for leaf in scope.leaves),
             )
         )
-        session.add(
-            KnowledgeProcessingItem(
-                id="item-81",
-                tenant_id=101,
-                job_id=job_id,
-                file_id=81,
-                document_id=80,
-                version_id=181,
-                expected_space_id=11,
-                expected_parent_id=50,
-            )
+        session.add_all(
+            [
+                KnowledgeProcessingItem(
+                    id=f"item-{leaf.target.file_id:08d}",
+                    tenant_id=101,
+                    job_id=job_id,
+                    file_id=leaf.target.file_id,
+                    document_id=leaf.target.document_id,
+                    version_id=leaf.target.version_id,
+                    expected_space_id=11,
+                    expected_parent_id=leaf.destination_parent_id,
+                )
+                for leaf in scope.leaves
+                if leaf.participates
+            ]
         )
         await session.commit()
     expectations = []
@@ -380,6 +416,7 @@ async def test_partial_sql_error_rolls_back_own_savepoint_even_if_caller_commits
 @pytest.mark.parametrize("change", ["new-child", "new-tag"])
 async def test_accepted_before_scope_cannot_quietly_lose_new_children_or_tags(moving, monkeypatch, change):
     import sqlalchemy as sa
+
     from bisheng.database.models.tag import TagLink
 
     built = await pipeline(moving, monkeypatch)
@@ -398,3 +435,46 @@ async def test_accepted_before_scope_cannot_quietly_lose_new_children_or_tags(mo
         with pytest.raises(KnowledgeOperationPlanChangedError):
             await built.repo.aapply_logical(session, prepared=current, projection_evidence=evidence)
         assert (await session.get(KnowledgeFile, 50)).knowledge_id == 10
+
+
+@pytest.mark.parametrize("zero", ["empty", "all-skipped"])
+async def test_real_zero_index_items_keep_real_logical_cutover_and_no_fake_file(moving, monkeypatch, zero):
+    from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
+
+    built = await pipeline(moving, monkeypatch, zero=zero)
+    async with built.sessions() as session:
+        current, evidence = await prepared(session, built)
+        receipt = await built.repo.aapply_logical(session, prepared=current, projection_evidence=evidence)
+        assert receipt.index_item_count == 0
+        assert (await session.execute(select(KnowledgeProcessingItem.id))).all() == []
+        built.repo.assert_logical_current(receipt, session)
+        await session.commit()
+    async with built.sessions() as session:
+        assert (await session.get(KnowledgeFile, 50)).knowledge_id == 11
+
+
+async def test_native_item_projection_is_seek_paged_without_manifest_or_snapshot(moving, monkeypatch):
+    import sqlalchemy as sa
+
+    built = await pipeline(moving, monkeypatch, count=401)
+    reads = []
+
+    def record(conn, cursor, sql, params, context, many):
+        if sql.lstrip().upper().startswith("SELECT") and "knowledge_processing_item" in sql:
+            reads.append((sql, params))
+
+    sa.event.listen(moving.engine.sync_engine, "before_cursor_execute", record)
+    try:
+        async with built.sessions() as session:
+            await prepared(session, built)
+        assert len(reads) >= 2
+        assert all(
+            "LIMIT" in sql.upper() and "processing_snapshot" not in sql and "scope_manifest" not in sql
+            for sql, _ in reads
+        )
+        assert all(
+            any(type(value) is str and (value == "" or value.startswith("item-")) for value in params)
+            for _, params in reads
+        )
+    finally:
+        sa.event.remove(moving.engine.sync_engine, "before_cursor_execute", record)
