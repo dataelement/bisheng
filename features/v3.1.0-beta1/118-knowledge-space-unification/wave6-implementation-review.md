@@ -269,3 +269,14 @@ M3最终518f组件经非作者复核原53与额外7个native边界绿；最初Se
 109独立克隆库bisheng_f118_probe_20261107以44f5bc87a固定backend归档运行MySQL转换组件，archive SHA256 23601ea9dfbe4f138e04119f9f241aa5d96d2e216a8dd2fd46ca46fa5785989c。SQL守卫禁止DDL/commit及File写，仅白名单组件DML；实际3tenant中tenant1执行3命令（1个0→3、2个新V1），真实分配Doc4/5、Version5/6，checkpoint事务内complete。业务时间/model/index原列及File全列保持；外TX强制rollback后所核11张表完整逐列摘要前后同c2661282f826d565a8f5d3e8c8f40726ba7802f1e72e830342987e8cf57efa65，Run0。MySQL自增计数器会因回滚分配推进，故不声称数据库物理状态逐位还原；仅测试克隆库，未影响原业务库。85 SELECT、5 INSERT、6 UPDATE、两SAVEPOINT/RELEASE；组件没有durable commit权限。
 
 证据evidence/preparatory-native-sql.json SHA256 61c9699bec2148636e9599532a9bdc00b15f10c4c60c56f7ca6a51657bdb0949，无凭据脚本同目录preparatory-native-sql-probe.py，local /private/tmp/f118-preparatory-native-sql.json。首次脚本误用测试常量MODELS导致AttributeError，只修准备脚本，非产品红/源码修复。Run的refs仅此回滚TX中组件fixture，未证明正式artifact membership；不计正式M2/M3/升级恢复/T202/E2E。原API启动时间仍2026-11-06T12:16:13.795554937Z，3005未操作。
+
+
+## 共享冻结读取、精确反解、上传准备及绑定扫描复核（2026-11-07）
+
+PROC reader314b单原叶提取经root全部diff/原协议复核，主树1e9d四路径**50 passed、5273 warnings、8.50秒**（/private/tmp/f118-root-frozen-reader-integrated.log/.xml）；codec ecfbf新70行仅同一闭集精确反解，root核实际五Domain类/原date字节/provenance后正常合主d5e1e3fbcc2212601af965c5b17714827756d498，七路径**178 passed、20532 warnings、24.63秒**（/private/tmp/f118-root-frozen-codec-sql-integrated.log/.xml）。作者15真缺接口红、13真缺模块红与各23/24完整路径765/778绿是不同选集，不累计；真实M2 permissions测试fixture修正非产品红。T875–878按共享reader/decoder范围闭合，真实App执行879880仍待办。
+
+EDGE ba079原KnowledgeService准备段提取经root逐段审阅并正常合13b12857a，主树原四路径**54 passed、1198 warnings、4.67秒**（/private/tmp/f118-root-upload-preparation-integrated.log/.xml）。16缺prepare真红，原三测试叶未改；原process签名/返回和从MinIO开始后缀AST一致，prepare零SQL/FGA/对象写/queue，原actual effective resolver唯一复用。Ruff原38→37自然去unused，不添加抑制或新诊断。T883884闭合，仅供后继SPACE共享，实际add_file/文件夹/网页/历史重链与83/84未闭合。
+
+root T885测试672eda7fa原生401/1001目标各3slot，两预算真红/3语义首绿；前版误用error字符串断言修正为原kwargs.reason后重跑为2红3绿，未当产品红。8c202ffd0仅Repo四增一替换，非union分支对原已读BRR按target ID一次分组，原_original/SQL/权限/锁序不变。原helper候选扫描分别482403→1203、3006003→3003，分组本身另需一次B扫描，整体O(B+M)而非宣称只读B次或常数内存。root十四路径**243 passed、1790 warnings、8.96秒**（/private/tmp/f118-model-original-green.log/.xml）。
+
+非作者EDGE固定archive复核：全部其余方法AST相同，原五路径52绿；独立同步/异步foreign、来源类型/ID/version及target-type同ID隔离四格，原5+额外4组合9绿，无确认行动项。日志/private/tmp/f118-edge-original-evidence-fixed.log与-independent-final.log，probe /private/tmp/test_f118_original_evidence_independent.py。T885886按真实线性匹配范围闭合。以上均不计实际M4 Coverage、公开模型删除、正式升级/恢复或E2E；待答AC80仍保持原Spec。

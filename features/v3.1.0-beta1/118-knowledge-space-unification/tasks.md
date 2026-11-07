@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史886编号：771已完成/历史交付、113当前待办、2外移；原137队列已完成36项、剩101项，另12张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史886编号：779已完成/历史交付、105当前待办、2外移；原137队列已完成36项、剩101项，另4张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7077,7 +7077,7 @@
   **配对测试**：T873\
   **验证 / 完成条件**：固定范围新旧原生选集与规模、独立复核通过，完整公开删除另卡。
 
-- [ ] **T875 · 正式冻结产物共享读取测试**
+- [x] **T875 · 正式冻结产物共享读取测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_frozen_plan_reader.py`\
   **逻辑 / 测试上下文**：W6§57冻结边界；真实原生事务、严格身份、完整材料先验与有界读取；不提前验收原整项任务。\
@@ -7085,7 +7085,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-59, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：真实红绿、独立固定SHA复核、主树集成；不以本地native替代真实MySQL升级或E2E。
 
-- [ ] **T876 · 正式冻结产物共享读取**
+- [x] **T876 · 正式冻结产物共享读取**
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_inventory.py`\
   **逻辑 / 测试上下文**：W6§57冻结边界；真实原生事务、严格身份、完整材料先验与有界读取；不提前验收原整项任务。\
@@ -7093,7 +7093,7 @@
   **配对测试**：T875\
   **验证 / 完成条件**：真实红绿、独立固定SHA复核、主树集成；不以本地native替代真实MySQL升级或E2E。
 
-- [ ] **T877 · SQL转换页精确反解测试**
+- [x] **T877 · SQL转换页精确反解测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_conversion_codec.py`\
   **逻辑 / 测试上下文**：W6§57冻结边界；真实原生事务、严格身份、完整材料先验与有界读取；不提前验收原整项任务。\
@@ -7101,7 +7101,7 @@
   **覆盖 AC**: AC-56, AC-58, AC-59, AC-63, AC-85, AC-93\
   **验证 / 完成条件**：真实红绿、独立固定SHA复核、主树集成；不以本地native替代真实MySQL升级或E2E。
 
-- [ ] **T878 · SQL转换页精确反解**
+- [x] **T878 · SQL转换页精确反解**
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_conversion_codec.py`\
   **逻辑 / 测试上下文**：W6§57冻结边界；真实原生事务、严格身份、完整材料先验与有界读取；不提前验收原整项任务。\
@@ -7141,7 +7141,7 @@
   **配对测试**：T881\
   **验证 / 完成条件**：真实红绿、独立固定SHA复核、主树集成；不以本地native替代真实MySQL升级或E2E。
 
-- [ ] **T883 · 原上传共享准备与有效快照测试**
+- [x] **T883 · 原上传共享准备与有效快照测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_upload_preparation.py`\
   **逻辑 / 测试上下文**：W6§59原download/真实大小md5/actual规则和旧caller回归，prepare零SQL或对象写，不新授权。\
@@ -7149,7 +7149,7 @@
   **覆盖 AC**: AC-02, AC-10, AC-43, AC-49\
   **验证 / 完成条件**：真实缺接口红/实际输入回归、原caller固定组合，不复制实现。
 
-- [ ] **T884 · 原上传共享准备与有效快照提取**
+- [x] **T884 · 原上传共享准备与有效快照提取**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`\
   **逻辑 / 测试上下文**：W6§59仅原process_one_file准备段提取/消费，原dedup/投影/对象/错误保持；SPACE实际接线后继。\
@@ -7157,7 +7157,7 @@
   **配对测试**：T883\
   **验证 / 完成条件**：原新组合、静态新增0、独立复核及主树集成；不提前完成T083084。
 
-- [ ] **T885 · 原模型绑定证据匹配原生规模测试**
+- [x] **T885 · 原模型绑定证据匹配原生规模测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_model_original_evidence_scale.py`\
   **逻辑 / 测试上下文**：W6§60单来源401/1001目标实际SQL与候选扫描计数，重复slot一致性/冲突及source版本隔离。\
@@ -7165,7 +7165,7 @@
   **覆盖 AC**: AC-71, AC-72, AC-87, AC-88, AC-89\
   **验证 / 完成条件**：先真实平方扫描预算红，再原语义与线性预算绿；不以计时猜性能。
 
-- [ ] **T886 · 原模型绑定证据按目标单次分组**
+- [x] **T886 · 原模型绑定证据按目标单次分组**
   **类型 / Owner**：后端 Repository / INT\
   **写入文件**：`src/backend/bisheng/llm/domain/repositories/reference_target_repository.py`\
   **逻辑 / 测试上下文**：W6§60仅内存分组，原_original证据冲突/首行语义、SQL/锁/权限与union分支不变。\
