@@ -954,3 +954,8 @@ PERM T906/907仅原upload_registration_repository.py与新test_kn_upload_databas
 areserve/aset_materialized仅本次独立新File；key登记UPDATE后将真实数据库返回的File.update_time纳入新receipt，原期望其他全部列/Doc/V1/链保持核验。不得把普通上传物化的旧时间逐字不变要求套在既有无条件updater上；不重写历史、迁移M3保持原业务时间及§50运维规则不变。File对象key/metadata仍精确，非时间任意trigger改值须fail closed，当前事务/savepoint/issuer/私有ACK/重绑定边界不变。Doc primary初始化后真实时间也沿原实际重读，不猜server timezone/时钟单调。
 
 测试必须在精确父5e真实失败，再新Repo触发器绿，原47/42+App45+入口组合保留。真实C2 SQLModel/Repository/通用SQL，不判断dialect走分支或加migration-only开关；作者先确认事实，再只窄修新File时间校验且固定交root非作者审。
+
+
+## 69. 原v2/MCP上传工厂接缝 V1：已冻结
+
+INT T908/909只原open_endpoints/api/endpoints/filelib.py、open_mcp/application.py两个工厂叶与新test_kn_open_upload_wiring.py。实际rg调用链确认除v1 DI外，这两处自行构造SpaceService并调用add_file；必须同样注入每调用新App及独立get_async_db_session、原该Service admit/maker/actor绑定方法。保持原resolved operator及ambient SA/D/MCP principal，不转成web身份、不自己按资源切tenant，不从request-bound Repo Session拼初始链。只factory接线，不改路由/表单/SDK/MCP wire、原资格/回调/解析参数/下载入口，不借本卡重设计协议。构造零SQL、测试缺factory真实红/真实对象与隔离RepoSession验证；既有v2/MCP用例组合，运输fake不当真实E2E。
