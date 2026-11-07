@@ -1126,3 +1126,12 @@ Root已实测两个source_read_target_repository的真实SQL：401/1001目标每
 业务Space→File、Server→Model各原阶段/数值顺序不改，只每ID≤200精确页，继承拓扑/五默认锁与显式共享策略照旧。Model同步saved读和async saved/transient均实现同语义。RRT使用各模块现write TargetRepo的纯_tombstone_statements完整tuple producer，再with_only_columns选原operation/stage+完整type/id/target_owner/tenant定位；不调用写侧权限/current_tenant或返回ORM对象、不复用ORM_add_tombstones。local结果校验完整expected tuple/重复/tenant，构造原DeletionEvidence。RRT统一全局lex索引顺序、每批≤200，明确是由旧逐目标numeric读锁改变，与§81及原Model写侧对齐；不声称物理锁序未变。KN direct/ancestor去重，Model仅实际owner tuples，缺owner零RRT，原原始四owner谓词不降。
 
 真实预算：401/1001三槽original候选变1203/3003（另一次O(B)建桶），T个删除标记tuple的SELECT≤ceil(T/200)；business精确IN每SQL≤200 IDs、代表性单owner测试总params≤250（不是声称任意200tuple多owner总参数≤250）。native还测10001 transient/actualbusiness分页、同步Model路径、全局lex、缺失/ancestor/legacy/Root共享及未选scope/坏TX早拒。原knowledge/model read Owner、source runtime/native及composition组合保留；0DML/原subject不变，局部优化不代正式升级/E2E。原PrivateRoot baseline4绿是旧复杂度见证，不删或改其原断言；正式新预算必须先实际红后实施。
+
+
+## 87. 原任务接受值与canonical投影SSOT前置 V1：已冻结
+
+J1a候选复核发现真实接缝：TransactionIdentity绑定当前nested/root；外TX签的K1 reservation不能放进后来SAVEPOINT。原不可改native探针/private/tmp/test_f118_k1_j1a_transaction_probe.py验证1绿。后继公开move-create将接原confirmation/key/actor，在同一私有SAVEPOINT中才签/consume真实K1原receipt；重放按真实Plan→Job接受hash判定，不放松issuer/TX。本段仅记录后继方向，不授权现在实现accept/ready/worker。为避免旧JobRepo↔MoveRepo循环和第三套hash，先PROC T959/T960两生产叶：新domain/schemas/processing_job_acceptance.py及原processing_job_repository.py，测试新test_processing_job_acceptance.py。
+
+同对象搬原ProcessingConfiguration/NewProcessingItem/JobRequestResult/JobLease/ItemLease以及_digest到纯Schema（原defaults/validators/Field/slots行为不改），旧Repo显式import reexport保持既有消费者同类型/同函数。_digest原json sort_keys/ensure_ascii=False/separators/allow_nan=False与sha256字节原样，既有所有digest消费者不换算法。原acreate中完整manifest的target校验/expected_space/排序/重复及processing_snapshot复制逐段提为processing_manifest；原request_facts键集/metadata-only两个字段提为processing_request_facts，旧acreate在原先次序和相同位置消费。新Schema不含SQL/clock/UUID/权限/credential/receipt/mutation，不成为第二任务平台；不额外复制完整大payload或把compact manifest当接受hash。
+
+原_actor/key/settings/nonempty gate、metadata空scope私有proof、事务/锁/幂等/flush/四kind结果全部保留；本卡不开放move、不改metadata参数/claim/retry/worker，也不改Job SQL schema。测试先固定四原kind完整canonical oracle及排序/同对象reexport/NaN/重复/invalid scope、原错误顺序；原Job/acceptance revision/cutover/query/metadata/identity组合及固定作者外检查通过才闭卡。新Schema≤600、旧热叶只搬原职责与薄消费。若最低实际投影还需第三叶先报Root。J1a exact public signature、compact字段及read replay将在此与K1完成后再单独冻，不沿未实现旧候选的跨TXreceipt API猜接口。
