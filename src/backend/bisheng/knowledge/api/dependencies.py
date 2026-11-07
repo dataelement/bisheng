@@ -5,7 +5,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application.metadata_legacy import build_legacy_metadata_service
+from bisheng.knowledge.application.space_upload import SpaceUploadApplication
 from bisheng.knowledge.domain.repositories.implementations.knowledge_chat_session_repository_impl import (
     KnowledgeChatSessionRepositoryImpl,
 )
@@ -154,6 +156,13 @@ async def get_knowledge_space_service(
     service.message_service = message_service
     service.version_repo = version_repo
     service.doc_repo = doc_repo
+    service.upload_application_factory = lambda: SpaceUploadApplication(
+        login_user=login_user,
+        session_factory=get_async_db_session,
+        admit_upload=service._require_action,
+        make_permission_record=service._new_file_permission_record,
+        actor_provider=service._permission_actor,
+    )
     return service
 
 

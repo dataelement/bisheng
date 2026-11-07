@@ -1,14 +1,15 @@
 """SPACE upload consumes actual saved rules before V1 registration/dispatch.
 
-The original process_one_file, adapter and native SQL execute. Storage and
+The original preparation, atomic upload application and native SQL execute. Storage and
 permission/queue transports are isolated; no default rule is faked by the test.
 """
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
+import sqlalchemy as sa
 from sqlmodel import select
 
 from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
@@ -33,7 +34,18 @@ legacy = fixtures.legacy
 
 @pytest.fixture
 async def upload(legacy, monkeypatch):
+    from bisheng.knowledge.application import space_upload
+    from bisheng.knowledge.domain.services.knowledge_permission_service import F048KnowledgeFilePermissionAdapter
+    from bisheng.knowledge.rag import knowledge_file_pipeline
+
     context = legacy.files.context
+
+    # SQLite legacy mode must have a real root BEGIN before a SAVEPOINT;
+    # otherwise releasing the first savepoint durably commits the test data.
+    def begin(connection):
+        connection.exec_driver_sql("BEGIN")
+
+    sa.event.listen(context.engine.sync_engine, "begin", begin)
     monkeypatch.setattr(module, "KnowledgeService", legacy.cls)
     monkeypatch.setattr(module, "get_async_db_session", context.sessions)
     monkeypatch.setattr(module, "get_minio_storage_sync", lambda: legacy.storage)
@@ -41,6 +53,21 @@ async def upload(legacy, monkeypatch):
     service._require_action = AsyncMock()
     service._initialize_child_resource_permissions = AsyncMock()
     service.update_folder_update_time = AsyncMock()
+    monkeypatch.setattr(space_upload, "KnowledgeService", legacy.cls)
+    monkeypatch.setattr(space_upload, "KnowledgeUtils", knowledge_file_pipeline.KnowledgeUtils)
+    monkeypatch.setattr(space_upload, "get_minio_storage_sync", lambda: legacy.storage)
+    projection = F048KnowledgeFilePermissionAdapter(
+        loader=None,
+        permission=SimpleNamespace(authorize_created=AsyncMock(), rollback_created=AsyncMock()),
+    )
+    monkeypatch.setattr(space_upload, "get_f048_resource_adapter", AsyncMock(return_value=projection))
+    service.upload_application_factory = lambda: space_upload.SpaceUploadApplication(
+        login_user=context.user,
+        session_factory=context.sessions,
+        admit_upload=service._require_action,
+        make_permission_record=service._new_file_permission_record,
+        actor_provider=service._permission_actor,
+    )
     monkeypatch.setattr(module.SpaceFileDao, "get_user_total_file_size", AsyncMock(return_value=0))
     monkeypatch.setattr(module.QuotaService, "get_knowledge_space_upload_limit_bytes", AsyncMock(return_value=None))
     monkeypatch.setattr(module.QuotaService, "get_tenant_storage_remaining_bytes", AsyncMock(return_value=None))
@@ -54,9 +81,17 @@ async def upload(legacy, monkeypatch):
         return "actual-rule-cache-key"
 
     monkeypatch.setattr(service, "preview_cache_key_for_split_rule", cache_key)
-    return SimpleNamespace(
-        service=service, context=context, legacy=legacy, publish=publish, preview_rules=preview_rules
-    )
+    try:
+        yield SimpleNamespace(
+            service=service,
+            context=context,
+            legacy=legacy,
+            publish=publish,
+            preview_rules=preview_rules,
+            projection=projection,
+        )
+    finally:
+        sa.event.remove(context.engine.sync_engine, "begin", begin)
 
 
 @pytest.mark.parametrize("path,kind", [("opaque-document", "document"), ("opaque-table", "table")])
@@ -74,7 +109,7 @@ async def test_upload_persists_actual_space_default_and_version_before_dispatch(
     else:
         assert actual["excel_rule"]["slice_length"] == 44
     assert upload.preview_rules == [(40, path, actual)]
-    upload.service._require_action.assert_awaited_once_with("knowledge_space", 40, "upload_file")
+    assert upload.service._require_action.await_args_list == [call("knowledge_space", 40, "upload_file")] * 2
     upload.publish.assert_called_once_with(
         user_id=7,
         file_id=accepted.id,

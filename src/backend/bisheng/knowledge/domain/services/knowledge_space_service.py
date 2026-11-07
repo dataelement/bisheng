@@ -4,7 +4,7 @@ import logging
 import re
 import tempfile
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from datetime import datetime
 from hashlib import sha256
@@ -60,7 +60,14 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
 )
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_current_tenant_id, get_is_management_api
+from bisheng.core.context.tenant import (
+    get_admin_scope_tenant_id,
+    get_current_tenant_id,
+    get_is_management_api,
+    is_tenant_filter_bypassed,
+    management_tenant_scope,
+    tenant_execution_scope,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
@@ -249,6 +256,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         prospective_grant_application: ProspectiveGrantApplication | None = None,
         knowledge_file_repo: "KnowledgeFileRepository | None" = None,
         space_listing_repository: KnowledgeSpaceListingRepository | None = None,
+        upload_application_factory=None,
     ):
         self.request = request
         self.login_user = login_user
@@ -259,6 +267,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
         self.knowledge_file_repo = knowledge_file_repo
+        self.upload_application_factory = upload_application_factory
         self.space_listing_repository = space_listing_repository or KnowledgeSpaceListingRepository()
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
@@ -4031,17 +4040,51 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "upload_file")
         require_space_processing_idle(db_knowledge, operation="upload_file")
 
-        level = 0
+        target_tid = db_knowledge.tenant_id
+        if (
+            type(target_tid) is not int
+            or target_tid <= 0
+            or type(get_current_tenant_id()) is not int
+            or get_current_tenant_id() != target_tid
+            or is_tenant_filter_bypassed()
+            or (get_admin_scope_tenant_id() is not None and not get_is_management_api())
+        ):
+            raise SpaceTenantMismatchError.http_exception()
+        if self.upload_application_factory is None:
+            raise RuntimeError("SPACE upload application factory is not configured")
+        # The original authorization above admits the concrete destination.
+        # Bind dispatch as well as SQL; the scheduler reads the raw tenant var.
+        pin = get_admin_scope_tenant_id()
+        management = get_is_management_api()
+        with (
+            tenant_execution_scope(target_tid),
+            management_tenant_scope(pin) if management and pin is not None else nullcontext(),
+        ):
+            return await self._add_files_in_execution_scope(
+                db_knowledge,
+                file_path,
+                parent_id=parent_id,
+                file_source=file_source,
+                skip_dedup=skip_dedup,
+                processing_overrides=processing_overrides,
+            )
+
+    async def _add_files_in_execution_scope(
+        self,
+        db_knowledge: Knowledge,
+        file_path: list[str],
+        *,
+        parent_id: int | None,
+        file_source: FileSource,
+        skip_dedup: bool,
+        processing_overrides: ProcessingOverrides | None,
+    ) -> list[KnowledgeSpaceFileResponse]:
+        knowledge_id = db_knowledge.id
         file_level_path = ""
-        parent_type = "knowledge_space"
-        parent_resource_id = knowledge_id
 
         if parent_id:
             parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
-            level = parent_folder.level + 1
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
-            parent_type = "folder"
-            parent_resource_id = parent_id
 
         # User-role cap (multi-role max GB; admin returns None = unlimited).
         role_user_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
@@ -4091,32 +4134,47 @@ class KnowledgeSpaceService(KnowledgeUtils):
         process_files = []
         failed_files = []
         preview_cache_keys = []
-        created_files = []
+        application = self.upload_application_factory()
 
         try:
             for one in file_path:
-                db_file = KnowledgeService.process_one_file(
+                prepared = KnowledgeService.prepare_one_file(
                     self.login_user,
                     knowledge=db_knowledge,
                     file_info=KnowledgeFileOne(file_path=one),
                     split_rule=file_split_rule.model_dump(),
-                    file_kwargs={
-                        "level": level,
-                        "file_level_path": file_level_path,
-                        "file_source": file_source.value,
-                    },
-                    skip_dedup=skip_dedup,
+                    file_kwargs={"file_source": file_source.value},
                     processing_rule_request=file_split_rule,
                 )
+                repeat_files = KnowledgeFileDao.get_file_by_condition(
+                    knowledge_id=knowledge_id,
+                    md5_=prepared.md5,
+                    file_name=prepared.original_file_name,
+                )
+                if repeat_files and not skip_dedup:
+                    db_file = KnowledgeService.stage_prepared_duplicate(prepared=prepared, repeat_files=repeat_files)
+                else:
+                    projected_user_total = current_user_total + prepared.file_size
+                    projected_tenant_total = current_tenant_total_bytes + prepared.file_size
+                    if tenant_cap_bytes is not None and projected_tenant_total > tenant_cap_bytes:
+                        blocker = (
+                            target_tid,
+                            "tenant_limit",
+                            round(projected_tenant_total / (1024**3), 2),
+                            round(tenant_cap_bytes / (1024**3), 2),
+                            "",
+                        )
+                        raise QuotaService._make_storage_quota_error(blocker, "storage_gb")
+                    if role_user_limit_bytes is not None and projected_user_total > role_user_limit_bytes:
+                        raise SpaceFileSizeLimitError()
+                    resolved_source = self._resolve_upload_file_source(prepared.original_file_name, file_source.value)
+                    db_file = await application.acreate_file(
+                        knowledge=db_knowledge,
+                        parent_id=parent_id,
+                        prepared=prepared,
+                        file_source=FileSource(resolved_source),
+                    )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
-                    if getattr(db_file, "id", None):
-                        created_files.append(db_file)
-                    resolved_file_source = self._resolve_upload_file_source(db_file.file_name, file_source.value)
-                    if db_file.file_source != resolved_file_source:
-                        db_file.file_source = resolved_file_source
-                        db_file = KnowledgeFileDao.update(db_file)
-                    if getattr(db_file, "id", None):
-                        await self._create_primary_document_for_file(db_file)
                     # Get a preview cache of this filekey
                     cache_key = self.preview_cache_key_for_split_rule(
                         knowledge_id,
@@ -4132,35 +4190,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
                     failed_file.file_level_path = file_level_path
                     failed_files.append(failed_file)
-                # Tenant-level cap: applies to admins as well; the write triggered by
-                # this upload would push the target tenant over its storage_gb cap.
-                if tenant_cap_bytes is not None and current_tenant_total_bytes > tenant_cap_bytes:
-                    blocker = (
-                        target_tid,
-                        "tenant_limit",
-                        round(current_tenant_total_bytes / (1024**3), 2),
-                        round(tenant_cap_bytes / (1024**3), 2),
-                        "",
-                    )
-                    raise QuotaService._make_storage_quota_error(blocker, "storage_gb")
-                # User-role cap (preserved). Admins skip this branch because
-                # role_user_limit_bytes is None for them.
-                if role_user_limit_bytes is not None and current_user_total > role_user_limit_bytes:
-                    raise SpaceFileSizeLimitError()
-            for created_file in created_files:
-                await self._initialize_child_resource_permissions(
-                    "knowledge_file",
-                    created_file.id,
-                    parent_type,
-                    parent_resource_id,
-                )
-        except Exception:
+        except BaseException:
             try:
-                await self._rollback_uploaded_files(
-                    created_files, parent_type=parent_type, parent_id=parent_resource_id
-                )
-            except Exception as cleanup_exc:
-                logger.exception("Failed to cleanup files after knowledge space upload error: {}", cleanup_exc)
+                await application.arollback_created()
+            except BaseException:
+                logger.opt(exception=True).error("Initial SPACE upload compensation requires reconciliation")
             raise
         from bisheng.worker.knowledge import scheduler as file_scheduler
 

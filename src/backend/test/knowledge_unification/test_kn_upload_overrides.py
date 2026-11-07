@@ -1,19 +1,14 @@
 """Original SPACE HTTP upload uses typed batch rules and the native writer."""
 
 import json
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import call
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlmodel import select
 
-from bisheng.knowledge.api.dependencies import (
-    get_knowledge_document_repository,
-    get_knowledge_document_version_repository,
-    get_knowledge_space_service,
-)
+from bisheng.knowledge.api.dependencies import get_knowledge_space_service
 from bisheng.knowledge.api.endpoints import knowledge_space as api
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
@@ -48,7 +43,7 @@ async def test_http_omitted_null_empty_inherit_saved_defaults(upload, extra):
     actual = json.loads(row["split_rule"])
     assert actual["chunk_size"] == 800
     assert actual["_effective_processing"]["supplied_fields_by_layer"]["batch"] == []
-    upload.service._require_action.assert_awaited_once_with("knowledge_space", 40, "upload_file")
+    assert upload.service._require_action.await_args_list == [call("knowledge_space", 40, "upload_file")] * 2
     upload.publish.assert_called_once()
 
 
@@ -137,7 +132,7 @@ async def test_folder_upload_keeps_only_original_container_action_with_explicit_
     row = response.json()["data"][0]
     assert row["file_level_path"] == "/95"
     assert json.loads(row["split_rule"])["chunk_size"] == 600
-    upload.service._require_action.assert_awaited_once_with("folder", 95, "upload_file")
+    assert upload.service._require_action.await_args_list == [call("folder", 95, "upload_file")] * 2
 
 
 @pytest.mark.parametrize(
@@ -167,18 +162,13 @@ async def test_explicit_rules_keep_original_compensation_after_version_registrat
     async with upload.context.sessions() as session:
         before_files = set((await session.exec(select(KnowledgeFile.id))).all())
         before_versions = set((await session.exec(select(KnowledgeDocumentVersion.id))).all())
-    upload.service._initialize_child_resource_permissions = AsyncMock(side_effect=RuntimeError("permission failed"))
-    adapter = SimpleNamespace(rollback_created=AsyncMock())
-    upload.service._resource_adapter = AsyncMock(return_value=adapter)
-    upload.service._permission_actor = AsyncMock(return_value=upload.context.user)
-    async with upload.context.sessions() as session:
-        upload.service.doc_repo = await get_knowledge_document_repository(session)
-        upload.service.version_repo = await get_knowledge_document_version_repository(session)
-        with pytest.raises(RuntimeError, match="permission failed"):
-            await upload.service.add_file(
-                40, ["opaque-document"], processing_overrides=ProcessingOverrides(document={"chunk_size": 600})
-            )
-    adapter.rollback_created.assert_awaited_once()
+    permission = upload.projection._permission
+    permission.authorize_created.side_effect = RuntimeError("permission failed")
+    with pytest.raises(RuntimeError, match="permission failed"):
+        await upload.service.add_file(
+            40, ["opaque-document"], processing_overrides=ProcessingOverrides(document={"chunk_size": 600})
+        )
+    permission.rollback_created.assert_awaited_once()
     upload.publish.assert_not_called()
     async with upload.context.sessions() as session:
         assert set((await session.exec(select(KnowledgeFile.id))).all()) == before_files
