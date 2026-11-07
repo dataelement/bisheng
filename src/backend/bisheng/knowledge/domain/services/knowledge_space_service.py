@@ -233,9 +233,6 @@ _MANAGED_PERMISSION_BATCH_SIZE = 100
 # filtering is refilled from the next OFFSET window, so this only bounds per-round
 # DB fetch + visibility evaluation, not the page size.
 _SEARCH_SCAN_BATCH_SIZE = 100
-# Chinese punctuation is intentionally distinct from ASCII punctuation.
-_WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]  # noqa: RUF001
-_WEB_LINK_SEPARATOR_RULES = ["after"] * len(_WEB_LINK_SEPARATORS)
 _AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
 _VIDEO_FILE_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
 
@@ -3714,48 +3711,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return f"original/{file_id}.md"
 
     @staticmethod
-    def _build_web_link_split_rule(knowledge_id: int) -> dict:
-        split_rule = FileProcessBase(knowledge_id=knowledge_id).model_dump()
-        split_rule["separator"] = _WEB_LINK_SEPARATORS
-        split_rule["separator_rule"] = _WEB_LINK_SEPARATOR_RULES
-        split_rule["chunk_overlap"] = 0
-        return split_rule
+    def _build_web_link_split_rule(knowledge: Knowledge, *, file_name: str) -> dict:
+        from bisheng.knowledge.application.file_processing_adapter import legacy_rule_from_snapshot
 
-    async def _create_primary_document_for_file(self, db_file: KnowledgeFile) -> None:
-        async with get_async_db_session() as v_session:
-            v_doc = KnowledgeDocument(
-                knowledge_id=db_file.knowledge_id,
-                file_level_path=db_file.file_level_path,
-                level=db_file.level or 0,
-            )
-            v_session.add(v_doc)
-            await v_session.flush()
-            v_version = KnowledgeDocumentVersion(
-                document_id=v_doc.id,
-                knowledge_file_id=db_file.id,
-                version_no=1,
-                is_primary=True,
-            )
-            v_session.add(v_version)
-            await v_session.flush()
-            v_doc.primary_version_id = v_version.id
-            v_session.add(v_doc)
-            await v_session.commit()
-
-    async def _cleanup_created_web_link_file(self, db_file: KnowledgeFile | None) -> None:
-        if not db_file or not getattr(db_file, "id", None):
-            return
-        expanded_ids = await self._cascade_version_links_on_delete([db_file.id])
-        await self._cleanup_resource_tuples([("knowledge_file", file_id) for file_id in expanded_ids])
-        await KnowledgeFileDao.adelete_batch(expanded_ids)
-        minio_client = get_minio_storage_sync()
-        metadata = db_file.user_metadata or {}
-        for object_name in {db_file.object_name, metadata.get("html_snapshot_object_name")}:
-            if object_name:
-                try:
-                    minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=object_name)
-                except Exception as exc:
-                    logger.warning(f"Failed to cleanup web link object {object_name}: {exc}")
+        snapshot = KnowledgeUtils.processing_snapshot_for_legacy_request(
+            FileProcessBase(knowledge_id=knowledge.id),
+            knowledge=knowledge,
+            file_name=file_name,
+            file_source=FileSource.WEB_LINK.value,
+        )
+        rule = legacy_rule_from_snapshot(snapshot, space_id=knowledge.id).model_dump(mode="json")
+        rule["_effective_processing"] = snapshot.model_dump(mode="json")
+        return rule
 
     async def import_web_link(
         self,
@@ -3780,6 +3747,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "import_web_link")
         require_space_processing_idle(db_knowledge, operation="import_web_link")
 
+        with self._upload_execution_scope(db_knowledge):
+            return await self._import_web_link_in_execution_scope(
+                db_knowledge, url=url, title=title, parent_id=parent_id, overwrite=overwrite
+            )
+
+    async def _import_web_link_in_execution_scope(
+        self, db_knowledge: Knowledge, *, url: str, title: str | None, parent_id: int | None, overwrite: bool
+    ) -> KnowledgeFile:
+        from bisheng.knowledge.application.web_link_upload import PreparedWebLink
+
+        knowledge_id = db_knowledge.id
         level = 0
         file_level_path = ""
         parent_type = "knowledge_space"
@@ -3831,7 +3809,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             raise QuotaService._make_storage_quota_error(blocker, "storage_gb")
 
-        split_rule = self._build_web_link_split_rule(knowledge_id)
+        split_rule = self._build_web_link_split_rule(db_knowledge, file_name=file_name)
         user_metadata = {
             "source_type": FileSource.WEB_LINK.value,
             "source_url": url,
@@ -3857,52 +3835,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 parent_resource_id=parent_resource_id,
             )
 
-        db_file: KnowledgeFile | None = None
+        application = self.upload_application_factory()
         try:
-            db_file = KnowledgeFile(
-                knowledge_id=knowledge_id,
-                tenant_id=db_knowledge.tenant_id,
-                file_name=file_name,
-                file_size=len(markdown_bytes),
-                md5=import_result.content_hash,
-                split_rule=json.dumps(split_rule, ensure_ascii=False),
-                user_id=self.login_user.user_id,
-                user_name=self.login_user.user_name,
-                updater_id=self.login_user.user_id,
-                updater_name=self.login_user.user_name,
-                level=level,
-                file_level_path=file_level_path,
-                file_source=FileSource.WEB_LINK.value,
-                user_metadata=user_metadata,
+            db_file = await application.acreate_web_link(
+                knowledge=db_knowledge,
+                parent_id=parent_id,
+                prepared=PreparedWebLink(
+                    file_name=file_name,
+                    content_hash=import_result.content_hash,
+                    markdown_bytes=markdown_bytes,
+                    html_snapshot_bytes=html_snapshot_bytes,
+                    split_rule=json.dumps(split_rule, ensure_ascii=False),
+                    user_metadata=user_metadata,
+                ),
             )
-            db_file = KnowledgeFileDao.add_file(db_file)
-            db_file.object_name = self._get_web_link_markdown_object_name(db_file.id)
-            html_snapshot_object_name = f"preview/{db_file.id}.html"
-            db_file.user_metadata = {**user_metadata, "html_snapshot_object_name": html_snapshot_object_name}
-            minio_client = get_minio_storage_sync()
-            minio_client.put_object_sync(
-                bucket_name=minio_client.bucket,
-                object_name=db_file.object_name,
-                file=markdown_bytes,
-                content_type="text/markdown; charset=utf-8",
-            )
-            if html_snapshot_bytes:
-                minio_client.put_object_sync(
-                    bucket_name=minio_client.bucket,
-                    object_name=html_snapshot_object_name,
-                    file=html_snapshot_bytes,
-                    content_type="text/html; charset=utf-8",
-                )
-            db_file = KnowledgeFileDao.update(db_file)
-            await self._create_primary_document_for_file(db_file)
-            await self._initialize_child_resource_permissions(
-                "knowledge_file",
-                db_file.id,
-                parent_type,
-                parent_resource_id,
-            )
-        except Exception:
-            await self._cleanup_created_web_link_file(db_file)
+        except BaseException:
+            await self._compensate_upload(application)
             raise
 
         KnowledgeService.audit_telemetry_service.telemetry_new_knowledge_file(self.login_user)
@@ -3912,8 +3860,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_id=db_file.user_id,
             file_id=db_file.id,
             file_name=db_file.file_name,
-            preview_cache_key=self.get_preview_cache_key(
-                knowledge_id, import_result.final_url, import_result.content_hash
+            preview_cache_key=self.preview_cache_key_for_split_rule(
+                knowledge_id, import_result.final_url, split_rule, md5_value=import_result.content_hash
             ),
             callback_url=None,
         )
@@ -3937,6 +3885,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_type: str,
         parent_resource_id: int,
     ) -> KnowledgeFile:
+        from bisheng.knowledge.domain.repositories.knowledge_version_read_repository import (
+            KnowledgeVersionReadRepository,
+        )
+
+        # A retained file never gains an initial-upload deletion receipt. Validate
+        # its full existing chain before the original in-place object writes.
+        anchor = await KnowledgeVersionReadRepository(get_async_db_session).aget_anchor(
+            tenant_id=get_current_tenant_id(), file_id=db_file.id
+        )
+        if anchor is None or anchor.space.id != db_file.knowledge_id:
+            raise SpaceFileNotFoundError()
         old_parent = self._parent_ref_from_level_path(db_file.file_level_path, db_file.knowledge_id)
         new_parent = (parent_type, parent_resource_id)
         db_file.file_name = file_name
@@ -3979,8 +3938,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_id=updated_file.user_id,
             file_id=updated_file.id,
             file_name=updated_file.file_name,
-            preview_cache_key=self.get_preview_cache_key(
-                updated_file.knowledge_id, user_metadata.get("final_url", ""), content_hash
+            preview_cache_key=self.preview_cache_key_for_split_rule(
+                updated_file.knowledge_id, user_metadata.get("final_url", ""), split_rule, md5_value=content_hash
             ),
             callback_url=None,
         )
@@ -4527,7 +4486,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from sqlmodel import col, func, or_, select
 
         from bisheng.knowledge.domain.models.knowledge import Knowledge
-        from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 
         await self._require_read_permission(space_id)
         cross_space = target_space_id != space_id
