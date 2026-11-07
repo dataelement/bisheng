@@ -5,7 +5,7 @@ import re
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
@@ -238,6 +238,12 @@ _WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、
 _WEB_LINK_SEPARATOR_RULES = ["after"] * len(_WEB_LINK_SEPARATORS)
 _AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
 _VIDEO_FILE_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
+
+
+@dataclass(slots=True)
+class _UploadDispatchBatch:
+    files: list[tuple[KnowledgeFile, str | None]] = field(default_factory=list)
+    folder_paths: list[str] = field(default_factory=list)
 
 
 class KnowledgeSpaceService(KnowledgeUtils):
@@ -4022,6 +4028,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         skip_dedup: bool = False,
         *,
         processing_overrides: ProcessingOverrides | None = None,
+        _application=None,
+        _deferred: _UploadDispatchBatch | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
@@ -4040,7 +4048,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "upload_file")
         require_space_processing_idle(db_knowledge, operation="upload_file")
 
-        target_tid = db_knowledge.tenant_id
+        if (_application is None) != (_deferred is None):
+            raise ValueError("Shared upload application and dispatch batch must be paired")
+        with self._upload_execution_scope(db_knowledge):
+            return await self._add_files_in_execution_scope(
+                db_knowledge,
+                file_path,
+                parent_id=parent_id,
+                file_source=file_source,
+                skip_dedup=skip_dedup,
+                processing_overrides=processing_overrides,
+                application=_application,
+                deferred=_deferred,
+            )
+
+    @contextmanager
+    def _upload_execution_scope(self, knowledge: Knowledge):
+        target_tid = knowledge.tenant_id
         if (
             type(target_tid) is not int
             or target_tid <= 0
@@ -4060,14 +4084,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             tenant_execution_scope(target_tid),
             management_tenant_scope(pin) if management and pin is not None else nullcontext(),
         ):
-            return await self._add_files_in_execution_scope(
-                db_knowledge,
-                file_path,
-                parent_id=parent_id,
-                file_source=file_source,
-                skip_dedup=skip_dedup,
-                processing_overrides=processing_overrides,
-            )
+            yield
 
     async def _add_files_in_execution_scope(
         self,
@@ -4078,6 +4095,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_source: FileSource,
         skip_dedup: bool,
         processing_overrides: ProcessingOverrides | None,
+        application=None,
+        deferred: _UploadDispatchBatch | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         knowledge_id = db_knowledge.id
         file_level_path = ""
@@ -4134,7 +4153,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         process_files = []
         failed_files = []
         preview_cache_keys = []
-        application = self.upload_application_factory()
+        application = application if application is not None else self.upload_application_factory()
 
         try:
             for one in file_path:
@@ -4191,24 +4210,40 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     failed_file.file_level_path = file_level_path
                     failed_files.append(failed_file)
         except BaseException:
-            try:
-                await application.arollback_created()
-            except BaseException:
-                logger.opt(exception=True).error("Initial SPACE upload compensation requires reconciliation")
+            if deferred is None:
+                await self._compensate_upload(application)
             raise
+        batch = deferred if deferred is not None else _UploadDispatchBatch()
+        batch.files.extend(zip(process_files, preview_cache_keys, strict=True))
+        batch.folder_paths.append(file_level_path)
+        if deferred is None:
+            await self._dispatch_upload_batch(knowledge_id, batch)
+        return failed_files + process_files
+
+    @staticmethod
+    async def _compensate_upload(application) -> None:
+        try:
+            await application.arollback_created()
+        except BaseException:
+            # Keep the staging error primary; uncertain ownership is retained.
+            logger.opt(exception=True).error("Initial SPACE upload compensation requires reconciliation")
+
+    async def _dispatch_upload_batch(self, knowledge_id: int, batch: _UploadDispatchBatch) -> None:
         from bisheng.worker.knowledge import scheduler as file_scheduler
 
-        for index, one in enumerate(process_files):
+        # Dispatch can have succeeded even when its acknowledgement fails.
+        # Callers must not compensate registered resources after entering here.
+        for row, cache_key in batch.files:
             file_scheduler.enqueue_or_dispatch(
-                user_id=one.user_id,
-                file_id=one.id,
-                file_name=one.file_name,
-                preview_cache_key=preview_cache_keys[index],
+                user_id=row.user_id,
+                file_id=row.id,
+                file_name=row.file_name,
+                preview_cache_key=cache_key,
                 callback_url=None,
             )
-        await self.update_folder_update_time(file_level_path)
+        for folder_path in dict.fromkeys(batch.folder_paths):
+            await self.update_folder_update_time(folder_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
-        return failed_files + process_files
 
     MAX_FOLDER_UPLOAD_FILES = 1000
 
@@ -4245,6 +4280,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "upload_file")
         require_space_processing_idle(db_knowledge, operation="upload_folder_items")
 
+        with self._upload_execution_scope(db_knowledge):
+            return await self._upload_folder_items_in_execution_scope(db_knowledge, items, parent_id)
+
+    async def _upload_folder_items_in_execution_scope(
+        self, db_knowledge: Knowledge, items: list[FolderUploadItem], parent_id: int | None
+    ) -> list[KnowledgeSpaceFileResponse]:
+        knowledge_id = db_knowledge.id
         base_path = ""
         base_child_level = 0
         if parent_id:
@@ -4303,51 +4345,43 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # (folder_id, file_level_path for its children, level for its children);
         # the empty chain is the drop point itself.
         node_info: dict[tuple[str, ...], tuple[int | None, str, int]] = {(): (parent_id, base_path, base_child_level)}
-        created_folders: list[KnowledgeFile] = []
+        application = self.upload_application_factory()
+        batch = _UploadDispatchBatch()
+        results: list[KnowledgeSpaceFileResponse] = []
         try:
             for dir_parts in sorted(dir_set, key=len):
-                parent_node_id, child_path, child_level = node_info[dir_parts[:-1]]
-                folder_row = await KnowledgeFileDao.aadd_file(
-                    KnowledgeFile(
-                        knowledge_id=knowledge_id,
-                        user_id=self.login_user.user_id,
-                        user_name=self.login_user.user_name,
-                        updater_id=self.login_user.user_id,
-                        updater_name=self.login_user.user_name,
-                        file_name=dir_parts[-1],
-                        file_type=0,
-                        level=child_level,
-                        file_level_path=child_path,
-                        status=KnowledgeFileStatus.SUCCESS.value,
+                parent_node_id, _, _ = node_info[dir_parts[:-1]]
+                folder_row = await application.acreate_folder(
+                    knowledge=db_knowledge,
+                    parent_id=parent_node_id,
+                    folder_name=dir_parts[-1],
+                )
+                node_info[dir_parts] = (
+                    folder_row.id,
+                    f"{folder_row.file_level_path}/{folder_row.id}",
+                    folder_row.level + 1,
+                )
+
+            # Each group retains the ordinary permission/quota/dedup pipeline.
+            # One receipt owner covers the entire request; no group dispatches.
+            groups: dict[tuple[str, ...], list[str]] = {}
+            for dir_parts, file_path in parsed:
+                groups.setdefault(dir_parts, []).append(file_path)
+            for dir_parts, file_paths in groups.items():
+                results.extend(
+                    await self.add_file(
+                        knowledge_id,
+                        file_paths,
+                        parent_id=node_info[dir_parts][0],
+                        _application=application,
+                        _deferred=batch,
                     )
                 )
-                created_folders.append(folder_row)
-                # Every created node must get its permission tuple (design 坑 U7);
-                # skipping this leaves an ownerless folder with a broken
-                # inheritance chain.
-                await self._initialize_child_resource_permissions(
-                    "folder",
-                    folder_row.id,
-                    "folder" if parent_node_id else "knowledge_space",
-                    parent_node_id or knowledge_id,
-                )
-                node_info[dir_parts] = (folder_row.id, f"{child_path}/{folder_row.id}", child_level + 1)
-        except Exception:
-            try:
-                await self._cleanup_resource_tuples([("folder", row.id) for row in created_folders])
-            finally:
-                await KnowledgeFileDao.adelete_batch([row.id for row in created_folders])
+        except BaseException:
+            await self._compensate_upload(application)
             raise
 
-        # Register files per directory through the regular pipeline (quota,
-        # dedup/FAILED semantics, doc+V1 rows, parse dispatch all reused).
-        groups: dict[tuple[str, ...], list[str]] = {}
-        for dir_parts, file_path in parsed:
-            groups.setdefault(dir_parts, []).append(file_path)
-        results: list[KnowledgeSpaceFileResponse] = []
-        for dir_parts, file_paths in groups.items():
-            results.extend(await self.add_file(knowledge_id, file_paths, parent_id=node_info[dir_parts][0]))
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
+        await self._dispatch_upload_batch(knowledge_id, batch)
         return results
 
     async def rename_file(self, file_id: int, new_name: str) -> KnowledgeFile:
