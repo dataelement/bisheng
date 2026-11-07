@@ -14,7 +14,15 @@ from bisheng.permission.application.control_state import SqlPermissionControlSta
 from bisheng.permission.application.identity import PermissionActor
 from bisheng.permission.application.runtime import F048PermissionRuntime, F048RuntimeComponents
 from bisheng.permission.application.sql_runtime import SqlProjectionFinalizer, SqlProjectionScopeGuard
-from bisheng.permission.domain.models import PermissionGrant, PermissionGrantAssignee, PermissionVisibleSourceProjection
+from bisheng.permission.domain.models import (
+    AuthorizationModelRelease,
+    PermissionCatalogRelease,
+    PermissionGrant,
+    PermissionGrantAssignee,
+    PermissionMigrationItem,
+    PermissionMigrationRun,
+    PermissionVisibleSourceProjection,
+)
 from bisheng.permission.domain.repositories.projection_repository import ProjectionRepository
 from bisheng.permission.domain.services.projection_plan import ProjectionOutcome, projection_state_expectations
 from bisheng.permission.domain.services.projection_service import ProjectionService
@@ -32,6 +40,10 @@ async def compose(database, monkeypatch, items):
     # The original finalizer reads these empty canonical tables as well as Mode.
     metadata = sa.MetaData()
     for model in (
+        AuthorizationModelRelease,
+        PermissionCatalogRelease,
+        PermissionMigrationRun,
+        PermissionMigrationItem,
         native.Operation,
         native.TupleRow,
         native.Mode,
@@ -230,7 +242,7 @@ async def test_marker_not_ready_and_unaccepted_actor_fail_before_projection(data
     assert not built.transport.calls and not database.queries
 
 
-async def test_bridge_native_parent_state_read_and_missing_composition_fail_closed(database):
+async def test_bridge_native_parent_state_read_and_missing_composition_fail_closed(database, monkeypatch):
     item = native.expectation()
     await native.seed(database, (item,))
     bridge = api().KnowledgeMoveProjectionApplication(
@@ -239,7 +251,12 @@ async def test_bridge_native_parent_state_read_and_missing_composition_fail_clos
     async with database.sessions() as session, session.begin():
         (row,) = await bridge.aread_parent_states(session, targets=(("knowledge_file", "1"),))
         assert row.parent_id == "12" and row.version == 5
-    with pytest.raises((PermissionPublishNotReadyError, RuntimeError, KeyError)):
+    from bisheng.permission.application import process_runtime
+
+    monkeypatch.setattr(
+        process_runtime, "get_f048_process_runtime", AsyncMock(side_effect=RuntimeError("not composed"))
+    )
+    with pytest.raises(PermissionPublishNotReadyError):
         await bridge.aexecute_or_resume(
             job_id=native.JOB, changes=(item,), actor=PermissionActor(user_id=7, current_tenant_id=101)
         )
