@@ -137,13 +137,18 @@ async def test_every_child_status_and_kind_preserves_owned_parent(database, stat
     assert any(row["id"] == owned.file.id for row in (await original.snapshot(database))["knowledgefile"])
 
 
-@pytest.mark.parametrize("case", ["descendant", "broken_document", "broken_version", "parent_changed"])
+@pytest.mark.parametrize("case", ["descendant", "broken_document", "broken_version", "parent_changed", "foreign_child"])
 async def test_orphan_relationships_or_broken_parent_are_not_hidden_by_inner_joins(database, case):
     repo = api().FolderUploadRegistrationRepository()
     owned = await create(repo, database)
     prefix = f"{owned.file.file_level_path}/{owned.file.id}"
     async with database.engine.begin() as connection:
-        if case == "descendant":
+        if case == "foreign_child":
+            await connection.execute(
+                File.__table__.insert(),
+                original.original.file(1000, tenant=202, knowledge_id=8000, file_level_path=prefix),
+            )
+        elif case == "descendant":
             await connection.execute(
                 File.__table__.insert(),
                 original.original.file(1000, knowledge_id=9700, file_level_path=prefix + "/999999"),
