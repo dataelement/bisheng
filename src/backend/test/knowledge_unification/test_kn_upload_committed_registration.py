@@ -257,6 +257,7 @@ async def test_200_original_receipts_share_only_one_instance_root_observer_and_k
         receipts = await original.register(
             repo, session, tuple(original.candidate(f"file-{i}") for i in range(200)), parent_id=11
         )
+        register_selects = len(database.queries)
         assert len(database.queries) <= 7
         assert [name for target, name in events if target is session.sync_session].count("after_commit") == 1
         assert [name for target, name in events if target is session.sync_session].count("after_transaction_end") == 1
@@ -272,6 +273,9 @@ async def test_200_original_receipts_share_only_one_instance_root_observer_and_k
         database.queries.clear()
         assert (await repo._arebind_committed_initial(other, registration=receipts[-1])).file.id == receipts[-1].file.id
         assert len(database.queries) <= 6
+        print(
+            f"initial commit count=200 register_SELECT={register_selects} ACK_SELECT=0 rebind_SELECT={len(database.queries)} observers=2"
+        )
 
 
 @pytest.mark.parametrize("changes", [{"tenant_id": 202}, {"type": 0}, {"type": 1}, {"type": 2}])
@@ -303,3 +307,93 @@ async def test_upload_root_lock_rejects_pending_without_flush_or_new_query(datab
             await repo.alock_space_for_upload(session, space_id=9700)
         assert not database.queries and pending.id is None and pending.tenant_id is None
         await session.rollback()
+
+
+@pytest.mark.parametrize("rollback", [False, True])
+async def test_caller_savepoint_receipt_requires_its_own_commit_and_the_real_root_commit(database, rollback):
+    repo = original.api().UploadRegistrationRepository()
+    async with AsyncSession(database.engine) as session:
+        await session.begin()
+        child = await session.begin_nested()
+        receipt = await reserved(repo, session)
+        await (child.rollback() if rollback else child.commit())
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            repo._acknowledge_committed_initial(registrations=(receipt,))
+        await session.commit()
+        if rollback:
+            with pytest.raises(KnowledgeOperationPlanConflictError):
+                repo._acknowledge_committed_initial(registrations=(receipt,))
+        else:
+            repo._acknowledge_committed_initial(registrations=(receipt,))
+            async with AsyncSession(database.engine) as other, other.begin():
+                await repo._arebind_committed_initial(other, registration=receipt)
+
+
+async def test_inner_savepoint_commit_followed_by_outer_savepoint_rollback_is_not_a_root_commit_proof(database):
+    repo = original.api().UploadRegistrationRepository()
+    before = await original.snapshot(database)
+    async with AsyncSession(database.engine) as session:
+        await session.begin()
+        outer = await session.begin_nested()
+        inner = await session.begin_nested()
+        receipt = await reserved(repo, session)
+        await inner.commit()
+        await outer.rollback()
+        await session.commit()
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            repo._acknowledge_committed_initial(registrations=(receipt,))
+    assert await original.snapshot(database) == before
+
+
+async def test_rolled_back_original_cannot_borrow_a_later_real_commit_even_when_all_ids_are_reused(database):
+    repo = original.api().UploadRegistrationRepository()
+    async with AsyncSession(database.engine) as session:
+        await session.begin()
+        old = await reserved(repo, session)
+        await session.rollback()
+        await session.begin()
+        new = await reserved(repo, session)
+        assert (new.file.id, new.document_id, new.version_id) == (old.file.id, old.document_id, old.version_id)
+        await session.commit()
+        repo._acknowledge_committed_initial(registrations=(new,))
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            repo._acknowledge_committed_initial(registrations=(old,))
+    async with AsyncSession(database.engine) as other, other.begin():
+        database.queries.clear()
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo._arebind_committed_initial(other, registration=old)
+        assert not database.queries
+        await repo._arebind_committed_initial(other, registration=new)
+
+
+async def test_failed_ack_batch_does_not_partially_authorize_the_first_original(database):
+    repo = original.api().UploadRegistrationRepository()
+    receipt = await commit(repo, database, acknowledge=False)
+    for values in ([receipt], (receipt,) * 201, (receipt, replace(receipt))):
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            repo._acknowledge_committed_initial(registrations=values)
+    async with AsyncSession(database.engine) as other, other.begin():
+        database.queries.clear()
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo._arebind_committed_initial(other, registration=receipt)
+        assert not database.queries
+
+
+async def test_retiring_private_observers_preserves_the_callers_existing_commit_listener(database):
+    repo, calls = original.api().UploadRegistrationRepository(), []
+
+    def caller_event(session):
+        calls.append(session.get_nested_transaction() is None)
+
+    async with AsyncSession(database.engine) as session:
+        sa.event.listen(session.sync_session, "after_commit", caller_event)
+        await session.begin()
+        receipt = await reserved(repo, session)
+        await session.commit()
+        repo._acknowledge_committed_initial(registrations=(receipt,))
+        await asyncio.sleep(0)
+        assert sa.event.contains(session.sync_session, "after_commit", caller_event)
+        calls.clear()
+        await session.commit()
+        assert calls == [True]
+        sa.event.remove(session.sync_session, "after_commit", caller_event)
