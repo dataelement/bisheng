@@ -1115,3 +1115,14 @@ aread_delete_scope(session:AsyncSession,*,space_id:int,selections:tuple[DeleteSe
 D1输出状态而不新增单删gate：原单删FILE1–7仍候选；batch FILE1/4/5为processing，2/3/6/7候选；DIR自身已知状态不判忙，unknown/NULL unsupported。目录/扩展版本内任一FILE忙则整unit忙，后继App分类，不部分删目录。先归并重复/被有效祖先覆盖请求，后以真实删除Resource/Version/待删Doc集合重叠合并unit并保全部原positions；仅共享仍保留Doc不合并，避免DSU键丢失。后继R3将每unit全部resource_ids（含DIR）映KNFILE精确targets并接Coverage/原Plan/hash/真实F048证据。D1不新增force/动作、对象IO或删除许可，不提前闭原T105–108。
 
 原生测试：无版本FILE/空目录、完整与历史链、401目录/Doc、10001历史链有界预算、NULL路径、前缀邻居、跨租户坏后代/缺FK不隐形、原pending不flush、目录WAITING/忙历史/unknown、真重叠与仅共享保留Doc两格。生产新增叶≤600、原Repo增量自然≤600；若实际最小实现超过先报Root拆职责，不压行或暗增第三叶。固定非作者复核后闭接缝，不冒称最终删除/升级完成。
+
+
+## 86. 同原SourceAuthority的KN/Model读取性能 V1：已冻结
+
+Root已实测两个source_read_target_repository的真实SQL：401/1001目标每目标3原槽位，original匹配482403/3006003候选；KN RRT402/1002、Model401/1001，且business IN params超过1000（W6记录）。T957由INT先新test_source_read_target_scale.py真实native红测试，T958由EDGE在T954之后仅knowledge/domain/repositories/source_read_target_repository.py与llm/domain/repositories/source_read_target_repository.py两叶实施；两个叶各≤600，不改SourceVerifier/SourceOwner/App/权限/writer。
+
+保原公开方法/DTO/最后资格重验、原scope issuer/identity/TX/purpose/credential、SourceRepository精确source版本及完整source-set校验。仍用原SQL scalar/no_autoflush/经授权bypass读取实际source owner tenant，不切换ambient tenant或合并origin/target身份；原DB identity_map不污染。saved originals一次raw(type,id)键set过滤、一次按完整key分桶，各key仅交原original_for/_original该桶，保同key多slot冲突及native次序；Model过滤目标IDset不可在每original行重建。transient仍无original且缺owner不猜，不把read facts当binding receipt。
+
+业务Space→File、Server→Model各原阶段/数值顺序不改，只每ID≤200精确页，继承拓扑/五默认锁与显式共享策略照旧。Model同步saved读和async saved/transient均实现同语义。RRT使用各模块现write TargetRepo的纯_tombstone_statements完整tuple producer，再with_only_columns选原operation/stage+完整type/id/target_owner/tenant定位；不调用写侧权限/current_tenant或返回ORM对象、不复用ORM_add_tombstones。local结果校验完整expected tuple/重复/tenant，构造原DeletionEvidence。RRT统一全局lex索引顺序、每批≤200，明确是由旧逐目标numeric读锁改变，与§81及原Model写侧对齐；不声称物理锁序未变。KN direct/ancestor去重，Model仅实际owner tuples，缺owner零RRT，原原始四owner谓词不降。
+
+真实预算：401/1001三槽original候选变1203/3003（另一次O(B)建桶），T个删除标记tuple的SELECT≤ceil(T/200)；business精确IN每SQL≤200 IDs、代表性单owner测试总params≤250（不是声称任意200tuple多owner总参数≤250）。native还测10001 transient/actualbusiness分页、同步Model路径、全局lex、缺失/ancestor/legacy/Root共享及未选scope/坏TX早拒。原knowledge/model read Owner、source runtime/native及composition组合保留；0DML/原subject不变，局部优化不代正式升级/E2E。原PrivateRoot baseline4绿是旧复杂度见证，不删或改其原断言；正式新预算必须先实际红后实施。

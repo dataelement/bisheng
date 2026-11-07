@@ -415,3 +415,6 @@ T947948已主合df816b67f，Root完整读唯一Repo diff/测试矩阵，六路�
 移动接缝分项验收：Root完整读269行纯Schema/同对象reexport、15行Web系统键过滤、115行真实FK reader与Scope对应消费；原9path237及原作者外foreign子目录1绿、Web系统键原独立1红→1绿已满足T930931/T937938/T945946，分别闭合，不冒整K1。独立两个P2仍由T949–952显式承接。
 
 T949950 fixed4b6baf81f真实NULL1红/空串1首绿→作者九路径239绿/40.27秒，原独立nested两格2绿。Root逐行复核4b6仅4增3删，沿唯一path_ids比较、不改持久编码，正常合入8d4c6981b；主树Scope+原独立NULL格共51 passed/2历史格明确deselected/650 warnings/4.54秒（/private/tmp/f118-root-null-path-fixed-corrected.log/.xml）。首次组合错误重复-p test.conftest注册、0实际测试，不算产品红，移除重复注册后上述通过。仅NULL接缝闭合；历史folder格T951952仍待修，T926927整K1保持待办。
+
+
+K1仓储整卡复查闭合：47563b0de（§83新test8dd56f1bc的5真红/3首绿→8绿）由Root逐行复核单Scope新增18行/586总行并正常主合3138566b6；按Version单遍汇总唯一Doc目的，保原逻辑路径/显式File优先、不任取分歧。201Doc/404Version用例实际验证不每Doc再扫全V。原不可改私有反例四格及真实Web producer合5 passed/89 warnings/.71秒（/private/tmp/f118-root-k1-two-p2-fixed.log/.xml）。主树新history+原九路径247 passed/6404 warnings/42.78秒（/private/tmp/f118-root-k1-complete-fixed.log/.xml），401/10001原Scope与实际J1 items轻列预算继续通过。T951952及T926927闭合；只P1/K1仓储组件，J1 accept/ready、Owner、worker、真实API/迁移未开放，不能称完整移动/E2E已完成。
