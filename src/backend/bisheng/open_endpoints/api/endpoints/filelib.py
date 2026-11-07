@@ -18,12 +18,14 @@ from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.utils import async_file_download, save_download_file
+from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_document_repository,
     get_knowledge_document_version_repository,
     get_knowledge_file_repository,
 )
+from bisheng.knowledge.application.space_upload import SpaceUploadApplication
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
     KnowledgeCreate,
@@ -136,6 +138,13 @@ def _build_space_service(
     )
     svc.version_repo = version_repo
     svc.doc_repo = doc_repo
+    svc.upload_application_factory = lambda: SpaceUploadApplication(
+        login_user=login_user,
+        session_factory=get_async_db_session,
+        admit_upload=svc._require_action,
+        make_permission_record=svc._new_file_permission_record,
+        actor_provider=svc._permission_actor,
+    )
     return svc
 
 
