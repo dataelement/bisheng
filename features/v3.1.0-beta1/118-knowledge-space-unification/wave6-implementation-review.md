@@ -247,3 +247,16 @@ WF真实SqlFence后续审计确认bad parent/mode/version三格未fail closed，
 WF d863三种坏权限metadata经真实SqlPermissionScopeFence证实3真红，原作者c28bf0423仅原Owner八行条件修复，原反例逐字未改复验通过；非当前edit/原public/原super资格不变。CH3f498原两叶批量原channel.visible，停main/sub同步仍保来源，401源11 actual SELECT/5≤100 FGA批，无完整sync JSON。root合c28后12paths215 passed、759warnings、2.62秒（/private/tmp/f118-root-wf-ch-disclosure.log/.xml），据实际闭合845846/851852。
 
 Default root fc7278263新14缺方法红→5paths70绿，独立EDGE自选79绿及7个额外原生身份/SQL/管理pin/Root对照绿，无确认问题。按实际五GET登录资格只读原key，管理entry单独原设置资格，Root foreign不fallback不复制；T855856闭合。六Owner源均合main072240eee，8paths171 passed、795warnings、3.27秒；APP仍等已冻SA预算接缝联验，不提前勾。当前source helpers不替公开模型/空间删除或完整Coverage。
+
+
+## 六来源、权限批读及原生M3组件整合（2026-11-07）
+
+受测主树d50401825dd306dfc2c8aa197d6f81fa5a44e212，选集为整个test/knowledge_unification（明确不收集TCP mock合同单模块）、test/permission/test_creator_delete_batch.py、test/open_api/test_service_account_creator_delete.py及test/app_runtime/test_app_permission_registration.py：**4166 passed、7 skipped、72839 warnings、163.75秒**。日志/JUnit /private/tmp/f118-root-native-sql-source-integrated.log/.xml。7 skip为原F054_PERMISSION_INTEGRATION中间件占位，不计E2E完成；与前次3803不是同快照，不相加。主树无源码fail，但未称全仓、CI、实际升级/部署或真实E2E通过。
+
+APP展示07b与权限批读cf366已联装：401个目标的两组原生SQL SELECT从4044/4435降到84/79，保持原SA创建者删除例外；50为18/17、200为33/31。root逐段核两生产叶并以九路径199绿复验，作者旧权限63绿。T871仅补旧State fake原接口（旧12+新26共38绿），T872旧APP注册以真实F118前a1b1a2387的43绿/1原bare-scope失败/7占位为对照，只对齐use退休后的原Catalog与可信management scope夹具；主树相关88绿/7占位。T849850/865866/871872按限定范围闭合，未新授权或放松生产兼容fake。
+
+M3最终518f组件经非作者复核原53与额外7个native边界绿；最初Service直接SQL违反C1已真红后移回Repo，最终Service不含SQL。Repo/Service自身savepoint保护业务与checkpoint，caller独占durable commit，真实ID摘要与恢复10001项线性验证；root本次完整选集覆盖，T861–864据组件范围闭合，实际artifact App、namespace/回填/Coverage与正式M3仍未闭合。DM实测按用户免除，C2静态及MySQL实际事务保留。
+
+大目标集d071的原401逐tombstone预锁与1001 OR深度反例已修：精确Tombstone按索引字符串全局锁序≤200批，业务Model仍数字序；Ref目标谓词同type分组和≤200 IN片段，原完整目标/来源边界不变。作者5新native及旧目标/删除/分页选集、root本次完整选集绿，T873874闭合；MySQL锁序/并发待T202，不能将单IN片段上限声称整条SQL参数≤200。模型cursor/core87f尚在非作者复核，T867–870不先勾。
+
+后继依赖按§57真实冻结artifact→SQL App六卡、§58上传原子注册两卡冻结；原生审计发现旧版本重链在主指针触发器失败后仍多一版本/两个primary，纳入原T083084后继事务接线，不扩大文件edit或更换上传调度。AC80 namespace applicability仍待用户决定，Spec原条款不改，正式联合权限/namespace发布不绕过该选择。

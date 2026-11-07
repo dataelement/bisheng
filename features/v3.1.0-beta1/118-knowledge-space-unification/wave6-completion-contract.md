@@ -807,3 +807,29 @@ EDGE T873874仅原llm/domain/repositories/reference_target_repository.py与resou
 TargetRepo仅将实际Tombstone(目标type/id/owner)读锁按完整集合预取分批≤200、复用原DeletionEvidence/_revision及missing/original/prelock proof校验，不每target一SQL；同步/异步共用原计划，原Server→Model→Tombstone锁顺序保持，分批内部与全局排序一致，注意数字ID/字符串索引顺序不可跨批交叉。不搬Owner认证到调用方、不读额外tenant、不改model默认/共享资格。原较大Model ID IN按便携条件分组，不改变实际锁定全集。RefRepo将等价目标谓词按target_type分组并按≤200 ID的IN片段组合，整条仍唯一SELECT、id seek/order与完整四键Source JOIN不变；不能拆成每目标组×每BRR页的重复扫描/用户×资源枚举。此处≤200是IN片段及Tombstone预取批次，不假报完整owner Scope总参数≤200；不另加Ref SQL总量限制或截断。401/1001多模型实际SQL、缺模型/合法tombstone/foreign/两Owner/全旧Owner/Reference paging选集须通过；真实MySQL锁/并发仍T202实测。
 
 INT T871只原test/open_api/test_service_account_creator_delete.py的State fake补permission_snapshots/load_grants_batch，复用原mode_for_target/load_grants语义，不删旧断言、不改生产兼容fake。T872只原APP注册测试：真实F118实现前a1b1a2387为43pass/1既有super bare-scope fail/7skip，当前41pass/3fail/7skip；其中2个use Catalog期望随本次退休已过期。对齐非可分配visible/5原动作与真实模型visible关系，保legacy use wire单测；旧super场景补原已存在可信management_tenant_scope fixture，不变任何生产跨tenant策略。7个原中间件placeholder仍明确skip，不伪报E2E。
+
+
+## 57. 冻结产物到真实SQL执行入口 V1：已冻结
+
+PROC独占T875–T880三组：T875/876原application/unification_inventory.py及新test_migration_frozen_plan_reader.py；T877/878新application/unification_conversion_codec.py及新test_migration_conversion_codec.py；T879/880新application/unification_conversion.py及新test_migration_conversion_application.py。均在knowledge模块与test/knowledge_unification下，每实现一生产叶、新叶≤600。依赖T842/858/860/862/864；这六卡仅真实SQL子步，不包含namespace/Catalog、AC80待答、M4引用/Coverage或正式CLI，不提前关闭T163164。
+
+原InventoryApplication提取只读aiter_frozen_pages(result,*,environment,backup_ref,schema_ref,current=None)，yield唯一frozen slots叶DTO(kind,section,scope,tenant_id,page_index,record_count,descriptor,content)；_verify_frozen仅完整drain同一reader，保原字节/合法图语义，不另复制DFS。原深度64、重复/循环object_key、root run元数据、plan→baseline绑定、材料hash/身份/计数均保留；增加实际tenant闭包和每(kind,section,scope,tenant)页索引连续、顺序唯一检查。合法空section/tenant无需伪造零页，不能将原M2合法材料变成新协议。
+
+decode_sql_conversion_page(content,*,run_id,writer_contract_version,tenant_id,page_index)->DecodedSQLConversionPage(commands:tuple[五Domain命令,...],deferred:tuple[InventoryRecord,...])只复用现decode_inventory_page、COMMAND_RECORD_TYPES与record_from_row精确roundtrip，不改595行中央codec/新建hash算法。显式恢复whole-second naive datetime与DefaultSlotProvenance tuple；只接受五SQL command及原permission_plan/source_decision后继记录，未知tag/section拒绝，SQL命令必须原Run/writer/tenant/ordinal闭包。不得将deferred静默执行或宣称namespace完成。
+
+UnificationSQLConversionApplication(*,artifact_store,session_factory,sql_service=None).arun(*,run_id,writer_contract_version,environment,backup_ref,schema_ref)->SQLConversionExecutionReport。caller不提供Session、raw commands或plan ref；从RunRepo.aget_global_freeze读取唯一真实refs，实际全量tenant含disabled宇宙及各Run阶段/hash/refs必须一致，仅baseline_frozen/converting允许。完整baseline及plan图和所有叶/坏尾先验证完，才允许任何业务DML。完整第一遍后按实际conversion membership/hash第二遍线性消费，禁止一批一遍全图或只验证已用页。
+
+按tenant稳定升序，实际批≤199命令，每批新native Session/外事务，精确锁Run/refs/hash；baseline_frozen首批phase与业务/checkpoint同TX进入converting。仅durable commit确认后才携原Service continuation给下一新Session；fresh App每tenant一次线性核真实已提交prefix/实际分配ID/digest，再从partial artifact page的真实ordinal继续suffix。commit失联立即停止、报告unknown，不盲重放/自动failed/重新M2/替换baseline；下次由真实持久checkpoint恢复。EOF来自完整verified SQL命令数，零命令tenant亦用真实空EOF checkpoint；不能借最后artifact页含deferred误算SQL EOF。安全进度不含原配置/凭据。
+
+中间SQL after摘要仅适用本子步未完成后继namespace转换前；未来总编排在SQL子步已完成且后继步骤开始时应按步骤checkpoint跳过，不能以预期namespace变化误判SQL漂移。Domain/Repo算法/phaseReady规则不改。测试含真实M2 artifact→typed Domain→native SQL，三tenant、foreign/缺tenant、坏尾零业务写、空tenant、部分已提交页恢复、unknown commit前后、File全列不变及401/10001线性查询/产物读预算。SQLite/native组件验证不替代后续MySQL正式停服升级。
+
+
+## 58. 后台初始上传原子注册前置 V1：已冻结
+
+PERM在模型核心独立复核完成后实施T881/882，仅新knowledge/domain/repositories/upload_registration_repository.py（DTO同叶）与新test/knowledge_unification/test_kn_upload_registration_repository.py。本组只原子SQL注册，不接旧上传/网页/文件夹/历史重链、不修改CommonBaseRepository/权限/调度；原T083084继续待办。上传仍原upload_file，不套Space.edit的J1 reprocess，不新增upload job kind或wire target_document_id。
+
+DTO NewUploadFile(frozen slots)仅原file_name/file_size/md5/split_rule/file_source/user_metadata/user_id/user_name/updater_id/updater_name，所有配置/metadata repr=False；RegisteredUpload(file repr=False,document_id,version_id)为本Repo私有登记的receipt，不可由任意IDs伪造回删。aregister_initial(session,*,space_id,parent_id,files:tuple[NewUploadFile,...]<=200)->tuple[RegisteredUpload,...]；aset_materialized(session,*,registration,object_name,user_metadata=None)->RegisteredUpload；arollback_created(session,*,registrations:tuple[RegisteredUpload,...])。空批零SQL/flush，实际Session/原TX/具体tenant、正int与FILE/type3/实际parent folder同空间同tenant路径服务端导出，不信client路径/ID。File+Doc+V1+真实自增互指在同caller事务仅flush，独立savepoint失败无半链；不commit/rollback caller、不覆盖caller pending，不使用bypass或自建Session，按原严格scope守卫处理。每读/写ID批≤200。
+
+首版本沿原initial version事实/状态/时间及原File等待处理语义；effective processing snapshot作为原split_rule完整保存，不在Repo重新resolve。永久key由旧KnowledgeUtils按实际FileID的唯一算法在后继应用计算；Repo仅接已物化object_name，不调用MinIO/FGA/queue/provider。materialize/cleanup只对本Repo发行、同Session/事务、仍匹配本次独立V1链和当前File事实的receipt生效，不能删历史或别次同ID；失败/cancel局部savepoint整笔回滚。rollback_created仅补偿本次新链SQL，不宣称分布式原子性。跨TX receipt需求须先交root冻结，禁止自行放松成裸ID。
+
+native测试含实际autoincrement+全链互指、真实SQL触发器打断Doc/V1/物化写后外层catch再commit无半链、foreign/跨parent/坏path/空批/超批/pending拒且caller修改不丢、伪receipt/换TX/链被历史化拒补偿、200项有界查询与非笛卡尔积。原已有版本重链原生触发器反例确认两个primary的事务缺口，后继须另冻原子link Repo/Service/DI；其原权限动作尚未冻结，不能猜file.edit或扩大权限。原审批skip参数当前未消费，不凭任务标题新增审批行为；格式/实大小/配额在注册前检查、解析后内容安全失败保留原可见失败状态，两类不混称无残留。
