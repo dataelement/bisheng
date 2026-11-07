@@ -4,7 +4,7 @@ from dataclasses import FrozenInstanceError
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import and_, event, or_, select, update
+from sqlalchemy import event, update
 from sqlmodel import Session
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -23,22 +23,10 @@ from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeP
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.repositories.move_scope_repository import MoveRoot, MoveScopeRepository
 from bisheng.permission.domain.models.grant import ResourcePermissionMode
+from bisheng.permission.domain.repositories.move_projection_repository import MoveProjectionRepository
 from test.knowledge_unification import test_kn_reference_repository as fixtures
 
 store, tenant = fixtures.store, fixtures.tenant
-
-
-class NativeParentStates:
-    """Real native Mode facts; final combination uses the production P1 reader."""
-
-    async def aread_parent_states(self, session, *, targets):
-        assert len(targets) <= 200
-        table = ResourcePermissionMode.__table__
-        query = select(table).where(
-            table.c.tenant_id == 101,
-            or_(*(and_(table.c.resource_type == kind, table.c.resource_id == key) for kind, key in targets)),
-        )
-        return tuple(SimpleNamespace(**dict(row)) for row in (await session.execute(query)).mappings())
 
 
 @pytest.fixture
@@ -140,7 +128,9 @@ async def moving(store, monkeypatch):
                 )
             )
         session.commit()
-    return SimpleNamespace(sync=sync, engine=engine, repo=MoveScopeRepository(parent_states=NativeParentStates()))
+    return SimpleNamespace(
+        sync=sync, engine=engine, repo=MoveScopeRepository(parent_states=MoveProjectionRepository(environment="test"))
+    )
 
 
 async def load(moving, session, roots=None, **kwargs):
@@ -420,3 +410,65 @@ async def test_pending_active_j1_cannot_be_flushed_after_scope_read(moving):
         with pytest.raises(KnowledgeProcessingConflictError):
             await load(moving, session)
         assert job in session.new
+
+
+@pytest.mark.parametrize("sync", [False, True])
+async def test_pending_item_can_not_break_a_released_input_inside_the_delete_transaction(moving, sync):
+    from datetime import datetime, timedelta
+
+    with Session(moving.sync) as session:
+        session.add(
+            KnowledgeOperationPlan(
+                id="plan-pending",
+                tenant_id=101,
+                actor_user_id=7,
+                operation="move",
+                space_id=10,
+                operation_id="done-job",
+                consumed_at=datetime.now(),
+                request_hash="a" * 64,
+                plan_digest="b" * 64,
+                expires_at=datetime.now() + timedelta(hours=1),
+            )
+        )
+        session.add(
+            KnowledgeProcessingJob(
+                id="done-job",
+                tenant_id=101,
+                space_id=11,
+                kind="move_index",
+                state="succeeded",
+                actor_user_id=7,
+                idempotency_key="done",
+                request_hash="c" * 64,
+                expected_model_config_revision=4,
+                total_count=1,
+            )
+        )
+        session.add(
+            KnowledgeProcessingItem(
+                id="done-item",
+                tenant_id=101,
+                job_id="done-job",
+                file_id=81,
+                document_id=80,
+                version_id=181,
+                expected_space_id=11,
+                state="succeeded",
+            )
+        )
+        session.commit()
+    if sync:
+        with Session(moving.sync) as session:
+            item = session.get(KnowledgeProcessingItem, "done-item")
+            item.state = "failed"
+            with pytest.raises(KnowledgeProcessingConflictError):
+                moving.repo.assert_no_unsettled_move_inputs(session, 10)
+            assert item in session.dirty
+    else:
+        async with AsyncSession(moving.engine) as session:
+            item = await session.get(KnowledgeProcessingItem, "done-item")
+            item.state = "failed"
+            with pytest.raises(KnowledgeProcessingConflictError):
+                await moving.repo.aassert_no_unsettled_move_inputs(session, 10)
+            assert item in session.dirty
