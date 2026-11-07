@@ -23,6 +23,7 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
+from bisheng.knowledge.domain.repositories.move_row_repository import PAGE, MoveRowRepository
 from bisheng.knowledge.domain.repositories.operation_plan_repository import _digest
 from bisheng.knowledge.domain.schemas.move_processing import (
     DOC_FIELDS,
@@ -40,8 +41,6 @@ from bisheng.knowledge.domain.schemas.move_processing import (
 )
 from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
 from bisheng.knowledge.domain.services.move_metadata_policy import effective_move_removed_fields
-
-PAGE = 200
 
 
 def conflict(reason):
@@ -63,7 +62,7 @@ def revision(row):
     return _digest({key: value for key, value in row.items() if key != "status"})
 
 
-class MoveScopeRepository:
+class MoveScopeRepository(MoveRowRepository):
     def __init__(self, *, parent_states=None):
         self.parent_states = parent_states
 
@@ -77,31 +76,6 @@ class MoveScopeRepository:
         if any(type(key) is not int or key <= 0 for key in space_ids):
             raise SpaceNotFoundError()
         return tenant
-
-    @staticmethod
-    async def _rows(session, model, fields, condition, *, lock=False):
-        table, result = model.__table__, []
-        cursor = "" if model is KnowledgeProcessingJob else 0
-        with session.no_autoflush, strict_tenant_filter():
-            while True:
-                query = (
-                    select(*(table.c[name] for name in fields))
-                    .where(condition, table.c.id > cursor)
-                    .order_by(table.c.id)
-                    .limit(PAGE)
-                )
-                rows = (await session.execute(query.with_for_update() if lock else query)).mappings().all()
-                result.extend(deepcopy(dict(row)) for row in rows)
-                if len(rows) < PAGE:
-                    return result
-                cursor = rows[-1]["id"]
-
-    async def _by_ids(self, session, model, fields, ids, *, lock=False, key="id"):
-        result, keys = [], sorted(set(ids))
-        for offset in range(0, len(keys), PAGE):
-            condition = model.__table__.c[key].in_(keys[offset : offset + PAGE])
-            result += await self._rows(session, model, fields, condition, lock=lock)
-        return result
 
     async def _roots(self, session, source, destination, *, lock=False):
         tenant = self._context(session, source, destination)
