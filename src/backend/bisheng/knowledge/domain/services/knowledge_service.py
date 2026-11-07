@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+from dataclasses import dataclass, field
 from datetime import datetime
 from time import perf_counter
 from typing import Any
@@ -128,6 +129,17 @@ _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE = 100
 # telemetry as the population approaches this ceiling so a tenant nearing it
 # is flagged before the enumeration hits the schema-level 5 000 hard cap.
 _LIBRARY_VISIBLE_MAX_RESULTS = 5000
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedUpload:
+    local_path: str = field(repr=False)
+    download_name: str
+    original_file_name: str
+    md5: str
+    file_size: int
+    split_rule: str = field(repr=False)
+    file_info: KnowledgeFileOne = field(repr=False)
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -1738,17 +1750,20 @@ class KnowledgeService(KnowledgeUtils):
         cls.audit_telemetry_service.audit_upload_knowledge_file(login_user, request, knowledge, file_list)
 
     @classmethod
-    def process_one_file(
+    def prepare_one_file(
         cls,
         login_user: UserPayload,
         knowledge: Knowledge,
         file_info: KnowledgeFileOne,
         split_rule: dict,
-        file_kwargs: dict = None,
-        skip_dedup: bool = False,
+        file_kwargs: dict | None = None,
         processing_rule_request: FileProcessBase | None = None,
-    ) -> KnowledgeFile:
-        """Process uploaded files"""
+    ) -> PreparedUpload:
+        """Stage the original local file and resolve its actual saved rules.
+
+        This has no registration, permission projection or object-write side
+        effects. The existing writer consumes exactly this prepared snapshot.
+        """
         # download original file
         filepath, file_name = file_download(file_info.file_path)
         md5_ = os.path.splitext(os.path.basename(filepath))[0].split("_")[0]
@@ -1756,7 +1771,6 @@ class KnowledgeService(KnowledgeUtils):
         # Get file size inbytes）
         file_size = os.path.getsize(filepath)
 
-        file_extension_name = file_name.split(".")[-1]
         original_file_name = cls.get_upload_file_original_name(file_name)
         actual_snapshot = None
         if processing_rule_request is not None:
@@ -1784,19 +1798,43 @@ class KnowledgeService(KnowledgeUtils):
             # The old writer always applies a per-file ExcelRule below. Feed
             # it the resolved value without mutating the caller's raw input.
             file_info = file_info.model_copy(update={"excel_rule": actual_rule.excel_rule})
-        # Does it contain duplicate files?
-        repeat_files = KnowledgeFileDao.get_file_by_condition(
-            knowledge_id=knowledge.id,
-            md5_=md5_,
-            file_name=original_file_name,
-        )
-
         if not file_info.excel_rule:
             file_info.excel_rule = ExcelRule()
         split_rule["excel_rule"] = file_info.excel_rule.model_dump()
         if actual_snapshot is not None:
             split_rule["_effective_processing"] = actual_snapshot.model_dump(mode="json")
-        str_split_rule = json.dumps(split_rule)
+        return PreparedUpload(
+            filepath, file_name, original_file_name, md5_, file_size, json.dumps(split_rule), file_info
+        )
+
+    @classmethod
+    def process_one_file(
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        file_info: KnowledgeFileOne,
+        split_rule: dict,
+        file_kwargs: dict = None,
+        skip_dedup: bool = False,
+        processing_rule_request: FileProcessBase | None = None,
+    ) -> KnowledgeFile:
+        """Process uploaded files"""
+        prepared = cls.prepare_one_file(
+            login_user,
+            knowledge,
+            file_info,
+            split_rule,
+            file_kwargs=file_kwargs,
+            processing_rule_request=processing_rule_request,
+        )
+        filepath, file_name = prepared.local_path, prepared.download_name
+        original_file_name, md5_, file_size = prepared.original_file_name, prepared.md5, prepared.file_size
+        str_split_rule, file_info = prepared.split_rule, prepared.file_info
+        repeat_files = KnowledgeFileDao.get_file_by_condition(
+            knowledge_id=knowledge.id,
+            md5_=md5_,
+            file_name=original_file_name,
+        )
         minio_client = get_minio_storage_sync()
 
         # ``skip_dedup``: callers that have already resolved a guaranteed-unique
