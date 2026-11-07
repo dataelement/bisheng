@@ -301,3 +301,19 @@ PERM d929初始上传Repo439行/新测试506行经root逐段及EDGE独立复核�
 c1a原重复分支只移动既有md5优先/tmp/FAILED响应并复用PreparedUpload，作者5真缺接口红+1旧skip_dedup首绿，root逐段审45行差异后正常合入。cbd原摘要stream经PERM非作者固定父AST oracle复核：原六路径132绿、独立9格Unicode/子类canonical重复/旧容器与generator/UTF8失败原状态/lex顺序均绿；旧normalize/digest直接从准确父生产AST提取，未重抄算法，其他合同AST完全相同。独立1001/100001高Unicode流峰值3407/3383 bytes，原wrapper仍O(N)normalize，只有stream辅助内存O(1)。两组主树250a05d652a92bce5c7bd52f1d5e85dd90b82144正常合流后11路径**192 passed、2377 warnings、12.97秒**（/private/tmp/f118-root-digest-duplicate-integrated.log/.xml）。T889–892按对应组件范围闭合，未接原Space/DI或M4写口。
 
 EDGE独审e508发现并由作者逐字复现1个P2：instance after_transaction_end以call_soon(remove)退役，若后继caller hook通过async SQLAlchemy bridge执行另Session原生SELECT1，让出driver控制时会改仍在dispatch的deque，导致DB COMMIT真实成功却RuntimeError。相同probe d929旧基线2绿/e508新1红1绿，且两边File/Doc/V1均已durable commit（/private/tmp/test_f118_upload_observer_regression.py、/private/tmp/f118-edge-upload-observer-{d929,e508}.log）；不是SQLite假事务或不合法caller。作者原85绿不能覆盖此反例，T887888继续未勾、e508未合主。修正须确定事件栈已退出的调用边界，不以另一计时延迟替代；发现者复验后才能合入及接实际上传App。
+
+
+## M4只读闭包、索引分页与提交观察者闭合（2026-11-07）
+
+5e5840097将观察者退役移到确定退出事件dispatch的显式ACK调用边界；未知/回滚路径等待当前Task完成，不再call_soon/call_later移除。EDGE原发现者复验同原private反例7绿与作者89项，native caller SELECT1执行且DB三行durable时commit不再RuntimeError。主树48f正常合入，T887888按组件闭合，不冒跨进程恢复。
+
+SourcePlan0100经root完整生产/原M2协议阅读后正常合入；只保页/Source/Root定位，顺序引用只读一遍，无来源×页全图反复扫描。Index d510经root逐段复核，精确四键有界两SELECT读头、实际BRR.id seek一SELECT页；不写ready/guard/绑定。主树5ee671da957fddcea1bb449e6251cdbe14d448e9九路径**209 passed、6167 warnings、33.24秒**（/private/tmp/f118-root-reference-commit-integrated.log/.xml），含真实上传Repo+commit89与两新只读组件及原SourceRead/Ref/reader组合。SourcePlan独立复核另交EDGE；此处root非作者复核已完成。T893–896仅只读组件闭合，M4写authority/Coverage未实现。
+
+原普通上传App由PERM独立开发，INT冻结§66原Service+DI接线及明确旧fixture装配；目录/网页/历史链、移动删除和完整E2E仍待后继，不以辅助卡数代替产品AC。
+
+EDGE固定0100额外SourcePlan复核：29+41原选集绿，4独立探针+1控制5绿，覆盖重启ordinal200、EOF/空tenant零GET、retiredroot及foreign模型父归属拒绝。10001来源/槽位均无按source重复GET；日志/private/tmp/f118-edge-sourceplan-0100-{native,callers}.log，private probe笔误修正不作产品红。无确认行动项。
+
+
+5e上传组件在独立MySQL克隆库bisheng_f118_probe_20261107验证通过：复用44f归档（23601ea9…589c）及已逐项AST核相同依赖，唯一overlay的5e模块SHA256 88d0ba4f21d8d3c0205600e321d7b15df2251b6180af9a51928e810422cc78f3。真实root提交ACK、caller hook另Session SELECT1、原私有ACK/fresh rebind和SQL回收commit通过；rollback不能ACK且fresh rebind零SQL拒。仅三表DML/两次显式提交，11表完整行摘要前后同d3ca445f3648b51dd9a7b9800a2db4637f1195de726143cd5e0f4a106c7341be、Run0；自增各推进2属MySQL真实分配行为。证据evidence/upload-registration-5e-mysql-proc-20261107.json（本地/private/tmp/f118-upload-registration-mysql-evidence/，SHA256 d772e5d814cc8a543d587ed0ae8065d46cf027235bfb5a3251f8d13b52808ef7）。这是单模块+44f依赖组件验证，不是全5e部署/Blob/FGA/queue/正式迁移/E2E。原API及worker镜像/启动时间均不变；3005未操作。完整归档传输曾被自动审查拒绝，改为唯一24KB模块+16KB无凭据probe后获审查放行，没有绕过传输。
+
+T899在5ee旧真实入口2真红：缺DI factory AttributeError，实际大小超角色限额仍永久put1次；日志/private/tmp/f118-t899-wiring-red.log。尚未实施T900，不把原cleanup缺fake上下文异常计另一个产品缺陷。
