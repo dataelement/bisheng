@@ -347,18 +347,28 @@ async def test_receipt_cannot_delete_a_chain_that_has_become_history(database):
 
 async def test_native_cancellation_after_document_insert_cannot_leave_half_a_chain(database):
     repo, before = api().UploadRegistrationRepository(), await snapshot(database)
+    inserted = []
 
-    def cancelled(_conn, _cursor, sql, _params, _context, _many):
+    def document_seen(_conn, _cursor, sql, _params, _context, _many):
         if sql.lstrip().upper().startswith("INSERT INTO KNOWLEDGE_DOCUMENT "):
-            raise asyncio.CancelledError()
+            inserted.append(True)
 
-    sa.event.listen(database.engine.sync_engine, "after_cursor_execute", cancelled)
+    class CancelAfterCompletedSQL(AsyncSession):
+        async def flush(self, *args, **kwargs):
+            await super().flush(*args, **kwargs)
+            if inserted:
+                # Cancel after the real native INSERT has returned. Raising from
+                # a driver event instead means connection loss to SQLAlchemy.
+                asyncio.current_task().cancel()
+                await asyncio.sleep(0)
+
+    sa.event.listen(database.engine.sync_engine, "after_cursor_execute", document_seen)
     try:
-        async with AsyncSession(database.engine) as session, session.begin():
+        async with CancelAfterCompletedSQL(database.engine) as session, session.begin():
             with pytest.raises(asyncio.CancelledError):
                 await register(repo, session)
     finally:
-        sa.event.remove(database.engine.sync_engine, "after_cursor_execute", cancelled)
+        sa.event.remove(database.engine.sync_engine, "after_cursor_execute", document_seen)
     assert await snapshot(database) == before
 
 
@@ -409,3 +419,88 @@ async def test_historical_deep_but_consistent_folder_path_is_not_a_new_upload_de
         assert receipt.file.level == 11 and receipt.file.file_level_path == "/" + "/".join(
             str(i) for i in range(100, 111)
         )
+
+
+@pytest.mark.parametrize("field", ["document_id", "version_id"])
+async def test_issued_receipt_ids_cannot_be_retyped_to_equal_floats(database, field):
+    repo = api().UploadRegistrationRepository()
+    async with AsyncSession(database.engine) as session, session.begin():
+        (receipt,) = await register(repo, session)
+        object.__setattr__(receipt, field, float(getattr(receipt, field)))
+        before = await contents(session)
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.arollback_created(session, registrations=(receipt,))
+        assert await contents(session) == before
+
+
+async def test_failed_materialization_and_cleanup_leave_the_original_receipt_usable(database):
+    before, repo = await snapshot(database), api().UploadRegistrationRepository()
+    async with AsyncSession(database.engine) as session, session.begin():
+        (receipt,) = await register(repo, session)
+        initial = await contents(session)
+        await session.execute(
+            sa.text(
+                "CREATE TRIGGER fail_materialize BEFORE UPDATE OF object_name ON knowledgefile BEGIN SELECT RAISE(ABORT, 'native materialization failure'); END"
+            )
+        )
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.aset_materialized(session, registration=receipt, object_name="original/key")
+        assert await contents(session) == initial
+        await session.execute(sa.text("DROP TRIGGER fail_materialize"))
+        ready = await repo.aset_materialized(
+            session, registration=receipt, object_name="original/key", user_metadata={"exact": [False, 0, 0.0, None]}
+        )
+        assert ready.file.user_metadata == {"exact": [False, 0, 0.0, None]}
+        assert ready.file.update_time == receipt.file.update_time
+        materialized = await contents(session)
+        await session.execute(
+            sa.text(
+                "CREATE TRIGGER fail_cleanup BEFORE DELETE ON knowledge_document BEGIN SELECT RAISE(ABORT, 'native cleanup failure'); END"
+            )
+        )
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.arollback_created(session, registrations=(ready,))
+        assert await contents(session) == materialized
+        await session.execute(sa.text("DROP TRIGGER fail_cleanup"))
+        await repo.arollback_created(session, registrations=(ready,))
+    assert await snapshot(database) == before
+
+
+async def test_cleanup_checks_every_receipt_before_touching_an_earlier_valid_chain(database):
+    repo = api().UploadRegistrationRepository()
+    async with AsyncSession(database.engine) as session, session.begin():
+        one, two = await register(repo, session, (candidate("one"), candidate("two")))
+        await session.execute(sa.update(File.__table__).where(File.id == two.file.id).values(status=2))
+        before = await contents(session)
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.arollback_created(session, registrations=(one, two))
+        assert await contents(session) == before
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"file_size": True},
+        {"file_size": 0.0},
+        {"file_size": -1},
+        {"user_id": True},
+        {"updater_id": 7.0},
+        {"split_rule": {}},
+        {"user_metadata": {"not_json": (1, 2)}},
+        {"user_metadata": {"not_finite": float("nan")}},
+    ],
+)
+async def test_input_types_are_not_coerced_and_rejection_has_zero_native_io(database, changes):
+    repo, statements = api().UploadRegistrationRepository(), []
+
+    def seen(_conn, _cursor, sql, _params, _context, _many):
+        statements.append(sql)
+
+    async with AsyncSession(database.engine) as session, session.begin():
+        sa.event.listen(database.engine.sync_engine, "before_cursor_execute", seen)
+        try:
+            with pytest.raises(KnowledgeOperationPlanConflictError):
+                await register(repo, session, (candidate(**changes),))
+            assert not statements and not session.new and not session.dirty
+        finally:
+            sa.event.remove(database.engine.sync_engine, "before_cursor_execute", seen)
