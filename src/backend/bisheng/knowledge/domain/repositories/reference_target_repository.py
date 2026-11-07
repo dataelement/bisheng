@@ -163,20 +163,60 @@ class KnowledgeReferenceTargetRepository:
         return statement.with_for_update() if lock else statement
 
     @staticmethod
-    def _tombstone_statement(key, owner):
-        # The exact owner came from a real row, an original source binding, or
-        # the trusted owner-query scope. It is never inferred for missing binds.
-        return (
-            select(ResourceReferenceTombstone)
-            .where(
-                ResourceReferenceTombstone.target_type == key.target_type.value,
-                ResourceReferenceTombstone.target_id == key.target_id,
-                ResourceReferenceTombstone.target_tenant_id == owner,
-                ResourceReferenceTombstone.tenant_id == owner,
+    def _tombstone_statements(entries):
+        # Only complete facts from real rows, original bindings or the trusted
+        # owner-query scope reach this producer; missing binds supply no owner.
+        values = tuple(entries)
+        if any(
+            type(pair) is not tuple
+            or len(pair) != 2
+            or not isinstance(pair[0], TargetKey)
+            or pair[0].target_type not in {TargetType.KNOWLEDGE_SPACE, TargetType.KNOWLEDGE_FILE}
+            or type(pair[1]) is not int
+            or pair[1] <= 0
+            for pair in values
+        ):
+            raise ResourceReferenceInvalidError(reason="knowledge_reference_tombstone_facts_invalid")
+        # The physical ID is VARCHAR: sort the complete set before slicing,
+        # never numeric chunks. Business locks and observations remain numeric.
+        ordered = sorted(set(values), key=lambda pair: (pair[0].target_type.value, pair[0].target_id, pair[1]))
+        model = ResourceReferenceTombstone
+        for start in range(0, len(ordered), 200):
+            groups = {}
+            for key, owner in ordered[start : start + 200]:
+                groups.setdefault((key.target_type.value, owner), []).append(key.target_id)
+            yield (
+                select(model)
+                .where(
+                    or_(
+                        *(
+                            and_(
+                                model.target_type == kind,
+                                model.target_id.in_(ids),
+                                model.target_tenant_id == owner,
+                                model.tenant_id == owner,
+                            )
+                            for (kind, owner), ids in groups.items()
+                        )
+                    )
+                )
+                .order_by(model.target_type, model.target_id, model.target_tenant_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
             )
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
+
+    @staticmethod
+    def _add_tombstones(rows, expected, found):
+        for row in rows:
+            if not isinstance(row, ResourceReferenceTombstone):
+                raise ResourceReferenceInvalidError(reason="knowledge_reference_tombstone_result_invalid")
+            try:
+                entry = TargetKey(row.target_type, row.target_id), row.target_tenant_id
+            except (TypeError, ValueError) as error:
+                raise ResourceReferenceInvalidError(reason="knowledge_reference_tombstone_result_invalid") from error
+            if entry not in expected or entry in found or row.tenant_id != entry[1]:
+                raise ResourceReferenceInvalidError(reason="knowledge_reference_tombstone_result_invalid")
+            found[entry] = row
 
     @staticmethod
     def _deletion(row):
@@ -256,34 +296,17 @@ class KnowledgeReferenceTargetRepository:
                 if file_ids
                 else {}
             )
-        result = []
-        for key in keys:
-            original, row, parent, space_id, owner = self._facts(
-                key, tenant_id, operation, spaces, files, candidate_owners, originals
-            )
-            self._check_tombstone_prelock(session, source_key, operation, key, space_id, owner)
+        plan = self._tombstone_plan(
+            session, keys, tenant_id, source_key, operation, spaces, files, candidate_owners, originals
+        )
+        value = None
+        while True:
+            try:
+                statement = plan.send(value)
+            except StopIteration as done:
+                return done.value
             with bypass_tenant_filter():
-                direct = session.execute(self._tombstone_statement(key, owner)).scalar_one_or_none() if owner else None
-                ancestor = (
-                    session.execute(
-                        self._tombstone_statement(TargetKey("knowledge_space", space_id), owner)
-                    ).scalar_one_or_none()
-                    if owner and space_id and key.target_type == TargetType.KNOWLEDGE_FILE
-                    else None
-                )
-            result.append(
-                KnowledgeTargetObservation(
-                    key,
-                    row is not None,
-                    owner,
-                    space_id,
-                    revision(row, parent, direct, ancestor),
-                    original,
-                    self._deletion(direct),
-                    self._deletion(ancestor),
-                )
-            )
-        return tuple(result)
+                value = list(session.execute(statement).scalars())
 
     async def alock_targets(self, session, target_keys, source_key, operation):
         tenant_id, keys = current_tenant(source_key, operation), self._keys(target_keys)
@@ -321,25 +344,43 @@ class KnowledgeReferenceTargetRepository:
                 if file_ids
                 else {}
             )
-        result = []
+        plan = self._tombstone_plan(
+            session, keys, tenant_id, source_key, operation, spaces, files, candidate_owners, originals
+        )
+        value = None
+        while True:
+            try:
+                statement = plan.send(value)
+            except StopIteration as done:
+                return done.value
+            with bypass_tenant_filter():
+                value = list((await session.execute(statement)).scalars())
+
+    def _tombstone_plan(
+        self, session, keys, tenant_id, source_key, operation, spaces, files, candidate_owners, originals
+    ):
+        planned, entries = [], set()
         for key in keys:
             original, row, parent, space_id, owner = self._facts(
                 key, tenant_id, operation, spaces, files, candidate_owners, originals
             )
             self._check_tombstone_prelock(session, source_key, operation, key, space_id, owner)
-            with bypass_tenant_filter():
-                direct = (
-                    (await session.execute(self._tombstone_statement(key, owner))).scalar_one_or_none()
-                    if owner
-                    else None
-                )
-                ancestor = (
-                    (
-                        await session.execute(self._tombstone_statement(TargetKey("knowledge_space", space_id), owner))
-                    ).scalar_one_or_none()
-                    if owner and space_id and key.target_type == TargetType.KNOWLEDGE_FILE
-                    else None
-                )
+            planned.append((key, original, row, parent, space_id, owner))
+            if owner:
+                entries.add((key, owner))
+                if space_id and key.target_type == TargetType.KNOWLEDGE_FILE:
+                    entries.add((TargetKey("knowledge_space", space_id), owner))
+        found = {}
+        for statement in self._tombstone_statements(entries):
+            self._add_tombstones((yield statement), entries, found)
+        result = []
+        for key, original, row, parent, space_id, owner in planned:
+            direct = found.get((key, owner))
+            ancestor = (
+                found.get((TargetKey("knowledge_space", space_id), owner))
+                if owner and space_id and key.target_type == TargetType.KNOWLEDGE_FILE
+                else None
+            )
             result.append(
                 KnowledgeTargetObservation(
                     key,
@@ -376,8 +417,9 @@ class KnowledgeReferenceTargetRepository:
                 tombstones.add((TargetKey(original.target_type, original.target_id), original.target_tenant_id))
                 if original.target_type == TargetType.KNOWLEDGE_FILE.value and original.target_space_id is not None:
                     tombstones.add((TargetKey("knowledge_space", original.target_space_id), original.target_tenant_id))
-        for key, owner in sorted(tombstones, key=lambda item: (*item[0].lock_order_key, item[1])):
-            yield self._tombstone_statement(key, owner), True
+        found = {}
+        for statement in self._tombstone_statements(tombstones):
+            self._add_tombstones((yield statement, True), tombstones, found)
         return sources, frozenset(keys), frozenset(space_ids), frozenset(file_ids), frozenset(tombstones)
 
     def prelock_targets(self, session, target_keys, source_keys):
