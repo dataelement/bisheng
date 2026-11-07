@@ -1,6 +1,8 @@
-"""Real runtime/ledger/Mode composition; only FGA and marker transport is isolated."""
+"""Real runtime/ledger/Mode composition with Catalog-result and transport isolation."""
 
+import asyncio
 import importlib
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -54,8 +56,16 @@ async def compose(database, monkeypatch, items):
         model.__table__.to_metadata(metadata).c.id.type = sa.Integer()
     async with database.engine.begin() as connection:
         await connection.run_sync(metadata.create_all)
-    monkeypatch.setattr(control_state, "get_async_db_session", database.sessions)
-    monkeypatch.setattr(sql_runtime, "get_async_db_session", database.sessions)
+    seen = []
+
+    @asynccontextmanager
+    async def sessions():
+        async with database.sessions() as session:
+            seen.append(session)
+            yield session
+
+    monkeypatch.setattr(control_state, "get_async_db_session", sessions)
+    monkeypatch.setattr(sql_runtime, "get_async_db_session", sessions)
     state, marker = SqlPermissionControlState(), FakeRecentMarker()
     # Catalog derivation has its own suites; this test isolates that pure result,
     # while the new proof still reads the actual CURRENT/ACTIVE native SQL pin.
@@ -81,9 +91,19 @@ async def compose(database, monkeypatch, items):
         initial.update(
             key for key, present in projection_state_expectations(plan.deltas, after=False).items() if present
         )
-    transport = FakeFGAProjection(initial)
+
+    class CheckedTransport(FakeFGAProjection):
+        async def write_atomic(self, **kwargs):
+            assert not any(session.in_transaction() for session in seen)
+            return await super().write_atomic(**kwargs)
+
+        async def read_present(self, *args, **kwargs):
+            assert not any(session.in_transaction() for session in seen)
+            return await super().read_present(*args, **kwargs)
+
+    transport = CheckedTransport(initial)
     projection = ProjectionService(
-        repository=ProjectionRepository(database.sessions),
+        repository=ProjectionRepository(sessions),
         marker=marker,
         scope_guard=SqlProjectionScopeGuard(),
         fga=transport,
@@ -104,7 +124,7 @@ async def compose(database, monkeypatch, items):
     components = F048RuntimeComponents(facade=facade, state=state, projection=projection, marker=marker, relations=None)
     repository = native.api().MoveProjectionRepository(environment="test")
     bridge = api().KnowledgeMoveProjectionApplication(
-        repository=repository, components=components, session_factory=database.sessions
+        repository=repository, components=components, session_factory=sessions
     )
     return SimpleNamespace(bridge=bridge, facade=facade, projection=projection, marker=marker, transport=transport)
 
@@ -260,3 +280,50 @@ async def test_bridge_native_parent_state_read_and_missing_composition_fail_clos
         await bridge.aexecute_or_resume(
             job_id=native.JOB, changes=(item,), actor=PermissionActor(user_id=7, current_tenant_id=101)
         )
+
+
+async def test_invalid_tail_cannot_begin_a_valid_prefix_projection(database, monkeypatch):
+    item = native.expectation()
+    built = await compose(database, monkeypatch, (item,))
+    database.queries.clear()
+    with pytest.raises(PermissionPublishNotReadyError):
+        await built.bridge.aexecute_or_resume(
+            job_id=native.JOB, changes=(item, object()), actor=PermissionActor(user_id=7, current_tenant_id=101)
+        )
+    assert not built.transport.calls and not database.queries
+
+
+async def test_cancelled_projection_is_not_ready_and_resumes_same_native_operation(database, monkeypatch):
+    item = native.expectation()
+    built = await compose(database, monkeypatch, (item,))
+    await before_modes(database, (item,))
+    original, write = asyncio.CancelledError("cancel actual projection"), built.transport.write_atomic
+    monkeypatch.setattr(built.transport, "write_atomic", AsyncMock(side_effect=original))
+    actor = PermissionActor(user_id=7, current_tenant_id=101)
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await built.bridge.aexecute_or_resume(job_id=native.JOB, changes=(item,), actor=actor)
+    assert caught.value is original
+    async with database.sessions() as session, session.begin():
+        with pytest.raises(PermissionPublishNotReadyError):
+            await built.bridge.arequire_finalized(session, job_id=native.JOB, expectations=(item,))
+    monkeypatch.setattr(built.transport, "write_atomic", write)
+    assert (await built.bridge.aexecute_or_resume(job_id=native.JOB, changes=(item,), actor=actor)).complete
+    async with database.sessions() as session:
+        assert (await session.execute(sa.select(sa.func.count()).select_from(native.Operation))).scalar_one() == 1
+
+
+async def test_recovery_preview_is_bound_to_original_request_before_any_forward_write(database, monkeypatch):
+    item = native.expectation()
+    await native.seed(database, (item,), status="FAILED_CLOSED")
+    built = await compose(database, monkeypatch, (item,))
+    preview = await built.projection.inspect_failed_closed_recovery(1)
+    monkeypatch.setattr(
+        built.projection,
+        "inspect_failed_closed_recovery",
+        AsyncMock(return_value=replace(preview, request_checksum="0" * 64)),
+    )
+    with pytest.raises(PermissionPublishNotReadyError):
+        await built.bridge.aexecute_or_resume(
+            job_id=native.JOB, changes=(item,), actor=PermissionActor(user_id=7, current_tenant_id=101)
+        )
+    assert not built.transport.calls
