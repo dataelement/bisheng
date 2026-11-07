@@ -39,6 +39,7 @@ from bisheng.knowledge.domain.schemas.move_processing import (
     move_scope_parameters,
 )
 from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
+from bisheng.knowledge.domain.services.move_metadata_policy import effective_move_removed_fields
 
 PAGE = 200
 
@@ -325,7 +326,7 @@ class MoveScopeRepository:
             values = deepcopy(row["user_metadata"])
             if values is not None and not isinstance(values, dict):
                 conflict("move_metadata_values_invalid")
-            for name in removed:
+            for name in effective_move_removed_fields(file_source=row["file_source"], removed_fields=removed):
                 if values is not None:
                     values.pop(name, None)
             after = {
