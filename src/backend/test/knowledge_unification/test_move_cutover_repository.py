@@ -42,7 +42,7 @@ async def test_reservation_reloads_real_scope_and_confirmation_before_issuing(mo
         if tamper == "metadata":
             scope.files[1].after["user_metadata"]["keep"]["field_value"] = "changed"
         elif tamper == "destination":
-            scope = replace(scope, destination_space_id=20)
+            scope = replace(scope, destination_space_id=20, destination={**scope.destination, "id": 20})
         actor = {**ACTOR, "actor_user_id": 8} if tamper == "actor" else ACTOR
         digest = "f" * 64 if tamper == "plan" else plan.plan_digest
         repo = MoveCutoverRepository(scope_repository=moving.repo)
@@ -104,3 +104,274 @@ async def test_native_mutator_rejects_caller_pending_before_savepoint_autoflush(
                 actor_reference=ACTOR,
             )
         assert other in session.dirty and other.remark == "caller-owned-pending"
+
+
+async def pipeline(moving, monkeypatch):
+    """Actual P1 runtime + SQL finalizer; only Catalog result/FGA transport isolated."""
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+
+    import sqlalchemy as sa
+
+    from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
+    from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
+    from bisheng.knowledge.domain.repositories.processing_job_repository import JobLease
+    from bisheng.permission.application.identity import PermissionActor
+    from bisheng.permission.domain.models import AuthorizationModelRelease, PermissionCatalogRelease
+    from bisheng.permission.domain.repositories.move_projection_repository import MoveProjectionExpectation
+    from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+    from test.knowledge_unification.test_move_projection import compose
+
+    @asynccontextmanager
+    async def sessions():
+        async with AsyncSession(moving.engine, expire_on_commit=False) as session:
+            yield session
+
+    repo = MoveCutoverRepository(scope_repository=moving.repo)
+    async with sessions() as session:
+        scope = await fixtures.load(moving, session)
+        plan = await confirmation(session, scope)
+        await session.commit()
+        receipt = await repo.aprepare_reservation(
+            session,
+            scope=scope,
+            confirmation_id=plan.confirmation_id,
+            plan_digest=plan.plan_digest,
+            actor_user_id=7,
+            actor_reference=ACTOR,
+        )
+        job_id = receipt.job_id
+        await repo.aconsume_reservation(session, receipt)
+        until = datetime.now() + timedelta(minutes=10)
+        session.add(
+            KnowledgeProcessingJob(
+                id=job_id,
+                tenant_id=101,
+                space_id=11,
+                kind="move_index",
+                state="running",
+                actor_user_id=7,
+                actor_reference=ACTOR,
+                idempotency_key="native-" + job_id,
+                request_hash="c" * 64,
+                expected_model_config_revision=4,
+                accepted_model_config_revision=4,
+                expected_index_generation="generation-4",
+                claim_generation=1,
+                lease_token="lease-token",
+                lease_until=until,
+                total_count=1,
+            )
+        )
+        session.add(
+            KnowledgeProcessingItem(
+                id="item-81",
+                tenant_id=101,
+                job_id=job_id,
+                file_id=81,
+                document_id=80,
+                version_id=181,
+                expected_space_id=11,
+                expected_parent_id=50,
+            )
+        )
+        await session.commit()
+    expectations = []
+    for change in scope.parent_changes:
+        common = {
+            "tenant_id": 101,
+            "resource_type": change.resource_type,
+            "resource_id": str(change.resource_id),
+            "resource_version": change.expected_permission_version,
+        }
+        before = VerifiedPermissionTarget.from_business_service(
+            **common,
+            parent_type=change.old_parent_type,
+            parent_id=str(change.old_parent_id),
+            context_version=scope.scope_digest,
+        )
+        after = VerifiedPermissionTarget.from_business_service(
+            **common,
+            parent_type=change.new_parent_type,
+            parent_id=str(change.new_parent_id),
+            context_version=scope.scope_digest,
+        )
+        expectations.append(
+            MoveProjectionExpectation(
+                job_id,
+                101,
+                change.resource_type,
+                str(change.resource_id),
+                before,
+                after,
+                change.mode,
+                change.expected_permission_version,
+                scope.changes_digest,
+                (7,),
+            )
+        )
+    built = await compose(SimpleNamespace(engine=moving.engine, sessions=sessions), monkeypatch, tuple(expectations))
+    async with moving.engine.begin() as conn:
+        await conn.execute(
+            sa.insert(AuthorizationModelRelease),
+            {
+                "id": 1,
+                "environment": "test",
+                "store_id": "actual-store",
+                "model_id": "actual-model",
+                "model_version": "f048",
+                "model_checksum": "a" * 64,
+                "required_relations_checksum": "b" * 64,
+                "openfga_version": "1",
+                "status": "ACTIVE",
+            },
+        )
+        await conn.execute(
+            sa.insert(PermissionCatalogRelease),
+            {
+                "id": 1,
+                "release_key": "current",
+                "version": 1,
+                "status": "CURRENT",
+                "write_fenced": False,
+                "required_authorization_model_release_id": 1,
+                "draft_owner_id": 7,
+                "idempotency_key": "catalog",
+                "checksum": "c" * 64,
+            },
+        )
+    assert (
+        await built.bridge.aexecute_or_resume(
+            job_id=job_id, changes=tuple(expectations), actor=PermissionActor(user_id=7, current_tenant_id=101)
+        )
+    ).complete
+    repo.projection_verifier = built.bridge
+    return SimpleNamespace(
+        repo=repo,
+        bridge=built.bridge,
+        scope=scope,
+        expectations=tuple(expectations),
+        job_id=job_id,
+        lease=JobLease(job_id, "lease-token", 1, until),
+        sessions=sessions,
+    )
+
+
+async def prepared(session, built):
+    from sqlalchemy import text
+
+    # SQLite's legacy driver otherwise RELEASEs a first SAVEPOINT durably.
+    await session.execute(text("BEGIN"))
+    value = await built.repo.aprepare_cutover(session, job_id=built.job_id, lease=built.lease)
+    evidence = await built.bridge.arequire_finalized(session, job_id=built.job_id, expectations=built.expectations)
+    return value, evidence
+
+
+async def test_actual_p1_native_evidence_applies_all_history_and_rolls_back_with_caller(moving, monkeypatch):
+    from bisheng.database.models.tag import TagLink
+    from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+
+    built = await pipeline(moving, monkeypatch)
+    async with built.sessions() as session:
+        current, evidence = await prepared(session, built)
+        receipt = await built.repo.aapply_logical(session, prepared=current, projection_evidence=evidence)
+        built.repo.assert_logical_current(receipt, session)
+        assert receipt.index_item_count == 1
+        files = (
+            (await session.execute(select(KnowledgeFile.__table__).where(KnowledgeFile.id.in_((50, 81, 82)))))
+            .mappings()
+            .all()
+        )
+        assert all(row["knowledge_id"] == 11 for row in files)
+        assert {row["id"]: row["status"] for row in files} == {50: 5, 81: 4, 82: 7}
+        assert (
+            await session.execute(select(KnowledgeDocument.knowledge_id).where(KnowledgeDocument.id == 80))
+        ).scalar_one() == 11
+        assert (await session.execute(select(TagLink.id))).all() == []
+        built.repo.consume_logical(receipt, session)
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            built.repo.consume_logical(receipt, session)
+        await session.rollback()
+    async with built.sessions() as session:
+        assert (await session.get(KnowledgeFile, 81)).knowledge_id == 10
+        assert (await session.execute(select(TagLink.id))).all() == [(1,)]
+
+
+async def test_committed_logical_after_is_idempotent_with_fresh_native_proof(moving, monkeypatch):
+    import sqlalchemy as sa
+
+    built = await pipeline(moving, monkeypatch)
+    async with built.sessions() as session:
+        current, evidence = await prepared(session, built)
+        await built.repo.aapply_logical(session, prepared=current, projection_evidence=evidence)
+        await session.commit()
+    writes = []
+
+    def record(conn, cursor, sql, params, context, many):
+        if sql.lstrip().upper().startswith(("UPDATE", "INSERT", "DELETE")):
+            writes.append(sql)
+
+    sa.event.listen(moving.engine.sync_engine, "before_cursor_execute", record)
+    try:
+        async with built.sessions() as session:
+            current, evidence = await prepared(session, built)
+            assert current.position == "after"
+            await built.repo.aapply_logical(session, prepared=current, projection_evidence=evidence)
+            await session.commit()
+        assert not writes
+    finally:
+        sa.event.remove(moving.engine.sync_engine, "before_cursor_execute", record)
+
+
+@pytest.mark.parametrize("bad", ["fake-proof", "stale-lease", "changed-root", "changed-prepared"])
+async def test_bad_proof_lease_or_same_transaction_change_cannot_write(moving, monkeypatch, bad):
+    import sqlalchemy as sa
+
+    from bisheng.common.errcode.permission import PermissionPublishNotReadyError
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+
+    built = await pipeline(moving, monkeypatch)
+    async with built.sessions() as session:
+        current, evidence = await prepared(session, built)
+        if bad == "fake-proof":
+            evidence = {"ready": True}
+        elif bad == "stale-lease":
+            object.__setattr__(current, "claim_generation", 0)
+        elif bad == "changed-root":
+            await session.execute(
+                sa.update(Knowledge)
+                .where(Knowledge.id == 10, Knowledge.tenant_id == 101)
+                .values(model_config_revision=99)
+            )
+        else:
+            current.scope.files[1].after["knowledge_id"] = 999
+        with pytest.raises(
+            (KnowledgeOperationPlanConflictError, KnowledgeOperationPlanChangedError, PermissionPublishNotReadyError)
+        ):
+            await built.repo.aapply_logical(session, prepared=current, projection_evidence=evidence)
+        assert (await session.get(KnowledgeFile, 81)).knowledge_id == 10
+
+
+async def test_partial_sql_error_rolls_back_own_savepoint_even_if_caller_commits(moving, monkeypatch):
+    import sqlalchemy as sa
+
+    built = await pipeline(moving, monkeypatch)
+    hit = []
+
+    def inject(conn, cursor, sql, params, context, many):
+        if not hit and sql.lstrip().upper().startswith("UPDATE KNOWLEDGEFILE"):
+            hit.append(1)
+            raise RuntimeError("after first real SQL write")
+
+    async with built.sessions() as session:
+        current, evidence = await prepared(session, built)
+        sa.event.listen(moving.engine.sync_engine, "after_cursor_execute", inject)
+        try:
+            with pytest.raises(RuntimeError, match="first real SQL"):
+                await built.repo.aapply_logical(session, prepared=current, projection_evidence=evidence)
+        finally:
+            sa.event.remove(moving.engine.sync_engine, "after_cursor_execute", inject)
+        await session.commit()
+    async with built.sessions() as session:
+        assert hit and (await session.get(KnowledgeFile, 81)).knowledge_id == 10
+        assert (await session.get(KnowledgeFile, 50)).knowledge_id == 10
