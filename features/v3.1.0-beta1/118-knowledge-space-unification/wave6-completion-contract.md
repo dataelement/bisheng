@@ -889,3 +889,33 @@ PROC T891/892仅新test/knowledge_unification/test_reference_digest_stream.py及
 原reference_set_digest(references)继续原normalize_references（原类型/集合去重/排序完全不变），随后委托同一Accumulator；所有成功SHA、Unicode/转义UTF8/空列表、旧重复/列表或generator可接受语义保持。统一编码只能有一处：原json.dumps tuple行的sort_keys/separators/ensure_ascii参数保持，以 '['、原逐行JSON及逗号、']'流式组合，与原完整JSON array逐字等价。hexdigest不破坏状态，可继续update；不新增版本前缀或把旧摘要改成新算法。旧normalization仍O(N)，仅去掉额外canonical整表；已排序stream才是O(1)辅助内存，不谎报全链常数内存。
 
 测试用变更前原函数/其实际固定字节作oracle，空/Unicode/引号斜线/数值字符串lex/重复/ReferenceSpec子类/非tuple旧输入/异常边界逐项一致，流式有序/倒序/重复输入区别与反复hexdigest；100001 generator实际tracemalloc证明辅助内存不随N增长，不能先建全refs列表再声称流式。原R2/source/M2/Model批量选集回归、固定非作者复核后合流。只新纯stdlib逻辑，无外部IO/新一般框架。
+
+
+## 64. M4原来源闭包与有界索引只读前置 V1：已冻结
+
+PROC依§63后实施T893/894新knowledge/application/unification_reference_plan.py+test_migration_reference_plan.py；T895/896新resource_reference/domain/repositories/reference_backfill_repository.py+test_migration_reference_backfill_repository.py。每卡一生产叶、新叶≤600，不写初始BRR/BRS/guard、Run/ready、不变更任何普通bind/Owner/legacy规则。AC80后继联合namespace及实际Owner最终修订证明未齐，readonly结果均不是写authority，不能以SQL中间after source/ref摘要冒最终namespace证明。
+
+SourcePlan最小DTO：ReferencePageRef(section:sources|conversion,tenant_id,page_index,record_count,object_key,sha256)；RecordPosition(page:ReferencePageRef,record_index)用实际decoder.records零基位置；RecordSpan(first,last)首尾含实际记录；SourcePlanEntry(header:原SourceInventoryRecord,header_at,references:RecordSpan|None,decisions:RecordSpan|None,decision_digest)。Root/retired保原DTO+实际Position，不复制其业务字段。FrozenReferencePlan只原FrozenGlobalInventoryResult、页目录及entries/root/retired定位摘要，无content/config/refs数组。Reader(*,inventory,artifact_store).aprepare(frozen,*,environment,backup_ref,schema_ref,current=None)->FrozenReferencePlan须完整drain原frozen reader（含所有材料/坏尾）才返回；aiter_reference_chunks(plan,*,tenant_id,after_source_ordinal=0,current=None)按已完成source数跳过，0为从头，yield ReferenceSourceChunk(source:SourcePlanEntry,records:tuple[ReferenceInventoryRecord,...]<=199,complete:bool)。零ref仅空complete chunk，无假artifact页。
+
+源header到下个非reference记录闭包，源key精确、tuple键严格增序/重复拒，计数与§63Accumulator核原header.reference_count/digest。每reference调用原source_decision SSOT；H0=Domain digest({kind:'source_decision_stream_v1',source:(tenant,type,id,version)})，每步digest({previous:H,record_type:decision.record_type,data:decision.data})。实际conversion中同SourceKey decision按相同顺序/fold核count/digest，闭集SQL/permission tag跳过，未知/缺/多/倒序/关闭后重开拒。此为当前reader派生内存摘要，不改原artifact/hash/descriptor协议；不缓存全decision/ref JSON。
+
+Root允许前/后/跨页，tenant EOF后核唯一Root.retained_version_count==实际active source数；active/retired root、同SourceKey active/retired不可并存；retired version须有同parent root，retired root不容active source；zero-version root合法。保原lifecycle/digest，不以泛化退役重新分类业务。实际M2已证401ref单源跨5页且Root在refs之后另页，禁止相邻假设。内存仅P页定位+active sources/roots/retired摘要；读取完整图一遍、顺序消费引用页一遍，共页缓存一页，不按source重扫全图。测试真实M2产物及401/10001源槽/多versions、root前后/跨页/zero/retired、计数/digest/decision坏尾、GET/内存/零写。initial_missing只原explicit ID且原missing；未来写口另冻，不能伪造旧BRR或放宽普通new_invalid限制。
+
+索引readonly DTO SourceBackfillHead(source_key,root:SourceSetReadFact|None,source:SourceSetReadFact|None)复用原fact；IndexedReference(id:int,fact:ReferenceReadRow)只包真实BRR.id；ReferenceBackfillPage(items,next_after)。aload_heads(session,*,source_keys:tuple[SourceKey,...]<=200)->按输入顺序tuple，keys唯一且全current具体tenant，空0SQL；恰两有界SELECT：source每完整四键AND以OR，root去重三键AND+原__root__/root_guard，不做独立IN乘积/Source×Root JOIN。alist_source_rows(session,*,source_key,after_id:int=0,limit:int=200)精确四键、实际id seek/order/limit≤200；满页next_after=末实际id，否则None，恰满EOF允许下一空页；无offset/count/伪id。原生TX/currenttenant/非bypass/no_autoflush/strict，Core scalar frozen DTO、零ORM refresh/flush/commit，不改caller pending/map。未知/缺guard/readyFalse原样返回供后继核，不自动修复或冒完整root一致性。测试200keys恰2SQL、交错tenant/type/id/version反例、10001实际ID与间隙、换pagesize同摘要、pending/expired/stale不污染、cursor/foreign/nativeScope SQL前拒。
+
+
+## 65. 普通新上传短事务应用前置 V1：已冻结
+
+PERM T897/898仅新knowledge/application/space_upload.py+test_kn_space_upload_application.py（INT明确交接，主agent负责集成/真实Service及DI）。依§58/59/61，原重复暂存§62不由本App重做；原SpaceService/DI消费后继另卡，不提前关闭83/84。每次add_file invocation创建独立App，不做跨请求/跨进程恢复平台。
+
+SpaceUploadApplication(*,login_user:原UserPayload,session_factory,admit_upload,make_permission_record,actor_provider,repository=None)。admit_upload为原Service仅对应容器upload_file的可信回调；record factory为原_new_file_permission_record纯SSOT，actor provider返回原Service实际actor对象，无新UserPayload/PermissionActor/凭据。acreate_file(*,knowledge:原已准入Knowledge,parent_id:int|None,prepared:PreparedUpload,file_source:FileSource)->KnowledgeFile；arollback_created()->None仅本实例已记录receipt，无裸ID/rows入参。初始上传保原scheduler，App本身零dispatch/J1/业务引用写。
+
+App要求caller已绑定真实具体execution tenant==knowledge.tenant_id，strict/非bypass/非all；不自行按输入ID切tenant。原actor.home/主体/dataScope必须保真，跨home仅原full-scope super路径，普通/narrowed/SA不增加跨tenant读取或写权。后继Service将在原upload_file授权及可信selected pin验证后，局部绑定整个add_file（含最后原scheduler）的实际tenant并恢复ambient，不仅App内部换scope；防止队列账本落回home tenant。App用现AuthenticatedSourceReadIdentity和原管理pin事实核同原User/actor/credential/scope，所有核验在业务TX外，不复制凭据hash算法、重造actor或以旧snapshot放行变更身份。
+
+新文件步骤：准入回调/身份核验→fresh本App独占native Session短TX→alock_space_for_upload真实Root+原idle guard→原子注册单File/Doc/V1→原KnowledgeUtils按实际ID确定key并areserve→commit明确ACK并私有acknowledge→释放业务Session→原telemetry、原永久blob保存及原临时对象cleanup→原adapter.authorize_created(record,actor) durable prepare/project/finalize正常成功才返回File。沿现同步storage调用语义，不为本前置另加线程/后台调度或新事务框架。make_record/actor原对象，不以wrapper DAO先commit拼半链；所有Blob/FGA/telemetry均无悬挂业务Session/TX，实际key/状态/时间/元数据及effective快照原样。
+
+每次commit前已记录本实例新receipt；commit失联即停止、不ACK/重绑/IO/dispatch，不猜未提交，附闭集阶段/实际自建ID进度并保留可核事实，不复制raw配置/凭据/path。取消或普通异常保持原异常类型/trace，当前owned TX回滚，不rollback caller。成功ACK后才记录可补偿creation；进程崩溃丢registry无自动回收承诺。
+
+pre-dispatch失败由后继Service统一调用arollback_created；按本实例逆序逐项：身份原样且fresh rebind核完整WAITING独立链→释放Session→原creation ledger rollback_created先reconcile unknown再inverse→成功才fresh rebind再次核链、原Repo SQL回收并commit ACK→最后清理本次owned永久blob。SQL删除commit unknown/投影uncertain/链漂移/身份变化均不删blob、不dispatcher、不伪Ready；不能先删对象后发现SQL无法回收。不回收重复上传旧行/历史/别次已提交资源，不触高级历史link/审批/格式前移。新App失败只做本次receipt限定补偿，具体恢复命令后继。
+
+测试真实Repo/原actualPrepared/真实SQL自增互指及原record maker；仅Blob/FGA/telemetry传输边界隔离且不冒真实投影验证。至少含原upload_file容器动作/visible-only拒且零SQL、Root idle锁内、sameScope/home/pin/SA及scope drift、commit前后unknown、blob/投影/SQL回收失败和顺序、改名/历史化拒回收、取消、无业务TX跨IO、同App prefix回收、原时间/effective值/paths。新叶≤600、旧上传/准备/原permission creation-rollback选集组合，非作者独审后合流，再接原Service及DI。
