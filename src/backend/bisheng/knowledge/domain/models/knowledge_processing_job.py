@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import Column, Index, UniqueConstraint
+from sqlalchemy import BigInteger, Column, Index, String, UniqueConstraint
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -30,6 +30,9 @@ class KnowledgeProcessingJob(SQLModelSerializable, table=True):
     kind: str = Field(max_length=32)
     state: str = Field(default="accepted", max_length=24)
     actor_user_id: int
+    # Optional move provenance only; never infer these facts from the audit user.
+    actor_subject_type: str | None = Field(default=None, exclude=True, sa_column=Column(String(32), nullable=True))
+    actor_subject_id: int | None = Field(default=None, exclude=True, sa_column=Column(BigInteger, nullable=True))
     # Identifiers and original narrowing metadata only; not an authorization
     # source. Execution revalidates the credential and retains its narrowing.
     actor_reference: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
