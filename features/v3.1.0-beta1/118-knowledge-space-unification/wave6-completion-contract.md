@@ -878,3 +878,14 @@ EDGE T889/890仅新test/knowledge_unification/test_kn_upload_duplicate_preparati
 将原process_one_file重复分支的md5优先/filename次级选择与完整tmp暂存、remark、FAILED、大小/split_rule赋值原样移至此方法；旧process在repeat_files and not skip_dedup时委托，正常创建/skip_dedup整段保持。新helper仅用prepared字段，不再file_download、不重复resolver；tmp key后缀仍prepared.download_name原扩展、展示名仍original_file_name，remove_unused_file仍原file_info.file_path且只tmp put成功后。保原返回同一候选对象及仅客户端失败响应的语义，不给旧行新commit、不重写旧历史或重新处理，不在这里增加visible/edit动作或扩大去重范围。
 
 测试须真实准备/原SQL候选与原process调用，md5优先、同名不同内容、显式skip_dedup保原正常创建，helper零DAO/下载/新版本/queue；tmp put失败不提前cleanup、不持久修改旧数据库行。原test_legacy_file_processing_callers/test_kn_upload/test_kn_upload_overrides及T883新测试原断言保留组合，真实缺方法红与原业务首绿分列。生产只本段提取，原大Service不顺便重构，Ruff既有诊断只作准确基线对照，新增0；测试≤600。
+
+
+## 63. 有序引用摘要流的唯一SSOT前置 V1：已冻结
+
+PROC T891/892仅新test/knowledge_unification/test_reference_digest_stream.py及原resource_reference/application/contracts.py（现474行，新增后≤600）。此项只为后继M4分页核原reference_set_digest，未实现SourcePlan/初始写或Coverage；AC80/namespace待答不受影响。不复制canonical协议，不改DTO/字段/Source/TargetKey与任何权限/SQL方法。
+
+新增ReferenceSetDigestAccumulator.update(reference:ReferenceSpec)->None、hexdigest()->str，以已有normalize_references的canonical tuple键(slot_key,target_type.value,target_id)非递减顺序接收已规范化行流；target_id按原字符串lex，绝不用numeric lock_order。仅保last key、hash和首项标记，不缓存完整refs；update不做集合归一/去重，允许相等canonical key以精确保留旧API可接受ReferenceSpec子类去重后仍同canonical键的成功行为，但拒倒序/非法reference类型。后继SourcePlan reader负责严格增序/重复拒绝，再调用此SSOT，不能把累加器当输入去重器。
+
+原reference_set_digest(references)继续原normalize_references（原类型/集合去重/排序完全不变），随后委托同一Accumulator；所有成功SHA、Unicode/转义UTF8/空列表、旧重复/列表或generator可接受语义保持。统一编码只能有一处：原json.dumps tuple行的sort_keys/separators/ensure_ascii参数保持，以 '['、原逐行JSON及逗号、']'流式组合，与原完整JSON array逐字等价。hexdigest不破坏状态，可继续update；不新增版本前缀或把旧摘要改成新算法。旧normalization仍O(N)，仅去掉额外canonical整表；已排序stream才是O(1)辅助内存，不谎报全链常数内存。
+
+测试用变更前原函数/其实际固定字节作oracle，空/Unicode/引号斜线/数值字符串lex/重复/ReferenceSpec子类/非tuple旧输入/异常边界逐项一致，流式有序/倒序/重复输入区别与反复hexdigest；100001 generator实际tracemalloc证明辅助内存不随N增长，不能先建全refs列表再声称流式。原R2/source/M2/Model批量选集回归、固定非作者复核后合流。只新纯stdlib逻辑，无外部IO/新一般框架。
