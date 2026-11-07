@@ -1001,3 +1001,6 @@ Service仅内部_application/_deferred成对可选参数串add_file→现helper�
 真实native FINALIZED op+CURRENT Mode+完整changes覆盖才签本native Session/TX/issuer私有evidence；K1实际apply最终必须消费P1原对象/verifier，不以stub ready作正向最终证明。scope完整物理File/Doc/Version闭集、双Root→Plan→Job→Item/Retry→File→Doc→Version→TagLink锁序、metadata/tag/稳定对象、所有历史与非索引项规则均见完整合同。原Model/RG/permission策略及hash SSOT不复制；若现唯一metadata/常量实现需从热Svc/worker提取而超两叶，先给root窄接缝登记，不私自复制算法/跨层导入。
 
 Owner/Job/worker/API/查询/源删除消费端尚未授权实现；本前置不开放move kind或提前闭T073074。原move/source+target upload_file，完成归属后同操作continuation不新增target move/edit；source输入保护到item succeeded ACK，failed/obsolete未完成不提前删源/破坏性重建。维持已排除的Worker在途外IO/用户改动竞态，不新增attempt围栏或其他框架。
+
+
+§73 P1/K1读事实接缝冻结：P1既登记两叶新增aread_parent_states(session,*,targets:tuple[(resource_type,str_id),...]≤200)->tuple[MoveParentState,...]，closed事实为type/id/mode/version/parent_type/id/projection_state/operation_id，native Repo读取并由bridge暴露给K1注入的ParentStateReadPort。缺失/非CURRENT沿原SqlPermissionControlState.mode_for_target的NotReady语义，不猜INHERIT/version0；这是SQL观察事实，不是move授权。evidence核store/model pin由P1在同native TX读CURRENT Catalog SQL权威，Owner不提供自猜hint，proof阶段不开另Session/FGA。复用原release/schema decoder/hash，若确需第三leaf最小SSOT提取先交root登记，不能复制协议。

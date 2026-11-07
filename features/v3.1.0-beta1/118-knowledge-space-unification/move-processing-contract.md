@@ -236,6 +236,16 @@ MoveCutoverRepo同TX用实际issuer的verifier核证再apply并签logical receip
 Native SQL repo不是一般权限授予者；不提供“ready=True”或“裸actor_ref即可accept”的组合入口。
 默认生产工厂必须注入实际 bridge/Repo；缺 port 在任何 reserve/dispatch 前失败。
 
+### P1/K1 current parent 与 Catalog SQL 接缝：已冻结
+
+P1 既登记两叶增加 `aread_parent_states(session, *, targets:tuple[(resource_type,str_id),...]≤200)`，
+由 native Repo 返回 `MoveParentState(type,id,mode,version,parent_type,parent_id,projection_state,operation_id)`，
+bridge 供 K1 的窄 `ParentStateReadPort` 注入；不让 Knowledge Domain 直接读 Permission ORM。
+缺失或非 CURRENT 沿原 control_state.mode_for_target 的 NotReady，不猜 INHERIT/0。
+这只是观察事实，source move / destination upload_file 仍由真实 Owner 准入。
+projection evidence 的 store/model pin 在同 native TX 读 CURRENT Catalog SQL 权威，Owner不带hint；
+不开另 Session/FGA，复用原 release/schema/hash SSOT，需要额外最小提取先交root登记。
+
 ## 6. J1 bounded move 接缝
 
 `MoveConfiguration(source_space_id,destination_space_id,source_model_config_revision,
