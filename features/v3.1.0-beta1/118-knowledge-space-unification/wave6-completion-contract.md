@@ -817,7 +817,7 @@ PROC独占T875–T880三组：T875/876原application/unification_inventory.py及
 
 decode_sql_conversion_page(content,*,run_id,writer_contract_version,tenant_id,page_index)->DecodedSQLConversionPage(commands:tuple[五Domain命令,...],deferred:tuple[InventoryRecord,...])只复用现decode_inventory_page、COMMAND_RECORD_TYPES与record_from_row精确roundtrip，不改595行中央codec/新建hash算法。显式恢复whole-second naive datetime与DefaultSlotProvenance tuple；只接受五SQL command及原permission_plan/source_decision后继记录，未知tag/section拒绝，SQL命令必须原Run/writer/tenant/ordinal闭包。不得将deferred静默执行或宣称namespace完成。
 
-UnificationSQLConversionApplication(*,artifact_store,session_factory,sql_service=None).arun(*,run_id,writer_contract_version,environment,backup_ref,schema_ref)->SQLConversionExecutionReport。caller不提供Session、raw commands或plan ref；从RunRepo.aget_global_freeze读取唯一真实refs，实际全量tenant含disabled宇宙及各Run阶段/hash/refs必须一致，仅baseline_frozen/converting允许。完整baseline及plan图和所有叶/坏尾先验证完，才允许任何业务DML。完整第一遍后按实际conversion membership/hash第二遍线性消费，禁止一批一遍全图或只验证已用页。
+UnificationSQLConversionApplication(*,artifact_store,session_factory,sql_service=None).arun(*,run_id,writer_contract_version,environment,backup_ref,schema_ref)->SQLConversionExecutionReport。caller不提供Session、raw commands或plan ref；从RunRepo.aget_global_freeze读取唯一真实refs，实际全量tenant含disabled宇宙及各Run的run/hash/refs必须一致，仅baseline_frozen/converting允许；合法逐tenant恢复可混合这两阶段，不要求phase字面相同。完整baseline及plan图和所有叶/坏尾先验证完，才允许任何业务DML。完整第一遍后按实际conversion membership/hash第二遍线性消费，禁止一批一遍全图或只验证已用页。
 
 按tenant稳定升序，实际批≤199命令，每批新native Session/外事务，精确锁Run/refs/hash；baseline_frozen首批phase与业务/checkpoint同TX进入converting。仅durable commit确认后才携原Service continuation给下一新Session；fresh App每tenant一次线性核真实已提交prefix/实际分配ID/digest，再从partial artifact page的真实ordinal继续suffix。commit失联立即停止、报告unknown，不盲重放/自动failed/重新M2/替换baseline；下次由真实持久checkpoint恢复。EOF来自完整verified SQL命令数，零命令tenant亦用真实空EOF checkpoint；不能借最后artifact页含deferred误算SQL EOF。安全进度不含原配置/凭据。
 
@@ -844,3 +844,10 @@ EDGE T883/884仅新test/knowledge_unification/test_kn_upload_preparation.py及�
 旧process_one_file消费该DTO后，原DAO md5优先于filename去重、skip_dedup可信内部用途、重复tmp对象/remark/FAILED返回、普通/QA投影、实际对象key、原cleanup/异常、telemetry及dispatch边界保持。不把原lib/QA改用新SPACE注册、不改审批/内容安全/版本/队列租户、不提前完成T083084。首准备是供后继SPACE共享的生产者；SQL注册和外部IO协调仍待真实接线。
 
 新测试至少缺prepare真红、真实实际文件大小/原md5/归一名称、SPACE默认/显式sparse/per-file Excel/专用媒体规则与snapshot版本、prepare零DAO/FGA/对象写/queue以及IO/规则失败明确传播。原test_legacy_file_processing_callers.py和test_kn_upload.py/test_kn_upload_overrides.py断言不改并组合回归；若现结构import stub必须复用现source_module真实类，不测试复制方法。不因extract扩原大叶重构；新测试≤600，原Service只本段提取。固定SHA非作者复核和主组合后才闭两卡。
+
+
+## 60. 原模型绑定证据匹配的线性内存扫描 V1：已冻结
+
+INT T885/886仅新test/knowledge_unification/test_model_original_evidence_scale.py与原llm/domain/repositories/reference_target_repository.py。独立审代码确认bind的每target _original(originals,key)重复扫描完整原BRR集合，虽无SQL笛卡尔JOIN仍有M×B内存工作；owner_query原originals为空，因此§56大目标测试未覆盖此路径。以真实SQL 401/1001模型及单来源多slot计数实际helper收到的候选行数证明，不按wall clock阈值猜性能。
+
+只在非union facts消费前将已读originals按完整MODEL目标ID分组一次，原_original在对应同ID候选中运行；保其所有target_tenant/space/legacy reason/run/evidence一致性与首原行选择，空/重复slot/不同source/version/foreign精确SQL谓词不变，旧helper可保。不得更改SQL、锁序、sharing/inherited/default/原source证据、Scope或授权，不为此group扩全资源优化。prelock_sources仅物理union原分支不发行或混用来源证据，仍原流程。测试需原生规模实际O(B+M)计数、相同目标多slot合法相同证据与冲突拒绝、不同source/version不串、既有Owner/混合prelock/删除影响回归；新增叶≤600、原大叶只窄改，不写其他叶。
