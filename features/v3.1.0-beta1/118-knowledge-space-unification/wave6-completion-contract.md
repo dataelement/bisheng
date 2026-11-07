@@ -1004,3 +1004,14 @@ Owner/Job/worker/API/查询/源删除消费端尚未授权实现；本前置不�
 
 
 §73 P1/K1读事实接缝冻结：P1既登记两叶新增aread_parent_states(session,*,targets:tuple[(resource_type,str_id),...]≤200)->tuple[MoveParentState,...]，closed事实为type/id/mode/version/parent_type/id/projection_state/operation_id，native Repo读取并由bridge暴露给K1注入的ParentStateReadPort。缺失/非CURRENT沿原SqlPermissionControlState.mode_for_target的NotReady语义，不猜INHERIT/version0；这是SQL观察事实，不是move授权。evidence核store/model pin由P1在同native TX读CURRENT Catalog SQL权威，Owner不提供自猜hint，proof阶段不开另Session/FGA。复用原release/schema decoder/hash，若确需第三leaf最小SSOT提取先交root登记，不能复制协议。
+
+
+## 74. 网页新建的闭集材料计划前置 V1：已冻结
+
+EDGE T928929只新knowledge/application/web_link_upload.py及新test_kn_web_upload_material.py（各≤600），并行不写现SpaceUploadApp/热Svc/DI。PreparedWebLink frozen slots保存原file_name/content_hash、markdown_bytes/html_snapshot_bytes、已解析split_rule字符串及服务端user_metadata；bytes/rule/metadata repr=False，不解析URL/下载/读写SQL/FGA/对象/queue，不接受客户端object key或发issuer/ready。DTO只材料，不是授权或新writer。
+
+build_web_link_objects(prepared,*,file_id:真实正int)->WebLinkObjectPlan返回冻结自有对象项（name/content_type/bytes私有）和deepcopy metadata。Markdown key复用原KnowledgeUtils.get_knowledge_file_object_name(file_id,固定md扩展)得到original/{id}.md；HTML沿原preview/{id}.html，metadata.html_snapshot_object_name由服务端强制为该实际ID key，不信input覆盖。Markdown始终一项，HTML空字节不产生PUT项，但metadata仍保原html key语义。原display文件名可为.html而对象仍.md，不改原名称/内容hash/bytes/rule/其他系统metadata值；metadata输出与输入隔离。固定content-type仍原text/markdown与text/html;charset=utf-8。不新建hash/格式策略/对象版本/备份/通用补偿框架。
+
+后继新建App仍实际Repo同TX File/Doc/V1+key/HTML metadata登记、私有ACK后才两Blob及原投影；此处不接线/不提前闭T08384。overwrite保持旧FileID/DocV关系及旧key覆盖/失败语义，不把旧row/key当initial receipt清理、不新增Blob分布式原子性；以后仅实际规则snapshot/完整性与tenant/原guard/调度必要差异另冻。Space默认快照/原Web专用分隔规则的实际producer后继由热Svc唯一消费，不在材料叶复制resolver。
+
+测试用原Utils源码唯一方法及原web key作为oracle，真实Bytes/Unicode展示名/html空非空/深拷贝metadata/强制服务器key/非法内部ID/安全repr及0外IO，缺模块真实红。原Web import/overwrite测试前后实际差异分列，不以材料通过冒完整Web链/E2E。
