@@ -457,7 +457,10 @@ async def test_real_zero_index_items_keep_real_logical_cutover_and_no_fake_file(
 async def test_native_item_projection_is_seek_paged_without_manifest_or_snapshot(moving, monkeypatch, count):
     import sqlalchemy as sa
 
-    built = await pipeline(moving, monkeypatch, count=count)
+    # The historical VIOLATION file is retained in the logical scope but is
+    # not an index participant; count the actual J1 items, not all versions.
+    built = await pipeline(moving, monkeypatch, count=count + 1)
+    assert sum(leaf.participates for leaf in built.scope.leaves) == count
     reads = []
 
     def record(conn, cursor, sql, params, context, many):
