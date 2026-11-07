@@ -400,3 +400,13 @@ T921/T922/T923固定非作者复核闭合：EDGE全读8aac6e4b6及5940a3c72旧fi
 - MySQL bisheng_f118_probe_20261107 八例全部通过：nested Folder+Web File/Doc/V1及file先于folder逆删；空HTML不误删；第二对象写后故障仅清理自有attempted keys；原取消+补偿；异App子项阻止空目录清理；commit前后unknown均不猜ACK/不PUT；坏管理pin零SQL/原User不变；真实两连接3138/3140 FOR UPDATE等待及释放。原App/Repo/observer/identity与F048记录adapter是真实代码；admission、FGA/Blob运输隔离，User非JWT，未测HTTP/queue，不是E2E。
 - 11表全部原行/列摘要逐项相等，自己分配的File12/Doc7/V7已清理或回滚，Run0；AI分别File20→32/Doc16→23/Version25→32，不重置、不宣称物理还原。SQL705 SELECT/26 INSERT/15 UPDATE/23 DELETE及29 savepoint/release包含全量harness前后快照，不能当生产性能指标；App无SQL Session跨Blob/FGA。容器/启动时间及配置前后完全相等，旧标准API未替换。
 - 结果evidence/f118-folder-web-mysql-12eae/folder-web-result.json SHA256 18bd41b28371946b6fd37be1cf23a0849186647e0757a1cbbeeaf4ed2b3df40f；自有清理清单00ffb2d5c7dd86add1b52966025e4052e6f2a94c6d048509bcbc81560eda9870；root本地核验摘要/private/tmp/f118-root-folder-web-mysql-evidence/reviewed-summary.json。此为数据库组件证明，正式停服/基线冻结/转换/引用回填/恢复及浏览器E2E仍待实施。
+
+
+### 主树K1与引用查询接缝复查（2026-11-07）
+
+932b09e3c正常合流PROC26a9原Scope569/reader115/Cutover527及Schema269/helper15；Root全读并九路径237 passed/6234 warnings/40.47s（/private/tmp/f118-root-k1-integrated.log/.xml）。原独立foreign后代probe1绿，不能覆盖PERM随后固定932实际发现的NULL路径与folder/history归属两P2：四格2红2绿、原六路径137绿、真实Web producer1绿，证据/private/tmp/f118-perm-k1-932-{independent,paired,web-producer}.log。§82/83修正冻结，原K1任务保持待办，不因237绿提前验收。
+
+Root实际source-authorized read native基线：KN files401/1001为402/1002次RRT SELECT，Model为401/1001次；两叶original候选分别482403/3006003（401或1001目标×每目标三槽总rows），max params KN402/1002、Model403/1003，方法内0DML。4 passed/2836 warnings/3.40s，/private/tmp/f118-source-read-scale-baseline.log/.jsonl及同名private probe；业务授权port隔离，SourceVerifier/SourceRepo/TargetRepo真实SQL。首轮4失败仅probe运行loop动态索取asyncfixture错误，改静态fixture后通过，不算产品红。这些读侧瓶颈仍未修，依写侧§84后继再单独冻结，不以本次tombstone写侧优化冒称全局性能闭合。
+
+
+T947948已主合df816b67f，Root完整读唯一Repo diff/测试矩阵，六路径84 passed/532 warnings/2.83s（/private/tmp/f118-root-kn-tombstone-batch.log/.xml），独立AST核15个原authority/revision/source/proof/consumer函数不变。真实6个预算红及缺producer/异常结果红转绿，原缺owner/刷新/late-parent控制保留；445生产行/276测试行。只闭tombstone批锁接缝，单版10001旧OR错误、稀疏版本×目标查询和读侧M×B均明确仍待§84或后继，不提前验收引用性能整卡。

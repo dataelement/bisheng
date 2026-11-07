@@ -1090,3 +1090,28 @@ PERM固定932b09e3c原native两对照及真实Web覆写producer确认：全空�
 PROC T951/T952接T950，仅原move_scope_repository.py与新增test_move_scope_history.py；先真实反例后实现。保原逻辑Doc.path被选中目录覆盖时的relative路径，以及原显式File选择的destination_path规则。仅Doc.path不在任何所选folder且无显式File归属时，遍历实际Version→File一次，按各实际File旧path中被选中folder的原relative映射，按Doc建立候选目的(path,root)集合；只有一个实际候选时整Doc及全部历史沿它一起移动，其他在树外版本也保持ID/链并进入同一Doc目标路径。不得逐Doc再扫全部Files/Versions、不得只迁所选历史或猜Doc字段，不改版本/对象key/原主版本/权限与metadata规则。
 
 若同Doc有多个不同候选目标路径，不任取第一条：预检明确归属冲突，可通过显式选择该File并指定目的目录消除歧义；原Doc自身有选中逻辑路径或显式File选择时沿原优先级，不新增动作/角色/修复任务。候选范围只选中subtree实际覆盖的File，不把扩展出来但不被选中folder覆盖的外部历史误作候选。测试含真实Web覆写后移动、root/嵌套relative、两历史同候选、分歧拒绝及显式File规则；原9path、metadata系统键、完整闭集、0DML/401/10001线性预算不降。单Scope≤600，若自然表达超限先报root另冻纯路径叶，不压行或偷偷增叶。此卡只闭AC19范围，后继Owner/J1仍未开放。
+
+
+## 84. 知识目标便携查询及原证据线性匹配 V1：已冻结
+
+EDGE T953/T954接T948，仍仅原knowledge/domain/repositories/reference_target_repository.py一生产叶；新test_knowledge_target_original_scale.py与既有test_knowledge_target_scale.py保语义预算。真实旧10001 bind/prelock因10000 OR/20006参数触SQLite深度1000；401三槽original_for候选482403。实际flow删除及APP版本批写均形成各版old/new完整union，稀疏S版本各1互异目标时S=T，所以不保留每版×全union目标页的查询乘积。
+
+业务SQL producer改按numeric ID排序每页≤200，完整Root全部页先于File全部页，原ORM/populate_existing/锁阶段保持；原original_statement只内部消费者时改plural有界producer，single bind按完整(type,id)≤200键页、按type分组ID IN，保原tenant/source_type/id/version与完整ORM，禁止类型/ID交叉组合。结果一次按(type,id)分桶，_facts仍调用原original_for但仅该桶，冲突五字段及第一原native候选沿原算法/该SQL返回次序，不新按owner/slot排序；旧SQL无ORDER，不能承诺不同DB优化器物理顺序一致。original_for作为读侧现consumer的SSOT签名/算法不改。无跨调用缓存/新flush/commit/pending限制/权限变化。
+
+多版本physical prelock独立按已选source_version≤200页读同exact tenant/source_type/source_id且仅KN两type的原BRR，每SQL真实PK seek≤200行，cursor取raw页最后id。raw(type,id)在精确选中键set中才纳入union，过滤前不构造TargetKey、不让未选target坏证据触发计划、不读未选version；不依赖匹配行推进或版本×targets双循环。P=ceil(S/200)，B=所选版本里的KN原行（含未选target），原证据流SELECT≤P+floor(B/200)，每raw行一次键集过滤；保原ix_brr_source和PK，不增DDL。bulk只签physical union/proof，不给observation挑original；后续每版独立bind仍只用自己版本桶。该上界不包括业务/RRT锁及后续每版verification，T/RRT排序仍O(T log T)，不泛称全系统线性。
+
+新测试先实测固定本卡父上的原10001错误与401/1001候选、稀疏401/1001source版本读取预算；再测10001 native成功、每页SQL参数/返回行、末页全未选/刚好200及foreign/混type同ID/同key三槽冲突、版本隔离/旧proof复用拒绝。原§81RRT预算/原Owner与batch组合保留，10001成功需实际alock/prelock而非捕异常即绿。新Repo≤600，超限先报不压行，不改source_read两叶或跨模块库；独立固定复核后闭卡。
+
+## 85. 删除闭集事实与现仓储前置 D1 V1：已冻结
+
+PERM固定5aa46b80d只读候选经Root核原DeleteRepo266行及实际Version Facts。T955/T956最多两生产叶：新knowledge/domain/schemas/direct_delete_scope.py与既有knowledge_space_delete_repository.py；新测试test_direct_delete_scope.py（规模可另test_direct_delete_scope_scale.py）。本卡只读物理闭集/可选原生锁读，不签授权或计划、不写/cutover、不接Service/worker；旧prepare/cutover暂不改，避免纯读委托暗降旧行锁。新Schema只DTO，不跑SQL/hash；VersionDocumentFact/VersionRowFact复用现knowledge_version_mutation_repository原类型（纯类型引用可TYPE_CHECKING，生产Repo构造原对象），不复制版本算法。
+
+DTO：DeleteSelection(resource_type:knowledge_file|folder,resource_id:int)；DeleteSelectionIssue(positions:tuple[int,...],reason:not_found|type_mismatch)；DeleteResourceFact含id/tenant_id/knowledge_id/file_type/file_name/file_level_path/level/status/user_id/update_time以及repr=False原object_names元组；DeleteUnit含selection_positions/resource_ids/version_ids/deleted_document_ids/unregistered_file_ids/processing_file_ids；DeleteScope含tenant_id/space_id/selections/resources/documents/versions/units/issues、repr=False原八字段cleanup_identity及完整object_names。所有facts全局去重只存一次，unit仅ID，不复存整版本链。严格原生ID/类型，NULL/未知status作为明确unsupported事实供后继分类，不猜SUCCESS。
+
+aread_delete_scope(session:AsyncSession,*,space_id:int,selections:tuple[DeleteSelection,...],for_update:bool=False)->DeleteScope。无新客户端数量限制；空选择参数合法后空scope/0SQL，不借空结果证明Root存在。非空要求原生外部TX、严格具体tenant/拒bypass，真实own/type3 Root；no_autoflush/Core scalars，不刷新调用方ORM/新Session/commit/DML。Root锚沿真实FK读取raw子项，坏foreign后代不能被C3裁掉或INNER吞；已知ID不完整明确拒。查询至多200行+明确201 lookahead，PK seek/精确ID页≤200；for_update按Root→实际File/Doc/Version稳定PK锁及重读比较，不能JOIN带入无序Root锁。目录字面路径用分隔符及autoescape，不让/20匹配/200；原NULL/空路径/level编码保留，不新增深度/层级修复。
+
+主版本选中扩整链；历史单删仍只自身、其他版本/Doc保留；目录含后代和真正删除范围扩展的外部历史siblings。完全无Version的FILE按原行为保留于删除scope并列unregistered；已有V却缺Doc/File、跨Root/tenant、引用DIR或复用File均拒。批量Doc/全部链及File FK，以现纯检查/_check_links等SSOT验证唯一primary/指针/完整链，不每Doc两SQL、不要求全部历史File.path等于Doc.path；实际祖先同Root/DIR、前缀/无环核对。实际原对象键集合仅原File object/preview/bbox/thumbnails及File ID字符串，不扩覆盖语义。
+
+D1输出状态而不新增单删gate：原单删FILE1–7仍候选；batch FILE1/4/5为processing，2/3/6/7候选；DIR自身已知状态不判忙，unknown/NULL unsupported。目录/扩展版本内任一FILE忙则整unit忙，后继App分类，不部分删目录。先归并重复/被有效祖先覆盖请求，后以真实删除Resource/Version/待删Doc集合重叠合并unit并保全部原positions；仅共享仍保留Doc不合并，避免DSU键丢失。后继R3将每unit全部resource_ids（含DIR）映KNFILE精确targets并接Coverage/原Plan/hash/真实F048证据。D1不新增force/动作、对象IO或删除许可，不提前闭原T105–108。
+
+原生测试：无版本FILE/空目录、完整与历史链、401目录/Doc、10001历史链有界预算、NULL路径、前缀邻居、跨租户坏后代/缺FK不隐形、原pending不flush、目录WAITING/忙历史/unknown、真重叠与仅共享保留Doc两格。生产新增叶≤600、原Repo增量自然≤600；若实际最小实现超过先报Root拆职责，不压行或暗增第三叶。固定非作者复核后闭接缝，不冒称最终删除/升级完成。
