@@ -1058,3 +1058,12 @@ PERM T939/T940新domain/schemas/processing_actor_subject.py及既有application/
 PERM T941/T942只既有models/knowledge_processing_job.py和knowledge_processing_retry.py：各nullable/exclude actor_subject_type String32及actor_subject_id BigInteger，无user/0默认；Job按PK读不增subject索引；Retry非唯一ix_kpr_job_subject(tenant_id,job_id,actor_subject_id,actor_subject_type,accepted_job_revision,id)。普通四kind允许NULL并保原恢复/鉴权；实际move写口后继J1只从同FrozenReference decoder生成，不以模型字段本身授予权限。
 
 INT T943/T944只新Alembic revision单叶：实施前live alembic heads确定唯一parent、实施后单head/offline测试，4 nullable列+1索引DDL-only，沿现helper幂等/create_all已有列索引兼容；不在DDL解析JSON/回填业务。旧正式a1b无三Processing表、当前service/worker均未接move是已核Git事实，不能代实际库COUNT。启用前只读盘点move Job及相关Retry的subject NULL/非法数；存在无法证明主体的trial行failclosed/运维判断，不按audit猜、不在线回填。原四kind NULL不被阻。DM8免实测，C2静态保留。实际J1 accept/ready等待K1私有receipt固定再单独冻，两种request hash不混。
+
+
+## 80. 移动闭集的真实 owned Root 读取 V1：已冻结
+
+PROC独立native反例已确认：源Folder50下File90为tenant202/knowledge_id10/DIR/path50时，旧Scope裸child查询被全局C3裁掉，错误签完整scope。旧foreign-root测试不能代这个坏后代场景；未修前K1整卡不验收。T945/T946新knowledge/domain/repositories/move_row_repository.py及原move_scope_repository.py两生产叶，测试原test_move_scope_repository.py并可新增test_move_row_repository.py；Scope委托/继承原_rows/_by_ids同签名，Cutover既冻消费者保持，不造通用查询平台。
+
+按原MetadataRepo真实ORM owned Root列作C3锚、raw children沿实际FK加入：File/Doc经真实knowledge_id；Version按file-FK、doc-FK读取入口分别锚其实际Root，保证目录被Version引用、缺File/缺Doc/跨tenant坏链可见或以完整已知集合差异明确拒；Tag经File，实际Job/Item/Retry消费如有则沿真实Job/Root关系。不能bypass、TRUE Root×数据假关联或INNER丢坏链后仍签完整scope。未知目录子项必须从真实FK闭集完整枚举；已知ID集合因锚缺失而未返回必须set/count失败，不当成功遗漏。Root锚辅助列不泄到原DTO/摘要；不返回foreign payload给调用者。具体支持模型白名单与原实际消费者一致，新reader/Scope各≤600，不压行，不借此改worker/权限/接口/Hash。
+
+保NoAutoflush/原事务/只读无DML，200 keyseek与实际C3模式，真实Source/Destination Root锁顺序；Native覆盖foreign后代、目录版本、坏Doc/File/FK、Tag/Job已用关系及401/10001规模，原Scope/Schema/P1/Cutover组合必须继续通过。只在全部closed事实通过后签scope/私有receipt。
