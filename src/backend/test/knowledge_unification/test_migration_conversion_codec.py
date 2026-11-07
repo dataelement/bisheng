@@ -132,6 +132,9 @@ native = actual_m2.native
 async def real_frozen(complete, transport):
     from sqlmodel.ext.asyncio.session import AsyncSession
 
+    await complete.insert(actual_m2.original.resources.Knowledge, [actual_m2.original.resources.resource(40, type=3)])
+    async with AsyncSession(complete.engine) as session, session.begin():
+        await actual_m2.original.permission.seed_rows(session)
     producer = importlib.import_module("bisheng.knowledge.application.unification_inventory")
     app = actual_m2.original.application(producer, transport)
     async with AsyncSession(complete.engine) as session, session.begin():
