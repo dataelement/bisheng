@@ -14,6 +14,7 @@ from bisheng.core.context.tenant import (
     management_tenant_scope,
     tenant_execution_scope,
 )
+from bisheng.knowledge.domain.schemas.processing_actor_subject import processing_actor_subject
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.open_api.application.knowledge_processing_identity import (
     capture_knowledge_processing_reference,
@@ -185,6 +186,11 @@ async def capture_processing_actor(
         "actor": _actor_facts(actor),
         "credential_reference": credential,
     }
+    if required_action == "move":
+        try:
+            processing_actor_subject(payload, tenant_id=tenant, actor_user_id=audit_user_id, source_space_id=space_id)
+        except ValueError as error:
+            raise PermissionDeniedError(reason="processing_actor_invalid") from error
     return FrozenProcessingActor(
         audit_user_id,
         tenant,
@@ -216,6 +222,13 @@ async def restore_processing_actor(reference, *, tenant_id: int):
             or not isinstance(reference["actor"], dict)
         ):
             raise ValueError("invalid processing origin")
+        if reference["required_action"] == "move":
+            processing_actor_subject(
+                reference,
+                tenant_id=tenant_id,
+                actor_user_id=reference["actor_user_id"],
+                source_space_id=reference["space_id"],
+            )
         reference = deepcopy(reference)
         credential = reference["credential_reference"]
     except (KeyError, TypeError, ValueError) as error:
