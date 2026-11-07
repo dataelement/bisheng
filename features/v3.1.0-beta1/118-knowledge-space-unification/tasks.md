@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史931编号：815已完成/历史交付、114当前待办、2外移；原137队列已完成36项、剩101项，另13张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史931编号：819已完成/历史交付、110当前待办、2外移；原137队列已完成36项、剩101项，另9张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7429,7 +7429,7 @@
   **配对测试**：T917\
   **验证 / 完成条件**：新叶≤600、原生和scope组合/static、固定非作者复核及主集成。
 
-- [ ] **T919 · 同次目录与文件上传应用测试**
+- [x] **T919 · 同次目录与文件上传应用测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_folder_upload_application.py`\
   **逻辑 / 测试上下文**：W6§72同次真实native/原资格，no bareID补偿/no跨IO业务TX。\
@@ -7437,7 +7437,7 @@
   **覆盖 AC**: AC-02, AC-09, AC-10, AC-14, AC-43, AC-49\
   **验证 / 完成条件**：真实缺接口红或原已修算法等价见证分列、固定独审/主组合。
 
-- [ ] **T920 · 同次目录与文件上传应用**
+- [x] **T920 · 同次目录与文件上传应用**
   **类型 / Owner**：后端 Application / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/application/space_upload.py`\
   **逻辑 / 测试上下文**：W6§72每实现≤2生产叶、原SSOT唯一复用、不扩动作/框架/worker竞态。\
@@ -7501,7 +7501,7 @@
   **配对测试**：T926\
   **验证 / 完成条件**：完整read/证据或切换原子性、SQL规模与static、固定非作者审和主组合；不提前验收整移动。
 
-- [ ] **T928 · 网页新建闭集材料与原对象key测试**
+- [x] **T928 · 网页新建闭集材料与原对象key测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_web_upload_material.py`\
   **逻辑 / 测试上下文**：W6§74原Utils/key/metadata/bytes等价，0 IO/authority。\
@@ -7509,7 +7509,7 @@
   **覆盖 AC**: AC-09, AC-10, AC-43\
   **验证 / 完成条件**：真实缺模块红、原实际oracle与repr隔离/native组合。
 
-- [ ] **T929 · 网页新建闭集材料计划**
+- [x] **T929 · 网页新建闭集材料计划**
   **类型 / Owner**：后端 Application / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/application/web_link_upload.py`\
   **逻辑 / 测试上下文**：W6§74只纯DTO/材料计划，非第二writer/绑定/actor/散列/对象事务。\
@@ -7519,7 +7519,7 @@
 
 - [ ] **T930 · 移动闭集纯 Domain DTO 同一类型与边界测试**
   **类型 / Owner**：测试 / PROC\
-  **写入文件**：`src/backend/test/knowledge_unification/test_move_scope_repository.py`\
+  **写入文件**：`src/backend/test/knowledge_unification/test_move_processing_schema.py`\
   **逻辑 / 测试上下文**：W6§75同一DTO reexport、纯值校验、不复制hash/协议；原native闭集与source guard测试保留。\
   **依赖**：T926\
   **覆盖 AC**: AC-13, AC-43, AC-83\

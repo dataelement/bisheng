@@ -353,3 +353,12 @@ T914固定2a95两测试叶由PERM独立复核，无Fake App/借用Session，原c
 真实109 MySQL克隆库以a524两个模块+44f逐项26依赖AST相同的组件单次执行成功：link/merge/primary、两个真实native连接2837/2838同target并发next_no4/5且唯一primary；原feature方法仅隔离config运输，三操作0SQL。仅本次own三表数据，分配File12/Doc8/Version16；lastACK完整事实File12/Doc4/Version12 fresh锁内重核后清理commitACK，11表全列摘要前后同d3ca445f3648b51dd9a7b9800a2db4637f1195de726143cd5e0f4a106c7341be、Run0。201 SELECT/36 INSERT/24 UPDATE/11 DELETE；自增计数推进，不声称DB元数据逐位还原。
 
 安全JSON /private/tmp/f118-version-mysql-a524/mysql-result.json，SHA256 a387b59d7e220ecd6e6bd4ecc0c45d476290935386419be9fd5edef6ae7987d6，remote evidence/version-mutation-a524-mysql-20261107.json；原完整own manifest SHA256 d4a0fbb3508bc7cfd6ac71f444ff01704032b649737f341f85045539e0fea430，本地mysql-manifest-summary.json。probe SHA256 be044187cd06c78953a48997155fdb05a509dcf44508adaa3b7583ca2d7f9e1d，只修测试归档CLAUDE symlink跳过后传输/单次运行，无重跑/产品源码修复。原API/worker镜像/启动/重启逐字不变；非完整部署、HTTP/FGA/Blob/provider/queue/正式迁移或E2E，3005未操作。
+
+
+### 原目录整批接线与网页材料前置（root 5940a3c72，2026-11-07）
+
+- 已全读并合流Folder App f266（同一次App拥有目录/File私有receipt，文件确认清理后才空目录逆序）；root原11路径251 passed /1093 warnings/11.60s，日志`/private/tmp/f118-root-folder-upload-application.log`。T919/T920闭合，不提前验收整上传卡。
+- 网页材料f1ad（54生产行、165测试行）已root独立全读并合流。纯PreparedWebLink与原Utils生成Markdown/HTML keys、deepcopy metadata/安全repr，无IO/权限/第二writer。root五路径57 passed /505 warnings/2.25s，日志`/private/tmp/f118-root-web-material.log`。T928/T929闭合；实际Web App/入口和overwrite后继未完成。
+- T921原2例真红（旧folder每组提前派发、后组失败留前缀）见`/private/tmp/f118-t921-folder-wiring-red.log`。8aac6e4b6现同App/deferred双参数仅内部串接，具体tenant scope覆盖整树至派发，保原upload_file/1000限制/深度9/顶层name-only/两阶段大小配额/重复FAILED。staging失败整次补偿，所有目录时间延至原派发尾；queue未知保资源。原4路径36 passed /1270 warnings/4.27s；扩展9 native passed /814 warnings/1.38s，日志`/private/tmp/f118-t922-folder-wiring-first.log`与`-expanded.log`。待固定非作者复核才闭卡。
+- T923旧FakeDAO/MagicMock User夹具在8aac时10 failed/4 passed（新实际factory/scope无合法原身份），不是新业务错误的红证据。5940a3c72以实际User/SQL/App/Repo/F048 adapter和原运输隔离替换，原11业务例与3 API结构例全部保留（含10层目录和第11层文件）。连同新9例23 passed /1445 warnings/2.72s，`/private/tmp/f118-t923-old-folder-native.log`；原API文件无需修改。
+- DM8实测按用户最新确认免除，C2 SQLModel/Repository/DDL静态仍保留。既有MySQL component证据、正式停服迁移及完整E2E各自区分；本轮无109部署/业务写入，不操作3005。当前整合回归在5940a3c72进行，不把旧4605快照当本轮结果。
