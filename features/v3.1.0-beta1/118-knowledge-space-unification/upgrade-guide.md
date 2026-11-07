@@ -133,7 +133,7 @@ W5本地100路径2852测试/15子测试通过，当前137待办；平台typechec
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史882编号：767已完成/历史交付、113当前待办、2外移；原137队列已完成36项、剩101项，另12张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史884编号：771已完成/历史交付、111当前待办、2外移；原137队列已完成36项、剩101项，另10张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -197,3 +197,6 @@ M3原子性按W6§53：每批保存点覆盖业务与游标，失败只回滚该
 [W6§57/58](./wave6-completion-contract.md#57-冻结产物到真实sql执行入口-v1已冻结)已冻结：M3 App先完整校验正式baseline/plan图和全部叶，再按真实tenant、≤199命令/新事务执行并同TX写checkpoint；已提交前缀每次恢复只线性核一次，commit失联停止等持久事实恢复。SQL子步完成不代表namespace/Catalog/初始引用回填/Coverage或完整升级完成，AC80仍待决定。正式停服、备份、盘点基线时序不变。
 
 初始上传先补仅flush的File/Doc/V1原子注册Repo，后继再接现有入口；保原upload_file、scheduler及effective快照，无新增edit门槛。原版本link已确认自commit可能在失败后留下两个primary，需后继同事务重链；首注册组件不能代替整个上传/文件夹/网页/历史版本验收。主树d50401825本地选集4166绿、7原占位skip，未执行本轮正式升级/恢复或完整E2E。
+
+
+W6§59继续抽取原上传准备段，effective规则只保留原唯一生产者，SQL注册/外部IO协调另接。109克隆MySQL已以固定44f5候选验证0→3/两个首版本注册同事务及强制回滚：11表逐列摘要相等、File全列不变、Run0；MySQL自增计数器仍会推进，不宣称物理状态逐位还原。这是组件准备证明（evidence/preparatory-native-sql.json），不是正式artifact App、停服升级/恢复或E2E。

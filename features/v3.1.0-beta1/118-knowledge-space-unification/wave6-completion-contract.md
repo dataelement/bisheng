@@ -833,3 +833,14 @@ DTO NewUploadFile(frozen slots)仅原file_name/file_size/md5/split_rule/file_sou
 首版本沿原initial version事实/状态/时间及原File等待处理语义；effective processing snapshot作为原split_rule完整保存，不在Repo重新resolve。永久key由旧KnowledgeUtils按实际FileID的唯一算法在后继应用计算；Repo仅接已物化object_name，不调用MinIO/FGA/queue/provider。materialize/cleanup只对本Repo发行、同Session/事务、仍匹配本次独立V1链和当前File事实的receipt生效，不能删历史或别次同ID；失败/cancel局部savepoint整笔回滚。rollback_created仅补偿本次新链SQL，不宣称分布式原子性。跨TX receipt需求须先交root冻结，禁止自行放松成裸ID。
 
 native测试含实际autoincrement+全链互指、真实SQL触发器打断Doc/V1/物化写后外层catch再commit无半链、foreign/跨parent/坏path/空批/超批/pending拒且caller修改不丢、伪receipt/换TX/链被历史化拒补偿、200项有界查询与非笛卡尔积。原已有版本重链原生触发器反例确认两个primary的事务缺口，后继须另冻原子link Repo/Service/DI；其原权限动作尚未冻结，不能猜file.edit或扩大权限。原审批skip参数当前未消费，不凭任务标题新增审批行为；格式/实大小/配额在注册前检查、解析后内容安全失败保留原可见失败状态，两类不混称无残留。
+
+
+## 59. 原上传staging与有效规则唯一生产者 V1：已冻结
+
+EDGE T883/884仅新test/knowledge_unification/test_kn_upload_preparation.py及原knowledge/domain/services/knowledge_service.py一生产叶。原process_one_file入口/参数/返回保持，由新prepare_one_file(cls,login_user,knowledge,file_info,split_rule,file_kwargs=None,processing_rule_request=None)->PreparedUpload承接原download、真实大小/md5/原名和effective snapshot解析。DTO frozen slots置同Service叶：local_path repr=False、download_name、original_file_name、md5、file_size、split_rule repr=False（原JSON字符串）、file_info repr=False（原/按原规则copy后的KnowledgeFileOne）。这不是新授权层；下载保原file_download唯一路径，不在此处新建format/size/quota规则。
+
+准备方法不读写SQL/FGA、不上传/删除MinIO对象、不telemetry/投队列、不创建Doc/V1。实际processing_snapshot_for_legacy_request、capture_legacy_processing_overrides、legacy_rule_from_snapshot仍唯一SSOT，原per-file Excel规则/actual_name/媒体类型、原原始md5获取顺序与split_rule JSON格式保留，不重复实现resolver。原无processing_rule_request的Excel/原split_rule变更语义保留，有请求时继续按原方式copy file_info，不覆盖调用方显式字段。
+
+旧process_one_file消费该DTO后，原DAO md5优先于filename去重、skip_dedup可信内部用途、重复tmp对象/remark/FAILED返回、普通/QA投影、实际对象key、原cleanup/异常、telemetry及dispatch边界保持。不把原lib/QA改用新SPACE注册、不改审批/内容安全/版本/队列租户、不提前完成T083084。首准备是供后继SPACE共享的生产者；SQL注册和外部IO协调仍待真实接线。
+
+新测试至少缺prepare真红、真实实际文件大小/原md5/归一名称、SPACE默认/显式sparse/per-file Excel/专用媒体规则与snapshot版本、prepare零DAO/FGA/对象写/queue以及IO/规则失败明确传播。原test_legacy_file_processing_callers.py和test_kn_upload.py/test_kn_upload_overrides.py断言不改并组合回归；若现结构import stub必须复用现source_module真实类，不测试复制方法。不因extract扩原大叶重构；新测试≤600，原Service只本段提取。固定SHA非作者复核和主组合后才闭两卡。

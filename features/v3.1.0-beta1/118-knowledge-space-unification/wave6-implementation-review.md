@@ -260,3 +260,12 @@ M3最终518f组件经非作者复核原53与额外7个native边界绿；最初Se
 大目标集d071的原401逐tombstone预锁与1001 OR深度反例已修：精确Tombstone按索引字符串全局锁序≤200批，业务Model仍数字序；Ref目标谓词同type分组和≤200 IN片段，原完整目标/来源边界不变。作者5新native及旧目标/删除/分页选集、root本次完整选集绿，T873874闭合；MySQL锁序/并发待T202，不能将单IN片段上限声称整条SQL参数≤200。模型cursor/core87f尚在非作者复核，T867–870不先勾。
 
 后继依赖按§57真实冻结artifact→SQL App六卡、§58上传原子注册两卡冻结；原生审计发现旧版本重链在主指针触发器失败后仍多一版本/两个primary，纳入原T083084后继事务接线，不扩大文件edit或更换上传调度。AC80 namespace applicability仍待用户决定，Spec原条款不改，正式联合权限/namespace发布不绕过该选择。
+
+
+## 模型来源核心及真实MySQL SQL子步准备验证（2026-11-07）
+
+87f两生产叶及测试经非作者PERM独立固定archive复核，原三路径56绿、自选3个native边界绿（真实default Owner不读非法value JSON、篡改ordinal仍fresh检查、同tenant换管理pin拒cursor、foreign coverage缺失零metadata读），无确认问题。作者889a8仅修原trace fixture kind为实际web_session，原D用户身份不收窄；主树db696c24755bb0b438ef457abbe55fe955cf4eb9正常合入后原九路径**193 passed、1298 warnings、6.98秒**，日志/JUnit /private/tmp/f118-root-model-source-integrated.log/.xml。T867–870按内部完整分类/有界分页交付闭合，原T111–120及生产Coverage/HTTP/删除仍未完成。
+
+109独立克隆库bisheng_f118_probe_20261107以44f5bc87a固定backend归档运行MySQL转换组件，archive SHA256 23601ea9dfbe4f138e04119f9f241aa5d96d2e216a8dd2fd46ca46fa5785989c。SQL守卫禁止DDL/commit及File写，仅白名单组件DML；实际3tenant中tenant1执行3命令（1个0→3、2个新V1），真实分配Doc4/5、Version5/6，checkpoint事务内complete。业务时间/model/index原列及File全列保持；外TX强制rollback后所核11张表完整逐列摘要前后同c2661282f826d565a8f5d3e8c8f40726ba7802f1e72e830342987e8cf57efa65，Run0。MySQL自增计数器会因回滚分配推进，故不声称数据库物理状态逐位还原；仅测试克隆库，未影响原业务库。85 SELECT、5 INSERT、6 UPDATE、两SAVEPOINT/RELEASE；组件没有durable commit权限。
+
+证据evidence/preparatory-native-sql.json SHA256 61c9699bec2148636e9599532a9bdc00b15f10c4c60c56f7ca6a51657bdb0949，无凭据脚本同目录preparatory-native-sql-probe.py，local /private/tmp/f118-preparatory-native-sql.json。首次脚本误用测试常量MODELS导致AttributeError，只修准备脚本，非产品红/源码修复。Run的refs仅此回滚TX中组件fixture，未证明正式artifact membership；不计正式M2/M3/升级恢复/T202/E2E。原API启动时间仍2026-11-06T12:16:13.795554937Z，3005未操作。
