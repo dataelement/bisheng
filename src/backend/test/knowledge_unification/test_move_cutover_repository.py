@@ -478,3 +478,34 @@ async def test_native_item_projection_is_seek_paged_without_manifest_or_snapshot
         )
     finally:
         sa.event.remove(moving.engine.sync_engine, "before_cursor_execute", record)
+
+
+async def test_target_container_sql_drift_is_not_hidden_by_unchanged_root_revision(moving, monkeypatch):
+    import sqlalchemy as sa
+
+    built = await pipeline(moving, monkeypatch)
+    async with built.sessions() as session:
+        current, evidence = await prepared(session, built)
+        await session.execute(
+            sa.update(KnowledgeFile)
+            .where(KnowledgeFile.id == 51, KnowledgeFile.tenant_id == 101)
+            .values(file_level_path="/52", level=1)
+        )
+        with pytest.raises(KnowledgeOperationPlanChangedError):
+            await built.repo.aapply_logical(session, prepared=current, projection_evidence=evidence)
+        assert (await session.get(KnowledgeFile, 50)).knowledge_id == 10
+
+
+async def test_logical_receipt_is_original_one_use_and_same_transaction(moving, monkeypatch):
+    import sqlalchemy as sa
+
+    built = await pipeline(moving, monkeypatch)
+    async with built.sessions() as session:
+        current, evidence = await prepared(session, built)
+        receipt = await built.repo.aapply_logical(session, prepared=current, projection_evidence=evidence)
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            built.repo.assert_logical_current(replace(receipt), session)
+        await session.commit()
+        await session.execute(sa.text("SELECT 1"))
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            built.repo.assert_logical_current(receipt, session)
