@@ -85,6 +85,7 @@ async def case(database, monkeypatch, tmp_path):
         fail_commit=None,
         fail_rollback=False,
         fail_close=False,
+        after_commit_hook=None,
         commit_count=0,
         blobs={},
         projection=set(),
@@ -105,6 +106,8 @@ async def case(database, monkeypatch, tmp_path):
             if hit and value.fail_commit[1] == "cancel_before":
                 raise asyncio.CancelledError()
             await super().commit()
+            if value.after_commit_hook:
+                value.after_commit_hook()
             if hit:
                 if value.fail_commit[1] == "cancel_after":
                     raise asyncio.CancelledError()
@@ -555,3 +558,14 @@ async def test_secondary_owned_session_cleanup_failure_preserves_the_original_er
         assert "commit ACK unknown" in str(caught.value)
     assert caught.value.space_upload_progress[0]["commit_outcome"] == "unknown"
     assert not case.active and not case.blobs and "telemetry" not in case.events
+
+
+async def test_sql_commit_hook_cannot_redirect_blob_cleanup_through_the_mutable_returned_file(case, monkeypatch):
+    application = app(case, monkeypatch)
+    row = await create(application, case)
+    owned = row.object_name
+    case.blobs["foreign/object.txt"] = b"unrelated"
+    case.after_commit_hook = lambda: setattr(row, "object_name", "foreign/object.txt")
+    await application.arollback_created()
+    assert owned not in case.blobs
+    assert case.blobs == {"foreign/object.txt": b"unrelated"}
