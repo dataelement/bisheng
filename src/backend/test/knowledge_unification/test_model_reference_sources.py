@@ -190,7 +190,7 @@ async def test_continuation_fresh_permissions_and_trace_change_but_no_stale_cred
     await session.commit()
     with original.actor() as user:
         user._runtime_credential_reference = {
-            "kind": "web",
+            "kind": "web_session",
             "user_id": 7,
             "tenant_id": 101,
             "token_version": 1,
