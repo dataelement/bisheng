@@ -174,6 +174,17 @@ async def writes(concrete_tenant, monkeypatch):
             KnowledgeDocumentVersionRepositoryImpl(session),
             KnowledgeFileRepositoryImpl(session),
         )
+        from bisheng.knowledge.application.knowledge_version_mutation import KnowledgeVersionMutationApplication
+
+        @asynccontextmanager
+        async def fresh_version_sessions():
+            async with AsyncSession(engine, expire_on_commit=False) as owned:
+                yield owned
+
+        version_service.version_mutation_application = KnowledgeVersionMutationApplication(
+            session_factory=fresh_version_sessions,
+            require_version_management_enabled=version_service._require_version_management_enabled,
+        )
         monkeypatch.setattr(
             "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service.KnowledgeAuditTelemetryService.audit_link_file_version",
             MagicMock(),

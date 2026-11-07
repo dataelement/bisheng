@@ -21,8 +21,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpaceFileNotFoundError, SpaceNotFoundError
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
     KnowledgeDocumentRepository,
 )
@@ -47,6 +46,7 @@ class KnowledgeVersionService:
         knowledge_file_repo: KnowledgeFileRepository,
         *,
         version_read_service=None,
+        version_mutation_application=None,
     ):
         self.request = request
         self.login_user = login_user
@@ -54,6 +54,7 @@ class KnowledgeVersionService:
         self.version_repo = version_repo
         self.knowledge_file_repo = knowledge_file_repo
         self._version_read_service = version_read_service
+        self.version_mutation_application = version_mutation_application
 
     def _reads(self):
         if self._version_read_service is None:
@@ -101,173 +102,40 @@ class KnowledgeVersionService:
     async def search_associable_documents(self, knowledge_id: int, keyword: str, current_file_id: int):
         return await self._reads().search_associable_documents(knowledge_id, keyword, current_file_id)
 
-    async def link_file_to_document(self, knowledge_file_id: int, target_document_id: int):
-        """Associate a parsed file into a target document's chain.
+    def _mutations(self):
+        if self.version_mutation_application is None:
+            raise RuntimeError("Version mutation application is not configured")
+        return self.version_mutation_application
 
-        Per product decision (2026-05-20 evt 3): the new version becomes the primary
-        version immediately. The old primary is demoted to history. The current file's
-        original independent document + V1 row are deleted (no追溯 retention needed —
-        the file information lives in the new version row via the join).
-        """
+    async def link_file_to_document(self, knowledge_file_id: int, target_document_id: int):
+        """Relink the complete chain in one application-owned transaction."""
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import LinkResponse
         from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
             KnowledgeAuditTelemetryService,
         )
 
-        await self._require_version_management_enabled()
-
-        from bisheng.common.errcode.knowledge_space import (
-            VersionLinkFileNotReadyError,
-            VersionLinkSourceFileMissingError,
-            VersionLinkSourceMultiVersionError,
-            VersionLinkTargetUnavailableError,
-        )
-
-        # ── Source guard ────────────────────────────────────────────────────
-        # Distinguish "file is gone" (deleted between list refresh and click)
-        # from "file is still parsing / failed" — they get different product
-        # toasts so the user knows whether to retry or pick another file.
-        current_kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if current_kf is None:
-            raise VersionLinkSourceFileMissingError()
-        if current_kf.status != KnowledgeFileStatus.SUCCESS.value:
-            raise VersionLinkFileNotReadyError()
-
-        # 2) source document must not already be a multi-version chain — moving
-        #    any of its versions out would break the existing chain.
-        source_version = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
-        if source_version is not None:
-            source_chain = await self.version_repo.find_by_document_id(source_version.document_id)
-            if len(source_chain) >= 2:
-                raise VersionLinkSourceMultiVersionError()
-
-        # ── Target guard ────────────────────────────────────────────────────
-        # 1) target document row must exist.
-        target_doc = await self.doc_repo.find_by_id(target_document_id)
-        if target_doc is None:
-            raise VersionLinkTargetUnavailableError()
-        # 2) target must have a live primary chain — primary_version_id set,
-        #    that version row exists, its knowledge_file row exists, and the
-        #    file is parsed SUCCESS. Any link in that chain being broken means
-        #    the target is effectively "deleted" from the user's point of view.
-        if target_doc.primary_version_id is None:
-            raise VersionLinkTargetUnavailableError()
-        target_primary_v = await self.version_repo.find_by_id(target_doc.primary_version_id)
-        if target_primary_v is None:
-            raise VersionLinkTargetUnavailableError()
-        target_primary_kf = await self.knowledge_file_repo.find_by_id(target_primary_v.knowledge_file_id)
-        if target_primary_kf is None or target_primary_kf.status != KnowledgeFileStatus.SUCCESS.value:
-            raise VersionLinkTargetUnavailableError()
-
-        if target_doc.knowledge_id != current_kf.knowledge_id:
-            raise HTTPException(status_code=409, detail="target document belongs to a different space")
-
-        # Duplicate-content check: does any existing version in the target chain share md5?
-        existing = await self.version_repo.find_by_document_id(target_document_id)
-        existing_kf_ids = [v.knowledge_file_id for v in existing]
-        existing_kfs = await self.knowledge_file_repo.find_by_ids(existing_kf_ids)
-        if current_kf.md5 and any(kf.md5 == current_kf.md5 for kf in existing_kfs if kf.md5):
-            raise HTTPException(status_code=409, detail="duplicate content already in target chain")
-
-        await self._require_processing_idle(current_kf.knowledge_id, "link_version")
-
-        # Capture the current file's original document (it will be deleted after relink)
-        original_chain = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
-
-        # Snapshot the old primary; we'll demote it AFTER the new primary is
-        # in place so an interruption never leaves the chain without any
-        # primary at all (the worst case here is two primaries, recoverable).
-        old_primary = await self.version_repo.find_primary(target_document_id)
-
-        # Create new version (auto-primary)
-        next_no = await self.version_repo.next_version_no(target_document_id)
-        new_version = KnowledgeDocumentVersion(
-            document_id=target_document_id,
+        result = await self._mutations().alink_file(
+            login_user=self.login_user,
             knowledge_file_id=knowledge_file_id,
-            version_no=next_no,
-            is_primary=True,
+            target_document_id=target_document_id,
         )
-        saved = await self.version_repo.save(new_version)
-
-        # Point target doc's primary_version_id at the new version
-        await self.doc_repo.update_primary_version_id(target_document_id, saved.id)
-
-        # Demote the old primary now — chain is already healthy with the new one.
-        if old_primary is not None and old_primary.id != saved.id:
-            old_primary.is_primary = False
-            await self.version_repo.update(old_primary)
-
-        # Delete current file's ORIGINAL independent document + V1 row (use the captured id;
-        # it may now be ambiguous with the freshly-created row we just inserted).
-        if original_chain is not None and original_chain.id != saved.id:
-            original_doc_id = original_chain.document_id
-            await self.version_repo.delete(original_chain.id)
-            await self.doc_repo.delete(original_doc_id)
-
-        # Mark file similar_status as resolved (Plan 3 sets this proactively; we ensure it here too)
-        if current_kf.similar_status != 2:
-            current_kf.similar_status = 2
-            await self.knowledge_file_repo.update(current_kf)
-
-        # Audit log
         KnowledgeAuditTelemetryService.audit_link_file_version(
-            self.login_user,
-            self.request,
-            current_kf.knowledge_id,
-            current_kf.file_name,
-            next_no,
+            self.login_user, self.request, result.knowledge_id, result.file_name, result.new_version_no
         )
-
-        return LinkResponse(document_id=target_document_id, new_version_no=next_no)
+        return LinkResponse(document_id=result.document_id, new_version_no=result.new_version_no)
 
     async def set_primary_version(self, version_id: int):
-        """Promote a historical version to primary; demote the old primary to history.
-
-        Index is NOT rebuilt — the RAG filter (Plan 4) uses is_primary to decide what's live,
-        so flipping the flag is sufficient and the change takes effect immediately.
-        """
+        """Promote the selected version atomically; the existing RAG filter applies."""
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import SetPrimaryResponse
         from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
             KnowledgeAuditTelemetryService,
         )
 
-        await self._require_version_management_enabled()
-
-        target_version = await self.version_repo.find_by_id(version_id)
-        if target_version is None:
-            raise HTTPException(status_code=404, detail="version not found")
-
-        target_kf = await self.knowledge_file_repo.find_by_id(target_version.knowledge_file_id)
-        if target_kf is None or target_kf.status != KnowledgeFileStatus.SUCCESS.value:
-            raise HTTPException(status_code=412, detail="target version not parsed successfully")
-
-        await self._require_processing_idle(target_kf.knowledge_id, "set_primary_version")
-
-        if not target_version.is_primary:
-            # Promote the new primary BEFORE demoting the old one so that any
-            # interruption in the middle leaves the chain with two primaries
-            # (recoverable, still visible in the list) instead of the rare
-            # "no primary at all" state that hides every file from the UI but
-            # keeps them in the dup checker.
-            old_primary = await self.version_repo.find_primary(target_version.document_id)
-            target_version.is_primary = True
-            await self.version_repo.update(target_version)
-            await self.doc_repo.update_primary_version_id(target_version.document_id, target_version.id)
-            if old_primary is not None and old_primary.id != target_version.id:
-                old_primary.is_primary = False
-                await self.version_repo.update(old_primary)
-
+        result = await self._mutations().aset_primary(login_user=self.login_user, version_id=version_id)
         KnowledgeAuditTelemetryService.audit_set_primary_version(
-            self.login_user,
-            self.request,
-            target_kf.knowledge_id,
-            target_kf.file_name,
-            target_version.version_no,
+            self.login_user, self.request, result.knowledge_id, result.file_name, result.new_primary_version_no
         )
-        return SetPrimaryResponse(
-            document_id=target_version.document_id,
-            new_primary_version_no=target_version.version_no,
-        )
+        return SetPrimaryResponse(document_id=result.document_id, new_primary_version_no=result.new_primary_version_no)
 
     async def delete_version(self, version_id: int):
         """Delete a historical (non-primary) version. Primary version must be promoted first.
@@ -516,124 +384,22 @@ class KnowledgeVersionService:
     async def search_version_sources(self, knowledge_id: int, keyword: str, current_file_id: int):
         return await self._reads().search_version_sources(knowledge_id, keyword, current_file_id)
 
-    async def merge_source_document_into_current(
-        self,
-        current_knowledge_file_id: int,
-        source_document_id: int,
-    ):
-        """Merge a single-version source document into the current file's document
-        chain. The source's V1 file becomes the new primary version of the current
-        document; the source document row is deleted.
-
-        Reverse direction of link_file_to_document — used by the version management
-        flow where the user picks a single-version target to absorb into the file
-        they are managing.
-        """
+    async def merge_source_document_into_current(self, current_knowledge_file_id: int, source_document_id: int):
+        """Absorb an independent source using the original qualification and response."""
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import LinkResponse
         from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
             KnowledgeAuditTelemetryService,
         )
 
-        await self._require_version_management_enabled()
-
-        from bisheng.common.errcode.knowledge_space import (
-            VersionLinkFileNotReadyError,
-            VersionLinkSourceFileMissingError,
-            VersionLinkSourceMultiVersionError,
+        result = await self._mutations().amerge_document(
+            login_user=self.login_user,
+            current_knowledge_file_id=current_knowledge_file_id,
+            source_document_id=source_document_id,
         )
-
-        # ── Current (the file the user is managing) guard ───────────────────
-        # Same split as link_file_to_document: deleted vs. not-yet-parsed get
-        # different toasts.
-        current_kf = await self.knowledge_file_repo.find_by_id(current_knowledge_file_id)
-        if current_kf is None:
-            raise VersionLinkSourceFileMissingError()
-        if current_kf.status != KnowledgeFileStatus.SUCCESS.value:
-            raise VersionLinkFileNotReadyError()
-
-        current_v = await self.version_repo.find_by_knowledge_file_id(current_knowledge_file_id)
-        if current_v is None:
-            # Current file is not in any chain — treat as not-ready for version mgmt.
-            raise VersionLinkFileNotReadyError()
-        target_doc_id = current_v.document_id
-
-        # ── Source (the document being absorbed) guard ──────────────────────
-        # In the merge flow the user picks a *file* from the similar/search
-        # list, so "source missing" is the user's mental model when any of
-        # these checks fail — surface 18064 "source file deleted" rather than
-        # 18062 "target document unavailable" (which is link-flow language).
-        source_doc = await self.doc_repo.find_by_id(source_document_id)
-        if source_doc is None:
-            # Cascade-on-delete (the new code path) removes the doc when the
-            # primary file is deleted in another tab.
-            raise VersionLinkSourceFileMissingError()
-        if source_doc.knowledge_id != current_kf.knowledge_id:
-            raise HTTPException(
-                status_code=409,
-                detail="source document belongs to a different space",
-            )
-
-        source_chain = await self.version_repo.find_by_document_id(source_document_id)
-        # Multi-version source: same product rule as link — a multi-version
-        # document cannot be absorbed into another chain.
-        if len(source_chain) >= 2:
-            raise VersionLinkSourceMultiVersionError()
-        if len(source_chain) == 0:
-            # Doc row survived but every version is gone — file was deleted.
-            raise VersionLinkSourceFileMissingError()
-        source_version = source_chain[0]
-        source_kf = await self.knowledge_file_repo.find_by_id(source_version.knowledge_file_id)
-        if source_kf is None:
-            raise VersionLinkSourceFileMissingError()
-        if source_kf.status != KnowledgeFileStatus.SUCCESS.value:
-            # File still around but not finished parsing.
-            raise VersionLinkFileNotReadyError()
-
-        existing = await self.version_repo.find_by_document_id(target_doc_id)
-        existing_kf_ids = [v.knowledge_file_id for v in existing]
-        existing_kfs = await self.knowledge_file_repo.find_by_ids(existing_kf_ids)
-        if source_kf.md5 and any(kf.md5 == source_kf.md5 for kf in existing_kfs if kf.md5):
-            raise HTTPException(status_code=409, detail="duplicate content already in current chain")
-
-        await self._require_processing_idle(current_kf.knowledge_id, "merge_versions")
-
-        # Promote-before-demote: an interruption mid-flow leaves the chain
-        # with two primaries (recoverable) instead of none (which would hide
-        # every file from the UI while still blocking dup uploads).
-        old_primary = await self.version_repo.find_primary(target_doc_id)
-
-        next_no = await self.version_repo.next_version_no(target_doc_id)
-        new_version = KnowledgeDocumentVersion(
-            document_id=target_doc_id,
-            knowledge_file_id=source_kf.id,
-            version_no=next_no,
-            is_primary=True,
-        )
-        saved = await self.version_repo.save(new_version)
-
-        await self.doc_repo.update_primary_version_id(target_doc_id, saved.id)
-
-        if old_primary is not None and old_primary.id != saved.id:
-            old_primary.is_primary = False
-            await self.version_repo.update(old_primary)
-
-        if source_version.id != saved.id:
-            await self.version_repo.delete(source_version.id)
-            await self.doc_repo.delete(source_document_id)
-
-        if source_kf.similar_status != 2:
-            source_kf.similar_status = 2
-            await self.knowledge_file_repo.update(source_kf)
-
         KnowledgeAuditTelemetryService.audit_link_file_version(
-            self.login_user,
-            self.request,
-            current_kf.knowledge_id,
-            source_kf.file_name,
-            next_no,
+            self.login_user, self.request, result.knowledge_id, result.file_name, result.new_version_no
         )
-
-        return LinkResponse(document_id=target_doc_id, new_version_no=next_no)
+        return LinkResponse(document_id=result.document_id, new_version_no=result.new_version_no)
 
     async def get_similar_candidates_for_file(
         self,

@@ -6,6 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.application.knowledge_version_mutation import KnowledgeVersionMutationApplication
 from bisheng.knowledge.application.metadata_legacy import build_legacy_metadata_service
 from bisheng.knowledge.application.space_upload import SpaceUploadApplication
 from bisheng.knowledge.domain.repositories.implementations.knowledge_chat_session_repository_impl import (
@@ -218,7 +219,7 @@ async def get_knowledge_version_service(
     """Get KnowledgeVersionService instance, bound to the current request and login user."""
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
-    return KnowledgeVersionService(
+    service = KnowledgeVersionService(
         request=request,
         login_user=login_user,
         doc_repo=doc_repo,
@@ -226,3 +227,8 @@ async def get_knowledge_version_service(
         knowledge_file_repo=knowledge_file_repo,
         version_read_service=read_service,
     )
+    service.version_mutation_application = KnowledgeVersionMutationApplication(
+        session_factory=get_async_db_session,
+        require_version_management_enabled=service._require_version_management_enabled,
+    )
+    return service
