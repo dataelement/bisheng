@@ -339,3 +339,6 @@ PERM固定archive非作者复核2dca：原四路径79绿，独立6native格绿�
 Root读c340版本App177行发现两层owned context exit可能让二次rollback/close覆盖原业务/unknown异常；作者真实native复现2红（原commit RuntimeError→secondary OSError、原18061→rollback OSError），a524仅App+test窄修保原异常实例并记录二次失败，不重试/补偿。最终App204行/40native、原9路径274绿，root逐段复核后正常合入。T904905按应用前置闭合。
 
 原三写Svc+唯一生产DI接线bcdd7733b退役旧多次selfcommit，其他read/similar/delete-version方法AST及原资格不改；新测试4真实缺接线红后扩原HTTP/disabled/busy/commitunknown。初次扩展188绿/1断言错把有gap版本号当行数，已516bea按实际旧行数修正，非产品红。最终8路径**189 passed、1336 warnings、7.61秒**（/private/tmp/f118-root-version-wiring-corrected.log/.xml），含真实HTTP→原Svc→实际App/Repo与原写入口。root提前保存了该失败断言的bcdd提交，随后显式修正重跑，未将T911–913计完成；固定非作者复核仍进行。
+
+
+固定516bea根版本入口获EDGE非作者审：自跑8路径185绿；完整原Depends链ASGI三write（仅认证/DB依赖替换，request Session含pending且任意ORM执行即fail）与unknown commit再close故障共4探针+DI控制5绿，未借请求Session/未改pending，真正commit及TX退出后才审计。其余原方法AST一致。root后继完整源码581ed3ff4（与516bea代码相同，只有文档提交）同完整选集 **4605 passed、7 skipped、97431 warnings、240.51秒**（/private/tmp/f118-root-version-entry-full.log/.xml）。T911–913按实际入口范围闭合；后续旧版本五路径实际21绿11红的fixture失配按§71单列处理，不沿用此前22/10为新基线。

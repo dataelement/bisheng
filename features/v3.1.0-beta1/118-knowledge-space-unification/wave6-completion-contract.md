@@ -971,3 +971,24 @@ INT T911/912只原knowledge_version_service.py与knowledge/api/dependencies.py�
 不新增任何动作/角色授权，不把仅前端CREATOR/ADMIN UI说成已有后端权限。业务资格/错误/次序仍由§67唯一App处理，原disabled开关及busy guard均保。DML期间无请求Repo Session借用或Telemetry IO；unknown不补偿/重试，二次rollback/close不得改掉原异常，必须独立复核关闭后才接线。T913只原test_kn_rebuild_write_entries.py为VersionService补实际App及新的独立native Session factory，保所有原busy/idle/开关/历史断言；不把fake App当native证明、不改10个精确旧基线失败。
 
 T911必须真实DI→原Svc→实际App/Repo→nativeSQL及三原HTTP路由/响应、原审计调用/开关/busy/unknown组合。原请求repos可用禁止调用的sentinel确保不再自commit；真实绑定ID/primary指针和完整旧File列核验，外部审计运输隔离不当完整E2E。新叶≤600，旧Service只这三写及必需注入，不重构整个版本功能。
+
+
+## 71. 原版本遗留原生测试明确装配 V1：已冻结
+
+INT T914仅test/knowledge/test_knowledge_version_service_link.py及set_primary.py两测试叶。精确旧五路径beda/c340为22绿10红；真实接线后516bea变21绿11红，不能把新增缺port误称旧失败。两helper补actual UserPayload/具体tenant1、实际新App与独立native Session factory；原request Session仅读断言，在该fixture的无pending边界expunge旧identity map，避免跨Session Core写后的陈旧对象。不得借原Session当新App Session/构造fake App/改任何生产资格。
+
+更新已经在精确旧实现失配的HTTP403/412/409期待为现已存在的VersionManagementDisabled/VersionLinkFileNotReady/VersionLinkSourceMultiVersion业务错误，重复MD5/切失败primary的原HTTP语义保持。旧“多版本源可拆历史V1”测试与改动前生产len>=2一律拒矛盾，按§67原现规则改为拒且源/目标整链不变，不借旧测试放宽产品。保其余成功主指针/旧链清理/历史保留/缺失/重复/失败状态断言。不是新增产品行为红；五路径须真实原生闭合并非作者复核。
+
+## 72. 文件夹上传同次登记、末尾派发及限定补偿 V1：已冻结
+
+EDGE先T915916提取现已修复原commit观察者SSOT，再T917918目录Repo及T919920同次App；INT负责T921922原SpaceService接线，旧folder两测试叶T923明确适配。均每实现≤2生产叶、新叶≤600。不得复制file准备/规则resolver、去重、配额、File/Doc/V1 writer、原permission maker或权限policy。保持原HTTP/schema/1000项限制、relative path规范化、深度9、顶层name-only重复、reported-size预检及各组实际大小配额。上传目录仍原upload_file，不调用add_folder引入create_folder动作。
+
+T915916新增domain/repositories/upload_commit_observer.py：UploadCommitObserver.observe(transaction:原TransactionIdentity)、acknowledge(transactions:tuple[原TransactionIdentity,...])->None，以及原root遍历helper。只将原UploadRegistrationRepo._observe_root及ACK中native commit/ancestry/ended校验原样提取，现File Repo仍先核本issuer/initial/tenant/full事实，再委托同一observer并标自身ACK；Folder复用它，不跨Repo窥私有map、不复制监听器。保持原native事件/弱引用、explicit awaited commit ACK后同步retire、unknown/rollback等到当前Task.done清理；不call_soon/call_later/新timer/全局事务框架。原error code及File receipt/API/SQL形状保留，重放原caller after_transaction_end真实SQL SELECT1与89项/C2/上传组合。observer本身不授任何资源补偿权。
+
+新FolderUploadRegistrationRepository同叶DTO NewUploadFolder(name及原creator/updater)、私有StagedUploadFolder/OwnedUploadFolder/local receipt。aregister_folder(session,*,space_id,parent_id,folder)仅current具体tenant/type3/实际父链导出path+level，保存原DIR type0/SUCCESS字段；同caller短TX只flush，拒pending/forged/foreign，不self commit/Session。_acknowledge_committed_folder(*,registration)须原issuer/full事实及共享原root observer ACK才发行Owned；_arebind_owned_empty_folder(session,*,registration)只新nativeTX重核原整行、原父链及实际全状态/种类子项与Doc/Version关系均为空，发行local；arollback_created_empty(session,*,receipt)再重核才删除，不接受裸ID/旧row/跨process。含literal escaped后代path查询，不能SUCCESS筛掉child/INNER吞破链或反复枚举每file；未解析metadata仅全行原类型精确比较。目录父链与空性SQL都由Repo拥有，事务内真实Root由App复用原idle guard。
+
+SpaceUploadApplication新增acreate_folder(*,knowledge,parent_id,folder_name)，只用现原identity/admit/maker/actor/session ports；SQL root commit/私有ACK→释放Session→原make_record(folder)/authorize_created完成父投影后才子。一个实例拥有一次folder请求的所有目录和文件，file仍唯一acreate_file。预派发失败先原file逆序补偿完全确认，再自有folder逆序：fresh私有full-row+empty预核→释放Session→原creation ledger reconcile/inverse→fresh再核/SQL删除commit ACK。unknown/changed/extra child保留树并保原错误，safe进度不含原配置/URL/path/凭据。目录无永久Blob；不能用泛project_delete或闲置裸ID_rollback_uploaded_files。
+
+Service仅内部_application/_deferred成对可选参数串add_file→现helper；私有_UploadDispatchBatch只file/previewKey和folder_paths。普通调用两者都无，保现App/rollback/dispatch；folder入口原授权/真实Root/具体scope预检后，一App一batch建树，再各目录走原add_file，保各组upload_file/最新规则/实际quota/dedup与FAILED响应。共享组不另建App、不局部补偿、不dispatch/更新时间。整次staging全成功后现enqueue_or_dispatch按原顺序唯一tail，再目录/空间时间。staging期间提前更新时间会使自有目录receipt失效，必须延后；第一次dispatch起若queue或时间写失败只保已注册/已派发前缀和原错，禁止反删可能已运行文件。不是队列事务/Worker在途竞态或崩溃自动恢复。
+
+新native三测试叶分别commit/receipt/整行空树、实际App父FGA顺序与文件后目录逆序、原HTTP/DI双目录第二组失败0dispatch/全前缀补偿与selected租户/队列unknown。T923只旧knowledge_space_folder_upload.py与_api.py必要factory/边界fixture适配，保count/depth/name/path/quota/permission/dedup原断言。固定非作者复核和主组合后各叶闭合；网页入口未接时原T083084仍不提前验收。

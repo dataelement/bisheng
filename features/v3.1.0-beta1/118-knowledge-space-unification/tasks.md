@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史913编号：807已完成/历史交付、104当前待办、2外移；原137队列已完成36项、剩101项，另3张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史923编号：810已完成/历史交付、111当前待办、2外移；原137队列已完成36项、剩101项，另10张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7365,7 +7365,7 @@
   **覆盖 AC**: AC-09, AC-51\
   **验证 / 完成条件**：缺port旧fixture失配单列，原native写入口组合全保。
 
-- [ ] **T911 · 原历史版本三写实际接线测试**
+- [x] **T911 · 原历史版本三写实际接线测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_version_mutation_wiring.py`\
   **逻辑 / 测试上下文**：W6§70实际DI/Svc/App/Repo及原HTTP、原审计/错误和unknown，不扩资格。\
@@ -7373,7 +7373,7 @@
   **覆盖 AC**: AC-02, AC-10, AC-11, AC-31, AC-43, AC-51\
   **验证 / 完成条件**：缺接线真红、native/ASGI组合、非作者固定审。
 
-- [ ] **T912 · 原历史版本三写委托原子应用**
+- [x] **T912 · 原历史版本三写委托原子应用**
   **类型 / Owner**：后端 Domain / INT\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_version_service.py`、`src/backend/bisheng/knowledge/api/dependencies.py`\
   **逻辑 / 测试上下文**：W6§70两叶退役原多提交写，保wire/原login与开关/错误/审计，不改delete-version。\
@@ -7381,13 +7381,93 @@
   **配对测试**：T911\
   **验证 / 完成条件**：完整原生链/HTTP、static新增0、非作者固定复核及主组合。
 
-- [ ] **T913 · 原版本重建冲突fixture装配真实原子应用**
+- [x] **T913 · 原版本重建冲突fixture装配真实原子应用**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_rebuild_write_entries.py`\
   **逻辑 / 测试上下文**：W6§70新的独占native Session而非旧request Session，全部原断言保留。\
   **依赖**：T912\
   **覆盖 AC**: AC-10, AC-51\
   **验证 / 完成条件**：旧fixture失配单列，实际busy/disabled/idle历史native组合。
+
+- [ ] **T914 · 原版本遗留原生测试装配与实际契约对齐**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge/test_knowledge_version_service_link.py`、`src/backend/test/knowledge/test_knowledge_version_service_set_primary.py`\
+  **逻辑 / 测试上下文**：W6§71真实User/tenant/独立App，原业务错误与现multi-version源拒绝；无生产变化。\
+  **依赖**：T912\
+  **覆盖 AC**: AC-10, AC-11, AC-31\
+  **验证 / 完成条件**：旧五路径22/10→新21/11失配准确归因，修后实际native组合及固定独审。
+
+- [ ] **T915 · 共享上传commit观察者测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_upload_commit_observer.py`\
+  **逻辑 / 测试上下文**：W6§72同次真实native/原资格，no bareID补偿/no跨IO业务TX。\
+  **依赖**：T907\
+  **覆盖 AC**: AC-02, AC-09, AC-10, AC-14, AC-43, AC-49\
+  **验证 / 完成条件**：真实缺接口红或原已修算法等价见证分列、固定独审/主组合。
+
+- [ ] **T916 · 共享上传commit观察者**
+  **类型 / Owner**：后端 Repository / EDGE\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/upload_commit_observer.py`、`src/backend/bisheng/knowledge/domain/repositories/upload_registration_repository.py`\
+  **逻辑 / 测试上下文**：W6§72每实现≤2生产叶、原SSOT唯一复用、不扩动作/框架/worker竞态。\
+  **依赖**：T915\
+  **配对测试**：T915\
+  **验证 / 完成条件**：新叶≤600、原生和scope组合/static、固定非作者复核及主集成。
+
+- [ ] **T917 · 目录自有登记与空树收据测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_folder_upload_registration_repository.py`\
+  **逻辑 / 测试上下文**：W6§72同次真实native/原资格，no bareID补偿/no跨IO业务TX。\
+  **依赖**：T916\
+  **覆盖 AC**: AC-02, AC-09, AC-10, AC-14, AC-43, AC-49\
+  **验证 / 完成条件**：真实缺接口红或原已修算法等价见证分列、固定独审/主组合。
+
+- [ ] **T918 · 目录自有登记与空树收据**
+  **类型 / Owner**：后端 Repository / EDGE\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/folder_upload_registration_repository.py`\
+  **逻辑 / 测试上下文**：W6§72每实现≤2生产叶、原SSOT唯一复用、不扩动作/框架/worker竞态。\
+  **依赖**：T917\
+  **配对测试**：T917\
+  **验证 / 完成条件**：新叶≤600、原生和scope组合/static、固定非作者复核及主集成。
+
+- [ ] **T919 · 同次目录与文件上传应用测试**
+  **类型 / Owner**：测试 / EDGE\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_folder_upload_application.py`\
+  **逻辑 / 测试上下文**：W6§72同次真实native/原资格，no bareID补偿/no跨IO业务TX。\
+  **依赖**：T918, T898\
+  **覆盖 AC**: AC-02, AC-09, AC-10, AC-14, AC-43, AC-49\
+  **验证 / 完成条件**：真实缺接口红或原已修算法等价见证分列、固定独审/主组合。
+
+- [ ] **T920 · 同次目录与文件上传应用**
+  **类型 / Owner**：后端 Application / EDGE\
+  **写入文件**：`src/backend/bisheng/knowledge/application/space_upload.py`\
+  **逻辑 / 测试上下文**：W6§72每实现≤2生产叶、原SSOT唯一复用、不扩动作/框架/worker竞态。\
+  **依赖**：T919\
+  **配对测试**：T919\
+  **验证 / 完成条件**：新叶≤600、原生和scope组合/static、固定非作者复核及主集成。
+
+- [ ] **T921 · 目录整次末尾派发接线测试**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge_unification/test_kn_folder_upload_wiring.py`\
+  **逻辑 / 测试上下文**：W6§72同次真实native/原资格，no bareID补偿/no跨IO业务TX。\
+  **依赖**：T920, T900\
+  **覆盖 AC**: AC-02, AC-09, AC-10, AC-14, AC-43, AC-49\
+  **验证 / 完成条件**：真实缺接口红或原已修算法等价见证分列、固定独审/主组合。
+
+- [ ] **T922 · 目录整次末尾派发接线**
+  **类型 / Owner**：后端 Domain / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
+  **逻辑 / 测试上下文**：W6§72每实现≤2生产叶、原SSOT唯一复用、不扩动作/框架/worker竞态。\
+  **依赖**：T921\
+  **配对测试**：T921\
+  **验证 / 完成条件**：新叶≤600、原生和scope组合/static、固定非作者复核及主集成。
+
+- [ ] **T923 · 原目录上传测试明确同次应用边界**
+  **类型 / Owner**：测试 / INT\
+  **写入文件**：`src/backend/test/knowledge/test_knowledge_space_folder_upload.py`、`src/backend/test/knowledge/test_knowledge_space_folder_upload_api.py`\
+  **逻辑 / 测试上下文**：W6§72只必要factory/边界fixture，保全部原count/depth/name/path/quota/permission/dedup断言。\
+  **依赖**：T922\
+  **覆盖 AC**: AC-09, AC-10, AC-14\
+  **验证 / 完成条件**：准确旧新差异、实际folder App组合，不造兼容fake writer。
 
 ## 自动化覆盖索引
 
@@ -7396,19 +7476,19 @@
 | AC | 测试任务 |
 | --- | --- |
 | AC-01 | T205, T722, T725, T727, T729, T867, T869, T871, T872, T873 |
-| AC-02 | T083, T121, T196, T205, T228, T606, T607, T646, T648, T697, T718, T720, T722, T725, T727, T729, T732, T743, T750, T752, T754, T756, T867, T869, T871, T872, T873, T881, T883, T887, T889, T897, T899, T901, T902, T904, T908, T911 |
+| AC-02 | T083, T121, T196, T205, T228, T606, T607, T646, T648, T697, T718, T720, T722, T725, T727, T729, T732, T743, T750, T752, T754, T756, T867, T869, T871, T872, T873, T881, T883, T887, T889, T897, T899, T901, T902, T904, T908, T911, T915, T917, T919, T921 |
 | AC-03 | T081, T121, T204, T606, T646, T648, T697, T722, T725, T727, T729, T732, T743, T787, T789, T791 |
 | AC-04 | T081, T121, T196, T204, T220, T265, T606, T626, T646, T648, T722, T725, T727, T729, T732, T743 |
 | AC-05 | T081, T121, T196, T204, T220, T265, T606, T626, T646, T648, T697, T722 |
 | AC-06 | T079, T121, T205, T646, T648, T664, T695, T697, T720, T750, T752, T754, T756 |
 | AC-07 | T079, T121, T205, T646, T648, T683, T695, T697, T706, T720, T722 |
 | AC-08 | T077, T101, T121, T204, T686, T750, T752, T754, T756 |
-| AC-09 | T083, T205, T669, T685, T750, T752, T754, T756, T765, T775, T787, T789, T791, T801, T803, T805, T816, T818, T820, T881, T887, T889, T897, T899, T901, T906, T910 |
-| AC-10 | T067, T083, T125, T205, T669, T673, T677, T765, T775, T787, T789, T791, T881, T883, T887, T889, T897, T899, T901, T902, T904, T906, T908, T911, T913 |
-| AC-11 | T083, T205, T750, T752, T754, T756, T775, T787, T789, T791, T881, T902, T904, T911 |
+| AC-09 | T083, T205, T669, T685, T750, T752, T754, T756, T765, T775, T787, T789, T791, T801, T803, T805, T816, T818, T820, T881, T887, T889, T897, T899, T901, T906, T910, T915, T917, T919, T921, T923 |
+| AC-10 | T067, T083, T125, T205, T669, T673, T677, T765, T775, T787, T789, T791, T881, T883, T887, T889, T897, T899, T901, T902, T904, T906, T908, T911, T913, T914, T915, T917, T919, T921, T923 |
+| AC-11 | T083, T205, T750, T752, T754, T756, T775, T787, T789, T791, T881, T902, T904, T911, T914 |
 | AC-12 | T085, T105, T205, T607 |
 | AC-13 | T085, T105, T205, T607 |
-| AC-14 | T079, T083, T121, T165, T205, T685, T765, T801, T803, T805, T816, T818, T820, T881, T887, T889, T897, T899, T901 |
+| AC-14 | T079, T083, T121, T165, T205, T685, T765, T801, T803, T805, T816, T818, T820, T881, T887, T889, T897, T899, T901, T915, T917, T919, T921, T923 |
 | AC-15 | T079, T121, T205, T801, T803, T805, T816, T818, T820 |
 | AC-16 | T205, T750, T752, T754, T756, T801, T803, T805 |
 | AC-17 | T087, T089, T206, T669 |
@@ -7425,7 +7505,7 @@
 | AC-28 | T103, T105, T109, T202, T206 |
 | AC-29 | T103, T105, T107, T109, T202, T206 |
 | AC-30 | T023, T077, T101, T202, T204, T239, T240, T241, T242, T251, T628, T630, T632, T633, T650, T750, T752, T754, T756, T787, T789, T791, T801, T803, T805, T816, T818, T820 |
-| AC-31 | T023, T077, T085, T099, T157, T202, T204, T239, T240, T241, T242, T251, T628, T630, T632, T633, T650, T667, T669, T681, T750, T752, T754, T756, T787, T789, T791, T801, T803, T805, T816, T818, T820, T902, T904, T911 |
+| AC-31 | T023, T077, T085, T099, T157, T202, T204, T239, T240, T241, T242, T251, T628, T630, T632, T633, T650, T667, T669, T681, T750, T752, T754, T756, T787, T789, T791, T801, T803, T805, T816, T818, T820, T902, T904, T911, T914 |
 | AC-32 | T077, T121, T202, T204, T750, T752, T754, T756 |
 | AC-33 | T071, T077, T097, T099, T123, T202, T204, T220, T626, T646, T648, T650, T683, T699, T701, T714, T718, T720, T733, T735, T737, T741 |
 | AC-34 | T063, T071, T097, T123, T202, T204, T593, T596, T608, T610, T612, T614, T616, T618, T620, T622, T624, T634, T636, T638, T640, T642, T644, T660, T662, T675, T699, T701, T714, T733, T735, T737, T741, T750, T752, T754, T756 |
@@ -7437,13 +7517,13 @@
 | AC-40 | T059, T069, T207, T679, T690, T695, T705, T706, T720 |
 | AC-41 | T207, T705, T706, T720 |
 | AC-42 | T059, T123, T207, T233, T705, T706 |
-| AC-43 | T059, T067, T069, T083, T207, T233, T673, T675, T677, T679, T690, T705, T706, T765, T775, T787, T789, T791, T881, T883, T887, T889, T897, T899, T901, T902, T904, T906, T911 |
+| AC-43 | T059, T067, T069, T083, T207, T233, T673, T675, T677, T679, T690, T705, T706, T765, T775, T787, T789, T791, T881, T883, T887, T889, T897, T899, T901, T902, T904, T906, T911, T915, T917, T919, T921 |
 | AC-44 | T059, T067, T069, T097, T207, T673, T675, T677, T679, T690, T705, T706, T775 |
 | AC-45 | T067, T097, T099, T123, T207, T673, T675, T677, T690, T775 |
 | AC-46 | T099, T207 |
 | AC-47 | T071, T099, T207, T699, T701, T714, T733, T735, T737, T741 |
 | AC-48 | T065, T097, T123, T207, T650, T657, T659, T664, T666, T667, T671, T683, T686, T687 |
-| AC-49 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T196, T208, T606, T607, T608, T610, T612, T614, T616, T618, T620, T622, T624, T634, T636, T638, T640, T642, T644, T657, T659, T660, T662, T664, T666, T673, T675, T677, T699, T701, T714, T733, T735, T737, T741, T766, T785, T883, T889, T897, T899, T901 |
+| AC-49 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T196, T208, T606, T607, T608, T610, T612, T614, T616, T618, T620, T622, T624, T634, T636, T638, T640, T642, T644, T657, T659, T660, T662, T664, T666, T673, T675, T677, T699, T701, T714, T733, T735, T737, T741, T766, T785, T883, T889, T897, T899, T901, T915, T917, T919, T921 |
 | AC-50 | T061, T063, T071, T123, T208, T606, T607, T608, T610, T612, T614, T616, T618, T620, T622, T624, T636, T638, T640, T642, T644, T660, T662, T664, T675, T677, T714, T733, T735, T737, T741, T766 |
 | AC-51 | T077, T097, T208, T667, T669, T671, T685, T686, T687, T750, T752, T754, T756, T765, T902, T904, T910, T911, T913 |
 | AC-52 | T065, T097, T208, T657, T659, T664, T666 |
