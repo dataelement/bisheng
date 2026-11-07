@@ -269,6 +269,28 @@ async def test_same_transaction_core_drift_cannot_reuse_stale_locked_facts(datab
             await repo.arelink(session, state=locked, new_version_no=4)
 
 
+async def test_hint_cannot_authorize_deleting_a_source_that_changed_before_locking(database):
+    await database.insert(File, [original.file(203, knowledge_id=9700, md5="other-file")])
+    changed = []
+
+    def drift(connection, _cursor, sql, _parameters, _context, _many):
+        if not changed and sql.startswith("SELECT knowledge_document.id") and "JOIN knowledge" in sql:
+            changed.append(True)
+            connection.execute(sa.update(Version.__table__).where(Version.id == 1001).values(knowledge_file_id=203))
+
+    sa.event.listen(database.engine.sync_engine, "after_cursor_execute", drift)
+    try:
+        repo = api().KnowledgeVersionMutationRepository()
+        async with AsyncSession(database.engine) as session, session.begin():
+            with pytest.raises(KnowledgeOperationPlanConflictError):
+                await repo.arelink(session, state=await state(repo, session), new_version_no=4)
+            assert changed == [True]
+            assert (await session.execute(sa.select(Document.id).where(Document.id == 10))).scalar_one() == 10
+            await session.rollback()
+    finally:
+        sa.event.remove(database.engine.sync_engine, "after_cursor_execute", drift)
+
+
 @pytest.mark.parametrize("count", [401, 1001])
 async def test_whole_chain_uses_bounded_linear_scalar_batches(database, count):
     await database.insert(
@@ -284,10 +306,11 @@ async def test_whole_chain_uses_bounded_linear_scalar_batches(database, count):
         assert len(database.queries) <= 80
         assert max(len(params) for _, params in database.queries) <= 205
         assert all(
-            not any(
-                field in sql.lower()
-                for field in ("split_rule", "user_metadata", "abstract", "object_name", "model_transition \n")
-            )
+            not any(field in sql.lower() for field in ("split_rule", "user_metadata", "abstract", "object_name"))
+            for sql, _ in database.queries
+        )
+        assert all(
+            "knowledge.model_transition" not in sql or "knowledge.model_transition IS NOT NULL" in sql
             for sql, _ in database.queries
         )
         print(
