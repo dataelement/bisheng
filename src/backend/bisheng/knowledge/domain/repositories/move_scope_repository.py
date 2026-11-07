@@ -248,10 +248,11 @@ class MoveScopeRepository(MoveRowRepository):
                 row = ancestor_map.get(key)
                 if row is None or row["file_type"] != 0 or row["knowledge_id"] != space or row["tenant_id"] != tenant:
                     conflict("move_parent_chain_invalid")
+                ancestor_path = path_ids(row["file_level_path"])
                 if any(
-                    ancestor_map.get(parent, {}).get("file_level_path")
-                    != ("/" + "/".join(map(str, path_ids(row["file_level_path"])[:index])) if index else "")
-                    for index, parent in enumerate(path_ids(row["file_level_path"]))
+                    parent not in ancestor_map
+                    or path_ids(ancestor_map[parent]["file_level_path"]) != ancestor_path[:index]
+                    for index, parent in enumerate(ancestor_path)
                 ):
                     conflict("move_parent_path_invalid")
         if for_update:
