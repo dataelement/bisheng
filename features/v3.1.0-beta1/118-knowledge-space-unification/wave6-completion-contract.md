@@ -962,3 +962,12 @@ INT T908/909只原open_endpoints/api/endpoints/filelib.py、open_mcp/application
 
 
 §66原重建冲突fixture补充T910：仅test_kn_rebuild_write_entries.py声明新必需upload_application_factory（若进入即显式失败）并将原副作用哨兵同时接prepare。忙空间仍须在quota/prepare/factory前失败，idle对照仍到原quota哨兵；不以缺port RuntimeError替代原idle行为证明。只fixture对齐，不改断言/production或令假App声称完整上传成功。
+
+
+## 70. 原历史版本三写入口与DI接线 V1：已冻结
+
+INT T911/912只原knowledge_version_service.py与knowledge/api/dependencies.py两生产叶、新test_kn_version_mutation_wiring.py。实际生产只有该DI构造VersionService；构造注入version_mutation_application（Domain不import App），API DI用独立get_async_db_session与该原Service._require_version_management_enabled回调构造实际App。link_file_to_document/merge_source_document_into_current/set_primary_version委托同名§67 App方法，原login UserPayload对象传递，返回既有LinkResponse/SetPrimaryResponse，提交ACK后沿原Telemetry参数。移除这三方法的旧自commit多步写，不留无port旧writer fallback；其他read/similar/delete-version保持原消费者。
+
+不新增任何动作/角色授权，不把仅前端CREATOR/ADMIN UI说成已有后端权限。业务资格/错误/次序仍由§67唯一App处理，原disabled开关及busy guard均保。DML期间无请求Repo Session借用或Telemetry IO；unknown不补偿/重试，二次rollback/close不得改掉原异常，必须独立复核关闭后才接线。T913只原test_kn_rebuild_write_entries.py为VersionService补实际App及新的独立native Session factory，保所有原busy/idle/开关/历史断言；不把fake App当native证明、不改10个精确旧基线失败。
+
+T911必须真实DI→原Svc→实际App/Repo→nativeSQL及三原HTTP路由/响应、原审计调用/开关/busy/unknown组合。原请求repos可用禁止调用的sentinel确保不再自commit；真实绑定ID/primary指针和完整旧File列核验，外部审计运输隔离不当完整E2E。新叶≤600，旧Service只这三写及必需注入，不重构整个版本功能。
