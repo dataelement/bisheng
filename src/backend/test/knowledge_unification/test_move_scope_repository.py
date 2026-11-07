@@ -128,6 +128,7 @@ async def moving(store, monkeypatch):
         ):
             session.add(
                 ResourcePermissionMode(
+                    id=key,
                     tenant_id=101,
                     resource_type=kind,
                     resource_id=str(key),
@@ -339,3 +340,83 @@ async def test_large_history_is_seek_paged_and_linear(moving, count):
     assert not writes and len(queries) <= 16 + 8 * ((count + 199) // 200)
     assert all(len(parameters) <= 410 for _, parameters in queries)
     assert [x.target.version_id for x in scope.leaves] == sorted(x.target.version_id for x in scope.leaves)
+
+
+@pytest.mark.parametrize("state", ["accepted", "running", "failed", "partial_failed", "obsolete"])
+@pytest.mark.parametrize("sync", [False, True])
+async def test_source_input_is_protected_until_item_succeeded_even_after_source_cleaned(moving, state, sync):
+    from datetime import datetime, timedelta
+
+    with Session(moving.sync) as session:
+        session.add(
+            KnowledgeOperationPlan(
+                id="plan",
+                tenant_id=101,
+                actor_user_id=7,
+                operation="move",
+                space_id=10,
+                operation_id="move-job",
+                consumed_at=datetime.now(),
+                request_hash="a" * 64,
+                plan_digest="b" * 64,
+                expires_at=datetime.now() + timedelta(hours=1),
+            )
+        )
+        session.add(
+            KnowledgeProcessingJob(
+                id="move-job",
+                tenant_id=101,
+                space_id=11,
+                kind="move_index",
+                state=state,
+                actor_user_id=7,
+                idempotency_key="move",
+                request_hash="c" * 64,
+                expected_model_config_revision=4,
+                total_count=1,
+            )
+        )
+        session.add(
+            KnowledgeProcessingItem(
+                id="move-item",
+                tenant_id=101,
+                job_id="move-job",
+                file_id=81,
+                document_id=80,
+                version_id=181,
+                expected_space_id=11,
+                state="failed",
+                step="move_source_cleaned",
+                checkpoint={"step": "move_source_cleaned"},
+            )
+        )
+        session.commit()
+    if sync:
+        with Session(moving.sync) as session:
+            with pytest.raises(KnowledgeProcessingConflictError):
+                moving.repo.assert_no_unsettled_move_inputs(session, 10)
+    else:
+        async with AsyncSession(moving.engine) as session:
+            with pytest.raises(KnowledgeProcessingConflictError):
+                await moving.repo.aassert_no_unsettled_move_inputs(session, 10)
+    with Session(moving.sync) as session:
+        session.get(KnowledgeProcessingItem, "move-item").state = "succeeded"
+        session.commit()
+        moving.repo.assert_no_unsettled_move_inputs(session, 10)
+
+
+async def test_pending_active_j1_cannot_be_flushed_after_scope_read(moving):
+    async with AsyncSession(moving.engine) as session:
+        job = KnowledgeProcessingJob(
+            tenant_id=101,
+            space_id=11,
+            kind="embedding_rebuild",
+            actor_user_id=7,
+            idempotency_key="pending",
+            request_hash="a" * 64,
+            expected_model_config_revision=4,
+        )
+        session.add(job)
+        with pytest.raises(KnowledgeProcessingConflictError):
+            await load(moving, session)
+        assert job in session.new
