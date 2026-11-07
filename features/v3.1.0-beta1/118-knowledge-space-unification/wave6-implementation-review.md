@@ -317,3 +317,14 @@ EDGE固定0100额外SourcePlan复核：29+41原选集绿，4独立探针+1控制
 5e上传组件在独立MySQL克隆库bisheng_f118_probe_20261107验证通过：复用44f归档（23601ea9…589c）及已逐项AST核相同依赖，唯一overlay的5e模块SHA256 88d0ba4f21d8d3c0205600e321d7b15df2251b6180af9a51928e810422cc78f3。真实root提交ACK、caller hook另Session SELECT1、原私有ACK/fresh rebind和SQL回收commit通过；rollback不能ACK且fresh rebind零SQL拒。仅三表DML/两次显式提交，11表完整行摘要前后同d3ca445f3648b51dd9a7b9800a2db4637f1195de726143cd5e0f4a106c7341be、Run0；自增各推进2属MySQL真实分配行为。证据evidence/upload-registration-5e-mysql-proc-20261107.json（本地/private/tmp/f118-upload-registration-mysql-evidence/，SHA256 d772e5d814cc8a543d587ed0ae8065d46cf027235bfb5a3251f8d13b52808ef7）。这是单模块+44f依赖组件验证，不是全5e部署/Blob/FGA/queue/正式迁移/E2E。原API及worker镜像/启动时间均不变；3005未操作。完整归档传输曾被自动审查拒绝，改为唯一24KB模块+16KB无凭据probe后获审查放行，没有绕过传输。
 
 T899在5ee旧真实入口2真红：缺DI factory AttributeError，实际大小超角色限额仍永久put1次；日志/private/tmp/f118-t899-wiring-red.log。尚未实施T900，不把原cleanup缺fake上下文异常计另一个产品缺陷。
+
+
+## 普通上传实际入口、更新时间与历史重链仓储滚动整合（2026-11-07）
+
+ef7adef App357行由root逐段复核正常合入；原33缺接口红、factory-await身份漂移2红、二次cleanup遮原错3红、可变DTO object key1红分别记录，最终45native/11路径207绿。root原v1 Service+DI及明确旧fixture接线2dca49356：四路径79绿（1093 warnings/5.68秒，/private/tmp/f118-root-space-upload-wiring-final.log/.xml）；含真实SQL+Prepared、实际App/F048 adapter运输隔离、超quota前零新增链、批次取消/失败逆序、unknown commit前后、super selected target覆盖最后原scheduler且恢复raw home/pin。初次组合一旧mock把UserPayload当Actor及hook已不被调用，只改成原F048运输故障；unknown-before fixture的SQLite缺真实BEGIN已修为显式root BEGIN，二者不冒产品红。T897898按App闭合；T899900901入口独审中，目录/网页/历史接线未验收83/84。
+
+用户免DM实跑仍保C2：PERM静态发现现DM unconditional updater会使新File key物化严格旧update_time校验误拒。T906在精确5e父6真红/7首绿；32750生产只3行吸收本次新File实际DB update_time，新receipt其他全部字段/Doc/V1及以后漂移核不放宽。13触发器测试+原89+App45=147、12路径220绿；root完整逐项复核后正常合入。原Doc初始化真实时间原已正确读回。只SQLite真实trigger模拟，不称DM实测；迁移M3保时间/运维规则不变。T906907闭合。
+
+实际rg调用链再核v2 filelib与MCP的两个自行构造Service工厂也调用add_file；§69/T908909只17行原工厂补App，原resolved operator/ambient principal及wire保留，两真缺factory红。6d275b654九路径146绿（1093 warnings/6.63秒，/private/tmp/f118-root-open-upload-timestamp-integrated.log/.xml），含原MCP/v2参数与默认模型回归。filelib RULE-5是原knowledge.api.dependencies跨API导入，准确父与新诊断逐字相同（/private/tmp/f118-open-factory-arch-baseline.txt），新增0；不称该旧文件架构全绿，不加抑制或借本卡扩全局依赖重构。
+
+EDGE fe683e6 Repo523行经root全源码/原业务链非作者审阅后合入；31新native含403/1003链26/44 SELECT及规范ID批，无按版本SQL；每查询至多200 IDs外加显式tenant参数，非声称整查询200参数。主树五路径129绿（1002 warnings/5.56秒，/private/tmp/f118-root-version-mutation-repository-final.log/.xml）。T902903按同TX整链仓储闭合，新App/旧Svc/DI仍未交。初次root128绿/1失配为旧idle对照未声明新upload port；T910仅两行fixture声明必需port/prepare副作用哨兵，原busy/idle断言不改，失配不当产品缺陷或Repo红。

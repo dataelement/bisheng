@@ -148,6 +148,7 @@ async def writes(concrete_tenant, monkeypatch):
         service._require_action = AsyncMock()
         service._require_read_permission = AsyncMock()
         service._initialize_child_resource_permissions = AsyncMock()
+        service.upload_application_factory = MagicMock(side_effect=AssertionError("no app work while busy"))
 
         async def actions(kind, ident, **kwargs):
             return ["move"] if kind == "knowledge_file" else ["upload_file"]
@@ -158,6 +159,7 @@ async def writes(concrete_tenant, monkeypatch):
         fetch = AsyncMock(side_effect=AssertionError("no external fetch while busy"))
         quota = AsyncMock(side_effect=AssertionError("no quota/object work while busy"))
         monkeypatch.setattr(spaces.KnowledgeService, "process_one_file", process)
+        monkeypatch.setattr(spaces.KnowledgeService, "prepare_one_file", process)
         monkeypatch.setattr(spaces.KnowledgeWebLinkImportService, "fetch", fetch)
         monkeypatch.setattr(spaces.QuotaService, "get_knowledge_space_upload_limit_bytes", quota)
         monkeypatch.setattr(spaces.SpaceFileDao, "count_folder_by_name", AsyncMock(return_value=0))

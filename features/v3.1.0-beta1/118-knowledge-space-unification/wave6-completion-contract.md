@@ -959,3 +959,6 @@ areserve/aset_materialized仅本次独立新File；key登记UPDATE后将真实�
 ## 69. 原v2/MCP上传工厂接缝 V1：已冻结
 
 INT T908/909只原open_endpoints/api/endpoints/filelib.py、open_mcp/application.py两个工厂叶与新test_kn_open_upload_wiring.py。实际rg调用链确认除v1 DI外，这两处自行构造SpaceService并调用add_file；必须同样注入每调用新App及独立get_async_db_session、原该Service admit/maker/actor绑定方法。保持原resolved operator及ambient SA/D/MCP principal，不转成web身份、不自己按资源切tenant，不从request-bound Repo Session拼初始链。只factory接线，不改路由/表单/SDK/MCP wire、原资格/回调/解析参数/下载入口，不借本卡重设计协议。构造零SQL、测试缺factory真实红/真实对象与隔离RepoSession验证；既有v2/MCP用例组合，运输fake不当真实E2E。
+
+
+§66原重建冲突fixture补充T910：仅test_kn_rebuild_write_entries.py声明新必需upload_application_factory（若进入即显式失败）并将原副作用哨兵同时接prepare。忙空间仍须在quota/prepare/factory前失败，idle对照仍到原quota哨兵；不以缺port RuntimeError替代原idle行为证明。只fixture对齐，不改断言/production或令假App声称完整上传成功。
