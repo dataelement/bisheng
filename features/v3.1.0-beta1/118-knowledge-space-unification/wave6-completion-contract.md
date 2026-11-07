@@ -1076,3 +1076,8 @@ EDGE T947/T948仅原 knowledge/domain/repositories/reference_target_repository.p
 私有 _tombstone_statements(entries) 接受完整(TargetKey,owner)事实，按(type.value,target_id字符串,owner)全局lex排序/完整元组去重后每批≤200；SQL同ORDER BY，按(type,owner)分组ID IN并同时限定tenant_id及target_tenant_id==owner，禁止独立类型/ID/owner集合交叉配对。缺owner不猜；bind缺row且无original为零RRT，owner_query缺row可用原可信tenant，foreign owner只能来自原实际绑定证据。每批最多200元组不等于总参数≤200（上界至800），T个元组RRT SELECT预算ceil(T/200)。这是RRT由旧逐目标numeric交错改成全局lex锁序；原业务Space→File numeric顺序不变，不宣称物理锁序完全相同。
 
 保持完整ORM/populate_existing/FOR UPDATE、原_deletion、revision(row,parent,direct,ancestor)字节及TargetKey observation顺序。结果按完整(key,owner)映射，异常/重复行明确拒；prelock所有source versions仅锁其union，实际当前版本observation仍只消费该版本original，不混用证据。原_check_prelock、逐目标_check_tombstone_prelock、session.info同TX私有proof与TransactionIdentity边界不变。不加跨调用/版本/TX缓存，不新增flush/commit或clean-session/pending限制，不改R2 writer、FGA、动作、身份、原权限和外部接口。先真实红测试提交、后生产；新旧相关native及语义矩阵、固定非作者复核后闭卡。新测试叶≤600；生产目标保持≤600。下一卡再冻结同Repo便携IN/OR和证据分桶，之后才接KN/Model source_read，禁止本卡越界。
+
+
+## 82. 移动祖先路径沿既有空路径编码 V1：已冻结
+
+PERM固定932b09e3c独立native反例：合法nested tree仅Root目录file_level_path由空串换NULL，移动其后代File就被move_parent_path_invalid误拒；空串对照通过。原SpaceService认可NULL/空串为根路径，两者不构成新业务政策。探针/private/tmp/test_f118_k1_932_independent.py及/private/tmp/f118-perm-k1-932-independent.log保留原样。本卡PROC T949/T950仅原move_scope_repository.py一生产叶及原test_move_scope_repository.py：祖先路径比较用现唯一move_path_ids/path_ids的解析结果和原祖先前缀比较，不直接拿raw None与空串比较、不复制第二路径解析、不改持久原编码。严格非法路径、缺祖先、跨tenant/space、循环/错误level等原断言保留；不增加历史层级修复或新深度限制，不改DTO/hash/FGA/worker。先同等native红测试后实现；Root独立原probe的NULL格转绿、9路径组合与作者外复验后闭卡。另一个历史File在所选folder而主版本在folder外的边界仍独立调查，本卡不偷偷决定其归属。
