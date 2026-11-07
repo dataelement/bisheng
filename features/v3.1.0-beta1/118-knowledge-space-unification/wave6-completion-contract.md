@@ -932,3 +932,16 @@ INT T899/900仅新test/knowledge_unification/test_kn_space_upload_wiring.py、�
 所有项目成功后沿原enqueue_or_dispatch/preview_cache_key/callback_url及文件夹/空间更新时间。初始上传不走J1 reprocess、不要求Space.edit/visible等额外动作、不绑定任务模型。实际格式和内容安全错误仍原解析期保失败完整链。原文件夹跨目录批次、网页覆盖、历史重链的整体事务与收据传递后继另冻，本卡不把T083084整项勾选，也不声明跨外部队列分布式原子性。
 
 测试覆盖真实Service+App+Repo+Prepared/nativeSQL/实际DI，Blob/FGA/队列仅运输隔离；原effective快照/媒体、dedup、大小配额注册前零新增链、批次失败逆序、安全unknown/取消、无业务SQL事务跨IO、可信selected super真实队列tenant及ambient恢复、普通/narrowed/SA越界零写。缺DI/入口仍旧writer须真实红，固定独立复核后主组合，真实MySQL组件证据不冒完整接口E2E。
+
+
+## 67. 原历史link/merge/set-primary原子事务前置 V1：已冻结
+
+EDGE独占T902–905，两新生产叶knowledge/domain/repositories/knowledge_version_mutation_repository.py、knowledge/application/knowledge_version_mutation.py与各自新test_kn_version_mutation_repository.py/test_kn_version_mutation_application.py；每实现卡一叶，各叶≤600，先Repo再App。原VersionService/API/DI此组零修改，后继接线另冻≤2叶。只原link_file_to_document、merge_source_document_into_current、set_primary_version三用例；delete-version/普通上传/移动/Blob/queue/引用删除保护不混入。
+
+Repo锁口alock_link_state(session,*,knowledge_file_id,target_document_id)、alock_merge_state(session,*,current_file_id,source_document_id)、alock_primary_state(session,*,version_id)返回本Repo同nativeSession/TX发行的私有Locked事实；arelink(session,*,state,new_version_no)和aset_primary(session,*,state)只flush、不commit/rollback caller/自开Session、不调用旧自commit仓储。具体事实DTO由同叶声明并交App唯一复用，含实际Source/Target Doc、完整Version与对应File/Root状态；不能由外部裸ID/自造DTO取得重链权。先hint解析关系，再当前具体tenant真实Space→数值排序Doc→Version/File有界规范锁，重读关系拒漂移；ID查询片段≤200，不能每版本查询/独立IN乘积或缺File的INNER丢失。严格tenant/非bypass/no_autoflush，caller pending不覆盖。Doc/Version无tenant列，须完整实际Space/currentTenant/type3及File.tenant/knowledge/type闭包证明。
+
+App构造session_factory与原require_version_management_enabled回调；alink_file(*,login_user,knowledge_file_id,target_document_id)、amerge_document(*,login_user,current_knowledge_file_id,source_document_id)、aset_primary(*,login_user,version_id)。保持真实原UserPayload/actor/context，不自行切tenant/伪造主体。原开关在SQL前读取；每次fresh独占Session单短TX，实际locked Root复用原idle guard，保原源SUCCESS/单版本、目标primary完整、同space、重复MD5和原业务错误/先后语义；next_no锁内max+1。源可无版本的原link规则保留；多版本源继续原现实现拒绝，不按一个过期旧测试放宽。
+
+后端原三write实际只有login dependency+功能开关/业务状态，前端CREATOR/ADMIN按钮不是后端既有gate。本组只整链事务化，沿现入口资格，不新增file.edit/Space.edit/visible或角色门槛，不将缺失的后台权限声称已存在；此处不扩大文件edit适用范围。跨tenant非法链按C3拒，不能借无tenant的Version/Doc访问foreign。事务内新Version、target pointer、旧primary demote、原独立Source Doc/V1清理、similar_status=2一次完成；原File目录/解析快照/对象/索引/BRR均不改，不悄做move。primary保持唯一，foreign/破链/非法多引用原子拒绝。
+
+唯一commit ACK后返回最小结果（document_id/new_version_no或new_primary_version_no及原审计所需space/file名），原Service后继沿原Telemetry。commit unknown停止/保原异常+安全进度，不自动重试或补偿，不能凭返回前异常猜未提交；无外部IO/审计跨业务锁。测试实际native每写阶段失败/外层rollback/唯一primary、缺链/foreign/MD5/次序/开关、401+有界查询及实际App同TX；旧版本测试与精确基线矛盾单列，不删断言假绿。此组辅助原子能力不提前完成T083084或整历史入口/E2E。
