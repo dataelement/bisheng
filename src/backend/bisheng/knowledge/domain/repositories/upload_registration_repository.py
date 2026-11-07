@@ -5,13 +5,12 @@ commit ACK permits fresh local rechecks of their original facts. This is neither
 general file deletion authority nor recovery after losing the private registry.
 """
 
-import asyncio
 import math
 import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
-from weakref import WeakKeyDictionary, WeakSet, ref
+from weakref import WeakKeyDictionary, WeakSet
 
 import sqlalchemy as sa
 from sqlalchemy.exc import SQLAlchemyError
@@ -28,6 +27,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.repositories.upload_commit_observer import UploadCommitObserver, root_transaction
 from bisheng.resource_reference.application.contracts import TransactionIdentity
 
 
@@ -110,12 +110,6 @@ class _Issued:
     initial: bool = True
 
 
-def _root(transaction):
-    while transaction.parent is not None:
-        transaction = transaction.parent
-    return transaction
-
-
 def _input(value):
     if type(value) is not NewUploadFile:
         _blocked("invalid_file_input")
@@ -152,45 +146,7 @@ def _path(value):
 class UploadRegistrationRepository:
     def __init__(self):
         self._issued = WeakKeyDictionary()
-        self._root_commits, self._acknowledged = WeakKeyDictionary(), WeakSet()
-
-    def _observe_root(self, transaction):
-        root = _root(transaction.transaction)
-        if root in self._root_commits:
-            return
-        state = self._root_commits[root] = {"commits": WeakSet(), "ended": False}
-        native, root_ref = transaction.session.sync_session, ref(root)
-        native_ref = ref(native)
-
-        def committed(current):
-            actual = current.get_nested_transaction() or current.get_transaction()
-            if actual is not None and _root(actual) is root_ref():
-                state["commits"].add(actual)
-
-        def remove(_finished=None):
-            task_ref = state.pop("cleanup_task", None)
-            task = task_ref() if task_ref else None
-            if task is not None:
-                task.remove_done_callback(remove)
-            target = native_ref()
-            if target is not None:
-                for name, listener in (("after_commit", committed), ("after_transaction_end", ended)):
-                    if sa.event.contains(target, name, listener):
-                        sa.event.remove(target, name, listener)
-
-        def ended(_current, actual):
-            if actual is root_ref():
-                state["ended"] = True
-                # Later caller hooks may yield through the async SQL bridge.
-                # Only owner-task completion proves their dispatch stack ended.
-                task = asyncio.current_task()
-                if task is not None:
-                    state["cleanup_task"] = ref(task)
-                    task.add_done_callback(remove)
-
-        state["retire"] = remove
-        sa.event.listen(native, "after_commit", committed)
-        sa.event.listen(native, "after_transaction_end", ended)
+        self._commits, self._acknowledged = UploadCommitObserver(), WeakSet()
 
     async def alock_space_for_upload(self, session: AsyncSession, *, space_id: int) -> Knowledge:
         tenant = _scope(session, clean=True)
@@ -364,27 +320,13 @@ class UploadRegistrationRepository:
             or len(registrations) > 200
         ):
             _blocked("invalid_acknowledgement")
-        retire = {}
+        transactions = []
         for receipt in registrations:
             issued = self._original(receipt)
-            transaction = issued.transaction.transaction
-            state = self._root_commits.get(_root(transaction))
-            if (
-                not issued.initial
-                or issued.tenant != tenant
-                or not state
-                or not state["ended"]
-                or issued.transaction.session.in_transaction()
-            ):
+            if not issued.initial or issued.tenant != tenant:
                 _blocked("original_root_commit_required")
-            while transaction is not None:
-                if transaction.is_active or transaction not in state["commits"]:
-                    _blocked("original_root_commit_required")
-                transaction = transaction.parent
-            retire[id(state)] = state["retire"]
-        # The App calls only after its awaited commit returned a definite ACK.
-        for remove in retire.values():
-            remove()
+            transactions.append(issued.transaction)
+        self._commits.acknowledge(tuple(transactions))
         self._acknowledged.update(registrations)
 
     async def _arebind_committed_initial(
@@ -396,7 +338,7 @@ class UploadRegistrationRepository:
             registration not in self._acknowledged
             or issued.tenant != tenant
             or issued.transaction.session is session
-            or _root(issued.transaction.transaction).is_active
+            or root_transaction(issued.transaction.transaction).is_active
         ):
             _blocked("acknowledged_original_required")
         (facts,) = await self._current(session, (registration,), (issued,))
@@ -432,7 +374,7 @@ class UploadRegistrationRepository:
         if not values:
             return ()
         transaction = TransactionIdentity.capture(session)
-        self._observe_root(transaction)
+        self._commits.observe(transaction)
         try:
             async with session.begin_nested():
                 (path, level) = (await self._locations(session, ((space_id, parent_id),)))[(space_id, parent_id)]
