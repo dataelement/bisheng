@@ -83,6 +83,8 @@ async def case(database, monkeypatch, tmp_path):
         allowed={"upload_file"},
         fail=None,
         fail_commit=None,
+        fail_rollback=False,
+        fail_close=False,
         commit_count=0,
         blobs={},
         projection=set(),
@@ -90,6 +92,11 @@ async def case(database, monkeypatch, tmp_path):
     )
 
     class Native(AsyncSession):
+        async def rollback(self):
+            await super().rollback()
+            if value.fail_rollback:
+                raise asyncio.CancelledError()
+
         async def commit(self):
             value.commit_count += 1
             hit = value.fail_commit and value.commit_count == value.fail_commit[0]
@@ -105,13 +112,17 @@ async def case(database, monkeypatch, tmp_path):
 
     @asynccontextmanager
     async def sessions():
-        async with Native(database.engine) as session:
-            value.sessions.append(session)
-            value.active.append(session)
-            try:
-                yield session
-            finally:
-                value.active.remove(session)
+        try:
+            async with Native(database.engine) as session:
+                value.sessions.append(session)
+                value.active.append(session)
+                try:
+                    yield session
+                finally:
+                    value.active.remove(session)
+        finally:
+            if value.fail_close:
+                raise OSError("owned session close transport failed")
 
     value.factory = sessions
 
@@ -527,3 +538,20 @@ async def test_empty_own_rollback_is_zero_business_sql_and_external_io(case, mon
     case.database.queries.clear()
     await application.arollback_created()
     assert not case.database.queries and not case.events and not case.sessions
+
+
+@pytest.mark.parametrize("cleanup", ["rollback_cancel", "close_error", "cancel_and_close"])
+async def test_secondary_owned_session_cleanup_failure_preserves_the_original_error_or_cancellation(
+    case, monkeypatch, cleanup
+):
+    application = app(case, monkeypatch)
+    case.fail_commit = (1, "cancel_before" if cleanup == "cancel_and_close" else "before")
+    case.fail_rollback = cleanup == "rollback_cancel"
+    case.fail_close = cleanup != "rollback_cancel"
+    expected = asyncio.CancelledError if cleanup == "cancel_and_close" else OSError
+    with pytest.raises(expected) as caught:
+        await create(application, case)
+    if expected is OSError:
+        assert "commit ACK unknown" in str(caught.value)
+    assert caught.value.space_upload_progress[0]["commit_outcome"] == "unknown"
+    assert not case.active and not case.blobs and "telemetry" not in case.events
