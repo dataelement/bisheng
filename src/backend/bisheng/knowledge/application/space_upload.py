@@ -24,6 +24,7 @@ from bisheng.core.context.tenant import (
     is_tenant_filter_bypassed,
 )
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.knowledge.application.web_link_upload import PreparedWebLink, WebLinkObject, build_web_link_objects
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import FileSource, KnowledgeFile
 from bisheng.knowledge.domain.repositories.folder_upload_registration_repository import (
@@ -67,6 +68,8 @@ class _Creation:
     acknowledged: bool = False
     rolled_back: bool = False
     blob_attempted: bool = False
+    objects: tuple[WebLinkObject, ...] = ()
+    attempted_objects: tuple[str, ...] = ()
     storage: object = None
     record: object = None
     delete_outcome: str = "not_attempted"
@@ -205,6 +208,7 @@ class SpaceUploadApplication:
 
     async def _register(self, knowledge, parent_id, prepared, file_source):
         entry = None
+        web = type(prepared) is PreparedWebLink
         async with self._session() as session:
             await session.begin()
             try:
@@ -216,11 +220,11 @@ class SpaceUploadApplication:
                     parent_id=parent_id,
                     files=(
                         NewUploadFile(
-                            file_name=prepared.original_file_name,
-                            file_size=prepared.file_size,
-                            md5=prepared.md5,
+                            file_name=prepared.file_name if web else prepared.original_file_name,
+                            file_size=len(prepared.markdown_bytes) if web else prepared.file_size,
+                            md5=prepared.content_hash if web else prepared.md5,
                             split_rule=prepared.split_rule,
-                            file_source=file_source.value,
+                            file_source=FileSource.WEB_LINK.value if web else file_source.value,
                             user_metadata={},
                             user_id=self.user.user_id,
                             user_name=self.user.user_name,
@@ -239,11 +243,18 @@ class SpaceUploadApplication:
                     receipt.version_id,
                 )
                 self._creations.append(entry)
-                key = KnowledgeUtils.get_knowledge_file_object_name(receipt.file.id, receipt.file.file_name)
-                entry.object_name = key
-                entry.registration = await self.repository.areserve_object_key(
-                    session, registration=receipt, object_name=key
-                )
+                if web:
+                    plan = build_web_link_objects(prepared, file_id=receipt.file.id)
+                    entry.objects, entry.object_name = plan.objects, plan.objects[0].name
+                    entry.registration = await self.repository.aset_materialized(
+                        session, registration=receipt, object_name=entry.object_name, user_metadata=plan.user_metadata
+                    )
+                else:
+                    key = KnowledgeUtils.get_knowledge_file_object_name(receipt.file.id, receipt.file.file_name)
+                    entry.object_name = key
+                    entry.registration = await self.repository.areserve_object_key(
+                        session, registration=receipt, object_name=key
+                    )
                 entry.stage, entry.commit_outcome = "commit", "unknown"
                 await session.commit()
                 entry.commit_outcome = "ack"
@@ -263,28 +274,31 @@ class SpaceUploadApplication:
             )
         return entry.record
 
+    async def _admit_destination(self, knowledge, parent_id, file_source=FileSource.SPACE_UPLOAD):
+        if self._stopped:
+            _blocked("invocation_stopped")
+        if (
+            not isinstance(knowledge, Knowledge)
+            or type(knowledge.id) is not int
+            or knowledge.id <= 0
+            or knowledge.type != 3
+        ):
+            _blocked("actual_space_required")
+        if parent_id is not None and (type(parent_id) is not int or parent_id <= 0):
+            _blocked("invalid_parent")
+        if not isinstance(file_source, FileSource):
+            _blocked("actual_file_source_required")
+        await self._check_identity(knowledge.tenant_id)
+        await self.admit(
+            "folder" if parent_id is not None else "knowledge_space", parent_id or knowledge.id, "upload_file"
+        )
+        await self._check_identity(knowledge.tenant_id)
+
     async def acreate_file(
         self, *, knowledge: Knowledge, parent_id: int | None, prepared: PreparedUpload, file_source: FileSource
     ) -> KnowledgeFile:
         try:
-            if self._stopped:
-                _blocked("invocation_stopped")
-            if (
-                not isinstance(knowledge, Knowledge)
-                or type(knowledge.id) is not int
-                or knowledge.id <= 0
-                or knowledge.type != 3
-            ):
-                _blocked("actual_space_required")
-            if parent_id is not None and (type(parent_id) is not int or parent_id <= 0):
-                _blocked("invalid_parent")
-            if not isinstance(file_source, FileSource):
-                _blocked("actual_file_source_required")
-            await self._check_identity(knowledge.tenant_id)
-            await self.admit(
-                "folder" if parent_id is not None else "knowledge_space", parent_id or knowledge.id, "upload_file"
-            )
-            await self._check_identity(knowledge.tenant_id)
+            await self._admit_destination(knowledge, parent_id, file_source)
             entry = await self._register(knowledge, parent_id, prepared, file_source)
             await self._check_identity(entry.tenant_id)
             entry.stage = "telemetry"
@@ -304,6 +318,42 @@ class SpaceUploadApplication:
             entry.stage = "temporary_cleanup"
             KnowledgeService.remove_unused_file(prepared.file_info.file_path)
             await self._check_identity(entry.tenant_id)
+            entry.stage = "projection"
+            adapter = await get_f048_resource_adapter("knowledge_file")
+            actor = await self._check_identity(entry.tenant_id)
+            await adapter.authorize_created(record=self._record(entry, entry.registration.file), actor=actor)
+            await self._check_identity(entry.tenant_id)
+            entry.stage = "created"
+            return entry.registration.file
+        except BaseException as error:
+            self._stopped = True
+            self._report(error)
+            raise
+
+    async def acreate_web_link(
+        self, *, knowledge: Knowledge, parent_id: int | None, prepared: PreparedWebLink
+    ) -> KnowledgeFile:
+        try:
+            await self._admit_destination(knowledge, parent_id, FileSource.WEB_LINK)
+            if type(prepared) is not PreparedWebLink:
+                _blocked("actual_web_material_required")
+            entry = await self._register(knowledge, parent_id, prepared, FileSource.WEB_LINK)
+            await self._check_identity(entry.tenant_id)
+            entry.stage = "blob"
+            entry.storage = get_minio_storage_sync()
+            entry.bucket_name = entry.storage.bucket
+            for item in entry.objects:
+                await self._check_identity(entry.tenant_id)
+                # Even a failed PUT may have persisted its object remotely.
+                entry.attempted_objects += (item.name,)
+                entry.blob_attempted = True
+                entry.storage.put_object_sync(
+                    bucket_name=entry.bucket_name,
+                    object_name=item.name,
+                    file=item.content,
+                    content_type=item.content_type,
+                )
+                await self._check_identity(entry.tenant_id)
             entry.stage = "projection"
             adapter = await get_f048_resource_adapter("knowledge_file")
             actor = await self._check_identity(entry.tenant_id)
@@ -359,22 +409,7 @@ class SpaceUploadApplication:
 
     async def acreate_folder(self, *, knowledge: Knowledge, parent_id: int | None, folder_name: str) -> KnowledgeFile:
         try:
-            if self._stopped:
-                _blocked("invocation_stopped")
-            if (
-                not isinstance(knowledge, Knowledge)
-                or type(knowledge.id) is not int
-                or knowledge.id <= 0
-                or knowledge.type != 3
-            ):
-                _blocked("actual_space_required")
-            if parent_id is not None and (type(parent_id) is not int or parent_id <= 0):
-                _blocked("invalid_parent")
-            await self._check_identity(knowledge.tenant_id)
-            await self.admit(
-                "folder" if parent_id is not None else "knowledge_space", parent_id or knowledge.id, "upload_file"
-            )
-            await self._check_identity(knowledge.tenant_id)
+            await self._admit_destination(knowledge, parent_id)
             entry = await self._register_folder(knowledge, parent_id, folder_name)
             await self._check_identity(entry.tenant_id)
             entry.stage = "projection"
@@ -482,7 +517,8 @@ class SpaceUploadApplication:
                     await self._check_identity(entry.tenant_id)
                     entry.stage = "rollback_blob"
                     if entry.blob_attempted:
-                        entry.storage.remove_object_sync(bucket_name=entry.bucket_name, object_name=entry.object_name)
+                        for key in reversed(entry.attempted_objects or (entry.object_name,)):
+                            entry.storage.remove_object_sync(bucket_name=entry.bucket_name, object_name=key)
                     entry.cleaned, entry.stage = True, "cleaned"
                 except Exception as error:
                     self._report(error)
