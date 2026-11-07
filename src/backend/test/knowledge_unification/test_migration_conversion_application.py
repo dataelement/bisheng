@@ -41,8 +41,8 @@ async def produced(complete, transport, request):
 
 
 class Sessions:
-    def __init__(self, engine, *, fail_at=None, after=False):
-        self.engine, self.fail_at, self.after = engine, fail_at, after
+    def __init__(self, engine, *, fail_at=None, after=False, cancel=False):
+        self.engine, self.fail_at, self.after, self.cancel = engine, fail_at, after, cancel
         self.opened, self.commits = [], 0
 
     @asynccontextmanager
@@ -59,6 +59,10 @@ class Sessions:
                     raise OSError("native commit transport interrupted before acknowledgement")
                 await super().commit()
                 if hit:
+                    if owner.cancel:
+                        import asyncio
+
+                        raise asyncio.CancelledError()
                     raise OSError("native commit transport lost its acknowledgement")
 
         async with Native(self.engine) as session:
@@ -218,3 +222,74 @@ async def test_native_scale_reads_frozen_graph_once_then_pages_once_and_uses_bou
         f"M2-to-SQL files={count} SELECT={len(database.queries)} artifact_GET={sum(gets.values())} "
         f"objects={len(transport.objects)} sessions={len(sessions.opened)}"
     )
+
+
+async def test_second_pass_rechecks_actual_membership_bytes_without_accepting_the_cached_first_pass(
+    module, produced, monkeypatch
+):
+    database, transport, _, _ = produced
+    before = await snapshot(database)
+    original = transport.store.storage.get_object
+    seen = Counter()
+
+    async def changed(**kwargs):
+        key = kwargs["object_name"]
+        seen[key] += 1
+        content = await original(**kwargs)
+        if seen[key] == 2 and b'"section":"conversion"' in content:
+            return b"changed after the complete first pass"
+        return content
+
+    monkeypatch.setattr(transport.store.storage, "get_object", changed)
+    app, _ = application(module, produced)
+    with pytest.raises(ReferenceCoverageNotReadyError) as caught:
+        await app.arun(**arguments(produced))
+    assert caught.value.kwargs["sql_conversion_report"]["stage"] == "read_page"
+    after = await snapshot(database)
+    for table in ("knowledge", "knowledgefile", "knowledge_document", "knowledge_document_version"):
+        assert after[table] == before[table]
+
+
+async def test_cancellation_after_real_domain_writes_rolls_back_the_current_owned_transaction(
+    module, produced, monkeypatch
+):
+    import asyncio
+
+    database, _, _, _ = produced
+    before = await snapshot(database)
+    app, sessions = application(module, produced)
+    actual = app.sql.aapply_batch
+
+    async def cancel(session, **kwargs):
+        result = await actual(session, **kwargs)
+        if get_current_tenant_id() == 101:
+            raise asyncio.CancelledError()
+        return result
+
+    monkeypatch.setattr(app.sql, "aapply_batch", cancel)
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await app.arun(**arguments(produced))
+    assert caught.value.sql_conversion_report["commit_outcome"] == "not_attempted"
+    after = await snapshot(database)
+    for table in ("knowledge", "knowledgefile", "knowledge_document", "knowledge_document_version"):
+        assert after[table] == before[table]
+    tenant = next(row for row in after[Run.__tablename__] if row["tenant_id"] == 101)
+    assert tenant["phase"] == "baseline_frozen" and tenant["checkpoints"] == {}
+    assert all(not session.in_transaction() for session in sessions.opened)
+
+
+async def test_cancel_during_commit_preserves_unknown_report_and_fresh_recovery(module, produced):
+    import asyncio
+
+    database, _, _, count = produced
+    app, _ = application(module, produced, Sessions(database.engine, fail_at=1, after=True, cancel=True))
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await app.arun(**arguments(produced))
+    assert caught.value.sql_conversion_report["commit_outcome"] == "unknown"
+    interrupted = await snapshot(database)
+    assert len(interrupted["knowledge_document"]) == count
+    resumed, _ = application(module, produced)
+    assert (await resumed.arun(**arguments(produced))).sql_complete
+    final = await snapshot(database)
+    assert final["knowledge_document"] == interrupted["knowledge_document"]
+    assert final["knowledge_document_version"] == interrupted["knowledge_document_version"]
