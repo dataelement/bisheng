@@ -1067,3 +1067,12 @@ PROC独立native反例已确认：源Folder50下File90为tenant202/knowledge_id1
 按原MetadataRepo真实ORM owned Root列作C3锚、raw children沿实际FK加入：File/Doc经真实knowledge_id；Version按file-FK、doc-FK读取入口分别锚其实际Root，保证目录被Version引用、缺File/缺Doc/跨tenant坏链可见或以完整已知集合差异明确拒；Tag经File，实际Job/Item/Retry消费如有则沿真实Job/Root关系。不能bypass、TRUE Root×数据假关联或INNER丢坏链后仍签完整scope。未知目录子项必须从真实FK闭集完整枚举；已知ID集合因锚缺失而未返回必须set/count失败，不当成功遗漏。Root锚辅助列不泄到原DTO/摘要；不返回foreign payload给调用者。具体支持模型白名单与原实际消费者一致，新reader/Scope各≤600，不压行，不借此改worker/权限/接口/Hash。
 
 保NoAutoflush/原事务/只读无DML，200 keyseek与实际C3模式，真实Source/Destination Root锁顺序；Native覆盖foreign后代、目录版本、坏Doc/File/FK、Tag/Job已用关系及401/10001规模，原Scope/Schema/P1/Cutover组合必须继续通过。只在全部closed事实通过后签scope/私有receipt。
+
+
+## 81. 知识目标 tombstone 精确元组批锁 V1：已冻结
+
+EDGE T947/T948仅原 knowledge/domain/repositories/reference_target_repository.py 一个生产叶及新 test/knowledge_unification/test_knowledge_target_scale.py。固定2116636cd真实native基线已测：owner401文件802次RRT SELECT、10001文件20002次，prelock401为402次；sync/async一致且零DML。预算反例6真红/原Owner控制1绿，/private/tmp/f118-kn-tombstone-candidate-red.log。本卡只消除该重复tombstone读取，不暗改尚存original_statement的OR、业务大IN、original_for扫描；10001 bind/prelock旧OR深度错误独立保留，不能以owner_query绿冒称整条大集合已通过。
+
+私有 _tombstone_statements(entries) 接受完整(TargetKey,owner)事实，按(type.value,target_id字符串,owner)全局lex排序/完整元组去重后每批≤200；SQL同ORDER BY，按(type,owner)分组ID IN并同时限定tenant_id及target_tenant_id==owner，禁止独立类型/ID/owner集合交叉配对。缺owner不猜；bind缺row且无original为零RRT，owner_query缺row可用原可信tenant，foreign owner只能来自原实际绑定证据。每批最多200元组不等于总参数≤200（上界至800），T个元组RRT SELECT预算ceil(T/200)。这是RRT由旧逐目标numeric交错改成全局lex锁序；原业务Space→File numeric顺序不变，不宣称物理锁序完全相同。
+
+保持完整ORM/populate_existing/FOR UPDATE、原_deletion、revision(row,parent,direct,ancestor)字节及TargetKey observation顺序。结果按完整(key,owner)映射，异常/重复行明确拒；prelock所有source versions仅锁其union，实际当前版本observation仍只消费该版本original，不混用证据。原_check_prelock、逐目标_check_tombstone_prelock、session.info同TX私有proof与TransactionIdentity边界不变。不加跨调用/版本/TX缓存，不新增flush/commit或clean-session/pending限制，不改R2 writer、FGA、动作、身份、原权限和外部接口。先真实红测试提交、后生产；新旧相关native及语义矩阵、固定非作者复核后闭卡。新测试叶≤600；生产目标保持≤600。下一卡再冻结同Repo便携IN/OR和证据分桶，之后才接KN/Model source_read，禁止本卡越界。
