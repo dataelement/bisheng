@@ -115,6 +115,7 @@ def test_native_upgrade_repeats_without_changing_or_deriving_old_actor_facts(exi
                 value = migration()
                 value.upgrade()
                 value.upgrade()
+            migration_statements = tuple(seen)
             reflected = sa.MetaData()
             for name in TABLES:
                 table = sa.Table(name, reflected, autoload_with=connection)
@@ -138,7 +139,9 @@ def test_native_upgrade_repeats_without_changing_or_deriving_old_actor_facts(exi
             indexes = sa.inspect(connection).get_indexes(TABLES[1])
             actual_index = next(item for item in indexes if item["name"] == "ix_kpr_job_subject")
             assert actual_index["column_names"] == INDEX_COLUMNS and not actual_index["unique"]
-            assert not any(re.match(r"\s*SELECT\b.*actor_reference", statement, re.I | re.S) for statement in seen)
+            assert not any(
+                re.match(r"\s*SELECT\b.*actor_reference", statement, re.I | re.S) for statement in migration_statements
+            )
     finally:
         engine.dispose()
 
