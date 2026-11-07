@@ -16,8 +16,14 @@ from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id,
 from bisheng.permission.domain.models import (
     AuthorizationModelRelease,
     PermissionCatalogRelease,
+)
+from bisheng.permission.domain.models import (
     PermissionProjectionOperation as Operation,
+)
+from bisheng.permission.domain.models import (
     PermissionProjectionTuple as TupleRow,
+)
+from bisheng.permission.domain.models import (
     ResourcePermissionMode as Mode,
 )
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
@@ -93,31 +99,31 @@ async def database():
         await connection.run_sync(metadata.create_all)
         await connection.execute(
             sa.insert(AuthorizationModelRelease),
-            dict(
-                id=1,
-                environment="test",
-                store_id="actual-store",
-                model_id="actual-model",
-                model_version="f048",
-                model_checksum="a" * 64,
-                required_relations_checksum="b" * 64,
-                openfga_version="1",
-                status="ACTIVE",
-            ),
+            {
+                "id": 1,
+                "environment": "test",
+                "store_id": "actual-store",
+                "model_id": "actual-model",
+                "model_version": "f048",
+                "model_checksum": "a" * 64,
+                "required_relations_checksum": "b" * 64,
+                "openfga_version": "1",
+                "status": "ACTIVE",
+            },
         )
         await connection.execute(
             sa.insert(PermissionCatalogRelease),
-            dict(
-                id=1,
-                release_key="actual-current",
-                version=1,
-                status="CURRENT",
-                write_fenced=False,
-                required_authorization_model_release_id=1,
-                draft_owner_id=7,
-                idempotency_key="catalog",
-                checksum="c" * 64,
-            ),
+            {
+                "id": 1,
+                "release_key": "actual-current",
+                "version": 1,
+                "status": "CURRENT",
+                "write_fenced": False,
+                "required_authorization_model_release_id": 1,
+                "draft_owner_id": 7,
+                "idempotency_key": "catalog",
+                "checksum": "c" * 64,
+            },
         )
     queries = []
     sa.event.listen(engine.sync_engine, "before_cursor_execute", lambda c, u, sql, p, x, m: queries.append(sql))
@@ -157,18 +163,18 @@ async def seed(database, items, *, status="FINALIZED", commit="f" * 64):
             row.operation_id, row.status = offset, "VERIFIED"
             tuples.append(row.model_dump(exclude={"id", "create_time", "update_time"}))
         modes.append(
-            dict(
-                id=offset,
-                tenant_id=101,
-                resource_type=item.resource_type,
-                resource_id=item.resource_id,
-                mode=item.mode,
-                parent_type=item.after.parent_type,
-                parent_id=item.after.parent_id,
-                version=plan.target_version,
-                projection_state="CURRENT",
-                operation_id=offset,
-            )
+            {
+                "id": offset,
+                "tenant_id": 101,
+                "resource_type": item.resource_type,
+                "resource_id": item.resource_id,
+                "mode": item.mode,
+                "parent_type": item.after.parent_type,
+                "parent_id": item.after.parent_id,
+                "version": plan.target_version,
+                "projection_state": "CURRENT",
+                "operation_id": offset,
+            }
         )
     async with database.engine.begin() as connection:
         await connection.execute(sa.insert(Operation), operations)
@@ -282,7 +288,7 @@ async def test_all_changes_coverage_cannot_be_replaced_by_one_page_and_a_full_di
 
 
 @pytest.mark.parametrize("count", [401, 10001])
-async def test_real_large_ledger_uses_bounded_batches_and_linear_sql(database, count):
+async def test_real_large_ledger_uses_bounded_batches_and_linear_sql(database, count, record_property):
     items, repository = (
         tuple(expectation(i) for i in range(1, count + 1)),
         api().MoveProjectionRepository(environment="test"),
@@ -295,6 +301,8 @@ async def test_real_large_ledger_uses_bounded_batches_and_linear_sql(database, c
     queries = database.queries
     assert all(sql.lstrip().upper().startswith("SELECT") for sql in queries)
     assert len(queries) <= 4 + math.ceil(count / 200) * 18
+    record_property("native_operation_count", count)
+    record_property("native_select_count", len(queries))
     assert not any(" JOIN " in sql.upper() and "permission_projection_tuple" in sql for sql in queries)
 
 
@@ -327,3 +335,53 @@ async def test_parent_states_are_actual_current_and_empty_has_no_io(database):
             await repository.aread_parent_states(session, targets=(("knowledge_file", "2"),))
         with bypass_tenant_filter(), pytest.raises(PermissionPublishNotReadyError):
             await repository.aread_parent_states(session, targets=(("knowledge_file", "1"),))
+
+
+async def test_related_pending_is_rejected_without_flushing_or_refreshing_the_caller(database):
+    item, repository = expectation(), api().MoveProjectionRepository(environment="test")
+    await seed(database, (item,))
+    async with database.sessions() as session, session.begin():
+        original = await session.get(Mode, 1)
+        original.parent_id = "different-caller-work"
+        flushes = []
+        sa.event.listen(session.sync_session, "before_flush", lambda *args: flushes.append(1))
+        with pytest.raises(PermissionPublishNotReadyError):
+            await repository.arequire_finalized(session, job_id=JOB, expectations=(item,), changes_digest=DIGEST)
+        assert not flushes and original.parent_id == "different-caller-work" and original in session.dirty
+        await session.rollback()
+
+
+async def test_foreign_expectations_reject_before_any_native_sql(database):
+    item, repository = expectation(), api().MoveProjectionRepository(environment="test")
+    token = set_current_tenant_id(202)
+    try:
+        async with database.sessions() as session, session.begin():
+            database.queries.clear()
+            with pytest.raises(PermissionPublishNotReadyError):
+                await repository.arequire_finalized(session, job_id=JOB, expectations=(item,), changes_digest=DIGEST)
+            assert not database.queries
+    finally:
+        current_tenant_id.reset(token)
+
+
+async def test_missing_final_page_operation_never_issues_partial_evidence(database):
+    items, repository = tuple(expectation(i) for i in range(1, 402)), api().MoveProjectionRepository(environment="test")
+    await seed(database, items[:-1])
+    async with database.sessions() as session, session.begin():
+        with pytest.raises(PermissionPublishNotReadyError):
+            await repository.arequire_finalized(session, job_id=JOB, expectations=items, changes_digest=DIGEST)
+
+
+async def test_evidence_does_not_allow_pending_permission_mutation_after_issuance(database):
+    item, repository = expectation(), api().MoveProjectionRepository(environment="test")
+    await seed(database, (item,))
+    async with database.sessions() as session, session.begin():
+        evidence = await repository.arequire_finalized(session, job_id=JOB, expectations=(item,), changes_digest=DIGEST)
+        mode = await session.get(Mode, 1)
+        mode.parent_id = "99"
+        with pytest.raises(PermissionPublishNotReadyError):
+            repository.assert_current(
+                evidence, session, job_id=JOB, expected_changes=(change(item),), changes_digest=DIGEST
+            )
+        assert mode in session.dirty
+        await session.rollback()
