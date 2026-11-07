@@ -4,9 +4,11 @@ The existing login/feature/business qualification is preserved. This adds no
 permission action and performs no object, provider, queue or audit I/O.
 """
 
+from contextlib import asynccontextmanager
 from weakref import WeakSet
 
 from fastapi import HTTPException
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -76,41 +78,66 @@ class KnowledgeVersionMutationApplication:
         if _identity(user) != identity:
             _blocked("identity_scope_changed")
 
+    @asynccontextmanager
+    async def _transaction(self):
+        original = None
+        try:
+            async with self.sessions() as session:
+                try:
+                    if not isinstance(session, AsyncSession) or session.in_transaction() or session in self._seen:
+                        _blocked("fresh_native_session_required")
+                    self._seen.add(session)
+                    async with session.begin():
+                        try:
+                            yield session
+                        except BaseException as error:
+                            original = error
+                            raise
+                except BaseException as error:
+                    # Capture commit errors too, before the owning factory's
+                    # rollback/close can replace an uncertain commit outcome.
+                    original = original if original is not None else error
+                    raise
+        except BaseException as error:
+            if original is not None and error is not original:
+                logger.opt(exception=True).error("Version mutation cleanup failed after an original error")
+                raise original
+            raise
+        if original is not None:
+            # A suppressing factory cannot turn body/commit failure into success.
+            raise original
+
     async def _execute(self, user, operation, inputs):
         identity = _identity(user)
         await self.enabled()  # The original feature/config I/O precedes SQL locks.
         self._current(user, identity)
-        async with self.sessions() as session:
-            if not isinstance(session, AsyncSession) or session.in_transaction() or session in self._seen:
-                _blocked("fresh_native_session_required")
-            self._seen.add(session)
-            async with session.begin():
-                self._current(user, identity)
-                if operation == "link":
-                    state = await self.repository.alock_link_state(session, **inputs)
-                    self._link(state)
-                elif operation == "merge":
-                    state = await self.repository.alock_merge_state(session, **inputs)
-                    self._merge(state)
-                else:
-                    state = await self.repository.alock_primary_state(session, **inputs)
-                    self._primary(state)
-                self._current(user, identity)
-                require_space_processing_idle(
-                    state.space,
-                    operation={"link": "link_version", "merge": "merge_versions", "primary": "set_primary_version"}[
-                        operation
-                    ],
-                )
-                if operation == "primary":
-                    result = await self.repository.aset_primary(session, state=state)
-                else:
-                    next_no = max(row.version_no for row in state.target_versions) + 1
-                    result = await self.repository.arelink(session, state=state, new_version_no=next_no)
-                self._current(user, identity)
-            # Returning is after the one awaited root commit ACK. Unknown commit
-            # errors propagate unchanged; never retry or infer a compensating write.
+        async with self._transaction() as session:
             self._current(user, identity)
+            if operation == "link":
+                state = await self.repository.alock_link_state(session, **inputs)
+                self._link(state)
+            elif operation == "merge":
+                state = await self.repository.alock_merge_state(session, **inputs)
+                self._merge(state)
+            else:
+                state = await self.repository.alock_primary_state(session, **inputs)
+                self._primary(state)
+            self._current(user, identity)
+            require_space_processing_idle(
+                state.space,
+                operation={"link": "link_version", "merge": "merge_versions", "primary": "set_primary_version"}[
+                    operation
+                ],
+            )
+            if operation == "primary":
+                result = await self.repository.aset_primary(session, state=state)
+            else:
+                next_no = max(row.version_no for row in state.target_versions) + 1
+                result = await self.repository.arelink(session, state=state, new_version_no=next_no)
+            self._current(user, identity)
+        # Returning is after the one awaited root commit ACK. Unknown commit
+        # errors propagate unchanged; never retry or infer a compensating write.
+        self._current(user, identity)
         return result
 
     @staticmethod
