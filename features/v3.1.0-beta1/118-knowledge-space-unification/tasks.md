@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史938编号：824已完成/历史交付、112当前待办、2外移；原137队列已完成36项、剩101项，另11张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史938编号：831已完成/历史交付、105当前待办、2外移；原137队列已完成38项、剩99项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -685,7 +685,7 @@
   **配对测试**：T081\
   **验证 / 完成条件**：运行配对测试 T081；验证本卡预期，相关范围检查通过。
 
-- [ ] **T083 · 后台文件上传与整版本注册：先写测试**
+- [x] **T083 · 后台文件上传与整版本注册：先写测试**
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_upload.py`（拟新增）\
   **逻辑 / 测试上下文**：同文件前后端版本路径一致，保留历史；失败不留孤立版本或半链，解析期unsupported/内容安全失败保原失败File及完整版本链；相似文档按现有开关选择保留/新版本。\
@@ -693,7 +693,7 @@
   **覆盖 AC**: AC-02, AC-09, AC-10, AC-11, AC-14, AC-43\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T084 · 后台文件上传与整版本注册**
+- [x] **T084 · 后台文件上传与整版本注册**
   **类型 / Owner**：后端 Domain / KN\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
   **逻辑 / 测试上下文**：后台调用同目录/文件夹/网页/新版本用例，沿既有审批、内容安全、格式/大小/深度/重名/配额与开关；统一 document/version 关系，只有成功主版本检索；effective快照共用原SSOT，初始上传保原scheduler，不套空间edit的J1重处理。\
@@ -7533,7 +7533,7 @@
   **配对测试**：T930\
   **验证 / 完成条件**：新叶≤600/static、固定非作者复核和主组合；不提前验收移动入口。
 
-- [ ] **T932 · 网页同次初始 App 与自有双对象测试**
+- [x] **T932 · 网页同次初始 App 与自有双对象测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_space_web_link_upload_application.py`\
   **逻辑 / 测试上下文**：W6§76 native初始链与两对象同receipt，失败/未知ACK/原身份/无事务跨IO。\
@@ -7541,7 +7541,7 @@
   **覆盖 AC**: AC-02, AC-09, AC-10, AC-43\
   **验证 / 完成条件**：真实红绿或首绿明确记录，固定非作者复核及相关native组合；不以局部证明冒整卡/E2E。
 
-- [ ] **T933 · 网页同次初始上传 App**
+- [x] **T933 · 网页同次初始上传 App**
   **类型 / Owner**：后端 Application / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/application/space_upload.py`\
   **逻辑 / 测试上下文**：W6§76唯一_register闭集分支与有界attempted keys，普通/Folder不变。\
@@ -7549,7 +7549,7 @@
   **配对测试**：T932\
   **验证 / 完成条件**：真实红绿或首绿明确记录，固定非作者复核及相关native组合；不以局部证明冒整卡/E2E。
 
-- [ ] **T934 · 网页实际规则和原入口接线测试**
+- [x] **T934 · 网页实际规则和原入口接线测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_space_web_link_wiring.py`\
   **逻辑 / 测试上下文**：W6§77真实SSOT snapshot/HTTP/native链/原去重/覆写边界/tenant/queue。\
@@ -7557,7 +7557,7 @@
   **覆盖 AC**: AC-02, AC-09, AC-10, AC-11, AC-43\
   **验证 / 完成条件**：真实红绿或首绿明确记录，固定非作者复核及相关native组合；不以局部证明冒整卡/E2E。
 
-- [ ] **T935 · 网页实际规则和原入口接线**
+- [x] **T935 · 网页实际规则和原入口接线**
   **类型 / Owner**：后端 Domain / INT\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`\
   **逻辑 / 测试上下文**：W6§77原fetch/quota/dedup和scheduler保留，新建同App，覆写只原ID/完整性/规则窄接线。\
@@ -7565,7 +7565,7 @@
   **配对测试**：T934\
   **验证 / 完成条件**：真实红绿或首绿明确记录，固定非作者复核及相关native组合；不以局部证明冒整卡/E2E。
 
-- [ ] **T936 · 原网页去重夹具适配实际身份和Root**
+- [x] **T936 · 原网页去重夹具适配实际身份和Root**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge/test_web_link_import_dedup.py`\
   **逻辑 / 测试上下文**：W6§77只必要原夹具适配，三个原错误与优先级仍真实验证；原fetch测试不改。\

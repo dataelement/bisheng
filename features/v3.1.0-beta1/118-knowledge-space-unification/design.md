@@ -832,7 +832,7 @@ Skill的可见性不能兼任全局enabled状态：真实使用/选择边界avai
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史938编号：824已完成/历史交付、112当前待办、2外移；原137队列已完成36项、剩101项，另11张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史938编号：831已完成/历史交付、105当前待办、2外移；原137队列已完成38项、剩99项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -878,3 +878,6 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 初始上传commit收据组件已在独立MySQL克隆库验证真实提交回调/私有重绑定/SQL回收，11表完整行前后一致，自增各推进2；只5e模块+44f等价依赖，不是完整部署或升级验证。完整固定摘要及环境边界见[W6记录](./wave6-implementation-review.md)，原Service/DI按[§66](./wave6-completion-contract.md#66-原space普通上传入口与实际di接线-v1已冻结)实施中。
 
 当前实施增量：普通上传已通过实际v1/v2/MCP工厂消费原子File/Doc/V1应用，版本link/merge/set-primary已改为单短事务且保原资格/响应/审计，入口独立复核中。新File物化采用实际数据库更新时间，兼容现有无条件updater；不影响迁移M3保旧时间。固定4fba完整4554绿/7原占位skip，后继版本入口189项组合绿；这两快照不相加，完整记录见[W6](./wave6-implementation-review.md)。目录/网页整链、移动/删除、namespace/回填/Coverage和完整E2E仍待实现。
+
+
+网页初始上传已复用同一短事务注册和私有提交收据，Markdown/HTML实际key及metadata与File/Doc/V1一起提交；释放Session后才对象/FGA，预派发失败按收据核链并逆序清理。网页覆写保原FileID/完整DocV关系及原对象覆盖失败语义，只先核现完整链并使用实际空间规则/预览缓存指纹；不承诺Blob覆盖自动恢复。目录整批统一派发及初始上传后端已独立复核，真实迁移/恢复和完整E2E仍待实施。证据见W6记录。

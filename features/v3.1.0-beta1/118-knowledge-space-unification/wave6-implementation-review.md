@@ -373,3 +373,15 @@ T921/T922/T923固定非作者复核闭合：EDGE全读8aac6e4b6及5940a3c72旧fi
 - P1固定8e3be041e23737716e576e84e94b44bc7575c91f已root完整读Repo489/bridge252和合流。原Runtime/State/projection policy零修改；CURRENT SQL pin、原plan/tuple校验、native FINALIZED+CURRENT完整coverage及同TX issuer evidence、PREPARED原窄保留和FAILED_CLOSED原确认恢复。S operator沿subject原alias。native401/10001实际22/454 SELECT，无Tuple笛卡尔积。
 - 作者原Repo29缺模块红，真实33绿；bridge原FK夹具错误先纠正后8纯缺模块红，取消11组合1红、prepare-only/other-op/parent/version16组合5红均已固定后绿。root在f74c6b43c1641f90b494b325d71385410f48ec82同六路径89 passed /64 warnings/11.49s，`/private/tmp/f118-root-move-projection.log`/`.xml`，含新Repo33/bridge16及原projection service/sql runtime/business source/reconcile CLI40。T924/T925闭合，K1真实证据消费、J1/Owner/worker/入口仍未闭。
 - Web入口T934测试1e295ea32已记录2红，日志`/private/tmp/f118-t934-web-entry-red.log`：实际规则仍1000而空间800；原legacy投影夹具不经过新App端口（未raise新端口注入的异常）。第二例是新接线缺失的端口证据，不声称旧实际FGA投影不运行。§76新App/§77根入口按冻结依赖继续，本轮主树这两个未实施接线测试仍预期红，不能称当前全树全绿。
+
+
+### Web真实初始链、规则及覆写接线闭合（2026-11-07）
+
+- T932新19例缺acreate_web_link真红，12eae69858d1e3796484f267d6bada91a8e73b0e后绿，App534行。root全读单App差异及263测试行并合流。原身份/session/observer/Folder流程保留，唯一_register闭集分支同TXFile/DocV1+md key/HTMLmetadata，ACK/释放SQL后两PUT/FGA；只自有attempted keys在SQL删除ACK后逆序回收，空HTML不误删，unknown/链变不猜。
+- 根Service567196d31使用实际system→space SSOT及Web专用11separators/after/overlap0，保存_effective_processing/config_version；preview fingerprint绑定实际保存rule+原content hash。整个fetch/去重/Markdown quota/创建/覆写/queue/time都在原具体tenant/pin内，User.home/actor不变。覆写只用现VersionReadRepo先校验完整链，原FileID/DocV/primary/历史/两个旧key覆盖及失败语义保持；不增file.edit或版本移动。删除了仅Web新建自commit writer和已无caller的专用cleanup/helper，未顺带修改其他旧入口。
+- T934初2红为规则1000未继承800/新App投影端口未接；后扩展10例第一遍6失败源于材料叶仍被conftest替成Mock Utils，夹具改用实际source_module Utils后10 passed /396 warnings/1.21s，`/private/tmp/f118-t935-web-entry-corrected.log`，不把夹具错误称产品红。
+- T936旧3FakeUser/浅Root在新具体factory边界3失败；10f62a125改真实首次创建、原DAO wraps与完整SQL前后对账，三个原duplicate/name错误及优先级保留。root21路径（作者原15上传路径+实际Web入口、rebuild早拒、原Web dedup/fetch、旧folder/API）380 passed /3592 warnings/18.33s，`/private/tmp/f118-root-web-entry-combined.log`/`.xml`。原版本43、普通/开放工厂及原全量4715是各历史选集，不累计。
+- EDGE非作者固定567196d3106184daaed58ae460d02421b27a1965全读入口+10例，新增7独立场景合17 passed（`/private/tmp/f118-edge-web-wiring-567196-independent-corrected.log`）：真实system默认且batch显式空、folder-only upload_file、投影取消+inverse二错保主错、overwrite第二HTML PUT unknown保SQL/旧key、历史File移folder保Doc.path/其他版本、rebuild早拒、queue后timestamp失败不逆删。其新增probe最初误用不存在FOLDER枚举修为DIR后的17绿，非产品红。T936单叶也已独立读无阻塞。
+- T932–936与原Backend上传/整版本注册T083/T084闭合：普通文件、版本link/merge/primary、folder整批、Web新建/覆写及原v1/v2/MCP共用已装配后端用例。此为后端卡完成，不代表前端改造、94AC完整验收、正式迁移或真实E2E完成。
+- 扩展开放回归尝试首次误写不存在test_filelib_upload_overrides路径，收集为0不计验证。实际3路径（kn_open_upload_wiring、v2_filelib_unified、open_mcp/upload）为38 passed/2 failed；2个失败是QA/旧type0 clear FakeUser在既有ModelReference._user拒绝，`/private/tmp/f118-root-web-open-regression-corrected.log`。六涉事删除/prepare/_user/旧fixture函数与8aac基线AST逐项不变，未重跑实库基线故不声称基线已通过。完整QA/旧删除clear卡T093/T094、T125/T126仍待办，后继必须适配真实身份及R2；不为本上传波放宽生产门槛或跳过测试。
+- Scope系统Web键丢失由root实际native独立反例1红确认，按§78纯helper修至d44ef后原probe原样1绿（12warnings/.32s），`/private/tmp/f118-move-web-key-private-fixed.log`。Scope/K1尚未主合；相关卡仍待真正Cutover固定与主组合，不提前关闭移动任务。
