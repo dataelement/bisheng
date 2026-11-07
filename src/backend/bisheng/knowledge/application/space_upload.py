@@ -26,6 +26,10 @@ from bisheng.core.context.tenant import (
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import FileSource, KnowledgeFile
+from bisheng.knowledge.domain.repositories.folder_upload_registration_repository import (
+    FolderUploadRegistrationRepository,
+    NewUploadFolder,
+)
 from bisheng.knowledge.domain.repositories.upload_registration_repository import (
     NewUploadFile,
     UploadRegistrationRepository,
@@ -54,8 +58,8 @@ class _Creation:
     parent_type: str
     parent_id: int
     file_id: int
-    document_id: int
-    version_id: int
+    document_id: int | None
+    version_id: int | None
     object_name: str | None = None
     bucket_name: str | None = None
     stage: str = "registered"
@@ -71,7 +75,15 @@ class _Creation:
 
 class SpaceUploadApplication:
     def __init__(
-        self, *, login_user, session_factory, admit_upload, make_permission_record, actor_provider, repository=None
+        self,
+        *,
+        login_user,
+        session_factory,
+        admit_upload,
+        make_permission_record,
+        actor_provider,
+        repository=None,
+        folder_repository=None,
     ):
         if not isinstance(login_user, UserPayload) or not all(
             callable(value) for value in (session_factory, admit_upload, make_permission_record, actor_provider)
@@ -79,12 +91,18 @@ class SpaceUploadApplication:
             _blocked("original_identity_and_ports_required")
         if repository is not None and not isinstance(repository, UploadRegistrationRepository):
             _blocked("actual_registration_repository_required")
+        if folder_repository is not None and not isinstance(folder_repository, FolderUploadRegistrationRepository):
+            _blocked("actual_folder_repository_required")
         self.user, self.sessions = login_user, session_factory
         self.admit, self.make_record, self.actor_provider = admit_upload, make_permission_record, actor_provider
         self.repository = repository if repository is not None else UploadRegistrationRepository()
+        self.folder_repository = (
+            folder_repository if folder_repository is not None else FolderUploadRegistrationRepository()
+        )
         self.identity = AuthenticatedSourceReadIdentity()
         self._original_identity, self._stopped = None, False
         self._creations, self._seen = [], WeakSet()
+        self._folders = []
 
     async def _check_identity(self, tenant):
         if (
@@ -164,7 +182,7 @@ class SpaceUploadApplication:
                     "cleaned",
                 )
             }
-            for item in self._creations
+            for item in (*self._creations, *self._folders)
         )
 
     def _report(self, error):
@@ -238,10 +256,10 @@ class SpaceUploadApplication:
                 raise
         return entry
 
-    def _record(self, entry, row):
+    def _record(self, entry, row, *, resource_type="knowledge_file"):
         if entry.record is None:
             entry.record = self.make_record(
-                row=row, resource_type="knowledge_file", parent_type=entry.parent_type, parent_id=entry.parent_id
+                row=row, resource_type=resource_type, parent_type=entry.parent_type, parent_id=entry.parent_id
             )
         return entry.record
 
@@ -302,6 +320,124 @@ class SpaceUploadApplication:
         async with self._session() as session, session.begin():
             await self.repository._arebind_committed_initial(session, registration=entry.registration)
 
+    async def _register_folder(self, knowledge, parent_id, folder_name):
+        entry = None
+        async with self._session() as session:
+            await session.begin()
+            try:
+                actual = await self.repository.alock_space_for_upload(session, space_id=knowledge.id)
+                require_space_processing_idle(actual, operation="upload_folder_items")
+                registration = await self.folder_repository.aregister_folder(
+                    session,
+                    space_id=actual.id,
+                    parent_id=parent_id,
+                    folder=NewUploadFolder(
+                        folder_name, self.user.user_id, self.user.user_name, self.user.user_id, self.user.user_name
+                    ),
+                )
+                entry = _Creation(
+                    registration,
+                    actual.tenant_id,
+                    "folder" if parent_id is not None else "knowledge_space",
+                    parent_id if parent_id is not None else actual.id,
+                    registration.file.id,
+                    None,
+                    None,
+                )
+                self._folders.append(entry)
+                entry.stage, entry.commit_outcome = "commit", "unknown"
+                await session.commit()
+                entry.commit_outcome = "ack"
+                entry.registration = self.folder_repository._acknowledge_committed_folder(registration=registration)
+                entry.acknowledged, entry.stage = True, "committed"
+            except BaseException:
+                rolled_back = await self._rollback_owned(session)
+                if entry is not None and entry.commit_outcome == "not_attempted":
+                    entry.rolled_back = rolled_back
+                raise
+        return entry
+
+    async def acreate_folder(self, *, knowledge: Knowledge, parent_id: int | None, folder_name: str) -> KnowledgeFile:
+        try:
+            if self._stopped:
+                _blocked("invocation_stopped")
+            if (
+                not isinstance(knowledge, Knowledge)
+                or type(knowledge.id) is not int
+                or knowledge.id <= 0
+                or knowledge.type != 3
+            ):
+                _blocked("actual_space_required")
+            if parent_id is not None and (type(parent_id) is not int or parent_id <= 0):
+                _blocked("invalid_parent")
+            await self._check_identity(knowledge.tenant_id)
+            await self.admit(
+                "folder" if parent_id is not None else "knowledge_space", parent_id or knowledge.id, "upload_file"
+            )
+            await self._check_identity(knowledge.tenant_id)
+            entry = await self._register_folder(knowledge, parent_id, folder_name)
+            await self._check_identity(entry.tenant_id)
+            entry.stage = "projection"
+            adapter = await get_f048_resource_adapter("folder")
+            actor = await self._check_identity(entry.tenant_id)
+            await adapter.authorize_created(
+                record=self._record(entry, entry.registration.file, resource_type="folder"), actor=actor
+            )
+            await self._check_identity(entry.tenant_id)
+            entry.stage = "created"
+            return entry.registration.file
+        except BaseException as error:
+            self._stopped = True
+            self._report(error)
+            raise
+
+    async def _folder_delete_sql(self, entry):
+        async with self._session() as session:
+            await session.begin()
+            try:
+                local = await self.folder_repository._arebind_owned_empty_folder(
+                    session, registration=entry.registration
+                )
+                await self.folder_repository.arollback_created_empty(session, receipt=local)
+                entry.delete_outcome = "unknown"
+                await session.commit()
+                entry.delete_outcome = "ack"
+            except BaseException:
+                await self._rollback_owned(session)
+                raise
+
+    async def _rollback_folders(self):
+        errors = []
+        for entry in reversed(self._folders):
+            if entry.cleaned or entry.rolled_back:
+                continue
+            try:
+                if entry.delete_outcome != "not_attempted":
+                    _blocked("cleanup_result_requires_reconciliation")
+                await self._check_identity(entry.tenant_id)
+                entry.stage = "rollback_precheck"
+                async with self._session() as session, session.begin():
+                    await self.folder_repository._arebind_owned_empty_folder(session, registration=entry.registration)
+                await self._check_identity(entry.tenant_id)
+                entry.stage = "rollback_projection"
+                adapter = await get_f048_resource_adapter("folder")
+                actor = await self._check_identity(entry.tenant_id)
+                await adapter.rollback_created(
+                    record=self._record(entry, entry.registration.file, resource_type="folder"), actor=actor
+                )
+                await self._check_identity(entry.tenant_id)
+                entry.stage = "rollback_sql"
+                await self._folder_delete_sql(entry)
+                await self._check_identity(entry.tenant_id)
+                entry.cleaned, entry.stage = True, "cleaned"
+            except Exception as error:
+                self._report(error)
+                errors.append(error)
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise ExceptionGroup("Folder upload compensation failed", errors)
+
     async def _delete_sql(self, entry):
         async with self._session() as session:
             await session.begin()
@@ -320,7 +456,10 @@ class SpaceUploadApplication:
         try:
             # An unknown original COMMIT supplies neither an ACK receipt nor
             # permission to infer absence and perform destructive compensation.
-            if any(not row.cleaned and not row.rolled_back and not row.acknowledged for row in self._creations):
+            if any(
+                not row.cleaned and not row.rolled_back and not row.acknowledged
+                for row in (*self._creations, *self._folders)
+            ):
                 _blocked("unacknowledged_creation")
             errors = []
             for entry in reversed(self._creations):
@@ -352,6 +491,8 @@ class SpaceUploadApplication:
                 raise errors[0]
             if errors:
                 raise ExceptionGroup("Initial upload compensation failed", errors)
+            # Files must be confirmed gone before any owned parent folder.
+            await self._rollback_folders()
         except BaseException as error:
             self._report(error)
             raise
