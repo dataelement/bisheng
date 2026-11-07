@@ -497,3 +497,25 @@ async def test_invalid_persisted_schema_returns_a_domain_conflict(moving):
     async with AsyncSession(moving.engine) as session:
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await load(moving, session)
+
+
+@pytest.mark.parametrize(
+    "key", ["source_type", "source_url", "final_url", "web_title", "imported_at", "html_snapshot_object_name"]
+)
+async def test_web_system_keys_survive_collision_while_ordinary_custom_values_are_removed(moving, key):
+    with Session(moving.sync) as session:
+        root = session.get(Knowledge, 10)
+        root.metadata_fields = [*root.metadata_fields, {"field_name": key, "field_type": "string"}]
+        ordinary = session.get(KnowledgeFile, 81)
+        ordinary.user_metadata = {
+            **ordinary.user_metadata,
+            key: {"field_type": "string", "field_value": "ordinary-custom"},
+        }
+        web = session.get(KnowledgeFile, 82)
+        web.user_metadata = {**web.user_metadata, key: "stable-web-system"}
+        session.commit()
+    async with AsyncSession(moving.engine) as session:
+        scope = await load(moving, session)
+        rows = {row.file_id: row for row in scope.files}
+        assert key not in rows[81].after["user_metadata"]
+        assert rows[82].after["user_metadata"][key] == "stable-web-system"
