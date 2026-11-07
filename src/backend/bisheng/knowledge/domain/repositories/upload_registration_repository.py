@@ -1,15 +1,17 @@
 """Initial upload SQL chains; the caller owns authorization, objects and commit.
 
-Receipts cover only chains created by this instance in the current transaction.
-They are neither general file deletion authority nor cross-transaction recovery.
+Local receipts cover only this instance's initial upload chains. Explicit root
+commit ACK permits fresh local rechecks of their original facts. This is neither
+general file deletion authority nor recovery after losing the private registry.
 """
 
+import asyncio
 import math
 import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, WeakSet, ref
 
 import sqlalchemy as sa
 from sqlalchemy.exc import SQLAlchemyError
@@ -105,6 +107,13 @@ class _Issued:
     parent_id: int | None
     file: KnowledgeFile
     facts: tuple[dict, dict, dict]
+    initial: bool = True
+
+
+def _root(transaction):
+    while transaction.parent is not None:
+        transaction = transaction.parent
+    return transaction
 
 
 def _input(value):
@@ -143,6 +152,56 @@ def _path(value):
 class UploadRegistrationRepository:
     def __init__(self):
         self._issued = WeakKeyDictionary()
+        self._root_commits, self._acknowledged = WeakKeyDictionary(), WeakSet()
+
+    def _observe_root(self, transaction):
+        root = _root(transaction.transaction)
+        if root in self._root_commits:
+            return
+        state = self._root_commits[root] = {"commits": WeakSet(), "ended": False}
+        native, root_ref = transaction.session.sync_session, ref(root)
+        native_ref = ref(native)
+
+        def committed(current):
+            actual = current.get_nested_transaction() or current.get_transaction()
+            if actual is not None and _root(actual) is root_ref():
+                state["commits"].add(actual)
+
+        def remove(_finished=None):
+            task_ref = state.pop("cleanup_task", None)
+            task = task_ref() if task_ref else None
+            if task is not None:
+                task.remove_done_callback(remove)
+            target = native_ref()
+            if target is not None:
+                for name, listener in (("after_commit", committed), ("after_transaction_end", ended)):
+                    if sa.event.contains(target, name, listener):
+                        sa.event.remove(target, name, listener)
+
+        def ended(_current, actual):
+            if actual is root_ref():
+                state["ended"] = True
+                # Later caller hooks may yield through the async SQL bridge.
+                # Only owner-task completion proves their dispatch stack ended.
+                task = asyncio.current_task()
+                if task is not None:
+                    state["cleanup_task"] = ref(task)
+                    task.add_done_callback(remove)
+
+        state["retire"] = remove
+        sa.event.listen(native, "after_commit", committed)
+        sa.event.listen(native, "after_transaction_end", ended)
+
+    async def alock_space_for_upload(self, session: AsyncSession, *, space_id: int) -> Knowledge:
+        tenant = _scope(session, clean=True)
+        if not _positive(space_id):
+            _blocked("invalid_location")
+        rows = await self._read(
+            session, sa.select(Knowledge.__table__).where(Knowledge.id == space_id, Knowledge.tenant_id == tenant)
+        )
+        if len(rows) != 1 or rows[0]["type"] != 3:
+            _blocked("space_missing_or_changed")
+        return Knowledge(**deepcopy(rows[0]))
 
     @staticmethod
     async def _read(session, statement):
@@ -271,15 +330,10 @@ class UploadRegistrationRepository:
         file, doc, version = facts
         return RegisteredUpload(KnowledgeFile(**deepcopy(file)), doc["id"], version["id"])
 
-    def _claim(self, session, receipt):
-        tenant = _scope(session, clean=True)
+    def _original(self, receipt):
         issued = self._issued.get(receipt) if type(receipt) is RegisteredUpload else None
-        if issued is None or issued.tenant != tenant or receipt.file is not issued.file:
+        if issued is None or receipt.file is not issued.file:
             _blocked("unissued_receipt")
-        try:
-            issued.transaction.assert_current(session)
-        except (TypeError, ValueError):
-            _blocked("receipt_transaction_changed")
         if (
             not _positive(receipt.document_id)
             or not _positive(receipt.version_id)
@@ -289,6 +343,68 @@ class UploadRegistrationRepository:
         ):
             _blocked("receipt_changed")
         return issued
+
+    def _claim(self, session, receipt):
+        tenant = _scope(session, clean=True)
+        issued = self._original(receipt)
+        if issued.tenant != tenant:
+            _blocked("receipt_scope_changed")
+        try:
+            issued.transaction.assert_current(session)
+        except (TypeError, ValueError):
+            _blocked("receipt_transaction_changed")
+        return issued
+
+    def _acknowledge_committed_initial(self, *, registrations: tuple[RegisteredUpload, ...]) -> None:
+        tenant = get_current_tenant_id()
+        if (
+            not _positive(tenant)
+            or is_tenant_filter_bypassed()
+            or type(registrations) is not tuple
+            or len(registrations) > 200
+        ):
+            _blocked("invalid_acknowledgement")
+        retire = {}
+        for receipt in registrations:
+            issued = self._original(receipt)
+            transaction = issued.transaction.transaction
+            state = self._root_commits.get(_root(transaction))
+            if (
+                not issued.initial
+                or issued.tenant != tenant
+                or not state
+                or not state["ended"]
+                or issued.transaction.session.in_transaction()
+            ):
+                _blocked("original_root_commit_required")
+            while transaction is not None:
+                if transaction.is_active or transaction not in state["commits"]:
+                    _blocked("original_root_commit_required")
+                transaction = transaction.parent
+            retire[id(state)] = state["retire"]
+        # The App calls only after its awaited commit returned a definite ACK.
+        for remove in retire.values():
+            remove()
+        self._acknowledged.update(registrations)
+
+    async def _arebind_committed_initial(
+        self, session: AsyncSession, *, registration: RegisteredUpload
+    ) -> RegisteredUpload:
+        tenant = _scope(session, clean=True)
+        issued = self._original(registration)
+        if (
+            registration not in self._acknowledged
+            or issued.tenant != tenant
+            or issued.transaction.session is session
+            or _root(issued.transaction.transaction).is_active
+        ):
+            _blocked("acknowledged_original_required")
+        (facts,) = await self._current(session, (registration,), (issued,))
+        receipt = self._receipt(facts)
+        self._issued[receipt] = _Issued(
+            TransactionIdentity.capture(session), tenant, issued.parent_id, receipt.file, facts, False
+        )
+        return receipt
 
     async def _current(self, session, receipts, issued):
         keys = tuple(dict.fromkeys((item.facts[0]["knowledge_id"], item.parent_id) for item in issued))
@@ -316,6 +432,7 @@ class UploadRegistrationRepository:
         if not values:
             return ()
         transaction = TransactionIdentity.capture(session)
+        self._observe_root(transaction)
         try:
             async with session.begin_nested():
                 (path, level) = (await self._locations(session, ((space_id, parent_id),)))[(space_id, parent_id)]
@@ -368,6 +485,14 @@ class UploadRegistrationRepository:
             self._issued[receipt] = _Issued(transaction, tenant, parent_id, receipt.file, fact)
         return receipts
 
+    async def areserve_object_key(
+        self, session: AsyncSession, *, registration: RegisteredUpload, object_name: str
+    ) -> RegisteredUpload:
+        issued = self._claim(session, registration)
+        if issued.facts[0]["object_name"] not in (None, ""):
+            _blocked("object_key_already_reserved")
+        return await self.aset_materialized(session, registration=registration, object_name=object_name)
+
     async def aset_materialized(
         self,
         session: AsyncSession,
@@ -406,7 +531,9 @@ class UploadRegistrationRepository:
                 receipt = self._receipt(current)
         except SQLAlchemyError as error:
             raise KnowledgeOperationPlanConflictError(reason="upload_registration_materialization_failed") from error
-        self._issued[receipt] = _Issued(issued.transaction, issued.tenant, issued.parent_id, receipt.file, current)
+        self._issued[receipt] = _Issued(
+            issued.transaction, issued.tenant, issued.parent_id, receipt.file, current, issued.initial
+        )
         del self._issued[registration]
         return receipt
 
