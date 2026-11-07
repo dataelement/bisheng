@@ -283,3 +283,57 @@ async def test_caller_active_session_cannot_be_borrowed_as_a_fresh_application_s
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await invoke(built.app, "link")
         assert caller.in_transaction() and not database.queries
+
+
+async def test_unknown_commit_is_preserved_when_factory_close_also_fails(database):
+    original = RuntimeError("original commit ACK unavailable")
+    calls = []
+
+    @asynccontextmanager
+    async def sessions():
+        calls.append(1)
+        session = AsyncSession(database.engine)
+
+        def lost_ack(_session):
+            raise original
+
+        sa.event.listen(session.sync_session, "after_commit", lost_ack)
+        try:
+            yield session
+        finally:
+            await session.close()
+            raise OSError("secondary factory close unavailable")
+
+    with pytest.raises(RuntimeError, match="original commit ACK") as caught:
+        await invoke(build(database, session_factory=sessions).app, "link")
+    assert caught.value is original and calls == [1]
+    after = await native_tests.snapshot(database)
+    assert len([row for row in after["knowledge_document_version"] if row["document_id"] == 20]) == 3
+
+
+async def test_original_business_error_is_preserved_when_native_transaction_rollback_fails(database, monkeypatch):
+    await corrupt(database, "source_failed")
+    before, rolled_back = await native_tests.snapshot(database), []
+
+    @asynccontextmanager
+    async def sessions():
+        async with AsyncSession(database.engine) as session:
+
+            def root_created(_session, transaction):
+                if transaction.parent is not None:
+                    return
+                original_rollback = transaction.rollback
+
+                def failed_reply(*args, **kwargs):
+                    original_rollback(*args, **kwargs)  # Actual native rollback runs first.
+                    rolled_back.append(1)
+                    raise OSError("secondary transaction rollback unavailable")
+
+                monkeypatch.setattr(transaction, "rollback", failed_reply)
+
+            sa.event.listen(session.sync_session, "after_transaction_create", root_created)
+            yield session
+
+    with pytest.raises(VersionLinkFileNotReadyError):
+        await invoke(build(database, session_factory=sessions).app, "link")
+    assert rolled_back == [1] and await native_tests.snapshot(database) == before
