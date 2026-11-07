@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, KnowledgeOperationPlanChangedError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError, KnowledgeOperationPlanConflictError
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.knowledge.domain.repositories.move_cutover_repository import MoveCutoverRepository

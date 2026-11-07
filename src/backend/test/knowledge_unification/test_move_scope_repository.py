@@ -472,3 +472,28 @@ async def test_pending_item_can_not_break_a_released_input_inside_the_delete_tra
             with pytest.raises(KnowledgeProcessingConflictError):
                 await moving.repo.aassert_no_unsettled_move_inputs(session, 10)
             assert item in session.dirty
+
+
+async def test_primary_physical_location_must_match_the_logical_document(moving):
+    with Session(moving.sync) as session:
+        session.add(
+            KnowledgeFile(
+                id=60, tenant_id=101, knowledge_id=10, file_type=0, file_name="outside", file_level_path="", level=0
+            )
+        )
+        session.get(KnowledgeFile, 81).file_level_path = "/60"
+        row = session.get(ResourcePermissionMode, 81)
+        row.parent_id = "60"
+        session.commit()
+    async with AsyncSession(moving.engine) as session:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await load(moving, session)
+
+
+async def test_invalid_persisted_schema_returns_a_domain_conflict(moving):
+    with Session(moving.sync) as session:
+        session.get(Knowledge, 10).metadata_fields = {}
+        session.commit()
+    async with AsyncSession(moving.engine) as session:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await load(moving, session)
