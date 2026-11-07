@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史898编号：783已完成/历史交付、113当前待办、2外移；原137队列已完成36项、剩101项，另12张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史898编号：787已完成/历史交付、109当前待办、2外移；原137队列已完成36项、剩101项，另8张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7189,7 +7189,7 @@
   **配对测试**：T887\
   **验证 / 完成条件**：生产仍≤600，原生红绿、非作者复核/主组合；App/Service/DI后继未接不验收T083084。
 
-- [ ] **T889 · 重复上传复用原准备快照测试**
+- [x] **T889 · 重复上传复用原准备快照测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_upload_duplicate_preparation.py`\
   **逻辑 / 测试上下文**：W6§62真实md5优先/同名选择、tmp及FAILED响应/skip_dedup，零再下载/SQL写/版本/queue。\
@@ -7197,7 +7197,7 @@
   **覆盖 AC**: AC-02, AC-09, AC-10, AC-14, AC-43, AC-49\
   **验证 / 完成条件**：真实缺接口红及原业务首绿分列，原上传组合不删断言。
 
-- [ ] **T890 · 原重复上传暂存分支唯一复用**
+- [x] **T890 · 原重复上传暂存分支唯一复用**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`\
   **逻辑 / 测试上下文**：W6§62只提取原重复分支并由原process调用，消费PreparedUpload，不扩授权/去重或新任务。\
@@ -7205,7 +7205,7 @@
   **配对测试**：T889\
   **验证 / 完成条件**：原新组合与静态新增0、固定非作者复核/主树集成；SPACE实际接线后继。
 
-- [ ] **T891 · 原引用集合摘要流字节与内存测试**
+- [x] **T891 · 原引用集合摘要流字节与内存测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_reference_digest_stream.py`\
   **逻辑 / 测试上下文**：W6§63原成功SHA/去重/lex/子类及Unicode一致，有序100001流常数辅助内存，区分原normalize成本。\
@@ -7213,7 +7213,7 @@
   **覆盖 AC**: AC-56, AC-63, AC-71, AC-87, AC-88, AC-89, AC-93\
   **验证 / 完成条件**：新接口真红，旧函数实际oracle锁字节/异常，原R2/M2选集与非作者复核。
 
-- [ ] **T892 · 原引用摘要唯一有序累加器**
+- [x] **T892 · 原引用摘要唯一有序累加器**
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/resource_reference/application/contracts.py`\
   **逻辑 / 测试上下文**：W6§63旧normalize后委托唯一逐行JSON摘要，所有旧协议不变；M4实际消费者后继。\
@@ -7238,15 +7238,15 @@
   **验证 / 完成条件**：先真实红再实现、原native组合/静态、新叶≤600、非作者固定复核与主集成；整项与真实E2E继续单列。
 
 - [ ] **T895 · 初始引用索引只读原生分页测试**
-  **类型 / Owner**：测试 / PROC\
+  **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_reference_backfill_repository.py`\
   **逻辑 / 测试上下文**：W6§64精确合同，真实材料/原业务边界，不造authority或跨IO事务。\
-  **依赖**：T894\
+  **依赖**：T374\
   **覆盖 AC**: AC-56, AC-63, AC-87, AC-88, AC-89, AC-93\
   **验证 / 完成条件**：先真实红再实现、原native组合/静态、新叶≤600、非作者固定复核与主集成；整项与真实E2E继续单列。
 
 - [ ] **T896 · 初始引用索引只读头与实际ID分页**
-  **类型 / Owner**：后端 Repository / PROC\
+  **类型 / Owner**：后端 Repository / EDGE\
   **写入文件**：`src/backend/bisheng/resource_reference/domain/repositories/reference_backfill_repository.py`\
   **逻辑 / 测试上下文**：W6§64精确合同，真实材料/原业务边界，不造authority或跨IO事务。\
   **依赖**：T895\

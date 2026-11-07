@@ -294,3 +294,10 @@ PROC真实SQL App生产8ec、最终测试94d已正常合入：三tenant/完整�
 PERM d929初始上传Repo439行/新测试506行经root逐段及EDGE独立复核后正常合入。35缺模块红、receipt等值float类型两真红后最终47绿，真实200项600实体注册只7 SELECT、IN片段≤200；原9路径321绿，扩大11路径7旧失败在精确44f基线同集合，新增0，未改旧fixture。EDGE原47、额外历史nonprimary V2/其他Doc primary alias/pending delete三native绿及200预算例共4绿（/private/tmp/test_f118_upload_registration_independent.py，/private/tmp/f118-edge-upload-registration-{native,independent}.log）；同TX原对象/full事实/父链与savepoint误commit检查通过。T881882按组件闭合，真实add_file/目录/网页/历史link和83/84仍待办。
 
 短事务跨IO继续按§61先补commitACK/reserved key/fresh私有rebind，不把同TX receipt放松成裸ID/一般删除权。补偿固定先核链→原ledger投影逆操作→再次核链/SQL删除提交确认→owned对象清理，unknown或链漂移保对象。新App原DI没有自动begin已独立验证（/private/tmp/f118-edge-space-upload-di-independent-corrected.log）；guard须锁内读实际Root再复用原规则，不能把下载前旧snapshot当真实idle证明。以上没有操作109:3005/新版部署/正式停服迁移/恢复/完整E2E。
+
+
+## 重复上传、摘要流及提交回调独立复核（2026-11-07）
+
+c1a原重复分支只移动既有md5优先/tmp/FAILED响应并复用PreparedUpload，作者5真缺接口红+1旧skip_dedup首绿，root逐段审45行差异后正常合入。cbd原摘要stream经PERM非作者固定父AST oracle复核：原六路径132绿、独立9格Unicode/子类canonical重复/旧容器与generator/UTF8失败原状态/lex顺序均绿；旧normalize/digest直接从准确父生产AST提取，未重抄算法，其他合同AST完全相同。独立1001/100001高Unicode流峰值3407/3383 bytes，原wrapper仍O(N)normalize，只有stream辅助内存O(1)。两组主树250a05d652a92bce5c7bd52f1d5e85dd90b82144正常合流后11路径**192 passed、2377 warnings、12.97秒**（/private/tmp/f118-root-digest-duplicate-integrated.log/.xml）。T889–892按对应组件范围闭合，未接原Space/DI或M4写口。
+
+EDGE独审e508发现并由作者逐字复现1个P2：instance after_transaction_end以call_soon(remove)退役，若后继caller hook通过async SQLAlchemy bridge执行另Session原生SELECT1，让出driver控制时会改仍在dispatch的deque，导致DB COMMIT真实成功却RuntimeError。相同probe d929旧基线2绿/e508新1红1绿，且两边File/Doc/V1均已durable commit（/private/tmp/test_f118_upload_observer_regression.py、/private/tmp/f118-edge-upload-observer-{d929,e508}.log）；不是SQLite假事务或不合法caller。作者原85绿不能覆盖此反例，T887888继续未勾、e508未合主。修正须确定事件栈已退出的调用边界，不以另一计时延迟替代；发现者复验后才能合入及接实际上传App。
