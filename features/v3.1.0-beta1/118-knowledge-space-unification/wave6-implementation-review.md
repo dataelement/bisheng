@@ -342,3 +342,14 @@ Root读c340版本App177行发现两层owned context exit可能让二次rollback/
 
 
 固定516bea根版本入口获EDGE非作者审：自跑8路径185绿；完整原Depends链ASGI三write（仅认证/DB依赖替换，request Session含pending且任意ORM执行即fail）与unknown commit再close故障共4探针+DI控制5绿，未借请求Session/未改pending，真正commit及TX退出后才审计。其余原方法AST一致。root后继完整源码581ed3ff4（与516bea代码相同，只有文档提交）同完整选集 **4605 passed、7 skipped、97431 warnings、240.51秒**（/private/tmp/f118-root-version-entry-full.log/.xml）。T911–913按实际入口范围闭合；后续旧版本五路径实际21绿11红的fixture失配按§71单列处理，不沿用此前22/10为新基线。
+
+
+## 遗留版本对齐、目录前置与真实MySQL并发证据（2026-11-07）
+
+T914固定2a95两测试叶由PERM独立复核，无Fake App/借用Session，原chain/MD5/primary/失败状态断言保留；精确原生产len>=2一律拒与新历史源负例一致。原五路径32全绿+真实wiring11=43绿，root与非作者各自独跑；日志/private/tmp/f118-root-version-legacy-aligned.log/.xml与/private/tmp/f118-perm-version-2a95-exact-combined.log。另一个不同read/scaffold/delete选集34绿2旧HTTP403期待失败未扩修，不能混称43路径。
+
+共享Observer6890970经root全源码/原三listener AST等价非作者复核正常合入，87行唯一算法/原File Repo511行；root九路径195绿（1093 warnings/9.44秒，/private/tmp/f118-root-shared-upload-observer.log/.xml），含旧89/C2/上传入口。FolderRepo6b6e34cc 276行经root逐段审空树/全行/nativeACK/foreign坏引用及无裸ID规则后合入，root十路径237绿（1093 warnings/10.71秒，/private/tmp/f118-root-folder-upload-registration.log/.xml）。T915–918仅前置闭合，App/目录真正接线后继仍待办；foreign child追加用例实际首绿，作者初误称红已更正，不作产品红。
+
+真实109 MySQL克隆库以a524两个模块+44f逐项26依赖AST相同的组件单次执行成功：link/merge/primary、两个真实native连接2837/2838同target并发next_no4/5且唯一primary；原feature方法仅隔离config运输，三操作0SQL。仅本次own三表数据，分配File12/Doc8/Version16；lastACK完整事实File12/Doc4/Version12 fresh锁内重核后清理commitACK，11表全列摘要前后同d3ca445f3648b51dd9a7b9800a2db4637f1195de726143cd5e0f4a106c7341be、Run0。201 SELECT/36 INSERT/24 UPDATE/11 DELETE；自增计数推进，不声称DB元数据逐位还原。
+
+安全JSON /private/tmp/f118-version-mysql-a524/mysql-result.json，SHA256 a387b59d7e220ecd6e6bd4ecc0c45d476290935386419be9fd5edef6ae7987d6，remote evidence/version-mutation-a524-mysql-20261107.json；原完整own manifest SHA256 d4a0fbb3508bc7cfd6ac71f444ff01704032b649737f341f85045539e0fea430，本地mysql-manifest-summary.json。probe SHA256 be044187cd06c78953a48997155fdb05a509dcf44508adaa3b7583ca2d7f9e1d，只修测试归档CLAUDE symlink跳过后传输/单次运行，无重跑/产品源码修复。原API/worker镜像/启动/重启逐字不变；非完整部署、HTTP/FGA/Blob/provider/queue/正式迁移或E2E，3005未操作。

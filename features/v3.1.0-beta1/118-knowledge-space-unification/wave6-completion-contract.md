@@ -992,3 +992,12 @@ SpaceUploadApplication新增acreate_folder(*,knowledge,parent_id,folder_name)，
 Service仅内部_application/_deferred成对可选参数串add_file→现helper；私有_UploadDispatchBatch只file/previewKey和folder_paths。普通调用两者都无，保现App/rollback/dispatch；folder入口原授权/真实Root/具体scope预检后，一App一batch建树，再各目录走原add_file，保各组upload_file/最新规则/实际quota/dedup与FAILED响应。共享组不另建App、不局部补偿、不dispatch/更新时间。整次staging全成功后现enqueue_or_dispatch按原顺序唯一tail，再目录/空间时间。staging期间提前更新时间会使自有目录receipt失效，必须延后；第一次dispatch起若queue或时间写失败只保已注册/已派发前缀和原错，禁止反删可能已运行文件。不是队列事务/Worker在途竞态或崩溃自动恢复。
 
 新native三测试叶分别commit/receipt/整行空树、实际App父FGA顺序与文件后目录逆序、原HTTP/DI双目录第二组失败0dispatch/全前缀补偿与selected租户/队列unknown。T923只旧knowledge_space_folder_upload.py与_api.py必要factory/边界fixture适配，保count/depth/name/path/quota/permission/dedup原断言。固定非作者复核和主组合后各叶闭合；网页入口未接时原T083084仍不提前验收。
+
+
+## 73. 跨空间移动实际投影证据与闭集SQL前置 V1：已冻结
+
+先冻[移动合同](./move-processing-contract.md)P1/K1，来自PROC365行固定候选040e8c749fde3c825488f4dccd84c489c23690572598f73e3e10e24d38074d89，root已全读并核现Runtime.project_parent_change为原ledger计划/模式投影。PERM独占T924925 P1两个叶：permission/domain/repositories/move_projection_repository.py与permission/application/knowledge_move_projection.py；PROC独占T926927 K1两个叶：knowledge/domain/repositories/move_scope_repository.py与move_cutover_repository.py。两组可并行，只冻窄verifier合同，不跨模块Domain依赖具体App/ORM，不另建证据/任务框架。每新叶≤600。
+
+真实native FINALIZED op+CURRENT Mode+完整changes覆盖才签本native Session/TX/issuer私有evidence；K1实际apply最终必须消费P1原对象/verifier，不以stub ready作正向最终证明。scope完整物理File/Doc/Version闭集、双Root→Plan→Job→Item/Retry→File→Doc→Version→TagLink锁序、metadata/tag/稳定对象、所有历史与非索引项规则均见完整合同。原Model/RG/permission策略及hash SSOT不复制；若现唯一metadata/常量实现需从热Svc/worker提取而超两叶，先给root窄接缝登记，不私自复制算法/跨层导入。
+
+Owner/Job/worker/API/查询/源删除消费端尚未授权实现；本前置不开放move kind或提前闭T073074。原move/source+target upload_file，完成归属后同操作continuation不新增target move/edit；source输入保护到item succeeded ACK，failed/obsolete未完成不提前删源/破坏性重建。维持已排除的Worker在途外IO/用户改动竞态，不新增attempt围栏或其他框架。
