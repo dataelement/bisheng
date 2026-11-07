@@ -453,10 +453,11 @@ async def test_real_zero_index_items_keep_real_logical_cutover_and_no_fake_file(
         assert (await session.get(KnowledgeFile, 50)).knowledge_id == 11
 
 
-async def test_native_item_projection_is_seek_paged_without_manifest_or_snapshot(moving, monkeypatch):
+@pytest.mark.parametrize("count", [401, 10001])
+async def test_native_item_projection_is_seek_paged_without_manifest_or_snapshot(moving, monkeypatch, count):
     import sqlalchemy as sa
 
-    built = await pipeline(moving, monkeypatch, count=401)
+    built = await pipeline(moving, monkeypatch, count=count)
     reads = []
 
     def record(conn, cursor, sql, params, context, many):
