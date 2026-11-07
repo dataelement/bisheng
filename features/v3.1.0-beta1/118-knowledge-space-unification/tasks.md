@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史936编号：822已完成/历史交付、112当前待办、2外移；原137队列已完成36项、剩101项，另11张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史936编号：824已完成/历史交付、110当前待办、2外移；原137队列已完成36项、剩101项，另9张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7469,7 +7469,7 @@
   **覆盖 AC**: AC-09, AC-10, AC-14\
   **验证 / 完成条件**：准确旧新差异、实际folder App组合，不造兼容fake writer。
 
-- [ ] **T924 · 移动F048真实投影闭集证据测试**
+- [x] **T924 · 移动F048真实投影闭集证据测试**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_projection_repository.py`、`src/backend/test/knowledge_unification/test_move_projection.py`\
   **逻辑 / 测试上下文**：W6§73/[移动合同](./move-processing-contract.md)仅P1/K1；真实ledger/全版本native，非fake authority。\
@@ -7477,7 +7477,7 @@
   **覆盖 AC**: AC-17, AC-18, AC-19, AC-20, AC-21, AC-22, AC-23, AC-24, AC-49, AC-54, AC-87, AC-88\
   **验证 / 完成条件**：真实缺接口红、原生/40110001有界预算与固定独审；K1实际apply最终用P1证据组合。
 
-- [ ] **T925 · 移动F048真实投影闭集证据**
+- [x] **T925 · 移动F048真实投影闭集证据**
   **类型 / Owner**：后端 Application / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/repositories/move_projection_repository.py`、`src/backend/bisheng/permission/application/knowledge_move_projection.py`\
   **逻辑 / 测试上下文**：W6§73只登记两生产叶，新叶≤600，真实issuer/TX/Scope，不开后继kind。\

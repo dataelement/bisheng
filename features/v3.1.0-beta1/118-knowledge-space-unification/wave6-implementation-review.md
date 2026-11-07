@@ -365,3 +365,11 @@ T914固定2a95两测试叶由PERM独立复核，无Fake App/借用Session，原c
 
 
 T921/T922/T923固定非作者复核闭合：EDGE全读8aac6e4b6及5940a3c72旧fixture diff，无确认阻塞。8aac六路径99 passed（folder wiring/App/Repo/ordinary wiring+upload/overrides），日志`/private/tmp/f118-edge-folder-wiring-8aac-related.log`。独立新增3原生边界与原9例组合12 passed（`/private/tmp/f118-edge-folder-wiring-8aac-independent.log`）：第二组CancelledError原实例不变、零queue/零timestamp、完整SQL回原样及file→folder→folder逆序；第二次queue ACK未知保全部资源；最后timestamp失败在两次queue后亦不回收SQL/对象。旧11业务例意图逐条核保留，API文件未改。仅原运输被隔离，非真实FGA/queue/E2E。
+
+
+### 原目录/网页材料整合回归与实际 P1（2026-11-07）
+
+- 固定源码5940a3c72d8086b0beb961cde68db7bb7258d08c全knowledge_unification（仅原TCP mock单模块未收集）+三原权限回归+旧folder11/API3：4715 passed、7原F054中间件占位skip、98869 warnings、249.77s。日志/XML为`/private/tmp/f118-root-folder-web-full.log`/`.xml`。此次包括原生Folder Repo/App/入口、旧fixture和Web材料；不含随后P1/新Web入口红测试。旧4605/4554均历史快照，不累计。
+- P1固定8e3be041e23737716e576e84e94b44bc7575c91f已root完整读Repo489/bridge252和合流。原Runtime/State/projection policy零修改；CURRENT SQL pin、原plan/tuple校验、native FINALIZED+CURRENT完整coverage及同TX issuer evidence、PREPARED原窄保留和FAILED_CLOSED原确认恢复。S operator沿subject原alias。native401/10001实际22/454 SELECT，无Tuple笛卡尔积。
+- 作者原Repo29缺模块红，真实33绿；bridge原FK夹具错误先纠正后8纯缺模块红，取消11组合1红、prepare-only/other-op/parent/version16组合5红均已固定后绿。root在f74c6b43c1641f90b494b325d71385410f48ec82同六路径89 passed /64 warnings/11.49s，`/private/tmp/f118-root-move-projection.log`/`.xml`，含新Repo33/bridge16及原projection service/sql runtime/business source/reconcile CLI40。T924/T925闭合，K1真实证据消费、J1/Owner/worker/入口仍未闭。
+- Web入口T934测试1e295ea32已记录2红，日志`/private/tmp/f118-t934-web-entry-red.log`：实际规则仍1000而空间800；原legacy投影夹具不经过新App端口（未raise新端口注入的异常）。第二例是新接线缺失的端口证据，不声称旧实际FGA投影不运行。§76新App/§77根入口按冻结依赖继续，本轮主树这两个未实施接线测试仍预期红，不能称当前全树全绿。
