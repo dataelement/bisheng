@@ -1015,3 +1015,8 @@ build_web_link_objects(prepared,*,file_id:真实正int)->WebLinkObjectPlan返回
 后继新建App仍实际Repo同TX File/Doc/V1+key/HTML metadata登记、私有ACK后才两Blob及原投影；此处不接线/不提前闭T08384。overwrite保持旧FileID/DocV关系及旧key覆盖/失败语义，不把旧row/key当initial receipt清理、不新增Blob分布式原子性；以后仅实际规则snapshot/完整性与tenant/原guard/调度必要差异另冻。Space默认快照/原Web专用分隔规则的实际producer后继由热Svc唯一消费，不在材料叶复制resolver。
 
 测试用原Utils源码唯一方法及原web key作为oracle，真实Bytes/Unicode展示名/html空非空/深拷贝metadata/强制服务器key/非法内部ID/安全repr及0外IO，缺模块真实红。原Web import/overwrite测试前后实际差异分列，不以材料通过冒完整Web链/E2E。
+
+
+## 75. 移动闭集纯 Domain DTO 前置 V1：已冻结
+
+T930/T931由PROC在K1实施前抽取新knowledge/domain/schemas/move_processing.py，仅Scope/闭集/ParentState窄口所需的纯DTO、类型与值校验。ScopeRepo显式reexport同一class对象供既冻消费者使用；不复制原digest、projection协议或metadata算法，不引入SQL、Session、App或权限控制面行为。此纯前置作为独立一生产叶卡，Scope和Cutover继续原两生产叶/每叶≤600，不压行、不为行数造反向依赖。真实native Scope/401与10001历史、source-input guard、P1实际证据组合覆盖原样保留。原P1/K1边界和后继未授权范围不变；actor.operator沿原PermissionActor.user_id实际subject事实，S为服务账号ID，不以Job自然人owner替代。
