@@ -95,8 +95,12 @@ async def case(database, monkeypatch, tmp_path):
             hit = value.fail_commit and value.commit_count == value.fail_commit[0]
             if hit and value.fail_commit[1] == "before":
                 raise OSError("commit ACK unknown before SQL commit")
+            if hit and value.fail_commit[1] == "cancel_before":
+                raise asyncio.CancelledError()
             await super().commit()
             if hit:
+                if value.fail_commit[1] == "cancel_after":
+                    raise asyncio.CancelledError()
                 raise OSError("commit ACK unknown after SQL commit")
 
     @asynccontextmanager
@@ -430,3 +434,96 @@ async def test_management_pin_or_credential_drift_before_io_blocks_reclaim(case,
     finally:
         context._admin_scope_tenant_id.reset(pin)
         context._is_management_api.reset(flag)
+
+
+@pytest.mark.parametrize("operation", ["create", "rollback"])
+async def test_identity_changed_while_acquiring_the_adapter_cannot_use_the_old_snapshot(case, monkeypatch, operation):
+    application = app(case, monkeypatch)
+    if operation == "rollback":
+        await create(application, case)
+
+    async def acquire(_resource_type):
+        assert not case.active
+        case.user.token_version += 1
+        return case.adapter
+
+    module = importlib.import_module("bisheng.knowledge.application.space_upload")
+    monkeypatch.setattr(module, "get_f048_resource_adapter", acquire)
+    with pytest.raises(ResourceReferenceInvalidError):
+        await (create(application, case) if operation == "create" else application.arollback_created())
+    mutation = (
+        case.adapter._permission.authorize_created
+        if operation == "create"
+        else case.adapter._permission.rollback_created
+    )
+    mutation.assert_not_awaited()
+    assert case.blobs and "remove" not in case.events
+
+
+async def test_caller_transaction_with_pending_state_is_not_borrowed_or_rolled_back(case, monkeypatch):
+    async with AsyncSession(case.database.engine) as caller, caller.begin():
+        pending = original.File(knowledge_id=9700, file_name="caller pending")
+        caller.add(pending)
+
+        @asynccontextmanager
+        async def borrowed():
+            yield caller
+
+        case.factory = borrowed
+        application = app(case, monkeypatch)
+        case.database.queries.clear()
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await create(application, case)
+        assert caller.in_transaction() and pending in caller.new and pending.id is None and pending.tenant_id is None
+        assert not case.database.queries and not case.blobs
+        await caller.rollback()
+
+
+async def test_same_tenant_service_account_keeps_its_real_subject_and_original_effective_user(case, monkeypatch):
+    case.actor = PermissionActor(subject_type="service_account", subject_id=50, tenant_id=101)
+    token = set_current_permission_actor(case.actor)
+    try:
+        application = app(case, monkeypatch)
+        row = await create(application, case)
+        actual = case.adapter._permission.authorize_created.await_args.kwargs
+        assert actual["actor"] is case.actor and actual["actor"].fga_subject == "service_account:50"
+        assert row.user_id == case.user.user_id == actual["owner_user_id"] == 7
+    finally:
+        reset_current_permission_actor(token)
+
+
+async def test_identity_drift_in_a_sync_blob_transport_stops_before_temporary_cleanup_or_projection(case, monkeypatch):
+    application = app(case, monkeypatch)
+    put = case.storage.put_object_sync
+
+    def changed(**kwargs):
+        put(**kwargs)
+        case.user.token_version += 1
+
+    case.storage.put_object_sync = changed
+    with pytest.raises(ResourceReferenceInvalidError):
+        await create(application, case)
+    assert case.blobs and "tmp" not in case.events
+    case.adapter._permission.authorize_created.assert_not_awaited()
+    with pytest.raises(ResourceReferenceInvalidError):
+        await application.arollback_created()
+    assert "inverse" not in case.events and "remove" not in case.events
+
+
+@pytest.mark.parametrize("when", ["cancel_before", "cancel_after"])
+async def test_commit_cancellation_keeps_original_type_and_unknown_progress_without_external_io(
+    case, monkeypatch, when
+):
+    application = app(case, monkeypatch)
+    case.fail_commit = (1, when)
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await create(application, case)
+    assert caught.value.space_upload_progress[0]["commit_outcome"] == "unknown"
+    assert not case.blobs and "telemetry" not in case.events and not case.active
+
+
+async def test_empty_own_rollback_is_zero_business_sql_and_external_io(case, monkeypatch):
+    application = app(case, monkeypatch)
+    case.database.queries.clear()
+    await application.arollback_created()
+    assert not case.database.queries and not case.events and not case.sessions
