@@ -397,3 +397,92 @@ async def test_retiring_private_observers_preserves_the_callers_existing_commit_
         await session.commit()
         assert calls == [True]
         sa.event.remove(session.sync_session, "after_commit", caller_event)
+
+
+async def test_caller_end_hook_native_sql_preserves_a_real_durable_root_commit(database):
+    from sqlalchemy.orm import Session
+
+    repo, calls, problem = original.api().UploadRegistrationRepository(), [], None
+    async with AsyncSession(database.engine) as session:
+        await session.begin()
+        receipt = await reserved(repo, session)
+
+        def caller_end(native_session, transaction):
+            if transaction.parent is None:
+                with Session(native_session.get_bind()) as audit:
+                    calls.append(audit.execute(sa.text("SELECT 1")).scalar_one())
+
+        sa.event.listen(session.sync_session, "after_transaction_end", caller_end)
+        try:
+            try:
+                await session.commit()
+            except Exception as error:
+                problem = error  # Read back the actual commit even if its ACK failed.
+        finally:
+            sa.event.remove(session.sync_session, "after_transaction_end", caller_end)
+        persisted = await original.snapshot(database)
+        assert any(row["id"] == receipt.file.id for row in persisted["knowledgefile"])
+        assert any(
+            row["id"] == receipt.document_id and row["primary_version_id"] == receipt.version_id
+            for row in persisted["knowledge_document"]
+        )
+        assert any(
+            row["id"] == receipt.version_id and row["knowledge_file_id"] == receipt.file.id
+            for row in persisted["knowledge_document_version"]
+        )
+        assert calls == [1] and problem is None
+        repo._acknowledge_committed_initial(registrations=(receipt,))
+
+
+@pytest.mark.parametrize("outcome", ["rollback", "unknown"])
+async def test_unacknowledged_observers_retire_only_after_the_root_owner_task_finishes(database, outcome):
+    repo, ready, release, native_sessions = (
+        original.api().UploadRegistrationRepository(),
+        asyncio.Event(),
+        asyncio.Event(),
+        [],
+    )
+
+    class UnknownCommit(AsyncSession):
+        async def commit(self):
+            await super().commit()
+            raise OSError("actual COMMIT returned but its wrapper lost the ACK")
+
+    async def root_owner():
+        async with UnknownCommit(database.engine) as session:
+            await session.begin()
+            await reserved(repo, session)
+            if outcome == "rollback":
+                await session.rollback()
+            else:
+                with pytest.raises(OSError):
+                    await session.commit()
+            native_sessions.append(session.sync_session)
+            ready.set()
+            await release.wait()
+
+    owner = asyncio.create_task(root_owner())
+    try:
+        await ready.wait()
+        await asyncio.sleep(0)
+        native_session = native_sessions[0]
+        # The task still owns its event lifecycle; a timer is not a boundary.
+        assert len(native_session.dispatch.after_commit) == len(native_session.dispatch.after_transaction_end) == 1
+    finally:
+        release.set()
+        await owner
+    assert not native_session.dispatch.after_commit and not native_session.dispatch.after_transaction_end
+
+
+async def test_successful_ack_does_not_accumulate_done_callbacks_in_the_long_lived_owner_task(database):
+    repo, task = original.api().UploadRegistrationRepository(), asyncio.current_task()
+    original_callbacks = len(task._callbacks or ())
+    async with AsyncSession(database.engine) as session:
+        for _ in range(5):
+            await session.begin()
+            receipt = await reserved(repo, session)
+            await session.commit()
+            repo._acknowledge_committed_initial(registrations=(receipt,))
+            assert len(task._callbacks or ()) == original_callbacks
+            assert not session.sync_session.dispatch.after_commit
+            assert not session.sync_session.dispatch.after_transaction_end
