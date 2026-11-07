@@ -223,6 +223,17 @@ async def test_native_scale_reads_frozen_graph_once_then_pages_once_and_uses_bou
         f"objects={len(transport.objects)} sessions={len(sessions.opened)}"
     )
 
+    stable = await snapshot(database)
+    gets.clear()
+    database.queries.clear()
+    restarted, _ = application(module, produced)
+    assert await restarted.arun(**arguments(produced)) == result
+    assert max(gets.values()) <= 2 and sum(gets.values()) <= len(transport.objects) * 2
+    assert len(database.queries) < ((count + 198) // 199 + 3) * 50
+    recovery_queries, recovery_gets = len(database.queries), sum(gets.values())
+    assert await snapshot(database) == stable
+    print(f"fresh-App full-prefix files={count} SELECT={recovery_queries} artifact_GET={recovery_gets}")
+
 
 async def test_second_pass_rechecks_actual_membership_bytes_without_accepting_the_cached_first_pass(
     module, produced, monkeypatch
