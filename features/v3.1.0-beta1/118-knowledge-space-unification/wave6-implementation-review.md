@@ -283,3 +283,14 @@ root T885测试672eda7fa原生401/1001目标各3slot，两预算真红/3语义�
 
 
 范围再核：Spec AC09/14只要求沿原格式/大小/部门/内容规则且两端一致；实际unsupported由base_file_pipeline.run的原FileExtensionMap在解析期识别。故修正T083/084及§58过严的“格式前置零版本”实现文字，不改Spec或生产格式规则；解析失败保完整失败链，无孤立版本。上传真实依赖改为已冻原准备/原子注册T884/T882，不以初始上传虚构新J1 kind/edit门槛。此项是约束开发范围，并非新需求或已接线证明。
+
+
+## 真实SQL执行及初始注册组件完整整合（2026-11-07）
+
+主树受测d014e8dde7c6f05b667549298e4b735e2478eab9，完整test/knowledge_unification（明确不收集TCP mock合同单模块）与原SA/APP/权限批读三路径：**4314 passed、7 skipped、92697 warnings、197.35秒**。日志/JUnit /private/tmp/f118-root-native-sql-upload-integrated.log/.xml。7项仍原F054中间件占位；前次4166为此前快照，不相加。本轮16变动Python文件format/逐叶arch通过，非legacy Ruff均0；原KnowledgeService已固定38→37且新增0单列，不称全仓lint通过。
+
+PROC真实SQL App生产8ec、最终测试94d已正常合入：三tenant/完整正式Run refs与tenantUniverse、全图坏尾/材料先验、新Session批量提交、空EOF、unknown commit和取消、partial artifact page原ordinal与真实ID恢复均native覆盖；10001首次1321 SELECT/218GET/58Sessions，fresh完整prefix1306 SELECT/218GET；每artifact每run最多2读，不重复前缀。PERM独立原三路径42绿、自选页内2命令prefix commit/rollback两格绿、最终两规模2绿；root额外实际allocatedID合法漂移拒无写与所有artifactIO无owned SQL TX两格绿（/private/tmp/test_f118_root_m3_app_independent.py、/private/tmp/f118-root-m3-app-independent.log/.xml）。生产同一blob f3f564b6825abfb98a58815ce54c26a56c0cbf03，root逐段复核无确认问题。T879880按SQL子步入口闭合，namespace/M4/ready/CLI及原T163164不提前勾。
+
+PERM d929初始上传Repo439行/新测试506行经root逐段及EDGE独立复核后正常合入。35缺模块红、receipt等值float类型两真红后最终47绿，真实200项600实体注册只7 SELECT、IN片段≤200；原9路径321绿，扩大11路径7旧失败在精确44f基线同集合，新增0，未改旧fixture。EDGE原47、额外历史nonprimary V2/其他Doc primary alias/pending delete三native绿及200预算例共4绿（/private/tmp/test_f118_upload_registration_independent.py，/private/tmp/f118-edge-upload-registration-{native,independent}.log）；同TX原对象/full事实/父链与savepoint误commit检查通过。T881882按组件闭合，真实add_file/目录/网页/历史link和83/84仍待办。
+
+短事务跨IO继续按§61先补commitACK/reserved key/fresh私有rebind，不把同TX receipt放松成裸ID/一般删除权。补偿固定先核链→原ledger投影逆操作→再次核链/SQL删除提交确认→owned对象清理，unknown或链漂移保对象。新App原DI没有自动begin已独立验证（/private/tmp/f118-edge-space-upload-di-independent-corrected.log）；guard须锁内读实际Root再复用原规则，不能把下载前旧snapshot当真实idle证明。以上没有操作109:3005/新版部署/正式停服迁移/恢复/完整E2E。

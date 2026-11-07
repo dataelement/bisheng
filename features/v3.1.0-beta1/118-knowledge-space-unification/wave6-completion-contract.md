@@ -866,3 +866,15 @@ PERM T887/888仅原knowledge/domain/repositories/upload_registration_repository.
 后继顺序固定但本卡不接App：短TX完整注册+确定key→commit ACK→释放业务Session后blob/FGA→成功才原dispatch；pre-dispatch补偿先fresh短TX重绑定核当前链、释放Session，再原creation ledger resolve/inverse，成功后fresh rebind再次核链并SQL删除commit明确成功，最后清理本次owned blob。任何链漂移、投影/SQL commit unknown均保blob与可核SQL，不先删对象、不dispatch、不持业务锁跨外部IO。原actor/home/Scope由后继可信App保持，Repo本身不新增身份/授权协议。
 
 native测试包括原47回归；root commit vs nested release/rollback/后续另TX、commit已发生但没有App ACK/commit wrapper抛unknown；fresh/local receipt边界、完整三行漂移/历史化/别名/改名/pending、读验证失败0写且保caller、reserved key纯SQL/不可替换原对象key及200项observer/SQL预算。普通DataScope/管理pin身份留App原准入测试；本扩展不新增一般跨TX删除服务、不冒正式恢复命令。
+
+
+§61真实App idle读取补充：同一登记Repo新增alock_space_for_upload(session,*,space_id)->实际detached Knowledge，仅current具体tenant/type3精确FOR UPDATE、_scope(clean=True)/no_autoflush，不开/提交Session、不复制guard。后继App在自身短TX先读实际Root，再调用原require_space_processing_idle(actual,operation='upload_file')，随后aregister_initial同TX提交；原guard仅state==REBUILDING/model_transition非None，错误10999保持，materialize/cleanup不额外叠idle。此读只App调用，原47/200项注册预算不变，新App多固定1次Root读。原API DI实际构造Message/Version/Doc/File repositories仅存session/model且get_db_session不自动begin，独立witness确认0 SELECT/transaction=False；新App仍只收独立session factory，不借请求Repo跨外部IO。
+
+
+## 62. 原重复上传暂存分支复用 V1：已冻结
+
+EDGE T889/890仅新test/knowledge_unification/test_kn_upload_duplicate_preparation.py及原knowledge/domain/services/knowledge_service.py；不改SpaceService/App/DI/新注册Repo，后继真实消费者另冻。新增stage_prepared_duplicate(cls,*,prepared:PreparedUpload,repeat_files:tuple[KnowledgeFile,...]|list[KnowledgeFile])->KnowledgeFile，接原已下载/已解析effective快照与原DAO取得的非空重复候选；不新授权或查询SQL，不注册Doc/V1，不投队列。
+
+将原process_one_file重复分支的md5优先/filename次级选择与完整tmp暂存、remark、FAILED、大小/split_rule赋值原样移至此方法；旧process在repeat_files and not skip_dedup时委托，正常创建/skip_dedup整段保持。新helper仅用prepared字段，不再file_download、不重复resolver；tmp key后缀仍prepared.download_name原扩展、展示名仍original_file_name，remove_unused_file仍原file_info.file_path且只tmp put成功后。保原返回同一候选对象及仅客户端失败响应的语义，不给旧行新commit、不重写旧历史或重新处理，不在这里增加visible/edit动作或扩大去重范围。
+
+测试须真实准备/原SQL候选与原process调用，md5优先、同名不同内容、显式skip_dedup保原正常创建，helper零DAO/下载/新版本/queue；tmp put失败不提前cleanup、不持久修改旧数据库行。原test_legacy_file_processing_callers/test_kn_upload/test_kn_upload_overrides及T883新测试原断言保留组合，真实缺方法红与原业务首绿分列。生产只本段提取，原大Service不顺便重构，Ruff既有诊断只作准确基线对照，新增0；测试≤600。

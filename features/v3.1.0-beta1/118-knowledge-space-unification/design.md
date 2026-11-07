@@ -832,7 +832,7 @@ Skill的可见性不能兼任全局enabled状态：真实使用/选择边界avai
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史888编号：779已完成/历史交付、107当前待办、2外移；原137队列已完成36项、剩101项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史890编号：783已完成/历史交付、105当前待办、2外移；原137队列已完成36项、剩101项，另4张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -871,3 +871,6 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 
 
 上传格式时序按现有前台保留：FileExtensionMap在原解析阶段识别unsupported，失败保留原失败File及完整版本链，不新造前置格式名单或审批。注册前仅按原限额核实际大小/配额；“无残留”限定孤立版本/半链。初始上传保原scheduler并读保存的effective快照，不借统一任务要求增空间edit；后续高级重处理按其原J1用例。
+
+
+真实冻结产物SQL执行App与初始上传注册组件已合主d014e8dde7，本地选集4314 passed/7原占位skip；SQL仅子步完成，namespace/Catalog、初始引用回填/M4/Coverage和正式升级仍待实施。后继上传按W6§61短TX提交ACK后释放Session再Blob/FGA；错误补偿先原投影回滚、SQL删除commit确认后再删本次对象，unknown/链漂移保对象。实际Root idle在注册TX内读取并复用原guard，不扩大文件edit、格式名单或worker竞态范围。
