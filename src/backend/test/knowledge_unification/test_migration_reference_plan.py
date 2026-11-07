@@ -42,12 +42,16 @@ def module():
 
 @pytest.fixture
 async def produced(complete, transport, request):
-    count, shape = getattr(request, "param", (5, "single"))
+    parameters = getattr(request, "param", (5, "single"))
+    count, shape = parameters[:2]
+    target = parameters[2] if len(parameters) == 3 else 11
     async with AsyncSession(complete.engine) as session, session.begin():
         session.add_all([m2.raw.flow("saved"), m2.raw.flow("retired", is_delete=1)])
         if shape == "single":
             session.add(
-                FlowVersion(id=1, tenant_id=101, flow_id="saved", name="saved", data=workflow_graph(*([11] * count)))
+                FlowVersion(
+                    id=1, tenant_id=101, flow_id="saved", name="saved", data=workflow_graph(*([target] * count))
+                )
             )
         else:
             session.add_all(
@@ -92,6 +96,30 @@ async def source_records(produced):
     ]
 
 
+async def actual_leaves(produced, kind):
+    inventory = importlib.import_module("bisheng.knowledge.application.unification_inventory")
+    return [
+        page
+        async for page in graph.reader(inventory, produced[1]).aiter_frozen_pages(
+            produced[2], **graph.arguments(produced[1])
+        )
+        if page.kind == kind
+    ]
+
+
+def entry(page):
+    return record_from_values(
+        "manifest_entry",
+        section=page.section,
+        scope=page.scope,
+        tenant_id=page.tenant_id,
+        page_index=page.page_index,
+        record_count=page.record_count,
+        descriptor=page.descriptor,
+        level=0,
+    )
+
+
 async def rewrite_sources(produced, change):
     _, transport, frozen, _, _ = produced
     records = [
@@ -103,9 +131,9 @@ async def rewrite_sources(produced, change):
     ]
     change(records)
     entries = [
-        record
-        for record in graph.root_records(transport, frozen, "baseline")
-        if record.record_type != "run" and not (record.data["section"] == "sources" and record.data["tenant_id"] == 101)
+        entry(page)
+        for page in await actual_leaves(produced, "baseline")
+        if not (page.section == "sources" and page.tenant_id == 101)
     ]
     for index, offset in enumerate(range(0, len(records), 199)):
         rows = tuple(records[offset : offset + 199])
@@ -131,21 +159,18 @@ async def rewrite_decisions(produced, change):
     _, transport, frozen, _, _ = produced
     original = graph.root_records(transport, frozen, "plan")
     entries, decisions = [], []
-    for record in original:
-        if record.record_type == "run":
-            continue
-        value = record.data
-        if value["section"] != "conversion" or value["tenant_id"] != 101:
-            entries.append(record)
+    for page in await actual_leaves(produced, "plan"):
+        if page.section != "conversion" or page.tenant_id != 101:
+            entries.append(entry(page))
             continue
         decisions.extend(
             decode_inventory_page(
-                transport.objects[value["descriptor"]["object_key"]],
+                page.content,
                 run_id=frozen.run_id,
                 section="conversion",
                 scope="tenant",
                 tenant_id=101,
-                page_index=value["page_index"],
+                page_index=page.page_index,
                 kind="plan",
             ).records
         )
@@ -203,6 +228,12 @@ async def test_actual_m2_roots_zero_versions_retired_and_replay_are_readonly(mod
         {field.name for field in fields(page)}
         == {"section", "tenant_id", "page_index", "record_count", "object_key", "sha256"}
         for page in plan.pages
+    )
+    knowledge_root = next(row for row in plan.roots if row.header.root_key.source_id == "9000")
+    knowledge_source = next(row for row in plan.sources if row.header.source_key.source_id == "9000")
+    assert (knowledge_root.at.page.page_index, knowledge_root.at.record_index) < (
+        knowledge_source.header_at.page.page_index,
+        knowledge_source.header_at.record_index,
     )
 
 
@@ -346,11 +377,14 @@ def change_source(records, case):
 )
 async def test_real_frozen_source_closure_rejects_semantic_corruption(module, produced, case):
     changed = await rewrite_sources(produced, lambda records: change_source(records, case))
-    with pytest.raises(KnowledgeOperationPlanConflictError):
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
         await prepare(module, changed)
+    assert caught.value.kwargs["reason"].startswith("migration_reference_plan_")
 
 
-@pytest.mark.parametrize("case", ["missing", "extra", "order", "digest", "reopen", "foreign"])
+@pytest.mark.parametrize(
+    "case", ["missing", "extra", "order", "digest", "reopen", "foreign", "bad_key", "reserved_version"]
+)
 async def test_real_source_decisions_match_original_ssot_per_source(module, produced, case):
     def change(records):
         positions = [
@@ -368,14 +402,42 @@ async def test_real_source_decisions_match_original_ssot_per_source(module, prod
         elif case == "reopen":
             records.append(records.pop(first))
         else:
-            data = records[first].data | (
-                {"revision_digest": "f" * 64} if case == "digest" else {"source_id": "unknown"}
-            )
+            replacement = {
+                "digest": {"revision_digest": "f" * 64},
+                "foreign": {"source_id": "unknown"},
+                "bad_key": {"source_type": "unknown"},
+                "reserved_version": {"source_version": "__root__"},
+            }
+            data = records[first].data | replacement[case]
             records[first] = record_from_values("source_decision", **data)
 
     changed = await rewrite_decisions(produced, change)
-    with pytest.raises(KnowledgeOperationPlanConflictError):
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
         await prepare(module, changed)
+    assert caught.value.kwargs["reason"].startswith("migration_reference_plan_")
+
+
+@pytest.mark.parametrize("produced", [(1, "single", 999)], indirect=True)
+async def test_actual_m2_initial_missing_numeric_slot_keeps_original_decision(module, produced):
+    from bisheng.knowledge.application.unification_preflight import source_decision
+
+    instance, plan = await prepare(module, produced)
+    chunks = [chunk async for chunk in instance.aiter_reference_chunks(plan, tenant_id=101)]
+    missing = next(
+        row for chunk in chunks if chunk.source.header.source_key.source_id == "saved" for row in chunk.records
+    )
+    decision = source_decision(missing, tenant_id=101).data
+    assert missing.origin == "explicit_id" and not missing.physical_fact.exists
+    assert decision["disposition"] == "initial_missing" and decision["target_id"] == "999"
+
+
+@pytest.mark.parametrize("produced", [(0, "single")], indirect=True)
+async def test_actual_zero_reference_source_has_no_fake_span_or_decision_page(module, produced):
+    instance, plan = await prepare(module, produced)
+    entry = next(row for row in plan.sources if row.header.source_key.source_id == "saved")
+    chunks = [row async for row in instance.aiter_reference_chunks(plan, tenant_id=101) if row.source == entry]
+    assert len(chunks) == 1 and chunks[0].complete and chunks[0].records == ()
+    assert entry.references is None and entry.decisions is None and entry.header.reference_count == 0
 
 
 async def test_bad_tail_cancel_and_changed_consumption_page_never_write_or_return_a_partial_plan(module, produced):
