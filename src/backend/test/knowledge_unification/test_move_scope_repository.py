@@ -519,3 +519,22 @@ async def test_web_system_keys_survive_collision_while_ordinary_custom_values_ar
         rows = {row.file_id: row for row in scope.files}
         assert key not in rows[81].after["user_metadata"]
         assert rows[82].after["user_metadata"][key] == "stable-web-system"
+
+
+async def test_foreign_unversioned_descendant_directory_cannot_hide_behind_tenant_filter(moving):
+    with Session(moving.sync) as session:
+        session.add(
+            KnowledgeFile(
+                id=90,
+                tenant_id=202,
+                knowledge_id=10,
+                file_name="foreign-dir",
+                file_type=0,
+                file_level_path="/50",
+                level=1,
+            )
+        )
+        session.commit()
+    async with AsyncSession(moving.engine) as session:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await load(moving, session)
