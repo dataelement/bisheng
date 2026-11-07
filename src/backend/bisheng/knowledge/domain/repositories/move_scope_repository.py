@@ -266,13 +266,29 @@ class MoveScopeRepository(MoveRowRepository):
                     conflict("move_locked_scope_changed")
         file_roots = {by_file[root.id]["document_id"]: root for root in roots if root.type == "file"}
 
-        def moved_path(path, doc_id=None):
+        def covered_path(path):
             old = path_ids(path)
             match = next((index for index, key in enumerate(old) if key in folders), None)
             if match is not None:
                 return (*destination_path, *old[match:]), folders[old[match]]
+
+        history_paths = {}
+        for version in versions.values():
+            candidate = covered_path(physical[version["knowledge_file_id"]]["file_level_path"])
+            if candidate is not None:
+                history_paths.setdefault(version["document_id"], set()).add(candidate)
+
+        def moved_path(path, doc_id=None):
+            covered = covered_path(path)
+            if covered is not None:
+                return covered
             if doc_id in file_roots:
                 return destination_path, file_roots[doc_id]
+            candidates = history_paths.get(doc_id, ())
+            if len(candidates) == 1:
+                return next(iter(candidates))
+            if candidates:
+                conflict("move_document_destination_ambiguous")
             conflict("move_document_outside_selection")
 
         doc_after, owners = {}, {}
