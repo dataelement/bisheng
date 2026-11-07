@@ -1023,3 +1023,20 @@ T930/T931由PROC在K1实施前抽取新knowledge/domain/schemas/move_processing.
 
 
 §73 P1恢复窄口补充：原Runtime.parent_change的prepare已提交但mark_projecting前退出时，仅native PREPARED且完整原plan/id/key/checksum已核、实际Mode仍CURRENT且before parent/mode/expected version精确相符，bridge可用原components.state.mark_projecting（原old_target/opid/after parent/实际runtime Catalog release_id）补完原保留步骤，再原reconcile。禁止换actor重建plan。其他nonfinalized先核Mode确属本op和冻结parent/version，不能把其他op blanket fail_closed；特定ProjectionFailed后仅fresh重读同id/key/checksum确FAILED_CLOSED才原inspect/confirmation/recover。原Runtime/State不改，无新投影协议或worker竞态框架。真实prepare-only、不同op、错误parent/version/取消和S/D原operator必须覆盖。
+
+
+## 76. 网页初始上传实际同次 App V1：已冻结
+
+EDGE T932/T933只既有knowledge/application/space_upload.py一生产叶及新test_kn_space_web_link_upload_application.py；直接复用§74 PreparedWebLink/build_web_link_objects，Repo/observer/Folder/Svc/DI/overwrite均不改。新增async acreate_web_link(*,knowledge:Knowledge,parent_id:int|None,prepared:PreparedWebLink)->KnowledgeFile，同原身份/具体tenant pin/upload_file，不处理URL/规则/临时文件/telemetry/queue。
+
+唯一_register加type(prepared) is PreparedWebLink闭集分支，name/实际Markdown bytes大小/原content hash/rule按材料原值，source固定WEB_LINK；实际aregister_initial得到FileID后纯key计划，同TX现aset_materialized一次保存md key及完整HTML metadata，然后原root commit/私有ACK/释放Session。普通File仍areserve原路径，不复制writer/receipt。Creation增加冻结objects tuple及attempted ownkeys tuple均≤2；每PUT前先记attempted，前后重验原身份，固定同bucket/storage/MIME。HTML空仍metadata有key但不PUT/不当已写。Blob后原record/authorize_created。
+
+同次arollback_created沿原完整双fresh预核/creation inverse/SQL三行删除ACK后才逆序删实际attempted私有keys；metadata或返回File变化不能重定向删除key，未知ACK/链变保资源，旧overwrite不参与。普通单key回收保原语义。新代码预计≤585行，formatter后若超600先报，不压行/不拆第二writer；最多最小提取重复destination/admission，但原identity/session/observer算法不变。真实SQL/DocV1/两PUT间无Session、HTML或投影失败/取消/原unknown、空HTML/篡改返回值/原权限与selected原身份测试，原普通及Folder组合回归。Web成功telemetry留原Service后继。
+
+## 77. 网页实际规则与原入口接线 V1：已冻结
+
+INT T934/T935只既有knowledge/domain/services/knowledge_space_service.py及新test_kn_space_web_link_wiring.py；T936仅必要旧test/knowledge/test_web_link_import_dedup.py夹具适配，原fetch提取测试不改。原入口upload_file/真实Root/tenant一致/idle之后复用§72具体scope包围fetch→去重/原Markdown大小quota→新App或overwrite→旧scheduler/时间tail；保持原User.home/actor与可信pin，不新增visible/file.edit/create_folder/审批或URL政策。原低价值三Markdown跳过hash、其余content优先再name、overwrite=False原两个错误均保。
+
+_build_web_link_split_rule改内部实际Knowledge/file_name输入，唯一KnowledgeUtils.processing_snapshot_for_legacy_request(FileProcessBase(id),knowledge,file_name,file_source=WEB_LINK)及现legacy_rule_from_snapshot生成原legacy字段和_effective_processing；不把默认参数当显式覆盖，system→space/config_version沿SSOT，Web最终11separators/after/overlap0仍原专用规则。新建实际PreparedWebLink→同factory.acreate_web_link，pre-dispatch失败同App自有补偿且保主错误；telemetry在成功返回之后。原scheduler/callback保持，preview改现preview_cache_key_for_split_rule以实际保存rule+原content_hash，队列unknown不回收。现DI无新增生产改动。仅Web新建旧自commit writer与专用cleanup/helper若实际无生产caller则移除；其他旧入口不顺带清理。
+
+覆写只窄接线：用现KnowledgeVersionReadRepository.aget_anchor（独立短只读Session）验证实际duplicate完整File/Doc/V/SPACE同tenant与同当前Root，不新增动作、不自行建V1。原File ID/DocV IDs/统计/primary以及旧两个key覆盖和Blob失败语义保留，不套初始receipt或逆删旧对象、不增备份/revision keys/分布式原子性。原单File字段更新→必要parent project_move→scheduler顺序保留，沿实际新规则快照/preview fingerprint。Doc.path不借此移动全历史，不扩大版本移动业务。原Parent/owner/updater语义保留。新HTTP/native组合含规则变更/cache、dedup/权限/pin/unknown、完整初始链、覆写primary及historical/坏链及旧对象失败边界；原rebuild早拒和普通/目录上传回归。未装配新App前不改原Service，更不提前闭T083/T084。

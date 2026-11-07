@@ -362,3 +362,6 @@ T914固定2a95两测试叶由PERM独立复核，无Fake App/借用Session，原c
 - T921原2例真红（旧folder每组提前派发、后组失败留前缀）见`/private/tmp/f118-t921-folder-wiring-red.log`。8aac6e4b6现同App/deferred双参数仅内部串接，具体tenant scope覆盖整树至派发，保原upload_file/1000限制/深度9/顶层name-only/两阶段大小配额/重复FAILED。staging失败整次补偿，所有目录时间延至原派发尾；queue未知保资源。原4路径36 passed /1270 warnings/4.27s；扩展9 native passed /814 warnings/1.38s，日志`/private/tmp/f118-t922-folder-wiring-first.log`与`-expanded.log`。待固定非作者复核才闭卡。
 - T923旧FakeDAO/MagicMock User夹具在8aac时10 failed/4 passed（新实际factory/scope无合法原身份），不是新业务错误的红证据。5940a3c72以实际User/SQL/App/Repo/F048 adapter和原运输隔离替换，原11业务例与3 API结构例全部保留（含10层目录和第11层文件）。连同新9例23 passed /1445 warnings/2.72s，`/private/tmp/f118-t923-old-folder-native.log`；原API文件无需修改。
 - DM8实测按用户最新确认免除，C2 SQLModel/Repository/DDL静态仍保留。既有MySQL component证据、正式停服迁移及完整E2E各自区分；本轮无109部署/业务写入，不操作3005。当前整合回归在5940a3c72进行，不把旧4605快照当本轮结果。
+
+
+T921/T922/T923固定非作者复核闭合：EDGE全读8aac6e4b6及5940a3c72旧fixture diff，无确认阻塞。8aac六路径99 passed（folder wiring/App/Repo/ordinary wiring+upload/overrides），日志`/private/tmp/f118-edge-folder-wiring-8aac-related.log`。独立新增3原生边界与原9例组合12 passed（`/private/tmp/f118-edge-folder-wiring-8aac-independent.log`）：第二组CancelledError原实例不变、零queue/零timestamp、完整SQL回原样及file→folder→folder逆序；第二次queue ACK未知保全部资源；最后timestamp失败在两次queue后亦不回收SQL/对象。旧11业务例意图逐条核保留，API文件未改。仅原运输被隔离，非真实FGA/queue/E2E。
