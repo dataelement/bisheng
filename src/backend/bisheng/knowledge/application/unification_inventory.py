@@ -7,6 +7,7 @@ business data or certifies Coverage. Backups remain an operational prerequisite.
 
 from collections import defaultdict
 from contextlib import aclosing
+from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,6 +94,18 @@ def _section(section, record):
     if type(record) is not InventoryRecord or record.record_type not in _SECTIONS.get(section, set()):
         _blocked("section_record_mismatch")
     _ = record.data  # validates closure even for a manually constructed record
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenInventoryPage:
+    kind: str
+    section: str
+    scope: str
+    tenant_id: int | None
+    page_index: int
+    record_count: int
+    descriptor: dict = field(repr=False)
+    content: bytes = field(repr=False)
 
 
 class _Pages:
@@ -225,9 +238,29 @@ class UnificationInventoryApplication:
                     _blocked("material_manifest_identity")
 
     async def _verify_frozen(self, result, *, environment, backup_ref, schema_ref, current):
-        for kind, descriptor in (("baseline", result.baseline_ref), ("plan", result.plan_ref)):
-            expected_baseline = None if kind == "baseline" else result.baseline_ref
-            seen = set()
+        async for _ in self.aiter_frozen_pages(
+            result, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref, current=current
+        ):
+            continue
+        return result
+
+    async def aiter_frozen_pages(self, result, *, environment, backup_ref, schema_ref, current=None):
+        if (
+            type(result) is not FrozenGlobalInventoryResult
+            or type(result.tenant_ids) is not tuple
+            or not result.tenant_ids
+            or any(type(tenant) is not int or tenant <= 0 for tenant in result.tenant_ids)
+            or tuple(sorted(set(result.tenant_ids))) != result.tenant_ids
+            or (current is not None and not callable(current))
+        ):
+            _blocked("invalid_frozen_input")
+        tenants = frozenset(result.tenant_ids)
+        current = current if current is not None else lambda: None
+        backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
+        baseline, plan = _descriptor(result.baseline_ref), _descriptor(result.plan_ref)
+        for kind, descriptor in (("baseline", baseline), ("plan", plan)):
+            expected_baseline = None if kind == "baseline" else baseline
+            seen, indices = set(), {}
 
             async def verify(
                 ref,
@@ -240,9 +273,12 @@ class UnificationInventoryApplication:
                 record_count=None,
                 kind=kind,
                 seen=seen,
+                indices=indices,
                 expected_baseline=expected_baseline,
             ):
                 current()
+                if scope == "tenant" and tenant_id not in tenants:
+                    _blocked("manifest_tenant")
                 if depth > 64 or ref["object_key"] in seen:
                     _blocked("manifest_graph")
                 seen.add(ref["object_key"])
@@ -268,6 +304,13 @@ class UnificationInventoryApplication:
                     if section != "sources":
                         for record in page.records:
                             _section(section, record)
+                    key = (kind, section, scope, tenant_id)
+                    if page_index != indices.get(key, 0):
+                        _blocked("manifest_page_order")
+                    indices[key] = page_index + 1
+                    yield FrozenInventoryPage(
+                        kind, section, scope, tenant_id, page_index, len(page.records), _descriptor(ref), content
+                    )
                     return
                 metadata = [record.data for record in page.records if record.record_type == "run"]
                 if depth == 0:
@@ -293,7 +336,7 @@ class UnificationInventoryApplication:
                     if record.record_type != "manifest_entry":
                         _blocked("manifest_entry")
                     entry = record.data
-                    await verify(
+                    async for leaf in verify(
                         entry["descriptor"],
                         section=entry["section"],
                         scope=entry["scope"],
@@ -301,10 +344,20 @@ class UnificationInventoryApplication:
                         page_index=entry["page_index"],
                         depth=depth + 1,
                         record_count=entry["record_count"],
-                    )
+                    ):
+                        yield leaf
 
-            await verify(descriptor)
-        return result
+            async for leaf in verify(descriptor):
+                yield leaf
+        await self._materials(
+            run_id=result.run_id,
+            writer_contract_version=result.writer_contract_version,
+            environment=environment,
+            tenant_ids=result.tenant_ids,
+            backup_ref=backup_ref,
+            schema_ref=schema_ref,
+            current=current,
+        )
 
     async def _physical_batch(self, pages, tenant, resources, files):
         expected_indices = {row.data["id"]: row.data for row in resources}
@@ -436,14 +489,6 @@ class UnificationInventoryApplication:
             if existing is not None:
                 await self._verify_frozen(
                     existing, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref, current=current
-                )
-                await self._materials(
-                    **identity,
-                    environment=environment,
-                    tenant_ids=tenant_ids,
-                    backup_ref=backup_ref,
-                    schema_ref=schema_ref,
-                    current=current,
                 )
                 return existing
             if (
