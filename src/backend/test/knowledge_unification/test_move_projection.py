@@ -327,3 +327,96 @@ async def test_recovery_preview_is_bound_to_original_request_before_any_forward_
             job_id=native.JOB, changes=(item,), actor=PermissionActor(user_id=7, current_tenant_id=101)
         )
     assert not built.transport.calls
+
+
+@pytest.mark.parametrize("retry_operator", [7, 9])
+async def test_prepare_only_commit_reserves_original_mode_without_rebuilding_retry_actor(
+    database, monkeypatch, retry_operator
+):
+    item = replace(native.expectation(), allowed_operator_ids=(7, 9))
+    built = await compose(database, monkeypatch, (item,))
+    await before_modes(database, (item,))
+    plan = native.build_move_plan(
+        item.after,
+        old_parent=(item.before.parent_type, item.before.parent_id),
+        new_parent=(item.after.parent_type, item.after.parent_id),
+        mode=item.mode,
+        store_id="actual-store",
+        model_id="actual-model",
+        operator_id=7,
+        idempotency_key=f"knowledge-move:{native.JOB}:{item.resource_type}:{item.resource_id}",
+    )
+    operation = await built.projection.prepare(plan)
+    assert operation.status == "PREPARED" and not built.transport.calls
+    checksum = operation.request_checksum
+    assert (
+        await built.bridge.aexecute_or_resume(
+            job_id=native.JOB, changes=(item,), actor=PermissionActor(user_id=retry_operator, current_tenant_id=101)
+        )
+    ).complete
+    async with database.sessions() as session:
+        row = (await session.execute(sa.select(native.Operation.__table__))).mappings().one()
+        assert row["id"] == operation.id and row["operator_id"] == 7 and row["request_checksum"] == checksum
+        assert row["status"] == "FINALIZED"
+
+
+@pytest.mark.parametrize("patch", [{"parent_id": "999"}, {"version": 3}])
+async def test_nonfinalized_wrong_mode_scope_never_reaches_transport_or_fences_the_resource(
+    database, monkeypatch, patch
+):
+    item = native.expectation()
+    await native.seed(database, (item,), status="STAGING")
+    async with database.engine.begin() as connection:
+        await connection.execute(sa.update(native.Mode).values(version=4, projection_state="PROJECTING"))
+        await connection.execute(sa.update(native.Mode).values(**patch))
+    built = await compose(database, monkeypatch, (item,))
+    async with database.engine.connect() as connection:
+        before = tuple((await connection.execute(sa.select(native.Mode.__table__))).mappings())
+    with pytest.raises(PermissionPublishNotReadyError):
+        await built.bridge.aexecute_or_resume(
+            job_id=native.JOB, changes=(item,), actor=PermissionActor(user_id=7, current_tenant_id=101)
+        )
+    async with database.engine.connect() as connection:
+        assert tuple((await connection.execute(sa.select(native.Mode.__table__))).mappings()) == before
+    assert not built.transport.calls
+
+
+async def test_stale_operation_cannot_fail_closed_another_real_operation_mode(database, monkeypatch):
+    item = native.expectation()
+    await native.seed(database, (item,), status="STAGING")
+    other_job = "e0e4b210-560a-4215-b787-9ac61158b6d2"
+    plan = native.normalize_projection_plan(
+        native.build_move_plan(
+            item.after,
+            old_parent=(item.before.parent_type, item.before.parent_id),
+            new_parent=(item.after.parent_type, item.after.parent_id),
+            mode=item.mode,
+            store_id="actual-store",
+            model_id="actual-model",
+            operator_id=7,
+            idempotency_key=f"knowledge-move:{other_job}:{item.resource_type}:{item.resource_id}",
+        )
+    )
+    operation, rows = native.build_projection_operation(plan, request_checksum=native.projection_request_checksum(plan))
+    operation.id, operation.status = 2, "STAGING"
+    async with database.engine.begin() as connection:
+        await connection.execute(
+            sa.insert(native.Operation), operation.model_dump(exclude={"create_time", "update_time"})
+        )
+        for row in rows:
+            row.operation_id = 2
+        await connection.execute(
+            sa.insert(native.TupleRow), [row.model_dump(exclude={"id", "create_time", "update_time"}) for row in rows]
+        )
+        await connection.execute(
+            sa.update(native.Mode).values(version=4, projection_state="PROJECTING", operation_id=2)
+        )
+    built = await compose(database, monkeypatch, (item,))
+    with pytest.raises(PermissionPublishNotReadyError):
+        await built.bridge.aexecute_or_resume(
+            job_id=native.JOB, changes=(item,), actor=PermissionActor(user_id=7, current_tenant_id=101)
+        )
+    async with database.engine.connect() as connection:
+        mode = (await connection.execute(sa.select(native.Mode.__table__))).mappings().one()
+        assert mode["operation_id"] == 2 and mode["projection_state"] == "PROJECTING" and mode["version"] == 4
+    assert not built.transport.calls
