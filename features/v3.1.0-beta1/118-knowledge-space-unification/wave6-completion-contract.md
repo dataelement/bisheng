@@ -1081,3 +1081,12 @@ EDGE T947/T948仅原 knowledge/domain/repositories/reference_target_repository.p
 ## 82. 移动祖先路径沿既有空路径编码 V1：已冻结
 
 PERM固定932b09e3c独立native反例：合法nested tree仅Root目录file_level_path由空串换NULL，移动其后代File就被move_parent_path_invalid误拒；空串对照通过。原SpaceService认可NULL/空串为根路径，两者不构成新业务政策。探针/private/tmp/test_f118_k1_932_independent.py及/private/tmp/f118-perm-k1-932-independent.log保留原样。本卡PROC T949/T950仅原move_scope_repository.py一生产叶及原test_move_scope_repository.py：祖先路径比较用现唯一move_path_ids/path_ids的解析结果和原祖先前缀比较，不直接拿raw None与空串比较、不复制第二路径解析、不改持久原编码。严格非法路径、缺祖先、跨tenant/space、循环/错误level等原断言保留；不增加历史层级修复或新深度限制，不改DTO/hash/FGA/worker。先同等native红测试后实现；Root独立原probe的NULL格转绿、9路径组合与作者外复验后闭卡。另一个历史File在所选folder而主版本在folder外的边界仍独立调查，本卡不偷偷决定其归属。
+
+
+## 83. 目录覆盖历史File的整版本归属 V1：已冻结
+
+PERM固定932b09e3c原native两对照及真实Web覆写producer确认：全空间md5去重可命中历史File82，overwrite移动其path到目录55，Doc/primary path仍原位置；这是§77明确保留的已有合法行为。选择历史File本身Scope通过，但选择包含它的目录会被move_document_outside_selection误拒；AC19与移动合同§4要求目录子项及整版本，不能当坏链隐藏。原证据/private/tmp/test_f118_k1_932_independent.py、test_f118_k1_932_web_producer.py保留不改。
+
+PROC T951/T952接T950，仅原move_scope_repository.py与新增test_move_scope_history.py；先真实反例后实现。保原逻辑Doc.path被选中目录覆盖时的relative路径，以及原显式File选择的destination_path规则。仅Doc.path不在任何所选folder且无显式File归属时，遍历实际Version→File一次，按各实际File旧path中被选中folder的原relative映射，按Doc建立候选目的(path,root)集合；只有一个实际候选时整Doc及全部历史沿它一起移动，其他在树外版本也保持ID/链并进入同一Doc目标路径。不得逐Doc再扫全部Files/Versions、不得只迁所选历史或猜Doc字段，不改版本/对象key/原主版本/权限与metadata规则。
+
+若同Doc有多个不同候选目标路径，不任取第一条：预检明确归属冲突，可通过显式选择该File并指定目的目录消除歧义；原Doc自身有选中逻辑路径或显式File选择时沿原优先级，不新增动作/角色/修复任务。候选范围只选中subtree实际覆盖的File，不把扩展出来但不被选中folder覆盖的外部历史误作候选。测试含真实Web覆写后移动、root/嵌套relative、两历史同候选、分歧拒绝及显式File规则；原9path、metadata系统键、完整闭集、0DML/401/10001线性预算不降。单Scope≤600，若自然表达超限先报root另冻纯路径叶，不压行或偷偷增叶。此卡只闭AC19范围，后继Owner/J1仍未开放。
