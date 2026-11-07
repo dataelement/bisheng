@@ -169,14 +169,40 @@ def normalize_references(references: tuple[ReferenceSpec, ...]) -> tuple[Referen
     )
 
 
+class ReferenceSetDigestAccumulator:
+    """Hash a nondecreasing canonical stream without normalizing or deduplicating."""
+
+    __slots__ = ("_has_rows", "_hash", "_last_key")
+
+    def __init__(self) -> None:
+        self._hash = hashlib.sha256(b"[")
+        self._last_key: tuple[str, str, str] | None = None
+        self._has_rows = False
+
+    def update(self, reference: ReferenceSpec) -> None:
+        if not isinstance(reference, ReferenceSpec):
+            raise TypeError("references must contain only ReferenceSpec values")
+        key = (reference.slot_key, reference.target.target_type.value, reference.target.target_id)
+        if self._last_key is not None and key < self._last_key:
+            raise ValueError("references must be in nondecreasing canonical order")
+        encoded = json.dumps(key, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        if self._has_rows:
+            self._hash.update(b",")
+        self._hash.update(encoded)
+        self._last_key, self._has_rows = key, True
+
+    def hexdigest(self) -> str:
+        completed = self._hash.copy()
+        completed.update(b"]")
+        return completed.hexdigest()
+
+
 def reference_set_digest(references: tuple[ReferenceSpec, ...]) -> str:
     """Hash configuration identities; moving a file must not rewrite its sources."""
-    canonical = [
-        (reference.slot_key, reference.target.target_type.value, reference.target.target_id)
-        for reference in normalize_references(references)
-    ]
-    encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    accumulator = ReferenceSetDigestAccumulator()
+    for reference in normalize_references(references):
+        accumulator.update(reference)
+    return accumulator.hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
