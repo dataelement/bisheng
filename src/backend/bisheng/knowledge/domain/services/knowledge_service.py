@@ -1808,6 +1808,30 @@ class KnowledgeService(KnowledgeUtils):
         )
 
     @classmethod
+    def stage_prepared_duplicate(
+        cls,
+        *,
+        prepared: PreparedUpload,
+        repeat_files: tuple[KnowledgeFile, ...] | list[KnowledgeFile],
+    ) -> KnowledgeFile:
+        """Stage the original duplicate response without preparing or persisting it again."""
+        minio_client = get_minio_storage_sync()
+        # Preserve the existing precedence: content duplicates win over name-only duplicates.
+        db_file = next((file for file in repeat_files if file.md5 == prepared.md5), repeat_files[0])
+        old_name = db_file.file_name
+        file_type = prepared.download_name.rsplit(".", 1)[-1]
+        obj_name = f"tmp/{db_file.id}.{file_type}"
+        db_file.object_name = obj_name
+        db_file.remark = json.dumps({"new_name": prepared.original_file_name, "old_name": old_name}, ensure_ascii=False)
+        # Keep the old row unchanged in SQL; the client still chooses overwrite.
+        minio_client.put_object_tmp_sync(db_file.object_name, prepared.local_path)
+        cls.remove_unused_file(prepared.file_info.file_path)
+        db_file.status = KnowledgeFileStatus.FAILED.value
+        db_file.split_rule = prepared.split_rule
+        db_file.file_size = prepared.file_size
+        return db_file
+
+    @classmethod
     def process_one_file(
         cls,
         login_user: UserPayload,
@@ -1827,7 +1851,7 @@ class KnowledgeService(KnowledgeUtils):
             file_kwargs=file_kwargs,
             processing_rule_request=processing_rule_request,
         )
-        filepath, file_name = prepared.local_path, prepared.download_name
+        filepath = prepared.local_path
         original_file_name, md5_, file_size = prepared.original_file_name, prepared.md5, prepared.file_size
         str_split_rule, file_info = prepared.split_rule, prepared.file_info
         repeat_files = KnowledgeFileDao.get_file_by_condition(
@@ -1835,29 +1859,14 @@ class KnowledgeService(KnowledgeUtils):
             md5_=md5_,
             file_name=original_file_name,
         )
-        minio_client = get_minio_storage_sync()
-
         # ``skip_dedup``: callers that have already resolved a guaranteed-unique
         # filename (e.g. F028 conversation export → import, which appends "(N)")
         # force a fresh insert. Otherwise re-importing the same conversation
         # collides on content md5 here and is silently rejected as a duplicate.
         if repeat_files and not skip_dedup:
-            # Preserve the existing precedence: content duplicates win over name-only duplicates.
-            db_file = next((file for file in repeat_files if file.md5 == md5_), repeat_files[0])
-            old_name = db_file.file_name
-            file_type = file_name.rsplit(".", 1)[-1]
-            obj_name = f"tmp/{db_file.id}.{file_type}"
-            db_file.object_name = obj_name
-            db_file.remark = json.dumps({"new_name": original_file_name, "old_name": old_name}, ensure_ascii=False)
-            # Uploaded to minio, do not modify the database, it is up to the front-end to decide whether to overwrite or not. If it is overwritten, the retry interface
-            minio_client.put_object_tmp_sync(db_file.object_name, filepath)
-            cls.remove_unused_file(file_info.file_path)
-            db_file.status = KnowledgeFileStatus.FAILED.value
-            db_file.split_rule = str_split_rule
-            # Update file size information
-            db_file.file_size = file_size
-            return db_file
+            return cls.stage_prepared_duplicate(prepared=prepared, repeat_files=repeat_files)
 
+        minio_client = get_minio_storage_sync()
         # Insert new data, upload the original file tominio
         db_file = KnowledgeFile(
             knowledge_id=knowledge.id,
