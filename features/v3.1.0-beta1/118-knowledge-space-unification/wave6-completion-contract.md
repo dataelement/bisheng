@@ -851,3 +851,18 @@ EDGE T883/884仅新test/knowledge_unification/test_kn_upload_preparation.py及�
 INT T885/886仅新test/knowledge_unification/test_model_original_evidence_scale.py与原llm/domain/repositories/reference_target_repository.py。独立审代码确认bind的每target _original(originals,key)重复扫描完整原BRR集合，虽无SQL笛卡尔JOIN仍有M×B内存工作；owner_query原originals为空，因此§56大目标测试未覆盖此路径。以真实SQL 401/1001模型及单来源多slot计数实际helper收到的候选行数证明，不按wall clock阈值猜性能。
 
 只在非union facts消费前将已读originals按完整MODEL目标ID分组一次，原_original在对应同ID候选中运行；保其所有target_tenant/space/legacy reason/run/evidence一致性与首原行选择，空/重复slot/不同source/version/foreign精确SQL谓词不变，旧helper可保。不得更改SQL、锁序、sharing/inherited/default/原source证据、Scope或授权，不为此group扩全资源优化。prelock_sources仅物理union原分支不发行或混用来源证据，仍原流程。测试需原生规模实际O(B+M)计数、相同目标多slot合法相同证据与冲突拒绝、不同source/version不串、既有Owner/混合prelock/删除影响回归；新增叶≤600、原大叶只窄改，不写其他叶。
+
+
+## 61. 本次初始上传commit ACK及短事务重绑定 V1：已冻结
+
+PERM T887/888仅原knowledge/domain/repositories/upload_registration_repository.py（现439行，扩后仍≤600）与新test/knowledge_unification/test_kn_upload_committed_registration.py。§58原aregister_initial/aset_materialized/arollback_created继续同Session/TX，不放宽它们；本前置只供后继本次上传App在SQL/Blob/FGA分阶段时安全处理自己新建的独立V1链，不接历史/任意IDs/跨进程恢复。普通上传继续原upload_file及原scheduler。
+
+新增areserve_object_key(session,*,registration,object_name)->RegisteredUpload仅SQL预留确定永久key，要求本次原对象receipt/原native TX及当前完整链、原object_name为空，只改object_name并保初始时间/其他三行事实，不证明blob已存在。key由后继App用原KnowledgeUtils按实际FileID计算，Repo不import应用Service或外部IO。复用现materialize的单一SQL写后核验实现，不复制链算法。原aset_materialized亦只是SQL字段登记，不提供对象存在或派发就绪证明。
+
+新增私有_acknowledge_committed_initial(*,registrations:tuple[RegisteredUpload,...]<=200)->None，仅在App实际await原根Session.commit()明确返回ACK后调用。Repo须同时有该原根Transaction的实际SQLAlchemy root after_commit证据（savepoint release、rollback、别的Session/TX或之后空commit不得充当）；原receipt及完整typed字段未变、当前具体tenant相同，登记只对这些原发行对象生效。用原Session实例级短生命周期observer/私有registry，不加全局event/新表/Model/DDL。after_commit虽已发生但外层commit wrapper报unknown时，App不会调用ACK，仍不得rebind/dispatch；原回滚或仅savepoint成功亦拒ACK。实现若需额外event处理须保持原caller生命周期，不主动commit/rollback。
+
+新增私有_arebind_committed_initial(session,*,registration)->RegisteredUpload：须原Repo私有发行且已明确ACK的原对象，fresh另一native Session/原已开新TX、同具体tenant/无pending/bypass，原Session根TX已结束。真实重读原File/Doc/V1全事实、当前parent/path、精确独立V1链/无额外history或primary alias、仍原WAITING及未改名/未派发；全部与ACK时原facts完全相同才签发新TX局部receipt。原已ACK receipt保留作后继再次短TX核验，新局部receipt按原§58规则消费；不能构造新dataclass/拷贝/裸ID/客户端nonce授权。后继App仅本次调用实例保留registry，进程崩溃丢registry不宣称自动恢复。
+
+后继顺序固定但本卡不接App：短TX完整注册+确定key→commit ACK→释放业务Session后blob/FGA→成功才原dispatch；pre-dispatch补偿先fresh短TX重绑定核当前链、释放Session，再原creation ledger resolve/inverse，成功后fresh rebind再次核链并SQL删除commit明确成功，最后清理本次owned blob。任何链漂移、投影/SQL commit unknown均保blob与可核SQL，不先删对象、不dispatch、不持业务锁跨外部IO。原actor/home/Scope由后继可信App保持，Repo本身不新增身份/授权协议。
+
+native测试包括原47回归；root commit vs nested release/rollback/后续另TX、commit已发生但没有App ACK/commit wrapper抛unknown；fresh/local receipt边界、完整三行漂移/历史化/别名/改名/pending、读验证失败0写且保caller、reserved key纯SQL/不可替换原对象key及200项observer/SQL预算。普通DataScope/管理pin身份留App原准入测试；本扩展不新增一般跨TX删除服务、不冒正式恢复命令。
