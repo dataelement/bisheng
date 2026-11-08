@@ -111,6 +111,9 @@ def owns_dsh_credential(method: str, path: str) -> bool:
                 re.fullmatch(r"/api/v1/dsh/market/plugins/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path)
                 or re.fullmatch(r"/api/v1/dsh/market/workbenches/[a-f0-9]{32}", path)
                 or re.fullmatch(r"/api/v1/dsh/market/workbenches/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path)
+                or re.fullmatch(
+                    r"/api/v1/dsh/market/workbenches/[a-f0-9]{32}/versions/[a-f0-9]{32}/screenshots/[a-f0-9]{64}", path
+                )
             )
             is not None
         )
@@ -436,6 +439,24 @@ class CustomMiddleware(BaseHTTPMiddleware):
         ip = get_request_ip(request)
         req_path = request.url.path
         dsh_owned = owns_dsh_credential(request.method, req_path)
+        dsh_scope = dsh_owned
+        market_browser_token = None
+        if dsh_owned and req_path.startswith("/api/v1/dsh/market/"):
+            authorization = request.headers.get("authorization", "")
+            if authorization.startswith("Bearer "):
+                import jwt
+
+                candidate = authorization[7:]
+                try:
+                    desktop = jwt.get_unverified_header(candidate).get("typ") == "bisheng-dsh-access+jwt"
+                except jwt.PyJWTError:
+                    desktop = False
+                if not desktop:
+                    market_browser_token = candidate
+            else:
+                market_browser_token = request.cookies.get("access_token_cookie")
+            if market_browser_token:
+                dsh_owned = False
         path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/dsh/", "/api/v1/internal/dsh/")) else request.url
         trace_id_var.set(trace_id)
 
@@ -446,13 +467,13 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # owns its own credential. Browser credentials must not change any of
         # those channels' identity or errors.
         token = (
-            _extract_http_access_token(request) if _uses_browser_identity(request.url.path) and not dsh_owned else None
+            (market_browser_token or _extract_http_access_token(request))
+            if _uses_browser_identity(request.url.path) and not dsh_owned
+            else None
         )
         decoded_subject = _decode_jwt_subject(token) if token else None
-        tenant_id = None if dsh_owned else _set_tenant_context(token, decoded_subject=decoded_subject)
-
         dsh_scope_tokens = []
-        if dsh_owned:
+        if dsh_scope:
             from bisheng.core.context import tenant as tenant_context
 
             dsh_scope_tokens = [
@@ -463,6 +484,7 @@ class CustomMiddleware(BaseHTTPMiddleware):
                 tenant_context._bypass_tenant_filter.set(False),
                 tenant_context._strict_tenant_filter.set(False),
             ]
+        tenant_id = None if dsh_owned else _set_tenant_context(token, decoded_subject=decoded_subject)
 
         req_path = request.url.path
         is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS) or bool(

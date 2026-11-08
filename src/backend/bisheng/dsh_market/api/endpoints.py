@@ -322,6 +322,26 @@ async def workbench_detail(
     return resp_200(await call_workbench(service.detail, actor.tenant_id, workbench_id))
 
 
+@router.get("/workbenches/{workbench_id}/versions/{version_id}/screenshots/{image_id}")
+async def workbench_screenshot(
+    workbench_id: str,
+    version_id: str,
+    image_id: str,
+    actor: MarketActor = Depends(market_actor),
+    service=Depends(get_workbench_service),
+):
+    data, metadata = await call_workbench(service.screenshot, actor.tenant_id, workbench_id, version_id, image_id)
+    return Response(
+        data,
+        media_type=metadata["media_type"],
+        headers={
+            "ETag": f'"{metadata["sha256"]}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @router.get("/workbenches/{workbench_id}/versions/{version_id}/artifact")
 async def workbench_artifact(
     workbench_id: str,

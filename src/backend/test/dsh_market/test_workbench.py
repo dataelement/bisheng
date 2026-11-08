@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.dsh_market.api.auth import MarketActor, market_actor, market_admin
@@ -589,6 +589,48 @@ def test_identity_conflict_and_lower_version_still_rejected(service):
     historical = service.preview(2, archive("1.0.0", extra={"package/client.js": b"old version overwrite"}))
     assert historical["reason"] == "lower_version"
     assert not historical["allowed"] and not historical["overwrite"]
+
+
+def test_deleted_equivalent_build_restore_preserves_history_and_tenant_isolation(service):
+    from bisheng.dsh_market.domain.models import MarketWorkbenchVersion
+
+    original = archive("0.2.1")
+    variant = archive("0.2.1+enterprise.screenshots.1")
+    original_task = service.import_bundle(2, 20, original)
+    row = service.list(2)["data"][0]
+    assert service.preview(2, variant)["reason"] == "version_conflict"
+    service.delete(2, 20, row["id"], row["revision"])
+    assert service.preview(2, archive("0.2.0"))["reason"] == "lower_version"
+    assert service.preview(2, archive("0.2.1", repository=False))["reason"] == "identity_conflict"
+    assert service.preview(2, variant)["allowed"]
+    restored_task = service.import_bundle(2, 20, variant)
+    assert restored_task["status"] == "completed"
+    restored = service.detail(2, row["id"])
+    assert restored["id"] == row["id"]
+    assert restored["revision"] == row["revision"] + 2
+    with pytest.raises(LookupError):
+        service.download(2, row["id"], original_task["version_id"])
+    assert restored["current_version"]["version"] == "0.2.1+enterprise.screenshots.1"
+    assert restored_task["version_id"] != original_task["version_id"]
+    assert service.download(2, row["id"], restored_task["version_id"])[0] == variant
+    assert service.preview(2, variant)["allowed"]
+    assert service.import_bundle(2, 20, variant)["status"] == "completed"
+    changed = archive("0.2.1+enterprise.screenshots.1", extra={"package/client.js": b"changed bytes"})
+    preview = service.preview(2, changed)
+    assert preview["allowed"] and preview["overwrite"] and not preview["duplicate"]
+    assert service.import_bundle(2, 20, changed)["status"] == "completed"
+    assert service.download(2, row["id"], restored_task["version_id"])[0] == changed
+    assert service.detail(2, row["id"])["revision"] == restored["revision"] + 1
+    assert service.preview(2, original)["reason"] == "version_conflict"
+    assert service.preview(2, archive("0.2.0"))["reason"] == "lower_version"
+    assert service.list(3)["total"] == 0
+    assert service.import_bundle(3, 30, original)["status"] == "completed"
+    assert service.list(3)["data"][0]["id"] != row["id"]
+    with service.repository.sessions() as db:
+        versions = db.exec(
+            select(MarketWorkbenchVersion).where(MarketWorkbenchVersion.workbench_id == row["id"])
+        ).all()
+        assert {v.version for v in versions} == {"0.2.1", "0.2.1+enterprise.screenshots.1"}
 
 
 def test_real_archive_above_old_eight_mib_limit(workbench_client):

@@ -2,11 +2,13 @@
 
 import hashlib
 
-from .workbench_bundle import WorkbenchBundleError, validate_workbench_bundle
-
-
-class WorkbenchArtifactError(ValueError):
-    pass
+from .workbench_bundle import (
+    WorkbenchBundleError,
+    read_workbench_screenshot,
+    screenshot_id,
+    validate_workbench_bundle,
+)
+from .workbench_repository import WorkbenchArtifactError, screenshot_metadata
 
 
 class WorkbenchService:
@@ -63,16 +65,50 @@ class WorkbenchService:
         return self.repository.delete(tenant, workbench_id, revision)
 
     def download(self, tenant, workbench_id, version_id):
-        version = self.repository.current_version(tenant, workbench_id, version_id)
-        if version is None:
+        snapshot = self.repository.current_version_snapshot(tenant, workbench_id, version_id)
+        if snapshot is None:
             raise LookupError("Current workbench version not found")
+        return self._download_snapshot(tenant, workbench_id, version_id, snapshot)
+
+    def _check_snapshot(self, tenant, workbench_id, version_id, snapshot):
+        current = self.repository.current_version_snapshot(tenant, workbench_id, version_id)
+        version, revision = snapshot
+        if (
+            current is None
+            or current[1] != revision
+            or any(current[0][key] != version[key] for key in ("id", "digest"))
+        ):
+            raise WorkbenchArtifactError("Workbench version changed")
+
+    def _download_snapshot(self, tenant, workbench_id, version_id, snapshot):
+        version, _revision = snapshot
         try:
             data = self.storage.get(tenant, version["digest"])
         except FileNotFoundError as exc:
             raise WorkbenchArtifactError("Workbench artifact missing") from exc
         if data is None or len(data) != version["size"] or hashlib.sha256(data).hexdigest() != version["digest"]:
             raise WorkbenchArtifactError("Workbench artifact digest mismatch")
-        current = self.repository.current_version(tenant, workbench_id, version_id)
-        if current is None or current["id"] != version["id"] or current["digest"] != version["digest"]:
-            raise WorkbenchArtifactError("Workbench version changed")
+        self._check_snapshot(tenant, workbench_id, version_id, snapshot)
         return data, version["digest"]
+
+    def screenshot(self, tenant, workbench_id, version_id, image_id):
+        snapshot = self.repository.current_version_snapshot(tenant, workbench_id, version_id)
+        if snapshot is None:
+            raise LookupError("Current workbench version not found")
+        version, _revision = snapshot
+        metadata = next(
+            (image for image in screenshot_metadata(version["manifest"], version["digest"]) if image["id"] == image_id),
+            None,
+        )
+        if metadata is None:
+            raise LookupError("Workbench screenshot not found")
+        if screenshot_id(version["digest"], metadata["path"], metadata["sha256"]) != image_id:
+            raise WorkbenchArtifactError("Workbench screenshot binding mismatch")
+        data, _digest = self._download_snapshot(tenant, workbench_id, version_id, snapshot)
+        try:
+            raw = read_workbench_screenshot(data, metadata)
+        except WorkbenchBundleError as exc:
+            raise WorkbenchArtifactError("Workbench screenshot unavailable or invalid") from exc
+        # Decoding can take time. Recheck after decoding as well as after storage IO.
+        self._check_snapshot(tenant, workbench_id, version_id, snapshot)
+        return raw, metadata

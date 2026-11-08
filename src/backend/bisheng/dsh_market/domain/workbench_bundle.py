@@ -1,14 +1,17 @@
 """Static validation of one npm workbench archive, without extracting or executing it."""
 
 import gzip
+import hashlib
 import io
 import json
 import re
 import tarfile
 import unicodedata
+import warnings
 from urllib.parse import urlparse
 
 import yaml
+from PIL import Image, UnidentifiedImageError
 from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 
 MAX_WORKBENCH_UPLOAD_BYTES = 100 * 1024 * 1024
@@ -317,6 +320,190 @@ def _read_patch(data, path):
     raise WorkbenchBundleError("WB-08: Patch file missing")
 
 
+MAX_SCREENSHOTS = 8
+MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024
+MAX_SCREENSHOTS_BYTES = 20 * 1024 * 1024
+MAX_SCREENSHOT_PIXELS = 16_000_000
+MAX_SCREENSHOT_DIMENSION = 8192
+SCREENSHOT_TYPES = {
+    ".png": ("PNG", "image/png"),
+    ".jpg": ("JPEG", "image/jpeg"),
+    ".jpeg": ("JPEG", "image/jpeg"),
+    ".webp": ("WEBP", "image/webp"),
+}
+
+
+def _screenshot_require(ok, code, field, message):
+    if not ok:
+        raise WorkbenchBundleError(f"WB-12: {message}", code=f"WORKBENCH_SCREENSHOT_{code}", field=field)
+
+
+def _screenshot_path(value, field):
+    _screenshot_require(isinstance(value, str) and 0 < len(value) <= 512, "PATH", field, "Invalid screenshot path")
+    path = value.removeprefix("./")
+    _screenshot_require(
+        _safe_path("package/" + path) and not any(char in path for char in "%?#"),
+        "PATH",
+        field,
+        "Screenshot path must be package-relative and safe",
+    )
+    extension = "." + path.rsplit(".", 1)[-1].lower()
+    _screenshot_require(
+        extension in SCREENSHOT_TYPES, "TYPE", field, "Only PNG, JPEG and WebP screenshots are supported"
+    )
+    return path, SCREENSHOT_TYPES[extension]
+
+
+def _read_screenshot_files(data, paths):
+    """Read only declared members from an already validated archive; never extract to disk."""
+    result = {}
+    total = 0
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(data)) as compressed:
+            with tarfile.open(fileobj=LimitedReader(compressed), mode="r|") as archive:
+                for item in archive:
+                    if item.name not in paths:
+                        continue
+                    _screenshot_require(item.isfile(), "PATH", paths[item.name], "Screenshot must be a regular file")
+                    _screenshot_require(
+                        0 < item.size <= MAX_SCREENSHOT_BYTES,
+                        "LIMIT",
+                        paths[item.name],
+                        "Screenshot exceeds 5 MiB or is empty",
+                    )
+                    total += item.size
+                    _screenshot_require(
+                        total <= MAX_SCREENSHOTS_BYTES,
+                        "LIMIT",
+                        "dsh.workbench.screenshots",
+                        "Screenshots exceed 20 MiB",
+                    )
+                    source = archive.extractfile(item)
+                    _screenshot_require(source is not None, "IMAGE", paths[item.name], "Unreadable screenshot")
+                    raw = source.read(MAX_SCREENSHOT_BYTES + 1)
+                    _screenshot_require(len(raw) == item.size, "IMAGE", paths[item.name], "Truncated screenshot")
+                    result[item.name] = raw
+    except (OSError, EOFError, tarfile.TarError) as exc:
+        raise WorkbenchBundleError(
+            "WB-12: Unreadable screenshot archive", code="WORKBENCH_SCREENSHOT_IMAGE", field="dsh.workbench.screenshots"
+        ) from exc
+    _screenshot_require(
+        set(result) == set(paths), "MISSING", "dsh.workbench.screenshots", "Declared screenshot is missing from archive"
+    )
+    return result
+
+
+def _screenshot_image(raw, expected, field):
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(raw)) as image:
+                _screenshot_require(
+                    image.format == expected[0], "TYPE", field, "Screenshot extension does not match actual image type"
+                )
+                width, height = image.size
+                _screenshot_require(
+                    0 < width <= MAX_SCREENSHOT_DIMENSION
+                    and 0 < height <= MAX_SCREENSHOT_DIMENSION
+                    and width * height <= MAX_SCREENSHOT_PIXELS,
+                    "LIMIT",
+                    field,
+                    "Screenshot exceeds 8192 pixels per dimension or 16 megapixels",
+                )
+                _screenshot_require(
+                    getattr(image, "n_frames", 1) == 1, "TYPE", field, "Animated screenshots are unsupported"
+                )
+                image.verify()
+            # verify() checks container integrity; load() also checks the compressed pixel data.
+            with Image.open(io.BytesIO(raw)) as image:
+                image.load()
+    except (
+        OSError,
+        SyntaxError,
+        ValueError,
+        UnidentifiedImageError,
+        Image.DecompressionBombWarning,
+        Image.DecompressionBombError,
+    ) as exc:
+        if isinstance(exc, WorkbenchBundleError):
+            raise
+        raise WorkbenchBundleError(
+            "WB-12: Invalid screenshot image", code="WORKBENCH_SCREENSHOT_IMAGE", field=field
+        ) from exc
+    return {
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "media_type": expected[1],
+        "width": width,
+        "height": height,
+        "bytes": len(raw),
+    }
+
+
+def screenshot_id(artifact_digest, path, image_digest):
+    return hashlib.sha256(f"{artifact_digest}\0{path}\0{image_digest}".encode()).hexdigest()
+
+
+def _screenshots(data, dsh, files):
+    if "workbench" not in dsh:
+        return []
+    workbench = dsh["workbench"]
+    field = "dsh.workbench.screenshots"
+    _screenshot_require(
+        isinstance(workbench, dict), "DECLARATION", "dsh.workbench", "Workbench declaration must be an object"
+    )
+    declarations = workbench.get("screenshots", [])
+    _screenshot_require(isinstance(declarations, list), "DECLARATION", field, "Screenshots must be an array")
+    _screenshot_require(len(declarations) <= MAX_SCREENSHOTS, "LIMIT", field, "At most 8 screenshots are supported")
+    entries, seen = [], set()
+    for index, entry in enumerate(declarations):
+        item_field = f"{field}[{index}]"
+        _screenshot_require(
+            isinstance(entry, dict) and "path" in entry and set(entry) <= {"path", "alt"},
+            "DECLARATION",
+            item_field,
+            "Screenshot requires path and optional alt only",
+        )
+        path, expected = _screenshot_path(entry["path"], item_field + ".path")
+        _screenshot_require(path not in seen, "DECLARATION", item_field + ".path", "Duplicate screenshot path")
+        seen.add(path)
+        _screenshot_require(
+            "package/" + path in files, "MISSING", item_field + ".path", "Declared screenshot is missing from archive"
+        )
+        alt = entry.get("alt", "")
+        _screenshot_require(
+            isinstance(alt, str)
+            and len(alt) <= 256
+            and not any(ord(char) < 32 or 127 <= ord(char) <= 159 or 0xD800 <= ord(char) <= 0xDFFF for char in alt),
+            "DECLARATION",
+            item_field + ".alt",
+            "Alt must be text of at most 256 characters without control characters or surrogates",
+        )
+        entries.append((path, expected, alt, item_field))
+    if not entries:
+        return []
+    raw_files = _read_screenshot_files(data, {"package/" + path: field for path, _expected, _alt, field in entries})
+    digest = hashlib.sha256(data).hexdigest()
+    result = []
+    for path, expected, alt, field in entries:
+        metadata = _screenshot_image(raw_files["package/" + path], expected, field)
+        result.append({"id": screenshot_id(digest, path, metadata["sha256"]), "path": path, "alt": alt, **metadata})
+    return result
+
+
+def read_workbench_screenshot(data, metadata):
+    """Read one persisted, declared screenshot and verify it against import metadata."""
+    path, expected = _screenshot_path(metadata["path"], "screenshot.path")
+    raw = _read_screenshot_files(data, {"package/" + path: "screenshot.path"})["package/" + path]
+    actual = _screenshot_image(raw, expected, "screenshot")
+    _screenshot_require(
+        all(metadata.get(key) == value for key, value in actual.items()),
+        "IMAGE",
+        "screenshot",
+        "Screenshot metadata mismatch",
+    )
+    return raw
+
+
 def validate_workbench_bundle(data: bytes) -> dict:
     require(0 < len(data) <= MAX_WORKBENCH_UPLOAD_BYTES, "WB-02", "Archive exceeds 100 MiB")
     require(data.startswith(b"\x1f\x8b"), "WB-01", "Expected gzip tar archive")
@@ -435,6 +622,7 @@ def validate_workbench_bundle(data: bytes) -> dict:
         "legacy_id": legacy_id,
         "display_name": title,
         "description": description,
+        "screenshots": _screenshots(data, dsh, files),
         "verification_level": "static",
         "warnings": ["legacy_identity", "runtime_not_verified"]
         if identity_kind == "legacy"
