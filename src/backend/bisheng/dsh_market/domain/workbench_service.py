@@ -59,6 +59,9 @@ class WorkbenchService:
             raise LookupError("Workbench not found")
         return result
 
+    def delete(self, tenant, actor, workbench_id, revision):
+        return self.repository.delete(tenant, workbench_id, revision)
+
     def download(self, tenant, workbench_id, version_id):
         version = self.repository.current_version(tenant, workbench_id, version_id)
         if version is None:
@@ -69,6 +72,7 @@ class WorkbenchService:
             raise WorkbenchArtifactError("Workbench artifact missing") from exc
         if data is None or len(data) != version["size"] or hashlib.sha256(data).hexdigest() != version["digest"]:
             raise WorkbenchArtifactError("Workbench artifact digest mismatch")
-        if self.repository.current_version(tenant, workbench_id, version_id) is None:
+        current = self.repository.current_version(tenant, workbench_id, version_id)
+        if current is None or current["id"] != version["id"] or current["digest"] != version["digest"]:
             raise WorkbenchArtifactError("Workbench version changed")
         return data, version["digest"]

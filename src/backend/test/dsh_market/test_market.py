@@ -156,15 +156,18 @@ def test_rejects_symlinks():
         validate_bundle(stream.getvalue())
 
 
-def test_idempotent_import_and_immutable_version(service):
+def test_idempotent_import_and_same_version_overwrite(service):
     data = bundle()
     first = service.import_bundle(2, 20, data)
     assert service.import_bundle(2, 20, data)["id"] == first["id"]
     modified = data + b"different container bytes"
     other = service.import_bundle(2, 20, modified)
-    assert other["status"] == "failed"
+    assert other["status"] == "completed"
+    assert other["version_id"] == first["version_id"]
     assert service.repository.list(2)["total"] == 1
     assert len(service.repository.list(2)["data"][0]["versions"]) == 1
+    plugin = service.repository.list(2)["data"][0]
+    assert service.download(2, plugin["id"], first["version_id"])[0] == modified
 
 
 def test_tenant_isolation_on_list_detail_download_and_mutation(service):
@@ -562,3 +565,212 @@ def test_community_import_preview_and_artifact_round_trip(service, kind):
         assert upgraded.json()["data"]["status"] == "completed"
         older = client.post("/api/v1/dsh/market/admin/imports/preview", files=upload).json()["data"]
         assert not older["allowed"] and older["reason"] == "lower_version"
+
+
+@pytest.mark.parametrize("kind", ["zip", "tgz"])
+def test_same_version_overwrite_api_story_updates_bytes_metadata_and_sync(service, kind):
+    from test.dsh_market.test_community_bundle import package_archive
+
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20, desktop=True)
+    app.dependency_overrides[market_admin] = lambda: MarketActor(2, 20)
+    app.dependency_overrides[get_market_service] = lambda: service
+
+    @app.exception_handler(BaseErrorCode)
+    async def error_handler(request, error):
+        return JSONResponse(error.to_dict())
+
+    base = "/api/v1/dsh/market"
+    original = package_archive(kind, {"displayName": "Original", "description": "Original description"})
+    replacement = package_archive(
+        kind,
+        {"displayName": "Replacement", "description": "Replacement description", "os": ["linux"], "cpu": ["x64"]},
+        extra={"index.js": b"export function apply() { return 'replacement'; }"},
+    )
+    original_digest, replacement_digest = (hashlib.sha256(data).hexdigest() for data in (original, replacement))
+    with TestClient(app) as client:
+
+        def upload(path, data):
+            response = client.post(base + path, files={"file": ("plugin." + kind, data)})
+            assert response.status_code == 200
+            return response.json()["data"]
+
+        first = upload("/admin/imports", original)
+        plugin = client.get(base + "/admin/plugins").json()["data"]["data"][0]
+        detail_url = base + "/admin/plugins/" + plugin["id"]
+        artifact_url = base + "/plugins/" + plugin["id"] + "/versions/" + first["version_id"] + "/artifact"
+        try:
+            preview = upload("/admin/imports/preview", replacement)
+            assert preview["allowed"] and preview["overwrite"] and not preview["duplicate"]
+            changed = upload("/admin/imports", replacement)
+            assert changed["status"] == "completed" and changed["version_id"] == first["version_id"]
+            current = client.get(detail_url).json()["data"]
+            assert current["revision"] == plugin["revision"] + 1
+            assert current["updated_at"] > plugin["updated_at"]
+            assert current["display_name"] == "Replacement"
+            assert current["description"] == "Replacement description"
+            assert len(current["versions"]) == 1
+            version = current["versions"][0]
+            assert version["digest"] == replacement_digest and version["size"] == len(replacement)
+            assert version["manifest"]["plugin"]["display_name"] == "Replacement"
+            assert set(version["manifest"]["targets"]) == {"linux-x64"}
+            artifact = client.get(artifact_url)
+            assert artifact.content == replacement
+            assert artifact.headers["etag"] == '"' + replacement_digest + '"'
+            policy = client.post(base + "/sync", json={"device_id": "overwrite-story", "plugins": []}).json()["data"][
+                "policies"
+            ][0]
+            assert policy["revision"] == current["revision"]
+            assert policy["versions"] == [{"id": first["version_id"], "digest": replacement_digest}]
+            audit = service.repository.audits(2, plugin["id"])[0]
+            assert audit["before"]["digest"] == original_digest
+            assert audit["after"]["digest"] == replacement_digest
+            assert audit["revision"] == current["revision"] and audit["actor_id"] == 20
+
+            duplicate = upload("/admin/imports/preview", replacement)
+            assert duplicate["allowed"] and duplicate["duplicate"] and not duplicate["overwrite"]
+            assert upload("/admin/imports", replacement)["id"] == changed["id"]
+            assert client.get(detail_url).json()["data"] == current
+            assert len(service.repository.audits(2, plugin["id"])) == 2
+
+            restored = upload("/admin/imports", original)
+            assert restored["status"] == "completed" and restored["id"] == first["id"]
+            restored_detail = client.get(detail_url).json()["data"]
+            assert restored_detail["revision"] == current["revision"] + 1
+            assert restored_detail["display_name"] == "Original"
+            assert restored_detail["versions"][0]["digest"] == original_digest
+            artifact = client.get(artifact_url)
+            assert artifact.content == original and artifact.headers["etag"] == '"' + original_digest + '"'
+            audit = service.repository.audits(2, plugin["id"])[0]
+            assert audit["before"]["digest"] == replacement_digest and audit["after"]["digest"] == original_digest
+
+            tenant_original = service.detail(2, plugin["id"])
+            app.dependency_overrides[market_actor] = lambda: MarketActor(3, 30, desktop=True)
+            app.dependency_overrides[market_admin] = lambda: MarketActor(3, 30)
+            assert client.get(artifact_url).json()["status_code"] != 200
+            assert not upload("/admin/imports/preview", replacement)["overwrite"]
+            assert upload("/admin/imports", replacement)["status"] == "completed"
+            assert service.detail(2, plugin["id"]) == tenant_original
+        finally:
+            # Delete via real routes even if a story assertion fails; the DB/storage are test-local.
+            for tenant in (2, 3):
+                app.dependency_overrides[market_admin] = lambda tenant=tenant: MarketActor(tenant, 20)
+                for row in service.list_plugins(tenant)["data"]:
+                    response = client.delete(base + "/admin/plugins/" + row["id"], params={"revision": row["revision"]})
+                    assert response.json()["data"]["deleted"]
+
+
+@pytest.mark.parametrize("action", ["disable", "delete", "unpublish"])
+@pytest.mark.parametrize("changed_bytes", [False, True])
+def test_same_version_import_restores_inactive_plugin(service, action, changed_bytes):
+    original = bundle()
+    first = service.import_bundle(2, 20, original)
+    plugin = service.list_plugins(2)["data"][0]
+    service.change(2, 20, plugin["id"], plugin["revision"], action)
+    data = original + b"replacement" if changed_bytes else original
+    restored = service.import_bundle(2, 21, data)
+    assert restored["status"] == "completed" and restored["version_id"] == first["version_id"]
+    current = service.detail(2, plugin["id"])
+    assert current["status"] == "published" and not current["disabled"]
+    assert current["revision"] == plugin["revision"] + 2
+    assert service.download(2, plugin["id"], first["version_id"])[0] == data
+
+
+def test_same_version_overwrite_rejects_stale_download_and_publish(service, monkeypatch):
+    data = bundle()
+    task = service.import_bundle(2, 20, data)
+    plugin = service.list_plugins(2)["data"][0]
+    get = service.storage.get
+
+    def overwrite_during_read(tenant, digest):
+        result = get(tenant, digest)
+        monkeypatch.setattr(service.storage, "get", get)
+        assert service.import_bundle(tenant, 21, data + b"replacement")["status"] == "completed"
+        return result
+
+    monkeypatch.setattr(service.storage, "get", overwrite_during_read)
+    with pytest.raises(ConflictError):
+        service.download(2, plugin["id"], task["version_id"])
+    assert service.detail(2, plugin["id"])["current_version_id"] == task["version_id"]
+
+    current = service.detail(2, plugin["id"])
+
+    # Restore A while publish validates B; revision must reject the stale publish.
+    def restore_during_read(tenant, digest):
+        result = get(tenant, digest)
+        monkeypatch.setattr(service.storage, "get", get)
+        service.import_bundle(tenant, 22, data)
+        return result
+
+    monkeypatch.setattr(service.storage, "get", restore_during_read)
+    with pytest.raises(ConflictError):
+        service.change(2, 20, plugin["id"], current["revision"], "publish", task["version_id"])
+
+
+def test_overwrite_validation_and_lower_version_fail_without_mutation(service):
+    data = bundle("2.0.0")
+    task = service.import_bundle(2, 20, data)
+    plugin = service.list_plugins(2)["data"][0]
+    invalid = bundle("2.0.0", dependencies={"missing": "1.0.0"})
+    assert service.import_bundle(2, 20, invalid)["status"] == "failed"
+    assert service.detail(2, plugin["id"]) == plugin
+    lower = bundle("1.0.0") + b"different bytes"
+    assert service.preview_bundle(2, lower)["reason"] == "lower_version"
+    assert not service.preview_bundle(2, lower)["overwrite"]
+    assert service.import_bundle(2, 20, lower)["status"] == "failed"
+    assert service.detail(2, plugin["id"]) == plugin
+    assert service.download(2, plugin["id"], task["version_id"])[0] == data
+    assert len(service.repository.audits(2, plugin["id"])) == 1
+
+
+def test_same_version_overwrite_rolls_back_when_audit_fails(service):
+    data = bundle()
+    task = service.import_bundle(2, 20, data)
+    plugin = service.list_plugins(2)["data"][0]
+    engine = next(service.repository.sessions().gen).get_bind()
+
+    def fail_audit_write(connection, cursor, statement, parameters, context, executemany):
+        if statement.startswith("INSERT INTO dsh_market_audit"):
+            raise RuntimeError("audit storage unavailable")
+
+    event.listen(engine, "before_cursor_execute", fail_audit_write)
+    try:
+        with pytest.raises(RuntimeError, match="audit storage unavailable"):
+            service.import_bundle(2, 21, data + b"replacement")
+    finally:
+        event.remove(engine, "before_cursor_execute", fail_audit_write)
+    assert service.detail(2, plugin["id"]) == plugin
+    assert service.download(2, plugin["id"], task["version_id"])[0] == data
+    assert len(service.repository.audits(2, plugin["id"])) == 1
+
+
+def test_concurrent_duplicate_import_rechecks_digest_after_insert_conflict(service, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+
+    original = bundle()
+    replacement = original + b"replacement"
+    commit = Session.commit
+    inject_conflict = True
+
+    def commit_after_concurrent_overwrite(db):
+        nonlocal inject_conflict
+        if not inject_conflict:
+            return commit(db)
+        inject_conflict = False
+        db.rollback()
+        # Another request wins task creation, completes A, then imports B before
+        # this request observes the duplicate-key error for its original A task.
+        assert service.import_bundle(2, 20, original)["status"] == "completed"
+        assert service.import_bundle(2, 21, replacement)["status"] == "completed"
+        raise IntegrityError("duplicate import digest", {}, RuntimeError("duplicate key"))
+
+    monkeypatch.setattr(Session, "commit", commit_after_concurrent_overwrite)
+    task = service.import_bundle(2, 22, original)
+    assert task["status"] == "completed" and task["actor_id"] == 22
+    plugin = service.list_plugins(2)["data"][0]
+    assert service.download(2, plugin["id"], task["version_id"])[0] == original
+    audit = service.repository.audits(2, plugin["id"])[0]
+    assert audit["actor_id"] == 22
+    assert audit["before"]["digest"] == hashlib.sha256(replacement).hexdigest()
+    assert audit["after"]["digest"] == hashlib.sha256(original).hexdigest()

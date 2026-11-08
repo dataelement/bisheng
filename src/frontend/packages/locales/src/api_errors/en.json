@@ -1,4 +1,8 @@
 {
+  "WORKBENCH_ARCHIVE_LIMIT": "Workbench archive exceeds the allowed limits",
+  "WORKBENCH_ARCHIVE_INVALID": "Workbench archive is corrupt or invalid",
+  "WORKBENCH_VALIDATION_FAILED": "Workbench package content is invalid",
+  "workbenchUploadTooLarge": "The server rejected the upload because it exceeds its size limit (HTTP 413). Choose a smaller archive.",
   "10993": "Your tenant has changed. Reopen the knowledge-base creation form.",
   "403": "No permission to perform this action",
   "404": "Resource not found",

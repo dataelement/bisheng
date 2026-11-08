@@ -44,7 +44,7 @@ async def call_workbench(function, *args, **kwargs):
     try:
         return await run_in_threadpool(function, *args, **kwargs)
     except WorkbenchBundleError as exc:
-        raise MarketWorkbenchBundleError(msg=str(exc)) from exc
+        raise MarketWorkbenchBundleError(msg=str(exc), validation_error=exc.details()) from exc
     except WorkbenchConflictError as exc:
         raise MarketWorkbenchConflictError(msg=str(exc)) from exc
     except WorkbenchArtifactError as exc:
@@ -287,6 +287,16 @@ async def admin_workbenches(
     service=Depends(get_workbench_service),
 ):
     return resp_200(await call_workbench(service.list, actor.tenant_id, page, size))
+
+
+@router.delete("/admin/workbenches/{workbench_id}")
+async def delete_workbench(
+    workbench_id: str,
+    revision: int = Query(ge=1),
+    actor: MarketActor = Depends(market_admin),
+    service=Depends(get_workbench_service),
+):
+    return resp_200(await call_workbench(service.delete, actor.tenant_id, actor.user_id, workbench_id, revision))
 
 
 @router.get("/workbenches")

@@ -1,6 +1,6 @@
 """Tenant-scoped workbench metadata and import tasks."""
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
@@ -40,8 +40,6 @@ class WorkbenchRepository:
         same = next((row for row in versions if row.version == manifest["version"]), None)
         current = next((row for row in versions if row.id == workbench.current_version_id), None) if workbench else None
         reason = "identity_conflict" if conflict else ""
-        if not reason and same and same.digest != digest:
-            reason = "version_conflict"
         if not reason and any(
             row.version != manifest["version"] and compare_semver(manifest["version"], row.version) == 0
             for row in versions
@@ -62,6 +60,7 @@ class WorkbenchRepository:
                 "suggested_display_name": manifest["display_name"],
                 "allowed": not reason,
                 "duplicate": bool(same and same.digest == digest),
+                "overwrite": bool(not reason and same and same.digest != digest),
                 "reason": reason,
                 "warnings": manifest["warnings"],
             },
@@ -78,7 +77,9 @@ class WorkbenchRepository:
             )
             existing = db.exec(query.with_for_update()).first()
             if existing:
-                if existing.status == "failed":
+                # Active reimports must reapply bytes after an overwrite or deletion.
+                # Resuming an existing completed task keeps its separate no-op behavior.
+                if existing.status in {"failed", "completed"}:
                     existing.status, existing.error, existing.error_code = "validating", "", ""
                     existing.actor_id, existing.display_name, existing.created_at = actor, display_name, now()
                     db.add(existing)
@@ -91,7 +92,11 @@ class WorkbenchRepository:
                 db.commit()
             except IntegrityError:
                 db.rollback()
-                return db.exec(query).one().model_dump()
+                # The winning task may already be completed and overwritten or deleted.
+                # Re-enter the active-import reset path rather than returning stale success.
+                db.exec(query.with_for_update()).one()
+                db.rollback()
+                return self.create_import(tenant, actor, digest, display_name)
             db.refresh(task)
             return task.model_dump()
 
@@ -176,9 +181,20 @@ class WorkbenchRepository:
                             manifest=manifest,
                         )
                         db.add(version)
-                    if workbench.current_version_id != version.id:
+                    changed = version.digest != task.digest or version.size != size or version.manifest != manifest
+                    version.digest, version.size, version.manifest = task.digest, size, manifest
+                    db.add(version)
+                    display_name = task.display_name or (
+                        workbench.display_name if preview["duplicate"] else manifest["display_name"]
+                    )
+                    if (
+                        changed
+                        or workbench.current_version_id != version.id
+                        or workbench.display_name != display_name
+                        or workbench.description != manifest["description"]
+                    ):
                         workbench.current_version_id = version.id
-                        workbench.display_name = task.display_name or manifest["display_name"]
+                        workbench.display_name = display_name
                         workbench.description = manifest["description"]
                         workbench.updated_at = now()
                         workbench.revision += 1
@@ -213,6 +229,7 @@ class WorkbenchRepository:
             )
         result = {
             "id": workbench.id,
+            "revision": workbench.revision,
             "identity_kind": workbench.identity_kind,
             "workbench_key": workbench.workbench_key,
             "legacy_id": workbench.legacy_id,
@@ -250,6 +267,33 @@ class WorkbenchRepository:
                 )
             ).first()
             return self._view(db, tenant, row, detail=True) if row else None
+
+    def delete(self, tenant, workbench_id, revision):
+        with self.sessions() as db:
+            row = db.exec(
+                select(MarketWorkbench).where(
+                    MarketWorkbench.tenant_id == tenant,
+                    MarketWorkbench.id == workbench_id,
+                    MarketWorkbench.current_version_id.is_not(None),
+                )
+            ).first()
+            if row is None:
+                raise LookupError("Workbench not found")
+            result = db.execute(
+                update(MarketWorkbench)
+                .where(
+                    MarketWorkbench.tenant_id == tenant,
+                    MarketWorkbench.id == workbench_id,
+                    MarketWorkbench.current_version_id.is_not(None),
+                    MarketWorkbench.revision == revision,
+                )
+                .values(current_version_id=None, revision=MarketWorkbench.revision + 1, updated_at=now())
+            )
+            if result.rowcount != 1:
+                db.rollback()
+                raise WorkbenchConflictError("Workbench changed; refresh and retry")
+            db.commit()
+            return {"id": workbench_id, "deleted": True}
 
     def current_version(self, tenant, workbench_id, version_id):
         with self.sessions() as db:

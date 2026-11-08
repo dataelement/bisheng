@@ -46,7 +46,7 @@ export const importMarketBundle = (file: File, tenant: number, signal: AbortSign
 
 export interface MarketPreview {
     name: string; display_name: string; current_version: string | null; incoming_version: string;
-    allowed: boolean; reason: string; duplicate: boolean;
+    allowed: boolean; reason: string; duplicate: boolean; overwrite?: boolean;
 }
 export const previewMarketBundle = (file: File, tenant: number, signal: AbortSignal) => {
     const body = new FormData(); body.append("file", file);

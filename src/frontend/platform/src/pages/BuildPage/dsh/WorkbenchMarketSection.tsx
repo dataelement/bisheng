@@ -1,21 +1,20 @@
-import { Button, Pagination } from "@bisheng/ui";
+import { Button, notification, Pagination } from "@bisheng/ui";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input } from "@bisheng/ui";
-import { notification } from "@bisheng/ui";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { showApiError } from "@/controllers/request";
 import { getMarketContext } from "@/controllers/API/dshMarket";
 import {
-    getMarketWorkbench, importWorkbenchBundle, listMarketWorkbenches, listWorkbenchImports,
-    previewWorkbenchBundle, resumeWorkbenchImport,
+    deleteMarketWorkbench, getMarketWorkbench, listMarketWorkbenches, listWorkbenchImports,
+    resumeWorkbenchImport,
 } from "@/controllers/API/dshWorkbenches";
-import type { MarketWorkbench, MarketWorkbenchDetail, WorkbenchImport, WorkbenchPreview } from "@/controllers/API/dshWorkbenches";
+import type { MarketWorkbench, MarketWorkbenchDetail, WorkbenchImport } from "@/controllers/API/dshWorkbenches";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
-const MAX_UPLOAD = 8 * 1024 * 1024;
+import { WorkbenchImportDialog } from "./WorkbenchImportDialog";
 
 export function WorkbenchMarketSection() {
-    const { t } = useTranslation("dshMarket");
+    const { t } = useTranslation(["dshMarket", "api_errors"]);
     const paginationLocale = usePaginationLocale();
     const [tenant, setTenant] = useState<number | null>(null);
     const [page, setPage] = useState(1);
@@ -26,20 +25,16 @@ export function WorkbenchMarketSection() {
     const [error, setError] = useState(false);
     const [busy, setBusy] = useState(false);
     const [uploadOpen, setUploadOpen] = useState(false);
-    const [file, setFile] = useState<File | null>(null);
-    const [displayName, setDisplayName] = useState("");
-    const [preview, setPreview] = useState<WorkbenchPreview | null>(null);
-    const [previewError, setPreviewError] = useState<string | null>(null);
-    const [checking, setChecking] = useState(false);
-    const [progress, setProgress] = useState<number | null>(null);
     const [refresh, setRefresh] = useState(0);
-    const upload = useRef<AbortController | null>(null);
     const mounted = useRef(true);
+    const deletion = useRef<AbortController | null>(null);
+    const deleteLock = useRef(false);
+    const detailRequest = useRef(0);
 
     const reload = useCallback(() => setRefresh(value => value + 1), []);
     useEffect(() => {
         mounted.current = true;
-        return () => { mounted.current = false; upload.current?.abort(); };
+        return () => { mounted.current = false; deletion.current?.abort(); };
     }, []);
     useEffect(() => {
         if (tenant !== null) return;
@@ -67,56 +62,44 @@ export function WorkbenchMarketSection() {
             .catch(() => { if (active) setError(true); });
         return () => { active = false; };
     }, [tenant, refresh]);
-    useEffect(() => {
-        setPreview(null); setPreviewError(null);
-        if (!uploadOpen || !file || tenant === null) { setChecking(false); return; }
-        if (!file.name.toLowerCase().endsWith(".tgz") || file.size > MAX_UPLOAD) {
-            setPreviewError(""); setChecking(false); return;
-        }
-        const controller = new AbortController();
-        setChecking(true);
-        previewWorkbenchBundle(file, tenant, controller.signal).then(result => {
-            if (!controller.signal.aborted) setPreview(result);
-        }).catch((failure: unknown) => {
-            if (controller.signal.aborted) return;
-            const message = typeof failure === "object" && failure !== null && "status_message" in failure
-                ? String(failure.status_message) : "";
-            setPreviewError(message.match(/^WB-\d+/)?.[0] || "");
-        })
-            .finally(() => { if (!controller.signal.aborted) setChecking(false); });
-        return () => controller.abort();
-    }, [file, tenant, uploadOpen]);
-
     async function openDetail(id: string) {
+        const sequence = ++detailRequest.current;
         try {
             const result = await getMarketWorkbench(id);
-            if (mounted.current) setDetail(result);
-        } catch { if (mounted.current) setError(true); }
+            if (mounted.current && sequence === detailRequest.current) setDetail(result);
+        } catch { if (mounted.current && sequence === detailRequest.current) setError(true); }
     }
 
-    async function uploadFile() {
-        if (!file || tenant === null || !preview?.allowed || checking || displayName.length > 128) return;
-        if (!file.name.toLowerCase().endsWith(".tgz") || file.size > MAX_UPLOAD) {
-            notification.open({ title: t("workbenchInvalidFile"), description: "", type: "error" }); return;
-        }
-        const controller = new AbortController(); upload.current = controller;
-        setBusy(true); setProgress(0);
-        try {
-            const task = await importWorkbenchBundle(file, tenant, displayName, controller.signal, setProgress);
-            if (task.status === "failed") {
-                notification.open({ title: t("workbenchValidationFailed"), description: task.error_code, type: "error" });
-            } else {
-                notification.open({ title: t("workbenchImported"), description: "" });
-                setUploadOpen(false); setFile(null); setDisplayName("");
-            }
-        } catch { if (!controller.signal.aborted && mounted.current) setError(true); }
-        finally { if (mounted.current) { setBusy(false); setProgress(null); reload(); } }
+    function handleDelete(row: MarketWorkbench) {
+        if (tenant === null || deleteLock.current || busy) return;
+        deleteLock.current = true;
+        const controller = new AbortController();
+        deletion.current = controller;
+        let submitting = false;
+        const active = () => mounted.current && !controller.signal.aborted;
+        const release = () => { if (active()) { deleteLock.current = false; setBusy(false); } };
+        bsConfirm({
+            title: t("delete"), desc: t("workbenchDeleteConfirm", { name: row.display_name }),
+            okTxt: t("delete"), canelTxt: t("cancel"), signal: controller.signal,
+            onClose: () => { release(); controller.abort(); },
+            onOk: async close => {
+                if (!active() || submitting) return;
+                submitting = true;
+                setBusy(true);
+                try {
+                    await deleteMarketWorkbench(row.id, row.revision, tenant, controller.signal);
+                    if (!active()) return;
+                    detailRequest.current++;
+                    setDetail(null);
+                    notification.open({ title: t("workbenchDeleted"), description: "", type: "success" });
+                    reload();
+                    close();
+                } catch (failure) {
+                    if (active()) showApiError(failure);
+                } finally { submitting = false; if (active()) setBusy(false); }
+            },
+        });
     }
-
-    const reason = preview?.reason === "lower_version" ? "workbenchLowerVersion"
-        : preview?.reason === "version_conflict" ? "workbenchVersionConflict"
-            : preview?.reason === "identity_conflict" ? "workbenchIdentityConflict"
-                : preview?.duplicate ? "workbenchDuplicate" : "workbenchReady";
 
     return <section className="space-y-6 pt-6">
         <header className="flex items-start justify-between gap-6">
@@ -137,7 +120,8 @@ export function WorkbenchMarketSection() {
                 <td className="p-4">{row.current_version.version}</td>
                 <td className="p-4">{row.workbench_key || row.legacy_id}</td>
                 <td className="p-4">{new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(row.updated_at) ? row.updated_at : `${row.updated_at}Z`).toLocaleString()}</td>
-                <td className="p-4"><Button variant="outlined" color="default" onClick={() => void openDetail(row.id)}>{t("details")}</Button></td>
+                <td className="p-4"><div className="flex gap-2"><Button variant="outlined" color="default" onClick={() => void openDetail(row.id)}>{t("details")}</Button>
+                    <Button variant="outlined" color="danger" disabled={busy} onClick={() => handleDelete(row)}>{t("delete")}</Button></div></td>
             </tr>)}</tbody></table>
             {!data.data.length && <p className="p-10 text-center text-muted-foreground">{t("workbenchEmpty")}</p>}
         </div>}
@@ -162,31 +146,8 @@ export function WorkbenchMarketSection() {
                     finally { setBusy(false); }
                 }}>{t("resume")}</Button>
             </div>)}</section>}
-        <Dialog open={uploadOpen} onOpenChange={open => { if (!busy) setUploadOpen(open); }}><DialogContent>
-            <DialogHeader><DialogTitle>{t("workbenchImport")}</DialogTitle>
-                <DialogDescription>{t("workbenchUploadHint")}</DialogDescription></DialogHeader>
-            <Input type="file" accept=".tgz,application/gzip" disabled={busy} aria-label={t("workbenchImport")}
-                onChange={event => { setPreview(null); setFile(event.target.files?.[0] || null); }} />
-            <Input value={displayName} disabled={busy} maxLength={128} aria-label={t("workbenchDisplayName")}
-                placeholder={t("workbenchDisplayName")} onChange={event => setDisplayName(event.target.value)} />
-            {checking && <p role="status">{t("previewing")}</p>}
-            {previewError !== null && <p role="alert" className="text-sm text-red-600">
-                {t("workbenchPreviewFailed")}{previewError && ` (${previewError})`}
-            </p>}
-            {preview && <div className="rounded-md border p-3 space-y-2 text-sm">
-                <p className="font-medium">{preview.suggested_display_name}</p>
-                <p>{preview.current_version || t("workbenchFirstImport")} → {preview.incoming_version}</p>
-                <p>{t("workbenchIdentity")}: {preview.workbench_key || preview.legacy_id}</p>
-                {preview.identity_kind === "legacy" && <p className="text-amber-600">{t("workbenchLegacy")}</p>}
-                <p className={preview.allowed ? "text-muted-foreground" : "text-red-600"}>{t(reason)}</p>
-            </div>}
-            {file && <p>{file.name} · {(file.size / 1048576).toFixed(1)} MiB</p>}
-            {progress !== null && <p role="status">{progress < 100 ? `${progress}%` : t("validating")}</p>}
-            <div className="flex gap-3 justify-end"><Button variant="outlined" color="default" onClick={() => {
-                upload.current?.abort(); if (!busy) setUploadOpen(false);
-            }}>{t("cancel")}</Button><Button disabled={!file || busy || checking || !preview?.allowed || displayName.length > 128}
-                onClick={() => void uploadFile()}>{t("workbenchImport")}</Button></div>
-        </DialogContent></Dialog>
+        {uploadOpen && tenant !== null && <WorkbenchImportDialog key={tenant} tenant={tenant}
+            onClose={() => setUploadOpen(false)} onImported={reload} />}
         <Dialog open={Boolean(detail)} onOpenChange={open => { if (!open) setDetail(null); }}>
             <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
                 {detail && <><DialogHeader><DialogTitle>{detail.display_name}</DialogTitle>

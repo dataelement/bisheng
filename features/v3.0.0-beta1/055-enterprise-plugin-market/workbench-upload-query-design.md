@@ -25,10 +25,10 @@
 | 表 | 主要字段与约束 | 职责 |
 | --- | --- | --- |
 | `dsh_market_workbench` | `id`、`tenant_id`、`identity_key`、`identity_kind`、`workbench_key`、`legacy_id`、`package_name`、`display_name`、`description`、`current_version_id`、`revision`、`updated_at`；租户内 `identity_key` 和 `package_name` 各唯一 | 一个租户的工作台条目。内部 `identity_key` 用 `github:<owner/repo>` 或 `legacy:<旧ID>` 防止空值唯一约束失效；对客户端只展示明确的身份字段。 |
-| `dsh_market_workbench_version` | `id`、`tenant_id`、`workbench_id`、`version`、`digest`、`size`、`manifest(JsonType)`、`created_at`；租户/工作台/版本唯一 | 不可变版本与经过白名单归一化的包元数据。`manifest` 仅包含服务端需要的字段，不回传完整 `package.json`。 |
+| `dsh_market_workbench_version` | `id`、`tenant_id`、`workbench_id`、`version`、`digest`、`size`、`manifest(JsonType)`、`created_at`；租户/工作台/版本唯一 | 稳定版本记录与经过白名单归一化的包元数据；管理员同版本重导入可替换 digest/size/manifest。`manifest` 仅包含服务端需要的字段，不回传完整 `package.json`。 |
 | `dsh_market_workbench_import` | `id`、`tenant_id`、`actor_id`、`digest`、`display_name`、`status`、`error_code`、`error`、`version_id`、`created_at`；租户/摘要唯一 | 可恢复的导入任务与失败原因。可选的展示名称存入任务以便恢复；状态 `validating/completed/failed`；`completed` 只表示静态校验与持久化完成。 |
 
-相同租户与压缩包摘要重复上传返回既有完成任务；失败任务可重新验证。同一 `identity_key + version` 对应不同摘要报版本冲突，较低的 SemVer 不自动覆盖当前版本。新版本通过后，在一次数据库事务中写入不可变版本、切换 `current_version_id`、递增 revision 并完成任务；失败保留旧当前版本。SemVer 比较必须正确处理预发布段，不能复用插件仓库当前只对数字三段 `split(".")` 的比较。
+同一租户与摘要的导入任务可复用，但每次主动上传必须重新判断当前内容：同一 `identity_key + version` 允许不同摘要覆盖，更新同一版本记录的 digest/size/manifest、展示元数据并递增 revision；A→B→A 不能被历史 completed 任务短路。相同内容安全重复，逻辑删除后主动重导入可恢复。较低 SemVer 与身份冲突仍拒绝，SemVer 等价但版本字符串不同仍按既有冲突保护。新版本创建记录并切换 `current_version_id`；所有元数据写入在事务内完成，失败保留旧当前版本。
 
 原始字节存入 `dsh-market/workbenches/{tenant_id}/{sha256}.tgz`，与现有插件 `.zip` key 分开。先完成归档安全与元数据校验，再写入对象存储并建任务；恢复任务时从 MinIO 复读并重新校验摘要与内容。上传中断或数据库提交失败时，任务可按摘要恢复校验。对象清理和配额治理留待后续，不能在此阶段删除已有版本的原始包。
 
@@ -98,10 +98,16 @@
 
 错误码沿用市场模块 262：`26205` 工作台包校验失败、`26206` 并发导入冲突、`26207` 工作台或当前版本不存在、`26208` 工作台制品缺失或校验失败；已在 `api_errors` 域补齐中、英、日文案。预览返回 `allowed=false` 和 `reason` 表示已有身份/版本冲突；正式导入任务以 `failed/error_code` 保存这类冲突。认证错误沿用当前市场身份边界。制品接口失败仍返回 JSON 错误响应；成功响应是二进制。
 
+### 4.1 包校验错误明细（2026-11-07）
+
+外层业务码保持数值 `26205`，原有 `status_message` 和 `data.exception` 保留；新增 `data.code/rule/field/message`。`code` 是字符串校验原因，不能传给 `BaseErrorCode(code=...)` 覆盖数值业务码。归档损坏用 `WORKBENCH_ARCHIVE_INVALID`，资源超限用 `WORKBENCH_ARCHIVE_LIMIT`，其他内容用 `WORKBENCH_CONTENT_INVALID`；patch 字段错误用 `WORKBENCH_PATCH_*` 区分缺字段、非法 ID、包名不一致、不支持字段/标签/表达式、配置类型、插入数量及深度/节点超限。`rule` 为 WB 规则号；`field` 为上传者 YAML 中的字段路径（无法定位时 null 或 patch），例如 `patch[0].insert[0].config`；`message` 为具体拒绝原因。
+
+平台保留完整 ApiError，区分网络、超时、HTTP（413 单独提示大小）、压缩包损坏、资源限制与内容校验；只对上述工作台校验契约展示原始固定原因、规则和字段，不再将它们统一归因于格式/大小/网络。取消请求不显示错误；重新选包清除上一次诊断，校验失败时禁止导入。
+
 ## 5. 上传、查询、下载与页面流程
 
-1. 管理员选 `.tgz`。前端仅作扩展名、体积初筛；服务端按 gzip/tar 内容检查。预览返回身份来源、版本、重复/冲突和旧包提示。
-2. 管理员确认上传。API 限制请求体与读取量，重新运行完整静态校验（不能相信先前预览）；校验通过后按租户写 MinIO，创建或复用导入任务；Service 从原始字节计算摘要，Repository 在事务内更新当前版本。恢复任务时复读 MinIO 并再次运行同一校验器。反向代理也需限制 multipart 总大小和并发，因为框架可先将文件暂存到磁盘。
+1. 管理员选一个或多个 `.tgz`，暂不支持 ZIP。前端限制每批最多 50 个，逐包按扩展名与 100 MiB 初筛，移除独立批次总量上限，串行调用现有单包预览接口；服务端按 gzip/tar 内容检查。逐包展示身份来源、版本、重复/冲突和旧包提示。格式或内容失败只拒绝该项；有效升级仍按原有版本规则允许。
+2. 管理员确认导入校验通过项，页面按选择顺序串行调用既有单包导入接口，不增加批次后端接口。API 限制请求体与读取量，重新运行完整静态校验（不能相信先前预览）；校验通过后按租户写 MinIO，创建或复用导入任务；Service 从原始字节计算摘要，Repository 在事务内更新当前版本。某包正式导入失败仅记录对应错误，后续通过项继续；界面检查任务 status 而非仅 HTTP/业务信封成功，保留多包结果。不同包独立提交，不承诺整批事务；关闭只取消尚未完成的请求，不能撤销服务端已提交的包。恢复任务时复读 MinIO 并再次运行同一校验器。反向代理也需限制 multipart 总大小和并发，因为框架可先将文件暂存到磁盘。
 3. 页面以「插件 / 工作台」区分两类列表，沿用现有上传、详情、进度和失败任务交互；工作台详情展示身份来源及 `verification_level=static`。新 UI 文案进入三语言 locale，不修改组件库视觉规范。
 4. Desktop 使用现有企业登录取得的 DSH access token 请求员工列表与详情，从详情的 `artifact_url` 下载当前版本 `.tgz`，核对响应长度与 SHA-256。平台已上传的包在本期可以下发，但没有签名授权、安装或自动更新接口；客户端不得将 `verification_level=static` 或下载成功当作安装许可。
 

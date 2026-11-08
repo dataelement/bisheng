@@ -7,6 +7,7 @@ export interface WorkbenchVersionSummary {
 
 export interface MarketWorkbench {
     id: string;
+    revision: number;
     identity_kind: "repository" | "legacy";
     workbench_key: string | null;
     legacy_id: string | null;
@@ -47,6 +48,7 @@ export interface WorkbenchPreview {
     suggested_display_name: string;
     allowed: boolean;
     duplicate: boolean;
+    overwrite?: boolean;
     reason: string;
     warnings: string[];
 }
@@ -66,6 +68,11 @@ const tenantHeaders = (tenant: number) => ({ "x-dsh-market-tenant": String(tenan
 export const listMarketWorkbenches = (tenant: number, page: number, signal?: AbortSignal) =>
     request.get<unknown, { data: MarketWorkbench[]; total: number }>(base, {
         params: { page, size: 20 }, signal, headers: tenantHeaders(tenant),
+    });
+
+export const deleteMarketWorkbench = (id: string, revision: number, tenant: number, signal?: AbortSignal) =>
+    request.delete<unknown, { id: string; deleted: true }>(`${base}/${id}`, {
+        params: { revision }, signal, headers: tenantHeaders(tenant),
     });
 
 export const listWorkbenchImports = (tenant: number) =>

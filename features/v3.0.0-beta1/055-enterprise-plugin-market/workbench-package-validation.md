@@ -33,13 +33,13 @@
 | 规则 | 级别 | 判定 |
 | --- | --- | --- |
 | WB-01 归档 | 必须 | gzip 压缩的 tar；所有条目在唯一 `package/` 根下，存在且只存在一个根 `package/package.json`。不能只凭文件扩展名判定格式。 |
-| WB-02 资源 | 必须 | 企业首版选择压缩后 ≤ 8 MiB、展开后 ≤ 256 MiB、≤ 10,000 个条目、`package.json` ≤ 1 MiB。8 MiB 与公共市场包体上限对齐，是此企业接口的设计取值；若客户确需更大包，应单独评估资源与客户端安装能力。 |
+| WB-02 资源 | 必须 | 按用户后续确认，企业工作台压缩后 ≤ 100 MiB、展开后 ≤ 256 MiB、≤ 10,000 个条目、`package.json` ≤ 1 MiB。前端、API 读取及代理需允许 100 MiB 包与 multipart 开销；其他资源与安全限制保持。此为企业接口取值，不修改公共市场限制。 |
 | WB-03 路径与类型 | 必须 | 拒绝绝对路径、`..`、反斜杠、空路径段、大小写或 Unicode 规范化后重复路径；仅接受普通文件和目录，拒绝符号链接、硬链接、设备、FIFO 等特殊条目。逐项限额、流式读取，不落地解压。 |
 | WB-04 敏感文件 | 必须 | 拒绝 `.env`、私钥、凭证、数据库、浏览器登录态等明显敏感文件名及路径；不可仅靠黑名单保证素材授权，页面提示管理员核查。公开市场还须遵守其发布权与许可证规则。 |
 | WB-05 JSON | 必须 | 包根 JSON 为 UTF-8 对象，拒绝重复键、过深结构和超限字符串；`name` 是合法 npm 包名，`version` 是完整 SemVer，支持 `0.3.0-desktop.1` 等预发布段。 |
 | WB-06 入口 | 必须 | `main`、`exports["."]` 指向服务端入口，`exports["./client"]` 指向已构建的客户端入口；解析导出路径后必须仍位于本包内且目标为普通文件。支持明确的字符串或可唯一解析的 `import`/`default` 条件导出；歧义导出拒绝。 |
 | WB-07 DSH 声明 | 必须 | `dsh.bundle.patch` 指向包内 patch；`dsh.client.platform == "web"`；`dsh.client.inject` 是字符串数组并包含 `dsh-desktop-workbenches`。只有客户端声明、没有 bundle 的包拒绝。 |
-| WB-08 patch | 必须 | patch 为合法 YAML 数组；只**解析语法树**，不求值 `!!js`。企业首版只接受一条 `insert`，条目仅有 `id`、`name`，其 `name` 等于 `package_name`，`id` 非空；拒绝其他操作或额外字段。扩展 patch 结构需另行评估宿主安全边界。 |
+| WB-08 patch | 必须 | patch 为合法 YAML 数组；只**解析语法树**，不求值 `!!js`。只允许 `insert` 操作且整个 patch 恰好插入一项。条目必需 `id`、`name`，可选 `config`，拒绝其他字段；`name` 必须为与 `package_name` 相同的字符串，`id` 为非空白、长度 ≤128 的字符串。`config` 必须是 YAML mapping，键为唯一字符串；允许标准 map/seq/str/null/bool/int/float，拒绝其他标签、合并键和循环引用。仅 `config.root` 可带 `!!js`，表达式必须完整匹配 `dshHomePath('directory-name')`（单/双引号、可有参数外空白；目录为 1–128 位 ASCII 字母/数字开头及字母/数字/下划线/连字符，不接受路径分隔符、点、转义或追加表达式）。整个 patch ≤1 MiB、解析阶段 ≤16 层容器及 2048 节点；语法树再检查根深度为 0 的 ≤16 层与 2048 节点，引用每次展开均计数。只静态识别此受限协议，不求值、不删改配置；新增表达式须独立评估目标宿主协议与安全边界。 |
 | WB-09 仓库身份 | 标准包必须 | `repository` 可为 npm 的字符串或 `{type,url}`；接受 `https://github.com/owner/repo[.git]` 及 npm 常见的 `git+https://github.com/owner/repo.git`，规范化后必须恰有 owner/repo 两段，移除 `.git` 与末尾斜杠并小写化。拒绝用户信息、查询、片段和含糊路径。上传只能验证声明格式，不能证明上传者拥有该仓库。 |
 | WB-10 旧清单 | 条件必须 | 若有 `workbench.json`，要求它是受限 JSON 对象，`version` 与根包一致、`entry` 指向包内普通文件；其 `id` 只作为旧 ID。无 `repository` 时必须有合法旧 ID，否则拒绝。 |
 | WB-11 依赖与许可 | 提示 | 记录 `dependencies`、`peerDependencies`、`engines`、`license` 和外部服务声明，展示缺少可随包解析依赖、原生模块或 `UNLICENSED` 等风险。压缩包无需自带 `node_modules`，因此静态上传不承诺脱机安装。 |

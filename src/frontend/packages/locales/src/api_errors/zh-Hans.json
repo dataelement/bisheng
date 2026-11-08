@@ -1,4 +1,8 @@
 {
+  "WORKBENCH_ARCHIVE_LIMIT": "工作台压缩包超出限制",
+  "WORKBENCH_ARCHIVE_INVALID": "工作台压缩包损坏或格式无效",
+  "WORKBENCH_VALIDATION_FAILED": "工作台包内容校验失败",
+  "workbenchUploadTooLarge": "服务器拒绝了超出大小限制的上传（HTTP 413），请选择更小的压缩包。",
   "10993": "所属租户已变化，请重新打开知识库新建表单",
   "403": "暂无操作权限",
   "404": "资源不存在",

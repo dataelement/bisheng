@@ -139,3 +139,9 @@ Authorization: Bearer <DSH access token>
 - 切换 BiSheng 地址、账号或租户后重新请求，不复用旧目录、详情或下载文件。
 
 样包结构及校验结论见[工作台压缩包校验规则](workbench-package-validation.md)。目标环境部署后，应以实际 API 响应补充联调证据。
+
+## 同版本覆盖与市场删除补充
+
+管理员可在相同版本号下重新导入更新内容，版本 ID 可保持但 SHA-256、字节数、manifest 与 revision 改变。客户端不可只按版本号或版本 ID 永久缓存内容；下载前重新取得详情，用最新 SHA-256 验证制品与 ETag。旧 If-None-Match 与新摘要不符时应重新下载。
+
+工作台详情/列表增加 revision，管理员删除接口为 DELETE /api/v1/dsh/market/admin/workbenches/{id}?revision=n，携带已有市场租户头并通过管理员认证；员工无需也不得调用。删除从市场列表、详情及下载入口移除，保留服务端版本记录，不会卸载客户端已安装内容；主动再次导入可恢复。上传 TGZ 上限为 100 MiB，解压限制与其他安全校验不变。

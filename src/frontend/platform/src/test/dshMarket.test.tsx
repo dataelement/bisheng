@@ -10,10 +10,10 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { notification } from "@bisheng/ui";
 import { previewMarketBundle, deleteMarketPlugin, getMarketContext, getMarketInstallPolicy, getMarketPlugin, importMarketBundle, listMarketImports, listMarketPlugins, setMarketInstallPolicy } from "@/controllers/API/dshMarket";
 import type { MarketPlugin } from "@/controllers/API/dshMarket";
-import { getMarketWorkbench, importWorkbenchBundle, listMarketWorkbenches, listWorkbenchImports, previewWorkbenchBundle } from "@/controllers/API/dshWorkbenches";
+import { deleteMarketWorkbench, getMarketWorkbench, importWorkbenchBundle, listMarketWorkbenches, listWorkbenchImports, previewWorkbenchBundle } from "@/controllers/API/dshWorkbenches";
 
 vi.mock("@/controllers/API/dshMarket", () => ({ previewMarketBundle: vi.fn(), deleteMarketPlugin: vi.fn(), getMarketContext: vi.fn(), getMarketInstallPolicy: vi.fn(), getMarketPlugin: vi.fn(), importMarketBundle: vi.fn(), listMarketImports: vi.fn(), listMarketPlugins: vi.fn(), resumeMarketImport: vi.fn(), setMarketInstallPolicy: vi.fn() }));
-vi.mock("@/controllers/API/dshWorkbenches", () => ({ getMarketWorkbench: vi.fn(), importWorkbenchBundle: vi.fn(), listMarketWorkbenches: vi.fn(), listWorkbenchImports: vi.fn(), previewWorkbenchBundle: vi.fn(), resumeWorkbenchImport: vi.fn() }));
+vi.mock("@/controllers/API/dshWorkbenches", () => ({ deleteMarketWorkbench: vi.fn(), getMarketWorkbench: vi.fn(), importWorkbenchBundle: vi.fn(), listMarketWorkbenches: vi.fn(), listWorkbenchImports: vi.fn(), previewWorkbenchBundle: vi.fn(), resumeWorkbenchImport: vi.fn() }));
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({ bsConfirm: vi.fn() }));
 vi.mock("@/hooks/useDshBrowserConfig", () => ({
     useDshBrowserConfig: () => ({ config: { enabled: true, management_enabled: true } }),
@@ -47,11 +47,12 @@ beforeEach(() => {
     vi.mocked(deleteMarketPlugin).mockResolvedValue({ id: plugin.id, deleted: true });
     vi.mocked(importMarketBundle).mockResolvedValue({ id: "job", status: "completed", error: "", created_at: "2026-09-10T00:00:00" });
     vi.mocked(listMarketWorkbenches).mockResolvedValue({ data: [{
-        id: "a".repeat(32), identity_kind: "repository", workbench_key: "example/workbench", legacy_id: null,
+        id: "a".repeat(32), revision: 4, identity_kind: "repository", workbench_key: "example/workbench", legacy_id: null,
         package_name: "dsh-example-workbench", display_name: "Workbench Demo", description: "Example",
         current_version: { id: "b".repeat(32), version: "1.0.0" }, verification_level: "static",
         updated_at: "2026-10-15T00:00:00",
     }], total: 1 });
+    vi.mocked(deleteMarketWorkbench).mockResolvedValue({ id: "a".repeat(32), deleted: true });
     vi.mocked(listWorkbenchImports).mockResolvedValue([]);
     vi.mocked(previewWorkbenchBundle).mockResolvedValue({
         package_name: "dsh-example-workbench", identity_kind: "repository", workbench_key: "example/workbench",
@@ -63,7 +64,7 @@ beforeEach(() => {
         created_at: "2026-10-15T00:00:00",
     });
     vi.mocked(getMarketWorkbench).mockResolvedValue({
-        id: "a".repeat(32), identity_kind: "repository", workbench_key: "example/workbench", legacy_id: null,
+        id: "a".repeat(32), revision: 4, identity_kind: "repository", workbench_key: "example/workbench", legacy_id: null,
         package_name: "dsh-example-workbench", display_name: "Workbench Demo", description: "Example",
         current_version: { id: "b".repeat(32), version: "1.0.0", sha256: "c".repeat(64), size_bytes: 1024, artifact_url: "/artifact" },
         verification_level: "static", updated_at: "2026-10-15T00:00:00",
@@ -195,6 +196,108 @@ describe("DSH market administration", () => {
         expect(within(dialog).getByText("versions")).toBeInTheDocument();
         expect(within(dialog).queryByRole("button", { name: "publish" })).not.toBeInTheDocument();
         expect(within(dialog).queryByText("audit")).not.toBeInTheDocument();
+    });
+    it("shows the plugin overwrite notice from the preview flag", async () => {
+        vi.mocked(previewMarketBundle).mockResolvedValue({ name: "company-demo", display_name: "Company Demo", current_version: "1.0.0", incoming_version: "1.0.0", allowed: true, reason: "", duplicate: false, overwrite: true });
+        render(view()); await screen.findByText("Company Demo");
+        fireEvent.click(screen.getByRole("button", { name: "import" }));
+        fireEvent.change(screen.getByLabelText("import", { selector: "input" }), { target: { files: [new File(["bundle"], "plugin.zip")] } });
+        await screen.findByText("overwriteVersion");
+        expect(within(screen.getByRole("dialog")).getByRole("button", { name: "import" })).toBeEnabled();
+    });
+    it("confirms workbench deletion with revision, clears detail and reloads", async () => {
+        render(view());
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await screen.findByText("Workbench Demo");
+        fireEvent.click(screen.getByRole("button", { name: "delete" }));
+        fireEvent.click(screen.getByRole("button", { name: "details" }));
+        await screen.findByRole("dialog");
+        expect(deleteMarketWorkbench).not.toHaveBeenCalled();
+        const confirmation = vi.mocked(bsConfirm).mock.calls[0][0];
+        expect(confirmation.desc).toBe("workbenchDeleteConfirm");
+        vi.mocked(listMarketWorkbenches).mockResolvedValue({ data: [], total: 0 });
+        const close = vi.fn(() => confirmation.onClose?.());
+        await act(async () => { await confirmation.onOk?.(close); });
+        expect(deleteMarketWorkbench).toHaveBeenCalledWith("a".repeat(32), 4, 2, expect.any(AbortSignal));
+        await screen.findByText("workbenchEmpty");
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(close).toHaveBeenCalledOnce();
+        expect(notification.open).toHaveBeenCalledWith(expect.objectContaining({ title: "workbenchDeleted" }));
+    });
+    it("cancels workbench deletion without a request and locks duplicate confirmation", async () => {
+        render(view());
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await screen.findByText("Workbench Demo");
+        const button = screen.getByRole("button", { name: "delete" });
+        act(() => { fireEvent.click(button); fireEvent.click(button); });
+        expect(bsConfirm).toHaveBeenCalledOnce();
+        const confirmation = vi.mocked(bsConfirm).mock.calls[0][0];
+        act(() => { confirmation.onCancel?.(); confirmation.onClose?.(); });
+        await act(async () => { await confirmation.onOk?.(vi.fn()); });
+        expect(deleteMarketWorkbench).not.toHaveBeenCalled();
+        expect(screen.getByText("Workbench Demo")).toBeInTheDocument();
+        fireEvent.click(button);
+        expect(bsConfirm).toHaveBeenCalledTimes(2);
+    });
+    it("reports failed workbench deletion and retains the row", async () => {
+        vi.mocked(deleteMarketWorkbench).mockRejectedValue(new Error("offline"));
+        render(view());
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await screen.findByText("Workbench Demo");
+        fireEvent.click(screen.getByRole("button", { name: "delete" }));
+        const close = vi.fn();
+        await act(async () => { await vi.mocked(bsConfirm).mock.calls[0][0].onOk?.(close); });
+        expect(screen.getByText("Workbench Demo")).toBeInTheDocument();
+        expect(listMarketWorkbenches).toHaveBeenCalledOnce();
+        expect(close).not.toHaveBeenCalled();
+        expect(notification.open).toHaveBeenCalledWith(expect.objectContaining({ type: "error" }));
+        expect(screen.getByRole("button", { name: "delete" })).toBeEnabled();
+        vi.mocked(deleteMarketWorkbench).mockResolvedValue({ id: "a".repeat(32), deleted: true });
+        await act(async () => { await vi.mocked(bsConfirm).mock.calls[0][0].onOk?.(close); });
+        expect(deleteMarketWorkbench).toHaveBeenCalledTimes(2);
+        expect(close).toHaveBeenCalledOnce();
+    });
+    it("returns from an empty last workbench page after deletion", async () => {
+        vi.mocked(listMarketWorkbenches).mockResolvedValue({ data: [await getMarketWorkbench("fixture")], total: 21 });
+        render(view());
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await screen.findByText("Workbench Demo");
+        fireEvent.click(screen.getByRole("button", { name: "pagination.next" }));
+        await waitFor(() => expect(listMarketWorkbenches).toHaveBeenLastCalledWith(2, 2, expect.any(AbortSignal)));
+        await screen.findByText("Workbench Demo");
+        fireEvent.click(screen.getByRole("button", { name: "delete" }));
+        vi.mocked(listMarketWorkbenches).mockResolvedValue({ data: [], total: 20 });
+        await act(async () => { await vi.mocked(bsConfirm).mock.calls[0][0].onOk?.(vi.fn()); });
+        await waitFor(() => expect(listMarketWorkbenches).toHaveBeenLastCalledWith(2, 1, expect.any(AbortSignal)));
+    });
+    it.each(["tenant", "unmount"])("invalidates a pending workbench confirmation on %s", async mode => {
+        const page = render(view());
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await screen.findByText("Workbench Demo");
+        fireEvent.click(screen.getByRole("button", { name: "delete" }));
+        const confirmation = vi.mocked(bsConfirm).mock.calls[0][0];
+        if (mode === "tenant") page.rerender(view(true, 3)); else page.unmount();
+        expect(confirmation.signal?.aborted).toBe(true);
+        await act(async () => { await confirmation.onOk?.(vi.fn()); });
+        expect(deleteMarketWorkbench).not.toHaveBeenCalled();
+    });
+    it.each(["tenant", "unmount"])("ignores a late workbench delete result after %s and prevents repeated requests", async mode => {
+        let resolve: (value: { id: string; deleted: true }) => void = () => undefined;
+        vi.mocked(deleteMarketWorkbench).mockReturnValue(new Promise(fulfill => { resolve = fulfill; }));
+        const page = render(view());
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await screen.findByText("Workbench Demo");
+        fireEvent.click(screen.getByRole("button", { name: "delete" }));
+        const confirmation = vi.mocked(bsConfirm).mock.calls[0][0];
+        const close = vi.fn();
+        let pending: unknown;
+        act(() => { pending = confirmation.onOk?.(close); });
+        await act(async () => { await confirmation.onOk?.(close); });
+        expect(deleteMarketWorkbench).toHaveBeenCalledOnce();
+        if (mode === "tenant") page.rerender(view(true, 3)); else page.unmount();
+        await act(async () => { resolve({ id: "a".repeat(32), deleted: true }); await pending; });
+        expect(close).not.toHaveBeenCalled();
+        expect(notification.open).not.toHaveBeenCalledWith(expect.objectContaining({ title: "workbenchDeleted" }));
     });
     it("previews and imports a workbench archive in its own section", async () => {
         render(view());

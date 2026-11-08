@@ -57,12 +57,11 @@
   "workbenchEmpty": "No workbenches yet. Import a workbench archive.",
   "workbenchFirstImport": "First import",
   "workbenchTotal": "{{count}} workbenches",
-  "workbenchUploadHint": "Select a .tgz workbench archive up to 8 MiB. The package structure and version are checked before import.",
-  "workbenchInvalidFile": "Select a .tgz archive up to 8 MiB",
+  "workbenchUploadHint": "Select a .tgz workbench archive up to 100 MiB. The package structure and version are checked before import.",
+  "workbenchInvalidFile": "Select a .tgz archive up to 100 MiB",
   "workbenchValidationFailed": "Workbench archive validation failed",
   "workbenchImported": "Workbench imported",
   "workbenchDisplayName": "Display name (optional)",
-  "workbenchPreviewFailed": "Could not preview the archive. Check its format, size and connection, then choose it again.",
   "workbenchLegacy": "Legacy workbench: browsing and download are available; Desktop runtime compatibility has not been verified.",
   "workbenchLowerVersion": "Choose a higher version; older versions are unsupported.",
   "workbenchVersionConflict": "This version already has different content. Use a new version number.",
@@ -70,5 +69,38 @@
   "workbenchDuplicate": "This archive was imported already. The existing version will be reused.",
   "workbenchReady": "After import, employees can browse and download the original archive.",
   "workbenchStaticOnly": "Only static archive checks have passed. Desktop installation and runtime have not been verified.",
-  "workbenchPackageName": "Package name"
+  "workbenchPreview": {
+    "code": "Code: {{code}}",
+    "field": "Field: {{field}}",
+    "fileSize": "The selected archive exceeds 100 MiB. Choose a smaller archive.",
+    "fileType": "Choose a .tgz workbench archive.",
+    "http": "The request failed (HTTP {{status}}). Try again or contact your administrator.",
+    "invalidResponse": "The server returned an unexpected response. Try again or contact your administrator.",
+    "network": "Could not reach the server. Check your connection and try again.",
+    "reason": "Reason: {{reason}}",
+    "rule": "Rule: {{rule}}",
+    "timeout": "The request timed out. Try again.",
+    "tooLarge": "The server rejected the upload (HTTP 413). Workbench archives must be no larger than 100 MiB. Contact your administrator if an archive within this limit is rejected."
+  },
+  "workbenchPackageName": "Package name",
+  "workbenchBatch": {
+    "hint": "Select up to 50 .tgz workbench archives, up to 100 MiB each. Files are checked and imported one at a time in selection order. Valid files, including version upgrades, can be imported even if other files fail.",
+    "confirm": "Import valid files ({{count}})",
+    "countLimit": "Select no more than 50 archives at a time.",
+    "summary": "{{total}} files · {{ready}} ready to import · {{rejected}} rejected · {{duplicate}} already imported",
+    "results": "{{completed}} completed · {{failed}} failed · {{rejected}} rejected",
+    "status": {
+      "pending": "Waiting for validation",
+      "ready": "Ready to import",
+      "rejected": "Rejected",
+      "duplicate": "Already imported (can be reused)",
+      "importing": "Importing",
+      "completed": "Completed",
+      "failed": "Import failed",
+      "validating": "Validating"
+    }
+  },
+  "overwriteVersion": "This version already exists. Importing will replace its package contents with this archive.",
+  "workbenchDeleteConfirm": "Delete {{name}}? It will be removed from the market and can no longer be browsed or downloaded. Workbenches already installed in clients are not affected. You can import it again later.",
+  "workbenchDeleted": "Workbench deleted"
 }

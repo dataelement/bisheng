@@ -57,12 +57,11 @@
   "workbenchEmpty": "暂无工作台，请先导入工作台压缩包",
   "workbenchFirstImport": "首次导入",
   "workbenchTotal": "共 {{count}} 个工作台",
-  "workbenchUploadHint": "请选择 .tgz 工作台压缩包，最大 8 MiB。上传前会检查包结构与版本。",
-  "workbenchInvalidFile": "请选择 8 MiB 以内的 .tgz 压缩包",
+  "workbenchUploadHint": "请选择 .tgz 工作台压缩包，最大 100 MiB。上传前会检查包结构与版本。",
+  "workbenchInvalidFile": "请选择 100 MiB 以内的 .tgz 压缩包",
   "workbenchValidationFailed": "工作台包校验失败",
   "workbenchImported": "工作台导入完成",
   "workbenchDisplayName": "显示名称（可选）",
-  "workbenchPreviewFailed": "无法预览压缩包，请检查格式、大小及网络后重新选择。",
   "workbenchLegacy": "旧格式工作台：可查询和下载，客户端运行兼容性尚未验证。",
   "workbenchLowerVersion": "导入版本低于已导入版本，请选择更高版本。",
   "workbenchVersionConflict": "此版本已有不同内容，请使用新的版本号。",
@@ -70,5 +69,38 @@
   "workbenchDuplicate": "此压缩包已导入，将复用已有版本。",
   "workbenchReady": "确认导入后，员工可查询并下载原始包。",
   "workbenchStaticOnly": "仅通过压缩包静态校验，尚未验证客户端安装与运行。",
-  "workbenchPackageName": "包名"
+  "workbenchPreview": {
+    "code": "错误代码：{{code}}",
+    "field": "字段：{{field}}",
+    "fileSize": "所选压缩包超过 100 MiB，请选择更小的压缩包。",
+    "fileType": "请选择 .tgz 工作台压缩包。",
+    "http": "请求失败（HTTP {{status}}），请重试或联系管理员。",
+    "invalidResponse": "服务器返回了异常响应，请重试或联系管理员。",
+    "network": "无法连接服务器，请检查网络连接后重试。",
+    "reason": "原因：{{reason}}",
+    "rule": "规则：{{rule}}",
+    "timeout": "请求超时，请重试。",
+    "tooLarge": "服务器拒绝了上传（HTTP 413）。工作台压缩包不能超过 100 MiB；若包大小在限制内仍被拒绝，请联系管理员。"
+  },
+  "workbenchPackageName": "包名",
+  "workbenchBatch": {
+    "hint": "可一次选择最多 50 个 .tgz 工作台包，每个不超过 100 MiB。按选择顺序逐个校验和导入；部分文件失败不影响其他有效文件及版本升级的导入。",
+    "confirm": "导入有效文件（{{count}}）",
+    "countLimit": "每次最多选择 50 个工作台包。",
+    "summary": "共 {{total}} 个文件 · {{ready}} 个可导入 · {{rejected}} 个未通过 · {{duplicate}} 个已导入",
+    "results": "{{completed}} 个完成 · {{failed}} 个失败 · {{rejected}} 个未通过",
+    "status": {
+      "pending": "等待校验",
+      "ready": "可导入",
+      "rejected": "未通过校验",
+      "duplicate": "已导入（可复用）",
+      "importing": "正在导入",
+      "completed": "已完成",
+      "failed": "导入失败",
+      "validating": "正在校验"
+    }
+  },
+  "overwriteVersion": "此版本已存在，导入后将使用当前压缩包覆盖该版本的包内容。",
+  "workbenchDeleteConfirm": "确定删除 {{name}}？删除后将从市场移除，无法浏览和下载，不影响客户端已安装的工作台。之后可重新导入。",
+  "workbenchDeleted": "工作台已删除"
 }

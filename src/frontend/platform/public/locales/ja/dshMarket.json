@@ -57,12 +57,11 @@
   "workbenchEmpty": "ワークベンチはありません。圧縮パッケージをインポートしてください。",
   "workbenchFirstImport": "初回インポート",
   "workbenchTotal": "{{count}} 件のワークベンチ",
-  "workbenchUploadHint": "8 MiB 以下の .tgz ファイルを選択してください。インポート前に構造とバージョンを確認します。",
-  "workbenchInvalidFile": "8 MiB 以下の .tgz ファイルを選択してください",
+  "workbenchUploadHint": "100 MiB 以下の .tgz ファイルを選択してください。インポート前に構造とバージョンを確認します。",
+  "workbenchInvalidFile": "100 MiB 以下の .tgz ファイルを選択してください",
   "workbenchValidationFailed": "ワークベンチパッケージの検証に失敗しました",
   "workbenchImported": "ワークベンチをインポートしました",
   "workbenchDisplayName": "表示名（任意）",
-  "workbenchPreviewFailed": "プレビューできませんでした。形式、サイズ、接続を確認して選び直してください。",
   "workbenchLegacy": "旧形式のワークベンチです。表示とダウンロードは可能ですが、Desktop での動作は未検証です。",
   "workbenchLowerVersion": "既存より新しいバージョンを選択してください。",
   "workbenchVersionConflict": "同じバージョンに異なる内容があります。新しい番号を使用してください。",
@@ -70,5 +69,38 @@
   "workbenchDuplicate": "このファイルはインポート済みです。既存のバージョンを使用します。",
   "workbenchReady": "インポート後、社員が元のファイルを参照・ダウンロードできます。",
   "workbenchStaticOnly": "静的なパッケージ検証のみ完了しています。Desktop でのインストールと動作は未検証です。",
-  "workbenchPackageName": "パッケージ名"
+  "workbenchPreview": {
+    "code": "エラーコード：{{code}}",
+    "field": "フィールド：{{field}}",
+    "fileSize": "選択したファイルは 100 MiB を超えています。小さいファイルを選択してください。",
+    "fileType": ".tgz 形式のワークベンチファイルを選択してください。",
+    "http": "リクエストに失敗しました（HTTP {{status}}）。再試行するか、管理者にお問い合わせください。",
+    "invalidResponse": "サーバーから予期しない応答が返されました。再試行するか、管理者にお問い合わせください。",
+    "network": "サーバーに接続できません。ネットワーク接続を確認して再試行してください。",
+    "reason": "理由：{{reason}}",
+    "rule": "ルール：{{rule}}",
+    "timeout": "リクエストがタイムアウトしました。再試行してください。",
+    "tooLarge": "サーバーがアップロードを拒否しました（HTTP 413）。ワークベンチパッケージは100 MiB以下にしてください。制限内でも拒否される場合は管理者に連絡してください。"
+  },
+  "workbenchPackageName": "パッケージ名",
+  "workbenchBatch": {
+    "hint": "最大50個の .tgz ワークベンチパッケージを選択できます。各100 MiB以下です。選択順に1つずつ検証・インポートします。一部のファイルが失敗しても、有効なファイルやバージョン更新をインポートできます。",
+    "confirm": "有効なファイルをインポート（{{count}}）",
+    "countLimit": "一度に選択できるパッケージは50個までです。",
+    "summary": "{{total}}ファイル · インポート可能 {{ready}} · 検証失敗 {{rejected}} · インポート済み {{duplicate}}",
+    "results": "完了 {{completed}} · 失敗 {{failed}} · 検証失敗 {{rejected}}",
+    "status": {
+      "pending": "検証待ち",
+      "ready": "インポート可能",
+      "rejected": "検証失敗",
+      "duplicate": "インポート済み（再利用可能）",
+      "importing": "インポート中",
+      "completed": "完了",
+      "failed": "インポート失敗",
+      "validating": "検証中"
+    }
+  },
+  "overwriteVersion": "このバージョンは既に存在します。インポートすると、このアーカイブの内容で既存バージョンのパッケージを上書きします。",
+  "workbenchDeleteConfirm": "{{name}} を削除しますか？マーケットから削除され、閲覧とダウンロードができなくなります。クライアントにインストール済みのワークベンチには影響しません。後から再インポートできます。",
+  "workbenchDeleted": "ワークベンチを削除しました"
 }

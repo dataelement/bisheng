@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import yaml
 from yaml.nodes import MappingNode, ScalarNode, SequenceNode
 
-MAX_WORKBENCH_UPLOAD_BYTES = 8 * 1024 * 1024
+MAX_WORKBENCH_UPLOAD_BYTES = 100 * 1024 * 1024
 MAX_WORKBENCH_EXPANDED_BYTES = 256 * 1024 * 1024
 MAX_WORKBENCH_ENTRIES = 10_000
 MAX_METADATA_BYTES = 1024 * 1024
@@ -30,7 +30,17 @@ SENSITIVE_NAME = re.compile(
 
 
 class WorkbenchBundleError(ValueError):
-    pass
+    def __init__(self, reason, *, code=None, field=None):
+        super().__init__(reason)
+        self.rule, _, self.message = reason.partition(": ")
+        self.code = code or {
+            "WB-01": "WORKBENCH_ARCHIVE_INVALID",
+            "WB-02": "WORKBENCH_ARCHIVE_LIMIT",
+        }.get(self.rule, "WORKBENCH_CONTENT_INVALID")
+        self.field = field
+
+    def details(self):
+        return {"code": self.code, "rule": self.rule, "field": self.field, "message": self.message}
 
 
 class LimitedReader:
@@ -168,15 +178,86 @@ def _mapping(node, rule):
     return result
 
 
+MAX_CONFIG_DEPTH = 16
+MAX_CONFIG_NODES = 2048
+YAML_PREFIX = "tag:yaml.org,2002:"
+HOME_PATH = re.compile(r"dshHomePath\(\s*(['\"])([a-zA-Z0-9][a-zA-Z0-9_-]{0,127})\1\s*\)\Z")
+
+
+def _patch_require(ok, code, field, message):
+    if not ok:
+        raise WorkbenchBundleError(f"WB-08: {message}", code=f"WORKBENCH_PATCH_{code}", field=field)
+
+
+def _check_patch_tree(root):
+    # Bound traversal before interpreting fields. Repeated aliases count toward the budget.
+    stack = [(root, 0, "patch", frozenset())]
+    count = 0
+    while stack:
+        node, depth, field, ancestors = stack.pop()
+        count += 1
+        _patch_require(count <= MAX_CONFIG_NODES, "NODE_LIMIT", field, "Patch exceeds 2048 YAML nodes")
+        _patch_require(depth <= MAX_CONFIG_DEPTH, "DEPTH_LIMIT", field, "Patch exceeds 16 YAML levels")
+        _patch_require(id(node) not in ancestors, "INVALID_CONFIG", field, "Recursive YAML aliases are unsupported")
+        ancestors = ancestors | {id(node)}
+        if isinstance(node, MappingNode):
+            _patch_require(node.tag == YAML_PREFIX + "map", "UNSUPPORTED_TAG", field, "Unsupported YAML mapping tag")
+            seen = set()
+            for key, value in node.value:
+                _patch_require(
+                    isinstance(key, ScalarNode) and key.tag == YAML_PREFIX + "str",
+                    "INVALID_CONFIG",
+                    field,
+                    "YAML keys must be strings",
+                )
+                _patch_require(key.value not in seen, "INVALID_CONFIG", field, "Duplicate YAML key")
+                seen.add(key.value)
+                stack.append((key, depth + 1, field, ancestors))
+                stack.append((value, depth + 1, f"{field}.{key.value}", ancestors))
+        elif isinstance(node, SequenceNode):
+            _patch_require(node.tag == YAML_PREFIX + "seq", "UNSUPPORTED_TAG", field, "Unsupported YAML sequence tag")
+            stack.extend((child, depth + 1, f"{field}[{index}]", ancestors) for index, child in enumerate(node.value))
+        else:
+            allowed = {YAML_PREFIX + tag for tag in ("str", "null", "bool", "int", "float")}
+            _patch_require(
+                node.tag in allowed or node.tag == YAML_PREFIX + "js",
+                "UNSUPPORTED_TAG",
+                field,
+                "Unsupported YAML scalar tag",
+            )
+            if node.tag == YAML_PREFIX + "js":
+                _patch_require(
+                    re.fullmatch(r"patch\[\d+\]\.insert\[\d+\]\.config\.root", field) is not None
+                    and HOME_PATH.fullmatch(node.value) is not None,
+                    "UNSUPPORTED_EXPRESSION",
+                    field,
+                    "Only config.root: !!js dshHomePath('directory-name') is supported",
+                )
+
+
 def _patch_id(raw, package_name):
     require(len(raw) <= MAX_METADATA_BYTES, "WB-08", "Patch exceeds 1 MiB")
     try:
-        root = yaml.compose(raw.decode("utf-8"), Loader=yaml.SafeLoader)
+        text = raw.decode("utf-8")
+        # Bound the parser before compose allocates the entire node graph.
+        depth = nodes = 0
+        for event in yaml.parse(text, Loader=yaml.SafeLoader):
+            if isinstance(event, (yaml.events.MappingStartEvent, yaml.events.SequenceStartEvent)):
+                depth += 1
+                nodes += 1
+            elif isinstance(event, (yaml.events.MappingEndEvent, yaml.events.SequenceEndEvent)):
+                depth -= 1
+            elif isinstance(event, (yaml.events.ScalarEvent, yaml.events.AliasEvent)):
+                nodes += 1
+            _patch_require(depth <= MAX_CONFIG_DEPTH, "DEPTH_LIMIT", "patch", "Patch exceeds 16 YAML levels")
+            _patch_require(nodes <= MAX_CONFIG_NODES, "NODE_LIMIT", "patch", "Patch exceeds 2048 YAML nodes")
+        root = yaml.compose(text, Loader=yaml.SafeLoader)
     except (UnicodeError, yaml.YAMLError, RecursionError) as exc:
         raise WorkbenchBundleError("WB-08: Invalid patch YAML") from exc
     require(isinstance(root, SequenceNode) and len(root.value) <= 1000, "WB-08", "Patch must be a short YAML array")
+    _check_patch_tree(root)
     ids = []
-    for operation in root.value:
+    for operation_index, operation in enumerate(root.value):
         mapping = _mapping(operation, "WB-08")
         require(
             set(mapping) == {"insert"}
@@ -185,22 +266,42 @@ def _patch_id(raw, package_name):
             "WB-08",
             "Only insert operations are supported",
         )
-        for entry in mapping["insert"].value:
+        for entry_index, entry in enumerate(mapping["insert"].value):
+            field = f"patch[{operation_index}].insert[{entry_index}]"
             fields = _mapping(entry, "WB-08")
-            name, entry_id = fields.get("name"), fields.get("id")
-            require(
-                set(fields) == {"name", "id"}
-                and isinstance(name, ScalarNode)
-                and name.value == package_name
-                and name.tag == "tag:yaml.org,2002:str"
-                and isinstance(entry_id, ScalarNode)
-                and 0 < len(entry_id.value) <= 128
-                and entry_id.tag == "tag:yaml.org,2002:str",
-                "WB-08",
-                "Patch must insert this package with an ID",
+            for required in ("name", "id"):
+                _patch_require(
+                    required in fields, "MISSING_FIELD", f"{field}.{required}", f"Patch entry requires {required}"
+                )
+            for extra in fields.keys() - {"name", "id", "config"}:
+                _patch_require(
+                    False, "UNSUPPORTED_FIELD", f"{field}.{extra}", "Only name, id and optional config are supported"
+                )
+            name, entry_id = fields["name"], fields["id"]
+            _patch_require(
+                isinstance(name, ScalarNode) and name.tag == YAML_PREFIX + "str" and name.value == package_name,
+                "NAME_MISMATCH",
+                f"{field}.name",
+                "Patch name must match package name",
             )
+            _patch_require(
+                isinstance(entry_id, ScalarNode)
+                and entry_id.tag == YAML_PREFIX + "str"
+                and 0 < len(entry_id.value) <= 128
+                and bool(entry_id.value.strip()),
+                "INVALID_ID",
+                f"{field}.id",
+                "Patch ID must be a non-empty string of at most 128 characters",
+            )
+            if "config" in fields:
+                _patch_require(
+                    isinstance(fields["config"], MappingNode),
+                    "INVALID_CONFIG",
+                    f"{field}.config",
+                    "Patch config must be a YAML mapping",
+                )
             ids.append(entry_id.value)
-    require(len(ids) == 1, "WB-08", "Patch must insert this package once")
+    _patch_require(len(ids) == 1, "INSERT_COUNT", "patch", "Patch must insert this package once")
     return ids[0]
 
 
@@ -217,7 +318,7 @@ def _read_patch(data, path):
 
 
 def validate_workbench_bundle(data: bytes) -> dict:
-    require(0 < len(data) <= MAX_WORKBENCH_UPLOAD_BYTES, "WB-02", "Archive exceeds 8 MiB")
+    require(0 < len(data) <= MAX_WORKBENCH_UPLOAD_BYTES, "WB-02", "Archive exceeds 100 MiB")
     require(data.startswith(b"\x1f\x8b"), "WB-01", "Expected gzip tar archive")
     folded = set()
     files = set()

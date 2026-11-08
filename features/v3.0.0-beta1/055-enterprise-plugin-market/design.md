@@ -6,7 +6,7 @@ API endpoint → MarketService → MarketRepository → SQLModel，MinIO 制品�
 
 五张新表：dsh_market_plugin、dsh_market_version、dsh_market_import、dsh_market_audit、dsh_market_device。表模型已加入数据库发现；按项目新表创建机制建表，既有表结构保持原样。
 
-插件 ID 稳定，版本 ID 与 ZIP SHA-256 绑定；插件记录维护 current_version_id、disabled、deleted、revision。删除在 CAS 事务中置 deleted=true、清空当前版本并记录后台操作；普通列表和详情过滤 deleted，策略继续返回曾发布版本以支持已有安装。导入校验成功后，在同一个事务中创建不可变版本、设置当前版本、更新展示元数据、递增 revision、记录前后状态，导入任务置为 completed。版本属性 published_once 记录曾发布资格，映射既有物理列 reviewed；保持现有数据结构与历史资格。导入任务以 tenant_id + digest 幂等，当前可用插件重复导入返回原任务并保留版本；已删除、旧下架或旧禁用记录的明确重导入重新校验并恢复当前版本；失败保持原状态。validating 任务可在服务恢复后继续。旧 pending 任务对应的版本可由管理员重新导入恢复。
+插件 ID 稳定，版本 ID 是稳定记录身份，同版本主动覆盖时 SHA-256、大小和 manifest 可更新；插件记录维护 current_version_id、disabled、deleted、revision。删除在 CAS 事务中置 deleted=true、清空当前版本并记录后台操作；普通列表和详情过滤 deleted，策略继续返回曾发布版本以支持已有安装。导入校验成功后，在同一个事务中创建版本或原位覆盖同版本内容、设置当前版本、更新展示元数据、递增 revision、记录前后状态，导入任务置为 completed。版本属性 published_once 记录曾发布资格，映射既有物理列 reviewed；保持现有数据结构与历史资格。导入任务以 tenant_id + digest 幂等，当前可用插件重复导入仍重新判断当前摘要，同版本不同内容覆盖并推进 revision；历史 completed digest 任务不得阻止 A→B→A；已删除、旧下架或旧禁用记录的明确重导入重新校验并恢复当前版本；失败保持原状态。validating 任务可在服务恢复后继续。旧 pending 任务对应的版本可由管理员重新导入恢复。
 
 制品对象键为 `dsh-market/{tenant_id}/{sha256}.zip`，使用当前 BISHENG 的 MinIO bucket/config。生产环境配置持久化对象存储与数据库备份；全量历史保留。当前没有租户容量配额与自动清理任务。
 
@@ -104,3 +104,27 @@ C1 分层；C2 使用 JsonType 与通用 SQL；C4 使用现有租户管理员应
 工作台使用独立的 `.tgz` 静态校验器、三张租户表和 MinIO 对象前缀，与原有插件 ZIP、设备报告和 `/sync` 发布快照分开。管理员预览与导入、Desktop 目录/详情/制品下载复用市场身份边界；管理页面沿用现有市场交互与组件。新表由 SQLModel 模型发现和 `create_all(checkfirst=True)` 创建，不改动已有市场表。完整数据结构、API 与边界见[工作台上传与查询设计](workbench-upload-query-design.md)，归档规则见[工作台压缩包校验规则](workbench-package-validation.md)。
 
 独立存储与路由用于区分工作台包与插件包；即使后缀同为 `.tgz`，也按各自协议验证。本轮不新增工作台安装或运行授权协议。已知边界：压缩包静态检查无法证明宿主服务、依赖解析与 UI 运行，真实 MinIO、MySQL/DM8 和 Desktop 联调需在部署环境验收。
+
+## 配置静态校验修复（2026-11-07）
+
+用户明确授权支持受约束 config、细分错误并以原包回归；WB-08 现接受 name/id 加可选 mapping config，边界与配额以[校验规则](workbench-package-validation.md)为准。先以 YAML 事件检查资源，再 compose 语法树并检查标签、引用和表达式位置；后端绝不实例化配置节点或执行 JavaScript。仅支持开发协议 §3.3 的 config.root + dshHomePath 单层目录子集；不开放通用 !!js。未来支持新函数、路径语法或标签时，重新评估宿主执行协议并补拒绝用例。
+
+预览、正式导入和恢复仍共用校验器，原始 TGZ 的摘要、对象存储、下载链路不变；未改数据库与权限。错误响应只在现有 26205 信封 data 中追加明细，字段及前端分类见[错误契约](workbench-upload-query-design.md)。已知坑：BaseErrorCode 的 code 参数是外层数值业务码，校验原因 code 必须存入 data，不能直接解包传参；MarketWorkbenchBundleError 接收 validation_error 明细解决冲突，API 回归同时断言两者。
+
+修订记录：2026-11-07，修复带 config 原包误报缺少 ID 与前端丢弃原因；原包 API 回归、拒绝测试和待完成 alpha3 验收见[修复验收记录](workbench-config-fix-validation.md)。
+
+## 工作台 TGZ 多选（2026-11-07）
+
+按用户确认只支持直接多选 TGZ，暂不支持 ZIP。平台逐包串行预览和导入，复用已有单包 API；不增加后端路由、批次表或存储格式。允许升级和已存在包幂等处理，格式/版本冲突仅拒绝对应文件，其他通过项继续。正式导入以当时后端重检为准，批次不是跨包事务；保留各文件结果，避免把业务任务 failed 当作 HTTP 成功。具体 AC、队列隔离和验证见[多选导入规格](workbench-multiselect-spec.md)。
+
+## 后续用户确认：覆盖、100 MiB 与工作台删除
+
+最新完整验收见 workbench-overwrite-delete-spec.md。本次保持 dsh_market 现有架构与表结构；插件与工作台均允许完全相同版本号重导入新内容，原位更新版本 digest/size/manifest、当前展示元数据及 revision。插件仍写入包含旧/新摘要的审计；内容寻址对象不变更旧字节。低版本与身份校验保留。预览 overwrite 仅在允许覆盖且内容变化时为 true。
+
+主动再次上传必须按当前状态重新执行，不能直接复用历史 completed 摘要任务；重复任务插入唯一键竞争恢复也走相同检查，覆盖 A→B→A。下载在存储读取之后重新检查当前版本 ID 与摘要，防止原位替换期间返回陈旧内容。客户端按详情最新摘要而非仅版本号缓存制品。
+
+工作台压缩包上限统一 100 MiB，API 读取最多上限+1，前端同值；保留展开 256 MiB、10,000 条目、元数据 1 MiB 与静态配置安全限制。每批仍 50 个、串行预览/上传，去掉独立 64 MiB 批次总量门槛。部署代理必须容纳 100 MiB 与 multipart 开销；插件既有 512 MiB 合同保留。
+
+工作台列表/详情暴露 revision；DELETE /api/v1/dsh/market/admin/workbenches/{id}?revision=n 使用真实 market_admin 依赖，repository 用 tenant+revision CAS 将 current_version_id 置空并推进 revision，返回 {id,deleted:true}。无数据库 schema 迁移、无历史回填、无共享内容对象删除。删后管理员/员工列表、详情及旧下载链接不可见；主动重导入可恢复，不卸载客户端已安装内容。
+
+管理页使用既有确认组件：确认取消、Escape、关闭与 AbortSignal 生命周期统一触发 exactly-once cleanup，异步关闭和 finally 绑定各自确认身份。删除锁定重复请求，失败保留行/对话框供重试，成功清除详情并刷新列表、回退空末页；组件销毁或租户变化后忽略旧回调。
