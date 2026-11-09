@@ -5,10 +5,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/b
 import { userContext } from '@/contexts/userContext';
 import { getToolsApi, updateToolApi } from '@/controllers/API/tools';
 import { showApiError } from '@/controllers/request';
-import Dalle3ToolForm from '@/pages/BuildPage/tools/builtInTool/Dalle3';
+import ImageGeneration from '@/pages/BuildPage/tools/builtInTool/ImageGeneration';
 import WebSearchForm from '@/pages/BuildPage/tools/builtInTool/WebSearchFrom';
 
-type ToolKey = 'web_search' | 'dalle_image_generator';
+type ToolKey = 'web_search' | 'image_generation';
 type SavedTool = {
     id: string | number;
     extra: string | null;
@@ -27,7 +27,7 @@ export function SharedToolSettings({ disabled = false }: SharedToolSettingsProps
     const busyRef = useRef(false);
     const labels: Record<ToolKey, string> = {
         web_search: t('model.searchTool'),
-        dalle_image_generator: t('model.drawingTool'),
+        image_generation: t('model.drawingTool'),
     };
 
     const handleOpen = async (key: ToolKey) => {
@@ -36,7 +36,8 @@ export function SharedToolSettings({ disabled = false }: SharedToolSettingsProps
         setBusy(true);
         try {
             const tools: SavedTool[] = await getToolsApi('default', { action: 'visible' });
-            const matches = tools.filter((tool) => tool.children?.some((child) => child.tool_key === key));
+            const matches = tools.filter((tool) => tool.children?.some((child) =>
+                child.tool_key === key || (key === 'image_generation' && child.tool_key === 'dalle_image_generator')));
             if (matches.length !== 1 || !matches[0].id) {
                 throw new Error(t('model.sharedToolUnavailable'));
             }
@@ -80,7 +81,7 @@ export function SharedToolSettings({ disabled = false }: SharedToolSettingsProps
     return (
         <div className="space-y-4">
             <p className="text-sm text-muted-foreground">{t('model.sharedToolHint')}</p>
-            {(['web_search', 'dalle_image_generator'] as const).map((key) => (
+            {(['web_search', 'image_generation'] as const).map((key) => (
                 <div key={key} className="flex items-center justify-between gap-4">
                     <span className="bisheng-label">{labels[key]}</span>
                     <Button
@@ -103,8 +104,12 @@ export function SharedToolSettings({ disabled = false }: SharedToolSettingsProps
                     {editor && (
                         <fieldset disabled={busy} aria-busy={busy} className="min-w-0">
                             {editor.key === 'web_search'
-                                ? <WebSearchForm formData={editor.config} onSubmit={handleSubmit} />
-                                : <Dalle3ToolForm formData={editor.config} onSubmit={handleSubmit} />}
+                                ? <WebSearchForm
+                                    toolId={String(editor.id)}
+                                    onSaved={() => setEditor(null)}
+                                    onSavingChange={(saving) => { busyRef.current = saving; setBusy(saving); }}
+                                />
+                                : <ImageGeneration formData={editor.config} onSubmit={handleSubmit} />}
                         </fieldset>
                     )}
                 </DialogContent>

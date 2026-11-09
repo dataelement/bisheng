@@ -26,12 +26,12 @@ import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 
 const MANAGED_TOOLS = [
-    'Dalle3绘画', 'Bing web搜索', '天眼查',
+    'Bing web搜索', '天眼查',
     'Firecrawl', 'Jina AI', 'SiliconFlow',
     '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据'
 ];
 // Newer built-in tools are matched by a child tool_key instead of the stored type name.
-export const MANAGED_TOOL_KEYS = ['web_fetch'];
+export const MANAGED_TOOL_KEYS = ['web_fetch', 'image_generation', 'dalle_image_generator'];
 
 export const hasManagedToolKey = (children?: { tool_key?: string }[]) =>
     (children || []).some((child) => MANAGED_TOOL_KEYS.includes(child.tool_key || ''));

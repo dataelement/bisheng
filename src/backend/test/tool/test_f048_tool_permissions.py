@@ -288,6 +288,10 @@ async def test_refresh_mcp_requires_exact_edit_action(monkeypatch) -> None:
 async def test_visible_tool_list_enumerates_ids_before_database_query(
     monkeypatch,
 ) -> None:
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_preset_child_keys",
+        AsyncMock(return_value={}),
+    )
     preset_tool_type = GptsToolsType(
         id=20,
         tenant_id=1,
@@ -343,6 +347,10 @@ async def test_visible_tool_list_enumerates_ids_before_database_query(
 
 @pytest.mark.asyncio
 async def test_visible_preset_tool_list_is_visible_to_regular_users(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_preset_child_keys",
+        AsyncMock(return_value={}),
+    )
     preset_tool_type = GptsToolsType(
         id=20,
         tenant_id=1,

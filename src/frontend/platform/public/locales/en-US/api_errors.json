@@ -255,6 +255,7 @@
   "15030": "MCP service response does not match SSE. Check the transport type and endpoint.",
   "15031": "Invalid MCP service URL. Use a complete http:// or https:// address.",
   "15032": "Failed to retrieve MCP tools. Check the service status and configuration.",
+  "15033": "Invalid image generation settings. Check the API address, API key and model; Azure is not supported.",
   "16000": "Dataset name already exists",
   "16100": "App factory error",
   "16101": "Application does not exist",
