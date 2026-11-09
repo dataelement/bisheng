@@ -174,6 +174,8 @@ class ModelDeletePlanApplication:
             )
             if await self._capture(scope, identity) != original:
                 _changed()
+            if session.new or session.dirty or session.deleted:
+                _changed()
             scope.check()
             result = ModelDeletePrecheck(inspection, confirmation)
         outer.check()
