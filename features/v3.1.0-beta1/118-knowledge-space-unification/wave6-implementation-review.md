@@ -600,3 +600,10 @@ fixed0fdda0e87c新增131行实际读取Repo和原Visibility薄桥，SPACE3正向
 §124独立固定export c9ad73cb6e：37项新native/边界1.30s通过，真实fresh checkout tenant变化在0查询前拒、nested drift拒、跨Root非primary alias/坏version_no/DIR/dangling Doc拒。额外facade_equality路径组合161通过、1原fixture失败：test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_door[hosted_runtime]，旧helper不接principal关键字；测试叶与CapabilityBus完整AST在e3a3da6983和c9ad73cb6e一致，确认本波baseline，不冒该额外路径全绿。Root14路径142绿保持独立口径。
 
 RRT fixed27aa5359e990已Root完整读两生产diff，normalmerge d0c6e3872d；主树3实际路径52 passed/2.69s，/private/tmp/f118-root-target-deletion-integrated.log及XML。原Source方法AST保持，只有已有目标删除证据写入和窄runtime桥；实际模型/空间删除业务整卡待闭，不把证据组件当公开删除交付。
+
+
+### 移动Owner受信事务整合（2026-11-09）
+
+2152eaefb865已normalmerge；Root已完整读两App、原peek/确认getter生产diff。Root实际/tmp最后ready await残留dirty File82改回源空间，原版DID NOT RAISE真红0.69s（f118-root-move-tail-pending-red）；正式125da4881c三红/一控制后，完整Session提交前与两共同SP释放前加UOW检查，未在合法Repo内部pending中途拒。主树8实际路径含Root原/tmp探针63 passed/15.12s，/private/tmp/f118-root-move-owner-integrated.log及XML。作者25路径410 passed/65.72s，旧adapter夹具把Source10写40的1项失败仅精确修fixture后同组绿，不算产品红。
+
+401/10001独立roots与changes预算分别precheck/accept184/2920 SQL，attempt/logical1611/37035（File/Doc/Ready Item各N=3N，其余分页项）；ready-renew14/max4绑定，claim68/guard78/checkpoint68/ACK71两规模同常量，零fullPlan/manifest。原Item为executemany N行×23绑定，不误作N参数IN；GROUP BY原10001 Item匹配driver约2.008ms另列，不称ACK总CPU恒定。原真实index adapter已联通Owner durable target_verified/source_cleaned与五标量ACK；实际worker/HTTP/旧接口整链仍§126继续，不因内部Owner完成勾整移动任务。
