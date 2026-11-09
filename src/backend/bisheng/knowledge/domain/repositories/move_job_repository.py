@@ -249,6 +249,18 @@ class MoveJobRepository:
             raise KnowledgeIdempotencyConflictError()
         return JobRequestResult(existing, True)
 
+    async def aread_move_confirmation(self, session, *, source_space_id, confirmation_id, plan_digest):
+        plan = await self._plan(session, confirmation_id)
+        if (
+            type(source_space_id) is not int
+            or source_space_id <= 0
+            or plan.operation != "move"
+            or plan.space_id != source_space_id
+            or plan.plan_digest != plan_digest
+        ):
+            _conflict("move_confirmation_changed")
+        return plan
+
     async def aget_move_request(
         self, session, *, source_space_id, confirmation_id, plan_digest, idempotency_key, actor_user_id, actor_reference
     ) -> JobRequestResult | None:
