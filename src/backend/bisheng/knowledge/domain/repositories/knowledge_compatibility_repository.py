@@ -13,14 +13,13 @@ class KnowledgeCompatibilityRepository:
         tenant_id = get_current_tenant_id()
         if type(tenant_id) is not int or tenant_id <= 0 or is_tenant_filter_bypassed():
             raise PermissionInvalidResourceError()
-        ids = list(dict.fromkeys(value for value in resource_ids if type(value) is int and value > 0))
+        ids = list(dict.fromkeys(value for value in resource_ids if type(value) is int and 0 < value <= 2**63 - 1))
         result = {}
         with strict_tenant_filter():
             async with get_async_db_session() as session:
                 for start in range(0, len(ids), 200):
                     rows = await session.exec(
                         select(Knowledge.id, Knowledge.type).where(
-                            Knowledge.tenant_id == tenant_id,
                             Knowledge.id.in_(ids[start : start + 200]),
                             Knowledge.type.in_((0, 1, 3)),
                         )
@@ -55,15 +54,12 @@ class KnowledgeCompatibilityRepository:
             raise PermissionInvalidResourceError()
         if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("legacy candidate page is invalid")
-        if len(preferred_ids) > 200:
-            raise ValueError("at most 200 preferred IDs are supported")
         abnormal = KnowledgeSpaceListingRepository._abnormal_exists()
         fields = [getattr(Knowledge, key) for key in KnowledgeRead.model_fields if hasattr(Knowledge, key)]
         statement = (
             select(Knowledge, case((abnormal, 1), else_=0))
             .options(load_only(*fields))
             .where(
-                Knowledge.tenant_id == tenant_id,
                 Knowledge.type == 3,
             )
         )
@@ -74,7 +70,7 @@ class KnowledgeCompatibilityRepository:
                 select(KnowledgeFile.id)
                 .where(
                     KnowledgeFile.knowledge_id == Knowledge.id,
-                    KnowledgeFile.tenant_id == tenant_id,
+                    KnowledgeFile.tenant_id == Knowledge.tenant_id,
                     KnowledgeFile.file_name.like(f"%{keyword}%"),
                 )
                 .exists()

@@ -163,7 +163,7 @@ class LegacyDocumentsApplication:
         if resource_type.strip().lower() != "knowledge_library":
             return resource_type
         resource_id = resource_id.strip()
-        if not resource_id.isdecimal() or str(int(resource_id)) != resource_id:
+        if not resource_id.isdecimal() or str(int(resource_id)) != resource_id or not 0 < int(resource_id) <= 2**63 - 1:
             raise PermissionInvalidResourceError()
         actual = (await self.repository.aresource_types([int(resource_id)])).get(int(resource_id))
         if actual is None:

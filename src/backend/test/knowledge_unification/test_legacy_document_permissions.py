@@ -11,7 +11,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.api.services.f048_permission_runtime import build_f048_resource_composition
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
+from bisheng.core.database import tenant_filter
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models import knowledge as models
 from bisheng.knowledge.domain.models.knowledge import Knowledge
@@ -30,6 +31,11 @@ from test.permission.test_data_scope_enforcement import FakeResolver, StubFGA, s
 @pytest.fixture
 async def real_targets(monkeypatch):
     token = set_current_tenant_id(101)
+    names = tenant_filter._tenant_aware_tables | {"knowledge", "knowledgefile", ResourcePermissionMode.__tablename__}
+    monkeypatch.setattr(tenant_filter, "_force_import_all_models", lambda: None)
+    monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", names)
+    tenant_filter.register_tenant_filter_events()
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
     async with engine.begin() as connection:
         await connection.run_sync(lambda conn: Knowledge.__table__.create(conn))
@@ -40,29 +46,30 @@ async def real_targets(monkeypatch):
         async with AsyncSession(engine, expire_on_commit=False) as session:
             yield session
 
-    async with sessions() as session:
-        session.add_all(
-            [
-                Knowledge(id=i, tenant_id=101, type=kind, state=1, user_id=7, name=str(kind), model="11")
-                for i, kind in ((11, 0), (12, 1), (13, 3), (14, 2))
-            ]
-        )
-        session.add(Knowledge(id=15, tenant_id=202, type=3, state=1, user_id=7, name="foreign", model="11"))
-        session.add_all(
-            [
-                ResourcePermissionMode(
-                    id=i,
-                    tenant_id=101,
-                    resource_type=kind,
-                    resource_id=str(i),
-                    mode="CUSTOM",
-                    version=1,
-                    projection_state="CURRENT",
-                )
-                for i, kind in ((11, "knowledge_library"), (12, "knowledge_library"), (13, "knowledge_space"))
-            ]
-        )
-        await session.commit()
+    with bypass_tenant_filter():
+        async with sessions() as session:
+            session.add_all(
+                [
+                    Knowledge(id=i, tenant_id=101, type=kind, state=1, user_id=7, name=str(kind), model="11")
+                    for i, kind in ((11, 0), (12, 1), (13, 3), (14, 2))
+                ]
+            )
+            session.add(Knowledge(id=15, tenant_id=202, type=3, state=1, user_id=7, name="foreign", model="11"))
+            session.add_all(
+                [
+                    ResourcePermissionMode(
+                        id=i,
+                        tenant_id=101,
+                        resource_type=kind,
+                        resource_id=str(i),
+                        mode="CUSTOM",
+                        version=1,
+                        projection_state="CURRENT",
+                    )
+                    for i, kind in ((11, "knowledge_library"), (12, "knowledge_library"), (13, "knowledge_space"))
+                ]
+            )
+            await session.commit()
     monkeypatch.setattr(models, "get_async_db_session", sessions)
     monkeypatch.setattr(compatibility, "get_async_db_session", sessions)
     fga = StubFGA()

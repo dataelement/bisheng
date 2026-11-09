@@ -84,6 +84,20 @@ async def test_candidate_continuation_is_stable_and_tenant_visible_exact(pages):
     assert [row.id for row in abnormal.data] == [13]
 
 
+async def test_original_preferred_ids_input_is_not_limited_by_candidate_batch_size(pages):
+    pages.fga.batch_check = _all_allowed
+    app = LegacyDocumentsApplication()
+    preferred = [*range(1000, 1250), 13]
+    first = await app.alist(identity=pages.user, page_size=1, preferred_ids=preferred)
+    assert [row.id for row in first.data] == [13] and first.has_more
+    second = await app.alist(identity=pages.user, page_size=1, preferred_ids=preferred, cursor=first.next_cursor)
+    assert [row.id for row in second.data] == [16] and not second.has_more
+
+
+async def _all_allowed(checks, consistency=None):
+    return [True for _ in checks]
+
+
 async def test_public_knowledge_alias_is_normalized_before_original_strict_registry(pages):
     from bisheng.permission.application import business_authorization as auth
 
