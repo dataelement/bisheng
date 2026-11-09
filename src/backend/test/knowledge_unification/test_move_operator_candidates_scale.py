@@ -20,7 +20,7 @@ async def test_outer_paging_uses_exact_keys_and_linear_scalar_sql(database, coun
     captured = []
 
     def capture(connection, cursor, sql, parameters, context, many):
-        captured.append((context.compiled.statement, parameters))
+        captured.append((context.compiled.statement, parameters, dict(context.compiled_parameters[0])))
 
     sa.event.listen(database.engine.sync_engine, "before_cursor_execute", capture)
     bridge = candidates.api().KnowledgeMoveProjectionApplication(repository=candidates.repository())
@@ -37,7 +37,7 @@ async def test_outer_paging_uses_exact_keys_and_linear_scalar_sql(database, coun
                 )
             )
             assert len(captured) == before + 1
-            statement, parameters = captured[-1]
+            statement, parameters, bindings = captured[-1]
             assert statement.is_select and len(statement.get_final_froms()) == 1
             assert statement.get_final_froms()[0].name == "permission_projection_operation"
             assert set(statement.selected_columns.keys()) == {
@@ -57,16 +57,18 @@ async def test_outer_paging_uses_exact_keys_and_linear_scalar_sql(database, coun
                 and p.right.value == 101
                 for p in predicates
             )
-            key_predicate = next(
-                p
-                for p in predicates
-                if isinstance(p, sa.sql.elements.BinaryExpression)
+            assert any(
+                isinstance(p, sa.sql.elements.BinaryExpression)
                 and getattr(p.left, "name", None) == "idempotency_key"
                 and p.operator is operators.in_op
+                for p in predicates
             )
-            assert set(key_predicate.right.value) == {
+            # Compiled statements may be cached from a prior page. Check the
+            # actual execution bindings, never the cached IN node's old value.
+            assert {value for value in bindings.values() if type(value) is str} == {
                 candidates.native.api().operation_key(candidates.native.JOB, "knowledge_file", ident) for ident in page
             }
+            assert {value for value in bindings.values() if type(value) is int} == {101}
             assert len(parameters) <= 201
     assert [(int(r.resource_id), r.operator_id) for r in result] == [
         (ident, ident + 100) for ident in ids if ident in present
@@ -75,5 +77,5 @@ async def test_outer_paging_uses_exact_keys_and_linear_scalar_sql(database, coun
     record_property("native_targets", count)
     record_property("native_candidate_selects", len(captured))
     print(
-        f"candidate targets={count} sparse={sparse} selects={len(captured)} max_parameters={max(len(p) for _, p in captured)}"
+        f"candidate targets={count} sparse={sparse} selects={len(captured)} max_parameters={max(len(p) for _, p, _ in captured)}"
     )

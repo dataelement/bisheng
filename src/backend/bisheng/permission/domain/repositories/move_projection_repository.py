@@ -123,6 +123,13 @@ class MoveParentState:
 
 
 @dataclass(frozen=True, slots=True)
+class MoveOperatorCandidate:
+    resource_type: str
+    resource_id: str
+    operator_id: int
+
+
+@dataclass(frozen=True, slots=True)
 class MoveProjectionFact:
     id: int
     tenant_id: int
@@ -342,6 +349,60 @@ class MoveProjectionRepository:
         if any(key not in rows or rows[key].projection_state != "CURRENT" for key in keys):
             _blocked("Resource permission mode is missing or not CURRENT")
         return tuple(rows[key] for key in keys)
+
+    async def alist_operator_candidates(self, session, *, job_id, targets) -> tuple[MoveOperatorCandidate, ...]:
+        """Read locators only; membership and complete projection proof are separate."""
+        tenant, _ = self._scope(session)
+        if type(targets) is not tuple or len(targets) > 200:
+            _blocked("operator candidate batch must contain at most 200 targets")
+        try:
+            operation_key(job_id, "folder", "1")
+            requested = {}
+            for target in targets:
+                if type(target) is not tuple or len(target) != 2:
+                    _blocked("exact candidate target pair required")
+                resource_type, resource_id = target
+                key = operation_key(job_id, resource_type, resource_id)
+                if key in requested:
+                    _blocked("duplicate operator candidate target")
+                requested[key] = (resource_type, _id(resource_id))
+        except (TypeError, ValueError, AttributeError) as error:
+            raise PermissionPublishNotReadyError(msg="Invalid move operator candidate target") from error
+        if not requested:
+            return ()
+        keys = tuple(requested) + tuple(requested.values())
+        self._pending(session, keys)
+        table = Operation.__table__
+        rows = await self._read(
+            session,
+            sa.select(
+                table.c.id,
+                table.c.tenant_id,
+                table.c.idempotency_key,
+                table.c.operation_type,
+                table.c.scope_type,
+                table.c.scope_key,
+                table.c.operator_id,
+            ).where(table.c.tenant_id == tenant, table.c.idempotency_key.in_(tuple(requested))),
+        )
+        self._pending(session, keys, tuple(row["id"] for row in rows))
+        found = {}
+        for row in rows:
+            key = row["idempotency_key"]
+            target = requested.get(key)
+            if (
+                target is None
+                or key in found
+                or row["tenant_id"] != tenant
+                or row["operation_type"] != "RESOURCE_MOVE"
+                or row["scope_type"] != "resource"
+                or row["scope_key"] != f"{target[0]}:{target[1]}"
+                or type(row["operator_id"]) is not int
+                or row["operator_id"] <= 0
+            ):
+                _blocked("invalid or duplicate move operator candidate")
+            found[key] = MoveOperatorCandidate(*target, row["operator_id"])
+        return tuple(found[key] for key in requested if key in found)
 
     async def alist_owned_operations(self, session, *, expectations, lock=False):
         self._expectations(session, expectations, bounded=True)

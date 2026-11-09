@@ -107,7 +107,7 @@ async def test_empty_and_missing_operations_are_normal_but_still_require_native_
         (("folder", "+1"),),
         (("folder", "0"),),
         (("folder", True),),
-        (("folder", "１"),),
+        (("folder", "\uff11"),),
         (("folder", "1"), ("folder", "1")),
         (("folder",),),
         ("folder",),
@@ -229,7 +229,7 @@ async def test_unrelated_pending_and_identity_map_survive_without_autoflush(data
         await session.rollback()
 
 
-@pytest.mark.parametrize("change", ["tenant", "transaction"])
+@pytest.mark.parametrize("change", ["tenant", "transaction", "pending"])
 async def test_context_change_during_sql_never_returns_candidates(database, monkeypatch, change):
     await insert(database, [row(1)])
     token = None
@@ -242,9 +242,15 @@ async def test_context_change_during_sql_never_returns_candidates(database, monk
             result = await original(*args, **kwargs)
             if change == "tenant":
                 token = set_current_tenant_id(202)
-            else:
+            elif change == "transaction":
                 await session.commit()
                 await session.begin()
+            else:
+                session.add(
+                    native.Mode(
+                        tenant_id=101, resource_type="knowledge_file", resource_id="1", mode="CUSTOM", version=1
+                    )
+                )
             return result
 
         monkeypatch.setattr(session, "execute", changing_execute)
@@ -257,6 +263,30 @@ async def test_context_change_during_sql_never_returns_candidates(database, monk
             if token is not None:
                 current_tenant_id.reset(token)
             await session.rollback()
+
+
+@pytest.mark.parametrize("tenant", [None, 0, -1, True])
+async def test_invalid_ambient_tenant_is_rejected_without_sql(database, tenant):
+    token = current_tenant_id.set(tenant)
+    try:
+        async with database.sessions() as session, session.begin():
+            database.queries.clear()
+            with pytest.raises(PermissionPublishNotReadyError):
+                await repository().alist_operator_candidates(session, job_id=native.JOB, targets=())
+            assert not database.queries
+    finally:
+        current_tenant_id.reset(token)
+
+
+async def test_unflushed_new_selected_operation_is_not_treated_as_missing(database):
+    async with database.sessions() as session, session.begin():
+        pending = native.Operation(**row(1))
+        session.add(pending)
+        database.queries.clear()
+        with pytest.raises(PermissionPublishNotReadyError):
+            await repository().alist_operator_candidates(session, job_id=native.JOB, targets=(("knowledge_file", "1"),))
+        assert not database.queries and pending in session.new
+        await session.rollback()
 
 
 async def test_candidate_cannot_replace_actual_pin_tuple_checksum_and_finalized_proof(database):
