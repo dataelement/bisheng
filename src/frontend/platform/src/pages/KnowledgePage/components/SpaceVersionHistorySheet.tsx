@@ -1,6 +1,6 @@
 import { Button, Tag } from "@bisheng/ui";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useId } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useContext, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sheet,
@@ -18,6 +18,11 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { locationContext } from "@/contexts/locationContext";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { SpaceVersionRelationPanel } from "./SpaceVersionRelationPanel";
+import { SpaceVersionUploadPanel } from "./SpaceVersionUploadPanel";
+import { SpaceSimilarDocumentPanel } from "./SpaceSimilarDocumentPanel";
 import { SpaceFileTools } from "./SpaceFileTools";
 import { FILE_STATUSES, StatusIndicator } from "./KnowledgeFileStatus";
 
@@ -28,14 +33,17 @@ interface SpaceVersionHistorySheetProps {
   fileId: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  api?: KnowledgeVersionsApi;
+  hasSimilar?: boolean;
+  api?: Partial<KnowledgeVersionsApi>;
 }
 
 export function SpaceVersionHistorySheet(props: SpaceVersionHistorySheetProps) {
+  const { appConfig } = useContext(locationContext);
   const targetKey = JSON.stringify([
     ...knowledgeQueryKeys.space(props.scope, props.spaceId),
     props.parentId,
     props.fileId,
+    appConfig.versionManagementEnabled === true,
   ]);
   return (
     <Sheet open={props.open} onOpenChange={props.onOpenChange}>
@@ -50,9 +58,27 @@ function HistoryContent({
   parentId,
   fileId,
   onOpenChange,
-  api = knowledgeVersionsApi,
+  hasSimilar = false,
+  api: customApi,
 }: SpaceVersionHistorySheetProps) {
   const { t } = useTranslation("knowledge");
+  const { appConfig } = useContext(locationContext);
+  const api = { ...knowledgeVersionsApi, ...customApi };
+  const client = useQueryClient();
+  const [panel, setPanel] = useState<"upload" | "merge" | "similar" | null>(
+    null,
+  );
+  const [busy, setBusy] = useState(false),
+    [uncertain, setUncertain] = useState(false);
+  const writing = useRef(false),
+    lifetime = useRef<AbortController>();
+  useEffect(() => {
+    const controller = new AbortController();
+    lifetime.current = controller;
+    return () => {
+      controller.abort();
+    };
+  }, []);
   // An unmounted opening never shares a later opening's request or cache.
   const openingId = useId();
   const validId = (id: number) => Number.isSafeInteger(id) && id > 0;
@@ -80,7 +106,70 @@ function HistoryContent({
   useEffect(() => {
     if (query.isError) showApiError(query.error);
   }, [query.isError, query.error]);
-  const data = query.isError ? undefined : query.data;
+  const data =
+    query.isError || query.data?.knowledge_id !== spaceId
+      ? undefined
+      : query.data;
+  const operationsEnabled =
+    appConfig.versionManagementEnabled === true && enabled && !!data;
+  const handleChanged = async () => {
+    if (lifetime.current?.signal.aborted) return;
+    setPanel(null);
+    await client.invalidateQueries({
+      queryKey: knowledgeQueryKeys.space(scope, spaceId),
+    });
+  };
+  const handleMutation = (
+    versionId: number,
+    operation: "primary" | "delete",
+  ) => {
+    const controller = lifetime.current;
+    if (
+      !operationsEnabled ||
+      !controller ||
+      controller.signal.aborted ||
+      writing.current ||
+      uncertain
+    )
+      return;
+    let attempted = false;
+    bsConfirm({
+      title: t(
+        operation === "primary"
+          ? "versions.set_primary"
+          : "versions.delete_history",
+      ),
+      desc: t(
+        operation === "primary"
+          ? "versions.confirm_primary"
+          : "versions.confirm_delete",
+      ),
+      signal: controller.signal,
+      onOk: async (close) => {
+        if (controller.signal.aborted || writing.current || attempted) return;
+        attempted = true;
+        writing.current = true;
+        setBusy(true);
+        try {
+          if (operation === "primary")
+            await api.setSpacePrimaryVersion(versionId, controller.signal);
+          else await api.deleteSpaceFileVersion(versionId, controller.signal);
+          if (controller.signal.aborted) return;
+          close();
+          await handleChanged();
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            setUncertain(true);
+            close();
+            showApiError(error);
+          }
+        } finally {
+          writing.current = false;
+          if (!controller.signal.aborted) setBusy(false);
+        }
+      },
+    });
+  };
   return (
     <SheetContent
       aria-describedby={undefined}
@@ -100,6 +189,8 @@ function HistoryContent({
           <Button variant="outline" onClick={() => void query.refetch()}>
             {t("retry")}
           </Button>
+        ) : query.data && !data ? (
+          <p role="alert">{t("f118.scope_unavailable")}</p>
         ) : !data ? (
           <p className="text-sm text-muted-foreground" role="status">
             {t("loading")}
@@ -122,6 +213,79 @@ function HistoryContent({
                 </div>
               )}
             </dl>
+            {operationsEnabled && (
+              <div className="mb-4 space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={busy || uncertain}
+                    onClick={() =>
+                      setPanel(panel === "upload" ? null : "upload")
+                    }
+                  >
+                    {t("versions.new_version")}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={busy || uncertain}
+                    onClick={() => setPanel(panel === "merge" ? null : "merge")}
+                  >
+                    {t("versions.merge")}
+                  </Button>
+                  {hasSimilar && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={busy || uncertain}
+                      onClick={() =>
+                        setPanel(panel === "similar" ? null : "similar")
+                      }
+                    >
+                      {t("versions.similar")}
+                    </Button>
+                  )}
+                </div>
+                {uncertain && (
+                  <p role="alert" className="text-sm">
+                    {t("versions.uncertain")}
+                  </p>
+                )}
+                {panel === "upload" && (
+                  <SpaceVersionUploadPanel
+                    scope={scope}
+                    spaceId={spaceId}
+                    parentId={parentId}
+                    documentId={data.document_id}
+                    api={api}
+                    onChanged={handleChanged}
+                    onBusyChange={setBusy}
+                  />
+                )}
+                {panel === "merge" && (
+                  <SpaceVersionRelationPanel
+                    scope={scope}
+                    spaceId={spaceId}
+                    fileId={fileId!}
+                    mode="merge"
+                    api={api}
+                    onChanged={handleChanged}
+                    onBusyChange={setBusy}
+                  />
+                )}
+                {panel === "similar" && (
+                  <SpaceSimilarDocumentPanel
+                    scope={scope}
+                    spaceId={spaceId}
+                    fileId={fileId!}
+                    api={api}
+                    onChanged={handleChanged}
+                    onBusyChange={setBusy}
+                  />
+                )}
+              </div>
+            )}
             {data.versions.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {t("f118.no_visible_versions")}
@@ -186,6 +350,33 @@ function HistoryContent({
                         </dd>
                       </div>
                     </dl>
+                    {operationsEnabled && !version.is_primary && (
+                      <div className="flex flex-wrap gap-2">
+                        {version.status === 2 && (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={busy || uncertain}
+                            onClick={() =>
+                              handleMutation(version.version_id, "primary")
+                            }
+                          >
+                            {t("versions.set_primary")}
+                          </Button>
+                        )}
+                        <Button
+                          size="small"
+                          color="danger"
+                          variant="text"
+                          disabled={busy || uncertain}
+                          onClick={() =>
+                            handleMutation(version.version_id, "delete")
+                          }
+                        >
+                          {t("versions.delete_history")}
+                        </Button>
+                      </div>
+                    )}
                     <SpaceFileTools
                       scope={scope}
                       spaceId={spaceId}
