@@ -170,6 +170,8 @@ export interface UseKnowledgeFileActionsOptions {
   confirm: KnowledgeUiPorts["confirm"];
   selectedList: KnowledgeFile[];
   canBatchDelete: boolean;
+  canDeleteSpace: boolean;
+  deletionScopeKey: string;
   space: KnowledgeSpaceContentProps["space"];
   onDeleteFile: KnowledgeSpaceContentProps["onDeleteFile"];
   onBatchDeleteFiles: KnowledgeSpaceContentProps["onBatchDeleteFiles"];

@@ -40,9 +40,11 @@ import type { User } from "@/types/api/user";
 import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
 import { KnowledgeTooltip } from "./components/KnowledgeTooltip";
 import { ProcessingDefaultsDialog } from "./components/ProcessingDefaultsDialog";
+import { KnowledgeDeletionDialog } from "./components/KnowledgeDeletionDialog";
+import { useKnowledgeDeletion } from "./hooks/useKnowledgeDeletion";
 import { FileAbnormalStatusCell } from "./components/FileAbnormalStatusCell";
 
-const ROW_ACTIONS = ["visible", "edit", "manage_permission"];
+const ROW_ACTIONS = ["visible", "edit", "manage_permission", "delete"];
 interface KnowledgeFileProps {
   scope: KnowledgeQueryScope;
   toolbarTarget?: HTMLDivElement | null;
@@ -50,10 +52,7 @@ interface KnowledgeFileProps {
 
 const pageWindow = window as Window & { LibPage?: { type: string } };
 
-export default function KnowledgeFile({
-  scope,
-  toolbarTarget,
-}: KnowledgeFileProps) {
+export default function KnowledgeFile({ scope, toolbarTarget }: KnowledgeFileProps) {
   const { t } = useTranslation("knowledge"),
     navigate = useNavigate(),
     client = useQueryClient();
@@ -122,10 +121,8 @@ export default function KnowledgeFile({
     user?.web_menu?.includes("create_knowledge") === true;
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<KnowledgeSpaceInfo | null>(null);
-  const [defaultsTarget, setDefaultsTarget] =
-    useState<KnowledgeSpaceInfo | null>(null);
-  const [permissionTarget, setPermissionTarget] =
-    useState<KnowledgeSpaceInfo | null>(null);
+  const [defaultsTarget, setDefaultsTarget] = useState<KnowledgeSpaceInfo | null>(null);
+  const [permissionTarget, setPermissionTarget] = useState<KnowledgeSpaceInfo | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const handleFilter = (value: string | number | null | undefined) => {
     const next = value === "abnormal";
@@ -199,6 +196,21 @@ export default function KnowledgeFile({
       if (live.current === epoch) showApiError(error);
     }
   };
+  const deletion = useKnowledgeDeletion(JSON.stringify([stableScope, epoch]));
+  const handleDeletion = async (
+    row: KnowledgeSpaceInfo,
+    kind: "delete" | "clear",
+    readonly = false,
+  ) => {
+    if (live.current !== epoch || !hasAction(row, "delete")) return;
+    setOpenId(null);
+    const owned = epoch;
+    if (await deletion.open({ spaceId: row.id, kind }, readonly)) {
+      if (live.current === owned)
+        await client.invalidateQueries({ queryKey: knowledgeQueryKeys.space(stableScope, row.id) });
+      if (live.current === owned) await handleRefresh();
+    }
+  };
   const renderMenu = (row: KnowledgeSpaceInfo) => {
     if (actionLoading[String(row.id)])
       return (
@@ -206,14 +218,43 @@ export default function KnowledgeFile({
           {t("knowledgeRowActions.loading", { ns: "permission" })}
         </DropdownItem>
       );
-    if (!hasAction(row, "edit") && !hasAction(row, "manage_permission"))
+    if (
+      !hasAction(row, "edit") &&
+      !hasAction(row, "manage_permission") &&
+      !hasAction(row, "delete")
+    )
       return (
-        <DropdownItem disabled>
-          {t("knowledgeRowActions.empty", { ns: "permission" })}
-        </DropdownItem>
+        <DropdownItem disabled>{t("knowledgeRowActions.empty", { ns: "permission" })}</DropdownItem>
       );
     return (
       <>
+        {hasAction(row, "delete") && (
+          <>
+            <DropdownItem
+              onSelect={() => {
+                void handleDeletion(row, "delete", true);
+              }}
+            >
+              {t("deletion.references")}
+            </DropdownItem>
+            <DropdownItem
+              danger
+              onSelect={() => {
+                void handleDeletion(row, "clear");
+              }}
+            >
+              {t("deletion.clear")}
+            </DropdownItem>
+            <DropdownItem
+              danger
+              onSelect={() => {
+                void handleDeletion(row, "delete");
+              }}
+            >
+              {t("deletion.delete_space")}
+            </DropdownItem>
+          </>
+        )}
         {hasAction(row, "manage_permission") && (
           <DropdownItem
             icon={<Shield />}
@@ -259,9 +300,7 @@ export default function KnowledgeFile({
         }}
       />
       {canCreate && (
-        <Button onClick={() => setCreateOpen(true)}>
-          {t("create", { ns: "bs" })}
-        </Button>
+        <Button onClick={() => setCreateOpen(true)}>{t("create", { ns: "bs" })}</Button>
       )}
     </div>
   );
@@ -272,9 +311,7 @@ export default function KnowledgeFile({
         : toolbarTarget === undefined
           ? toolbar
           : null}
-      {active.isInitialLoading && (
-        <p role="status">{t("f118.loading_space")}</p>
-      )}
+      {active.isInitialLoading && <p role="status">{t("f118.loading_space")}</p>}
       {active.isError && (
         <div role="alert">
           <p>{t("f118.load_failed")}</p>
@@ -307,19 +344,13 @@ export default function KnowledgeFile({
                         type="button"
                         className="ml-3 inline-flex outline-none"
                         aria-label={t("fileStatusFilterLabel", {
-                          value: t(
-                            onlyAbnormal
-                              ? "fileStatusAbnormal"
-                              : "fileStatusFilterAll",
-                          ),
+                          value: t(onlyAbnormal ? "fileStatusAbnormal" : "fileStatusFilterAll"),
                         })}
                       >
                         <Outlined.Filter
                           size={16}
                           aria-hidden
-                          className={
-                            onlyAbnormal ? "text-primary" : "text-gray-400"
-                          }
+                          className={onlyAbnormal ? "text-primary" : "text-gray-400"}
                         />
                       </button>
                     }
@@ -346,10 +377,7 @@ export default function KnowledgeFile({
                       <div className="truncate max-w-[500px] w-[264px] text-sm font-medium pt-2">
                         {row.name}
                       </div>
-                      <KnowledgeTooltip
-                        side="top"
-                        content={row.description || ""}
-                      >
+                      <KnowledgeTooltip side="top" content={row.description || ""}>
                         <div className="truncate max-w-[500px] text-xs text-text-2 pt-1">
                           {row.description || ""}
                         </div>
@@ -364,15 +392,10 @@ export default function KnowledgeFile({
                   {row.user_name || "--"}
                 </TableCell>
                 <TableCell>
-                  <FileAbnormalStatusCell
-                    hasAbnormalFiles={row.has_abnormal_files}
-                  />
+                  <FileAbnormalStatusCell hasAbnormalFiles={row.has_abnormal_files} />
                 </TableCell>
                 <TableCell className="text-right">
-                  <span
-                    className="contents"
-                    onClick={(event) => event.stopPropagation()}
-                  >
+                  <span className="contents" onClick={(event) => event.stopPropagation()}>
                     <Dropdown
                       align="end"
                       open={openId === String(row.id)}
@@ -422,6 +445,7 @@ export default function KnowledgeFile({
           />
         )}
       </div>
+      <KnowledgeDeletionDialog operation={deletion} />
       <KnowledgeLibraryDialog
         scope={scope}
         datalist={rows}
