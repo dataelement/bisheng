@@ -1235,3 +1235,8 @@ T979先native反例，T980只新knowledge/domain/repositories/move_job_ready_rep
 mark先分页读取原真实items，按原_digest构造checkpoint.logical_move，绑定Job marker摘要、实际target三元组、expected space/parent和原snapshot摘要；保全部其他checkpoint键。每页≤200，flush Item标记后尾验原lease/receipt并consume_logical，最后才写Job marker。零Item同原子marker+succeeded/finished/pendingFalse，非零保持running，原item状态/attempt/result不改。中途异常即使外层catch+commit也只有partial Item，无Job marker，故执行口必拒；Job marker落盘后不能把未知提交当未成功补偿。重试新receipt接线留B2，不签旧receipt替代。
 
 move执行读沿原metadata模式total_count/defer大manifest、claim SQL LIMIT1，不能每item读全Job manifest/全部pending集合；checkpoint API保私有logical_move、拒caller重写，普通kind行为不变。native覆盖0/非0、错issuer/TX/subject/plan/hash/lease、partial Item catchcommit、取消、takeover保历史marker、改snapshot/target/marker拒、checkpoint保留、原四kind控制和401/10001有界SQL/无重复全scope验证。此卡不接API/Owner/worker/RG或用户异步竞态。若两叶不能保持现lease/actor约束，先报Root拆合同，禁止复制旧算法。
+
+
+## 98. QA既有生命周期端到组件核验：已冻结
+
+Root核原W4实际KnowledgeModelReferenceApplication及KnowledgeService：QA create/base、model change/rebuild、clear/delete已接真实R2，同Knowledge事务。T093/T094只核闭该既有实现与补原生consumer测试，不为满足剩余任务数重写业务。T093原依赖T092只是顺序编排，QA不调用跨空间移动；改实际前置T018/T258/T052与既有KN模型生命周期，不等move完成。新test_qa_bindings.py≤600，原生Knowledge/QA/File/Model/R2/原UserPayload，external projection/index/object/queue是测试边界。测试actual sync/async create wrappers与base、缺embedding沿原拒绝不新增zero-model创建、投影/R2失败回滚、clear保模型/源/引用且只清本tenantQA内容、delete解除实际outgoing、失败完整回滚、改模型保旧+pending直到原QA finalizer。type仍1，不加入SPACE处理Job或新页面。已覆盖且未改生产的行为用现有红绿历史+本次组合证明，不伪造新缺陷红；如发现真缺陷先记录实际红再窄修原叶。旧v2 FakeUser/DAO测试未代表真实新消费者，应后继改为同真实事务行为断言，不能放宽UserPayload校验。
