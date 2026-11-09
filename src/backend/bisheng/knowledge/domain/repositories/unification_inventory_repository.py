@@ -232,6 +232,49 @@ def _row(row_type, row):
 
 
 class UnificationInventoryRepository:
+    async def ainspect_hard_deleted_roots(self, session, *, root_keys):
+        """Exact global PK absence; a foreign physical row is never absence."""
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.resource_reference.application.contracts import (
+            SourceRootKey,
+            SourceType,
+            TransactionIdentity,
+            canonical_target_id,
+        )
+
+        tenant, transaction = _scope(session), TransactionIdentity.capture(session)
+        if type(root_keys) is not tuple or not 1 <= len(root_keys) <= 200:
+            _blocked("absent_root_batch")
+        absent = set(root_keys)
+        for key in root_keys:
+            if (
+                type(key) is not SourceRootKey
+                or key.tenant_id != tenant
+                or key.source_type not in {SourceType.KNOWLEDGE, SourceType.CHANNEL_SYNC}
+            ):
+                _blocked("unknown_absent_root")
+            if key.source_type == SourceType.KNOWLEDGE:
+                if canonical_target_id(key.source_id) != key.source_id:
+                    _blocked("absent_root_id")
+            elif len(key.source_id) > 36:
+                _blocked("absent_root_id")
+        for kind, model in ((SourceType.KNOWLEDGE, Knowledge), (SourceType.CHANNEL_SYNC, Channel)):
+            keys = tuple(key for key in root_keys if key.source_type == kind)
+            if not keys:
+                continue
+            ids = tuple(int(key.source_id) if kind == SourceType.KNOWLEDGE else key.source_id for key in keys)
+            with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
+                found = tuple((await session.execute(select(model.id).where(model.id.in_(ids)))).scalars())
+            transaction.assert_current(session)
+            if _scope(session) != tenant:
+                _blocked("absent_root_context")
+            # SQL collation can match a Channel key with a different spelling.
+            # The caller admits only an entirely absent batch, so any physical
+            # hit conservatively rejects it without Python identity guessing.
+            if found:
+                return frozenset()
+        return frozenset(absent)
+
     @staticmethod
     async def _read(session, statement):
         _scope(session)

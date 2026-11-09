@@ -27,6 +27,51 @@ _TOMBSTONE = frozenset(
 )
 _INDEX = frozenset({"root_head", "source_head", "raw_count", "raw_digest"})
 _STATE = frozenset({"original", "target_tombstones", "ancestor_tombstones", "legacy"})
+PHYSICAL_ROOT_ABSENT = ("physical_root_absent",)
+
+
+def absent_root_digest(key):
+    return digest(
+        {"tenant_id": key.tenant_id, "source_type": key.source_type.value, "source_id": key.source_id, "exists": False}
+    )
+
+
+def inactive_index_state(key, heads, raw_count):
+    """Recognize only the exact committed R2 hard-delete empty-set shape."""
+    from bisheng.channel.domain.services.reference_extractor import CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION
+    from bisheng.knowledge.domain.services.model_reference_extractor import KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION
+    from bisheng.resource_reference.application.contracts import SourceType
+
+    versions = {
+        SourceType.KNOWLEDGE: KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
+        SourceType.CHANNEL_SYNC: CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
+    }
+    if key.source_type not in versions or len(heads) != 2 or raw_count != 0:
+        blocked("unknown_inactive_index")
+    heads = tuple(_row(sql_value(dict(row)), _HEAD) for row in heads)
+    root = next((row for row in heads if row["source_version"] == "__root__"), None)
+    source = next((row for row in heads if row["source_version"] == "current"), None)
+    if (
+        root is None
+        or source is None
+        or any(
+            (row["tenant_id"], row["source_type"], row["source_id"])
+            != (key.tenant_id, key.source_type.value, key.source_id)
+            or row["digest"] != reference_set_digest(())
+            or row["effective"]
+            for row in heads
+        )
+        or root["ready"]
+        or not source["ready"]
+        or root["source_revision"] <= 0
+        or root["source_revision"] != source["source_revision"]
+        or root["extractor_version"] != "root-guard-v1"
+        or source["extractor_version"] != versions[key.source_type]
+    ):
+        blocked("unknown_inactive_index")
+    state = {"root_head": root, "source_heads": [source], "raw_count": 0, "raw_digest": digest(()), "legacy": []}
+    parse_retired(state)
+    return canonical(state).decode()
 
 
 def blocked(reason):
@@ -365,4 +410,15 @@ def validate_inventory_fact(record):
     elif type(record) is RootInventoryRecord and record.retained_version_count == 0:
         parse_root_index(record.frozen_index)
     elif type(record) is RetiredInventoryRecord and record.source_key is None:
-        parse_retired(record.frozen_index)
+        state = parse_retired(record.frozen_index)
+        if record.lifecycle == PHYSICAL_ROOT_ABSENT:
+            heads = [state["root_head"], *state["source_heads"]]
+            if (
+                state["root_head"] is None
+                or state["raw_digest"] != digest(())
+                or state["legacy"]
+                or inactive_index_state(record.root_key, heads, state["raw_count"]) != record.frozen_index
+                or record.configuration_digest != absent_root_digest(record.root_key)
+                or record.business_revision_digest != record.configuration_digest
+            ):
+                blocked("invalid_absent_index_fact")

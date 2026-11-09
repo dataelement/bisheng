@@ -6,7 +6,7 @@ facts are preserved for the owning verifier, never repaired or marked ready.
 
 from dataclasses import dataclass, fields
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
@@ -14,6 +14,7 @@ from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_
 from bisheng.resource_reference.application.contracts import (
     ROOT_GUARD_VERSION,
     SourceKey,
+    SourceRootKey,
     TransactionIdentity,
     reference_set_digest,
 )
@@ -72,6 +73,77 @@ def _identity(row):
 
 
 class ReferenceBackfillRepository:
+    async def apage_index_roots(self, session, *, after_key=None, limit=200):
+        tenant, _ = _scope(session)
+        if type(limit) is not int or not 1 <= limit <= 200:
+            _invalid("root_page_limit")
+        if after_key is not None and (type(after_key) is not SourceRootKey or after_key.tenant_id != tenant):
+            _invalid("root_cursor")
+        queries = []
+        for model in (BusinessReferenceSet, BusinessResourceReference):
+            table = model.__table__
+            query = select(table.c.source_type, table.c.source_id).where(table.c.tenant_id == tenant)
+            if after_key is not None:
+                kind = after_key.source_type.value
+                query = query.where(
+                    or_(
+                        table.c.source_type > kind,
+                        and_(table.c.source_type == kind, table.c.source_id > after_key.source_id),
+                    )
+                )
+            queries.append(query)
+        roots = queries[0].union(queries[1]).subquery("migration_index_roots")
+        rows = await self._read(
+            session,
+            select(roots.c.source_type, roots.c.source_id)
+            .order_by(roots.c.source_type, roots.c.source_id)
+            .limit(limit),
+        )
+        try:
+            return tuple(SourceRootKey(tenant, row["source_type"], row["source_id"]) for row in rows)
+        except (TypeError, ValueError) as error:
+            raise KnowledgeOperationPlanConflictError(reason="reference_backfill_unknown_index_root") from error
+
+    async def aload_empty_index_candidates(self, session, *, root_keys):
+        tenant, _ = _scope(session)
+        if (
+            type(root_keys) is not tuple
+            or not 1 <= len(root_keys) <= 200
+            or any(type(key) is not SourceRootKey or key.tenant_id != tenant for key in root_keys)
+        ):
+            _invalid("root_batch")
+
+        def predicate(table):
+            return and_(
+                table.c.tenant_id == tenant,
+                or_(
+                    *(
+                        and_(table.c.source_type == key.source_type.value, table.c.source_id == key.source_id)
+                        for key in root_keys
+                    )
+                ),
+            )
+
+        sets, refs = BusinessReferenceSet.__table__, BusinessResourceReference.__table__
+        heads = await self._read(
+            session, select(*sets.c).where(predicate(sets)).order_by(sets.c.id).limit(2 * len(root_keys) + 1)
+        )
+        if len(heads) > 2 * len(root_keys):
+            _invalid("unexpected_empty_index_heads")
+        counts = await self._read(
+            session,
+            select(refs.c.source_type, refs.c.source_id, func.count().label("raw_count"))
+            .where(predicate(refs))
+            .group_by(refs.c.source_type, refs.c.source_id),
+        )
+        grouped = {key: [] for key in root_keys}
+        for row in heads:
+            grouped[SourceRootKey(tenant, row["source_type"], row["source_id"])].append(dict(row))
+        sizes = {(row["source_type"], row["source_id"]): row["raw_count"] for row in counts}
+        return {
+            key: (tuple(rows), sizes.get((key.source_type.value, key.source_id), 0)) for key, rows in grouped.items()
+        }
+
     @staticmethod
     async def _read(session, statement):
         tenant, transaction = _scope(session)
@@ -499,7 +571,9 @@ class ReferenceBackfillRepository:
             after = page[-1]["id"]
         return tuple(dict(row) for row in heads), tuple(rows)
 
-    async def aclear_registered_retired(self, session, *, root_key, source_key=None, cleanup_empty_root=False):
+    async def aclear_registered_retired(
+        self, session, *, root_key, source_key=None, cleanup_empty_root=False, expected_empty_heads=None
+    ):
         from sqlalchemy import delete
 
         tenant, transaction = _scope(session)
@@ -509,6 +583,64 @@ class ReferenceBackfillRepository:
             != (root_key.tenant_id, root_key.source_type, root_key.source_id)
         ):
             _invalid("retired_scope")
+        if expected_empty_heads is not None:
+            from datetime import datetime
+
+            table, refs = BusinessReferenceSet.__table__, BusinessResourceReference.__table__
+            if (
+                source_key is not None
+                or cleanup_empty_root
+                or type(expected_empty_heads) is not tuple
+                or len(expected_empty_heads) != 2
+                or len({row["id"] for row in expected_empty_heads}) != 2
+            ):
+                _invalid("empty_index_scope")
+            predicates = []
+            expected = {}
+            for row in expected_empty_heads:
+                if (
+                    set(row) != set(table.c.keys())
+                    or (row["tenant_id"], row["source_type"], row["source_id"])
+                    != (tenant, root_key.source_type.value, root_key.source_id)
+                    or row["effective"] is not False
+                ):
+                    _invalid("empty_index_before")
+                values = dict(row)
+                for name in ("create_time", "update_time"):
+                    if type(values[name]) is str:
+                        values[name] = datetime.fromisoformat(values[name])
+                expected[row["id"]] = values
+                predicates.append(
+                    and_(
+                        *(
+                            table.c[name].is_(None) if value is None else table.c[name] == value
+                            for name, value in values.items()
+                            if name not in {"create_time", "update_time"}
+                        )
+                    )
+                )
+            locked = await self._read(
+                session,
+                select(*table.c).where(table.c.tenant_id == tenant, table.c.id.in_(tuple(expected))).with_for_update(),
+            )
+            if {row["id"]: dict(row) for row in locked} != expected:
+                _invalid("empty_index_before_changed")
+            no_references = (
+                ~select(refs.c.id)
+                .where(
+                    refs.c.tenant_id == tenant,
+                    refs.c.source_type == root_key.source_type.value,
+                    refs.c.source_id == root_key.source_id,
+                )
+                .exists()
+            )
+            result = await session.execute(delete(table).where(or_(*predicates), no_references))
+            if result.rowcount != 2:
+                _invalid("empty_index_changed")
+            transaction.assert_current(session)
+            if _scope(session)[0] != tenant:
+                _invalid("tenant_changed")
+            return
         for model in (BusinessResourceReference, BusinessReferenceSet):
             table = model.__table__
             query = delete(table).where(

@@ -104,6 +104,9 @@ class UnificationSQLConversionApplication:
 
     async def _admit(self, run_id, writer):
         async with self._session() as session, session.begin():
+            from bisheng.knowledge.domain.repositories.unification_task_repository import UnificationTaskRepository
+
+            await UnificationTaskRepository().avalidate_migration_idle(session)
             tenants = await self.runs.alist_actual_tenant_ids(session)
             frozen = await self.runs.aget_global_freeze(
                 session, run_id=run_id, writer_contract_version=writer, tenant_ids=tenants
@@ -190,6 +193,12 @@ class UnificationSQLConversionApplication:
             await session.begin()
             try:
                 run = await self._scope_run(session, frozen)
+                if not state.get("_migration_idle_checked"):
+                    from bisheng.knowledge.domain.repositories.unification_task_repository import (
+                        UnificationTaskRepository,
+                    )
+
+                    await UnificationTaskRepository().avalidate_migration_idle(session)
                 if run.phase == "baseline_frozen":
                     await self.runs.aadvance(
                         session, **self._identity(frozen), expected_phase="baseline_frozen", next_phase="converting"
@@ -217,6 +226,7 @@ class UnificationSQLConversionApplication:
                 raise
         # A receipt becomes a cross-session continuation ONLY after commit ACK.
         state["last_acknowledged_progress"] = asdict(result.progress)
+        state["_migration_idle_checked"] = True
         state["stage"] = "apply"
         return result
 
@@ -320,12 +330,14 @@ class UnificationSQLConversionApplication:
                 True,
             )
         except asyncio.CancelledError as error:
-            error.sql_conversion_report = state | {
-                "commit_outcome": "unknown" if state["stage"] == "commit" else "not_attempted"
-            }
+            error.sql_conversion_report = {
+                key: value for key, value in state.items() if key != "_migration_idle_checked"
+            } | {"commit_outcome": "unknown" if state["stage"] == "commit" else "not_attempted"}
             raise
         except Exception as error:
-            report = state | {"commit_outcome": "unknown" if state["stage"] == "commit" else "not_attempted"}
+            report = {key: value for key, value in state.items() if key != "_migration_idle_checked"} | {
+                "commit_outcome": "unknown" if state["stage"] == "commit" else "not_attempted"
+            }
             if isinstance(error, BaseErrorCode):
                 error.kwargs["sql_conversion_report"] = report
                 raise

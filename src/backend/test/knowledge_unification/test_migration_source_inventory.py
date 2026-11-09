@@ -348,10 +348,14 @@ async def test_401_pages_child_batches_and_duplicate_targets_do_not_repeat_direc
         if not any(name in query for name in ("business_reference_set", "business_resource_reference", "m4_exact_rrt"))
     ]
     assert len(original_queries) < 55
-    assert sum("business_reference_set" in query for query in queries) == 14
-    assert sum("business_resource_reference" in query for query in queries) == 14
+    assert sum("business_reference_set" in query and "migration_index_roots" not in query for query in queries) == 14
+    assert (
+        sum("business_resource_reference" in query and "migration_index_roots" not in query for query in queries) == 14
+    )
     assert sum("m4_exact_rrt" in query for query in queries) == 3
-    assert len(queries) - len(original_queries) == 31
+    # One bounded root-key UNION is the new complete-index lifecycle check.
+    assert sum("migration_index_roots" in query for query in queries) == 1
+    assert len(queries) - len(original_queries) == 32
     assert all(statement._offset_clause is None for statement in statements)
 
 
