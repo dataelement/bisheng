@@ -40,7 +40,7 @@ BISHENG Desktop создан на базе DeepSeek Harness (DSH) и вмест�
 
 ![Веб-, настольный и мобильный интерфейсы BISHENG](docs/images/readme/bisheng-platform-overview.png)
 
-[Скачать BISHENG Desktop](https://dshdesktop.com/zh/enterprise/)
+[Скачать BISHENG Desktop](https://dshdesktop.com/zh/enterprise/) · [Руководство пользователя BISHENG Desktop](https://dataelem.feishu.cn/wiki/BWSMwdc2Ciwif4kfe5HcyGHgn3b#share-QZrMdHGRdokzWixRl6vc30w1n8P)
 
 Чтобы настроить клиент под свои нужды (например, заменить логотип), можно изменить [открытый исходный код клиента](https://github.com/dataelement/bisheng-desktop).
 
@@ -145,7 +145,7 @@ docker compose -f docker-compose.yml -p bisheng up -d
 
 По умолчанию первый зарегистрированный пользователь становится системным администратором.
 
-Подробнее об установке и развёртывании: [Самостоятельное развёртывание](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
+Чтобы включить все возможности (BISHENG Desktop, размещаемые приложения, дообучение и другие), см. документацию: [Самостоятельное развёртывание](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 ## Благодарности
 Этот репозиторий использует наработки [langchain](https://github.com/langchain-ai/langchain), [langflow](https://github.com/logspace-ai/langflow), [unstructured](https://github.com/Unstructured-IO/unstructured) и [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory). Благодарим их авторов за замечательную работу.

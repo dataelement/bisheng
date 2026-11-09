@@ -40,7 +40,7 @@ Simply put, think of it as an open-source alternative to WorkBuddy / Doubao Work
 
 ![BISHENG web, desktop and mobile interfaces](docs/images/readme/bisheng-platform-overview.png)
 
-[Download BISHENG Desktop](https://dshdesktop.com/zh/enterprise/)
+[Download BISHENG Desktop](https://dshdesktop.com/zh/enterprise/) · [BISHENG Desktop User Guide](https://dataelem.feishu.cn/wiki/BWSMwdc2Ciwif4kfe5HcyGHgn3b#share-QZrMdHGRdokzWixRl6vc30w1n8P)
 
 To customize the client (for example, to replace the logo), you can modify the [open-source client code](https://github.com/dataelement/bisheng-desktop).
 
@@ -145,7 +145,7 @@ After the startup is complete, access http://IP:3001 in the browser. The login p
 
 By default, the first registered user will become the system admin. 
 
-For more installation and deployment issues, refer to:：[Self-hosting](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
+To enable all features (BISHENG Desktop, hosted applications, fine-tuning, and more), see the documentation: [Self-hosting](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 ## Acknowledgement 
 This repo benefits from [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) and [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) . Thanks for their wonderful works.
