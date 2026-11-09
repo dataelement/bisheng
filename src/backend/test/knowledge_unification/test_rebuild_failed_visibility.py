@@ -83,6 +83,19 @@ async def visibility(current_tenant, monkeypatch):
                 KnowledgeDocumentVersion(id=2, document_id=100, knowledge_file_id=1, version_no=2, is_primary=True),
             ]
         )
+        # Status cases are genuine current primaries; an absent Version is
+        # separately rejected by the F118 positive-primary qualification tests.
+        for ident in range(2, 9):
+            session.add(KnowledgeDocument(id=100 + ident, knowledge_id=10, primary_version_id=1000 + ident))
+            session.add(
+                KnowledgeDocumentVersion(
+                    id=1000 + ident,
+                    document_id=100 + ident,
+                    knowledge_file_id=ident,
+                    version_no=1,
+                    is_primary=True,
+                )
+            )
         await session.commit()
     monkeypatch.setattr(module, "get_async_db_session", sessions)
     monkeypatch.setattr(knowledge_model, "get_async_db_session", sessions)
