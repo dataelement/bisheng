@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史962编号：855已完成/历史交付、105当前待办、2外移；原137队列已完成38项、剩99项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史962编号：859已完成/历史交付、101当前待办、2外移；原137队列已完成38项、剩99项，另2张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7717,7 +7717,7 @@
   **配对测试**：T953\
   **验证 / 完成条件**：真实红绿/首绿分列、有界native及固定作者外复核；不扩大权限或提前验收完整特性。
 
-- [ ] **T955 · 删除闭集与坏链规模真实反例**
+- [x] **T955 · 删除闭集与坏链规模真实反例**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_direct_delete_scope.py`；`src/backend/test/knowledge_unification/test_direct_delete_scope_scale.py`\
   **逻辑 / 测试上下文**：W6§85原单删/批量状态事实、完整及无Version链、真实C3/FK/重叠与规模。\
@@ -7725,7 +7725,7 @@
   **覆盖 AC**: AC-12, AC-19, AC-43, AC-83, AC-85, AC-94\
   **验证 / 完成条件**：真实红绿/首绿分列、有界native及固定作者外复核；不扩大权限或提前验收完整特性。
 
-- [ ] **T956 · 删除物理闭集事实仓储前置**
+- [x] **T956 · 删除物理闭集事实仓储前置**
   **类型 / Owner**：后端 Repository / PERM\
   **写入文件**：`src/backend/bisheng/knowledge/domain/schemas/direct_delete_scope.py`；`src/backend/bisheng/knowledge/domain/repositories/knowledge_space_delete_repository.py`\
   **逻辑 / 测试上下文**：W6§85两叶只读/可选有序锁读，不替换旧prepare/cutover或签可执行计划。\
@@ -7733,7 +7733,7 @@
   **配对测试**：T955\
   **验证 / 完成条件**：真实红绿/首绿分列、有界native及固定作者外复核；不扩大权限或提前验收完整特性。
 
-- [ ] **T957 · Source授权读取的实际目标大集合预算反例**
+- [x] **T957 · Source授权读取的实际目标大集合预算反例**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_source_read_target_scale.py`\
   **逻辑 / 测试上下文**：W6§86真实SourceVerifier/SourceRepo/TargetRepo及sync Model、saved/transient和原三槽匹配；不fake scope。\
@@ -7741,7 +7741,7 @@
   **覆盖 AC**: AC-37, AC-43, AC-68, AC-83, AC-85, AC-89, AC-91, AC-92\
   **验证 / 完成条件**：真实预算红与原控制，0DML/原identity和tenant保持，private旧复杂度见证保留。
 
-- [ ] **T958 · Source授权KN和Model读取的有界查询与证据匹配**
+- [x] **T958 · Source授权KN和Model读取的有界查询与证据匹配**
   **类型 / Owner**：后端 Repository / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/source_read_target_repository.py`；`src/backend/bisheng/llm/domain/repositories/source_read_target_repository.py`\
   **逻辑 / 测试上下文**：W6§86两叶only，原资格与共享策略不变；scalar精确RRT批锁/业务200ID页/原证据桶，sync与async保同语义。\

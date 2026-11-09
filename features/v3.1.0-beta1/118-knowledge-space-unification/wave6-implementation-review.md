@@ -435,3 +435,12 @@ T953954固定0f54272ee经Root全读diff，正常合流；Root七路径101 passed
 T959960已Root全读128行Schema及旧Repo完整diff，并正常主合9d253f256。作者原27缺模块红/12原控制绿→39首绿，22路径512绿；Root八路径150 passed/2954 warnings/5.52秒（/private/tmp/f118-root-acceptance-ssot.log/.xml）。五原DTO及_digest同对象显式reexport，原manifest仅原一次deepcopy、request_facts复用已准备值，canonical四oracle不变；其他Job gate/metadata空proof/事务/锁位置保留。两卡闭合，不提前开move。J1a新受理接口按实际K1 native SAVEPOINT接缝在§89另冻。
 
 D1 bc8独立复查52原绿但2原生额外格1红1绿，真实祖先较晚重读覆盖physical基线被锁比较漏检；原probe/private/tmp/f118-d1-independent-probe.log保留。T956原合同要求重读一致，退回同卡修，不先主合或记完成。修复39199d3bc已候验，不把原52绿当整体安全。旧version switch_off测试独立父基线同样期待HTTPException但原Service抛VersionManagementDisabledError，故组合明确单列已证旧失败，后继旧协议卡处理，未放宽生产门槛。
+
+
+### 2026-11-09 Source读侧与删除闭集主合
+
+Root全读两读侧diff，合018e38e83f；固定主树13路径159 passed/1123 warnings/10.67秒（/private/tmp/f118-root-source-read-bounded.log/.xml）。T957原8预算未改全部转绿，saved401/1001候选1203/3003、RRT3/6，10001transient两类51RRT；新native36格/原SourceAuthority及sharing/default/canonical/早拒全部保。两生产叶157/330行，只有scalar无identity_map污染、0DML，globallex锁改变按合同明确。T957958闭合，不是全系统性能或E2E结论。
+
+D1正式反例b78c14b59原1红→39199d3bc单合并优先级修正；独立原2probe原样2绿(/private/tmp/f118-d1-independent-fixed.log)，Root已全读新增Repo流程及正常主合。Root新两叶53+独立2为55 passed/1471 warnings/2.47秒（/private/tmp/f118-root-delete-scope-reviewed.log/.xml）。Repo582/Schema146，全部旧prepare/cutover/cleanup方法未改；53作者新测、旧回归和独立探针合197绿/1已证旧switch_off失败排除。52原绿曾漏祖先覆盖，现原反例确已闭合，T955956组件闭；公开删除仍待R3权限投影优先和计划接线，不能以只读scope代真实删除。
+
+主树52892298a7901c3a02876eeafb5fa8d4c4d31730正在原4890选集基础上加入新move/Scope/性能/acceptance/D1进行完整本地回归；结束前不写全绿或正式升级结论。当前Task数按checkbox逐项生成，原99待办仍含真实业务入口/迁移/页面/E2E，不按组件测试数折算AC完成率。
