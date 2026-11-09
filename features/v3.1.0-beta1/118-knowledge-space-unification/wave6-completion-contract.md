@@ -1190,3 +1190,24 @@ canonical _model_payload只在floor非None时纳入该事实；默认None的普�
 Root已读Alembic AGENTS，实施前实际alembic heads唯一f118_move_actor_subject（2026-11-09），新revision f118_retired_use_floor父接此head，编写后再验单head及原database/test_alembic_single_head。INT T967968单revision仅permission_model.retired_use_level_floor Integer nullable/defaultNone、无server_default，无JSON解析/回填/签发/seed/新授权；shared table_exists/column_exists大小写兼容守卫，缺整个表留原Model.create_all，已有列/值保持，重复upgrade无改。标准DDL/C2静态保，DM8免实测。downgrade仍要求停服一致备份恢复，不删除业务或猜历史值。
 
 旧Model行新列NULL，不据visibility_level/derived_level自动补；正式floor来源只后继已核旧mixed Plan，Snapshot/API/codec/联合verify未装配前不发布。正式停服→备份→此中性DDL→全局实际权限盘点/基线冻结→计划/转换时序不变，脚本不探测停服。升级演练/MySQL验证另执行，不以SQLite原生DDL替代。测试覆盖缺文件红、旧表无列/已有列3/缺表/create_all同形/重复/保旧行及同parent/DDL-only，禁止迁移扫描业务表推导floor。
+
+
+## 93. 删除精确引用SQL事实收集 D3a：已冻结
+
+T969新test_direct_delete_reference_query.py（规模可另test_direct_delete_reference_query_scale.py）先红；T970仅新knowledge/application/direct_delete_reference_query.py单叶≤600。DirectDeleteReferenceQuery(*,runtime:ReferenceBindingRuntime,coverage_factory:Callable[[AsyncSession],CoverageRepository],scope_repository:KnowledgeSpaceDeleteRepository|None=None)；acollect(session:AsyncSession,*,space_id:int,selections:tuple[DeleteSelection,...])->DeleteReferenceFacts。显式真实runtime且repository.verifier同一issuer，actual D1/Owner/stream/coverage公口，不接caller Scope/receipt/Actor/权限callback/新Session/披露。原生已有外TX/具体tenant/拒bypass/入口无pending，保持no_autoflush；这只是内部SQL事实，不对外路由、不授删除许可。后继App才在SQL前原选中目标资格、SQL close后SourceDisclosure；本卡无FGA/provider/外IO，不新增派生child delete门槛。
+
+同叶detached immutable DTO：DeleteReferenceSlotFact(reference_id,unit_index,source:SourceKey,slot_key,target:TargetKey,source_revision)全部reprFalse；DeleteReferenceFacts(scope:DeleteScope,references:tuple[DeleteReferenceSlotFact,...],sources:tuple[SourceKey,...],source_counts,slot_counts,unit_source_counts,unit_slot_counts,observed_source_tenant_ids,coverage_epoch,inventory_hash)，除epoch均reprFalse。计数tuple((SourceType.value,int),...)固定六类，unit数组按D1原顺序；Source/version全局/每unit各自去重，slots按真实每BRR计。无ORM/OwnerScope/receipt/can_*或自造hash，不复制全版本链。调用方不得把内部DTO直接HTTP回传或作为确认authority。
+
+步骤固定：捕获TX/tenant→factory须真实CoverageRepository SQL ledger adapter→globalReady+tenant六类ready→D1 for_update=False→一次resource_id→unit索引（全部unit资源含DIR转KNFILE，绝不SPACE/contents范围）→非空targets一次原averify_owner_targets/target_owner_scope，精确覆盖并stateVALID、owner/space同D1→完整耗尽新stream→单遍构造detached命中/计数/observedtenants→globalReady重验observed/原epoch/inventory，再own六类ready→TX/tenant尾验→才返回。任何末页/coverage/上下文/取消异常无部分成功结果。
+
+空选择或all issues无targets，不造空OwnerScope，但仍Coverage首尾；D1空scope不证明Root存在，mixed保issues，只查实际units；busy/unsupported/unregistered不在此分类过滤。全局ready验证observed外租户，不把source tenant冒充target owner，不过滤paused/history/legacy直接引用，不把无依赖当可删除。真实status端口可在native测试隔离，但Owner/receipts/ReferenceRepo/LEFTjoin必须真SQL。
+
+预算索引O(T)、聚合O(R+S+U)，排序另计；owner receipt验证合3T（创建1+流首尾2），不是T×pages；OwnSpace真Owner SQL 2ceil(T/200)+1+ceil((T+1)/200)，stream≤ceil(T/200)+floor(R/200)，T0均0。Coverage12 local+2global公口调用，适配器SQL单列；D1预算独立，输出内存O(T+R+S+U)不声称恒定。native含primary/history/DIR/外sibling、space-only不阻、跨unit/source多槽/外tenant受限原事实、空/mixed/legacy、篡改/尾验/缺adapter/epoch源集变化、401/1001/10001实际SQL及无DML/FGA/新Session。原Actor与展示接线必须后继另冻。
+
+## 94. 零Item逻辑ready持久槽 S0：已冻结
+
+只读native原probe三断言证明：K1 logical receipt在后来SAVEPOINT被拒、回原TX可consume；现generic item claim/finalize有未ready缺口，不算功能完成。0Item没有Item.checkpoint，immutable params/manifest/state/error不能伪装proof。因此先T971测试test_move_logical_marker_schema.py、T972仅原knowledge/domain/models/knowledge_processing_job.py一叶，加move_logical_marker:dict|None默认None、private exclude/reprFalse、Column(JsonType,nullable=True)，无默认ready/索引/actor/model绑定。新test≤600。原四kind构造/序列化/字段与scope_manifest、原acceptance哈希不受影响；只存事实，Shape/ready证明留B1，不在Model猜actor或签发marker。
+
+T973/T974 INT新test_move_logical_marker_migration.py及单Alembic revision v3_1_0_beta1_f118_move_logical_marker.py；实施前live唯一head为准（当前f118_retired_use_floor），仅同表nullable JsonType列，shared幂等/缺表留create_all/已有列数据保持，无JSON解析或补marker。MySQL原JsonType None可能是JSON null，旧加列为SQL NULL，后继以Python None/合法dict判定，不写MySQL JSON函数/不假设SQL IS NULL即全部未ready。DM静态JsonType→CLOB，用户免实测。DDL-only/单head/备份恢复规则同§92，未启用B1前不可发布move入口。
+
+后继B1新MoveJobReadyRepo+旧JobRepo：同原receipt TX、不再后来nested；Item marker全写/flush后，尾验/consume原receipt，最后才写Job marker（零项同原子写succeeded），partial Item commit仍因Job markerNone被拒；claim JobLease需在ready前允许，封item/guard/finalize及checkpoint覆盖。候选Job marker闭集move_schema/job_id/plan_id/request_hash/after_scope_digest/projection_evidence_digest/index_item_count/ready_claim_generation，最后generation只是历史，takeover/retry不清/重签。B1/retry/J1c exact API后继另冻，此S0不假报缺口已封。
