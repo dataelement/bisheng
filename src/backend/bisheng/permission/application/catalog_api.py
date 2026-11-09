@@ -861,6 +861,8 @@ class SqlCatalogState:
                 )
             ).scalars()
         )
+        if any(row.kind != "CUSTOM" and row.retired_use_level_floor is not None for row in rows):
+            raise ValueError("retired-use floor belongs only to a controlled custom model")
         ids = [int(row.id) for row in rows if row.id is not None]
         pairs = (
             list(
@@ -896,6 +898,7 @@ class SqlCatalogState:
                 config_scope=row.config_scope,
                 visibility_only_resource_types=tuple(row.visibility_only_resource_types or ()),
                 visibility_level=row.visibility_level,
+                retired_use_level_floor=row.retired_use_level_floor,
             )
             for row in rows
             if row.kind == "CUSTOM"
@@ -976,6 +979,7 @@ class SqlCatalogState:
                 allow_same_level=model.allow_same_level,
                 visibility_only_resource_types=list(model.visibility_only_resource_types),
                 visibility_level=model.visibility_level,
+                retired_use_level_floor=model.retired_use_level_floor,
             )
             session.add(row)
             await session.flush()
@@ -1793,6 +1797,7 @@ class F048CatalogApi:
                 config_scope=model.config_scope,
                 visibility_only_resource_types=model.visibility_only_resource_types,
                 visibility_level=model.visibility_level,
+                retired_use_level_floor=model.retired_use_level_floor,
             )
             for model in before.model_release.models
             if model.kind == "CUSTOM"

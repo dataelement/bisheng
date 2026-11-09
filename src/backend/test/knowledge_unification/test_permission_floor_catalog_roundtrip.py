@@ -117,7 +117,7 @@ async def test_existing_floor_survives_real_edit_save_reload_cycles_and_new_mode
     catalog_api = api(session_factory)
     monkeypatch.setattr(control_state, "get_async_db_session", session_factory)
     batches = (
-        [{"type": "UPDATE_MODEL", "model_key": "legacy", "name": "Renamed", "action_codes": ["download", "rename"]}],
+        [{"type": "UPDATE_MODEL", "model_key": "legacy", "name": "Renamed", "action_codes": ["rename", "download"]}],
         [
             {"type": "UPDATE_MODEL", "model_key": "legacy", "action_codes": ["download"]},
             {"type": "CREATE_MODEL", "model_key": "ordinary", "name": "Ordinary", "action_codes": ["download"]},
