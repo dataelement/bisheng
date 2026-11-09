@@ -265,6 +265,108 @@ class PermissionMigrationSnapshotRepository:
             tuple(models),
         )
 
+    async def aload_resource(self, session, *, mode_id, resource_keys, lock=False):
+        """Exact old/new resource buckets, including every inactive source."""
+        tenant = self._scope(session)
+        if (
+            type(mode_id) is not int
+            or mode_id <= 0
+            or type(resource_keys) is not tuple
+            or not 1 <= len(resource_keys) <= 2
+            or type(lock) is not bool
+            or not session.in_transaction()
+        ):
+            _blocked("resource_identity_required")
+        transaction = TransactionIdentity.capture(session)
+
+        def current():
+            if self._scope(session) != tenant or session.new or session.dirty or session.deleted:
+                _blocked("resource_context_changed")
+            try:
+                transaction.assert_current(session)
+            except (TypeError, ValueError) as error:
+                raise PermissionMigrationBlockedError(reason="f118_snapshot_resource_transaction_changed") from error
+
+        async def read(query):
+            current()
+            result = await self._read(session, query.with_for_update() if lock else query)
+            current()
+            return result
+
+        mode = ResourcePermissionMode.__table__
+        rows = await read(select(*mode.c).where(mode.c.id == mode_id, mode.c.tenant_id == tenant))
+        if len(rows) != 1 or (rows[0]["resource_type"], rows[0]["resource_id"]) not in resource_keys:
+            _blocked("resource_mode_changed")
+        await self._operations(session, rows)
+        current()
+        buckets = []
+        for model in (PermissionGrant, PermissionVisibleSourceProjection):
+            table, records, after = model.__table__, [], 0
+            keys = []
+            for key in resource_keys:
+                if type(key) is not tuple or len(key) != 2 or not all(type(value) is str and value for value in key):
+                    _blocked("resource_key_invalid")
+                keys.append((table.c.resource_type == key[0]) & (table.c.resource_id == key[1]))
+            while True:
+                page = await read(
+                    select(*table.c)
+                    .where(table.c.tenant_id == tenant, or_(*keys), table.c.id > after)
+                    .order_by(table.c.id)
+                    .limit(200)
+                )
+                records.extend(page)
+                if len(page) < 200:
+                    break
+                after = page[-1]["id"]
+            buckets.append(records)
+        grant_rows, visible_rows = buckets
+        for start in range(0, len(visible_rows), 200):
+            await self._operations(session, visible_rows[start : start + 200])
+            current()
+        sources = []
+        source = PermissionGrantAssignee.__table__.alias("f118_resource_sources")
+        for offset in range(0, len(grant_rows), 200):
+            ids, after = tuple(row["id"] for row in grant_rows[offset : offset + 200]), 0
+            while True:
+                page = await read(
+                    select(*source.c)
+                    .where(source.c.grant_id.in_(ids), source.c.id > after)
+                    .order_by(source.c.id)
+                    .limit(200)
+                )
+                if any(row["tenant_id"] != tenant for row in page):
+                    _blocked("resource_source_owner_changed")
+                sources.extend(page)
+                if len(page) < 200:
+                    break
+                after = page[-1]["id"]
+        grouped = {}
+        for row in sources:
+            grouped.setdefault(row["grant_id"], []).append(row)
+        names = set(VisibleSourceProjectionDTO.model_fields)
+        from bisheng.permission.migration.f118_plan import PermissionResourceBaseline
+
+        result = PermissionResourceBaseline(
+            tenant,
+            rows[0]["resource_type"],
+            rows[0]["resource_id"],
+            _record(ResourceModeBaseline, rows[0]),
+            tuple(_record(PermissionGrantBaseline, row) for row in grant_rows),
+            tuple(
+                _record(PermissionAssigneeBaseline, source)
+                for grant in grant_rows
+                for source in grouped.get(grant["id"], ())
+            ),
+            tuple(
+                PermissionVisibleSourceBaseline(
+                    row["id"], VisibleSourceProjectionDTO.model_validate({key: row[key] for key in names})
+                )
+                for row in visible_rows
+            ),
+        )
+        current()
+        return result
+
     async def _page(self, session, model, *, after_id, limit):
         tenant = self._scope(session)
         self._bounds(after_id, limit)

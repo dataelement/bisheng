@@ -1,10 +1,12 @@
 """Actual M2/M3 SQL plus isolated HTTP/Redis transports for T157/T158."""
 
 import json
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import asdict, replace
 from types import SimpleNamespace
+from weakref import WeakSet
 
 import httpx
 import pytest
@@ -31,6 +33,7 @@ from bisheng.permission.domain.models import (
     PermissionModel,
     PermissionModelAction,
     PermissionVisibleSourceProjection,
+    ResourcePermissionMode,
 )
 from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
     PermissionMigrationSnapshotRepository,
@@ -72,7 +75,7 @@ async def resource_native(raw_resource_native):
 
 class Sessions:
     def __init__(self, engine):
-        self.engine, self.opened, self.commits = engine, [], 0
+        self.engine, self.opened, self.commits = engine, WeakSet(), 0
         self.fail_at, self.after, self.cancel = None, False, False
 
     @asynccontextmanager
@@ -94,7 +97,7 @@ class Sessions:
                     raise OSError("commit ACK lost")
 
         async with Native(self.engine, expire_on_commit=False) as session:
-            self.opened.append(session)
+            self.opened.add(session)
             yield session
 
     def assert_closed(self):
@@ -135,7 +138,12 @@ class Store:
             key = body.get("tuple_key", {})
             if not key and not body.get("continuation_token"):
                 self.scans += 1
-            values = sorted(self.tuples, reverse=self.scans % 2 == 0)
+            if not key:
+                if not body.get("continuation_token"):
+                    self._scan_values = sorted(self.tuples, reverse=self.scans % 2 == 0)
+                values = self._scan_values
+            else:
+                values = sorted(self.tuples)
 
             def matches(row):
                 for index, field in enumerate(("user", "relation", "object")):
@@ -277,7 +285,9 @@ def initial_tuples(before, resource, schema):
 
 @pytest.fixture
 async def published_input(complete, transport, monkeypatch, request):
-    same = getattr(request, "param", False)
+    options = getattr(request, "param", False)
+    options = options if type(options) is dict else {"same": options}
+    same = options.get("same", False)
     target = build_authorization_model_f048()
     source_schema = deepcopy(target)
     release_type = next(row for row in source_schema["type_definitions"] if row["type"] == "permission_model_release")
@@ -286,7 +296,18 @@ async def published_input(complete, transport, monkeypatch, request):
         release_type["metadata"]["relations"]["use_marker"] = deepcopy(
             release_type["metadata"]["relations"]["download_marker"]
         )
-    before = legacy_catalog()
+    if "models" in options:
+        standard_count = sum(row.kind != "CUSTOM" for row in legacy_catalog().models)
+        customs = (
+            CustomModelSelection("inactive-model", "Inactive model", ("download", "use"), active=False),
+            *(
+                CustomModelSelection(f"custom-{i}", f"Custom {i}", ("download", "use"))
+                for i in range(options["models"] - standard_count - 1)
+            ),
+        )
+        before = legacy_catalog(customs=customs)
+    else:
+        before = legacy_catalog()
     before = replace(
         before,
         authorization=replace(
@@ -296,6 +317,12 @@ async def published_input(complete, transport, monkeypatch, request):
         ),
         models=tuple(replace(row, legacy_source_key="legacy:" + row.model_key) for row in before.models),
     )
+    if options.get("history"):
+        before = replace(
+            before,
+            authorization=replace(before.authorization, id=3),
+            release=replace(before.release, required_authorization_model_release_id=3),
+        )
     # Same-schema installations may still carry a Catalog use selection; the
     # Store model itself is the actual current target model, not a fake hash.
     async with AsyncSession(complete.engine) as session, session.begin():
@@ -310,6 +337,13 @@ async def published_input(complete, transport, monkeypatch, request):
             await session.execute(sa.delete(table.__table__))
         monkeypatch.setattr(m2.permission, "baseline", lambda _: before)
         await m2.permission.seed_catalog(session)
+        if options.get("history"):
+            session.add(
+                AuthorizationModelRelease(
+                    **(asdict(before.authorization) | {"id": 1, "model_id": "earlier-same", "status": "RETIRED"})
+                )
+            )
+            await session.flush()
         mode = (await PermissionMigrationSnapshotRepository().alist_resource_modes(session))[0]
         source_service = GrantSourceService()
         sources = []
@@ -332,11 +366,30 @@ async def published_input(complete, transport, monkeypatch, request):
         resource = plans.PermissionResourceBaseline(
             101, "knowledge_library", "9000", mode, tuple(grants), tuple(sources), ()
         )
+        for index in range(options.get("sources", 2) - 2):
+            canonical = source_service.canonicalize_source(
+                source_id=1000 + index,
+                subject_type="user",
+                subject_id="7",
+                source_type="OTHER",
+                source_ref=f"original-scale:{index}",
+            )
+            values = asdict(canonical)
+            values.pop("active")
+            sources.append(
+                plans.PermissionAssigneeBaseline(
+                    id=values.pop("source_id"), grant_id=101, tenant_id=101, state="ACTIVE", **values
+                )
+            )
+        resource = replace(resource, assignees=tuple(sources))
+        buckets = defaultdict(list)
+        for row in sources:
+            buckets[row.grant_id].append(row.to_source_record())
         snapshots = plans._grants(
             resource,
             {row.model_key: row for row in before.models},
             {row.code: row.resource_types for row in before.actions},
-            {row.grant_id: (row.to_source_record(),) for row in sources},
+            {key: tuple(rows) for key, rows in buckets.items()},
         )
         visible = (
             VisibilityProjectionCompiler().compile(tenant_id=101, grants=snapshots, existing_sources=()).active_sources
@@ -352,9 +405,45 @@ async def published_input(complete, transport, monkeypatch, request):
         session.add_all(
             PermissionVisibleSourceProjection(id=row.id, **row.source.model_dump()) for row in resource.visible_sources
         )
+    from test.knowledge_unification import test_migration_resource_repository as resources
+
+    extra_modes = []
+    if options.get("roots", 1) > 1:
+        roots = [resources.resource(10000 + i) for i in range(options["roots"] - 1)]
+        await complete.insert(resources.Knowledge, roots)
+        extra_modes.extend(
+            plans.ResourceModeBaseline(10000 + i, 101, "knowledge_library", str(10000 + i), "CUSTOM")
+            for i in range(options["roots"] - 1)
+        )
+    if options.get("parent"):
+        extra_modes.append(
+            plans.ResourceModeBaseline(1, 101, "knowledge_file", "1", "INHERIT", "knowledge_library", "9000")
+        )
+    if options.get("contexts"):
+        extra_modes.append(plans.ResourceModeBaseline(2, 101, "workflow", "context-flow", "CUSTOM"))
+    if extra_modes:
+        await complete.insert(ResourcePermissionMode, [asdict(row) for row in extra_modes])
     sessions = Sessions(complete.engine)
     store = Store(source_schema, sessions)
+    if options.get("history"):
+        store.models["earlier-same"] = source_schema
     store.tuples = initial_tuples(before, resource, source_schema)
+    from bisheng.permission.domain.services.resource_lifecycle_policy import compile_existing_mode_tuples
+
+    for row in extra_modes:
+        store.tuples.update(delta.key for delta in compile_existing_mode_tuples(row))
+    store.tuples.update((f"user:{100000 + i}", "member", "tenant:202") for i in range(options.get("tuples", 0)))
+    if options.get("contexts"):
+        store.tuples.update(
+            {
+                ("tenant:202", "shared_with", "workflow:context-flow"),
+                ("user:*", "visible", "knowledge_library:9000"),
+                ("user:*", "system_download_marker", "knowledge_library:9000"),
+                ("user:*", "system_use_marker", "knowledge_library:9000"),
+            }
+        )
+    if options.get("raw_edge"):
+        store.tuples.add(tuple(options["raw_edge"]))
     if getattr(request.node, "callspec", None) and request.node.callspec.params.get("corrupt") == "unknown_namespace":
         store.tuples.add(("user:7", "unknown_relation", "knowledge_library:9000"))
     original_client = httpx.AsyncClient
@@ -412,4 +501,5 @@ async def published_input(complete, transport, monkeypatch, request):
         frozen=frozen,
         input=dict(transport.inputs),
         same=same,
+        options=options,
     )
