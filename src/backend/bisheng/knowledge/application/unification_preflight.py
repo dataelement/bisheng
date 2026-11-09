@@ -1,12 +1,15 @@
 """Deterministic M2 checks over acquired facts; no binding/ready authority."""
 
 import re
-from collections import defaultdict
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.knowledge.application.unification_conversion_plan import ConversionPlanBuilder
 from bisheng.knowledge.application.unification_inventory_codec import digest, record_from_row, record_from_values
+from bisheng.knowledge.application.unification_permission_namespace import (
+    PermissionNamespacePlan,
+    namespace_plan_records,
+)
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
 from bisheng.knowledge.domain.repositories.unification_control_repository import (
     CreatorFact,
@@ -24,11 +27,7 @@ from bisheng.llm.domain.repositories.migration_target_repository import ModelMig
 from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
     PermissionMigrationSnapshotRepository,
 )
-from bisheng.permission.migration.f118_plan import (
-    PermissionResourceBaseline,
-    _checksum,
-    build_resource_retirement_plans,
-)
+from bisheng.permission.migration.f118_plan import ResourceRetirementPlanner
 
 
 def _blocked(reason):
@@ -170,8 +169,10 @@ class UnificationPreflight:
             after = members.next_after
         return page.items, by_root, page.items[-1].knowledge_id
 
-    async def aiter_tenant(self, session, *, catalog_plan, planned_at):
+    async def aiter_tenant(self, session, *, permission_planner: ResourceRetirementPlanner, planned_at):
         tenant = get_current_tenant_id()
+        namespace = PermissionNamespacePlan(permission_planner=permission_planner)
+        catalog_plan = permission_planner.catalog_plan
         builder = ConversionPlanBuilder(
             run_id=catalog_plan.run_id,
             writer_contract_version=catalog_plan.writer_contract_version,
@@ -251,6 +252,7 @@ class UnificationPreflight:
                     creator = getattr(row, "user_id", getattr(row, "created_by", None))
                     if creator is not None:
                         creators.add(creator)
+                    namespace.observe(section="resources", tenant_id=tenant, record=record)
                     yield "resources", record
                 async for fact in creator_facts(creators):
                     yield "control", fact
@@ -311,71 +313,22 @@ class UnificationPreflight:
                     _blocked("role_parent_missing")
                 yield "control", record_from_row(fact)
 
-        groups = {}
-        grants, assignees, visible = defaultdict(list), defaultdict(list), defaultdict(list)
-        grant_parent = {}
         for method in ("resource_modes", "grants", "assignees", "visible_sources"):
             after = None
             while True:
                 rows = await getattr(self.permissions, "alist_" + method)(session, after_id=after, limit=200)
                 for row in rows:
-                    yield "permission", record_from_row(row)
-                    if method == "resource_modes":
-                        key = (row.resource_type, row.resource_id)
-                        if key in groups:
-                            _blocked("duplicate_permission_mode")
-                        groups[key] = row
-                    elif method == "grants":
-                        key = (row.resource_type, row.resource_id)
-                        grants[key].append(row)
-                        grant_parent[row.id] = key
-                    elif method == "assignees":
-                        assignees[row.grant_id].append(row)
-                    else:
-                        visible[(row.source.resource_type, row.source.resource_id)].append(row)
+                    record = record_from_row(row)
+                    namespace.observe(section="permission", tenant_id=tenant, record=record)
+                    yield "permission", record
                 if len(rows) < 200:
                     break
                 if not rows or (after is not None and rows[-1].id <= after):
                     _blocked("non_advancing_permission_page")
                 after = rows[-1].id
-        if set(grants) - set(groups) or set(visible) - set(groups) or set(assignees) - set(grant_parent):
-            _blocked("permission_parent_missing")
-        baselines = (
-            PermissionResourceBaseline(
-                tenant,
-                key[0],
-                key[1],
-                mode,
-                tuple(grants[key]),
-                tuple(source for grant in grants[key] for source in assignees[grant.id]),
-                tuple(visible[key]),
-            )
-            for key, mode in groups.items()
-        )
-        for plan in build_resource_retirement_plans(catalog_plan=catalog_plan, before=baselines):
-            original = plan.before
-            target_type = original.resource_type
-            if (
-                original.resource_type == "knowledge_library"
-                and original.resource_id.isdecimal()
-                and spaces.get(int(original.resource_id), {}).get("type") == 0
-            ):
-                target_type = "knowledge_space"
-            yield (
-                "conversion",
-                record_from_values(
-                    "permission_plan",
-                    tenant_id=tenant,
-                    resource_type=original.resource_type,
-                    resource_id=original.resource_id,
-                    target_resource_type=target_type,
-                    plan_checksum=plan.checksum,
-                    before_digest=_checksum(original),
-                    after_grants_digest=_checksum(plan.after_grants),
-                    visibility_deltas_digest=_checksum(plan.visibility_deltas),
-                    expected_use_changes_digest=_checksum(plan.expected_use_changes),
-                ),
-            )
+        for plan in namespace.finish():
+            for section, record in namespace_plan_records(plan):
+                yield section, record
         yield (
             "control",
             record_from_values(

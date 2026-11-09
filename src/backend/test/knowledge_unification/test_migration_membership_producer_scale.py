@@ -20,6 +20,7 @@ async def test_native_member_reads_and_plan_candidates_follow_root_pages_not_roo
         producer.Member,
         [producer.member_fixture.member(i + 1, str(1000 + i), user_id=8, user_role="MEMBER") for i in range(count)],
     )
+    await producer.original.seed_original_modes(complete, tuple(1000 + i for i in range(count)))
     module = __import__("bisheng.knowledge.application.unification_preflight", fromlist=["x"])
     planner, candidates = module.plan_space_creator_membership, []
 

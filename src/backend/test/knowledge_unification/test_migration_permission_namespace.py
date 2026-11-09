@@ -213,7 +213,7 @@ async def test_qa_retired_existing_space_and_unmodelled_physical_files_are_not_c
     assert len(result) == 5 and all(row.after == row.before for row in result[1:])
     header = module().permission_plan_record(result[-1]).data
     assert header["before_digest"] == plans._checksum(result[-1].before)
-    assert header["before_digest"] != digest(result[-1].before)
+    assert header["before_digest"] != digest(asdict(result[-1].before))
 
 
 @pytest.mark.parametrize(
