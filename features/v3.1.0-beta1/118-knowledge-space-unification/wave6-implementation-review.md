@@ -469,3 +469,14 @@ Root提交中性marker DDL8d7f757c5，正常合流floor typed transport d8c2b2b3
 P1 floor transport非作者8路径251绿，另真实SQL坏provenance7绿（/private/tmp/f118-floor-independent-regression.log及f118-floor-native-provenance-review.log）；默认None旧canonical checksum保持，typed artifact新增null字段按正式中性DDL后新盘点schema，不承诺旧准备artifact字节不变。P2作者固定6e6983759仅Catalog API5行/CURRENT1行、新native14绿/原组合190绿；Root全读并正常主合，corrected真实六路径103 passed/426 warnings/1.11秒（/private/tmp/f118-root-floor-catalog-roundtrip-corrected.log/.xml）。首命令误拼测试路径未运行，不计验证。T977978组件闭合，HTTP继续拒floor写，旧mixed新签发按§99后继，不宣称全平台迁移完成。原无floor UPDATE_MODEL动作数组乱序也可复现的旧checksum问题单列既有缺陷，未扩大本需求修复。
 
 T093实际native13例在70e49b34b为1真红12绿：NORMAL clear误发QA表DELETE；旧1b83a1c6 Service仅type1删QA。ff943f013只共享Repo恢复QA条件，原两个FakeUser用例以同名迁入新native文件，真实Consumer的UserPayload/tenant/SQL/R2/回滚与transport顺序保留。Root七路径110 passed/3077 warnings/5.47秒（/private/tmp/f118-root-qa-native-green.log/.xml）；独立agent固定原红和修正树同选择重跑1红12绿→110绿，/private/tmp/f118-qa-independent-{red,combined}.log。T093094闭组件，无新增零模型创建、无SPACE QA合并/Job框架；现QA缺embedding仍原拒绝，模型切换保old/pending至原finalizer。非生产升级/E2E结论。
+
+
+### 2026-11-09 原等级签发、保序模型引用流及成员事实主合
+
+Root全读c67fb8b46单Plan窄增量，正常合流后六路径141 passed/459 warnings/1.86秒（/private/tmp/f118-root-mixed-tier-signing.log/.xml）。独立PROC固定archive补3个native旧use narrow-scope/provenance/tier篡改格，与原路径共131绿（/private/tmp/f118-p3-independent-review.log）；只有合法原effective-use mixed确会掉tier才签原floor，pure-use不签、普通visibility不升级、source/subject完全保。T981982闭组件，namespace尚未签/发布。
+
+Root全读22b2b38ba两个生产叶diff并正常合流；10路径261 passed/11299 warnings/30.64秒（/private/tmp/f118-root-model-impact-stream.log/.xml）。T983原corrected45真实预算红/25控制绿→作者8路径192绿；原Model v2摘要字段/字节/顺序及100001slots<1MiB oracle保。真实10001 targets/30003refs首尾合3T=30003候选（旧3050305），stream201SQL、最多204params（旧10005）；稀疏9refs为51SQL。KN默认分组流不变、真实LEFTsource-set/Owner/tenant/TX/coverage及无FGA/DML保持。T983984闭性能前置，不关闭T111112/公开删除。
+
+T985仅搬wire定义与函数至127行pure schema，Root逐AST证明原所有定义与剩余codec语句等值；原codec483行，8路径193 passed/34032 warnings/47.58秒（/private/tmp/f118-root-inventory-schema-ssot.log/.xml）。T988随后只加两种冻结Member记录，Root逐旧schema dict比对全部旧spec相同，无旧wire变化。T986 Root corrected原生17缺模块红，原错误import的是普通tenant contextmanager，改显式fixture tenant101后重跑仍17个真实缺模块失败；无生产已实现时伪称首绿。之后Member坏typed异常期待误写ReferenceCoverage，授权改为原codec真实KnowledgeOperationPlanConflict；作者先固定旧codec三坏值独证（/private/tmp/f118-t987-original-codec-exception-proof.log），不改生产异常。
+
+T987 fixed3be9a417a Root全读210行Reader+codec6行，正常合流；作者10path359绿，native202/403/10003Root的header及member阶段各4/6/102SQL、maxparams203，含空/完整401Member页/完整source字段/nullable/原枚举与不flush/不刷新及SQLawait后tenant/TX变化。Root在241d5bd4692a86e49e30ac7977301c65b53a2df0源码联合B1七路径188 passed/32355 warnings/52.59秒（/private/tmp/f118-root-ready-member-integration-corrected.log/.xml）；首命令误拼boundaries文件未执行，不计验证。T986987988闭只读事实，不冒M2 App/preflight/全局孤儿检查或Member转换写已接，正式停服基线尚未执行。

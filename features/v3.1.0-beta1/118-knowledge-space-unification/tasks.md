@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史994编号：880已完成/历史交付、112当前待办、2外移；原137队列已完成40项、剩97项，另15张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史994编号：887已完成/历史交付、105当前待办、2外移；原137队列已完成40项、剩97项，另8张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7925,7 +7925,7 @@
   **配对测试**：T979\
   **验证 / 完成条件**：真实红绿、原控制与固定作者外复验；不冒正式发布或E2E。
 
-- [ ] **T981 · 旧mixed use原等级签发的native反例**
+- [x] **T981 · 旧mixed use原等级签发的native反例**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_permission_floor_retirement_signing.py`；`src/backend/test/knowledge_unification/test_permission_floor_inventory_roundtrip.py`\
   **逻辑 / 测试上下文**：W6§99原正式输入等级与默认None控制、typed/Catalog闭环和篡改拒。\
@@ -7933,7 +7933,7 @@
   **覆盖 AC**: AC-78, AC-80, AC-81, AC-83, AC-85\
   **验证 / 完成条件**：先真实红后实现、原权限/库存组合与独立复查；非正式发布。
 
-- [ ] **T982 · 迁移计划受控签发退役use等级floor**
+- [x] **T982 · 迁移计划受控签发退役use等级floor**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/migration/f118_plan.py`\
   **逻辑 / 测试上下文**：W6§99仅合法effective-use mixed且原等级会下降时签原floor，原一致性不松。\
@@ -7941,7 +7941,7 @@
   **配对测试**：T981\
   **验证 / 完成条件**：先真实红后实现、原权限/库存组合与独立复查；非正式发布。
 
-- [ ] **T983 · 模型影响全局有序精确流的native预算反例**
+- [x] **T983 · 模型影响全局有序精确流的native预算反例**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_inbound_owner_global_stream.py`；`src/backend/test/knowledge_unification/test_model_impact_scale.py`；`src/backend/test/knowledge_unification/test_model_reference_sources.py`\
   **逻辑 / 测试上下文**：W6§100全局ID/原v2字节、scope CPU和有界目标/引用SQL。\
@@ -7949,7 +7949,7 @@
   **覆盖 AC**: AC-70, AC-72, AC-76, AC-83, AC-85, AC-89\
   **验证 / 完成条件**：真预算红绿、完整原digest与身份控制、固定作者外复验；不扩大范围。
 
-- [ ] **T984 · 模型影响复用保序的有界精确Owner流**
+- [x] **T984 · 模型影响复用保序的有界精确Owner流**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/resource_reference/domain/repositories/reference_repository.py`；`src/backend/bisheng/llm/domain/services/model_reference_service.py`\
   **逻辑 / 测试上下文**：W6§100原stream默认保留，新global_id_order有界归并及原ModelService消费。\
@@ -7964,7 +7964,7 @@
   **依赖**：T976\
   **验证 / 完成条件**：原typed/codec控制、native边界/规模及固定复查，不冒M2正式基线/转换完成。
 
-- [ ] **T986 · SPACE成员正式事实原生分页与typed反例**
+- [x] **T986 · SPACE成员正式事实原生分页与typed反例**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_space_membership_inventory.py`\
   **逻辑 / 测试上下文**：W6§101零集header/精确Root+Member页/C3及规模，无新授权。\
@@ -7972,7 +7972,7 @@
   **覆盖 AC**: AC-55, AC-57, AC-80, AC-83, AC-85\
   **验证 / 完成条件**：原typed/codec控制、native边界/规模及固定复查，不冒M2正式基线/转换完成。
 
-- [ ] **T987 · 原SPACE成员完整事实读取和typed库存**
+- [x] **T987 · 原SPACE成员完整事实读取和typed库存**
   **类型 / Owner**：后端 Repository / INT\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_space_membership_repository.py`；`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§101真实ownRoot锚、完整raw Member列和closed codec，无转换写。\
@@ -7980,7 +7980,7 @@
   **配对测试**：T986\
   **验证 / 完成条件**：原typed/codec控制、native边界/规模及固定复查，不冒M2正式基线/转换完成。
 
-- [ ] **T988 · 原SPACE成员wire闭集定义**
+- [x] **T988 · 原SPACE成员wire闭集定义**
   **类型 / Owner**：基础设施定义 / INT\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_inventory_schema.py`\
   **逻辑 / 测试上下文**：W6§101 header显式空集与真实Member列schema，既有定义不变。\
