@@ -1374,3 +1374,20 @@ baseline与plan原顺序保留，七字段Resource command可晚到，finish才�
 ## 110. P1完整owned事实应用窄口：已冻结
 
 PROC T1009先原test_move_projection.py的native红测，T1010仅原permission/application/knowledge_move_projection.py一生产叶（≤600），导出原MoveProjectionFact类型（不复制DTO）及alist_owned_operations(session,*,expectations,lock=False)->tuple[MoveProjectionFact,...]薄转发实际nativeRepo。Owner不得经bridge.repository读permission Domain；permission Repo不导知识表。只延续原外部Session/TX，不开Session/commit、不做FGA、不新增receipt或重新编译ledger。完整Repo原scope/CURRENT pin/expectation/allowed_operator_ids/完整tuple/checksum/Mode facts校验与≤200原边界不变；lock只原语义，不用候选或裸status替代。此口可返回own nonfinalized实际事实供§107分类，FINALIZED/after仍由原arequire_finalized同TX证据证明，业务权限准入仍Owner职责。原P1桥/Repo全部控制及实际candidate→membership后继一致，未提前开放API/worker。
+
+
+## 111. 原M3 Root与创建者Member原子写：已冻结
+
+PERM T1011先native旧Writer真红，T1012仅原unification_space_membership_repository.py（现271，新叶逻辑留此且≤600）及原unification_conversion_repository.py（历史恰600叶，明确允许必要薄hook增量，不压行规避）。依赖§108 fixed4418fc539c与§106 fixed94c1，等合主树固定后实施；新test_migration_membership_writer.py及scale叶各≤600，现M3 fixture接口仅必要修正，INT App/EDGE producer/Service/Outcome schema不抢写。
+
+保原Run→Root升序→Member全局PK升序→File/Doc/Version→Tag/Link→Default锁序。原_load minimal Root header补user_id后，在原Root锁之后批量锁本页Resource commands完整Member set；按真实owned Root0/3与user_id=command.creator_user_id核scope，exact canonical SPACE business_id IN≤200，每页Member.id seek≤200/201 FOR UPDATE，一次分桶；不逐Root反扫全部成员、不C3过滤无tenant的Member、不CAST/多独立列IN拼组合。零Member每root仍显式完整空tuple。仅原NORMAL ResourceConversionCommand触发，QA/type2/既有SPACE或V1-only不造成员计划；原NORMAL已转SPACE只供原aread_after验证，不收养未checkpoint的after状态。
+
+MemberRepo私有_alock_conversion_sets(session,*,roots,commands,current)->dict[root_id,tuple[SpaceMembershipRow,...]]、_assert_conversion_before(*,command,root,members)->None、_aapply_conversion_member(session,*,command,current)->int、_assert_conversion_after(*,command,root,members,expected_member_id=None)->tuple[actualPK,fullAfterSetDigest]。current为实际tenant/TransactionIdentity轻守卫（非新authority），原alock_scope入口第一次await前capture、每SQL await前后核同Scope并最终assert后写原scope value；apply/aread_after取当前实际original/owned SP轻守卫，不在每Member页重算200commands seal。完整commands仍原_bound首尾核，不新建receipt/registry/session/commit/SP。MemberRepo只复用原MEMBER_COLUMNS/SpaceMembershipRow、schema creator_membership_template及fingerprints.digest，不反向import Service/pureplanner。
+
+原_before Resource分支保Root业务/neutral before校验，另核七字段native strict（尤其拒True==1），原Root.user_id匹配、完整count及原20字段有序rawMember set digest；insert须无owner自然键/无其它CREATOR，existingIDNone、签入naive秒时间模板digest相同；keep须唯一同原owner CREATOR+ACTIVE、existingPK和17持久列模板digest不变、plannedAtNone。原软删除creator事实可保历史owner，不任换owner/激活/提升其它Member；metadata/source/binding/pin/null/time原样保留。
+
+原aapply_and_read_after既有owned SP内Resource UPDATE后执行Member hook：insert按签入模板ORM add/flush取实际DB PK；keep零Member DML。actualPK暂存在原scope私有value用于本次尾验，不外传当authority。原aread_after重新完整set锁读；keep全set必须等原before；insert找唯一actual owner新row（17列==模板，PK等本次flush实际PK），去掉它后完整余集count/digest必须复原before。正常resume无本次expectedPK时仍从实际唯一模板owner定位并纳实际摘要，不根据形状收养未checkpoint转换。
+
+Resource actual_after_digest固定为digest((rootBusinessHash,rootNeutralHash,actualCreatorPK,fullAfterMemberSetDigest))，原Root after两hash核验保留；ConversionOutcome字段/其它四kind实际Outcome字节、Service._fold/checkpoint算法与App commit ACK均不改。原Service外owned SP继续把Repo内SP写入和Run checkpoint同包；晚SQL/取消/触发器改模板即便caller catch+commit也无Root3但Member0的半转换。恢复沿原verified committed prefix，实际PK换掉/原Member增删改source等使摘要变动拒；unknown commit停止，重新原prefix核验后再继续，不新重试框架。
+
+§108独立/tmp actual原Writer已证1真红：原SQLService完成且Root3，creator Member仍0（/private/tmp/f118-member-writer-unmet-dependency.log/.xml）；另只读原实际Member creator_ids/我创建集合也空（/private/tmp/f118-member-writer-readonly-gap.log）。新官方native须覆盖真实SQLService/App路径insert/keep/旧source全保、晚失败与cancel外catchcommit、触发器改Member/Root、原after PK及fullset漂移resume、缺/foreign Root/原creator字段错、pending/TX、ACK重复与zero extra insert、401/10001和多Root参数≤200/单遍候选，原四kind不变。正式permission namespace Publisher/Coverage/全升级仍后继，本卡不冒全部迁移已完。
