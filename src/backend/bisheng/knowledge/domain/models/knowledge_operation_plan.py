@@ -8,7 +8,7 @@ never access tokens, provider credentials, file content, or source configs.
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import Column, Index, UniqueConstraint
+from sqlalchemy import Column, Index, Integer, String, UniqueConstraint
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -25,6 +25,7 @@ class KnowledgeOperationPlan(SQLModelSerializable, table=True):
         UniqueConstraint("tenant_id", "operation", "operation_id", name="uk_kop_plan_operation"),
         Index("ix_kop_plan_expiry", "expires_at", "id"),
         Index("ix_kop_plan_actor", "tenant_id", "actor_user_id", "operation", "id"),
+        Index("ix_kop_model_execution", "tenant_id", "model_server_id", "model_execution_state"),
     )
 
     id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True, max_length=36)
@@ -47,5 +48,14 @@ class KnowledgeOperationPlan(SQLModelSerializable, table=True):
     # transaction. The same durable operation resumes after a partial failure.
     operation_id: str | None = Field(default=None, max_length=64)
     consumed_at: datetime | None = Field(default=None)
+    model_server_id: int | None = Field(
+        default=None, exclude=True, repr=False, sa_column=Column(Integer, nullable=True)
+    )
+    model_execution_state: str | None = Field(
+        default=None, exclude=True, repr=False, sa_column=Column(String(32), nullable=True)
+    )
+    model_execution_metadata: dict | None = Field(
+        default=None, exclude=True, repr=False, sa_column=Column(JsonType, nullable=True)
+    )
     create_time: datetime = Field(default_factory=operation_plan_now)
     update_time: datetime = Field(default_factory=operation_plan_now)
