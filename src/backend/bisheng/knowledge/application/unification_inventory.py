@@ -565,6 +565,9 @@ class UnificationInventoryApplication:
         identity = {"run_id": run_id, "writer_contract_version": writer_contract_version}
         with session.no_autoflush:
             await self.runs.aschema_precheck(session)
+            from bisheng.knowledge.domain.repositories.unification_task_repository import UnificationTaskRepository
+
+            await UnificationTaskRepository().avalidate_migration_idle(session)
             tenant_ids = await self.runs.alist_actual_tenant_ids(session)
             existing = await self.runs.aget_global_freeze(session, **identity, tenant_ids=tenant_ids)
             if existing is not None:

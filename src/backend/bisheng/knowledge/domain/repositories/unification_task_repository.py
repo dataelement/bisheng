@@ -106,6 +106,64 @@ class BrokerTargetFact:
 
 class UnificationTaskRepository:
     @staticmethod
+    def _validate_delete_phase(row):
+        from bisheng.knowledge.domain.repositories.knowledge_deletion_execution_repository import OPERATIONS
+
+        operation, phase = row["operation_type"], row["business_phase"]
+        if operation is None and phase is None:
+            return
+        if operation not in OPERATIONS or phase != "finalized":
+            raise KnowledgeOperationPlanConflictError(
+                reason="migration_tasks_business_delete_not_finalized", job_id=row["id"], business_phase=phase
+            )
+
+    async def avalidate_migration_idle(self, session):
+        """MIG-only barrier; ordinary cleanup and online readiness are unchanged."""
+        from sqlalchemy import and_, or_
+
+        from bisheng.knowledge.domain.repositories.knowledge_deletion_execution_repository import OPERATIONS
+        from bisheng.resource_reference.application.contracts import TransactionIdentity
+        from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
+
+        _scope(session)
+        tenant, transaction = get_current_tenant_id(), TransactionIdentity.capture(session)
+
+        def current():
+            _scope(session)
+            transaction.assert_current(session)
+            if get_current_tenant_id() != tenant:
+                _blocked("migration_idle_context_changed")
+
+        table = KnowledgeSpaceDeleteJob.__table__
+        rows = await self._read(
+            session,
+            select(table.c.id, table.c.operation_type, table.c.business_phase)
+            .where(
+                or_(
+                    and_(table.c.operation_type.is_(None), table.c.business_phase.is_not(None)),
+                    and_(
+                        table.c.operation_type.is_not(None),
+                        or_(
+                            table.c.operation_type.not_in(tuple(OPERATIONS)),
+                            table.c.business_phase.is_(None),
+                            table.c.business_phase != "finalized",
+                        ),
+                    ),
+                )
+            )
+            .order_by(table.c.id)
+            .limit(1),
+        )
+        current()
+        for row in rows:
+            self._validate_delete_phase(row)
+        tombstones = ResourceReferenceTombstone.__table__
+        deleting = await self._read(session, select(tombstones.c.id).where(tombstones.c.stage == "deleting").limit(1))
+        current()
+        if deleting:
+            _blocked("target_deletion_not_finalized")
+
+    @staticmethod
     async def _read(session, query):
         _scope(session)
         # These explicit operational facts must also expose foreign/orphan rows;
@@ -139,6 +197,8 @@ class UnificationTaskRepository:
         rows = await self._read(session, query.order_by(table.c.id).limit(limit + 1))
         facts = []
         for row in rows[:limit]:
+            if model is KnowledgeSpaceDeleteJob:
+                self._validate_delete_phase(row)
             if (
                 type(row["tenant_id"]) is not int
                 or row["tenant_id"] <= 0

@@ -7,7 +7,11 @@ from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaratio
 from bisheng.app_publish.domain.services.reference_extractor import extract_app_references
 from bisheng.assistant.domain.services.reference_extractor import extract_assistant_references
 from bisheng.channel.domain.services.reference_extractor import extract_channel_sync_references
-from bisheng.knowledge.application.unification_reference_state import blocked
+from bisheng.knowledge.application.unification_reference_state import (
+    PHYSICAL_ROOT_ABSENT,
+    blocked,
+    validate_inventory_fact,
+)
 from bisheng.knowledge.application.unification_sources import knowledge_business_revision_digest
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
 from bisheng.knowledge.domain.services.model_reference_extractor import extract_knowledge_model_references
@@ -127,6 +131,13 @@ class ReferenceAfterSources:
     async def averify_retired(self, session, *, header):
         from bisheng.resource_reference.application.contracts import SourceKey
 
+        if header.lifecycle == PHYSICAL_ROOT_ABSENT:
+            validate_inventory_fact(header)
+            if await self.repository.ainspect_hard_deleted_roots(session, root_keys=(header.root_key,)) != frozenset(
+                {header.root_key}
+            ):
+                blocked("deleted_source_reappeared")
+            return
         kind = header.root_key.source_type
         if header.source_key is None and kind in {SourceType.WORKFLOW_VERSION, SourceType.HOSTED_APP_VERSION}:
             root = await self.repository.aload_reference_root(session, root_key=header.root_key)
@@ -180,7 +191,9 @@ class ReferenceAfterSources:
         expected_roots.update(
             row.header.root_key
             for row in plan.retired
-            if row.header.root_key.tenant_id == tenant and row.header.source_key is None
+            if row.header.root_key.tenant_id == tenant
+            and row.header.source_key is None
+            and row.header.lifecycle != PHYSICAL_ROOT_ABSENT
         )
         expected_versions = {
             key
