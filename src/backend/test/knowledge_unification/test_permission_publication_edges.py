@@ -8,6 +8,7 @@ import sqlalchemy as sa
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.core.context.tenant import current_tenant_id
 from bisheng.knowledge.application.unification_permissions import PermissionPublicationApplication
+from bisheng.permission.application.sql_runtime import stable_grant_key
 from bisheng.permission.domain.models import PermissionGrantAssignee, ResourcePermissionMode
 from bisheng.permission.domain.repositories.f118_resource_write_repository import F118ResourceWriteRepository
 from test.knowledge_unification.test_permission_publication_application import (
@@ -289,4 +290,34 @@ async def test_bounded_real_catalog_snapshot_preserves_original_publication_payl
             actual
         )
         == original
+    )
+
+
+
+@pytest.mark.parametrize(
+    "published_input",
+    [
+        {"raw_edge": ("user:99", "visible", "knowledge_space:9000")},
+        {
+            "raw_edge": (
+                "user:99",
+                "protected_assignee",
+                "permission_grant:"
+                + stable_grant_key(
+                    tenant_id=101, resource_type="knowledge_space", resource_id="9000", model_key="owner"
+                ),
+            )
+        },
+        {"raw_edge": ("knowledge_space:9000#reader", "member", "tenant:202")},
+    ],
+    indirect=True,
+)
+async def test_unowned_frozen_destination_edges_cannot_gain_meaning_after_namespace_conversion(published_input):
+    value = published_input
+    with pytest.raises(BaseErrorCode):
+        await app(value).arun_permissions(**value.input, operator_id=7)
+    assert value.store.writes == 0
+    assert not any(
+        request.method == "POST" and request.url.path.endswith("/authorization-models")
+        for request in value.store.requests
     )
