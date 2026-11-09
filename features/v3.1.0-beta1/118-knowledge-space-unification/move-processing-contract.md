@@ -34,6 +34,8 @@ credential、subject、tenant pin、data_scope ceiling；actor_reference 仅是�
 
 continuation 的授权来源是同一持久接受操作 + 原 source move 已真实准入 + 完成的 F048 父关系
 投影 + 精确 after 归属。每步仍恢复当前凭据及原 narrowing，并 fresh 核目标容器 upload_file。
+P1部分断点须区分：原PREPARED且Mode仍before CURRENT时fresh核选中资源move；本job已改Mode但尚未FINALIZED只允许完整owned ledger支撑原operation前向恢复，不能误当completed continuation或进index。已FINALIZED还须实际Mode精确CURRENT after。新typed主体retry无法通过当前move即拒，不能沿旧主体接受事实放宽。精确候选读取与完整阶段规则见[W6§107](./wave6-completion-contract.md#107-p1精确操作者候选读取与原move断点分类已冻结)。
+
 personal narrowing 用现 `permission.application.data_scope` 注册的 ownership resolver 对实际
 冻结资源 ID 做 filter_owned；缺 resolver fail closed，不额外发一个 visible/move 动作代替 narrowing。
 

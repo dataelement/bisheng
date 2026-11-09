@@ -1328,3 +1328,20 @@ ACTIVE与RETIRED VisibleSource全保原rowID和原字段，仅明确改资源rty
 原direct可见subject集合必须逐资源相同，source identity/contribution集合一致；可见tuple改名用原Compiler._aggregate_deltas产生旧删新写，parent-only不伪称新增visible来源。Mode parent的FGA完整关系、继承闭包与全部实时tuple核验属于后继namespace Publisher/全量对账，本卡只提供before/after事实，不假报已投影。既有SPACE因新增可见metadata出现原scope洞/非预期Source/subject变化则block，不能发布新可见。after actual verifier重建完整同计划并与plan.after精确比，不再盲比plan.before；新增target/after篡改及原before mutable坏证据拒，完整迭代才证明batch完成。
 
 测试含NORMAL显式root变、QA相同Mode控制、existingSPACE不变/原scope洞拒、只parent变child、protected creator/department userset/同subject多sources、inactive/RETIRED原ID/版本/来源保持、坏tuple/contribution/缺canonical历史阻断、wrongtenant/改ID/反向/缺target/晚batch缺项、空mapping旧checksum；401/1001资源和独立models预算context编译一次、按真实G+S候选，不资源×全Catalog重编或Grant×Source积。本卡不改codec/preflight/Reader/M3权限表/FGA，不能关闭T157158；正式资格与写authority后继单独冻结。
+
+
+## 106. 原Member全局完整性实际前置 A：已冻结
+
+T997/T998仅原unification_space_membership_repository.py与unification_control_repository.py两叶；新native测试test_migration_space_membership_global.py（可另规模测试叶）≤600。新增MemberRepo.avalidate_global_integrity(session)->None；由原ControlRepo.avalidate_global_integrity末尾真实await调用。原M2 arun已经调用Control门禁，不另建CLI或新Session。先前四张控制表的检查保留。只读阻断，不修角色、合并、删除或授新Grant；本卡不关闭正式M2/M3任务。
+
+Member无tenant：先全局原SPACE成员PK顺序seek，每页≤200/201，不漏其它租户、inactive、其它角色、其它membership_source。Python对business_id做ASCII canonical positive decimal且<=2**63-1严格校验，拒空白、+、前导0、非ASCII数字、零、负数、超范围及alias。然后每页唯一Root.id≤200的直接numeric IN，LEFT JOIN真实Tenant.id numeric PK核父存在、tenant positive且真实Tenant存在。不得CAST Root.id/Member.business_id做全表join，不做Member×全部Root/tenant积，不逐member查父、不把无法归属的行因inner join吞掉。合法原QA1/retired2父记录可存在但原样保留；只canonical parent能分类，未知knowledge type阻断；CHANNEL完全排除。
+
+全局读只在方法内部no_autoflush+strict_tenant_filter+短bypass_tenant_filter查询包裹，不改变ambient tenant；入口及每await前后核原concrete tenant/原TransactionIdentity。缺TX/ambient bypass/tenant变化或TX变化failclosed，原pending无flush且不被覆盖；异常退出恢复上下文。不可把global读变成普通scope Reader宽泛开关。成本O(M)原member扫描+每页有界索引父查，内存O(200)；空SPACE零误写，401/10001规模证明参数上限、页数、无CAST/笛卡尔积，真实脏alias/orphan阻断原Control入口。
+
+## 107. P1精确操作者候选读取与原move断点分类：已冻结
+
+T999先native红测，T1000仍仅permission/domain/repositories/move_projection_repository.py与application/knowledge_move_projection.py两叶各≤600，不改knowledge Owner/worker/Job或业务权限动作。Repo同叶新增frozen slots MoveOperatorCandidate(resource_type,resource_id,operator_id)，bridge导出并转发：alist_operator_candidates(session,*,job_id,targets:tuple[(resource_type,resource_id),...])->tuple[MoveOperatorCandidate,...]。真实canonical Job UUID、exact target tuple≤200、folder|knowledge_file、canonical正ID（沿原operation_key）、去重或拒重复须一致且输出按输入顺序。空targets返回空；不存在原operation正常无candidate。不接任意operation_id、LIKE前缀或全Job扫描。
+
+原operation查询仅实际tenant+每个exact canonical idempotency_key闭集，scalar fields足够校验tenant/key/RESOURCE_MOVE/resource scope_key与positive native operator；每资源最多一条，重复/坏row拒。原native scope/TX/no_autoflush/pending控制沿用，跨tenant operation不返回；不加载tuple ledger/JSON/其它Job/所有RetryReceipt，不做FGA或写。candidate只是定位事实，不是原operator已准入证明，不替代CURRENT pin/Mode/tuple/checksum核验。后继Owner每页候选IDs经真实J1 aoperator_membership≤200验证，再为每expectation给actual candidate和当前actor的小允许集；原alist_owned_operations仍完整验证scope/pin/original ledger与Mode，不能只信candidate。无原operation也要允许本次合法actor新建；不把允许集扩大到全部租户用户或只猜原+最近retry（会遗漏中间重试操作者）。
+
+原move-processing-contract §2 continuation政策不变，补实际阶段：无operation或本job PREPARED且Mode仍before CURRENT时，fresh核实际冻结selected file/folder.move和目标upload；本job已经nonfinalized且Mode已PROJECTING/FAILED_CLOSED或CURRENT after时，只有同持久接受操作+当前credential及原narrowing+fresh目标upload+完整本job owned ledger可恢复原P1 forward，不能当完成证明或跑index；本jobFINALIZED且Mode精确CURRENT after才可作已投影subset依据。foreign operation/错parent/version/裸status或marker拒。全部P1完成后fresh K1 prepare+durable evidence+logical apply+Job ready同TX commitACK后方入index。新typed主体retry仍先当前selected.move+目标upload，partial状态无法满足则拒；不能借旧主体接受事实授权新主体。实际独立native探针19通过，证据/private/tmp/f118-move-continuation-probe.log；本卡仅candidate reader，不提前装Owner。

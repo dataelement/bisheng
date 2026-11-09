@@ -133,7 +133,7 @@ W5本地100路径2852测试/15子测试通过，当前137待办；平台typechec
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史996编号：889已完成/历史交付、105当前待办、2外移；原137队列已完成40项、剩97项，另8张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史1000编号：895已完成/历史交付、103当前待办、2外移；原137队列已完成40项、剩97项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -233,3 +233,6 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 
 
 2026-11-09 当前组件状态：原mixed-use等级受控签发及Catalog/CURRENT携带已本地验证，普通可见性不提级；移动逻辑ready持久封口已完成，两批量UPDATE显式tenant条件经独立原生SQL复验。成员只读盘点保显式空集/完整source字段，主树与ready组合188项通过；模型影响保原v2摘要的有界读取组合261项通过。namespace资源权限计划、成员转换写及移动retry/Owner/worker入口继续按冻结合同推进，正式停服升级/恢复/E2E仍未完成。
+
+
+2026-11-09实施合同补充：原Member没有tenant，正式盘点前通过[W6§106](./wave6-completion-contract.md#106-原member全局完整性实际前置-a已冻结)全局SPACE PK分页与canonical ID、indexed Root/Tenant精确核验，alias/orphan阻断，合法QA/type2历史成员原样保留。移动部分P1断点按[§107](./wave6-completion-contract.md#107-p1精确操作者候选读取与原move断点分类已冻结)只恢复本job原ledger，全部P1与业务logical/ready提交成功后才处理index；新主体仍须真实当前move准入。两项是现有范围的实际接线，不改变动作范围，不把内部组件通过当升级验收。

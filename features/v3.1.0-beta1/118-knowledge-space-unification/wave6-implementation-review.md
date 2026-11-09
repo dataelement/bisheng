@@ -492,3 +492,10 @@ B1 fixed7d50首轮独立31native+规模/221原组合及/tmp3格均绿，但两�
 固定c45613899c0cac92744804bee8d87cb06f5f3382完整选择（原5160口径再加入旧v2 facade）为5560 passed/4 failed/7原F054占位skip/148558 warnings/426.02秒，/private/tmp/f118-root-ready-members-tier-stream-full.log/.xml；不记全绿。四红中，Root先前QA-only修正漏了W4 SPACE原有问答清理，test_kn_space_reference_lifecycle delete/clear两原用例如实发现；075dff767只恢复{QA,SPACE}原清理，NORMAL仍不发QA DELETE，不改原失败断言。另test_model_target_scale两个空引用规模旧oracle要求全T一次SQL，与§100明确分组预算不相容；只适配ceil(T/200)次及完整query<=204params，保原所有其它预算/结果，模型生产未为旧oracle回退大IN。
 
 Root修后六路径59 passed/1452 warnings/7.63秒（/private/tmp/f118-root-full-failures-fixed.log/.xml），非作者固定075完整导出原两失败模块+QA为28绿2.01秒（/private/tmp/f118-root075-independent.log）。独立review也明确补核此前漏掉的W4 SPACE路径。T094/T983重新闭合，但完整同选择仍须修后重新运行，尚不把局部59绿替代全回归结果。
+
+
+### 2026-11-09 C4/B2/原创建者纯计划集成
+
+固定主树f8ee86f11626bd2050256d5d5e6bcbb9ded4a768已含namespace Catalog80cd93247、原成员纯计划5a4dfc348、move retry4640bb36e及075dff767四红修正。C4/成员主树9路径316 passed（/private/tmp/f118-root-namespace-member-plan.xml），B2主树10路径220 passed（/private/tmp/f118-root-move-retry-integration-corrected.xml）。作者外C4 3 native+233原控制、成员116原控制+3 native、B2 2 native+211组合均PASS；关闭T989–T994。C5尚待独立复查与root合流，不能据纯计划宣称正式转换完成。
+
+同固定主树正在重跑此前5560绿4红7skip的完整选集，结果未出；历史四红已由075修正，定向59绿并有独审28绿，但尚不替代完整回归。下一步按§106实际Member全局前置、§107 P1精确operator候选冻结并行，原Owner/正式Member M2/M3后继不能只停留于helper。
