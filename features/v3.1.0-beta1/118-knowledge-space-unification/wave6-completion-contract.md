@@ -1766,3 +1766,10 @@ M4只在重验原同before和真实Root absence后，复用原retired checkpoint
 
 
 批量集成补充：retry在原实际Root读取及确认锁后复用require_space_processing_idle，REBUILDING或非空model_transition时不另派原文件解析；download仍可读取，tag不增加这项限制。此为本次普通重试与重建的顺序冲突校验，不扩展worker在途IO一致性。新batch path的space_id统一正int64。
+
+
+## 137. 客户端可见空间候选的实际消费面（2026-11-10 已冻结）
+
+原T188覆盖日常ChatKnowledge、KnowledgeSpaceDialog及任务模式KnowledgeSpaceSelect。当前三者的mine/joined/department并集只能证明成员分类，不是完整visible候选。改用实际GET `/api/v1/knowledge/space/list?cursor&page_size&keyword`，原envelope.data为`{data,page_size,has_more,next_cursor}`，page_size≤200；有界候选扫描允许空页且has_more，不能据空data误判终态。客户端独立API/helper和useInfiniteQuery复用真实cursor/search，按当前身份/租户及实际凭据上下文隔离，不复用成员清单缓存或首次全量加载；每个实际入口有下一页、错误和重试。
+
+保存selection不因候选缺失自动清空、替换或认定已删除，现runtime visible校验仍保留；QA/org独立路径保持。首页/sidebar已有成员分类是另一功能，不为选择器接线重写分类或扩全平台聚合。前台仍无后台高级配置和新增复制入口。

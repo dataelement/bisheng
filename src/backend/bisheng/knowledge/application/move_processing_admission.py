@@ -33,25 +33,29 @@ def tenant():
     return value
 
 
-def subject(reference):
+def subject(reference, *, required_action="move"):
     return processing_actor_subject(
-        reference, tenant_id=tenant(), actor_user_id=reference["actor_user_id"], source_space_id=reference["space_id"]
+        reference,
+        tenant_id=tenant(),
+        actor_user_id=reference["actor_user_id"],
+        source_space_id=reference["space_id"],
+        required_action=required_action,
     )
 
 
 @asynccontextmanager
-async def identity(reference, *, current=None, entry_kind=None, allow_other=False):
-    original = subject(reference)
+async def identity(reference, *, current=None, entry_kind=None, allow_other=False, required_action="move"):
+    original = subject(reference, required_action=required_action)
     active = reference
     if current is not None:
         active = (
             await capture_processing_actor(
-                current, space_id=reference["space_id"], required_action="move", entry_kind=entry_kind
+                current, space_id=reference["space_id"], required_action=required_action, entry_kind=entry_kind
             )
         ).reference
-        if subject(active) != original and not allow_other:
+        if subject(active, required_action=required_action) != original and not allow_other:
             raise PermissionDeniedError(reason="move_retry_required_for_other_subject")
-    if current is not None and subject(active) == original:
+    if current is not None and subject(active, required_action=required_action) == original:
         old, fresh = reference["credential_reference"], active["credential_reference"]
         if old.get("kind") == fresh.get("kind") == "api_credential":
             active = {
@@ -68,7 +72,7 @@ async def identity(reference, *, current=None, entry_kind=None, allow_other=Fals
             }
     async with restore_processing_actor(active, tenant_id=tenant()) as restored:
         actor = get_current_permission_actor()
-        if subject(active) == original:
+        if subject(active, required_action=required_action) == original:
             actor = _narrow_actor(actor, reference["actor"])
         token = set_current_permission_actor(actor)
         try:

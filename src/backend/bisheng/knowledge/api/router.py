@@ -8,8 +8,10 @@ from .endpoints.move_processing import router as move_processing_router
 from .endpoints.processing import router as processing_router
 from .endpoints.qa import router as qa_router
 from .endpoints.references import router as references_router
+from .endpoints.space_copy import router as space_copy_router
 from .endpoints.upload_settings import router as upload_settings_router
 
+knowledge_space_router.include_router(space_copy_router)
 knowledge_space_router.include_router(batch_router)
 knowledge_space_router.include_router(processing_router)
 knowledge_space_router.include_router(move_processing_router)

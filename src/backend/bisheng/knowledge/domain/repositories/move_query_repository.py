@@ -12,6 +12,11 @@ from bisheng.resource_reference.application.contracts import TransactionIdentity
 
 
 class MoveQueryRepository:
+    def __init__(self, *, kind="move_index"):
+        if kind not in {"move_index", "space_copy"}:
+            raise ValueError("explicit durable query kind required")
+        self.kind = kind
+
     async def alist_items(self, session, *, job_id, after=None, state=None):
         tenant = get_current_tenant_id()
         transaction = TransactionIdentity.capture(session)
@@ -32,7 +37,7 @@ class MoveQueryRepository:
             .join(job, job.c.space_id == Knowledge.id)
             .join(table, table.c.job_id == job.c.id)
             .where(
-                Knowledge.tenant_id == tenant, job.c.tenant_id == tenant, job.c.id == job_id, job.c.kind == "move_index"
+                Knowledge.tenant_id == tenant, job.c.tenant_id == tenant, job.c.id == job_id, job.c.kind == self.kind
             )
         )
         if state is not None:

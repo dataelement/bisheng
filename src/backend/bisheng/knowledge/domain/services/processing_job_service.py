@@ -354,7 +354,12 @@ class ProcessingJobService:
     async def _job(self, session, space_id, job_id, identity):
         await self._authorize(identity, space_id)
         job = await self.jobs.aget(session, job_id)
-        if job.space_id != space_id:
+        if job.space_id != space_id or job.kind not in {
+            "embedding_rebuild",
+            "file_reprocess",
+            "file_resplit",
+            "metadata_schema_change",
+        }:
             raise KnowledgeProcessingJobNotFoundError()
         return job
 
