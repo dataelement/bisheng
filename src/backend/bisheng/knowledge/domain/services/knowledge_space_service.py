@@ -1269,11 +1269,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         embedding_model_id: int | None = None,
         processing_defaults: ProcessingDefaults | None = None,
         web_creation_context: KnowledgeCreationContext | None = None,
+        entry_kind: str = "web",
+        initial_metadata_fields: list[dict] | None = None,
     ) -> KnowledgeSpaceCreateResp:
         """Create a new knowledge space, subject to the role-level creation quota."""
 
-        advanced = embedding_model_id is not None or processing_defaults is not None
-        if advanced and (
+        if entry_kind not in {"web", "open_api"}:
+            raise PermissionDeniedError()
+        advanced = embedding_model_id is not None or processing_defaults is not None or initial_metadata_fields is not None
+        if entry_kind == "open_api":
+            from bisheng.open_api.domain.context import get_current_open_api_principal
+
+            principal = get_current_open_api_principal()
+            if (
+                principal is None
+                or web_creation_context is not None
+                or not principal.has_scope("knowledge:write")
+                or principal.tenant_id != get_current_tenant_id()
+                or (principal.effective_user_id or principal.resource_owner_user_id) != self.login_user.user_id
+            ):
+                raise PermissionDeniedError()
+        elif advanced and (
             not isinstance(web_creation_context, KnowledgeCreationContext)
             or web_creation_context.user_id != self.login_user.user_id
         ):
@@ -1287,6 +1303,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if processing_defaults is not None
             else None
         )
+        if initial_metadata_fields is not None:
+            from bisheng.knowledge.domain.schemas.knowledge_schema import MetadataField
+
+            initial_metadata_fields = [MetadataField.model_validate(value).model_dump(mode="json") for value in initial_metadata_fields]
         existing = await self._existing_creation(creation_request_id, None)
         selected_model_id = embedding_model_id
         if existing is None:
@@ -1321,6 +1341,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             embedding_model_id=embedding_model_id,
             processing_defaults=defaults,
         )
+        if initial_metadata_fields is not None:
+            schema_input = json.dumps(initial_metadata_fields, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+            payload_hash = sha256(f"{payload_hash}|initial_metadata|{schema_input}".encode()).hexdigest()
         if existing is not None:
             if existing.creation_payload_hash != payload_hash:
                 raise SpaceCreationRequestConflictError()
@@ -1341,6 +1364,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             auth_type=auth_type,
             type=KnowledgeTypeEnum.SPACE.value,
             model=selected_model_id,
+            metadata_fields=initial_metadata_fields,
             processing_defaults=defaults.model_dump(mode="json") if defaults is not None else None,
             is_released=is_released,
             auto_tag_enabled=False,

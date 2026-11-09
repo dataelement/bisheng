@@ -31,7 +31,6 @@ from bisheng.common.errcode.knowledge import (
     KnowledgePreviewError,
     KnowledgeQAError,
     KnowledgeRebuildingError,
-    KnowledgeSpaceListNotSupportedError,
 )
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200, resp_500
 from bisheng.common.services import telemetry_service
@@ -301,9 +300,17 @@ async def create_knowledge(
     """Create Knowledge Base."""
     context = await KnowledgeCreationPolicy.prepare(login_user, expected_tenant_id=knowledge.expected_tenant_id)
     with tenant_execution_scope(context.tenant_id), strict_tenant_filter():
-        db_knowledge = await KnowledgeService.acreate_knowledge(
-            request, login_user, knowledge, web_creation_context=context
-        )
+        if knowledge.type in {KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.SPACE.value}:
+            from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+            db_knowledge = await LegacyDocumentsApplication().acreate(
+                request=request, identity=login_user, command=knowledge,
+                web_creation_context=context,
+            )
+        else:
+            db_knowledge = await KnowledgeService.acreate_knowledge(
+                request, login_user, knowledge, web_creation_context=context
+            )
     return resp_200(db_knowledge)
 
 
@@ -337,7 +344,9 @@ async def copy_knowledge(
             ),
             identity=login_user,
         )
-        return resp_200(result["knowledge"])
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        return resp_200(LegacyDocumentsApplication.view(result["knowledge"]))
     await UserPayload.assert_effective_web_menu_contains(login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
     try:
         await KnowledgeService.permission_service.ensure_knowledge_read_async(
@@ -444,14 +453,6 @@ async def get_knowledge(
     infinite-scroll loading on the client.
     """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
-    # Knowledge spaces have their own dedicated list endpoints; this handler
-    # covers document/QA libraries only. Rejecting SPACE here keeps the
-    # response uniform across identities — the previous behaviour returned an
-    # empty page for regular users and the full set for super admins because
-    # the resource-type mismatch was only detected inside F048 target
-    # resolution, which super_admin bypasses.
-    if knowledge_type is KnowledgeTypeEnum.SPACE:
-        raise KnowledgeSpaceListNotSupportedError.http_exception()
     pinned: list[int] | None = None
     if preferred_ids:
         parsed: list[int] = []
@@ -464,6 +465,15 @@ async def get_knowledge(
             except ValueError:
                 continue
         pinned = parsed or None
+    if knowledge_type in {KnowledgeTypeEnum.NORMAL, KnowledgeTypeEnum.SPACE}:
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        result = await LegacyDocumentsApplication().alist(
+            identity=login_user, name=name, sort_by=sort_by, cursor=cursor,
+            page_size=page_size, preferred_ids=pinned, has_abnormal=has_abnormal,
+            legacy_view=knowledge_type is KnowledgeTypeEnum.NORMAL,
+        )
+        return resp_200(data=result)
     result = await KnowledgeService.get_knowledge(
         request,
         login_user,
@@ -488,7 +498,9 @@ def get_knowledge_info(
 ):
     """Based on Knowledge BaseIDRead Knowledge Base Information."""
     res = KnowledgeService.get_knowledge_info(request, login_user, knowledge_id)
-    return resp_200(data=res)
+    from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+    return resp_200(data=[LegacyDocumentsApplication.view(row) for row in res])
 
 
 @router.put("/", status_code=200)
@@ -496,7 +508,9 @@ def update_knowledge(
     *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), knowledge: KnowledgeUpdate
 ):
     res = KnowledgeService.update_knowledge(request, login_user, knowledge)
-    return resp_200(data=res)
+    from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+    return resp_200(data=LegacyDocumentsApplication.view(res))
 
 
 @router.delete("/", status_code=200)

@@ -15,6 +15,7 @@ from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models import knowledge as models
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.repositories import knowledge_compatibility_repository as compatibility
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.permission.application import business_authorization as auth
 from bisheng.permission.application.identity import current_permission_actor, set_current_permission_actor
@@ -63,6 +64,7 @@ async def real_targets(monkeypatch):
         )
         await session.commit()
     monkeypatch.setattr(models, "get_async_db_session", sessions)
+    monkeypatch.setattr(compatibility, "get_async_db_session", sessions)
     fga = StubFGA()
     decision = service(fga)
 
@@ -153,3 +155,15 @@ async def test_foreign_missing_and_retired_type_never_get_an_admin_fallback(real
     assert await KnowledgePermissionService.get_knowledge_action_map_async(
         real_targets.user, [14, 15, 999], ["visible"]
     ) == {14: set(), 15: set(), 999: set()}
+
+
+async def test_service_account_namespace_partition_does_not_turn_the_audit_owner_into_the_subject(real_targets):
+    actor = PermissionActor(subject_type="service_account", subject_id=8, tenant_id=101)
+    token = set_current_permission_actor(actor)
+    try:
+        result = await KnowledgePermissionService.get_knowledge_action_map_async(real_targets.user, [13], ["visible"])
+        assert result == {13: {"visible"}}
+        checks = [item for kind, items in real_targets.fga.calls if kind == "batch" for item in items]
+        assert checks and all(item["user"] == "service_account:8" for item in checks)
+    finally:
+        current_permission_actor.reset(token)

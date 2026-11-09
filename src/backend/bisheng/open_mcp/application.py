@@ -92,6 +92,13 @@ def _space_service(request: Request, login_user, version_repo, doc_repo) -> Know
 
 async def list_knowledge(*, request: Request, command, version_repo, doc_repo):
     login_user = await get_open_api_operator_async()
+    if command.resource_type == KnowledgeTypeEnum.NORMAL.value:
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        return await LegacyDocumentsApplication().alist(
+            identity=login_user, name=command.name, sort_by=command.sort_by,
+            page_size=command.page_size, cursor=command.cursor,
+        )
     if command.resource_type in _KB_TYPES:
         return await KnowledgeService.get_knowledge(
             request,
@@ -121,6 +128,14 @@ async def create_knowledge(*, request: Request, command, version_repo, doc_repo)
         auth_type=AuthTypeEnum(command.auth_type),
         is_released=command.is_released,
     )
+    if command.resource_type == KnowledgeTypeEnum.NORMAL.value:
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        knowledge.auth_type = AuthTypeEnum.PUBLIC
+        knowledge.is_released = False
+        return await LegacyDocumentsApplication().acreate(
+            request=request, identity=login_user, command=knowledge, entry_kind="open_api",
+        )
     if command.resource_type in _KB_TYPES:
         knowledge.auth_type = AuthTypeEnum.PUBLIC
         knowledge.is_released = False
@@ -133,6 +148,7 @@ async def create_knowledge(*, request: Request, command, version_repo, doc_repo)
             description=knowledge.description,
             auth_type=knowledge.auth_type,
             is_released=knowledge.is_released,
+            entry_kind="open_api",
         )
         return KnowledgeRead(
             **created.model_dump(),
