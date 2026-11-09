@@ -52,17 +52,33 @@ class CopyObjects:
     def __init__(self, storage, *, source_id, target_id, file_ids, object_map):
         self.storage, self.source_id, self.target_id = storage, source_id, target_id
         self.file_ids, self.copied, self.object_map = file_ids, set(), object_map
+        self.prefixes = set()
 
     def mapped(self, key):
-        match = re.fullmatch(r"knowledge/images/" + str(self.source_id) + r"/(\d+)/(.*)", key)
+        match = re.fullmatch(r"knowledge/images/([1-9][0-9]*)/([1-9][0-9]*)/(.+)", key)
         if (
             match is None
-            or match[1] not in self.file_ids
-            or not match[2]
-            or any(part in {".", ".."} for part in match[2].split("/"))
+            or match[2] not in self.file_ids
+            or any(part in {"", ".", ".."} for part in match[3].split("/"))
+            or any(ord(char) < 32 or ord(char) == 127 for char in key)
         ):
             raise ValueError("copy attachment is outside the accepted source files")
-        return f"knowledge/images/{self.target_id}/{self.file_ids[match[1]]}/{match[2]}"
+        return f"knowledge/images/{self.target_id}/{self.file_ids[match[2]]}/{match[3]}"
+
+    def image_prefix(self, key):
+        # Space is a historical storage prefix, while the globally unique File
+        # ID must belong to the actual accepted copy scope. Never list a bucket.
+        match = re.match(r"knowledge/images/([1-9][0-9]*)/([1-9][0-9]*)/", key)
+        if match is None or match[2] not in self.file_ids:
+            raise ValueError("copy image prefix is outside the accepted source files")
+        prefix = match[0]
+        if key != prefix:
+            self.mapped(key)
+        if prefix in self.prefixes:
+            return
+        self.prefixes.add(prefix)
+        for row in self.storage.minio_client_sync.list_objects(self.storage.bucket, prefix=prefix, recursive=True):
+            self.copy(row.object_name, self.mapped(row.object_name))
 
     def copy(self, old, new):
         if (old, new) in self.copied:
@@ -90,8 +106,10 @@ class CopyObjects:
             if key.startswith(self.storage.bucket + "/"):
                 key = key[len(self.storage.bucket) + 1 :]
             new = self.object_map.get(key)
-            if new is None and key.startswith(f"knowledge/images/{self.source_id}/"):
-                new = self.mapped(key)
+            if key.startswith("knowledge/images/"):
+                mapped = self.mapped(key)
+                self.image_prefix(key)
+                new = new or mapped
             if new is None:
                 return raw
             self.copy(key, new)
@@ -112,8 +130,7 @@ class CopyObjects:
 
     def objects(self, source, target):
         prefix = f"knowledge/images/{self.source_id}/{source['id']}/"
-        for row in self.storage.minio_client_sync.list_objects(self.storage.bucket, prefix=prefix, recursive=True):
-            self.copy(row.object_name, self.mapped(row.object_name))
+        self.image_prefix(prefix)
         for name in ("object_name", "preview_file_object_name", "bbox_object_name", "thumbnails"):
             old, new = source.get(name), target.get(name)
             if not old:
@@ -123,6 +140,8 @@ class CopyObjects:
                 old = old[len(self.storage.bucket) + 1 :]
             if not new or new == old:
                 raise ValueError("copy requires an independent object key")
+            if old.startswith("knowledge/images/"):
+                self.image_prefix(old)
             if name in {"preview_file_object_name", "bbox_object_name"}:
                 content = self.storage.get_object_sync(object_name=old)
                 if content is None:

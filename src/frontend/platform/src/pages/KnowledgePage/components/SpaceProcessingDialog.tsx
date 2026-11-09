@@ -80,7 +80,11 @@ function Content({
   onOpenChange,
   onSaved,
 }: SpaceProcessingDialogProps) {
-  const { t } = useTranslation("knowledge");
+  const { t, i18n } = useTranslation("knowledge");
+  const invalidReason = (reason: string) =>
+    i18n.exists(`knowledge:batch.reason_${reason}`)
+      ? t(`batch.reason_${reason}`)
+      : t("f118.processing_unavailable");
   const actions = useKnowledgeProcessingActions(scope, spaceId);
   const [jobsPage, setJobsPage] = useState(1);
   const paginationLocale = usePaginationLocale();
@@ -413,7 +417,8 @@ function Content({
               </p>
               {plan.result.invalid_items.map((item, index) => (
                 <p key={index}>
-                  {item.name ?? t("f118.processing_unavailable")}: {item.reason}
+                  {item.name ?? t("f118.processing_unavailable")}:{" "}
+                  {invalidReason(item.reason)}
                 </p>
               ))}
             </section>
