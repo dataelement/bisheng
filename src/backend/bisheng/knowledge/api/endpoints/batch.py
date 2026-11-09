@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Path, Request
 from fastapi.exceptions import RequestValidationError
 from pydantic import Field, ValidationError
 
@@ -34,9 +34,9 @@ class BatchRequest(ProcessingSchema):
 
 @router.post("/{space_id}/files/batch/{operation}/inspect")
 async def inspect_batch(
-    space_id: int,
     operation: BatchOperation,
     change: BatchRequest,
+    space_id: int = Path(gt=0, le=9223372036854775807),
     identity: UserPayload = Depends(UserPayload.get_login_user),
     application=Depends(get_batch_application),
 ):
@@ -46,10 +46,10 @@ async def inspect_batch(
 
 @router.post("/{space_id}/files/batch/{operation}/precheck")
 async def precheck_batch(
-    space_id: int,
     operation: BatchOperation,
     change: BatchRequest,
     request: Request,
+    space_id: int = Path(gt=0, le=9223372036854775807),
     identity: UserPayload = Depends(UserPayload.get_login_user),
     application=Depends(get_batch_application),
 ):
@@ -60,10 +60,10 @@ async def precheck_batch(
 
 @router.post("/{space_id}/files/batch/{operation}/confirm")
 async def confirm_batch(
-    space_id: int,
     operation: BatchOperation,
     change: ProcessingCreateRequest,
     request: Request,
+    space_id: int = Path(gt=0, le=9223372036854775807),
     identity: UserPayload = Depends(UserPayload.get_login_user),
     application=Depends(get_batch_application),
 ):

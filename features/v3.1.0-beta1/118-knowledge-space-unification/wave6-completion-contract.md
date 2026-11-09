@@ -1763,3 +1763,6 @@ M4只在重验原同before和真实Root absence后，复用原retired checkpoint
 原T179实际SPACE上传页使用SpaceFileUploadPanel，旧FileUploadStep2未挂载，不能以旧组件存在视为已接。新增只读GET `/{space_id}/files/upload-settings?parent_id=...`，调用原KSS验证实际Root/Folder归属和对应upload_file动作；folder授权不增加Root.visible/edit。返回原ProcessingSettingsRead，仅规则/配置版本，不返回名称、模型或文件列表；不写默认或历史文件。现管理默认GET仍原edit规则，不改其权限。
 
 平台复用原ProcessingDefaultsEditor读取effective_defaults并保document/table两草稿；默认继承时register不附overrides，显式临时规则仅随本次上传传原ProcessingOverrides。每次drop验证并深拷贝到真实上传job，后续编辑或重试不得改变已受理批次。音视频及网页专用规则不传普通覆盖，保既有支持类型限制；不PUT空间默认、不自动重处理。保原取消/失败与真实处理中状态，actual upload_file依然服务端最终校验。不扩前台高级配置，不新增上传队列或处理平台。
+
+
+批量集成补充：retry在原实际Root读取及确认锁后复用require_space_processing_idle，REBUILDING或非空model_transition时不另派原文件解析；download仍可读取，tag不增加这项限制。此为本次普通重试与重建的顺序冲突校验，不扩展worker在途IO一致性。新batch path的space_id统一正int64。
