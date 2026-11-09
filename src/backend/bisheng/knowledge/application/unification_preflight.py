@@ -124,6 +124,16 @@ def source_decision(record, *, tenant_id):
             or (original is None and fact.exists and str(fact.knowledge_id) != row["target_id"])
         ):
             _blocked("deletion_ancestor_identity")
+    # Direct evidence never shadows an unfinished or foreign ancestor delete.
+    # Both rows can legitimately remain after two completed operations, but
+    # every frozen deletion must agree on the one physical target owner.
+    if len(direct) > 1 or len(ancestors) > 1:
+        _blocked("deletion_owner_conflict")
+    deletions = (*direct, *ancestors)
+    if any(row["stage"] != "deleted" for row in deletions):
+        _blocked("deletion_incomplete")
+    if len({row["target_tenant_id"] for row in deletions}) > 1:
+        _blocked("deletion_owner_conflict")
     if (
         original is not None
         and fact.exists

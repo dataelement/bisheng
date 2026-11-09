@@ -15,7 +15,8 @@ from bisheng.resource_reference.domain.models.business_reference_set import Busi
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from test.knowledge_unification import test_migration_resource_repository as original
-from test.knowledge_unification.test_migration_preflight import native as native, resource_native as resource_native
+from test.knowledge_unification.test_migration_preflight import native as native
+from test.knowledge_unification.test_migration_preflight import resource_native as resource_native
 
 
 async def captured_record(native, *, live=False, direct_stage="deleted", ancestor_stage="deleted", ancestor_owner=101):
