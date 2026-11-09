@@ -563,6 +563,19 @@ class DataQueryService(BaseModel):
                 raise ValueError("unknown sort order")
             res.sort(key=lambda x: x[sort_field_config[0]], reverse=sort_reverse)
 
+        limit_num = self.data_config.result_limit.get_limit_number() if self.data_config.result_limit else 0
+        has_explicit_metric_sort = any(metric.sort is not None for metric in self.data_config.metrics)
+        if limit_num and dimension_index >= 0 and self.data_config.metrics and not has_explicit_metric_sort:
+            metric_column = sort_field[self.data_config.metrics[0].field_id][0]
+
+            def metric_sort_key(row: list) -> float:
+                value = row[metric_column]
+                if value is None:
+                    return float("-inf")
+                return float(value)
+
+            res.sort(key=metric_sort_key, reverse=True)
+
         # split result dimensions and values
         final_dimensions = []
         final_values = []
