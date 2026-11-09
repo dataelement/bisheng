@@ -50,6 +50,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
 
     const [search, setSearch] = useState("");
     const candidates = useKnowledgeCandidates('space');
+    const searchCandidates = candidates.search;
     const previous = useRef<{ scopeKey: string | null; list: KnowledgeBase[] }>({ scopeKey: null, list: [] });
     const currentList = candidates.items.map(kb => ({ ...kb, type: 3 } as KnowledgeBase));
     if (candidates.loaded && !candidates.error) previous.current = { scopeKey: candidates.scopeKey, list: currentList };
@@ -57,9 +58,9 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     const loading = candidates.loading;
     const loadError = candidates.error && (!isApiError(candidates.error) || (candidates.error.kind !== 'canceled' && candidates.error.presentation !== 'global')) ? candidates.error : null;
     useEffect(() => {
-        const timer = setTimeout(() => candidates.search(search.trim()), 250);
+        const timer = setTimeout(() => searchCandidates(search.trim()), 250);
         return () => clearTimeout(timer);
-    }, [search, candidates.search]);
+    }, [search, searchCandidates]);
 
     const selectedIds = useMemo(() => new Set(orgKbs.map((k) => k.id)), [orgKbs]);
 
