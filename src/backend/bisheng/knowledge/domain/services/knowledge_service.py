@@ -115,7 +115,6 @@ from bisheng.utils.async_utils import run_async_safe
 
 _KNOWLEDGE_LIST_ACTIONS = [
     "visible",
-    "use",
     "edit",
     "delete",
     "manage_permission",
@@ -466,7 +465,7 @@ class KnowledgeService(KnowledgeUtils):
         sort_by: str = "update_time",
         cursor: str | None = None,
         page_size: int = 10,
-        action: str = "use",
+        action: str = "visible",
         preferred_ids: list[int] | None = None,
         has_abnormal: bool | None = None,
     ) -> PageInfiniteCursorData[KnowledgeRead]:
@@ -483,14 +482,16 @@ class KnowledgeService(KnowledgeUtils):
             they can see (``list_visible_objects``), then run the historical
             keyset scan under an ``id IN (:visible_ids)`` filter. ``visible``
             is the superset of every concrete action, so the pre-filter is
-            valid for ``action="use"``; the per-page BatchCheck below still
-            narrows the result to rows the user can actually ``use``.
+            sufficient for legacy ``action="use"``, normalized to visible.
+            Other requested actions still use the per-page BatchCheck.
           * ``sort_by`` ∈ {``update_time``, ``create_time``} → true keyset
             cursor with key ``[sort_value, id]``; ``sort_by="name"`` still
             uses a pseudo-cursor (offset internally, AD-15) with key
             ``[page_num]``. ``has_more`` is detected by fetching
             ``page_size + 1`` rows; the ``total`` field is no longer computed.
         """
+        # Retain the old HTTP action as an alias, never as a business action.
+        action = "visible" if action == "use" else action
         total_start = perf_counter()
 
         # ---- 1. Decode cursor (branch on sort_by) ----
@@ -583,7 +584,7 @@ class KnowledgeService(KnowledgeUtils):
         res: list[Knowledge] = []
         filter_start = perf_counter()
         # ``action`` values other than "visible" still require a per-page
-        # BatchCheck: visible ⊇ use ⊇ …, so the pre-filter is a superset. Admin
+        # BatchCheck: visible is the superset of concrete actions. Admin
         # bypass skips this because every action is granted.
         needs_action_check = (not is_admin) and action != "visible"
 

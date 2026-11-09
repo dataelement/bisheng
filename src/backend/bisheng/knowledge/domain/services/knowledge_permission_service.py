@@ -198,7 +198,7 @@ class KnowledgePermissionService:
         knowledge_id: int,
     ) -> None:
         del owner_user_id
-        await self.ensure_action_async(login_user, knowledge_id, "use")
+        await self.ensure_action_async(login_user, knowledge_id, "visible")
 
     def ensure_knowledge_write_sync(
         self,
@@ -234,7 +234,7 @@ class KnowledgePermissionService:
         knowledge_id: int,
     ) -> None:
         del owner_user_id
-        self.ensure_action_sync(login_user, knowledge_id, "use")
+        self.ensure_action_sync(login_user, knowledge_id, "visible")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1088,7 +1088,7 @@ class KnowledgeFileDeliveryAuthorizationPort:
             resource_type="knowledge_library",
             resource_id=library_id,
             actor=actor,
-            action="use",
+            action="visible",
         )
         if not allowed:
             from bisheng.common.errcode.permission import PermissionDeniedError

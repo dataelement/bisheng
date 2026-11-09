@@ -1745,3 +1745,14 @@ space_copy异步Plan.space_id为source、operation_id为原Job.id，真实Job在
 原T085/86、T180/T189覆盖download/tag/retry，复用原OperationPrecheck及300秒Plan，接口为 `/{space}/files/batch/{download|tag|retry}/{inspect|precheck|confirm}`。inspect仅分类/真实tenant pin，不写Plan；precheck固定原完整选择与修订，混合项显式确认有效子集，confirm仅原三字段。响应按原选择逐项succeeded/accepted/skipped/failed和可选下载URL，retry仅真实broker受理报accepted，不造新ProcessingJob或任务平台。原download/rename等动作独立校验，不追加Root.visible；标签真正新建仍原Root.edit，已有标签追加按原rename。新标签及绑定和Plan消费同SQL事务；派发沿原at-least-once语义，未知ACK保原Plan续派，不宣称exactly-once。目录selection为本地选择，不先用visible/my-permissions隐藏无权项；后台分类才是权威。实际下载沿原目录/HTML/七天URL规则，有对象错误明确失败，不静默跳过并消费Plan。
 
 原T185/T186保存引用与普通候选分离：旧知识/模型ID及原类型不因候选缺失被清空、替换或认定已删除，缺候选仅未确认；真实Source详情提供失效原因。新候选SPACE3走visible cursor，QA1独立visible；不再旧type0/use或成员清单并集。查询按身份、当前租户/管理pin隔离，异步迟到不覆盖新上下文。仅显式修改对应槽位才改变其ID，修复一个默认模型不清空其他缺候选模型；纯可见授权沿原Source/assignee版本撤销，不产生伪use动作或新授权管理框架。
+
+
+## 135. 已正常删除业务的迁移索引闭合（2026-11-10 已冻结）
+
+真实原KN/Channel生命周期hard-delete业务行后保留inactive零引用Source索引，不能据此泛化允许孤儿。M2仅为这两个已证业务类型，全球PK确认业务不存在、完整且仅一root_guard+current source、同tenant/type/id及正revision、原extractor/digest版本、guard false/false、source ready=true/effective=false、两个原空集合digest、BRR精确零时，冻结内部physical_root_absent清理分类及完整原before。这不是产品退役功能，不造Root/Member/Target/tombstone，也不猜未知业务owner。外tenant同ID、active、半套、残BRR及未知版本仍阻断；每批key≤200，不按Root乘全索引扫描。
+
+M4只在重验原同before和真实Root absence后，复用原retired checkpoint精确清除这对零引用索引；重放只接受已签空after，proof实体root_count不含这种不存在业务行。原strict index universe和实际SQL退役规则保持，未知extra不自动清理。
+
+新删除Job若operation_type非NULL且business_phase=prepared，尚未完成业务切换，不得进入新的迁移/epoch后再假定原删除可续跑。原MIG-only实际SQL guard在fresh/既有frozen M2、M3首写前和M4签证前复用；半NULL、未知新phase同样拒，旧(NULL,NULL)清理任务及finalized后只剩对象/索引清理的任务沿原分类保留。不自动取消或重绑epoch，不探测服务/进程；运维先沿原业务计划完成或正式处置，再执行正式冻结。
+
+原T222/T223同时收口知识业务内的use消费：旧HTTP/action=use和公开兼容方法名保留，入口归一为visible；RAG实际请求/筛选visible结果，不依赖use结果key。其他动作、类型、数据scope及成功主版本资格不变，不借此改分页/缓存框架。

@@ -96,7 +96,7 @@ def _stub_enrichment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
+async def test_regular_user_threads_visible_ids_into_dao_and_runs_edit_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _stub_enrichment(monkeypatch)
@@ -111,7 +111,7 @@ async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
     async def _fake_aget_all_knowledge(*args, **kwargs):
         dao_calls.append(kwargs)
         # First (and only) call returns two rows — the second is dropped because
-        # the per-batch ``use`` check filters it out.
+        # the per-batch ``edit`` check filters it out.
         return [_knowledge(100), _knowledge(101)]
 
     monkeypatch.setattr(ks_mod.KnowledgeDao, "aget_all_knowledge", _fake_aget_all_knowledge)
@@ -120,8 +120,8 @@ async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
 
     async def _fake_action_map(login_user, ids, actions):
         action_map_calls.append(list(actions))
-        # Only id=100 has ``use``; id=101 is visible but not use-able.
-        return {100: {"use", "visible"}, 101: {"visible"}}
+        # Only id=100 has ``edit``; id=101 is visible but not editable.
+        return {100: {"edit", "visible"}, 101: {"visible"}}
 
     with patch.object(
         KnowledgeService.permission_service,
@@ -133,7 +133,7 @@ async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
             login_user=_User(),
             knowledge_type=KnowledgeTypeEnum.NORMAL,
             page_size=10,
-            action="use",
+            action="edit",
         )
 
     # visible enumeration was asked for the library type at the shared cap.
@@ -146,11 +146,11 @@ async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
     assert dao_calls, "DAO must be called for a non-empty visible set"
     assert dao_calls[0]["id_in"] == [100, 101, 102]
 
-    # Only the requested ``use`` filter is checked. The surviving page is not
+    # Only the requested ``edit`` filter is checked. The surviving page is not
     # decorated with unrelated actions.
-    assert action_map_calls == [["use"]]
+    assert action_map_calls == [["edit"]]
 
-    # Only id=100 survived the ``use`` check; the row is decorated from the
+    # Only id=100 survived the ``edit`` check; the row is decorated from the
     # already-proven visible marker.
     assert [row.id for row in page.data] == [100]
     assert page.data[0].actions == ["visible"]
