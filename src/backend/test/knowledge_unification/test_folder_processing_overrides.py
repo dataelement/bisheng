@@ -73,9 +73,37 @@ async def test_existing_prepare_default_keeps_the_original_media_override_semant
         root = await session.get(Knowledge, 40)
     request = FileProcessBase(knowledge_id=40, chunk_size=123)
     prepared = context.legacy.cls.prepare_one_file(
-        context.context.user, root, KnowledgeFileOne(file_path="opaque-original-body"),
-        request.model_dump(), processing_rule_request=request,
+        context.context.user,
+        root,
+        KnowledgeFileOne(file_path="opaque-original-body", excel_rule={"slice_length": 0}),
+        request.model_dump(),
+        processing_rule_request=request,
     )
     actual = json.loads(prepared.split_rule)["_effective_processing"]
     assert actual["file_kind"] == "audio" and actual["effective_rule"]["chunk_size"] == 123
     assert download.call_count == 1
+
+
+async def test_server_owned_legacy_table_zero_keeps_unbounded_snapshot(folder_upload):
+    from bisheng.knowledge.domain.schemas.processing_settings import LegacyProcessingOverrides
+
+    context = folder_upload.upload
+    result = await context.service.add_file(
+        40, ["opaque-table"], processing_overrides=LegacyProcessingOverrides(table={"slice_length": 0})
+    )
+    actual = json.loads(result[0].split_rule)["_effective_processing"]
+    assert actual["file_kind"] == "table"
+    assert actual["effective_rule"]["slice_length"] == 0 and actual["effective_rule"]["legacy_unbounded"] is True
+
+
+async def test_server_owned_legacy_media_keeps_its_explicit_rule(folder_upload, monkeypatch):
+    from bisheng.knowledge.domain.schemas.processing_settings import LegacyProcessingOverrides
+
+    context = folder_upload.upload
+    globals_ = context.legacy.cls.prepare_one_file.__func__.__globals__
+    monkeypatch.setitem(globals_, "file_download", Mock(return_value=(str(folder_upload.second), "original.mp3")))
+    result = await context.service.add_file(
+        40, ["opaque-media"], processing_overrides=LegacyProcessingOverrides(document={"chunk_size": 123})
+    )
+    actual = json.loads(result[0].split_rule)["_effective_processing"]
+    assert actual["file_kind"] == "audio" and actual["effective_rule"]["chunk_size"] == 123

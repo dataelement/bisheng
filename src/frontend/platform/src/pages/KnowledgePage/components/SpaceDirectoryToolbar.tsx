@@ -1,3 +1,4 @@
+import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import { Button, SearchInput } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -10,6 +11,7 @@ interface SpaceDirectoryToolbarProps {
   canCreateFolder: boolean;
   onCreateFolder: () => void;
   canUpload: boolean;
+  onWebLink?: () => void;
   onBatchDownload?: () => void;
   onBatchRetry?: () => void;
   onBatchTag?: () => void;
@@ -26,6 +28,7 @@ export function SpaceDirectoryToolbar({
   canCreateFolder,
   onCreateFolder,
   canUpload,
+  onWebLink,
   onBatchDownload,
   onBatchRetry,
   onBatchTag,
@@ -78,6 +81,7 @@ export function SpaceDirectoryToolbar({
         onChange={(event) => onKeywordChange(event.target.value)}
       />
       {canCreateFolder && <Button onClick={onCreateFolder}>{t("f118.create_folder")}</Button>}
+      {canUpload && knowledgeUploadCapabilities.webLink && onWebLink && <Button variant="link" onClick={onWebLink}>{t("webLink")}</Button>}
       {canUpload && (
         <Button variant="link" onClick={handleUpload}>
           {t("uploadFile")}

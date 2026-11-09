@@ -543,7 +543,11 @@
     "processing_field_time": "时间",
     "processing_item_number": "项目 {{number}}",
     "upload_temporary": "为本次上传使用临时规则",
-    "upload_rules_hint": "默认继承空间规则。这里的修改仅作用于本次新增的文件，重试仍使用该批次规则。音视频和网页导入沿用各自的专用规则。"
+    "upload_rules_hint": "默认继承空间规则。这里的修改仅作用于本次新增的文件，重试仍使用该批次规则。音视频和网页导入沿用各自的专用规则。",
+    "upload_folder": "上传文件夹",
+    "folder_upload_limit": "一次文件夹上传最多包含 1,000 个文件。",
+    "folder_upload_skipped": "已跳过 {{count}} 个格式不支持或超出大小限制的文件。",
+    "folder_upload_empty": "没有可上传的受支持文件。"
   },
   "deletion": {
     "references": "引用来源",

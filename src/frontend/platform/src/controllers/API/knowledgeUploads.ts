@@ -56,6 +56,35 @@ export async function registerSpaceFiles(
   );
 }
 
+export interface SpaceFolderFilesCreate {
+  parent_id?: number | null;
+  items: { file_path: string; relative_path: string; size: number }[];
+  overrides?: ProcessingOverrides;
+}
+export async function registerSpaceFolder(
+  spaceId: number,
+  body: SpaceFolderFilesCreate,
+  signal?: AbortSignal,
+): Promise<KnowledgeSpaceChild[]> {
+  requireId(spaceId);
+  if (body.parent_id != null) requireId(body.parent_id);
+  return axios.post(
+    `/api/v1/knowledge/space/${spaceId}/folders/upload`,
+    {
+      items: body.items.map(({ file_path, relative_path, size }) => ({
+        file_path,
+        relative_path,
+        size,
+      })),
+      ...(body.parent_id === undefined ? {} : { parent_id: body.parent_id }),
+      ...(body.overrides === undefined
+        ? {}
+        : { overrides: structuredClone(body.overrides) }),
+    },
+    { signal },
+  );
+}
+
 export async function getUploadSettings(
   spaceId: number,
   parentId?: number | null,
@@ -72,6 +101,7 @@ export async function getUploadSettings(
 export const knowledgeUploadsApi = {
   uploadSpaceFile,
   registerSpaceFiles,
+  registerSpaceFolder,
   getUploadSettings,
 };
 export type KnowledgeUploadsApi = typeof knowledgeUploadsApi;

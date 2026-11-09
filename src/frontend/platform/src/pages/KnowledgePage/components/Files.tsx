@@ -1,3 +1,5 @@
+import WebLinkImportDialog from "./WebLinkImportDialog";
+import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import { useKnowledgeBatch } from "../hooks/useKnowledgeBatch";
 import { BatchOperationDialog } from "./BatchOperationDialog";
 import { BatchTagDraftDialog } from "./BatchTagDraftDialog";
@@ -349,6 +351,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
   });
   const batch = useKnowledgeBatch(JSON.stringify([...base, parentId, selectedKeys]));
   const [batchTagsOpen, setBatchTagsOpen] = useState(false);
+  const [webLinkOpen, setWebLinkOpen] = useState(false);
   const runBatch = async (
     operation: "download" | "tag" | "retry",
     tag_ids?: number[],
@@ -383,6 +386,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         canCreateFolder={containerActions.includes("create_folder")}
         onCreateFolder={() => handleEdit()}
         canUpload={containerActions.includes("upload_file")}
+        onWebLink={() => setWebLinkOpen(true)}
         onBatchDownload={() => {
           void runBatch("download");
         }}
@@ -529,6 +533,13 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         previewItem={visiblePreview?.token.item}
         previewData={visiblePreview?.data}
         closePreview={closePreview}
+      />
+      <WebLinkImportDialog
+        knowledgeId={String(spaceId)} parentId={parentId}
+        scopeKey={JSON.stringify([...base, parentId])}
+        open={knowledgeUploadCapabilities.webLink && webLinkOpen && containerActions.includes("upload_file")}
+        onOpenChange={setWebLinkOpen}
+        onImported={() => { void client.invalidateQueries({ queryKey: base }); }}
       />
       <KnowledgeDeletionDialog operation={deletion} />
       <BatchOperationDialog operation={batch} />
