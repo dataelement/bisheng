@@ -1515,3 +1515,40 @@ command_digest沿原ModelDeletePlanRepo._hash：update为{operation:'model_updat
 actor_reference沿原PlanRepo闭集：actual current tenant、identity.user_id审计、原web五字段_runtime_credential_reference、真实resolve_permission_actor(identity).data_scope和原explicit management pin，保home tenant，不排除窄scope、不把全量超管home1强制改成执行tenant101，不存trace。原credential形状/当前合法性/真实tenant admin与Root readonly规则由原Runtime/Core保持；入Core前快照、Core后及create尾核当前actor/credential/pin一致，失败不用临时新凭据重签。可必要额外常数次原actor解析，但需独立报实际成本；不按Model/Source循环解析。
 
 先native真红后绿：实际SQL Plan读回重验，三移除口（PUT保留差集单/多模型、server全删及empty）、无移除update本口拒且原PUT未改、跨tenant/shared Root/非管理员/真实Coverage未ready/异常/租户或TX/actor变化、到尾INSERT失败/cancel外catchcommit均无业务变更且无半plan；exact command hash与敏感字段不落artifact、真实原revisions/TTL/actor pin、同一Core仅调用1次。原10001target/30003ref budget275SELECT（server3/model4/RRT51/Tenant2/Run14/BRR201）只对应现native夹具，precheck仅新增1plan INSERT及已声明常数actor开销；真实Coverage/metadata另算，不能拿mock冒adapter证明。原T113/T114整卡不因内部helper提前勾。模型分享尚无业务prepare→projection→SQLfinalize口，permission project_delete只删enabled marker不能替代llm_server shared_with；后继正式冻结，不在本片触碰，也不以原Projection原子90条上限给模型分享新增任意业务上限。
+
+
+## 121. 实际跨空间移动应用Owner及执行短事务口 A1：已冻结
+
+PROC先native红再仅两新应用叶knowledge/application/move_processing_owner.py、move_processing_admission.py（各≤600，正常format不压行）。原T087–T092/T073–T076内部接线子片，不另编号、不提前关闭整个旧业务/API/worker卡。admission叶只承载该Owner实际消费的原身份/阶段与P1 expectation纯材料，不SQL、不新receipt/capability/registry或通用事务callback框架。原Repo/P1/K1/J1/Execution/R2/Schema/旧Service/runner/API/DI本片不改；真实缺窄接口须先报Root另冻，不绕private数据库访问。
+
+KnowledgeMoveProcessingOwner(*,session_factory,projection:KnowledgeMoveProjectionApplication,reference_runtime:ReferenceBindingRuntime,clock=_now,chat_rehome=dispatch_knowledge_chat_rehome)。前三项显式必需，内部构造同一原OperationPlanRepository、MoveScopeRepository(parent_states=projection)、K1(projection_verifier=projection)、MoveJobs、Ready、Execution及完整ProcessingJobRepository。R2使用原KnowledgeReferenceTargetOwner(move_cutover=同K1)与同registered reference_runtime；不自行改注册Owner/仓储。默认chat用knowledge_space_chat_history_retention_service原真实dispatcher，不以空callback宣称交付。session_factory每次须实际新native AsyncSession、入时无TX/无pending；Owner拥有短read或write事务、commit/rollback，不接caller Session/Scope/snapshot/receipt/actor_reference。实际同tenant/bypass/原TX每关键await O(1)核，不把FullScope校验塞每item。只move_index，普通四kind硬拒，不能增加全局白名单。
+
+| 方法 | 精确输入/结果 |
+| --- | --- |
+| aprecheck | (source_space_id:int,request:FileMoveReq,*,identity,entry_kind:str)->OperationPrecheck |
+| aaccept | (source_space_id:int,request:ProcessingCreateRequest,*,identity,entry_kind:str)->JobAccepted |
+| astart_attempt | (job_id:str,*,expected_dispatch_revision:int,lease_seconds:int=900)->JobLease|None |
+| aensure_logical | (lease:JobLease)->JobAccepted|None |
+| aguard_item | (lease:ItemLease)->MoveExecutionSnapshot|None |
+| aclaim_item | (lease:JobLease)->ItemLease|None |
+| asave_item_checkpoint | (lease:ItemLease,*,step:str,checkpoint:Mapping)->bool |
+| acomplete_item | (lease:ItemLease,*,source_count:int,milvus_count:int,es_count:int,source_digest:str,target_payload_digest:str)->bool |
+| afail_item | (lease:ItemLease,*,error_code:int)->bool |
+| arenew_attempt / arenew_item | (lease:JobLease/ItemLease)->bool |
+| afinalize_attempt | (lease:JobLease)->JobAccepted|None |
+| afail_attempt | (job_id:str,*,expected_job_revision:int,error_code:int,lease:JobLease|None=None)->bool |
+| aretry_failed | (job_id:str,request:ProcessingRetryRequest,*,identity,entry_kind:str)->JobAccepted |
+
+成功ACK保持原5scalar，不从App import worker DTO，W1沿实际MoveIndexResult拆值。错误只原5位int，失败Item走原jobs.acomplete_item(succeeded=False,result={})和同TX P1；不持久provider异常原文。除afail_attempt外，所有worker执行/续租/Item口短读实际Job/latestRetry actor并关闭SQL，沿原restore_processing_actor恢复当前credential/收窄+fresh目标upload，再fresh TX核prefix/lease/configuration/原P1证据/业务事实并调用原kernel。afail_attempt专为凭据恢复等先决失败落诊断，不以恢复已失效credential为前提；只可信native Job locator/当前tenant/observed revision/可选原lease→原kernel失败并commit，0外部IO、不从audit造身份或业务执行许可。
+
+precheck：短TX载detached原Scope→关闭SQL→原selected folder/file.move与目标容器upload（无额外space.move/edit gate）/narrowing/原capture→fresh TX重载Scope精确等值后仅写原Plan，5分钟expires，commit。原OperationPlan.acreate的can_execute默认由index manifest导出，本Owner仅返回DTO改为bool(scope.files)、valid_items真实logical roots，保证0-index的非空逻辑可执行；不改原Plan/Schema算法。A1仅跨空间有效全量请求；source==destination交后续KN保原同步语义，本口拒。FileMoveReq.skip_invalid=True在此内部片明确拒，不能忽略、不逐root重拉fullScope；原T08586批量分类随后接入，在此之前不开放KN/API，也不声称完整批量预检已完成。
+
+accept：先实际Plan/J1完整replay探测短读后关闭；新接受核旧归属selected.move/目标upload。已有Job当次允许同typed主体的新合法JWT做continuation：可信native Plan/Job给原actor_reference及audit字节输入原J1 _origin/replay，当前identity另核真实有效凭据、同typed主体、原ceiling相交及§107阶段资格；不恢复过期旧凭据作为门、不用新capture重签旧Plan。非同主体必须明确retry。fresh写TX仍原acreate_move_reserved再次裁定竞争/新建/replay并commit，不凭首次read猜成功；不复制或改原hash/lease/RetryReceipt算法。
+
+ensure：短TX原Execution.avalidate_attempt首次全接受+Items/Scope一次（None也commit），关闭SQL后在实际Job/operator候选≤200→原J1 membership→完整原pin/tuple/Mode owned facts基础做§107当前continuation与P1 aexecute_or_resume。外部FGA IO不持业务SQL；P1使用自有原sessions。然后fresh业务TX在签任何原K1/P1 proof之前建立共同SAVEPOINT：K1 prepare→P1 require_finalized(full expected changes)→K1 apply→R2维护全部logical File IDs→Ready；释放SP后commit。0items同完整链，不走ordinary reset/finalize捷径。任一R2/Ready失败/cancel/outer catchcommit不能留下半归属/半ready。
+
+Item写口：同一个fresh native TX、原双Root↑/Plan/Job/Item锁序，先actual bounded Item snapshot/anchor及真实P1 evidence，再原Kernel guard/claim/checkpoint/ACK。K1逻辑proof要求full sequence；Item原Execution.assert_current要求该实际snapshot的单anchor及job global changes_digest，沿原Bridge/Repo即可签该单anchor（不是每item重取fullScope/全部operations），不能用裸digest或FINALIZED dict代证据；peek与最终claim实际Item须相同anchor。无receipt跨TX给W1，aguard只返回detached原Snapshot供外IO。状态或配置导致None/False必须正常commit原obsolete ACK再返回，不能在TX内抛错把obsolete回滚。afinalize调用原move kernel，成功项/历史ready/lease/CAS/重试hash不改。
+
+同真实logical commit成功或确定ready重放后、SQL全部关闭，按原scope.files（DIR→folder，FILE→knowledge_file）的真实int IDs调用原build_knowledge_chat_flows(source_space_id,resources)，再chat_rehome(source_space_id=...,source_flow_ids=...,reason='cross_space_move')。不能accept即派或删旧副作用；replay沿原幂等flow补commit后未派发窗口，失败保原best-effort日志，不回滚已commit归属。不新增chat/model任务绑定或通用补偿系统。
+
+测试实际Application接受/逻辑/Item ACK三叶可分，每叶≤600：原真实P1/K1/J1/R2多Session、selected move仅子项可用/目标upload/tenant/home-pin/S-D主体、fresh凭据same-subject replay及不同主体仅retry、P1部分前向及FINALIZED after、operator候选必须membership、0item、未知commit/幂等恢复/chat时序、None obsolete确实durable、凭据失效能afail_attempt、坏/跨TX证据/after/version、真实ACK File+Item/count原子。401/10001须含独立projection changes也达N的selected-file集合，不只单DIR下N叶；每Item P1与snapshot成本恒定，不FullScope×Items。完整attempt/最终cutover各线性另报，既有count聚合成本单列。W1/HTTP/query/DI留后继，无mock helper替代实际短事务装配。

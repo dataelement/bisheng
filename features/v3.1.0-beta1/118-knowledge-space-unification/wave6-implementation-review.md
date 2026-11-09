@@ -562,3 +562,12 @@ T1011/T1012固定作者提交3fdd21360adc2e79a2ca9145738b6594933bff60，已正�
 移动执行固定4359af7935正常merge，Root完整读三生产叶，无新缺陷；作者956 passed/202.04s。Root独立actual ACK探针3 passed/0.90s：错durable cleaned计数、多余敏感结果、原目标多Version别名均拒且没有File状态UPDATE；/private/tmp/f118-root-move-execution-native.log。Root9条路径116 passed/102.82s，/private/tmp/f118-root-move-execution-integration.log。T1014–T1017闭合内部kernel；实际MoveOwner/runner/scanner/API/DI及direct-file引用归属同步仍后继，未打开普通kind白名单。固定旧四kind SQL/绑定/结果oracle与AST控制已保留。
 
 C6 wire154617生产diff已读；该三卡组仍等待完整producer/consumer/M2组合，不因wire独立242通过就关闭正式迁移。
+
+
+### C6正式完整namespace图语义门与R2集成（2026-11-09）
+
+C6三卡组T1024–1029闭合：wire154617、producer c8a537、consumer9c5c12aa6b，原正式fresh/既有freeze/M3写前完整图均验证actual physical资格、完整Catalog/矩阵、每Mode显式target与全部after G/S。Root官方consumer29项缺模块红6601b0b442；首79组合的3失败是测试header位置及旧fixture缺真实global闭集，源第一版未改，精确适配后79 passed/11.81s。Root401/10001 Mode两规模46.44s，SQL0，derive/matrix各2，峰1,789,937/35,158,507B；日志/private/tmp/f118-t1029-consumer-scale.log。fresh复用本轮实际compiled，经完整before Catalog等值核验，不追加两次Catalog推导。
+
+全部migration首轮1522绿/5旧fixture失败222.42s，2项原测试借fresh漏叶来造旧坏图，现fresh正确提前阻；另plan_time的3个参数额外NORMAL Root缺原Mode。仅测试适配：先真实合法freeze再artifact重签并将fixture ledger refs/hash精确绑定以模拟历史坏图；时间夹具显式补原Mode，未旁路生产门。后继0c746ab294同选集1527 passed/229.89s，/private/tmp/f118-root-c6-migration-corrected.log。独立C6 native8 passed/9.14s：真实带Source图7层重签错误/缺INACTIVE尾行/跨tenant页均在frozen与actual M3写前拒，writer0/DML0；晚到Catalog拒、conversion header晚到合法、fresh/frozen各2次、额外FGA/sourceIO0、三tenant Source桶段末释放。原两生产hash与候选完全一致；原5失败对应两fixture8项独立复跑2.17s通过。权限SQL/FGA正式Publisher、当前环境停服升级、恢复、全E2E仍未完成。
+
+R2三叶d1a6b6edb5正常合流：Root完整diff和独立2 native0.64s通过（held ORM/mixedafter2→replay0、Source不完整commonSP外catchcommit完整回滚），126项相关组合通过；该组合另外2旧fixture断点已按上文关闭，不冒第一次全绿。作者20路径343passed/140.18s；外审12路径206passed/99.23s+5独立native7.28s，完整legacy bundle/NULL/foreign尾行零UPDATE、范围外旧失效不触碰、Source全行保持。首/tmp探针4项输入违反原CHECK未进入产品，仅修夹具，不计产品红。401/10001单slot20/356 SELECT、3/51 UPDATE、max405；三slot28/556 SELECT、7/151 UPDATE、max273；原每IN≤200，完整scope6/receipts10/logical2固定。原T09192尚待真实MoveOwner/worker/API，不因R2组件已完成而勾整卡。

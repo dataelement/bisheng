@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史1029编号：926已完成/历史交付、101当前待办、2外移；原137队列已完成42项、剩95项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史1029编号：932已完成/历史交付、95当前待办、2外移；原137队列已完成42项、剩95项，另0张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -732,6 +732,8 @@
   **依赖**：T087, T086\
   **配对测试**：T087\
   **验证 / 完成条件**：运行配对测试 T087；验证本卡预期，相关范围检查通过。
+
+  **W6实施边界**：跨空间内部Owner按[§121](./wave6-completion-contract.md#121-实际跨空间移动应用owner及执行短事务口-a1已冻结)推进；skip_invalid批量分类T08586、旧同空间语义及KN/API/worker后继装配未完成前，整卡保持待办。
 
 - [ ] **T089 · 移动归属与权限阶段提交：先写测试**
   **类型 / Owner**：测试 / KN\
@@ -8271,7 +8273,7 @@
   **配对测试**：T1022\
   **验证 / 完成条件**：原fresh/autobegin与有TX两入口、尾及中途guard真实Native、原14路径与规模控制通过，之后才评原T111112关闭。
 
-- [ ] **T1024 · 正式namespace完整闭合wire原生反例**
+- [x] **T1024 · 正式namespace完整闭合wire原生反例**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_namespace_codec.py`\
   **逻辑 / 测试上下文**：W6§116新plan section/完整mode及after rows/全局矩阵和完整摘要，不接受旧hint代替。\
@@ -8279,7 +8281,7 @@
   **覆盖 AC**: AC-55, AC-78, AC-80, AC-81, AC-83, AC-85\
   **验证 / 完成条件**：先原native红绿，三卡组实际M2/M3和作者外复查；不据纯计划声称已SQL/FGA发布。
 
-- [ ] **T1025 · 原schema与codec闭合namespace计划明细**
+- [x] **T1025 · 原schema与codec闭合namespace计划明细**
   **类型 / Owner**：后端 Application / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_inventory_schema.py`；`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§116精确字段及typed native行，permission_plan继续deferred，旧不完整artifact重冻。\
@@ -8287,7 +8289,7 @@
   **配对测试**：T1024\
   **验证 / 完成条件**：先原native红绿，三卡组实际M2/M3和作者外复查；不据纯计划声称已SQL/FGA发布。
 
-- [ ] **T1026 · 物理资格到完整namespace生产原生反例**
+- [x] **T1026 · 物理资格到完整namespace生产原生反例**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_namespace_plan.py`；`src/backend/test/knowledge_unification/test_migration_namespace_plan_scale.py`\
   **逻辑 / 测试上下文**：W6§117原父边/真实Root0资格、不新增所有file Mode门、tenant峰值和全局compiled复用。\
@@ -8295,7 +8297,7 @@
   **覆盖 AC**: AC-37, AC-55, AC-78, AC-80, AC-81, AC-83, AC-85\
   **验证 / 完成条件**：先原native红绿，三卡组实际M2/M3和作者外复查；不据纯计划声称已SQL/FGA发布。
 
-- [ ] **T1027 · 原preflight生成完整显式namespace计划**
+- [x] **T1027 · 原preflight生成完整显式namespace计划**
   **类型 / Owner**：后端 Application / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_permission_namespace.py`；`src/backend/bisheng/knowledge/application/unification_preflight.py`\
   **逻辑 / 测试上下文**：W6§117一个tenant桶及原compiled planner，原physical/source/Member流程保留。\
@@ -8303,7 +8305,7 @@
   **配对测试**：T1026\
   **验证 / 完成条件**：先原native红绿，三卡组实际M2/M3和作者外复查；不据纯计划声称已SQL/FGA发布。
 
-- [ ] **T1028 · 正式namespace冻结与写前语义门反例**
+- [x] **T1028 · 正式namespace冻结与写前语义门反例**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_namespace_inventory.py`；`src/backend/test/knowledge_unification/test_migration_namespace_inventory_scale.py`\
   **逻辑 / 测试上下文**：W6§118 fresh/既有freeze/M3全图耗尽，缺明细/晚页/重新签坏计划拒、pertenant峰值。\
@@ -8311,7 +8313,7 @@
   **覆盖 AC**: AC-55, AC-78, AC-80, AC-81, AC-83, AC-85\
   **验证 / 完成条件**：先原native红绿，三卡组实际M2/M3和作者外复查；不据纯计划声称已SQL/FGA发布。
 
-- [ ] **T1029 · 原正式盘点与冻结读接namespace完整验证**
+- [x] **T1029 · 原正式盘点与冻结读接namespace完整验证**
   **类型 / Owner**：后端 Application / INT\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_permission_inventory.py`；`src/backend/bisheng/knowledge/application/unification_inventory.py`\
   **逻辑 / 测试上下文**：W6§118 upfront Catalog artifact flush与plan根metadata复用、同一资格/编译、原M3写前门。\
