@@ -582,3 +582,12 @@ ModelDeletePlan固定859c518ea799经Root完整226行独审、175项集成6.54s�
 Catalog DRAFT fixed873469c03e9d两生产叶正常合流；Root完整diff独审，作者最终21实际路径451 passed/26.75s。保legacy/floor/纯可见/非active完整字段、新PK归一、ACTIVE原pin复用或新STAGED，旧CURRENT/auth零DML，不早切CURRENT。401/1001 models实际SELECT53/80、DML9/15、derive各1；bulk200、单语句max203参数（200-ID IN及游标/limit/offset）、单bulk行13字段。原fae7adee96 71 missing module真红；原ae0dc immutable create_time trigger探针真红后修尾部raw列比较，managed update_time允许按原DB规则维护。SQL/取消/外catchcommit回滚、C2 ANSI/MySQL静态通过。正式资源SQL/FGA/原Run checkpoint/CURRENT切换另按依赖接线，不据本片关闭T157158。
 
 Root合并后实际三条Catalog测试路径84 passed/7.67s，/private/tmp/f118-root-catalog-integrated.log及同名XML；完整生产diff已复查。此为该片集成结果，未重冒6308全选集。
+
+
+### 实际公共检索的成功主版本资格（2026-11-09）
+
+§124原T101/T102范围内修正原负向过滤：原只用成功文件减non_primary，真实未登记、坏主指针、跨Root Document或File多链别名可以作为主版本进入结果。官方红e3a3da6983为8 fail/3控制pass，/private/tmp/f118-primary-native-red-corrected.log；早期测试将实际Version700/702误写600/602造成第9条失败，仅修测试并复跑正式红，不计该夹具错误为产品红。
+
+fixed0fdda0e87c新增131行实际读取Repo和原Visibility薄桥，SPACE3正向核File唯一Version、Document归属/primary_version_id/is_primary及SUCCESS；原文件可见性、IN/NOTIN/none、历史delivery、NORMAL0/QA1不扩。401/10001实际全集及显式候选各3/51 SELECT，最大208 bind，seek≤200；EXPLAIN确认Version/File alias使用索引查找，无版本表全扫或文件×版本积；C2 ANSI/MySQL编译、Ruff、两生产叶逐路径arch通过。首6路径67 passed/1.56s。
+
+14实际调用方路径首次140 pass/2 fail，旧test_rebuild_failed_visibility的状态控制File2–8没有Doc/Version却预期作为主版本；仅fixture补齐真实各自primary链（c9ad73cb6e），原所有状态/可见/QA断言保留，新未登记拒绝测试独立保留。生产fixed未变，最终同14路径142 passed/1.94s，/private/tmp/f118-primary-full-callers-corrected.log及XML。原T101/T102是否完整闭合仍待独立复查，不据本组件通过提前关闭后继节点/旧协议入口。
