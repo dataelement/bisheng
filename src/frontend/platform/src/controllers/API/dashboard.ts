@@ -180,28 +180,57 @@ import {
 import { sumMetricValues } from '@/pages/Dashboard/components/charts/metricCardValue';
 import { cloneDeep } from "lodash-es";
 
-function transformStackedData(resData: any) {
+const METRIC_SERIES_NAME_MAX_LENGTH = 24
+
+type MetricSeriesSource = { displayName?: string; fieldName?: string }
+
+function metricSeriesName(metric: MetricSeriesSource | undefined) {
+    const name = metric?.displayName || metric?.fieldName || ''
+    return name.length > METRIC_SERIES_NAME_MAX_LENGTH
+        ? `${name.slice(0, METRIC_SERIES_NAME_MAX_LENGTH)}...`
+        : name
+}
+
+// Stacked/grouped charts expand one category into one row per stack value. A single
+// metric keeps the historical "stack value is the series" shape; with several metrics
+// each metric stacks on its own so no metric is silently dropped.
+export function transformStackedData(resData: any, component: DashboardComponent) {
     const { value, dimensions: rawDimensions } = resData;
+    const metrics = component.data_config.metrics || [];
+    const metricCount = Math.max(metrics.length, 1);
     const groups: string[] = [];
-    const seriesKeys: string[] = [];
-    const dataMap: Record<string, Record<string, number>> = {};
+    const stackValues: string[] = [];
+    const dataMap: Record<string, Record<string, number | null>> = {};
 
     rawDimensions.forEach((dim: string[], index: number) => {
-        const seriesName = dim[dim.length - 1];
+        const seriesValue = String(dim[dim.length - 1] ?? '');
         const groupName = dim.slice(0, -1).join('\n');
-        const val = value[index][0];
 
         if (!groups.includes(groupName)) groups.push(groupName);
-        if (!seriesKeys.includes(seriesName)) seriesKeys.push(seriesName);
-
+        if (!stackValues.includes(seriesValue)) stackValues.push(seriesValue);
         if (!dataMap[groupName]) dataMap[groupName] = {};
-        dataMap[groupName][seriesName] = val;
+
+        for (let metricIndex = 0; metricIndex < metricCount; metricIndex += 1) {
+            const seriesName = metricCount > 1
+                ? `${metricSeriesName(metrics[metricIndex])} · ${seriesValue}`
+                : seriesValue;
+            dataMap[groupName][seriesName] = value[index]?.[metricIndex] ?? null;
+        }
     });
 
-    const series = seriesKeys.map(name => ({
-        name,
-        data: groups.map(group => dataMap[group][name] ?? null)
-    }));
+    // Keep the stack values of one metric next to each other in the legend/series order.
+    const series = [];
+    for (let metricIndex = 0; metricIndex < metricCount; metricIndex += 1) {
+        const metricName = metricSeriesName(metrics[metricIndex]);
+        for (const seriesValue of stackValues) {
+            const name = metricCount > 1 ? `${metricName} · ${seriesValue}` : seriesValue;
+            series.push({
+                name,
+                data: groups.map(group => dataMap[group][name] ?? null),
+                ...(metricCount > 1 ? { stackGroup: metricName } : {}),
+            });
+        }
+    }
 
     return { dimensions: groups, series };
 }
@@ -210,9 +239,7 @@ function transformNormalData(resData: any, component: DashboardComponent) {
     const dimensions = resData.dimensions.map((name: string[]) => name.join('\n'));
     const metrics = component.data_config.metrics || [];
     const series = metrics.map((m, idx) => ({
-        name: (m.displayName || m.fieldName || '').length > 24
-            ? (m.displayName || m.fieldName).slice(0, 24) + '...'
-            : (m.displayName || m.fieldName || ''),
+        name: metricSeriesName(m),
         data: resData.value.map((val: any[]) => val[idx])
     }));
 
@@ -454,7 +481,7 @@ export async function queryChartData(params: {
 
     const isStacked = !!component.data_config.stackDimension?.fieldId;
     const { dimensions, series } = isStacked
-        ? transformStackedData(resData)
+        ? transformStackedData(resData, component)
         : transformNormalData(resData, component);
     const organizationDisplay: Pick<ChartDataResponse, "dimensionLabels" | "categoryFieldIds" | "seriesFieldId"> = {
         dimensionLabels: resData.dimension_labels || {},

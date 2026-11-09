@@ -549,7 +549,7 @@ const getCartesianChartOption = (
         hideOverlap: true
       }
     }
-    if (isStacked) item.stack = 'total';
+    if (isStacked) item.stack = s.stackGroup || 'total';
     if (isArea) item.areaStyle = { opacity: 0.1 };
     // if (isLineOrArea) item.smooth = true;
 
