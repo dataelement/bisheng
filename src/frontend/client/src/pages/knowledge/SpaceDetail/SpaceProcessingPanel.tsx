@@ -197,7 +197,7 @@ export function SpaceProcessingPanel({ spaceId, canEdit, state }: SpaceProcessin
               </Button>
             )}
             <Button variant="outlined" disabled={blocked} onClick={progress.close}>
-              {localize("close")}
+              {localize("com_ui_close")}
             </Button>
           </DialogFooter>
         </DialogContent>

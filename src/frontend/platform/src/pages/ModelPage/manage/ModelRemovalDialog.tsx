@@ -67,7 +67,7 @@ export function ModelConfigActions({
         loading={saving}
         onClick={onSave}
       >
-        {t(saving ? "model.modelStatusChecking" : "model.save")}
+        {t(saving ? "bs:model.modelStatusChecking" : "model.save")}
       </Button>
     </div>
   );

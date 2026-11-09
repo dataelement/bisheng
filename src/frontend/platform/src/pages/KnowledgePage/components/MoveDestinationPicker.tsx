@@ -118,7 +118,7 @@ export function MoveDestinationPicker({
             void spaces.fetchNextPage();
           }}
         >
-          {t("loadMore", { ns: "bs" })}
+          {t("shared:knowledge.selection.loadMore")}
         </Button>
       )}
       <div className="flex flex-wrap gap-2">

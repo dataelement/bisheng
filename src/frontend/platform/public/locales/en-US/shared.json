@@ -50,6 +50,9 @@
       "empty": "The file is empty",
       "unsupported": "This file type cannot be previewed",
       "fileExpired": "The file is unavailable. Upload a new file and try again."
+    },
+    "selection": {
+      "loadMore": "Load more"
     }
   },
   "hostedApp": {
