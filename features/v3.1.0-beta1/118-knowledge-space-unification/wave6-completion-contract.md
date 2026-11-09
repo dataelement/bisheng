@@ -1252,3 +1252,12 @@ Root核原W4实际KnowledgeModelReferenceApplication及KnowledgeService：QA cre
 pure-use不设floor，去use仍同tier/普通metadata模型不设，已有floor按P1原样携带；普通visibility3/download1全局1控制不变。原全部非use选择/动作、key/name/kind/active/configscope/allow_same和derived_level一致性仍强制；floor变化只允许本次确切受控签发的预期值，不放宽为任意max(metadata)。签发进入原after Baseline/canonical checksum/plan checksum，typed codec沿既有完整字段，不增新wire；verify重建同一pure计划，篡改/移除floor失败。实际SnapshotRepo→plan→typed artifact→Catalog保存/重载/CURRENT完整native组件闭环，不开放HTTP写floor或新发布流程。
 
 P1临时测试“旧mixed仍阻断直到后继签发”在本卡按精确新功能更新，保留真实old mixed native oracle与旧普通模型对照，不能简单删断言；原被调高use的其他pure模型也须维持其正确旧tier，不编造不一致before以求通过。测试还含inactiveuse、不选use、无具体动作、原derived坏值/等级不一致、既有floor、原scope不覆盖SPACE、自定义未选动作不补、artifact/CURRENT篡改以及原纯可见可撤销控制。此卡不实施namespace mapping/资源SQL/FGA发布，不能关闭T157158或正式迁移验收。若需第三生产叶先报Root，禁止改核心Policy普通规则凑迁移。
+
+
+## 100. 模型影响复用精确流并保原v2摘要顺序：已冻结
+
+Root核ModelReferenceService._dataset仍每BRR页调用旧alist_inbound_for_owner_page：重复全T scope验证且每页SQL带全T目标，未因KN新stream自动解决。T983先实测旧多目标/多引用native预算反例，T984仅resource_reference/domain/repositories/reference_repository.py及llm/domain/services/model_reference_service.py两生产叶。新测试test_inbound_owner_global_stream.py及test_model_impact_scale.py各≤600；既有test_model_reference_sources.py的测试端口随实际新消费更新但原v2摘要oracle/100001slots峰值/无效ID拒断言不变。
+
+既有aiter_inbound_for_owner_pages加global_id_order:bool=False（严格bool），默认分组顺序/原KN消费者完全不变。True用同原精确target≤200分组、同_inbound_owner_statement完整LEFTjoin/source-set验证与捕获cursor的分页，按各组原BRR.id有序页作有界多路merge，产出的每页≤limit且全局BRR.id递增。首尾完整scope验证各一次、内TX/tenant/issuer/registration guard O(1)，保持初始raw targets副本和尾部篡改检查。不得每组重新签OwnerScope、每页再验证T receipts或用单个超大IN回避分组。每组仅保当前≤limit页，堆每组一个候选；空间O(T+G*limit)而非O(R)，G=ceil(T/200)，SQL≤G+floor(R/limit)，参数≤200精确targets的原上界。不会承诺物理行锁全局ID顺序；原分组锁已有变化，全局merge只保证输出/摘要顺序。完整耗尽前不提供完成证明，取消/异常/部分关闭不假成功，无新Session/DML/flush/FGA。
+
+ModelReferenceService只改_dataset消费True流，保原_reference binding字段、原sha256 f118-model-inbound-v2 prefix和ID/row hash更新字节、scope/owner/coverage/legacy/管理员/原身份/受限来源及cursor context算法。不得改为排序全部R row/hash列表，也不因改遍历顺序使原plan/cursor摘要漂移。已存在100001slots精确hash与<1MiB单目标端口测试仍需绿，native多组交错ID必须与旧page全局序列逐字节一致。旧native5种模型、跨租户摘要/禁止共享Root编辑与失效/尾Coverage测试保，真实401/1001/10001 sparse/dense SQL+候选验证预算独立量测，0引用也测完。若两叶实现不能保原语义/预算先报Root，不另造影响runtime/算法。此卡闭性能接缝，正式Coverage adapter/计划执行/外部入口仍后继，不直接勾T111112。
