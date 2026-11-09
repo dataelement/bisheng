@@ -3,6 +3,8 @@
 from copy import deepcopy
 
 from bisheng.common.errcode.knowledge import (
+    KnowledgeFileNotExistError,
+    KnowledgeMetadataFieldExistError,
     KnowledgeMetadataFieldNotExistError,
     KnowledgeMetadataValueTypeConvertError,
     KnowledgeOperationPlanChangedError,
@@ -96,18 +98,86 @@ class KnowledgeIndexEditApplication:
         if root.type != 3:
             return None  # Original NORMAL/QA metadata protocol remains its own path.
         self._current(context)
+        values = self._values(root, file.user_metadata, request, operation="replace")
+        affected = tuple(sorted(set(file.user_metadata or {}) | set(values)))
+        return await self._apply_metadata(user, context, root, file, expected, values, affected)
+
+    @staticmethod
+    def _values(root, current, request, *, operation):
         schema = {row["field_name"]: row for row in root.metadata_fields or []}
-        values = {}
+        values = {} if operation == "replace" else deepcopy(current or {})
+        if operation == "delete":
+            for name in request.field_names:
+                if name not in values:
+                    raise KnowledgeMetadataFieldNotExistError(field_name=name)
+                values.pop(name)
+            return values
         for item in request.user_metadata_list:
-            if item.field_name not in schema:
-                raise KnowledgeMetadataFieldNotExistError(field_name=item.field_name)
-            kind = schema[item.field_name]["field_type"]
+            name = item.field_name
+            if name not in schema or (operation == "patch" and name not in values):
+                raise KnowledgeMetadataFieldNotExistError(field_name=name)
+            if operation == "add" and name in values:
+                raise KnowledgeMetadataFieldExistError(field_name=name)
+            kind = schema[name]["field_type"]
             try:
                 value = utils.metadata_value_type_convert(value=item.field_value, target_type=kind)
             except (TypeError, ValueError) as error:
-                raise KnowledgeMetadataValueTypeConvertError(field_name=item.field_name) from error
-            values[item.field_name] = {"field_value": value, "field_type": kind, "updated_at": item.updated_at}
-        affected = tuple(sorted(set(file.user_metadata or {}) | set(values)))
+                raise KnowledgeMetadataValueTypeConvertError(field_name=name) from error
+            if operation == "patch":
+                # Original patch preserves the existing field metadata/timestamp.
+                values[name]["field_value"] = value
+            else:
+                values[name] = {"field_value": value, "field_type": kind, "updated_at": item.updated_at}
+        return values
+
+    async def abatch_metadata(self, user, knowledge_id, requests, *, operation):
+        """Validate the legacy batch before any external or SQL writes.
+
+        Each physical file then uses the existing writer. This does not promise
+        cross-file distributed atomicity.
+        """
+        if operation not in {"add", "patch", "delete"}:
+            raise ValueError("Unsupported metadata operation")
+        context, prepared, order = self._context(), {}, []
+        async with self.sessions() as session:
+            root = await self.repository.aread_root(session, knowledge_id)
+        if root.type != 3:
+            return None  # Keep NORMAL/QA on their existing legacy protocol.
+        await require_business_action(
+            get_current_open_api_principal() or user,
+            resource_type="knowledge_space",
+            resource_id=root.id,
+            action="edit",
+        )
+        self._current(context)
+        require_space_processing_idle(root, operation="file_user_metadata")
+        for request in requests:
+            root, file, expected = await self._read(request.knowledge_file_id, identity=user, validate=True)
+            self._current(context)
+            if root.id != knowledge_id:
+                raise KnowledgeFileNotExistError()
+            if root.type != 3:
+                raise KnowledgeProcessingConflictError(reason="metadata_space_required")
+            previous = prepared.get(file.id)
+            if previous is not None and previous[2] != expected:
+                raise KnowledgeOperationPlanChangedError()
+            before = previous[3] if previous is not None else file.user_metadata
+            values = self._values(root, before, request, operation=operation)
+            fields = set(
+                request.field_names
+                if operation == "delete"
+                else (item.field_name for item in request.user_metadata_list)
+            )
+            if previous is not None:
+                fields.update(previous[4])
+            prepared[file.id] = root, file, expected, values, tuple(sorted(fields))
+            order.append(file.id)
+        results = {}
+        for file_id, (root, file, expected, values, affected) in prepared.items():
+            results[file_id] = await self._apply_metadata(user, context, root, file, expected, values, affected)
+        return [results[file_id] for file_id in order]
+
+    async def _apply_metadata(self, user, context, root, file, expected, values, affected):
 
         async def guard():
             self._current(context)

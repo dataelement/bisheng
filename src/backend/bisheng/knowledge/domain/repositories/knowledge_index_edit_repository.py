@@ -14,6 +14,16 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
 
 class KnowledgeIndexEditRepository:
+    async def aread_root(self, session, knowledge_id):
+        tenant = get_current_tenant_id()
+        if type(tenant) is not int or tenant <= 0 or is_tenant_filter_bypassed():
+            raise KnowledgeFileNotExistError()
+        with session.no_autoflush, strict_tenant_filter():
+            root = (await session.execute(select(Knowledge).where(Knowledge.id == knowledge_id))).scalar_one_or_none()
+        if root is None or root.tenant_id != tenant:
+            raise KnowledgeFileNotExistError()
+        return root.model_copy(deep=True)
+
     async def aread(self, session, file_id, *, lock=False):
         tenant = get_current_tenant_id()
         if type(tenant) is not int or tenant <= 0 or is_tenant_filter_bypassed():

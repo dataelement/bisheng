@@ -1796,3 +1796,6 @@ HTTP部署兼容补充：本次新移动/处理确认与重试键不调用仅sec
 退役type=2不复活且不清理原数据。旧personal_knowledge_info返回空集合，queryKnowledge返回原空list/total envelope；旧个人上传在存储、配额、模型或资源创建之前以既有10962拒绝，service入口同样拒绝。原个人status兼容成功，不再让退役个人空间的旧重建状态阻塞其他聊天资源。会话临时附件/workstation/files、任务临时文件及其处理流程保持原行为，不能把退役个人空间映射成新SPACE。
 
 开发边界：PROC负责旧CRUD/权限分类及旧文件协议；MIG负责历史运行检索；PERM负责目录/web上传及审批/频道上传装配；Root负责退役兼容和元数据写入，并整合各lane。仍按原任务卡归档，不增helper编号；只做必要反例和定点验证，全部实际功能闭合后再整体回归、停服升级演练及E2E。
+
+
+元数据值兼容补充：实际v2依赖装配原KnowledgeIndexEditApplication；SPACE批量add/patch/delete先完整校验请求、归属、schema和原容器edit，关闭只读SQL后逐物理File沿同writer索引ACK→SQL。add不覆盖现字段，patch不创建缺失字段且保原字段时间，delete只移指定字段；未修改字段及web原对象/URL字段保持。重复File输入先按原顺序合成最终值，仅一次真实索引写；不承诺跨文件外部索引分布式原子性。已完成项仍原逐File语义，不新增Job/批量平台。单modify仍原replace语义，NORMAL/QA原路径保持；未装writer的SPACE入口拒绝，不能落旧SQL先写路径。定点原生15项覆盖真实依赖、历史版本、3操作及索引失败不提交、后项非法不提前写、重复/跨空间边界，非整体回归结论。
