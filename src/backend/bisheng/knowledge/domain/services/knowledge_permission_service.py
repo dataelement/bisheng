@@ -25,6 +25,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.repositories.knowledge_compatibility_repository import KnowledgeCompatibilityRepository
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     check_business_action,
@@ -45,7 +46,7 @@ _PERMISSION_SYNC_TIMEOUT_SECONDS = 60
 
 
 class KnowledgePermissionService:
-    """Action-native F048 checks for business-verified knowledge libraries."""
+    """Legacy knowledge IDs resolve through their actual tenant-owned resource type."""
 
     @classmethod
     async def check_action_async(
@@ -54,11 +55,14 @@ class KnowledgePermissionService:
         knowledge_id: int,
         action: str,
     ) -> bool:
+        resource_type = (await KnowledgeCompatibilityRepository().aresource_types([knowledge_id])).get(knowledge_id)
+        if resource_type is None:
+            return False
         return await check_business_action(
             login_user,
-            resource_type="knowledge_library",
+            resource_type=resource_type,
             resource_id=knowledge_id,
-            action=action,
+            action="visible" if action == "use" else action,
         )
 
     @classmethod
@@ -89,13 +93,23 @@ class KnowledgePermissionService:
         if not normalized_ids or not normalized_actions:
             return {}
 
-        action_map = await batch_check_business_actions(
-            login_user,
-            resource_type="knowledge_library",
-            resource_ids=normalized_ids,
-            actions=normalized_actions,
-        )
-        return {knowledge_id: set(action_map.get(str(knowledge_id), frozenset())) for knowledge_id in normalized_ids}
+        types = await KnowledgeCompatibilityRepository().aresource_types(normalized_ids)
+        result = {ident: set() for ident in normalized_ids}
+        for resource_type in ("knowledge_library", "knowledge_space"):
+            ids = [ident for ident in dict.fromkeys(normalized_ids) if types.get(ident) == resource_type]
+            if not ids:
+                continue
+            action_map = await batch_check_business_actions(
+                login_user,
+                resource_type=resource_type,
+                resource_ids=ids,
+                actions=normalized_actions,
+            )
+            for ident in ids:
+                # The public map retains a requested legacy alias key; its
+                # business authorization normalizes the actual decision to visible.
+                result[ident] = set(action_map.get(str(ident), frozenset()))
+        return result
 
     @classmethod
     def get_knowledge_action_map_sync(

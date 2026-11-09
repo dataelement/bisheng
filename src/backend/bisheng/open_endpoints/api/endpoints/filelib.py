@@ -174,6 +174,15 @@ async def create(
     workbench embedding model. Type 2 and invalid values are unsupported.
     """
     login_user = await get_open_api_operator_async()
+    if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        knowledge.auth_type = AuthTypeEnum.PUBLIC
+        knowledge.is_released = False
+        result = await LegacyDocumentsApplication().acreate(
+            request=request, identity=login_user, command=knowledge, entry_kind="open_api",
+        )
+        return resp_200(result)
     if knowledge.type in _KB_TYPES:
         # auth_type / is_released only apply to knowledge spaces (AD-07);
         # force defaults so they have no effect on knowledge bases.
@@ -196,6 +205,7 @@ async def create(
             description=knowledge.description,
             auth_type=knowledge.auth_type,
             is_released=knowledge.is_released,
+            entry_kind="open_api",
         )
         # Spaces use a different permission model than KBs; populate user_name and
         # the creator's effective space actions for a consistent output.
@@ -238,7 +248,9 @@ async def update_knowledge(
             description=knowledge.description if knowledge.description is not None else "",
             is_released=row.is_released,
         )
-        return resp_200(updated)
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        return resp_200(LegacyDocumentsApplication.view(updated))
     if row.type in _KB_TYPES:
         # update_knowledge is sync and uses run_async_safe internally; run it in a
         # threadpool so it is not invoked on the endpoint's running event loop.
@@ -266,6 +278,13 @@ async def get_knowledge(
     Response is ``PageInfiniteCursorData`` (data/page_size/has_more/next_cursor).
     """
     login_user = await get_open_api_operator_async()
+    if knowledge_type == KnowledgeTypeEnum.NORMAL.value:
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        page = await LegacyDocumentsApplication().alist(
+            identity=login_user, name=name, sort_by=sort_by, page_size=page_size, cursor=cursor,
+        )
+        return resp_200(page)
     if knowledge_type in _KB_TYPES:
         page = await KnowledgeService.get_knowledge(
             request,
