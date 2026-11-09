@@ -25,6 +25,7 @@ from bisheng.knowledge.application.unification_inventory_codec import (
     encode_inventory_page,
     record_from_values,
 )
+from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
 from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun
 from bisheng.permission.application.migration_read import PinnedMigrationPermissionReader
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
@@ -75,6 +76,7 @@ async def complete(native, monkeypatch):
     models = (
         *raw.TABLES,
         KnowledgeUnificationRun,
+        KnowledgeSpaceDeleteJob,
         BusinessReferenceSet,
         BusinessResourceReference,
         ResourceReferenceTombstone,
