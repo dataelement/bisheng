@@ -223,7 +223,7 @@ export interface KnowledgeFile {
 // Backend raw types (snake_case from API responses)
 // ─────────────────────────────────────────────
 
-interface RawKnowledgeSpace {
+export interface RawKnowledgeSpace {
     id: number;
     name: string;
     description?: string;
@@ -342,7 +342,7 @@ export interface UploadFileResponse {
 // ─────────────────────────────────────────────
 
 /** Map a raw backend space to the frontend KnowledgeSpace model */
-function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
+export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
     return {
         id: String(raw.id),
         name: raw.name,

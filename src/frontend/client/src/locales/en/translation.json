@@ -2902,6 +2902,7 @@
     "title": "System notice"
   },
   "dshChat": {
+    "loadMoreKnowledge": "Load more",
     "backToCapabilities": "Back to capabilities",
     "uploadDescription": "Add local files to this conversation",
     "knowledgeDescription": "Choose knowledge spaces for context",

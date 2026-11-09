@@ -2830,6 +2830,7 @@
     "title": "系统通知"
   },
   "dshChat": {
+    "loadMoreKnowledge": "加载更多",
     "backToCapabilities": "返回添加菜单",
     "uploadDescription": "添加本地文件到当前对话",
     "knowledgeDescription": "选择参与上下文的知识空间",
