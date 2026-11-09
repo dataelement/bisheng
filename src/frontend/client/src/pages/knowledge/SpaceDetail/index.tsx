@@ -338,6 +338,8 @@ function useKnowledgeSpaceDetail(
     confirm,
     selectedList,
     canBatchDelete,
+    canDeleteSpace,
+    deletionScopeKey: JSON.stringify([currentFolderId, Array.from(selectedFiles).sort(), Array.from(deleteEntryIds).sort()]),
     space,
     onDeleteFile,
     onBatchDeleteFiles,
