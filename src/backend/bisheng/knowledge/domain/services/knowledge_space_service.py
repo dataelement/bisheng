@@ -273,6 +273,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.prospective_grant_application = prospective_grant_application
         self.knowledge_file_repo = knowledge_file_repo
         self.upload_application_factory = upload_application_factory
+        self._upload_accounting_user = None
+        self._upload_execution_guard = None
         self.space_listing_repository = space_listing_repository or KnowledgeSpaceListingRepository()
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
@@ -4061,9 +4063,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
 
         # User-role cap (multi-role max GB; admin returns None = unlimited).
-        role_user_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
+        accounting_user = self._upload_accounting_user or self.login_user
+        if self._upload_accounting_user is not None and accounting_user.tenant_id != db_knowledge.tenant_id:
+            raise SpaceTenantMismatchError.http_exception()
+        role_user_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(accounting_user)
         logger.debug(f"space_file_upload_limit_bytes={role_user_limit_bytes} user_id={self.login_user.user_id}")
-        current_user_total = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
+        current_user_total = int(await SpaceFileDao.get_user_total_file_size(accounting_user.user_id))
 
         # Tenant-level cap: applies to the *target tenant* of the destination
         # knowledge space, regardless of the writer's role/admin status.
@@ -4115,6 +4120,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         try:
             for one in file_path:
+                if self._upload_execution_guard is not None:
+                    await self._upload_execution_guard()
                 prepared = KnowledgeService.prepare_one_file(
                     self.login_user,
                     knowledge=db_knowledge,
@@ -4124,6 +4131,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     processing_rule_request=file_split_rule,
                     ordinary_overrides_only=not legacy_overrides,
                 )
+                if self._upload_execution_guard is not None:
+                    await self._upload_execution_guard()
                 repeat_files = KnowledgeFileDao.get_file_by_condition(
                     knowledge_id=knowledge_id,
                     md5_=prepared.md5,
@@ -4190,6 +4199,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _dispatch_upload_batch(self, knowledge_id: int, batch: _UploadDispatchBatch) -> None:
         from bisheng.worker.knowledge import scheduler as file_scheduler
 
+        if self._upload_execution_guard is not None:
+            await self._upload_execution_guard()
         # Dispatch can have succeeded even when its acknowledgement fails.
         # Callers must not compensate registered resources after entering here.
         for row, cache_key in batch.files:
@@ -4203,6 +4214,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for folder_path in dict.fromkeys(batch.folder_paths):
             await self.update_folder_update_time(folder_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
+        if self._upload_execution_guard is not None:
+            await self._upload_execution_guard()
 
     MAX_FOLDER_UPLOAD_FILES = 1000
 

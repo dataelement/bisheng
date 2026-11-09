@@ -206,6 +206,20 @@ class SpaceUploadApplication:
             return False
         return True
 
+    def _new_upload_file(self, prepared, file_source, web):
+        return NewUploadFile(
+            file_name=prepared.file_name if web else prepared.original_file_name,
+            file_size=len(prepared.markdown_bytes) if web else prepared.file_size,
+            md5=prepared.content_hash if web else prepared.md5,
+            split_rule=prepared.split_rule,
+            file_source=FileSource.WEB_LINK.value if web else file_source.value,
+            user_metadata={},
+            user_id=self.user.user_id,
+            user_name=self.user.user_name,
+            updater_id=self.user.user_id,
+            updater_name=self.user.user_name,
+        )
+
     async def _register(self, knowledge, parent_id, prepared, file_source):
         entry = None
         web = type(prepared) is PreparedWebLink
@@ -218,20 +232,7 @@ class SpaceUploadApplication:
                     session,
                     space_id=actual.id,
                     parent_id=parent_id,
-                    files=(
-                        NewUploadFile(
-                            file_name=prepared.file_name if web else prepared.original_file_name,
-                            file_size=len(prepared.markdown_bytes) if web else prepared.file_size,
-                            md5=prepared.content_hash if web else prepared.md5,
-                            split_rule=prepared.split_rule,
-                            file_source=FileSource.WEB_LINK.value if web else file_source.value,
-                            user_metadata={},
-                            user_id=self.user.user_id,
-                            user_name=self.user.user_name,
-                            updater_id=self.user.user_id,
-                            updater_name=self.user.user_name,
-                        ),
-                    ),
+                    files=(self._new_upload_file(prepared, file_source, web),),
                 )
                 entry = _Creation(
                     receipt,
