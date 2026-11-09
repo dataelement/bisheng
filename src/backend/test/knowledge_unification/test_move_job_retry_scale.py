@@ -38,11 +38,11 @@ async def test_retry_never_reads_large_snapshot_or_expires_read_projection_manif
         eligibility = await built.repo.aretry_eligibility(session, built.job_id)
         assert eligibility.retryable and not eligibility.finalize_only
         assert public.scope_manifest is original_manifest and "scope_manifest" not in inspect(public).unloaded
-        result = await built.repo.aretry_failed(session, built.job_id, **retry_args(revision))
+        result = await built.repo.aretry_failed(session, built.job_id, **retry_args(revision), _move=True)
         assert result.job.total_count == result.job.pending_count == count
         selects = [sql for sql in statements if sql.lstrip().upper().startswith("SELECT")]
-        assert len(selects) <= 10
+        assert len(selects) <= 11  # Original reset plus the required bounded Root/Plan prefix.
         assert all("processing_snapshot" not in sql.partition("FROM")[0] for sql in selects)
         assert all("scope_manifest" not in sql.partition("FROM")[0] for sql in selects)
-        assert all("knowledge_operation_plan" not in sql for sql in selects)
+        assert all("knowledge_operation_plan.parameters" not in sql and "target_manifest" not in sql for sql in selects)
         print({"items": count, "retry_selects": len(selects), "snapshot_or_manifest_selects": 0})

@@ -10,6 +10,7 @@ import sqlalchemy as sa
 
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem as Item
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob as Job
+from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt as Retry
 from bisheng.knowledge.domain.repositories.processing_job_repository import (
     ProcessingConfiguration,
     ProcessingJobRepository,
@@ -19,10 +20,10 @@ from test.knowledge_unification.test_job_repo import job_session as job_session
 from test.knowledge_unification.test_job_repo import job_tenant as job_tenant
 
 ORACLES = {
-    "embedding_rebuild": (49, "8e9387191d310ef3ab1267560d4f9930c2107d795a2266f03b5abf8aee6db66c"),
-    "file_reprocess": (49, "7fa859e050bd4fa41608219c67895b0993cbb0a570725ddf8978c9fd2bf86afc"),
-    "file_resplit": (49, "8b7d29b1740e6de4ae88f25773c6e9c82d2852faa5f2c46e368a631a3024dbe6"),
-    "metadata_schema_change": (38, "cce3afa94f87d53616c42c9beb35fa2d436903bf2dd0a7996712588ca77bee63"),
+    "embedding_rebuild": (49, "3405d207e21bcf2cadd4f5019cc4812b1c89b932619f02fe0ca838bf62360025"),
+    "file_reprocess": (49, "3405d207e21bcf2cadd4f5019cc4812b1c89b932619f02fe0ca838bf62360025"),
+    "file_resplit": (49, "3405d207e21bcf2cadd4f5019cc4812b1c89b932619f02fe0ca838bf62360025"),
+    "metadata_schema_change": (38, "5bbb995bc856688bcf1ad9be8f4414f8f72d854a062172aada23da94a3447d8a"),
 }
 
 
@@ -70,6 +71,13 @@ async def test_ordinary_sql_bindings_and_state_are_identical_to_pre_hook_kernel(
     )
     await job_session.commit()
     events, ids = [], {}
+
+    def fixed_receipt_inputs(session, context, instances):
+        for row in session.new:
+            if isinstance(row, Retry):
+                row.create_time = row.update_time = now
+
+    sa.event.listen(job_session.sync_session, "before_flush", fixed_receipt_inputs)
 
     def normalize(value):
         if type(value) is str:

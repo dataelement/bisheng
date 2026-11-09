@@ -12,8 +12,9 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeProcessingJobNotRetryableError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt as Retry
-from bisheng.knowledge.domain.schemas.processing_job_acceptance import ProcessingConfiguration, _digest
+from bisheng.knowledge.domain.schemas.processing_job_acceptance import _digest
 from test.knowledge_unification.test_job_query_dispatch import actual_processing_task as actual_processing_task
 from test.knowledge_unification.test_job_repo import clock as clock
 from test.knowledge_unification.test_job_repo import configuration as configuration
@@ -21,6 +22,7 @@ from test.knowledge_unification.test_job_repo import create as original_create
 from test.knowledge_unification.test_job_repo import job_session as job_session
 from test.knowledge_unification.test_job_repo import job_tenant as job_tenant
 from test.knowledge_unification.test_job_repo import repository as repository
+from test.knowledge_unification.test_move_execution_fixtures import complete_move, item_evidence
 from test.knowledge_unification.test_move_job_ready import CONFIG, Item, Job, logical, mark, pipeline
 from test.knowledge_unification.test_move_job_ready import accepted as accepted
 from test.knowledge_unification.test_move_job_ready import moving as moving
@@ -69,7 +71,7 @@ async def test_zero_logical_failure_retries_and_fresh_native_k1_p1_can_finish(
         args = retry_args(failed.revision)
         eligibility = await built.repo.aretry_eligibility(session, built.job_id)
         assert eligibility.retryable and not eligibility.finalize_only
-        result = await built.repo.aretry_failed(session, built.job_id, **args)
+        result = await built.repo.aretry_failed(session, built.job_id, **args, _move=True)
         assert not result.reused and result.job.state == "accepted" and result.job.pending_dispatch
         assert result.job.total_count == result.job.pending_count == 0 and result.job.move_logical_marker is None
         receipt = (await session.execute(sa.select(Retry))).scalars().one()
@@ -97,12 +99,12 @@ async def test_zero_logical_failure_retries_and_fresh_native_k1_p1_can_finish(
             {7, 50}
         )
     async with built.sessions() as session, session.begin():
-        built.lease = await built.repo.aclaim(session, built.job_id, configuration=CONFIG)
+        built.lease = await built.repo.aclaim(session, built.job_id, configuration=CONFIG, _move=True)
         assert built.lease is not None
         final = await mark(session, built, await logical(session, built))
         assert final.state == "succeeded"
         assert not (await built.repo.aretry_eligibility(session, built.job_id)).retryable
-        replay = await built.repo.aretry_failed(session, built.job_id, **args)
+        replay = await built.repo.aretry_failed(session, built.job_id, **args, _move=True)
         assert replay.reused and replay.job.state == "succeeded"
 
 
@@ -111,13 +113,15 @@ async def test_retry_replay_keeps_original_hash_and_revision_cas(moving, accepte
     async with built.sessions() as session, session.begin():
         failed = await fail(session, built)
         args = retry_args(failed.revision)
-        assert not (await built.repo.aretry_failed(session, built.job_id, **args)).reused
-        assert (await built.repo.aretry_failed(session, built.job_id, **args)).reused
+        assert not (await built.repo.aretry_failed(session, built.job_id, **args, _move=True)).reused
+        assert (await built.repo.aretry_failed(session, built.job_id, **args, _move=True)).reused
         for changes in ({"actor_reference": retry_actor("user", 50)}, {"expected_job_revision": failed.revision}):
             with pytest.raises(KnowledgeIdempotencyConflictError):
-                await built.repo.aretry_failed(session, built.job_id, **(args | changes))
+                await built.repo.aretry_failed(session, built.job_id, **(args | changes), _move=True)
         with pytest.raises(KnowledgeProcessingJobNotRetryableError):
-            await built.repo.aretry_failed(session, built.job_id, **(args | {"idempotency_key": "other-key"}))
+            await built.repo.aretry_failed(
+                session, built.job_id, **(args | {"idempotency_key": "other-key"}), _move=True
+            )
 
 
 @pytest.mark.parametrize("bad", ["null", "wrong-type", "wrong-id"])
@@ -128,7 +132,7 @@ async def test_old_same_key_receipt_cannot_gain_a_guessed_subject(
     async with built.sessions() as session, session.begin():
         failed = await fail(session, built)
         args = retry_args(failed.revision)
-        await built.repo.aretry_failed(session, built.job_id, **args)
+        await built.repo.aretry_failed(session, built.job_id, **args, _move=True)
         values = {
             "null": {"actor_subject_type": None, "actor_subject_id": None},
             "wrong-type": {"actor_subject_type": "user"},
@@ -136,7 +140,7 @@ async def test_old_same_key_receipt_cannot_gain_a_guessed_subject(
         }[bad]
         await session.execute(sa.update(Retry.__table__).where(Retry.job_id == built.job_id).values(**values))
         with pytest.raises(KnowledgeIdempotencyConflictError):
-            await built.repo.aretry_failed(session, built.job_id, **args)
+            await built.repo.aretry_failed(session, built.job_id, **args, _move=True)
 
 
 @pytest.mark.parametrize("ready", [False, True])
@@ -148,16 +152,20 @@ async def test_nonzero_failure_retry_preserves_original_actor_and_all_success_by
         saved = None
         if ready:
             await mark(session, built, await logical(session, built))
-            done = await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
-            assert await built.repo.acomplete_item(
-                session, done.lease, configuration=CONFIG, succeeded=True, result={"native": [0, False]}
+            done = await built.repo.aclaim_next_item(
+                session,
+                built.lease,
+                configuration=CONFIG,
+                _move=True,
+                move_projection_evidence=await item_evidence(session, built),
             )
+            assert await complete_move(session, built, done.lease)
             saved = deepcopy(done.item.model_dump())
         failed = await fail(session, built)
         marker = deepcopy(failed.move_logical_marker)
         source_actor = deepcopy(failed.actor_reference)
         result = await built.repo.aretry_failed(
-            session, built.job_id, **retry_args(failed.revision, actor_reference=retry_actor("user", 17))
+            session, built.job_id, **retry_args(failed.revision, actor_reference=retry_actor("user", 17)), _move=True
         )
         assert result.job.move_logical_marker == marker and result.job.actor_reference == source_actor
         receipt = (await session.execute(sa.select(Retry))).scalars().one()
@@ -173,13 +181,19 @@ async def test_ready_finalize_only_reuses_original_successes_without_new_logical
     built = await pipeline(moving, accepted, monkeypatch)
     async with built.sessions() as session, session.begin():
         await mark(session, built, await logical(session, built))
-        done = await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
-        await built.repo.acomplete_item(session, done.lease, configuration=CONFIG, succeeded=True)
+        done = await built.repo.aclaim_next_item(
+            session,
+            built.lease,
+            configuration=CONFIG,
+            _move=True,
+            move_projection_evidence=await item_evidence(session, built),
+        )
+        await complete_move(session, built, done.lease)
         snapshot = deepcopy(done.item.model_dump())
         failed = await fail(session, built)
         eligibility = await built.repo.aretry_eligibility(session, built.job_id)
         assert eligibility.retryable and eligibility.finalize_only
-        await built.repo.aretry_failed(session, built.job_id, **retry_args(failed.revision))
+        await built.repo.aretry_failed(session, built.job_id, **retry_args(failed.revision), _move=True)
         assert (await session.get(Item, done.item.id)).model_dump() == snapshot
         receipt = (await session.execute(sa.select(Retry))).scalars().one()
         assert receipt.item_count == 0 and receipt.actor_subject_id == 50
@@ -242,7 +256,7 @@ async def test_unproved_or_wrong_scope_retry_facts_fail_closed(
                         await built.repo.aretry_eligibility(session, built.job_id)
                     assert type(failure.value).__module__.startswith("bisheng.common.errcode")
                 with pytest.raises(Exception) as failure:
-                    await built.repo.aretry_failed(session, built.job_id, **retry_args(revision))
+                    await built.repo.aretry_failed(session, built.job_id, **retry_args(revision), _move=True)
                 assert type(failure.value).__module__.startswith("bisheng.common.errcode")
         finally:
             if token is not None:
@@ -269,14 +283,14 @@ async def test_original_configuration_mismatch_still_records_obsolete_without_re
     built = await pipeline(moving, accepted, monkeypatch, zero="empty")
     async with built.sessions() as session, session.begin():
         failed = await fail(session, built)
-        config = (
-            ProcessingConfiguration(99, "generation-4")
-            if changed == "revision"
-            else ProcessingConfiguration(4, "other-generation")
+        await session.execute(
+            sa.update(Knowledge)
+            .where(Knowledge.id == 11)
+            .values(
+                **({"model_config_revision": 99} if changed == "revision" else {"index_generation": "other-generation"})
+            )
         )
-        result = await built.repo.aretry_failed(
-            session, built.job_id, **retry_args(failed.revision, configuration=config)
-        )
+        result = await built.repo.aretry_failed(session, built.job_id, **retry_args(failed.revision), _move=True)
         assert result.job.state == "obsolete" and not result.job.pending_dispatch
         assert not (await session.execute(sa.select(Retry))).all()
 
@@ -292,7 +306,7 @@ async def test_zero_ready_failure_is_not_mistaken_for_finalize_only_retry(moving
         assert not eligibility.retryable and not eligibility.finalize_only
         revision = (await session.execute(sa.select(Job.revision).where(Job.id == built.job_id))).scalar_one()
         with pytest.raises(KnowledgeProcessingJobNotRetryableError):
-            await built.repo.aretry_failed(session, built.job_id, **retry_args(revision))
+            await built.repo.aretry_failed(session, built.job_id, **retry_args(revision), _move=True)
 
 
 @pytest.mark.parametrize("kind", ["embedding_rebuild", "file_reprocess", "file_resplit", "metadata_schema_change"])
@@ -330,7 +344,9 @@ async def test_retry_current_subject_is_checked_by_original_source_origin_decode
         else:
             origin["actor"]["subject_id"] = True
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await built.repo.aretry_failed(session, built.job_id, **retry_args(revision, actor_reference=origin))
+            await built.repo.aretry_failed(
+                session, built.job_id, **retry_args(revision, actor_reference=origin), _move=True
+            )
         assert (await session.get(Job, built.job_id)).state == "failed"
         assert (await session.get(Job, built.job_id)).revision == revision
         assert not (await session.execute(sa.select(Retry))).all()

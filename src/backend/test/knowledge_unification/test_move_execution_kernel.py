@@ -85,9 +85,10 @@ async def finish(session, built, claimed, *, evidence=None):
 
 
 async def test_missing_composition_and_default_generic_path_never_mutate_move(built):
+    unconfigured = ProcessingJobRepository(move_jobs=built.move, move_ready=built.ready)
     async with built.sessions() as session, session.begin():
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await built.repo.arenew(session, built.lease, configuration=ready.CONFIG, _move=True)
+            await unconfigured.arenew(session, built.lease, configuration=ready.CONFIG, _move=True)
     composed(built)
     async with built.sessions() as session, session.begin():
         before = (await built.repo.aget_execution(session, built.job_id)).revision
@@ -114,7 +115,7 @@ async def test_real_dual_configuration_drift_is_durably_obsolete(built, side, fi
     async with built.sessions() as session:
         job = await built.repo.aget_execution(session, built.job_id)
         assert job.state == "obsolete" and not job.pending_dispatch and job.lease_until is None
-        assert field in job.obsolete_reason
+        assert ("index_digest" if field in {"index_name", "collection_name"} else field) in job.obsolete_reason
 
 
 @pytest.mark.parametrize("bad", ["missing", "copied", "old-tx"])
@@ -196,7 +197,7 @@ async def test_owner_savepoint_before_p1_rolls_back_file_and_item_when_outer_cat
 
         async def fail_after_file(statement, *args, **kwargs):
             result = await native(statement, *args, **kwargs)
-            if statement.is_update and statement.table.name == "knowledge_file":
+            if statement.is_update and statement.table.name == ready.File.__tablename__:
                 raise RuntimeError("native failure after File UPDATE")
             return result
 

@@ -254,10 +254,44 @@ async def _consume_metadata_completion(
 
 
 class ProcessingJobRepository:
-    def __init__(self, *, clock: Callable[[], datetime] = _utc_now, move_jobs=None, move_ready=None):
+    def __init__(
+        self, *, clock: Callable[[], datetime] = _utc_now, move_jobs=None, move_ready=None, move_execution=None
+    ):
         self.clock = clock
         self.move_jobs = move_jobs
         self.move_ready = move_ready
+        self.move_execution = move_execution
+
+    def _move_execution(self):
+        from bisheng.knowledge.domain.repositories.move_execution_repository import MoveExecutionRepository
+
+        actual = self.move_execution
+        if (
+            not isinstance(actual, MoveExecutionRepository)
+            or actual.move_jobs is not self.move_jobs
+            or actual.ready is not self.move_ready
+        ):
+            raise KnowledgeOperationPlanConflictError(reason="move_execution_not_configured")
+        return actual
+
+    async def _execution_job(self, session, job_id, *, _move=False):
+        if type(_move) is not bool:
+            raise ValueError("explicit move path must be boolean")
+        current = None
+        if _move:
+            execution = self._move_execution()
+            execution.cutover._clean(session)
+            context = execution._context(session)
+            current = await execution._alock_prefix(session, job_id=job_id)
+            with session.no_autoflush:
+                job = await self._job(session, job_id, lock=True, include_manifest=False)
+            execution._tail(session, context)
+            execution.assert_job(current, job)
+        else:
+            job = await self._job(session, job_id, lock=True, include_manifest=False)
+            if job.kind == "move_index":
+                raise KnowledgeOperationPlanConflictError(reason="move_execution_explicit_path_required")
+        return job, current
 
     def _move_ready(self):
         if self.move_ready is None:
@@ -477,6 +511,19 @@ class ProcessingJobRepository:
             ).one_or_none()
         if receipt is not None and receipt.tenant_id != job.tenant_id:
             raise KnowledgeProcessingJobNotFoundError()
+        if job.kind == "move_index":
+            actual = receipt if receipt is not None else job
+            subject = self._move_ready().retry_subject(
+                job, actor_user_id=actual.actor_user_id, actor_reference=actual.actor_reference
+            )
+            if (actual.actor_subject_type, actual.actor_subject_id) != (subject.subject_type, subject.subject_id):
+                raise KnowledgeOperationPlanConflictError(reason="move_retry_subject_changed")
+            if receipt is not None and not (
+                type(receipt.expected_job_revision) is int
+                and type(receipt.accepted_job_revision) is int
+                and 0 <= receipt.expected_job_revision < receipt.accepted_job_revision <= job.revision
+            ):
+                raise KnowledgeOperationPlanConflictError(reason="move_retry_revision_changed")
         return deepcopy(receipt.actor_reference if receipt is not None else job.actor_reference)
 
     async def adispatch_candidates(
@@ -690,7 +737,15 @@ class ProcessingJobRepository:
             and job.lease_until > self._now()
         )
 
-    def _check_configuration(self, job: KnowledgeProcessingJob, configuration: ProcessingConfiguration) -> bool:
+    def _check_configuration(
+        self, job: KnowledgeProcessingJob, configuration: ProcessingConfiguration, *, move_current=None
+    ) -> bool:
+        if move_current is not None:
+            reason = self._move_execution().configuration_reason(move_current)
+            if reason is not None:
+                self._obsolete(job, reason)
+                return False
+            configuration = move_current.configuration.target
         reason = None
         if job.expected_model_config_revision != configuration.model_config_revision:
             reason = "model_config_revision_changed"
@@ -715,6 +770,10 @@ class ProcessingJobRepository:
                 reason = "metadata_schema_digest_changed"
         if reason is None:
             return True
+        self._obsolete(job, reason)
+        return False
+
+    def _obsolete(self, job, reason):
         job.state = "obsolete"
         job.obsolete_reason = reason
         job.error_code = KnowledgeProcessingObsoleteError.Code
@@ -722,7 +781,6 @@ class ProcessingJobRepository:
         job.lease_until = None
         job.finished_at = job.update_time = self._now()
         job.revision += 1
-        return False
 
     async def aclaim(
         self,
@@ -732,12 +790,13 @@ class ProcessingJobRepository:
         configuration: ProcessingConfiguration,
         expected_job_revision: int | None = None,
         lease_seconds: int = 900,
+        _move: bool = False,
     ) -> JobLease | None:
         if type(lease_seconds) is not int or lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
         if expected_job_revision is not None and (type(expected_job_revision) is not int or expected_job_revision < 0):
             raise ValueError("expected_job_revision must be a non-negative integer")
-        job = await self._job(session, job_id, lock=True, include_manifest=False)
+        job, current = await self._execution_job(session, job_id, _move=_move)
         if expected_job_revision is not None and job.revision != expected_job_revision:
             return None
         now = self._now()
@@ -745,7 +804,7 @@ class ProcessingJobRepository:
             return None
         if job.state == "running" and job.lease_until is not None and job.lease_until > now:
             return None
-        if not self._check_configuration(job, configuration):
+        if not self._check_configuration(job, configuration, move_current=current):
             await session.flush()
             return None
         job.claim_generation += 1
@@ -767,13 +826,14 @@ class ProcessingJobRepository:
         *,
         configuration: ProcessingConfiguration,
         lease_seconds: int = 900,
+        _move: bool = False,
     ) -> JobLease | None:
         if type(lease_seconds) is not int or lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
-        job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
+        job, current = await self._execution_job(session, lease.job_id, _move=_move)
         if not self._active_job_lease(job, lease):
             return None
-        if not self._check_configuration(job, configuration):
+        if not self._check_configuration(job, configuration, move_current=current):
             await session.flush()
             return None
         job.lease_until = self._now() + timedelta(seconds=lease_seconds)
@@ -782,14 +842,20 @@ class ProcessingJobRepository:
         return JobLease(job.id, job.lease_token, job.claim_generation, job.lease_until)
 
     async def aclaim_next_item(
-        self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration
+        self,
+        session: AsyncSession,
+        lease: JobLease,
+        *,
+        configuration: ProcessingConfiguration,
+        _move: bool = False,
+        move_projection_evidence=None,
     ) -> ClaimedItem | None:
-        job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
+        job, current = await self._execution_job(session, lease.job_id, _move=_move)
         if not self._active_job_lease(job, lease):
             return None
         if job.kind == "move_index":
             self._move_ready().require_job_ready(job)
-        if not self._check_configuration(job, configuration):
+        if not self._check_configuration(job, configuration, move_current=current):
             await session.flush()
             return None
         now = self._now()
@@ -820,6 +886,9 @@ class ProcessingJobRepository:
                 continue
             if job.kind == "move_index":
                 self._move_ready().require_item_ready(job, row)
+                await self._move_execution()._aassert_item_after(
+                    session, job, row, current, projection_evidence=move_projection_evidence
+                )
             row.state = "running"
             row.attempt += 1
             row.claim_generation += 1
@@ -844,9 +913,15 @@ class ProcessingJobRepository:
         )
 
     async def _guard_item(
-        self, session: AsyncSession, lease: ItemLease, configuration: ProcessingConfiguration
+        self,
+        session: AsyncSession,
+        lease: ItemLease,
+        configuration: ProcessingConfiguration,
+        *,
+        _move: bool = False,
+        move_projection_evidence=None,
     ) -> tuple[KnowledgeProcessingJob, KnowledgeProcessingItem] | None:
-        job = await self._job(session, lease.job.job_id, lock=True, include_manifest=False)
+        job, current = await self._execution_job(session, lease.job.job_id, _move=_move)
         if not self._active_job_lease(job, lease.job):
             return None
         if job.kind == "move_index":
@@ -856,9 +931,13 @@ class ProcessingJobRepository:
             return None
         if job.kind == "move_index":
             self._move_ready().require_item_ready(job, row)
-        if not self._check_configuration(job, configuration):
+        if not self._check_configuration(job, configuration, move_current=current):
             await session.flush()
             return None
+        if job.kind == "move_index":
+            await self._move_execution()._aassert_item_after(
+                session, job, row, current, projection_evidence=move_projection_evidence
+            )
         return job, row
 
     async def asave_checkpoint(
@@ -869,12 +948,16 @@ class ProcessingJobRepository:
         configuration: ProcessingConfiguration,
         step: str,
         checkpoint: Mapping[str, Any],
+        _move: bool = False,
+        move_projection_evidence=None,
     ) -> bool:
         if not isinstance(step, str) or not step or len(step) > 64:
             raise ValueError("step must contain 1..64 characters")
         value = deepcopy(dict(checkpoint))
         _digest(value)
-        guarded = await self._guard_item(session, lease, configuration)
+        guarded = await self._guard_item(
+            session, lease, configuration, _move=_move, move_projection_evidence=move_projection_evidence
+        )
         if guarded is None:
             return False
         job, row = guarded
@@ -891,10 +974,14 @@ class ProcessingJobRepository:
         *,
         configuration: ProcessingConfiguration,
         lease_seconds: int = 900,
+        _move: bool = False,
+        move_projection_evidence=None,
     ) -> ItemLease | None:
         if type(lease_seconds) is not int or lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
-        guarded = await self._guard_item(session, lease, configuration)
+        guarded = await self._guard_item(
+            session, lease, configuration, _move=_move, move_projection_evidence=move_projection_evidence
+        )
         if guarded is None:
             return None
         job, row = guarded
@@ -1014,13 +1101,21 @@ class ProcessingJobRepository:
         succeeded: bool,
         result: Mapping[str, Any] | None = None,
         error_code: int | None = None,
+        _move: bool = False,
+        move_projection_evidence=None,
     ) -> bool:
         outcome = deepcopy(dict(result or {}))
         _digest(outcome)
-        guarded = await self._guard_item(session, lease, configuration)
+        guarded = await self._guard_item(
+            session, lease, configuration, _move=_move, move_projection_evidence=move_projection_evidence
+        )
         if guarded is None:
             return False
         job, row = guarded
+        if job.kind == "move_index":
+            await self._move_execution()._acomplete_file(
+                session, job, row, succeeded=succeeded, outcome=outcome, error_code=error_code
+            )
         row.state = "succeeded" if succeeded else "failed"
         row.result = outcome
         row.error_code = None if succeeded else error_code
@@ -1130,8 +1225,13 @@ class ProcessingJobRepository:
         if type(expected_job_revision) is not int or expected_job_revision < 0 or type(error_code) is not int:
             raise ValueError("failure requires the observed revision and a public error code")
         candidate = await self._job(session, job_id, lock=False, include_manifest=False)
-        root = await KnowledgeModelReferenceRepository().aget(session, candidate.space_id, for_update=True)
-        job = await self._job(session, job_id, lock=True, include_manifest=False)
+        current = None
+        if candidate.kind == "move_index":
+            job, current = await self._execution_job(session, job_id, _move=True)
+            root = current.destination
+        else:
+            root = await KnowledgeModelReferenceRepository().aget(session, candidate.space_id, for_update=True)
+            job = await self._job(session, job_id, lock=True, include_manifest=False)
         if job.state not in {"accepted", "running"}:
             return None
         if lease is not None:
@@ -1141,7 +1241,7 @@ class ProcessingJobRepository:
             job.state == "running" and job.lease_until is not None and job.lease_until > self._now()
         ):
             return None
-        if root is None:
+        if root is None and current is None:
             job.state = "obsolete"
             job.obsolete_reason = "owning_space_missing"
             job.error_code = KnowledgeProcessingObsoleteError.Code
@@ -1158,7 +1258,10 @@ class ProcessingJobRepository:
                     if job.kind == "metadata_schema_change"
                     else {}
                 ),
-            ),
+            )
+            if current is None
+            else None,
+            move_current=current,
         ):
             await session.flush()
             return job
@@ -1198,14 +1301,14 @@ class ProcessingJobRepository:
         return job
 
     async def afinalize(
-        self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration
+        self, session: AsyncSession, lease: JobLease, *, configuration: ProcessingConfiguration, _move: bool = False
     ) -> KnowledgeProcessingJob | None:
-        job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
+        job, current = await self._execution_job(session, lease.job_id, _move=_move)
         if not self._active_job_lease(job, lease):
             return None
         if job.kind == "move_index":
             self._move_ready().require_job_ready(job)
-        if not self._check_configuration(job, configuration):
+        if not self._check_configuration(job, configuration, move_current=current):
             await session.flush()
             return job
         await self._refresh_counts(session, job)
@@ -1229,8 +1332,9 @@ class ProcessingJobRepository:
         actor_user_id: int,
         actor_reference: Mapping[str, Any],
         configuration: ProcessingConfiguration,
+        _move: bool = False,
     ) -> JobRequestResult:
-        job = await self._job(session, job_id, lock=True, include_manifest=False)
+        job, current = await self._execution_job(session, job_id, _move=_move)
         key = self._key(idempotency_key)
         actor = self._actor(actor_user_id, actor_reference)
         if type(expected_job_revision) is not int or expected_job_revision < 0:
@@ -1278,7 +1382,7 @@ class ProcessingJobRepository:
             return JobRequestResult(job, False)
         if job.revision != expected_job_revision or job.state not in {"failed", "partial_failed"}:
             raise KnowledgeProcessingJobNotRetryableError()
-        if not self._check_configuration(job, configuration):
+        if not self._check_configuration(job, configuration, move_current=current):
             await session.flush()
             return JobRequestResult(job, False)
         if move_eligibility is not None and not move_eligibility.retryable:
