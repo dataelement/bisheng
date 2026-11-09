@@ -435,12 +435,21 @@ class ProcessingJobRepository:
         page_size: int,
         kind: str | None = None,
         state: str | None = None,
+        ordinary_only: bool = False,
     ) -> JobPage:
+        if type(ordinary_only) is not bool:
+            raise ValueError("ordinary list selection requires an explicit boolean")
         offset = self._page(page, page_size)
         await self._space(session, space_id, lock=False)
         filters = [KnowledgeProcessingJob.space_id == space_id]
         if kind is not None:
             filters.append(KnowledgeProcessingJob.kind == ProcessingKind(kind).value)
+        if ordinary_only:
+            filters.append(
+                KnowledgeProcessingJob.kind.in_(
+                    ("embedding_rebuild", "file_reprocess", "file_resplit", "metadata_schema_change")
+                )
+            )
         if state is not None:
             filters.append(KnowledgeProcessingJob.state == JobState(state).value)
         with strict_tenant_filter():

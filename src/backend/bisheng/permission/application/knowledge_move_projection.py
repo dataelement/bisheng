@@ -6,6 +6,7 @@ This bridge grants no knowledge action and never accesses knowledge persistence.
 
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from inspect import isawaitable
 from weakref import WeakSet
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,7 @@ from bisheng.common.errcode.permission import PermissionProjectionFailedError, P
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
 from bisheng.core.database import get_async_db_session
 from bisheng.permission.application.control_state import SqlPermissionControlState
-from bisheng.permission.application.identity import PermissionActor
+from bisheng.permission.application.identity import PermissionActor, get_current_permission_actor
 from bisheng.permission.application.runtime import F048PermissionRuntime, F048RuntimeComponents
 from bisheng.permission.domain.repositories.move_projection_repository import (
     MoveOperatorCandidate,
@@ -191,11 +192,15 @@ class KnowledgeMoveProjectionApplication:
         self._owned_mode(item, fact)
         return fact
 
-    async def aexecute_or_resume(self, *, job_id, changes, actor) -> MoveProjectionProgress:
+    async def aexecute_or_resume(self, *, job_id, changes, actor, progress=None) -> MoveProjectionProgress:
         tenant = get_current_tenant_id()
         self._scope(tenant)
         if not isinstance(actor, PermissionActor):
             _blocked("original actor required")
+        if progress is not None and not callable(progress):
+            _blocked("async move progress guard required")
+        original_subject = actor.subject_type, actor.subject_id, actor.tenant_id
+        original_context = get_current_permission_actor()
         # Validate the entire input before any FGA action, including bad tails.
         async with self._session() as session:
             self.repository._expectations(session, changes, job_id=job_id)
@@ -215,6 +220,23 @@ class KnowledgeMoveProjectionApplication:
                 self._scope(tenant)
                 key = operation_key(job_id, item.resource_type, item.resource_id)
                 fact = by_key.get(key)
+                if progress is not None and (fact is None or fact.status != "FINALIZED"):
+                    pending = progress(item)
+                    if not isawaitable(pending):
+                        _blocked("move progress guard must be awaitable")
+                    result = await pending
+                    self._scope(tenant)
+                    if (
+                        result is not None
+                        or get_current_permission_actor() is not original_context
+                        or original_subject
+                        != (
+                            actor.subject_type,
+                            actor.subject_id,
+                            actor.tenant_id,
+                        )
+                    ):
+                        _blocked("move progress guard changed its contract or actor")
                 if fact is not None and fact.status != "FINALIZED":
                     fact = await self._reserve_prepared(components, item, fact, tenant)
                 if fact is None:

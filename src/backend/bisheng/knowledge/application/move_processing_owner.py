@@ -322,42 +322,47 @@ class KnowledgeMoveProcessingOwner:
                 )
             await self._authorize_scope(actual, attempt.scope, expected, facts)
             await self.projection.aexecute_or_resume(
-                job_id=job.id, changes=expected, actor=get_current_permission_actor()
+                job_id=job.id,
+                changes=expected,
+                actor=get_current_permission_actor(),
+                progress=admission.projection_progress(self, lease, attempt.scope),
             )
-            async with self._session() as session:
-                async with self._savepoint(session):
-                    prepared = await self._call(
-                        session, self.cutover.aprepare_cutover(session, job_id=job.id, lease=lease)
+            async with admission.logical_identity(reference, attempt.scope):
+                async with self._session() as session:
+                    async with self._savepoint(session):
+                        prepared = await self._call(
+                            session, self.cutover.aprepare_cutover(session, job_id=job.id, lease=lease)
+                        )
+                        evidence = await self._call(
+                            session, self.projection.arequire_finalized(session, job_id=job.id, expectations=expected)
+                        )
+                        logical = await self._call(
+                            session,
+                            self.cutover.aapply_logical(session, prepared=prepared, projection_evidence=evidence),
+                        )
+                        await self._call(
+                            session,
+                            self.reference_owner.amove_file_ownership(
+                                session, logical=logical, reference_runtime=self.reference_runtime
+                            ),
+                        )
+                        result = await self._call(
+                            session, self.jobs.amark_move_ready(session, logical_receipt=logical, lease=lease)
+                        )
+                try:
+                    resources = [
+                        ("folder" if row.before["file_type"] == 0 else "knowledge_file", row.file_id)
+                        for row in prepared.scope.files
+                    ]
+                    self.chat_rehome(
+                        source_space_id=prepared.scope.source_space_id,
+                        source_flow_ids=build_knowledge_chat_flows(prepared.scope.source_space_id, resources),
+                        reason="cross_space_move",
                     )
-                    evidence = await self._call(
-                        session, self.projection.arequire_finalized(session, job_id=job.id, expectations=expected)
-                    )
-                    logical = await self._call(
-                        session, self.cutover.aapply_logical(session, prepared=prepared, projection_evidence=evidence)
-                    )
-                    await self._call(
-                        session,
-                        self.reference_owner.amove_file_ownership(
-                            session, logical=logical, reference_runtime=self.reference_runtime
-                        ),
-                    )
-                    result = await self._call(
-                        session, self.jobs.amark_move_ready(session, logical_receipt=logical, lease=lease)
-                    )
-            try:
-                resources = [
-                    ("folder" if row.before["file_type"] == 0 else "knowledge_file", row.file_id)
-                    for row in prepared.scope.files
-                ]
-                self.chat_rehome(
-                    source_space_id=prepared.scope.source_space_id,
-                    source_flow_ids=build_knowledge_chat_flows(prepared.scope.source_space_id, resources),
-                    reason="cross_space_move",
-                )
-            except Exception:
-                # Preserve the original post-commit, best-effort F071 rehome semantics.
-                logger.exception("knowledge_chat_entry.task_failed stage=move_after_commit job={}", job.id)
-            return result
+                except Exception:
+                    # Preserve the original post-commit, best-effort F071 rehome semantics.
+                    logger.exception("knowledge_chat_entry.task_failed stage=move_after_commit job={}", job.id)
+                return result
 
     async def _item_snapshot(self, session, lease, *, claim):
         if claim:
