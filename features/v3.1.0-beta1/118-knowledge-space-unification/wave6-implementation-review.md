@@ -444,3 +444,6 @@ Root全读两读侧diff，合018e38e83f；固定主树13路径159 passed/1123 wa
 D1正式反例b78c14b59原1红→39199d3bc单合并优先级修正；独立原2probe原样2绿(/private/tmp/f118-d1-independent-fixed.log)，Root已全读新增Repo流程及正常主合。Root新两叶53+独立2为55 passed/1471 warnings/2.47秒（/private/tmp/f118-root-delete-scope-reviewed.log/.xml）。Repo582/Schema146，全部旧prepare/cutover/cleanup方法未改；53作者新测、旧回归和独立探针合197绿/1已证旧switch_off失败排除。52原绿曾漏祖先覆盖，现原反例确已闭合，T955956组件闭；公开删除仍待R3权限投影优先和计划接线，不能以只读scope代真实删除。
 
 主树52892298a7901c3a02876eeafb5fa8d4c4d31730正在原4890选集基础上加入新move/Scope/性能/acceptance/D1进行完整本地回归；结束前不写全绿或正式升级结论。当前Task数按checkbox逐项生成，原99待办仍含真实业务入口/迁移/页面/E2E，不按组件测试数折算AC完成率。
+
+
+完整本地回归固定52892298a7901c3a02876eeafb5fa8d4c4d31730已结束：5160 passed/7原F054中间件占位skip/106422 warnings/318.28秒（/private/tmp/f118-root-move-delete-read-full.log/.xml）。选集为全knowledge_unification（TCP mock单模块另跑）+原三权限回归+旧folder/API/Web dedup/fetch，与原4890同选择口径，增加本波Scope/性能/D1/acceptance。此为固定版本本地结果，不含后继J1a或正式权限联合计划，也不冒MySQL升级/恢复/E2E。旧已证switch_off及QA clear fixture失败分别记录于旧协议卡，未纳入此选择。

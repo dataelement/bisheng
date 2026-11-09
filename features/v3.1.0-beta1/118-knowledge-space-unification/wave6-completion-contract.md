@@ -1159,3 +1159,14 @@ compact Job.parameters闭集：move_schema/operation_id/confirmation_id/plan_dig
 aoperator_membership(session,*,job_id,operator_ids:tuple[int,...]<=200)->frozenset[int]：空0SQL，严格正int非bool/native/currenttenant/noautoflush；原Job typed主体由真实frozen ref/两索引标量核一致，Retry只同job/tenant、合法typed subject及实际已接受revision，按(subject_type,subject_id)选真实代表PK再≤200批读原ref，原早期Retry也保留，不只最新、不过期旧credential否定接受事实。只查compact Job/Plan header/有限Retry refs，不每projection读全PlanScope/Job manifest/整Retry历史JSON；索引列不是授权。不猜audit_user，承认原F048 operator仅numeric alias的既有限制，不宣称新typed权限协议；foreign/NULL trial无法证明则failclosed。
 
 native至少同TX/跨TX重复、同key冲突/换key已consume、未知commit后实库查询、外catchcommit原子性、真假issuer/0items pending、S/D/audit不同及旧Retry成员、401/10001接受线性/轻量membership、原四kind/metadata全回归。J1b ready/零项retry/generic finalize与claim旁路封闭、J1c双Root execution、Owner/Worker/入口仍后继另冻，当前只内部Repo能力且不发布运行入口。新Repo≤600，实际超限先报Root拆职责，不能压行或暗第三叶。
+
+
+## 90. 原OwnerScope精确引用流 R3读取前置：已冻结
+
+T963先新test_inbound_owner_stream.py原生反例；T964仅原resource_reference/domain/repositories/reference_repository.py一个生产叶。只新增aiter_inbound_for_owner_pages(session:AsyncSession,scope:OwnerTargetScope,*,limit:int=200)->AsyncIterator[tuple[BusinessResourceReference,...]]，不实现D3授权/披露/App或修改旧公开方法默认结果/顺序/错误。原Repo为历史大叶，只必要helper/流增量，不借此大重构压行；新test叶≤600。原owner_page LEFT SourceSet完整身份/record_kind/source/ready/effective/revision和原错误是唯一校验算法，两方法抽共用private SQL/rows helper，不复制canonical或Verifier注册/receipt算法。
+
+先原_check_scope完整验证及limit严格1..200；随即无await捕获独立TransactionIdentity、具体owner、原registered scope identity、detached raw(type.value,id)元组（不能保原TargetKey对象别名）。SQL始终只用这份私有初始集合，每≤200 exact targets一组、每组BRR.id seek每次≤limit行，按目标组序/组内PK序，不承诺跨组全局BRRid锁序；foreign Source tenants只按原target-owner scope读取，原SourceSet完整LEFT join保证缺损显式拒、不因暂停过滤引用，不增加space-contents范围。
+
+内循环O(1)检查捕获TX.assert_current/session/current_tenant_id（原方法拒bypass/无具体tenant）及同Repo weak scope registration identity，必要同authority/owner常量检查；不每页重新扫描全部receipts/targets，不读Verifier私有字段、不造子scope/新authority。尾部再原_check_scope完整校验；异常、提前aclose或取消均不能证明检查完成。后继D3必须完整耗尽并通过原identity/Coverage尾验后才返回任何可展示impact/确认结果，流本身不是删除许可。篡改scope/原TargetKey在yield之间也不能改变后续SQL目标，末验拒绝；旧page首尾完整验证照旧。
+
+预算单列：T目标/R引用/G=ceil(T/200)，SQL≤G+floor(R/limit)，每SQL≤200 IDs/≤limit rows，代表性KNFILE页总params≤250；原TargetOwner/D1/Disclosure成本独立测，不泛称全系统线性。流完整scope验证仅首尾各一次（编译/排序另计），内guard常数；无T×引用页。真实401/1001/10001目标、稀疏/密集/整200空尾、完整身份LEFTjoin缺口/旧scope复制/切TX/tenant/bypass/Key篡改/取消/无DML及旧owner_page/Model impact控制。真实owner receipts/native Session，不fake scope或SQL字符串替代。Controller预auth和SourceDisclosure先不实现，避免新增派生child删除gate或持本SQL事务跨FGA。
