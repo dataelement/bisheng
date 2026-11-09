@@ -82,6 +82,7 @@ def _register_permission_runtime_contexts() -> None:
         get_department_projection_scope,
         register_department_projection_runtime_context,
     )
+    from bisheng.llm.application.model_provider_projection import get_model_provider_projection_scope
     from bisheng.permission.application.process_runtime import (
         register_f048_permission_runtime_context,
     )
@@ -91,6 +92,7 @@ def _register_permission_runtime_contexts() -> None:
             client,
             external_scopes={
                 "department": get_department_projection_scope(),
+                "llm_model_deletion": get_model_provider_projection_scope(),
             },
         )
 

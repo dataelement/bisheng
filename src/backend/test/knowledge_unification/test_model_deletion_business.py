@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.llm.domain.models import llm_server as model_module
@@ -25,9 +26,7 @@ ready = actual.ready
 
 
 @pytest.mark.parametrize("server_id", [1, 5])
-async def test_original_public_delete_never_mutates_when_formal_coverage_is_unconfigured(
-    ready, monkeypatch, server_id
-):
+async def test_original_public_delete_never_mutates_when_formal_coverage_is_unconfigured(ready, monkeypatch, server_id):
     session, _, _ = ready
     await session.commit()
 
@@ -38,6 +37,19 @@ async def test_original_public_delete_never_mutates_when_formal_coverage_is_unco
     monkeypatch.setattr(model_module, "get_async_db_session", sessions)
     monkeypatch.setattr(service_module, "_write_llm_audit", AsyncMock())
     monkeypatch.setattr(access, "_runtime", None)
+    # The new composition owns fresh native sessions on the same real engine.
+    # No ready/Core decision is replaced to keep this old-path regression green.
+    from bisheng.llm.application import model_deletion
+
+    @asynccontextmanager
+    async def native_sessions():
+        async with AsyncSession(session.bind, expire_on_commit=False) as current:
+            yield current
+
+    async def application():
+        return model_deletion.ModelDeletionApplication(session_factory=native_sessions)
+
+    monkeypatch.setattr(model_deletion, "get_model_deletion_application", application)
     before_server = (await session.execute(select(LLMServer.id).order_by(LLMServer.id))).scalars().all()
     before_models = (await session.execute(select(LLMModel.id).order_by(LLMModel.id))).scalars().all()
     with actual.native.actor() as identity:
