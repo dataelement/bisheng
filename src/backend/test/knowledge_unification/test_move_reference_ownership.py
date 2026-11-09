@@ -1,11 +1,13 @@
 """§119: native K1/ready and derived direct File reference ownership."""
 
+import asyncio
 from copy import copy
 from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
 
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
 from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile as File
@@ -33,22 +35,22 @@ def compose(built, *, cutover=None):
 
 def binding(ident, file_id=81, **changes):
     return {
-        **dict(
-            id=ident,
-            tenant_id=101,
-            source_type="assistant",
-            source_id="actual-source",
-            source_version="current",
-            slot_key=f"files[{ident}]",
-            target_type="knowledge_file",
-            target_id=str(file_id),
-            target_tenant_id=101,
-            target_space_id="10",
-            source_revision=4,
-            legacy_invalid_reason=None,
-            legacy_run_id=None,
-            legacy_evidence_key=None,
-        ),
+        **{
+            "id": ident,
+            "tenant_id": 101,
+            "source_type": "assistant",
+            "source_id": "actual-source",
+            "source_version": "current",
+            "slot_key": f"files[{ident}]",
+            "target_type": "knowledge_file",
+            "target_id": str(file_id),
+            "target_tenant_id": 101,
+            "target_space_id": "10",
+            "source_revision": 4,
+            "legacy_invalid_reason": None,
+            "legacy_run_id": None,
+            "legacy_evidence_key": None,
+        },
         **changes,
     }
 
@@ -70,18 +72,18 @@ async def seed(built, *, rows=None):
         await session.execute(
             sa.insert(Source.__table__),
             [
-                dict(
-                    tenant_id=key[0],
-                    source_type=key[1],
-                    source_id=key[2],
-                    source_version=key[3],
-                    source_revision=4,
-                    extractor_version="native-original",
-                    digest=reference_set_digest(tuple(specs)),
-                    effective=True,
-                    ready=True,
-                    record_kind="source",
-                )
+                {
+                    "tenant_id": key[0],
+                    "source_type": key[1],
+                    "source_id": key[2],
+                    "source_version": key[3],
+                    "source_revision": 4,
+                    "extractor_version": "native-original",
+                    "digest": reference_set_digest(tuple(specs)),
+                    "effective": True,
+                    "ready": True,
+                    "record_kind": "source",
+                }
                 for key, specs in sources.items()
             ],
         )
@@ -149,35 +151,37 @@ async def test_bad_late_page_zero_update_and_common_sp_outer_catch_commit(built,
         await session.execute(sa.insert(BRR.__table__), [binding(10 + n) for n in range(401)])
         values = {"target_space_id": None if bad == "space_null" else "30"}
         if bad == "legacy":
-            values = dict(
-                legacy_invalid_reason="target_missing", legacy_run_id="original-run", legacy_evidence_key="original-key"
-            )
+            values = {
+                "legacy_invalid_reason": "target_missing",
+                "legacy_run_id": "original-run",
+                "legacy_evidence_key": "original-key",
+            }
         elif bad == "source_foreign":
             values = {"tenant_id": 202}
             await session.execute(
                 sa.insert(Source.__table__),
-                dict(
-                    tenant_id=202,
-                    source_type="assistant",
-                    source_id="actual-source",
-                    source_version="current",
-                    source_revision=4,
-                    extractor_version="original",
-                    digest="a" * 64,
-                    effective=True,
-                    ready=True,
-                    record_kind="source",
-                ),
+                {
+                    "tenant_id": 202,
+                    "source_type": "assistant",
+                    "source_id": "actual-source",
+                    "source_version": "current",
+                    "source_revision": 4,
+                    "extractor_version": "original",
+                    "digest": "a" * 64,
+                    "effective": True,
+                    "ready": True,
+                    "record_kind": "source",
+                },
             )
         elif bad == "target_foreign":
             values = {"target_tenant_id": 202}
         elif bad == "target_null":
-            values = dict(
-                target_tenant_id=None,
-                legacy_invalid_reason="target_missing",
-                legacy_run_id="old",
-                legacy_evidence_key="old",
-            )
+            values = {
+                "target_tenant_id": None,
+                "legacy_invalid_reason": "target_missing",
+                "legacy_run_id": "old",
+                "legacy_evidence_key": "old",
+            }
         await session.execute(sa.update(BRR.__table__).where(BRR.id == 410).values(**values))
     before = await facts(built)
     rt, writes = compose(built), []
@@ -191,7 +195,7 @@ async def test_bad_late_page_zero_update_and_common_sp_outer_catch_commit(built,
     sa.event.listen(engine, "before_cursor_execute", capture)
     try:
         async with built.sessions() as session, session.begin():
-            with pytest.raises(Exception):
+            with pytest.raises((ResourceReferenceInvalidError, KnowledgeOperationPlanConflictError, ValueError)):
                 async with session.begin_nested():
                     receipt = await logical(session, built)
                     await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime)
@@ -218,23 +222,29 @@ async def test_original_logical_issuer_tx_tenant_and_registered_runtime_required
         elif bad == "copied":
             receipt = copy(receipt)
         elif bad == "wrong_runtime":
-            rt.runtime = ReferenceBindingRuntime(ReferenceRepository(), rt.runtime.verifier)
+            rt.runtime.repository.verifier = None
 
         async def call():
             await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime)
 
         if bad == "nested":
             async with session.begin_nested():
-                with pytest.raises(Exception):
+                with pytest.raises((ResourceReferenceInvalidError, KnowledgeOperationPlanConflictError, ValueError)):
                     await call()
         elif bad == "wrong_tenant":
-            with tenant_execution_scope(202), pytest.raises(Exception):
+            with (
+                tenant_execution_scope(202),
+                pytest.raises((ResourceReferenceInvalidError, KnowledgeOperationPlanConflictError, ValueError)),
+            ):
                 await call()
         elif bad == "bypass":
-            with bypass_tenant_filter(), pytest.raises(Exception):
+            with (
+                bypass_tenant_filter(),
+                pytest.raises((ResourceReferenceInvalidError, KnowledgeOperationPlanConflictError, ValueError)),
+            ):
                 await call()
         else:
-            with pytest.raises(Exception):
+            with pytest.raises((ResourceReferenceInvalidError, KnowledgeOperationPlanConflictError, ValueError)):
                 await call()
 
 
@@ -247,12 +257,12 @@ async def test_r2_then_ready_failure_common_sp_cannot_outer_commit_partial(built
         pass
 
     async with built.sessions() as session, session.begin():
-        with pytest.raises(LateCancel):
+        with pytest.raises(asyncio.CancelledError if failure == "late_cancel" else LateCancel):
             async with session.begin_nested():
                 receipt = await logical(session, built)
                 assert await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime) == 3
                 if failure == "late_cancel":
-                    raise LateCancel()
+                    raise asyncio.CancelledError()
 
                 # A real ready call updates Item then fails its final Job UPDATE.
                 def fail(connection, cursor, statement, parameters, context, many):
@@ -275,5 +285,5 @@ async def test_replay_actual_after_no_update_and_old_tx_reject(built):
         assert await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime) == 3
         assert await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime) == 0
     async with built.sessions() as session, session.begin():
-        with pytest.raises(Exception):
+        with pytest.raises((ResourceReferenceInvalidError, KnowledgeOperationPlanConflictError, ValueError)):
             await rt.owner.amove_file_ownership(session, logical=receipt, reference_runtime=rt.runtime)
