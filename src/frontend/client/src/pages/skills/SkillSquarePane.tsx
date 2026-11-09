@@ -43,14 +43,13 @@ export function SkillSquarePane() {
         title={localize('com_skill_center_square_title')}
         description={localize('com_skill_center_square_description')}
       />
-      <div className="flex w-full max-w-[1000px] shrink-0 items-center justify-end px-5 py-5">
+      <div className="mb-5 mt-6 w-full max-w-[480px] shrink-0 max-[767px]:px-4">
         <SearchInput
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           onClear={() => setSearch('')}
           placeholder={localize('com_skill_center_search')}
           aria-label={localize('com_skill_center_search')}
-          className="w-full min-[576px]:w-64"
         />
       </div>
       <main className="scrollbar-os flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">

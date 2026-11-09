@@ -5,6 +5,7 @@ import { MODULE_HOME_COLUMN, MODULE_HOME_PILL } from '~/components/ModuleHome';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
+import bannerStyles from './SquareBanner.module.css';
 import { useSquareTypes } from './useSquareTypes';
 import type { SquareType } from './squarePaths';
 
@@ -68,7 +69,7 @@ export function SquarePage() {
           </div>
         </div>
       )}
-      <div className="min-h-0 w-full flex-1 overflow-hidden">
+      <div className={cn('min-h-0 w-full flex-1 overflow-hidden', types.length > 1 && bannerStyles.scatterArtwork)}>
         <Suspense
           fallback={
             <div className="flex h-full w-full items-center justify-center">

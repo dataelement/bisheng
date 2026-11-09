@@ -26,7 +26,9 @@
 
 - `embed=dsh` 是显式桌面入口。JS 使用统一环境入口，CSS 使用 `html[data-bisheng-surface='desktop']`，不要逐组件重新读 URL。桌面身份还可能来自宿主、旧桥接、session 或同一页面的内存状态。
 - `embed=mobile-app` 只表示手机 App 提供聊天头部，仍是 `channel='web'`，不能因此启用桌面控件外观。
-- [usePrefersMobileLayout](../src/hooks/usePrefersMobileLayout.tsx) 当前仅判断 `≤767px`，桌面嵌入窄窗口也会返回 `true`。`touch-mobile:` 实际是 `≤1023px` 的宽度规则，不是触摸或手机设备判断。
+- [usePrefersMobileLayout](../src/hooks/usePrefersMobileLayout.tsx) 与 MainLayout 共用布局判断：仅网页在 `≤767px` 时使用 H5 布局；DSH 嵌入页始终使用桌面布局。真实内容宽度仍用于桌面布局内部的排版。`touch-mobile:` 实际是 `≤1023px` 的宽度规则，不是触摸或手机设备判断。
+- 桌面模块首页沿用插件页的 56px 顶部留白、48px 底部留白和 960px 内容上限。侧边基础留白使用宿主传入的 `--dsh-chat-window-width`，按整窗宽度的 4% 计算并限制在 24–48px。首页与插件页都在右侧稳定预留 5px 滚动条空间。旧宿主缺少整窗宽度时使用内容区宽度。弹窗扩展原生视口时继续按同一个宿主宽度排版。
+- 收起侧栏时，宿主可将模块网页放在原生按钮下方。模块外框用 `--dsh-chat-viewport-top` 抵扣这部分顶部距离，标题仍距窗口顶部 56px。
 - [useFinePointer](../src/hooks/useFinePointer.tsx) 判断 `(hover: hover) and (pointer: fine)`，布局、容器与输入能力分开使用。
 - sessionStorage 不可用时有同一页面内的内存回退；刷新后需 URL 或宿主重新提供身份，内存不能跨刷新保存。
 - 网页已支持可选只读 `hostInfo`，见 [types.ts](../src/utils/clientEnvironment/types.ts)。本次核对的 Desktop `src/preload/enterprise-chat.ts` 尚未暴露它；旧宿主桌面 `os` 保留 `unknown`，不能由 `embed=dsh` 推断 Windows/macOS。

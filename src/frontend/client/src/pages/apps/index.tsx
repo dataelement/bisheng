@@ -166,7 +166,7 @@ export default function AppCenter() {
                 MODULE_HOME_FRAME,
                 'relative flex-1',
                 // Align with the mobile shell's navigation and preserve its content spacing.
-                isMobileLayout && 'px-4 pb-5 pt-3 [--module-home-compact-padding:12px_16px_20px]',
+                isMobileLayout && 'px-4 pb-5 pt-3',
             )}
         >
             {isMobileLayout ? (
