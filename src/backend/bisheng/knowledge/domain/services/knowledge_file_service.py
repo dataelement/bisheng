@@ -7,7 +7,7 @@ from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotExistError, KnowledgeMetadataFieldNotExistError, \
-    KnowledgeMetadataFieldExistError, KnowledgeMetadataValueTypeConvertError
+    KnowledgeMetadataFieldExistError, KnowledgeMetadataValueTypeConvertError, KnowledgeProcessingConflictError
 from bisheng.knowledge.domain import utils
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
@@ -28,11 +28,13 @@ class KnowledgeFileService:
         knowledge_repository: 'KnowledgeRepository',
         f048_permission_adapter=None,
         f048_resource_type: str = "knowledge_file",
+        metadata_value_writer=None,
     ):
         self.knowledge_file_repository = knowledge_file_repository
         self.knowledge_repository = knowledge_repository
         self.f048_permission_adapter = f048_permission_adapter
         self.f048_resource_type = f048_resource_type
+        self.metadata_value_writer = metadata_value_writer
 
     async def resolve_permission_target(
         self,
@@ -142,6 +144,10 @@ class KnowledgeFileService:
     async def modify_file_user_metadata(self, login_user: 'UserPayload',
                                         modify_file_metadata_req: 'ModifyKnowledgeFileMetaDataReq'):
         """Add Knowledge File Metadata"""
+        if self.metadata_value_writer is not None:
+            result = await self.metadata_value_writer.amodify_metadata(login_user, modify_file_metadata_req)
+            if result is not None:
+                return result
         knowledge_file_model = await self.knowledge_file_repository.find_by_id(
             entity_id=modify_file_metadata_req.knowledge_file_id)
 
@@ -152,6 +158,9 @@ class KnowledgeFileService:
             entity_id=knowledge_file_model.knowledge_id)
 
         await self._ensure_knowledge_access(login_user, knowledge_model, "edit")
+        if getattr(knowledge_model, "type", None) == 3:
+            raise KnowledgeProcessingConflictError(reason="metadata_value_writer_unconfigured")
+
 
         metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
                                knowledge_model.metadata_fields or []}

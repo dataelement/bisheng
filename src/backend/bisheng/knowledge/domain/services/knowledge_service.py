@@ -44,7 +44,9 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNoEmbeddingError,
     KnowledgeNotExistError,
     KnowledgeNotQAError,
+    KnowledgeOperationConfirmationRequiredError,
     KnowledgeOperationPlanConflictError,
+    KnowledgeProcessingConflictError,
     KnowledgeTagExistError,
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
@@ -85,17 +87,20 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.knowledge.domain.repositories.knowledge_version_read_repository import KnowledgeVersionReadRepository
 from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
     UpdateKnowledgeMetadataFieldsReq,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
+from bisheng.knowledge.domain.services.knowledge_index_results import require_es_write, require_milvus_write
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerPermissionRecord,
     KnowledgeFilePermissionRecord,
     KnowledgePermissionService,
 )
+from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.utils import to_llm_invoke_error
 from bisheng.permission.application.access import (
@@ -146,6 +151,7 @@ class KnowledgeService(KnowledgeUtils):
 
     permission_service = KnowledgePermissionService()
     audit_telemetry_service = KnowledgeAuditTelemetryService()
+    version_read_repository = KnowledgeVersionReadRepository()
 
     def __init__(
         self,
@@ -1100,8 +1106,18 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def update_knowledge_model(cls, *, login_user, knowledge_id, model_id, name=None, description=None):
-        """Legacy endpoint: same-ID metadata retains old bindings unchanged."""
+    def update_knowledge_model(cls, *, login_user, knowledge_id, model_id, name=None, description=None,
+                               confirmation=None, processing_commands=None):
+        """Legacy metadata/QA semantics; SPACE model changes use real PROC."""
+        with get_sync_db_session() as session:
+            candidate = KnowledgeModelReferenceApplication.repository.get(session, knowledge_id)
+            advanced = candidate is not None and candidate.type == KnowledgeTypeEnum.SPACE.value and str(candidate.model) != str(model_id)
+        if advanced:
+            if confirmation is None or processing_commands is None:
+                raise KnowledgeOperationConfirmationRequiredError()
+            return run_async_safe(processing_commands.alegacy_model_confirm(
+                knowledge_id, confirmation, identity=login_user, name=name, description=description
+            ), timeout=60)
         command = None
         repository = KnowledgeModelReferenceApplication.repository
         with get_sync_db_session() as session:
@@ -1670,7 +1686,8 @@ class KnowledgeService(KnowledgeUtils):
         return failed_files + process_files
 
     @classmethod
-    async def rebuild_knowledge_file(cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileReProcess):
+    async def rebuild_knowledge_file(cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileReProcess,
+                                     *, processing_commands=None):
         """
         Rebuild Knowledge Base Files
         :param request:
@@ -1692,8 +1709,15 @@ class KnowledgeService(KnowledgeUtils):
 
         db_file = await KnowledgeFileDao.query_by_id(req_data.kb_file_id)
 
-        if not db_file:
+        if not db_file or db_file.knowledge_id != knowledge.id:
             raise NotFoundError.http_exception()
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequest
+            if processing_commands is None or not all((req_data.confirmation_id, req_data.plan_digest, req_data.idempotency_key)):
+                raise KnowledgeOperationConfirmationRequiredError()
+            command = ProcessingCreateRequest(confirmation_id=req_data.confirmation_id,
+                plan_digest=req_data.plan_digest, idempotency_key=req_data.idempotency_key)
+            return await processing_commands.alegacy_file_confirm(knowledge.id, command, identity=login_user, file_id=db_file.id)
 
         db_file = await cls.process_rebuild_file(db_file, req_data, login_user.user_id, login_user.user_name)
 
@@ -2418,7 +2442,8 @@ class KnowledgeService(KnowledgeUtils):
                     raise ValueError("milvus chunk pk field or vector field is None")
                 record["updater"] = login_user.user_name
                 record["update_time"] = update_time
-                vector_client.col.upsert(record)
+                result = vector_client.col.upsert(record)
+                require_milvus_write(result, attribute="upsert_count", expected=1)
         logger.debug("update_milvus_chunk_updater_info over")
 
         res = es_client.client.update_by_query(
@@ -2436,7 +2461,33 @@ class KnowledgeService(KnowledgeUtils):
             },
             conflicts="proceed",
         )
+        require_es_write(res, action="updated")
         logger.debug(f"update_es_chunk_updater_info: {res}")
+
+    @classmethod
+    def _chunk_target(cls, knowledge, file_id):
+        require_space_processing_idle(knowledge, operation="chunk_write")
+        file = KnowledgeFileDao.query_by_id_sync(file_id)
+        if file is None or file.knowledge_id != knowledge.id or file.file_type != 1:
+            raise NotFoundError.http_exception()
+        if file.status in {1, 4, 5}:
+            raise KnowledgeProcessingConflictError(reason="chunk_file_processing")
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            anchor = run_async_safe(
+                cls.version_read_repository.aget_anchor(tenant_id=get_current_tenant_id(), file_id=file_id),
+                timeout=60,
+            )
+            if anchor is None or anchor.space.id != knowledge.id:
+                raise NotFoundError.http_exception()
+        current = KnowledgeDao.query_by_id(knowledge.id)
+        if current is None:
+            raise NotFoundError.http_exception()
+        require_space_processing_idle(current, operation="chunk_write")
+        if (current.model_config_revision, current.index_generation) != (
+            knowledge.model_config_revision, knowledge.index_generation
+        ):
+            raise KnowledgeOperationPlanConflictError(reason="chunk_configuration_changed")
+        return current
 
     @classmethod
     def update_knowledge_chunk(
@@ -2454,6 +2505,7 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id,
             "edit",
         )
+        db_knowledge = cls._chunk_target(db_knowledge, file_id)
 
         logger.info(f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -2478,6 +2530,8 @@ class KnowledgeService(KnowledgeUtils):
         new_text = KnowledgeUtils.aggregate_chunk_metadata(text, new_metadata)
         try:
             res = vector_client.add_texts([new_text], [new_metadata], timeout=10)
+            if not isinstance(res, list) or len(res) != 1:
+                raise KnowledgeFileFailedError(exception="chunk_vector_write_incomplete")
         except MilvusException:
             raise
         except Exception as e:
@@ -2487,8 +2541,10 @@ class KnowledgeService(KnowledgeUtils):
         # delete data
         logger.info(f"act=delete_vector pk={pk}")
         res = vector_client.col.delete(f"pk in {pk}", timeout=10)
+        require_milvus_write(res, attribute="delete_count", expected=len(pk))
         logger.info(f"act=update_vector_over {res}")
 
+        cls._chunk_target(db_knowledge, file_id)
         logger.info(f"act=update_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
         res = es_client.client.update_by_query(
@@ -2506,11 +2562,13 @@ class KnowledgeService(KnowledgeUtils):
                 },
             },
         )
+        require_es_write(res, action="updated")
         logger.info(f"act=update_es_chunk_over {res}")
 
         # update metadata updater and update_time
         cls.update_chunk_updater_info(vector_client, es_client, db_knowledge, file_id, login_user)
 
+        cls._chunk_target(db_knowledge, file_id)
         KnowledgeFileDao.update_file_updater(file_id, login_user.user_id, login_user.user_name)
 
         return True
@@ -2529,6 +2587,7 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id,
             "edit",
         )
+        db_knowledge = cls._chunk_target(db_knowledge, file_id)
 
         logger.info(f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -2536,6 +2595,8 @@ class KnowledgeService(KnowledgeUtils):
             expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             timeout=10,
         )
+        require_milvus_write(res, attribute="delete_count")
+        cls._chunk_target(db_knowledge, file_id)
         logger.info(f"act=delete_vector_over {res}")
 
         logger.info(
@@ -2552,10 +2613,12 @@ class KnowledgeService(KnowledgeUtils):
             },
             conflicts="proceed",
         )
+        require_es_write(res, action="deleted")
         logger.info(f"act=delete_es_over {res}")
 
         cls.update_chunk_updater_info(vector_client, es_client, db_knowledge, file_id, login_user)
 
+        cls._chunk_target(db_knowledge, file_id)
         KnowledgeFileDao.update_file_updater(file_id, login_user.user_id, login_user.user_name)
 
         return True

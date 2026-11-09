@@ -35,14 +35,26 @@ export function requiresManagementScope(method: string, raw: string): boolean {
     [["PATCH", "DELETE"], /^\/api\/v1\/apps\/[^/]+$/],
     [["POST"], /^\/api\/v1\/apps\/[^/]+\/actions\/[^/]+$/],
     [["POST", "PUT", "DELETE"], /^\/api\/v1\/apps\/[^/]+\/secrets\/[^/]+$/],
-    [["PATCH"], /^\/api\/v1\/apps\/[^/]+\/data\/tables\/[^/]+\/rows(?:\/[^/]+)?$/],
+    [
+      ["PATCH"],
+      /^\/api\/v1\/apps\/[^/]+\/data\/tables\/[^/]+\/rows(?:\/[^/]+)?$/,
+    ],
     [
       ["POST", "PATCH"],
       /^\/api\/v1\/apps\/[^/]+\/runtime\/(?:materials(?:\/[^/]+)?|restore|operations\/[^/]+\/cancel)$/,
     ],
-    [["POST"], /^\/api\/v1\/apps\/[^/]+\/(?:withdraw|publish\/manual-publish)$/],
-    [["POST", "DELETE"], /^\/api\/v1\/apps\/[^/]+\/versions\/[^/]+\/preview(?:\/[^/]+)?$/],
-    [["POST", "PUT", "PATCH", "DELETE"], /^\/api\/v1\/(?:roles|user-groups)(?:\/[^/]+)?$/],
+    [
+      ["POST"],
+      /^\/api\/v1\/apps\/[^/]+\/(?:withdraw|publish\/manual-publish)$/,
+    ],
+    [
+      ["POST", "DELETE"],
+      /^\/api\/v1\/apps\/[^/]+\/versions\/[^/]+\/preview(?:\/[^/]+)?$/,
+    ],
+    [
+      ["POST", "PUT", "PATCH", "DELETE"],
+      /^\/api\/v1\/(?:roles|user-groups)(?:\/[^/]+)?$/,
+    ],
     [["POST"], /^\/api\/v1\/workflow\/(?:create|versions|change_version)$/],
     [["PATCH"], /^\/api\/v1\/workflow\/(?:update\/[^/]+|status)$/],
     [["PUT", "DELETE"], /^\/api\/v1\/workflow\/versions\/[^/]+$/],
@@ -54,7 +66,14 @@ export function requiresManagementScope(method: string, raw: string): boolean {
       ["POST"],
       /^\/api\/v1\/knowledge\/(?:create|copy|qa\/copy|upload\/[^/]+|tags|file\/tags(?:\/batch)?)$/,
     ],
-    [["GET"], /^\/api\/v1\/knowledge\/space\/[^/]+\/(?:references|deletion\/[^/]+)$/],
+    [
+      ["POST"],
+      /^\/api\/v1\/knowledge\/space\/[^/]+\/copy\/(?:precheck|confirm)$/,
+    ],
+    [
+      ["GET"],
+      /^\/api\/v1\/knowledge\/space\/[^/]+\/(?:references|deletion\/[^/]+)$/,
+    ],
     [
       ["POST"],
       /^\/api\/v1\/knowledge\/space\/[^/]+\/files\/batch\/(?:download|tag|retry)\/(?:inspect|precheck|confirm)$/,
@@ -69,7 +88,9 @@ export function requiresManagementScope(method: string, raw: string): boolean {
       /^\/api\/v1\/knowledge\/space\/[^/]+\/processing-jobs(?:\/precheck|\/[^/]+\/retry)?$/,
     ],
   ];
-  return rules.some(([methods, pattern]) => methods.includes(verb) && pattern.test(path));
+  return rules.some(
+    ([methods, pattern]) => methods.includes(verb) && pattern.test(path),
+  );
 }
 
 export function guardManagementResponse(
@@ -80,7 +101,11 @@ export function guardManagementResponse(
   if (raw === undefined) return;
   const tenantId = Number(raw);
   if (!Number.isSafeInteger(tenantId) || tenantId <= 0) return;
-  if (snapshot != null && effectiveTenant != null && snapshot !== effectiveTenant)
+  if (
+    snapshot != null &&
+    effectiveTenant != null &&
+    snapshot !== effectiveTenant
+  )
     throw new Error("management_scope_stale");
   if (effectiveTenant !== null && tenantId !== effectiveTenant) {
     announceManagementScope(tenantId);
