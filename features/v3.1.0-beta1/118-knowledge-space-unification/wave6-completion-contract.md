@@ -1170,3 +1170,16 @@ T963先新test_inbound_owner_stream.py原生反例；T964仅原resource_referenc
 内循环O(1)检查捕获TX.assert_current/session/current_tenant_id（原方法拒bypass/无具体tenant）及同Repo weak scope registration identity，必要同authority/owner常量检查；不每页重新扫描全部receipts/targets，不读Verifier私有字段、不造子scope/新authority。尾部再原_check_scope完整校验；异常、提前aclose或取消均不能证明检查完成。后继D3必须完整耗尽并通过原identity/Coverage尾验后才返回任何可展示impact/确认结果，流本身不是删除许可。篡改scope/原TargetKey在yield之间也不能改变后续SQL目标，末验拒绝；旧page首尾完整验证照旧。
 
 预算单列：T目标/R引用/G=ceil(T/200)，SQL≤G+floor(R/limit)，每SQL≤200 IDs/≤limit rows，代表性KNFILE页总params≤250；原TargetOwner/D1/Disclosure成本独立测，不泛称全系统线性。流完整scope验证仅首尾各一次（编译/排序另计），内guard常数；无T×引用页。真实401/1001/10001目标、稀疏/密集/整200空尾、完整身份LEFTjoin缺口/旧scope复制/切TX/tenant/bypass/Key篡改/取消/无DML及旧owner_page/Model impact控制。真实owner receipts/native Session，不fake scope或SQL字符串替代。Controller预auth和SourceDisclosure先不实现，避免新增派生child删除gate或持本SQL事务跨FGA。
+
+
+## 91. 原Catalog受控visibility等级与namespace声明 C1：已冻结
+
+旧正式1b83a1c6f的真实SSOT/原API AST→native SQLite→现SnapshotRepo证据两格已核：官方ASSIGN_ACTION_LEVEL允许use=3，再建{use,download}，原等级3；现退役会降1而被原一致性门拒。原use_kb经真实legacy mapper产纯use，旧完整use scopes含library且不含SPACE，并非“仅library”API可编辑。/private/tmp/test_f118_catalog_reachability.py两绿及native before JSON保留；/private/tmp/test_f118_controlled_tier_floor.py十格AST试验验证所需窄行为，非线上数据量或正式发布证明。
+
+T965测试先新test_permission_retirement_namespace_catalog.py；T966只原permission/migration/f118_plan.py与原permission/domain/services/model_policy.py两生产叶。原Plan605行/Policy为历史大叶例外，允许最窄必要增量，不无关重构/压行；新测试≤600。只纯Catalog，未做资源namespace/SQL/FGA发布，不关闭T157158。
+
+build_catalog_retirement_plan原kwargs补namespace_type_mappings:tuple[tuple[str,str],...]=()；只允许空或((knowledge_library,knowledge_space),)，拒反向/重复/任意其他映射。该事实存CatalogRetirementPlan且进入原_catalog_payload/_checksum，所有本叶内重建显式携带、不从after猜；同原canonical/derive_action_release/derive_permission_models，无新hash/授权模型/SQL字段。默认空不改变旧scopes语义；非空仅当原受控visibility provenance包含library时加入SPACE标记，不修改任何非use action scope/选择/模型key/name/active/allow_same/legacy_source_key。
+
+仅合法server-owned visibility_types非空时，_custom_model的canonical derived_level取具体动作max与visibility_level的max；没有provenance的普通custom内容/checksum与原代码完全相同，standard等级不动。floor必须来自正式before合法原等级，保原HTTP visibility字段只读、禁止客户端设floor。保原plan原等级/非use效果一致性门：已有F118 metadata高于before derived的异常形状（download1/visibility3/before derived1）必须明确block，不能静默提升。仅canonical重编该异常形状可能成3的边界要显式测试并在正式盘点拒绝该不一致输入，不把这类trial当新授权来源。
+
+验证真实old native mixed3→3/pure1→1、各原适用resource的等级/非use动作不变、默认与反向/伪映射/篡改hash、普通无metadata完全相同、标准与原HTTP只读、异常before仍block。映射后的现有SPACE必须后继联合Resource计划按原Grant/Source/可见tuple逐项验证，不得新增可见；当前scope空洞custom SPACE事实仍原preflight拒绝。原f118_verify重建mapped Catalog的接线及NamespacePlan/typed graph后继另冻：本卡映射验证不支持处应failclosed，不能假报联合verify完成。旧无映射verify/原权限迁移和模型policy回归必须保持。Source按Grant一次分桶/Catalog一次编译，不增N资源重编或Grant×Source积。
