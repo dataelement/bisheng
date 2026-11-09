@@ -13,7 +13,6 @@ from bisheng.resource_reference.application.source_contracts import (
     TransientTargetRequest,
     canonical_payload_json,
 )
-from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.workflow.application.reference_source_owner import _references, normalize_execution_graph
 
 
@@ -85,6 +84,8 @@ async def _saved(session, runtime, identity, workflow_id, version_id, supplied_g
     if override:
         if not isinstance(override, dict) or any(not isinstance(value, dict) for value in override.values()):
             raise ResourceReferenceInvalidError(reason="workflow_override_invalid")
+        from bisheng.worker.workflow.redis_callback import RedisCallback
+
         executable = RedisCallback.override_nodes_params(executable, override)
         if _references(executable) != result.snapshot.references:
             raise ResourceReferenceInvalidError(reason="workflow_override_changes_references")
