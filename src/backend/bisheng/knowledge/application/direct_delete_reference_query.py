@@ -132,10 +132,16 @@ class DirectDeleteReferenceQuery:
         return units, keys, tuple(sorted(keys.values(), key=lambda key: key.lock_order_key))
 
     @staticmethod
-    def _slot(row, units, targets, sources, seen):
+    def _slot(row, units, targets, sources, seen, *, tenant_id, space_id):
         raw = row.target_type, row.target_id
+        legacy = row.legacy_invalid_reason == "target_missing" and all(
+            type(value) is str and value for value in (row.legacy_run_id, row.legacy_evidence_key)
+        )
+        legacy_fields = (row.legacy_invalid_reason, row.legacy_run_id, row.legacy_evidence_key)
         if (
             raw not in units
+            or (not legacy and any(value is not None for value in legacy_fields))
+            or (not legacy and (row.target_tenant_id != tenant_id or row.target_space_id != str(space_id)))
             or type(row.id) is not int
             or row.id <= 0
             or row.id in seen
@@ -189,7 +195,7 @@ class DirectDeleteReferenceQuery:
                 owner_scope = self.runtime.repository.target_owner_scope(session, receipts)
                 async for page in self.runtime.repository.aiter_inbound_for_owner_pages(session, owner_scope):
                     for row in page:
-                        fact = self._slot(row, units, target_by_raw, sources, seen)
+                        fact = self._slot(row, units, target_by_raw, sources, seen, tenant_id=tenant, space_id=space_id)
                         references.append(fact)
                         unit_sources[fact.unit_index].add(fact.source)
                         unit_slots[fact.unit_index][fact.source.source_type] += 1

@@ -607,3 +607,10 @@ RRT fixed27aa5359e990已Root完整读两生产diff，normalmerge d0c6e3872d；�
 2152eaefb865已normalmerge；Root已完整读两App、原peek/确认getter生产diff。Root实际/tmp最后ready await残留dirty File82改回源空间，原版DID NOT RAISE真红0.69s（f118-root-move-tail-pending-red）；正式125da4881c三红/一控制后，完整Session提交前与两共同SP释放前加UOW检查，未在合法Repo内部pending中途拒。主树8实际路径含Root原/tmp探针63 passed/15.12s，/private/tmp/f118-root-move-owner-integrated.log及XML。作者25路径410 passed/65.72s，旧adapter夹具把Source10写40的1项失败仅精确修fixture后同组绿，不算产品红。
 
 401/10001独立roots与changes预算分别precheck/accept184/2920 SQL，attempt/logical1611/37035（File/Doc/Ready Item各N=3N，其余分页项）；ready-renew14/max4绑定，claim68/guard78/checkpoint68/ACK71两规模同常量，零fullPlan/manifest。原Item为executemany N行×23绑定，不误作N参数IN；GROUP BY原10001 Item匹配driver约2.008ms另列，不称ACK总CPU恒定。原真实index adapter已联通Owner durable target_verified/source_cleaned与五标量ACK；实际worker/HTTP/旧接口整链仍§126继续，不因内部Owner完成勾整移动任务。
+
+
+### 知识直接引用实际target元数据资格（2026-11-09）
+
+原T103–T110业务链检查发现D2原raw flow只核Source ready/revision，未核非legacy target owner/space。官方25716首5红/37控制中，2项把完整既有legacy误当数据错误的oracle不符合原已确认行为；首次实现也使原legacy保留控制失败，已撤回该范围扩张并保持原旧断言。完整legacy（含owner未知）仍保留阻断事实、不猜/改owner、不恢复失效引用；仅非legacy owner/space漂移及非法部分bundle拒。生产仍同Scope/receipt，逐行O(1)，无额外SQL/跨源扫描。
+
+精确修正的新3红+3legacy控制，用git原HEAD源码/tmp独立加载实证0.55s（f118-delete-inbound-metadata-red-corrected），其余36已由首原选集控制，不冒称全部红。最终D1/D2四实际路径99 passed/6.68s，/private/tmp/f118-delete-inbound-metadata-corrected.log及XML，含401/10001预算；旧legacy保留、foreign Source只数量等全部原断言保持。原T103–T110仍按业务入口/删除投影/恢复完整验收，不将此校验单独计为完成。
