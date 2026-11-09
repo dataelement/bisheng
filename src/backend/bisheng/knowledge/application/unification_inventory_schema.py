@@ -123,7 +123,7 @@ _CONVERSION_COMMON = _spec(
     "schema_version:int run_id:str writer_contract_version:str tenant_id:positive command_key:hash operation:str"
 )
 _CONVERSION_FIELDS = {
-    "resource_conversion": "knowledge_id:positive before_business_digest:hash after_business_digest:hash before_neutral_digest:hash after_neutral_digest:hash after_inventory_business_revision_digest:hash after_owner_configuration_digest:hash target_type:int target_is_released:bool target_migration_origin:str",
+    "resource_conversion": "knowledge_id:positive before_business_digest:hash after_business_digest:hash before_neutral_digest:hash after_neutral_digest:hash after_inventory_business_revision_digest:hash after_owner_configuration_digest:hash target_type:int target_is_released:bool target_migration_origin:str creator_user_id:positive membership_action:str before_member_count:nonnegative before_member_digest:hash existing_creator_member_id:positive? creator_template_digest:hash creator_planned_at:str?",
     "initialize_v1": "knowledge_id:positive file_id:positive file_business_digest:hash before_relation_digest:hash natural_key:hash document_template_digest:hash version_template_digest:hash file_level_path:str? level:int? planned_at:str",
     "tag_conversion": "tag_id:positive knowledge_id:positive before_digest:hash after_digest:hash from_business_type:str to_business_type:str",
     "tag_link_conversion": "link_id:positive file_id:positive knowledge_id:positive tag_id:positive before_digest:hash after_digest:hash? from_type:int to_type:int action:str survivor_link_id:positive survivor_digest:hash",

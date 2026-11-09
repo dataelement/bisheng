@@ -120,7 +120,7 @@ async def database(resource_native, monkeypatch):
             plan_ref={"object_key": "plan/original", "sha256": IDENTITY["plan_hash"]},
         )
         await runs.aadvance(session, **IDENTITY, expected_phase="baseline_frozen", next_phase="converting")
-    facts = await producer.acquire(resource_native)
+    facts = await producer.acquire(resource_native, planned_at=NOW)
     async with engine.connect() as connection:
         defaults = tuple(
             producer.DefaultRow(*row)
@@ -140,7 +140,17 @@ async def database(resource_native, monkeypatch):
     for kind in producer.KINDS:
         values = facts[kind]
         for offset in range(0, max(len(values), 1), 200):
-            getattr(builder, "add_" + kind)(values[offset : offset + 200])
+            batch = values[offset : offset + 200]
+            kwargs = (
+                {
+                    "creator_memberships": tuple(
+                        plan for plan in facts["creator_memberships"] if plan.knowledge_id in {row.id for row in batch}
+                    )
+                }
+                if kind == "resources"
+                else {}
+            )
+            getattr(builder, "add_" + kind)(batch, **kwargs)
     builder.add_defaults(defaults)
     commands = tuple(builder.finish())
     return SimpleNamespace(
@@ -357,7 +367,7 @@ async def test_tag_conversion_rechecks_actual_owner_and_link_version_relations(r
 
 async def test_actual_version_rows_are_not_rescanned_for_each_file_in_a_batch(repo, database, monkeypatch):
     await database.insert(raw.KnowledgeFile, [raw.file(ident) for ident in range(10, 411)])
-    facts = await producer.acquire(database)
+    facts = await producer.acquire(database, planned_at=NOW)
     builder = importlib.import_module(
         "bisheng.knowledge.application.unification_conversion_plan"
     ).ConversionPlanBuilder(
@@ -366,7 +376,17 @@ async def test_actual_version_rows_are_not_rescanned_for_each_file_in_a_batch(re
     for kind in producer.KINDS:
         values = facts[kind]
         for offset in range(0, max(len(values), 1), 200):
-            getattr(builder, "add_" + kind)(values[offset : offset + 200])
+            batch = values[offset : offset + 200]
+            kwargs = (
+                {
+                    "creator_memberships": tuple(
+                        plan for plan in facts["creator_memberships"] if plan.knowledge_id in {row.id for row in batch}
+                    )
+                }
+                if kind == "resources"
+                else {}
+            )
+            getattr(builder, "add_" + kind)(batch, **kwargs)
     builder.add_defaults(())
     commands = tuple(cmd for cmd in builder.finish() if cmd.operation == "initialize_v1")[:200]
     scans = []

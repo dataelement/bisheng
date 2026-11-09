@@ -275,7 +275,7 @@ async def test_native_large_conversion_and_fresh_session_recovery_are_linear_and
     from bisheng.knowledge.domain.services.unification_fingerprints import digest
 
     await database.insert(native.raw.KnowledgeFile, [native.raw.file(i) for i in range(10, count + 7)])
-    facts = await native.producer.acquire(database)
+    facts = await native.producer.acquire(database, planned_at=native.NOW)
     builder = importlib.import_module(
         "bisheng.knowledge.application.unification_conversion_plan"
     ).ConversionPlanBuilder(
@@ -286,7 +286,17 @@ async def test_native_large_conversion_and_fresh_session_recovery_are_linear_and
     for kind in native.producer.KINDS:
         rows = facts[kind]
         for offset in range(0, max(len(rows), 1), 200):
-            getattr(builder, "add_" + kind)(rows[offset : offset + 200])
+            values = rows[offset : offset + 200]
+            kwargs = (
+                {
+                    "creator_memberships": tuple(
+                        plan for plan in facts["creator_memberships"] if plan.knowledge_id in {row.id for row in values}
+                    )
+                }
+                if kind == "resources"
+                else {}
+            )
+            getattr(builder, "add_" + kind)(values, **kwargs)
     builder.add_defaults(())
     commands = tuple(cmd for cmd in builder.finish() if cmd.operation == "initialize_v1")
     assert len(commands) == count

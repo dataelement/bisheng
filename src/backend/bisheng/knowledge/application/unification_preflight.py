@@ -8,9 +8,18 @@ from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.knowledge.application.unification_conversion_plan import ConversionPlanBuilder
 from bisheng.knowledge.application.unification_inventory_codec import digest, record_from_row, record_from_values
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
-from bisheng.knowledge.domain.repositories.unification_control_repository import UnificationControlRepository
+from bisheng.knowledge.domain.repositories.unification_control_repository import (
+    CreatorFact,
+    UnificationControlRepository,
+)
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
 from bisheng.knowledge.domain.repositories.unification_resource_repository import UnificationResourceRepository
+from bisheng.knowledge.domain.repositories.unification_space_membership_repository import (
+    SpaceMembershipHeader,
+    SpaceMembershipRow,
+    UnificationSpaceMembershipRepository,
+)
+from bisheng.knowledge.domain.services.unification_space_membership_plan import plan_space_creator_membership
 from bisheng.llm.domain.repositories.migration_target_repository import ModelMigrationTargetFact
 from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
     PermissionMigrationSnapshotRepository,
@@ -88,11 +97,12 @@ def source_decision(record, *, tenant_id):
 
 
 class UnificationPreflight:
-    def __init__(self, *, resources=None, controls=None, permissions=None, inventory=None):
+    def __init__(self, *, resources=None, controls=None, permissions=None, inventory=None, memberships=None):
         self.resources = resources if resources is not None else UnificationResourceRepository()
         self.inventory = inventory if inventory is not None else UnificationInventoryRepository()
         self.controls = controls if controls is not None else UnificationControlRepository()
         self.permissions = permissions if permissions is not None else PermissionMigrationSnapshotRepository()
+        self.memberships = memberships if memberships is not None else UnificationSpaceMembershipRepository()
 
     @staticmethod
     async def _pages(repository, method, session):
@@ -119,6 +129,47 @@ class UnificationPreflight:
                 _blocked("non_advancing_page")
             after = page.next_after
 
+    async def _membership_batch(self, session, rows, after_id):
+        selected = tuple(row for row in rows if row.type in (0, 3))
+        if not selected:
+            return (), {}, after_id
+        page = await self.memberships.apage_headers(session, after_id=after_id, limit=len(selected))
+        if (
+            any(type(row) is not SpaceMembershipHeader for row in page.items)
+            or tuple(row.knowledge_id for row in page.items) != tuple(row.id for row in selected)
+            or (page.next_after is not None and page.next_after != page.items[-1].knowledge_id)
+        ):
+            _blocked("membership_headers_incomplete")
+        for header, resource in zip(page.items, selected, strict=True):
+            if (header.tenant_id, header.knowledge_type, header.creator_user_id) != (
+                resource.tenant_id,
+                resource.type,
+                resource.user_id,
+            ):
+                _blocked("membership_header_resource_changed")
+        by_root = {row.id: [] for row in selected}
+        after = None
+        while True:
+            members = await self.memberships.apage_members(
+                session, knowledge_ids=tuple(by_root), after_id=after, limit=200
+            )
+            if len(members.items) > 200:
+                _blocked("membership_page_limit")
+            for member in members.items:
+                if type(member) is not SpaceMembershipRow or member.knowledge_id not in by_root:
+                    _blocked("membership_parent_changed")
+                by_root[member.knowledge_id].append(member)
+            if members.next_after is None:
+                break
+            if (
+                not members.items
+                or members.next_after != members.items[-1].id
+                or (after is not None and members.next_after <= after)
+            ):
+                _blocked("membership_page_not_advancing")
+            after = members.next_after
+        return page.items, by_root, page.items[-1].knowledge_id
+
     async def aiter_tenant(self, session, *, catalog_plan, planned_at):
         tenant = get_current_tenant_id()
         builder = ConversionPlanBuilder(
@@ -128,19 +179,20 @@ class UnificationPreflight:
         )
         tenant_fact = await self.controls.aget_tenant(session)
         yield "control", record_from_row(tenant_fact)
-        seen_creators = set()
+        seen_creators = {}
+        member_after = None
         spaces, files, departments = {}, {}, set()
         role_keys, relationship_rows = set(), []
         storage_bytes = 0
 
         async def creator_facts(ids):
-            wanted = tuple(sorted(ids - seen_creators))
+            wanted = tuple(sorted(ids - seen_creators.keys()))
             for offset in range(0, len(wanted), 200):
                 facts = await self.controls.ainspect_users(session, user_ids=wanted[offset : offset + 200])
                 for fact in facts:
-                    if not fact.exists:
+                    if type(fact) is not CreatorFact or fact.user_id not in wanted or fact.exists is not True:
                         _blocked("creator_missing")
-                    seen_creators.add(fact.user_id)
+                    seen_creators[fact.user_id] = fact
                     yield record_from_row(fact)
 
         for method in (
@@ -155,7 +207,24 @@ class UnificationPreflight:
             "department_spaces",
         ):
             async for rows in self._pages(self.resources, "alist_" + method, session):
-                if method in {"resources", "files", "documents", "versions", "tags", "tag_links"}:
+                if method == "resources":
+                    headers, member_rows, member_after = await self._membership_batch(session, rows, member_after)
+                    wanted = {row.creator_user_id for row in headers if row.creator_user_id is not None}
+                    async for fact in creator_facts(wanted):
+                        yield "control", fact
+                    membership_plans = []
+                    for header in headers:
+                        original_members = tuple(member_rows[header.knowledge_id])
+                        plan = plan_space_creator_membership(
+                            header, original_members, seen_creators.get(header.creator_user_id), planned_at=planned_at
+                        )
+                        if plan is not None:
+                            membership_plans.append(plan)
+                        yield "control", record_from_row(header)
+                        for member in original_members:
+                            yield "control", record_from_row(member)
+                    builder.add_resources(rows, creator_memberships=tuple(membership_plans))
+                elif method in {"files", "documents", "versions", "tags", "tag_links"}:
                     getattr(builder, "add_" + method)(rows)
                 creators = set()
                 for row in rows:
@@ -185,6 +254,10 @@ class UnificationPreflight:
                     yield "resources", record
                 async for fact in creator_facts(creators):
                     yield "control", fact
+            if method == "resources":
+                tail = await self.memberships.apage_headers(session, after_id=member_after, limit=1)
+                if tail.items or tail.next_after is not None:
+                    _blocked("membership_resource_missing")
 
         ancestors = set()
         for item in files.values():
