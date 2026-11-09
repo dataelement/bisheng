@@ -76,7 +76,7 @@ def source_decision(record, *, tenant_id):
             fact.target_tenant_id != tenant_id
             or not fact.space_exists
             or fact.space_tenant_id != tenant_id
-            or fact.knowledge_type not in {0, 3}
+            or fact.knowledge_type not in {0, 1, 3}
             or (fact.file_type is not None and fact.file_type not in {0, 1})
         ):
             _blocked("knowledge_physical_parent")
