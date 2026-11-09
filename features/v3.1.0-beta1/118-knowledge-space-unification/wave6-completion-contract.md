@@ -1275,3 +1275,14 @@ T986先native成员事实测试，T987仅新domain/repositories/unification_spac
 
 
 §101字段定义接缝T988由Root单独维护提纯后的wire schema叶，在T986真实红之后、T987消费之前：新增space_membership_header闭集(knowledge_id/tenant_id/knowledge_type/creator_user_id/member_count/row_digest)与space_member闭集(派生tenant_id/knowledge_id+全部真实Member列+row_digest)，不改任何已有wire。T987仍仅MemberRepo+codec两叶，不把Schema修改暗算为第三生产文件。私有库存允许原角色/状态/nullable值作事实，业务冲突判定由后继preflight；fact不构成可见性或授权。
+
+
+## 102. Catalog显式namespace声明与一次逐模型适用矩阵 C4：已冻结
+
+用户已确认AC80按同模型现有SPACE能力并记录预期差异。原NORMAL0/QA1都属于knowledge_library，不能全局字符串替换资源；本卡先签Catalog声明，资源转换资格/SQL/FGA后继。T989真实pure/native Catalog红测，T990仅permission/migration/f118_plan.py+f118_verify.py两叶；新test_permission_namespace_catalog.py≤600。
+
+CatalogRetirementPlan尾追加namespace_type_mappings:tuple[tuple[str,str],...]=()，以及namespace_applicability_changes:tuple[ModelApplicabilityChange,...]=()。同文件新frozen ModelApplicabilityChange字段model_key/from_resource_type/to_resource_type/before_action_codes/after_action_codes/reason；动作tuple沿原Catalog canonical有效动作顺序，不复制资源/Grant/subjects。build_catalog_retirement_plan新增同名mapping keyword，仅接受严格native tuple空或(("knowledge_library","knowledge_space"),)，其它/重复/反向/链/可变结构拒。每模型仅一次按before Library与after SPACE精确action scopes过滤，reason固定document_library_to_knowledge_space_existing_capabilities；actions scopes/非use选择/key/tier/active/allow_same不变，文件edit不扩。矩阵包括未变化模型，精确一行/model，不Nresources×M重建。action差异包含已单列use退休，并能明确现有SPACE动作差异。
+
+_compile_catalog在原effective use scope与原受控visibility provenance合并后，只有types含knowledge_library且声明mapping时额外保knowledge_space可见provenance，保留library（QA及历史资源仍用），不把SPACE加入CatalogAction.resource_types。pure-use仅可见可撤销，mixed floor沿§99严格签原tier；无library provenance不无端补space，标准按原canonical。全局既有SPACE资源的实际Source/可见集合不得因此放宽，后继资源级原before矩阵/范围洞校验必须阻断非预期变动，不能Catalog成功即放行。
+
+非空mapping及完整matrix进入原_catalog_payload/checksum；空mapping必须matrix空且保持原payload/模型/checksum字节。_resource_context及verify_catalog_retirement重建须显式传原mapping并比完整计划，伪造/删mapping或matrix/改理由/动作/排序/after metadata均拒。C4尚无target namespace资源证明，所以非空mapping的resource builder/verify当前统一failclosed，不让旧resource==before验证误绿；后继C5才显式签actual before/after与target Mode。旧无mapping全部行为继续。测试含pure/mixed/自定义未选动作/标准editor manager差异、QA library marker保留、原scopes逐项相同、原Grant不变/不发布，以及401/1001模型矩阵候选次数预算。不得改Policy/CatalogAPI/codec第三叶，正式artifact接线另冻；本卡不关闭T157158。
