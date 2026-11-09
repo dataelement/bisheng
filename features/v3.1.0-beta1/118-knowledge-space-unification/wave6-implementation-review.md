@@ -447,3 +447,6 @@ D1正式反例b78c14b59原1红→39199d3bc单合并优先级修正；独立原2p
 
 
 完整本地回归固定52892298a7901c3a02876eeafb5fa8d4c4d31730已结束：5160 passed/7原F054中间件占位skip/106422 warnings/318.28秒（/private/tmp/f118-root-move-delete-read-full.log/.xml）。选集为全knowledge_unification（TCP mock单模块另跑）+原三权限回归+旧folder/API/Web dedup/fetch，与原4890同选择口径，增加本波Scope/性能/D1/acceptance。此为固定版本本地结果，不含后继J1a或正式权限联合计划，也不冒MySQL升级/恢复/E2E。旧已证switch_off及QA clear fixture失败分别记录于旧协议卡，未纳入此选择。
+
+
+2026-11-09 C1合同收窄：真实旧use3 mixed输入需保原tier，但普通受控visibility3+download1全局tier1为既有合法语义，不能改旧测试oracle追求普遍max。原§91候选未写生产（只有未跟踪测试草稿且初轮混夹具问题，不计全部真红），现改独立retired_use_level_floor事实前置，不改普通visibility行为；默认None旧checksum保，DDL/签发/存取/联合verify后继装配。用户产品确认不变，技术实现不以扩大现规则求迁移通过。

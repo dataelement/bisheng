@@ -7797,21 +7797,21 @@
   **配对测试**：T963\
   **验证 / 完成条件**：真实红绿/规模/末验，旧公开默认方法原义；不预先开D3或删除许可。
 
-- [ ] **T965 · 原Catalog退役等级与namespace provenance真实反例**
+- [ ] **T965 · 独立迁移等级floor类型与普通visibility对照**
   **类型 / Owner**：测试 / PERM\
-  **写入文件**：`src/backend/test/knowledge_unification/test_permission_retirement_namespace_catalog.py`\
-  **逻辑 / 测试上下文**：W6§91原官方use=3 mixed及原legacy纯use，受控floor/映射/hash/HTTP只读与无metadata不变。\
+  **写入文件**：`src/backend/test/knowledge_unification/test_permission_retired_use_floor_schema.py`\
+  **逻辑 / 测试上下文**：修订W6§91独立readonly nullable字段/native Model、controlled canonical与普通visibility旧oracle不变。\
   **依赖**：T002\
   **覆盖 AC**: AC-78, AC-80, AC-81, AC-83, AC-85\
-  **验证 / 完成条件**：原生before真实红绿/异常拒绝，默认旧迁移和模型policy控制。
+  **验证 / 完成条件**：缺字段真实红/原控制绿，默认None旧payload/checksum相同，非法与HTTP写拒。
 
-- [ ] **T966 · 原Catalog受控退役等级及namespace声明纯计划**
+- [ ] **T966 · 独立受控retired-use等级事实存储及canonical**
   **类型 / Owner**：后端 Domain / PERM\
-  **写入文件**：`src/backend/bisheng/permission/migration/f118_plan.py`；`src/backend/bisheng/permission/domain/services/model_policy.py`\
-  **逻辑 / 测试上下文**：W6§91同canonical/等级门，受控visibility floor和受限namespace映射入hash，不扩大action scope。\
+  **写入文件**：`src/backend/bisheng/permission/domain/models/catalog.py`；`src/backend/bisheng/permission/domain/services/model_policy.py`\
+  **逻辑 / 测试上下文**：修订W6§91仅独立retired_use_level_floor非None时保floor；不改变visibility_level语义，不改Plan或签发。\
   **依赖**：T965\
   **配对测试**：T965\
-  **验证 / 完成条件**：两叶窄增量、固定非作者复验；mapped verify/资源转换后继，未完成不发布。
+  **验证 / 完成条件**：两叶窄增量、原policy/HTTP/native控制；DDL/完整pipeline后继，未完成不发布。
 
 ## 自动化覆盖索引
 

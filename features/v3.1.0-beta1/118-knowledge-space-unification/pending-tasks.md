@@ -178,5 +178,5 @@
 | T962 | 移动reserved接受与原Job持久事实查询 | 后端 Repository / PROC | T961 |
 | T963 | 原OwnerScope引用流规模与完整性反例 | 测试 / EDGE | T958 |
 | T964 | 原OwnerScope精确目标有界引用流 | 后端 Repository / EDGE | T963 |
-| T965 | 原Catalog退役等级与namespace provenance真实反例 | 测试 / PERM | T002 |
-| T966 | 原Catalog受控退役等级及namespace声明纯计划 | 后端 Domain / PERM | T965 |
+| T965 | 独立迁移等级floor类型与普通visibility对照 | 测试 / PERM | T002 |
+| T966 | 独立受控retired-use等级事实存储及canonical | 后端 Domain / PERM | T965 |
