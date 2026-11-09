@@ -23,6 +23,8 @@ from bisheng.knowledge.application.unification_inventory_codec import (
     record_from_row,
     record_from_values,
 )
+from bisheng.knowledge.application.unification_permission_inventory import PermissionInventoryVerifier
+from bisheng.knowledge.application.unification_permission_namespace import catalog_namespace_records
 from bisheng.knowledge.application.unification_preflight import UnificationPreflight, source_decision
 from bisheng.knowledge.application.unification_source_codec import decode_source_page, encode_source_page
 from bisheng.knowledge.application.unification_sources import (
@@ -47,7 +49,7 @@ from bisheng.permission.application.migration_read import (
 from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
     PermissionMigrationSnapshotRepository,
 )
-from bisheng.permission.migration.f118_plan import build_catalog_retirement_plan
+from bisheng.permission.migration.f118_plan import ResourceRetirementPlanner, build_catalog_retirement_plan
 from bisheng.resource_reference.application.contracts import ReferenceSpec, TransactionIdentity, reference_set_digest
 
 _SECTIONS = {
@@ -75,6 +77,14 @@ _SECTIONS = {
         "space_member",
     },
     "permission": {"resource_mode", "grant", "assignee", "visible_source"},
+    "permission_namespace": {
+        "namespace_catalog",
+        "namespace_applicability",
+        "namespace_target_mode",
+        "namespace_after_grant",
+        "namespace_after_assignee",
+        "namespace_after_visible_source",
+    },
     "catalog": {"catalog_release", "authorization", "catalog_action", "permission_model"},
     "physical": {"physical_index", "physical_object"},
     "tasks": {"queued_task", "queued_task_orphan", "broker_task"},
@@ -249,14 +259,28 @@ class UnificationInventoryApplication:
                 ):
                     _blocked("material_manifest_identity")
 
-    async def _verify_frozen(self, result, *, environment, backup_ref, schema_ref, current):
+    async def _verify_frozen(self, result, *, environment, backup_ref, schema_ref, current, permission_planner=None):
         async for _ in self.aiter_frozen_pages(
-            result, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref, current=current
+            result,
+            environment=environment,
+            backup_ref=backup_ref,
+            schema_ref=schema_ref,
+            current=current,
+            _permission_planner=permission_planner,
         ):
             continue
         return result
 
-    async def aiter_frozen_pages(self, result, *, environment, backup_ref, schema_ref, current=None):
+    async def aiter_frozen_pages(
+        self,
+        result,
+        *,
+        environment,
+        backup_ref,
+        schema_ref,
+        current=None,
+        _permission_planner=None,
+    ):
         if (
             type(result) is not FrozenGlobalInventoryResult
             or type(result.tenant_ids) is not tuple
@@ -271,6 +295,28 @@ class UnificationInventoryApplication:
         current = current if current is not None else lambda: None
         backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
         baseline, plan = _descriptor(result.baseline_ref), _descriptor(result.plan_ref)
+        current()
+        plan_root_content = await self.store.aload_canonical(plan, run_id=result.run_id, kind="plan")
+        current()
+        plan_root = decode_inventory_page(
+            plan_root_content,
+            run_id=result.run_id,
+            section="manifest",
+            scope="global",
+            tenant_id=None,
+            page_index=0,
+            kind="plan",
+        )
+        metadata = [record.data for record in plan_root.records if record.record_type == "run"]
+        if len(metadata) != 1:
+            _blocked("manifest_metadata")
+        permissions = PermissionInventoryVerifier(
+            run_id=result.run_id,
+            writer_contract_version=result.writer_contract_version,
+            target_model_checksum=metadata[0]["authorization_model_checksum"],
+            catalog_plan_checksum=metadata[0]["catalog_digest"],
+            permission_planner=_permission_planner,
+        )
         for kind, descriptor in (("baseline", baseline), ("plan", plan)):
             expected_baseline = None if kind == "baseline" else baseline
             seen, indices = set(), {}
@@ -295,9 +341,12 @@ class UnificationInventoryApplication:
                 if depth > 64 or ref["object_key"] in seen:
                     _blocked("manifest_graph")
                 seen.add(ref["object_key"])
-                content = await self.store.aload_canonical(
-                    ref, run_id=result.run_id, kind="sources" if section == "sources" else kind
-                )
+                if kind == "plan" and depth == 0:
+                    content = plan_root_content
+                else:
+                    content = await self.store.aload_canonical(
+                        ref, run_id=result.run_id, kind="sources" if section == "sources" else kind
+                    )
                 current()
                 if section == "sources":
                     page = decode_source_page(content, run_id=result.run_id, tenant_id=tenant_id, page_index=page_index)
@@ -318,6 +367,7 @@ class UnificationInventoryApplication:
                         for record in page.records:
                             _section(section, record)
                             memberships.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
+                            permissions.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
                     key = (kind, section, scope, tenant_id)
                     if page_index != indices.get(key, 0):
                         _blocked("manifest_page_order")
@@ -342,6 +392,13 @@ class UnificationInventoryApplication:
                     }
                     if any(value.get(name) != item for name, item in expected.items()):
                         _blocked("frozen_input_changed")
+                    if kind == "baseline":
+                        permissions.observe(
+                            kind=kind,
+                            section="manifest",
+                            tenant_id=None,
+                            record=next(record for record in page.records if record.record_type == "run"),
+                        )
                 elif metadata:
                     _blocked("nested_manifest_metadata")
                 for record in page.records:
@@ -364,6 +421,7 @@ class UnificationInventoryApplication:
             async for leaf in verify(descriptor):
                 yield leaf
         memberships.finish()
+        permissions.finish()
         await self._materials(
             run_id=result.run_id,
             writer_contract_version=result.writer_contract_version,
@@ -414,18 +472,17 @@ class UnificationInventoryApplication:
         if expected_indices or expected_objects:
             _blocked("incomplete_physical_inventory")
 
-    async def _tenant(self, session, pages, source_inventory, catalog_plan, tenant, identity, planned_at):
+    async def _tenant(self, session, pages, source_inventory, permission_planner, tenant, identity, planned_at):
         context = await source_inventory.aprepare_tenant_context(session, **identity)
         resource_requests, object_requests = [], []
         spaces = {}
         memberships = MembershipInventoryVerifier()
         async for section, record in self.preflight.aiter_tenant(
-            session, catalog_plan=catalog_plan, planned_at=planned_at
+            session, permission_planner=permission_planner, planned_at=planned_at
         ):
-            memberships.observe(
-                kind="plan" if section == "conversion" else "baseline", section=section, tenant_id=tenant, record=record
-            )
-            await pages.add(section, tenant, record, kind="plan" if section == "conversion" else "baseline")
+            kind = "plan" if section in {"conversion", "permission_namespace"} else "baseline"
+            memberships.observe(kind=kind, section=section, tenant_id=tenant, record=record)
+            await pages.add(section, tenant, record, kind=kind)
             if record.record_type == "resource":
                 value = record.data
                 spaces[value["id"]] = value["type"]
@@ -535,13 +592,20 @@ class UnificationInventoryApplication:
             catalog = await self.permissions.aload_catalog_baseline(session, environment=environment)
             target_checksum = target_authorization_model_checksum()
             catalog_plan = build_catalog_retirement_plan(
-                **identity, before=catalog, target_model_checksum=target_checksum
+                **identity,
+                before=catalog,
+                target_model_checksum=target_checksum,
+                namespace_type_mappings=(("knowledge_library", "knowledge_space"),),
             )
+            permission_planner = ResourceRetirementPlanner(catalog_plan=catalog_plan)
             pages = _Pages(self.store, run_id, current)
             for row in (catalog.release, catalog.authorization, *catalog.actions, *catalog.models):
                 await pages.add("catalog", None, record_from_row(row))
             for row in (*catalog_plan.after_actions, *catalog_plan.after_models):
                 await pages.add("catalog", None, record_from_row(row), kind="plan")
+            for record in catalog_namespace_records(permission_planner):
+                await pages.add("permission_namespace", None, record, kind="plan")
+            await pages.finish()
             async with self.reader_factory(catalog) as reader:
                 if not isinstance(reader, PinnedMigrationPermissionReader) or reader._pin != catalog.authorization:
                     _blocked("actual_pinned_reader_required")
@@ -557,7 +621,9 @@ class UnificationInventoryApplication:
                 planned_at = unification_now().replace(microsecond=0)
                 for tenant in tenant_ids:
                     with tenant_execution_scope(tenant):
-                        await self._tenant(session, pages, source_inventory, catalog_plan, tenant, identity, planned_at)
+                        await self._tenant(
+                            session, pages, source_inventory, permission_planner, tenant, identity, planned_at
+                        )
                         await pages.finish()
             async for record in self.queued.aiter_facts(tenant_ids=tenant_ids):
                 _section("tasks", record)
@@ -607,6 +673,15 @@ class UnificationInventoryApplication:
                 ),
             )
             current()
+            candidate = FrozenGlobalInventoryResult(run_id, writer_contract_version, tenant_ids, baseline, plan)
+            await self._verify_frozen(
+                candidate,
+                environment=environment,
+                backup_ref=backup_ref,
+                schema_ref=schema_ref,
+                current=current,
+                permission_planner=permission_planner,
+            )
             self.runs.assert_inventory_clean(session)
             return await self.runs.afreeze_all(
                 session, **identity, tenant_ids=tenant_ids, baseline_ref=baseline, plan_ref=plan

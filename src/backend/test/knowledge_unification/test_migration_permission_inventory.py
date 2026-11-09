@@ -9,9 +9,9 @@ from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.errcode.permission import PermissionMigrationBlockedError
 from bisheng.knowledge.application.unification_inventory_codec import record_from_row, record_from_values
 from bisheng.permission.migration import f118_plan as plans
+from test.knowledge_unification.test_permission_namespace_resource import mapped
 from test.knowledge_unification.test_permission_namespace_resource import original as original
 from test.knowledge_unification.test_permission_namespace_resource import storage as storage
-from test.knowledge_unification.test_permission_namespace_resource import mapped
 
 ERRORS = (KnowledgeOperationPlanConflictError, PermissionMigrationBlockedError)
 

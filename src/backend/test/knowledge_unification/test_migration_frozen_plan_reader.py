@@ -199,23 +199,34 @@ async def test_foreign_scope_bad_count_duplicate_object_and_wrong_root_fail_clos
 
 async def test_legal_empty_sections_and_tenants_do_not_require_fabricated_pages(module, transport, frozen):
     result = await replace_baseline(transport, frozen, ())
-    # A real nonempty conversion plan cannot be attached to an empty baseline.
     with pytest.raises(KnowledgeOperationPlanConflictError):
         await read(module, transport, result)
+    # Empty business tenants still retain the actual global Catalog and its
+    # complete namespace plan. A metadata-only graph is no longer a valid run.
+    pages = await read(module, transport, frozen)
+
+    def entry(page):
+        return record_from_values(
+            "manifest_entry",
+            section=page.section,
+            scope=page.scope,
+            tenant_id=page.tenant_id,
+            page_index=page.page_index,
+            record_count=page.record_count,
+            descriptor=page.descriptor,
+            level=0,
+        )
+
+    baseline = tuple(entry(page) for page in pages if page.kind == "baseline" and page.section == "catalog")
+    result = await replace_baseline(transport, frozen, baseline)
     metadata = next(row for row in root_records(transport, result, "plan") if row.record_type == "run")
-    content = encode_inventory_page(
-        run_id=result.run_id,
-        section="manifest",
-        scope="global",
-        tenant_id=None,
-        page_index=0,
-        records=(metadata,),
-        kind="plan",
-    )
-    plan = await transport.store.aput_canonical(run_id=result.run_id, kind="plan", content=content)
-    result = replace(result, plan_ref=plan)
-    pages = await read(module, transport, result)
-    assert not any(page.kind == "baseline" for page in pages)
+    entries = tuple(entry(page) for page in pages if page.kind == "plan" and page.scope == "global")
+    for node in iter_manifest_nodes(run_id=result.run_id, kind="plan", entries=iter(entries), metadata=metadata):
+        descriptor = await transport.store.aput_canonical(run_id=result.run_id, kind="plan", content=node.content)
+        if node.is_root:
+            plan = descriptor
+    pages = await read(module, transport, replace(result, plan_ref=plan))
+    assert pages and all(page.scope == "global" for page in pages)
     assert result.tenant_ids == (1, 101, 202)
 
 
@@ -270,7 +281,22 @@ async def test_original_depth_boundary_does_not_confuse_manifest_level_indices(m
 
 
 async def test_late_corruption_and_material_corruption_are_errors_not_partial_success(module, transport, frozen):
-    entries = await leaves(transport, frozen, (0, 1))
+    # Retain the complete original Catalog/Member/permission closure so the
+    # targeted trailing transport corruption is reached before semantic checks.
+    entries = tuple(
+        record_from_values(
+            "manifest_entry",
+            section=page.section,
+            scope=page.scope,
+            tenant_id=page.tenant_id,
+            page_index=page.page_index,
+            record_count=page.record_count,
+            descriptor=page.descriptor,
+            level=0,
+        )
+        for page in await read(module, transport, frozen)
+        if page.kind == "baseline"
+    ) + await leaves(transport, frozen, (1,))
     result = await replace_baseline(transport, frozen, entries)
     transport.objects[entries[-1].data["descriptor"]["object_key"]] = b"corrupt tail"
     with pytest.raises(ReferenceCoverageNotReadyError):

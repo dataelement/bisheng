@@ -48,6 +48,25 @@ def module():
     return importlib.import_module("bisheng.knowledge.application.unification_inventory")
 
 
+async def original_library_modes(native, pairs):
+    """Explicit original F048 Root policies; never a production repair default."""
+    await native.insert(
+        permission.ResourcePermissionMode,
+        [
+            {
+                "id": ident,
+                "tenant_id": tenant,
+                "resource_type": "knowledge_library",
+                "resource_id": str(ident),
+                "mode": "CUSTOM",
+                "version": 1,
+                "projection_state": "CURRENT",
+            }
+            for tenant, ident in pairs
+        ],
+    )
+
+
 @pytest.fixture
 async def complete(native, monkeypatch):
     models = (*raw.TABLES, KnowledgeUnificationRun)
@@ -61,6 +80,7 @@ async def complete(native, monkeypatch):
     async with AsyncSession(native.engine) as session, session.begin():
         await permission.seed_catalog(session)
     await native.insert(resources.Knowledge, [resources.resource(9000, model="11")])
+    await original_library_modes(native, ((101, 9000),))
     await native.insert(resources.KnowledgeFile, [resources.file(1)])
     await native.insert(
         raw.LLMServer,
@@ -410,6 +430,7 @@ async def test_global_orphan_keeps_original_claim_without_source_or_tenant_reass
 
 async def test_actual_401_resource_source_inventory_reuses_directories_and_bounded_pages(module, complete, transport):
     await complete.insert(resources.Knowledge, [resources.resource(ident, model=None) for ident in range(10000, 10401)])
+    await original_library_modes(complete, tuple((101, ident) for ident in range(10000, 10401)))
     physical = Physical()
     complete.queries.clear()
     async with AsyncSession(complete.engine) as session, session.begin():
@@ -510,6 +531,7 @@ async def test_full_m2_refuses_final_creation_collision_without_writing_run(modu
             resources.resource(9101, type=3, creation_request_id="collision"),
         ],
     )
+    await original_library_modes(complete, ((101, 9100),))
     async with AsyncSession(complete.engine) as session, session.begin():
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await application(module, transport).arun(session, **transport.inputs)
@@ -528,6 +550,7 @@ async def test_full_m2_frozen_v1_commands_use_one_run_timestamp_across_tenants(
 
     monkeypatch.setattr(module, "unification_now", clock, raising=False)
     await complete.insert(resources.Knowledge, [resources.resource(1000, 1, model=None)])
+    await original_library_modes(complete, ((1, 1000),))
     await complete.insert(resources.KnowledgeFile, [resources.file(2, 1, knowledge_id=1000)])
     async with AsyncSession(complete.engine) as session, session.begin():
         await application(module, transport).arun(session, **transport.inputs)
