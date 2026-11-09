@@ -1221,6 +1221,7 @@
     "session_kicked_title": "セッションが終了しました"
   },
   "com_app": {
+    "all": "すべて",
     "center_title": "アプリセンター",
     "empty_go_explore": "利用したアプリはまだありません。アプリ広場へどうぞ",
     "explore_more": "さらにアプリを探す",
@@ -1239,6 +1240,11 @@
       "all": "すべてのスペース",
       "created": "自分が作成",
       "department": "部門ナレッジスペース",
+      "empty_all": "ナレッジスペースはまだありません",
+      "empty_content": "まだコンテンツがありません",
+      "empty_created": "まだコンテンツがありません。<cta>今すぐ作成</cta>",
+      "empty_department": "部門ナレッジスペースはまだありません",
+      "empty_joined": "まだコンテンツがありません。<cta>広場へ行って</cta>探してみましょう",
       "joined": "参加中のスペース",
       "load_error": "ナレッジスペースを読み込めませんでした。再試行してください。",
       "more": "その他の操作",

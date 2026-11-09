@@ -15,6 +15,12 @@
 .toolbar { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: var(--vnext-geometry-16) var(--vnext-geometry-24); margin-top: 16px; margin-bottom: 16px; }
 .sort { margin-left: auto; flex: none; max-width: 100%; }
 .panel { min-width: 0; flex: none; padding-bottom: var(--vnext-geometry-24); container-type: inline-size; container-name: knowledge-home; }
+.emptyPanel { flex: 1; min-height: 0; padding-bottom: 0; container-type: size; }
+.emptyPanel .emptyCompact { display: none; }
+@container knowledge-home (width < 320px) or (height < 200px) {
+  .emptyPanel .emptyFull { display: none; }
+  .emptyPanel .emptyCompact { display: flex; }
+}
 /* Reflow fluid cards against a fixed minimum; narrower containers cannot add columns. */
 .grid {
   display: grid;
