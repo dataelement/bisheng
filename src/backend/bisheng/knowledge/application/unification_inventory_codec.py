@@ -140,6 +140,25 @@ def _validate(tag, data):
             or data["target_migration_origin"] != data["run_id"]
         ):
             _invalid()
+        if tag == "resource_conversion":
+            if data["membership_action"] == "insert":
+                if data["existing_creator_member_id"] is not None or data["creator_planned_at"] is None:
+                    _invalid()
+                try:
+                    value = datetime.fromisoformat(data["creator_planned_at"])
+                except ValueError:
+                    _invalid()
+                if value.tzinfo is not None or value.microsecond or value.isoformat() != data["creator_planned_at"]:
+                    _invalid()
+            elif data["membership_action"] == "keep":
+                if (
+                    data["existing_creator_member_id"] is None
+                    or data["creator_planned_at"] is not None
+                    or data["before_member_count"] == 0
+                ):
+                    _invalid()
+            else:
+                _invalid()
         if tag == "initialize_v1":
             try:
                 datetime.fromisoformat(data["planned_at"])

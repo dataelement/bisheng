@@ -15,6 +15,7 @@ from bisheng.knowledge.domain.schemas.unification_conversion import (
     DefaultConversionCommand,
     DefaultSlotProvenance,
     InitializeV1Command,
+    ResourceConversionCommand,
 )
 
 _COMMANDS = {name: cls for cls, name in COMMAND_RECORD_TYPES.items()}
@@ -53,11 +54,18 @@ def decode_sql_conversion_page(content, *, run_id, writer_contract_version, tena
         if cls is None or (values["run_id"], values["writer_contract_version"]) != (run_id, writer_contract_version):
             _invalid()
         try:
-            if cls is InitializeV1Command:
-                value = datetime.fromisoformat(values["planned_at"])
+            time_key = (
+                "planned_at"
+                if cls is InitializeV1Command
+                else "creator_planned_at"
+                if cls is ResourceConversionCommand and values["creator_planned_at"] is not None
+                else None
+            )
+            if time_key is not None:
+                value = datetime.fromisoformat(values[time_key])
                 if value.tzinfo is not None or value.microsecond:
                     _invalid()
-                values["planned_at"] = value
+                values[time_key] = value
             elif cls is DefaultConversionCommand:
                 values["provenance"] = tuple(DefaultSlotProvenance(**item) for item in values["provenance"])
             command = cls(**values)
