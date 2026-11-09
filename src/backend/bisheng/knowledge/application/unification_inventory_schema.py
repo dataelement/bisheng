@@ -14,7 +14,7 @@ _SCHEMAS = {
         "task_kind:str task_id:str space_id:int? file_id:int? document_id:int? version_id:int? payload_tenant_id:positive? state:str reason:str configuration_digest:hash record_digest:hash"
     ),
     "permission_plan": _spec(
-        "tenant_id:positive resource_type:str resource_id:str target_resource_type:str plan_checksum:hash before_digest:hash after_grants_digest:hash visibility_deltas_digest:hash expected_use_changes_digest:hash"
+        "tenant_id:positive resource_type:str resource_id:str target_resource_type:str plan_checksum:hash before_digest:hash after_grants_digest:hash visibility_deltas_digest:hash expected_use_changes_digest:hash mode_id:positive catalog_plan_checksum:hash target_mode_digest:hash after_digest:hash grant_count:nonnegative assignee_count:nonnegative visible_source_count:nonnegative"
     ),
     "resource": _spec(
         "tenant_id:positive id:positive type:int user_id:int? state:int? model:str? index_name:str? collection_name:str? creation_request_id:str? creation_payload_hash:str? old_business_digest:hash neutral_digest:hash"
@@ -118,6 +118,21 @@ _SCHEMAS = {
         "id:positive model_key:str name:str normalized_name:str kind:str config_scope:str derived_level:int? active:bool allow_same_level:bool selected_action_codes:strings effective_action_codes:strings visibility_only_resource_types:strings visibility_level:int? legacy_source_key:str? retired_use_level_floor:int?"
     ),
 }
+
+_SCHEMAS.update(
+    {
+        "namespace_catalog": _spec(
+            "run_id:str writer_contract_version:str before_catalog_checksum:hash target_model_checksum:hash catalog_plan_checksum:hash action_checksum:hash model_checksum:hash from_resource_type:str to_resource_type:str model_count:nonnegative"
+        ),
+        "namespace_applicability": _spec(
+            "catalog_plan_checksum:hash model_key:str from_resource_type:str to_resource_type:str before_action_codes:strings after_action_codes:strings reason:str"
+        ),
+        "namespace_target_mode": {"mode_id": "positive", **_SCHEMAS["resource_mode"]},
+        "namespace_after_grant": {"mode_id": "positive", **_SCHEMAS["grant"]},
+        "namespace_after_assignee": {"mode_id": "positive", **_SCHEMAS["assignee"]},
+        "namespace_after_visible_source": {"mode_id": "positive", **_SCHEMAS["visible_source"]},
+    }
+)
 
 _CONVERSION_COMMON = _spec(
     "schema_version:int run_id:str writer_contract_version:str tenant_id:positive command_key:hash operation:str"

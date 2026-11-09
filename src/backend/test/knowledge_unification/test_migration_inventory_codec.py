@@ -295,11 +295,19 @@ def test_permission_change_plan_has_closed_digests_and_explicit_namespace(codec)
         after_grants_digest=DIGEST,
         visibility_deltas_digest=DIGEST,
         expected_use_changes_digest=DIGEST,
+        mode_id=4,
+        catalog_plan_checksum=DIGEST,
+        target_mode_digest=DIGEST,
+        after_digest=DIGEST,
+        grant_count=1,
+        assignee_count=1,
+        visible_source_count=1,
     )
     assert decode(
         codec,
-        encode(codec, (record,), section="permission"),
-        section="permission",
+        encode(codec, (record,), section="conversion", kind="plan"),
+        section="conversion",
+        kind="plan",
     ).records == (record,)
     with pytest.raises(KnowledgeOperationPlanConflictError):
         codec.record_from_values("permission_plan", **(record.data | {"actor_reference": "private-secret"}))

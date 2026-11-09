@@ -192,7 +192,7 @@ async def test_permission_summary_binds_whole_after_with_permission_hash_and_sta
     assert record.data["after_digest"] == plans._checksum(plan.after)
     assert record.data["after_grants_digest"] != plans._checksum(plan.after.grants)
     chinese = replace(plan.after.mode, resource_id="知识空间")
-    assert plans._checksum(chinese) != codec.digest(chinese)
+    assert plans._checksum(chinese) != codec.digest(asdict(chinese))
     raw = encode((record,), section="conversion")
     result = decode_sql_conversion_page(raw, run_id=RUN, writer_contract_version=WRITER, tenant_id=101, page_index=0)
     assert result.commands == () and result.deferred == (record,)
@@ -288,6 +288,42 @@ async def test_catalog_run_and_permission_summary_location_are_not_hints(compile
     for changes in ({"section": "permission"}, {"section": "conversion", "kind": "baseline"}):
         with pytest.raises(KnowledgeOperationPlanConflictError):
             encode((declaration,), **changes)
+
+
+async def test_namespace_leaf_keeps_the_original_bounded_plan_manifest_protocol(compiled):
+    record = header(compiled[1])
+    content = encode((record,), scope="global", tenant_id=None)
+    entry = codec.record_from_values(
+        "manifest_entry",
+        section="permission_namespace",
+        scope="global",
+        tenant_id=None,
+        page_index=0,
+        record_count=1,
+        descriptor={
+            "object_key": "f118/unification/namespace-wire/plan/leaf.json",
+            "sha256": codec.hashlib.sha256(content).hexdigest(),
+        },
+        level=0,
+    )
+    metadata = codec.record_from_values(
+        "run",
+        writer_contract_version=WRITER,
+        environment="test",
+        tenant_count=1,
+        tenant_inventory_digest=HASH,
+        backup_ref={"object_key": "backup/base", "sha256": HASH},
+        schema_ref={"object_key": "schema/base", "sha256": HASH},
+        catalog_digest=compiled[1].checksum,
+        authorization_model_checksum=HASH,
+        baseline_ref={"object_key": "baseline/root", "sha256": HASH},
+    )
+    nodes = tuple(codec.iter_manifest_nodes(run_id=RUN, kind="plan", entries=(entry,), metadata=metadata))
+    assert len(nodes) == 2 and nodes[-1].is_root
+    leaf = codec.decode_inventory_page(
+        nodes[0].content, run_id=RUN, section="manifest", scope="global", tenant_id=None, page_index=0, kind="plan"
+    )
+    assert leaf.records == (entry,)
 
 
 @pytest.mark.parametrize("count", [401, 10001])
