@@ -40,7 +40,7 @@ BISHENG デスクトップクライアントは DeepSeek Harness（DSH）を基�
 
 ![BISHENG の Web・デスクトップ・モバイル画面](docs/images/readme/bisheng-platform-overview.png)
 
-[BISHENG クライアントをダウンロード](https://dshdesktop.com/zh/enterprise/)
+[BISHENG クライアントをダウンロード](https://dshdesktop.com/zh/enterprise/) · [BISHENG クライアントの使い方](https://dataelem.feishu.cn/wiki/BWSMwdc2Ciwif4kfe5HcyGHgn3b#share-QZrMdHGRdokzWixRl6vc30w1n8P)
 
 クライアントをカスタマイズする場合（ロゴの変更など）は、[クライアントのオープンソースコード](https://github.com/dataelement/bisheng-desktop)を基に変更できます。
 
@@ -148,7 +148,7 @@ docker compose -f docker-compose.yml -p bisheng up -d
 
 デフォルトでは、最初に登録されたユーザーがシステム管理者となります。
 
-詳細なインストールおよびデプロイに関する問題は、こちらを参照してください：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
+すべての機能（BISHENG クライアント、ホスティングアプリ、ファインチューニングなど）を有効にするには、ドキュメントをご参照ください：[プライベート環境へのデプロイ](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 ## 謝辞
 このリポジトリは [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) および [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) の恩恵を受けています。素晴らしい作品に感謝します。

@@ -40,7 +40,7 @@ Em poucas palavras, pense nele como uma alternativa de código aberto ao WorkBud
 
 ![Interfaces web, desktop e móveis do BISHENG](docs/images/readme/bisheng-platform-overview.png)
 
-[Baixar o BISHENG Desktop](https://dshdesktop.com/zh/enterprise/)
+[Baixar o BISHENG Desktop](https://dshdesktop.com/zh/enterprise/) · [Guia de uso do BISHENG Desktop](https://dataelem.feishu.cn/wiki/BWSMwdc2Ciwif4kfe5HcyGHgn3b#share-QZrMdHGRdokzWixRl6vc30w1n8P)
 
 Para personalizar o cliente (por exemplo, substituir o logotipo), você pode modificar o [código aberto do cliente](https://github.com/dataelement/bisheng-desktop).
 
@@ -145,7 +145,7 @@ Após a conclusão da inicialização, acesse http://IP:3001 no navegador. A pá
 
 Por padrão, o primeiro usuário cadastrado se tornará o administrador do sistema.
 
-Para mais informações sobre instalação e implantação, consulte: [Hospedagem própria](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
+Para habilitar todas as funcionalidades (BISHENG Desktop, aplicativos hospedados, ajuste fino e mais), consulte a documentação: [Hospedagem própria](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 ## Agradecimentos
 Este repositório se beneficia de [langchain](https://github.com/langchain-ai/langchain), [langflow](https://github.com/logspace-ai/langflow), [unstructured](https://github.com/Unstructured-IO/unstructured) e [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory). Agradecemos pelo excelente trabalho.

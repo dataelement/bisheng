@@ -40,7 +40,7 @@ BISHENG 桌面端基于 DeepSeek Harness（DSH）开发，与 BISHENG 平台协�
 
 ![BISHENG 网页端、桌面端与手机端展示](docs/images/readme/bisheng-platform-overview.png)
 
-[下载 BISHENG 客户端](https://dshdesktop.com/zh/enterprise/)
+[下载 BISHENG 客户端](https://dshdesktop.com/zh/enterprise/) · [BISHENG 客户端使用说明](https://dataelem.feishu.cn/wiki/BWSMwdc2Ciwif4kfe5HcyGHgn3b#share-QZrMdHGRdokzWixRl6vc30w1n8P)
 
 若需要对客户端进行改造（比如更换 LOGO），可基于[客户端开源代码](https://github.com/dataelement/bisheng-desktop)改造。
 
@@ -144,7 +144,7 @@ docker compose -f docker-compose.yml -p bisheng up -d
 ```
 启动后，在浏览器中访问 http://IP:3001 ，出现登录页，进行用户注册。默认第一个注册的用户会成为系统admin。
 
-其他安装部署问题参考：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
+打开全量功能（BISHENG客户端、托管应用、微调等）参见文档：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 
 ## 感谢 
