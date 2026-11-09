@@ -1303,6 +1303,8 @@
   **配对测试**：T157\
   **验证 / 完成条件**：运行配对测试 T157；验证本卡预期，相关范围检查通过。
 
+  **W6实施边界**：先按[§122](./wave6-completion-contract.md#122-正式权限catalog-draft精确sql物化已冻结)闭合真实Catalog DRAFT SQL物化，资源改写/实际FGA/原Run进度与最终ACTIVE-CURRENT切换后继；整T157158不提前勾选。
+
 - [x] **T159 · 停服 run/计划/检查点持久账本：先写测试**
   **类型 / Owner**：测试 / MIG\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_ledger.py`（拟新增）\
