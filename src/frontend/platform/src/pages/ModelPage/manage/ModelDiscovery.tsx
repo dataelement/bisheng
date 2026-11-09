@@ -31,6 +31,27 @@ import {
 
 import { ModelDiscoveryOptions } from "./ModelDiscoveryOptions";
 
+function discoveryFailureReason(failure: unknown): string | undefined {
+  if (!failure || typeof failure !== "object") return undefined;
+  const record = failure as {
+    kind?: string;
+    code?: string;
+    data?: { reason?: string };
+    response?: { data?: { data?: { reason?: string } } };
+  };
+  const reason = record.data?.reason ?? record.response?.data?.data?.reason;
+  if (reason) return reason;
+  if (
+    record.kind === "timeout" ||
+    record.code === "ECONNABORTED" ||
+    record.code === "ETIMEDOUT"
+  )
+    return "timeout";
+  if (record.kind === "network" || record.code === "ERR_NETWORK")
+    return "connection";
+  return undefined;
+}
+
 const manualSpeechProviders = new Set([
   "volcengine",
   "qianfan",
@@ -168,13 +189,7 @@ export function ModelDiscovery({
       }
     } catch (failure: unknown) {
       if (version === requestVersion.current) {
-        const failureData = failure as {
-          data?: { reason?: string };
-          response?: { data?: { data?: { reason?: string } } };
-        };
-        const reason =
-          failureData?.data?.reason ??
-          failureData?.response?.data?.data?.reason;
+        const reason = discoveryFailureReason(failure);
         setRequiredReason(
           ["workspace", "credentials", "resource", "region"].includes(
             reason || "",

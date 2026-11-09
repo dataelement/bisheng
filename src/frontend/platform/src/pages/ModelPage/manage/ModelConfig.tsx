@@ -30,6 +30,7 @@ import {
 import { useAdminScope } from "@/hooks/useAdminScope";
 import { ArrowLeft, Plus } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import i18next from "i18next";
 import { useTranslation } from "react-i18next";
 import { CustomForm } from "./CustomForm";
 import { ModelDiscovery } from "./ModelDiscovery";
@@ -37,7 +38,6 @@ import { ModelItem } from "./ModelItem";
 import { bishengModelProvider, matchesProviderSearch, modelProvider, providerSelectOptions } from "./modelProviders";
 import {
   hasDuplicateModelName,
-  hasInvalidModelName,
   trimModelNames,
 } from "./modelNameTrim";
 import { canShareToChildren, isGlobalSuperUser } from "./permissions";
@@ -229,10 +229,23 @@ export default function ModelConfig({
       const hasTTSVoiceError = normalizedModels.some(
         (model) => model.model_type === "tts" && !model.config?.voice,
       );
-      if (
-        hasInvalidModelName(normalizedModels) ||
-        normalizedModels.some((model) => !model.model_type)
-      ) {
+      const blankName = normalizedModels.some((model) => !model.model_name);
+      const longName = normalizedModels.some(
+        (model) => (model.model_name ?? "").length > 100,
+      );
+      if (blankName) {
+        return toast.show({
+          type: "warning",
+          message: t("model.modelNameEmpty"),
+        });
+      }
+      if (longName) {
+        return toast.show({
+          type: "warning",
+          message: t("model.modelNameLength"),
+        });
+      }
+      if (normalizedModels.some((model) => !model.model_type)) {
         return toast.show({
           type: "warning",
           message: t("model.modelNameValidation"),
@@ -264,12 +277,18 @@ export default function ModelConfig({
         });
       } else {
         await updateLLmServer(saveData).then(() => {
-          onAfterSave(t("model.updateSuccess"));
+          onAfterSave(t("model.saveSuccess"));
           onBack();
         });
       }
       refetchConfig();
     } catch (error) {
+      if (error && typeof error === "object") {
+        const reported = error as { message?: string };
+        const generic = String(i18next.t("api_errors:fallback"));
+        if (!reported.message || reported.message === generic)
+          reported.message = t("model.saveFailed", { ns: "model" });
+      }
       showApiError(error);
     } finally {
       setIsLoading(false);

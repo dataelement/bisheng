@@ -30,6 +30,7 @@ from bisheng.open_mcp.server import OpenMcpDispatchMiddleware, create_open_mcp_r
 from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
 from bisheng.public_endpoints.api.router import router_public
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
+from bisheng.utils.mask_data import redact_validation_errors
 from bisheng.utils.threadpool import thread_pool
 
 
@@ -56,11 +57,12 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
     # Pydantic validator context can contain ValueError instances.
+    errors = redact_validation_errors(exc.errors())
     msg = jsonable_encoder(
-        {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": exc.errors()},
+        {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": errors},
         custom_encoder={ValueError: str},
     )
-    logger.error(f"{req.method} {req.url} {str(exc.errors())[:100]}")
+    logger.error(f"{req.method} {req.url} {str(errors)[:100]}")
     return JSONResponse(content=msg)
 
 

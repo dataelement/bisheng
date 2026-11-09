@@ -113,6 +113,20 @@ describe("model discovery interaction", () => {
       screen.getByRole("button", { name: "model.refreshModels" }),
     ).toBeEnabled();
   });
+  it.each([
+    [{ code: "ERR_NETWORK" }, "model.discoveryError_connection"],
+    [{ kind: "network" }, "model.discoveryError_connection"],
+    [{ code: "ECONNABORTED" }, "model.discoveryError_timeout"],
+    [{ kind: "timeout" }, "model.discoveryError_timeout"],
+  ] as const)("maps a browser transport failure %j to %s", async (failure, message) => {
+    vi.mocked(discoverModels).mockRejectedValue(failure);
+    render(<ModelDiscovery {...props()} />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(message);
+  });
   it("shows the rate-limit error inside the picker", async () => {
     vi.mocked(discoverModels).mockRejectedValue({ data: { reason: "rate_limit" } });
     render(<ModelDiscovery {...props()} />);

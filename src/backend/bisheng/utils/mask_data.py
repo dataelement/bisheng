@@ -242,6 +242,58 @@ class JsonFieldMasker:
 
 
 # Example Use
+# Credential names whose rejected values must not be echoed. A type error puts the
+# submitted object or array in ``input``; masking only strings would leave that payload intact.
+CREDENTIAL_FIELDS = frozenset(
+    {
+        "access_key_id",
+        "anthropic_api_key",
+        "api_key",
+        "api_secret",
+        "app_secret",
+        "email_password",
+        "jina_api_key",
+        "management_token",
+        "openai_api_key",
+        "password",
+        "secret_access_key",
+        "secret_key",
+        "session_token",
+        "siliconflow_api_key",
+        "speech_access_key",
+        "speech_api_key",
+        "speech_secret_key",
+    }
+)
+
+
+def _redact_validation_value(value):
+    if isinstance(value, dict):
+        return {
+            key: "********" if str(key) in CREDENTIAL_FIELDS else _redact_validation_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_validation_value(item) for item in value]
+    return value
+
+
+def redact_validation_errors(errors: list) -> list:
+    """Replace credential ``input`` values before a validation error is returned or logged."""
+    redacted = []
+    for error in errors:
+        item = dict(error)
+        loc = item.get("loc") or ()
+        if any(str(part) in CREDENTIAL_FIELDS for part in loc) and "input" in item:
+            item["input"] = "********"
+        elif "input" in item:
+            item["input"] = _redact_validation_value(item["input"])
+        if isinstance(item.get("ctx"), dict):
+            item["ctx"] = _redact_validation_value(item["ctx"])
+        redacted.append(item)
+    return redacted
+
+
 def main():
     masker = JsonFieldMasker()
 
