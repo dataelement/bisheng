@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.errcode.permission import PermissionMigrationBlockedError
+from bisheng.common.models.space_channel_member import SpaceChannelMember
 from bisheng.core.database import tenant_filter
 from bisheng.database.models.role import Role
 from bisheng.database.models.tenant import UserTenant
@@ -39,7 +40,17 @@ def module():
 
 @pytest.fixture
 async def native(resource_native, monkeypatch):
-    models = (User, UserTenant, Role, UserRole, LLMServer, LLMModel, TenantSystemModelConfig, *snapshot.TABLES)
+    models = (
+        User,
+        UserTenant,
+        Role,
+        UserRole,
+        LLMServer,
+        LLMModel,
+        TenantSystemModelConfig,
+        SpaceChannelMember,
+        *snapshot.TABLES,
+    )
     names = {model.__tablename__ for model in models if "tenant_id" in model.__table__.c} - {"user_tenant"}
     monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", tenant_filter._tenant_aware_tables | names)
     previous = tenant_filter._discover_tenant_aware_tables()

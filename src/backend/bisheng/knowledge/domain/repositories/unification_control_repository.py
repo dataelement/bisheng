@@ -1,8 +1,8 @@
 """Bounded original creator, organization and quota facts for M2.
 
 These reads confer no authority and do not enforce quota or classify historical
-memberships. The caller owns the native transaction and runs the four global
-tenant-integrity probes once before consuming individual tenant pages.
+memberships. The caller owns the native transaction and runs the original four
+tenant probes and SPACE parent gate before consuming individual tenant pages.
 """
 
 import json
@@ -26,6 +26,11 @@ from bisheng.database.models.role import Role
 from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.database.models.user_role import UserRole
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import InventoryPage
+from bisheng.knowledge.domain.repositories.unification_space_membership_repository import (
+    UnificationSpaceMembershipRepository,
+    _current,
+)
+from bisheng.resource_reference.application.contracts import TransactionIdentity
 from bisheng.user.domain.models.user import User
 
 TENANT_COLUMNS = (
@@ -316,11 +321,13 @@ class UnificationControlRepository:
         )
 
     async def avalidate_global_integrity(self, session: AsyncSession) -> None:
-        _scope(session)
+        tenant_id = _scope(session)
+        transaction = TransactionIdentity.capture(session)
         for model in (UserTenant, Department, Role, UserRole):
             source = model.__table__.alias("m2_control_row")
             tenant = Tenant.__table__.alias("m2_control_tenant")
             keys = USER_ROLE_KEY if model is UserRole else ("id",)
+            _current(session, tenant_id, transaction)
             rows = await self._read(
                 session,
                 select(*(source.c[name] for name in keys))
@@ -329,5 +336,9 @@ class UnificationControlRepository:
                 .limit(1),
                 global_facts=True,
             )
+            _current(session, tenant_id, transaction)
             if rows:
                 _blocked(f"invalid_tenant_{model.__tablename__}", **dict(rows[0]))
+        _current(session, tenant_id, transaction)
+        await UnificationSpaceMembershipRepository().avalidate_global_integrity(session)
+        _current(session, tenant_id, transaction)

@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
+from bisheng.common.models.space_channel_member import SpaceChannelMember
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.database import tenant_filter
 from bisheng.core.openfga.client import FGAClient
@@ -566,3 +567,29 @@ async def test_full_m2_keeps_original_default_sources_and_freezes_safe_after_com
                 sa.select(raw.TenantSystemModelConfig.value).where(raw.TenantSystemModelConfig.id == 701)
             )
         ).scalar_one() == value
+
+
+@pytest.mark.parametrize("business_id", ["09000", "999999"])
+async def test_actual_m2_refuses_raw_space_alias_or_orphan_before_any_artifact_freeze(
+    module, complete, transport, business_id
+):
+    await complete.insert(
+        SpaceChannelMember,
+        [
+            {
+                "id": 71,
+                "business_id": business_id,
+                "business_type": "SPACE",
+                "user_id": 7,
+                "user_role": "ADMIN",
+                "status": "REJECTED",
+                "membership_source": "original-source",
+            }
+        ],
+    )
+    before = dict(transport.objects)
+    async with AsyncSession(complete.engine) as session, session.begin():
+        with pytest.raises(KnowledgeOperationPlanConflictError) as error:
+            await application(module, transport).arun(session, **transport.inputs)
+        assert "unification_space_membership_global" in error.value.kwargs["reason"]
+    assert transport.objects == before and not transport.requests

@@ -177,15 +177,20 @@ async def test_original_pending_objects_are_not_flushed_refreshed_or_replaced(na
 
 @pytest.mark.parametrize("control", [False, True])
 @pytest.mark.parametrize("changed", ["tenant", "transaction", "failure"])
+@pytest.mark.parametrize("boundary", ["first", "parent"])
 async def test_every_real_await_rechecks_original_context_and_restores_short_bypass(
-    native, monkeypatch, control, changed
+    native, monkeypatch, control, changed, boundary
 ):
     await native.insert(Member, [member(1)])
     async with AsyncSession(native.engine) as session, session.begin():
-        execute, tokens, nested = session.execute, [], []
+        execute, tokens, nested, calls = session.execute, [], [], []
+        at = (6 if control else 2) if boundary == "parent" else 1
 
         async def mutation(*args, **kwargs):
             result = await execute(*args, **kwargs)
+            calls.append(1)
+            if len(calls) != at:
+                return result
             if changed == "tenant":
                 tokens.append(set_current_tenant_id(202))
             elif changed == "transaction":
@@ -199,7 +204,7 @@ async def test_every_real_await_rechecks_original_context_and_restores_short_byp
         try:
             with pytest.raises(RuntimeError if changed == "failure" else KnowledgeOperationPlanConflictError):
                 await repo.avalidate_global_integrity(session)
-            assert len(native.queries) == 1 and not is_tenant_filter_bypassed()
+            assert len(native.queries) == at and not is_tenant_filter_bypassed()
         finally:
             for token in reversed(tokens):
                 current_tenant_id.reset(token)

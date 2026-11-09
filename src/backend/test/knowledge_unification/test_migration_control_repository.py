@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+from bisheng.common.models.space_channel_member import SpaceChannelMember
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
     current_tenant_id,
@@ -82,7 +83,7 @@ def repo():
 
 @pytest.fixture
 async def native(monkeypatch):
-    models = (Tenant, UserTenant, Department, Role, UserRole, User)
+    models = (Tenant, UserTenant, Department, Role, UserRole, User, SpaceChannelMember)
     names = {
         model.__tablename__
         for model in models
@@ -415,13 +416,13 @@ async def test_global_probes_once_then_tenant_pages_do_not_repeat_global_or_join
     await native.insert(UserRole, [row("user_roles", 1), row("user_roles", 2, 202)])
     async with AsyncSession(native.engine) as session, session.begin():
         await repo.avalidate_global_integrity(session)
-        assert len(native.queries) == 4
-        assert all("LEFT OUTER JOIN" in sql.upper() and params[-2:] == (1, 0) for sql, params in native.queries)
+        assert len(native.queries) == 5  # Original four probes, then the genuine empty SPACE page.
+        assert all("LEFT OUTER JOIN" in sql.upper() and params[-2:] == (1, 0) for sql, params in native.queries[:4])
         for tenant in (101, 202):
             with tenant_execution_scope(tenant):
                 for kind in (*PAGED, "user_roles"):
                     assert len((await getattr(repo, f"alist_{kind}")(session)).items) == 1
-        assert len(native.queries) == 12
+        assert len(native.queries) == 13
     assert sum("LEFT OUTER JOIN" in sql.upper() for sql, _ in native.queries) == 4
     # Compile actual executed statement trees for MySQL; no connection or vendor-specific tuple seek.
     for statement in native.statements:
