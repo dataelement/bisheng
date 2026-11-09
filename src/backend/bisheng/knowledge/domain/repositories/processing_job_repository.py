@@ -13,6 +13,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from inspect import ismethod
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 from weakref import WeakKeyDictionary
@@ -938,6 +939,24 @@ class ProcessingJobRepository:
             job = (await session.execute(query)).one_or_none()
         if job is None or job.tenant_id != self._tenant_id():
             raise KnowledgeProcessingJobNotFoundError()
+        if job.kind == "move_index":
+            with strict_tenant_filter():
+                facts = (
+                    await session.execute(
+                        select(
+                            KnowledgeProcessingJob.id,
+                            KnowledgeProcessingJob.space_id,
+                            KnowledgeProcessingJob.parameters,
+                            KnowledgeProcessingJob.move_logical_marker,
+                            KnowledgeProcessingJob.request_hash,
+                            KnowledgeProcessingJob.claim_generation,
+                            KnowledgeProcessingJob.succeeded_count,
+                        ).where(KnowledgeProcessingJob.id == job_id)
+                    )
+                ).one_or_none()
+            if facts is None:
+                raise KnowledgeProcessingJobNotFoundError()
+            job = SimpleNamespace(**{**job._mapping, **facts._mapping})
         if job.kind in {"metadata_schema_change", "move_index"}:
             expected_count = job.total_count
         else:
@@ -951,6 +970,13 @@ class ProcessingJobRepository:
         counts = await self._state_counts(session, job_id)
         if sum(counts.values()) != expected_count:
             raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
+        logical_pending = False
+        if job.kind == "move_index":
+            logical_pending = self._move_ready().retry_logical_pending(job, counts)
+        return self._retry_eligibility(job, counts, expected_count, logical_pending=logical_pending)
+
+    @staticmethod
+    def _retry_eligibility(job, counts, expected_count, *, logical_pending=False) -> RetryEligibility:
         terminal_failure = job.state in {"failed", "partial_failed"}
         finalize_only = (
             terminal_failure
@@ -958,10 +984,18 @@ class ProcessingJobRepository:
             and expected_count > 0
             and counts.get("succeeded", 0) == expected_count
         )
-        return RetryEligibility(
-            terminal_failure and (bool(counts.get("failed", 0) + counts.get("pending", 0)) or finalize_only),
-            finalize_only,
-        )
+        retryable = terminal_failure and (bool(counts.get("failed", 0) + counts.get("pending", 0)) or finalize_only)
+        if job.kind == "move_index":
+            if logical_pending:
+                finalize_only = False
+                retryable = (
+                    terminal_failure
+                    and not counts.get("running", 0)
+                    and (expected_count == 0 or bool(counts.get("failed", 0) + counts.get("pending", 0)))
+                )
+            elif expected_count == 0:
+                retryable = finalize_only = False
+        return RetryEligibility(retryable, finalize_only)
 
     async def _refresh_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> None:
         counts = await self._item_counts(session, job)
@@ -1201,6 +1235,14 @@ class ProcessingJobRepository:
         actor = self._actor(actor_user_id, actor_reference)
         if type(expected_job_revision) is not int or expected_job_revision < 0:
             raise ValueError("expected_job_revision must be a non-negative integer")
+        move_subject = move_eligibility = None
+        logical_pending = False
+        if job.kind == "move_index":
+            ready = self._move_ready()
+            counts = await self._item_counts(session, job)
+            logical_pending = ready.retry_logical_pending(job, counts)
+            move_subject = ready.retry_subject(job, actor_user_id=actor_user_id, actor_reference=actor)
+            move_eligibility = self._retry_eligibility(job, counts, job.total_count, logical_pending=logical_pending)
         request_hash = _digest(
             {
                 "tenant_id": self._tenant_id(),
@@ -1224,6 +1266,13 @@ class ProcessingJobRepository:
         if receipt is not None:
             if receipt.tenant_id != job.tenant_id or receipt.request_hash != request_hash:
                 raise KnowledgeIdempotencyConflictError()
+            if move_subject is not None and (
+                (receipt.actor_subject_type, receipt.actor_subject_id)
+                != (move_subject.subject_type, move_subject.subject_id)
+                or receipt.actor_user_id != actor_user_id
+                or receipt.actor_reference != actor
+            ):
+                raise KnowledgeIdempotencyConflictError()
             return JobRequestResult(job, True)
         if job.state == "obsolete":
             return JobRequestResult(job, False)
@@ -1232,8 +1281,10 @@ class ProcessingJobRepository:
         if not self._check_configuration(job, configuration):
             await session.flush()
             return JobRequestResult(job, False)
+        if move_eligibility is not None and not move_eligibility.retryable:
+            raise KnowledgeProcessingJobNotRetryableError()
         retry_query = select(KnowledgeProcessingItem)
-        if job.kind == "metadata_schema_change":
+        if job.kind in {"metadata_schema_change", "move_index"}:
             retry_query = retry_query.options(defer(KnowledgeProcessingItem.processing_snapshot, raiseload=True))
         with strict_tenant_filter():
             rows = (
@@ -1246,8 +1297,14 @@ class ProcessingJobRepository:
                     .execution_options(populate_existing=True)
                 )
             ).all()
-        if not rows and not (await self.aretry_eligibility(session, job.id)).finalize_only:
-            raise KnowledgeProcessingJobNotRetryableError()
+        if not rows:
+            empty_allowed = (
+                move_eligibility.finalize_only or (logical_pending and job.total_count == 0)
+                if move_eligibility is not None
+                else (await self.aretry_eligibility(session, job.id)).finalize_only
+            )
+            if not empty_allowed:
+                raise KnowledgeProcessingJobNotRetryableError()
         for row in rows:
             if row.tenant_id != job.tenant_id:
                 raise KnowledgeProcessingJobNotFoundError()
@@ -1273,6 +1330,11 @@ class ProcessingJobRepository:
                 request_hash=request_hash,
                 actor_user_id=actor_user_id,
                 actor_reference=actor,
+                **(
+                    {"actor_subject_type": move_subject.subject_type, "actor_subject_id": move_subject.subject_id}
+                    if move_subject is not None
+                    else {}
+                ),
                 expected_job_revision=expected_job_revision,
                 accepted_job_revision=job.revision,
                 item_count=len(rows),
