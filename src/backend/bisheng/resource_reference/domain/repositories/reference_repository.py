@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from heapq import heappop, heappush
 from weakref import ReferenceType, WeakKeyDictionary, ref
 
 from sqlalchemy import and_, false, or_, select, update
@@ -643,16 +644,20 @@ class ReferenceRepository:
         return tuple(result)
 
     async def aiter_inbound_for_owner_pages(
-        self, session: AsyncSession, scope: OwnerTargetScope, *, limit: int = 200
+        self, session: AsyncSession, scope: OwnerTargetScope, *, limit: int = 200, global_id_order: bool = False
     ) -> AsyncIterator[tuple[BusinessResourceReference, ...]]:
-        """Stream exact target groups, then BRR IDs within each group.
+        """Stream exact target groups, optionally merging their BRR IDs.
 
-        This is not a global BRR lock order. Only exhausting the stream runs
-        its final full scope validation; partial pages grant no authorization.
+        Global output order is not physical lock order: each SQL query still
+        locks one exact group. Only exhaustion runs final scope validation;
+        partial pages grant no authorization. The merge holds one bounded
+        page and one heap candidate per group, never all inbound rows.
         """
         self._check_scope(session, scope)
         if type(limit) is not int or not 1 <= limit <= 200:
             raise ValueError("inbound page limit must be 1..200")
+        if type(global_id_order) is not bool:
+            raise ValueError("inbound global ID order must be a bool")
         # Copy primitive values before awaiting: neither a changed scope nor a
         # changed original TargetKey may redirect a later target group's SQL.
         raw_targets = tuple((key.target_type.value, key.target_id) for key in scope.targets)
@@ -675,23 +680,66 @@ class ReferenceRepository:
             ):
                 raise _invalid("target_owner_scope_invalid")
 
-        for start in range(0, len(raw_targets), 200):
-            targets = tuple(TargetKey(kind, ident) for kind, ident in raw_targets[start : start + 200])
-            after = None
-            while True:
+        if global_id_order:
+            groups = tuple(
+                tuple(TargetKey(kind, ident) for kind, ident in raw_targets[start : start + 200])
+                for start in range(0, len(raw_targets), 200)
+            )
+
+            async def load(index, after):
                 current()
                 with session.no_autoflush, bypass_tenant_filter():
-                    rows = (await session.execute(self._inbound_owner_statement(targets, after, limit))).all()
+                    rows = (await session.execute(self._inbound_owner_statement(groups[index], after, limit))).all()
                 current()
                 page = self._inbound_owner_rows(rows)
-                if not page:
-                    break
-                # The ORM rows are public and mutable after yielding. Capture
-                # the SQL cursor first so their mutation cannot skip later rows.
-                after = page[-1].id
-                yield page
-                if len(page) < limit:
-                    break
+                # Buffered ORM rows are also mutable after yielding another
+                # group's page. Capture every merge key and seek cursor now.
+                return page, tuple(row.id for row in page)
+
+            pages, heap, output = [], [], []
+            for index in range(len(groups)):
+                page, ids = await load(index, None)
+                pages.append((page, ids))
+                if page:
+                    heappush(heap, (ids[0], index, 0))
+            while heap:
+                current()
+                _, index, offset = heappop(heap)
+                page, ids = pages[index]
+                output.append(page[offset])
+                if offset + 1 < len(page):
+                    heappush(heap, (ids[offset + 1], index, offset + 1))
+                else:
+                    if len(page) == limit:
+                        page, ids = await load(index, ids[-1])
+                    else:
+                        page, ids = (), ()
+                    pages[index] = (page, ids)
+                    if page:
+                        heappush(heap, (ids[0], index, 0))
+                if len(output) == limit:
+                    yield tuple(output)
+                    output.clear()
+            if output:
+                yield tuple(output)
+        else:
+            for start in range(0, len(raw_targets), 200):
+                targets = tuple(TargetKey(kind, ident) for kind, ident in raw_targets[start : start + 200])
+                after = None
+                while True:
+                    current()
+                    with session.no_autoflush, bypass_tenant_filter():
+                        rows = (await session.execute(self._inbound_owner_statement(targets, after, limit))).all()
+                    current()
+                    page = self._inbound_owner_rows(rows)
+                    if not page:
+                        break
+                    # The ORM rows are public and mutable after yielding. Capture
+                    # the SQL cursor first so their mutation cannot skip later rows.
+                    after = page[-1].id
+                    yield page
+                    if len(page) < limit:
+                        break
         current()
         self._check_scope(session, scope)
         if tuple((key.target_type.value, key.target_id) for key in scope.targets) != raw_targets:
