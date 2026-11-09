@@ -11,6 +11,7 @@ import {
 import { triggerUrlDownload } from "../knowledgeUtils";
 import { EditTagsModal } from "./EditTagsModal";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
+import { MoveJobProgress } from "./MoveJobProgress";
 import { MoveToDialog } from "./MoveToDialog";
 import { VersionManagementDialog } from "./VersionManagementDialog";
 import { VersionHistorySheet } from "./VersionHistorySheet";
@@ -51,6 +52,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
     webLinkSubmitting,
     resetWebLinkDialog,
     submitWebLink,
+    moveProgress,
     moveDialogOpen,
     setMoveDialogOpen,
     handleMoveConfirm,
@@ -156,6 +158,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
           resourceName={permTarget.name}
         />
       )}
+      {moveProgress && <MoveJobProgress progress={moveProgress} />}
       {/* F034: Move files/folders (same-space + cross-space) */}
       <MoveToDialog
         open={moveDialogOpen}

@@ -164,6 +164,12 @@ async def get_knowledge_space_service(
         make_permission_record=service._new_file_permission_record,
         actor_provider=service._permission_actor,
     )
+    from bisheng.knowledge.application.move_application import get_move_application
+
+    service.move_application_factory = get_move_application
+    from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
+
+    service.deletion_application_factory = get_deletion_application
     return service
 
 
@@ -231,4 +237,7 @@ async def get_knowledge_version_service(
         session_factory=get_async_db_session,
         require_version_management_enabled=service._require_version_management_enabled,
     )
+    from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
+
+    service.deletion_application_factory = get_deletion_application
     return service

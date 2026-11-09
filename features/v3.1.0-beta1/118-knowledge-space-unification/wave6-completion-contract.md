@@ -1658,3 +1658,81 @@ PUT中断恢复客户端重交完整原DTO且command hash一致，绝不从hash�
 Plan完整batch metadata仅常数次建/核索引和阶段写，禁止每批重写全JSON/重解析全清单造成B²；原ProjectionOperation状态承载批进度，每await只原tenant/TX/身份及scalar执行pin。真实请求期不可变索引须来自实际已验证Plan，后台恢复沿同真实入口重建，不新全局authority registry。实际调用预算分别记录T targets/R raw/S sharing/B批，Core完整检查固定次数、RRT IN≤200/业务删除IN≤200、各实际新增PK成本实测；原adapter read_present可能逐tuple远程读取，不能把S次IO写成B次。不得扩大为分享链接签发加固。
 
 生产装配须实际marker支持llm scope、API/worker/linsight/DSH所用runtime builder的一致scope注册；不能仅请求端临时runtime绿，也不新建通用重试平台。native从实际普通/force/旧无force PUT DELETE进，全链到Source保留、失效执行拒，含0model/0share、50/51/90/401/10001共享、各页/批故障/unknowncommit/cancel/重启、并发新引用、跨tenant仅摘要、外catchcommit0半SQL、无重复INSERT。未配置或未ready Coverage始终10994；本卡不签T169170启用。首官方旧路径红只2项真实delete绕Coverage及1空provider Core控制，不冒称其覆盖完整红矩阵，后继必须扩全链验收。
+
+§127必要共享围栏补正：仅provider锁内check再关SQL去共享会有检查后竞态，因此同原Plan三执行列/索引增加内部model_share_server reservation，限真实现有业务Owner/原授权，不新公开能力、队列、RRT或Coverage门。所有真实llm_server分享writer短TX reserve并commit后，才锁外完整before/read/prepare→短TX绑定→IO→finalize；0delta也完成reservation。TenantMount沿实际mount_child.operator传入，不造默认Root User或凭audit UID授权。删除prepare先实际Core/确认成功，再由真实Owner占同表内部preparation reservation（purpose闭集绑定真实删除Plan/command hash），关SQL读before/prepare，最终Core再检+删除Plan consume/RRT/batch绑定与内部reservation完成在同一TX原子handoff，不留释放窗口。handoff前失败/过期必须0RRT/0共享FGA，并受信结束仅本operation的临时fence；新引用引起原确认变化则重预检，不更新原影响。
+
+§127原修订SSOT补正：ModelTargetOwner的target_revision包含RRT，prepare后必变；原确认before target_revisions保持原样。首次reserve同TX RRTprepare后真实Owner重签得到reserved_target_revisions，私有执行元数据固定保存，最终同op afterprepare按它核验；原server business revision/inbound-v2/Coverage仍核原确认，不重定义原_revision算法。
+
+## 128. 知识引用业务检查的实际入向资格：已冻结
+
+Root负责原T103–T110知识检查/展示至删除业务链，不新增helper任务编号。直接文件/文件夹范围复用真实D1 Scope及D2 Query，space整体绑定不进入文件范围；任何folder实际涵盖版本的直接有效引用阻断整项，所有Source配置保持。既有D2完整流还须逐raw行核target_tenant_id精确等已签Owner及target_space_id等实际空间，非legacy行的unknown/NULL/foreign/stale metadata必须10994 failclosed，不以Source ready+同revision替代完整target资格，也不能force越过。原完整legacy missing bundle则沿既有D2保留为阻断事实，owner未知不猜测/改写，不将这种原已确认的事实误改成Coverage故障；部分/非法bundle仍拒。这些facts不授予删除许可，也不恢复失效引用。只核exact删除范围，范围外既有invalid不触碰；允许原跨Source租户计数/无权只数量的披露规则，不新增Source租户等Owner的门。此校验每行O(1)，完整receipt/Scope只固定次数，无逐行目标重读或Source业务JSON扫描。后继真实知识引用Service必须经当前业务目标delete动作和来源应用批量披露，closed目标SQL后再展示，不能让这些内部facts成为授权或把无权来源名称写公共DTO。
+
+
+#### §126 补充：实际 move 查询接线与默认列表边界（已冻结）
+
+原处理列表 kind=None 仅选普通四kind（embedding_rebuild/file_reprocess/file_resplit/metadata_schema_change），Repo新增可选 ordinary_only=False 保持原默认，Service仅默认列表显式传True；COUNT及分页同一谓词，不先分页再剔除，不增加kind探测SQL。此单一读谓词的SELECT字节改变已接受，普通结果/SQL数量及原执行内核黄金值保持。显式 kind=move_index 的list/get/items/retry进入原typed actor当前权限的Move Access；kind只是路由提示，真实Job.kind、来源/目标、租户、参与者及逐项可见性仍校验，不将候选总数作为可见总数。统一前端面板后继须显式查询move类别。不得借本读路由开放copy或把旧skip_invalid=True直接传入内部全有效MoveOwner。
+
+
+## 129. 功能优先的并行收口与移动外层合同（2026-11-09 已冻结）
+
+按用户最新顺序先完成功能，再统一整体回归、升级演练和E2E；每条业务链只保留必需定点验证、lint/架构检查，不反复跑全选集或完整10001规模矩阵。原任务编号/AC不增；无关优化记[后续清单](../../../docs/backlog/f118-deferred-optimizations.md)，不列本次完成前置。Root集成已交fixed并实现知识引用/删除，PROC完成移动前后端业务链，PERM完成模型删除/共享，MIG完成正式回填/Coverage/CLI。共享文件按方法所有权交接，禁止全仓Git清理。
+
+移动外层交给PROC：新增实际Move应用协调，Domain的KnowledgeSpaceService仅依赖注入factory，API/dependencies负责装配，不Domain反向import Application。允许修改KSS仅move_items及新增aprecheck_move/aconfirm_move，旧API仅/files/move及新移动路由，客户端仅实际knowledge.ts/knowledgeProcessing.ts/useKnowledgeMove与必要实际进度UI/i18n；Root不并行改这些方法。其它KSS删除/复制/模型重建及其它API由Root保留所有权；依赖工厂新增参数不改现有默认参数语义。
+
+统一precheck(FileMoveReq)->OperationPrecheck，confirm仅ProcessingCreateRequest三个字段；执行类型从真实冻结Plan读取。同空间返回原moved/invalid同步结果，不建processing Job、不迁索引/embedding/模型引用；跨空间确认返回真实JobAccepted，不能转成moved成功。旧/files/move仅兼容原同空间裸调用，跨空间裸请求明确缺确认拒，不再走原先SQL归属先commit再投影/旧迁移dispatch旁路；更新实际客户端跨空间调用为预检→展示真实impact/invalid并确认→confirm→显式kind=move_index查询/失败重试，accepted只提示已提交。保留同空间拖拽、撤回和原结果形状，遇部分无效或撤回重新分类则用真实precheck/confirm，不能把裸skip_invalid=True当已确认的不可变计划。无需让旧同空间每次成功直移新增异步流程。
+
+分类一次读取实际选择/目录闭集并规范重复、祖先重叠，以已有各对象move/目标upload、深度/同名/状态规则判定；无权对象不披露名字。有效子集仅一次真实MoveScope构建，不逐Root完整加载；分类/skip同意事实在原Plan.impact内签名，不改变内部MoveScope.parameters/J1 actor/hash。全无效为原Plan承载的不可执行review，禁止造空MoveScope/假Item。确认最终同原实际修订与权限重验，分类或范围变化重新预检。跨空间仅用已集成实际Owner/Worker链；同空间必须同步修正真实Document、当前及历史File路径一致，并按实际before permission事实→原F048父级投影→锁后真实SQL全链finalize，投影或SQL失败用原不可变Plan恢复，不新建通用任务平台；对象键/标签/embedding不因同空间移动变更。若原F048实际口不能满足恢复，先发具体接口事实给Root，不凭空套cross-space Job。
+
+移动查询本次新增的重复完整scope与深页前缀materialize属于本次实现缺陷，放在上述功能接通后作局部修正，不扩大到普通四kind通用重构。复用实际有界keyset、原顺序/tenant/current typed actor/Personal narrowing/逐项visible；total流式计算，仅保目标页。必要的完整原Plan资格核验一次明确记录，不靠删权限检查伪O(1)，不在每Item或每离页候选重复读取完整Scope。不得以本轮查询修正新建通用分页/缓存系统。
+
+
+## 130. 知识引用检查与生产 Coverage 消费合同（已冻结）
+
+Root负责实际KnowledgeReferenceService及知识删除，MIG负责生产Coverage/回填/启用。生产入口固定knowledge/application/unification_coverage.py::production_coverage_factory(session,*,writer_contract_version='f118-v1')->CoverageRepository；内部ProductionCoverageReader只实现原CoveragePort/GlobalCoveragePort四口，使用同caller Session，不开Session/commit/FGA。未配置/缺DDL/无证书/错误一律10994；不按零BRR判ready。
+
+MIG复用原KnowledgeUnificationRun.source_coverage与verification_report，窄增nullable BigInteger coverage_epoch及(writer_contract_version,coverage_epoch,tenant_id)索引；旧NULL不可ready。锁实际全局Tenant anchor后MAX(epoch)+1（正int64），六类真实回填完成且全量对账闭合才同原阶段转换原子签证。Reader每次读取实际完整tenant全集与各tenant有效证书，核writer/六类closed proof/descriptor/hash/epoch，不缓存掩盖尾变化；全局epoch取有效证书集合max，verified_tenant_ids及inventory_digest按真实全集闭合。新tenant创建同TX证明业务为空、写端合同已装配再签新epoch；任一漏证书tenant使全局未就绪。历史失败被原可信后继完成覆盖后不能永久误拦，当前未完成/failed迁移不能由旧证书绕过。原Run实际阶段与证书JSON闭集由MIG在实施前给Root核现有入口，不另造第二账本。
+
+KnowledgeReferenceService先当前真实身份和目标delete动作（原选中文件/夹或whole-space根，不能额外强加space.edit/visible），再短TX原D1/D2与coverage检查，关闭目标锁后用六SourceOwner现有SourceDisclosureRuntime有界≤200补名称/版本/入口，无权/外tenant来源只计类型数量，不返回其ID/名称；检查/披露失败不转零引用。直接文件只原实际范围，不因space-level binding被拦；whole space/delete/clear覆盖空间及所有直接内容引用，包含其已登记legacy missing事实，原unknown owner不猜写。
+
+新增SpaceDeleteScopeRepository复用D1实际scope验证，完整物理inventory一次有界读取，空空间仍核真实Root；SpaceDeleteReferenceQuery复用现原target verifier、同issuer Owner scope及Coverage facade。ReferenceRepository原bounded owner stream仅窄增include_space_contents=False，True只接受一个真实已签KnowledgeSpace scope，按target_space_id同Root查完整left-join source ready流；原默认和所有其它调用保持，不对每Source扫业务JSON。当前实际子项union验证一次，不逐入向行重查Owner。
+
+知识来源分页是当前完整影响集上的上下文cursor，不能授权；实际每次重检目标动作/tenant/actor/当前凭据/管理pin及影响摘要。AuthenticatedSourceReadIdentity新增astable_capture仅排除trace并额外固定management pin，原acapture行为与字节不变；不耦合LLM私有cursor，不删Personal/API narrowing。只保有界页面DTO，类型/slot/source计数与原完整流一致；最终删除仍fresh真实事务重验，不把展示结果当authority。
+
+§129同空间P1实证补充：原MoveProjectionRepository不读取ProcessingJob表，其job_id参数是canonical UUID operation锚点。允许用真实KnowledgeOperationPlan.id/operation_id复用原P1 owned ledger/Mode恢复及arequire_finalized，绝不创建假Job/Item/worker。Plan consumed不等于SQL完成，重试核实际full-before/full-after与同P1证据，mixed拒；真实当前身份/目标upload及Scope/permission版本仍核，不能把FINALIZED当新授权。
+
+
+## 131. 知识内容删除的完整执行合同（已冻结）
+
+Root沿原T103–T110及批量T08586一次完成公开预检/确认、实际投影→SQL→清理、原任务恢复，不另增helper卡。复用KnowledgeOperationPlan及KnowledgeSpaceDeleteJob、原F048 RESOURCE_DELETE ledger，禁止另建删除队列/任务平台。原Job增加nullable operation_type、business_phase与(tenant_id,space_id,operation_type,business_phase,state)索引；旧NULL任务仍原清理语义，state仍PENDING/RUNNING/SUCCEEDED及原lease，不复用phase为伪任务成功。中性DDL跟在MIG Coverage revision后，不并行起head。
+
+文件/夹预检用原实际D1/引用Query一次闭集，按unit合并祖先/版本重叠；任一有效直接引用或原业务权限/处理冲突使整unit不可删。混合批只原显式skip确认，拒force；整个空间绑定不拦普通文件。空间clear检查整个空间及内容引用且不允许force，保模型Source/配置；space delete可force但只绕已知引用，必须原正式确认及最终同Scope/入向/epoch/权限/状态影响重验，Coverage失败绝不force。对外confirm仅原三个不可变Plan字段，类型与force从实际Plan取；取消零业务改动。旧普通删除入口可在同请求生成并消费真计划，不能再直SQL旁路。
+
+初始执行短TX实际Root→完整File/版本锁→入向/来源→Plan重验，原同事务consume Plan+持久Job完整清理manifest/原actor reference+已注册Owner RRT DELETING，关SQL后F048原幂等project_delete。真实Projection全部完成后，fresh短TX以同operation DELETING receipts核当前scope/引用/epoch/业务行/真实ledger，再SQL删除File/Version/Document、必要Knowledge Root与自身出向模型绑定、RRT DELETED、Job phase一次提交。File/Folder没有强删；原配置/入向绑定原ID不改，wholeSpace强删保失效来源。space clear不写Root DELETED tombstone，只给实际被删内容写证据；进行中Root的暂时DELETING来自同tenant实际active clear Job标量事实，完成即释放，不伪造永久失效原因。
+
+Job phase完成SQL后仍持久清理意图，MinIO/ES/Milvus失败仅重试同Job，不重复业务SQL/FGA；HTTP不得把accepted/待清理报完全成功。原Beat恢复/lease、原清理索引身份核验及FakeEmbeddings保留，不为管理清理读取已失效模型。空间clear仅清空原索引内容并校验为空，保现有索引结构，免除重建空索引时重新调用模型；space delete清理其实际索引。对象清理只实际manifest对象键，不删源前缀，确保已移动到目标的原始对象存活。文件索引清理按≤200实际IDs批，不展开无界IN/全版本积。
+
+持久actor沿现processing_identity原typed principal/凭据identifier/ceiling恢复，仅必要将封闭动作集增delete，不新增space.delete授权门给文件用例、不用audit UID造权限主体。初次授权沿原文件/夹delete及空间delete；恢复同已consume operation仍核当前真实同主体/tenant/管理pin及不可变Plan/实际journal，原凭据撤销不能被旧授权绕过。COMMIT未知按实际同Job/业务phase恢复，不重插业务行。
+
+实际SourceMoveInputRepository通过已consume move Plan.space_id→Job.operation_id→Item标量原生ACK保护源空间输入，不读完整Plan/Scope JSON，不新增任务模型绑定；只有真实Job succeeded且Item succeeded/source_cleaned及计数完成才释放源clear/delete，0Item也须Job逻辑完成。仅checkpoint source_cleaned而未File/Item ACK不能提前drop源index；同空间没有此异步依赖。force不绕任务冲突。泛化Worker外部IO/用户修改竞态仍按用户排除，不扩通用并发平台。
+
+## 132. 剩余处理、复制和模型页面的整链边界（已冻结）
+
+PROC持有原T095–T100整链：KnowledgeProcessingCommands协调真实四kind预检/确认，复用原ProcessingJobService及KnowledgeProcessingOwner，不改算法。空空间embedding变更走原prepare/apply的同步完成结果，不伪造0 Item任务；同ID仅名称/描述仍原保存。Chunk/meta沿原容器edit，不扩展file.edit；原物理File ID经aget_anchor证明Root/Document/Version归属，允许真实历史版本，处理fence保留。真实索引分页读取完整结果，不以10000静默截断。Root独占删除、引用、clear、共享身份解码及TargetOwner，双方只按方法合并共享KSS/API叶。
+
+复制由SpaceCopy应用、Repo与原Worker的space_copy分支组成，原copy API仅兼容形状，不沿旧type3拒绝/源COPYING旁路。源creator须真实typed主体与业务creator证明，不用审计UID推断，不给超管creator豁免；复用upload_file actor reference，纯subject decoder显式required_action='upload_file'，默认move严格行为不变。目标自身模型引用在创建同事务登记；源状态/配置/索引不变，目标拥有独立File/Dir/Document/Version、元数据、对象及块附件。原F048 copy规则保持：CUSTOM普通授权复制、INHERIT无本地普通授权，新creator且不复制保护授权。无内容可同步完成，不造任务。新确认返回真实knowledge、processing_job或null及completed，accepted不当成功；不复制发布、订阅、pin和聊天。
+
+PERM已完成实际ModelConfig/ModelItem删除UI并固定1bbc16d0a9fba21f8bad7e63aec4e8f0b917ad58，Root正常合并；原ModelManagement/workbench允许模型配置不改。原表单校验后只将完整原PUT DTO冻结在内存；无removed直接原保存，不增加Coverage准入；有removed用原provider removal-plan，整provider即使零model也用server-removal-plan。普通已知引用禁执行，force须现有管理权限、非共享只读、检查完整且二次明确确认；10994无force出口。实际PUT/DELETE仅附原force/confirmationId/planDigest，成功须await业务fulfilled后刷新/返回，取消和失败保留表单。Source页只展示原名称、版本、入口和受限计数，不渲染隐藏ID；分页固定provider/差集与cursor。未知网络ACK只重试原DTO/Plan/force选择，不自动重新预检DELETING配置；明确18087/18088或cursor失效须新影响和新同意。管理pin/权限变更撤销确认，完整配置和凭据不落日志或local/sessionStorage。页面相关27键三语齐；这些定点检查不代表整体验收通过。
+
+Root本地知识链已接公开引用、不可变删除Plan/Job、原F048投影证明、物理版本SQL切换及清理恢复。定点证据：引用/SourceMove/空空间clear与恢复16例；另1例真实ProjectionService、SQL权限预留/Mode/journal/最终证明穿透到历史File删除，主版本保留且同Plan重复ACK不重写FGA。仍须原业务收尾、知识页面、旧协议入口与DDL整链集成完成后统一整体测试，不据此勾选整体回归或宣称上线。
+
+## 133. 同步操作、旧删除协议及两端消费接线（已冻结）
+
+同空间移动签原生operation='move_same_space'，异步跨空间仍'move'；原确认reader仅窄接两者，执行端核same_space_move与operation exact相符，异步MoveOwner仍只接受move。既有异步Scope/Cutover/源输入保护只选move，避免真实同步P1没有Job而被误当缺失异步任务永久阻断clear/delete。目标/参数/J1 actor及hash规则不放宽，不造Job/列/JSON查询。真实同空间P1→SQL路径与重放之后源输入guard通过已有native回归。
+
+space_copy异步Plan.space_id为source、operation_id为原Job.id，真实Job在目标space，kind=space_copy，原Item最后step=copy_completed；此ACK只在独立对象/附件、原P1及实际索引verify后由真实File+Item同事务提交，无move marker/source_cleaned伪证明。Source输入保护仅增加这个native类别；Job/Item成功且计数闭合才释放。空或仅DIR复制用space_copy_empty，经完整物理闭集证明无FILE，实际目标Space ID作为原同步operation锚点，creation_request_id绑定真Plan+key，且真实R2/P1完成才同步completed，不造0 Item Job或异步输入依赖。
+
+旧v1/v2/MCP文档删除按实际Root.type分流：SPACE3沿同KnowledgeDeletionApplication/原Plan与Job，QA1、退役2及未转换旧0保原路径及响应外形；SPACE文件批量一次原物理闭集，不逐file提前部分commit。v2和MCP手工构造的KSS装配同deletion factory；不以源URL名字猜资源类型。历史版本入口保原VersionID协议与feature gate、原不存在404/主版本409：服务端解析真实physicalFile/Root，再签带historical_version_id的原文件删除Plan，检查真实unit仅该非主version，避免切主竞态把一次历史版本删除扩成整个Document。最终仍复查原Scope/hash；公开请求不能伪造这个内部标记。保原版本删除审计/响应，不新增version编辑权限。
+
+整空间正式SQL cutover同时清理原私有tag library和同Root实际channel member，不把共享tag库删掉。新确认入口沿KSS保留原空间删除通知/审计/telemetry及内容chat rehome/更新时间；内部cleanup manifest只传服务端原hook，HTTP仅返回真实job状态，不返回对象key或内部projection/source事实。清空最后准入仍可检查未删除Root的原delete权限；其余投影后恢复依真实当前凭据与原journal/Mode证据，不伪造新权限。通用通知可靠性平台不在本次扩展范围。
+
+两端删除页面由PERM按原T184及原删除卡消费：ordinary/clear无force，整空间force须获取force:true新Plan并重新明确同意该次影响；混合valid/invalid必须明确只执行valid，取消零业务改动。confirm只原三字段，pending/running或清理失败不乐观删行/跳转；未知ACK保同Plan/key，真实succeeded后才原刷新和导航。首次引用inspection与cursor后的SourcePage是不同精确DTO，不能把独立查询的slot_counts拼成删除Plan影响。仅SPACE3目录/空间接新UI，QA与独立Version协议不混用。平台管理scope mapper只纳入新增知识references/deletion URL，维持原真实tenant pin；client沿自身tenant，不新造管理scope。

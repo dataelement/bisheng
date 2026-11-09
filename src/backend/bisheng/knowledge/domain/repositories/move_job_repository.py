@@ -254,7 +254,7 @@ class MoveJobRepository:
         if (
             type(source_space_id) is not int
             or source_space_id <= 0
-            or plan.operation != "move"
+            or plan.operation not in {"move", "move_same_space"}
             or plan.space_id != source_space_id
             or plan.plan_digest != plan_digest
         ):
@@ -476,3 +476,97 @@ class MoveJobRepository:
         if self._context(session) != tenant:
             _conflict("move_membership_context_changed")
         return frozenset(found)
+
+    async def alist_query_candidates(
+        self,
+        session,
+        *,
+        space_id,
+        subject_type,
+        subject_id,
+        after_id=None,
+        limit=200,
+        state=None,
+        ordered=False,
+        after=None,
+    ) -> tuple[str, ...]:
+        """Coarse typed candidates only; the App still checks live authority."""
+        tenant = self._context(session)
+        if (
+            type(ordered) is not bool
+            or (ordered and after_id is not None)
+            or (
+                after is not None
+                and (
+                    not ordered
+                    or type(after) is not tuple
+                    or len(after) != 2
+                    or not isinstance(after[0], datetime)
+                    or not isinstance(after[1], str)
+                )
+            )
+            or type(space_id) is not int
+            or space_id <= 0
+            or subject_type not in ("user", "service_account")
+            or type(subject_id) is not int
+            or subject_id <= 0
+            or type(limit) is not int
+            or not 1 <= limit <= 200
+            or (after_id is not None and (not isinstance(after_id, str) or not 0 < len(after_id) <= 36))
+        ):
+            raise ValueError("move candidate page requires exact typed subject and bounded seek")
+        job, plan, retry = (
+            model.__table__
+            for model in (KnowledgeProcessingJob, KnowledgeOperationPlan, KnowledgeProcessingRetryReceipt)
+        )
+        from sqlalchemy import and_, or_
+
+        from bisheng.knowledge.domain.schemas.processing_job import JobState
+
+        historical = (
+            select(retry.c.id)
+            .where(
+                retry.c.tenant_id == tenant,
+                retry.c.job_id == job.c.id,
+                retry.c.actor_subject_type == subject_type,
+                retry.c.actor_subject_id == subject_id,
+                retry.c.expected_job_revision >= 0,
+                retry.c.accepted_job_revision > retry.c.expected_job_revision,
+                retry.c.accepted_job_revision <= job.c.revision,
+            )
+            .exists()
+        )
+        statement = (
+            (select(job.c.id, job.c.accepted_at) if ordered else select(job.c.id))
+            .select_from(
+                job.join(
+                    plan,
+                    and_(
+                        plan.c.tenant_id == tenant,
+                        plan.c.operation == "move",
+                        plan.c.operation_id == job.c.id,
+                        plan.c.consumed_at.is_not(None),
+                    ),
+                )
+            )
+            .where(
+                job.c.tenant_id == tenant,
+                job.c.kind == "move_index",
+                or_(job.c.space_id == space_id, plan.c.space_id == space_id),
+                or_(and_(job.c.actor_subject_type == subject_type, job.c.actor_subject_id == subject_id), historical),
+            )
+        )
+        if after_id is not None:
+            statement = statement.where(job.c.id > after_id)
+        if state is not None:
+            statement = statement.where(job.c.state == JobState(state).value)
+        if ordered and after is not None:
+            timestamp, ident = after
+            statement = statement.where(
+                or_(job.c.accepted_at < timestamp, and_(job.c.accepted_at == timestamp, job.c.id < ident))
+            )
+        order = (job.c.accepted_at.desc(), job.c.id.desc()) if ordered else (job.c.id,)
+        rows = await self._rows(session, statement.order_by(*order).limit(limit))
+        if self._context(session) != tenant:
+            _conflict("move_query_context_changed")
+        return tuple((row["id"], row["accepted_at"]) for row in rows) if ordered else tuple(row["id"] for row in rows)

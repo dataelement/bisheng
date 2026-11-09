@@ -86,7 +86,6 @@ from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeState,
     KnowledgeTypeEnum,
 )
-from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import (
     KnowledgeDocumentVersion,
 )
@@ -103,6 +102,7 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
 )
 from bisheng.knowledge.domain.models.knowledge_space_user_pin import KnowledgeSpaceUserPinDao
 from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
+from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     InitialPermissionApplyResult,
@@ -1815,67 +1815,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return result
 
     async def clear_space(self, space_id: int) -> None:
-        """F030: clear a knowledge space's contents but keep the space itself.
-
-        Mirrors ``delete_space``'s content cleanup (vector + ES + minio + child
-        file/folder rows + child FGA tuples) while preserving the space row, its
-        members, space-level FGA tuples and tag library — i.e. name/description/id
-        and membership survive, only the files/folders inside are removed.
-        """
-        async with get_async_db_session() as session:
-            space = await KnowledgeModelReferenceApplication.repository.aget(session, space_id)
-            if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-                raise SpaceNotFoundError()
-            prepared = await KnowledgeModelReferenceApplication.aprepare_removal(
-                session, space_id, login_user=self.login_user, only_clear=True
-            )
-            child_resources = await self._list_space_child_resources(space_id)
-            child_permission_records = await self._load_resource_permission_records(child_resources)
-            await self._project_resource_deletes(child_permission_records)
-
-            # Preserve the existing projection → external purge → SQL order.
-            await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
-            await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
-            await KnowledgeModelReferenceApplication.aapply_removal(session, prepared)
-            await session.commit()
+        """Clear through the confirmed lifecycle, preserving the space and model."""
+        manifest = await self._deletion_application().aordinary_delete(
+            identity=self.login_user, space_id=space_id, operation="knowledge_space_clear"
+        )
         self._dispatch_knowledge_chat_rehome(
             source_space_id=space_id,
-            resources=child_resources,
+            resources=[(row["resource_type"], row["resource_id"]) for row in manifest["fga_resources"]],
             reason="clear_space",
         )
 
-        # The vector drop above removed the Milvus collection + ES index; recreate
-        # empty ones so the cleared space stays queryable (empty result, not 500).
-        await asyncio.to_thread(KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, space)
-
     async def delete_space(self, space_id: int) -> None:
-        async with get_async_db_session() as session:
-            space = await KnowledgeModelReferenceApplication.repository.aget(session, space_id)
-            if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-                raise SpaceNotFoundError()
-            prepared = await KnowledgeModelReferenceApplication.aprepare_removal(
-                session, space_id, login_user=self.login_user
-            )
-            child_resources = await self._list_space_child_resources(space_id)
-            original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
-            original_member_ids = {member.user_id for member in original_members}
-            original_member_ids.update(await self._authorized_space_user_ids(space_id))
-            child_permission_records = await self._load_resource_permission_records(child_resources)
-            container_adapter = await self._resource_adapter("knowledge_space")
-            container_record = await container_adapter.load_permission_record(
-                resource_type="knowledge_space",
-                resource_id=str(space_id),
-            )
-            if container_record is None:
-                raise SpaceNotFoundError()
-            actor = await self._permission_actor()
-            await self._project_resource_deletes(child_permission_records)
-            await container_adapter.project_delete(record=container_record, actor=actor)
-
-            await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
-            await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
-            await KnowledgeModelReferenceApplication.aapply_removal(session, prepared)
-            await session.commit()
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+        await self._require_action("knowledge_space", space_id, "delete")
+        original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
+        original_member_ids = {member.user_id for member in original_members}
+        original_member_ids.update(await self._authorized_space_user_ids(space_id))
+        await self._deletion_application().aordinary_delete(
+            identity=self.login_user, space_id=space_id, operation="knowledge_space_delete"
+        )
         await self._send_space_event_notification(
             action_code=SPACE_DELETED_MESSAGE,
             receiver_user_ids=sorted(original_member_ids),
@@ -1883,20 +1843,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_name=space.name,
             navigable=False,
         )
-
-        # Drop the private auto-tag library bound to this space (if any) so
-        # we never leave orphan rows in knowledge_space_tag_library.
-        try:
-            await KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge(space_id)
-        except Exception as e:
-            _logger.warning(
-                "Failed to delete private tag library for space %s: %s",
-                space_id,
-                e,
-            )
-
-        # delete space channel memeber
-        await SpaceChannelMemberDao.clean_space_member(space_id)
 
         # Audit log and telemetry
         await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(self.login_user, self.request, space)
@@ -3625,15 +3571,57 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
         return updated_folder
 
-    async def _delete_formal_resource(self, resource) -> dict:
-        from bisheng.knowledge.domain.services.knowledge_space_direct_delete_service import (
-            KnowledgeSpaceDirectDeleteService,
-        )
+    def _deletion_application(self):
+        factory = getattr(self, "deletion_application_factory", None)
+        if factory is None:
+            raise RuntimeError("knowledge deletion composition is not configured")
+        return factory()
 
-        return await KnowledgeSpaceDirectDeleteService(
-            authorize=self._require_action,
-            load_permission_records=self._load_resource_permission_records,
-        ).delete(resource=resource, applicant_user_id=self.login_user.user_id)
+    async def confirm_deletion(self, space_id, change):
+        """New confirmation retains the old notifications, audit and chat hooks."""
+        application = self._deletion_application()
+        operation, _ = await application.acompletion_details(
+            identity=self.login_user, space_id=space_id, request=change
+        )
+        space, recipients = None, set()
+        if operation == "knowledge_space_delete":
+            space = await KnowledgeDao.aquery_by_id(space_id)
+            if space is not None:
+                members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
+                recipients = {member.user_id for member in members}
+                recipients.update(await self._authorized_space_user_ids(space_id))
+        result = await application.aconfirm(identity=self.login_user, space_id=space_id, request=change)
+        if result["state"] != "succeeded" or result.get("reused"):
+            return result
+        _, manifest = await application.acompletion_details(
+            identity=self.login_user, space_id=space_id, request=change, completed=True
+        )
+        if operation == "knowledge_space_delete":
+            if space is not None:
+                await self._send_space_event_notification(
+                    action_code=SPACE_DELETED_MESSAGE,
+                    receiver_user_ids=sorted(recipients),
+                    space_id=space_id,
+                    space_name=space.name,
+                    navigable=False,
+                )
+                await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(self.login_user, self.request, space)
+                KnowledgeAuditTelemetryService.telemetry_delete_knowledge(self.login_user)
+        else:
+            self._dispatch_knowledge_chat_rehome(
+                source_space_id=space_id,
+                resources=[(row["resource_type"], row["resource_id"]) for row in manifest["fga_resources"]],
+                reason=operation,
+            )
+            await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        return result
+
+    async def _delete_formal_resource(self, resource) -> dict:
+        return await self._deletion_application().aordinary_delete(
+            identity=self.login_user,
+            space_id=resource.knowledge_id,
+            selections=(DeleteSelection("folder" if resource.file_type == 0 else "knowledge_file", resource.id),),
+        )
 
     async def delete_folder(self, space_id: int, folder_id: int):
         folder = await self._get_folder_for_action(space_id, folder_id)
@@ -4468,258 +4456,42 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 all_files.add(v.knowledge_file_id)
         return all_files, all_docs
 
-    async def move_items(
-        self,
-        space_id: int,
-        items: list[dict],
-        target_space_id: int,
-        target_folder_id: int | None = None,
-        skip_invalid: bool = False,
-    ) -> dict:
-        """Move files/folders within a space or across spaces (F034).
+    async def aprecheck_move(self, space_id, request):
+        if not callable(getattr(self, "move_application_factory", None)):
+            from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-        Returns ``{"moved": [...], "invalid": [...]}``; see design §4.2. Same-space
-        is a synchronous metadata move; cross-space additionally relocates the whole
-        version chain, clears tags (AC-23), marks SUCCESS files REBUILDING, and
-        dispatches async retrieval-data migration per file.
-        """
-        from sqlmodel import col, func, or_, select
+            raise KnowledgeOperationPlanConflictError(reason="move_application_unconfigured")
+        application = await self.move_application_factory()
+        return await application.aprecheck(space_id, request, identity=self.login_user, entry_kind="web")
 
-        from bisheng.knowledge.domain.models.knowledge import Knowledge
+    async def aconfirm_move(self, space_id, request):
+        if not callable(getattr(self, "move_application_factory", None)):
+            from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-        await self._require_read_permission(space_id)
-        cross_space = target_space_id != space_id
-        # Depth limit counts FOLDER layers only (see MAX_FOLDER_LEVEL). Files may
-        # sit inside a deepest-level folder, so file moves carry no depth check.
-        max_folder_level = MAX_FOLDER_LEVEL
+            raise KnowledgeOperationPlanConflictError(reason="move_application_unconfigured")
+        application = await self.move_application_factory()
+        return await application.aconfirm(space_id, request, identity=self.login_user, entry_kind="web")
 
-        async with get_async_db_session() as session:
-            source_space = await session.get(Knowledge, space_id)
-            target_space = await session.get(Knowledge, target_space_id)
-            if not target_space or target_space.type != KnowledgeTypeEnum.SPACE.value:
-                raise SpaceNotFoundError()
-            if source_space and target_space.tenant_id != source_space.tenant_id:
-                raise SpaceTenantMismatchError()
+    async def move_items(self, space_id, items, target_space_id, target_folder_id=None, skip_invalid=False):
+        """Retain synchronous same-space moves; cross-space requires confirmation."""
+        from bisheng.knowledge.domain.schemas.knowledge_space_schema import FileMoveReq
 
-            if target_folder_id:
-                target_folder = await session.get(KnowledgeFile, target_folder_id)
-                if (
-                    not target_folder
-                    or target_folder.file_type != FileType.DIR.value
-                    or target_folder.knowledge_id != target_space_id
-                ):
-                    raise SpaceFolderNotFoundError()
-                target_level_path = f"{target_folder.file_level_path}/{target_folder.id}"
-                target_level = target_folder.level + 1
-                new_parent: tuple[str, int] = ("folder", target_folder.id)
-            else:
-                target_level_path = ""
-                target_level = 0
-                new_parent = ("knowledge_space", target_space_id)
+        if not callable(getattr(self, "move_application_factory", None)):
+            from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-            # Target-side upload permission (same + cross space): moving items
-            # into a folder / space root is semantically "placing files there",
-            # so require upload_file on the target — mirrors add_file. The move
-            # dialog already hides targets the user can't upload to; this also
-            # blocks direct API calls into a no-permission target (decision-8
-            # reversal, see 测试反馈修复-R1.md #5).
-            if target_folder_id:
-                target_actions = await self._get_effective_actions("folder", target_folder_id, space_id=target_space_id)
-            else:
-                target_actions = await self._get_effective_actions(
-                    "knowledge_space", target_space_id, space_id=target_space_id
-                )
-            if "upload_file" not in target_actions:
-                raise SpacePermissionDeniedError()
-
-            # ── validate each item ──
-            valid: list[KnowledgeFile] = []
-            invalid: list[dict] = []
-            for it in items:
-                rec = await session.get(KnowledgeFile, int(it["id"]))
-                if not rec or rec.knowledge_id != space_id:
-                    raise SpaceFileNotFoundError()
-                is_folder = rec.file_type == FileType.DIR.value
-                word = "folder" if is_folder else "file"
-                otype = "folder" if is_folder else "knowledge_file"
-                self_prefix = f"{rec.file_level_path}/{rec.id}"
-
-                reason: str | None = None
-                effective_actions = await self._get_effective_actions(
-                    otype,
-                    rec.id,
-                    space_id=space_id,
-                )
-                if "move" not in effective_actions:
-                    reason = "no_permission"
-                elif is_folder and not cross_space and target_folder_id == rec.id:
-                    reason = "into_self"
-                elif is_folder and not cross_space and target_level_path.startswith(f"{self_prefix}/"):
-                    reason = "into_subtree"
-                elif not cross_space and target_level_path == (rec.file_level_path or ""):
-                    reason = "into_current_parent"
-                else:
-                    if is_folder:
-                        # Deepest FOLDER in the moved subtree (the folder itself
-                        # included); files are excluded — they don't count as a
-                        # layer, so an empty folder and a folder whose deepest
-                        # node is a file are both limited by their folders only.
-                        max_sub = await session.scalar(
-                            select(func.max(KnowledgeFile.level)).where(
-                                KnowledgeFile.knowledge_id == space_id,
-                                KnowledgeFile.file_type == FileType.DIR.value,
-                                or_(
-                                    KnowledgeFile.id == rec.id,
-                                    col(KnowledgeFile.file_level_path) == self_prefix,
-                                    col(KnowledgeFile.file_level_path).like(f"{self_prefix}/%"),
-                                ),
-                            )
-                        )
-                        depth_after = target_level + ((max_sub or rec.level) - rec.level)
-                        if depth_after > max_folder_level:
-                            reason = "depth_exceeded"
-                    # AC-12: same-level FOLDER name conflict is rejected for BOTH
-                    # same-space and cross-space moves (the dup query already scopes
-                    # to target_space_id). Files are never name-checked on move.
-                    if reason is None and is_folder:
-                        # Root-level rows persist file_level_path as NULL or "";
-                        # normalise both at the target root, otherwise SQL's
-                        # NULL == "" (false) lets a same-name root folder slip
-                        # through the dup check and the move silently succeeds.
-                        level_path_cond = (
-                            SpaceFileDao._root_path_filter()
-                            if target_level_path == ""
-                            else KnowledgeFile.file_level_path == target_level_path
-                        )
-                        dup = await session.scalar(
-                            select(func.count(KnowledgeFile.id)).where(
-                                KnowledgeFile.knowledge_id == target_space_id,
-                                KnowledgeFile.file_type == FileType.DIR.value,
-                                KnowledgeFile.file_name == rec.file_name,
-                                level_path_cond,
-                                KnowledgeFile.id != rec.id,
-                            )
-                        )
-                        if dup and dup > 0:
-                            reason = "name_conflict"
-
-                if reason:
-                    invalid.append({"id": rec.id, "type": word, "name": rec.file_name, "reason": reason})
-                else:
-                    valid.append(rec)
-
-            if invalid and not skip_invalid:
-                return {"moved": [], "invalid": invalid}
-
-            if valid:
-                if source_space is not None:
-                    require_space_processing_idle(source_space, operation="move_out")
-                require_space_processing_idle(target_space, operation="move_in")
-
-            # ── execute valid items ──
-            moved: list[dict] = []
-            moved_file_ids: set[int] = set()  # all relocated files (tag clearing, AC-23)
-            files_to_migrate: set[int] = set()  # only files with data to move (was SUCCESS → REBUILDING)
-            direct_move_resources: set[tuple[str, int]] = set()
-            for rec in valid:
-                is_folder = rec.file_type == FileType.DIR.value
-                word = "folder" if is_folder else "file"
-                old_parent = self._parent_ref_from_level_path(rec.file_level_path, space_id)
-                level_delta = target_level - rec.level
-
-                rows: list[KnowledgeFile] = [rec]
-                if is_folder:
-                    old_self_prefix = f"{rec.file_level_path}/{rec.id}"
-                    new_self_prefix = f"{target_level_path}/{rec.id}"
-                    descendants = (
-                        await session.exec(
-                            select(KnowledgeFile).where(
-                                KnowledgeFile.knowledge_id == space_id,
-                                or_(
-                                    col(KnowledgeFile.file_level_path) == old_self_prefix,
-                                    col(KnowledgeFile.file_level_path).like(f"{old_self_prefix}/%"),
-                                ),
-                            )
-                        )
-                    ).all()
-                    for d in descendants:
-                        d.file_level_path = new_self_prefix + (d.file_level_path or "")[len(old_self_prefix) :]
-                        d.level = d.level + level_delta
-                        rows.append(d)
-                if cross_space:
-                    direct_move_resources.update(
-                        (
-                            "folder" if row.file_type == FileType.DIR.value else "knowledge_file",
-                            row.id,
-                        )
-                        for row in rows
-                    )
-                rec.file_level_path = target_level_path
-                rec.level = target_level
-
-                if cross_space:
-                    leaf_file_ids = [r.id for r in rows if r.file_type == FileType.FILE.value]
-                    chain_files, chain_docs = await self._collect_version_chain_file_ids(session, leaf_file_ids)
-                    for cfid in chain_files:
-                        cf = await session.get(KnowledgeFile, cfid)
-                        if cf is None:
-                            continue
-                        cf.knowledge_id = target_space_id
-                        moved_file_ids.add(cfid)
-                        if cf.status == KnowledgeFileStatus.SUCCESS.value:
-                            # Only completed files have chunks to migrate. Files still
-                            # parsing/failed continue in the target space via their own
-                            # parse/retry flow (AC-21); no migration dispatch for them.
-                            cf.status = KnowledgeFileStatus.REBUILDING.value
-                            files_to_migrate.add(cfid)
-                        session.add(cf)
-                    for r in rows:
-                        r.knowledge_id = target_space_id
-                    for did in chain_docs:
-                        doc = await session.get(KnowledgeDocument, did)
-                        if doc is not None:
-                            doc.knowledge_id = target_space_id
-                            session.add(doc)
-
-                for r in rows:
-                    session.add(r)
-
-                moved.append(
-                    {
-                        "id": rec.id,
-                        "type": word,
-                        "old_parent_id": old_parent[1] if old_parent[0] == "folder" else None,
-                        "cross_space": cross_space,
-                    }
-                )
-
-            await session.commit()
-
-        # ── post-commit side effects (FGA tuples / tags / async dispatch) ──
-        if cross_space:
-            self._dispatch_knowledge_chat_rehome(
-                source_space_id=space_id,
-                resources=sorted(direct_move_resources),
-                reason="cross_space_move",
-            )
-
-        for m in moved:
-            otype = "folder" if m["type"] == "folder" else "knowledge_file"
-            old_parent = ("folder", m["old_parent_id"]) if m["old_parent_id"] else ("knowledge_space", space_id)
-            await self._replace_resource_parent_tuple(otype, m["id"], old_parent, new_parent)
-
-        if cross_space:
-            # AC-23: clear space tags on every relocated file (tags don't migrate).
-            for fid in moved_file_ids:
-                await TagDao.aupdate_resource_tags([], str(fid), ResourceTypeEnum.SPACE_FILE, self.login_user.user_id)
-            # Dispatch retrieval-data migration only for files that had data (source = old space).
-            for fid in files_to_migrate:
-                await self._dispatch_cross_space_migration(fid, source_space_id=space_id)
-
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
-        if cross_space:
-            await KnowledgeDao.async_update_knowledge_update_time_by_id(target_space_id)
-        return {"moved": moved, "invalid": invalid}
+            raise KnowledgeOperationPlanConflictError(reason="move_application_unconfigured")
+        application = await self.move_application_factory()
+        return await application.move_legacy(
+            space_id,
+            FileMoveReq(
+                items=items,
+                target_space_id=target_space_id,
+                target_folder_id=target_folder_id,
+                skip_invalid=skip_invalid,
+            ),
+            identity=self.login_user,
+            entry_kind="web",
+        )
 
     async def update_file_encoding(
         self,
@@ -4797,8 +4569,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return list(expanded)
 
-    async def delete_file(self, file_id: int):
-        file_record = await self._get_file_for_action(file_id)
+    async def delete_file(self, file_id: int, *, space_id: int | None = None):
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_action("knowledge_file", file_id, "delete")
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
         if not space:
@@ -5031,40 +4803,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not knowledge:
             raise SpaceNotFoundError()
 
-        await self._require_read_permission(knowledge_id)
         self._ensure_space_async_task_tenant_consistency(knowledge, "batch_delete")
-        file_ids, folder_ids = await self._normalize_batch_delete_inputs(
-            knowledge_id,
-            file_ids,
-            folder_ids,
+        selections = tuple(
+            [DeleteSelection("folder", ident) for ident in self._dedupe_ids(folder_ids)]
+            + [DeleteSelection("knowledge_file", ident) for ident in self._dedupe_ids(file_ids)]
         )
-
-        for folder_id in folder_ids:
-            await self.delete_folder(knowledge.id, folder_id)
-
-        if file_ids:
-            direct_files = []
-            for file_id in self._dedupe_ids(file_ids):
-                file_record = await self._get_file_for_action(file_id, space_id=knowledge_id)
-                await self._require_action(
-                    "knowledge_file",
-                    file_id,
-                    "delete",
-                )
-                direct_files.append(file_record)
-            deleted_ids: set[int] = set()
-            for file_record in direct_files:
-                if file_record.id in deleted_ids:
-                    continue
-                manifest = await self._delete_formal_resource(file_record)
-                deleted_ids.update(manifest["file_ids"])
-                self._dispatch_knowledge_chat_rehome(
-                    source_space_id=knowledge.id,
-                    resources=[(item["resource_type"], item["resource_id"]) for item in manifest["fga_resources"]],
-                    reason="batch_delete_files",
-                )
-        if file_ids:
-            await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)
+        if not selections:
+            return
+        manifest = await self._deletion_application().aordinary_delete(
+            identity=self.login_user, space_id=knowledge_id, selections=selections
+        )
+        self._dispatch_knowledge_chat_rehome(
+            source_space_id=knowledge_id,
+            resources=[(row["resource_type"], row["resource_id"]) for row in manifest["fga_resources"]],
+            reason="batch_delete_files",
+        )
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
 
     async def batch_download(self, space_id: int, file_ids: list[int], folder_ids: list[int]) -> str:
         """

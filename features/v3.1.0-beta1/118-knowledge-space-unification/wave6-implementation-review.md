@@ -600,3 +600,24 @@ fixed0fdda0e87c新增131行实际读取Repo和原Visibility薄桥，SPACE3正向
 §124独立固定export c9ad73cb6e：37项新native/边界1.30s通过，真实fresh checkout tenant变化在0查询前拒、nested drift拒、跨Root非primary alias/坏version_no/DIR/dangling Doc拒。额外facade_equality路径组合161通过、1原fixture失败：test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_door[hosted_runtime]，旧helper不接principal关键字；测试叶与CapabilityBus完整AST在e3a3da6983和c9ad73cb6e一致，确认本波baseline，不冒该额外路径全绿。Root14路径142绿保持独立口径。
 
 RRT fixed27aa5359e990已Root完整读两生产diff，normalmerge d0c6e3872d；主树3实际路径52 passed/2.69s，/private/tmp/f118-root-target-deletion-integrated.log及XML。原Source方法AST保持，只有已有目标删除证据写入和窄runtime桥；实际模型/空间删除业务整卡待闭，不把证据组件当公开删除交付。
+
+
+### 移动Owner受信事务整合（2026-11-09）
+
+2152eaefb865已normalmerge；Root已完整读两App、原peek/确认getter生产diff。Root实际/tmp最后ready await残留dirty File82改回源空间，原版DID NOT RAISE真红0.69s（f118-root-move-tail-pending-red）；正式125da4881c三红/一控制后，完整Session提交前与两共同SP释放前加UOW检查，未在合法Repo内部pending中途拒。主树8实际路径含Root原/tmp探针63 passed/15.12s，/private/tmp/f118-root-move-owner-integrated.log及XML。作者25路径410 passed/65.72s，旧adapter夹具把Source10写40的1项失败仅精确修fixture后同组绿，不算产品红。
+
+401/10001独立roots与changes预算分别precheck/accept184/2920 SQL，attempt/logical1611/37035（File/Doc/Ready Item各N=3N，其余分页项）；ready-renew14/max4绑定，claim68/guard78/checkpoint68/ACK71两规模同常量，零fullPlan/manifest。原Item为executemany N行×23绑定，不误作N参数IN；GROUP BY原10001 Item匹配driver约2.008ms另列，不称ACK总CPU恒定。原真实index adapter已联通Owner durable target_verified/source_cleaned与五标量ACK；实际worker/HTTP/旧接口整链仍§126继续，不因内部Owner完成勾整移动任务。
+
+
+### 知识直接引用实际target元数据资格（2026-11-09）
+
+原T103–T110业务链检查发现D2原raw flow只核Source ready/revision，未核非legacy target owner/space。官方25716首5红/37控制中，2项把完整既有legacy误当数据错误的oracle不符合原已确认行为；首次实现也使原legacy保留控制失败，已撤回该范围扩张并保持原旧断言。完整legacy（含owner未知）仍保留阻断事实、不猜/改owner、不恢复失效引用；仅非legacy owner/space漂移及非法部分bundle拒。生产仍同Scope/receipt，逐行O(1)，无额外SQL/跨源扫描。
+
+精确修正的新3红+3legacy控制，用git原HEAD源码/tmp独立加载实证0.55s（f118-delete-inbound-metadata-red-corrected），其余36已由首原选集控制，不冒称全部红。最终D1/D2四实际路径99 passed/6.68s，/private/tmp/f118-delete-inbound-metadata-corrected.log及XML，含401/10001预算；旧legacy保留、foreign Source只数量等全部原断言保持。原T103–T110仍按业务入口/删除投影/恢复完整验收，不将此校验单独计为完成。
+
+
+### 实际移动 HTTP 与原 Worker 整链集成（2026-11-09）
+
+c666adc6915e0312a77e5dac4710028447ad524c 经Root完整17文件diff生产链复查后normalmerge 1666d7ea27。主功能树实际HTTP/原任务/默认混合列表/普通执行黄金值/长P1进度/事务尾九路径62 passed/16.30s，证据 /private/tmp/f118-root-move-chain-integrated.log 及同名XML。作者固定组合657 passed、21个慢规模项排除；401/10001另测2通过，完整预算见 /private/tmp/f118-fullchain-fixed-evidence.md。此非最新全特性全选集或部署E2E。
+
+新显式预检确认到原EXECUTE_TASK、实际P1/K1/R2/Ready、原index adapter、durable target_verified/source_cleaned及五标量ACK、query/retry已接通；原同步移动/skip_invalid外层分类与同空间语义、源空间删除输入保护仍待业务闭合。默认list仅普通四kind，COUNT与page同谓词；这是读列表SQL字节的明确例外，原执行49/49/49/38黄金值保持。未据本次整合提前关闭T073–094；原137队列仍44完成、93待办，按整卡条件验收。

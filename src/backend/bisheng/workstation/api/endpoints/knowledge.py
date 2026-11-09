@@ -8,7 +8,6 @@ from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.core.cache.utils import save_download_file, save_uploaded_file
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.utils.util import sync_func_to_async
 from bisheng.workstation.domain.services import WorkStationService
@@ -92,8 +91,10 @@ async def query_knowledge_list(request: Request, page: int, size: int, login_use
 
 
 @router.delete("/deleteKnowledge")
-def delete_knowledge(request: Request, file_id: int, login_user=LoginUserDep):
-    res = KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
+async def delete_knowledge(request: Request, file_id: int, login_user=LoginUserDep):
+    from bisheng.knowledge.application.deletion_compatibility import delete_legacy_files
+
+    res = await delete_legacy_files(request=request, identity=login_user, file_ids=[file_id])
     return resp_200(data=res)
 
 

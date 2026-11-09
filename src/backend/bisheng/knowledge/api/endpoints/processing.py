@@ -9,6 +9,7 @@ from bisheng.common.errcode.admin_scope import AdminScopeChangedError
 from bisheng.common.schemas.api import resp_200
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.application.move_processing_access import MoveProcessingAccess, get_move_owner
 from bisheng.knowledge.application.processing_owner import KnowledgeProcessingOwner
 from bisheng.knowledge.domain.repositories.processing_settings_repository import ProcessingSettingsRepository
 from bisheng.knowledge.domain.schemas.processing_job import (
@@ -33,7 +34,7 @@ router = APIRouter(tags=["knowledge_processing"])
 
 def get_processing_service():
     # These kinds have native handlers and same-transaction SQL Owners.
-    # Move/copy kinds stay unavailable until their real assembly joins.
+    # Move is assembled only by the explicit move branches below.
     return ProcessingJobService(
         owner=KnowledgeProcessingOwner(),
         available_kinds={"embedding_rebuild", "file_reprocess", "file_resplit", "metadata_schema_change"},
@@ -126,6 +127,12 @@ async def list_processing_jobs(
     identity: UserPayload = Depends(UserPayload.get_login_user),
     service: ProcessingJobService = Depends(get_processing_service),
 ):
+    if kind == "move_index":
+        return resp_200(
+            await MoveProcessingAccess(await get_move_owner()).alist(
+                space_id, identity=identity, page=page, page_size=page_size, state=state
+            )
+        )
     async with get_async_db_session() as session:
         data = await service.alist(
             session, space_id, identity=identity, page=page, page_size=page_size, kind=kind, state=state
@@ -137,9 +144,12 @@ async def list_processing_jobs(
 async def get_processing_job(
     job_id: str,
     space_id: int = Path(gt=0),
+    kind: ProcessingKind | None = None,
     identity: UserPayload = Depends(UserPayload.get_login_user),
     service: ProcessingJobService = Depends(get_processing_service),
 ):
+    if kind == "move_index":
+        return resp_200(await MoveProcessingAccess(await get_move_owner()).aget(space_id, job_id, identity=identity))
     async with get_async_db_session() as session:
         data = await service.aget(session, space_id, job_id, identity=identity)
     return resp_200(data)
@@ -149,12 +159,19 @@ async def get_processing_job(
 async def list_processing_items(
     job_id: str,
     space_id: int = Path(gt=0),
+    kind: ProcessingKind | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     state: ItemState | None = None,
     identity: UserPayload = Depends(UserPayload.get_login_user),
     service: ProcessingJobService = Depends(get_processing_service),
 ):
+    if kind == "move_index":
+        return resp_200(
+            await MoveProcessingAccess(await get_move_owner()).alist_items(
+                space_id, job_id, identity=identity, page=page, page_size=page_size, state=state
+            )
+        )
     async with get_async_db_session() as session:
         data = await service.alist_items(
             session, space_id, job_id, identity=identity, page=page, page_size=page_size, state=state
@@ -168,10 +185,15 @@ async def retry_processing_job(
     change: ProcessingRetryRequest,
     request: Request,
     space_id: int = Path(gt=0),
+    kind: ProcessingKind | None = None,
     identity: UserPayload = Depends(UserPayload.get_login_user),
     service: ProcessingJobService = Depends(get_processing_service),
 ):
     await _write_scope(request, identity)
+    if kind == "move_index":
+        return resp_200(
+            await MoveProcessingAccess(await get_move_owner()).aretry(space_id, job_id, change, identity=identity)
+        )
     async with get_async_db_session() as session:
         outcome = await service.aretry(session, space_id, job_id, change, identity=identity, entry_kind="web")
         # Obsolescence is durable business state; report its error only after

@@ -1,6 +1,12 @@
 import { useKnowledgeDeletion } from "../hooks/useKnowledgeDeletion";
 import type { UseKnowledgeFileActionsOptions } from "./knowledgeSpaceTypes";
-import { FileType, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
+import {
+  FileType,
+  type KnowledgeFile,
+  batchDownloadApi,
+  batchRetryApi,
+  getFileDownloadApi,
+} from "~/api/knowledge";
 import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
 import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import {
@@ -18,7 +24,6 @@ export function useKnowledgeFileActions({
   setEditingTagsFileId,
   setIsBatchTagging,
   queryClient,
-  canMoveFile,
   deleteEntryIds,
   downloadEntryIds,
   showToast,
@@ -80,6 +85,7 @@ export function useKnowledgeFileActions({
   // F034: move selected files/folders (same-space or cross-space) via MoveToDialog,
   // plus drag-to-folder move (dropMoveToFolder wired into the table/card drag sources).
   const {
+    moveProgress,
     moveDialogOpen,
     setMoveDialogOpen,
     openMove,
@@ -104,11 +110,9 @@ export function useKnowledgeFileActions({
     const uploading = selected.filter((f) => isKnowledgeItemUploading(f));
     const movable = selected.filter((f) => !isKnowledgeItemUploading(f));
     if (!movable.length && !uploading.length) return;
-    // Frontend pre-flight (space-level move permission, simple block): if the user
-    // can't move in this space, every movable item is denied → block dialog before
-    // the picker. The backend re-validates per item on the move.
-    const permitted = canMoveFile ? movable : [];
-    const denied = canMoveFile ? [] : movable;
+    // The server classifies concrete source move actions; source upload is unrelated.
+    const permitted = movable;
+    const denied: KnowledgeFile[] = [];
     requestBatchMove(permitted, denied, uploading);
   };
 
@@ -332,6 +336,7 @@ export function useKnowledgeFileActions({
     handleReferences,
     handleBatchDownload,
     handleBatchTag,
+    moveProgress,
     moveDialogOpen,
     setMoveDialogOpen,
     openMove,

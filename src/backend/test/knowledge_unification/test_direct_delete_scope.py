@@ -15,6 +15,7 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument as Document
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion as Version
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile as File
+from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
 from bisheng.knowledge.domain.repositories.knowledge_space_delete_repository import KnowledgeSpaceDeleteRepository
 from bisheng.knowledge.domain.repositories.knowledge_version_mutation_repository import (
     VersionDocumentFact,
@@ -44,7 +45,8 @@ async def db(deletion_tenant, monkeypatch):
     async with engine.begin() as connection:
         await connection.run_sync(
             lambda conn: Knowledge.metadata.create_all(
-                conn, tables=[model.__table__ for model in (Knowledge, File, Document, Version)]
+                conn,
+                tables=[model.__table__ for model in (Knowledge, File, Document, Version, KnowledgeSpaceDeleteJob)],
             )
         )
 

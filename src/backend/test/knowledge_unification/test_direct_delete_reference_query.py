@@ -490,3 +490,47 @@ async def test_busy_history_still_contributes_its_exact_binding_for_later_app_cl
     assert len(result.references) == 1 and result.references[0].target == TargetKey("knowledge_file", 31)
     assert dict(result.slot_counts)["assistant"] == 1
     assert_ready(ctx)
+
+
+@pytest.mark.parametrize("corruption", ["foreign_owner", "wrong_space", "missing_space"])
+async def test_actual_inbound_metadata_must_match_verified_physical_target_before_complete(context, corruption):
+    ctx = context
+    await seed(ctx, (30, 101, "assistant", "a", "current", "selected"))
+    values = {
+        "foreign_owner": {"target_tenant_id": 202},
+        "wrong_space": {"target_space_id": "2"},
+        "missing_space": {"target_space_id": None},
+    }[corruption]
+    async with ctx.db.sessions() as session, session.begin():
+        await session.execute(sa.update(Binding).where(Binding.target_id == "30").values(**values))
+    ctx.db.statements.clear()
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await collect(ctx, ("knowledge_file", 30))
+    assert all(sql.lstrip().upper().startswith("SELECT") for sql, _ in ctx.db.statements)
+
+
+@pytest.mark.parametrize("owner", [None, 101])
+async def test_complete_original_legacy_bundle_remains_a_blocking_fact_without_rewriting_owner(context, owner):
+    ctx = context
+    await seed(ctx, (30, 101, "assistant", "legacy", "current", "selected"))
+    async with ctx.db.sessions() as session, session.begin():
+        await session.execute(
+            sa.update(Binding)
+            .where(Binding.target_id == "30")
+            .values(
+                target_tenant_id=owner,
+                legacy_invalid_reason="target_missing",
+                legacy_run_id="old-run",
+                legacy_evidence_key="old-evidence",
+            )
+        )
+    result = await collect(ctx, ("knowledge_file", 30))
+    assert len(result.references) == 1 and dict(result.source_counts)["assistant"] == 1
+    async with ctx.db.sessions() as session:
+        row = (await session.execute(sa.select(Binding).where(Binding.target_id == "30"))).scalar_one()
+        assert (row.target_tenant_id, row.legacy_invalid_reason, row.legacy_run_id, row.legacy_evidence_key) == (
+            owner,
+            "target_missing",
+            "old-run",
+            "old-evidence",
+        )

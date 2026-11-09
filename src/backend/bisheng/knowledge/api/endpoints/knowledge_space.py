@@ -623,7 +623,7 @@ async def delete_file(
     file_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    await svc.delete_file(file_id)
+    await svc.delete_file(file_id, space_id=space_id)
     return resp_200()
 
 
@@ -633,16 +633,16 @@ async def move_file_folder(
     req: FileMoveReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    """F034: move files/folders within or across spaces (same-space when
-    target_space_id == space_id). Returns {moved, invalid}; see design §4.2."""
-    result = await svc.move_items(
-        space_id,
-        [item.model_dump() for item in req.items],
-        target_space_id=req.target_space_id,
-        target_folder_id=req.target_folder_id,
-        skip_invalid=req.skip_invalid,
+    """Legacy same-space synchronous entry; cross-space uses explicit confirmation."""
+    return resp_200(
+        await svc.move_items(
+            space_id,
+            [item.model_dump() for item in req.items],
+            target_space_id=req.target_space_id,
+            target_folder_id=req.target_folder_id,
+            skip_invalid=req.skip_invalid,
+        )
     )
-    return resp_200(result)
 
 
 @router.get("/{space_id}/files/{file_id}/preview")

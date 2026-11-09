@@ -192,3 +192,59 @@ def needs_move(changes, facts):
         else:
             KnowledgeMoveProjectionApplication._owned_mode(item, fact)
     return result
+
+
+def projection_progress(owner, lease, scope):
+    """Index one accepted scope once; each resource guard reads only its root."""
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+
+    roots = {("knowledge_file", leaf.target.file_id): leaf.selected_root for leaf in scope.leaves}
+    roots.update({resource(root): root for root in scope.roots})
+    changes = {(change.resource_type, change.resource_id): change for change in scope.parent_changes}
+
+    async def progress(item):
+        root = roots[(item.resource_type, int(item.resource_id))]
+        kind, ident = resource(root)
+        async with owner._session() as session:
+            job, reference = await owner._job(session, lease.job_id)
+        async with identity(reference) as (actual, _):
+            async with owner._session() as session:
+                current = await owner._call(
+                    session,
+                    owner.execution.aread_projection(
+                        session, lease=lease, resource_type=kind, resource_id=ident, jobs=owner.jobs
+                    ),
+                )
+                if current is not None:
+                    expected, facts = await owner._materials(
+                        session, job, (changes[(kind, ident)],), actor_id=subject(reference).subject_id
+                    )
+            if current is None:
+                raise KnowledgeOperationPlanConflictError(reason="move_projection_lease_stopped")
+            required = needs_move(expected, facts)
+            await authorize(
+                actual,
+                roots=(root,),
+                destination_space_id=job.space_id,
+                destination_folder_id=job.parameters["destination_folder_id"],
+                move=(root,) if (kind, ident) in required else (),
+            )
+            async with owner._session() as session:
+                renewed = await owner._call(session, owner.jobs.arenew(session, lease, configuration=None, _move=True))
+            if renewed is None:
+                raise KnowledgeOperationPlanConflictError(reason="move_projection_lease_stopped")
+
+    return progress
+
+
+@asynccontextmanager
+async def logical_identity(reference, scope):
+    """Recheck current credentials/narrowing after the last external projection."""
+    async with identity(reference) as (actual, _):
+        await authorize(
+            actual,
+            roots=scope.roots,
+            destination_space_id=scope.destination_space_id,
+            destination_folder_id=scope.destination_folder_id,
+        )
+        yield

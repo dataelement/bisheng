@@ -247,3 +247,5 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 2026-11-09后继集成：模型inspection在原目标锁前固定native事务，关键await及最终Coverage/身份核同tenant/TX；原4项独审及274组合通过。移动内核与[W6§119](./wave6-completion-contract.md#119-移动逻辑切换的原直接file引用归属维护已冻结)直接File引用target_space_id维护已集成，保全部来源配置/版本/失效证据；实际MoveOwner/worker/HTTP仍按依赖实施。正式权限namespace完整target/after明细及fresh、frozen、M3写前语义门已闭合，全部迁移1527项通过。固定0c746ab294的完整本地选集6308通过、7项原中间件占位跳过；此快照不含后继新ModelDeletePlan模块，该模块另经175项集成和尾部pending ORM独立探针通过。Catalog DRAFT精确写入已集成，保ACTIVE复用/STAGED分支和完整provenance，正式资源SQL、FGA发布、CURRENT切换、停服升级与环境E2E仍待执行。
 
 2026-11-09公共检索补正：SPACE3以真实File→唯一Version→Document主指针正向证明成功主版本，未登记、错归属或坏指针不回退旧索引；原子项visible、原IN/NOTIN/none结果层防线及历史delivery不变，NORMAL0/QA1保持原规则。固定0fdda0e87c与精确旧fixture补正c9ad73cb6e的14调用方142项本地通过；401/10001候选各3/51 SELECT、max208参数，无版本表全扫。此非数据转换或环境E2E证据。
+
+整链实施合同补充（2026-11-09）：原M3权限发布按W6§125通过原Run走完整Store对账、资源SQL、固定pin差集及最后CURRENT切换；移动按§126接原EXECUTE_TASK与新明确确认/查询链，P1长批次以原compact lease续租，禁止每项全Scope。模型删除按§127使用原KnowledgeOperationPlan新增3个可NULL执行字段及provider围栏索引（先中性DDL），内部provider分享/prepare reservation与删除消费同表原子handoff，FGA期间SQL关闭；原确认hash不变，PUT恢复重交原DTO且hash一致，绝不保存credentials。代码实现及环境验收仍进行中，不能将合同冻结计为业务完成。
