@@ -1419,6 +1419,13 @@ class OpenFGACatalogProjector:
         return canonical
 
     @staticmethod
+    def expected_stage_tuples(draft: CatalogDraftSnapshot) -> tuple[tuple[str, str, str], ...]:
+        """The original Catalog graph, without changing its active pointer."""
+        return tuple(
+            (row["user"], row["relation"], row["object"]) for row in OpenFGACatalogProjector._expected_tuples(draft)
+        )
+
+    @staticmethod
     def _expected_tuples(
         draft: CatalogDraftSnapshot,
     ) -> list[dict[str, str]]:

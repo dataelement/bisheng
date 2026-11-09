@@ -284,6 +284,31 @@ class GrantSourceService:
             raise ValueError(f"{source_type} source_ref must not be empty")
         return f"{prefixes[source_type]}:{source_ref}", source_ref
 
+    def compile_existing_tuples(self, grants: tuple[GrantSnapshot, ...]) -> tuple[ProjectionTupleDelta, ...]:
+        """Project stored source/state facts without applying ADD eligibility.
+
+        Inactive models may retain existing assignments. Reconstructing those
+        edges must not call the new-source policy or regenerate source IDs.
+        """
+        result = {}
+        for grant in grants:
+            active = tuple(source for source in grant.sources if source.active)
+            if not grant.active or not active:
+                continue
+            values = [
+                self._model_delta(grant, action="WRITE", sequence=0),
+                self._grant_delta(grant, action="WRITE", sequence=1),
+            ]
+            seen = set()
+            for source in active:
+                key = source.projected_subject, source.protected
+                if key not in seen:
+                    seen.add(key)
+                    values.append(self._assignee_delta(grant, source, action="WRITE", sequence=len(values)))
+            for value in values:
+                result.setdefault(value.key, value)
+        return tuple(result.values())
+
     def add_source(
         self,
         grant: GrantSnapshot,

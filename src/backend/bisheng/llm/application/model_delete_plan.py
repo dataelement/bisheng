@@ -92,6 +92,30 @@ def _identity_facts(identity):
     )
 
 
+async def capture_model_identity(identity, *, tenant_id, plans, call):
+    """One closed web identity recipe, shared by precheck and execution."""
+    before = _identity_facts(identity)
+    actor = await call(resolve_permission_actor, identity)
+    if before != _identity_facts(identity) or not isinstance(actor, PermissionActor):
+        _changed()
+    reference = {
+        "tenant_id": tenant_id,
+        "actor_user_id": identity.user_id,
+        "credential_reference": deepcopy(before[5]),
+        "data_scope": actor.data_scope,
+    }
+    if get_is_management_api() and get_admin_scope_tenant_id() is not None:
+        reference["management_tenant_id"] = get_admin_scope_tenant_id()
+    try:
+        reference = plans._actor(reference, tenant_id)
+    except (TypeError, ValueError) as error:
+        raise KnowledgeOperationPlanConflictError(reason="model_delete_plan_web_identity_required") from error
+    credential = reference["credential_reference"]
+    if credential["tenant_id"] != identity.tenant_id or credential["token_version"] != identity.token_version:
+        _changed()
+    return before, actor, reference
+
+
 class ModelDeletePlanApplication:
     def __init__(
         self, *, references: ModelReferenceService, plans: ModelDeletePlanRepository | None = None, ttl_seconds=300
@@ -107,26 +131,7 @@ class ModelDeletePlanApplication:
         self.ttl_seconds = ttl_seconds
 
     async def _capture(self, scope, identity):
-        before = _identity_facts(identity)
-        actor = await scope.call(resolve_permission_actor, identity)
-        if before != _identity_facts(identity) or not isinstance(actor, PermissionActor):
-            _changed()
-        reference = {
-            "tenant_id": scope.tenant_id,
-            "actor_user_id": identity.user_id,
-            "credential_reference": deepcopy(before[5]),
-            "data_scope": actor.data_scope,
-        }
-        if get_is_management_api() and get_admin_scope_tenant_id() is not None:
-            reference["management_tenant_id"] = get_admin_scope_tenant_id()
-        try:
-            reference = self.plans._actor(reference, scope.tenant_id)
-        except (TypeError, ValueError) as error:
-            raise KnowledgeOperationPlanConflictError(reason="model_delete_plan_web_identity_required") from error
-        credential = reference["credential_reference"]
-        if credential["tenant_id"] != identity.tenant_id or credential["token_version"] != identity.token_version:
-            _changed()
-        return before, actor, reference
+        return await capture_model_identity(identity, tenant_id=scope.tenant_id, plans=self.plans, call=scope.call)
 
     async def _plan(self, session, *, identity, operation, server_id, retained, command_digest):
         outer = _Scope(session)

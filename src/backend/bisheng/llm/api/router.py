@@ -1,5 +1,6 @@
 import json
-from typing import Any
+from dataclasses import asdict
+from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query, Request, UploadFile, WebSocket
 from loguru import logger
@@ -25,6 +26,7 @@ from ..domain.schemas import (
     EvaluationLLMConfig,
     KnowledgeLLMConfig,
     LLMServerCreateReq,
+    ModelRemovalSourcesRequest,
     WorkbenchModelConfig,
 )
 from ..domain.services.asr_realtime import run_realtime_asr
@@ -180,8 +182,13 @@ async def delete_llm_server(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
     server_id: int = Body(..., embed=True, description="Service Provider UniqueID"),
+    force: Annotated[bool, Query()] = False,
+    confirmation_id: Annotated[str | None, Query(max_length=36)] = None,
+    plan_digest: Annotated[str | None, Query(pattern="^[0-9a-f]{64}$")] = None,
 ):
-    await LLMService.delete_llm_server(request, login_user, server_id)
+    await LLMService.delete_llm_server(
+        request, login_user, server_id, force=force, confirmation_id=confirmation_id, plan_digest=plan_digest
+    )
     return resp_200()
 
 
@@ -190,9 +197,49 @@ async def update_llm_server(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
     server: LLMServerCreateReq = Body(..., description="Service Provider All Data"),
+    force: Annotated[bool, Query()] = False,
+    confirmation_id: Annotated[str | None, Query(max_length=36)] = None,
+    plan_digest: Annotated[str | None, Query(pattern="^[0-9a-f]{64}$")] = None,
 ):
-    ret = await LLMService.update_llm_server(request, login_user, server)
+    ret = await LLMService.update_llm_server(
+        request, login_user, server, force=force, confirmation_id=confirmation_id, plan_digest=plan_digest
+    )
     return resp_200(data=ret)
+
+
+@router.post("/removal-plan")
+async def precheck_removed_models(
+    server: LLMServerCreateReq,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    from bisheng.llm.application.model_references import get_model_reference_application
+
+    result = await (await get_model_reference_application()).aplan_removed_update(identity=login_user, server=server)
+    return resp_200(data=asdict(result))
+
+
+@router.post("/server-removal-plan")
+async def precheck_server_removal(
+    server_id: int = Body(..., embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    from bisheng.llm.application.model_references import get_model_reference_application
+
+    result = await (await get_model_reference_application()).aplan_server_delete(
+        identity=login_user, server_id=server_id
+    )
+    return resp_200(data=asdict(result))
+
+
+@router.post("/removal-sources")
+async def list_removed_model_sources(
+    query: ModelRemovalSourcesRequest,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    from bisheng.llm.application.model_references import get_model_reference_application
+
+    result = await (await get_model_reference_application()).alist_sources(identity=login_user, query=query)
+    return resp_200(data=asdict(result))
 
 
 @router.get("/info")

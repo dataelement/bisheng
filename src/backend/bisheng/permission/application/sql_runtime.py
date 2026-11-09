@@ -310,7 +310,7 @@ class RedisConsistencyMarker:
                     resource_id=None,
                 ),
             )
-        elif plan.scope_type in {"department", "tenant", "user_group"}:
+        elif plan.scope_type in {"department", "tenant", "user_group", "llm_model_deletion"}:
             keys = (self._tenant_key(plan.tenant_id),)
         else:
             raise ValueError(f"unsupported permission marker scope: {plan.scope_type}")

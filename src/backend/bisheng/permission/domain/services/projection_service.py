@@ -37,6 +37,10 @@ from bisheng.permission.domain.services.projection_plan import (
 ProjectionCommitUnknownError = projection_plan_types.ProjectionCommitUnknownError
 
 
+class ProjectionScopeDeferred(PermissionPublishNotReadyError):
+    """A model journal exists but its business owner has not bound it yet."""
+
+
 class ProjectionMarkerPort(Protocol):
     async def is_ready(self) -> bool: ...
 
@@ -373,10 +377,7 @@ class ProjectionService:
             )
         if len(preview.correction_deltas) > MAX_ATOMIC_TUPLES:
             raise PermissionPublishNotReadyError(
-                msg=(
-                    "FAILED_CLOSED recovery requires more than "
-                    f"{MAX_ATOMIC_TUPLES} atomic tuple corrections"
-                ),
+                msg=(f"FAILED_CLOSED recovery requires more than {MAX_ATOMIC_TUPLES} atomic tuple corrections"),
             )
         if not await self._scope_guard.is_failed_closed_recovery_scope(
             plan,
@@ -405,9 +406,7 @@ class ProjectionService:
         try:
             await self._marker.arm(plan)
             commit_checksum = (
-                await self._write(preview.correction_deltas)
-                if preview.correction_deltas
-                else operation.after_checksum
+                await self._write(preview.correction_deltas) if preview.correction_deltas else operation.after_checksum
             )
         except Exception as exc:
             if not await self._is_after(plan.deltas):
@@ -455,6 +454,10 @@ class ProjectionService:
     ) -> ProjectionOutcome:
         try:
             await self._scope_guard.reserve(plan, int(operation.id))
+        except ProjectionScopeDeferred as exc:
+            if plan.scope_type != "llm_model_deletion":
+                await self.abandon_prepared(plan, exc)
+            raise
         except Exception as exc:
             await self.abandon_prepared(plan, exc)
             raise
