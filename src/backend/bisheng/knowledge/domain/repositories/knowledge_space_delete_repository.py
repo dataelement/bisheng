@@ -303,8 +303,9 @@ class KnowledgeSpaceDeleteRepository:
         units = self._delete_units(groups.values(), by_file, by_document, physical)
         deleting = {key for unit in units for key in unit.resource_ids}
         if for_update:
+            # An ancestor reread must not replace the facts returned for deletion.
             for model, columns, expected in (
-                (KnowledgeFile, names, {**physical, **parents}),
+                (KnowledgeFile, names, {**parents, **physical}),
                 (KnowledgeDocument, document_names, documents),
                 (KnowledgeDocumentVersion, version_names, versions),
             ):
