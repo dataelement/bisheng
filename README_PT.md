@@ -1,6 +1,6 @@
 > Criado na China. Assim como as equipes por trás de [Deepseek] e [Black Myth: Wukong], esperamos trazer mais beleza ao mundo.
 
-<img src="https://dataelem.com/bs/face.png" alt="Bisheng banner">
+<img src="docs/images/readme/bisheng-banner-en.png" alt="Bisheng banner">
 
 <p align="center">
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
