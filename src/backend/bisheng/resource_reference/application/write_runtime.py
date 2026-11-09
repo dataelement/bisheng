@@ -65,6 +65,38 @@ class ReferenceBindingRuntime:
         self.verifier = verifier
         self.bindings = ReferenceBindings(repository, verifier)
 
+    async def arefresh_file_target_ownership(self, session, *, receipts, expected_space_id):
+        """Refresh derived File space ownership, never source configuration."""
+        if self.repository.verifier is not self.verifier:
+            raise ResourceReferenceInvalidError(reason="reference_target_verifier_mismatch")
+        transaction = TransactionIdentity.capture(session)
+        tenant = self.repository.current_tenant_id()
+        targets = self.verifier.validate_owner_receipts(session, receipts)
+        if (
+            type(expected_space_id) is not int
+            or expected_space_id <= 0
+            or not targets
+            or any(
+                target.key.target_type != TargetType.KNOWLEDGE_FILE
+                or target.state != ReferenceState.VALID
+                or target.target_tenant_id != tenant
+                or target.target_space_id is None
+                for target in targets
+            )
+            or len({target.target_space_id for target in targets}) != 1
+            or targets[0].target_space_id == str(expected_space_id)
+        ):
+            raise ResourceReferenceInvalidError(reason="reference_file_owner_invalid")
+        scope = self.repository.target_owner_scope(session, receipts)
+        count = await self.repository.aupdate_file_target_ownership(
+            session, scope=scope, expected_space_id=expected_space_id
+        )
+        transaction.assert_current(session)
+        if self.repository.current_tenant_id() != tenant:
+            raise ResourceReferenceInvalidError(reason="reference_file_owner_context_changed")
+        self.verifier.validate_owner_receipts(session, receipts)
+        return count
+
     @staticmethod
     def _snapshot(root, current, rows) -> _SourceSnapshot:
         old = normalize_references(

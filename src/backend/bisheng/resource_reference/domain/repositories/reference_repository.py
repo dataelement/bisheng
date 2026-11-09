@@ -17,6 +17,7 @@ from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.resource_reference.application.contracts import (
     ROOT_GUARD_VERSION,
     ReferenceSpec,
+    ReferenceState,
     SourceKey,
     SourceRootKey,
     SourceType,
@@ -555,6 +556,91 @@ class ReferenceRepository:
         verified = self.verifier.validate_owner_receipts(session, scope._receipts)
         if {target.key for target in verified} != set(scope.targets):
             raise _invalid("target_owner_scope_invalid")
+
+    async def aupdate_file_target_ownership(self, session, *, scope, expected_space_id):
+        """Validate the complete locked inbound set before bounded derived writes.
+
+        The business Owner already holds Root/File locks and owns the SAVEPOINT.
+        Reuse the exact-target stream; do not introduce a reverse SourceRoot lock.
+        """
+        self._check_scope(session, scope)
+        if not isinstance(session, AsyncSession):
+            raise TypeError("file ownership requires a native AsyncSession")
+        native = session.sync_session
+        if native.new or native.dirty or native.deleted:
+            raise _invalid("reference_file_owner_pending_changes")
+        transaction, tenant = TransactionIdentity.capture(session), self.current_tenant_id()
+        targets = self.verifier.validate_owner_receipts(session, scope._receipts)
+        if (
+            type(expected_space_id) is not int
+            or expected_space_id <= 0
+            or any(
+                target.key.target_type != TargetType.KNOWLEDGE_FILE
+                or target.state != ReferenceState.VALID
+                or target.target_tenant_id != tenant
+                or target.target_space_id is None
+                for target in targets
+            )
+            or len({target.target_space_id for target in targets}) != 1
+            or targets[0].target_space_id == str(expected_space_id)
+        ):
+            raise _invalid("reference_file_owner_invalid")
+        spaces = {target.key.target_id: target.target_space_id for target in targets}
+        before, after = str(expected_space_id), targets[0].target_space_id
+
+        def current():
+            transaction.assert_current(session)
+            if self.current_tenant_id() != tenant or self.verifier is None:
+                raise _invalid("reference_file_owner_context_changed")
+
+        def valid(row):
+            if (
+                row.tenant_id != tenant
+                or row.target_tenant_id != tenant
+                or row.target_type != TargetType.KNOWLEDGE_FILE.value
+                or row.target_id not in spaces
+                or row.target_space_id not in (before, spaces[row.target_id])
+                or any(
+                    getattr(row, key) is not None
+                    for key in ("legacy_invalid_reason", "legacy_run_id", "legacy_evidence_key")
+                )
+            ):
+                raise _invalid("reference_file_owner_inbound_invalid")
+
+        # Exhaustion performs the original stream's complete scope validation.
+        async for page in self.aiter_inbound_for_owner_pages(session, scope):
+            current()
+            for row in page:
+                valid(row)
+        changed = 0
+        table = BusinessResourceReference.__table__
+        async for page in self.aiter_inbound_for_owner_pages(session, scope):
+            current()
+            for row in page:
+                valid(row)
+            ids = tuple(row.id for row in page if row.target_space_id == before)
+            if not ids:
+                continue
+            file_ids = tuple(sorted({row.target_id for row in page if row.target_space_id == before}))
+            result = await session.execute(
+                update(table)
+                .where(
+                    table.c.id.in_(ids),
+                    table.c.tenant_id == tenant,
+                    table.c.target_tenant_id == tenant,
+                    table.c.target_type == TargetType.KNOWLEDGE_FILE.value,
+                    table.c.target_id.in_(file_ids),
+                    table.c.target_space_id == before,
+                )
+                .values(target_space_id=after)
+            )
+            current()
+            if result.rowcount != len(ids):
+                raise _invalid("reference_file_owner_write_conflict")
+            changed += result.rowcount
+        current()
+        self._check_scope(session, scope)
+        return changed
 
     def list_inbound_for_owner(
         self, session: Session, scope: OwnerTargetScope, *, include_space_contents: bool = False
