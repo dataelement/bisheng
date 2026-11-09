@@ -535,7 +535,9 @@
     "processing_field_string": "テキスト",
     "processing_field_number": "数値",
     "processing_field_time": "日時",
-    "processing_item_number": "項目 {{number}}"
+    "processing_item_number": "項目 {{number}}",
+    "upload_temporary": "今回のアップロードに一時的なルールを使う",
+    "upload_rules_hint": "既定ではスペースのルールを継承します。ここでの変更は今回追加するファイルにのみ適用され、再試行でも同じルールを使います。音声・動画・Webの取り込みには専用のルールを使います。"
   },
   "deletion": {
     "references": "参照元",

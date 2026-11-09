@@ -1,4 +1,4 @@
-import { Button, toast } from "@bisheng/ui";
+import { Button, Checkbox, toast } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
   useCallback,
@@ -19,12 +19,19 @@ import {
 import {
   knowledgeSpaceApi,
   type KnowledgeSpaceChild,
+  type ProcessingOverrides,
 } from "@/controllers/API/knowledgeSpace";
 import {
   knowledgeQueryKeys,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import {
+  ProcessingDefaultsEditor,
+  processingDefaultsToDraft,
+  validateProcessingDefaultsDraft,
+  type ProcessingDefaultsDraft,
+} from "./ProcessingDefaultsEditor";
 import { FILE_STATUSES, StatusIndicator } from "./KnowledgeFileStatus";
 
 interface SpaceFileUploadPanelProps {
@@ -43,6 +50,7 @@ type Upload = {
   controller?: AbortController;
   token?: symbol;
   registrationStarted: boolean;
+  overrides?: ProcessingOverrides;
 };
 type Epoch = {
   id: number;
@@ -118,6 +126,45 @@ export function SpaceFileUploadPanel({
     };
   }, [epoch]);
 
+  const [rules, setRules] = useState<{
+    epoch: Epoch;
+    enabled: boolean;
+    draft?: ProcessingDefaultsDraft;
+  } | null>(null);
+  const activeRules = rules?.epoch === epoch ? rules : null;
+  const temporary = !!activeRules?.enabled;
+  const settings = useQuery({
+    queryKey: [
+      ...epoch.prefix,
+      "upload-settings",
+      instance,
+      epoch.id,
+      parentId,
+    ],
+    queryFn: ({ signal }) =>
+      knowledgeUploadsApi.getUploadSettings(spaceId, parentId, signal),
+    enabled: temporary,
+    retry: false,
+    cacheTime: 0,
+    refetchOnWindowFocus: false,
+  });
+  useEffect(() => {
+    if (settings.error && current.current === epoch && !epoch.retired)
+      showApiError(settings.error);
+  }, [epoch, settings.error]);
+  useEffect(() => {
+    if (!settings.data || current.current !== epoch || epoch.retired) return;
+    const defaults = settings.data.effective_defaults;
+    setRules((previous) =>
+      previous?.epoch !== epoch || previous.draft
+        ? previous
+        : {
+            ...previous,
+            draft: processingDefaultsToDraft(defaults),
+          },
+    );
+  }, [epoch, settings.data]);
+
   const run = useCallback(
     async (job: Upload) => {
       if (current.current !== epoch || epoch.retired || job.phase !== "queued")
@@ -149,7 +196,13 @@ export function SpaceFileUploadPanel({
         sync();
         const rows = await knowledgeUploadsApi.registerSpaceFiles(
           spaceId,
-          { file_path: [job.staged.file_path], parent_id: parentId },
+          {
+            file_path: [job.staged.file_path],
+            parent_id: parentId,
+            ...(job.overrides === undefined
+              ? {}
+              : { overrides: structuredClone(job.overrides) }),
+          },
           controller.signal,
         );
         if (!live()) return;
@@ -249,6 +302,27 @@ export function SpaceFileUploadPanel({
       (status.isSuccess && ids.some((id) => !observed.has(id))));
   const handleDrop = (files: File[]) => {
     if (current.current !== epoch || epoch.retired) return;
+    const validation = activeRules?.draft
+      ? validateProcessingDefaultsDraft(activeRules.draft)
+      : null;
+    const hasOrdinaryFile = files.some(
+      (file) => !media.has(file.name.split(".").pop()?.toLowerCase() ?? ""),
+    );
+    if (temporary && hasOrdinaryFile && !validation?.ok) {
+      toast.show({
+        type: "error",
+        message: t(
+          activeRules?.draft
+            ? "f118.invalid_defaults"
+            : "f118.loading_defaults",
+        ),
+      });
+      return;
+    }
+    const overrides: ProcessingOverrides | undefined =
+      temporary && validation?.ok
+        ? { document: validation.value.document, table: validation.value.table }
+        : undefined;
     for (const file of files) {
       const isMedia = media.has(
         file.name.split(".").pop()?.toLowerCase() ?? "",
@@ -269,6 +343,9 @@ export function SpaceFileUploadPanel({
         file,
         phase: "queued",
         registrationStarted: false,
+        ...(!isMedia && overrides
+          ? { overrides: structuredClone(overrides) }
+          : {}),
       });
     }
     sync();
@@ -282,6 +359,43 @@ export function SpaceFileUploadPanel({
   };
   return (
     <section aria-label={t("uploadFile")} className="space-y-4">
+      <div className="space-y-3">
+        <Checkbox
+          label={t("f118.upload_temporary")}
+          checked={temporary}
+          onCheckedChange={(checked) =>
+            setRules({
+              epoch,
+              enabled: checked === true,
+              draft: activeRules?.draft,
+            })
+          }
+        />
+        <p className="text-body-sm text-text-2">
+          {t("f118.upload_rules_hint")}
+        </p>
+        {temporary &&
+          (activeRules?.draft ? (
+            <ProcessingDefaultsEditor
+              value={activeRules.draft}
+              onChange={(draft) => setRules({ epoch, enabled: true, draft })}
+            />
+          ) : settings.isError ? (
+            <div role="alert">
+              <p>{t("f118.load_failed")}</p>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  void settings.refetch();
+                }}
+              >
+                {t("retry")}
+              </Button>
+            </div>
+          ) : (
+            <p role="status">{t("f118.loading_defaults")}</p>
+          ))}
+      </div>
       <DropZone onDrop={handleDrop} />
       <ul className="space-y-3">
         {jobs.map((job) => (

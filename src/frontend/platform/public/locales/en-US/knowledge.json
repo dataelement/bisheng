@@ -541,7 +541,9 @@
     "processing_field_string": "Text",
     "processing_field_number": "Number",
     "processing_field_time": "Time",
-    "processing_item_number": "Item {{number}}"
+    "processing_item_number": "Item {{number}}",
+    "upload_temporary": "Use different rules for this upload",
+    "upload_rules_hint": "By default, files inherit the space rules. Changes here apply only to files added in this batch; retries keep these rules. Audio, video, and web imports use their own rules."
   },
   "deletion": {
     "references": "References",
