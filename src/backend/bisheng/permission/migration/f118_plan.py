@@ -327,14 +327,31 @@ def _compile_catalog(before):
     actions = derive_action_release(action for action in before.actions if action.code != "use")
     by_code = {action.code: action for action in before.actions}
     selections = []
+    expected_floors = {model.model_key: model.retired_use_level_floor for model in before.models}
     for model in before.models:
         if model.kind != "CUSTOM":
             continue
         selected = tuple(code for code in model.selected_action_codes if code != "use")
         types = set(model.visibility_only_resource_types)
+        floor = model.retired_use_level_floor
+        level = model.visibility_level
         if "use" in model.effective_action_codes:
             types.update(by_code["use"].resource_types)
-        level = model.visibility_level
+            if floor is None:
+                original_levels = tuple(by_code[code].level for code in model.effective_action_codes)
+                if (
+                    type(model.derived_level) is not int
+                    or model.derived_level not in {1, 2, 3, 4}
+                    or any(type(value) is not int or value not in {1, 2, 3, 4} for value in original_levels)
+                    or model.derived_level != max(original_levels)
+                ):
+                    _blocked("original_use_tier_changed")
+                if level is not None and level != model.derived_level:
+                    _blocked("original_use_visibility_tier_conflict")
+                remaining = tuple(by_code[code].level for code in model.effective_action_codes if code != "use")
+                if remaining and max(remaining) < model.derived_level:
+                    floor = model.derived_level
+                    expected_floors[model.model_key] = floor
         if types:
             if type(model.derived_level) is not int or model.derived_level not in {1, 2, 3, 4}:
                 _blocked("visibility_tier_missing")
@@ -349,7 +366,7 @@ def _compile_catalog(before):
                 model.config_scope,
                 tuple(sorted(types)),
                 level,
-                retired_use_level_floor=model.retired_use_level_floor,
+                retired_use_level_floor=floor,
             )
         )
     models = derive_permission_models(
@@ -372,7 +389,7 @@ def _compile_catalog(before):
             or model.active != original.active
             or model.allow_same_level != original.allow_same_level
             or model.kind != original.kind
-            or model.retired_use_level_floor != original.retired_use_level_floor
+            or model.retired_use_level_floor != expected_floors[model.model_key]
             or set(model.action_codes) != set(original.effective_action_codes) - {"use"}
             or set(model.selected_action_codes) != set(original.selected_action_codes) - {"use"}
         ):
