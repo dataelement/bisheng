@@ -254,6 +254,12 @@ class PermissionModel(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(Integer, nullable=True),
     )
+    retired_use_level_floor: int | None = Field(
+        default=None,
+        exclude=True,
+        repr=False,
+        sa_column=Column(Integer, nullable=True),
+    )
     active: bool = Field(
         default=True,
         sa_column=Column(Boolean, nullable=False, server_default=text("1")),
