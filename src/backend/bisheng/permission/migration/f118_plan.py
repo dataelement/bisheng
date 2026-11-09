@@ -6,11 +6,12 @@ The formal migration owns the original artifacts and their run/hash binding.
 
 import json
 import re
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, fields, is_dataclass, replace
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from datetime import datetime
 from hashlib import sha256
 from itertools import zip_longest
+from types import MappingProxyType
 
 from pydantic import BaseModel
 
@@ -637,10 +638,10 @@ def _resource_payload(plan):
 @dataclass(frozen=True, slots=True)
 class _ResourceRetirementContext:
     catalog_plan: CatalogRetirementPlan
-    before_models: dict[str, PermissionModelBaseline]
-    after_models: dict[str, PermissionModelBaseline]
-    before_scopes: dict[str, frozenset[str]]
-    after_scopes: dict[str, frozenset[str]]
+    before_models: Mapping[str, PermissionModelBaseline]
+    after_models: Mapping[str, PermissionModelBaseline]
+    before_scopes: Mapping[str, frozenset[str]]
+    after_scopes: Mapping[str, frozenset[str]]
 
 
 def _resource_context(catalog_plan):
@@ -807,15 +808,8 @@ def _build_resource_retirement_plan(context, before, namespace_target=None):
     return replace(plan, checksum=_checksum(_resource_payload(plan)))
 
 
-def build_resource_retirement_plans(
-    *,
-    catalog_plan: CatalogRetirementPlan,
-    before: Iterable[PermissionResourceBaseline],
-    target_modes: Iterable[ResourceModeBaseline] | None = None,
-) -> Iterator[ResourceRetirementPlan]:
-    """Compile one frozen directory per batch; retain no context beyond iteration."""
-    context = _resource_context(catalog_plan)
-    if not catalog_plan.namespace_type_mappings:
+def _iter_resource_retirement_plans(context, before, target_modes):
+    if not context.catalog_plan.namespace_type_mappings:
         if target_modes is not None:
             _blocked("namespace_mapping_required")
         for resource in before:
@@ -828,6 +822,72 @@ def build_resource_retirement_plans(
             if resource is missing or target is missing:
                 _blocked("namespace_target_batch_length_changed")
             yield _build_resource_retirement_plan(context, resource, target)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ResourceRetirementPlanner:
+    """Reuse one verified immutable Catalog directory; retain no resource facts."""
+
+    catalog_plan: CatalogRetirementPlan
+    _context: _ResourceRetirementContext = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self):
+        context = _resource_context(self.catalog_plan)
+        if any(
+            type(value) is not tuple
+            for value in (
+                self.catalog_plan.before.actions,
+                self.catalog_plan.before.models,
+                self.catalog_plan.after_actions,
+                self.catalog_plan.after_models,
+                self.catalog_plan.namespace_type_mappings,
+                self.catalog_plan.namespace_applicability_changes,
+            )
+        ) or any(
+            type(scope) is not frozenset
+            for index in (context.before_scopes, context.after_scopes)
+            for scope in index.values()
+        ):
+            _blocked("catalog_plan_changed")
+        object.__setattr__(
+            self,
+            "_context",
+            replace(
+                context,
+                before_models=MappingProxyType(context.before_models),
+                after_models=MappingProxyType(context.after_models),
+                before_scopes=MappingProxyType(context.before_scopes),
+                after_scopes=MappingProxyType(context.after_scopes),
+            ),
+        )
+
+    def build(
+        self,
+        *,
+        before: PermissionResourceBaseline,
+        namespace_target: ResourceModeBaseline | None = None,
+    ) -> ResourceRetirementPlan:
+        return next(
+            self.build_many(before=(before,), target_modes=None if namespace_target is None else (namespace_target,))
+        )
+
+    def build_many(
+        self,
+        *,
+        before: Iterable[PermissionResourceBaseline],
+        target_modes: Iterable[ResourceModeBaseline] | None = None,
+    ) -> Iterator[ResourceRetirementPlan]:
+        return _iter_resource_retirement_plans(self._context, before, target_modes)
+
+
+def build_resource_retirement_plans(
+    *,
+    catalog_plan: CatalogRetirementPlan,
+    before: Iterable[PermissionResourceBaseline],
+    target_modes: Iterable[ResourceModeBaseline] | None = None,
+) -> Iterator[ResourceRetirementPlan]:
+    """Compile one frozen directory per batch; retain no context beyond iteration."""
+    yield from _iter_resource_retirement_plans(_resource_context(catalog_plan), before, target_modes)
 
 
 def build_resource_retirement_plan(

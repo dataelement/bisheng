@@ -80,7 +80,21 @@ async def test_native_compiled_point_and_repeated_batches_equal_original_complet
     assert not sql
 
 
-@pytest.mark.parametrize("bad", ["none", "checksum", "matrix", "mapping", "models", "scope"])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "none",
+        "checksum",
+        "matrix",
+        "mapping",
+        "models",
+        "scope",
+        "actions_list",
+        "models_list",
+        "matrix_list",
+        "mapping_list",
+    ],
+)
 async def test_bad_catalog_is_rebuilt_and_rejected_before_even_empty_batches(original, bad):
     _, before_catalog, _ = original
     catalog = mapped(before_catalog)
@@ -90,6 +104,10 @@ async def test_bad_catalog_is_rebuilt_and_rejected_before_even_empty_batches(ori
         "matrix": replace(catalog, namespace_applicability_changes=catalog.namespace_applicability_changes[:-1]),
         "mapping": replace(catalog, namespace_type_mappings=()),
         "models": replace(catalog, after_models=catalog.after_models[::-1]),
+        "actions_list": replace(catalog, after_actions=list(catalog.after_actions)),
+        "models_list": replace(catalog, after_models=list(catalog.after_models)),
+        "matrix_list": replace(catalog, namespace_applicability_changes=list(catalog.namespace_applicability_changes)),
+        "mapping_list": replace(catalog, namespace_type_mappings=list(catalog.namespace_type_mappings)),
         "scope": replace(
             catalog,
             after_actions=(
@@ -108,6 +126,8 @@ async def test_bad_catalog_is_rebuilt_and_rejected_before_even_empty_batches(ori
 async def test_compiled_value_and_every_index_are_ordinary_immutable_values(original):
     _, before_catalog, before = original
     compiler = plans.ResourceRetirementPlanner(catalog_plan=mapped(before_catalog))
+    with pytest.raises(TypeError):
+        plans.ResourceRetirementPlanner(mapped(before_catalog))
     assert not hasattr(compiler, "__dict__")
     for item in fields(compiler):
         with pytest.raises((FrozenInstanceError, AttributeError, TypeError)):
@@ -124,6 +144,22 @@ async def test_compiled_value_and_every_index_are_ordinary_immutable_values(orig
             setattr(context, name, {})
     mode = target(before, resource_type="knowledge_space")
     assert compiler.build(before=before, namespace_target=mode).after.mode == mode
+
+
+@pytest.mark.parametrize("mapped_catalog", [False, True])
+@pytest.mark.parametrize("explicit_target", [False, True])
+async def test_single_call_preserves_target_error_precedence_for_an_invalid_resource(
+    original, mapped_catalog, explicit_target
+):
+    _, before_catalog, before = original
+    catalog = mapped(before_catalog) if mapped_catalog else build(before_catalog)
+    mode = target(before, resource_type="knowledge_space") if explicit_target else None
+    compiler = plans.ResourceRetirementPlanner(catalog_plan=catalog)
+    with pytest.raises(PermissionMigrationBlockedError) as old:
+        plans.build_resource_retirement_plan(catalog_plan=catalog, before=None, namespace_target=mode)
+    with pytest.raises(PermissionMigrationBlockedError) as current:
+        compiler.build(before=None, namespace_target=mode)
+    assert current.value.kwargs == old.value.kwargs
 
 
 @pytest.mark.parametrize("mapped_catalog", [False, True])
