@@ -202,7 +202,7 @@ async def test_invalid_limits_fail_before_query(monkeypatch, limit):
 
 
 @pytest.mark.parametrize(
-    "failure", ["missing", "not_ready", "inactive", "revision", "record_kind", "tenant", "type", "version"]
+    "failure", ["missing", "not_ready", "inactive", "revision", "record_kind", "tenant", "type", "source_id", "version"]
 )
 async def test_native_complete_left_source_identity_never_erases_blocking_binding(failure):
     async with native() as (session, repository, scope, _):
@@ -222,6 +222,7 @@ async def test_native_complete_left_source_identity_never_erases_blocking_bindin
                 },
                 "tenant": {"tenant_id": 202},
                 "type": {"source_type": "channel_sync"},
+                "source_id": {"source_id": "other"},
                 "version": {"source_version": "other"},
             }[failure]
             await session.execute(update(SourceSet).values(**change))
@@ -285,7 +286,7 @@ async def test_native_foreign_sources_versions_and_registered_legacy_are_preserv
         assert rows[0].legacy_run_id == "frozen" and rows[0].target_tenant_id is None
 
 
-@pytest.mark.parametrize("failure", ["copy", "foreign_repo", "transaction", "tenant", "bypass"])
+@pytest.mark.parametrize("failure", ["copy", "foreign_repo", "transaction", "session", "tenant", "bypass"])
 async def test_original_scope_session_tenant_and_issuer_guards_fail_before_sql(monkeypatch, failure):
     async with native() as (session, repository, scope, _):
         if failure == "copy":
@@ -296,7 +297,11 @@ async def test_original_scope_session_tenant_and_issuer_guards_fail_before_sql(m
             await session.commit()
             await session.begin()
         with observe(session, repository, monkeypatch) as (sql, _, _), pytest.raises(ResourceReferenceInvalidError):
-            if failure == "tenant":
+            if failure == "session":
+                async with AsyncSession(session.bind) as other:
+                    await other.begin()
+                    await consume(repository, other, scope)
+            elif failure == "tenant":
                 with tenant(202):
                     await consume(repository, session, scope)
             elif failure == "bypass":
@@ -307,7 +312,9 @@ async def test_original_scope_session_tenant_and_issuer_guards_fail_before_sql(m
         assert not sql
 
 
-@pytest.mark.parametrize("failure", ["scope_targets", "key_alias", "transaction", "tenant", "bypass", "registration"])
+@pytest.mark.parametrize(
+    "failure", ["scope_targets", "key_alias", "transaction", "tenant", "bypass", "registration", "authority", "owner"]
+)
 async def test_yield_changes_cannot_expand_later_sql_or_prove_completion(monkeypatch, failure):
     async with native(201) as (session, repository, scope, _):
         stream = repository.aiter_inbound_for_owner_pages(session, scope, limit=1)
@@ -327,6 +334,10 @@ async def test_yield_changes_cannot_expand_later_sql_or_prove_completion(monkeyp
                 object.__setattr__(scope, "transaction", TransactionIdentity.capture(session))
             elif failure == "registration":
                 del repository._issued_scopes[scope]
+            elif failure == "authority":
+                object.__setattr__(scope, "_authority", object())
+            elif failure == "owner":
+                object.__setattr__(scope, "owner_tenant_id", 202)
             with pytest.raises(ResourceReferenceInvalidError):
                 if failure == "tenant":
                     with tenant(202):
