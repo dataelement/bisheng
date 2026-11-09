@@ -1,11 +1,12 @@
 """Bounded original SPACE membership facts for the private M2 inventory.
 
-Member has no tenant column: only an exact, physically owned type-0/3 Root
-classifies its canonical business ID. Conflicting roles, duplicate users and
-inactive sources remain facts. These reads grant no authority and neither
-repair membership nor prove the later global orphan/alias checks complete.
+Member has no tenant column: scoped pages use an exact, physically owned
+type-0/3 Root to classify its business ID. Conflicting roles, duplicate users and
+inactive sources remain facts. These reads grant no authority or membership
+repair. The separate global gate proves canonical original SPACE parents.
 """
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -15,7 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, SpaceChannelMember
-from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed, strict_tenant_filter
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    get_current_tenant_id,
+    is_tenant_filter_bypassed,
+    strict_tenant_filter,
+)
+from bisheng.database.models.tenant import Tenant
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import InventoryPage
 from bisheng.resource_reference.application.contracts import TransactionIdentity
@@ -112,6 +119,60 @@ def _current(session, tenant, transaction):
 
 
 class UnificationSpaceMembershipRepository:
+    @staticmethod
+    async def _global_read(session, statement, tenant, transaction):
+        _current(session, tenant, transaction)
+        with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
+            rows = tuple((await session.execute(statement)).mappings())
+        _current(session, tenant, transaction)
+        return rows
+
+    async def avalidate_global_integrity(self, session: AsyncSession) -> None:
+        tenant = _scope(session)
+        transaction = TransactionIdentity.capture(session)
+        member, root = SpaceChannelMember.__table__.c, Knowledge.__table__.c
+        parent_tenant = Tenant.__table__.alias("m2_member_parent_tenant")
+        after = None
+        while True:
+            query = select(member.id, member.business_id).where(member.business_type == BusinessTypeEnum.SPACE)
+            if after is not None:
+                query = query.where(member.id > after)
+            rows = await self._global_read(session, query.order_by(member.id).limit(201), tenant, transaction)
+            selected = rows[:200]
+            if not selected:
+                return
+            ids = []
+            for row in selected:
+                value = row["business_id"]
+                if type(value) is not str or re.fullmatch(r"[1-9][0-9]{0,18}", value) is None or int(value) > 2**63 - 1:
+                    _blocked("global_business_id_invalid")
+                ids.append(int(value))
+            ids = tuple(dict.fromkeys(ids))
+            parents = await self._global_read(
+                session,
+                select(
+                    root.id.label("knowledge_id"),
+                    root.tenant_id,
+                    root.type.label("knowledge_type"),
+                    parent_tenant.c.id.label("original_tenant_id"),
+                )
+                .select_from(Knowledge.__table__.outerjoin(parent_tenant, parent_tenant.c.id == root.tenant_id))
+                .where(root.id.in_(ids)),
+                tenant,
+                transaction,
+            )
+            if {row["knowledge_id"] for row in parents} != set(ids) or any(
+                not _positive(row["tenant_id"])
+                or row["original_tenant_id"] != row["tenant_id"]
+                or type(row["knowledge_type"]) is not int
+                or row["knowledge_type"] not in (0, 1, 2, 3)
+                for row in parents
+            ):
+                _blocked("global_parent_invalid")
+            if len(rows) <= 200:
+                return
+            after = selected[-1]["id"]
+
     @staticmethod
     async def _read(session, statement, tenant, transaction):
         _current(session, tenant, transaction)
