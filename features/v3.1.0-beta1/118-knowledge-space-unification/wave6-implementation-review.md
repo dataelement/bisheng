@@ -571,3 +571,14 @@ C6三卡组T1024–1029闭合：wire154617、producer c8a537、consumer9c5c12aa6
 全部migration首轮1522绿/5旧fixture失败222.42s，2项原测试借fresh漏叶来造旧坏图，现fresh正确提前阻；另plan_time的3个参数额外NORMAL Root缺原Mode。仅测试适配：先真实合法freeze再artifact重签并将fixture ledger refs/hash精确绑定以模拟历史坏图；时间夹具显式补原Mode，未旁路生产门。后继0c746ab294同选集1527 passed/229.89s，/private/tmp/f118-root-c6-migration-corrected.log。独立C6 native8 passed/9.14s：真实带Source图7层重签错误/缺INACTIVE尾行/跨tenant页均在frozen与actual M3写前拒，writer0/DML0；晚到Catalog拒、conversion header晚到合法、fresh/frozen各2次、额外FGA/sourceIO0、三tenant Source桶段末释放。原两生产hash与候选完全一致；原5失败对应两fixture8项独立复跑2.17s通过。权限SQL/FGA正式Publisher、当前环境停服升级、恢复、全E2E仍未完成。
 
 R2三叶d1a6b6edb5正常合流：Root完整diff和独立2 native0.64s通过（held ORM/mixedafter2→replay0、Source不完整commonSP外catchcommit完整回滚），126项相关组合通过；该组合另外2旧fixture断点已按上文关闭，不冒第一次全绿。作者20路径343passed/140.18s；外审12路径206passed/99.23s+5独立native7.28s，完整legacy bundle/NULL/foreign尾行零UPDATE、范围外旧失效不触碰、Source全行保持。首/tmp探针4项输入违反原CHECK未进入产品，仅修夹具，不计产品红。401/10001单slot20/356 SELECT、3/51 UPDATE、max405；三slot28/556 SELECT、7/151 UPDATE、max273；原每IN≤200，完整scope6/receipts10/logical2固定。原T09192尚待真实MoveOwner/worker/API，不因R2组件已完成而勾整卡。
+
+
+### 固定完整回归与Model删除预检、Catalog首片（2026-11-09）
+
+固定0c746ab294的完整特性本地选集6308 passed /7项原中间件占位skip /0 fail、764.23s，日志/private/tmp/f118-root-c6-r2-feature-full.log及同名XML。收集时尚无后继新ModelDeletePlan模块，不将该模块冒计为已包含。
+
+ModelDeletePlan固定859c518ea799经Root完整226行独审、175项集成6.54s（f118-root-model-precheck-integration）及独立尾await探针1 passed/0.19s（f118-root-model-plan-tail-green）通过后正常合入。原aee29最后身份capture后可留下pending LLMModel由SP释放autoflush写入，Root真实探针DID NOT RAISE（f118-root-model-plan-tail-red），作者正式3红1控制后窄增最后无pending检查，最终47 native和456组合32.05s通过。只闭内部precheck/Plan前置，不提前关闭T113–120整业务入口。
+
+Catalog DRAFT fixed873469c03e9d两生产叶正常合流；Root完整diff独审，作者最终21实际路径451 passed/26.75s。保legacy/floor/纯可见/非active完整字段、新PK归一、ACTIVE原pin复用或新STAGED，旧CURRENT/auth零DML，不早切CURRENT。401/1001 models实际SELECT53/80、DML9/15、derive各1；bulk200、单语句max203参数（200-ID IN及游标/limit/offset）、单bulk行13字段。原fae7adee96 71 missing module真红；原ae0dc immutable create_time trigger探针真红后修尾部raw列比较，managed update_time允许按原DB规则维护。SQL/取消/外catchcommit回滚、C2 ANSI/MySQL静态通过。正式资源SQL/FGA/原Run checkpoint/CURRENT切换另按依赖接线，不据本片关闭T157158。
+
+Root合并后实际三条Catalog测试路径84 passed/7.67s，/private/tmp/f118-root-catalog-integrated.log及同名XML；完整生产diff已复查。此为该片集成结果，未重冒6308全选集。
