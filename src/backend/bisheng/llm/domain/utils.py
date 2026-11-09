@@ -1,7 +1,7 @@
 import asyncio
 import functools
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Union
 from uuid import UUID
 
@@ -150,13 +150,25 @@ def normalize_reasoning_content(payload: Any) -> Any:
     return payload
 
 
+def _seconds_until_day_end(now: datetime | None = None) -> int:
+    """Seconds until the next local midnight, for the TTL of daily-limit counters.
+
+    The counter key already carries the date, but the Redis helpers default to a one-hour
+    TTL, so a "daily" limit would reset after an hour of inactivity. Expiring the key at
+    midnight keeps the counter alive for exactly the day it counts.
+    """
+    current = now or datetime.now()
+    midnight = datetime.combine(current.date() + timedelta(days=1), datetime.min.time())
+    return max(1, int((midnight - current).total_seconds()))
+
+
 async def bisheng_model_limit_check(self: "BishengBase"):
     now = datetime.now().strftime("%Y-%m-%d")
     if self.server_info.limit_flag:
         # Number of calls checked
         cache_key = f"model_limit:{now}:{self.server_info.id}"
         redis_client = await get_redis_client()
-        use_num = await redis_client.aincr(cache_key)
+        use_num = await redis_client.aincr(cache_key, expiration=_seconds_until_day_end())
         if use_num > self.server_info.limit:
             raise LlmProviderDailyLimitExceededError(
                 f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
@@ -168,7 +180,7 @@ def sync_bisheng_model_limit_check(self: "BishengBase"):
     if self.server_info.limit_flag:
         # Number of calls checked
         cache_key = f"model_limit:{now}:{self.server_info.id}"
-        use_num = get_redis_client_sync().incr(cache_key)
+        use_num = get_redis_client_sync().incr(cache_key, expiration=_seconds_until_day_end())
         if use_num > self.server_info.limit:
             raise LlmProviderDailyLimitExceededError(
                 f"{self.server_info.name}/{self.model_info.model_name} Quota used up"
