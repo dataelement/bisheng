@@ -1283,11 +1283,28 @@ class WorkStationService(BaseService):
         """
         failures: list[dict] = []
         try:
+            from bisheng.knowledge.domain.repositories.retrieval_file_repository import KnowledgeRetrievalFileRepository
+
+            selected_ids = list(
+                dict.fromkeys(
+                    [
+                        *(use_knowledge_param.organization_knowledge_ids or []),
+                        *(use_knowledge_param.knowledge_space_ids or []),
+                    ]
+                )
+            )
+            async with get_async_db_session() as session:
+                actual_types = await KnowledgeRetrievalFileRepository().aload_actual_types(
+                    session, knowledge_ids=selected_ids
+                )
+            for ident in selected_ids:
+                if actual_types.get(ident) not in {0, 1, 3}:
+                    failures.append({"id": ident, "name": "", "error": "Knowledge base is unavailable"})
             # F029 Stage 1: drop space-bucket kb_ids the user lacks view_space on.
             visibility_filter = await cls._filter_visible_space_kb_ids(
                 login_user=login_user,
-                space_bucket=use_knowledge_param.knowledge_space_ids,
-                org_bucket=use_knowledge_param.organization_knowledge_ids,
+                space_bucket=[ident for ident in selected_ids if actual_types.get(ident) == 3],
+                org_bucket=[ident for ident in selected_ids if actual_types.get(ident) in {0, 1}],
             )
             space_kb_id_set = {int(x) for x in visibility_filter["space_kb_ids"]}
 
@@ -1309,12 +1326,16 @@ class WorkStationService(BaseService):
                     )
                 org_kb_ids = permitted_org_ids
 
-            vectorstore_targets = [(kb_id, False) for kb_id in org_kb_ids] + [
-                (int(kb_id), True) for kb_id in visibility_filter["space_kb_ids"]
-            ]
+            admitted = set(org_kb_ids) | space_kb_id_set
+            vectorstore_targets = [(ident, ident in space_kb_id_set) for ident in selected_ids if ident in admitted]
 
             knowledge_vector_list = {}
             for kb_id, is_space_bucket in vectorstore_targets:
+                if is_space_bucket:
+                    # Actual SPACE rows use the existing F029 retrieval path;
+                    # the legacy selector JSON never determines its permission path.
+                    knowledge_vector_list[kb_id] = {}
+                    continue
                 try:
                     vectorstore_info = await KnowledgeRag.get_multi_knowledge_vectorstore(
                         invoke_user_id=login_user.user_id,
@@ -1361,6 +1382,44 @@ class WorkStationService(BaseService):
             for kb_id, vectorstore_info in knowledge_vector_list.items():
                 if len(finally_docs) >= max_total_docs:
                     break
+                if kb_id in space_kb_id_set:
+                    try:
+                        from bisheng.knowledge.domain.services.space_flow_retrieval import aretrieve_space_documents
+
+                        selected_tag_id = use_knowledge_param.knowledge_space_tag_filters.get(int(kb_id))
+                        metadata_filter = None
+                        if selected_tag_id is not None:
+                            from bisheng.knowledge.domain.services.knowledge_space_tag_filter_service import (
+                                KnowledgeSpaceTagFilterService,
+                            )
+
+                            tag_scope = await KnowledgeSpaceTagFilterService().build_index_prefilter(
+                                int(kb_id), selected_tag_id, login_user
+                            )
+                            if tag_scope.is_empty:
+                                continue
+
+                            def metadata_filter(_space, scope=tag_scope):
+                                return scope.milvus_expr, scope.es_filter
+
+                        kb_docs = await aretrieve_space_documents(
+                            space_ids=[int(kb_id)],
+                            query=question,
+                            identity_user=login_user,
+                            max_content=max_token,
+                            metadata_filter_fn=metadata_filter,
+                            sort_by_source_and_index=True,
+                            access_scope="per_user",
+                            retrieval_multipliers=(1,),
+                        )
+                        finally_docs.extend(kb_docs)
+                        if kb_docs:
+                            kb_succeed.append(kb_id)
+                    except Exception as exc:
+                        err_msg = str(exc) or exc.__class__.__name__
+                        failures.append({"id": int(kb_id), "name": "", "error": err_msg})
+                        logger.warning("[queryChunksFromDB] kb={} failed: {}", kb_id, err_msg)
+                    continue
                 milvus_vectorstore = vectorstore_info.get("milvus")
                 es_vectorstore = vectorstore_info.get("es")
                 kb_row = vectorstore_info.get("knowledge")

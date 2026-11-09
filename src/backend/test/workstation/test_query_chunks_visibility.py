@@ -15,8 +15,9 @@ ACs covered:
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain_core.documents import Document
@@ -34,6 +35,19 @@ def _make_doc(file_id: int, content: str = "") -> Document:
             "knowledge_id": 100,
         },
     )
+
+
+@pytest.fixture
+def legacy_org_types(monkeypatch):
+    """Isolate the new native type read in the original transport-only controls."""
+    from bisheng.knowledge.domain.repositories.retrieval_file_repository import KnowledgeRetrievalFileRepository
+
+    @asynccontextmanager
+    async def sessions():
+        yield object()
+
+    monkeypatch.setattr("bisheng.workstation.domain.services.workstation_service.get_async_db_session", sessions)
+    monkeypatch.setattr(KnowledgeRetrievalFileRepository, "aload_actual_types", AsyncMock(return_value={100: 0}))
 
 
 # ---------------------------------------------------------------------------
@@ -244,7 +258,7 @@ async def test_post_filter_kb_docs_org_bucket_passthrough(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_query_chunks_org_kb_uses_use_permission_and_bypasses_legacy_auth(monkeypatch):
+async def test_query_chunks_org_kb_uses_use_permission_and_bypasses_legacy_auth(monkeypatch, legacy_org_types):
     permission_calls = []
     vector_calls = []
 
@@ -315,7 +329,7 @@ async def test_query_chunks_org_kb_uses_use_permission_and_bypasses_legacy_auth(
 
 
 @pytest.mark.asyncio
-async def test_query_chunks_org_kb_init_failure_is_reported(monkeypatch):
+async def test_query_chunks_org_kb_init_failure_is_reported(monkeypatch, legacy_org_types):
     async def fake_filter_ids(self, login_user, knowledge_ids, action):
         return [100]
 
