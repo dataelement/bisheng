@@ -1671,3 +1671,16 @@ Root负责原T103–T110知识检查/展示至删除业务链，不新增helper�
 #### §126 补充：实际 move 查询接线与默认列表边界（已冻结）
 
 原处理列表 kind=None 仅选普通四kind（embedding_rebuild/file_reprocess/file_resplit/metadata_schema_change），Repo新增可选 ordinary_only=False 保持原默认，Service仅默认列表显式传True；COUNT及分页同一谓词，不先分页再剔除，不增加kind探测SQL。此单一读谓词的SELECT字节改变已接受，普通结果/SQL数量及原执行内核黄金值保持。显式 kind=move_index 的list/get/items/retry进入原typed actor当前权限的Move Access；kind只是路由提示，真实Job.kind、来源/目标、租户、参与者及逐项可见性仍校验，不将候选总数作为可见总数。统一前端面板后继须显式查询move类别。不得借本读路由开放copy或把旧skip_invalid=True直接传入内部全有效MoveOwner。
+
+
+## 129. 功能优先的并行收口与移动外层合同（2026-11-09 已冻结）
+
+按用户最新顺序先完成功能，再统一整体回归、升级演练和E2E；每条业务链只保留必需定点验证、lint/架构检查，不反复跑全选集或完整10001规模矩阵。原任务编号/AC不增；无关优化记[后续清单](../../../docs/backlog/f118-deferred-optimizations.md)，不列本次完成前置。Root集成已交fixed并实现知识引用/删除，PROC完成移动前后端业务链，PERM完成模型删除/共享，MIG完成正式回填/Coverage/CLI。共享文件按方法所有权交接，禁止全仓Git清理。
+
+移动外层交给PROC：新增实际Move应用协调，Domain的KnowledgeSpaceService仅依赖注入factory，API/dependencies负责装配，不Domain反向import Application。允许修改KSS仅move_items及新增aprecheck_move/aconfirm_move，旧API仅/files/move及新移动路由，客户端仅实际knowledge.ts/knowledgeProcessing.ts/useKnowledgeMove与必要实际进度UI/i18n；Root不并行改这些方法。其它KSS删除/复制/模型重建及其它API由Root保留所有权；依赖工厂新增参数不改现有默认参数语义。
+
+统一precheck(FileMoveReq)->OperationPrecheck，confirm仅ProcessingCreateRequest三个字段；执行类型从真实冻结Plan读取。同空间返回原moved/invalid同步结果，不建processing Job、不迁索引/embedding/模型引用；跨空间确认返回真实JobAccepted，不能转成moved成功。旧/files/move仅兼容原同空间裸调用，跨空间裸请求明确缺确认拒，不再走原先SQL归属先commit再投影/旧迁移dispatch旁路；更新实际客户端跨空间调用为预检→展示真实impact/invalid并确认→confirm→显式kind=move_index查询/失败重试，accepted只提示已提交。保留同空间拖拽、撤回和原结果形状，遇部分无效或撤回重新分类则用真实precheck/confirm，不能把裸skip_invalid=True当已确认的不可变计划。无需让旧同空间每次成功直移新增异步流程。
+
+分类一次读取实际选择/目录闭集并规范重复、祖先重叠，以已有各对象move/目标upload、深度/同名/状态规则判定；无权对象不披露名字。有效子集仅一次真实MoveScope构建，不逐Root完整加载；分类/skip同意事实在原Plan.impact内签名，不改变内部MoveScope.parameters/J1 actor/hash。全无效为原Plan承载的不可执行review，禁止造空MoveScope/假Item。确认最终同原实际修订与权限重验，分类或范围变化重新预检。跨空间仅用已集成实际Owner/Worker链；同空间必须同步修正真实Document、当前及历史File路径一致，并按实际before permission事实→原F048父级投影→锁后真实SQL全链finalize，投影或SQL失败用原不可变Plan恢复，不新建通用任务平台；对象键/标签/embedding不因同空间移动变更。若原F048实际口不能满足恢复，先发具体接口事实给Root，不凭空套cross-space Job。
+
+移动查询本次新增的重复完整scope与深页前缀materialize属于本次实现缺陷，放在上述功能接通后作局部修正，不扩大到普通四kind通用重构。复用实际有界keyset、原顺序/tenant/current typed actor/Personal narrowing/逐项visible；total流式计算，仅保目标页。必要的完整原Plan资格核验一次明确记录，不靠删权限检查伪O(1)，不在每Item或每离页候选重复读取完整Scope。不得以本轮查询修正新建通用分页/缓存系统。
