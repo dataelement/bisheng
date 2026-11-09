@@ -160,3 +160,13 @@ async def test_incomplete_index_ack_is_visible_and_never_removes_source(copying)
     with pytest.raises(RuntimeError, match="ACK failed"):
         await apply(copying)
     assert copying.old.rows == original and copying.objects.values["original/81.txt"] == b"source bytes"
+
+
+def test_copy_of_previously_moved_file_rewrites_its_original_image_namespace(copying):
+    # Actual move retains original object/image keys while current File ownership
+    # changes. File 81 is accepted in space 41; its original image namespace is 40.
+    objects = module.CopyObjects(copying.objects, source_id=41, target_id=50, file_ids={"81": 181}, object_map={"original/81.txt": "original/181.txt", "preview/81.md": "preview/181.md"})
+    copied = objects.objects(copying.snapshot["source_file"], copying.snapshot["target_file"])
+    assert b"/50/181/" in copying.objects.values["preview/181.md"]
+    assert copied == {"image": "knowledge/images/50/181/same.png"}
+    assert copying.objects.values["knowledge/images/50/181/same.png"] == b"image bytes"
