@@ -263,10 +263,10 @@
     },
     "dalle_image_generator": {
       "params": {
-        "query": "Description of the image"
+        "query": "Description of the image to generate."
       },
-      "desc": "Generate image based on text description",
-      "name": "Dall-E 3 Image Generator"
+      "desc": "Generate images from a prompt using the configured service and model.",
+      "name": "Image generation"
     },
     "web_search": {
       "params": {
@@ -321,6 +321,13 @@
       },
       "desc": "Retrieve shareholder information including name, equity ratio, capital contribution, etc.",
       "name": "Company Shareholders"
+    },
+    "image_generation": {
+      "params": {
+        "query": "Description of the image to generate."
+      },
+      "desc": "Generate images from a prompt using the configured service and model.",
+      "name": "Image generation"
     }
   },
   "invalidEmailMessage": "Please enter a valid email address",
@@ -391,8 +398,8 @@
       "name": "WeCom"
     },
     "Dalle3绘画": {
-      "desc": "OpenAI text-to-image model",
-      "name": "Dall-E 3 Image Generation"
+      "name": "Image generation",
+      "desc": "Generate images from a prompt using the configured service and model."
     },
     "Jina AI": {
       "desc": "Convert content of target URLs (PDF supported) into Markdown format for LLM processing",
@@ -413,6 +420,10 @@
     "SiliconFlow": {
       "desc": "Generate high-quality images using Flux or Stable Diffusion models",
       "name": "SiliconFlow"
+    },
+    "图像生成": {
+      "name": "Image generation",
+      "desc": "Generate images from a prompt using the configured service and model."
     }
   },
   "azureEndpointPlaceholder": "Example: https://xxx.openai.azure.com/",
@@ -443,5 +454,14 @@
   "enterApiKey": "Enter the API key",
   "encryptMethodSslLabel": "SSL encryption",
   "uploadFile": "Upload File",
-  "sandboxTestFailed": "The test did not finish."
+  "sandboxTestFailed": "The test did not finish.",
+  "imageGeneration": {
+    "openai_api_base": "API base URL",
+    "openai_api_key": "API key",
+    "model": "Model",
+    "openai_proxy": "Proxy (optional)",
+    "invalidAddress": "Enter an HTTP(S) API URL without credentials, query parameters or fragments.",
+    "enterNewKey": "Enter an API key for the new service host.",
+    "reconfigureAzure": "Azure is no longer supported. Configure a compatible API address, API key and model."
+  }
 }

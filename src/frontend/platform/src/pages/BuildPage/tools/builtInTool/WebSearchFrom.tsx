@@ -6,7 +6,10 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import { DialogClose,DialogFooter } from "@/components/bs-ui/dialog";
 import { Label } from '@/components/bs-ui/label';
 
-import { getToolsApi,updateToolApi } from '@/controllers/API/tools';
+import { getToolsApi } from '@/controllers/API/tools';
+import { getWebSearchSettings, putWebSearchSettings, WebSearchSecret } from '@/controllers/API/webSearch';
+import { CustomWebSearch } from './CustomWebSearch';
+import { normalizeSearchMapping } from './customSearchMapping';
 import { useEffect,useRef,useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { InputField,SelectField } from "./InputField";
@@ -48,76 +51,73 @@ const defaultToolParams = {
 };
 
 interface WebSearchFormProps {
-    formData?: any;
-    onSubmit?: (config: any) => void;
     isApi?: boolean;
+    toolId?: string;
+    onSaved?: () => void;
 }
 
-const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps) => {
+const WebSearchForm = ({ isApi = false, toolId, onSaved }: WebSearchFormProps) => {
     const { t } = useTranslation();
+    const tRef = useRef(t);
+    tRef.current = t;
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const toolIdRef = useRef('');
     const [enabled, setEnabled] = useState(true);
     const [prompt, setPrompt] = useState('');
+    const [revision, setRevision] = useState('');
+    const [secretConfigured, setSecretConfigured] = useState(false);
+    const [secret, setSecret] = useState<WebSearchSecret>({ action: 'keep' });
+    const [reload, setReload] = useState(0);
     const closeRef = useRef<HTMLButtonElement | null>(null);
 
     const [allToolsConfig, setAllToolsConfig] = useState<Record<string, any>>({
         ...defaultToolParams,
     });
 
+    const [persistedProviders, setPersistedProviders] = useState<string[]>([]);
     const [selectedTool, setSelectedTool] = useState<string>('bing');
     const [formErrors, setFormErrors] = useState({});
 
-    // Initialization: If isApi is true, fetch data via the interface; otherwise, use the parent-level formData.
     useEffect(() => {
-        const initFromApi = async () => {
+        let active = true;
+        const load = async () => {
+            setLoading(true);
+            setRevision('');
             try {
-                const res = await getToolsApi('default');
-                const webSearchTool = res.find((item: any) => item.name === '联网搜索');
-                if (webSearchTool) {
-                    toolIdRef.current = webSearchTool.id;
-                    if (webSearchTool.extra) {
-                        try {
-                            const extraData = JSON.parse(webSearchTool.extra);
-                            setSelectedTool(extraData.type || 'bing');
-                            setEnabled(extraData.enabled ?? true);
-                            setPrompt(extraData.prompt ?? '');
-                            setAllToolsConfig({
-                                ...defaultToolParams,
-                                ...(extraData.config || {}),
-                            });
-                        } catch (e) { }
-                    }
+                let id = toolId;
+                if (!id && isApi) {
+                    const tools = await getToolsApi('default');
+                    id = tools.find((item: any) => (item.children || []).some((child: any) => child.tool_key === 'web_search'))?.id;
                 }
-            } catch (error: any) {
-                notification.open({ type: 'error', title: String(t('failed') ?? ''), description: String(error?.message || '') });
+                if (!id) throw new Error('Missing tool');
+                const settings = await getWebSearchSettings(String(id));
+                if (!active) return;
+                toolIdRef.current = String(id);
+                setSelectedTool(settings.type || 'bing');
+                setEnabled(settings.enabled);
+                setPrompt(settings.prompt || '');
+                const providers = { ...defaultToolParams, ...settings.providers };
+                const custom = settings.providers.custom as { mapping?: Record<string, string> } | undefined;
+                if (custom) providers.custom = { ...custom, mapping: normalizeSearchMapping(custom.mapping) };
+                setAllToolsConfig(providers);
+                setPersistedProviders(Object.keys(settings.providers));
+                setRevision(settings.revision);
+                setSecretConfigured(settings.custom_secret_configured);
+                setSecret({ action: 'keep' });
+            } catch {
+                if (active) notification.open({ type: 'error', title: String(tRef.current('failed')), description: String(tRef.current('chatConfig.webSearch.loadFailed')) });
             } finally {
-                setLoading(false);
+                if (active) setLoading(false);
             }
         };
-
-        const initFromProps = () => {
-            const mergedConfig = {
-                ...defaultToolParams,
-                ...(formData?.config || {}),
-            } as Record<string, any>;
-            setAllToolsConfig(mergedConfig);
-            setSelectedTool(formData?.type || 'bing');
-            setEnabled(formData?.enabled ?? true);
-            setPrompt(formData?.prompt ?? '');
-            setLoading(false);
-        };
-
-        if (isApi) {
-            initFromApi();
-        } else {
-            initFromProps();
-        }
-    }, [isApi, formData]);
+        void load();
+        return () => { active = false; };
+    }, [isApi, toolId, reload]);
 
     const validationRules = {
         bing: {
-            base_url: (value) => !value && 'Bing Search URL ' + t('chatConfig.errors.required')
+            base_url: (value) => !(value || defaultToolParams.bing.base_url) && 'Bing Search URL ' + t('chatConfig.errors.required')
         },
         bocha: {
             api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
@@ -127,7 +127,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
         },
         serp: {
             api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required'),
-            engine: (value) => !value && 'engine ' + t('chatConfig.errors.required')
+            engine: (value) => !(value || defaultToolParams.serp.engine) && 'engine ' + t('chatConfig.errors.required')
         },
         tavily: {
             api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
@@ -137,7 +137,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             endpoint: (value) => !value && 'Endpoint ' + t('chatConfig.errors.required')
         },
         searXNG: {
-            server_url: (value) => !value && 'The server address cannot be empty'
+            server_url: (value) => !(value || allToolsConfig.searXNG?.base_url) && 'The server address cannot be empty'
         },
         deepseek: {
             api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
@@ -151,11 +151,13 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
 
     const handleParamChange = (e) => {
         const { name, value } = e.target;
+        setPersistedProviders(prev => prev.includes(selectedTool) ? prev : [...prev, selectedTool]);
         setAllToolsConfig(prev => ({
             ...prev,
             [selectedTool]: {
                 ...prev[selectedTool],
-                [name]: value
+                [name]: value,
+                ...(selectedTool === 'searXNG' && name === 'server_url' && value === '' && 'base_url' in (prev[selectedTool] || {}) ? { base_url: '' } : {})
             }
         }));
 
@@ -182,36 +184,37 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             return;
         }
 
-        const typedConfig = {
-            bing: (allToolsConfig as any).bing || defaultToolParams.bing,
-            bocha: (allToolsConfig as any).bocha || defaultToolParams.bocha,
-            jina: (allToolsConfig as any).jina || defaultToolParams.jina,
-            serp: (allToolsConfig as any).serp || defaultToolParams.serp,
-            tavily: (allToolsConfig as any).tavily || defaultToolParams.tavily,
-            cloudsway: (allToolsConfig as any).cloudsway || defaultToolParams.cloudsway,
-            searXNG: (allToolsConfig as any).searXNG || defaultToolParams.searXNG,
-            deepseek: allToolsConfig.deepseek || defaultToolParams.deepseek,
-        };
-
-        const newConfig = {
-            enabled,
-            type: selectedTool,
-            config: typedConfig,
-            prompt,
-        };
-        try {
-            if (isApi) {
-                if (toolIdRef.current) {
-                    await updateToolApi(toolIdRef.current, newConfig);
-                }
-                notification.open({ type: 'success', title: String(t('skills.saveSuccessful') ?? ''), description: String('') });
-                // Close the pop-up window after successful submission.
-                closeRef.current?.click();
-            } else {
-                onSubmit?.(newConfig);
+        if (selectedTool === 'custom') {
+            const custom = allToolsConfig.custom;
+            const operation = custom?.operation;
+            const mapping = custom?.mapping;
+            if (!custom?.proof?.key_id || !custom?.proof?.ciphertext) {
+                notification.open({ type: 'error', title: String(t('failed')), description: String(t('chatConfig.webSearch.proofRequired')) });
+                return;
             }
-        } catch (error: any) {
-            notification.open({ type: 'error', title: String(t('failed') ?? ''), description: String(error?.message || '') });
+            if (!operation?.server || !operation?.method || !operation?.path || !operation?.query_parameter?.name || !mapping?.title || !mapping?.url || !mapping?.snippet || (operation?.auth?.location !== 'none' && (!operation?.auth?.name || (secret.action !== 'replace' && !secretConfigured)))) {
+                notification.open({ type: 'error', title: String(t('failed')), description: String(t('chatConfig.webSearch.requiredFields')) });
+                return;
+            }
+        }
+        try {
+            setSaving(true);
+            const providers = Object.fromEntries(persistedProviders.map(key => [key, allToolsConfig[key]]));
+            if (selectedTool in defaultToolParams && !(selectedTool in providers)) providers[selectedTool] = allToolsConfig[selectedTool];
+            if (selectedTool === 'bing' && providers.bing && !providers.bing.base_url) providers.bing = { ...providers.bing, base_url: defaultToolParams.bing.base_url };
+            if (selectedTool === 'serp' && providers.serp && !providers.serp.engine) providers.serp = { ...providers.serp, engine: defaultToolParams.serp.engine };
+            if (providers.custom) providers.custom = { ...providers.custom, mapping: normalizeSearchMapping(providers.custom.mapping) };
+            await putWebSearchSettings(toolIdRef.current, {
+                revision, enabled, type: selectedTool, prompt, providers, custom_secret: selectedTool === 'custom' ? secret : { action: 'keep' },
+            });
+            setSecret({ action: 'keep' });
+            notification.open({ type: 'success', title: String(t('skills.saveSuccessful')), description: '' });
+            onSaved?.();
+            closeRef.current?.click();
+        } catch {
+            notification.open({ type: 'error', title: String(t('failed')), description: String(t('chatConfig.webSearch.saveFailed')) });
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -234,6 +237,8 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
         );
 
         switch (selectedTool) {
+            case 'custom':
+                return <CustomWebSearch toolId={toolIdRef.current} value={allToolsConfig.custom} onChange={(value) => { setPersistedProviders(prev => prev.includes('custom') ? prev : [...prev, 'custom']); setAllToolsConfig(prev => ({ ...prev, custom: value })); }} secret={secret} onSecretChange={setSecret} secretConfigured={secretConfigured} />;
             case 'bing':
                 return (
                     <>
@@ -390,7 +395,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                         required
                         label={t('chatConfig.webSearch.serverUrl')}
                         name="server_url"
-                        value={currentToolMap['server_url'] || ''}
+                        value={currentToolMap['server_url'] || currentToolMap['base_url'] || ''}
                         onChange={handleParamChange}
                         error={(formErrors as any).server_url}
                         id="searxng-server-url"
@@ -402,7 +407,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
         }
     };
 
-    if (isApi && loading) {
+    if (loading) {
         return (
             <div className="flex h-40 items-center justify-center">
                 <LoadingIcon />
@@ -412,7 +417,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
 
     return (
         <>
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <form onSubmit={handleSubmit} className="flex max-h-[75vh] flex-col gap-4 overflow-y-auto">
                 {/* Hide the close button for programmatic closing of the pop-up window after successful submission. */}
                 <DialogClose asChild>
                     <button ref={closeRef} className="hidden" />
@@ -422,6 +427,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                     value={selectedTool}
                     onChange={handleToolChange}
                     options={[
+                        { value: 'custom', label: t('chatConfig.webSearch.custom') },
                         { value: 'bing', label: t('chatConfig.webSearch.bing') },
                         { value: 'bocha', label: t('chatConfig.webSearch.bocha') },
                         { value: 'jina', label: t('chatConfig.webSearch.jina') },
@@ -441,12 +447,13 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                 </div>
 
                 <DialogFooter>
-                    <DialogClose>
+                    <DialogClose asChild>
                         <Button variant="outlined" type="button" color="default">
                             {t('build.cancel')}
                         </Button>
                     </DialogClose>
-                    <Button type="submit" disabled={isApi && loading}>
+                    <Button type="button" variant="outlined" color="default" onClick={() => setReload(value => value + 1)}>{t('chatConfig.webSearch.reload')}</Button>
+                    <Button type="submit" disabled={saving || !revision}>
                         {t('build.confirm')}
                     </Button>
                 </DialogFooter>
