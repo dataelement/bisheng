@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史1017编号：901已完成/历史交付、114当前待办、2外移；原137队列已完成40项、剩97项，另17张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史1017编号：912已完成/历史交付、103当前待办、2外移；原137队列已完成40项、剩97项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -8083,7 +8083,7 @@
   **配对测试**：T999\
   **验证 / 完成条件**：先真实native红绿、原相关控制与作者外固定复查；不假报正式迁移或move入口完成。
 
-- [ ] **T1001 · 创建者成员正式Command闭集反例**
+- [x] **T1001 · 创建者成员正式Command闭集反例**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_conversion_schema.py`\
   **逻辑 / 测试上下文**：W6§108七个必填成员字段与原五kind闭集。\
@@ -8091,7 +8091,7 @@
   **覆盖 AC**: AC-55, AC-57, AC-80, AC-83, AC-85\
   **验证 / 完成条件**：先事实驱动红绿、三卡组整体原M2/M3控制、独立复查；不得以缺字段或假空Header掩盖失败。
 
-- [ ] **T1002 · 正式Resource Command纳入成员冻结计划**
+- [x] **T1002 · 正式Resource Command纳入成员冻结计划**
   **类型 / Owner**：后端 Schema / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/domain/schemas/unification_conversion.py`；`src/backend/bisheng/knowledge/application/unification_inventory_schema.py`\
   **逻辑 / 测试上下文**：W6§108强制字段，无全None旧artifact兼容分支。\
@@ -8099,7 +8099,7 @@
   **配对测试**：T1001\
   **验证 / 完成条件**：先事实驱动红绿、三卡组整体原M2/M3控制、独立复查；不得以缺字段或假空Header掩盖失败。
 
-- [ ] **T1003 · 成员命令canonical wire恢复反例**
+- [x] **T1003 · 成员命令canonical wire恢复反例**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_conversion_codec.py`；`src/backend/test/knowledge_unification/test_migration_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§108 insert/keep互斥、时间恢复与旧四kind控制。\
@@ -8107,7 +8107,7 @@
   **覆盖 AC**: AC-55, AC-57, AC-83, AC-85\
   **验证 / 完成条件**：先事实驱动红绿、三卡组整体原M2/M3控制、独立复查；不得以缺字段或假空Header掩盖失败。
 
-- [ ] **T1004 · 原双codec接入成员命令校验与时间恢复**
+- [x] **T1004 · 原双codec接入成员命令校验与时间恢复**
   **类型 / Owner**：后端 Application / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`；`src/backend/bisheng/knowledge/application/unification_conversion_codec.py`\
   **逻辑 / 测试上下文**：W6§108只沿原encoder canonical回比，不复制wire。\
@@ -8115,7 +8115,7 @@
   **配对测试**：T1003\
   **验证 / 完成条件**：先事实驱动红绿、三卡组整体原M2/M3控制、独立复查；不得以缺字段或假空Header掩盖失败。
 
-- [ ] **T1005 · 原M2 producer生成真实成员计划反例**
+- [x] **T1005 · 原M2 producer生成真实成员计划反例**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_conversion_plan.py`；`src/backend/test/knowledge_unification/test_migration_preflight_membership.py`\
   **逻辑 / 测试上下文**：W6§108实际Header/Member/CreatorFact接线，缺失及冲突阻断与线性预算。\
@@ -8123,7 +8123,7 @@
   **覆盖 AC**: AC-55, AC-57, AC-80, AC-83, AC-85\
   **验证 / 完成条件**：先事实驱动红绿、三卡组整体原M2/M3控制、独立复查；不得以缺字段或假空Header掩盖失败。
 
-- [ ] **T1006 · 原preflight与stage0 builder生产完整成员计划**
+- [x] **T1006 · 原preflight与stage0 builder生产完整成员计划**
   **类型 / Owner**：后端 Application / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_conversion_plan.py`；`src/backend/bisheng/knowledge/application/unification_preflight.py`\
   **逻辑 / 测试上下文**：W6§108一次Root索引，Header后Member事实完整保留；原stage/finish顺序不变。\
@@ -8131,7 +8131,7 @@
   **配对测试**：T1005\
   **验证 / 完成条件**：先事实驱动红绿、三卡组整体原M2/M3控制、独立复查；不得以缺字段或假空Header掩盖失败。
 
-- [ ] **T1007 · 正式成员基线完整性与晚到命令核验反例**
+- [x] **T1007 · 正式成员基线完整性与晚到命令核验反例**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_membership_baseline_guard.py`；`src/backend/test/knowledge_unification/test_migration_membership_baseline_app.py`\
   **逻辑 / 测试上下文**：W6§109真实原Header/Member/Creator/Command，fresh/frozen/M3写前缺项门禁。\
@@ -8139,7 +8139,7 @@
   **覆盖 AC**: AC-55, AC-57, AC-80, AC-83, AC-85\
   **验证 / 完成条件**：真实红绿、与原纯planner分支一致性、规模及正式M2/M3组合；不得伪造空基线。
 
-- [ ] **T1008 · 原正式盘点及冻结图读取接成员完整性校验**
+- [x] **T1008 · 原正式盘点及冻结图读取接成员完整性校验**
   **类型 / Owner**：后端 Application / INT\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_space_membership_inventory.py`；`src/backend/bisheng/knowledge/application/unification_inventory.py`\
   **逻辑 / 测试上下文**：W6§109单遍graph/每Root摘要，真实接原fresh _tenant及aiter_frozen_pages。\
@@ -8147,7 +8147,7 @@
   **配对测试**：T1007\
   **验证 / 完成条件**：首冻/既有freeze/M3完整读取统一阻断缺项，原material/graph/hash/序号门禁保留，无新执行框架。
 
-- [ ] **T1009 · P1应用桥完整owned事实导出反例**
+- [x] **T1009 · P1应用桥完整owned事实导出反例**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_projection.py`\
   **逻辑 / 测试上下文**：W6§110真实native原owned验证、同session/TX、不允许候选代替完整事实。\
@@ -8155,7 +8155,7 @@
   **覆盖 AC**: AC-24, AC-43, AC-49, AC-54, AC-83\
   **验证 / 完成条件**：原桥缺口native红绿、完整P1控制和作者外复核，未接Owner。
 
-- [ ] **T1010 · 通过原P1应用桥导出完整owned投影事实**
+- [x] **T1010 · 通过原P1应用桥导出完整owned投影事实**
   **类型 / Owner**：后端 Application / PROC\
   **写入文件**：`src/backend/bisheng/permission/application/knowledge_move_projection.py`\
   **逻辑 / 测试上下文**：W6§110仅原DTO re-export和原nativeRepo薄转发，无新授权/SQL/ledger算法。\
@@ -8179,7 +8179,7 @@
   **配对测试**：T1011\
   **验证 / 完成条件**：晚失败/cancel/外catchcommit仍无半转换，原prefix重验拒漂移、无重复insert、不造Grant。
 
-- [ ] **T1013 · 原冻结图空集合与深度控制保持真实成员闭集**
+- [x] **T1013 · 原冻结图空集合与深度控制保持真实成员闭集**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_frozen_plan_reader.py`\
   **逻辑 / 测试上下文**：W6§109完整性升级后两旧oracle精确适配：空baseline不得配非空命令，62/63层保完整原真实图。\
