@@ -692,7 +692,11 @@ export function useChartState(
       timeGranularity: dim.timeGranularity || null
     }))
 
-    const serializedStackDimensions = stackDimensions
+    // Basic bar/line/pie charts have no stack axis; keep a legacy stack dimension from
+    // being re-saved on them, otherwise the query returns category × series rows and the
+    // chart shows fewer categories than configured.
+    const stackDimensionsForChart = isStackedChart(chartType) ? stackDimensions : []
+    const serializedStackDimensions = stackDimensionsForChart
       .slice(0, getMaxStackDimensionCount(chartType))
       .map(dimension => ({
         fieldId: dimension.fieldId,

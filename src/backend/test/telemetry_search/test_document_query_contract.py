@@ -5,13 +5,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from test.telemetry_search.test_document_statistics import ts
 
 from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_CONTENT_STAT_INDEX as INDEX
 from bisheng.telemetry_search.domain.init_dataset import DASHBOARD_DATASET
 from bisheng.telemetry_search.domain.schemas.component import ComponentDataConfig, DimensionQueryFilter
 from bisheng.telemetry_search.domain.services import component, dashboard_export_detail, knowledge_document_reader
 from bisheng.telemetry_search.domain.services.knowledge_document_statistics import DocumentStatistics
+from test.telemetry_search.test_document_statistics import ts
 
 
 @pytest.fixture
@@ -112,6 +112,43 @@ async def test_result_limit_respects_explicit_metric_sort(setup):
     result = await component.DataQueryService(dataset_code=INDEX, data_config=config).query_telemetry_data()
     assert result.dimensions == [["A"]]
     assert result.value == [[1]]
+
+
+async def test_result_limit_keeps_complete_stacked_categories(setup):
+    """TOP-N 按类目截断: 堆叠图的每个类目必须保留全部系列行."""
+    _, load = setup
+    records = []
+    for space in range(5):
+        for category in ("A类", "B类"):
+            for index in range(space + 1):
+                records.append(
+                    {
+                        "knowledge_identity": f"document:{space}-{category}-{index}",
+                        "file_id": space * 100 + index + (0 if category == "A类" else 50),
+                        "timestamp": ts("2026-09-01") / 1000,
+                        "space_name": f"空间{space}",
+                        "space_id": space,
+                        "file_category_name": category,
+                    }
+                )
+    load.return_value = DocumentStatistics(records, {})
+    config = ComponentDataConfig(
+        dimensions=[{"fieldId": "space_name"}],
+        stackDimension={"fieldId": "file_category_name"},
+        metrics=[{"fieldId": "total_file_count"}, {"fieldId": "new_file_count"}],
+        resultLimit={"limitType": "limited", "limit": 3},
+    )
+    result = await component.DataQueryService(dataset_code=INDEX, data_config=config).query_telemetry_data()
+    assert [dimension[0] for dimension in result.dimensions] == [
+        "空间4",
+        "空间4",
+        "空间3",
+        "空间3",
+        "空间2",
+        "空间2",
+    ]
+    assert [value[0] for value in result.value] == [5, 5, 4, 4, 3, 3]
+    assert all(len(value) == 2 for value in result.value)
 
 
 async def test_query_rollups_export_match_with_shared_references(setup):

@@ -1,4 +1,5 @@
 import copy
+import math
 from datetime import datetime, timedelta
 from typing import Any, Literal, Union
 
@@ -563,19 +564,6 @@ class DataQueryService(BaseModel):
                 raise ValueError("unknown sort order")
             res.sort(key=lambda x: x[sort_field_config[0]], reverse=sort_reverse)
 
-        limit_num = self.data_config.result_limit.get_limit_number() if self.data_config.result_limit else 0
-        has_explicit_metric_sort = any(metric.sort is not None for metric in self.data_config.metrics)
-        if limit_num and dimension_index >= 0 and self.data_config.metrics and not has_explicit_metric_sort:
-            metric_column = sort_field[self.data_config.metrics[0].field_id][0]
-
-            def metric_sort_key(row: list) -> float:
-                value = row[metric_column]
-                if value is None:
-                    return float("-inf")
-                return float(value)
-
-            res.sort(key=metric_sort_key, reverse=True)
-
         # split result dimensions and values
         final_dimensions = []
         final_values = []
@@ -605,12 +593,81 @@ class DataQueryService(BaseModel):
                 final_values.append(one)
 
         # limit size
-        if self.data_config.result_limit:
-            if limit_num := self.data_config.result_limit.get_limit_number():
-                final_dimensions = final_dimensions[:limit_num]
-                final_values = final_values[:limit_num]
+        if limit_num := self.result_limit_number():
+            final_dimensions, final_values = self.limit_by_category(
+                final_dimensions,
+                final_values,
+                limit_num,
+                rank_by_primary_metric=not self.has_explicit_ordering(),
+            )
 
         return final_dimensions, final_values
+
+    def result_limit_number(self) -> int:
+        if not self.data_config.result_limit:
+            return 0
+        return self.data_config.result_limit.get_limit_number() or 0
+
+    def has_explicit_ordering(self) -> bool:
+        """Whether the configured ordering must be preserved by a TOP-N limit."""
+        dimensions = [*self.data_config.dimensions, *self.data_config.get_stack_dimensions()]
+        if any(dimension.sort for dimension in dimensions):
+            return True
+        # A time axis keeps its chronological order; ranking it by metric would scramble
+        # the trend the user asked to see, so TOP-N keeps the earliest buckets instead.
+        if any(dimension.field_id == TIMESTAMP_FIELD for dimension in dimensions):
+            return True
+        return any(metric.sort for metric in self.data_config.metrics)
+
+    @staticmethod
+    def numeric_metric(value: Any) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        return number if math.isfinite(number) else 0.0
+
+    def limit_by_category(
+        self,
+        dimensions: list[list],
+        values: list[list],
+        limit: int,
+        *,
+        rank_by_primary_metric: bool,
+    ) -> (list[list], list[list]):
+        """Keep the first `limit` categories together with every series row of them.
+
+        Stacked/grouped charts expand one category into one row per stack value. Limiting
+        rows would cut a category in half, dropping its remaining series and showing fewer
+        categories than the user asked for, so the limit applies per category instead.
+        """
+        if not dimensions:
+            return dimensions[:limit], values[:limit]
+        category_width = len(self.data_config.dimensions)
+        if category_width <= 0:
+            return dimensions[:limit], values[:limit]
+
+        grouped: dict[tuple, list[int]] = {}
+        category_order: list[tuple] = []
+        for index, dimension in enumerate(dimensions):
+            key = tuple(dimension[:category_width])
+            if key not in grouped:
+                grouped[key] = []
+                category_order.append(key)
+            grouped[key].append(index)
+
+        if rank_by_primary_metric and values:
+            # TOP-N without an explicit ordering ranks categories by their primary metric
+            # total; for a single row per category this is the plain metric value.
+            category_order.sort(
+                key=lambda key: sum(
+                    self.numeric_metric(values[index][0]) if values[index] else 0.0 for index in grouped[key]
+                ),
+                reverse=True,
+            )
+
+        kept = [index for key in category_order[:limit] for index in grouped[key]]
+        return [dimensions[index] for index in kept], [values[index] for index in kept]
 
     def in_time_range(self, time_range: list[int], timestamp: int, timestamp_dimension: AggregationExpression) -> bool:
         """judge data timestamp whether in time range"""
