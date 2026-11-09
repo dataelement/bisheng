@@ -147,7 +147,16 @@ async def test_new_unregistered_tenant_and_new_pending_run_invalidate_tail(modul
         before = await repository.arequire_global_ready()
         await session.execute(
             sa.insert(Run.__table__).values(
-                id="new", tenant_id=101, run_id="new-run", phase="preparing", writer_contract_version="f118-v1"
+                id="new",
+                tenant_id=101,
+                run_id="new-run",
+                phase="preparing",
+                writer_contract_version="f118-v1",
+                baseline_ref={},
+                plan_ref={},
+                checkpoints={},
+                source_coverage={},
+                verification_report={},
             )
         )
         with pytest.raises(ReferenceCoverageNotReadyError):
@@ -175,3 +184,48 @@ async def test_native_tenant_and_transaction_drift_never_leaks_a_partial_status(
         finally:
             if token is not None:
                 current_tenant_id.reset(token)
+
+
+async def test_trusted_success_covers_old_failed_run_but_later_mutation_is_not_covered(module, ledger):
+    async with AsyncSession(ledger) as session, session.begin():
+        session.add(
+            Run(
+                id="old-failed",
+                tenant_id=101,
+                run_id="old",
+                phase="failed",
+                error_code=10994,
+                error_reason="old_failure",
+                checkpoints={"_failed_from_phase": "preparing"},
+            )
+        )
+    async with AsyncSession(ledger) as session, session.begin():
+        rows = (await session.execute(sa.select(Run.__table__))).mappings().all()
+        count, fingerprint = module.ledger_inventory(rows)
+    cert = certificate(101)
+    cert["superseded_ledger_count"], cert["superseded_ledger_digest"] = count, fingerprint
+    cert["certificate_digest"] = digest({key: value for key, value in cert.items() if key != "certificate_digest"})
+    await seed(ledger, 101, cert=cert)
+    async with AsyncSession(ledger) as session, session.begin():
+        repository = module.production_coverage_factory(session)
+        assert len(await repository.arequire_ready()) == 6
+        await session.execute(
+            sa.update(Run.__table__).where(Run.__table__.c.id == "old-failed").values(error_reason="changed")
+        )
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await repository.arequire_ready()
+
+
+async def test_new_tenant_without_creation_certificate_invalidates_global_inventory(module, ledger):
+    from bisheng.database.models.tenant import Tenant
+
+    await seed(ledger, 101)
+    await seed(ledger, 202)
+    async with AsyncSession(ledger) as session, session.begin():
+        repository = module.production_coverage_factory(session)
+        before = await repository.arequire_global_ready()
+        await session.execute(sa.insert(Tenant.__table__).values(id=303, tenant_code="third", tenant_name="Third"))
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await repository.arequire_global_ready(
+                expected_epoch=before.coverage_epoch, expected_inventory_hash=before.tenant_inventory_hash
+            )
