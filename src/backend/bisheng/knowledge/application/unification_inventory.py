@@ -31,6 +31,7 @@ from bisheng.knowledge.application.unification_sources import (
     SourceInventoryRecord,
     UnificationSourceInventory,
 )
+from bisheng.knowledge.application.unification_space_membership_inventory import MembershipInventoryVerifier
 from bisheng.knowledge.domain.models.knowledge_unification_run import unification_now
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
 from bisheng.knowledge.domain.repositories.unification_run_repository import (
@@ -61,7 +62,18 @@ _SECTIONS = {
         "tag_library",
         "department_space",
     },
-    "control": {"tenant", "membership", "department", "role", "user_role", "creator", "role_fact", "quota_usage"},
+    "control": {
+        "tenant",
+        "membership",
+        "department",
+        "role",
+        "user_role",
+        "creator",
+        "role_fact",
+        "quota_usage",
+        "space_membership_header",
+        "space_member",
+    },
     "permission": {"resource_mode", "grant", "assignee", "visible_source"},
     "catalog": {"catalog_release", "authorization", "catalog_action", "permission_model"},
     "physical": {"physical_index", "physical_object"},
@@ -254,6 +266,7 @@ class UnificationInventoryApplication:
             or (current is not None and not callable(current))
         ):
             _blocked("invalid_frozen_input")
+        memberships = MembershipInventoryVerifier()
         tenants = frozenset(result.tenant_ids)
         current = current if current is not None else lambda: None
         backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
@@ -304,6 +317,7 @@ class UnificationInventoryApplication:
                     if section != "sources":
                         for record in page.records:
                             _section(section, record)
+                            memberships.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
                     key = (kind, section, scope, tenant_id)
                     if page_index != indices.get(key, 0):
                         _blocked("manifest_page_order")
@@ -349,6 +363,7 @@ class UnificationInventoryApplication:
 
             async for leaf in verify(descriptor):
                 yield leaf
+        memberships.finish()
         await self._materials(
             run_id=result.run_id,
             writer_contract_version=result.writer_contract_version,
@@ -403,9 +418,13 @@ class UnificationInventoryApplication:
         context = await source_inventory.aprepare_tenant_context(session, **identity)
         resource_requests, object_requests = [], []
         spaces = {}
+        memberships = MembershipInventoryVerifier()
         async for section, record in self.preflight.aiter_tenant(
             session, catalog_plan=catalog_plan, planned_at=planned_at
         ):
+            memberships.observe(
+                kind="plan" if section == "conversion" else "baseline", section=section, tenant_id=tenant, record=record
+            )
             await pages.add(section, tenant, record, kind="plan" if section == "conversion" else "baseline")
             if record.record_type == "resource":
                 value = record.data
@@ -417,6 +436,7 @@ class UnificationInventoryApplication:
             if len(resource_requests) == 199 or len(object_requests) == 199:
                 await self._physical_batch(pages, tenant, resource_requests, object_requests)
                 resource_requests, object_requests = [], []
+        memberships.finish()
         if resource_requests or object_requests:
             await self._physical_batch(pages, tenant, resource_requests, object_requests)
         header, refs = None, []

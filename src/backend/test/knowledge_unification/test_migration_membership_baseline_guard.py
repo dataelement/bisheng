@@ -8,6 +8,7 @@ import importlib
 import pytest
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+from bisheng.core.database import tenant_filter
 from bisheng.knowledge.application.unification_conversion_plan import ConversionPlanBuilder
 from bisheng.knowledge.application.unification_inventory_codec import digest, record_from_row, record_from_values
 from bisheng.knowledge.domain.repositories.unification_resource_repository import UnificationResourceRepository
@@ -21,6 +22,17 @@ native = original.native
 own_tenant = original.own_tenant
 inventoried = original.inventoried
 NOW = original.NOW
+
+
+@pytest.fixture(autouse=True)
+def original_c3_events(monkeypatch):
+    # The original membership fixture uses explicitly scoped Core projections;
+    # ResourceRepository additionally relies on the real C3 ORM SELECT event.
+    names = tenant_filter._tenant_aware_tables | {"knowledge"}
+    monkeypatch.setattr(tenant_filter, "_force_import_all_models", lambda: None)
+    monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
+    monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", names)
+    tenant_filter.register_tenant_filter_events()
 
 
 def api():
@@ -173,6 +185,22 @@ async def test_original_conflicts_match_pure_planner_rules(inventoried, case):
         h = next(i for i, (_, r) in enumerate(baseline) if r.record_type == "space_membership_header")
         hs, hr = baseline[h]
         baseline[h] = (hs, changed(hr, member_count=hr.data["member_count"] + 1))
+    # Re-sign the changed original set and keep template. The conflict itself,
+    # rather than only an old digest, must still be rejected.
+    members = [r.data for _, r in baseline if r.record_type == "space_member" and r.data["knowledge_id"] == 1]
+    members = [{k: v for k, v in r.items() if k != "row_digest"} for r in members]
+    owner = next(r for r in members if r["id"] == 10)
+    template = {k: owner[k] for k in original.MEMBER_COLUMNS if k != "id"}
+    cs, cr = commands[0]
+    commands[0] = (
+        cs,
+        changed(
+            cr,
+            before_member_count=len(members),
+            before_member_digest=digest(members),
+            creator_template_digest=digest(template),
+        ),
+    )
     with pytest.raises(KnowledgeOperationPlanConflictError):
         consume(checker, baseline, commands)
 
@@ -196,3 +224,42 @@ async def test_original_row_digest_is_checked_separately(inventoried):
     baseline[i] = (section, record_from_values(row.record_type, **(row.data | {"row_digest": "f" * 64})))
     with pytest.raises(KnowledgeOperationPlanConflictError):
         consume(checker, baseline, commands)
+
+
+async def test_physically_existing_soft_deleted_creator_keeps_original_ownership(inventoried):
+    checker = api()
+    baseline, commands = await facts(inventoried)
+    baseline = [(s, changed(r, delete=1) if r.record_type == "creator" else r) for s, r in baseline]
+    consume(checker, baseline, commands)
+
+
+def test_empty_original_tenant_needs_no_fake_members_or_commands():
+    api().finish()
+
+
+@pytest.mark.parametrize("count", [401, 10001])
+async def test_native_member_set_validation_is_single_pass_and_releases_raw_rows(inventoried, monkeypatch, count):
+    import tracemalloc
+
+    module = importlib.import_module("bisheng.knowledge.application.unification_space_membership_inventory")
+    baseline, commands = await facts(inventoried, extra=count)
+    real = module.digest
+    visits = []
+
+    def counted(value):
+        if isinstance(value, list):
+            visits.append(len(value))
+        return real(value)
+
+    monkeypatch.setattr(module, "digest", counted)
+    sql = len(inventoried.statements)
+    tracemalloc.start()
+    try:
+        consume(module.MembershipInventoryVerifier(), baseline, commands)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert sum(visits) == count
+    assert len(inventoried.statements) == sql
+    assert peak < count * 5000 + 4 * 1024 * 1024
+    print(f"membership baseline: members={count}, raw visits={sum(visits)}, SQL=0, peak={peak}")
