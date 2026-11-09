@@ -9,6 +9,7 @@ import { Button } from "~/components/ui/Button";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { SquareBanner } from "~/pages/square/SquareBanner";
 import { cn, copyText } from "~/utils";
 import { getAppShareUrl } from "./appUtils";
 import { AgentCard } from "./components/AgentCard";
@@ -225,24 +226,7 @@ export default function ExplorePlaza() {
         "max-[767px]:h-[100dvh]",
       )}
     >
-      {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
-      <div className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]">
-        {/* Decorative scattered icons — kept from the original banner art, recolored
-                    via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-blue-200"
-          style={{
-            WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ""}/assets/channel/apptab-icons.svg)`,
-            maskImage: `url(${__APP_ENV__.BASE_URL || ""}/assets/channel/apptab-icons.svg)`,
-            WebkitMaskSize: "cover",
-            maskSize: "cover",
-            WebkitMaskPosition: "center",
-            maskPosition: "center",
-            WebkitMaskRepeat: "no-repeat",
-            maskRepeat: "no-repeat",
-          }}
-        />
+      <SquareBanner title={bannerTitle} description={bannerDescription}>
         {/* The unified square owns navigation; only the standalone mobile page needs a back button. */}
         {!isUnifiedSquare && (
           <div className="absolute left-4 top-4 z-10 md:hidden">
@@ -255,13 +239,7 @@ export default function ExplorePlaza() {
             </Button>
           </div>
         )}
-        <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
-          <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-blue-500">{bannerTitle}</h1>
-          <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
-            {bannerDescription}
-          </p>
-        </div>
-      </div>
+      </SquareBanner>
 
       {/* 过滤栏：桌面与原先一致；窄屏搜索独占一行（移动端始终展开搜索） */}
       <div className="w-full max-w-[1000px] shrink-0 flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">

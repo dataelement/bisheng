@@ -19,8 +19,7 @@ const PANES: Record<SquareType, ReturnType<typeof lazy>> = {
 /**
  * The discover side of every workbench module behind one sidebar entry, so the
  * module homes are only ever "mine". The tabs are the modules this account may open;
- * each tab hosts that module's existing square unchanged (its own banner, search, cards
- * and preview drawer).
+ * each tab hosts that module's search, cards and preview drawer below a shared banner layout.
  */
 export function SquarePage() {
   const localize = useLocalize();

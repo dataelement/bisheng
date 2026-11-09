@@ -5,8 +5,8 @@ import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
 import { matchesSkillSearch } from '~/components/Skills/localization';
 import { useLocalize } from '~/hooks';
+import { SquareBanner } from '~/pages/square/SquareBanner';
 import { SkillGrid, SkillGridSkeleton } from './SkillGrid';
-import { SkillSquareBanner } from './SkillSquareBanner';
 
 const noop = () => undefined;
 
@@ -39,7 +39,10 @@ export function SkillSquarePane() {
   const emptyKind = keyword ? 'search' : failed ? 'failed' : 'square';
   return (
     <div className="flex h-full min-h-0 w-full flex-col items-center overflow-hidden">
-      <SkillSquareBanner />
+      <SquareBanner
+        title={localize('com_skill_center_square_title')}
+        description={localize('com_skill_center_square_description')}
+      />
       <div className="flex w-full max-w-[1000px] shrink-0 items-center justify-end px-5 py-5">
         <SearchInput
           value={search}
