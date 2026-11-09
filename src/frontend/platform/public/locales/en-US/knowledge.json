@@ -666,5 +666,27 @@
     "upload_invalid": "The file format, size or media-upload setting does not meet the current rules.",
     "upload_unconfirmed": "The new file’s status could not be confirmed. Refresh the list to check.",
     "confirm_new_version": "Confirm new version"
+  },
+  "move": {
+    "title": "Move",
+    "jobs": "Move tasks",
+    "current_space": "Current space",
+    "current_folder": "Current folder",
+    "target_space": "Destination space",
+    "search_spaces": "Search spaces",
+    "root": "Space root",
+    "choose_folder_hint": "Choose the space root, or enter a folder to use it as the destination.",
+    "review": "{{count}} selected items can be moved.",
+    "whole_versions": "All historical versions and contents of selected folders will move together.",
+    "permissions": "Inherited access follows the new parent. Custom access is preserved.",
+    "tags": "Source space tags are not transferred.",
+    "retained_fields": "Metadata fields preserved: {{fields}}",
+    "removed_fields": "Values in these metadata fields will be removed: {{fields}}",
+    "none": "None",
+    "async_notice": "Cross-space moves continue migrating search indexes after acceptance. Acceptance is not completion.",
+    "skip_invalid": "Skip the unavailable items above and move only the valid items.",
+    "unknown_ack": "The submission result is unknown. Retry this same operation before submitting another move.",
+    "completed": "Move completed.",
+    "destination": "Move to: {{destination}}"
   }
 }

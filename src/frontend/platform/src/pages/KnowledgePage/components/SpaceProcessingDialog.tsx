@@ -30,6 +30,7 @@ import {
 } from "@/controllers/hooks/knowledge";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
+import { createDshOperationId as createOperationId } from "@/util/dshOperationId";
 import { showApiError } from "@/controllers/request";
 import { ModelSelect } from "../../ModelPage/manage/tabs/WorkbenchModel";
 import { embeddingGroups } from "./KnowledgeLibraryDialog";
@@ -211,7 +212,7 @@ function Content({
         }
         result = await actions.precheck(request);
       }
-      if (alive.current) setPlan({ result, key: crypto.randomUUID() });
+      if (alive.current) setPlan({ result, key: createOperationId() });
     } catch (error) {
       if (alive.current) showApiError(error);
     } finally {

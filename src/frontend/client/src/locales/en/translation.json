@@ -1874,6 +1874,38 @@
       "tags_load_failed": "The space tag list is unavailable. Existing permission restrictions still apply.",
       "invalid_name": "Use a tag name within the existing length limit.",
       "select_first": "Select files or folders first"
+    },
+    "processing_jobs": {
+      "title": "Processing tasks",
+      "loading": "Loading tasks…",
+      "load_failed": "Could not read the latest task state. Refresh before starting a new retry.",
+      "unknown_ack": "The retry response is unknown. Retry the same request to check its result; no new task will be created.",
+      "accepted_hint": "The request was accepted. Processing is not complete; follow the actual task state.",
+      "counts": "Total {{0}} · Completed {{1}} · Failed {{2}} · Pending {{3}}",
+      "hidden": "{{0}} restricted items are included in the counts.",
+      "error_code": "Error code: {{0}}",
+      "item": "Item {{0}}",
+      "previous": "Previous",
+      "next": "Next",
+      "back": "Task list",
+      "refresh": "Refresh",
+      "retry_failed": "Retry failed items",
+      "retry_request": "Retry same request",
+      "empty": "No processing tasks.",
+      "rebuilding": "The space index is rebuilding. Files can still be browsed, previewed, and downloaded; search is paused.",
+      "rebuild_failed": "The space index rebuild failed.",
+      "unknown": "State unavailable",
+      "kind_embedding_rebuild": "Index rebuild",
+      "kind_file_reprocess": "File processing",
+      "kind_file_resplit": "File splitting",
+      "kind_metadata_schema_change": "Metadata update",
+      "state_accepted": "Accepted; waiting to start",
+      "state_running": "Processing",
+      "state_succeeded": "Completed",
+      "state_partial_failed": "Some items failed",
+      "state_failed": "Failed",
+      "state_obsolete": "Settings changed; this task is obsolete",
+      "state_pending": "Pending"
     }
   },
   "com_subscription": {
@@ -2902,6 +2934,7 @@
     "title": "System notice"
   },
   "dshChat": {
+    "loadMoreKnowledge": "Load more",
     "backToCapabilities": "Back to capabilities",
     "uploadDescription": "Add local files to this conversation",
     "knowledgeDescription": "Choose knowledge spaces for context",

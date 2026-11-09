@@ -1801,6 +1801,38 @@
       "tags_load_failed": "空间标签列表暂不可用，原权限限制仍适用。",
       "invalid_name": "标签名称请遵守原长度限制。",
       "select_first": "请先选择文件或文件夹"
+    },
+    "processing_jobs": {
+      "title": "处理任务",
+      "loading": "正在读取任务…",
+      "load_failed": "无法读取任务最新状态。开始新的重试前请先刷新。",
+      "unknown_ack": "重试请求的应答尚不明确。请重试同一请求确认结果，不会新建任务。",
+      "accepted_hint": "请求已接收，处理尚未完成，请以实际任务状态为准。",
+      "counts": "共 {{0}} 项 · 已完成 {{1}} 项 · 失败 {{2}} 项 · 待处理 {{3}} 项",
+      "hidden": "计数包含 {{0}} 项受限内容。",
+      "error_code": "错误码：{{0}}",
+      "item": "第 {{0}} 项",
+      "previous": "上一页",
+      "next": "下一页",
+      "back": "任务列表",
+      "refresh": "刷新",
+      "retry_failed": "重试失败项",
+      "retry_request": "重试原请求",
+      "empty": "暂无处理任务。",
+      "rebuilding": "空间索引正在重建。仍可浏览目录、预览和下载文件，检索暂时不可用。",
+      "rebuild_failed": "空间索引重建失败。",
+      "unknown": "状态暂不可用",
+      "kind_embedding_rebuild": "索引重建",
+      "kind_file_reprocess": "文件重处理",
+      "kind_file_resplit": "文件重新切分",
+      "kind_metadata_schema_change": "元数据更新",
+      "state_accepted": "已接收，等待处理",
+      "state_running": "处理中",
+      "state_succeeded": "已完成",
+      "state_partial_failed": "部分失败",
+      "state_failed": "失败",
+      "state_obsolete": "配置已变化，任务已过期",
+      "state_pending": "待处理"
     }
   },
   "com_subscription": {
@@ -2830,6 +2862,7 @@
     "title": "系统通知"
   },
   "dshChat": {
+    "loadMoreKnowledge": "加载更多",
     "backToCapabilities": "返回添加菜单",
     "uploadDescription": "添加本地文件到当前对话",
     "knowledgeDescription": "选择参与上下文的知识空间",

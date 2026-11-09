@@ -31,13 +31,8 @@ export { default as usePrefersMobileLayout } from "./usePrefersMobileLayout";
 export { default as useFinePointer } from "./useFinePointer";
 export { default as useScrollToRef } from "./useScrollToRef";
 export { useScrollRevealRef } from "./useScrollRevealRef";
-export { useCategorizedKnowledgeSpaces } from "./useCategorizedKnowledgeSpaces";
 export { useWorkbenchMenuNames } from "./useWorkbenchMenuNames";
 export type { WorkbenchMenuKey } from "./useWorkbenchMenuNames";
-export type {
-  KnowledgeSpaceCategory,
-  KnowledgeSpaceGroup,
-} from "./useCategorizedKnowledgeSpaces";
 export { default as useLocalStorage } from "./useLocalStorage";
 export { default as useDelayedRender } from "./useDelayedRender";
 export { default as useOnClickOutside } from "./useOnClickOutside";

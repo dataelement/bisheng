@@ -666,5 +666,27 @@
     "upload_invalid": "文件格式、大小或媒体上传开关不符合当前规则。",
     "upload_unconfirmed": "无法确认新文件状态，请刷新列表核对。",
     "confirm_new_version": "确认关联为新版本"
+  },
+  "move": {
+    "title": "移动",
+    "jobs": "移动任务",
+    "current_space": "当前空间",
+    "current_folder": "当前文件夹",
+    "target_space": "目标空间",
+    "search_spaces": "搜索空间",
+    "root": "空间根目录",
+    "choose_folder_hint": "选择空间根目录，或进入文件夹后将其作为目标。",
+    "review": "本次可移动 {{count}} 个选中项。",
+    "whole_versions": "将同时移动所选文件的全部历史版本及所选文件夹内的内容。",
+    "permissions": "继承授权将随新父级变化，自定义授权保持。",
+    "tags": "源空间标签不会带入目标空间。",
+    "retained_fields": "保留的元数据字段：{{fields}}",
+    "removed_fields": "移入目标空间后将清除这些元数据字段的值：{{fields}}",
+    "none": "无",
+    "async_notice": "跨空间移动确认后仍需迁移检索索引；任务完成前不会显示为全部完成。",
+    "skip_invalid": "我确认跳过上述不可执行项，仅移动有效项。",
+    "unknown_ack": "暂时无法确认提交结果。请重试同一次操作，避免重复提交新的移动。",
+    "completed": "移动已完成。",
+    "destination": "移动到：{{destination}}"
   }
 }

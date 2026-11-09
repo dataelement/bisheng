@@ -13,6 +13,8 @@ interface SpaceDirectoryToolbarProps {
   onBatchDownload?: () => void;
   onBatchRetry?: () => void;
   onBatchTag?: () => void;
+  onMove?: () => void;
+  onMoveJobs?: () => void;
   selectedCount?: number;
   onDeleteSelected?: () => void;
   onReferences?: () => void;
@@ -29,6 +31,8 @@ export function SpaceDirectoryToolbar({
   onBatchDownload,
   onBatchRetry,
   onBatchTag,
+  onMove,
+  onMoveJobs,
   selectedCount = 0,
   onDeleteSelected,
   onReferences,
@@ -50,6 +54,7 @@ export function SpaceDirectoryToolbar({
     <div className="flex items-center justify-end gap-3">
       {selectedCount > 0 && (
         <>
+          <Button variant="outlined" onClick={onMove}>{t("move.title")}</Button>
           <Button variant="outlined" onClick={onBatchDownload}>
             {t("batch.download")}
           </Button>
@@ -61,6 +66,7 @@ export function SpaceDirectoryToolbar({
           </Button>
         </>
       )}
+      {onMoveJobs && <Button variant="outlined" onClick={onMoveJobs}>{t("move.jobs")}</Button>}
       {selectedCount > 0 && (
         <Button color="danger" variant="outlined" onClick={onDeleteSelected}>
           {t("deletion.selected")} ({selectedCount})
