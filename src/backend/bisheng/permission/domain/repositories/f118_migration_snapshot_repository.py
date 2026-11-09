@@ -43,6 +43,7 @@ from bisheng.permission.migration.f118_plan import (
     PermissionVisibleSourceBaseline,
     ResourceModeBaseline,
 )
+from bisheng.resource_reference.application.contracts import TransactionIdentity
 
 
 def _blocked(reason):
@@ -119,11 +120,12 @@ class PermissionMigrationSnapshotRepository:
         with session.no_autoflush, strict_tenant_filter():
             return tuple((await session.execute(statement)).mappings().all())
 
-    async def _catalog_rows(self, session, table, *conditions):
+    async def _catalog_rows(self, session, table, *conditions, read=None):
         """Internal <=200-ID batches plus one unconsumed EOF lookahead."""
+        read = read or self._read
         after = 0
         while True:
-            rows = await self._read(
+            rows = await read(
                 session, select(*table.c).where(*conditions, table.c.id > after).order_by(table.c.id).limit(201)
             )
             batch = rows[:200]
@@ -156,16 +158,60 @@ class PermissionMigrationSnapshotRepository:
             or release["write_fenced"]
         ):
             _blocked("authorization_pin_not_ready")
+        return await self._catalog_content(session, release, pins[0])
+
+    async def aload_catalog_release(self, session: AsyncSession, *, release_id: int) -> PermissionCatalogBaseline:
+        """Complete raw by-ID facts, retaining actual DRAFT/STAGED status."""
+        tenant = self._scope(session)
+        if type(release_id) is not int or release_id <= 0 or not session.in_transaction():
+            _blocked("native_release_identity_required")
+        try:
+            transaction = TransactionIdentity.capture(session)
+        except (TypeError, ValueError) as error:
+            raise PermissionMigrationBlockedError(reason="f118_snapshot_release_transaction_changed") from error
+
+        def current():
+            if self._scope(session) != tenant or session.new or session.dirty or session.deleted:
+                _blocked("release_context_changed")
+            try:
+                transaction.assert_current(session)
+            except (TypeError, ValueError) as error:
+                raise PermissionMigrationBlockedError(reason="f118_snapshot_release_transaction_changed") from error
+
+        async def read(session, query):
+            current()
+            result = await self._read(session, query)
+            current()
+            return result
+
+        release_table, auth_table = PermissionCatalogRelease.__table__, AuthorizationModelRelease.__table__
+        releases = await read(session, select(*release_table.c).where(release_table.c.id == release_id))
+        if len(releases) != 1:
+            _blocked("catalog_release_missing")
+        pins = await read(
+            session,
+            select(*auth_table.c).where(auth_table.c.id == releases[0]["required_authorization_model_release_id"]),
+        )
+        if len(pins) != 1:
+            _blocked("catalog_release_authorization_missing")
+        result = await self._catalog_content(session, releases[0], pins[0], read=read)
+        current()
+        return result
+
+    async def _catalog_content(self, session, release, pin, *, read=None):
+        read = read or self._read
         action_table, scope_table = PermissionAction.__table__, PermissionActionResourceScope.__table__
         actions = []
         action_by_id = {}
-        async for rows in self._catalog_rows(session, action_table, action_table.c.catalog_release_id == release["id"]):
+        async for rows in self._catalog_rows(
+            session, action_table, action_table.c.catalog_release_id == release["id"], read=read
+        ):
             if not rows:
                 continue
             ids = tuple(row["id"] for row in rows)
             action_by_id.update((row["id"], row) for row in rows)
             scopes = {ident: [] for ident in ids}
-            async for links in self._catalog_rows(session, scope_table, scope_table.c.action_id.in_(ids)):
+            async for links in self._catalog_rows(session, scope_table, scope_table.c.action_id.in_(ids), read=read):
                 for link in links:
                     scopes[link["action_id"]].append(link["resource_type"])
             actions.extend(
@@ -181,12 +227,14 @@ class PermissionMigrationSnapshotRepository:
             )
         model_table, link_table = PermissionModel.__table__, PermissionModelAction.__table__
         models = []
-        async for rows in self._catalog_rows(session, model_table, model_table.c.catalog_release_id == release["id"]):
+        async for rows in self._catalog_rows(
+            session, model_table, model_table.c.catalog_release_id == release["id"], read=read
+        ):
             if not rows:
                 continue
             ids = tuple(row["id"] for row in rows)
             selected = {ident: [] for ident in ids}
-            async for links in self._catalog_rows(session, link_table, link_table.c.model_id.in_(ids)):
+            async for links in self._catalog_rows(session, link_table, link_table.c.model_id.in_(ids), read=read):
                 for link in links:
                     action = action_by_id.get(link["action_id"])
                     if action is None:
@@ -212,7 +260,7 @@ class PermissionMigrationSnapshotRepository:
                 )
         return PermissionCatalogBaseline(
             _record(CatalogReleaseBaseline, release),
-            _record(AuthorizationPinBaseline, pins[0]),
+            _record(AuthorizationPinBaseline, pin),
             tuple(actions),
             tuple(models),
         )
