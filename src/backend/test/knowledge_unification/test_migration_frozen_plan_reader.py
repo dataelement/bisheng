@@ -199,6 +199,21 @@ async def test_foreign_scope_bad_count_duplicate_object_and_wrong_root_fail_clos
 
 async def test_legal_empty_sections_and_tenants_do_not_require_fabricated_pages(module, transport, frozen):
     result = await replace_baseline(transport, frozen, ())
+    # A real nonempty conversion plan cannot be attached to an empty baseline.
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        await read(module, transport, result)
+    metadata = next(row for row in root_records(transport, result, "plan") if row.record_type == "run")
+    content = encode_inventory_page(
+        run_id=result.run_id,
+        section="manifest",
+        scope="global",
+        tenant_id=None,
+        page_index=0,
+        records=(metadata,),
+        kind="plan",
+    )
+    plan = await transport.store.aput_canonical(run_id=result.run_id, kind="plan", content=content)
+    result = replace(result, plan_ref=plan)
     pages = await read(module, transport, result)
     assert not any(page.kind == "baseline" for page in pages)
     assert result.tenant_ids == (1, 101, 202)
@@ -206,15 +221,31 @@ async def test_legal_empty_sections_and_tenants_do_not_require_fabricated_pages(
 
 @pytest.mark.parametrize("depth", [62, 63])
 async def test_original_depth_boundary_does_not_confuse_manifest_level_indices(module, transport, frozen, depth):
-    entry = (await leaves(transport, frozen, (0,)))[0]
+    # Keep the entire actual original membership closure while varying only
+    # manifest depth; a lone Root without its Header is no longer a legal graph.
+    entries = tuple(
+        record_from_values(
+            "manifest_entry",
+            section=page.section,
+            scope=page.scope,
+            tenant_id=page.tenant_id,
+            page_index=page.page_index,
+            record_count=page.record_count,
+            descriptor=page.descriptor,
+            level=0,
+        )
+        for page in await read(module, transport, frozen)
+        if page.kind == "baseline"
+    )
     for level in range(depth):
+        count = len(entries)
         content = encode_inventory_page(
             run_id=frozen.run_id,
             section="manifest",
             scope="global",
             tenant_id=None,
             page_index=0,
-            records=(entry,),
+            records=entries,
             kind="baseline",
         )
         descriptor = await transport.store.aput_canonical(run_id=frozen.run_id, kind="baseline", content=content)
@@ -224,10 +255,11 @@ async def test_original_depth_boundary_does_not_confuse_manifest_level_indices(m
             scope="global",
             tenant_id=None,
             page_index=0,
-            record_count=1,
+            record_count=count,
             descriptor=descriptor,
             level=level,
         )
+        entries = (entry,)
     result = await replace_baseline(transport, frozen, (entry,))
     # iter_manifest_nodes adds one intermediate node below its root.
     if depth + 2 > 64:
