@@ -164,6 +164,9 @@ async def get_knowledge_space_service(
         make_permission_record=service._new_file_permission_record,
         actor_provider=service._permission_actor,
     )
+    from bisheng.knowledge.application.move_application import get_move_application
+
+    service.move_application_factory = get_move_application
     return service
 
 

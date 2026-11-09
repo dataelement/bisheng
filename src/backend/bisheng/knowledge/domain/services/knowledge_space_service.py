@@ -86,7 +86,6 @@ from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeState,
     KnowledgeTypeEnum,
 )
-from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import (
     KnowledgeDocumentVersion,
 )
@@ -4468,258 +4467,42 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 all_files.add(v.knowledge_file_id)
         return all_files, all_docs
 
-    async def move_items(
-        self,
-        space_id: int,
-        items: list[dict],
-        target_space_id: int,
-        target_folder_id: int | None = None,
-        skip_invalid: bool = False,
-    ) -> dict:
-        """Move files/folders within a space or across spaces (F034).
+    async def aprecheck_move(self, space_id, request):
+        if not callable(getattr(self, "move_application_factory", None)):
+            from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-        Returns ``{"moved": [...], "invalid": [...]}``; see design §4.2. Same-space
-        is a synchronous metadata move; cross-space additionally relocates the whole
-        version chain, clears tags (AC-23), marks SUCCESS files REBUILDING, and
-        dispatches async retrieval-data migration per file.
-        """
-        from sqlmodel import col, func, or_, select
+            raise KnowledgeOperationPlanConflictError(reason="move_application_unconfigured")
+        application = await self.move_application_factory()
+        return await application.aprecheck(space_id, request, identity=self.login_user, entry_kind="web")
 
-        from bisheng.knowledge.domain.models.knowledge import Knowledge
+    async def aconfirm_move(self, space_id, request):
+        if not callable(getattr(self, "move_application_factory", None)):
+            from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-        await self._require_read_permission(space_id)
-        cross_space = target_space_id != space_id
-        # Depth limit counts FOLDER layers only (see MAX_FOLDER_LEVEL). Files may
-        # sit inside a deepest-level folder, so file moves carry no depth check.
-        max_folder_level = MAX_FOLDER_LEVEL
+            raise KnowledgeOperationPlanConflictError(reason="move_application_unconfigured")
+        application = await self.move_application_factory()
+        return await application.aconfirm(space_id, request, identity=self.login_user, entry_kind="web")
 
-        async with get_async_db_session() as session:
-            source_space = await session.get(Knowledge, space_id)
-            target_space = await session.get(Knowledge, target_space_id)
-            if not target_space or target_space.type != KnowledgeTypeEnum.SPACE.value:
-                raise SpaceNotFoundError()
-            if source_space and target_space.tenant_id != source_space.tenant_id:
-                raise SpaceTenantMismatchError()
+    async def move_items(self, space_id, items, target_space_id, target_folder_id=None, skip_invalid=False):
+        """Retain synchronous same-space moves; cross-space requires confirmation."""
+        from bisheng.knowledge.domain.schemas.knowledge_space_schema import FileMoveReq
 
-            if target_folder_id:
-                target_folder = await session.get(KnowledgeFile, target_folder_id)
-                if (
-                    not target_folder
-                    or target_folder.file_type != FileType.DIR.value
-                    or target_folder.knowledge_id != target_space_id
-                ):
-                    raise SpaceFolderNotFoundError()
-                target_level_path = f"{target_folder.file_level_path}/{target_folder.id}"
-                target_level = target_folder.level + 1
-                new_parent: tuple[str, int] = ("folder", target_folder.id)
-            else:
-                target_level_path = ""
-                target_level = 0
-                new_parent = ("knowledge_space", target_space_id)
+        if not callable(getattr(self, "move_application_factory", None)):
+            from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-            # Target-side upload permission (same + cross space): moving items
-            # into a folder / space root is semantically "placing files there",
-            # so require upload_file on the target — mirrors add_file. The move
-            # dialog already hides targets the user can't upload to; this also
-            # blocks direct API calls into a no-permission target (decision-8
-            # reversal, see 测试反馈修复-R1.md #5).
-            if target_folder_id:
-                target_actions = await self._get_effective_actions("folder", target_folder_id, space_id=target_space_id)
-            else:
-                target_actions = await self._get_effective_actions(
-                    "knowledge_space", target_space_id, space_id=target_space_id
-                )
-            if "upload_file" not in target_actions:
-                raise SpacePermissionDeniedError()
-
-            # ── validate each item ──
-            valid: list[KnowledgeFile] = []
-            invalid: list[dict] = []
-            for it in items:
-                rec = await session.get(KnowledgeFile, int(it["id"]))
-                if not rec or rec.knowledge_id != space_id:
-                    raise SpaceFileNotFoundError()
-                is_folder = rec.file_type == FileType.DIR.value
-                word = "folder" if is_folder else "file"
-                otype = "folder" if is_folder else "knowledge_file"
-                self_prefix = f"{rec.file_level_path}/{rec.id}"
-
-                reason: str | None = None
-                effective_actions = await self._get_effective_actions(
-                    otype,
-                    rec.id,
-                    space_id=space_id,
-                )
-                if "move" not in effective_actions:
-                    reason = "no_permission"
-                elif is_folder and not cross_space and target_folder_id == rec.id:
-                    reason = "into_self"
-                elif is_folder and not cross_space and target_level_path.startswith(f"{self_prefix}/"):
-                    reason = "into_subtree"
-                elif not cross_space and target_level_path == (rec.file_level_path or ""):
-                    reason = "into_current_parent"
-                else:
-                    if is_folder:
-                        # Deepest FOLDER in the moved subtree (the folder itself
-                        # included); files are excluded — they don't count as a
-                        # layer, so an empty folder and a folder whose deepest
-                        # node is a file are both limited by their folders only.
-                        max_sub = await session.scalar(
-                            select(func.max(KnowledgeFile.level)).where(
-                                KnowledgeFile.knowledge_id == space_id,
-                                KnowledgeFile.file_type == FileType.DIR.value,
-                                or_(
-                                    KnowledgeFile.id == rec.id,
-                                    col(KnowledgeFile.file_level_path) == self_prefix,
-                                    col(KnowledgeFile.file_level_path).like(f"{self_prefix}/%"),
-                                ),
-                            )
-                        )
-                        depth_after = target_level + ((max_sub or rec.level) - rec.level)
-                        if depth_after > max_folder_level:
-                            reason = "depth_exceeded"
-                    # AC-12: same-level FOLDER name conflict is rejected for BOTH
-                    # same-space and cross-space moves (the dup query already scopes
-                    # to target_space_id). Files are never name-checked on move.
-                    if reason is None and is_folder:
-                        # Root-level rows persist file_level_path as NULL or "";
-                        # normalise both at the target root, otherwise SQL's
-                        # NULL == "" (false) lets a same-name root folder slip
-                        # through the dup check and the move silently succeeds.
-                        level_path_cond = (
-                            SpaceFileDao._root_path_filter()
-                            if target_level_path == ""
-                            else KnowledgeFile.file_level_path == target_level_path
-                        )
-                        dup = await session.scalar(
-                            select(func.count(KnowledgeFile.id)).where(
-                                KnowledgeFile.knowledge_id == target_space_id,
-                                KnowledgeFile.file_type == FileType.DIR.value,
-                                KnowledgeFile.file_name == rec.file_name,
-                                level_path_cond,
-                                KnowledgeFile.id != rec.id,
-                            )
-                        )
-                        if dup and dup > 0:
-                            reason = "name_conflict"
-
-                if reason:
-                    invalid.append({"id": rec.id, "type": word, "name": rec.file_name, "reason": reason})
-                else:
-                    valid.append(rec)
-
-            if invalid and not skip_invalid:
-                return {"moved": [], "invalid": invalid}
-
-            if valid:
-                if source_space is not None:
-                    require_space_processing_idle(source_space, operation="move_out")
-                require_space_processing_idle(target_space, operation="move_in")
-
-            # ── execute valid items ──
-            moved: list[dict] = []
-            moved_file_ids: set[int] = set()  # all relocated files (tag clearing, AC-23)
-            files_to_migrate: set[int] = set()  # only files with data to move (was SUCCESS → REBUILDING)
-            direct_move_resources: set[tuple[str, int]] = set()
-            for rec in valid:
-                is_folder = rec.file_type == FileType.DIR.value
-                word = "folder" if is_folder else "file"
-                old_parent = self._parent_ref_from_level_path(rec.file_level_path, space_id)
-                level_delta = target_level - rec.level
-
-                rows: list[KnowledgeFile] = [rec]
-                if is_folder:
-                    old_self_prefix = f"{rec.file_level_path}/{rec.id}"
-                    new_self_prefix = f"{target_level_path}/{rec.id}"
-                    descendants = (
-                        await session.exec(
-                            select(KnowledgeFile).where(
-                                KnowledgeFile.knowledge_id == space_id,
-                                or_(
-                                    col(KnowledgeFile.file_level_path) == old_self_prefix,
-                                    col(KnowledgeFile.file_level_path).like(f"{old_self_prefix}/%"),
-                                ),
-                            )
-                        )
-                    ).all()
-                    for d in descendants:
-                        d.file_level_path = new_self_prefix + (d.file_level_path or "")[len(old_self_prefix) :]
-                        d.level = d.level + level_delta
-                        rows.append(d)
-                if cross_space:
-                    direct_move_resources.update(
-                        (
-                            "folder" if row.file_type == FileType.DIR.value else "knowledge_file",
-                            row.id,
-                        )
-                        for row in rows
-                    )
-                rec.file_level_path = target_level_path
-                rec.level = target_level
-
-                if cross_space:
-                    leaf_file_ids = [r.id for r in rows if r.file_type == FileType.FILE.value]
-                    chain_files, chain_docs = await self._collect_version_chain_file_ids(session, leaf_file_ids)
-                    for cfid in chain_files:
-                        cf = await session.get(KnowledgeFile, cfid)
-                        if cf is None:
-                            continue
-                        cf.knowledge_id = target_space_id
-                        moved_file_ids.add(cfid)
-                        if cf.status == KnowledgeFileStatus.SUCCESS.value:
-                            # Only completed files have chunks to migrate. Files still
-                            # parsing/failed continue in the target space via their own
-                            # parse/retry flow (AC-21); no migration dispatch for them.
-                            cf.status = KnowledgeFileStatus.REBUILDING.value
-                            files_to_migrate.add(cfid)
-                        session.add(cf)
-                    for r in rows:
-                        r.knowledge_id = target_space_id
-                    for did in chain_docs:
-                        doc = await session.get(KnowledgeDocument, did)
-                        if doc is not None:
-                            doc.knowledge_id = target_space_id
-                            session.add(doc)
-
-                for r in rows:
-                    session.add(r)
-
-                moved.append(
-                    {
-                        "id": rec.id,
-                        "type": word,
-                        "old_parent_id": old_parent[1] if old_parent[0] == "folder" else None,
-                        "cross_space": cross_space,
-                    }
-                )
-
-            await session.commit()
-
-        # ── post-commit side effects (FGA tuples / tags / async dispatch) ──
-        if cross_space:
-            self._dispatch_knowledge_chat_rehome(
-                source_space_id=space_id,
-                resources=sorted(direct_move_resources),
-                reason="cross_space_move",
-            )
-
-        for m in moved:
-            otype = "folder" if m["type"] == "folder" else "knowledge_file"
-            old_parent = ("folder", m["old_parent_id"]) if m["old_parent_id"] else ("knowledge_space", space_id)
-            await self._replace_resource_parent_tuple(otype, m["id"], old_parent, new_parent)
-
-        if cross_space:
-            # AC-23: clear space tags on every relocated file (tags don't migrate).
-            for fid in moved_file_ids:
-                await TagDao.aupdate_resource_tags([], str(fid), ResourceTypeEnum.SPACE_FILE, self.login_user.user_id)
-            # Dispatch retrieval-data migration only for files that had data (source = old space).
-            for fid in files_to_migrate:
-                await self._dispatch_cross_space_migration(fid, source_space_id=space_id)
-
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
-        if cross_space:
-            await KnowledgeDao.async_update_knowledge_update_time_by_id(target_space_id)
-        return {"moved": moved, "invalid": invalid}
+            raise KnowledgeOperationPlanConflictError(reason="move_application_unconfigured")
+        application = await self.move_application_factory()
+        return await application.move_legacy(
+            space_id,
+            FileMoveReq(
+                items=items,
+                target_space_id=target_space_id,
+                target_folder_id=target_folder_id,
+                skip_invalid=skip_invalid,
+            ),
+            identity=self.login_user,
+            entry_kind="web",
+        )
 
     async def update_file_encoding(
         self,
