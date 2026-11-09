@@ -1318,6 +1318,9 @@ def render_upgrade(values, tmp_path, objects, *, expect_success=True):
                 str(values_path),
                 "--is-upgrade",
                 "--dry-run=server",
+                # This API fixture implements discovery/lookup only, not an
+                # OpenAPI schema server. Keep chart values validation enabled.
+                "--disable-openapi-validation",
                 "--kubeconfig",
                 str(config_path),
             ],
