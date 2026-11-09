@@ -150,10 +150,11 @@ def select_delete_scope(scope, positions):
     if positions == tuple(range(len(scope.selections))) and not scope.issues:
         return scope
     remap = {position: index for index, position in enumerate(positions)}
+    selected_positions = frozenset(positions)
     units = tuple(
         replace(unit, selection_positions=tuple(remap[pos] for pos in unit.selection_positions))
         for unit in scope.units
-        if set(unit.selection_positions) <= set(positions)
+        if set(unit.selection_positions) <= selected_positions
     )
     ids = {ident for unit in units for ident in unit.resource_ids}
     version_ids = {ident for unit in units for ident in unit.version_ids}
