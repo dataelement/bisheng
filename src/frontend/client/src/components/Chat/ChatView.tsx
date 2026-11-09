@@ -42,6 +42,7 @@ import { type AddToKnowledgeSelection } from "~/pages/Subscription/Article/AddTo
 import { useChatSurfaceLayout } from "./hooks/useChatSurfaceLayout";
 import { useTaskWorkspaceState } from "./hooks/useTaskWorkspaceState";
 import { ChatSurfacePresentation } from "./ChatSurfacePresentation";
+import { readNewChatKey } from './newChatDraft';
 
 interface ChatViewProps {
   id?: string;
@@ -57,8 +58,25 @@ function useChatView(
   const { conversationId: cid } = useParams();
   const location = useLocation();
   const conversationId = (cid ?? id) || "new";
+  // KeepAlive keeps this view mounted on settings routes. Only a chat draft
+  // navigation may replace its logical identity or discard its composer.
+  const draftIdentityRef = useRef(readNewChatKey(location.state, location.key));
+  if (location.pathname === '/c/new') {
+    draftIdentityRef.current = readNewChatKey(location.state, location.key);
+  }
+  const draftIdentity = draftIdentityRef.current;
+  const composerIdentity = conversationId === 'new' ? draftIdentity : conversationId;
+  const composerIdentityRef = useRef(composerIdentity);
+  composerIdentityRef.current = composerIdentity;
 
   const [inputText, setInputText] = useState("");
+  const previousDraftIdentityRef = useRef(draftIdentity);
+  useEffect(() => {
+    if (conversationId === 'new' && location.pathname === '/c/new' && previousDraftIdentityRef.current !== draftIdentity) {
+      previousDraftIdentityRef.current = draftIdentity;
+      setInputText('');
+    }
+  }, [conversationId, draftIdentity, location.pathname]);
 
   // F035: task mode is a toggle on the daily welcome page — no route jump.
   // The route stays `/c`; only submitting in task mode navigates to /linsight.
@@ -108,6 +126,7 @@ function useChatView(
     shareToken,
     "chat",
     presence.ensureLeaseId,
+    draftIdentity,
   );
 
   useVisibleKnowledgeSelections({ user, selectedOrgKbs, setSelectedOrgKbs });
@@ -266,11 +285,12 @@ function useChatView(
       // Capture the turn's resources before resetting its composer draft. A
       // `false` result (e.g. the department is full) keeps the draft so the
       // user can send again once a slot frees up.
+      const sendingIdentity = composerIdentity;
       const accepted = await sendMessage(text, files, { taskMode: isTaskTurn });
-      if (accepted) setInputText("");
+      if (accepted && composerIdentityRef.current === sendingIdentity) setInputText("");
       return accepted;
     },
-    [taskMode, canUseTaskMode, sendMessage, allowInviteSend],
+    [taskMode, canUseTaskMode, sendMessage, allowInviteSend, composerIdentity],
   );
 
   const isNew = conversationId === "new";
@@ -485,6 +505,7 @@ function useChatView(
   return {
     t,
     conversationId,
+    composerIdentity,
     inputText,
     setInputText,
     taskMode,

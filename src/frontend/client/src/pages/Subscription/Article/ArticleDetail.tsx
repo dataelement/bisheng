@@ -20,6 +20,7 @@ import { useArticleShare } from "../hooks/useArticleShare";
 import { AddToKnowledgeModal } from "./AddToKnowledgeModal";
 import { ArticleAiDock } from "../AiChat/ArticleAiDock";
 import { useAuthContext } from "~/hooks/AuthContext";
+import desktopLayout from "../ChannelLayout.module.css";
 
 interface ArticleDetailProps {
   article: Article;
@@ -236,10 +237,10 @@ export function ArticleDetail({
     ? ((user as any).plugins as string[]).includes("knowledge_space")
     : true;
   return (
-    <div className="flex px-4 pt-5 flex-col h-full">
+    <div className={`${desktopLayout.article} flex px-4 pt-5 flex-col h-full`}>
       {/* Top Toolbar — closed by a newspaper-style thick-thin double rule:
                 2px bottom border here + the 1px sibling line below. */}
-      <div className="border-b-2 border-text-2 pb-4">
+      <div className={`${desktopLayout.articleToolbar} border-b-2 border-text-2 pb-4`}>
         {/* Mobile-only back button; the article title is intentionally hidden here
                     (it already appears inside the article content). */}
         {isNarrowShell && onBack ? (
@@ -336,7 +337,7 @@ export function ArticleDetail({
       <div aria-hidden className="mt-[2px] shrink-0 border-b border-text-2" />
 
       {/* Iframe Content Area */}
-      <div className="flex-1 bg-white relative">
+      <div className={`${desktopLayout.articleContent} flex-1 bg-white relative`}>
         {loading ? (
           <div className="flex items-center justify-center h-full text-text-3 text-sm">
             {localize("com_subscription.loading")}
@@ -357,7 +358,7 @@ export function ArticleDetail({
         {showBackTop && (
           <button
             onClick={handleBackToTop}
-            className="absolute bottom-32 right-8 size-10 bg-white shadow-lg border border-border-base rounded-full flex items-center justify-center text-text-2 hover:text-[#333] transition-all animate-in fade-in slide-in-from-bottom-4"
+            className={`${desktopLayout.backToTop} absolute bottom-32 right-8 size-10 bg-white shadow-lg border border-border-base rounded-full flex items-center justify-center text-text-2 hover:text-[#333] transition-all animate-in fade-in slide-in-from-bottom-4`}
           >
             <ArrowUp className="size-5" />
           </button>

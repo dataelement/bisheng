@@ -24,6 +24,7 @@ export function readDesktopPresentation(): DesktopPresentation {
     reportLanding: method("reportLanding"),
     reportKnowledgeDialog: method("reportKnowledgeDialog"),
     reportNavigation: method("reportNavigation"),
+    onProjectsChanged: method("onProjectsChanged"),
     reportSettings: method("reportSettings"),
     requestSettingsClose: method("requestSettingsClose"),
     requestSettingsFocus: method("requestSettingsFocus"),

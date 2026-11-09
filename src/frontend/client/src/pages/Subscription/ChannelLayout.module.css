@@ -1,0 +1,69 @@
+/* Browse and reading panes share one desktop frame, measured inside its gutters. */
+@container workbench (min-width: 768px) {
+  :global(html[data-bisheng-surface='desktop']) .frame {
+    align-items: center;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame.expanded {
+    --module-page-bottom-spacing: 0px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .list {
+    align-items: center;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .readingList {
+    padding-inline-end: 24px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .detailPane {
+    padding-inline-start: 24px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .header {
+    padding: 0 0 16px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .scroller {
+    width: 100%;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .listContent {
+    padding-inline: 0;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .article {
+    min-height: 0;
+    min-width: 0;
+    padding: 0;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .articleToolbar {
+    padding-top: 8px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .articleContent {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-height: 0;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .articleContent > iframe {
+    grid-area: 1 / 1;
+    min-height: 0;
+  }
+
+  /* Anchor the floating control to the reader row, including with a tall input. */
+  :global(html[data-bisheng-surface='desktop']) .frame .backToTop {
+    grid-area: 1 / 1 / 2 / 2;
+    bottom: 16px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .dock {
+    grid-area: 2 / 1;
+    position: relative;
+    min-width: 0;
+    padding-inline: 0;
+    padding-top: 16px;
+  }
+}

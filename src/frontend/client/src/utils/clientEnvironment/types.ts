@@ -24,6 +24,7 @@ export type DesktopPresentation = Readonly<{
   reportLanding?: (landing: boolean) => void;
   reportKnowledgeDialog?: (open: boolean) => void;
   reportNavigation?: (navigation: unknown) => void;
+  onProjectsChanged?: (listener: () => void) => (() => void);
   reportSettings?: (section: string) => void;
   requestSettingsClose?: () => void;
   requestSettingsFocus?: (direction: "previous" | "next") => void;
@@ -38,7 +39,11 @@ export type ClientEnvironment = Readonly<{
     deviceType: IdentitySource;
     os: IdentitySource;
   }>;
-  capabilities: Readonly<{ hasNativePresentation: boolean }>;
+  capabilities: Readonly<{
+    hasNativePresentation: boolean;
+    /** embed=mobile-app opts into a native host owning the entire chat header. */
+    hasHostChatHeader: boolean;
+  }>;
 }>;
 
 declare global {

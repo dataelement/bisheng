@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { Button as ProductButton, Tabs } from '@bisheng/ui';
-import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
+import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_TOOLBAR, ModuleHomeHeader } from '~/components/ModuleHome';
 import cn from '~/utils/cn';
 import { USE_PRODUCT_COMPONENTS } from './home/vnext/componentMode';
 import { Filled, Outlined } from 'bisheng-icons';
@@ -13,6 +13,7 @@ import { useKnowledgeSpaceActions } from './hooks/useKnowledgeSpacePermissions';
 import { useSpaceActions } from './hooks/useSpaceActions';
 import { KnowledgeHomeSort } from './home/vnext/KnowledgeHomeSort';
 import { KnowledgeHomeCard } from './home/vnext/KnowledgeHomeCard';
+import { KnowledgeHomeEmptyState } from './home/vnext/KnowledgeHomeEmptyState';
 import { useKnowledgeHomeSort } from './home/vnext/useKnowledgeHomeSort';
 import { groupHomeSpaces, mergePinnedOrder, sortHomeSpaces, type HomeCategory, type HomeSpace } from './home/vnext/homeSpaces';
 import tokens from './home/vnext/tokens.module.css';
@@ -31,7 +32,7 @@ interface KnowledgeHomePageProps {
 const categories: HomeCategory[] = ['all', 'department', 'created', 'joined'];
 const categoryIcons = { department: Filled.Departure, created: Filled.Person, joined: Filled.Tag };
 
-export function KnowledgeHomePage({ enabled = true, category: controlledCategory, onCategoryChange, onSpaceSelect, onCreateSpace, onSpaceSettings }: KnowledgeHomePageProps) {
+export function KnowledgeHomePage({ enabled = true, category: controlledCategory, onCategoryChange, onSpaceSelect, onCreateSpace, onSpaceSettings, onKnowledgeSquare }: KnowledgeHomePageProps) {
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -83,6 +84,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
   });
   const loading = lists.mine.isLoading || lists.joined.isLoading || lists.department.isLoading;
   const resolved = !loading && !lists.error;
+  const empty = resolved && visible.length === 0;
   const refreshing = lists.mine.isFetching || lists.joined.isFetching || lists.department.isFetching;
 
   const handleAction = async (item: HomeSpace, action: 'pin' | 'delete') => {
@@ -115,9 +117,9 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
           <Outlined.Plus aria-hidden />{localize('com_knowledge.create_knowledge_space')}
         </button>}
       </ModuleHomeHeader>
-      <div className={cn(MODULE_HOME_COLUMN, styles.toolbar)}>
+      <div className={cn(MODULE_HOME_COLUMN, MODULE_HOME_TOOLBAR, styles.toolbar)}>
         <div ref={tabsRef} className={styles.productTabs}>
-          <Tabs aria-label={menuNames.knowledge} size="medium" activeKey={category}
+          <Tabs className="dsh-home-tabs" aria-label={menuNames.knowledge} size="medium" activeKey={category}
             onChange={(value) => {
               const next = categories.find((key) => key === value);
               if (next) setCategory(next);
@@ -134,16 +136,18 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
         </div>
         <KnowledgeHomeSort value={sort} onValueChange={setSort} />
       </div>
-      <div className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
+      <div className={cn(MODULE_HOME_BODY, 'scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto')}>
         <div ref={panelRef} role="tabpanel" tabIndex={0}
-          aria-busy={loading || refreshing} className={cn(MODULE_HOME_COLUMN, styles.panel)}>
+          aria-busy={loading || refreshing} className={cn(MODULE_HOME_COLUMN, styles.panel, empty && styles.emptyPanel)}>
           {lists.error ? (
             <div className={styles.status} role="alert">
               <p>{localize('com_knowledge.home_next.load_error')}</p>
               <button type="button" className={styles.secondaryButton} onClick={lists.retry}>{localize('com_ui_retry')}</button>
             </div>
           ) : loading ? <p className={styles.status} role="status">{localize('com_knowledge.loading')}</p>
-            : visible.length === 0 ? <p className={styles.status} role="status">{localize('com_knowledge.no_data')}</p>
+            : empty ? <KnowledgeHomeEmptyState category={category}
+              onCreate={enabled ? onCreateSpace : undefined}
+              onOpenSquare={enabled ? onKnowledgeSquare : undefined} />
               : <div className={styles.grid}>
                 {visible.map((item, index) => <KnowledgeHomeCard key={item.space.id} item={item}
                   animateLayout={!reduceMotion} moving={movingSpaceId === item.space.id}

@@ -588,6 +588,93 @@ def test_docx_reference_mode_passes_a_cloned_build(tmp_path):
     assert "合计: 0 ERROR / 0 WARN" in out, out  # incl. no table-overflow ERROR: copy_table fitted it
 
 
+def build_info_bar_template(path: Path) -> Path:
+    """106 template shape (2026-11-06): the info bar is pushed right with leading
+    spaces that share a run with the label, and a wide table runs into the
+    margins with its first row merged across all three grid columns."""
+    helpers = _docx_helpers()
+    doc = Document()
+    section = doc.sections[0]
+    section.left_margin = section.right_margin = DocxCm(3.17)  # 版心 14.7cm
+    for runs in (
+        ["      ", "主办部门：", "需求部门"],
+        ["         核 稿 人：", " "],
+        ["         完成日期：", "202X年X月X日"],
+    ):
+        paragraph = doc.add_paragraph()
+        for text in runs:
+            helpers.set_run_font(paragraph.add_run(text), "仿宋", 15)
+    table = doc.add_table(rows=2, cols=3)
+    for row in table.rows:
+        for cell in row.cells:
+            cell.width = DocxCm(18.5 / 3)  # 18.5cm, wider than 版心 on purpose
+    merged = table.rows[0].cells[0].merge(table.rows[0].cells[2])
+    merged.width = DocxCm(18.5)
+    helpers.set_run_font(merged.paragraphs[0].add_run("履约验收方案"), "仿宋", 15, bold=True)
+    doc.save(path)
+    return path
+
+
+def test_docx_merged_first_row_is_measured_once(tmp_path):
+    """python-docx returns a gridSpan cell once per grid column; summing them read
+    an 18.5cm template table as 55.5cm and sent the model into ~30 repair rounds."""
+    template = build_info_bar_template(tmp_path / "template.docx")
+    out = run_script("bisheng-docx", "inspect_docx.py", template, "--check-only").stdout
+    assert "总宽 18.5cm" in out, out
+    assert "55.5" not in out, out
+
+
+def test_docx_reference_tables_are_not_overflow_errors(tmp_path):
+    """A table no wider than the reference's own is the template's layout — even
+    after the build inserts tables before it and its index shifts."""
+    helpers = _docx_helpers()
+    template = build_info_bar_template(tmp_path / "template.docx")
+    doc = Document(template)
+    narrow = doc.add_table(rows=1, cols=2)
+    for cell in narrow.rows[0].cells:
+        cell.width = DocxCm(7)
+        helpers.set_run_font(cell.paragraphs[0].add_run("表头"), "仿宋", 15, bold=True)
+    doc.paragraphs[0]._p.addnext(narrow._tbl)  # now table 1; the template's table becomes table 2
+    out_path = tmp_path / "out.docx"
+    doc.save(out_path)
+
+    out = run_script("bisheng-docx", "inspect_docx.py", out_path, "--check-only", "--reference", template).stdout
+    assert "超过" not in out, out
+    assert "合计: 0 ERROR" in out, out
+
+
+def test_docx_fill_label_value_keeps_leading_spaces(tmp_path):
+    helpers = _docx_helpers()
+    template = build_info_bar_template(tmp_path / "template.docx")
+    doc = Document(template)
+    bar = doc.paragraphs
+    helpers.fill_label_value(bar[0], "信息技术部")
+    helpers.fill_label_value(bar[1], "部门负责人")
+    helpers.fill_label_value(bar[2], "2026年10月19日")
+    assert [p.text for p in bar] == [
+        "      主办部门：信息技术部",
+        "         核 稿 人：部门负责人",
+        "         完成日期：2026年10月19日",
+    ]
+    out_path = tmp_path / "out.docx"
+    doc.save(out_path)
+    out = run_script("bisheng-docx", "inspect_docx.py", out_path, "--check-only", "--reference", template).stdout
+    assert PASS in out, out
+
+
+def test_docx_reference_mode_flags_an_info_bar_that_lost_its_spaces(tmp_path):
+    """What 106 shipped: ``run.text = "核 稿 人：…"`` dropped the spaces sharing the
+    label's run, and the font/size/spacing comparison could not see it."""
+    template = build_info_bar_template(tmp_path / "template.docx")
+    doc = Document(template)
+    doc.paragraphs[1].runs[0].text = "核 稿 人：部门负责人"
+    out_path = tmp_path / "out.docx"
+    doc.save(out_path)
+
+    out = run_script("bisheng-docx", "inspect_docx.py", out_path, "--check-only", "--reference", template).stdout
+    assert_mentions(out, "[ERROR]", "「核稿人」参照 行首9个空格", "当前 行首0个空格", "fill_label_value")
+
+
 def test_docx_reference_mode_flags_a_profile_rebuild(tmp_path):
     """What the 106 sessions shipped: Document() + the 公文 profile."""
     helpers = _docx_helpers()

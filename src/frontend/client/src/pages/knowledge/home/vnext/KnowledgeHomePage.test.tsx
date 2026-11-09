@@ -1,8 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createInstance } from 'i18next';
+import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import type { KnowledgeSpace } from '~/api/knowledge';
+import translation from '~/locales/en/translation.json';
 import { KnowledgeHomePage } from '../../KnowledgeHomePage';
 
 jest.mock('./componentMode', () => ({ USE_PRODUCT_COMPONENTS: false }));
@@ -11,6 +14,9 @@ jest.mock('@bisheng/ui', () => ({
   ...jest.requireActual('../../../../../../packages/ui/src/components/Tabs/Tabs.tsx'),
   ...jest.requireActual('../../../../../../packages/ui/src/components/Button/Button.tsx'),
   ...jest.requireActual('../../../../../../packages/ui/src/components/Dropdown/Dropdown.tsx'),
+  ...jest.requireActual('../../../../../../packages/ui/src/components/Select/Select.tsx'),
+  ...jest.requireActual('../../../../../../packages/ui/src/components/StateView/StateView.tsx'),
+  ...jest.requireActual('../../../../../../packages/ui/src/components/Illustration/EmptyStateIllustration.tsx'),
 }));
 
 const mockCreatorInfo = jest.fn();
@@ -36,6 +42,7 @@ jest.mock('~/hooks', () => ({
 }));
 jest.mock('~/Providers', () => ({ useConfirm: () => mockConfirm }));
 jest.mock('bisheng-icons', () => ({ ...jest.requireActual('bisheng-icons'), Outlined: {
+  ...jest.requireActual('bisheng-icons').Outlined,
   Edit: () => <svg />, Delete: () => <svg />, Plus: () => <svg />, More: () => <svg />, Pin: () => <svg />, People: () => <svg />,
 } }));
 jest.mock('../../hooks/useKnowledgeSpaceLists', () => ({ useKnowledgeSpaceLists: () => ({
@@ -163,8 +170,10 @@ it('closes the shared menu with Escape without reopening its tooltip or entering
 it('closes sorting with Escape without changing its value and restores keyboard focus', async () => {
   mount();
   const sort = screen.getByRole('combobox');
+  sort.focus();
   fireEvent.keyDown(sort, { key: 'ArrowDown' });
-  fireEvent.keyDown(await screen.findByRole('listbox'), { key: 'Escape' });
+  await screen.findByRole('listbox');
+  fireEvent.keyDown(sort, { key: 'Escape' });
   await waitFor(() => {
     expect(sort).toHaveAttribute('aria-expanded', 'false');
     expect(sort).toHaveFocus();
@@ -240,8 +249,26 @@ it('keeps the home controls when all real lists are empty', () => {
   mockData = { mine: [], joined: [], department: [] };
   mount();
   expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('com_knowledge.home_next.all');
-  expect(screen.getByRole('status')).toHaveTextContent('com_knowledge.no_data');
+  expect(screen.getByRole('status')).toHaveTextContent('com_knowledge.home_next.empty_all');
   expect(screen.getByRole('button', { name: 'com_knowledge.create_knowledge_space' })).toBeEnabled();
+});
+
+it.each([
+  ['created', 'mine', 'Create a space', 'Nothing here yet. Create a space', 'onCreateSpace'],
+  ['joined', 'joined', 'Go to the square', 'Nothing here yet. Go to the square to explore', 'onKnowledgeSquare'],
+] as const)('offers the next action when the %s tab is empty', async (category, list, label, message, action) => {
+  mockData[list] = [];
+  const i18n = createInstance();
+  await i18n.init({ lng: 'en', resources: { en: { translation } } });
+  render(<I18nextProvider i18n={i18n}><MemoryRouter><QueryClientProvider client={new QueryClient()}>
+    <KnowledgeHomePage {...callbacks} category={category} />
+  </QueryClientProvider></MemoryRouter></I18nextProvider>);
+
+  const status = screen.getByRole('status');
+  expect(status).toHaveTextContent(message);
+  expect(screen.getByRole('tabpanel').querySelector('svg')).toBeInTheDocument();
+  await userEvent.click(within(status).getByRole('button', { name: label }));
+  expect(callbacks[action]).toHaveBeenCalledTimes(1);
 });
 
 it('locks repeated pin operations and passes the original category from the all tab', async () => {

@@ -546,20 +546,56 @@ def _row_repeats_as_header(row) -> bool:
     return tr_pr is not None and tr_pr.find(qn("w:tblHeader")) is not None
 
 
-def check_tables(doc, section) -> None:
+def first_row_widths(table) -> list:
+    """Widths of the first row's *physical* cells.
+
+    python-docx returns a horizontally merged cell (``gridSpan``) once per grid
+    column it covers, so summing ``row.cells`` counts its width that many times.
+    106 (2026-11-06): a template table whose first row spans 3 columns read as
+    55.5cm instead of 18.5cm, and the model spent ~30 rounds "fixing" it.
+    """
+    seen: set[int] = set()
+    widths = []
+    for cell in table.rows[0].cells:
+        if id(cell._tc) in seen:
+            continue
+        seen.add(id(cell._tc))
+        widths.append(cell.width)
+    return widths
+
+
+def table_width_cm(table) -> float | None:
+    """Total width of the first row, or None when any cell has no fixed width."""
+    if not table.rows:
+        return None
+    widths = first_row_widths(table)
+    if not widths or any(w is None for w in widths):
+        return None
+    return sum(w / 360000 for w in widths)
+
+
+def check_tables(doc, section, width_cap_cm: float | None = None) -> None:
+    """``width_cap_cm``: in --reference mode, the widest table of the reference.
+
+    Customer templates routinely run tables into the margins with a negative
+    indent; a table no wider than the template's own is the template's layout,
+    not an overflow the build introduced.
+    """
     usable_cm = (section.page_width - section.left_margin - section.right_margin) / 360000
+    cap_cm = max(usable_cm, width_cap_cm or 0)
     for index, table in enumerate(doc.tables):
         if not table.rows:
             add("WARN", f"表 {index + 1} 是空的 —— 删掉它，或把数据填进去")
             continue
-        widths = [c.width for c in table.rows[0].cells]
+        widths = first_row_widths(table)
         if all(w is not None for w in widths):
             total_cm = sum(w / 360000 for w in widths)
-            if total_cm > usable_cm + 0.2:
+            if total_cm > cap_cm + 0.2:
+                limit = f"参照文档最宽的表 {cap_cm:.1f}cm" if cap_cm > usable_cm else f"版心 {usable_cm:.1f}cm"
                 add(
                     "ERROR",
-                    f"表 {index + 1} 总宽 {total_cm:.1f}cm 超过版心 {usable_cm:.1f}cm → 右侧列会被截出页面。"
-                    f"把 widths_cm 的合计压到 {usable_cm:.1f}cm 以内（用 content_width_cm(section) 取准确值）。",
+                    f"表 {index + 1} 总宽 {total_cm:.1f}cm 超过{limit} → 右侧列会被截出页面。"
+                    f"把 widths_cm 的合计压到 {cap_cm:.1f}cm 以内（用 content_width_cm(section) 取版心宽）。",
                 )
         elif any(w is None for w in widths):
             add(
@@ -666,7 +702,7 @@ def check_fields(doc) -> None:
         )
 
 
-def collect_findings(doc) -> tuple[bool, list[tuple[str, str, str]]]:
+def collect_findings(doc, width_cap_cm: float | None = None) -> tuple[bool, list[tuple[str, str, str]]]:
     findings.clear()
     section = doc.sections[0]
     faces = document_faces(doc)
@@ -675,7 +711,7 @@ def collect_findings(doc) -> tuple[bool, list[tuple[str, str, str]]]:
     check_fonts(doc, profile)
     check_profile_fonts(doc, faces, is_gongwen)
     check_headings(doc)
-    check_tables(doc, section)
+    check_tables(doc, section, width_cap_cm)
     check_images(doc, section)
     check_text(doc, is_gongwen)
     check_fields(doc)
@@ -710,6 +746,64 @@ def check_against_reference(doc, ref) -> None:
             "对照参照文档同类段落的版式（inspect_docx.py --content-only 读参照文档）；"
             "用 clone_paragraph() 复制参照段落再换文字，不要用 add_body / add_heading_cn 新建。",
         )
+    check_label_lines(doc, ref)
+
+
+LABEL_RE = re.compile(r"^(.{1,16}?)[：:]")
+LEFT_ALIGNS = (None, "左对齐", "两端对齐")
+
+
+def label_of(text: str) -> str | None:
+    """「核 稿 人：…」→「核稿人」. Only short labels: a body sentence is not a field."""
+    match = LABEL_RE.match(text.strip(" 　"))
+    if not match:
+        return None
+    label = re.sub(r"\s", "", match.group(1))
+    return label if 2 <= len(label) <= 8 else None
+
+
+def check_label_lines(doc, ref) -> None:
+    """Info-bar lines (主办部门/撰稿人/核稿人/完成日期) must keep the reference's position.
+
+    Templates push these lines right with leading spaces, not with alignment,
+    and the spaces often share a run with the label. A build that rewrites the
+    run (``run.text = "核 稿 人：…"``) deletes them, the line jumps to the left
+    margin, and the font/size/spacing comparison above cannot see it.
+    106 (2026-11-06): 29 spaces became 16 and 0.
+    """
+    spec: dict[str, tuple[int, str | None] | None] = {}
+    for paragraph in ref.paragraphs:
+        label = label_of(paragraph.text)
+        if label is None:
+            continue
+        fmt = paragraph_format(paragraph)
+        if fmt["lead"] < 2 and fmt["align"] in LEFT_ALIGNS:
+            continue  # an ordinary left-aligned line: nothing positional to keep
+        position = (fmt["lead"], fmt["align"])
+        # The same label placed two different ways in the reference is ambiguous.
+        spec[label] = position if spec.get(label, position) == position else None
+
+    drifted: list[str] = []
+    for index, paragraph in enumerate(doc.paragraphs):
+        label = label_of(paragraph.text)
+        want = spec.get(label) if label else None
+        if want is None:
+            continue
+        fmt = paragraph_format(paragraph)
+        same_align = fmt["align"] in LEFT_ALIGNS if want[1] in LEFT_ALIGNS else fmt["align"] == want[1]
+        if abs(fmt["lead"] - want[0]) > 1 or not same_align:
+            drifted.append(
+                f"P{index}「{label}」参照 行首{want[0]}个空格{' ' + want[1] if want[1] else ''}，"
+                f"当前 行首{fmt['lead']}个空格{' ' + fmt['align'] if fmt['align'] else ''}"
+            )
+    if drifted:
+        add(
+            "ERROR",
+            f"{len(drifted)} 个信息栏段落的位置和参照文档不一致：{'; '.join(drifted[:6])}"
+            f"{' …' if len(drifted) > 6 else ''}。参照文档靠行首空格把这些行排到右侧，"
+            "行首空格常和标签在同一个 run 里，`run.text = '核 稿 人：…'` 整体覆盖就把空格删了。"
+            "改用 fill_label_value(段落, '值')：只换冒号后面的文字，冒号前（含行首空格）原样保留。",
+        )
 
 
 def is_upload(path: str) -> bool:
@@ -719,14 +813,19 @@ def is_upload(path: str) -> bool:
 def run_checks(path: str, reference: str | None = None) -> None:
     doc = Document(path)
     ref_doc = Document(reference) if reference else None
+    width_cap_cm = None
     if ref_doc is not None:
         # Whatever the reference itself would be flagged for is the user's own
         # layout, not a defect the build introduced.
         _, ref_findings = collect_findings(ref_doc)
         inherited = {key for _, _, key in ref_findings} | PROFILE_KEYS
+        # Table-width findings name the table by index, which shifts once the
+        # build adds tables, so they are matched by width instead of by key.
+        ref_widths = [w for w in (table_width_cm(t) for t in ref_doc.tables) if w is not None]
+        width_cap_cm = max(ref_widths, default=None)
     else:
         inherited = set()
-    is_gongwen, current = collect_findings(doc)
+    is_gongwen, current = collect_findings(doc, width_cap_cm)
     findings.clear()
     findings.extend(f for f in current if f[2] not in inherited)
     if ref_doc is not None:

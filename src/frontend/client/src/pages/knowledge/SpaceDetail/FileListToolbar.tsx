@@ -7,6 +7,7 @@ import { useLocalize } from "~/hooks";
 import useSelectCopy from "~/hooks/useSelectCopy";
 import { cn } from "~/utils";
 import { CompoundSearchInput, type SearchParams } from "./CompoundSearchInput";
+import desktopLayout from "./KnowledgeSpaceLayout.module.css";
 
 /**
  * Toolbar shared by the list and card views (Figma 13198:75844).
@@ -88,6 +89,7 @@ export function FileListToolbar({
     return (
         <div
             className={cn(
+                desktopLayout.toolbar,
                 "flex h-11 shrink-0 items-center gap-2 px-4",
                 // The grey band reads as the list's header row, so it only applies
                 // in list mode; over the card grid the toolbar sits on the page.

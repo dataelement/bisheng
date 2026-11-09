@@ -83,7 +83,7 @@ async def rename(
     name: str = Body(..., description="Session name", embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    await ChatSessionService.rename_session(conversationId, name)
+    await ChatSessionService.rename_session(conversationId, name, login_user)
     return resp_200()
 
 

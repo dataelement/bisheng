@@ -290,7 +290,7 @@ class Cluster:
                 "conditions": [{"type": "Ready", "status": "True"}],
                 "initContainerStatuses": [
                     {"name": c["name"], "state": {"terminated": {"exitCode": 0, "finishedAt": self.clock.iso()}}}
-                    for c in body["spec"]["initContainers"]
+                    for c in body["spec"].get("initContainers", [])
                 ],
                 "containerStatuses": [
                     {"name": c["name"], "ready": True, "imageID": c["image"], "state": {"running": {}}}

@@ -1,5 +1,5 @@
 /* Keep the approved 1440px geometry at every viewport width. */
-.scope, .geometry {
+.scope {
   --vnext-geometry-2: 2px;
   --vnext-geometry-4: 2px;
   --vnext-geometry-6: 4px;

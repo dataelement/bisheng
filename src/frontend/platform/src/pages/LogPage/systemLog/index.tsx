@@ -1,10 +1,10 @@
 // @ts-strict-ignore
-import { Pagination, Button, Select } from '@bisheng/ui';
+import { Pagination, Button, Input, Select } from '@bisheng/ui';
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { notification } from "@bisheng/ui";
 import {
     actionToI18nKey,
@@ -39,6 +39,7 @@ import {
     renderSystemId,
     toAppOptions,
 } from "./auditRow";
+import { AuditEmptyState } from "../components/AuditEmptyState";
 import { OrgFilter } from "../components/OrgFilter";
 import type { OrgSelection } from "@/types/api/audit";
 
@@ -104,6 +105,7 @@ type FilterKeys = {
     targetAppId: string
     tenantId: string
     org: OrgSelection
+    note: string
 }
 
 const init: FilterKeys = {
@@ -116,6 +118,7 @@ const init: FilterKeys = {
     targetAppId: '',
     tenantId: '',
     org: EMPTY_ORG_SELECTION,
+    note: '',
 }
 
 // What the backend receives for one set of controls — the list and the
@@ -130,6 +133,7 @@ const toFilters = (keys: FilterKeys): AuditLogFilters => ({
     targetAppId: keys.targetAppId,
     tenantId: keys.tenantId ? Number(keys.tenantId) : undefined,
     org: keys.org,
+    note: keys.note.trim(),
 })
 
 export default function SystemLog() {
@@ -144,7 +148,7 @@ export default function SystemLog() {
     const { modules, loadModules } = useModules(multiTenantEnabled)
     const { apps, searchApps, loadApps } = useAuditApps(t)
     const { showTenant, tenants, loadTenants } = useTenantFilter(multiTenantEnabled && Boolean(user?.is_global_super))
-    const { page, pageSize, loading, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
+    const { page, pageSize, loading, loaded, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
         getLogsApi({ ...param })
     )
 
@@ -189,16 +193,16 @@ export default function SystemLog() {
         loadUsers()
     }, [])
 
-    const columnCount = showTenant ? 12 : 11
-
     return <div className="relative">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>
         )}
-        <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto px-2 py-4 pb-10">
-            <div className="flex flex-wrap gap-4">
+        <div className="flex h-[calc(100vh-128px-var(--license-banner-h,0px))] flex-col overflow-y-auto px-2 py-4 pb-10">
+            <div className="flex shrink-0 flex-wrap gap-4">
+                <OrgFilter value={keys.org} tenantId={keys.tenantId ? Number(keys.tenantId) : null}
+                    onChange={org => setKeys({ ...keys, org })} />
                 <Select
                     {...selectLabels}
                     multiple
@@ -260,8 +264,13 @@ export default function SystemLog() {
                     options={tenants.filter(tenant => tenant.id != null).map(tenant => ({ value: String(tenant.id), label: tenant.tenant_name }))}
                     value={keys.tenantId || null} onOpenChange={open => { if (open) loadTenants() }}
                     onChange={value => setKeys({ ...keys, tenantId: value == null ? '' : String(value) })} />}
-                <OrgFilter value={keys.org} tenantId={keys.tenantId ? Number(keys.tenantId) : null}
-                    onChange={org => setKeys({ ...keys, org })} />
+                <Input
+                    className="w-[200px]"
+                    aria-label={t('log.remark')}
+                    placeholder={t('log.remark')}
+                    value={keys.note}
+                    onChange={(event) => setKeys({ ...keys, note: event.target.value.slice(0, 200) })}
+                />
                 <div className="flex items-center gap-2">
                     <Button size="medium" onClick={handleSearch}>
                         {t('log.searchButton')}
@@ -319,13 +328,8 @@ export default function SystemLog() {
                         )
                     })}
                 </TableBody>
-                {!logs.length && <TableFooter>
-                    <TableRow>
-                        <TableCell colSpan={columnCount} className="text-center text-gray-400">{t('build.empty')}</TableCell>
-                    </TableRow>
-                </TableFooter>}
             </Table>
-            {!logs.length && <div className="h-[700px]"></div>}
+            {loaded && !loading && logs.length === 0 && <AuditEmptyState />}
         </div>
         {/* Pagination */}
 

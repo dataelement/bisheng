@@ -54,6 +54,17 @@ async def submit_task_turn(
     from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
     from bisheng.workstation.domain.services.chat_service import _to_linsight_submit
 
+    project_intent = None
+    if data.project_id is not None:
+        if session_subject is not None or api_meta is not None or telemetry_source != "platform" or strict_enqueue:
+            from bisheng.common.errcode.chat import ProjectInputError
+
+            raise ProjectInputError()
+        project_intent = {
+            "project_id": data.project_id,
+            "request_id": data.project_request_id,
+            "payload": data.project_creation_payload(),
+        }
     consumed = await _consume_task_invite(login_user.user_id)
     submit_obj = _to_linsight_submit(data)
     # Pass the original daily-shape files (filepath/type/file_id) so the user
@@ -68,6 +79,7 @@ async def submit_task_turn(
             api_meta=api_meta,
             telemetry_source=telemetry_source,
             session_name=session_name,
+            **({"project_intent": project_intent} if project_intent else {}),
         )
     except Exception:
         if consumed:

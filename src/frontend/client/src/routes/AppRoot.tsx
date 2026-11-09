@@ -45,8 +45,10 @@ export default function AppRoot() {
   const mobileNavHidden = useRecoilValue(store.chatMobileNavHiddenState);
   const {
     channel,
+    capabilities,
     layout: { isNarrowViewport: isTabletOrMobile },
   } = useClientEnvironment();
+  const hasHostChatHeader = capabilities?.hasHostChatHeader ?? false;
 
   const isAppChatCompact = useMediaQuery("(max-width: 1023px)");
   const isNarrowContent = useMediaQuery("(max-width: 767px)");
@@ -164,8 +166,8 @@ export default function AppRoot() {
   });
 
   useEffect(() => {
-    if (isAppChatCompact === false) setAppHistoryOpen(false);
-  }, [isAppChatCompact]);
+    if (!isAppChatCompact || hasHostChatHeader) setAppHistoryOpen(false);
+  }, [isAppChatCompact, hasHostChatHeader]);
 
   if (!isAuthenticated) {
     return null;
@@ -259,7 +261,7 @@ export default function AppRoot() {
                 />
               </div>
             )}
-            {isAppSurface && isAppChatCompact && (
+            {isAppSurface && isAppChatCompact && !hasHostChatHeader && (
               <MobileAppHistoryDropdown
                 open={appHistoryOpen}
                 onClose={() => setAppHistoryOpen(false)}

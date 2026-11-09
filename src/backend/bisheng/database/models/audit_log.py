@@ -393,6 +393,7 @@ class AuditLogDao(AuditLogBase):
         target_app_id: str | None = None,
         group_member_ids: list[int] | None = None,
         dept_predicate=None,
+        note: str | None = None,
     ) -> (list[AuditLog], int):
         """
         Filter logs by user group.
@@ -412,6 +413,10 @@ class AuditLogDao(AuditLogBase):
         ``dept_predicate`` (F003): ``org_snapshot.build_dept_predicate`` on
         ``operator_dept_id`` — the caller's department scope intersected with
         the organisation filter; ``None`` adds nothing.
+
+        ``note``: substring of the stored remark. Blank means no filter.
+        ``%`` and ``_`` are matched literally. Empty and NULL remarks do not
+        match a keyword; the page's 「无」 is a display fallback, not a stored value.
 
         ``group_member_ids`` (F056 design pit 15): legacy rows snapshot the
         operator's groups into ``group_ids``; structured v2 rows
@@ -489,6 +494,12 @@ class AuditLogDao(AuditLogBase):
         if dept_predicate is not None:
             statement = statement.where(dept_predicate)
             count_statement = count_statement.where(dept_predicate)
+        note_keyword = (note or "").strip()
+        if note_keyword:
+            escaped = note_keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            note_predicate = AuditLog.note.like(f"%{escaped}%", escape="\\")
+            statement = statement.where(note_predicate)
+            count_statement = count_statement.where(note_predicate)
         # ``create_time`` is second-precision; the id tiebreaker keeps OFFSET
         # pages disjoint and the export deterministic (backend AGENTS.md).
         statement = statement.order_by(AuditLog.create_time.desc(), AuditLog.id.desc())
@@ -565,6 +576,7 @@ class AuditLogDao(AuditLogBase):
         ip_address: str | None = None,
         operator_name: str | None = None,
         object_name: str | None = None,
+        note: str | None = None,
     ) -> AuditLog:
         """Structured audit_log insert (v2.5.1 schema).
 
@@ -573,6 +585,9 @@ class AuditLogDao(AuditLogBase):
           - global super (no F019 scope)   → ROOT_TENANT_ID (=1)
           - global super (F019 scope=X)    → X (current management view)
           - system trigger (operator_id=0) → ROOT_TENANT_ID
+
+        ``note`` is the remark shown in the audit page's 备注 column. Approval
+        writers put the scenario display name there. Other callers leave it empty.
 
         ``operator_name`` is auto-resolved when not supplied: ``'system'``
         for ``operator_id == 0`` (system trigger), otherwise looked up via
@@ -616,6 +631,7 @@ class AuditLogDao(AuditLogBase):
             audit_metadata=metadata,
             ip_address=ip_address,
             object_name=object_name,
+            note=note,
         )
         await astamp_audit_logs([entry])
         with bypass_tenant_filter():

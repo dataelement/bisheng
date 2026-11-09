@@ -1,7 +1,7 @@
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
+import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_INTRO, ModuleHomeHeader } from '~/components/ModuleHome';
 import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
@@ -167,7 +167,7 @@ export default function AppCenter() {
                 MODULE_HOME_FRAME,
                 'relative flex-1',
                 // Align with the mobile shell's navigation and preserve its content spacing.
-                isMobileLayout && 'px-4 pb-5 pt-3',
+                isMobileLayout && 'px-4 pb-5 pt-3 [--module-home-compact-padding:12px_16px_20px]',
             )}
         >
             {isMobileLayout ? (
@@ -198,7 +198,7 @@ export default function AppCenter() {
                         </div>
                     </ModuleHomeHeader>
 
-                    <div className={cn(MODULE_HOME_COLUMN, 'mt-4 mb-4 flex min-w-0 shrink-0 items-center gap-4 sm:gap-6')}>
+                    <div className={cn(MODULE_HOME_COLUMN, MODULE_HOME_INTRO, 'mt-4 mb-4 flex min-w-0 shrink-0 items-center gap-4 sm:gap-6')}>
                         <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">
                             <div className="flex w-max max-w-full min-w-0 items-center gap-[24px]">
                                 <p
@@ -217,7 +217,7 @@ export default function AppCenter() {
                 滚动区占满整宽（滚动条贴最右），内容居中约束在 1000px */}
             <main
                 ref={mainRef}
-                className="relative flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto scroll-on-scroll"
+                className={cn(MODULE_HOME_BODY, 'relative flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto scroll-on-scroll')}
                 onScroll={handleMainScroll}
                 data-scrolling={isMainScrolling ? 'true' : 'false'}
             >

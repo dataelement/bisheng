@@ -133,6 +133,10 @@ def _normalize(value, path=()):
             # ObjectMeta.Finalizers uses omitempty after the last authorized
             # finalizer is removed; nonempty protection remains compared.
             continue
+        if path == ("spec",) and key == "initContainers" and child == []:
+            # Legacy frozen plans may contain the empty list that core/v1
+            # omits. Nonempty init containers remain part of the exact plan.
+            continue
         if path == ("spec",) and (key, str(child)) in {
             ("serviceAccountName", "default"),
             ("serviceAccount", "default"),

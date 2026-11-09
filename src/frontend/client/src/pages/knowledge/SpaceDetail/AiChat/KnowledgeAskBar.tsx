@@ -20,6 +20,7 @@ import { parkChatAsk } from "~/components/Chat/chatAskHandoff";
 import { useLocalize, useNewConvo } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
+import desktopLayout from "../KnowledgeSpaceLayout.module.css";
 
 const noop = () => undefined;
 
@@ -56,7 +57,7 @@ export function KnowledgeAskBar({ spaceId, spaceName, modelValue }: KnowledgeAsk
     };
 
     return (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col bg-gradient-to-b from-white/0 to-white px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-10">
+        <div className={`${desktopLayout.dock} pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col bg-gradient-to-b from-white/0 to-white px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-10`}>
             <div className="pointer-events-auto relative mx-auto flex w-full max-w-[800px] flex-col">
                 <KnowledgeAiInput
                     key={spaceId}

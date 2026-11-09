@@ -20,13 +20,14 @@ import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import type { ChatMessage } from "~/api/chatApi";
 import { getAgentMessages, getSessionName } from "~/api/chatApi";
-import { openChatStream, type SSESubmission } from "~/hooks/useAiChatSSE";
+import { openChatStream, type ChatStreamHandle, type SSESubmission } from "~/hooks/useAiChatSSE";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { refreshInviteQuota } from "~/hooks/inviteQuotaRefresh";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
 import { startLinsight, getLinsightSessionVersionList } from "~/api/linsight";
 import { SopStatus, taskModeSkillsState } from "~/store/linsight";
 import { isMediaAttachmentFile, type MediaParsingState } from "~/utils/mediaAttachmentUtils";
+import { captureProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 
 /**
  * Turns that are still generating, across every mounted chat surface.
@@ -113,6 +114,7 @@ export default function useAiChat(
      * is full, in which case the turn must not be sent.
      */
     ensureFlowLeaseId?: () => Promise<{ leaseId: string | null; blocked: boolean }>,
+    draftIdentity = "",
 ) {
     const [historyError, setHistoryError] = useState<unknown>(null);
     const [historyReload, setHistoryReload] = useState(0);
@@ -128,13 +130,19 @@ export default function useAiChat(
     const [loadingByConvo, setLoadingByConvo] = useState<Record<string, boolean>>({});
     const [parsingMediaByConvo, setParsingMediaByConvo] = useState<Record<string, boolean>>({});
     const [conversationId, setConversationId] = useState(initialConversationId);
+    // Formal sessions retain their server id; unsaved drafts need a distinct
+    // bucket so a same-URL new-chat action cannot revive a failed earlier turn.
+    const draftBucketId = draftIdentity ? `new:${draftScope}:${draftIdentity}` : 'new';
+    const activeBucketId = conversationId === 'new' ? draftBucketId : conversationId;
+    const activeBucketRef = useRef(activeBucketId);
+    activeBucketRef.current = activeBucketId;
 
     // What the caller sees: the active conversation's slice of the above.
-    const messages = messagesByConvo[conversationId] ?? EMPTY_MESSAGES;
-    const title = titleByConvo[conversationId] ?? "";
-    const isStreaming = !!streamingByConvo[conversationId];
-    const isLoading = !!loadingByConvo[conversationId];
-    const isParsingMedia = !!parsingMediaByConvo[conversationId];
+    const messages = messagesByConvo[activeBucketId] ?? EMPTY_MESSAGES;
+    const title = titleByConvo[activeBucketId] ?? "";
+    const isStreaming = !!streamingByConvo[activeBucketId];
+    const isLoading = !!loadingByConvo[activeBucketId];
+    const isParsingMedia = !!parsingMediaByConvo[activeBucketId];
 
     // Identifies this hook instance inside the shared registry.
     const ownerIdRef = useRef<string>("");
@@ -171,6 +179,20 @@ export default function useAiChat(
     const setParsingMediaFor = useCallback((cid: string, value: boolean) => {
         setParsingMediaByConvo((prev) => (!!prev[cid] === value ? prev : { ...prev, [cid]: value }));
     }, []);
+    const discardUnsavedBucket = useCallback((bucketId: string) => {
+        if (bucketId !== 'new' && !bucketId.startsWith('new:')) return;
+        const remove = <T,>(previous: Record<string, T>): Record<string, T> => {
+            if (!(bucketId in previous)) return previous;
+            const next = { ...previous };
+            delete next[bucketId];
+            return next;
+        };
+        setMessagesByConvo(remove);
+        setTitleByConvo(remove);
+        setStreamingByConvo(remove);
+        setLoadingByConvo(remove);
+        setParsingMediaByConvo(remove);
+    }, []);
 
     /** Move a turn's buckets when it learns its real conversation id, so the
      *  answer the user is watching is still there once the URL catches up. */
@@ -192,24 +214,24 @@ export default function useAiChat(
     // history, clearing, the switch effect).
     const setMessages = useCallback(
         (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
-            setMessagesFor(conversationId, updater),
-        [conversationId, setMessagesFor],
+            setMessagesFor(activeBucketId, updater),
+        [activeBucketId, setMessagesFor],
     );
     const setTitle = useCallback(
-        (updater: string | ((prev: string) => string)) => setTitleFor(conversationId, updater),
-        [conversationId, setTitleFor],
+        (updater: string | ((prev: string) => string)) => setTitleFor(activeBucketId, updater),
+        [activeBucketId, setTitleFor],
     );
     const setIsStreaming = useCallback(
-        (value: boolean) => setStreamingFor(conversationId, value),
-        [conversationId, setStreamingFor],
+        (value: boolean) => setStreamingFor(activeBucketId, value),
+        [activeBucketId, setStreamingFor],
     );
     const setIsLoading = useCallback(
-        (value: boolean) => setLoadingFor(conversationId, value),
-        [conversationId, setLoadingFor],
+        (value: boolean) => setLoadingFor(activeBucketId, value),
+        [activeBucketId, setLoadingFor],
     );
     const setIsParsingMedia = useCallback(
-        (value: boolean) => setParsingMediaFor(conversationId, value),
-        [conversationId, setParsingMediaFor],
+        (value: boolean) => setParsingMediaFor(activeBucketId, value),
+        [activeBucketId, setParsingMediaFor],
     );
 
     // Refs for accessing latest state in callbacks
@@ -261,10 +283,22 @@ export default function useAiChat(
             const ownerId = ownerIdRef.current;
             const previous = liveStreams.get(streamKey(ownerId, cid));
             previous?.close();
-            const handle = openChatStream(submission, localize);
-            liveStreams.set(streamKey(ownerId, cid), { convoId: cid, close: handle.close });
+            let finished = false;
+            const entry: LiveStream = { convoId: cid, close: () => { handle.close(); } };
+            const handle: ChatStreamHandle = openChatStream({ ...submission, onEnd: () => {
+                if (finished) return;
+                finished = true;
+                const key = streamKey(ownerId, entry.convoId);
+                const current = liveStreams.get(key);
+                if (current === entry) liveStreams.delete(key);
+                // A replaced turn cannot finish a newer stream in the same chat.
+                if (current && current !== entry) return;
+                submission.onEnd();
+                if (entry.convoId !== activeBucketRef.current) discardUnsavedBucket(entry.convoId);
+            } }, localize);
+            if (!finished) liveStreams.set(streamKey(ownerId, cid), entry);
         },
-        [localize],
+        [localize, discardUnsavedBucket],
     );
 
     /** Close a turn if one is live for this conversation, and forget it. */
@@ -299,14 +333,16 @@ export default function useAiChat(
      *  be forgotten again.
      */
     const adoptConversationId = useCallback(
-        (turn: { cid: string; knowledge: SelectedOrgKb[] }, next: string) => {
+        (turn: { cid: string; bucketId: string; knowledge: SelectedOrgKb[] }, next: string) => {
             if (!next || next === turn.cid) return;
             const previousId = turn.cid;
+            const previousBucketId = turn.bucketId;
             promoteSelection(previousId, next, turn.knowledge);
-            promoteBucket(turn.cid, next);
-            promoteStream(turn.cid, next);
+            promoteBucket(previousBucketId, next);
+            promoteStream(previousBucketId, next);
             turn.cid = next;
-            setConversationId((current) => current === previousId ? next : current);
+            turn.bucketId = next;
+            setConversationId((current) => current === previousId && activeBucketRef.current === previousBucketId ? next : current);
         },
         [promoteBucket, promoteStream, promoteSelection],
     );
@@ -336,8 +372,7 @@ export default function useAiChat(
 
     // Track previous external ID to distinguish sidebar navigation from self-navigate
     const [previousExternalId, setPreviousExternalId] = useState(initialConversationId);
-    const internalConvoIdRef = useRef(conversationId);
-    internalConvoIdRef.current = conversationId;
+    const [previousDraftIdentity, setPreviousDraftIdentity] = useState(draftIdentity);
 
     // Timer for the post-handoff attachment poll. `generation` fences a request
     // that is already in flight: clearing the timeout alone would still let its
@@ -386,12 +421,18 @@ export default function useAiChat(
 
     // Resolve sidebar navigation during render so the composer, its callbacks,
     // and the message bucket commit with the same conversation identity.
-    if (previousExternalId !== initialConversationId) {
+    if (previousExternalId !== initialConversationId || (initialConversationId === 'new' && previousDraftIdentity !== draftIdentity)) {
+        if (initialConversationId === 'new' && previousDraftIdentity !== draftIdentity) {
+            const previousBucketId = previousDraftIdentity ? `new:${draftScope}:${previousDraftIdentity}` : 'new';
+            if (!streamingByConvo[previousBucketId]) discardUnsavedBucket(previousBucketId);
+        }
         setPreviousExternalId(initialConversationId);
+        setPreviousDraftIdentity(draftIdentity);
         if (initialConversationId !== conversationId) {
+            const arrivingBucketId = initialConversationId === 'new' ? draftBucketId : initialConversationId;
             const arrivingIsLive = !!streamingByConvo[initialConversationId]
-                || !!liveStreams.get(streamKey(ownerIdRef.current, initialConversationId));
-            setLoadingFor(initialConversationId, initialConversationId !== "new" && !arrivingIsLive);
+                || !!liveStreams.get(streamKey(ownerIdRef.current, arrivingBucketId));
+            setLoadingFor(arrivingBucketId, initialConversationId !== "new" && !arrivingIsLive);
             skipLoadConvoRef.current = null;
             setConversationId(initialConversationId);
         }
@@ -436,7 +477,7 @@ export default function useAiChat(
             });
         return () => { active = false; };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
-    }, [conversationId, shareToken, historyReload]);
+    }, [conversationId, activeBucketId, shareToken, historyReload]);
 
     // Load the conversation's stored name. The history endpoints return messages
     // only, so opening an existing conversation by URL (deep link or share link)
@@ -472,9 +513,9 @@ export default function useAiChat(
     // is removed.
 
     // --- Send a message ---
-    const finishMediaParsing = useCallback((userMsgId: string) => {
-        setIsParsingMedia(false);
-        setMessages((prev) => {
+    const finishMediaParsing = useCallback((userMsgId: string, bucketId: string) => {
+        setParsingMediaFor(bucketId, false);
+        setMessagesFor(bucketId, (prev) => {
             let matched = false;
             const next = prev.map((m) => {
                 if (!m.isCreatedByUser || !m.files?.length) return m;
@@ -517,11 +558,15 @@ export default function useAiChat(
             }
             return next;
         });
-    }, [setIsParsingMedia, setMessages]);
+    }, [setParsingMediaFor, setMessagesFor]);
 
     const sendMessage = useCallback(
         async (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
             if ((!text.trim() && !(files?.length)) || isStreaming) return false;
+            // The lease may take time. Keep this send's original project even if
+            // the user opens another draft before the request can be submitted.
+            const projectDraft = captureProjectChatDraft(conversationId === "new" ? null : conversationId);
+            const turnMessages = messagesRef.current;
             if (knowledgeAccessBlocked) {
                 showToast({ message: knowledgeAccessMessage, status: "warning" });
                 return false;
@@ -551,14 +596,14 @@ export default function useAiChat(
             // what makes that true for all of the callbacks at once: `turn.cid`
             // is the single place the id lives, so a mid-stream promotion from
             // "new" to a real id carries the whole turn with it.
-            const turn = { cid: conversationId, knowledge: selectedOrgKbs };
-            setSelectedOrgKbs(turn.knowledge);
+            const turn = { cid: conversationId, bucketId: activeBucketId, knowledge: selectedOrgKbs };
+            if (activeBucketRef.current === turn.bucketId) setSelectedOrgKbs(turn.knowledge);
             const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
-                setMessagesFor(turn.cid, updater);
+                setMessagesFor(turn.bucketId, updater);
             const setTitle = (updater: string | ((prev: string) => string)) =>
-                setTitleFor(turn.cid, updater);
-            const setIsStreaming = (value: boolean) => setStreamingFor(turn.cid, value);
-            const setIsParsingMedia = (value: boolean) => setParsingMediaFor(turn.cid, value);
+                setTitleFor(turn.bucketId, updater);
+            const setIsStreaming = (value: boolean) => setStreamingFor(turn.bucketId, value);
+            const setIsParsingMedia = (value: boolean) => setParsingMediaFor(turn.bucketId, value);
 
 
             const taskMode = !!opts?.taskMode;
@@ -594,7 +639,7 @@ export default function useAiChat(
                 ({ previewUrl, mediaPreviewUrl, mediaCoverUrl, parsingState, ...rest }) => rest,
             );
 
-            const parentMsg = messagesRef.current[messagesRef.current.length - 1];
+            const parentMsg = turnMessages[turnMessages.length - 1];
             const parentMessageId = parentMsg?.messageId ?? NO_PARENT;
             const currentConvoId =
                 conversationId === "new" ? null : conversationId;
@@ -628,7 +673,7 @@ export default function useAiChat(
             };
 
             // Add both messages immediately
-            const updatedMessages = [...messagesRef.current, userMessage, initialResponse];
+            const updatedMessages = [...turnMessages, userMessage, initialResponse];
             setMessages(updatedMessages);
 
             // Build SSE payload (same structure as useChatFunctions.ask).
@@ -689,6 +734,7 @@ export default function useAiChat(
             // Create SSE submission
             const submission: SSESubmission = {
                 payload,
+                projectDraft: projectDraft ?? null,
                 userMessage,
                 flowLeaseId: presence?.leaseId ?? undefined,
                 onStart: () => {
@@ -989,7 +1035,7 @@ export default function useAiChat(
                     );
                 },
                 onMessage: (text, messageId) => {
-                    finishMediaParsing(realUserMessageId);
+                    finishMediaParsing(realUserMessageId, turn.bucketId);
                     console.log('[AiChat] message:', { text: text?.slice(0, 50), messageId });
                     setMessages((prev) => {
                         const msgs = [...prev];
@@ -1009,7 +1055,7 @@ export default function useAiChat(
                 // as separate sections instead of regex-parsing a `:::thinking:::`
                 // envelope.
                 onAgentUpdate: (patch) => {
-                    finishMediaParsing(realUserMessageId);
+                    finishMediaParsing(realUserMessageId, turn.bucketId);
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const lastMsg = msgs[msgs.length - 1];
@@ -1068,7 +1114,7 @@ export default function useAiChat(
                     // New conversation: fetch the AI-generated title. The gen_title
                     // endpoint waits until the backend's background task persists a
                     // real name, so this no longer races slow models (>5s).
-                    const finalConvoId = data.conversation?.conversationId || internalConvoIdRef.current;
+                    const finalConvoId = data.conversation?.conversationId || turn.cid;
                     if (wasNewConvo && finalConvoId && finalConvoId !== 'new') {
                         dataService.genTitle({ conversationId: finalConvoId })
                             .then((res: { title?: string }) => {
@@ -1111,7 +1157,7 @@ export default function useAiChat(
                 // that already produced an answer would lose it if we overwrote `text`
                 // (and the bubble would then render that answer as raw error text).
                 onError: (error, errorCode, meta) => {
-                    finishMediaParsing(realUserMessageId);
+                    finishMediaParsing(realUserMessageId, turn.bucketId);
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const lastMsg = msgs[msgs.length - 1];
@@ -1129,28 +1175,28 @@ export default function useAiChat(
                     });
                 },
                 onEnd: () => {
-                    finishMediaParsing(realUserMessageId);
+                    finishMediaParsing(realUserMessageId, turn.bucketId);
                     setIsStreaming(false);
                 },
             };
 
             // Lock input immediately — don't wait for SSE open event
             setIsStreaming(true);
-            beginStream(turn.cid, submission);
+            beginStream(turn.bucketId, submission);
             return true;
         },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId]
     );
 
     // --- Stop generating ---
     const stopGenerating = useCallback(() => {
         // Only the conversation being read. A turn generating in another one is
         // none of this button's business.
-        endStream(conversationId);
+        endStream(activeBucketId);
         cancelIngestPoll(conversationId);
         setIsStreaming(false);
         setIsParsingMedia(false);
-    }, [cancelIngestPoll, conversationId, endStream, setIsParsingMedia, setIsStreaming]);
+    }, [cancelIngestPoll, conversationId, activeBucketId, endStream, setIsParsingMedia, setIsStreaming]);
 
     // --- Clear conversation ---
     const clearConversation = useCallback(() => {
@@ -1164,6 +1210,8 @@ export default function useAiChat(
     const regenerate = useCallback(
         async (parentMessageId: string) => {
             if (isStreaming) return;
+            const projectDraft = captureProjectChatDraft(conversationId === "new" ? null : conversationId);
+            const turnMessages = messagesRef.current;
             if (knowledgeAccessBlocked) {
                 showToast({ message: knowledgeAccessMessage, status: "warning" });
                 return;
@@ -1181,16 +1229,16 @@ export default function useAiChat(
             // what makes that true for all of the callbacks at once: `turn.cid`
             // is the single place the id lives, so a mid-stream promotion from
             // "new" to a real id carries the whole turn with it.
-            const turn = { cid: conversationId, knowledge: selectedOrgKbs };
-            setSelectedOrgKbs(turn.knowledge);
+            const turn = { cid: conversationId, bucketId: activeBucketId, knowledge: selectedOrgKbs };
+            if (activeBucketRef.current === turn.bucketId) setSelectedOrgKbs(turn.knowledge);
             const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) =>
-                setMessagesFor(turn.cid, updater);
-            const setIsStreaming = (value: boolean) => setStreamingFor(turn.cid, value);
+                setMessagesFor(turn.bucketId, updater);
+            const setIsStreaming = (value: boolean) => setStreamingFor(turn.bucketId, value);
 
 
 
             // Find the parent (user) message
-            const parentMsg = messagesRef.current.find(
+            const parentMsg = turnMessages.find(
                 (m) => m.messageId === parentMessageId
             );
             if (!parentMsg) return;
@@ -1258,6 +1306,7 @@ export default function useAiChat(
             // callback, before any placeholder was added.
             const submission: SSESubmission = {
                 payload,
+                projectDraft: projectDraft ?? null,
                 userMessage: parentMsg,
                 flowLeaseId: presence?.leaseId ?? undefined,
                 onStart: () => {
@@ -1347,9 +1396,9 @@ export default function useAiChat(
             };
 
             setIsStreaming(true);
-            beginStream(turn.cid, submission);
+            beginStream(turn.bucketId, submission);
         },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast, ensureFlowLeaseId]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast, ensureFlowLeaseId]
     );
 
     return {

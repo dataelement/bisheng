@@ -13,6 +13,7 @@ import { getTenantsApi } from '@/controllers/API/tenant'
 import { cancelRuntimeAuditExport, createRuntimeAuditExport, downloadRuntimeAuditExport, getRuntimeAuditCandidates, withRuntimeOrg } from '@/controllers/API/runtimeAudit'
 import { EMPTY_ORG_SELECTION } from '@/controllers/API/log'
 import type { OrgSelection } from '@/types/api/audit'
+import { AuditEmptyState } from '../components/AuditEmptyState'
 import { OrgFilter } from '../components/OrgFilter'
 import type { RuntimeAuditFilters, RuntimeAuditKind } from '@/controllers/API/runtimeAudit'
 import { useRuntimeAudit } from './useRuntimeAudit'
@@ -98,13 +99,13 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
   return <div className="flex min-h-0 flex-1 flex-col gap-4 pt-2">
     {kind === 'access' && <p className="text-sm text-muted-foreground">{t('log.runtime.accessHint')}</p>}
     <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <OrgFilter value={org} onChange={setOrg} tenantId={tenantId ?? null} className="min-w-48 flex-1" />
       <div className="min-w-48 flex-1">
         <Select {...labels} value={range} aria-label={t('log.runtime.timeRange')} options={['recent7d', 'custom', 'all'].map(value => ({ value, label: t(`log.runtime.${value}`) }))} onChange={value => setRange(value as RuntimeAuditFilters['time_range'])} />
       </div>
       <CandidateFilter key={`app-${scopeKey}-${filters.time_range}-${filters.start_time}-${filters.end_time}`} kind={kind} dimension="app" filters={filters} scopeKey={scopeKey} value={filters.app_id} onChange={value => setFilters({ ...filters, app_id: value, visitor_id: undefined })} />
       <CandidateFilter key={`visitor-${scopeKey}-${filters.time_range}-${filters.start_time}-${filters.end_time}-${filters.app_id}-${filters.credential_id}`} kind={kind} dimension="visitor" filters={filters} scopeKey={scopeKey} value={filters.visitor_id?.toString()} onChange={value => setFilters({ ...filters, visitor_id: value ? Number(value) : undefined })} />
       {kind === 'model' && <CandidateFilter key={`credential-${scopeKey}-${filters.time_range}-${filters.app_id}`} kind={kind} dimension="credential" filters={filters} scopeKey={scopeKey} value={filters.credential_id?.toString()} onChange={value => setFilters({ ...filters, credential_id: value ? Number(value) : undefined, visitor_id: undefined })} />}
-      <OrgFilter value={org} onChange={setOrg} tenantId={tenantId ?? null} className="min-w-48 flex-1" />
       {range === 'custom' && <>
         <div className="w-56 max-w-full"><DatePicker showTime value={start} placeholder={t('log.runtime.start')} onChange={setStart} /></div>
         <div className="w-56 max-w-full"><DatePicker showTime value={end} placeholder={t('log.runtime.end')} onChange={setEnd} /></div>
@@ -116,10 +117,14 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey }: RecordProps) {
     <p className="text-sm text-muted-foreground">{t('log.runtime.identityHint')}</p>
     {query.isError ? <div role="alert">{t('log.runtime.loadFailed')} <Button onClick={() => void query.refetch()}>{t('log.runtime.refresh')}</Button></div>
       : query.isInitialLoading ? <p role="status">{t('log.runtime.loading')}</p>
-        : <Table containerClassName="min-h-0 flex-1 overflow-auto"><TableHeader className="sticky top-0 z-10 bg-background-main"><TableRow>{fields.map(field => <TableHead key={field}>{t(`log.runtime.fields.${field}`)}</TableHead>)}</TableRow></TableHeader><TableBody>
-          {query.data?.items.map(row => <TableRow key={String(row.id)}>{fields.map(field => <TableCell key={field}><RuntimeAuditCell kind={kind} field={field} row={row} /></TableCell>)}</TableRow>)}
-          {query.data?.items.length === 0 && <TableRow><TableCell colSpan={fields.length}>{t('log.runtime.empty')}</TableCell></TableRow>}
-        </TableBody></Table>}
+        : <>
+          <Table containerClassName={query.data?.items.length ? 'min-h-0 flex-1 overflow-auto' : undefined}><TableHeader className="sticky top-0 z-10 bg-background-main"><TableRow>{fields.map(field => <TableHead key={field}>{t(`log.runtime.fields.${field}`)}</TableHead>)}</TableRow></TableHeader>
+            {!!query.data?.items.length && <TableBody>
+              {query.data.items.map(row => <TableRow key={String(row.id)}>{fields.map(field => <TableCell key={field}><RuntimeAuditCell kind={kind} field={field} row={row} /></TableCell>)}</TableRow>)}
+            </TableBody>}
+          </Table>
+          {query.data?.items.length === 0 && <AuditEmptyState />}
+        </>}
     <div className="flex shrink-0 items-center gap-2"><Button disabled={page === 1 || query.isFetching} onClick={previous}>{t('log.runtime.previous')}</Button><span>{page}</span><Button disabled={!query.data?.next_cursor || query.isFetching} onClick={next}>{t('log.runtime.next')}</Button><Button onClick={() => void query.refetch()}>{t('log.runtime.refresh')}</Button></div>
     <RuntimeAuditExportDialog open={exportOpen} onOpenChange={setExportOpen} kind={kind} filters={filters}
       job={exportQuery.data} busy={busy} createFailed={createFailed} queryFailed={exportQuery.isError}

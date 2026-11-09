@@ -13,6 +13,7 @@ import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import type { KnowledgeSpaceModel } from "./index";
 import { KnowledgeSpaceOverlays } from "./KnowledgeSpaceOverlays";
 import { KnowledgeSpaceToolbar } from "./KnowledgeSpaceToolbar";
+import desktopLayout from "./KnowledgeSpaceLayout.module.css";
 interface KnowledgeSpacePresentationProps {
   model: KnowledgeSpaceModel;
 }
@@ -189,6 +190,7 @@ export function KnowledgeSpacePresentation({
               <div
                 ref={cardGridRef}
                 className={cn(
+                  desktopLayout.grid,
                   // pb-[112px] reserves room for the bottom AI dock (40px gap + 56px input + 16px safe-area)
                   // so the last card row clears the dock with a 40px visual gap above the input top.
                   "w-full min-w-0 pb-[112px]",
@@ -267,7 +269,12 @@ export function KnowledgeSpacePresentation({
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div
+              className={cn(
+                "flex min-h-0 min-w-0 flex-1 flex-col",
+                desktopLayout.table,
+              )}
+            >
               <FileListView
                 files={displayFiles}
                 onEnsureFilePermissions={ensureFilePermissions}

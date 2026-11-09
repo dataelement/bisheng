@@ -31,6 +31,8 @@ import useSelectCopy from "~/hooks/useSelectCopy";
 import { useToastContext } from "~/Providers";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { showApiError } from "~/api/request";
+import { MODULE_PAGE_DESKTOP_COLUMN, MODULE_PAGE_DESKTOP_FRAME } from "~/components/ModuleHome";
+import settingsLayout from "~/components/ModuleHome/ModuleSettingsLayout.module.css";
 import { resolveSettingsReturnPath } from "../knowledgeUtils";
 import { CreatedPermissionFailureState } from "./CreatedPermissionFailureState";
 import {
@@ -223,9 +225,9 @@ export function KnowledgeSpaceSettingsPage() {
   };
 
   return (
-    <main className="flex h-full min-h-0 bg-white" data-testid="knowledge-space-settings-page">
-      <div className="flex min-h-0 w-full flex-1 flex-col rounded-xl bg-white px-4 pt-4">
-        <header className="flex h-8 shrink-0 items-center gap-3">
+    <main className={`${MODULE_PAGE_DESKTOP_FRAME} ${settingsLayout.frame} flex h-full min-h-0 bg-white`} data-testid="knowledge-space-settings-page">
+      <div className={`${MODULE_PAGE_DESKTOP_COLUMN} ${settingsLayout.content} flex min-h-0 w-full flex-1 flex-col rounded-xl bg-white px-4 pt-4`}>
+        <header className={`${settingsLayout.header} flex h-8 shrink-0 items-center gap-3`}>
           <button
             type="button"
             aria-label={localize("back")}
@@ -244,11 +246,11 @@ export function KnowledgeSpaceSettingsPage() {
           </h1>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto py-4">
-          <div className="mx-auto w-full max-w-[648px] space-y-6">
+        <div className={`${settingsLayout.body} min-h-0 flex-1 overflow-y-auto py-4`}>
+          <div className={`${settingsLayout.form} mx-auto w-full max-w-[648px] space-y-6`}>
             <section className="space-y-6">
               <SettingsSectionHeader kind="basic" title={localize("com_unified_permission.basic_settings")} />
-              <div className="space-y-4 px-6 max-[768px]:px-0">
+              <div className={`${settingsLayout.fields} space-y-4 px-6 max-[768px]:px-0`}>
                 <div className="space-y-2">
                   <Label className="text-body font-medium text-text-1">
                     <span className="mr-1 text-danger">*</span>
@@ -321,7 +323,7 @@ export function KnowledgeSpaceSettingsPage() {
                   kind="advanced"
                   title={localize("com_unified_permission.advanced_settings")}
                 />
-                <div className="space-y-4 px-6 max-[768px]:px-0">
+                <div className={`${settingsLayout.fields} space-y-4 px-6 max-[768px]:px-0`}>
                   <SettingsSwitchRow
                     label={localize("com_knowledge.auto_tag_generation")}
                     checked={settings.form.autoTagEnabled}
@@ -412,7 +414,7 @@ export function KnowledgeSpaceSettingsPage() {
                   kind="permission"
                   title={localize("com_unified_permission.access_and_share")}
                 />
-                <div className="space-y-4 px-6 max-[768px]:px-0">
+                <div className={`${settingsLayout.fields} space-y-4 px-6 max-[768px]:px-0`}>
                   <KnowledgeSpaceAccessMode
                     visibility={settings.form.visibility}
                     mode={settings.mode}

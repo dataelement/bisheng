@@ -804,11 +804,13 @@ class ApprovalExceptionService:
             "instance_id": instance_id,
             "exception_type": exception_type,
         }
+        note: str | None = None
         # Enrich with handler/retry_count/payload_snapshot from the live records
         # so audit rows carry the full context PRD §9.1 expects.
         try:
             instance = await ApprovalInstanceRepository.get_instance(instance_id)
             if instance is not None:
+                note = instance.scenario_name
                 metadata["handler"] = instance.handler_key or instance.scenario_code
                 if action == "approval.exception.cancel":
                     metadata["payload_snapshot"] = instance.payload_snapshot
@@ -832,5 +834,6 @@ class ApprovalExceptionService:
             target_id=str(exception_id),
             reason=reason,
             metadata=metadata,
+            note=note,
             ip_address=ip_address,
         )

@@ -29,6 +29,7 @@ export function ChatSurfacePresentation({
   const {
     t,
     conversationId,
+    composerIdentity,
     inputText,
     setInputText,
     taskMode,
@@ -249,6 +250,8 @@ export function ChatSurfacePresentation({
                               )}
                               {inviteQuotaBar}
                               <AiChatInput
+                                key={composerIdentity}
+                                composerIdentity={composerIdentity}
                                 allowConfiguration={false}
                                 disabled={
                                   Boolean(historyError) ||
@@ -492,6 +495,8 @@ export function ChatSurfacePresentation({
                           <div className="w-full">
                             {inviteQuotaBar}
                             <AiChatInput
+                              key={composerIdentity}
+                              composerIdentity={composerIdentity}
                               elevated
                               disabled={
                                 Boolean(historyError) ||

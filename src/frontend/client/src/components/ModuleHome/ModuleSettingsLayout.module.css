@@ -1,0 +1,69 @@
+/* Settings share the desktop module frame; field and dialog spacing stay local. */
+:global(html[data-bisheng-surface='desktop']) .frame .twoColumns {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container workbench (max-width: 768px) {
+  :global(html[data-bisheng-surface='desktop']) .frame .fields {
+    padding-inline: 0;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame footer > button {
+    flex: 1 1 0%;
+  }
+}
+
+@container workbench (max-width: 560px) {
+  :global(html[data-bisheng-surface='desktop']) .frame :global([data-settings-access-mode]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container workbench (min-width: 768px) {
+  :global(html[data-bisheng-surface='desktop']) .frame {
+    --module-page-bottom-spacing: 0px;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .content {
+    container-type: inline-size;
+    min-width: 0;
+    padding: 0;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .header {
+    height: auto;
+    min-height: 32px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .header > h1 {
+    min-width: 0;
+    font: var(--module-home-title-font);
+    letter-spacing: normal;
+    overflow-wrap: anywhere;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .body {
+    padding-block: 32px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .form {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .form > * {
+    min-width: 0;
+  }
+
+  /* The existing 900px capacity threshold applies after the page gutters. */
+  @container (min-width: 900px) {
+    :global(html[data-bisheng-surface='desktop']) .frame .twoColumns {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+}

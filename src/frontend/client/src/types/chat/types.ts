@@ -108,6 +108,7 @@ export type TBackupCode = {
 };
 
 export type TUser = {
+  tenant_id?: number;
   id: string;
   username: string;
   email: string;

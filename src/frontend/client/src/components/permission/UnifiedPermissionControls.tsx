@@ -72,6 +72,7 @@ export function AccessModeSelector({
   // with a plain ellipsis for now.
   return (
     <RadioGroup
+      data-settings-access-mode
       value={value}
       disabled={disabled}
       onValueChange={(next) => onValueChange(next as "private" | "shared")}

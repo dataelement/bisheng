@@ -123,7 +123,9 @@ async def gen_title(
     title = await generate_conversation_title_async(question=human, llm=llm)
     session = await MessageSessionDao.async_get_one(conversation_id)
     if session:
-        await MessageSessionDao.update_session_name(chat_id=session.chat_id, name=title)
+        from bisheng.chat_session.domain.chat import ChatSessionService
+
+        await ChatSessionService.update_generated_session_name(chat_id=session.chat_id, name=title)
         await AuditLogService.create_chat_message(
             user=login_user,
             ip_address=get_request_ip(request),

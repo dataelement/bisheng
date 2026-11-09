@@ -1,0 +1,79 @@
+/* Match the host plugin page without changing browser or narrow-viewport layouts. */
+@container workbench (max-width: 767px) {
+  :global(html[data-bisheng-surface='desktop']) .home {
+    padding: var(--module-home-compact-padding, 20px 12px);
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .search {
+    width: 100%;
+  }
+}
+
+@container workbench (min-width: 768px) {
+  :global(html[data-bisheng-surface='desktop']) .frame {
+    /* DSH's body font and page-title token, independent of each module's typography. */
+    --module-home-font-family: var(--dsw-font-family, var(--dsh-font-family-text, var(--dsh-font-family-text-default, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif)));
+    --module-home-title-font: var(--dsw-font-l-20, 500 20px/28px var(--module-home-font-family));
+    padding: 56px clamp(24px, calc(var(--dsh-chat-viewport-width, 100vw) * 0.04), 48px) var(--module-page-bottom-spacing, 48px);
+    font-family: var(--module-home-font-family);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-autospace: normal;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .column {
+    max-width: 960px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .header {
+    height: auto;
+    min-height: 32px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .header > h1 {
+    flex: 1 1 160px;
+    font: var(--module-home-title-font);
+    letter-spacing: normal;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .actions {
+    max-width: 100%;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .search {
+    width: 16rem;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .toolbar {
+    margin-top: 16px;
+    margin-bottom: 0;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .intro {
+    margin-top: 4px;
+    margin-bottom: 0;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .body {
+    padding-top: 32px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .body > .column {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .groups {
+    gap: 32px;
+  }
+
+  :global(html[data-bisheng-surface='desktop']) .frame .groups > section > h2 {
+    padding-inline: 0;
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+  }
+}
