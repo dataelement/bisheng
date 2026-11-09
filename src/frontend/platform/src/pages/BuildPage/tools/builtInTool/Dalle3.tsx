@@ -58,8 +58,6 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     };
 
     const handleProviderChange = (value) => {
-        console.log(value, pro, formData.openai_api_key);
-
         if (value !== pro) {
             localFormData.openai_api_key = '';
         } else {

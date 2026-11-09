@@ -1,5 +1,11 @@
 {
   "model": {
+    "searchTool": "検索ツール",
+    "drawingTool": "画像生成ツール",
+    "configure": "設定",
+    "configureTool": "{{tool}}を設定",
+    "sharedToolHint": "プラットフォームのツール設定と共通です。変更はプラットフォームにも反映されます。ツール設定は個別に保存されます。",
+    "sharedToolUnavailable": "ツール設定を読み込めません。プラットフォームにツールが存在し、設定が有効であることを確認してください。",
     "editPrompt": "プロンプトを編集",
     "docKnowledgeAbstractPrompt": "ドキュメント知識ベース要約プロンプト",
     "docKnowledgeAbstractPromptTooltip": "ドキュメント知識ベースのファイルアップロード時にファイルを要約するプロンプト",

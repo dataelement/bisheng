@@ -1590,11 +1590,6 @@
       "count": 8
     }
   },
-  "src/pages/BuildPage/tools/builtInTool/Dalle3.tsx": {
-    "no-console": {
-      "count": 1
-    }
-  },
   "src/pages/BuildPage/tools/builtInTool/EmailConfig.tsx": {
     "no-restricted-syntax": {
       "count": 4
