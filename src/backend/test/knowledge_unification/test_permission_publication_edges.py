@@ -293,7 +293,6 @@ async def test_bounded_real_catalog_snapshot_preserves_original_publication_payl
     )
 
 
-
 @pytest.mark.parametrize(
     "published_input",
     [

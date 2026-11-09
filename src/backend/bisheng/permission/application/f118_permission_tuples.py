@@ -148,6 +148,13 @@ class F118PermissionTupleBuilder:
         return False
 
     def finish(self, *, stage_tuples, before_release_key, after_release_key):
+        # Destination nodes have no original SQL owner in a valid before graph.
+        # Adopting dormant edges here would activate unsigned assignments when
+        # the new resource/grant links are published, even if the raw edge is
+        # legal under the schema. A Run intent is the only partial-stage proof.
+        destinations = set(self.moves.values())
+        if any(user.partition("#")[0] in destinations or obj in destinations for user, _, obj in self.before):
+            blocked("unowned_destination_endpoint")
         controlled = {"permission_enabled", "custom_mode", "inherit_mode", "parent", "grant", "visible"}
         owned = {
             key
