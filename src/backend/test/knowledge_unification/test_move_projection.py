@@ -458,7 +458,10 @@ async def test_owned_fact_bridge_keeps_actual_native_session_transaction_and_loc
         operations = [
             statement
             for statement in observed
-            if any(getattr(table, "name", None) == "permission_projection_operation" for table in statement.get_final_froms())
+            if any(
+                getattr(table, "name", None) == "permission_projection_operation"
+                for table in statement.get_final_froms()
+            )
         ]
         assert operations and all((statement._for_update_arg is not None) == lock for statement in operations)
         assert all(statement.is_select for statement in observed)
@@ -517,9 +520,15 @@ async def test_owned_fact_bridge_preserves_empty_missing_foreign_and_native_batc
         assert await bridge.alist_owned_operations(session, expectations=()) == () and not database.queries
         item = native.expectation()
         assert await bridge.alist_owned_operations(session, expectations=(item,)) == ()
+        foreign = replace(
+            item,
+            tenant_id=202,
+            before=item.before.model_copy(update={"tenant_id": 202}),
+            after=item.after.model_copy(update={"tenant_id": 202}),
+        )
         database.queries.clear()
         with pytest.raises(PermissionPublishNotReadyError):
-            await bridge.alist_owned_operations(session, expectations=(replace(item, tenant_id=202),))
+            await bridge.alist_owned_operations(session, expectations=(foreign,))
         assert not database.queries
         with pytest.raises(PermissionPublishNotReadyError):
             await bridge.alist_owned_operations(

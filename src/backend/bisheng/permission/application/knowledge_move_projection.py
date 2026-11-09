@@ -21,6 +21,7 @@ from bisheng.permission.domain.repositories.move_projection_repository import (
     MoveParentState,
     MoveProjectionEvidence,
     MoveProjectionExpectation,
+    MoveProjectionFact,
     MoveProjectionRepository,
     operation_key,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "MoveParentState",
     "MoveProjectionEvidence",
     "MoveProjectionExpectation",
+    "MoveProjectionFact",
     "MoveProjectionProgress",
 ]
 
@@ -101,6 +103,9 @@ class KnowledgeMoveProjectionApplication:
 
     async def alist_operator_candidates(self, session, *, job_id, targets) -> tuple[MoveOperatorCandidate, ...]:
         return await self.repository.alist_operator_candidates(session, job_id=job_id, targets=targets)
+
+    async def alist_owned_operations(self, session, *, expectations, lock=False) -> tuple[MoveProjectionFact, ...]:
+        return await self.repository.alist_owned_operations(session, expectations=expectations, lock=lock)
 
     async def arequire_finalized(self, session, *, job_id, expectations) -> MoveProjectionEvidence:
         # The full Owner sequence is mandatory. Native issuance verifies every
