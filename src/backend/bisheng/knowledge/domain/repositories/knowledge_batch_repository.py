@@ -13,6 +13,7 @@ from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import Tag, TagLink
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.resource_reference.application.contracts import TransactionIdentity
 
 _FIELDS = (
@@ -79,6 +80,8 @@ class KnowledgeBatchRepository:
         roots = await query(select(Knowledge).where(Knowledge.id == space_id, Knowledge.tenant_id == tenant))
         if len(roots) != 1 or roots[0].type != 3:
             raise SpaceNotFoundError()
+        if command.operation == "retry":
+            require_space_processing_idle(roots[0], operation="retry")
         records = []
         base = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == space_id, KnowledgeFile.tenant_id == tenant)
         if any(item.type == "folder" for item in command.items):

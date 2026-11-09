@@ -9,10 +9,10 @@ import pytest
 from sqlalchemy import select, update
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError, KnowledgeProcessingConflictError
 from bisheng.database.models.tag import Tag, TagLink
 from bisheng.knowledge.application import processing_identity
-from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequest
@@ -88,6 +88,25 @@ async def test_inspection_no_plan_and_rebuilding_download_allowed(batch):
     assert not batch.dispatches
 
 
+@pytest.mark.parametrize("transition", [False, True])
+async def test_retry_cannot_start_after_space_model_rebuild_begins(batch, transition):
+    app = batch.application()
+    async with batch.db.sessions() as session, session.begin():
+        await session.execute(update(KnowledgeFile).where(KnowledgeFile.id == 31).values(status=3))
+    plan = await app.aprecheck(identity=batch.user, space_id=1, command=command("retry", ("file", 31)))
+    async with batch.db.sessions() as session, session.begin():
+        values = (
+            {"model_transition": {"stage": "preparing"}} if transition else {"state": KnowledgeState.REBUILDING.value}
+        )
+        await session.execute(update(Knowledge).where(Knowledge.id == 1).values(**values))
+    with pytest.raises(KnowledgeProcessingConflictError):
+        await app.aconfirm(identity=batch.user, space_id=1, operation="retry", request=confirmation(plan))
+    assert not batch.dispatches
+    async with batch.db.sessions() as session:
+        assert (await session.get(KnowledgeFile, 31)).status == 3
+        assert (await session.get(KnowledgeOperationPlan, plan.confirmation_id)).operation_id is None
+
+
 async def test_mixed_tag_cancel_creates_nothing(batch):
     batch.denied.add(31)
     plan = await batch.application().aprecheck(
@@ -150,7 +169,9 @@ async def test_retry_waiting_and_plan_commit_precede_dispatch_unknown_ack_is_exp
         "items"
     ][0]["state"] == "accepted"
     assert batch.dispatches == [31]
-    assert not any(sql.lstrip().upper().startswith(("UPDATE", "INSERT", "DELETE")) for sql, _ in batch.db.statements[before:])
+    assert not any(
+        sql.lstrip().upper().startswith(("UPDATE", "INSERT", "DELETE")) for sql, _ in batch.db.statements[before:]
+    )
 
 
 async def test_folder_retry_deduplicates_failed_children(batch):
