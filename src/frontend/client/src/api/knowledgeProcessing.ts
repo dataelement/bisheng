@@ -310,26 +310,79 @@ export async function createProcessingJob(spaceId: number, command: ProcessingCr
   return unwrap<JobAccepted>(await request.post(jobsPath(spaceId), command));
 }
 
-export async function listProcessingJobs(spaceId: number, query: ProcessingJobsQuery = {}): Promise<PageData<ProcessingJobRead>> {
-  return unwrap(await request.get<ApiEnvelope<PageData<ProcessingJobRead>>>(jobsPath(spaceId), { params: query }));
+/** Optional response scope is used by the task panel; existing callers keep their wire shape. */
+export interface ProcessingResponseScope {
+  tenant?: string;
+  onTenant?: (tenant: string) => void;
+  signal?: AbortSignal;
+}
+type ScopedResponse<T> = { data: ApiEnvelope<T>; headers: Record<string, unknown> };
+function unwrapScoped<T>(response: ScopedResponse<T>, scope: ProcessingResponseScope): T {
+  const value = unwrap(response.data);
+  const actual = String(response.headers["x-management-tenant"] ?? "");
+  if (
+    !/^[1-9][0-9]*$/.test(actual) ||
+    !Number.isSafeInteger(Number(actual)) ||
+    (scope.tenant !== undefined && actual !== scope.tenant)
+  )
+    throw Object.assign(new Error("management_scope_changed"), { status_code: 19704 });
+  scope.onTenant?.(actual);
+  return value;
+}
+async function readScoped<T>(
+  url: string,
+  params: object,
+  scope: ProcessingResponseScope,
+): Promise<T> {
+  return unwrapScoped(
+    await request.getResponse<ScopedResponse<T>>(url, {
+      params,
+      signal: scope.signal,
+      ...(scope.tenant === undefined ? {} : { headers: { "X-Management-Tenant": scope.tenant } }),
+    }),
+    scope,
+  );
+}
+export async function listProcessingJobs(
+  spaceId: number,
+  query: ProcessingJobsQuery = {},
+  scope?: ProcessingResponseScope,
+): Promise<PageData<ProcessingJobRead>> {
+  if (scope) return readScoped(jobsPath(spaceId), query, scope);
+  return unwrap(
+    await request.get<ApiEnvelope<PageData<ProcessingJobRead>>>(jobsPath(spaceId), {
+      params: query,
+    }),
+  );
 }
 
 export async function getProcessingJob(
   spaceId: number,
   jobId: string,
   kind?: ProcessingKind,
+  scope?: ProcessingResponseScope,
 ): Promise<ProcessingJobRead> {
+  if (scope) return readScoped(jobPath(spaceId, jobId), kind ? { kind } : {}, scope);
   return unwrap(
     await (kind
-      ? request.get<ApiEnvelope<ProcessingJobRead>>(jobPath(spaceId, jobId), {
-          params: { kind },
-        })
+      ? request.get<ApiEnvelope<ProcessingJobRead>>(jobPath(spaceId, jobId), { params: { kind } })
       : request.get<ApiEnvelope<ProcessingJobRead>>(jobPath(spaceId, jobId))),
   );
 }
 
-export async function listProcessingItems(spaceId: number, jobId: string, query: ProcessingItemsQuery = {}): Promise<PageData<ProcessingItemRead>> {
-  return unwrap(await request.get<ApiEnvelope<PageData<ProcessingItemRead>>>(`${jobPath(spaceId, jobId)}/items`, { params: query }));
+export async function listProcessingItems(
+  spaceId: number,
+  jobId: string,
+  query: ProcessingItemsQuery = {},
+  scope?: ProcessingResponseScope,
+): Promise<PageData<ProcessingItemRead>> {
+  if (scope) return readScoped(`${jobPath(spaceId, jobId)}/items`, query, scope);
+  return unwrap(
+    await request.get<ApiEnvelope<PageData<ProcessingItemRead>>>(
+      `${jobPath(spaceId, jobId)}/items`,
+      { params: query },
+    ),
+  );
 }
 
 export async function retryProcessingJob(
@@ -338,7 +391,24 @@ export async function retryProcessingJob(
   command: ProcessingRetryRequest,
   kind?: ProcessingKind,
   managementTenant?: string,
+  scope?: ProcessingResponseScope,
 ): Promise<JobAccepted> {
+  if (scope) {
+    if (!kind || !scope.tenant || scope.tenant !== managementTenant)
+      throw Object.assign(new Error("management_scope_changed"), { status_code: 19704 });
+    return unwrapScoped(
+      await request.postResponse<ScopedResponse<JobAccepted>>(
+        `${jobPath(spaceId, jobId)}/retry`,
+        command,
+        {
+          params: { kind },
+          headers: { "X-Management-Tenant": managementTenant },
+          signal: scope.signal,
+        },
+      ),
+      scope,
+    );
+  }
   return unwrap<JobAccepted>(
     await (kind
       ? request.post(`${jobPath(spaceId, jobId)}/retry`, command, {
