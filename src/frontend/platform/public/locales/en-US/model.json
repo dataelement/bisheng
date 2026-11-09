@@ -121,7 +121,7 @@
     "discoveryManualProvider": "Configure this provider manually with a model ID and type.",
     "fetchModels": "Fetch models",
     "fetchingModels": "Fetching…",
-    "searchDiscoveredModels": "Search model name or ID",
+    "searchDiscoveredModels": "Search model name",
     "discoveredCount": "{{count}} models found",
     "toggleVisibleSelection": "Select / clear visible results",
     "modelAlreadyAdded": "Already added",

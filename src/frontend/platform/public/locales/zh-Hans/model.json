@@ -119,7 +119,7 @@
     "discoveryManualProvider": "该供应商使用手动配置，请填写模型 ID 和类型。",
     "fetchModels": "获取模型",
     "fetchingModels": "正在获取…",
-    "searchDiscoveredModels": "搜索模型名称或 ID",
+    "searchDiscoveredModels": "搜索模型名称",
     "discoveredCount": "获取到 {{count}} 个模型",
     "toggleVisibleSelection": "选择 / 取消当前结果",
     "modelAlreadyAdded": "已添加",

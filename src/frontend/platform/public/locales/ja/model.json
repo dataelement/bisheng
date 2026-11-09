@@ -119,7 +119,7 @@
     "discoveryManualProvider": "このプロバイダーはモデル ID と種類を手動で設定してください。",
     "fetchModels": "モデルを取得",
     "fetchingModels": "取得中…",
-    "searchDiscoveredModels": "モデル名・ID で検索",
+    "searchDiscoveredModels": "モデル名で検索",
     "discoveredCount": "{{count}} 件のモデル",
     "toggleVisibleSelection": "表示結果を選択・解除",
     "modelAlreadyAdded": "追加済み",
