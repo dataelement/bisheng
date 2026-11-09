@@ -19,6 +19,8 @@ export interface ChartDataResponse {
 export interface ChartSeries {
   name: string // 系列名称，如 '销售额'、'订单数'
   data: number[] | PieDataItem[] // 数据数组，饼图使用 PieDataItem
+  // 多指标堆叠图里每个指标各自成栈；缺省时所有系列共用同一个栈。
+  stackGroup?: string
 }
 
 export interface PivotTableRow {

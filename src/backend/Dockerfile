@@ -7,15 +7,22 @@ WORKDIR /app
 # dmPython 安装时会附带 dmssl 包，其中已包含所需的原生 .so 文件，
 # 无需额外安装达梦客户端或下载 DPI 驱动包。
 ENV UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple \
-    UV_HTTP_TIMEOUT=120 \
+    UV_HTTP_TIMEOUT=300 \
     UV_HTTP_RETRIES=5 \
     UV_LINK_MODE=copy
+
+# Drone passes proxy via `docker build --build-arg`; ARG does not leak into the runtime image.
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy
 
 # Copy dependency manifests first so application changes keep this layer cached.
 COPY pyproject.toml uv.lock ./
 
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    http_proxy="$http_proxy" https_proxy="$https_proxy" no_proxy="$no_proxy" \
     uv export --quiet --frozen --no-dev --format requirements.txt --output-file requirements.txt && \
+    http_proxy="$http_proxy" https_proxy="$https_proxy" no_proxy="$no_proxy" \
     uv pip install -r requirements.txt --system && \
     rm -f requirements.txt
 

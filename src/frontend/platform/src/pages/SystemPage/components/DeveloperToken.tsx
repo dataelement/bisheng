@@ -103,7 +103,7 @@ function asPayload(form: TokenFormState): DeveloperTokenPayload {
     rate_limit_per_minute: parseLimit(form.rate_limit_per_minute),
     route_whitelist: normalizeDeveloperTokenRouteWhitelist(form.route_whitelist),
     file_sync_rule: fileSyncRuleForSave(form.file_sync_rule),
-    knowledge_uploader_user_id: uploaderId,
+    knowledge_uploader_user_id: uploaderId ?? null,
   }
   if (!form.id || form.binding_changed) {
     const selected = form.user[0]
@@ -282,14 +282,6 @@ export default function DeveloperToken() {
         title: t("prompt"),
         variant: "error",
         description: t("system.developerToken.requiredError"),
-      })
-      return
-    }
-    if (form.knowledge_uploader.length === 0) {
-      toast({
-        title: t("prompt"),
-        variant: "error",
-        description: t("system.developerToken.knowledgeUploaderRequiredError"),
       })
       return
     }

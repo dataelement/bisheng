@@ -218,7 +218,7 @@ class DeveloperTokenRouteRule(BaseModel):
 class DeveloperTokenCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     user_id: int
-    knowledge_uploader_user_id: int
+    knowledge_uploader_user_id: int | None = None
     department_id: int | None = None
     dept_id: str | None = None
     enabled: bool = True

@@ -85,7 +85,7 @@ steps:
       - 'cd src/frontend'
 
       # 构建 frontend 镜像
-      - 'docker build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy -t $DOCKER_REPO:$VERSION .'
+      - 'docker build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=$no_proxy -t $DOCKER_REPO:$VERSION .'
 
       # 推送镜像
       - 'docker push $DOCKER_REPO:$VERSION'
@@ -140,7 +140,7 @@ steps:
       - 'cd src/backend'
 
       # 构建 backend 镜像
-      - 'docker build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy -t $DOCKER_REPO:$VERSION .'
+      - 'docker build --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=$no_proxy -t $DOCKER_REPO:$VERSION .'
 
       # 推送镜像
       - 'docker push $DOCKER_REPO:$VERSION'
