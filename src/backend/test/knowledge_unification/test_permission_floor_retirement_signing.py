@@ -33,6 +33,11 @@ from test.knowledge_unification.test_perm_migration import after_catalog, baseli
 OLD_USE_SCOPES = frozenset({"app", "assistant", "knowledge_library", "linsight_skill", "tool", "workflow"})
 
 
+@pytest.fixture
+def signing_tenant(tenant_context):
+    tenant_context(101)
+
+
 def legacy_catalog(*, use_level=3, use_active=True, customs=None):
     # Actual old F048 SSOT order/scopes; official ASSIGN_ACTION_LEVEL can move
     # use to 3. Re-derive ALL before models, including pure-use and standards.
@@ -168,8 +173,11 @@ def test_inactive_or_unselected_use_does_not_issue_floor():
 
 
 @pytest.mark.parametrize("bad", [None, True, 0, 1, 2, 4, 3.0])
-def test_original_derived_must_be_the_actual_canonical_effective_maximum(bad):
-    before = legacy_catalog(customs=(CustomModelSelection("mixed-use", "Mixed use", ("download", "use")),))
+@pytest.mark.parametrize("pure", [False, True])
+def test_original_derived_must_be_the_actual_canonical_effective_maximum(bad, pure):
+    before = legacy_catalog(
+        customs=(CustomModelSelection("mixed-use", "Mixed use", ("use",) if pure else ("download", "use")),)
+    )
     before = replace(
         before,
         models=tuple(replace(row, derived_level=bad) if row.model_key == "mixed-use" else row for row in before.models),
@@ -228,9 +236,8 @@ def test_verifier_rebuild_rejects_any_modified_floor(tamper):
 
 
 async def test_real_snapshot_plan_artifact_catalog_reload_and_current_are_one_native_component(
-    session_factory, tenant_context, monkeypatch
+    signing_tenant, session_factory, monkeypatch
 ):
-    tenant_context(101)
     original = legacy_catalog()
     monkeypatch.setattr(native, "baseline", lambda _module: original)
     async with session_factory() as session, session.begin():
