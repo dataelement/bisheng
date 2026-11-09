@@ -12,6 +12,52 @@ from bisheng.knowledge.domain.schemas.direct_delete_scope import select_delete_s
 from bisheng.knowledge.domain.schemas.processing_job import OperationInvalidItem, OperationItem, ResourceVersionTarget
 from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.knowledge.domain.services.knowledge_reference_service import impact_digest
+from bisheng.resource_reference.application.contracts import SourceType
+
+
+async def _denied_review(owner, *, space_id, reference, selections):
+    """No permitted target: report only submitted IDs and no dependency facts."""
+    pin = await owner._pin()
+    async with owner._session() as session:
+        result = await owner.plans.acreate(
+            session,
+            operation="knowledge_file_delete",
+            space_id=space_id,
+            actor_reference=reference,
+            targets=[],
+            target_revisions={},
+            source_revisions={},
+            parameters={
+                "can_execute": False,
+                "selections": [],
+                "requested_selections": [asdict(row) for row in selections],
+                "authorized_positions": [],
+                "valid_positions": [],
+                "force": False,
+                "pin": pin,
+            },
+            impact={
+                "source_counts": {kind.value: 0 for kind in SourceType},
+                "restricted_counts": {kind.value: 0 for kind in SourceType},
+                "file_count": 0,
+                "source_page": {"data": [], "page_size": 50, "has_more": False, "next_cursor": None},
+            },
+            expires_at=_now() + timedelta(minutes=5),
+        )
+    return result.model_copy(
+        update={
+            "can_execute": False,
+            "valid_items": [],
+            "invalid_items": [
+                OperationInvalidItem(
+                    id=row.resource_id,
+                    type="folder" if row.resource_type == "folder" else "file",
+                    reason="no_permission",
+                )
+                for row in selections
+            ],
+        }
+    )
 
 
 async def precheck_deletion(
@@ -29,6 +75,14 @@ async def precheck_deletion(
     reference = await admission.capture(identity, space_id=space_id)
     async with admission.identity(reference, current=identity) as (actual, _):
         whole = operation != "knowledge_file_delete"
+        requested = selections
+        authorized = tuple(range(len(selections))) if whole else await admission.selected_positions(actual, selections)
+        if not whole:
+            if not selections:
+                raise ResourceReferenceInvalidError(reason="knowledge_delete_selection_required")
+            if not authorized:
+                return await _denied_review(owner, space_id=space_id, reference=reference, selections=requested)
+            selections = tuple(requested[position] for position in authorized)
         inspection = await owner.references.ainspect(
             identity=actual, space_id=space_id, selections=selections, whole_space=whole
         )
@@ -44,7 +98,15 @@ async def precheck_deletion(
             ):
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_historical_version_changed")
         allowed = None if whole else await owner._permissions(actual, scope)
-        invalid, valid_positions = [], []
+        authorized_set = frozenset(authorized)
+        invalid = [
+            OperationInvalidItem(
+                id=row.resource_id, type="folder" if row.resource_type == "folder" else "file", reason="no_permission"
+            )
+            for position, row in enumerate(requested)
+            if not whole and position not in authorized_set
+        ]
+        valid_positions = []
         referenced = {row.unit_index for row in facts.references}
         for issue in scope.issues:
             invalid.extend(
@@ -117,6 +179,8 @@ async def precheck_deletion(
                 },
                 parameters={
                     "selections": [asdict(row) for row in selections],
+                    "requested_selections": [asdict(row) for row in requested],
+                    "authorized_positions": list(authorized),
                     "valid_positions": list(positions),
                     "force": force,
                     "can_execute": executable,

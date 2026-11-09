@@ -83,7 +83,12 @@ class UnificationConversionService:
             session, run_id=identity["run_id"], writer_contract_version=identity["writer_contract_version"], lock=lock
         )
         self.runs._validate(run, identity["run_id"], identity["writer_contract_version"])
-        self.runs._expected(run, "converting", identity["baseline_hash"], identity["plan_hash"])
+        self.runs._hashes(run, identity["baseline_hash"], identity["plan_hash"])
+        if run.phase != "converting" and not (
+            run.phase in {"backfilling", "verifying", "verified", "completed"}
+            and run.checkpoints.get("converting", {}).get("sql_conversion", {}).get("complete") is True
+        ):
+            _blocked("phase_changed")
         raw = run.checkpoints.get("converting", {}).get("sql_conversion")
         return _progress(raw), raw
 
@@ -161,6 +166,10 @@ class UnificationConversionService:
         if current != (expected_checkpoint or SQLConversionProgress(None, 0, None, False)):
             _blocked("checkpoint_changed")
         if mode == "apply":
+            run = await self.repository.aread_run(
+                session, run_id=run_id, writer_contract_version=writer_contract_version, lock=True
+            )
+            self.runs._expected(run, "converting", baseline_hash, plan_hash)
             if current.complete or ordinal != current.processed_count:
                 _blocked("not_next_batch")
             start = SQLConversionProgress(None, 0, self._seed(batch), False)
@@ -252,7 +261,9 @@ class UnificationConversionService:
     async def averify_committed_page(self, session, *, batch):
         value = self._consume(session, batch, "verify")
         await self._check(session, batch, value)
-        scope = await self.repository.alock_scope(session, **_identity(batch), commands=batch.commands)
+        scope = await self.repository.alock_scope(
+            session, **_identity(batch), commands=batch.commands, verification=True
+        )
         try:
             outcomes = await self.repository.aread_after(session, scope=scope)
         finally:

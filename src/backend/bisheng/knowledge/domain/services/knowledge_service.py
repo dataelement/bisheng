@@ -120,7 +120,6 @@ from bisheng.utils.async_utils import run_async_safe
 
 _KNOWLEDGE_LIST_ACTIONS = [
     "visible",
-    "use",
     "edit",
     "delete",
     "manage_permission",
@@ -472,7 +471,7 @@ class KnowledgeService(KnowledgeUtils):
         sort_by: str = "update_time",
         cursor: str | None = None,
         page_size: int = 10,
-        action: str = "use",
+        action: str = "visible",
         preferred_ids: list[int] | None = None,
         has_abnormal: bool | None = None,
     ) -> PageInfiniteCursorData[KnowledgeRead]:
@@ -489,14 +488,16 @@ class KnowledgeService(KnowledgeUtils):
             they can see (``list_visible_objects``), then run the historical
             keyset scan under an ``id IN (:visible_ids)`` filter. ``visible``
             is the superset of every concrete action, so the pre-filter is
-            valid for ``action="use"``; the per-page BatchCheck below still
-            narrows the result to rows the user can actually ``use``.
+            sufficient for legacy ``action="use"``, normalized to visible.
+            Other requested actions still use the per-page BatchCheck.
           * ``sort_by`` ∈ {``update_time``, ``create_time``} → true keyset
             cursor with key ``[sort_value, id]``; ``sort_by="name"`` still
             uses a pseudo-cursor (offset internally, AD-15) with key
             ``[page_num]``. ``has_more`` is detected by fetching
             ``page_size + 1`` rows; the ``total`` field is no longer computed.
         """
+        # Retain the old HTTP action as an alias, never as a business action.
+        action = "visible" if action == "use" else action
         total_start = perf_counter()
 
         # ---- 1. Decode cursor (branch on sort_by) ----
@@ -589,7 +590,7 @@ class KnowledgeService(KnowledgeUtils):
         res: list[Knowledge] = []
         filter_start = perf_counter()
         # ``action`` values other than "visible" still require a per-page
-        # BatchCheck: visible ⊇ use ⊇ …, so the pre-filter is a superset. Admin
+        # BatchCheck: visible is the superset of concrete actions. Admin
         # bypass skips this because every action is granted.
         needs_action_check = (not is_admin) and action != "visible"
 
@@ -2893,6 +2894,8 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         knowledge_id: int,
         file_ids: list[int],
+        *,
+        batch_application=None,
     ) -> str:
         """Batch download knowledge-base files.
 
@@ -2915,6 +2918,21 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise NotFoundError(msg="knowledge not found")
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            if batch_application is None:
+                raise RuntimeError("ordinary batch application is not configured")
+            from bisheng.knowledge.domain.schemas.knowledge_batch import BatchCommand
+
+            result = await batch_application.aordinary(
+                identity=login_user,
+                space_id=knowledge_id,
+                command=BatchCommand(operation="download", items=[{"id": ident, "type": "file"} for ident in file_ids]),
+            )
+            if any(row["state"] == "failed" for row in result["items"]):
+                from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError
+
+                raise KnowledgeOperationPlanChangedError(reason="batch_download_partial_failure", result=result)
+            return result["url"]
         db_files: list[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids)
         # Keep only files that actually belong to this knowledge base
         db_files = [f for f in db_files if f.knowledge_id == knowledge_id]
@@ -3061,9 +3079,31 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def batch_add_file_tags(
-        cls, login_user: UserPayload, knowledge_id: int, file_ids: list[int], tag_ids: list[int]
+        cls,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_ids: list[int],
+        tag_ids: list[int],
+        *,
+        batch_application=None,
     ):
         """批量添加标签到文档"""
+        knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            if batch_application is None:
+                raise RuntimeError("ordinary batch application is not configured")
+            from bisheng.knowledge.domain.schemas.knowledge_batch import BatchCommand
+
+            if not file_ids or not tag_ids:
+                return
+            await batch_application.aordinary(
+                identity=login_user,
+                space_id=knowledge_id,
+                command=BatchCommand(
+                    operation="tag", items=[{"id": ident, "type": "file"} for ident in file_ids], tag_ids=tag_ids
+                ),
+            )
+            return
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
 
         await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)

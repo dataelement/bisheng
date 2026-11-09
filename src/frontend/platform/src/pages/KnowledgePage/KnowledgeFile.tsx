@@ -41,9 +41,17 @@ import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
 import { KnowledgeTooltip } from "./components/KnowledgeTooltip";
 import { ProcessingDefaultsDialog } from "./components/ProcessingDefaultsDialog";
 import { SpaceProcessingDialog } from "./components/SpaceProcessingDialog";
+import { KnowledgeDeletionDialog } from "./components/KnowledgeDeletionDialog";
+import { useKnowledgeDeletion } from "./hooks/useKnowledgeDeletion";
 import { FileAbnormalStatusCell } from "./components/FileAbnormalStatusCell";
 
-const ROW_ACTIONS = ["visible", "edit", "manage_permission", "upload_file"];
+const ROW_ACTIONS = [
+  "visible",
+  "edit",
+  "manage_permission",
+  "upload_file",
+  "delete",
+];
 interface KnowledgeFileProps {
   scope: KnowledgeQueryScope;
   toolbarTarget?: HTMLDivElement | null;
@@ -205,6 +213,23 @@ export default function KnowledgeFile({
       if (live.current === epoch) showApiError(error);
     }
   };
+  const deletion = useKnowledgeDeletion(JSON.stringify([stableScope, epoch]));
+  const handleDeletion = async (
+    row: KnowledgeSpaceInfo,
+    kind: "delete" | "clear",
+    readonly = false,
+  ) => {
+    if (live.current !== epoch || !hasAction(row, "delete")) return;
+    setOpenId(null);
+    const owned = epoch;
+    if (await deletion.open({ spaceId: row.id, kind }, readonly)) {
+      if (live.current === owned)
+        await client.invalidateQueries({
+          queryKey: knowledgeQueryKeys.space(stableScope, row.id),
+        });
+      if (live.current === owned) await handleRefresh();
+    }
+  };
   const renderMenu = (row: KnowledgeSpaceInfo) => {
     if (actionLoading[String(row.id)])
       return (
@@ -212,7 +237,11 @@ export default function KnowledgeFile({
           {t("knowledgeRowActions.loading", { ns: "permission" })}
         </DropdownItem>
       );
-    if (!hasAction(row, "edit") && !hasAction(row, "manage_permission"))
+    if (
+      !hasAction(row, "edit") &&
+      !hasAction(row, "manage_permission") &&
+      !hasAction(row, "delete")
+    )
       return (
         <DropdownItem disabled>
           {t("knowledgeRowActions.empty", { ns: "permission" })}
@@ -232,6 +261,33 @@ export default function KnowledgeFile({
               {t("f118.processing_title_copy")}
             </DropdownItem>
           )}
+        {hasAction(row, "delete") && (
+          <>
+            <DropdownItem
+              onSelect={() => {
+                void handleDeletion(row, "delete", true);
+              }}
+            >
+              {t("deletion.references")}
+            </DropdownItem>
+            <DropdownItem
+              danger
+              onSelect={() => {
+                void handleDeletion(row, "clear");
+              }}
+            >
+              {t("deletion.clear")}
+            </DropdownItem>
+            <DropdownItem
+              danger
+              onSelect={() => {
+                void handleDeletion(row, "delete");
+              }}
+            >
+              {t("deletion.delete_space")}
+            </DropdownItem>
+          </>
+        )}
         {hasAction(row, "manage_permission") && (
           <DropdownItem
             icon={<Shield />}
@@ -480,6 +536,7 @@ export default function KnowledgeFile({
           />
         )}
       </div>
+      <KnowledgeDeletionDialog operation={deletion} />
       <KnowledgeLibraryDialog
         scope={scope}
         datalist={rows}

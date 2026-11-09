@@ -1,42 +1,21 @@
-import { Button, Input } from "@bisheng/ui";
-import {
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useKnowledgeBatch } from "../hooks/useKnowledgeBatch";
+import { BatchOperationDialog } from "./BatchOperationDialog";
+import { BatchTagDraftDialog } from "./BatchTagDraftDialog";
+import { Button } from "@bisheng/ui";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/bs-ui/table";
-import {
-  knowledgeSpaceApi,
-  type KnowledgeSpaceChild,
-} from "@/controllers/API/knowledgeSpace";
-import {
-  knowledgeFilesApi,
-  type SpaceFilePreview,
-} from "@/controllers/API/knowledgeFiles";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { knowledgeSpaceApi, type KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
+import { knowledgeFilesApi, type SpaceFilePreview } from "@/controllers/API/knowledgeFiles";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
-import {
-  knowledgeQueryKeys,
-  type KnowledgeQueryScope,
-} from "@/controllers/hooks/knowledge";
+import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
 import { FileStatusFilter } from "./FileStatusFilter";
-import PreviewFile from "./PreviewFile";
+import { SpaceDirectoryOverlays } from "./SpaceDirectoryOverlays";
+import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
+import { useDirectoryDeletion } from "../hooks/useDirectoryDeletion";
 import { SpaceDirectoryRow } from "./SpaceDirectoryRow";
 import { SpaceDirectoryToolbar } from "./SpaceDirectoryToolbar";
 export { StatusIndicator } from "./KnowledgeFileStatus";
@@ -98,12 +77,7 @@ export default function Files(props: FilesProps) {
     />
   );
 }
-function Directory({
-  scope,
-  spaceId,
-  parentId: initialParent,
-  onOpenFolder,
-}: DirectoryProps) {
+function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: DirectoryProps) {
   const { t } = useTranslation("knowledge");
   const client = useQueryClient();
   const instance = useId(),
@@ -119,11 +93,7 @@ function Directory({
   const [filterOpen, setFilterOpen] = useState(false);
   const { identityKey, tenantId, managementTenantId, view } = scope;
   const base = useMemo(
-    () =>
-      knowledgeQueryKeys.space(
-        { identityKey, tenantId, managementTenantId, view },
-        spaceId,
-      ),
+    () => knowledgeQueryKeys.space({ identityKey, tenantId, managementTenantId, view }, spaceId),
     [identityKey, tenantId, managementTenantId, view, spaceId],
   );
   const epoch = useMemo(
@@ -174,8 +144,7 @@ function Directory({
         ...filters,
         ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
       }),
-    getNextPageParam: (result) =>
-      result.has_more ? (result.next_cursor ?? undefined) : undefined,
+    getNextPageParam: (result) => (result.has_more ? (result.next_cursor ?? undefined) : undefined),
     enabled: !keyword,
     keepPreviousData: false,
     cacheTime: 0,
@@ -216,8 +185,7 @@ function Directory({
     }
   }
   for (const key of rowKeys)
-    if (!rowLifetimes.current.has(key))
-      rowLifetimes.current.set(key, { retired: false });
+    if (!rowLifetimes.current.has(key)) rowLifetimes.current.set(key, { retired: false });
   const isCurrent = (token: Edit | Target) =>
     current.current === token.epoch &&
     (!token.item || (!!token.rowLifetime && !token.rowLifetime.retired));
@@ -235,8 +203,7 @@ function Directory({
     const type = parentId === null ? "knowledge_space" : "folder";
     void getMyResourcePermissionsApi(type, String(parentId ?? spaceId))
       .then((result) => {
-        if (current.current === epoch)
-          setContainer({ epoch, actions: result.actions });
+        if (current.current === epoch) setContainer({ epoch, actions: result.actions });
       })
       .catch((error) => {
         if (current.current === epoch) showApiError(error);
@@ -281,20 +248,10 @@ function Directory({
   const handleEdit = (item?: KnowledgeSpaceChild) => {
     if (
       item &&
-      !(
-        menu?.token.item.id === item.id &&
-        menu.actions.includes("rename") &&
-        isCurrent(menu.token)
-      )
+      !(menu?.token.item.id === item.id && menu.actions.includes("rename") && isCurrent(menu.token))
     )
       return;
-    if (
-      !item &&
-      !(
-        container?.epoch === epoch &&
-        container.actions.includes("create_folder")
-      )
-    )
+    if (!item && !(container?.epoch === epoch && container.actions.includes("create_folder")))
       return;
     const token = {
       epoch,
@@ -320,8 +277,7 @@ function Directory({
         });
       else if (token.item.file_type === 0)
         await knowledgeFilesApi.renameSpaceFolder(spaceId, token.item.id, body);
-      else
-        await knowledgeFilesApi.renameSpaceFile(spaceId, token.item.id, body);
+      else await knowledgeFilesApi.renameSpaceFile(spaceId, token.item.id, body);
       if (editToken.current !== token || !isCurrent(token)) return;
       await client.invalidateQueries({ queryKey: token.epoch.prefix });
       if (editToken.current === token && isCurrent(token)) closeEdit();
@@ -342,12 +298,8 @@ function Directory({
     previewToken.current = token;
     setPreview({ token });
     try {
-      const data = await knowledgeFilesApi.getSpaceFilePreview(
-        spaceId,
-        item.id,
-      );
-      if (previewToken.current === token && isCurrent(token))
-        setPreview({ token, data });
+      const data = await knowledgeFilesApi.getSpaceFilePreview(spaceId, item.id);
+      if (previewToken.current === token && isCurrent(token)) setPreview({ token, data });
     } catch (error) {
       if (previewToken.current === token && isCurrent(token)) {
         closePreview();
@@ -365,10 +317,7 @@ function Directory({
     )
       return;
     try {
-      const data = await knowledgeFilesApi.getSpaceFileDownload(
-        spaceId,
-        item.id,
-      );
+      const data = await knowledgeFilesApi.getSpaceFileDownload(spaceId, item.id);
       if (!isCurrent(token) || !data.original_url) return;
       const anchor = document.createElement("a");
       anchor.href = data.original_url;
@@ -382,17 +331,47 @@ function Directory({
   };
   const visibleEdit = edit && isCurrent(edit) ? edit : null;
   const visiblePreview = preview && isCurrent(preview.token) ? preview : null;
-  const previewFile = visiblePreview
-    ? {
-        ...visiblePreview.token.item,
-        fileType: visiblePreview.token.item.parse_type ?? "",
-        fileName: visiblePreview.token.item.file_name,
-      }
-    : null;
-
+  const {
+    deletion,
+    selectedKeys,
+    selectedRows,
+    selectionError,
+    handleSelection,
+    remove,
+    references,
+  } = useDirectoryDeletion({
+    spaceId,
+    epoch,
+    scopeKey: JSON.stringify([...base, parentId, keyword, statuses, page]),
+    rows,
+    isCurrent: () => current.current === epoch,
+    onDeleted: () => client.invalidateQueries({ queryKey: base }),
+  });
+  const batch = useKnowledgeBatch(JSON.stringify([...base, parentId, selectedKeys]));
+  const [batchTagsOpen, setBatchTagsOpen] = useState(false);
+  const runBatch = async (
+    operation: "download" | "tag" | "retry",
+    tag_ids?: number[],
+    new_tag_names?: string[],
+  ) => {
+    setBatchTagsOpen(false);
+    const outcome = await batch.open({
+      spaceId,
+      operation,
+      items: selectedRows.map((item) => ({
+        id: item.id,
+        type: item.file_type === 0 ? "folder" : "file",
+        name: item.file_name,
+      })),
+      ...(operation === "tag" ? { tag_ids, new_tag_names } : {}),
+    });
+    if (outcome && current.current === epoch && operation !== "download")
+      await client.invalidateQueries({ queryKey: base });
+  };
   const containerActions = container?.epoch === epoch ? container.actions : [];
   return (
     <div className="relative space-y-4">
+      {selectionError === epoch && <p role="alert">{t("deletion.reason_no_permission")}</p>}
       <SpaceDirectoryToolbar
         spaceId={spaceId}
         parentId={parentId}
@@ -404,6 +383,18 @@ function Directory({
         canCreateFolder={containerActions.includes("create_folder")}
         onCreateFolder={() => handleEdit()}
         canUpload={containerActions.includes("upload_file")}
+        onBatchDownload={() => {
+          void runBatch("download");
+        }}
+        onBatchRetry={() => {
+          void runBatch("retry");
+        }}
+        onBatchTag={() => setBatchTagsOpen(true)}
+        selectedCount={selectedRows.length}
+        onDeleteSelected={() => {
+          void remove(selectedRows);
+        }}
+        onReferences={selectedRows.length ? () => references(selectedRows) : undefined}
       />
       <Table>
         <TableHeader>
@@ -439,11 +430,7 @@ function Directory({
         <TableBody>
           {rows.map((item) => {
             const itemMenu =
-              menu &&
-              menu.token.epoch === epoch &&
-              menu.token.item.id === item.id
-                ? menu
-                : null;
+              menu && menu.token.epoch === epoch && menu.token.item.id === item.id ? menu : null;
             return (
               <SpaceDirectoryRow
                 key={item.id}
@@ -457,6 +444,18 @@ function Directory({
                 error={itemMenu?.error ?? false}
                 onMenu={(open) => {
                   void handleMenu(item, open);
+                }}
+                selected={selectedKeys.includes(rowKey(item))}
+                onSelect={(checked) => {
+                  void handleSelection(item, checked);
+                }}
+                onDelete={() => {
+                  if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
+                    void remove([item]);
+                }}
+                onReferences={() => {
+                  if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
+                    references([item]);
                 }}
                 onRename={() => handleEdit(item)}
                 onDownload={() => {
@@ -478,13 +477,10 @@ function Directory({
           })}
         </TableBody>
       </Table>
-      {active.isInitialLoading && (
-        <p role="status">{t("f118.loading_directory")}</p>
+      {active.isInitialLoading && <p role="status">{t("f118.loading_directory")}</p>}
+      {!active.isInitialLoading && !active.error && !rows.length && !hasMore && (
+        <p>{t("f118.directory_empty")}</p>
       )}
-      {!active.isInitialLoading &&
-        !active.error &&
-        !rows.length &&
-        !hasMore && <p>{t("f118.directory_empty")}</p>}
       {!!active.error && (
         <Button
           onClick={() => {
@@ -520,80 +516,31 @@ function Directory({
           </Button>
         </div>
       )}
-      <Dialog
-        open={!!visibleEdit}
-        onOpenChange={(open) => {
-          if (!open) closeEdit();
+      <SpaceDirectoryOverlays
+        instance={instance}
+        editOpen={!!visibleEdit}
+        editingItem={visibleEdit?.item}
+        name={name}
+        setName={setName}
+        saving={saving === visibleEdit}
+        closeEdit={closeEdit}
+        handleSave={handleSave}
+        previewOpen={!!visiblePreview}
+        previewItem={visiblePreview?.token.item}
+        previewData={visiblePreview?.data}
+        closePreview={closePreview}
+      />
+      <KnowledgeDeletionDialog operation={deletion} />
+      <BatchOperationDialog operation={batch} />
+      <BatchTagDraftDialog
+        spaceId={spaceId}
+        availableTags={selectedRows.flatMap((item) => item.tags ?? [])}
+        open={batchTagsOpen}
+        onClose={() => setBatchTagsOpen(false)}
+        onReview={(ids, names) => {
+          void runBatch("tag", ids, names);
         }}
-      >
-        <DialogContent aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>
-              {t(visibleEdit?.item ? "rename" : "f118.create_folder")}
-            </DialogTitle>
-          </DialogHeader>
-          <label htmlFor={`${instance}-name`}>
-            {t(visibleEdit?.item ? "name" : "f118.folder_name")}
-          </label>
-          <Input
-            id={`${instance}-name`}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <DialogFooter>
-            <Button variant="outlined" onClick={closeEdit}>
-              {t("cancel")}
-            </Button>
-            <Button
-              disabled={!name.trim() || saving === visibleEdit}
-              onClick={() => {
-                void handleSave();
-              }}
-            >
-              {t("save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={!!visiblePreview}
-        onOpenChange={(open) => {
-          if (!open) closePreview();
-        }}
-      >
-        <DialogContent className="max-w-5xl" aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>{visiblePreview?.token.item.file_name}</DialogTitle>
-          </DialogHeader>
-          {visiblePreview?.data && previewFile ? (
-            <PreviewFile
-              file={previewFile}
-              rawFiles={[previewFile]}
-              partitions={{}}
-              chunks={[]}
-              setChunks={() => undefined}
-              edit={false}
-              urlState={{
-                load: true,
-                url:
-                  visiblePreview.data.preview_url ||
-                  visiblePreview.data.original_url,
-              }}
-              previewData={{
-                ...visiblePreview.data,
-                file_source: visiblePreview.data.file_source ?? undefined,
-              }}
-            />
-          ) : (
-            <p role="status">{t("loading")}</p>
-          )}
-          <DialogFooter>
-            <Button variant="outlined" onClick={closePreview}>
-              {t("cancel")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      />
     </div>
   );
 }

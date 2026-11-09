@@ -1,4 +1,4 @@
-import { Button, Dropdown, DropdownItem } from "@bisheng/ui";
+import { Button, Checkbox, Dropdown, DropdownItem } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useContext, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,6 +20,10 @@ interface SpaceDirectoryRowProps {
   actions: readonly string[];
   loading: boolean;
   error: boolean;
+  selected?: boolean;
+  onSelect?: (selected: boolean) => void;
+  onDelete?: () => void;
+  onReferences?: () => void;
   onMenu: (open: boolean) => void;
   onOpen: () => void;
   onPreview: () => void;
@@ -35,6 +39,10 @@ export function SpaceDirectoryRow({
   actions,
   loading,
   error,
+  selected,
+  onSelect,
+  onDelete,
+  onReferences,
   onMenu,
   onOpen,
   onPreview,
@@ -59,37 +67,28 @@ export function SpaceDirectoryRow({
       fileId: item.id,
       enabled: historyEnabled,
     }),
-    [
-      identityKey,
-      tenantId,
-      managementTenantId,
-      view,
-      spaceId,
-      parentId,
-      item.id,
-      historyEnabled,
-    ],
+    [identityKey, tenantId, managementTenantId, view, spaceId, parentId, item.id, historyEnabled],
   );
   const [history, setHistory] = useState<typeof epoch | null>(null);
   return (
     <TableRow>
       <TableCell>
         <div className="flex items-center gap-2">
+          {known && onSelect && (
+            <Checkbox
+              aria-label={`${t("deletion.select")} ${item.file_name}`}
+              checked={selected}
+              onCheckedChange={(checked) => onSelect(checked === true)}
+            />
+          )}
           {folder ? (
             <Outlined.FolderClose aria-hidden="true" />
           ) : (
             <FileIcon
-              type={
-                (item.file_name.split(".").pop()?.toLowerCase() ??
-                  "txt") as FileType
-              }
+              type={(item.file_name.split(".").pop()?.toLowerCase() ?? "txt") as FileType}
             />
           )}
-          <Button
-            variant="link"
-            disabled={!known}
-            onClick={folder ? onOpen : onPreview}
-          >
+          <Button variant="link" disabled={!known} onClick={folder ? onOpen : onPreview}>
             {item.file_name}
           </Button>
         </div>
@@ -97,10 +96,7 @@ export function SpaceDirectoryRow({
       <TableCell>{item.update_time?.replace("T", " ") || "--"}</TableCell>
       <TableCell>
         {!folder && typeof item.status === "number" && (
-          <StatusIndicator
-            status={item.status}
-            remark={item.remark ?? undefined}
-          />
+          <StatusIndicator status={item.status} remark={item.remark ?? undefined} />
         )}
       </TableCell>
       <TableCell className="text-right">
@@ -111,35 +107,31 @@ export function SpaceDirectoryRow({
             onOpenChange={onMenu}
             menu={
               <>
-                {loading && (
-                  <DropdownItem disabled>{t("loading")}</DropdownItem>
-                )}
+                {loading && <DropdownItem disabled>{t("loading")}</DropdownItem>}
                 {error && (
-                  <DropdownItem
-                    onSelect={() => queueMicrotask(() => onMenu(true))}
-                  >
+                  <DropdownItem onSelect={() => queueMicrotask(() => onMenu(true))}>
                     {t("retry")}
                   </DropdownItem>
                 )}
                 {!loading && !error && actions.includes("rename") && (
                   <DropdownItem onSelect={onRename}>{t("rename")}</DropdownItem>
                 )}
-                {historyEnabled &&
-                  !loading &&
-                  !error &&
-                  actions.includes("visible") && (
-                    <DropdownItem onSelect={() => setHistory(epoch)}>
-                      {t("f118.version_history")}
+                {!loading && !error && actions.includes("delete") && (
+                  <>
+                    <DropdownItem onSelect={onReferences}>{t("deletion.references")}</DropdownItem>
+                    <DropdownItem danger onSelect={onDelete}>
+                      {t("deletion.delete_items")}
                     </DropdownItem>
-                  )}
-                {!folder &&
-                  !loading &&
-                  !error &&
-                  actions.includes("download") && (
-                    <DropdownItem onSelect={onDownload}>
-                      {t("downloadOriginal")}
-                    </DropdownItem>
-                  )}
+                  </>
+                )}
+                {historyEnabled && !loading && !error && actions.includes("visible") && (
+                  <DropdownItem onSelect={() => setHistory(epoch)}>
+                    {t("f118.version_history")}
+                  </DropdownItem>
+                )}
+                {!folder && !loading && !error && actions.includes("download") && (
+                  <DropdownItem onSelect={onDownload}>{t("downloadOriginal")}</DropdownItem>
+                )}
               </>
             }
           >

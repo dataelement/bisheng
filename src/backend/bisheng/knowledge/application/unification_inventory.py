@@ -350,6 +350,10 @@ class UnificationInventoryApplication:
                 current()
                 if section == "sources":
                     page = decode_source_page(content, run_id=result.run_id, tenant_id=tenant_id, page_index=page_index)
+                    from bisheng.knowledge.application.unification_reference_state import validate_inventory_fact
+
+                    for record in page.records:
+                        validate_inventory_fact(record)
                 else:
                     page = decode_inventory_page(
                         content,
@@ -586,6 +590,7 @@ class UnificationInventoryApplication:
                 current=current,
             )
             await self.raw.avalidate_global_orphans(session)
+            await self.raw.avalidate_registered_source_tenants(session)
             await self.preflight.resources.avalidate_global_integrity(session)
             await self.preflight.controls.avalidate_global_integrity(session)
             await self.permissions.avalidate_global_integrity(session)

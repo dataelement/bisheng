@@ -1521,3 +1521,38 @@ establish those guarantees.
 ## 工具与技能全员授权升级（f048-v6）
 
 `migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。
+
+## F118 knowledge-space unification
+
+Run from `src/backend` after the operator has stopped all business writers and
+created the immutable backup/schema evidence artifacts. Use the same `config`
+as the service. The default preview validates an existing frozen graph and
+reports its scope without SQL/FGA/artifact writes; it does not freeze a fresh
+inventory or certify readiness.
+
+```bash
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production \
+  --backup-ref '{"object_key":"f118/unification/maintenance-1/verification/<hash>.json","sha256":"<hash>"}' \
+  --schema-ref '{"object_key":"f118/unification/maintenance-1/verification/<schema-hash>.json","sha256":"<schema-hash>"}'
+```
+
+Add `--apply --operator-id 7` for the actual M2 freeze, original SQL conversion,
+permission publication, six-source backfill, full reconciliation and persisted
+Coverage certificate. After interruption, repeat the identical arguments with
+`--apply --resume`; this requires the same already-frozen Run and never rebuilds
+its baseline. Old frozen artifacts lacking original index/deletion facts require
+a new stopped-service inventory, not a guessed legacy classification. Output
+contains the Run/hashes, tenant scope, six-source proofs and the immutable plan
+reference containing the invalid-slot inventory. Nonzero exit preserves the
+checkpoint and never restarts services. Enable business traffic only after the
+operator has accepted the overall upgrade verification and real environment
+checks; a local component test is not that acceptance.
+
+F118 deliberately uses a narrow context assembly rather than the general
+`initialize_app_context` convention: the eager general initializer constructs
+`MinioStorage` and may initialize buckets/policies. The command registers the
+original DB/Redis managers from the live service settings and closes them with
+`close_app_context`; its existing owned raw MinIO/ES/Milvus and permission
+adapters never invoke the API startup, default seeds or bucket/policy writers.
+This feature-specific exception preserves the frozen read-only inventory
+contract and does not change general script initialization.

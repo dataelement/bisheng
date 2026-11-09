@@ -70,6 +70,18 @@ export function requiresManagementScope(method: string, raw: string): boolean {
       ["POST"],
       /^\/api\/v1\/knowledge\/space\/[^/]+\/copy\/(?:precheck|confirm)$/,
     ],
+    [
+      ["GET"],
+      /^\/api\/v1\/knowledge\/space\/[^/]+\/(?:references|deletion\/[^/]+)$/,
+    ],
+    [
+      ["POST"],
+      /^\/api\/v1\/knowledge\/space\/[^/]+\/files\/batch\/(?:download|tag|retry)\/(?:inspect|precheck|confirm)$/,
+    ],
+    [
+      ["POST"],
+      /^\/api\/v1\/knowledge\/space\/[^/]+\/(?:files\/references|files\/delete\/(?:inspect|precheck)|delete\/precheck|clear\/precheck|deletion\/confirm)$/,
+    ],
     [["PUT"], /^\/api\/v1\/knowledge\/space\/[^/]+\/processing-settings$/],
     [
       ["POST"],

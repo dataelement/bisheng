@@ -95,3 +95,33 @@ class KnowledgeLegacyEvidenceRepository:
             result = await session.execute(self._run(run_id))
             run = result.scalar_one_or_none()
         return self._facts(run, source_key, run_id, evidence_key)
+
+    async def aload_snapshot_evidence(self, session, source_key, target, *, rows, run_id, evidence_key):
+        """Reuse a caller-owned complete original-source scalar snapshot.
+
+        The native inventory owns the original snapshot. This returns immutable
+        legacy provenance only; it neither issues binding authority nor repairs
+        missing markers. Existing exact bundle/Run rules remain the same.
+        """
+        from types import SimpleNamespace
+
+        self._check_tenant(source_key)
+        original = tuple(SimpleNamespace(**row) for row in rows)
+        if any(
+            (row.source_type, row.source_id, row.source_version, row.target_type, row.target_id)
+            != (
+                source_key.source_type.value,
+                source_key.source_id,
+                source_key.source_version,
+                target.target_type.value,
+                target.target_id,
+            )
+            for row in original
+        ):
+            raise ResourceReferenceInvalidError(reason="legacy_evidence_original_mismatch")
+        self._check_original(original, source_key, run_id, evidence_key)
+        with session.no_autoflush, strict_tenant_filter():
+            result = await session.execute(self._run(run_id))
+            run = result.scalar_one_or_none()
+        self._check_tenant(source_key)
+        return self._facts(run, source_key, run_id, evidence_key)

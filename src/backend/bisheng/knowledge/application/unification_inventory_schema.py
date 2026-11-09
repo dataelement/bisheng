@@ -89,7 +89,7 @@ _SCHEMAS = {
         "tenant_id:positive resource_id:positive original_type:int target_type:int action:str business_digest:hash"
     ),
     "source_decision": _spec(
-        "tenant_id:positive source_type:str source_id:str source_version:str slot_key:str target_type:str target_id:str exists:bool disposition:str revision_digest:hash"
+        "tenant_id:positive source_type:str source_id:str source_version:str slot_key:str target_type:str target_id:str exists:bool disposition:str revision_digest:hash frozen_state_digest:hash"
     ),
     "quota_usage": _spec(
         "tenant_id:positive personal_space_count:nonnegative department_space_count:nonnegative stored_bytes:nonnegative configuration_digest:hash"

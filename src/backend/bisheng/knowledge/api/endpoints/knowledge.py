@@ -41,6 +41,7 @@ from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_s
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_file_service, get_knowledge_service
+from bisheng.knowledge.application.knowledge_batch import get_batch_application
 from bisheng.knowledge.application.knowledge_processing_commands import KnowledgeProcessingCommands
 from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeCreate,
@@ -1040,6 +1041,7 @@ def update_knowledge_model(
 async def batch_download_knowledge_files(
     *,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
+    batch_application=Depends(get_batch_application),
     knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
     file_ids: list[int] = Body(..., embed=True, description="List of file IDs to download"),
 ):
@@ -1055,6 +1057,7 @@ async def batch_download_knowledge_files(
         login_user=login_user,
         knowledge_id=knowledge_id,
         file_ids=file_ids,
+        batch_application=batch_application,
     )
     return resp_200(data={"url": download_url})
 
@@ -1126,9 +1129,12 @@ async def update_file_tags(
 async def batch_add_file_tags(
     *,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
+    batch_application=Depends(get_batch_application),
     req_data: BatchAddFileTagsReq,
 ):
-    await KnowledgeService.batch_add_file_tags(login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids)
+    await KnowledgeService.batch_add_file_tags(
+        login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids, batch_application=batch_application
+    )
     return resp_200()
 
 
