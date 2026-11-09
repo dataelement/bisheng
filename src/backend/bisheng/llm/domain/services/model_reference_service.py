@@ -105,8 +105,8 @@ class _InspectionScope:
             self.transaction.assert_current(self.session)
 
     def pin(self):
-        # Fresh Sessions retain the original repository's natural autobegin.
-        # Once its real lock read returned, this pin can never be replaced.
+        # Pin the original native transaction before any target lock. A fresh
+        # Session checks out its own connection without issuing an extra SQL.
         self.check()
         if self.transaction is None:
             self.transaction = TransactionIdentity.capture(self.session)
@@ -192,6 +192,10 @@ class ModelReferenceService:
         guard = _InspectionScope(session)
         original = await guard.call(self._authorize, identity)
         stable = await guard.call(self._stable_identity, identity)
+        if guard.transaction is None:
+            if not session.in_transaction():
+                await guard.call(session.connection)
+            guard.pin()
         removal = await guard.call(
             self.repository.alock_removal_targets,
             session,
@@ -199,7 +203,6 @@ class ModelReferenceService:
             retained_model_ids=retained_model_ids,
             delete_server=delete_server,
         )
-        guard.pin()
         receipts, scope = (), None
         runtime = self.runtime or await guard.call(get_reference_binding_runtime)
         if not isinstance(runtime, ReferenceBindingRuntime):
