@@ -18,6 +18,7 @@ import {
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
+import { createDshOperationId as createOperationId } from "@/util/dshOperationId";
 
 interface SpaceProcessingProgressProps {
   scope: KnowledgeQueryScope;
@@ -93,7 +94,7 @@ export function SpaceProcessingProgress({
     const request =
       retry?.revision === job.data.revision
         ? retry
-        : { revision: job.data.revision, key: crypto.randomUUID() };
+        : { revision: job.data.revision, key: createOperationId() };
     setRetry(request);
     setBusy(true);
     try {

@@ -275,7 +275,11 @@ class ReferenceMigration:
         )
 
     async def _retire(self, tenant, *, verify_only):
-        from bisheng.knowledge.application.unification_reference_state import parse_retired, retired_index
+        from bisheng.knowledge.application.unification_reference_state import (
+            PHYSICAL_ROOT_ABSENT,
+            parse_retired,
+            retired_index,
+        )
         from bisheng.knowledge.domain.repositories.reference_legacy_evidence_repository import (
             KnowledgeLegacyEvidenceRepository,
         )
@@ -319,6 +323,11 @@ class ReferenceMigration:
                             root_key=header.root_key,
                             source_key=header.source_key,
                             cleanup_empty_root=False,
+                            **(
+                                {"expected_empty_heads": (baseline["root_head"], *baseline["source_heads"])}
+                                if header.lifecycle == PHYSICAL_ROOT_ABSENT
+                                else {}
+                            ),
                         )
                         actual = parse_retired(
                             await retired_index(
@@ -383,6 +392,8 @@ class ReferenceMigration:
         return checksum
 
     async def _tenant(self, tenant, *, verify_only=False):
+        from bisheng.knowledge.application.unification_reference_state import PHYSICAL_ROOT_ABSENT
+
         phase, goal = await self._phase(tenant)
         retired_digest = await self._retire(tenant, verify_only=verify_only)
         entries = tuple(entry for entry in self.plan.sources if entry.header.source_key.tenant_id == tenant)
@@ -408,7 +419,11 @@ class ReferenceMigration:
             if located.header.root_key.tenant_id == tenant:
                 proofs[located.header.root_key.source_type.value]["root_count"] += 1
         for located in self.plan.retired:
-            if located.header.root_key.tenant_id == tenant and located.header.source_key is None:
+            if (
+                located.header.root_key.tenant_id == tenant
+                and located.header.source_key is None
+                and located.header.lifecycle != PHYSICAL_ROOT_ABSENT
+            ):
                 proofs[located.header.root_key.source_type.value]["root_count"] += 1
         checksum, ordinal = _seed(self.frozen, tenant), 0
         prefix = goal["processed_count"] if goal else 0

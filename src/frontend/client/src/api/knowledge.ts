@@ -109,6 +109,7 @@ export interface KnowledgeSpace {
     memberCount: number;          // mapped from member_count
     fileCount: number;            // success-indexed file count
     totalFileCount: number;
+    state?: number | null;
     role: SpaceRole;
     isPinned: boolean;
     createdAt: string;            // mapped from create_time
@@ -234,6 +235,7 @@ export interface RawKnowledgeSpace {
     member_count?: number;
     file_count?: number;
     total_file_count?: number;
+    state?: number | null;
     follower_num?: number;
     file_num?: number;
     role?: string;
@@ -355,6 +357,7 @@ export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         memberCount: raw.member_count ?? raw.follower_num ?? 0,
         fileCount: raw.file_count ?? raw.file_num ?? 0,
         totalFileCount: raw.total_file_count ?? raw.file_num ?? raw.file_count ?? 0,
+        state: raw.state,
         role: (raw.user_role as SpaceRole) || (raw.role as SpaceRole) || SpaceRole.MEMBER,
         isPinned: raw.is_pinned ?? false,
         createdAt: raw.create_time || "",

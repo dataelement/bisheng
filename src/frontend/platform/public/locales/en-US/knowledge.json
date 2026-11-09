@@ -541,7 +541,9 @@
     "processing_field_string": "Text",
     "processing_field_number": "Number",
     "processing_field_time": "Time",
-    "processing_item_number": "Item {{number}}"
+    "processing_item_number": "Item {{number}}",
+    "upload_temporary": "Use different rules for this upload",
+    "upload_rules_hint": "By default, files inherit the space rules. Changes here apply only to files added in this batch; retries keep these rules. Audio, video, and web imports use their own rules."
   },
   "deletion": {
     "references": "References",
@@ -635,5 +637,27 @@
     "tags_load_failed": "The space tag list is unavailable. Existing permission restrictions still apply.",
     "invalid_name": "Use a tag name within the existing length limit.",
     "select_first": "Select files or folders first"
+  },
+  "move": {
+    "title": "Move",
+    "jobs": "Move tasks",
+    "current_space": "Current space",
+    "current_folder": "Current folder",
+    "target_space": "Destination space",
+    "search_spaces": "Search spaces",
+    "root": "Space root",
+    "choose_folder_hint": "Choose the space root, or enter a folder to use it as the destination.",
+    "review": "{{count}} selected items can be moved.",
+    "whole_versions": "All historical versions and contents of selected folders will move together.",
+    "permissions": "Inherited access follows the new parent. Custom access is preserved.",
+    "tags": "Source space tags are not transferred.",
+    "retained_fields": "Metadata fields preserved: {{fields}}",
+    "removed_fields": "Values in these metadata fields will be removed: {{fields}}",
+    "none": "None",
+    "async_notice": "Cross-space moves continue migrating search indexes after acceptance. Acceptance is not completion.",
+    "skip_invalid": "Skip the unavailable items above and move only the valid items.",
+    "unknown_ack": "The submission result is unknown. Retry this same operation before submitting another move.",
+    "completed": "Move completed.",
+    "destination": "Move to: {{destination}}"
   }
 }

@@ -1,6 +1,8 @@
 import { useKnowledgeBatch } from "../hooks/useKnowledgeBatch";
 import { BatchOperationDialog } from "./BatchOperationDialog";
 import { BatchTagDraftDialog } from "./BatchTagDraftDialog";
+import { MoveDialog } from "./MoveDialog";
+import type { MoveSelection } from "@/controllers/API/knowledgeMove";
 import { Button } from "@bisheng/ui";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -349,6 +351,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
   });
   const batch = useKnowledgeBatch(JSON.stringify([...base, parentId, selectedKeys]));
   const [batchTagsOpen, setBatchTagsOpen] = useState(false);
+  const [move, setMove] = useState<{ mode: "move" | "jobs"; items: MoveSelection[] } | null>(null);
   const runBatch = async (
     operation: "download" | "tag" | "retry",
     tag_ids?: number[],
@@ -371,6 +374,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
   const containerActions = container?.epoch === epoch ? container.actions : [];
   return (
     <div className="relative space-y-4">
+      {move && <MoveDialog scope={scope} spaceId={spaceId} parentId={parentId} items={move.items} mode={move.mode} onClose={() => setMove(null)} />}
       {selectionError === epoch && <p role="alert">{t("deletion.reason_no_permission")}</p>}
       <SpaceDirectoryToolbar
         spaceId={spaceId}
@@ -390,6 +394,8 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
           void runBatch("retry");
         }}
         onBatchTag={() => setBatchTagsOpen(true)}
+        onMove={() => setMove({ mode: "move", items: selectedRows.map(item => ({ id: item.id, type: item.file_type === 0 ? "folder" : "file" })) })}
+        onMoveJobs={() => setMove({ mode: "jobs", items: [] })}
         selectedCount={selectedRows.length}
         onDeleteSelected={() => {
           void remove(selectedRows);

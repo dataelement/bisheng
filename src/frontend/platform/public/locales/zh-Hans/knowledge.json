@@ -541,7 +541,9 @@
     "processing_field_string": "文本",
     "processing_field_number": "数字",
     "processing_field_time": "时间",
-    "processing_item_number": "项目 {{number}}"
+    "processing_item_number": "项目 {{number}}",
+    "upload_temporary": "为本次上传使用临时规则",
+    "upload_rules_hint": "默认继承空间规则。这里的修改仅作用于本次新增的文件，重试仍使用该批次规则。音视频和网页导入沿用各自的专用规则。"
   },
   "deletion": {
     "references": "引用来源",
@@ -635,5 +637,27 @@
     "tags_load_failed": "空间标签列表暂不可用，原权限限制仍适用。",
     "invalid_name": "标签名称请遵守原长度限制。",
     "select_first": "请先选择文件或文件夹"
+  },
+  "move": {
+    "title": "移动",
+    "jobs": "移动任务",
+    "current_space": "当前空间",
+    "current_folder": "当前文件夹",
+    "target_space": "目标空间",
+    "search_spaces": "搜索空间",
+    "root": "空间根目录",
+    "choose_folder_hint": "选择空间根目录，或进入文件夹后将其作为目标。",
+    "review": "本次可移动 {{count}} 个选中项。",
+    "whole_versions": "将同时移动所选文件的全部历史版本及所选文件夹内的内容。",
+    "permissions": "继承授权将随新父级变化，自定义授权保持。",
+    "tags": "源空间标签不会带入目标空间。",
+    "retained_fields": "保留的元数据字段：{{fields}}",
+    "removed_fields": "移入目标空间后将清除这些元数据字段的值：{{fields}}",
+    "none": "无",
+    "async_notice": "跨空间移动确认后仍需迁移检索索引；任务完成前不会显示为全部完成。",
+    "skip_invalid": "我确认跳过上述不可执行项，仅移动有效项。",
+    "unknown_ack": "暂时无法确认提交结果。请重试同一次操作，避免重复提交新的移动。",
+    "completed": "移动已完成。",
+    "destination": "移动到：{{destination}}"
   }
 }

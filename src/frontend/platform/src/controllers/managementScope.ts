@@ -83,6 +83,7 @@ export function requiresManagementScope(method: string, raw: string): boolean {
       /^\/api\/v1\/knowledge\/space\/[^/]+\/(?:files\/references|files\/delete\/(?:inspect|precheck)|delete\/precheck|clear\/precheck|deletion\/confirm)$/,
     ],
     [["PUT"], /^\/api\/v1\/knowledge\/space\/[^/]+\/processing-settings$/],
+    [["POST"], /^\/api\/v1\/knowledge\/space\/[^/]+\/files\/move\/(?:precheck|confirm)$/],
     [
       ["POST"],
       /^\/api\/v1\/knowledge\/space\/[^/]+\/processing-jobs(?:\/precheck|\/[^/]+\/retry)?$/,

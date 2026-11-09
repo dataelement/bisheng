@@ -310,6 +310,10 @@ async def certify_migration(session, *, frozen, proofs):
     await UnificationInventoryRepository().avalidate_global_orphans(session)
     await UnificationInventoryRepository().avalidate_registered_source_tenants(session)
     context.check()
+    from bisheng.knowledge.domain.repositories.unification_task_repository import UnificationTaskRepository
+
+    await UnificationTaskRepository().avalidate_migration_idle(session)
+    context.check()
     epoch = await repository.aallocate_epoch(session)
     tenants = await repository.aload_tenants(session)
     if tenants != frozen.tenant_ids or set(proofs) != set(tenants):

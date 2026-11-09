@@ -2,6 +2,7 @@ import axios from "@/controllers/request";
 import type {
   KnowledgeSpaceChild,
   ProcessingOverrides,
+  ProcessingSettingsRead,
 } from "./knowledgeSpace";
 
 export interface SpaceUploadFile {
@@ -55,5 +56,22 @@ export async function registerSpaceFiles(
   );
 }
 
-export const knowledgeUploadsApi = { uploadSpaceFile, registerSpaceFiles };
+export async function getUploadSettings(
+  spaceId: number,
+  parentId?: number | null,
+  signal?: AbortSignal,
+): Promise<ProcessingSettingsRead> {
+  requireId(spaceId);
+  if (parentId != null) requireId(parentId);
+  return axios.get(`/api/v1/knowledge/space/${spaceId}/files/upload-settings`, {
+    params: parentId == null ? {} : { parent_id: parentId },
+    signal,
+  });
+}
+
+export const knowledgeUploadsApi = {
+  uploadSpaceFile,
+  registerSpaceFiles,
+  getUploadSettings,
+};
 export type KnowledgeUploadsApi = typeof knowledgeUploadsApi;

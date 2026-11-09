@@ -535,7 +535,9 @@
     "processing_field_string": "テキスト",
     "processing_field_number": "数値",
     "processing_field_time": "日時",
-    "processing_item_number": "項目 {{number}}"
+    "processing_item_number": "項目 {{number}}",
+    "upload_temporary": "今回のアップロードに一時的なルールを使う",
+    "upload_rules_hint": "既定ではスペースのルールを継承します。ここでの変更は今回追加するファイルにのみ適用され、再試行でも同じルールを使います。音声・動画・Webの取り込みには専用のルールを使います。"
   },
   "deletion": {
     "references": "参照元",
@@ -629,5 +631,27 @@
     "tags_load_failed": "スペースのタグ一覧が利用できません。元の権限制限が適用されます。",
     "invalid_name": "元の文字数制限内でタグ名を入力してください。",
     "select_first": "ファイルまたはフォルダーを選択してください"
+  },
+  "move": {
+    "title": "移動",
+    "jobs": "移動タスク",
+    "current_space": "現在のスペース",
+    "current_folder": "現在のフォルダー",
+    "target_space": "移動先スペース",
+    "search_spaces": "スペースを検索",
+    "root": "スペースのルート",
+    "choose_folder_hint": "スペースのルート、またはフォルダーを開いて移動先を選択してください。",
+    "review": "選択した {{count}} 件を移動できます。",
+    "whole_versions": "すべての履歴バージョンと選択したフォルダーの内容をまとめて移動します。",
+    "permissions": "継承された権限は移動先の親に従い、カスタム権限は保持されます。",
+    "tags": "元のスペースのタグは移動先に引き継がれません。",
+    "retained_fields": "保持するメタデータ項目：{{fields}}",
+    "removed_fields": "次のメタデータ項目の値を削除します：{{fields}}",
+    "none": "なし",
+    "async_notice": "スペース間の移動では受付後も検索インデックスの移行が続きます。受付は完了を意味しません。",
+    "skip_invalid": "実行できない項目をスキップし、有効な項目のみ移動することを確認します。",
+    "unknown_ack": "送信結果を確認できません。同じ操作を再試行してから新しい移動を行ってください。",
+    "completed": "移動が完了しました。",
+    "destination": "移動先：{{destination}}"
   }
 }

@@ -564,8 +564,14 @@ class UnificationSourceInventory:
         current()
         tenant, index, knowledge = context.tenant_id, context.name_index, context.knowledge_rows
         cache = ({}, {}, set(), {})
+        physical_roots = set()
 
         async def prepared(record):
+            if isinstance(record, (RootInventoryRecord, RetiredInventoryRecord)):
+                physical_roots.add(record.root_key)
+            elif isinstance(record, SourceInventoryRecord):
+                key = record.source_key
+                physical_roots.add(SourceRootKey(key.tenant_id, key.source_type, key.source_id))
             if isinstance(record, RootInventoryRecord) and record.retained_version_count == 0:
                 from bisheng.knowledge.application.unification_reference_state import parse_root_index, sql_value
 
@@ -602,6 +608,34 @@ class UnificationSourceInventory:
             async for record in self._configured(session, tenant, knowledge, cache):
                 current()
                 yield await prepared(record)
+            from bisheng.knowledge.application.unification_reference_state import (
+                PHYSICAL_ROOT_ABSENT,
+                absent_root_digest,
+                inactive_index_state,
+            )
+
+            after = None
+            while True:
+                keys = await self.original_state.repository.apage_index_roots(session, after_key=after)
+                current()
+                candidates = tuple(key for key in keys if key not in physical_roots)
+                if candidates:
+                    absent = await self.repository.ainspect_hard_deleted_roots(session, root_keys=candidates)
+                    current()
+                    if absent != frozenset(candidates):
+                        _blocked("unknown_index_root")
+                    original = await self.original_state.repository.aload_empty_index_candidates(
+                        session, root_keys=candidates
+                    )
+                    current()
+                    for key in candidates:
+                        heads, count = original[key]
+                        state = inactive_index_state(key, heads, count)
+                        checksum = absent_root_digest(key)
+                        yield RetiredInventoryRecord(key, None, PHYSICAL_ROOT_ABSENT, checksum, checksum, state)
+                if len(keys) < 200:
+                    break
+                after = keys[-1]
             current()
         except (TypeError, ValueError, KeyError) as error:
             raise KnowledgeOperationPlanConflictError(reason="unification_sources_malformed_configuration") from error
