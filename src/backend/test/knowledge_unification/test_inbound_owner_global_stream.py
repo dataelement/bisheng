@@ -217,3 +217,54 @@ async def test_global_partial_or_cancel_never_gets_final_scope_validation(monkey
                 with pytest.raises(asyncio.CancelledError):
                     await task
             assert validations == [401] and len(checks) == 1
+
+
+async def test_global_captures_buffered_ids_and_seek_before_yield_without_autoflush(monkeypatch):
+    async with native(401) as (session, repository, scope, _):
+        pending = SourceSet(
+            tenant_id=101,
+            source_type="assistant",
+            source_id="pending",
+            source_version="current",
+            source_revision=1,
+            extractor_version="native",
+            digest="b" * 64,
+            ready=True,
+            effective=True,
+        )
+        session.add(pending)
+        stream = repository.aiter_inbound_for_owner_pages(session, scope, limit=37, global_id_order=True)
+        with observe(session, repository, monkeypatch) as (sql, validations, _):
+            first = await anext(stream)
+            assert [row.id for row in first] == list(range(1, 38))
+            # The remaining buffered page has IDs beyond this caller-owned
+            # row. A later SQL must seek its captured ID, never this new value.
+            first[-1].id = 999999
+            remaining = [row.id async for page in stream for row in page]
+            assert remaining == list(range(38, 402))
+        assert pending in session.new and pending.id is None and first[-1] in session.dirty
+        assert validations == [401, 401]
+        assert all(query.lstrip().upper().startswith("SELECT") for query, _ in sql)
+
+
+async def test_cancel_during_native_prefetch_never_validates_completion_or_commits(monkeypatch):
+    async with native(401) as (session, repository, scope, _):
+        execute, entered, hold = session.execute, asyncio.Event(), asyncio.Event()
+
+        async def blocked(*args, **kwargs):
+            result = await execute(*args, **kwargs)
+            entered.set()
+            await hold.wait()
+            return result
+
+        monkeypatch.setattr(session, "execute", blocked)
+        stream = repository.aiter_inbound_for_owner_pages(session, scope, global_id_order=True)
+        with observe(session, repository, monkeypatch) as (_, validations, checks):
+            task = asyncio.create_task(anext(stream))
+            await entered.wait()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            await stream.aclose()
+            assert validations == [401] and len(checks) == 1
+            scope.transaction.assert_current(session)

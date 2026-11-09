@@ -370,12 +370,12 @@ def binding(ident, *, slot="same"):
 async def test_v2_digest_rejects_invalid_or_nonmonotonic_physical_ids(impact, monkeypatch, ids):
     _, service, _ = impact
     metadata(service)
-    pages = iter((tuple(binding(i) for i in ids), ()))
 
-    async def page(*args, **kwargs):
-        return next(pages)
+    async def pages(*args, global_id_order=False, **kwargs):
+        assert global_id_order is True
+        yield tuple(binding(i) for i in ids)
 
-    monkeypatch.setattr(service.runtime.repository, "alist_inbound_for_owner_page", page)
+    monkeypatch.setattr(service.runtime.repository, "aiter_inbound_for_owner_pages", pages)
     with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
         await first(impact, user)
 
@@ -385,11 +385,12 @@ async def test_100001_slots_stream_complete_digest_without_hash_list_peak(impact
     metadata(service)
     count = 100001
 
-    async def page(active, scope, *, after_id=None):
-        start = (after_id or 0) + 1
-        return tuple(binding(i, slot=str(i)) for i in range(start, min(start + 200, count + 1)))
+    async def pages(active, scope, *, global_id_order=False):
+        assert global_id_order is True
+        for start in range(1, count + 1, 200):
+            yield tuple(binding(i, slot=str(i)) for i in range(start, min(start + 200, count + 1)))
 
-    monkeypatch.setattr(service.runtime.repository, "alist_inbound_for_owner_page", page)
+    monkeypatch.setattr(service.runtime.repository, "aiter_inbound_for_owner_pages", pages)
     expected = hashlib.sha256(b"f118-model-inbound-v2\0")
     for i in range(1, count + 1):
         expected.update(i.to_bytes(8, "big"))

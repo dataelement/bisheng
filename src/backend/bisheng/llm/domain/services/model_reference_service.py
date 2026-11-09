@@ -175,26 +175,24 @@ class ModelReferenceService:
         owners = {receipt.target.key: receipt.target.target_tenant_id for receipt in receipts}
         sources, slots, observed_tenants = {}, dict.fromkeys(SourceType, 0), set()
         digest, cursor = hashlib.sha256(b"f118-model-inbound-v2\0"), None
-        while scope is not None:
-            page = await runtime.repository.alist_inbound_for_owner_page(session, scope, after_id=cursor)
-            if not page:
-                break
-            for row in page:
-                if type(row.id) is not int or not 0 < row.id < 2**64 or (cursor is not None and row.id <= cursor):
-                    raise ReferenceCoverageNotReadyError(reason="reference_inbound_order_invalid")
-                if (
-                    row.target_tenant_id != owners[TargetKey(row.target_type, row.target_id)]
-                    or row.target_space_id is not None
-                    or row.legacy_invalid_reason is not None
-                ):
-                    raise ReferenceCoverageNotReadyError(reason="reference_inbound_target_inconsistent")
-                key = SourceKey(row.tenant_id, row.source_type, row.source_id, row.source_version)
-                sources[key] = sources.get(key, 0) + 1
-                slots[key.source_type] += 1
-                observed_tenants.add(row.tenant_id)
-                digest.update(row.id.to_bytes(8, "big"))
-                digest.update(_binding_digest(row))
-                cursor = row.id
+        if scope is not None:
+            async for page in runtime.repository.aiter_inbound_for_owner_pages(session, scope, global_id_order=True):
+                for row in page:
+                    if type(row.id) is not int or not 0 < row.id < 2**64 or (cursor is not None and row.id <= cursor):
+                        raise ReferenceCoverageNotReadyError(reason="reference_inbound_order_invalid")
+                    if (
+                        row.target_tenant_id != owners[TargetKey(row.target_type, row.target_id)]
+                        or row.target_space_id is not None
+                        or row.legacy_invalid_reason is not None
+                    ):
+                        raise ReferenceCoverageNotReadyError(reason="reference_inbound_target_inconsistent")
+                    key = SourceKey(row.tenant_id, row.source_type, row.source_id, row.source_version)
+                    sources[key] = sources.get(key, 0) + 1
+                    slots[key.source_type] += 1
+                    observed_tenants.add(row.tenant_id)
+                    digest.update(row.id.to_bytes(8, "big"))
+                    digest.update(_binding_digest(row))
+                    cursor = row.id
         return {
             "original": original,
             "stable": stable,
