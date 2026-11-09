@@ -1799,3 +1799,6 @@ HTTP部署兼容补充：本次新移动/处理确认与重试键不调用仅sec
 
 
 元数据值兼容补充：实际v2依赖装配原KnowledgeIndexEditApplication；SPACE批量add/patch/delete先完整校验请求、归属、schema和原容器edit，关闭只读SQL后逐物理File沿同writer索引ACK→SQL。add不覆盖现字段，patch不创建缺失字段且保原字段时间，delete只移指定字段；未修改字段及web原对象/URL字段保持。重复File输入先按原顺序合成最终值，仅一次真实索引写；不承诺跨文件外部索引分布式原子性。已完成项仍原逐File语义，不新增Job/批量平台。单modify仍原replace语义，NORMAL/QA原路径保持；未装writer的SPACE入口拒绝，不能落旧SQL先写路径。定点原生15项覆盖真实依赖、历史版本、3操作及索引失败不提交、后项非法不提前写、重复/跨空间边界，非整体回归结论。
+
+
+历史检索语义补充：原workflow knowledge分支check_auth关闭时保持原关闭资源鉴权、runtime user构建向量的语义，迁移后只补SPACE真实成功主版本的业务资格过滤；打开时复用F029 visible公开过滤。不能通过复用literal space helper切换成配置者，也不能把原全局MultiRetriever→单次RRF/rerank/max_content变成逐空间融合后拼接。仅实际SPACE3的原native store使用窄只读forwarding适配，native prefilter与score-pair postfilter后仍入原全局融合；原0/1及literal space已有toggle语义不动。Workstation原逐KB检索使用原login_user并复用现SPACE helper。无metadata匹配的原(None,None)须skip，不能变成无条件检索。真实Root分类仅exact≤200的id/type标量批，不扫全资源JSON；原source/model运行准入不绕过。
