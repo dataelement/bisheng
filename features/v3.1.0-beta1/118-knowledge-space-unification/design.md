@@ -832,7 +832,7 @@ Skill的可见性不能兼任全局enabled状态：真实使用/选择边界avai
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史956编号：839已完成/历史交付、115当前待办、2外移；原137队列已完成38项、剩99项，另16张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；历史960编号：851已完成/历史交付、107当前待办、2外移；原137队列已完成38项、剩99项，另8张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -886,4 +886,4 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 移动任务主体前置已合入：原FrozenReference解析和两Model可空标量只记录主体事实，审计用户不代替S/D主体；原四kind允许NULL。中性DDL f118_move_actor_subject（parent f118_finalize_retry）仅四nullable列与一Retry索引，无JSON解析/回填。固定211663本地完整选集4890 passed/7旧占位skip，独立TCP mock39绿；实际move闭集/Owner/worker仍待装配。独立109克隆MySQL的Folder/Web八组件例全部通过，11表原数据摘要与容器配置不变、自增仍推进；运输隔离且未测JWT/HTTP/queue，不计正式升级或E2E。固定源码、摘要及边界见[W6记录](./wave6-implementation-review.md)。
 
 
-目录移动覆盖历史File时按AC19迁整Doc：原Doc逻辑路径在选中目录内则保原relative；显式File选择沿原目的目录。仅逻辑路径在外时，从实际被所选目录覆盖的版本路径一次汇总目的归属，唯一候选承载全部历史；多个不同候选须在预检明确冲突，不能任取一条。原Web覆写合法产生历史File与主版本不同目录，不能据此把历史漏出闭集；详见W6§83，当前修正待实施/复验。
+目录移动覆盖历史File时按AC19迁整Doc：原Doc逻辑路径在选中目录内则保原relative；显式File选择沿原目的目录。仅逻辑路径在外时，从实际被所选目录覆盖的版本路径一次汇总目的归属，唯一候选承载全部历史；多个不同候选须在预检明确冲突，不能任取一条。原Web覆写合法产生历史File与主版本不同目录，不能据此把历史漏出闭集；详见W6§83，已完成仓储修正和原独立反例复验；实际Owner/worker/入口仍待装配。

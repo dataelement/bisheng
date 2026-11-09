@@ -248,10 +248,11 @@ class MoveScopeRepository(MoveRowRepository):
                 row = ancestor_map.get(key)
                 if row is None or row["file_type"] != 0 or row["knowledge_id"] != space or row["tenant_id"] != tenant:
                     conflict("move_parent_chain_invalid")
+                ancestor_path = path_ids(row["file_level_path"])
                 if any(
-                    ancestor_map.get(parent, {}).get("file_level_path")
-                    != ("/" + "/".join(map(str, path_ids(row["file_level_path"])[:index])) if index else "")
-                    for index, parent in enumerate(path_ids(row["file_level_path"]))
+                    parent not in ancestor_map
+                    or path_ids(ancestor_map[parent]["file_level_path"]) != ancestor_path[:index]
+                    for index, parent in enumerate(ancestor_path)
                 ):
                     conflict("move_parent_path_invalid")
         if for_update:
@@ -265,13 +266,29 @@ class MoveScopeRepository(MoveRowRepository):
                     conflict("move_locked_scope_changed")
         file_roots = {by_file[root.id]["document_id"]: root for root in roots if root.type == "file"}
 
-        def moved_path(path, doc_id=None):
+        def covered_path(path):
             old = path_ids(path)
             match = next((index for index, key in enumerate(old) if key in folders), None)
             if match is not None:
                 return (*destination_path, *old[match:]), folders[old[match]]
+
+        history_paths = {}
+        for version in versions.values():
+            candidate = covered_path(physical[version["knowledge_file_id"]]["file_level_path"])
+            if candidate is not None:
+                history_paths.setdefault(version["document_id"], set()).add(candidate)
+
+        def moved_path(path, doc_id=None):
+            covered = covered_path(path)
+            if covered is not None:
+                return covered
             if doc_id in file_roots:
                 return destination_path, file_roots[doc_id]
+            candidates = history_paths.get(doc_id, ())
+            if len(candidates) == 1:
+                return next(iter(candidates))
+            if candidates:
+                conflict("move_document_destination_ambiguous")
             conflict("move_document_outside_selection")
 
         doc_after, owners = {}, {}
