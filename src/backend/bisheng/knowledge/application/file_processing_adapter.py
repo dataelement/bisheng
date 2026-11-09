@@ -25,6 +25,10 @@ _HIERARCHICAL_EXTENSIONS = {"md", "doc", "docx"}
 def capture_legacy_processing_overrides(request: FileProcessBase) -> LegacyProcessingOverrides:
     raw = deepcopy(request._processing_explicit_input)
     document = {key: deepcopy(getattr(request, key)) for key in raw if key in DocumentProcessingRule.model_fields}
+    if "separator" in raw and not raw.get("separator_rule"):
+        # The old parser derives a matching rule array from explicit separators.
+        # Keep that dependent value without making unrelated defaults explicit.
+        document["separator_rule"] = deepcopy(request.separator_rule)
     excel = raw.get("excel_rule")
     if isinstance(excel, ExcelRule):
         excel = excel._processing_explicit_input
