@@ -48,7 +48,7 @@ def processing_actor_subject(
     existing capture/restore path; these facts do not authorize an operation.
     """
     if (
-        required_action not in {"move", "delete", "upload_file"}
+        required_action not in {"move", "delete", "upload_file", "rename", "download"}
         or not all(_positive_integer(value) for value in (tenant_id, actor_user_id, source_space_id))
         or not isinstance(reference, Mapping)
         or set(reference) != _ORIGIN_FIELDS

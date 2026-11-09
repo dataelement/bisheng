@@ -54,6 +54,8 @@ vi.mock("@/contexts/locationContext", async () => ({
     },
   }),
 }));
+// The controlled defaults fields do not mount the legacy drag-and-drop strategy.
+vi.mock("@/pages/KnowledgePage/components/FileUploadSplitStrategy", () => ({ default: () => null }));
 vi.mock("@/pages/KnowledgePage/components/FileUploadStep1", () => ({
   default: () => null,
 }));

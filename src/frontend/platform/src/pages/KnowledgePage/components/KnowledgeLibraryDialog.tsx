@@ -75,7 +75,7 @@ function positiveId(value: unknown): number | null {
   const id = Number(value);
   return Number.isSafeInteger(id) && String(id) === value ? id : null;
 }
-function embeddingGroups(raw: unknown): EmbeddingGroup[] {
+export function embeddingGroups(raw: unknown): EmbeddingGroup[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((server) => {
     if (
@@ -148,7 +148,7 @@ function FormFrame({
   return (
     <DialogContent
       close={!busy}
-      className="sm:max-w-3xl max-h-[90vh] overflow-y-auto"
+      className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
       onEscapeKeyDown={(event) => {
         if (busy) event.preventDefault();
       }}

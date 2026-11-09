@@ -291,6 +291,8 @@ class ProcessingJobRepository:
             job = await self._job(session, job_id, lock=True, include_manifest=False)
             if job.kind == "move_index":
                 raise KnowledgeOperationPlanConflictError(reason="move_execution_explicit_path_required")
+            if job.kind == "space_copy":
+                raise KnowledgeOperationPlanConflictError(reason="copy_execution_explicit_path_required")
         return job, current
 
     def _move_ready(self):
@@ -378,7 +380,7 @@ class ProcessingJobRepository:
         statement = select(KnowledgeProcessingJob).where(KnowledgeProcessingJob.id == job_id)
         if not include_manifest:
             cached = session.identity_map.get(inspect(KnowledgeProcessingJob).identity_key_from_primary_key((job_id,)))
-            if cached is not None and inspect(cached).dict.get("kind") in {"metadata_schema_change", "move_index"}:
+            if cached is not None and inspect(cached).dict.get("kind") in {"metadata_schema_change", "move_index", "space_copy"}:
                 # A prior query may have loaded the manifest in this Session.
                 # Expire only that immutable execution-irrelevant attribute so
                 # the explicit raiseload option cannot reuse its cached JSON.
@@ -391,7 +393,7 @@ class ProcessingJobRepository:
             row = (await session.exec(statement)).one_or_none()
         if row is None or row.tenant_id != tenant_id:
             raise KnowledgeProcessingJobNotFoundError()
-        if not include_manifest and row.kind not in {"metadata_schema_change", "move_index"}:
+        if not include_manifest and row.kind not in {"metadata_schema_change", "move_index", "space_copy"}:
             # Other kinds retain their complete historical manifest. Metadata
             # and move execute from their explicitly bounded representations.
             with strict_tenant_filter():
@@ -873,7 +875,7 @@ class ProcessingJobRepository:
             KnowledgeProcessingItem.job_id == job.id,
             KnowledgeProcessingItem.state.in_(["pending", "running"]),
         )
-        if job.kind in {"metadata_schema_change", "move_index"}:
+        if job.kind in {"metadata_schema_change", "move_index", "space_copy"}:
             query = query.where(
                 or_(
                     KnowledgeProcessingItem.state == "pending",
@@ -1015,7 +1017,7 @@ class ProcessingJobRepository:
         counts = await self._state_counts(session, job.id)
         total = sum(counts.values())
         expected_count = (
-            job.total_count if job.kind in {"metadata_schema_change", "move_index"} else len(job.scope_manifest)
+            job.total_count if job.kind in {"metadata_schema_change", "move_index", "space_copy"} else len(job.scope_manifest)
         )
         if total != expected_count:
             raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
@@ -1053,7 +1055,7 @@ class ProcessingJobRepository:
             if facts is None:
                 raise KnowledgeProcessingJobNotFoundError()
             job = SimpleNamespace(**{**job._mapping, **facts._mapping})
-        if job.kind in {"metadata_schema_change", "move_index"}:
+        if job.kind in {"metadata_schema_change", "move_index", "space_copy"}:
             expected_count = job.total_count
         else:
             with strict_tenant_filter():
@@ -1276,7 +1278,7 @@ class ProcessingJobRepository:
             return job
         else:
             unfinished_query = select(KnowledgeProcessingItem)
-            if job.kind in {"metadata_schema_change", "move_index"}:
+            if job.kind in {"metadata_schema_change", "move_index", "space_copy"}:
                 unfinished_query = unfinished_query.options(
                     defer(KnowledgeProcessingItem.processing_snapshot, raiseload=True)
                 )
@@ -1397,7 +1399,7 @@ class ProcessingJobRepository:
         if move_eligibility is not None and not move_eligibility.retryable:
             raise KnowledgeProcessingJobNotRetryableError()
         retry_query = select(KnowledgeProcessingItem)
-        if job.kind in {"metadata_schema_change", "move_index"}:
+        if job.kind in {"metadata_schema_change", "move_index", "space_copy"}:
             retry_query = retry_query.options(defer(KnowledgeProcessingItem.processing_snapshot, raiseload=True))
         with strict_tenant_filter():
             rows = (

@@ -117,9 +117,12 @@ async def get_knowledge_file_service(
     """DapatkanKnowledgeFileServiceInstance Dependencies"""
     from bisheng.knowledge.domain.services.knowledge_file_service import KnowledgeFileService as _KnowledgeFileService
 
+    from bisheng.knowledge.application.knowledge_index_edit import get_knowledge_index_editor
+
     return _KnowledgeFileService(
         knowledge_repository=knowledge_repository,
         knowledge_file_repository=knowledge_file_repository,
+        metadata_value_writer=get_knowledge_index_editor(),
     )
 
 
@@ -170,6 +173,9 @@ async def get_knowledge_space_service(
     from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
 
     service.deletion_application_factory = get_deletion_application
+    from bisheng.knowledge.application.knowledge_batch import get_batch_application
+
+    service.batch_application_factory = get_batch_application
     return service
 
 

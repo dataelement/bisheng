@@ -41,6 +41,8 @@ from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_s
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_file_service, get_knowledge_service
+from bisheng.knowledge.application.knowledge_batch import get_batch_application
+from bisheng.knowledge.application.knowledge_processing_commands import KnowledgeProcessingCommands
 from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeCreate,
     KnowledgeDao,
@@ -63,6 +65,7 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
     UpdateFileTagsReq,
     UpdateKnowledgeMetadataFieldsReq,
 )
+from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequest
 from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
@@ -285,7 +288,9 @@ async def rebuild_knowledge_file(
 ):
     """Reprocessing Knowledge Base Files"""
 
-    res = await KnowledgeService.rebuild_knowledge_file(request, login_user, req_data)
+    res = await KnowledgeService.rebuild_knowledge_file(
+        request, login_user, req_data, processing_commands=KnowledgeProcessingCommands()
+    )
     return resp_200(res)
 
 
@@ -316,6 +321,23 @@ async def copy_knowledge(
     if not knowledge:
         return KnowledgeNotExistError.return_resp()
 
+    if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+        from uuid import uuid4
+
+        from bisheng.knowledge.application.space_copy import SpaceCopyApplication
+
+        app = SpaceCopyApplication()
+        plan = await app.aprecheck(
+            knowledge_id, name=knowledge_name or f"{knowledge.name} Copy"[:200], identity=login_user
+        )
+        result = await app.aconfirm(
+            knowledge_id,
+            ProcessingCreateRequest(
+                confirmation_id=plan.confirmation_id, plan_digest=plan.plan_digest, idempotency_key=str(uuid4())
+            ),
+            identity=login_user,
+        )
+        return resp_200(result["knowledge"])
     await UserPayload.assert_effective_web_menu_contains(login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
     try:
         await KnowledgeService.permission_service.ensure_knowledge_read_async(
@@ -992,14 +1014,25 @@ def update_knowledge_model(
     *, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: UpdateKnowledgeReq
 ):
     """Save actual model configuration and references before task dispatch."""
-    KnowledgeService.update_knowledge_model(
+    confirmation = (
+        ProcessingCreateRequest(
+            confirmation_id=req_data.confirmation_id,
+            plan_digest=req_data.plan_digest,
+            idempotency_key=req_data.idempotency_key,
+        )
+        if all((req_data.confirmation_id, req_data.plan_digest, req_data.idempotency_key))
+        else None
+    )
+    result = KnowledgeService.update_knowledge_model(
         login_user=login_user,
         knowledge_id=req_data.knowledge_id,
         model_id=req_data.model_id,
         name=req_data.knowledge_name,
         description=req_data.description,
+        confirmation=confirmation,
+        processing_commands=KnowledgeProcessingCommands(),
     )
-    return resp_200()
+    return resp_200(result if confirmation is not None else None)
 
 
 @router.post(
@@ -1008,6 +1041,7 @@ def update_knowledge_model(
 async def batch_download_knowledge_files(
     *,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
+    batch_application=Depends(get_batch_application),
     knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
     file_ids: list[int] = Body(..., embed=True, description="List of file IDs to download"),
 ):
@@ -1023,6 +1057,7 @@ async def batch_download_knowledge_files(
         login_user=login_user,
         knowledge_id=knowledge_id,
         file_ids=file_ids,
+        batch_application=batch_application,
     )
     return resp_200(data={"url": download_url})
 
@@ -1094,9 +1129,12 @@ async def update_file_tags(
 async def batch_add_file_tags(
     *,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
+    batch_application=Depends(get_batch_application),
     req_data: BatchAddFileTagsReq,
 ):
-    await KnowledgeService.batch_add_file_tags(login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids)
+    await KnowledgeService.batch_add_file_tags(
+        login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids, batch_application=batch_application
+    )
     return resp_200()
 
 

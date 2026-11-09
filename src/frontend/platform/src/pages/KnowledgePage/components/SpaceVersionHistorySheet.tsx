@@ -18,6 +18,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { SpaceFileTools } from "./SpaceFileTools";
 import { FILE_STATUSES, StatusIndicator } from "./KnowledgeFileStatus";
 
 interface SpaceVersionHistorySheetProps {
@@ -185,6 +186,12 @@ function HistoryContent({
                         </dd>
                       </div>
                     </dl>
+                    <SpaceFileTools
+                      scope={scope}
+                      spaceId={spaceId}
+                      fileId={version.knowledge_file_id}
+                      status={version.status}
+                    />
                   </li>
                 ))}
               </ol>

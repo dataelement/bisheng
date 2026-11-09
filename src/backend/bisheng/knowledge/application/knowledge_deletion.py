@@ -11,6 +11,7 @@ from bisheng.common.errcode.knowledge import (
     ResourceReferenceConflictError,
     ResourceReferenceInvalidError,
 )
+from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application import deletion_admission as admission
 from bisheng.knowledge.application.direct_delete_reference_query import DirectDeleteReferenceQuery
@@ -176,6 +177,12 @@ class KnowledgeDeletionApplication:
 
         return await precheck_deletion(self, **kwargs)
 
+    async def ainspect_selections(self, *, identity, space_id, selections):
+        reference = await admission.capture(identity, space_id=space_id)
+        async with admission.identity(reference, current=identity) as (actual, _):
+            permitted = await admission.selected_positions(actual, selections)
+            return {"permitted_selection_count": len(permitted)}
+
     async def aordinary_delete(
         self, *, identity, space_id, selections=(), operation="knowledge_file_delete", historical_version_id=None
     ):
@@ -187,6 +194,8 @@ class KnowledgeDeletionApplication:
             historical_version_id=historical_version_id,
         )
         if not review.can_execute or review.invalid_items:
+            if review.invalid_items and all(row.reason == "no_permission" for row in review.invalid_items):
+                raise PermissionDeniedError()
             if any(review.impact["source_counts"].values()) or any(
                 row.reason == "referenced" for row in review.invalid_items
             ):
@@ -354,6 +363,11 @@ class KnowledgeDeletionApplication:
                         return {"job_id": job.id, "state": "succeeded", "accepted": False, "reused": True}
                     await self.execution.arefresh_continuation(session, job_id=job.id, reference=continuation)
             else:
+                if plan.operation == "knowledge_file_delete":
+                    requested = _selections(plan.parameters.get("requested_selections", plan.parameters["selections"]))
+                    expected = tuple(plan.parameters.get("authorized_positions", range(len(requested))))
+                    if await admission.selected_positions(actual, requested) != expected:
+                        raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_permissions_changed")
                 inspection = await self.references.ainspect(
                     identity=actual,
                     space_id=space_id,

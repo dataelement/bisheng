@@ -9,20 +9,22 @@ type ScopedResponse<T> = { headers: Record<string, unknown>; data: Envelope<T> }
 const changed = () => Object.assign(new Error("management_scope_changed"), { status_code: 19704 });
 export async function readDeletionTenant(
   command: DeleteCommand,
-): Promise<{ tenant: string; inspection: ReferenceInspection }> {
+): Promise<{ tenant: string; inspection?: ReferenceInspection }> {
   const response =
     command.kind === "files"
-      ? await request.postResponse<ScopedResponse<ReferenceInspection>>(
-          `/api/v1/knowledge/space/${command.spaceId}/files/references`,
+      ? await request.postResponse<ScopedResponse<{ permitted_selection_count: number }>>(
+          `/api/v1/knowledge/space/${command.spaceId}/files/delete/inspect`,
           { items: command.items },
         )
       : await request.getResponse<ScopedResponse<ReferenceInspection>>(
           `/api/v1/knowledge/space/${command.spaceId}/references`,
         );
-  const inspection = unwrap(response.data);
+  // The read-only action probe carries no dependency data or Plan. A denied
+  // selection must still reach formal batch classification with the same pin.
+  const data = unwrap<ReferenceInspection | { permitted_selection_count: number }>(response.data);
   const tenant = String(response.headers["x-management-tenant"] ?? "");
   if (!/^[1-9][0-9]*$/.test(tenant) || !Number.isSafeInteger(Number(tenant))) throw changed();
-  return { tenant, inspection };
+  return "source_page" in data ? { tenant, inspection: data } : { tenant };
 }
 function scoped<T>(response: ScopedResponse<T>, pin?: string): T {
   if (!pin || String(response.headers["x-management-tenant"] ?? "") !== pin) throw changed();

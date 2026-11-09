@@ -1735,4 +1735,41 @@ space_copy异步Plan.space_id为source、operation_id为原Job.id，真实Job在
 
 整空间正式SQL cutover同时清理原私有tag library和同Root实际channel member，不把共享tag库删掉。新确认入口沿KSS保留原空间删除通知/审计/telemetry及内容chat rehome/更新时间；内部cleanup manifest只传服务端原hook，HTTP仅返回真实job状态，不返回对象key或内部projection/source事实。清空最后准入仍可检查未删除Root的原delete权限；其余投影后恢复依真实当前凭据与原journal/Mode证据，不伪造新权限。通用通知可靠性平台不在本次扩展范围。
 
-两端删除页面由PERM按原T184及原删除卡消费：ordinary/clear无force，整空间force须获取force:true新Plan并重新明确同意该次影响；混合valid/invalid必须明确只执行valid，取消零业务改动。confirm只原三字段，pending/running或清理失败不乐观删行/跳转；未知ACK保同Plan/key，真实succeeded后才原刷新和导航。首次引用inspection与cursor后的SourcePage是不同精确DTO，不能把独立查询的slot_counts拼成删除Plan影响。仅SPACE3目录/空间接新UI，QA与独立Version协议不混用。平台管理scope mapper只纳入新增知识references/deletion URL，维持原真实tenant pin；client沿自身tenant，不新造管理scope。
+两端删除页面由PERM按原T184及原删除卡消费：ordinary/clear无force，整空间force须获取force:true新Plan并重新明确同意该次影响；混合valid/invalid必须明确只执行valid，取消零业务改动。confirm只原三字段，pending/running或清理失败不乐观删行/跳转；未知ACK保同Plan/key，真实succeeded后才原刷新和导航。首次引用inspection与cursor后的SourcePage是不同精确DTO，不能把独立查询的slot_counts拼成删除Plan影响。仅SPACE3目录/空间接新UI，QA与独立Version协议不混用。平台管理scope mapper纳入新增知识references/deletion URL及下述只读动作probe，维持原真实tenant pin；client沿自身tenant，不新造管理scope。
+
+
+2026-11-10补充：POST `/{space}/files/delete/inspect`只读真实选中对象delete动作分类，输出`permitted_selection_count`及原响应tenant头；不读名称/引用、不写Plan、不要求Root.visible，client文件pin取自该probe。正式precheck保留原完整requested_selections及授权位置，先分类再只检查允许范围；无权项仅原提交ID/type/no_permission。全无权仍返回不可执行review，无假Job/闭集。confirm重验原完整授权分类，变动18088重新预检。选择位置frozenset只构建一次，避免每unit重复全批构造。新中性DDL `f118_knowledge_delete_execution` parent=`f118_reference_coverage_epoch`，实际单head，旧Job全部列/数据保持、两新列NULL。
+
+## 134. 其余批量操作与保存引用的边界（2026-11-10 已冻结）
+
+原T085/86、T180/T189覆盖download/tag/retry，复用原OperationPrecheck及300秒Plan，接口为 `/{space}/files/batch/{download|tag|retry}/{inspect|precheck|confirm}`。inspect仅分类/真实tenant pin，不写Plan；precheck固定原完整选择与修订，混合项显式确认有效子集，confirm仅原三字段。响应按原选择逐项succeeded/accepted/skipped/failed和可选下载URL，retry仅真实broker受理报accepted，不造新ProcessingJob或任务平台。原download/rename等动作独立校验，不追加Root.visible；标签真正新建仍原Root.edit，已有标签追加按原rename。新标签及绑定和Plan消费同SQL事务；派发沿原at-least-once语义，未知ACK保原Plan续派，不宣称exactly-once。目录selection为本地选择，不先用visible/my-permissions隐藏无权项；后台分类才是权威。实际下载沿原目录/HTML/七天URL规则，有对象错误明确失败，不静默跳过并消费Plan。
+
+原T185/T186保存引用与普通候选分离：旧知识/模型ID及原类型不因候选缺失被清空、替换或认定已删除，缺候选仅未确认；真实Source详情提供失效原因。新候选SPACE3走visible cursor，QA1独立visible；不再旧type0/use或成员清单并集。查询按身份、当前租户/管理pin隔离，异步迟到不覆盖新上下文。仅显式修改对应槽位才改变其ID，修复一个默认模型不清空其他缺候选模型；纯可见授权沿原Source/assignee版本撤销，不产生伪use动作或新授权管理框架。
+
+
+## 135. 已正常删除业务的迁移索引闭合（2026-11-10 已冻结）
+
+真实原KN/Channel生命周期hard-delete业务行后保留inactive零引用Source索引，不能据此泛化允许孤儿。M2仅为这两个已证业务类型，全球PK确认业务不存在、完整且仅一root_guard+current source、同tenant/type/id及正revision、原extractor/digest版本、guard false/false、source ready=true/effective=false、两个原空集合digest、BRR精确零时，冻结内部physical_root_absent清理分类及完整原before。这不是产品退役功能，不造Root/Member/Target/tombstone，也不猜未知业务owner。外tenant同ID、active、半套、残BRR及未知版本仍阻断；每批key≤200，不按Root乘全索引扫描。
+
+M4只在重验原同before和真实Root absence后，复用原retired checkpoint精确清除这对零引用索引；重放只接受已签空after，proof实体root_count不含这种不存在业务行。原strict index universe和实际SQL退役规则保持，未知extra不自动清理。
+
+新删除Job若operation_type非NULL且business_phase=prepared，尚未完成业务切换，不得进入新的迁移/epoch后再假定原删除可续跑。原MIG-only实际SQL guard在fresh/既有frozen M2、M3首写前和M4签证前复用；半NULL、未知新phase同样拒，旧(NULL,NULL)清理任务及finalized后只剩对象/索引清理的任务沿原分类保留。不自动取消或重绑epoch，不探测服务/进程；运维先沿原业务计划完成或正式处置，再执行正式冻结。
+
+原T222/T223同时收口知识业务内的use消费：旧HTTP/action=use和公开兼容方法名保留，入口归一为visible；RAG实际请求/筛选visible结果，不依赖use结果key。其他动作、类型、数据scope及成功主版本资格不变，不借此改分页/缓存框架。
+
+
+## 136. 实际上传页的临时规则接线（2026-11-10 已冻结）
+
+原T179实际SPACE上传页使用SpaceFileUploadPanel，旧FileUploadStep2未挂载，不能以旧组件存在视为已接。新增只读GET `/{space_id}/files/upload-settings?parent_id=...`，调用原KSS验证实际Root/Folder归属和对应upload_file动作；folder授权不增加Root.visible/edit。返回原ProcessingSettingsRead，仅规则/配置版本，不返回名称、模型或文件列表；不写默认或历史文件。现管理默认GET仍原edit规则，不改其权限。
+
+平台复用原ProcessingDefaultsEditor读取effective_defaults并保document/table两草稿；默认继承时register不附overrides，显式临时规则仅随本次上传传原ProcessingOverrides。每次drop验证并深拷贝到真实上传job，后续编辑或重试不得改变已受理批次。音视频及网页专用规则不传普通覆盖，保既有支持类型限制；不PUT空间默认、不自动重处理。保原取消/失败与真实处理中状态，actual upload_file依然服务端最终校验。不扩前台高级配置，不新增上传队列或处理平台。
+
+
+批量集成补充：retry在原实际Root读取及确认锁后复用require_space_processing_idle，REBUILDING或非空model_transition时不另派原文件解析；download仍可读取，tag不增加这项限制。此为本次普通重试与重建的顺序冲突校验，不扩展worker在途IO一致性。新batch path的space_id统一正int64。
+
+
+## 137. 客户端可见空间候选的实际消费面（2026-11-10 已冻结）
+
+原T188覆盖日常ChatKnowledge、KnowledgeSpaceDialog及任务模式KnowledgeSpaceSelect。当前三者的mine/joined/department并集只能证明成员分类，不是完整visible候选。改用实际GET `/api/v1/knowledge/space/list?cursor&page_size&keyword`，原envelope.data为`{data,page_size,has_more,next_cursor}`，page_size≤200；有界候选扫描允许空页且has_more，不能据空data误判终态。客户端独立API/helper和useInfiniteQuery复用真实cursor/search，按当前身份/租户及实际凭据上下文隔离，不复用成员清单缓存或首次全量加载；每个实际入口有下一页、错误和重试。
+
+保存selection不因候选缺失自动清空、替换或认定已删除，现runtime visible校验仍保留；QA/org独立路径保持。首页/sidebar已有成员分类是另一功能，不为选择器接线重写分类或扩全平台聚合。前台仍无后台高级配置和新增复制入口。

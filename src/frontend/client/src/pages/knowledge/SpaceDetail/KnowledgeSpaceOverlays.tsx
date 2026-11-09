@@ -1,3 +1,4 @@
+import { FileType } from "~/api/knowledge";
 import { getFileDownloadApi } from "~/api/knowledge";
 import {
   Dialog,
@@ -69,14 +70,27 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
         isOpen={!!editingTagsFileId || isBatchTagging}
         onClose={handleCloseEditTags}
         onSaved={handleTagsSaved}
+        onBatchSaved={model.handleBatchTagsSaved}
+        availableTags={displayFiles
+          .filter((file) => selectedFiles.has(file.id))
+          .flatMap((file) => file.tags ?? [])}
         spaceId={space.id}
         fileId={isBatchTagging ? null : editingTagsFileId}
         fileIds={isBatchTagging ? Array.from(selectedFiles) : undefined}
+        batchItems={
+          isBatchTagging
+            ? displayFiles
+                .filter((file) => selectedFiles.has(file.id))
+                .map((file) => ({
+                  id: Number(file.id),
+                  type: file.type === FileType.FOLDER ? ("folder" as const) : ("file" as const),
+                  name: file.name,
+                }))
+            : undefined
+        }
         initialTagIds={
           editingTagsFileId && !isBatchTagging
-            ? displayFiles
-                .find((f) => f.id === editingTagsFileId)
-                ?.tags?.map((t) => t.id) || []
+            ? displayFiles.find((f) => f.id === editingTagsFileId)?.tags?.map((t) => t.id) || []
             : []
         }
       />
@@ -90,9 +104,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
         >
           <DialogContent className="max-w-[520px]">
             <DialogHeader>
-              <DialogTitle>
-                {localize("com_knowledge.web_link_import_title")}
-              </DialogTitle>
+              <DialogTitle>{localize("com_knowledge.web_link_import_title")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -115,9 +127,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
                   id="knowledge-web-link-title"
                   value={webLinkTitle}
                   onChange={(e) => setWebLinkTitle(e.target.value)}
-                  placeholder={localize(
-                    "com_knowledge.web_link_title_placeholder",
-                  )}
+                  placeholder={localize("com_knowledge.web_link_title_placeholder")}
                   disabled={webLinkSubmitting}
                 />
               </div>

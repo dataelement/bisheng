@@ -25,6 +25,19 @@ class SpaceDeletePrecheckRequest(BaseModel):
     force: bool = Field(default=False, strict=True)
 
 
+@router.post("/{space_id}/files/delete/inspect")
+async def inspect_selected_actions(
+    change: FileDeletePrecheckRequest,
+    space_id: int = Path(gt=0, le=2**63 - 1),
+    identity: UserPayload = Depends(UserPayload.get_login_user),
+    application: KnowledgeDeletionApplication = Depends(get_deletion_application),
+):
+    selections = tuple(
+        DeleteSelection("folder" if row.type == "folder" else "knowledge_file", row.id) for row in change.items
+    )
+    return resp_200(await application.ainspect_selections(identity=identity, space_id=space_id, selections=selections))
+
+
 @router.post("/{space_id}/files/delete/precheck")
 async def precheck_files(
     change: FileDeletePrecheckRequest,

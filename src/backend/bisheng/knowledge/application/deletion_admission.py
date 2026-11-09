@@ -2,6 +2,7 @@
 
 from contextlib import asynccontextmanager
 
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_current_tenant_id, is_tenant_filter_bypassed
 from bisheng.knowledge.application.processing_identity import (
@@ -10,9 +11,11 @@ from bisheng.knowledge.application.processing_identity import (
     capture_processing_actor,
     restore_processing_actor,
 )
+from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
 from bisheng.knowledge.domain.schemas.processing_actor_subject import processing_actor_subject
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.open_api.application.knowledge_processing_identity import OPEN_API_SCOPE_CODES, is_scope_granted
+from bisheng.permission.application.business_authorization import batch_check_business_actions
 from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL, get_data_scope_resolver
 from bisheng.permission.application.identity import (
     get_current_permission_actor,
@@ -43,6 +46,25 @@ async def capture(identity, *, space_id):
     return (
         await capture_processing_actor(identity, space_id=space_id, required_action="delete", entry_kind=entry)
     ).reference
+
+
+async def selected_positions(identity, selections):
+    """Classify selected actions without acquiring names or reference metadata."""
+    if type(selections) is not tuple or any(type(row) is not DeleteSelection for row in selections):
+        raise ResourceReferenceInvalidError(reason="knowledge_delete_selection_invalid")
+    actor, owner = get_current_permission_actor(), tenant()
+    permitted = set()
+    for kind in ("folder", "knowledge_file"):
+        ids = sorted({row.resource_id for row in selections if row.resource_type == kind})
+        for offset in range(0, len(ids), 200):
+            batch = tuple(ids[offset : offset + 200])
+            actions = await batch_check_business_actions(
+                identity, resource_type=kind, resource_ids=batch, actions=("delete",)
+            )
+            if tenant() != owner or get_current_permission_actor() is not actor:
+                raise ResourceReferenceInvalidError(reason="knowledge_delete_actor_changed")
+            permitted.update((kind, ident) for ident in batch if "delete" in actions.get(str(ident), ()))
+    return tuple(index for index, row in enumerate(selections) if (row.resource_type, row.resource_id) in permitted)
 
 
 @asynccontextmanager
