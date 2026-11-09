@@ -52,10 +52,16 @@ async def test_global_super_is_unrestricted(identity):
     assert await AuditDeptScopeService.resolve(_user(global_super=True), None) == AuditDeptScope.unlimited()
 
 
-async def test_tenant_admin_who_also_manages_a_department_is_unrestricted(identity):
+async def test_tenant_admin_is_limited_to_the_tenant_department_tree(identity, monkeypatch):
     identity.tenant_admin = True
     identity.admin_departments = [_dept(2, "/1/2/")]
-    assert await AuditDeptScopeService.resolve(_user(), 1) == AuditDeptScope.unlimited()
+
+    async def _roots(tenant_scope):
+        assert tenant_scope == 1
+        return ["/1/"]
+
+    monkeypatch.setattr(module.AuditDeptRepository, "root_paths", _roots)
+    assert await AuditDeptScopeService.resolve(_user(), 1) == AuditDeptScope.restricted(admin_paths=["/1/"])
 
 
 async def test_department_admin_gets_union_of_paths_in_audit_tenant(identity):

@@ -200,14 +200,15 @@ class TestResolveScope:
         assert scope.dept_scope == AuditDeptScope.restricted(exact_ids=[3])
         assert state.resolved == [1]
 
-    async def test_tenant_admin_unlimited(self, env):
+    async def test_tenant_admin_gets_dept_scope(self, env):
         from bisheng.core.context.tenant import tenant_execution_scope
 
         module, state, user = env
         state.tenant_admin = True
         with tenant_execution_scope(1):
             scope = await module.resolve_scope(user)
-        assert scope.dept_scope is None and state.resolved == []
+        assert scope.dept_scope == AuditDeptScope.restricted(exact_ids=[3])
+        assert state.resolved == [1]
 
     async def test_per_app_grant_unlimited(self, env):
         from bisheng.core.context.tenant import tenant_execution_scope

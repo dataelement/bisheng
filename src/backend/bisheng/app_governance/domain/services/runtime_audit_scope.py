@@ -31,12 +31,13 @@ async def resolve_scope(user, tenant_id=None, *, app_id=None):
     dept_scope = None
     if app_id:
         # The per-app audit_read grant is its own authority; department scope
-        # applies to the audit-menu entry only (F003 decision 10).
+        # applies to the audit-menu entry, including a tenant administrator.
         await authorize_app(fresh, app_id, "audit_read")
         apps = (app_id,)
     else:
-        if not fresh.is_global_super and not await is_tenant_admin(fresh.user_id, effective):
-            await UserPayload.assert_effective_web_menu_contains(fresh.user_id, "log")
+        if not fresh.is_global_super:
+            if not await is_tenant_admin(fresh.user_id, effective):
+                await UserPayload.assert_effective_web_menu_contains(fresh.user_id, "log")
             try:
                 dept_scope = await AuditDeptScopeService.resolve(fresh, effective)
             except UnAuthorizedError as exc:
