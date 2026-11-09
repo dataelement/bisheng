@@ -945,6 +945,8 @@
   **配对测试**：T113\
   **验证 / 完成条件**：运行配对测试 T113；验证本卡预期，相关范围检查通过。
 
+  **W6实施边界**：内部预检计划按[§120](./wave6-completion-contract.md#120-原模型删除确认计划内部协调已冻结)独立推进，只依赖T112；原真实PUT/DELETE、分享与强删Writer待后继装配，整卡不提前勾选。
+
 - [ ] **T115 · 模型普通删除原子事务：先写测试**
   **类型 / Owner**：测试 / LLM\
   **写入文件**：`src/backend/test/knowledge_unification/test_llm_delete_normal.py`（拟新增）\
