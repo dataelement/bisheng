@@ -1135,3 +1135,10 @@ J1a候选复核发现真实接缝：TransactionIdentity绑定当前nested/root�
 同对象搬原ProcessingConfiguration/NewProcessingItem/JobRequestResult/JobLease/ItemLease以及_digest到纯Schema（原defaults/validators/Field/slots行为不改），旧Repo显式import reexport保持既有消费者同类型/同函数。_digest原json sort_keys/ensure_ascii=False/separators/allow_nan=False与sha256字节原样，既有所有digest消费者不换算法。原acreate中完整manifest的target校验/expected_space/排序/重复及processing_snapshot复制逐段提为processing_manifest；原request_facts键集/metadata-only两个字段提为processing_request_facts，旧acreate在原先次序和相同位置消费。新Schema不含SQL/clock/UUID/权限/credential/receipt/mutation，不成为第二任务平台；不额外复制完整大payload或把compact manifest当接受hash。
 
 原_actor/key/settings/nonempty gate、metadata空scope私有proof、事务/锁/幂等/flush/四kind结果全部保留；本卡不开放move、不改metadata参数/claim/retry/worker，也不改Job SQL schema。测试先固定四原kind完整canonical oracle及排序/同对象reexport/NaN/重复/invalid scope、原错误顺序；原Job/acceptance revision/cutover/query/metadata/identity组合及固定作者外检查通过才闭卡。新Schema≤600、旧热叶只搬原职责与薄消费。若最低实际投影还需第三叶先报Root。J1a exact public signature、compact字段及read replay将在此与K1完成后再单独冻，不沿未实现旧候选的跨TXreceipt API猜接口。
+
+
+## 88. AC-80 namespace适用范围产品决定：已确认
+
+2026-11-09已收到用户最终确认：沿用同一模型在知识空间现有的动作范围，并登记预期变化。该适用变化来自文档库转SPACE的资源类型统一；全平台单独移除use不改变其他资源的动作范围。保原model_key、非use动作选择、管理等级、主体/Grant/Source/可见集合，标准模型按既有SPACE规则派生动作；自定义不补未选动作，纯use仅保可见与撤销，rename不并edit且文件edit不扩展。正式停服后逐模型冻结前后适用动作与差异原因，只有上述适用变化和可见代use属于允许差异；其他差异阻断切换。联合namespace/Catalog计划可按此口径继续冻结开发，尚未执行正式发布或迁移。
+
+本节解除前文历史记录的AC80待答条件，不追认任何未实施接口或正式发布。权限联合计划仍须按精确新接口另冻、真实native对账及MySQL停服/恢复验证，不能把产品确认记成T157158或M3/Coverage完成。

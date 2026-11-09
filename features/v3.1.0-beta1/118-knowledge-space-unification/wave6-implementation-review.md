@@ -418,3 +418,10 @@ T949950 fixed4b6baf81f真实NULL1红/空串1首绿→作者九路径239绿/40.27
 
 
 K1仓储整卡复查闭合：47563b0de（§83新test8dd56f1bc的5真红/3首绿→8绿）由Root逐行复核单Scope新增18行/586总行并正常主合3138566b6；按Version单遍汇总唯一Doc目的，保原逻辑路径/显式File优先、不任取分歧。201Doc/404Version用例实际验证不每Doc再扫全V。原不可改私有反例四格及真实Web producer合5 passed/89 warnings/.71秒（/private/tmp/f118-root-k1-two-p2-fixed.log/.xml）。主树新history+原九路径247 passed/6404 warnings/42.78秒（/private/tmp/f118-root-k1-complete-fixed.log/.xml），401/10001原Scope与实际J1 items轻列预算继续通过。T951952及T926927闭合；只P1/K1仓储组件，J1 accept/ready、Owner、worker、真实API/迁移未开放，不能称完整移动/E2E已完成。
+
+
+### 2026-11-09 继续实施与产品口径闭合
+
+2026-11-09已收到用户最终确认：沿用同一模型在知识空间现有的动作范围，并登记预期变化。该适用变化来自文档库转SPACE的资源类型统一；全平台单独移除use不改变其他资源的动作范围。保原model_key、非use动作选择、管理等级、主体/Grant/Source/可见集合，标准模型按既有SPACE规则派生动作；自定义不补未选动作，纯use仅保可见与撤销，rename不并edit且文件edit不扩展。正式停服后逐模型冻结前后适用动作与差异原因，只有上述适用变化和可见代use属于允许差异；其他差异阻断切换。联合namespace/Catalog计划可按此口径继续冻结开发，尚未执行正式发布或迁移。
+
+前开发agent因额度失败退出：PROC仅测试固定29a318343，D1测试固定9f054e026及两生产叶未提交草稿，均保留。当前重新按原lane/冻结合同继续，不把中断当成完成或评审结论。T957 corrected在固定aa5源上8个真实预算红+31原控制绿（14.04秒，/private/tmp/f118-t957-source-read-red-corrected.log/.xml），已提交6e803ae5d；首轮同步identity port缺capture两例为测试夹具错误，corrected全部8个为真实预算AssertionError，来源资格与数据读取先完成。

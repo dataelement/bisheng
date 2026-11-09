@@ -167,11 +167,11 @@ W6持续实施；历史960编号：851已完成/历史交付、107当前待办�
 新版受限MinIO adapter写/回读准备盘点artifact SHA256 `8e7366b92b94ec511e5426a4571a9598da6da09d8c5b2423e93eb34d46b24d81`；无建桶、授权策略、模型或解析IO。真实SQL/fair Redis任务reader返回0项（这是该环境当时事实，不代表已盘点Celery broker）；knowledge_unification_run/processing_job/processing_item仍0行。证据`evidence/preparatory-native-ports.json` SHA256 `72981605007d6e3e2e4b8831dbbc35a663f3aaf24c3964fcced7badcabcf000f`，无凭据脚本同目录`preparatory-native-ports-probe.py`。这不是M1停服一致备份/正式M2 freeze/M3转换/恢复/E2E，3005保持不动。
 
 
-## 联合namespace权限计划的AC-80待确认口径
+## 联合namespace权限计划的AC-80已确认口径
 
 实现前实际SSOT审计发现：同一权限模型从旧library目标改为SPACE目标时，全局非use selected/effective动作和等级可完全不变，但目标可适用动作发生变化。默认editor由旧库{use,edit}变为{edit,create_folder,upload_file}；manager/owner另适用原share；custom{use,upload_file}变为{upload_file}，不新增edit/rename/download。仅use模型继续只有原可见与撤销，不加其他动作。真实Catalog/ModelSnapshot/GrantService两例验证等级/allow_same与管理边界不变。
 
-用户异步确认待答：是否按同模型的现有SPACE能力执行并列为namespace预期适用变化，或严格保旧库动作、遇新增能力阻断。现spec AC-80仍保原“非use动作效果不变”文字，答复前不修改其语义，不冻结依赖此选择的联合权限计划、不执行namespace/FGA发布。已完成SQL阶段计划和broker/无关开发继续；问题确认后同步spec/design/升级/HTML。不是以新动作、改全局scope、替换model_key或增加文件edit解决此冲突。
+2026-11-09已收到用户最终确认：沿用同一模型在知识空间现有的动作范围，并登记预期变化。该适用变化来自文档库转SPACE的资源类型统一；全平台单独移除use不改变其他资源的动作范围。保原model_key、非use动作选择、管理等级、主体/Grant/Source/可见集合，标准模型按既有SPACE规则派生动作；自定义不补未选动作，纯use仅保可见与撤销，rename不并edit且文件edit不扩展。正式停服后逐模型冻结前后适用动作与差异原因，只有上述适用变化和可见代use属于允许差异；其他差异阻断切换。联合namespace/Catalog计划可按此口径继续冻结开发，尚未执行正式发布或迁移。
 
 
 ## Celery broker只读端口已联装（2026-11-07）
@@ -194,7 +194,7 @@ M3原子性按W6§53：每批保存点覆盖业务与游标，失败只回滚该
 
 ## 真实SQL迁移入口及初始上传事务前置（2026-11-07）
 
-[W6§57/58](./wave6-completion-contract.md#57-冻结产物到真实sql执行入口-v1已冻结)已冻结：M3 App先完整校验正式baseline/plan图和全部叶，再按真实tenant、≤199命令/新事务执行并同TX写checkpoint；已提交前缀每次恢复只线性核一次，commit失联停止等持久事实恢复。SQL子步完成不代表namespace/Catalog/初始引用回填/Coverage或完整升级完成，AC80仍待决定。正式停服、备份、盘点基线时序不变。
+[W6§57/58](./wave6-completion-contract.md#57-冻结产物到真实sql执行入口-v1已冻结)已冻结：M3 App先完整校验正式baseline/plan图和全部叶，再按真实tenant、≤199命令/新事务执行并同TX写checkpoint；已提交前缀每次恢复只线性核一次，commit失联停止等持久事实恢复。SQL子步完成不代表namespace/Catalog/初始引用回填/Coverage或完整升级完成，AC80口径已确认，联合权限计划待实际实施。正式停服、备份、盘点基线时序不变。
 
 初始上传先补仅flush的File/Doc/V1原子注册Repo，后继再接现有入口；保原upload_file、scheduler及effective快照，无新增edit门槛。原版本link已确认自commit可能在失败后留下两个primary，需后继同事务重链；首注册组件不能代替整个上传/文件夹/网页/历史版本验收。主树d50401825本地选集4166绿、7原占位skip，未执行本轮正式升级/恢复或完整E2E。
 

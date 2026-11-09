@@ -640,7 +640,7 @@ flowchart TD
 | 验证组 | 关键样本 | 对应 AC |
 | --- | --- | --- |
 | 前后台同资源 | 前台建后台读、后台改前台刷新、相同 ID/目录/版本；后台 3 页签与普通/管理员列表隔离 | AC-01–AC-16 |
-| 权限与入口 | 菜单无资源、edit 无后台、子项授权、自定义/继承、服务账号无菜单、PAT 收窄、有效委托身份；不扩展文件 edit，Chunk/元数据等高级用例沿原容器 edit，已有文件重试/重命名沿 rename；非 use 动作及适用范围不变 | AC-03–AC-08、AC-30–AC-37、AC-80 |
+| 权限与入口 | 菜单无资源、edit 无后台、子项授权、自定义/继承、服务账号无菜单、PAT 收窄、有效委托身份；不扩展文件 edit，Chunk/元数据等高级用例沿原容器 edit，已有文件重试/重命名沿 rename；非 use 动作选择不变；旧库转SPACE沿用同模型现有适用范围并登记差异 | AC-03–AC-08、AC-30–AC-37、AC-80 |
 | 配置 | 两类型切换保留输入、保存失败不改、参数边界、显式覆盖、网页/音视频约束、历史文件不重切 | AC-38–AC-48 |
 | 目录/移动 | 最大深度、循环、同层重名、整版本链、标签清理、元数据保留/清除确认、自定义授权、移动后删源不坏图片附件 | AC-17–AC-24 |
 | 批量与复制 | 混合无权/处理项、确认前零修改、执行时权限变化、父子去重、副本所有者/版本/索引/对象生命周期、排除 pin/chat/release | AC-12、AC-13、AC-25–AC-27 |
@@ -847,11 +847,11 @@ W6持续实施；历史960编号：851已完成/历史交付、107当前待办�
 旧版缺少F118新私有列与账本表，正式M2实际仓储读取前须在已停服且一致备份后执行中性DDL结构升级。顺序为：旧任务收尾/停所有写端→一致备份及原schema记录→仅中性DDL→正式原业务盘点/预检→全租户正式基线和计划freeze→业务转换/回填/新权限投影。DDL不做任何业务转换、seed或在线runtime启动；原业务事实摘要不把新列默认算成原业务变化，并记录备份/原新schema与DDL摘要。失败保持维护；脚本不检测/控制停服。详细边界见[W6§26](./wave6-completion-contract.md#26-停服维护中的中性结构准备顺序已冻结)。正式迁移命令尚未全部存在，当前不发布猜测命令。
 
 
-## 联合namespace权限计划的AC-80待确认口径
+## 联合namespace权限计划的AC-80已确认口径
 
 实现前实际SSOT审计发现：同一权限模型从旧library目标改为SPACE目标时，全局非use selected/effective动作和等级可完全不变，但目标可适用动作发生变化。默认editor由旧库{use,edit}变为{edit,create_folder,upload_file}；manager/owner另适用原share；custom{use,upload_file}变为{upload_file}，不新增edit/rename/download。仅use模型继续只有原可见与撤销，不加其他动作。真实Catalog/ModelSnapshot/GrantService两例验证等级/allow_same与管理边界不变。
 
-用户异步确认待答：是否按同模型的现有SPACE能力执行并列为namespace预期适用变化，或严格保旧库动作、遇新增能力阻断。现spec AC-80仍保原“非use动作效果不变”文字，答复前不修改其语义，不冻结依赖此选择的联合权限计划、不执行namespace/FGA发布。已完成SQL阶段计划和broker/无关开发继续；问题确认后同步spec/design/升级/HTML。不是以新动作、改全局scope、替换model_key或增加文件edit解决此冲突。
+2026-11-09已收到用户最终确认：沿用同一模型在知识空间现有的动作范围，并登记预期变化。该适用变化来自文档库转SPACE的资源类型统一；全平台单独移除use不改变其他资源的动作范围。保原model_key、非use动作选择、管理等级、主体/Grant/Source/可见集合，标准模型按既有SPACE规则派生动作；自定义不补未选动作，纯use仅保可见与撤销，rename不并edit且文件edit不扩展。正式停服后逐模型冻结前后适用动作与差异原因，只有上述适用变化和可见代use属于允许差异；其他差异阻断切换。联合namespace/Catalog计划可按此口径继续冻结开发，尚未执行正式发布或迁移。
 
 
 M3数据库时间保留的静态边界见[W6§50](./wave6-completion-contract.md#50-m2新建v1可表示时间-v1已冻结)：新V1统一可表示整秒，旧time严格保留与读回。DM原managed updater的临时运维窗口处于业务事务外，保存并恢复原状态，不能在业务TX里ALTER或扩展全局ORM语义；具体执行链随M3/CLI后继冻结。DM免实测不免该兼容要求。
@@ -859,7 +859,7 @@ M3数据库时间保留的静态边界见[W6§50](./wave6-completion-contract.md
 
 ## 真实SQL迁移入口及初始上传事务前置（2026-11-07）
 
-[W6§57/58](./wave6-completion-contract.md#57-冻结产物到真实sql执行入口-v1已冻结)已冻结：M3 App先完整校验正式baseline/plan图和全部叶，再按真实tenant、≤199命令/新事务执行并同TX写checkpoint；已提交前缀每次恢复只线性核一次，commit失联停止等持久事实恢复。SQL子步完成不代表namespace/Catalog/初始引用回填/Coverage或完整升级完成，AC80仍待决定。正式停服、备份、盘点基线时序不变。
+[W6§57/58](./wave6-completion-contract.md#57-冻结产物到真实sql执行入口-v1已冻结)已冻结：M3 App先完整校验正式baseline/plan图和全部叶，再按真实tenant、≤199命令/新事务执行并同TX写checkpoint；已提交前缀每次恢复只线性核一次，commit失联停止等持久事实恢复。SQL子步完成不代表namespace/Catalog/初始引用回填/Coverage或完整升级完成，AC80口径已确认，联合权限计划待实际实施。正式停服、备份、盘点基线时序不变。
 
 初始上传先补仅flush的File/Doc/V1原子注册Repo，后继再接现有入口；保原upload_file、scheduler及effective快照，无新增edit门槛。原版本link已确认自commit可能在失败后留下两个primary，需后继同事务重链；首注册组件不能代替整个上传/文件夹/网页/历史版本验收。主树d50401825本地选集4166绿、7原占位skip，未执行本轮正式升级/恢复或完整E2E。
 
