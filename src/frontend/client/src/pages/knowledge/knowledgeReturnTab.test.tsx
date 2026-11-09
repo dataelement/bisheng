@@ -135,7 +135,10 @@ it('retains joined through folders and both levels of Back', async () => {
   fireEvent.click(await screen.findByRole('link', { name: 'joined space' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }));
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/space/joined/folder/folder-1'));
-  fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
+  const folderBack = screen.getByRole('button', { name: 'com_ui_go_back' });
+  // jsdom does not evaluate the responsive Tailwind rules.
+  expect(folderBack).not.toHaveClass('max-[767px]:hidden');
+  fireEvent.click(folderBack);
   await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/space/joined'));
   fireEvent.click(screen.getByRole('button', { name: 'com_ui_go_back' }));
   expect(await screen.findByRole('tabpanel', { name: /home_next.joined/ })).toBeInTheDocument();
