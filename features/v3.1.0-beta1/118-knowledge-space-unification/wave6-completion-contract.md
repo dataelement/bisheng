@@ -1243,3 +1243,12 @@ Root核原W4实际KnowledgeModelReferenceApplication及KnowledgeService：QA cre
 
 
 §98补充原行为证据：固定旧1b83a1c6的delete_knowledge只在type1显式删除QA表。当前model_reference_repository._content_deletes无条件包含QA表，原普通资源清空意图不应扩展。T093新增原生实际consumer+SQL语句断言；若确认真实红，T094实际根因叶改为model_reference_repository.py，仅保原QA条件，不改Service事务/外IO顺序/授权。旧协议两个FakeUser用例迁入test_qa_bindings.py并保留原测试名、改真实consumer原生fixture，保“QA清、NORMAL不触QA”原行为断言；列入T093写文件，不能用移除测试掩盖新行为。
+
+
+## 99. 旧effective-use mixed模型原等级受控签发 P3：已冻结
+
+依P0/P1/P2已携带独立字段，T981先native真实旧Catalog输入反例，T982仅原permission/migration/f118_plan.py一个生产叶（历史大叶只窄增量），新test_permission_floor_retirement_signing.py≤600。_compile_catalog只在CUSTOM、原floorNone、before effective含use、去use后仍有active具体动作、具体动作最高等级低于before合法derived_level时，签floor=before derived。签发前严格验证原derived等于before原effective动作的原canonical最高等级（native int1..4非bool），不据人为抬高或不一致baseline签权限。原use是active且有合法原scope/level，原selected/effective一致性门继续；visibility provenance来自原effective use.resource_types与已有受控metadata，不改action scopes，不改legacy_source_key、不用sentinel。已有visibility_level若与原tier冲突明确阻断，不覆盖已有证据。
+
+pure-use不设floor，去use仍同tier/普通metadata模型不设，已有floor按P1原样携带；普通visibility3/download1全局1控制不变。原全部非use选择/动作、key/name/kind/active/configscope/allow_same和derived_level一致性仍强制；floor变化只允许本次确切受控签发的预期值，不放宽为任意max(metadata)。签发进入原after Baseline/canonical checksum/plan checksum，typed codec沿既有完整字段，不增新wire；verify重建同一pure计划，篡改/移除floor失败。实际SnapshotRepo→plan→typed artifact→Catalog保存/重载/CURRENT完整native组件闭环，不开放HTTP写floor或新发布流程。
+
+P1临时测试“旧mixed仍阻断直到后继签发”在本卡按精确新功能更新，保留真实old mixed native oracle与旧普通模型对照，不能简单删断言；原被调高use的其他pure模型也须维持其正确旧tier，不编造不一致before以求通过。测试还含inactiveuse、不选use、无具体动作、原derived坏值/等级不一致、既有floor、原scope不覆盖SPACE、自定义未选动作不补、artifact/CURRENT篡改以及原纯可见可撤销控制。此卡不实施namespace mapping/资源SQL/FGA发布，不能关闭T157158或正式迁移验收。若需第三生产叶先报Root，禁止改核心Policy普通规则凑迁移。
