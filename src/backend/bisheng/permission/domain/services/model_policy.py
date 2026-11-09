@@ -37,6 +37,7 @@ class CustomModelSelection:
     config_scope: str = "PLATFORM"
     visibility_only_resource_types: tuple[str, ...] = ()
     visibility_level: int | None = None
+    retired_use_level_floor: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +64,7 @@ class DerivedPermissionModel:
     action_codes: tuple[str, ...]
     visibility_only_resource_types: tuple[str, ...] = ()
     visibility_level: int | None = None
+    retired_use_level_floor: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,7 +156,7 @@ def _validate_model_key(model_key: str) -> str:
 
 
 def _model_payload(model: DerivedPermissionModel) -> dict[str, object]:
-    return {
+    payload = {
         "action_codes": model.action_codes,
         "active": model.active,
         "allow_same_level": model.allow_same_level,
@@ -167,6 +169,9 @@ def _model_payload(model: DerivedPermissionModel) -> dict[str, object]:
         "visibility_only_resource_types": model.visibility_only_resource_types,
         "visibility_level": model.visibility_level,
     }
+    if model.retired_use_level_floor is not None:
+        payload["retired_use_level_floor"] = model.retired_use_level_floor
+    return payload
 
 
 def _visibility_metadata(
@@ -294,6 +299,11 @@ def _custom_model(
     )
     if derived_level is None and visibility_types:
         derived_level = visibility_level
+    floor = selection.retired_use_level_floor
+    if floor is not None:
+        if type(floor) is not int or floor not in {1, 2, 3, 4} or not visibility_types or floor != visibility_level:
+            raise ValueError("retired-use floor requires matching controlled visibility provenance")
+        derived_level = max(derived_level or 0, floor)
     model = DerivedPermissionModel(
         model_key=model_key,
         name=name,
@@ -306,6 +316,7 @@ def _custom_model(
         action_codes=effective_codes,
         visibility_only_resource_types=visibility_types,
         visibility_level=visibility_level,
+        retired_use_level_floor=floor,
     )
     if model.allow_same_level and "manage_permission" not in model.action_codes:
         raise ValueError(f"custom model {model_key} cannot allow same level without manage_permission")
@@ -418,6 +429,7 @@ def validate_standard_model_update(
         "action_codes",
         "visibility_only_resource_types",
         "visibility_level",
+        "retired_use_level_floor",
     )
     if any(getattr(current, field) != getattr(candidate, field) for field in immutable_fields):
         raise ValueError("standard model fields are immutable")
