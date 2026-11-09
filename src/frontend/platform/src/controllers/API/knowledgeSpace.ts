@@ -1,4 +1,15 @@
 import axios from "@/controllers/request";
+import type {
+  ProcessingCommandResult,
+  ProcessingCreateRequest,
+  ProcessingRetryRequest,
+  JobAccepted,
+} from "./knowledgeProcessing";
+export type {
+  ProcessingCreateRequest,
+  ProcessingRetryRequest,
+  JobAccepted,
+} from "./knowledgeProcessing";
 import type { PermissionGrantSubjectInput } from "./permission";
 
 export interface KnowledgeSpaceSummary {
@@ -351,21 +362,6 @@ export type ProcessingPrecheckRequest =
       targets?: null;
       parameters: MetadataSchemaParameters;
     };
-export interface ProcessingCreateRequest {
-  idempotency_key: string;
-  confirmation_id: string;
-  plan_digest: string;
-}
-export interface ProcessingRetryRequest {
-  idempotency_key: string;
-  expected_job_revision: number;
-}
-export interface JobAccepted {
-  job_id: string;
-  accepted: true;
-  state: JobState;
-  reused: boolean;
-}
 export interface ProcessingJobRead {
   id: string;
   space_id: number;
@@ -537,8 +533,11 @@ export function precheckProcessing(
 export function createProcessingJob(
   spaceId: number,
   request: ProcessingCreateRequest,
-): Promise<JobAccepted> {
-  return axios.post<unknown, JobAccepted>(jobsPath(spaceId), request);
+): Promise<ProcessingCommandResult> {
+  return axios.post<unknown, ProcessingCommandResult>(
+    jobsPath(spaceId),
+    request,
+  );
 }
 export function listProcessingJobs(
   spaceId: number,

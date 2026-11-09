@@ -35,6 +35,15 @@ class KnowledgeCopyProjectionApplication:
             blocked()
         components = await self.composition._composition()
         catalog = await components.facade._runtime_catalog()
+        before_mode = await components.state.mode_for_target(source)
+        if (
+            before_mode.projection_state,
+            before_mode.version,
+            before_mode.mode,
+            before_mode.parent_type,
+            before_mode.parent_id,
+        ) != ("CURRENT", source.resource_version, mode, source.parent_type, source.parent_id):
+            blocked()
         key = _idempotency_key("copy", tenant, source.resource_type, source.resource_id, target.resource_id)
         fact = await self.repository.aget_operation_by_idempotency(key)
         if fact is not None:
@@ -67,16 +76,24 @@ class KnowledgeCopyProjectionApplication:
                 await components.projection.reconcile_operation(fact.id)
             elif fact.status not in {"PREPARED", "FINALIZED"}:
                 blocked()
-        # The unchanged original facade also finalizes its real Owner/Grant
-        # mirrors. A projection ledger status by itself is never completion.
-        result = await components.facade.project_copy(
-            source=source, target=target, actor=actor, owner_user_id=owner_user_id, mode=mode
-        )
+        # A durable original copy must not be compiled again from its new
+        # Grant rows. Restore its exact plan and verify every native mirror.
         current = await self.repository.aget_operation_by_idempotency(key)
+        if current is not None and current.status == "FINALIZED":
+            from bisheng.permission.domain.services.projection_plan import ProjectionOutcome
+
+            outcome = ProjectionOutcome(
+                current.id, current.target_version, "FINALIZED", current.request_checksum, idempotent=True
+            )
+        else:
+            result = await components.facade.project_copy(
+                source=source, target=target, actor=actor, owner_user_id=owner_user_id, mode=mode
+            )
+            outcome = getattr(result, "projection", None)
+            current = await self.repository.aget_operation_by_idempotency(key)
         if current is None or current.status != "FINALIZED":
             blocked()
         plan = await self._plan(current, source, target, actor, catalog)
-        outcome = getattr(result, "projection", None)
         if (
             outcome is None
             or outcome.status != "FINALIZED"
@@ -149,7 +166,7 @@ class KnowledgeCopyProjectionApplication:
             blocked()
         return outcome
 
-    async def _plan(self, fact, source, target, actor, catalog):
+    async def _plan(self, fact, source, target, actor, catalog, *, tuples=None):
         if (
             fact.tenant_id != target.tenant_id
             or fact.operation_type != "RESOURCE_COPY"
@@ -163,7 +180,8 @@ class KnowledgeCopyProjectionApplication:
             != _idempotency_key("copy", target.tenant_id, source.resource_type, source.resource_id, target.resource_id)
         ):
             blocked()
-        tuples = await self.repository.aget_operation_tuples(fact.id)
+        if tuples is None:
+            tuples = await self.repository.aget_operation_tuples(fact.id)
         plan = restore_projection_plan(fact, tuples)
         if projection_request_checksum(plan) != fact.request_checksum:
             blocked()
@@ -175,3 +193,41 @@ class KnowledgeCopyProjectionApplication:
         if parents != ({f"{target.parent_type}:{target.parent_id}"} if target.parent_type is not None else set()):
             blocked()
         return plan
+
+    async def arequire_completed(self, session, *, pairs):
+        """Verify original complete after facts in the caller's native TX."""
+        from types import SimpleNamespace
+
+        from bisheng.permission.domain.repositories.copy_projection_repository import CopyProjectionRepository
+        from bisheng.resource_reference.application.contracts import TransactionIdentity
+
+        tenant, tx = get_current_tenant_id(), TransactionIdentity.capture(session)
+        if is_tenant_filter_bypassed() or session.new or session.dirty or session.deleted:
+            blocked()
+        repository = CopyProjectionRepository(environment=self.composition.repository.environment)
+        pin = await repository._pin(session)
+        catalog = SimpleNamespace(store_id=pin[0], model_id=pin[1])
+        for source, target, mode, operator in pairs:
+            key = _idempotency_key("copy", tenant, source.resource_type, source.resource_id, target.resource_id)
+            fact, before, state, rows = await repository.aread_pair(session, source=source, target=target, key=key)
+            if (before.projection_state, before.version, before.mode, before.parent_type, before.parent_id) != (
+                "CURRENT",
+                source.resource_version,
+                mode,
+                source.parent_type,
+                source.parent_id,
+            ):
+                blocked()
+            if fact.status != "FINALIZED" or (
+                state.projection_state,
+                state.operation_id,
+                state.version,
+                state.mode,
+                state.parent_type,
+                state.parent_id,
+            ) != ("CURRENT", fact.id, 1, mode, target.parent_type, target.parent_id):
+                blocked()
+            await self._plan(fact, source, target, operator, catalog, tuples=rows)
+            tx.assert_current(session)
+            if get_current_tenant_id() != tenant or is_tenant_filter_bypassed():
+                blocked()

@@ -287,7 +287,9 @@ async def rebuild_knowledge_file(
 ):
     """Reprocessing Knowledge Base Files"""
 
-    res = await KnowledgeService.rebuild_knowledge_file(request, login_user, req_data, processing_commands=KnowledgeProcessingCommands())
+    res = await KnowledgeService.rebuild_knowledge_file(
+        request, login_user, req_data, processing_commands=KnowledgeProcessingCommands()
+    )
     return resp_200(res)
 
 
@@ -318,6 +320,23 @@ async def copy_knowledge(
     if not knowledge:
         return KnowledgeNotExistError.return_resp()
 
+    if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+        from uuid import uuid4
+
+        from bisheng.knowledge.application.space_copy import SpaceCopyApplication
+
+        app = SpaceCopyApplication()
+        plan = await app.aprecheck(
+            knowledge_id, name=knowledge_name or f"{knowledge.name} Copy"[:200], identity=login_user
+        )
+        result = await app.aconfirm(
+            knowledge_id,
+            ProcessingCreateRequest(
+                confirmation_id=plan.confirmation_id, plan_digest=plan.plan_digest, idempotency_key=str(uuid4())
+            ),
+            identity=login_user,
+        )
+        return resp_200(result["knowledge"])
     await UserPayload.assert_effective_web_menu_contains(login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
     try:
         await KnowledgeService.permission_service.ensure_knowledge_read_async(
@@ -994,9 +1013,15 @@ def update_knowledge_model(
     *, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: UpdateKnowledgeReq
 ):
     """Save actual model configuration and references before task dispatch."""
-    confirmation = ProcessingCreateRequest(confirmation_id=req_data.confirmation_id,
-        plan_digest=req_data.plan_digest, idempotency_key=req_data.idempotency_key) if all((
-            req_data.confirmation_id, req_data.plan_digest, req_data.idempotency_key)) else None
+    confirmation = (
+        ProcessingCreateRequest(
+            confirmation_id=req_data.confirmation_id,
+            plan_digest=req_data.plan_digest,
+            idempotency_key=req_data.idempotency_key,
+        )
+        if all((req_data.confirmation_id, req_data.plan_digest, req_data.idempotency_key))
+        else None
+    )
     result = KnowledgeService.update_knowledge_model(
         login_user=login_user,
         knowledge_id=req_data.knowledge_id,

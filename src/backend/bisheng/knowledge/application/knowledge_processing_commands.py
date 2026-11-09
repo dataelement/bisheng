@@ -8,6 +8,7 @@ from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
 from bisheng.knowledge.application.processing_owner import KnowledgeProcessingOwner
+from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
 from bisheng.knowledge.domain.schemas.processing_job import (
     OperationItem,
     ProcessingCreateRequest,
@@ -33,7 +34,41 @@ class KnowledgeProcessingCommands:
         if session.new or session.dirty or session.deleted:
             raise KnowledgeOperationPlanChangedError()
 
+    async def aread_metadata_schema(self, space_id, *, identity):
+        from copy import deepcopy
+
+        await self.service._authorize(identity, space_id)
+        async with self.sessions() as session:
+            root = await KnowledgeModelReferenceApplication.repository.aget(session, space_id)
+            if (
+                root is None
+                or root.type != 3
+                or type(root.metadata_schema_revision) is not int
+                or root.metadata_schema_revision < 0
+            ):
+                raise KnowledgeOperationPlanChangedError()
+            return {"revision": root.metadata_schema_revision, "fields": deepcopy(root.metadata_fields or [])}
+
+    async def aread_target(self, space_id, file_id, *, identity):
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.knowledge.domain.repositories.knowledge_version_read_repository import (
+            KnowledgeVersionReadRepository,
+        )
+        from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
+
+        await self.service._authorize(identity, space_id)
+        anchor = await KnowledgeVersionReadRepository(self.sessions).aget_anchor(
+            tenant_id=get_current_tenant_id(), file_id=file_id
+        )
+        if anchor is None or anchor.space.id != space_id:
+            raise KnowledgeOperationPlanChangedError()
+        return ResourceVersionTarget(file_id=file_id, document_id=anchor.document.id, version_id=anchor.version.id)
+
     async def aprecheck(self, space_id, request, *, identity, entry_kind="web"):
+        await self.service._authorize(identity, space_id)
+        async with self.sessions() as session:
+            await session.connection()
+            await SourceMoveInputRepository().arequire_released(session, space_id=space_id)
         request = ProcessingPrecheckRequest.model_validate(request.model_dump(mode="json"))
         selected = request.parameters.embedding_model_id if request.kind == "embedding_rebuild" else None
         if selected is not None:
@@ -92,6 +127,7 @@ class KnowledgeProcessingCommands:
 
     async def _confirm(self, space_id, request, identity, entry_kind, *, metadata=None, kind=None, file_id=None):
         request = ProcessingCreateRequest.model_validate(request.model_dump(mode="json"))
+        await self.service._authorize(identity, space_id)
         async with self.sessions() as session:
             plan = await self.service.plans._locked(session, request.confirmation_id)
             if kind is not None and plan.operation != kind:
@@ -101,6 +137,7 @@ class KnowledgeProcessingCommands:
                 or {item["file_id"] for item in plan.target_manifest} != {file_id}
             ):
                 raise KnowledgeOperationPlanChangedError()
+            await SourceMoveInputRepository().arequire_released(session, space_id=space_id)
             if not plan.impact.get("configuration_only"):
                 result = await self.service.acreate(
                     session, space_id, request, identity=identity, entry_kind=entry_kind

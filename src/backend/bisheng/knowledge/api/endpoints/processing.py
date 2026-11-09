@@ -12,6 +12,7 @@ from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application.knowledge_processing_commands import KnowledgeProcessingCommands
 from bisheng.knowledge.application.move_processing_access import MoveProcessingAccess, get_move_owner
 from bisheng.knowledge.application.processing_owner import KnowledgeProcessingOwner
+from bisheng.knowledge.application.space_copy_access import SpaceCopyAccess
 from bisheng.knowledge.domain.repositories.processing_settings_repository import ProcessingSettingsRepository
 from bisheng.knowledge.domain.schemas.processing_job import (
     ItemState,
@@ -56,6 +57,33 @@ def _system_defaults(space_id):
     fields = DocumentProcessingRule.model_fields
     return ProcessingDefaults.model_validate(
         {"document": legacy.model_dump(include=set(fields)), "table": legacy.excel_rule.model_dump(mode="json")}
+    )
+
+
+@router.get("/{space_id}/metadata-schema")
+async def read_metadata_schema(
+    space_id: int = Path(gt=0),
+    identity: UserPayload = Depends(UserPayload.get_login_user),
+    service: ProcessingJobService = Depends(get_processing_service),
+):
+    return resp_200(
+        await KnowledgeProcessingCommands(session_factory=get_async_db_session, service=service).aread_metadata_schema(
+            space_id, identity=identity
+        )
+    )
+
+
+@router.get("/{space_id}/files/{file_id}/processing-target")
+async def read_processing_target(
+    space_id: int = Path(gt=0),
+    file_id: int = Path(gt=0),
+    identity: UserPayload = Depends(UserPayload.get_login_user),
+    service: ProcessingJobService = Depends(get_processing_service),
+):
+    return resp_200(
+        await KnowledgeProcessingCommands(session_factory=get_async_db_session, service=service).aread_target(
+            space_id, file_id, identity=identity
+        )
     )
 
 
@@ -124,6 +152,10 @@ async def list_processing_jobs(
     identity: UserPayload = Depends(UserPayload.get_login_user),
     service: ProcessingJobService = Depends(get_processing_service),
 ):
+    if kind == "space_copy":
+        return resp_200(
+            await SpaceCopyAccess().alist(space_id, identity=identity, page=page, page_size=page_size, state=state)
+        )
     if kind == "move_index":
         return resp_200(
             await MoveProcessingAccess(await get_move_owner()).alist(
@@ -145,6 +177,8 @@ async def get_processing_job(
     identity: UserPayload = Depends(UserPayload.get_login_user),
     service: ProcessingJobService = Depends(get_processing_service),
 ):
+    if kind == "space_copy":
+        return resp_200(await SpaceCopyAccess().aget(space_id, job_id, identity=identity))
     if kind == "move_index":
         return resp_200(await MoveProcessingAccess(await get_move_owner()).aget(space_id, job_id, identity=identity))
     async with get_async_db_session() as session:
@@ -163,6 +197,12 @@ async def list_processing_items(
     identity: UserPayload = Depends(UserPayload.get_login_user),
     service: ProcessingJobService = Depends(get_processing_service),
 ):
+    if kind == "space_copy":
+        return resp_200(
+            await SpaceCopyAccess().alist_items(
+                space_id, job_id, identity=identity, page=page, page_size=page_size, state=state
+            )
+        )
     if kind == "move_index":
         return resp_200(
             await MoveProcessingAccess(await get_move_owner()).alist_items(
@@ -187,6 +227,8 @@ async def retry_processing_job(
     service: ProcessingJobService = Depends(get_processing_service),
 ):
     await _write_scope(request, identity)
+    if kind == "space_copy":
+        return resp_200(await SpaceCopyAccess().aretry(space_id, job_id, change, identity=identity))
     if kind == "move_index":
         return resp_200(
             await MoveProcessingAccess(await get_move_owner()).aretry(space_id, job_id, change, identity=identity)

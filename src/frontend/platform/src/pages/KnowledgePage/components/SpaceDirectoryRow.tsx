@@ -8,6 +8,7 @@ import type { KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
 import { locationContext } from "@/contexts/locationContext";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { StatusIndicator } from "./KnowledgeFileStatus";
+import { SpaceFileTools } from "./SpaceFileTools";
 import { SpaceVersionHistorySheet } from "./SpaceVersionHistorySheet";
 
 interface SpaceDirectoryRowProps {
@@ -151,6 +152,14 @@ export function SpaceDirectoryRow({
               <Outlined.More />
             </Button>
           </Dropdown>
+        )}
+        {!folder && (
+          <SpaceFileTools
+            scope={scope}
+            spaceId={spaceId}
+            fileId={item.id}
+            status={item.status}
+          />
         )}
         <SpaceVersionHistorySheet
           scope={epoch.scope}

@@ -146,8 +146,12 @@ async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
         if job.revision != expected_dispatch_revision or job.state not in {"accepted", "running"}:
             return _summary(job)
         space_id, kind, operation_id = job.space_id, job.kind, job.parameters.get("operation_id")
-        if kind != "move_index":
+        if kind not in {"move_index", "space_copy"}:
             reference = await owner.jobs.alatest_retry_actor(session, job_id)
+    if kind == "space_copy":
+        from bisheng.worker.knowledge.space_copy_jobs import execute_copy_job
+
+        return await execute_copy_job(job_id, expected_dispatch_revision, proof=proof)
     if kind == "move_index":
         from bisheng.worker.knowledge import move_jobs
 
