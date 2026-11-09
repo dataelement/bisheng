@@ -47,6 +47,12 @@ _SCHEMAS = {
     "membership": _spec(
         "id:positive user_id:int tenant_id:positive is_default:int status:str is_active:int? last_access_time:str? join_time:str? row_digest:hash"
     ),
+    "space_membership_header": _spec(
+        "knowledge_id:positive tenant_id:positive knowledge_type:int creator_user_id:int? member_count:nonnegative row_digest:hash"
+    ),
+    "space_member": _spec(
+        "tenant_id:positive knowledge_id:positive id:positive business_id:str business_type:str user_id:int user_role:str status:str membership_source:str department_admin_promoted_from_role:str? relation:str? grant_subject_type:str? grant_subject_id:int? grant_relation:str? grant_include_children:bool grant_model_id:str? grant_binding_key:str? is_pinned:bool create_time:str? update_time:str? row_digest:hash"
+    ),
     "department": _spec(
         "id:positive tenant_id:positive parent_id:int? path:str status:str is_deleted:int is_tenant_root:int mounted_tenant_id:int? update_time:str? row_digest:hash"
     ),
