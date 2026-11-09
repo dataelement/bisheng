@@ -205,7 +205,7 @@ _SCHEMAS = {
     ),
     "catalog_action": _spec("code:str name:str level:int? active:bool resource_types:strings sort_order:int"),
     "permission_model": _spec(
-        "id:positive model_key:str name:str normalized_name:str kind:str config_scope:str derived_level:int? active:bool allow_same_level:bool selected_action_codes:strings effective_action_codes:strings visibility_only_resource_types:strings visibility_level:int? legacy_source_key:str?"
+        "id:positive model_key:str name:str normalized_name:str kind:str config_scope:str derived_level:int? active:bool allow_same_level:bool selected_action_codes:strings effective_action_codes:strings visibility_only_resource_types:strings visibility_level:int? legacy_source_key:str? retired_use_level_floor:int?"
     ),
 }
 
@@ -229,6 +229,8 @@ def _validate(tag, data):
         _invalid()
     for name, spec in schema.items():
         _value(data[name], spec)
+    if tag == "permission_model" and data["retired_use_level_floor"] not in {None, 1, 2, 3, 4}:
+        _invalid()
     if tag == "broker_task" and (
         data["state"] not in _BROKER_GLOBAL_STATES | {"queued", "unacked", "legacy_requires_reissue", "obsolete"}
         or (data["tenant_id"] is None) != (data["state"] in _BROKER_GLOBAL_STATES)

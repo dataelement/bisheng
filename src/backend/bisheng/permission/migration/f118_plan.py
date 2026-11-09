@@ -26,6 +26,7 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
     GrantSourceService,
+    is_visibility_only_model,
     model_snapshot_for_target,
 )
 from bisheng.permission.domain.services.model_policy import CustomModelSelection, derive_permission_models
@@ -115,6 +116,7 @@ class PermissionModelBaseline:
     visibility_only_resource_types: tuple[str, ...] = ()
     visibility_level: int | None = None
     legacy_source_key: str | None = None
+    retired_use_level_floor: int | None = None
 
     def __post_init__(self):
         if any(
@@ -122,6 +124,27 @@ class PermissionModelBaseline:
             for value in (self.selected_action_codes, self.effective_action_codes, self.visibility_only_resource_types)
         ):
             raise TypeError("model snapshots require immutable action/provenance tuples")
+        floor = self.retired_use_level_floor
+        if floor is not None:
+            provenance = GrantModelSnapshot(
+                self.model_key,
+                self.active,
+                (),
+                floor,
+                visibility_only_resource_types=self.visibility_only_resource_types,
+                visibility_level=self.visibility_level,
+                visibility_only=True,
+            )
+            if (
+                type(floor) is not int
+                or floor not in {1, 2, 3, 4}
+                or self.kind != "CUSTOM"
+                or type(self.derived_level) is not int
+                or self.derived_level < floor
+                or self.visibility_level != floor
+                or not is_visibility_only_model(provenance)
+            ):
+                raise ValueError("existing retired-use floor requires its original tier and controlled provenance")
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,6 +349,7 @@ def _compile_catalog(before):
                 model.config_scope,
                 tuple(sorted(types)),
                 level,
+                retired_use_level_floor=model.retired_use_level_floor,
             )
         )
     models = derive_permission_models(
@@ -348,6 +372,7 @@ def _compile_catalog(before):
             or model.active != original.active
             or model.allow_same_level != original.allow_same_level
             or model.kind != original.kind
+            or model.retired_use_level_floor != original.retired_use_level_floor
             or set(model.action_codes) != set(original.effective_action_codes) - {"use"}
             or set(model.selected_action_codes) != set(original.selected_action_codes) - {"use"}
         ):
@@ -359,6 +384,7 @@ def _compile_catalog(before):
                 effective_action_codes=model.action_codes,
                 visibility_only_resource_types=model.visibility_only_resource_types,
                 visibility_level=model.visibility_level,
+                retired_use_level_floor=model.retired_use_level_floor,
             )
         )
     return actions, models, tuple(result)
