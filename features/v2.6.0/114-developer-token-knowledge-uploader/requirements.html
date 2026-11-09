@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>需求 · Developer Token 配置知识上传人</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--weak:#edf3ff;--ok:#17683b;--warn:#8a4b00;--bad:#a92525}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;overflow-wrap:anywhere}
+  a{color:var(--accent);text-underline-offset:3px}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  .hero{background:linear-gradient(135deg,#164789,#285eae);color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:27px;line-height:1.45}
+  .meta{font-size:13px;margin:0}
+  .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}
+  .summary-grid .item{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:12px 14px;border-radius:10px}
+  .item b{display:block;font-size:12px;margin-bottom:4px}
+  .item p{font-size:14px;margin:0}
+  .toc,.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  .toc h2{font-size:15px;margin:0 0 10px}
+  .toc ol{columns:2;column-gap:32px;padding-left:22px;margin:0}
+  .toc li{break-inside:avoid;margin:3px 0}
+  h2{font-size:21px;line-height:1.5;margin:0 0 6px}
+  h3{font-size:16px;line-height:1.6;margin:23px 0 8px}
+  .lead,.hint{color:var(--sub);font-size:13px}
+  p{margin:10px 0}
+  .badge{display:inline-block;font-size:11px;font-weight:600;color:var(--accent);background:var(--weak);padding:2px 8px;border-radius:12px;vertical-align:middle}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .callout.warn{border-color:var(--warn);background:#fff8e9}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  .callout strong{display:block;margin-bottom:4px}
+  .table-wrap{overflow-x:auto;max-width:100%;margin:12px 0;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8;color:#364459;font-weight:650}
+  tr:last-child td{border-bottom:0}
+  tr>*:last-child{border-right:0}
+  caption{text-align:left;font-weight:600;padding:10px 12px;background:#fafbfc}
+  .diagram{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;margin:14px 0}
+  .diagram-scroll{overflow-x:auto}
+  .diagram svg{display:block;width:100%;min-width:760px;height:auto}
+  figcaption{font-size:12px;color:var(--sub);margin-top:8px}
+  .diagram text{font-family:inherit;fill:#26364d}
+  code{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .status{font-weight:600;color:var(--warn)}
+  .status.closed{font-weight:600;color:var(--ok)}
+  .footer{font-size:12px;color:var(--sub);text-align:center;margin-top:26px}
+  @media(max-width:680px){.wrap{padding:16px 12px 48px}.summary-grid{grid-template-columns:1fr}.toc ol{columns:1}}
+  @media print{body{background:#fff}.hero{background:#fff!important;color:#111!important;border:1px solid #777}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1 id="title">Developer Token 配置知识上传人</h1>
+  <p class="meta">Feature F114 · 文档版本 0.2 · 2026-11-06 · 状态：<span class="status closed">需求已闭环</span></p>
+  <div class="summary-grid">
+    <div class="item"><b>适用项目</b><p>毕昇 Platform 管理端 + 后端 <code>developer_token</code>、<code>open_endpoints/filelib</code> 写路径。不涉及知识门户 BFF。</p></div>
+    <div class="item"><b>优先级</b><p>P0 = 本需求必须交付。一期即本次；二期未定。</p></div>
+    <div class="item"><b>确认依据</b><p>2026-11-06 聊天（Yancy / 娟子）归纳 + 同日表单 Q1–Q3；同日用户文字「确认」全文批准。</p></div>
+  </div>
+</header>
+
+<nav class="toc" id="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#background">背景与问题</a></li>
+    <li><a href="#goals">目标与指标</a></li>
+    <li><a href="#scope">范围</a></li>
+    <li><a href="#flow">用户场景与流程</a></li>
+    <li><a href="#requirements">功能需求</a></li>
+    <li><a href="#nfr">非功能与依赖</a></li>
+    <li><a href="#data">数据与埋点</a></li>
+    <li><a href="#acceptance">验收标准</a></li>
+    <li><a href="#risk">风险与灰度回滚</a></li>
+    <li><a href="#validation">四维检查结论</a></li>
+    <li><a href="#changelog">变更记录</a></li>
+  </ol>
+</nav>
+
+<section class="card" id="background">
+  <h2>1. 背景与问题</h2>
+  <p><span class="badge">用户决定</span> 外部系统经 Open API 写入知识库文件时，希望<strong>上传人</strong>在界面上体现为业务指定的系统用户，而不是默认落在 admin 或 Token 绑定账号上。</p>
+  <p><span class="badge">用户决定</span> <strong>鉴权与资源权限</strong>仍按现有 Developer Token 规则（绑定用户、IP、路由、限流；Filelib 可选 <code>external_id</code> 切换业务权限主体），<strong>不得</strong>因新增配置而「对调用方完全放开权限」。</p>
+  <div class="callout">
+    <strong>客观事实（源码，非生产统计）</strong>
+    <code>developer_token.user_id</code> 为绑定用户；Filelib 写接口通过 <code>get_filelib_request_user</code> 解析请求用户：未传 <code>external_id</code> 时使用 Token 绑定用户作为 <code>login_user</code>，业务写库时的操作者/上传人字段与 <code>login_user</code> 一致。F069 仅覆盖四个只读 Filelib 接口；上传与 <code>file/sync</code> 等写路径不在 F069 规格内，但沿用同一用户解析依赖。
+  </div>
+  <p><span class="badge">逻辑推演</span> 当 Token 绑定 admin 且调用方不传 <code>external_id</code> 时，上传人记录为 admin，与业务期望不符。需要在 Token 配置层增加独立的「知识上传人」，与绑定用户解耦。</p>
+</section>
+
+<section class="card" id="goals">
+  <h2>2. 目标与指标</h2>
+  <div class="table-wrap">
+    <table>
+      <caption>指标（无线上基线，以验收用例为准）</caption>
+      <thead>
+        <tr><th>名称</th><th>口径</th><th>基线</th><th>目标</th><th>观察</th><th>数据来源</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>上传人可配置</td>
+          <td>Token 绑定用户 A、配置知识上传人 B；未传 <code>external_id</code> 的 Filelib 写请求成功落库后，文件/知识上传人相关字段为 B</td>
+          <td>未传 <code>external_id</code> 时上传人 = 绑定用户</td>
+          <td>AC-01、AC-02 通过</td>
+          <td>开发 mock／接口测试 + 独立验收查库</td>
+          <td><code>knowledge_file</code> 等落库字段、管理端文件列表展示</td>
+        </tr>
+        <tr>
+          <td>权限不变</td>
+          <td>同上场景下，权限拒绝/允许与改动前绑定用户 A 的行为一致</td>
+          <td>现有 Token + Filelib 权限链</td>
+          <td>AC-03、AC-04 通过</td>
+          <td>对照测试（允许/拒绝各一例）</td>
+          <td>HTTP 状态/业务码、无越权正文</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="scope">
+  <h2>3. 范围</h2>
+  <h3>3.1 本次包含</h3>
+  <ul>
+    <li>Platform：<strong>系统配置 → Developer Token</strong> 新建/编辑/详情，增加「知识上传人」选人字段（与「绑定用户」并列，文案区分权限 vs 上传人）。</li>
+    <li>后端：Token CRUD 持久化知识上传人；Admin API 入参/出参携带该字段。</li>
+    <li>Filelib 经 Developer Token 的<strong>写接口</strong>（设计阶段列完整路径清单；至少包含 multipart 上传与 <code>POST /api/v2/filelib/file/sync</code> 等会创建/登记知识文件的接口）。</li>
+    <li>写路径规则：权限仍用现有 <code>login_user</code> 解析；<strong>仅</strong>上传人/创建者类落库字段按本需求决策表写入。</li>
+    <li>存量 Token：保存/编辑时强制补齐知识上传人（见 REQ-002）。</li>
+  </ul>
+  <h3>3.2 明确不做</h3>
+  <ul>
+    <li>Filelib 只读接口（列表、详情、retrieve 等）：不涉及上传人变更。</li>
+    <li>MCP 工具链、非 Filelib 的 <code>/api/v2</code> 写接口（除非设计阶段发现与 Filelib 共用同一写库入口且属同一落文件语义——须追溯 REQ-004）。</li>
+    <li>修改 Token 绑定用户、路由白名单、IP、限流、<code>file_sync_rule</code> 的既有语义。</li>
+    <li>回溯修改历史已落库文件的上传人。</li>
+    <li>知识门户 BFF、门户侧配置页。</li>
+  </ul>
+  <h3>3.3 涉及数据表（业务视角）</h3>
+  <div class="table-wrap">
+    <table>
+      <caption>表与 DDL 预期（具体列名与迁移在技术设计定稿）</caption>
+      <thead>
+        <tr><th>表</th><th>角色</th><th>DDL</th><th>关键已有/新增字段（业务含义）</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>developer_token</code></td>
+          <td>读/写</td>
+          <td>新增可空列 → 业务必填由应用层保证；迁移须 MySQL + DM8 双库</td>
+          <td>已有 <code>user_id</code>（绑定用户）；新增「知识上传人 user_id」</td>
+        </tr>
+        <tr>
+          <td><code>user</code></td>
+          <td>读</td>
+          <td>无</td>
+          <td>校验选人存在、未逻辑删除、满足租户/启用规则（设计细化）</td>
+        </tr>
+        <tr>
+          <td><code>knowledge_file</code> 及关联知识/文档表</td>
+          <td>写（上传人相关列）</td>
+          <td>无</td>
+          <td>如 <code>original_uploader_id</code>、创建者/操作者等（设计阶段对照写路径统一清单）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="flow">
+  <h2>4. 用户场景与流程</h2>
+  <h3>4.1 管理员配置 Token</h3>
+  <p>租户管理员在 Platform 打开 Token 编辑，选择绑定用户（接口权限主体）与知识上传人（落库上传人主体），保存后 Admin API 持久化。</p>
+  <h3>4.2 外部系统上传（未传 external_id）</h3>
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 760 220" role="img" aria-labelledby="fig1-title">
+        <title id="fig1-title">Filelib 写请求：权限与上传人分离</title>
+        <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#245bb1"/></marker></defs>
+        <rect x="20" y="80" width="120" height="44" rx="8" fill="#fff" stroke="#245bb1"/>
+        <text x="80" y="106" text-anchor="middle" font-size="13">外部写请求</text>
+        <line x1="140" y1="102" x2="180" y2="102" stroke="#245bb1" marker-end="url(#arr)"/>
+        <rect x="180" y="80" width="130" height="44" rx="8" fill="#fff" stroke="#245bb1"/>
+        <text x="245" y="106" text-anchor="middle" font-size="12">Token 鉴权链</text>
+        <line x1="310" y1="102" x2="350" y2="102" stroke="#245bb1" marker-end="url(#arr)"/>
+        <rect x="350" y="60" width="150" height="84" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="425" y="88" text-anchor="middle" font-size="12">权限 login_user</text>
+        <text x="425" y="108" text-anchor="middle" font-size="11">= 绑定用户 A</text>
+        <text x="425" y="128" text-anchor="middle" font-size="11">（与现网一致）</text>
+        <line x1="500" y1="102" x2="540" y2="102" stroke="#245bb1" marker-end="url(#arr)"/>
+        <rect x="540" y="60" width="200" height="84" rx="8" fill="#eff8f2" stroke="#17683b"/>
+        <text x="640" y="88" text-anchor="middle" font-size="12">落库上传人</text>
+        <text x="640" y="108" text-anchor="middle" font-size="11">= 配置用户 B</text>
+        <text x="640" y="128" text-anchor="middle" font-size="11">（本需求新增）</text>
+      </svg>
+    </div>
+    <figcaption>未传 <code>external_id</code> 时：鉴权与权限检查仍走绑定用户 A；上传人字段写 B。</figcaption>
+  </figure>
+  <h3>4.3 外部系统上传（已传 external_id）</h3>
+  <p><span class="badge">用户决定 2026-11-06</span> 权限与上传人均使用 <code>external_id</code> 解析出的唯一有效用户（与 F069/F081 对「业务主体」的既有语义一致）；Token 上配置的知识上传人<strong>不覆盖</strong>该结果。</p>
+</section>
+
+<section class="card" id="requirements">
+  <h2>5. 功能需求</h2>
+
+  <h3 id="REQ-001">REQ-001 · Token 管理端字段 <span class="badge">P0 · 一期</span></h3>
+  <p>来源：聊天 + Q3。在 Developer Token 新建/编辑表单增加「知识上传人」，必选系统内用户；界面说明：绑定用户决定接口权限，知识上传人决定未传 <code>external_id</code> 时的落库上传人。</p>
+  <div class="table-wrap">
+    <table>
+      <caption>字段：知识上传人</caption>
+      <thead>
+        <tr><th>名称</th><th>业务含义</th><th>类型</th><th>必填</th><th>校验</th><th>默认值</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>知识上传人</td>
+          <td>Filelib 写请求未传 <code>external_id</code> 时，写入知识/文件的上传人身份</td>
+          <td>用户 ID（正整数）</td>
+          <td>是（新建与编辑保存时）</td>
+          <td>用户存在、可用；不可与绑定用户相同字段混淆（允许 A≠B 或 A=B，产品不禁止同人）</td>
+          <td>无</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="REQ-002">REQ-002 · Admin API 契约 <span class="badge">P0 · 一期</span></h3>
+  <p><code>POST/PUT /api/v1/admin/developer-tokens</code> 必须接受并返回知识上传人；缺失或无效用户返回明确业务错误，不落库。详情/列表返回展示用用户名（与绑定用户展示方式对齐）。</p>
+  <p><span class="badge">AI 建议 · 待设计确认</span> 历史 Token 在<strong>下次编辑保存</strong>时必须补齐知识上传人；仅启用写接口时若库内为空则写接口拒绝（见 REQ-004 异常表）。不在本需求做批量后台回填默认值。</p>
+
+  <h3 id="REQ-003">REQ-003 · Filelib 写路径上传人决策 <span class="badge">P0 · 一期</span></h3>
+  <div class="table-wrap">
+    <table>
+      <caption>决策表 D-UPLOADER</caption>
+      <thead>
+        <tr><th>条件</th><th>权限主体（login_user）</th><th>落库上传人</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>有效 Token；未传或空 <code>external_id</code></td>
+          <td>Token 绑定用户（现状）</td>
+          <td>Token 配置的知识上传人</td>
+        </tr>
+        <tr>
+          <td>有效 Token；传合法 <code>external_id</code> 且解析唯一有效用户</td>
+          <td>解析用户（现状）</td>
+          <td>解析用户（现状，配置不上传人不覆盖）</td>
+        </tr>
+        <tr>
+          <td><code>external_id</code> 非法/重复/不存在</td>
+          <td>—</td>
+          <td>—；请求拒绝，无写库副作用（现状）</td>
+        </tr>
+        <tr>
+          <td>Token 未配置知识上传人（仅可能存量脏数据）</td>
+          <td>按现状解析</td>
+          <td>写接口拒绝；读接口不受影响</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="REQ-004">REQ-004 · 写接口范围 <span class="badge">P0 · 一期</span></h3>
+  <p>来源：Q1。覆盖 Filelib 模块内所有经 Developer Token 认证、会创建或登记知识文件记录的写操作；设计阶段输出路径清单并与本 REQ 追溯。只读接口排除。</p>
+
+  <h3 id="REQ-005">REQ-005 · 权限与 OpenFGA 不变量 <span class="badge">P0 · 一期</span></h3>
+  <p>PermissionService 及资源授权仍基于权限 <code>login_user</code>；不得因上传人写成 B 而让 B 的权限参与本次请求鉴权。上传人 B 仅作为元数据写入与展示。</p>
+
+  <h3>异常清单（REQ-003/004 共用）</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>类型</th><th>场景</th><th>调用方可见结果</th><th>落库</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>权限不足</td><td>绑定用户（或 external 用户）无目标库写权限</td><td>拒绝；与现网一致</td><td>无新文件</td></tr>
+        <tr><td>配置缺失</td><td>未传 external_id 且 Token 无知识上传人</td><td>拒绝（业务码设计阶段定义）</td><td>无新文件</td></tr>
+        <tr><td>重复提交</td><td>与现网 filelib 重复策略一致</td><td>不适用本需求单独变更</td><td>按现网</td></tr>
+        <tr><td>并发</td><td>多请求并行上传</td><td>不适用本需求单独变更</td><td>各请求上传人按决策表独立计算</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="nfr">
+  <h2>6. 非功能与依赖</h2>
+  <ul>
+    <li><strong>双库</strong>：<code>developer_token</code> 加列须 Alembic + DM8 兼容（JsonType 等既有规范）。</li>
+    <li><strong>多租户</strong>：知识上传人选人范围规则在设计阶段与现有 Token 绑定用户选人一致（通常同 Token <code>tenant_id</code>）。</li>
+    <li><strong>安全</strong>：日志不得打印 Token 明文；拒绝响应不泄露无权限资源正文。</li>
+    <li><strong>依赖</strong>：F044 Developer Token、Filelib 写服务链、F069 用户解析（external_id）、F066 file/sync（权限仍绑定用户，上传人字段按决策表与 sync 已有 responsible 逻辑在设计中统一，避免双写冲突）。</li>
+  </ul>
+</section>
+
+<section class="card" id="data">
+  <h2>7. 数据与埋点</h2>
+  <p>无新增产品埋点要求。运维日志建议可区分 <code>token_id</code>、权限 <code>user_id</code>、写入 <code>uploader_user_id</code>（实现细节见设计），不记录 Token 秘密。</p>
+</section>
+
+<section class="card" id="acceptance">
+  <h2>8. 验收标准</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>AC ID</th><th>前提</th><th>动作</th><th>预期</th><th>关联 REQ</th></tr>
+      </thead>
+      <tbody>
+        <tr id="AC-01">
+          <td>AC-01</td>
+          <td>Token：绑定用户=admin(A)，知识上传人=业务用户(B)；未传 external_id</td>
+          <td>调用 Filelib 写接口成功上传/同步落文件</td>
+          <td>文件上传人相关字段为 B；列表/详情展示为 B</td>
+          <td>REQ-003</td>
+        </tr>
+        <tr id="AC-02">
+          <td>AC-02</td>
+          <td>同上</td>
+          <td>管理端保存 Token，知识上传人为空</td>
+          <td>保存失败，提示必选</td>
+          <td>REQ-001、REQ-002</td>
+        </tr>
+        <tr id="AC-03">
+          <td>AC-03</td>
+          <td>绑定用户 A 对目标库无写权限，知识上传人 B 有权限</td>
+          <td>未传 external_id 写上传</td>
+          <td>拒绝；无新文件；不因 B 有权限而成功</td>
+          <td>REQ-005</td>
+        </tr>
+        <tr id="AC-04">
+          <td>AC-04</td>
+          <td>绑定用户 A 有写权限；传合法 external_id 对应用户 C</td>
+          <td>Filelib 写上传</td>
+          <td>权限按 C；上传人为 C（非 B）</td>
+          <td>REQ-003</td>
+        </tr>
+        <tr id="AC-05">
+          <td>AC-05</td>
+          <td>存量 Token 无知识上传人</td>
+          <td>未传 external_id 写上传</td>
+          <td>拒绝；无脏行</td>
+          <td>REQ-003</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="risk">
+  <h2>9. 风险与灰度回滚</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>风险</th><th>触发</th><th>影响</th><th>应对</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>写路径漏改</td>
+          <td>某 Filelib 写入口仍用 login_user 写上传人</td>
+          <td>部分接口仍显示 admin</td>
+          <td>设计列清单 + 代码审核对照 REQ-004；回归 AC-01</td>
+        </tr>
+        <tr>
+          <td>file/sync 与 responsible 字段</td>
+          <td>F066 已有责任人语义</td>
+          <td>上传人双重规则</td>
+          <td>设计阶段统一决策表，必要时 spec 偏差记录</td>
+        </tr>
+        <tr>
+          <td>回滚</td>
+          <td>上线后撤回版本</td>
+          <td>新字段不再写入</td>
+          <td>已落库 B 的上传人数据不自动回滚为 A</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="validation">
+  <h2>10. 四维检查结论</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>维度</th><th>结论</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>合理</td><td>成立</td><td>解耦鉴权与上传人归属，对齐聊天目标；与 F069 external_id 语义兼容。</td></tr>
+        <tr><td>闭环</td><td>成立</td><td>配置 → 写请求 → 落库/展示 → 失败拒绝均有出口；存量 Token 编辑补齐 + 脏数据写拒绝。</td></tr>
+        <tr><td>边界</td><td>成立</td><td>Filelib 写 vs 只读、门户/MCP 排除；Q1–Q3 已确认。</td></tr>
+        <tr><td>可验收</td><td>成立</td><td>AC-01～AC-05 可观察；file/sync 与 responsible 细节留设计但不阻塞 AC 主路径。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout ok">
+    <strong>PRD 四问自检</strong>
+    研发：主规则与决策表已给出，写路径清单在设计补全。测试：可按 AC 写 mock／e2e 流转。业务：上线后未传 external_id 的上传人可配置。新人：背景与 F069/F066 关系已记录。
+  </div>
+  <p class="hint">阻塞项：0（Q1–Q3 已于 2026-11-06 确认）。澄清项：file/sync 与 <code>responsible_person</code> 优先级在设计阶段定稿。</p>
+</section>
+
+<section class="card" id="changelog">
+  <h2>11. 变更记录</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>版本</th><th>日期</th><th>变更</th><th>确认</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>0.1</td>
+          <td>2026-11-06</td>
+          <td>初稿：聊天归纳 + Q1 Filelib 写 / Q2 缺参用配置·有参用 external / Q3 必填</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>0.2</td>
+          <td>2026-11-06</td>
+          <td>状态：需求已闭环（用户「确认」）</td>
+          <td>生效稿 0.2，后续设计/用例以此为准</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="footer">F114 · requirements.html · 毕昇 monorepo</p>
+</div>
+</body>
+</html>

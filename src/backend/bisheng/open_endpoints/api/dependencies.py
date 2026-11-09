@@ -1,5 +1,6 @@
 import logging
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends, Query, Request
@@ -7,12 +8,19 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.developer_token import DeveloperTokenInvalidFileSyncRuleError
+from bisheng.common.errcode.developer_token import (
+    DeveloperTokenInvalidError,
+    DeveloperTokenInvalidFileSyncRuleError,
+    DeveloperTokenKnowledgeUploaderInvalidError,
+    DeveloperTokenKnowledgeUploaderMissingError,
+)
 from bisheng.common.errcode.filelib_sync import FilelibSyncRuleNotConfiguredError
 from bisheng.common.services.config_service import settings
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.database.models.tenant import UserTenantDao
 from bisheng.developer_token.api.dependencies import (
     get_developer_token_principal,
+    get_optional_developer_token_principal,
 )
 from bisheng.developer_token.domain.schemas import (
     DeveloperTokenFileSyncRule,
@@ -63,6 +71,7 @@ from bisheng.open_endpoints.domain.services.filelib_user_context_service import 
 )
 from bisheng.open_endpoints.domain.services.inspection_standard_sync_service import InspectionStandardSyncService
 from bisheng.open_endpoints.domain.utils import get_default_operator_async
+from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
 from bisheng.user.domain.repositories.interfaces.user_repository import UserRepository
 
@@ -132,18 +141,27 @@ def build_filelib_space_query_service(
     return query
 
 
-async def get_filelib_space_command_service(
-    request: Request,
-    user: UserPayload = Depends(get_default_operator_async),
-    session: AsyncSession = Depends(get_db_session),
-) -> FilelibSpaceCommandService:
-    return FilelibSpaceCommandService(
-        query=build_filelib_space_query_service(
-            request=request,
-            user=user,
-            session=session,
-            storage=await get_minio_storage(),
-        )
+@dataclass(frozen=True)
+class FilelibWriteSpaceContext:
+    """OpenAPI write path: permission user vs knowledge-file record user."""
+
+    permission_user: UserPayload
+    record_user: UserPayload
+    command: FilelibSpaceCommandService
+
+
+async def _user_payload_for_token_tenant(user_id: int, tenant_id: int) -> UserPayload:
+    user = await UserDao.aget_user(int(user_id))
+    if user is None or int(getattr(user, "delete", 0) or 0) != 0:
+        raise DeveloperTokenKnowledgeUploaderInvalidError()
+    user_tenant = await UserTenantDao.aget_user_tenant(int(user_id), int(tenant_id))
+    if user_tenant is None or getattr(user_tenant, "status", "active") != "active":
+        raise DeveloperTokenKnowledgeUploaderInvalidError()
+    return await UserPayload.init_login_user(
+        user_id=int(user.user_id),
+        user_name=str(user.user_name or ""),
+        tenant_id=int(tenant_id),
+        token_version=int(getattr(user, "token_version", 0) or 0),
     )
 
 
@@ -208,6 +226,95 @@ async def get_filelib_user_context_service(
     user_repository: UserRepository = Depends(get_filelib_user_repository),
 ) -> FilelibUserContextService:
     return FilelibUserContextService(user_repository)
+
+
+async def get_filelib_write_space_context(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    principal: DeveloperTokenPrincipal | None = Depends(get_optional_developer_token_principal),
+    default_operator: UserPayload = Depends(get_default_operator_async),
+    user_context: FilelibUserContextService = Depends(get_filelib_user_context_service),
+    external_id: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=EXTERNAL_USER_ID_MAX_LENGTH,
+            pattern=r".*\S.*",
+        ),
+    ] = None,
+) -> AsyncGenerator[FilelibWriteSpaceContext, None]:
+    """Yield context so ``external_id`` tenant visibility lasts for the whole request."""
+    storage = await get_minio_storage()
+
+    if principal is None:
+        permission_user = default_operator
+        yield FilelibWriteSpaceContext(
+            permission_user=permission_user,
+            record_user=permission_user,
+            command=FilelibSpaceCommandService(
+                query=build_filelib_space_query_service(
+                    request=request,
+                    user=permission_user,
+                    session=session,
+                    storage=storage,
+                ),
+                record_user=permission_user,
+            ),
+        )
+        return
+
+    normalized_external = FilelibUserContextService.normalize_external_id(external_id)
+    if normalized_external is not None:
+        async with user_context.use_user(principal, external_id) as permission_user:
+            command = FilelibSpaceCommandService(
+                query=build_filelib_space_query_service(
+                    request=request,
+                    user=permission_user,
+                    session=session,
+                    storage=storage,
+                ),
+                record_user=permission_user,
+            )
+            yield FilelibWriteSpaceContext(
+                permission_user=permission_user,
+                record_user=permission_user,
+                command=command,
+            )
+        return
+
+    permission_user = principal.user
+    if principal.knowledge_uploader_user_id is None:
+        raise DeveloperTokenKnowledgeUploaderMissingError()
+    try:
+        record_user = await _user_payload_for_token_tenant(
+            int(principal.knowledge_uploader_user_id),
+            int(principal.tenant_id),
+        )
+    except DeveloperTokenKnowledgeUploaderInvalidError:
+        raise
+    except Exception as exc:
+        logger.exception("filelib write context failed to load knowledge uploader")
+        raise DeveloperTokenInvalidError() from exc
+
+    yield FilelibWriteSpaceContext(
+        permission_user=permission_user,
+        record_user=record_user,
+        command=FilelibSpaceCommandService(
+            query=build_filelib_space_query_service(
+                request=request,
+                user=permission_user,
+                session=session,
+                storage=storage,
+            ),
+            record_user=record_user,
+        ),
+    )
+
+
+async def get_filelib_space_command_service(
+    ctx: FilelibWriteSpaceContext = Depends(get_filelib_write_space_context),
+) -> FilelibSpaceCommandService:
+    return ctx.command
 
 
 async def get_filelib_retrieve_source_service(
@@ -328,11 +435,14 @@ async def get_filelib_sync_service(
     repository: FilelibSyncRepository = Depends(get_filelib_sync_repository),
     session: AsyncSession = Depends(get_db_session),
 ) -> FilelibSyncService:
+    if principal.knowledge_uploader_user_id is None:
+        raise DeveloperTokenKnowledgeUploaderMissingError()
     return FilelibSyncService(
         request=request,
         login_user=principal.user,
         token_id=principal.token_id,
         token_name=principal.token_name,
+        knowledge_uploader_user_id=principal.knowledge_uploader_user_id,
         file_sync_rule=DeveloperTokenFileSyncRule.model_validate(principal.raw_file_sync_rule),
         repository=repository,
         knowledge_space_service=build_knowledge_space_service_for_filelib_sync(

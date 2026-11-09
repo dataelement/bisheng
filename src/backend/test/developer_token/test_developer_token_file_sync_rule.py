@@ -506,6 +506,7 @@ async def test_create_persists_normalized_rule(monkeypatch) -> None:
     monkeypatch.setattr(DeveloperTokenService, "repository", Repo)
     monkeypatch.setattr(DeveloperTokenService, "_resolve_binding_tenant", AsyncMock(return_value=5))
     monkeypatch.setattr(DeveloperTokenService, "_assert_admin_scope", AsyncMock())
+    monkeypatch.setattr(DeveloperTokenService, "_validate_knowledge_uploader", AsyncMock())
     monkeypatch.setattr(
         DeveloperTokenService,
         "_validate_file_sync_rule",
@@ -531,7 +532,13 @@ async def test_create_persists_normalized_rule(monkeypatch) -> None:
 
     await DeveloperTokenService.create_token(
         operator,
-        DeveloperTokenCreate(name="sync", user_id=7, department_id=20, file_sync_rule=rule),
+        DeveloperTokenCreate(
+            name="sync",
+            user_id=7,
+            knowledge_uploader_user_id=7,
+            department_id=20,
+            file_sync_rule=rule,
+        ),
     )
 
     assert saved["token"].file_sync_rule["category"] == {
@@ -563,6 +570,7 @@ async def test_update_distinguishes_omitted_rule_from_explicit_null(
         id=1,
         tenant_id=5,
         user_id=7,
+        knowledge_uploader_user_id=7,
         name="sync",
         token_hash="hash",
         token_ciphertext="cipher",
@@ -591,6 +599,7 @@ async def test_update_distinguishes_omitted_rule_from_explicit_null(
     )
     monkeypatch.setattr(DeveloperTokenService, "repository", Repo)
     monkeypatch.setattr(DeveloperTokenService, "_assert_admin_scope", AsyncMock())
+    monkeypatch.setattr(DeveloperTokenService, "_validate_knowledge_uploader", AsyncMock())
     monkeypatch.setattr(DeveloperTokenService, "_validate_file_sync_rule", validate)
     monkeypatch.setattr(DeveloperTokenService, "_audit", AsyncMock())
     monkeypatch.setattr(DeveloperTokenService, "_to_read", AsyncMock(return_value=SimpleNamespace(id=1)))
@@ -617,6 +626,7 @@ async def test_rebinding_same_tenant_revalidates_existing_target_for_new_user(mo
         id=1,
         tenant_id=5,
         user_id=7,
+        knowledge_uploader_user_id=7,
         name="sync",
         token_hash="hash",
         token_ciphertext="cipher",
@@ -640,6 +650,7 @@ async def test_rebinding_same_tenant_revalidates_existing_target_for_new_user(mo
     monkeypatch.setattr(DeveloperTokenService, "repository", Repo)
     monkeypatch.setattr(DeveloperTokenService, "_assert_admin_scope", AsyncMock())
     monkeypatch.setattr(DeveloperTokenService, "_resolve_binding_tenant", AsyncMock(return_value=5))
+    monkeypatch.setattr(DeveloperTokenService, "_validate_knowledge_uploader", AsyncMock())
     monkeypatch.setattr(DeveloperTokenService, "_validate_file_sync_rule", validate)
     monkeypatch.setattr(DeveloperTokenService, "_audit", AsyncMock())
     monkeypatch.setattr(DeveloperTokenService, "_to_read", AsyncMock(return_value=SimpleNamespace(id=1)))

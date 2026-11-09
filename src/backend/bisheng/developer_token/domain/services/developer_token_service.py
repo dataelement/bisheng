@@ -25,6 +25,8 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenInvalidRateLimitError,
     DeveloperTokenInvalidRouteRuleError,
     DeveloperTokenIpForbiddenError,
+    DeveloperTokenKnowledgeUploaderInvalidError,
+    DeveloperTokenKnowledgeUploaderMissingError,
     DeveloperTokenLimiterUnavailableError,
     DeveloperTokenMissingError,
     DeveloperTokenRateLimitedError,
@@ -159,11 +161,13 @@ class DeveloperTokenService:
             payload.user_id,
             payload.file_sync_rule,
         )
+        await cls._validate_knowledge_uploader(tenant_id, int(payload.knowledge_uploader_user_id))
 
         plaintext = cls._generate_plaintext_token()
         token = DeveloperToken(
             tenant_id=tenant_id,
             user_id=payload.user_id,
+            knowledge_uploader_user_id=int(payload.knowledge_uploader_user_id),
             name=payload.name.strip(),
             token_hash=cls._hash_token(plaintext),
             token_ciphertext=cls._encrypt_plaintext(plaintext),
@@ -222,6 +226,15 @@ class DeveloperTokenService:
         update_data.pop("dept_id", None)
 
         target_tenant_id = int(update_data.get("tenant_id", token.tenant_id))
+        if "knowledge_uploader_user_id" in update_data:
+            final_uploader_id = update_data["knowledge_uploader_user_id"]
+        else:
+            final_uploader_id = token.knowledge_uploader_user_id
+        if final_uploader_id is None:
+            raise DeveloperTokenKnowledgeUploaderMissingError()
+        await cls._validate_knowledge_uploader(target_tenant_id, int(final_uploader_id))
+        update_data["knowledge_uploader_user_id"] = int(final_uploader_id)
+
         final_file_sync_rule = update_data.get("file_sync_rule", token.file_sync_rule)
         normalized_file_sync_rule = await cls._validate_file_sync_rule(
             target_tenant_id,
@@ -820,6 +833,9 @@ class DeveloperTokenService:
                 token_name=str(token.name or ""),
                 tenant_id=int(token.tenant_id),
                 user=user_payload,
+                knowledge_uploader_user_id=(
+                    int(token.knowledge_uploader_user_id) if token.knowledge_uploader_user_id is not None else None
+                ),
                 raw_file_sync_rule=raw_file_sync_rule,
             )
         except BaseException:
@@ -881,6 +897,13 @@ class DeveloperTokenService:
             user_tenant = await UserTenantDao.aget_user_tenant(user_id, tenant_id)
             if user_tenant is None or getattr(user_tenant, "status", "active") != "active":
                 raise DeveloperTokenBindingForbiddenError()
+
+    @classmethod
+    async def _validate_knowledge_uploader(cls, token_tenant_id: int, uploader_user_id: int) -> None:
+        """Ensure the configured knowledge uploader is active for the token tenant."""
+        if uploader_user_id <= 0:
+            raise DeveloperTokenKnowledgeUploaderInvalidError()
+        await cls._validate_token_binding(token_tenant_id, uploader_user_id)
 
     @classmethod
     async def _resolve_binding_tenant(
@@ -1172,6 +1195,7 @@ class DeveloperTokenService:
     ) -> DeveloperTokenRead:
         tenant_name = None
         user_name = None
+        knowledge_uploader_user_name = None
         try:
             tenant = await TenantDao.aget_by_id(token.tenant_id)
             tenant_name = getattr(tenant, "tenant_name", None) if tenant else None
@@ -1182,6 +1206,15 @@ class DeveloperTokenService:
             user_name = getattr(user, "user_name", None) if user else None
         except Exception:
             logger.exception("developer token user enrichment failed token_id=%s", token.id)
+        if token.knowledge_uploader_user_id is not None:
+            try:
+                uploader = await UserDao.aget_user(int(token.knowledge_uploader_user_id))
+                knowledge_uploader_user_name = getattr(uploader, "user_name", None) if uploader else None
+            except Exception:
+                logger.exception(
+                    "developer token knowledge uploader enrichment failed token_id=%s",
+                    token.id,
+                )
         file_sync_rule = None
         if token.file_sync_rule is not None:
             try:
@@ -1194,6 +1227,10 @@ class DeveloperTokenService:
             tenant_name=tenant_name,
             user_id=token.user_id,
             user_name=user_name,
+            knowledge_uploader_user_id=(
+                int(token.knowledge_uploader_user_id) if token.knowledge_uploader_user_id is not None else None
+            ),
+            knowledge_uploader_user_name=knowledge_uploader_user_name,
             name=token.name,
             token_prefix=token.token_prefix,
             enabled=bool(token.enabled),
@@ -1235,6 +1272,7 @@ class DeveloperTokenService:
             "id": token.id,
             "tenant_id": token.tenant_id,
             "user_id": token.user_id,
+            "knowledge_uploader_user_id": token.knowledge_uploader_user_id,
             "name": token.name,
             "token_prefix": token.token_prefix,
             "enabled": bool(token.enabled),

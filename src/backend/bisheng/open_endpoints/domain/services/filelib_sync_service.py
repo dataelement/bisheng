@@ -110,6 +110,7 @@ class FilelibSyncService:
         login_user: UserPayload,
         token_id: int,
         token_name: str = "",
+        knowledge_uploader_user_id: int | None = None,
         file_sync_rule: DeveloperTokenFileSyncRule,
         repository: FilelibSyncRepository,
         knowledge_space_service: KnowledgeSpaceService,
@@ -117,6 +118,7 @@ class FilelibSyncService:
         self.request = request
         self.login_user = login_user
         self.token_id = token_id
+        self.knowledge_uploader_user_id = knowledge_uploader_user_id
         self.token_name = str(token_name or "").strip()
         self.file_sync_rule = file_sync_rule
         self.repository = repository
@@ -611,11 +613,13 @@ class FilelibSyncService:
             )
 
         if int(self.login_user.user_id) > 0:
-            token_user = await self.repository.find_user_by_id(int(self.login_user.user_id))
+            uploader_id = int(self.knowledge_uploader_user_id or self.login_user.user_id)
+            uploader_row = await self.repository.find_user_by_id(uploader_id)
+            uploader_name = str(getattr(uploader_row, "user_name", "") or self.login_user.user_name)
             return (
-                int(self.login_user.user_id),
-                self.login_user.user_name,
-                self._normalize_user_external_id(token_user),
+                uploader_id,
+                uploader_name,
+                self._normalize_user_external_id(uploader_row),
             )
         return int(self.login_user.user_id), self.login_user.user_name, ""
 

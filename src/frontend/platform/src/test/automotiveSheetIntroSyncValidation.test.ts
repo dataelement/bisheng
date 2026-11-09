@@ -9,6 +9,7 @@ const tokenWithRule: DeveloperTokenRecord = {
   id: 10,
   tenant_id: 5,
   user_id: 7,
+  knowledge_uploader_user_id: 7,
   name: "token",
   token_prefix: "bs_abc",
   enabled: true,
