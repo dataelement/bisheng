@@ -81,9 +81,9 @@ class KnowledgeRag:
         action_map = await KnowledgePermissionService.get_knowledge_action_map_async(
             login_user,
             normalized,
-            ["use"],
+            ["visible"],
         )
-        return {knowledge_id for knowledge_id in normalized if "use" in action_map.get(knowledge_id, set())}
+        return {knowledge_id for knowledge_id in normalized if "visible" in action_map.get(knowledge_id, set())}
 
     @classmethod
     def _get_usable_knowledge(

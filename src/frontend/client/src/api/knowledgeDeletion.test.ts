@@ -16,13 +16,14 @@ const envelope = (data: unknown, tenant = "8") => ({
 });
 const command = { spaceId: 3, kind: "files", items: [{ id: 7, type: "file" }] } as const;
 beforeEach(() => jest.clearAllMocks());
-it("learns the tenant from the selected-delete references read without a root-visible lookup", async () => {
-  jest.mocked(request.postResponse).mockResolvedValue(envelope({ check_complete: true }));
+it("learns the tenant without requiring every selected action or root visibility", async () => {
+  jest.mocked(request.postResponse).mockResolvedValue(envelope({ permitted_selection_count: 0 }));
   const captured = await readDeletionTenant(command);
   expect(captured.tenant).toBe("8");
-  expect(request.postResponse).toHaveBeenCalledWith("/api/v1/knowledge/space/3/files/references", {
+  expect(request.postResponse).toHaveBeenCalledWith("/api/v1/knowledge/space/3/files/delete/inspect", {
     items: command.items,
   });
+  expect(captured.inspection).toBeUndefined();
   expect(request.getResponse).not.toHaveBeenCalled();
 });
 it("sends the same real tenant through precheck, exact confirmation, status and source pages", async () => {

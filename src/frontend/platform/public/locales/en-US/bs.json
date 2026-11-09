@@ -4436,5 +4436,14 @@
       "admin": "Administrators",
       "children": "Includes subdepartments"
     }
+  },
+  "references": {
+    "saved": "Saved reference",
+    "unavailable": "Currently unavailable",
+    "unconfirmed": "Some saved IDs are not in the current choices. Their availability cannot be confirmed here; the saved IDs are retained.",
+    "partialRepair": "You can save partial repairs. All references must be valid before running or publishing.",
+    "invalid_deleted": "Deleted",
+    "invalid_legacy": "Missing historical reference",
+    "deleting": "Deletion in progress"
   }
 }

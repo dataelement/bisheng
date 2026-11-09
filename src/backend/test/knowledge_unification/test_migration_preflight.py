@@ -15,6 +15,7 @@ from bisheng.core.database import tenant_filter
 from bisheng.database.models.role import Role
 from bisheng.database.models.tenant import UserTenant
 from bisheng.database.models.user_role import UserRole
+from bisheng.knowledge.application.unification_reference_state import OriginalReferenceState
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
 from bisheng.knowledge.domain.repositories.unification_target_repository import KnowledgeMigrationTargetRepository
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
@@ -24,7 +25,10 @@ from bisheng.permission.domain.repositories.f118_migration_snapshot_repository i
     PermissionMigrationSnapshotRepository,
 )
 from bisheng.permission.migration import f118_plan
-from bisheng.resource_reference.application.contracts import SourceKey, TargetKey
+from bisheng.resource_reference.application.contracts import ReferenceSpec, SourceKey, TargetKey
+from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.user.domain.models.user import User
 from test.knowledge_unification import test_migration_resource_repository as original
 from test.knowledge_unification import test_perm_migration as pure
@@ -49,6 +53,9 @@ async def native(resource_native, monkeypatch):
         LLMModel,
         TenantSystemModelConfig,
         SpaceChannelMember,
+        BusinessReferenceSet,
+        BusinessResourceReference,
+        ResourceReferenceTombstone,
         *snapshot.TABLES,
     )
     names = {model.__tablename__ for model in models if "tenant_id" in model.__table__.c} - {"user_tenant"}
@@ -285,9 +292,28 @@ async def test_explicit_missing_is_not_foreign_retired_or_existing_offline_and_n
     keys = tuple(TargetKey("knowledge_space", str(i)) for i in (9000, 9999, 8000, 7000))
     async with AsyncSession(native.engine) as session, session.begin():
         facts = await KnowledgeMigrationTargetRepository().ainspect(session, source_key=source, targets=keys)
+    async with AsyncSession(native.engine) as session, session.begin():
+        refs = tuple(ReferenceSpec(f"slot-{i}", key) for i, key in enumerate(keys))
+        state = OriginalReferenceState()
+        index_snapshot = await state.repository.aload_raw_snapshot(session, source_key=source)
+        _, states = await state.acapture(
+            session,
+            source_key=source,
+            references=refs,
+            physical=dict(zip(keys, facts, strict=True)),
+            tombstone_cache={},
+            snapshot=index_snapshot,
+        )
     rows = [
-        ReferenceInventoryRecord(source, f"slot-{i}", key, "explicit_id", fact)
-        for i, (key, fact) in enumerate(zip(keys, facts, strict=True))
+        ReferenceInventoryRecord(
+            source,
+            ref.slot_key,
+            ref.target,
+            "explicit_id",
+            fact,
+            states[(ref.slot_key, ref.target.target_type.value, ref.target.target_id)],
+        )
+        for ref, fact in zip(refs, facts, strict=True)
     ]
     assert module.source_decision(rows[0], tenant_id=101).data["disposition"] == "existing_saved_slot"
     assert module.source_decision(rows[1], tenant_id=101).data["disposition"] == "initial_missing"
@@ -322,8 +348,21 @@ async def test_original_global_role_and_revoked_root_numeric_model_are_not_new_a
     key = TargetKey("model", "11")
     async with AsyncSession(native.engine) as session, session.begin():
         fact = (await ModelMigrationTargetRepository().ainspect(session, source_key=source, targets=(key,)))[0]
+        state = OriginalReferenceState()
+        index_snapshot = await state.repository.aload_raw_snapshot(session, source_key=source)
+        _, states = await state.acapture(
+            session,
+            source_key=source,
+            references=(ReferenceSpec("old-slot", key),),
+            physical={key: fact},
+            tombstone_cache={},
+            snapshot=index_snapshot,
+        )
         decision = module.source_decision(
-            ReferenceInventoryRecord(source, "old-slot", key, "explicit_id", fact), tenant_id=101
+            ReferenceInventoryRecord(
+                source, "old-slot", key, "explicit_id", fact, states[("old-slot", key.target_type.value, key.target_id)]
+            ),
+            tenant_id=101,
         )
         assert decision.data["disposition"] == "existing_saved_slot" and decision.data["exists"]
         assert "grant" not in decision.data and "new_binding_allowed" not in decision.data

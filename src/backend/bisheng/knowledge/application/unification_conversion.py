@@ -88,13 +88,18 @@ class UnificationSQLConversionApplication:
             session, run_id=frozen.run_id, writer_contract_version=frozen.writer_contract_version, lock=True
         )
         if (
-            run.phase not in {"baseline_frozen", "converting"}
+            run.phase not in {"baseline_frozen", "converting", "backfilling", "verifying", "verified", "completed"}
             or run.baseline_ref != frozen.baseline_ref
             or run.plan_ref != frozen.plan_ref
             or run.baseline_hash != frozen.baseline_ref["sha256"]
             or run.plan_hash != frozen.plan_ref["sha256"]
         ):
             _blocked("frozen_run_changed")
+        if run.phase not in {"baseline_frozen", "converting"} and any(
+            run.checkpoints.get("converting", {}).get(name, {}).get("complete") is not True
+            for name in ("sql_conversion",)
+        ):
+            _blocked("later_phase_incomplete_conversion")
         return run
 
     async def _admit(self, run_id, writer):
@@ -256,6 +261,21 @@ class UnificationSQLConversionApplication:
             continuation = await self._apply(frozen, (), ordinal, current, continuation, True, state)
             current = continuation.progress
         return TenantSQLConversionProgress(tenant, total, deferred, current)
+
+    async def arun_references(
+        self, *, run_id, writer_contract_version, environment, backup_ref, schema_ref, operator_id
+    ):
+        from bisheng.knowledge.application.unification_references import run_references
+
+        return await run_references(
+            self,
+            run_id=run_id,
+            writer_contract_version=writer_contract_version,
+            environment=environment,
+            backup_ref=backup_ref,
+            schema_ref=schema_ref,
+            operator_id=operator_id,
+        )
 
     async def arun_permissions(
         self, *, run_id, writer_contract_version, environment, backup_ref, schema_ref, operator_id

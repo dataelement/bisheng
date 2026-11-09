@@ -397,3 +397,207 @@ class UnificationInventoryRepository:
         )
         if await self._read(session, query):
             _blocked("assistant_parent_invalid")
+
+    async def aload_reference_source(self, session, *, source_key):
+        """Exact original scalar projections for stopped-service M4 revalidation."""
+        from bisheng.resource_reference.application.contracts import SourceKey, SourceType
+
+        tenant = _scope(session)
+        if type(source_key) is not SourceKey or source_key.tenant_id != tenant:
+            _blocked("source_identity")
+        key, kind = source_key, source_key.source_type
+
+        async def one(model, cls, condition, overrides=None, parent=None):
+            query = select(*_columns(model, cls, overrides)).where(condition)
+            if parent is not None:
+                query = query.join(*parent)
+            rows = await self._read(session, query.with_for_update())
+            if len(rows) != 1:
+                _blocked("source_missing_or_duplicated")
+            value = _row(cls, rows[0])
+            if hasattr(value, "tenant_id") and value.tenant_id != tenant:
+                _blocked("source_wrong_tenant")
+            return value
+
+        if kind in {SourceType.WORKFLOW_VERSION, SourceType.HOSTED_APP_VERSION}:
+            workflow = kind == SourceType.WORKFLOW_VERSION
+            model, cls = (Flow, WorkflowRootRow) if workflow else (App, AppRootRow)
+            root = await one(model, cls, model.id == key.source_id, {"data_json": Flow.data} if workflow else None)
+            if workflow:
+                version = await one(
+                    FlowVersion,
+                    WorkflowVersionRow,
+                    (FlowVersion.id == int(key.source_version)) & (FlowVersion.flow_id == key.source_id),
+                    {"data_json": FlowVersion.data},
+                )
+            else:
+                version = await one(
+                    AppVersion,
+                    AppVersionRow,
+                    (AppVersion.id == key.source_version) & (AppVersion.app_id == key.source_id),
+                    {"tenant_id": App.tenant_id, "capabilities_json": AppVersion.capabilities},
+                    (App, App.id == AppVersion.app_id),
+                )
+            return root, version, ()
+        if kind in {SourceType.ASSISTANT, SourceType.CHANNEL_SYNC}:
+            assistant = kind == SourceType.ASSISTANT
+            model, cls = (Assistant, AssistantRow) if assistant else (Channel, ChannelRow)
+            root = await one(model, cls, model.id == key.source_id)
+            method = self.alist_assistant_links if assistant else self.alist_channel_syncs
+            argument, children, after = "assistant_ids" if assistant else "channel_ids", [], None
+            while True:
+                page = await method(session, **{argument: (key.source_id,)}, after_id=after, limit=200)
+                children.extend(page.items)
+                if page.next_after is None:
+                    break
+                after = page.next_after
+            return root, None, tuple(children)
+        if kind == SourceType.KNOWLEDGE:
+            row = await one(
+                Knowledge,
+                KnowledgeRow,
+                Knowledge.id == int(key.source_id),
+                {"model_transition_json": Knowledge.model_transition},
+            )
+        elif kind == SourceType.MODEL_DEFAULT:
+            if key.source_id not in MODEL_DEFAULT_SCHEMAS:
+                _blocked("unknown_default")
+            row = await one(TenantSystemModelConfig, DefaultRow, TenantSystemModelConfig.key == key.source_id)
+        else:
+            _blocked("unknown_source_type")
+        if key.source_version != "current":
+            _blocked("source_version")
+        return row, None, ()
+
+    async def acensus_reference_sources(self, session):
+        """One actual six-source membership pass; no target/source cross product."""
+        from bisheng.resource_reference.application.contracts import SourceKey, SourceRootKey, SourceType
+
+        tenant, roots, sources, versions = _scope(session), {}, set(), set()
+
+        async def pages(method):
+            after = None
+            while True:
+                page = await method(session, after_id=after, limit=200)
+                yield page.items
+                if page.next_after is None:
+                    return
+                after = page.next_after
+
+        for kind, root_method, version_method in (
+            (SourceType.WORKFLOW_VERSION, self.alist_workflow_roots, self.alist_workflow_versions),
+            (SourceType.HOSTED_APP_VERSION, self.alist_app_roots, self.alist_app_versions),
+        ):
+            live = set()
+            async for page in pages(root_method):
+                for row in page:
+                    roots[SourceRootKey(tenant, kind, row.id)] = row
+                    if (row.is_delete == 0) if kind == SourceType.WORKFLOW_VERSION else (row.state != "deleted"):
+                        live.add(row.id)
+            async for page in pages(version_method):
+                for row in page:
+                    parent = row.flow_id if kind == SourceType.WORKFLOW_VERSION else row.app_id
+                    versions.add(SourceKey(tenant, kind, parent, str(row.id)))
+                    if parent in live and (kind != SourceType.WORKFLOW_VERSION or row.is_delete in (None, 0)):
+                        sources.add(SourceKey(tenant, kind, parent, str(row.id)))
+        for kind, method in (
+            (SourceType.ASSISTANT, self.alist_assistants),
+            (SourceType.CHANNEL_SYNC, self.alist_channels),
+            (SourceType.KNOWLEDGE, self.alist_knowledge),
+            (SourceType.MODEL_DEFAULT, self.alist_model_defaults),
+        ):
+            async for page in pages(method):
+                for row in page:
+                    ident = row.key if kind == SourceType.MODEL_DEFAULT else str(row.id)
+                    roots[SourceRootKey(tenant, kind, ident)] = row
+                    if kind == SourceType.ASSISTANT and row.is_delete != 0:
+                        continue
+                    if kind == SourceType.KNOWLEDGE and row.type == 2:
+                        continue
+                    sources.add(SourceKey(tenant, kind, ident, "current"))
+        return roots, frozenset(sources), frozenset(versions)
+
+    async def aload_reference_root(self, session, *, root_key):
+        from bisheng.resource_reference.application.contracts import SourceRootKey, SourceType
+
+        tenant = _scope(session)
+        if type(root_key) is not SourceRootKey or root_key.tenant_id != tenant:
+            _blocked("root_scope")
+        types = {
+            SourceType.WORKFLOW_VERSION: (Flow, WorkflowRootRow, {"data_json": Flow.data}),
+            SourceType.HOSTED_APP_VERSION: (App, AppRootRow, None),
+        }
+        if root_key.source_type not in types:
+            _blocked("version_root_type")
+        model, row_type, overrides = types[root_key.source_type]
+        rows = await self._read(
+            session,
+            select(*_columns(model, row_type, overrides)).where(model.id == root_key.source_id).with_for_update(),
+        )
+        if len(rows) != 1 or rows[0]["tenant_id"] != tenant:
+            _blocked("root_missing")
+        return _row(row_type, rows[0])
+
+    async def ais_empty_installation(self, session):
+        """Actual global creation-time emptiness, never an existing-tenant ready fallback."""
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun
+        from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+        from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+        from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
+
+        _scope(session)
+        for model in (
+            Flow,
+            FlowVersion,
+            App,
+            AppVersion,
+            Assistant,
+            AssistantLink,
+            Channel,
+            ChannelKnowledgeSync,
+            Knowledge,
+            TenantSystemModelConfig,
+            KnowledgeUnificationRun,
+            BusinessReferenceSet,
+            BusinessResourceReference,
+            ResourceReferenceTombstone,
+        ):
+            with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
+                if (await session.execute(select(model.__table__.c.id).limit(1))).first() is not None:
+                    return False
+        return True
+
+    async def avalidate_registered_source_tenants(self, session):
+        """One global native tenant-integrity gate for formal M2/M4 only."""
+        _scope(session)
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+        from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+        from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
+
+        # Actual registered tenants close the source/index universe. Rows under
+        # a nonexistent tenant must never disappear from the global M4 proof.
+        for model in (
+            Flow,
+            FlowVersion,
+            App,
+            Assistant,
+            AssistantLink,
+            Channel,
+            Knowledge,
+            TenantSystemModelConfig,
+            BusinessReferenceSet,
+            BusinessResourceReference,
+            ResourceReferenceTombstone,
+        ):
+            table, parent = model.__table__, Tenant.__table__.alias("reference_registered_tenant")
+            query = (
+                select(table.c.id)
+                .select_from(table.outerjoin(parent, parent.c.id == table.c.tenant_id))
+                .where(parent.c.id.is_(None))
+                .limit(1)
+            )
+            with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
+                if (await session.execute(query)).first() is not None:
+                    _blocked("unregistered_source_or_index_tenant")

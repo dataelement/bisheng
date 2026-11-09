@@ -154,6 +154,7 @@ class KnowledgeUnificationRunRepository:
                         KnowledgeUnificationRun.writer_contract_version == writer_contract_version,
                         KnowledgeUnificationRun.origin == "migration",
                         KnowledgeUnificationRun.run_id != run_id,
+                        KnowledgeUnificationRun.phase.notin_(("completed", "failed")),
                     )
                     .order_by(KnowledgeUnificationRun.tenant_id)
                     .limit(1)
@@ -319,6 +320,7 @@ class KnowledgeUnificationRunRepository:
                         KnowledgeUnificationRun.writer_contract_version == writer_contract_version,
                         KnowledgeUnificationRun.origin == "migration",
                         KnowledgeUnificationRun.run_id != run_id,
+                        KnowledgeUnificationRun.phase.notin_(("completed", "failed")),
                     )
                     .limit(1)
                     .with_for_update()

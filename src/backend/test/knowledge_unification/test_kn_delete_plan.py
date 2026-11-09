@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import select
 
-from bisheng.common.errcode.knowledge import ResourceReferenceConflictError, ResourceReferenceInvalidError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ResourceReferenceConflictError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.knowledge.application import knowledge_deletion as module
 from bisheng.knowledge.application import processing_identity
 from bisheng.knowledge.domain.models.knowledge import Knowledge
@@ -83,6 +87,7 @@ async def application(context, service, monkeypatch):
     )
     monkeypatch.setattr(module, "get_f048_runtime", AsyncMock(return_value=runtime))
     monkeypatch.setattr(module, "require_business_action", AsyncMock())
+    monkeypatch.setattr(module.admission, "batch_check_business_actions", native.module.batch_check_business_actions)
     app = module.KnowledgeDeletionApplication(
         session_factory=context.db.sessions,
         coverage_factory=context.factory,
@@ -159,3 +164,51 @@ async def test_known_direct_reference_cannot_be_bypassed_by_confirming_non_execu
             selections=native.native.selections(("knowledge_file", 31)),
             force=True,
         )
+
+
+async def test_mixed_permissions_hide_denied_dependency_and_require_fresh_consent_after_change(
+    application, context, monkeypatch
+):
+    await native.native.seed(context, (31, 101, "assistant", "not-disclosed", "current", "file"))
+    permitted = {40}
+
+    async def actions(identity, *, resource_type, resource_ids, actions):
+        return {str(ident): frozenset(actions) if ident in permitted else frozenset() for ident in resource_ids}
+
+    monkeypatch.setattr(module.admission, "batch_check_business_actions", actions)
+    selections = native.native.selections(("knowledge_file", 31), ("knowledge_file", 40))
+    review = await application.aprecheck(identity=application.user, space_id=1, selections=selections)
+    assert review.can_execute and review.requires_skip_confirmation
+    assert [row.id for row in review.valid_items] == [40]
+    assert [(row.id, row.reason, row.name) for row in review.invalid_items] == [(31, "no_permission", None)]
+    assert not any(review.impact["source_counts"].values())
+    assert not review.impact["source_page"]["data"]
+    permitted.add(31)
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        await application.aconfirm(
+            identity=application.user,
+            space_id=1,
+            request=ProcessingCreateRequest(
+                confirmation_id=review.confirmation_id,
+                plan_digest=review.plan_digest,
+                idempotency_key="permission-change",
+            ),
+        )
+    async with context.db.sessions() as session:
+        assert not (await session.execute(select(KnowledgeSpaceDeleteJob))).scalars().all()
+
+
+async def test_no_authorized_selection_is_non_executable_without_reading_dependency_facts(application, monkeypatch):
+    async def deny(identity, *, resource_type, resource_ids, actions):
+        return {str(ident): frozenset() for ident in resource_ids}
+
+    monkeypatch.setattr(module.admission, "batch_check_business_actions", deny)
+    inspection = AsyncMock(side_effect=AssertionError("denied selections must not disclose reference facts"))
+    monkeypatch.setattr(application.references, "ainspect", inspection)
+    selections = native.native.selections(("knowledge_file", 31))
+    probe = await application.ainspect_selections(identity=application.user, space_id=1, selections=selections)
+    assert probe == {"permitted_selection_count": 0}
+    review = await application.aprecheck(identity=application.user, space_id=1, selections=selections)
+    assert not review.can_execute and not review.valid_items
+    assert review.invalid_items[0].reason == "no_permission" and review.invalid_items[0].name is None
+    inspection.assert_not_awaited()

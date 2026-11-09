@@ -27,6 +27,9 @@ from bisheng.knowledge.application.unification_inventory_codec import (
 )
 from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun
 from bisheng.permission.application.migration_read import PinnedMigrationPermissionReader
+from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from test.knowledge_unification import test_migration_inventory_repository as raw
 from test.knowledge_unification import test_migration_preflight as preflight
 from test.knowledge_unification import test_migration_resource_repository as resources
@@ -69,7 +72,13 @@ async def original_library_modes(native, pairs):
 
 @pytest.fixture
 async def complete(native, monkeypatch):
-    models = (*raw.TABLES, KnowledgeUnificationRun)
+    models = (
+        *raw.TABLES,
+        KnowledgeUnificationRun,
+        BusinessReferenceSet,
+        BusinessResourceReference,
+        ResourceReferenceTombstone,
+    )
     names = {model.__tablename__ for model in models if "tenant_id" in model.__table__.c} - {"user_tenant"}
     previous = tenant_filter._discover_tenant_aware_tables()
     monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: previous | names)

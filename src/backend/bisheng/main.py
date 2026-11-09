@@ -120,6 +120,16 @@ def _register_resource_reference_composition() -> None:
     from bisheng.resource_reference.composition import register
 
     register()
+    from bisheng.tenant.application.tenant_creation import (
+        create_mounted_tenant_with_coverage,
+        create_tenant_with_coverage,
+    )
+    from bisheng.tenant.domain.services.tenant_service import TenantService
+
+    TenantService.configure_creation(create_tenant_with_coverage)
+    from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService
+
+    TenantMountService.configure_creation(create_mounted_tenant_with_coverage)
 
 
 async def _prepare_native_reference_permissions() -> None:
@@ -150,7 +160,9 @@ async def lifespan(app: FastAPI):
         # by a face a local coding agent calls in a loop.
         model_call_record_writer.start()
         try:
-            await init_default_data()
+            from bisheng.knowledge.application.unification_coverage import bootstrap_created_root
+
+            await init_default_data(reference_bootstrap=bootstrap_created_root)
             # F035 task-mode compatibility data remains unrelated to F048 resource
             # authorization and is safe to maintain independently.
             try:
