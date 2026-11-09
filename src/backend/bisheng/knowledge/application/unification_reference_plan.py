@@ -17,6 +17,7 @@ from bisheng.knowledge.application.unification_sources import (
     SourceInventoryRecord,
 )
 from bisheng.knowledge.domain.repositories.unification_run_repository import FrozenGlobalInventoryResult
+from bisheng.knowledge.domain.schemas.unification_conversion import DefaultConversionCommand, ResourceConversionCommand
 from bisheng.knowledge.domain.services.unification_fingerprints import digest
 from bisheng.resource_reference.application.contracts import (
     ReferenceSetDigestAccumulator,
@@ -99,6 +100,7 @@ class FrozenReferencePlan:
     sources: tuple[SourcePlanEntry, ...]
     roots: tuple[LocatedRoot, ...]
     retired: tuple[LocatedRetired, ...]
+    conversions: tuple = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +112,9 @@ class ReferenceSourceChunk:
 
 class _Source:
     def __init__(self, header, at):
+        from bisheng.knowledge.application.unification_reference_state import parse_frozen
+
+        parse_frozen(header.frozen_index, index=True)
         self.header, self.at = header, at
         self.accumulator = ReferenceSetDigestAccumulator()
         self.count, self.last_key, self.first, self.last = 0, None, None, None
@@ -159,7 +164,7 @@ class UnificationReferencePlanReader:
 
     async def aprepare(self, frozen, *, environment, backup_ref, schema_ref, current=None):
         current = self._current(current)
-        pages, sources, roots, retired = [], {}, {}, []
+        pages, sources, roots, retired, conversions = [], {}, {}, [], []
         active, seen, retired_roots, retired_sources = {}, set(), set(), set()
         decisions, latest_decision = {}, {}
 
@@ -190,6 +195,19 @@ class UnificationReferencePlanReader:
                     page.content, run_id=frozen.run_id, tenant_id=page.tenant_id, page_index=page.page_index
                 ).records
             else:
+                from bisheng.knowledge.application.unification_conversion_codec import decode_sql_conversion_page
+
+                conversions.extend(
+                    command
+                    for command in decode_sql_conversion_page(
+                        page.content,
+                        run_id=frozen.run_id,
+                        writer_contract_version=frozen.writer_contract_version,
+                        tenant_id=page.tenant_id,
+                        page_index=page.page_index,
+                    ).commands
+                    if type(command) in {ResourceConversionCommand, DefaultConversionCommand}
+                )
                 rows = decode_inventory_page(
                     page.content,
                     run_id=frozen.run_id,
@@ -276,7 +294,7 @@ class UnificationReferencePlanReader:
             entries.append(replace(entry, decisions=RecordSpan(actual.first, actual.last) if actual else None))
         current()
         return FrozenReferencePlan(
-            deepcopy(frozen), tuple(pages), tuple(entries), tuple(roots.values()), tuple(retired)
+            deepcopy(frozen), tuple(pages), tuple(entries), tuple(roots.values()), tuple(retired), tuple(conversions)
         )
 
     @staticmethod

@@ -43,7 +43,15 @@ def certificate(tenant, *, epoch=1, run="coverage-native", superseded=()):
         "baseline_hash": "a" * 64,
         "plan_hash": "b" * 64,
         "source_types": [kind.value for kind in SourceType],
-        "proofs": {kind.value: dict(proof) for kind in SourceType},
+        "proofs": {
+            kind.value: {
+                **proof,
+                "extractor_version": __import__(
+                    "bisheng.knowledge.application.unification_coverage", fromlist=["reference_extractor_versions"]
+                ).reference_extractor_versions()[kind.value],
+            }
+            for kind in SourceType
+        },
         "superseded_ledger_count": len(superseded),
         "superseded_ledger_digest": digest(list(superseded)),
     }

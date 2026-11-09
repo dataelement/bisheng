@@ -69,6 +69,19 @@ _HISTORY_FIELDS = (
 )
 
 
+def reference_extractor_versions():
+    from bisheng.knowledge.application import unification_sources as sources
+
+    return {
+        SourceType.WORKFLOW_VERSION.value: sources.WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+        SourceType.HOSTED_APP_VERSION.value: sources.APP_REFERENCE_EXTRACTOR_VERSION,
+        SourceType.ASSISTANT.value: sources.ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
+        SourceType.CHANNEL_SYNC.value: sources.CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
+        SourceType.KNOWLEDGE.value: sources.KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
+        SourceType.MODEL_DEFAULT.value: sources.MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
+    }
+
+
 def _hash(value):
     return type(value) is str and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
@@ -137,12 +150,12 @@ def validate_certificate(row, history, writer):
             blocked("empty_tenant_not_migration")
     else:
         blocked("certificate_origin")
-    for proof in cert["proofs"].values():
+    for kind, proof in cert["proofs"].items():
         if (
             type(proof) is not dict
             or set(proof) != _PROOF_FIELDS
             or type(proof["extractor_version"]) is not str
-            or not 1 <= len(proof["extractor_version"]) <= 64
+            or proof["extractor_version"] != reference_extractor_versions()[kind]
             or not _hash(proof["source_digest"])
             or not _hash(proof["reference_digest"])
         ):
@@ -284,3 +297,204 @@ class ProductionCoverageReader:
 def production_coverage_factory(session, *, writer_contract_version="f118-v1"):
     reader = ProductionCoverageReader(session)
     return CoverageRepository(reader, global_port=reader, writer_contract_version=writer_contract_version)
+
+
+async def certify_migration(session, *, frozen, proofs):
+    """After actual complete reconciliation, certificate and terminal phase share TX."""
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from bisheng.knowledge.domain.repositories.unification_run_repository import KnowledgeUnificationRunRepository
+
+    context, repository = CoverageContext(session), UnificationCoverageRepository()
+    from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
+
+    await UnificationInventoryRepository().avalidate_global_orphans(session)
+    await UnificationInventoryRepository().avalidate_registered_source_tenants(session)
+    context.check()
+    epoch = await repository.aallocate_epoch(session)
+    tenants = await repository.aload_tenants(session)
+    if tenants != frozen.tenant_ids or set(proofs) != set(tenants):
+        blocked("migration_universe_changed")
+    rows = await repository.aload_runs(session)
+    selected = {row["tenant_id"]: row for row in rows if row["run_id"] == frozen.run_id}
+    if set(selected) != set(tenants):
+        blocked("migration_run_membership")
+    runs = KnowledgeUnificationRunRepository()
+    for tenant in tenants:
+        row = selected[tenant]
+        if (
+            row["phase"],
+            row["baseline_hash"],
+            row["plan_hash"],
+            row["writer_contract_version"],
+            row["coverage_epoch"],
+        ) != (
+            "verifying",
+            frozen.baseline_ref["sha256"],
+            frozen.plan_ref["sha256"],
+            frozen.writer_contract_version,
+            None,
+        ) or row["checkpoints"].get("backfilling", {}).get("references", {}).get("complete") is not True:
+            blocked("migration_not_verified")
+        prior = tuple(other for other in rows if other["tenant_id"] == tenant and other["id"] != row["id"])
+        count, checksum = ledger_inventory(prior)
+        cert = {
+            "schema_version": 1,
+            "tenant_id": tenant,
+            "run_id": frozen.run_id,
+            "writer_contract_version": frozen.writer_contract_version,
+            "origin": "migration",
+            "coverage_epoch": epoch,
+            "baseline_hash": row["baseline_hash"],
+            "plan_hash": row["plan_hash"],
+            "source_types": list(_TYPES),
+            "proofs": proofs[tenant],
+            "superseded_ledger_count": count,
+            "superseded_ledger_digest": checksum,
+        }
+        cert["certificate_digest"] = digest(cert)
+        validate_certificate(
+            {
+                **row,
+                "phase": "completed",
+                "coverage_epoch": epoch,
+                "source_coverage": dict.fromkeys(_TYPES, True),
+                "verification_report": {**row["verification_report"], "reference_coverage": cert},
+            },
+            prior,
+            frozen.writer_contract_version,
+        )
+        with tenant_execution_scope(tenant):
+            await runs.aadvance(
+                session,
+                run_id=frozen.run_id,
+                writer_contract_version=frozen.writer_contract_version,
+                baseline_hash=row["baseline_hash"],
+                plan_hash=row["plan_hash"],
+                expected_phase="verifying",
+                next_phase="verified",
+            )
+            await repository.awrite_certificate(
+                session, row={**row, "phase": "verified"}, certificate=cert, source_coverage=dict.fromkeys(_TYPES, True)
+            )
+        context.check()
+    return epoch
+
+
+async def _certify_created_tenant(session, *, tenant_id, prior_tenant_ids, prior_epoch, epoch):
+    """Internal same-creation-TX handoff; the public factory offers no empty marker."""
+    from uuid import uuid4
+
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
+    from bisheng.resource_reference.domain.repositories.reference_backfill_repository import ReferenceBackfillRepository
+
+    context, repository = CoverageContext(session), UnificationCoverageRepository()
+    actual = await repository.aload_tenants(session)
+    if (
+        type(tenant_id) is not int
+        or tenant_id <= 0
+        or tenant_id in prior_tenant_ids
+        or tuple(sorted((*prior_tenant_ids, tenant_id))) != actual
+        or epoch != prior_epoch + 1
+    ):
+        blocked("creation_inventory_changed")
+    previous_rows = await repository.aload_runs(session)
+    if any(row["tenant_id"] == tenant_id for row in previous_rows):
+        blocked("new_tenant_already_has_ledger")
+    # All old certificates remain exact and current. A just-created identity is
+    # never inferred from an empty query against an arbitrary existing tenant.
+    if prior_tenant_ids:
+        ProductionCoverageReader._global(previous_rows, prior_tenant_ids, "f118-v1")
+    elif tenant_id != 1 or actual != (1,) or previous_rows or prior_epoch != 0 or epoch != 1:
+        blocked("fresh_root_inventory_required")
+    with tenant_execution_scope(tenant_id):
+        inventory = UnificationInventoryRepository()
+        await inventory.avalidate_global_orphans(session)
+        await inventory.avalidate_tenant_orphans(session)
+        roots, sources, versions = await inventory.acensus_reference_sources(session)
+        if roots or sources or versions:
+            blocked("created_tenant_business_not_empty")
+        await ReferenceBackfillRepository().aassert_index_universe(session, source_keys=())
+        # Existing deletion evidence also proves the identity was used before
+        # this creation and cannot be relabelled as an empty tenant.
+        present = await ReferenceBackfillRepository().ahas_tenant_tombstones(session)
+        if present:
+            blocked("created_tenant_deletion_evidence")
+    proofs = {
+        kind: {
+            "extractor_version": reference_extractor_versions()[kind],
+            "root_count": 0,
+            "source_count": 0,
+            "zero_reference_count": 0,
+            "reference_count": 0,
+            "valid_count": 0,
+            "invalid_legacy_count": 0,
+            "invalid_deleted_count": 0,
+            "source_digest": digest([]),
+            "reference_digest": digest([]),
+        }
+        for kind in _TYPES
+    }
+    run_id = f"f118-empty-{tenant_id}-{epoch}"
+    cert = {
+        "schema_version": 1,
+        "tenant_id": tenant_id,
+        "run_id": run_id,
+        "writer_contract_version": "f118-v1",
+        "origin": "empty_tenant",
+        "coverage_epoch": epoch,
+        "baseline_hash": None,
+        "plan_hash": None,
+        "source_types": list(_TYPES),
+        "proofs": proofs,
+        "superseded_ledger_count": 0,
+        "superseded_ledger_digest": digest([]),
+    }
+    cert["certificate_digest"] = digest(cert)
+    row = {
+        "id": str(uuid4()),
+        "tenant_id": tenant_id,
+        "run_id": run_id,
+        "writer_contract_version": "f118-v1",
+        "origin": "empty_tenant",
+        "phase": "completed",
+        "coverage_epoch": epoch,
+        "baseline_hash": None,
+        "plan_hash": None,
+        "baseline_ref": {},
+        "plan_ref": {},
+        "checkpoints": {},
+        "source_coverage": dict.fromkeys(_TYPES, True),
+        "verification_report": {"reference_coverage": cert},
+        "error_code": None,
+        "error_reason": None,
+    }
+    validate_certificate(row, (), "f118-v1")
+    await repository.ainsert_empty_certificate(session, row=row)
+    context.check()
+    # This check includes the new SQL row and the new Tenant before commit.
+    await ProductionCoverageReader(session).aget_global_status("f118-v1")
+
+
+async def bootstrap_created_root(session, tenant):
+    """Composition callback only for the original pending Root INSERT in startup."""
+    from sqlalchemy import inspect
+
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from bisheng.database.models.tenant import Tenant
+    from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
+
+    if type(tenant) is not Tenant or tenant.id != 1 or tenant not in session.new or not inspect(tenant).pending:
+        blocked("actual_new_root_required")
+    with tenant_execution_scope(1):
+        repository = UnificationCoverageRepository()
+        previous = await repository.aload_tenants(session)
+        if previous or not await UnificationInventoryRepository().ais_empty_installation(session):
+            # Legacy databases may predate Tenant. Preserve the original Root
+            # creation, with no readiness claim; formal stopped-service M2-M4
+            # must inventory their existing business/index data.
+            return False
+        await repository.aflush_created_root(session, tenant=tenant)
+        epoch = await repository.aallocate_epoch(session)
+        await _certify_created_tenant(session, tenant_id=1, prior_tenant_ids=(), prior_epoch=0, epoch=epoch)
+        return True

@@ -482,6 +482,9 @@ async def published_input(complete, transport, monkeypatch, request):
     def begin(connection):
         connection.exec_driver_sql("BEGIN")
 
+    if options.get("reference_seed") is not None:
+        await options["reference_seed"](complete)
+
     app = m2.application(
         __import__("bisheng.knowledge.application.unification_inventory", fromlist=["UnificationInventoryApplication"]),
         transport,
