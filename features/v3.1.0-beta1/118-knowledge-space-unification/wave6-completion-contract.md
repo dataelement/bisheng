@@ -1220,3 +1220,18 @@ Root已核实际SnapshotRepo select(*table.c)+_record(fields(cls))可自动读�
 _compile_catalog显式携带已有floor给CustomModelSelection，afterModel保同floor，原model_key/等级/nonuse/actions/allow_same/active/legacy_source全部一致性门继续；此卡只保已有事实，不签发旧mixed的新floor、不加namespace mapping/发布。标准floor拒，合法existing floor在use已退休时可正常重建；真实old mixed use3/download1的新签发仍后继，不放宽blocker冒完成。
 
 codec permission_model闭集schema新增nullable严格floor，None/3 native记录、页、完整graph roundtrip且原canonical/hash统一；多/缺/float/bool/越界/被改数据或hash明确拒。新字段是中性DDL后正式M2盘点事实，旧准备artifact不冒正式基线；默认None不改变动作语义，不宣称旧preparatory artifact字节相同。SnapshotRepo无需修改但必须native实测从实际PermissionModel列读回floor（exclude不丢事实）。新test≤600；原大叶只必要增量。原库存/graph/permissions plans/verify全回归，无SQL/FGA写/自动签发/Coverage ready。Catalog API/control_state读写携带、正式签发与联合namespace后继另冻，未全部闭合不发布。
+
+
+## 96. 既有受控floor的Catalog保存编辑与CURRENT核验 P2：已冻结
+
+T977先真实API/SQL反例，T978仅permission/application/catalog_api.py及control_state.py两叶。_load_models从原PermissionModel携带retired_use_level_floor至CustomModelSelection，STANDARD raw非空明确拒；_replace_children保存canonical同字段；_apply_changes初始selection携带已有字段，原replace保留，CREATE_MODEL保持None。CURRENT canonical/原SQL列比对加入floor。不得开放HTTP字段/响应、不得签发新floor、不改GrantSnapshot/运行授权或普通visibility语义。HTTP extra-forbid继续拒caller floor，既有合法floor经过load→edit→save→reload/CURRENT不丢；非法/raw漂移fail closed；默认None普通/标准checksums及动作等级原控制保留。历史大叶仅必要窄增量，不扩大权限功能。测试新叶≤600，真实native存取、API允许原操作及原失败顺序、CURRENT含非管理员路径；作者外固定复核后闭组件。正式旧mixed签发/namespace仍后继，不以本卡完成T157158。
+
+## 97. move逻辑ready原事务封口 B1：已冻结
+
+T979先native反例，T980只新knowledge/domain/repositories/move_job_ready_repository.py（≤600）+原processing_job_repository.py两叶；原MoveJobRepository不改。新MoveJobReadyRepository(*,move_jobs:MoveJobRepository,clock=...)使用原move_jobs.cutover唯一issuer，不反向import旧JobRepo，不复制hash/manifest/lease算法。amark_move_ready(session,*,logical_receipt:MoveLogicalReceipt,lease:JobLease)->JobAccepted，返回原JobAccepted类型；旧JobRepo可选move_ready注入及薄委托，缺配置对move ready/item路径fail closed。若原JobAccepted实际类型/返回不足，先报告Root，不暗造新DTO。
+
+同receipt当前TX，不能后来创建SAVEPOINT绕TransactionIdentity；Owner后继须在K1.prepare/P1之前创建共同SAVEPOINT。原Job claim/renew仍可在未ready时取得JobLease，供K1执行；只封move的item claim/_guard_item/finalize及checkpoint覆盖。Job marker严格闭集move_schema/job_id/plan_id/request_hash/after_scope_digest/projection_evidence_digest/index_item_count/ready_claim_generation，generation仅首次历史，不因takeover/retry清除或要求等于新generation。校验原issuer/TX/实际JobLease/Plan与完整接受hash、实际after scope/P1 proof；不能用caller裸dict或state猜ready。
+
+mark先分页读取原真实items，按原_digest构造checkpoint.logical_move，绑定Job marker摘要、实际target三元组、expected space/parent和原snapshot摘要；保全部其他checkpoint键。每页≤200，flush Item标记后尾验原lease/receipt并consume_logical，最后才写Job marker。零Item同原子marker+succeeded/finished/pendingFalse，非零保持running，原item状态/attempt/result不改。中途异常即使外层catch+commit也只有partial Item，无Job marker，故执行口必拒；Job marker落盘后不能把未知提交当未成功补偿。重试新receipt接线留B2，不签旧receipt替代。
+
+move执行读沿原metadata模式total_count/defer大manifest、claim SQL LIMIT1，不能每item读全Job manifest/全部pending集合；checkpoint API保私有logical_move、拒caller重写，普通kind行为不变。native覆盖0/非0、错issuer/TX/subject/plan/hash/lease、partial Item catchcommit、取消、takeover保历史marker、改snapshot/target/marker拒、checkpoint保留、原四kind控制和401/10001有界SQL/无重复全scope验证。此卡不接API/Owner/worker/RG或用户异步竞态。若两叶不能保持现lease/actor约束，先报Root拆合同，禁止复制旧算法。

@@ -455,3 +455,10 @@ D1正式反例b78c14b59原1红→39199d3bc单合并优先级修正；独立原2p
 2026-11-09 J1a/精确引用流主合闭合：Root全读466新MoveRepo+旧Repo40窄委托/拒普通move、同K1 savepoint/完整接受hash/typed代表membership；非作者独立两native为2绿（调用方SAVEPOINT回滚仍可新受理、consume后Task取消外catchcommit无半状态）。原29path659绿，Root新39+原独立2共41 passed/3782 warnings/23.19秒（/private/tmp/f118-root-j1a-reviewed.log/.xml）。T961962闭内部reserved，不开放ready/Owner/worker/实际入口。
 
 Root全读原Repo stream +69/-4（含private helper和原page复用）并主合e015df4b8；Root四路径104 passed/2260 warnings/9.20秒（/private/tmp/f118-root-inbound-stream.log/.xml），完整receipt验证仅首尾两次、SQL使用初始raw key副本，cursor在yield前捕获，取消/partial不证明完成。T963964闭前置；D3资格/披露/删除许可尚未实施，未新增child FGA gate或跨SQL/FGA IO。原rawModelFloor前置fb04待Root整合/中性DDL，C1后续签发/读写/Namespace仍不计完成。
+
+
+### 2026-11-09 存储、库存及精确删除引用事实集成
+
+Root提交中性marker DDL8d7f757c5，正常合流floor typed transport d8c2b2b3及D3 collector900632d2a；主树九路径206 passed/4626 warnings/9.21秒（/private/tmp/f118-root-storage-delete-query-inventory.log/.xml）。另floor policy56绿、floor DDL41绿/独立8绿、marker storage58绿已分别记录真实日志。T965–976只闭各存储/携带/查询组件；尚无floor新签发、namespace正式转换、move ready或公开删除。D3真实Owner/原stream/尾Coverage，没有FGA/外IO；401/1001/10001规模SQL分别按目标页和引用页增长，不把Coverage测试adapter当正式ReadyAdapter。floor transport作者外复查另行记录。
+
+后继P2与B1先按§96/97冻结两生产叶边界；Root继续集成和验证，不扩大use退役范围。停服/备份→中性DDL→正式盘点冻结时序保持，DM8免实测，MySQL正式升级/恢复和E2E仍未完成。

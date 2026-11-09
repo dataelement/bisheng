@@ -1,6 +1,6 @@
 # F118 剩余任务清单
 
-2026-11-09 W6滚动快照，按 [tasks.md](./tasks.md) 未勾选卡生成：**111项**。原137队列完成38项、剩99项；为同一需求登记372张接缝卡T605–T976，其中360张已闭合、12张待办。历史976编号 = 863已完成/历史交付 +111待办 +2外移；范围内974张复选框卡。任务数不代表独立功能数或94条AC完成率。
+2026-11-09 W6滚动快照，按 [tasks.md](./tasks.md) 未勾选卡生成：**103项**。原137队列完成38项、剩99项；为同一需求登记376张接缝卡T605–T980，其中372张已闭合、4张待办。历史980编号 = 875已完成/历史交付 +103待办 +2外移；范围内978张复选框卡。任务数不代表独立功能数或94条AC完成率。
 
 已确认范围见[范围复核](./scope-review.md)，固定提交、复现与环境边界见[W6记录](./wave6-implementation-review.md)，接口见[W6合同](./wave6-completion-contract.md)。分享签发T404/T405继续外移，未记成完成。
 
@@ -16,8 +16,8 @@
 | 装配、国际化与真实接口验证 | 8 |
 | 完整E2E与最终评审 | 10 |
 | 遗留知识/RAG使用适配 | 2 |
-| W6原需求必要接缝 | 12 |
-| **合计** | **111** |
+| W6原需求必要接缝 | 4 |
+| **合计** | **103** |
 
 下一波按冻结合同闭合移动/删除及引用查询接缝，按确认口径推进知识namespace/全局权限发布及初始引用回填/Coverage，再继续其余页面与正式升级/E2E。仅实际装配的kind可接受；默认Embedding只影响创建。用户免DM8实测，C2静态保留，MySQL真实事务/升级不免除；不操作109:3005。
 
@@ -174,15 +174,7 @@
 
 | 编号 | 任务 | 类型 / Owner | 依赖 |
 | --- | --- | --- | --- |
-| T965 | 独立迁移等级floor类型与普通visibility对照 | 测试 / PERM | T002 |
-| T966 | 独立受控retired-use等级事实存储及canonical | 后端 Domain / PERM | T965 |
-| T967 | 退役use等级nullable中性DDL测试 | 测试 / INT | T966 |
-| T968 | 退役use等级中性结构准备 | 后端 DDL / INT | T967 |
-| T969 | 删除精确引用SQL事实native反例 | 测试 / EDGE | T956, T964 |
-| T970 | 删除精确引用内部SQL事实收集 | 后端 Application / EDGE | T969 |
-| T971 | move逻辑marker私有模型字段测试 | 测试 / PROC | T962 |
-| T972 | move逻辑ready私有持久槽前置 | 后端 Model / PROC | T971 |
-| T973 | move逻辑marker中性DDL测试 | 测试 / INT | T972 |
-| T974 | move逻辑marker中性结构准备 | 后端 DDL / INT | T973 |
-| T975 | 权限floor native快照和typed图roundtrip反例 | 测试 / PERM | T966, T968 |
-| T976 | 退役floor既有事实的闭集模型与artifact载入 | 后端 Domain / PERM | T975 |
+| T977 | 既有floor的Catalog存取和CURRENT原生反例 | 测试 / PERM | T976 |
+| T978 | Catalog和CURRENT携带既有受控floor | 后端 Application / PERM | T977 |
+| T979 | move逻辑ready封口native反例 | 测试 / PROC | T974, T962 |
+| T980 | move逻辑ready持久证明与item执行封口 | 后端 Repository / PROC | T979 |

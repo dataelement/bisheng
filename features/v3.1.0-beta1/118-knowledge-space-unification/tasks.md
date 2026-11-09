@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史976编号：863已完成/历史交付、111当前待办、2外移；原137队列已完成38项、剩99项，另12张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史980编号：875已完成/历史交付、103当前待办、2外移；原137队列已完成38项、剩99项，另4张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7797,7 +7797,7 @@
   **配对测试**：T963\
   **验证 / 完成条件**：真实红绿/规模/末验，旧公开默认方法原义；不预先开D3或删除许可。
 
-- [ ] **T965 · 独立迁移等级floor类型与普通visibility对照**
+- [x] **T965 · 独立迁移等级floor类型与普通visibility对照**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_permission_retired_use_floor_schema.py`\
   **逻辑 / 测试上下文**：修订W6§91独立readonly nullable字段/native Model、controlled canonical与普通visibility旧oracle不变。\
@@ -7805,7 +7805,7 @@
   **覆盖 AC**: AC-78, AC-80, AC-81, AC-83, AC-85\
   **验证 / 完成条件**：缺字段真实红/原控制绿，默认None旧payload/checksum相同，非法与HTTP写拒。
 
-- [ ] **T966 · 独立受控retired-use等级事实存储及canonical**
+- [x] **T966 · 独立受控retired-use等级事实存储及canonical**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/domain/models/catalog.py`；`src/backend/bisheng/permission/domain/services/model_policy.py`\
   **逻辑 / 测试上下文**：修订W6§91仅独立retired_use_level_floor非None时保floor；不改变visibility_level语义，不改Plan或签发。\
@@ -7813,7 +7813,7 @@
   **配对测试**：T965\
   **验证 / 完成条件**：两叶窄增量、原policy/HTTP/native控制；DDL/完整pipeline后继，未完成不发布。
 
-- [ ] **T967 · 退役use等级nullable中性DDL测试**
+- [x] **T967 · 退役use等级nullable中性DDL测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_permission_retired_use_floor_migration.py`\
   **逻辑 / 测试上下文**：W6§92当前单head、旧表加nullableInteger无default/无回填、重复/已有列/缺表和旧值保持。\
@@ -7821,7 +7821,7 @@
   **覆盖 AC**: AC-57, AC-80, AC-83, AC-85\
   **验证 / 完成条件**：真缺revision红→native DDL绿，Model同形且无业务DML/JSON读。
 
-- [ ] **T968 · 退役use等级中性结构准备**
+- [x] **T968 · 退役use等级中性结构准备**
   **类型 / Owner**：后端 DDL / INT\
   **写入文件**：`src/backend/bisheng/core/database/alembic/versions/v3_1_0_beta1_f118_retired_use_floor.py`\
   **逻辑 / 测试上下文**：W6§92live head为parent，仅permission_model单nullableInteger列，shared幂等helper，无业务签发。\
@@ -7829,7 +7829,7 @@
   **配对测试**：T967\
   **验证 / 完成条件**：单head/offline guard/C2静态，未执行正式数据库升级或pipeline发布。
 
-- [ ] **T969 · 删除精确引用SQL事实native反例**
+- [x] **T969 · 删除精确引用SQL事实native反例**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_direct_delete_reference_query.py`；`src/backend/test/knowledge_unification/test_direct_delete_reference_query_scale.py`\
   **逻辑 / 测试上下文**：W6§93实际D1/Owner/stream和Coverage尾验，raw事实不授权，规模/空/坏项。\
@@ -7837,7 +7837,7 @@
   **覆盖 AC**: AC-43, AC-70, AC-72, AC-76, AC-83, AC-85, AC-94\
   **验证 / 完成条件**：真实红绿/原控制、native规模或schema parity、固定非作者复验；不提前验收整体。
 
-- [ ] **T970 · 删除精确引用内部SQL事实收集**
+- [x] **T970 · 删除精确引用内部SQL事实收集**
   **类型 / Owner**：后端 Application / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/application/direct_delete_reference_query.py`\
   **逻辑 / 测试上下文**：W6§93单叶原公口，不做FGA/披露/新Session或派生child权限。\
@@ -7845,7 +7845,7 @@
   **配对测试**：T969\
   **验证 / 完成条件**：真实红绿/原控制、native规模或schema parity、固定非作者复验；不提前验收整体。
 
-- [ ] **T971 · move逻辑marker私有模型字段测试**
+- [x] **T971 · move逻辑marker私有模型字段测试**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_logical_marker_schema.py`\
   **逻辑 / 测试上下文**：W6§94nullable JsonType/原四kind/hash/序列化不变；不是ready签发。\
@@ -7853,7 +7853,7 @@
   **覆盖 AC**: AC-24, AC-43, AC-49, AC-54, AC-83\
   **验证 / 完成条件**：真实红绿/原控制、native规模或schema parity、固定非作者复验；不提前验收整体。
 
-- [ ] **T972 · move逻辑ready私有持久槽前置**
+- [x] **T972 · move逻辑ready私有持久槽前置**
   **类型 / Owner**：后端 Model / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/models/knowledge_processing_job.py`\
   **逻辑 / 测试上下文**：W6§94只nullable move_logical_marker，无默认ready/无模型引用，不关旧gap。\
@@ -7861,7 +7861,7 @@
   **配对测试**：T971\
   **验证 / 完成条件**：真实红绿/原控制、native规模或schema parity、固定非作者复验；不提前验收整体。
 
-- [ ] **T973 · move逻辑marker中性DDL测试**
+- [x] **T973 · move逻辑marker中性DDL测试**
   **类型 / Owner**：测试 / INT\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_logical_marker_migration.py`\
   **逻辑 / 测试上下文**：W6§94原live单head、旧值/缺表/重复/create_all/DDL-only。\
@@ -7869,7 +7869,7 @@
   **覆盖 AC**: AC-57, AC-83, AC-85\
   **验证 / 完成条件**：真实红绿/原控制、native规模或schema parity、固定非作者复验；不提前验收整体。
 
-- [ ] **T974 · move逻辑marker中性结构准备**
+- [x] **T974 · move逻辑marker中性结构准备**
   **类型 / Owner**：后端 DDL / INT\
   **写入文件**：`src/backend/bisheng/core/database/alembic/versions/v3_1_0_beta1_f118_move_logical_marker.py`\
   **逻辑 / 测试上下文**：W6§94实施前live parent，单nullable JsonType/无回填签发。\
@@ -7877,7 +7877,7 @@
   **配对测试**：T973\
   **验证 / 完成条件**：真实红绿/原控制、native规模或schema parity、固定非作者复验；不提前验收整体。
 
-- [ ] **T975 · 权限floor native快照和typed图roundtrip反例**
+- [x] **T975 · 权限floor native快照和typed图roundtrip反例**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_permission_floor_inventory_roundtrip.py`\
   **逻辑 / 测试上下文**：W6§95真实SnapshotRepo读FloorNone/3、codec完整记录/页/图、篡改拒，已有事实不丢。\
@@ -7885,13 +7885,45 @@
   **覆盖 AC**: AC-57, AC-80, AC-81, AC-83, AC-85\
   **验证 / 完成条件**：真实红绿/原库存和权限控制，exclude不导致snapshot丢事实。
 
-- [ ] **T976 · 退役floor既有事实的闭集模型与artifact载入**
+- [x] **T976 · 退役floor既有事实的闭集模型与artifact载入**
   **类型 / Owner**：后端 Domain / PERM\
   **写入文件**：`src/backend/bisheng/permission/migration/f118_plan.py`；`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§95新Baseline字段与existing floor传递、typed codec白名单同改，无第三Snapshot/新签发。\
   **依赖**：T975\
   **配对测试**：T975\
   **验证 / 完成条件**：原等级门不松、完整native/typed roundtrip、固定非作者复验，不发布。
+
+- [ ] **T977 · 既有floor的Catalog存取和CURRENT原生反例**
+  **类型 / Owner**：测试 / PERM\
+  **写入文件**：`src/backend/test/knowledge_unification/test_permission_floor_catalog_roundtrip.py`\
+  **逻辑 / 测试上下文**：W6§96真实API SQL存取、普通None控制及HTTP拒caller field。\
+  **依赖**：T976\
+  **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
+  **验证 / 完成条件**：真实红绿、原控制与固定作者外复验；不冒正式发布或E2E。
+
+- [ ] **T978 · Catalog和CURRENT携带既有受控floor**
+  **类型 / Owner**：后端 Application / PERM\
+  **写入文件**：`src/backend/bisheng/permission/application/catalog_api.py`；`src/backend/bisheng/permission/application/control_state.py`\
+  **逻辑 / 测试上下文**：W6§96仅两叶携带验证既有floor，不签新值。\
+  **依赖**：T977\
+  **配对测试**：T977\
+  **验证 / 完成条件**：真实红绿、原控制与固定作者外复验；不冒正式发布或E2E。
+
+- [ ] **T979 · move逻辑ready封口native反例**
+  **类型 / Owner**：测试 / PROC\
+  **写入文件**：`src/backend/test/knowledge_unification/test_move_job_ready.py`\
+  **逻辑 / 测试上下文**：W6§97零项/partial提交/lease/私有marker和有界执行。\
+  **依赖**：T974, T962\
+  **覆盖 AC**: AC-24, AC-43, AC-49, AC-54, AC-83\
+  **验证 / 完成条件**：真实红绿、原控制与固定作者外复验；不冒正式发布或E2E。
+
+- [ ] **T980 · move逻辑ready持久证明与item执行封口**
+  **类型 / Owner**：后端 Repository / PROC\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/move_job_ready_repository.py`；`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
+  **逻辑 / 测试上下文**：W6§97原TX验证、Item先Job后、薄委托及原kind控制。\
+  **依赖**：T979\
+  **配对测试**：T979\
+  **验证 / 完成条件**：真实红绿、原控制与固定作者外复验；不冒正式发布或E2E。
 
 ## 自动化覆盖索引
 
@@ -7922,7 +7954,7 @@
 | AC-21 | T087, T091, T206, T785, T924, T926, T937 |
 | AC-22 | T087, T089, T206, T924, T926 |
 | AC-23 | T073, T091, T206, T785, T924, T926 |
-| AC-24 | T073, T089, T091, T206, T785, T924, T926, T951, T961, T971 |
+| AC-24 | T073, T089, T091, T206, T785, T924, T926, T951, T961, T971, T979 |
 | AC-25 | T081, T095, T206 |
 | AC-26 | T095, T206 |
 | AC-27 | T095, T206 |
@@ -7941,18 +7973,18 @@
 | AC-40 | T059, T069, T207, T679, T690, T695, T705, T706, T720 |
 | AC-41 | T207, T705, T706, T720 |
 | AC-42 | T059, T123, T207, T233, T705, T706 |
-| AC-43 | T059, T067, T069, T083, T207, T233, T673, T675, T677, T679, T690, T705, T706, T765, T775, T787, T789, T791, T881, T883, T887, T889, T897, T899, T901, T902, T904, T906, T911, T915, T917, T919, T921, T928, T930, T932, T934, T936, T937, T939, T941, T945, T947, T949, T951, T953, T955, T957, T959, T961, T963, T969, T971 |
+| AC-43 | T059, T067, T069, T083, T207, T233, T673, T675, T677, T679, T690, T705, T706, T765, T775, T787, T789, T791, T881, T883, T887, T889, T897, T899, T901, T902, T904, T906, T911, T915, T917, T919, T921, T928, T930, T932, T934, T936, T937, T939, T941, T945, T947, T949, T951, T953, T955, T957, T959, T961, T963, T969, T971, T979 |
 | AC-44 | T059, T067, T069, T097, T207, T673, T675, T677, T679, T690, T705, T706, T775 |
 | AC-45 | T067, T097, T099, T123, T207, T673, T675, T677, T690, T775 |
 | AC-46 | T099, T207 |
 | AC-47 | T071, T099, T207, T699, T701, T714, T733, T735, T737, T741 |
 | AC-48 | T065, T097, T123, T207, T650, T657, T659, T664, T666, T667, T671, T683, T686, T687 |
-| AC-49 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T196, T208, T606, T607, T608, T610, T612, T614, T616, T618, T620, T622, T624, T634, T636, T638, T640, T642, T644, T657, T659, T660, T662, T664, T666, T673, T675, T677, T699, T701, T714, T733, T735, T737, T741, T766, T785, T883, T889, T897, T899, T901, T915, T917, T919, T921, T924, T926, T959, T961, T971 |
+| AC-49 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T196, T208, T606, T607, T608, T610, T612, T614, T616, T618, T620, T622, T624, T634, T636, T638, T640, T642, T644, T657, T659, T660, T662, T664, T666, T673, T675, T677, T699, T701, T714, T733, T735, T737, T741, T766, T785, T883, T889, T897, T899, T901, T915, T917, T919, T921, T924, T926, T959, T961, T971, T979 |
 | AC-50 | T061, T063, T071, T123, T208, T606, T607, T608, T610, T612, T614, T616, T618, T620, T622, T624, T636, T638, T640, T642, T644, T660, T662, T664, T675, T677, T714, T733, T735, T737, T741, T766 |
 | AC-51 | T077, T097, T208, T667, T669, T671, T685, T686, T687, T750, T752, T754, T756, T765, T902, T904, T910, T911, T913 |
 | AC-52 | T065, T097, T208, T657, T659, T664, T666 |
 | AC-53 | T061, T065, T067, T071, T097, T208, T657, T659, T664, T666, T671, T673, T675, T677, T687, T699, T701, T714, T733, T735, T737, T741, T766 |
-| AC-54 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T208, T608, T610, T612, T614, T616, T618, T620, T622, T624, T634, T636, T638, T640, T642, T644, T657, T660, T662, T664, T666, T673, T675, T677, T683, T699, T701, T714, T733, T735, T737, T741, T766, T785, T924, T926, T959, T961, T971 |
+| AC-54 | T061, T063, T065, T067, T071, T073, T075, T097, T123, T208, T608, T610, T612, T614, T616, T618, T620, T622, T624, T634, T636, T638, T640, T642, T644, T657, T660, T662, T664, T666, T673, T675, T677, T683, T699, T701, T714, T733, T735, T737, T741, T766, T785, T924, T926, T959, T961, T971, T979 |
 | AC-55 | T093, T125, T161, T163, T203, T211, T228, T693, T787, T789, T791, T799, T801, T803, T805 |
 | AC-56 | T157, T159, T161, T173, T203, T211, T681, T688, T693, T703, T710, T712, T716, T760, T762, T769, T771, T772, T777, T779, T781, T783, T795, T799, T807, T809, T811, T813, T823, T825, T827, T829, T831, T833, T835, T837, T841, T857, T859, T861, T863, T875, T877, T879, T891, T893, T895 |
 | AC-57 | T163, T203, T211, T228, T760, T762, T769, T943, T967, T973, T975 |
@@ -7976,12 +8008,12 @@
 | AC-75 | T049, T111, T202, T209, T651, T653, T655, T843, T845, T847, T849, T851, T853, T855, T865, T867, T869, T871, T872, T873 |
 | AC-76 | T111, T113, T115, T117, T119, T202, T209, T229, T651, T653, T655, T843, T845, T847, T849, T851, T853, T855, T865, T867, T869, T871, T872, T873, T963, T969 |
 | AC-77 | T113, T115, T117, T119, T202, T209, T651, T653, T655 |
-| AC-78 | T019, T021, T025, T027, T127, T135, T153, T155, T157, T202, T204, T215, T217, T224, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T273, T323, T598, T601, T602, T603, T604, T628, T630, T632, T633, T681, T777, T781, T783, T795, T813, T965 |
+| AC-78 | T019, T021, T025, T027, T127, T135, T153, T155, T157, T202, T204, T215, T217, T224, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T273, T323, T598, T601, T602, T603, T604, T628, T630, T632, T633, T681, T777, T781, T783, T795, T813, T965, T977 |
 | AC-79 | T023, T025, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T202, T204, T210, T222, T224, T226, T239, T240, T241, T242, T271, T282, T305, T307, T315, T323, T329, T337, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T534, T535, T536, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T582, T584, T586, T588, T590, T591, T592, T593, T595, T596, T597, T598, T601, T602, T604, T628, T630, T632, T633, T744, T746, T747, T749, T795, T813 |
-| AC-80 | T019, T023, T027, T153, T157, T161, T169, T173, T202, T203, T204, T211, T215, T217, T228, T235, T239, T240, T241, T242, T249, T251, T263, T264, T269, T271, T272, T323, T681, T693, T716, T795, T965, T967, T975 |
-| AC-81 | T019, T021, T023, T027, T135, T153, T157, T202, T203, T204, T211, T215, T217, T224, T228, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T323, T598, T602, T603, T604, T628, T630, T632, T633, T681, T965, T975 |
+| AC-80 | T019, T023, T027, T153, T157, T161, T169, T173, T202, T203, T204, T211, T215, T217, T228, T235, T239, T240, T241, T242, T249, T251, T263, T264, T269, T271, T272, T323, T681, T693, T716, T795, T965, T967, T975, T977 |
+| AC-81 | T019, T021, T023, T027, T135, T153, T157, T202, T203, T204, T211, T215, T217, T224, T228, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T271, T272, T323, T598, T602, T603, T604, T628, T630, T632, T633, T681, T965, T975, T977 |
 | AC-82 | T019, T025, T041, T051, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T155, T202, T204, T210, T222, T226, T239, T240, T241, T242, T601, T744, T746, T747, T749 |
-| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210, T215, T217, T222, T224, T226, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T272, T273, T282, T315, T323, T329, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T534, T535, T536, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T582, T584, T586, T588, T590, T591, T592, T593, T595, T596, T597, T598, T601, T602, T603, T604, T628, T630, T632, T633, T681, T744, T746, T747, T749, T930, T939, T941, T943, T945, T947, T949, T951, T953, T955, T957, T959, T961, T963, T965, T967, T969, T971, T973, T975 |
+| AC-83 | T021, T023, T025, T027, T041, T045, T051, T101, T127, T129, T131, T133, T135, T137, T141, T143, T145, T147, T149, T151, T153, T155, T157, T196, T202, T204, T210, T215, T217, T222, T224, T226, T235, T237, T239, T240, T241, T242, T247, T249, T251, T263, T264, T269, T272, T273, T282, T315, T323, T329, T350, T353, T355, T357, T362, T366, T369, T371, T382, T384, T392, T394, T395, T397, T399, T401, T403, T406, T408, T409, T411, T413, T415, T417, T419, T421, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T511, T513, T515, T517, T519, T521, T523, T525, T526, T527, T528, T529, T534, T535, T536, T553, T555, T557, T559, T560, T561, T563, T565, T567, T569, T570, T571, T572, T573, T574, T575, T577, T578, T579, T580, T581, T582, T584, T586, T588, T590, T591, T592, T593, T595, T596, T597, T598, T601, T602, T603, T604, T628, T630, T632, T633, T681, T744, T746, T747, T749, T930, T939, T941, T943, T945, T947, T949, T951, T953, T955, T957, T959, T961, T963, T965, T967, T969, T971, T973, T975, T977, T979 |
 | AC-84 | T081, T095, T109, T121, T202, T204, T220, T265, T626, T646, T648, T722 |
 | AC-85 | T075, T157, T159, T161, T173, T202, T203, T211, T651, T653, T655, T681, T688, T693, T716, T760, T762, T769, T771, T772, T777, T779, T781, T783, T795, T799, T807, T809, T811, T823, T825, T827, T829, T831, T833, T835, T837, T857, T859, T861, T863, T875, T877, T879, T893, T945, T947, T953, T955, T957, T963, T965, T967, T969, T973, T975 |
 | AC-86 | T061, T063, T065, T067, T073, T075, T097, T149, T202, T208, T424, T427, T429, T431, T433, T436, T438, T440, T442, T444, T446, T448, T450, T452, T454, T456, T458, T460, T462, T464, T466, T468, T470, T472, T474, T476, T478, T480, T482, T484, T486, T488, T490, T492, T494, T496, T499, T501, T503, T505, T591, T592, T593, T596, T608, T610, T612, T614, T616, T618, T620, T622, T624, T636, T638, T640, T642, T644, T660, T662, T677, T733, T735, T737, T741, T744, T746, T747, T766, T775, T785, T787, T789, T791, T801, T803, T805, T807, T809, T811, T823, T825, T827, T829, T939, T941, T959, T961 |
