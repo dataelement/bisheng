@@ -394,7 +394,9 @@ class ProcessingJobService:
 
     async def alist(self, session, space_id, *, identity, page=1, page_size=20, kind=None, state=None):
         await self._authorize(identity, space_id)
-        result = await self.jobs.alist_jobs(session, space_id, page=page, page_size=page_size, kind=kind, state=state)
+        result = await self.jobs.alist_jobs(
+            session, space_id, page=page, page_size=page_size, kind=kind, state=state, ordinary_only=kind is None
+        )
         return PageData[ProcessingJobRead](
             data=[
                 self._read(

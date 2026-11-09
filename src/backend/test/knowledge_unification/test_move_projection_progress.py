@@ -74,3 +74,25 @@ async def test_progress_failure_preserves_completed_original_operation_and_stops
     async with database.sessions() as session:
         rows = (await session.execute(sa.select(native.Operation.scope_key, native.Operation.status))).all()
         assert rows == [("knowledge_file:1", "FINALIZED")]
+
+
+async def test_progress_cannot_replace_the_original_ambient_typed_actor(database, monkeypatch):
+    from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
+
+    item = native.expectation()
+    built = await runtime.compose(database, monkeypatch, (item,))
+    await runtime.before_modes(database, (item,))
+    changed = []
+
+    async def progress(item):
+        changed.append(set_current_permission_actor(PermissionActor(user_id=8, tenant_id=101)))
+
+    try:
+        with pytest.raises(PermissionPublishNotReadyError):
+            await built.bridge.aexecute_or_resume(
+                job_id=native.JOB, changes=(item,), actor=PermissionActor(user_id=7, tenant_id=101), progress=progress
+            )
+    finally:
+        for token in reversed(changed):
+            reset_current_permission_actor(token)
+    assert not built.transport.calls

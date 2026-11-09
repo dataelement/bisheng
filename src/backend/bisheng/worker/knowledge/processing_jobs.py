@@ -145,8 +145,15 @@ async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
         job = await owner.jobs.aget_execution(session, job_id)
         if job.revision != expected_dispatch_revision or job.state not in {"accepted", "running"}:
             return _summary(job)
-        reference = await owner.jobs.alatest_retry_actor(session, job_id)
         space_id, kind, operation_id = job.space_id, job.kind, job.parameters.get("operation_id")
+        if kind != "move_index":
+            reference = await owner.jobs.alatest_retry_actor(session, job_id)
+    if kind == "move_index":
+        from bisheng.worker.knowledge import move_jobs
+
+        return await move_jobs.execute_move_job(
+            job_id, expected_dispatch_revision, owner=await move_jobs.get_move_owner(), proof=proof
+        )
     if kind == "metadata_schema_change":
         return await metadata_jobs.execute_metadata_job(job_id, expected_dispatch_revision, owner=owner, proof=proof)
     try:
