@@ -36,6 +36,7 @@ def verify_catalog_retirement(
         writer_contract_version=plan.writer_contract_version,
         before=plan.before,
         target_model_checksum=plan.target_model_checksum,
+        namespace_type_mappings=plan.namespace_type_mappings,
     )
     if rebuilt != plan:
         _blocked("catalog_plan_changed")

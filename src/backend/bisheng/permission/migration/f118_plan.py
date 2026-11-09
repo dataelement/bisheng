@@ -20,6 +20,7 @@ from bisheng.permission.domain.services.catalog_policy import (
     REGISTERED_ACTION_CODES,
     CatalogAction,
     derive_action_release,
+    effective_action_codes,
 )
 from bisheng.permission.domain.services.grant_source_service import (
     GrantModelSnapshot,
@@ -247,6 +248,23 @@ class PermissionResourceBaseline:
 
 
 @dataclass(frozen=True, slots=True)
+class ModelApplicabilityChange:
+    model_key: str
+    from_resource_type: str
+    to_resource_type: str
+    before_action_codes: tuple[str, ...]
+    after_action_codes: tuple[str, ...]
+    reason: str
+
+    def __post_init__(self):
+        if any(
+            type(codes) is not tuple or any(type(code) is not str for code in codes)
+            for codes in (self.before_action_codes, self.after_action_codes)
+        ):
+            raise TypeError("namespace applicability requires immutable action tuples")
+
+
+@dataclass(frozen=True, slots=True)
 class CatalogRetirementPlan:
     run_id: str
     writer_contract_version: str
@@ -257,6 +275,8 @@ class CatalogRetirementPlan:
     action_checksum: str
     model_checksum: str
     checksum: str
+    namespace_type_mappings: tuple[tuple[str, str], ...] = ()
+    namespace_applicability_changes: tuple[ModelApplicabilityChange, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -323,7 +343,7 @@ def _validate_catalog(before):
             _blocked("unexplained_empty_model")
 
 
-def _compile_catalog(before):
+def _compile_catalog(before, *, namespace_type_mappings=()):
     actions = derive_action_release(action for action in before.actions if action.code != "use")
     by_code = {action.code: action for action in before.actions}
     selections = []
@@ -352,6 +372,8 @@ def _compile_catalog(before):
                 if remaining and max(remaining) < model.derived_level:
                     floor = model.derived_level
                     expected_floors[model.model_key] = floor
+        if namespace_type_mappings and "knowledge_library" in types:
+            types.add("knowledge_space")
         if types:
             if type(model.derived_level) is not int or model.derived_level not in {1, 2, 3, 4}:
                 _blocked("visibility_tier_missing")
@@ -408,7 +430,7 @@ def _compile_catalog(before):
 
 
 def _catalog_payload(plan):
-    return (
+    original = (
         plan.run_id,
         plan.writer_contract_version,
         plan.before,
@@ -418,11 +440,47 @@ def _catalog_payload(plan):
         plan.action_checksum,
         plan.model_checksum,
     )
+    if plan.namespace_type_mappings:
+        return (*original, plan.namespace_type_mappings, plan.namespace_applicability_changes)
+    return original
+
+
+def _namespace_applicability(before, actions, models):
+    previous_codes = effective_action_codes(before.actions, "knowledge_library")
+    current_codes = effective_action_codes(actions, "knowledge_space")
+    by_key = {model.model_key: model for model in models}
+    result = []
+    for previous in before.models:
+        current = by_key[previous.model_key]
+        old_selected, new_selected = set(previous.effective_action_codes), set(current.effective_action_codes)
+        result.append(
+            ModelApplicabilityChange(
+                previous.model_key,
+                "knowledge_library",
+                "knowledge_space",
+                tuple(code for code in previous_codes if code in old_selected),
+                tuple(code for code in current_codes if code in new_selected),
+                "document_library_to_knowledge_space_existing_capabilities",
+            )
+        )
+    return tuple(result)
 
 
 def build_catalog_retirement_plan(
-    *, run_id, writer_contract_version, before: PermissionCatalogBaseline, target_model_checksum
+    *,
+    run_id,
+    writer_contract_version,
+    before: PermissionCatalogBaseline,
+    target_model_checksum,
+    namespace_type_mappings=(),
 ) -> CatalogRetirementPlan:
+    if (
+        type(namespace_type_mappings) is not tuple
+        or any(type(pair) is not tuple for pair in namespace_type_mappings)
+        or any(type(part) is not str for pair in namespace_type_mappings for part in pair)
+        or namespace_type_mappings not in ((), (("knowledge_library", "knowledge_space"),))
+    ):
+        _blocked("invalid_namespace_mapping")
     if (
         not isinstance(run_id, str)
         or not run_id.strip()
@@ -435,7 +493,7 @@ def build_catalog_retirement_plan(
     _digest(target_model_checksum)
     _validate_catalog(before)
     try:
-        actions, models, records = _compile_catalog(before)
+        actions, models, records = _compile_catalog(before, namespace_type_mappings=namespace_type_mappings)
     except (TypeError, ValueError) as error:
         raise PermissionMigrationBlockedError(reason="f118_permission_invalid_retirement") from error
     plan = CatalogRetirementPlan(
@@ -448,6 +506,8 @@ def build_catalog_retirement_plan(
         actions.checksum,
         models.checksum,
         "",
+        namespace_type_mappings,
+        _namespace_applicability(before, actions.actions, records) if namespace_type_mappings else (),
     )
     return replace(plan, checksum=_checksum(_catalog_payload(plan)))
 
@@ -585,9 +645,12 @@ def _resource_context(catalog_plan):
         writer_contract_version=catalog_plan.writer_contract_version,
         before=catalog_plan.before,
         target_model_checksum=catalog_plan.target_model_checksum,
+        namespace_type_mappings=catalog_plan.namespace_type_mappings,
     )
     if rebuilt != catalog_plan:
         _blocked("catalog_plan_changed")
+    if catalog_plan.namespace_type_mappings:
+        _blocked("namespace_resource_target_required")
     return _ResourceRetirementContext(
         catalog_plan,
         {model.model_key: model for model in catalog_plan.before.models},
