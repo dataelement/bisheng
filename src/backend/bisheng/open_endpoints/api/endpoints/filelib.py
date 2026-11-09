@@ -455,6 +455,7 @@ async def upload_file(
             knowledge_id=knowledge_id,
             file_path=[file_path],
             parent_id=parent_id,
+            **({"callback_url": callback_url} if callback_url else {}),
             processing_overrides=overrides if overrides.document is not None or overrides.table is not None else None,
         )
         return resp_200(data=res[0])

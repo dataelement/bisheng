@@ -146,7 +146,7 @@ export function MoveJobProgress({ progress }: MoveJobProgressProps) {
             </Button>
           )}
           <Button variant="outlined" onClick={() => progress.setOpen(false)}>
-            {localize("close")}
+            {localize("com_ui_close")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -74,6 +74,19 @@ async def test_mcp_upload_preserves_explicit_zero_flags_and_omitted_defaults(mon
         assert override.table is None
 
 
+async def test_original_multipart_callback_reaches_the_space_dispatch_boundary(api, monkeypatch):
+    add = AsyncMock(return_value=[{"id": 81}])
+    monkeypatch.setattr(filelib.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=SimpleNamespace(type=3)))
+    monkeypatch.setattr(filelib, "_build_space_service", lambda *args: SimpleNamespace(add_file=add))
+    callback = "https://callback.invalid/completed"
+    response = await api.client.post(
+        "/api/v2/filelib/file/7", files=fixtures._form({"callback_url": callback}), headers=fixtures.AUTH
+    )
+    assert response.status_code == 200
+    assert add.await_args.kwargs.get("callback_url") == callback
+    assert add.await_args.kwargs.get("processing_overrides") is None
+
+
 def test_legacy_separator_derivation_does_not_turn_other_defaults_into_overrides():
     request = FileProcessBase(knowledge_id=7, separator=["|", ";"], excel_rule={"slice_length": 0})
     override = capture_legacy_processing_overrides(request)

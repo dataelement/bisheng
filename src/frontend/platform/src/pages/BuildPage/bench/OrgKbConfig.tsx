@@ -251,7 +251,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                 );
                             })}
                         {candidates.hasMore && <Button type="button" variant="text" disabled={candidates.loadingMore} onClick={candidates.loadMore}>
-                            {t('loadMore')}
+                            {t('shared:knowledge.selection.loadMore')}
                         </Button>}
                     </div>
                 </div>
