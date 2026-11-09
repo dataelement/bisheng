@@ -172,32 +172,10 @@ class MoveExecutionRepository(MoveRowRepository):
 
     async def _prefix(self, session, job_id, *, lock):
         context = self._context(session)
-        job, plan = KnowledgeProcessingJob.__table__, KnowledgeOperationPlan.__table__
-        names = (
-            "id",
-            "tenant_id",
-            "space_id",
-            "kind",
-            "parameters",
-            "request_hash",
-            "idempotency_key",
-            "actor_user_id",
-            "actor_reference",
-            "actor_subject_type",
-            "actor_subject_id",
-            "revision",
-            "total_count",
-            "succeeded_count",
-            "claim_generation",
-            "move_logical_marker",
-            "state",
-            "lease_token",
-            "lease_until",
-            "expected_model_config_revision",
-            "expected_index_generation",
-        )
+        plan = KnowledgeOperationPlan.__table__
         self._pending(session, {KnowledgeProcessingJob: {job_id}})
-        headers = await self._read(session, select(*(job.c[name] for name in names)).where(job.c.id == job_id))
+        headers = await self.aread_move_job_header(session, job_id=job_id)
+        self._tail(session, context)
         if len(headers) != 1 or headers[0]["tenant_id"] != context[0]:
             _fail("job_missing")
         header = headers[0]
@@ -233,7 +211,9 @@ class MoveExecutionRepository(MoveRowRepository):
             "actor_user_id",
             "actor_reference",
         )
-        query = select(*(plan.c[name] for name in names)).where(plan.c.id == p["confirmation_id"])
+        query = select(*(plan.c[name] for name in names)).where(
+            plan.c.id == p["confirmation_id"], plan.c.tenant_id == context[0]
+        )
         plans = await self._read(session, query.with_for_update() if lock else query)
         if (
             len(plans) != 1
@@ -389,7 +369,8 @@ class MoveExecutionRepository(MoveRowRepository):
                 }
             )
             if (
-                snapshot["move_schema"] != 1
+                type(snapshot["move_schema"]) is not int
+                or snapshot["move_schema"] != 1
                 or not leaf.participates
                 or leaf.target.model_dump()
                 != {name: getattr(item, name) for name in ("file_id", "document_id", "version_id")}
@@ -479,7 +460,10 @@ class MoveExecutionRepository(MoveRowRepository):
         table = KnowledgeProcessingItem.__table__
         self._pending(session, {KnowledgeProcessingItem: {item_id}})
         rows = await self._read(
-            session, select(table).where(table.c.id == item_id, table.c.job_id == job_id).with_for_update()
+            session,
+            select(table)
+            .where(table.c.id == item_id, table.c.job_id == job_id, table.c.tenant_id == job.tenant_id)
+            .with_for_update(),
         )
         if len(rows) != 1 or rows[0]["tenant_id"] != job.tenant_id:
             _fail("item_missing")
@@ -497,15 +481,19 @@ class MoveExecutionRepository(MoveRowRepository):
         current = await self._alock_prefix(session, job_id=lease.job.job_id)
         return await self._aassert_item_after(session, *guarded, current, projection_evidence=projection_evidence)
 
-    async def _acomplete_file(self, session, job, item, current, *, succeeded, outcome, error_code):
+    async def _acomplete_file(self, session, job, item, *, succeeded, outcome, error_code):
         context = self._context(session)
+        if type(succeeded) is not bool:
+            _fail("actual_completion_outcome_required")
+        if not succeeded and (outcome or type(error_code) is not int or not 10000 <= error_code <= 99999):
+            _fail("public_failure_code_required")
         if succeeded:
             if set(outcome) != {"source_count", "milvus_count", "es_count", "source_digest", "target_payload_digest"}:
                 _fail("completion_result_shape")
             expected = {
                 "schema_version": 1,
                 "operation_id": job.id,
-                **asdict(current.configuration),
+                **asdict(MoveConfiguration(**job.parameters["configuration"])),
                 **{name: getattr(item, name) for name in ("file_id", "document_id", "version_id")},
                 "metadata_policy_digest": _digest(
                     {

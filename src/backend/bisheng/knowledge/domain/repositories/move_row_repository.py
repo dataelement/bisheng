@@ -116,6 +116,50 @@ class MoveRowRepository:
             result += await self._rows(session, model, fields, condition, lock=lock, via=key)
         return result
 
+    async def aread_move_job_header(self, session, *, job_id):
+        """Read only the compact native locator under the original tenant/TX."""
+        tenant, transaction = get_current_tenant_id(), TransactionIdentity.capture(session)
+        if type(tenant) is not int or tenant <= 0 or is_tenant_filter_bypassed():
+            _conflict()
+        job = KnowledgeProcessingJob.__table__
+        names = (
+            "id",
+            "tenant_id",
+            "space_id",
+            "kind",
+            "parameters",
+            "request_hash",
+            "idempotency_key",
+            "actor_user_id",
+            "actor_reference",
+            "actor_subject_type",
+            "actor_subject_id",
+            "revision",
+            "total_count",
+            "succeeded_count",
+            "claim_generation",
+            "move_logical_marker",
+            "state",
+            "lease_token",
+            "lease_until",
+            "expected_model_config_revision",
+            "expected_index_generation",
+        )
+        with session.no_autoflush, strict_tenant_filter():
+            rows = (
+                (
+                    await session.execute(
+                        select(*(job.c[name] for name in names)).where(job.c.id == job_id, job.c.tenant_id == tenant)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        if get_current_tenant_id() != tenant or is_tenant_filter_bypassed():
+            _conflict()
+        transaction.assert_current(session)
+        return tuple(deepcopy(dict(row)) for row in rows)
+
     async def aread_move_target(self, session, *, target, expected_path):
         """Point-read one target and its primary/ancestors, never its sibling chain."""
         tenant, transaction = get_current_tenant_id(), TransactionIdentity.capture(session)
