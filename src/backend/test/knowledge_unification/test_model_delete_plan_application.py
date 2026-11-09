@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import select, text, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, InvalidRequestError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import (
@@ -238,13 +238,18 @@ async def test_mutating_caller_dto_during_actual_inspection_cannot_change_the_fr
     assert {target.target_id for target in result.inspection.targets} == {"12", "13", "14", "15"}
 
 
-@pytest.mark.parametrize("retained", [(11, 12, 13, 14, 15), (11, 11), (-1,), (44,)])
-async def test_no_actual_removal_or_unowned_retained_model_cannot_create_confirmation(ready, retained):
+@pytest.mark.parametrize(
+    "retained,error",
+    [
+        ((11, 12, 13, 14, 15), KnowledgeOperationPlanConflictError),
+        ((11, 11), ReferenceCoverageNotReadyError),
+        ((-1,), ReferenceCoverageNotReadyError),
+        ((44,), ResourceReferenceInvalidError),
+    ],
+)
+async def test_no_actual_removal_or_unowned_retained_model_cannot_create_confirmation(ready, retained, error):
     session, references, plans = ready
-    with (
-        native.actor() as user,
-        pytest.raises((KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError, ValueError)),
-    ):
+    with native.actor() as user, pytest.raises(error):
         await application(references, plans).aplan_removed_update(session, identity=web(user), server=request(retained))
     assert await plan_count(session) == 0
 
@@ -429,3 +434,68 @@ async def test_original_home_web_identity_and_narrow_scope_survive_explicit_mana
         assert row.actor_reference["data_scope"] == "personal_only"
     finally:
         reset_current_permission_actor(token)
+
+
+@pytest.mark.parametrize("phase", ["core", "create"])
+@pytest.mark.parametrize("rebegin", [False, True])
+async def test_real_rollback_rebegin_cannot_rebind_the_original_precheck_transaction(
+    ready, monkeypatch, phase, rebegin
+):
+    session, references, plans = ready
+    app = application(references, plans)
+    target = references if phase == "core" else plans
+    name = "ainspect_removed_models" if phase == "core" else "acreate_model_delete_plan"
+    method = getattr(target, name)
+
+    async def replace_transaction(*args, **kwargs):
+        result = await method(*args, **kwargs)
+        await session.rollback()
+        if rebegin:
+            # SQLAlchemy itself rejects rebegin inside a rolled-back owned
+            # transaction context; it cannot silently return a replacement TX.
+            await session.execute(select(Tenant.id).limit(1))
+        return result
+
+    monkeypatch.setattr(target, name, replace_transaction)
+    error = InvalidRequestError if rebegin else ReferenceCoverageNotReadyError
+    with native.actor() as user, pytest.raises(error):
+        await app.aplan_server_delete(session, identity=web(user), server_id=1)
+    await session.commit()
+    assert await plan_count(session) == 0
+
+
+async def test_existing_caller_savepoint_and_unrelated_write_are_preserved(ready):
+    session, references, plans = ready
+    async with session.begin_nested():
+        caller = TransactionIdentity.capture(session)
+        with native.actor() as user:
+            result = await application(references, plans).aplan_server_delete(session, identity=web(user), server_id=1)
+        caller.assert_current(session)
+        assert result.inspection.check_complete and await plan_count(session) == 1
+    await session.rollback()
+    assert await plan_count(session) == 0
+
+
+async def test_business_orm_added_by_a_callback_cannot_be_flushed_with_the_confirmation(ready, monkeypatch):
+    session, references, plans = ready
+    app = application(references, plans)
+    inspect = references.ainspect_removed_models
+
+    async def pending(*args, **kwargs):
+        result = await inspect(*args, **kwargs)
+        session.add(LLMModel(id=77, tenant_id=101, server_id=1, model_name="must not flush", model_type="llm"))
+        return result
+
+    monkeypatch.setattr(references, "ainspect_removed_models", pending)
+    with native.actor() as user, pytest.raises(KnowledgeOperationPlanConflictError):
+        await app.aplan_server_delete(session, identity=web(user), server_id=1)
+    await session.commit()
+    assert await plan_count(session) == 0
+    assert (await session.execute(select(LLMModel.id).where(LLMModel.id == 77))).scalar_one_or_none() is None
+
+
+@pytest.mark.parametrize("ttl", [True, 0, -1, 1.5])
+async def test_ttl_is_a_server_owned_positive_native_integer(ready, ttl):
+    _, references, plans = ready
+    with pytest.raises(ValueError):
+        application(references, plans, ttl_seconds=ttl)
