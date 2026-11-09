@@ -400,3 +400,62 @@ async def test_empty_receipts_still_require_active_native_transaction(built):
         with pytest.raises(ResourceReferenceInvalidError):
             await run(rt, session, ())
         assert not session.in_transaction()
+
+
+async def test_await_cannot_replace_positive_actor_id_with_equal_bool_alias(built, monkeypatch):
+    rt = native.runtime(built)
+    actor = PermissionActor(user_id=1, tenant_id=101)
+    async with built.sessions() as session:
+        await native.caller(session)
+        execute = session.execute
+        async with session.begin_nested():
+            issued = await native.receipts(built, session, ("model", 11))
+
+            async def alias(statement, *args, **kwargs):
+                result = await execute(statement, *args, **kwargs)
+                if "FROM resource_reference_tombstone" in str(statement):
+                    object.__setattr__(actor, "subject_id", True)
+                return result
+
+            monkeypatch.setattr(session, "execute", alias)
+            with pytest.raises(ResourceReferenceInvalidError):
+                await run(rt, session, issued, actor=actor)
+        assert await native.rows(session) == ()
+
+
+@pytest.mark.parametrize("phase", ["prepare", "finalize"])
+async def test_runtime_tail_await_cannot_leave_pending_business_writes(built, monkeypatch, phase):
+    rt = native.runtime(built)
+    async with built.sessions() as session:
+        await native.caller(session)
+        name = "aprepare" if phase == "prepare" else "afinalize"
+        method = getattr(rt.target_deletions, name)
+
+        async def pending(*args, **kwargs):
+            result = await method(*args, **kwargs)
+            session.add(native.LLMModel(id=77, tenant_id=101, server_id=1, model_name="tail", model_type="llm"))
+            return result
+
+        monkeypatch.setattr(rt.target_deletions, name, pending)
+        with pytest.raises(ResourceReferenceInvalidError):
+            async with session.begin_nested():
+                issued = await native.receipts(built, session, ("model", 11))
+                if phase == "prepare":
+                    await run(rt, session, issued)
+                else:
+                    await run(rt, session, issued)
+                    await session.execute(
+                        delete(native.LLMModel).where(native.LLMModel.id == 11, native.LLMModel.tenant_id == 101)
+                    )
+                    await rt.afinalize_target_deletion(
+                        session,
+                        receipts=issued,
+                        operation_id="same",
+                        operation_type="model_delete_server",
+                        actor=native.ACTOR,
+                    )
+        await session.commit()
+        assert await native.rows(session) == ()
+        assert (
+            await session.execute(select(native.LLMModel.id).where(native.LLMModel.id == 77))
+        ).scalar_one_or_none() is None

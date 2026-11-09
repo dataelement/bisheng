@@ -19,6 +19,7 @@ from bisheng.common.errcode.knowledge import (
     ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
 )
+from bisheng.permission.application.identity import PermissionActor
 from bisheng.resource_reference.application.bindings import ReferenceBindings
 from bisheng.resource_reference.application.contracts import (
     BindingWriteContext,
@@ -28,6 +29,7 @@ from bisheng.resource_reference.application.contracts import (
     SourceKey,
     SourceType,
     TargetKey,
+    TargetLockReceipt,
     TargetType,
     TransactionIdentity,
     VerifiedReferenceSet,
@@ -36,6 +38,7 @@ from bisheng.resource_reference.application.contracts import (
 )
 from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
+from bisheng.resource_reference.domain.repositories.target_deletion_repository import TargetDeletionRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,10 +63,60 @@ class _SourceSnapshot:
 
 
 class ReferenceBindingRuntime:
-    def __init__(self, repository: ReferenceRepository, verifier: ReferenceTargetVerifier):
+    def __init__(self, repository: ReferenceRepository, verifier: ReferenceTargetVerifier, *, target_deletions=None):
         self.repository = repository
         self.verifier = verifier
         self.bindings = ReferenceBindings(repository, verifier)
+        self.target_deletions = (
+            target_deletions if target_deletions is not None else TargetDeletionRepository(repository)
+        )
+
+    async def aprepare_target_deletion(
+        self,
+        session: AsyncSession,
+        *,
+        receipts: tuple[TargetLockReceipt, ...],
+        operation_id: str,
+        operation_type: str,
+        actor: PermissionActor,
+    ) -> int:
+        return await self._target_deletion(session, receipts, operation_id, operation_type, actor, finalize=False)
+
+    async def afinalize_target_deletion(
+        self,
+        session: AsyncSession,
+        *,
+        receipts: tuple[TargetLockReceipt, ...],
+        operation_id: str,
+        operation_type: str,
+        actor: PermissionActor,
+    ) -> int:
+        return await self._target_deletion(session, receipts, operation_id, operation_type, actor, finalize=True)
+
+    async def _target_deletion(self, session, receipts, operation_id, operation_type, actor, *, finalize):
+        if (
+            not isinstance(self.repository, ReferenceRepository)
+            or self.repository.verifier is not self.verifier
+            or not isinstance(self.target_deletions, TargetDeletionRepository)
+            or self.target_deletions.repository is not self.repository
+            or type(receipts) is not tuple
+        ):
+            raise ResourceReferenceInvalidError(reason="reference_target_deletion_runtime_mismatch")
+        context = self.target_deletions._context(
+            session, operation_id=operation_id, operation_type=operation_type, actor=actor
+        )
+        if not receipts:
+            return 0
+        self.verifier.validate_owner_receipts(session, receipts)
+        scope = self.repository.target_owner_scope(session, receipts)
+        context.check()
+        method = self.target_deletions.afinalize if finalize else self.target_deletions.aprepare
+        result = await method(
+            session, scope=scope, operation_id=operation_id, operation_type=operation_type, actor=actor
+        )
+        context.check()
+        self.repository._check_scope(session, scope)
+        return result
 
     async def arefresh_file_target_ownership(self, session, *, receipts, expected_space_id):
         """Refresh derived File space ownership, never source configuration."""

@@ -72,6 +72,8 @@ async def test_real_model_owner_scope_has_linear_rrt_reads_and_bounded_core_writ
                 delete(native.LLMModel).where(native.LLMModel.server_id == 1, native.LLMModel.tenant_id == 101)
             )
             statements, stop = native.count_sql(built.engine)
+            clauses.clear()
+            event.listen(built.engine.sync_engine, "before_execute", clause)
             try:
                 assert (
                     await rt.afinalize_target_deletion(
@@ -85,6 +87,7 @@ async def test_real_model_owner_scope_has_linear_rrt_reads_and_bounded_core_writ
                 )
             finally:
                 stop()
+                event.remove(built.engine.sync_engine, "before_execute", clause)
             native.no_source_sql(statements)
             reads = [row for row in statements if "FROM resource_reference_tombstone" in row[0]]
             updates = [row for row in statements if row[0].upper().startswith("UPDATE RESOURCE_REFERENCE_TOMBSTONE")]
@@ -102,6 +105,10 @@ async def test_real_model_owner_scope_has_linear_rrt_reads_and_bounded_core_writ
                 and "stage" in sql
                 for sql, _, _ in updates
             )
+            for statement in clauses:
+                for dialect in (mysql.dialect(), DefaultDialect()):
+                    sql = str(statement.compile(dialect=dialect)).upper()
+                    assert "ON DUPLICATE" not in sql and "ON CONFLICT" not in sql and "CAST(" not in sql
             print(
                 {
                     "targets": count,
