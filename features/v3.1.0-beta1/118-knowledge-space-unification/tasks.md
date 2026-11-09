@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史960编号：851已完成/历史交付、107当前待办、2外移；原137队列已完成38项、剩99项，另8张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史960编号：853已完成/历史交付、105当前待办、2外移；原137队列已完成38项、剩99项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7701,7 +7701,7 @@
   **配对测试**：T951\
   **验证 / 完成条件**：Scope≤600、真实红绿及9path/规模预算、固定非作者复验；未开Owner/worker。
 
-- [ ] **T953 · 知识目标原证据大集合与稀疏版本预算反例**
+- [x] **T953 · 知识目标原证据大集合与稀疏版本预算反例**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_knowledge_target_original_scale.py`；`src/backend/test/knowledge_unification/test_knowledge_target_scale.py`\
   **逻辑 / 测试上下文**：W6§84原10001异常、单次分桶候选及实际稀疏版本读取预算/精确证据。\
@@ -7709,7 +7709,7 @@
   **覆盖 AC**: AC-43, AC-83, AC-85\
   **验证 / 完成条件**：真实红绿/首绿分列、有界native及固定作者外复核；不扩大权限或提前验收完整特性。
 
-- [ ] **T954 · 知识目标查询分页及精确原证据分桶**
+- [x] **T954 · 知识目标查询分页及精确原证据分桶**
   **类型 / Owner**：后端 Repository / EDGE\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/reference_target_repository.py`\
   **逻辑 / 测试上下文**：W6§84业务numeric页、单版exact键页与多版selected-version原行seek；不版本×targets。\

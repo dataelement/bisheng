@@ -425,3 +425,8 @@ K1仓储整卡复查闭合：47563b0de（§83新test8dd56f1bc的5真红/3首绿�
 2026-11-09已收到用户最终确认：沿用同一模型在知识空间现有的动作范围，并登记预期变化。该适用变化来自文档库转SPACE的资源类型统一；全平台单独移除use不改变其他资源的动作范围。保原model_key、非use动作选择、管理等级、主体/Grant/Source/可见集合，标准模型按既有SPACE规则派生动作；自定义不补未选动作，纯use仅保可见与撤销，rename不并edit且文件edit不扩展。正式停服后逐模型冻结前后适用动作与差异原因，只有上述适用变化和可见代use属于允许差异；其他差异阻断切换。联合namespace/Catalog计划可按此口径继续冻结开发，尚未执行正式发布或迁移。
 
 前开发agent因额度失败退出：PROC仅测试固定29a318343，D1测试固定9f054e026及两生产叶未提交草稿，均保留。当前重新按原lane/冻结合同继续，不把中断当成完成或评审结论。T957 corrected在固定aa5源上8个真实预算红+31原控制绿（14.04秒，/private/tmp/f118-t957-source-read-red-corrected.log/.xml），已提交6e803ae5d；首轮同步identity port缺capture两例为测试夹具错误，corrected全部8个为真实预算AssertionError，来源资格与数据读取先完成。
+
+
+### 2026-11-09 有界原证据读取主树验收
+
+T953954固定0f54272ee经Root全读diff，正常合流；Root七路径101 passed/1206 warnings/10.59秒，/private/tmp/f118-root-target-original-bounded.log/.xml。Root另独立核16原authority/revision/proof函数AST完全不变。新12预算/原OR真红转绿，原19旧锁列表仅两处随已冻分页适配，不改RRT预算/结果；KN Repo453行。单版401/1001三槽匹配变1203/3003，10001为30003；稀疏401/1001版本BRR读取5/11次，每raw页≤200、最大208参数，已选版本内每行一次，不做版本×union目标。sync/async实际10001 bind/prelock各205 SELECT成功，不是捕旧错误计绿；Root页全部先于File页，原权限/身份/写口不变。T953954组件闭合，读侧T958仍实施中，正式迁移/E2E未完成。
