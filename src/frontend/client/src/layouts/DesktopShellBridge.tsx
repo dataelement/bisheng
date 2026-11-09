@@ -5,6 +5,7 @@ import { workbenchBranding } from "~/components/Chat/workbenchBranding";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useClientEnvironment } from "~/hooks/useClientEnvironment";
 import { readDesktopPresentation } from "~/utils/clientEnvironment";
+import { resendConversationActivity } from "~/components/Chat/desktopConversationBridge";
 import { useDesktopNavigation } from "~/components/Chat/useDesktopNavigation";
 import { useDesktopAppearance } from "~/components/Chat/useDesktopAppearance";
 import { useWorkbenchNavLinks } from "./useWorkbenchNavLinks";
@@ -64,5 +65,9 @@ export function DesktopShellBridge() {
     if (channel === "desktop")
       readDesktopPresentation().reportNavigation?.(JSON.parse(payload));
   }, [payload, channel, hasNativePresentation]);
+  // The host drops activity reported under a stale path, e.g. while /c/new becomes /c/<id>.
+  useEffect(() => {
+    resendConversationActivity();
+  }, [pathname]);
   return null;
 }
