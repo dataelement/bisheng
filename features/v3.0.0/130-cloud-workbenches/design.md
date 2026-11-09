@@ -77,7 +77,7 @@
 
 ## 6. 对外契约与依赖
 
-提供上述 DSH / Web 目录、源码与发布 API，公开 workbench-guide.md / workbench-guide-en.md，以及 SDK 0.1.2；保留 SDK 0.1.1 下载和校验。依赖 F054 应用状态、F055 发布流水线/固定版本快照、F062 设备会话、F048 业务动作授权、对象存储与 Redis。配套桌面 PR #125 必须另行部署；旧 app-proxy 不识别新票据入口，因此后端/前端升级不代表桌面入口交付完成。
+提供上述 DSH / Web 目录、源码与发布 API，公开 workbench-guide.md / workbench-guide-en.md，以及 SDK 0.1.2；保留 SDK 0.1.1 下载和校验。开发工具分发路由受既有 open_platform.enabled 进程配置控制，关闭时不注册路由并返回 404；云端运行和入口另受 app_runtime.enabled 控制，镜像更新不会自动启用原来关闭的能力。依赖 F054 应用状态、F055 发布流水线/固定版本快照、F062 设备会话、F048 业务动作授权、对象存储与 Redis。配套桌面 PR #125 必须另行部署；旧 app-proxy 不识别新票据入口，因此后端/前端升级不代表桌面入口交付完成。
 
 ## 7. 测试与可观测
 

@@ -20,7 +20,7 @@
 
 ## 4. 系统现状与数据流
 
-`POST /api/v1/dsh/audit/message-feedback` → desktop_principal → schema 验证 → DshModelAuditFeedbackService → DshModelAuditFeedbackRepository → 当前租户/用户的审计会话检查 → 事件 CAS → SQL 提交。`/dsh/settings` 的能力声明增加 audit_message_feedback.version=1。
+`POST /api/v1/dsh/audit/message-feedback` → desktop_principal → schema 验证 → DshModelAuditFeedbackService → DshModelAuditFeedbackRepository → 当前租户/用户的审计会话检查 → 事件 CAS → SQL 提交。`/api/v1/dsh/config` 的能力声明增加 audit_message_feedback.version=1。
 
 请求字段为 conversation_id、message_id、event_seq、op=put/delete；put 需要 rating=positive/negative，可含 category/note；delete 不允许评价内容。返回 status 为 UPDATED/UNCHANGED/STALE/CONFLICT/NOT_READY/DISABLED，已接受/冲突序号通过 event_seq 返回。
 
