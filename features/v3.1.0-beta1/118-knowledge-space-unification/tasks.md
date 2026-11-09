@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史994编号：889已完成/历史交付、103当前待办、2外移；原137队列已完成40项、剩97项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史994编号：887已完成/历史交付、105当前待办、2外移；原137队列已完成39项、剩98项，另7张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -774,7 +774,7 @@
   **覆盖 AC**: AC-55, AC-65, AC-70, AC-71, AC-74, AC-87, AC-88, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [x] **T094 · QA 创建删除清空的模型槽位**
+- [ ] **T094 · QA 创建删除清空的模型槽位**
   **类型 / Owner**：后端 Domain / KN\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/model_reference_repository.py`（原Service接线已交付，仅根因叶恢复QA条件）\
   **逻辑 / 测试上下文**：QA type1保持独立入口与原业务；create_knowledge/create_knowledge_base/acreate_knowledge_base和delete_knowledge使用R2维护当前模型槽，删除QA解除出向模型绑定，clear保留；模型修改复用原 QA 变更/重建路径，引用随原业务槽位更新。\
@@ -7941,9 +7941,9 @@
   **配对测试**：T981\
   **验证 / 完成条件**：先真实红后实现、原权限/库存组合与独立复查；非正式发布。
 
-- [x] **T983 · 模型影响全局有序精确流的native预算反例**
+- [ ] **T983 · 模型影响全局有序精确流的native预算反例**
   **类型 / Owner**：测试 / EDGE\
-  **写入文件**：`src/backend/test/knowledge_unification/test_inbound_owner_global_stream.py`；`src/backend/test/knowledge_unification/test_model_impact_scale.py`；`src/backend/test/knowledge_unification/test_model_reference_sources.py`\
+  **写入文件**：`src/backend/test/knowledge_unification/test_inbound_owner_global_stream.py`；`src/backend/test/knowledge_unification/test_model_impact_scale.py`；`src/backend/test/knowledge_unification/test_model_reference_sources.py`；`src/backend/test/knowledge_unification/test_model_target_scale.py`\
   **逻辑 / 测试上下文**：W6§100全局ID/原v2字节、scope CPU和有界目标/引用SQL。\
   **依赖**：T964\
   **覆盖 AC**: AC-70, AC-72, AC-76, AC-83, AC-85, AC-89\

@@ -1310,3 +1310,6 @@ plan_space_creator_membership(header:SpaceMembershipHeader,members:tuple[SpaceMe
 NORMAL0无owner自然键且无其它CREATOR→insert；唯一同owner CREATOR+ACTIVE→keep全部原字段；owner已有其它role/status、重复owner行、其它用户CREATOR、缺creator事实/不完整/跨scope明确阻断，不提升/激活/选first。其它用户非creator行原样保持，不据其成员身份授新Grant。insert模板SPACE/CREATOR/ACTIVE/manual与其余原模型默认值，create/update_time均原planned_at（严格naive/秒精度），不现场取now；keep既有完整row除ID的digest作为templateDigest、planned_at=None，existingID保原。旧Member来源、relation/grant/binding/pin全冻，不将Member当新F048 Source。
 
 测试复用真实MemberReader和raw模型默认作oracle，空/keep/各冲突/跨tenant/错Root/缺末页/重复PK/坏Header/软删除creator/全部source字段保留；401/10001其它成员单遍预算，不建用户×成员表。此卡只纯子计划，不改原ResourceConversionCommand/codec/M2 App/M3写，后继显式冻结接线；不冒原“我创建的”迁移缺口已执行修复。
+
+
+2026-11-09完整主树c456回归5560绿/4红/7原占位skip：T094只保QA而漏保SPACE共享仓储既有问答内容清理，Root修正为QA或SPACE沿原清理、仅NORMAL不发QA表DELETE；原space native delete/clear两红是现成红证据，保持原断言不改。T983另两旧test_model_target_scale原要求全targets单BRR SQL，现与§100明确精确分组预算冲突；只改旧oracle为ceil(T/200)次空引用查询及每查询<=204params，保llm_model4/RRT ceil/总SQL<=40/每IN<=200/结果/租户断言。生产模型流不改、不为旧1次查询回退超大IN。T094/T983暂重开，修后加入同选集复验；这四红不能记作既有失败。
