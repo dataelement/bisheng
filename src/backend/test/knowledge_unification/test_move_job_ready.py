@@ -527,3 +527,46 @@ async def test_unknown_result_after_final_job_marker_does_not_compensate_committ
     async with built.sessions() as session, session.begin():
         assert hit and (await session.get(Job, built.job_id)).move_logical_marker is not None
         assert await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG) is not None
+
+
+async def test_real_ready_updates_bind_current_tenant_in_where_for_items_and_job(moving, accepted, monkeypatch):
+    from sqlalchemy.sql import operators, visitors
+    from sqlalchemy.sql.elements import BinaryExpression
+
+    built = await pipeline(moving, accepted, monkeypatch, count=2)
+    writes = []
+
+    def capture(_connection, _cursor, _sql, _params, context, _many):
+        compiled = context.compiled
+        statement = compiled.statement if compiled is not None else None
+        if getattr(statement, "is_update", False) and statement.table.name in (Item.__tablename__, Job.__tablename__):
+            writes.append((compiled, dict(context.compiled_parameters[0])))
+
+    async with built.sessions() as session, session.begin():
+        receipt = await logical(session, built)
+        sa.event.listen(moving.engine.sync_engine, "after_cursor_execute", capture)
+        try:
+            await mark(session, built, receipt)
+        finally:
+            sa.event.remove(moving.engine.sync_engine, "after_cursor_execute", capture)
+    assert len(writes) == 3
+    assert [compiled.statement.table.name for compiled, _ in writes].count(Item.__tablename__) == 2
+    for compiled, parameters in writes:
+        statement = compiled.statement
+        predicates = [
+            node
+            for condition in statement._where_criteria
+            for node in visitors.iterate(condition)
+            if isinstance(node, BinaryExpression)
+            and node.operator is operators.eq
+            and getattr(getattr(node.left, "table", None), "name", None) == statement.table.name
+        ]
+        columns = {node.left.name for node in predicates}
+        assert {"id", "tenant_id"} <= columns
+        if statement.table.name == Item.__tablename__:
+            assert "job_id" in columns
+        tenant = [node for node in predicates if node.left.name == "tenant_id"]
+        assert len(tenant) == 1
+        # These are the compiled parameters of SQL already executed by SQLite,
+        # rather than source-text matching or a predicate in the SET clause.
+        assert parameters[compiled.bind_names[tenant[0].right]] == 101
