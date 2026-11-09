@@ -6,8 +6,10 @@ must be supplied by a same-session MIG adapter; absence is never readiness.
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 
+from sqlalchemy import inspect as inspect_orm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -21,7 +23,9 @@ from bisheng.core.context.tenant import (
     is_management_all_tenants,
 )
 from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.llm.domain.repositories.model_deletion_repository import ModelDeletionRepository
+from bisheng.llm.domain.repositories.model_provider_operation_repository import ModelProviderOperationRepository
 from bisheng.llm.domain.services.model_reference_cursor import (
     ModelReferenceSourceEntry,
     ModelReferenceSourcePage,
@@ -64,6 +68,13 @@ class ModelReferenceInspection:
     inventory_hash: str
     blocked: bool
     check_complete: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedModelRemoval:
+    inspection: ModelReferenceInspection
+    receipts: tuple
+    runtime: ReferenceBindingRuntime
 
 
 def _binding_digest(row) -> bytes:
@@ -188,7 +199,38 @@ class ModelReferenceService:
             }
         )
 
-    async def _dataset(self, session, *, identity, server_id, retained_model_ids, delete_server):
+    @staticmethod
+    def _execution_pin(session, execution, identity, removal):
+        if execution is None:
+            return None
+        if (
+            type(execution) is not KnowledgeOperationPlan
+            or inspect_orm(execution).session is not session.sync_session
+            or not inspect_orm(execution).persistent
+            or execution.operation not in {"model_update_server", "model_delete_server"}
+            or execution.model_execution_state not in {"RESERVED", "SHARING_COMPLETE"}
+            or execution.model_server_id != removal.server_id
+            or execution.tenant_id != removal.owner_tenant_id
+            or execution.actor_user_id != identity.user_id
+            or execution.actor_reference.get("management_tenant_id")
+            != (get_admin_scope_tenant_id() if get_is_management_api() else None)
+        ):
+            raise ResourceReferenceInvalidError(reason="model_deletion_execution_untrusted")
+        ModelProviderOperationRepository().validate(execution)
+        if execution.target_manifest != [
+            {"target_type": "model", "target_id": target.target_id} for target in removal.targets
+        ]:
+            raise ResourceReferenceInvalidError(reason="model_deletion_execution_targets_changed")
+        return (
+            execution.id,
+            execution.operation_id,
+            execution.request_hash,
+            execution.plan_digest,
+            execution.model_execution_state,
+            deepcopy(execution.model_execution_metadata),
+        )
+
+    async def _dataset(self, session, *, identity, server_id, retained_model_ids, delete_server, execution=None):
         guard = _InspectionScope(session)
         original = await guard.call(self._authorize, identity)
         stable = await guard.call(self._stable_identity, identity)
@@ -203,14 +245,33 @@ class ModelReferenceService:
             retained_model_ids=retained_model_ids,
             delete_server=delete_server,
         )
+        execution_pin = self._execution_pin(session, execution, identity, removal)
         receipts, scope = (), None
         runtime = self.runtime or await guard.call(get_reference_binding_runtime)
         if not isinstance(runtime, ReferenceBindingRuntime):
             raise ReferenceCoverageNotReadyError(reason="reference_runtime_unconfigured")
         if removal.targets:
             receipts = await guard.call(runtime.verifier.averify_owner_targets, session, removal.targets)
-            if any(receipt.target.state != ReferenceState.VALID for receipt in receipts):
-                raise ResourceReferenceInvalidError(reason="model_removal_target_unavailable")
+            for receipt in receipts:
+                target = receipt.target
+                if execution is None:
+                    valid = target.state == ReferenceState.VALID
+                else:
+                    evidence = target.evidence
+                    valid = (
+                        target.state == ReferenceState.DELETING
+                        and evidence is not None
+                        and evidence.operation_id == execution.operation_id
+                        and evidence.target == target.key
+                        and evidence.target_tenant_id == removal.owner_tenant_id
+                        and evidence.stage == "deleting"
+                        and execution.model_execution_metadata.get("reserved_target_revisions", {}).get(
+                            f"model:{target.key.target_id}"
+                        )
+                        == target.target_revision
+                    )
+                if not valid:
+                    raise ResourceReferenceInvalidError(reason="model_removal_target_unavailable")
             scope = runtime.repository.target_owner_scope(session, receipts)
         if self.coverage_factory is None:
             raise ReferenceCoverageNotReadyError(reason="model_reference_coverage_unconfigured")
@@ -256,6 +317,9 @@ class ModelReferenceService:
             "tenants": observed_tenants,
             "digest": digest.hexdigest(),
             "blocked": cursor is not None,
+            "execution": execution,
+            "execution_pin": execution_pin,
+            "runtime": runtime,
         }
 
     async def _finish(self, identity, facts):
@@ -273,6 +337,11 @@ class ModelReferenceService:
             or await guard.call(self._stable_identity, identity) != facts["stable"]
         ):
             raise ResourceReferenceInvalidError(reason="model_reference_identity_changed")
+        if (
+            self._execution_pin(facts["guard"].session, facts["execution"], identity, facts["removal"])
+            != facts["execution_pin"]
+        ):
+            raise ResourceReferenceInvalidError(reason="model_deletion_execution_changed")
         guard.check()
 
     @staticmethod
@@ -334,6 +403,28 @@ class ModelReferenceService:
         delete_server: bool = False,
         source_page_size: int = 50,
     ) -> ModelReferenceInspection:
+        return (
+            await self._aprepare_removed_models(
+                session,
+                identity=identity,
+                server_id=server_id,
+                retained_model_ids=retained_model_ids,
+                delete_server=delete_server,
+                source_page_size=source_page_size,
+            )
+        ).inspection
+
+    async def _aprepare_removed_models(
+        self,
+        session,
+        *,
+        identity,
+        server_id: int,
+        retained_model_ids,
+        delete_server: bool = False,
+        source_page_size: int = 50,
+        execution=None,
+    ) -> PreparedModelRemoval:
         try:
             size = validate_page_size(source_page_size)
             facts = await self._dataset(
@@ -342,6 +433,7 @@ class ModelReferenceService:
                 server_id=server_id,
                 retained_model_ids=retained_model_ids,
                 delete_server=delete_server,
+                execution=execution,
             )
             guard = facts["guard"]
             guard.check()
@@ -358,7 +450,7 @@ class ModelReferenceService:
                             first.append(ModelReferenceSourceEntry(item, facts["sources"][item.source]))
             await self._finish(identity, facts)
             removal, before = facts["removal"], facts["before"]
-            return ModelReferenceInspection(
+            inspection = ModelReferenceInspection(
                 server_id=removal.server_id,
                 targets=removal.targets,
                 target_revisions=tuple((r.target.key, r.target.target_revision) for r in facts["receipts"]),
@@ -373,6 +465,7 @@ class ModelReferenceService:
                 inventory_hash=before.tenant_inventory_hash,
                 blocked=facts["blocked"],
             )
+            return PreparedModelRemoval(inspection, facts["receipts"], facts["runtime"])
         except BaseErrorCode:
             raise
         except Exception as error:

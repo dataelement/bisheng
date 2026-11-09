@@ -39,7 +39,8 @@ def _now() -> datetime:
 
 
 def _utc(value: datetime) -> datetime:
-    return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
+    value = value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
+    return value.replace(microsecond=0)
 
 
 def _hash(value) -> str:

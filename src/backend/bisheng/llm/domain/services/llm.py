@@ -56,6 +56,7 @@ from bisheng.llm.domain.schemas import (
     AssistantLLMItem,
     EvaluationLLMConfig,
     KnowledgeLLMConfig,
+    LLMModelCreateReq,
     LLMModelInfo,
     LLMServerCreateReq,
     LLMServerInfo,
@@ -680,12 +681,16 @@ class LLMService:
 
         # Description Failed to add all models
         if len(success_models) == 0 and failed_msg:
-            await LLMDao.adelete_server_by_id(ret.id)
+            cleanup = await cls._cleanup_failed_added_models(login_user, server, ret.id, success_models)
+            if not cleanup:
+                failed_msg += "Failed model rows were preserved because protected cleanup could not complete."
             raise ServerAddAllError.http_exception(failed_msg)
         elif len(success_models) > 0 and failed_msg:
             # Some models added successfully, Delete failed model information
             ret.models = success_models
-            await LLMDao.adelete_model_by_ids(model_ids=[one.id for one in failed_models])
+            cleanup = await cls._cleanup_failed_added_models(login_user, server, ret.id, success_models)
+            if not cleanup:
+                failed_msg += "Failed model rows were preserved because protected cleanup could not complete."
             await cls.add_llm_server_hook(request, login_user, ret)
             raise ServerAddError.http_exception(f"<{success_msg.rstrip(',')}>Added{failed_msg}")
 
@@ -705,21 +710,52 @@ class LLMService:
         return ret
 
     @classmethod
-    async def delete_llm_server(cls, request: Request, login_user: UserPayload, server_id: int) -> bool:
+    async def _cleanup_failed_added_models(cls, login_user, server, server_id, successful):
+        from bisheng.llm.application.model_deletion import get_model_deletion_application
+
+        try:
+            application = await get_model_deletion_application()
+            if not successful:
+                await application.adelete_server(identity=login_user, server_id=server_id)
+            else:
+                retained = [LLMModelCreateReq.model_validate(one.model_dump()) for one in successful]
+                cleanup = server.model_copy(update={"id": server_id, "models": retained}, deep=True)
+                await application.aupdate_server(identity=login_user, server=cleanup)
+            return True
+        except Exception:
+            # A failed add must never bypass Coverage, confirmation, or an
+            # existing provider fence merely to remove its failed probe rows.
+            logger.exception("Protected model creation cleanup could not complete for provider {}", server_id)
+            return False
+
+    @classmethod
+    async def delete_llm_server(
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        server_id: int,
+        *,
+        force=False,
+        confirmation_id=None,
+        plan_digest=None,
+    ) -> bool:
         """Delete a service provider"""
-        # Snapshot before delete so the audit row preserves name/endpoint.
-        with bypass_tenant_filter():
-            pre = await LLMDao.aget_server_by_id(server_id)
+        from bisheng.llm.application.model_deletion import get_model_deletion_application
 
-        await LLMDao.adelete_server_by_id(server_id, operator=login_user)
-
-        if pre is not None:
-            await _write_llm_audit(
-                login_user,
-                TenantAuditAction.LLM_SERVER_DELETE.value,
-                pre,
-            )
+        application = await get_model_deletion_application()
+        await application.adelete_server(
+            identity=login_user,
+            server_id=server_id,
+            force=force,
+            confirmation_id=confirmation_id,
+            plan_digest=plan_digest,
+        )
         return True
+
+    @classmethod
+    async def _after_protected_server_delete(cls, login_user, server):
+        if server is not None:
+            await _write_llm_audit(login_user, TenantAuditAction.LLM_SERVER_DELETE.value, server)
 
     @classmethod
     async def add_llm_server_hook(cls, request: Request, login_user: UserPayload, server: LLMServerInfo) -> bool:
@@ -879,13 +915,23 @@ class LLMService:
 
     @classmethod
     async def update_llm_server(
-        cls, request: Request, login_user: UserPayload, server: LLMServerCreateReq
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        server: LLMServerCreateReq,
+        *,
+        force=False,
+        confirmation_id=None,
+        plan_digest=None,
     ) -> LLMServerInfo:
         """Update Service Provider Information"""
         exist_server = await LLMDao.aget_server_by_id(server.id)
         if not exist_server:
             raise NotFoundError.http_exception()
 
+        from bisheng.llm.application.model_deletion import get_model_deletion_application
+
+        application = await get_model_deletion_application()
         old_models = await LLMDao.aget_model_by_server_ids([exist_server.id])
         old_model_dict = {one.id: one for one in old_models}
         if exist_server.name != server.name:
@@ -904,6 +950,32 @@ class LLMService:
                     model_dict[one.model_name].server_id = exist_server.id
             else:
                 raise ModelNameRepeatError.http_exception()
+
+        retained_ids = tuple(one.id for one in server.models if one.id)
+        if len(retained_ids) != len(set(retained_ids)) or not set(retained_ids) <= set(old_model_dict):
+            from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+
+            raise ResourceReferenceInvalidError(reason="model_retained_identity_invalid")
+        if set(old_model_dict) - set(retained_ids) or confirmation_id is not None or force:
+            return await application.aupdate_server(
+                identity=login_user,
+                server=server,
+                force=force,
+                confirmation_id=confirmation_id,
+                plan_digest=plan_digest,
+            )
+
+        replay = await application.areplay_completed_update(identity=login_user, server=server)
+        if replay is not None:
+            return replay
+        if exist_server.tenant_id == ROOT_TENANT_ID:
+            from bisheng.llm.application.model_sharing import get_model_sharing_application
+
+            sharing_application = await get_model_sharing_application()
+            await sharing_application.aresume_existing(
+                identity=login_user, server_id=exist_server.id, enabled=server.share_to_children
+            )
+        await application.arequire_idle(server_id=exist_server.id)
 
         mask_maker = JsonFieldMasker()
         merged_config = cls.strip_config_whitespace(
@@ -985,6 +1057,33 @@ class LLMService:
                 to_probe.append(one)
         await cls.probe_models_in_background(to_probe, login_user)
         return new_server_info
+
+    @classmethod
+    async def _after_protected_server_update(cls, login_user, info, old_server, old_models, request_data):
+        if old_server.tenant_id == ROOT_TENANT_ID:
+            await _write_llm_audit(
+                login_user,
+                TenantAuditAction.LLM_SERVER_TOGGLE_SHARE.value,
+                info,
+                extra={"share_to_children": request_data.share_to_children},
+            )
+        await _write_llm_audit(login_user, TenantAuditAction.LLM_SERVER_UPDATE.value, info)
+        invalidate_llm_info_cache(server_id=info.id)
+        old = {model.id: model for model in old_models}
+        to_probe = []
+        for model in info.models:
+            invalidate_llm_info_cache(model_id=model.id)
+            if model.id not in old:
+                await cls.set_default_model(model, login_user=login_user)
+            if (
+                model.id not in old
+                or old[model.id].model_name != model.model_name
+                or old[model.id].model_type != model.model_type
+            ):
+                model.status, model.remark = LLMModelStatus.UNKNOWN.value, ""
+                to_probe.append(model)
+        await ContextWindowService.invalidate([model.id for model in info.models])
+        await cls.probe_models_in_background(to_probe, login_user)
 
     @classmethod
     async def verify_model_status(cls, model_id: int, login_user: UserPayload) -> LLMModelInfo:
