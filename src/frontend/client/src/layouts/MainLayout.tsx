@@ -1,5 +1,5 @@
 import { DesktopShellBridge } from "./DesktopShellBridge";
-import { useClientEnvironment } from "~/hooks/useClientEnvironment";
+import { useClientLayout } from "~/hooks/useClientEnvironment";
 import desktopViewport from "./desktopViewport.module.css";
 import { getBysConfigApi } from "~/api/apps";
 import { Outlined } from "bisheng-icons";
@@ -41,9 +41,9 @@ export default function MainLayout() {
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
   const {
-    channel,
-    layout: { isNarrowViewport: isMobile },
-  } = useClientEnvironment();
+    identity: { channel },
+    prefersMobileLayout: isMobile,
+  } = useClientLayout();
   const outletScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const isAppsArea = pathname.includes("/apps");
 

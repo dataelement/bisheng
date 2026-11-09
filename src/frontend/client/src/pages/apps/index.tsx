@@ -76,8 +76,7 @@ export default function AppCenter() {
     const [appGridCols, setAppGridCols] = useState(() => {
         if (typeof window === 'undefined') return 3;
         const width = window.innerWidth;
-        const mobile = window.matchMedia('(max-width: 767px)').matches;
-        if (mobile) {
+        if (isMobileLayout) {
             return width < 480 ? 1 : 2;
         }
         if (width < 480) return 1;
