@@ -693,10 +693,10 @@ class ReferenceRepository:
         return result
 
     @classmethod
-    def _inbound_owner_statement(cls, targets, after_id, limit):
+    def _inbound_owner_statement(cls, targets, after_id, limit, *, include_space_contents=False):
         source, binding = BusinessReferenceSet, BusinessResourceReference
         query = (
-            cls._target_query(targets)
+            cls._target_query(targets, include_space_contents=include_space_contents)
             .add_columns(source)
             .outerjoin(
                 source,
@@ -730,7 +730,13 @@ class ReferenceRepository:
         return tuple(result)
 
     async def aiter_inbound_for_owner_pages(
-        self, session: AsyncSession, scope: OwnerTargetScope, *, limit: int = 200, global_id_order: bool = False
+        self,
+        session: AsyncSession,
+        scope: OwnerTargetScope,
+        *,
+        limit: int = 200,
+        global_id_order: bool = False,
+        include_space_contents: bool = False,
     ) -> AsyncIterator[tuple[BusinessResourceReference, ...]]:
         """Stream exact target groups, optionally merging their BRR IDs.
 
@@ -744,6 +750,11 @@ class ReferenceRepository:
             raise ValueError("inbound page limit must be 1..200")
         if type(global_id_order) is not bool:
             raise ValueError("inbound global ID order must be a bool")
+        if type(include_space_contents) is not bool or (
+            include_space_contents
+            and (len(scope.targets) != 1 or scope.targets[0].target_type != TargetType.KNOWLEDGE_SPACE)
+        ):
+            raise ValueError("space contents require one verified space Owner scope")
         # Copy primitive values before awaiting: neither a changed scope nor a
         # changed original TargetKey may redirect a later target group's SQL.
         raw_targets = tuple((key.target_type.value, key.target_id) for key in scope.targets)
@@ -775,7 +786,13 @@ class ReferenceRepository:
             async def load(index, after):
                 current()
                 with session.no_autoflush, bypass_tenant_filter():
-                    rows = (await session.execute(self._inbound_owner_statement(groups[index], after, limit))).all()
+                    rows = (
+                        await session.execute(
+                            self._inbound_owner_statement(
+                                groups[index], after, limit, include_space_contents=include_space_contents
+                            )
+                        )
+                    ).all()
                 current()
                 page = self._inbound_owner_rows(rows)
                 # Buffered ORM rows are also mutable after yielding another
@@ -815,7 +832,13 @@ class ReferenceRepository:
                 while True:
                     current()
                     with session.no_autoflush, bypass_tenant_filter():
-                        rows = (await session.execute(self._inbound_owner_statement(targets, after, limit))).all()
+                        rows = (
+                            await session.execute(
+                                self._inbound_owner_statement(
+                                    targets, after, limit, include_space_contents=include_space_contents
+                                )
+                            )
+                        ).all()
                     current()
                     page = self._inbound_owner_rows(rows)
                     if not page:

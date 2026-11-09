@@ -33,6 +33,8 @@ async def client(app, monkeypatch):
     module = api()
     web = FastAPI()
     web.include_router(module.router, prefix="/api/v1/knowledge/space")
+    legacy = importlib.import_module("bisheng.knowledge.api.endpoints.knowledge_space")
+    web.include_router(legacy.router, prefix="/api/v1")
     web.include_router(processing.router, prefix="/api/v1/knowledge/space")
 
     @web.exception_handler(BaseErrorCode)
@@ -49,7 +51,20 @@ async def client(app, monkeypatch):
     monkeypatch.setattr(access, "batch_check_business_actions", visible)
     monkeypatch.setattr(processing, "get_move_owner", owner)
     web.dependency_overrides[UserPayload.get_login_user] = lambda: app.current
-    web.dependency_overrides[module.get_move_owner] = lambda: app.owner
+    from bisheng.knowledge.application import move_application
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+    service = KnowledgeSpaceService(request=None, login_user=app.current)
+
+    async def move_factory():
+        return move_application.KnowledgeMoveApplication(owner=app.owner, max_folder_level=9)
+
+    async def classified(identity, **kwargs):
+        return {str(value): ("move", "visible") for value in kwargs["resource_ids"]}
+
+    service.move_application_factory = move_factory
+    monkeypatch.setattr(move_application, "batch_check_business_actions", classified)
+    web.dependency_overrides[module.get_knowledge_space_service] = lambda: service
 
     async def write_scope(request, identity):
         assert identity is app.current and request.headers["X-Management-Tenant"] == "101"
@@ -380,3 +395,21 @@ async def test_default_ordinary_http_list_is_not_poisoned_or_counted_by_move_row
     result = response.json()
     assert result["status_code"] == 200
     assert result["data"] == {"data": [], "total": 0}
+
+
+async def test_legacy_same_space_http_is_synchronous_and_cross_bare_is_rejected(application, monkeypatch):
+    app = application
+    await stages.reset_to_before(app)
+    with request_context(app.actor):
+        async with client(app, monkeypatch) as http:
+            path = "/api/v1/knowledge/space/10/files/move"
+            request = {"items": [{"id": 81, "type": "file"}], "target_space_id": 11}
+            denied = (await http.post(path, json=request)).json()
+            assert denied["status_code"] != 200
+            request["target_space_id"] = 10
+            result = (await http.post(path, json=request)).json()
+    assert result["status_code"] == 200 and result["data"]["moved"][0]["id"] == 81
+    assert "accepted" not in result["data"]
+    async with app.built.sessions() as session:
+        assert (await session.get(base.File, 81)).file_level_path == ""
+        assert (await session.get(base.File, 82)).file_level_path == ""

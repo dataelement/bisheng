@@ -253,7 +253,7 @@ export interface PageQuery {
 }
 export interface AdminSpacesQuery extends PageQuery { keyword?: string }
 export interface ProcessingJobsQuery extends PageQuery { kind?: ProcessingKind; state?: JobState }
-export interface ProcessingItemsQuery extends PageQuery { state?: ItemState }
+export interface ProcessingItemsQuery extends PageQuery { state?: ItemState; kind?: ProcessingKind }
 
 type ApiEnvelope<T> = { status_code: number; status_message: string; data: T };
 
@@ -314,16 +314,39 @@ export async function listProcessingJobs(spaceId: number, query: ProcessingJobsQ
   return unwrap(await request.get<ApiEnvelope<PageData<ProcessingJobRead>>>(jobsPath(spaceId), { params: query }));
 }
 
-export async function getProcessingJob(spaceId: number, jobId: string): Promise<ProcessingJobRead> {
-  return unwrap(await request.get<ApiEnvelope<ProcessingJobRead>>(jobPath(spaceId, jobId)));
+export async function getProcessingJob(
+  spaceId: number,
+  jobId: string,
+  kind?: ProcessingKind,
+): Promise<ProcessingJobRead> {
+  return unwrap(
+    await (kind
+      ? request.get<ApiEnvelope<ProcessingJobRead>>(jobPath(spaceId, jobId), {
+          params: { kind },
+        })
+      : request.get<ApiEnvelope<ProcessingJobRead>>(jobPath(spaceId, jobId))),
+  );
 }
 
 export async function listProcessingItems(spaceId: number, jobId: string, query: ProcessingItemsQuery = {}): Promise<PageData<ProcessingItemRead>> {
   return unwrap(await request.get<ApiEnvelope<PageData<ProcessingItemRead>>>(`${jobPath(spaceId, jobId)}/items`, { params: query }));
 }
 
-export async function retryProcessingJob(spaceId: number, jobId: string, command: ProcessingRetryRequest): Promise<JobAccepted> {
-  return unwrap<JobAccepted>(await request.post(`${jobPath(spaceId, jobId)}/retry`, command));
+export async function retryProcessingJob(
+  spaceId: number,
+  jobId: string,
+  command: ProcessingRetryRequest,
+  kind?: ProcessingKind,
+  managementTenant?: string,
+): Promise<JobAccepted> {
+  return unwrap<JobAccepted>(
+    await (kind
+      ? request.post(`${jobPath(spaceId, jobId)}/retry`, command, {
+          params: { kind },
+          headers: { "X-Management-Tenant": managementTenant },
+        })
+      : request.post(`${jobPath(spaceId, jobId)}/retry`, command)),
+  );
 }
 
 // Scope comes from the authenticated caller; it is never sent as an authorization override.

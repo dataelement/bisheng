@@ -77,6 +77,9 @@ def _space_service(request: Request, login_user, version_repo, doc_repo) -> Know
     service = KnowledgeSpaceService(request=request, login_user=login_user)
     service.version_repo = version_repo
     service.doc_repo = doc_repo
+    from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
+
+    service.deletion_application_factory = get_deletion_application
     service.upload_application_factory = lambda: SpaceUploadApplication(
         login_user=login_user,
         session_factory=get_async_db_session,
@@ -360,7 +363,9 @@ async def list_knowledge_files(*, request: Request, command, version_repo, doc_r
 
 async def delete_knowledge_files(*, request: Request, file_ids: list[int]) -> None:
     login_user = get_open_api_operator()
-    await run_in_threadpool(KnowledgeService.delete_knowledge_file, request, login_user, file_ids)
+    from bisheng.knowledge.application.deletion_compatibility import delete_legacy_files
+
+    await delete_legacy_files(request=request, identity=login_user, file_ids=file_ids)
 
 
 __all__ = [

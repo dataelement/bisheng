@@ -126,6 +126,8 @@ class KnowledgeModelReferenceRepository:
             model.lease_token,
             model.lease_until,
             model.attempts,
+            model.operation_type,
+            model.business_phase,
         ).where(model.id == deletion_job.id)
         with session.no_autoflush, strict_tenant_filter():
             row = session.execute(query).mappings().one_or_none()
@@ -142,6 +144,7 @@ class KnowledgeModelReferenceRepository:
             or row["lease_until"] is None
             or row["lease_until"] <= deletion_now()
             or row["manifest"] != deletion_job.manifest
+            or (row["operation_type"] is not None and row["business_phase"] != "finalized")
         ):
             raise ResourceReferenceInvalidError(reason="knowledge_cleanup_job_changed")
         knowledge = row["manifest"].get("knowledge") if isinstance(row["manifest"], dict) else None

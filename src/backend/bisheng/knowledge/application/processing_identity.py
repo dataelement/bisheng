@@ -32,7 +32,7 @@ from bisheng.permission.application.identity import (
 )
 from bisheng.user.application.runtime_identity import resolve_web_runtime_identity
 
-_ACTIONS = frozenset({"edit", "rename", "move", "upload_file"})
+_ACTIONS = frozenset({"edit", "rename", "move", "upload_file", "delete"})
 _WEB_FIELDS = frozenset({"kind", "user_id", "tenant_id", "token_version", "expires_at"})
 _ORIGIN_FIELDS = frozenset(
     {

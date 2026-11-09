@@ -254,7 +254,7 @@ class MoveJobRepository:
         if (
             type(source_space_id) is not int
             or source_space_id <= 0
-            or plan.operation != "move"
+            or plan.operation not in {"move", "move_same_space"}
             or plan.space_id != source_space_id
             or plan.plan_digest != plan_digest
         ):
@@ -478,12 +478,34 @@ class MoveJobRepository:
         return frozenset(found)
 
     async def alist_query_candidates(
-        self, session, *, space_id, subject_type, subject_id, after_id=None, limit=200, state=None
+        self,
+        session,
+        *,
+        space_id,
+        subject_type,
+        subject_id,
+        after_id=None,
+        limit=200,
+        state=None,
+        ordered=False,
+        after=None,
     ) -> tuple[str, ...]:
         """Coarse typed candidates only; the App still checks live authority."""
         tenant = self._context(session)
         if (
-            type(space_id) is not int
+            type(ordered) is not bool
+            or (ordered and after_id is not None)
+            or (
+                after is not None
+                and (
+                    not ordered
+                    or type(after) is not tuple
+                    or len(after) != 2
+                    or not isinstance(after[0], datetime)
+                    or not isinstance(after[1], str)
+                )
+            )
+            or type(space_id) is not int
             or space_id <= 0
             or subject_type not in ("user", "service_account")
             or type(subject_id) is not int
@@ -515,7 +537,7 @@ class MoveJobRepository:
             .exists()
         )
         statement = (
-            select(job.c.id)
+            (select(job.c.id, job.c.accepted_at) if ordered else select(job.c.id))
             .select_from(
                 job.join(
                     plan,
@@ -538,7 +560,13 @@ class MoveJobRepository:
             statement = statement.where(job.c.id > after_id)
         if state is not None:
             statement = statement.where(job.c.state == JobState(state).value)
-        rows = await self._rows(session, statement.order_by(job.c.id).limit(limit))
+        if ordered and after is not None:
+            timestamp, ident = after
+            statement = statement.where(
+                or_(job.c.accepted_at < timestamp, and_(job.c.accepted_at == timestamp, job.c.id < ident))
+            )
+        order = (job.c.accepted_at.desc(), job.c.id.desc()) if ordered else (job.c.id,)
+        rows = await self._rows(session, statement.order_by(*order).limit(limit))
         if self._context(session) != tenant:
             _conflict("move_query_context_changed")
-        return tuple(row["id"] for row in rows)
+        return tuple((row["id"], row["accepted_at"]) for row in rows) if ordered else tuple(row["id"] for row in rows)

@@ -224,7 +224,6 @@ function useKnowledgeSpaceDetail(
     canCreateFolder,
     canUploadFile,
     canMoveFile,
-    canMoveFolder,
     permissionEntryIds,
     deleteEntryIds,
     downloadEntryIds,
@@ -307,14 +306,10 @@ function useKnowledgeSpaceDetail(
     (f) => selectedFiles.has(f.id) && f.type === FileType.FOLDER,
   );
   const selectedList = displayFiles.filter((f) => selectedFiles.has(f.id));
-  const selectionHasFile = selectedList.some((f) => f.type !== FileType.FOLDER);
-  // Batch move requires the target to accept both selected resource kinds.
+  // The actual server review classifies each selected source and the target.
   // Uploading placeholders no longer block the entry — the
   // move flow warns about them and lets the user move the rest (handleBatchMove).
-  const canBatchMove =
-    selectedList.length > 0 &&
-    (!hasFoldersSelected || canMoveFolder) &&
-    (!selectionHasFile || canMoveFile);
+  const canBatchMove = selectedList.length > 0;
   const canBatchDelete =
     selectedList.length > 0 &&
     selectedList.every((file) => deleteEntryIds.has(file.id));
@@ -413,10 +408,8 @@ function useKnowledgeSpaceDetail(
   const cardDrag = useKnowledgeMoveDrag({
     files: displayFiles,
     selectedFiles,
-    onMoveToFolder: canUploadFile
-      ? (folderId, items, folderName) =>
-          dropMoveToFolder(items, folderId, folderName)
-      : undefined,
+    onMoveToFolder: (folderId, items, folderName) =>
+      dropMoveToFolder(items, folderId, folderName),
   });
 
   return {

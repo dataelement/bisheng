@@ -6,9 +6,11 @@ the reference writer subsequently locks/CAS-checks the source root and set.
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sqlalchemy import and_, or_
+from sqlalchemy.orm import load_only
 from sqlmodel import select
 
 from bisheng.common.errcode.knowledge import ResourceReferenceConflictError, ResourceReferenceInvalidError
@@ -16,9 +18,11 @@ from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_b
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
 from bisheng.resource_reference.application.contracts import (
     DeletionEvidence,
     SourceKey,
+    TargetDeleteStage,
     TargetKey,
     TargetType,
     TransactionIdentity,
@@ -80,7 +84,11 @@ def original_for(rows, key):
 
 def revision(*rows):
     payload = [
-        {column.name: getattr(row, column.name) for column in row.__table__.columns} for row in rows if row is not None
+        dict(row)
+        if isinstance(row, Mapping)
+        else {column.name: getattr(row, column.name) for column in row.__table__.columns}
+        for row in rows
+        if row is not None
     ]
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str).encode()
@@ -349,6 +357,26 @@ class KnowledgeReferenceTargetRepository:
                 entries.add((key, owner))
                 if space_id and key.target_type == TargetType.KNOWLEDGE_FILE:
                     entries.add((TargetKey("knowledge_space", space_id), owner))
+        clearing = {}
+        space_ids = sorted(ident for ident, row in spaces.items() if row.type == 3)
+        job = KnowledgeSpaceDeleteJob
+        names = ("id", "tenant_id", "space_id", "operation_type", "business_phase", "state")
+        for start in range(0, len(space_ids), 200):
+            query = (
+                select(job)
+                .options(load_only(*(getattr(job, name) for name in names), raiseload=True))
+                .where(
+                    job.tenant_id == tenant_id,
+                    job.space_id.in_(space_ids[start : start + 200]),
+                    job.operation_type == "knowledge_space_clear",
+                    job.state != "SUCCEEDED",
+                )
+                .order_by(job.space_id, job.id)
+            )
+            for active in (yield query):
+                if active.space_id in clearing or active.business_phase not in {"prepared", "finalized"}:
+                    raise ResourceReferenceInvalidError(reason="knowledge_clear_execution_inconsistent")
+                clearing[active.space_id] = {name: getattr(active, name) for name in names}
         found = {}
         for statement in self._tombstone_statements(entries):
             self._add_tombstones((yield statement), entries, found)
@@ -360,16 +388,35 @@ class KnowledgeReferenceTargetRepository:
                 if owner and space_id and key.target_type == TargetType.KNOWLEDGE_FILE
                 else None
             )
+            pending = clearing.get(int(space_id)) if space_id is not None else None
+            transient = (
+                None
+                if pending is None
+                else DeletionEvidence(
+                    pending["id"],
+                    TargetKey(TargetType.KNOWLEDGE_SPACE, space_id),
+                    pending["tenant_id"],
+                    TargetDeleteStage.DELETING,
+                )
+            )
+            if transient is not None:
+                existing = direct if key.target_type == TargetType.KNOWLEDGE_SPACE else ancestor
+                if existing is not None:
+                    raise ResourceReferenceInvalidError(reason="knowledge_clear_tombstone_conflict")
             result.append(
                 KnowledgeTargetObservation(
                     key,
                     row is not None,
                     owner,
                     space_id,
-                    revision(row, parent, direct, ancestor),
+                    revision(row, parent, direct, ancestor, pending),
                     original,
-                    self._deletion(direct),
-                    self._deletion(ancestor),
+                    transient
+                    if key.target_type == TargetType.KNOWLEDGE_SPACE and transient
+                    else self._deletion(direct),
+                    transient
+                    if key.target_type == TargetType.KNOWLEDGE_FILE and transient
+                    else self._deletion(ancestor),
                 )
             )
         return tuple(result)
