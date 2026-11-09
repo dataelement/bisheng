@@ -116,7 +116,8 @@ def test_mapping_records_all_models_in_canonical_order_without_changing_scopes_o
     )
     assert "share" in set(by_key["manager"].after_action_codes) - set(by_key["manager"].before_action_codes)
     assert "share" in by_key["owner"].after_action_codes
-    assert by_key["chosen-rename"].after_action_codes == ("rename",)
+    assert by_key["chosen-rename"].after_action_codes == ()  # Rename applies only to folder/file.
+    assert model(result, "chosen-rename", after=True).effective_action_codes == ("rename",)
     assert "edit" not in by_key["chosen-rename"].after_action_codes
     assert by_key["pure"].before_action_codes == ("use",) and by_key["pure"].after_action_codes == ()
     for key in ("pure", "mixed", "library-visible"):
@@ -129,6 +130,61 @@ def test_mapping_records_all_models_in_canonical_order_without_changing_scopes_o
     with pytest.raises(FrozenInstanceError):
         matrix[0].reason = "caller"
     assert verify.verify_catalog_retirement(plan=result, actual=after_catalog(result)).complete
+
+
+def test_original_model_storage_order_never_pairs_one_models_capabilities_with_another():
+    original = legacy_catalog()
+    before = replace(original, models=original.models[::-1], actions=original.actions[::-1])
+    result = build(before, namespace_type_mappings=MAPPING)
+    assert tuple(row.model_key for row in result.namespace_applicability_changes) == tuple(
+        row.model_key for row in before.models
+    )
+    for change in result.namespace_applicability_changes:
+        previous = model(before, change.model_key)
+        current = model(result, change.model_key, after=True)
+        assert change.before_action_codes == applicable(original.actions, previous, "knowledge_library")
+        assert change.after_action_codes == applicable(result.after_actions, current, "knowledge_space")
+
+
+def test_mapping_never_invents_library_or_space_provenance_for_an_unrelated_old_use_scope():
+    original = legacy_catalog()
+    before = replace(
+        original,
+        actions=tuple(
+            replace(row, resource_types=frozenset({"tool"})) if row.code == "use" else row for row in original.actions
+        ),
+    )
+    result = build(before, namespace_type_mappings=MAPPING)
+    assert model(result, "pure-use", after=True).visibility_only_resource_types == ("tool",)
+    assert model(result, "mixed-use", after=True).visibility_only_resource_types == ("tool",)
+
+
+def test_matrix_values_cannot_hold_mutable_action_collections_or_bypass_an_empty_plan():
+    result = build(legacy_catalog(), namespace_type_mappings=MAPPING)
+    entry = result.namespace_applicability_changes[0]
+    with pytest.raises(TypeError):
+        replace(entry, after_action_codes=["edit"])
+    empty = build(result.before)
+    with pytest.raises(PermissionMigrationBlockedError):
+        verify.verify_catalog_retirement(
+            plan=replace(empty, namespace_applicability_changes=(entry,)), actual=after_catalog(empty)
+        )
+
+
+def test_mapping_rejects_tuple_subclasses_instead_of_accepting_mutable_semantic_overrides():
+    class TupleSubclass(tuple):
+        pass
+
+    class StringSubclass(str):
+        pass
+
+    for mapping in (
+        TupleSubclass(MAPPING),
+        (TupleSubclass(MAPPING[0]),),
+        ((StringSubclass("knowledge_library"), "knowledge_space"),),
+    ):
+        with pytest.raises(PermissionMigrationBlockedError):
+            build(legacy_catalog(), namespace_type_mappings=mapping)
 
 
 @pytest.mark.parametrize(
@@ -245,7 +301,7 @@ async def test_actual_sql_catalog_snapshot_build_verify_are_read_only_and_grants
 @pytest.mark.parametrize("count", [401, 1001])
 def test_matrix_constructs_one_candidate_per_model_and_derives_catalog_only_once(monkeypatch, count):
     before = legacy_catalog(
-        customs=tuple(CustomModelSelection(f"custom-{i}", f"Custom {i}", ("download", "use")) for i in range(count))
+        customs=tuple(CustomModelSelection(f"custom-{i}", f"Custom {i}", ("download", "use")) for i in range(count - 4))
     )
     candidates, derivations = [], []
     init = plans.ModelApplicabilityChange.__init__
@@ -262,7 +318,7 @@ def test_matrix_constructs_one_candidate_per_model_and_derives_catalog_only_once
     monkeypatch.setattr(plans.ModelApplicabilityChange, "__init__", construct)
     monkeypatch.setattr(plans, "derive_permission_models", compile_once)
     result = build(before, namespace_type_mappings=MAPPING)
-    assert len(candidates) == len(result.namespace_applicability_changes) == len(before.models) == count + 4
+    assert len(candidates) == len(result.namespace_applicability_changes) == len(before.models) == count
     assert len(derivations) == 1
     assert len({row.model_key for row in result.namespace_applicability_changes}) == len(before.models)
-    print({"custom_models": count, "matrix_candidates": len(candidates), "catalog_derivations": len(derivations)})
+    print({"models": count, "matrix_candidates": len(candidates), "catalog_derivations": len(derivations)})
