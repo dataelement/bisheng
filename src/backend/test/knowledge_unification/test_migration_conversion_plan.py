@@ -12,8 +12,13 @@ from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.knowledge.application.reference_source_owner import KnowledgeReferenceSourceOwner
 from bisheng.knowledge.application.unification_inventory_codec import digest, record_from_row
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
+from bisheng.knowledge.domain.repositories.unification_control_repository import UnificationControlRepository
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import DefaultRow
 from bisheng.knowledge.domain.repositories.unification_resource_repository import UnificationResourceRepository
+from bisheng.knowledge.domain.repositories.unification_space_membership_repository import (
+    UnificationSpaceMembershipRepository,
+)
+from bisheng.knowledge.domain.services.unification_space_membership_plan import plan_space_creator_membership
 from test.knowledge_unification import test_migration_resource_repository as original
 
 native = original.native
@@ -27,17 +32,57 @@ def module():
     return importlib.import_module("bisheng.knowledge.application.unification_conversion_plan")
 
 
-async def acquire(database):
+async def acquire(database, *, planned_at=NOW):
     async with AsyncSession(database.engine) as session, session.begin():
-        return {kind: tuple(await original.collect(UnificationResourceRepository(), kind, session)) for kind in KINDS}
+        result = {kind: tuple(await original.collect(UnificationResourceRepository(), kind, session)) for kind in KINDS}
+        reader, controls, plans, after = (
+            UnificationSpaceMembershipRepository(),
+            UnificationControlRepository(),
+            [],
+            None,
+        )
+        while True:
+            page = await reader.apage_headers(session, after_id=after)
+            by_root = {row.knowledge_id: [] for row in page.items}
+            cursor = None
+            while by_root:
+                members = await reader.apage_members(session, knowledge_ids=tuple(by_root), after_id=cursor)
+                for row in members.items:
+                    by_root[row.knowledge_id].append(row)
+                if members.next_after is None:
+                    break
+                cursor = members.next_after
+            ids = tuple(sorted({row.creator_user_id for row in page.items if row.creator_user_id is not None}))
+            creators = {row.user_id: row for row in await controls.ainspect_users(session, user_ids=ids)}
+            for header in page.items:
+                plan = plan_space_creator_membership(
+                    header,
+                    tuple(by_root[header.knowledge_id]),
+                    creators.get(header.creator_user_id),
+                    planned_at=planned_at,
+                )
+                if plan is not None:
+                    plans.append(plan)
+            if page.next_after is None:
+                break
+            after = page.next_after
+        result["creator_memberships"] = tuple(plans)
+        return result
 
 
 def build(module, rows, defaults=()):
     builder = module.ConversionPlanBuilder(**IDENTITY, planned_at=NOW)
+    memberships = {row.knowledge_id: row for row in rows.get("creator_memberships", ())}
     for kind in KINDS:
         values = rows.get(kind, ())
         for offset in range(0, max(1, len(values)), 200):
-            getattr(builder, "add_" + kind)(values[offset : offset + 200])
+            batch = values[offset : offset + 200]
+            kwargs = (
+                {"creator_memberships": tuple(memberships[row.id] for row in batch if row.type == 0)}
+                if kind == "resources"
+                else {}
+            )
+            getattr(builder, "add_" + kind)(batch, **kwargs)
     builder.add_defaults(defaults)
     return builder, tuple(builder.finish())
 
@@ -85,9 +130,9 @@ async def test_creation_key_collision_is_final_projection_across_separate_pages(
     )
     rows = await acquire(native)
     builder = module.ConversionPlanBuilder(**IDENTITY, planned_at=NOW)
-    builder.add_resources(rows["resources"][:1])
+    builder.add_resources(rows["resources"][:1], creator_memberships=rows["creator_memberships"])
     with pytest.raises(KnowledgeOperationPlanConflictError):
-        builder.add_resources(rows["resources"][1:])
+        builder.add_resources(rows["resources"][1:], creator_memberships=())
         tuple(builder.finish())
 
 
@@ -263,7 +308,7 @@ def test_builder_rejects_out_of_order_duplicate_oversized_or_unknown_batches(mod
     builder = module.ConversionPlanBuilder(**IDENTITY, planned_at=NOW)
     builder.add_files(())
     with pytest.raises(KnowledgeOperationPlanConflictError):
-        builder.add_resources(())
+        builder.add_resources((), creator_memberships=())
     with pytest.raises(KnowledgeOperationPlanConflictError):
         module.ConversionPlanBuilder(**IDENTITY, planned_at="not-time")
     with pytest.raises(KnowledgeOperationPlanConflictError):
@@ -274,7 +319,7 @@ def test_finish_seals_inputs_before_lazy_iterator_is_consumed(module):
     builder = module.ConversionPlanBuilder(**IDENTITY, planned_at=NOW)
     commands = builder.finish()
     with pytest.raises(KnowledgeOperationPlanConflictError):
-        builder.add_resources(())
+        builder.add_resources((), creator_memberships=())
     with pytest.raises(KnowledgeOperationPlanConflictError):
         builder.finish()
     assert tuple(commands) == ()

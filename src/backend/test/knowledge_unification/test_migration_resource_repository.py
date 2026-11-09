@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+from bisheng.common.models.space_channel_member import SpaceChannelMember
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
     current_tenant_id,
@@ -29,6 +30,7 @@ from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, QAKnowledge
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import KnowledgeSpaceTagLibrary
+from bisheng.user.domain.models.user import User
 
 MODELS = {
     "resources": Knowledge,
@@ -75,7 +77,7 @@ def repo():
 
 @pytest.fixture
 async def native(monkeypatch):
-    models = (Tenant, Department, *MODELS.values())
+    models = (Tenant, Department, User, SpaceChannelMember, *MODELS.values())
     names = {model.__tablename__ for model in models if "tenant_id" in model.__table__.c}
     monkeypatch.setattr(tenant_filter, "_force_import_all_models", lambda: None)
     monkeypatch.setattr(tenant_filter, "_discover_tenant_aware_tables", lambda: names)
@@ -93,6 +95,9 @@ async def native(monkeypatch):
         await connection.execute(
             Tenant.__table__.insert(),
             [{"id": ident, "tenant_code": f"t{ident}", "tenant_name": f"t{ident}"} for ident in (1, 101, 202)],
+        )
+        await connection.execute(
+            User.__table__.insert(), [{"user_id": 7, "user_name": "historical", "password": "-", "delete": 1}]
         )
     queries = []
 

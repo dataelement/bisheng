@@ -60,9 +60,6 @@ async def native(resource_native, monkeypatch):
             pending.extend(foreign.column.table for foreign in table.foreign_keys)
     async with resource_native.engine.begin() as connection:
         await connection.run_sync(metadata.create_all)
-        await connection.execute(
-            User.__table__.insert(), [{"user_id": 7, "user_name": "historical", "password": "-", "delete": 1}]
-        )
     return resource_native
 
 

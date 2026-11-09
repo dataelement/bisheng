@@ -35,6 +35,10 @@ from bisheng.knowledge.domain.schemas.unification_conversion import (
 from bisheng.knowledge.domain.schemas.unification_conversion import (
     initial_version_templates as initial_version_templates,
 )
+from bisheng.knowledge.domain.schemas.unification_space_membership import (
+    CreatorMembershipPlan,
+    creator_membership_template,
+)
 from bisheng.llm.domain.services.chat_default_model_backfill import transform_chat_default
 from bisheng.llm.domain.services.default_reference_extractor import extract_model_default_references
 from bisheng.llm.domain.services.linsight_default_model_backfill import transform_linsight_llm_config
@@ -179,8 +183,30 @@ class ConversionPlanBuilder:
     def _base(self, operation, ident):
         return _common(operation, self.run_id, self.writer, self._tenant, ident)
 
-    def add_resources(self, rows: tuple[raw.ResourceRow, ...]):
+    def add_resources(
+        self, rows: tuple[raw.ResourceRow, ...], *, creator_memberships: tuple[CreatorMembershipPlan, ...]
+    ):
         self._batch(rows, 0, raw.ResourceRow)
+        if (
+            type(creator_memberships) is not tuple
+            or len(creator_memberships) > 200
+            or any(type(plan) is not CreatorMembershipPlan for plan in creator_memberships)
+        ):
+            _blocked("membership_plan_shape")
+        by_root = {}
+        for plan in creator_memberships:
+            if (
+                type(plan.knowledge_id) is not int
+                or plan.knowledge_id <= 0
+                or plan.knowledge_id in by_root
+                or type(plan.tenant_id) is not int
+                or type(plan.creator_user_id) is not int
+                or plan.creator_user_id <= 0
+            ):
+                _blocked("membership_plan_identity")
+            by_root[plan.knowledge_id] = plan
+        if set(by_root) != {row.id for row in rows if row.type == 0}:
+            _blocked("membership_plan_pairing")
         for row in rows:
             self._scope(row.tenant_id)
             record_from_row(row)
@@ -194,6 +220,18 @@ class ConversionPlanBuilder:
                 self._creation[key] = row.id
             command = None
             if row.type == 0:
+                membership = by_root[row.id]
+                if (membership.tenant_id, membership.creator_user_id) != (row.tenant_id, row.user_id):
+                    _blocked("membership_resource_owner_changed")
+                if membership.membership_action == "insert":
+                    template = creator_membership_template(
+                        knowledge_id=row.id, creator_user_id=row.user_id, planned_at=membership.planned_at
+                    )
+                    if (
+                        membership.planned_at != self.planned_at
+                        or digest(template) != membership.creator_template_digest
+                    ):
+                        _blocked("membership_template_changed")
                 after = replace(
                     row, type=3, is_released=False, neutral=replace(row.neutral, migration_origin=self.run_id)
                 )
@@ -226,7 +264,15 @@ class ConversionPlanBuilder:
                     target_type=3,
                     target_is_released=False,
                     target_migration_origin=self.run_id,
+                    creator_user_id=membership.creator_user_id,
+                    membership_action=membership.membership_action,
+                    before_member_count=membership.before_member_count,
+                    before_member_digest=membership.before_member_digest,
+                    existing_creator_member_id=membership.existing_creator_member_id,
+                    creator_template_digest=membership.creator_template_digest,
+                    creator_planned_at=membership.planned_at,
                 )
+                record_from_row(command)
             self._add(self._resources, row.id, {"type": row.type, "command": command})
 
     def add_files(self, rows: tuple[raw.FileRow, ...]):
