@@ -1780,7 +1780,7 @@
       "notRecorded": "Not recorded",
       "noResult": "No result produced",
       "identifier": "ID: {{id}}",
-      "title": "Application runtime records",
+      "title": "Hosted apps",
       "app": "Application",
       "visitor": "Visitor",
       "credential": "Calling key",

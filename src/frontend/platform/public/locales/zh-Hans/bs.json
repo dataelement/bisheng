@@ -1725,7 +1725,7 @@
       "notRecorded": "未记录",
       "noResult": "未产生结果",
       "identifier": "标识：{{id}}",
-      "title": "应用运行记录",
+      "title": "托管应用",
       "app": "应用",
       "visitor": "访问用户",
       "credential": "调用密钥",

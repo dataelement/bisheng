@@ -1725,7 +1725,7 @@
       "notRecorded": "未記録",
       "noResult": "結果なし",
       "identifier": "識別子：{{id}}",
-      "title": "アプリ実行記録",
+      "title": "ホスト型アプリ",
       "app": "アプリ",
       "visitor": "アクセスユーザー",
       "credential": "呼び出しキー",
