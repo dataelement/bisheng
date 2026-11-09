@@ -9,6 +9,7 @@ from bisheng.common.errcode.admin_scope import AdminScopeChangedError
 from bisheng.common.schemas.api import resp_200
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.application.knowledge_processing_commands import KnowledgeProcessingCommands
 from bisheng.knowledge.application.move_processing_access import MoveProcessingAccess, get_move_owner
 from bisheng.knowledge.application.processing_owner import KnowledgeProcessingOwner
 from bisheng.knowledge.domain.repositories.processing_settings_repository import ProcessingSettingsRepository
@@ -96,10 +97,8 @@ async def precheck_processing(
     service: ProcessingJobService = Depends(get_processing_service),
 ):
     await _write_scope(request, identity)
-    async with get_async_db_session() as session:
-        data = await service.aprecheck(session, space_id, change, identity=identity, entry_kind="web")
-        await session.commit()
-    return resp_200(data)
+    commands = KnowledgeProcessingCommands(session_factory=get_async_db_session, service=service)
+    return resp_200(await commands.aprecheck(space_id, change, identity=identity, entry_kind="web"))
 
 
 @router.post("/{space_id}/processing-jobs")
@@ -111,10 +110,8 @@ async def create_processing_job(
     service: ProcessingJobService = Depends(get_processing_service),
 ):
     await _write_scope(request, identity)
-    async with get_async_db_session() as session:
-        data = await service.acreate(session, space_id, change, identity=identity, entry_kind="web")
-        await session.commit()
-    return resp_200(data)
+    commands = KnowledgeProcessingCommands(session_factory=get_async_db_session, service=service)
+    return resp_200(await commands.aconfirm(space_id, change, identity=identity, entry_kind="web"))
 
 
 @router.get("/{space_id}/processing-jobs")

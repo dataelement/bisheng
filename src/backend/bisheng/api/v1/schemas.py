@@ -730,6 +730,9 @@ class KnowledgeFileProcess(FileProcessBase):
 
 # Knowledge Base Re-Segment Adjustment
 class KnowledgeFileReProcess(FileProcessBase):
+    confirmation_id: str | None = None
+    plan_digest: str | None = None
+    idempotency_key: str | None = None
     kb_file_id: int = Field(..., description="Knowledge Base FilesID")
     file_path: str = Field(default="", description="FilePath")
     excel_rule: ExcelRule | None = Field(default=None, description="Excel rules")
@@ -750,6 +753,10 @@ class UsedAppPin(BaseModel):
 
 class UpdateKnowledgeReq(BaseModel):
     """Update Knowledge Base Model Request"""
+
+    confirmation_id: str | None = None
+    plan_digest: str | None = None
+    idempotency_key: str | None = None
 
     model_id: int = Field(..., description="embeddingModelsID")
     model_type: str | None = Field(
