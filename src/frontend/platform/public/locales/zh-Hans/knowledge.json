@@ -497,7 +497,9 @@
     "version_history": "历史版本",
     "version_no": "版本",
     "version_upload_time": "上传时间",
-    "version_uploader": "上传者"
+    "version_uploader": "上传者",
+    "upload_temporary": "为本次上传使用临时规则",
+    "upload_rules_hint": "默认继承空间规则。这里的修改仅作用于本次新增的文件，重试仍使用该批次规则。音视频和网页导入沿用各自的专用规则。"
   },
   "deletion": {
     "references": "引用来源",

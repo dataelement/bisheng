@@ -497,7 +497,9 @@
     "version_history": "Version history",
     "version_no": "Version",
     "version_upload_time": "Uploaded at",
-    "version_uploader": "Uploaded by"
+    "version_uploader": "Uploaded by",
+    "upload_temporary": "Use different rules for this upload",
+    "upload_rules_hint": "By default, files inherit the space rules. Changes here apply only to files added in this batch; retries keep these rules. Audio, video, and web imports use their own rules."
   },
   "deletion": {
     "references": "References",

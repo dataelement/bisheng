@@ -491,7 +491,9 @@
     "version_history": "バージョン履歴",
     "version_no": "バージョン",
     "version_upload_time": "アップロード日時",
-    "version_uploader": "アップロード者"
+    "version_uploader": "アップロード者",
+    "upload_temporary": "今回のアップロードに一時的なルールを使う",
+    "upload_rules_hint": "既定ではスペースのルールを継承します。ここでの変更は今回追加するファイルにのみ適用され、再試行でも同じルールを使います。音声・動画・Webの取り込みには専用のルールを使います。"
   },
   "deletion": {
     "references": "参照元",
