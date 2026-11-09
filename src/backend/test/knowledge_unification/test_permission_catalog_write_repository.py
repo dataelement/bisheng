@@ -80,6 +80,15 @@ def prepared(session_factory, monkeypatch, tenant_context):
                 ),
             )
         monkeypatch.setattr(native, "baseline", lambda _: before)
+        async with session_factory() as session:
+            engine = session.bind
+
+        # Real parent BEGIN: SQLite legacy mode otherwise commits the first
+        # released SAVEPOINT even when the logical caller TX later rolls back.
+        @sa.event.listens_for(engine.sync_engine, "begin")
+        def begin(connection):
+            connection.exec_driver_sql("BEGIN")
+
         async with session_factory() as session, session.begin():
             await native.seed_catalog(session)
         async with session_factory() as session, session.begin():

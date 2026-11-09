@@ -10,12 +10,15 @@ from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id,
 from bisheng.permission.domain.models import (
     AuthorizationModelRelease,
     PermissionAction,
+    PermissionModel,
 )
 from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
     PermissionMigrationSnapshotRepository,
 )
 from test.knowledge_unification.test_permission_catalog_write_repository import (
     arguments,
+    capture,
+    dml,
     raw,
 )
 from test.knowledge_unification.test_permission_catalog_write_repository import (
@@ -195,3 +198,98 @@ async def test_never_selects_another_pin_just_because_checksum_matches(prepared,
                 session, **(arguments(value) | {"target_authorization_release_id": other})
             )
             assert result.authorization.id == other
+
+
+async def test_target_drift_during_final_before_read_is_rejected_before_return(ready, module, monkeypatch):
+    snapshots = PermissionMigrationSnapshotRepository()
+    original_read = snapshots.aload_catalog_release
+    visits = 0
+
+    async def changing(session, *, release_id):
+        nonlocal visits
+        result = await original_read(session, release_id=release_id)
+        if release_id == ready.before.release.id:
+            visits += 1
+            if visits == 2:
+                await session.execute(
+                    sa.update(AuthorizationModelRelease)
+                    .where(AuthorizationModelRelease.id == ready.target)
+                    .values(store_id="after-final-lock-read")
+                )
+        return result
+
+    monkeypatch.setattr(snapshots, "aload_catalog_release", changing)
+    async with ready.factory() as session, session.begin():
+        before = await raw(session)
+        with pytest.raises(PermissionMigrationBlockedError):
+            await module.F118CatalogWriteRepository(snapshot_repository=snapshots).astage_catalog(
+                session, **arguments(ready)
+            )
+        assert visits == 2 and await raw(session) == before
+
+
+async def test_verified_stage_is_global_and_accepts_concrete_tenant_other_than_one(ready, module):
+    token = set_current_tenant_id(202)
+    try:
+        async with ready.factory() as session, session.begin():
+            result = await module.F118CatalogWriteRepository().astage_catalog(session, **arguments(ready))
+            assert result.release.id == ready.draft
+    finally:
+        current_tenant_id.reset(token)
+
+
+@pytest.mark.parametrize("table", ["permission_model", "permission_model_action"])
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_real_second_bulk_page_failure_cannot_leave_any_children(prepared, module, table, cancel, monkeypatch):
+    value = await prepared(count=401)
+    async with value.factory() as session, session.begin():
+        before = await raw(session)
+        execute = session.execute
+        pages = 0
+
+        async def fail_second(statement, *args, **kwargs):
+            nonlocal pages
+            result = await execute(statement, *args, **kwargs)
+            if getattr(statement, "is_insert", False) and statement.table.name == table:
+                pages += 1
+                if pages == 2:
+                    raise asyncio.CancelledError() if cancel else RuntimeError("after-real-second-bulk-page")
+            return result
+
+        monkeypatch.setattr(session, "execute", fail_second)
+        with pytest.raises(asyncio.CancelledError if cancel else RuntimeError):
+            await module.F118CatalogWriteRepository().astage_catalog(session, **arguments(value))
+        monkeypatch.setattr(session, "execute", execute)
+        assert pages == 2 and await raw(session) == before
+    async with value.factory() as session, session.begin():
+        assert await raw(session) == before
+
+
+@pytest.mark.parametrize("table", [PermissionModel, AuthorizationModelRelease])
+async def test_actual_original_sql_drift_is_blocked_before_first_child_write(ready, module, table):
+    async with ready.factory() as session, session.begin():
+        if table is PermissionModel:
+            await session.execute(
+                sa.update(table)
+                .where(table.catalog_release_id == ready.before.release.id)
+                .values(legacy_source_key=None)
+            )
+        else:
+            await session.execute(
+                sa.update(table).where(table.id == ready.before.authorization.id).values(model_checksum="e" * 64)
+            )
+    statements, remove = capture(ready)
+    try:
+        async with ready.factory() as session, session.begin():
+            with pytest.raises(PermissionMigrationBlockedError):
+                await module.F118CatalogWriteRepository().astage_catalog(session, **arguments(ready))
+        assert not dml(statements)
+    finally:
+        remove()
+
+
+@pytest.mark.parametrize("ident", [True, 0, 999999])
+async def test_by_id_reader_rejects_bad_or_missing_real_identity(ready, ident):
+    async with ready.factory() as session, session.begin():
+        with pytest.raises(PermissionMigrationBlockedError):
+            await PermissionMigrationSnapshotRepository().aload_catalog_release(session, release_id=ident)
