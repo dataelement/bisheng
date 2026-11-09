@@ -3375,6 +3375,26 @@
       "group_order": "Ordered by first indexing time",
       "group_last": "Latest request",
       "group_count": "{{count}} saved requests",
+      "group_like": "Like",
+      "group_dislike": "Dislike",
+      "group_likes": "Likes {{count}}",
+      "group_dislikes": "Dislikes {{count}}",
+      "feedback_heading": "Message feedback",
+      "feedback": {
+        "rating": {
+          "positive": "Like",
+          "negative": "Dislike"
+        },
+        "category": {
+          "task-result": "Task result",
+          "instruction-following": "Instruction following",
+          "product-interaction": "Product interaction",
+          "service-stability": "Service stability",
+          "resource-cost": "Resource and cost",
+          "security-privacy-permission": "Security, privacy, and permission",
+          "other": "Other"
+        }
+      },
       "group_abnormal": "{{count}} abnormal",
       "group_scope": "Only matching requests are shown. Group totals and status cover all indexed requests and may lag.",
       "group_all": "View all saved requests",
