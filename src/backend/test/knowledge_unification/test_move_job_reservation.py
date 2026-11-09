@@ -47,7 +47,17 @@ def actor(kind="user", ident=7):
 
 
 @pytest.fixture
-async def accepted(moving):
+async def accepted(moving, monkeypatch):
+    # aiosqlite legacy mode does not begin a DB transaction for SELECT/SAVEPOINT.
+    # Materialize the caller's native BEGIN so SAVEPOINT release cannot commit it.
+    sa.event.listen(moving.engine.sync_engine, "begin", lambda connection: connection.exec_driver_sql("BEGIN"))
+    from bisheng.core.database import tenant_filter
+
+    monkeypatch.setattr(
+        tenant_filter,
+        "_tenant_aware_tables",
+        tenant_filter._tenant_aware_tables | {KnowledgeProcessingRetryReceipt.__tablename__},
+    )
     async with moving.engine.begin() as connection:
         await connection.run_sync(KnowledgeProcessingRetryReceipt.__table__.create)
 
@@ -204,7 +214,7 @@ async def test_same_and_cross_transaction_replay_survives_business_and_lease_cha
         return await consume(session, receipt)
 
     monkeypatch.setattr(cutover, "aconsume_reservation", counted)
-    async with AsyncSession(moving.engine) as session, session.begin():
+    async with AsyncSession(moving.engine, expire_on_commit=False) as session, session.begin():
         assert await repo.aget_move_request(session, **prepared.args) is None
         first = await repo.acreate_move_reserved(session, **prepared.args)
         second = await repo.acreate_move_reserved(session, **prepared.args)
@@ -353,3 +363,60 @@ async def test_old_repo_has_only_explicit_thin_move_delegation_and_generic_creat
                 configuration=ProcessingConfiguration(4, "generation-4"),
                 items=[NewProcessingItem(prepared.scope.leaves[0].target, 10)],
             )
+
+
+async def test_successful_reservation_is_rolled_back_by_the_external_native_transaction(moving, accepted):
+    prepared = await accepted()
+    repo, _ = jobs(moving)
+    async with AsyncSession(moving.engine) as session:
+        transaction = await session.begin()
+        result = await repo.acreate_move_reserved(session, **prepared.args)
+        job_id = result.job.id
+        assert session.in_transaction() and not session.in_nested_transaction()
+        await transaction.rollback()
+    async with AsyncSession(moving.engine) as session:
+        assert await session.get(KnowledgeProcessingJob, job_id) is None
+        assert not (await session.execute(sa.select(KnowledgeProcessingItem))).all()
+        assert (await session.get(KnowledgeOperationPlan, prepared.plan.confirmation_id)).operation_id is None
+
+
+async def test_replay_does_not_flush_or_refresh_unrelated_pending_state(moving, accepted):
+    prepared = await accepted()
+    original = await create(moving, prepared.args)
+    repo, _ = jobs(moving)
+    async with AsyncSession(moving.engine) as session, session.begin():
+        cached = await session.get(KnowledgeFile, 82)
+        cached.remark = "caller pending"
+        pending = KnowledgeFile(tenant_id=101, knowledge_id=10, file_name="pending")
+        session.add(pending)
+        statements = []
+        sa.event.listen(
+            moving.engine.sync_engine, "before_cursor_execute", lambda _c, _cu, sql, *_: statements.append(sql)
+        )
+        replay = await repo.aget_move_request(session, **prepared.args)
+        assert replay.reused and replay.job.id == original.job.id
+        assert cached in session.dirty and cached.remark == "caller pending"
+        assert pending in session.new and pending.id is None
+        assert all(sql.lstrip().upper().startswith("SELECT") for sql in statements)
+        await session.rollback()
+
+
+async def test_actual_web_snapshot_removal_policy_keeps_original_system_metadata(moving, accepted):
+    async with AsyncSession(moving.engine) as session:
+        source = await session.get(Knowledge, 10)
+        source.metadata_fields = [
+            *source.metadata_fields,
+            {"field_name": "source_url", "field_type": "string"},
+            {"field_name": "html_snapshot_object_name", "field_type": "string"},
+        ]
+        await session.execute(sa.update(KnowledgeFile.__table__).where(KnowledgeFile.id == 82).values(status=2))
+        await session.commit()
+    prepared = await accepted()
+    job = (await create(moving, prepared.args)).job
+    assert job.total_count == 2
+    async with AsyncSession(moving.engine) as session:
+        rows = (await session.execute(sa.select(KnowledgeProcessingItem))).scalars().all()
+        web = next(row.processing_snapshot for row in rows if row.file_id == 82)
+        assert web["metadata_policy"]["removed_fields"] == ["lose"]
+        assert web["file_after"]["user_metadata"]["source_url"] == "https://private.invalid"
+        assert web["file_after"]["user_metadata"]["html_snapshot_object_name"] == "snap/82"

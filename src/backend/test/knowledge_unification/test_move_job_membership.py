@@ -81,7 +81,7 @@ async def test_all_accepted_early_retries_remain_members_and_only_bounded_refere
     assert actual == frozenset({7, 17, 50})
     assert len(statements) <= 8
     for sql, _ in statements:
-        assert sql.lstrip().upper().startswith("SELECT")
+        assert sql.lstrip().upper() == "BEGIN" or sql.lstrip().upper().startswith("SELECT")
         selected = sql.partition("FROM")[0]
         assert "scope_manifest" not in selected and "processing_snapshot" not in selected
         assert "knowledge_operation_plan.parameters" not in selected
@@ -191,12 +191,33 @@ async def test_native_acceptance_and_replay_read_each_scope_linearly_not_per_ite
     prepared = await accepted()
     statements = []
     sa.event.listen(moving.engine.sync_engine, "before_cursor_execute", lambda _c, _cu, sql, *_: statements.append(sql))
+    # Measure the unchanged actual K1 path, then roll its private transaction back.
+    # J1 must add only fixed SQL overhead to that same original linear work.
+    _, cutover = jobs(moving)
+    async with AsyncSession(moving.engine) as session, session.begin():
+        transaction = await session.begin_nested()
+        receipt = await cutover.aprepare_reservation(
+            session,
+            scope=prepared.scope,
+            confirmation_id=prepared.plan.confirmation_id,
+            plan_digest=prepared.plan.plan_digest,
+            actor_user_id=7,
+            actor_reference=prepared.origin,
+        )
+        await cutover.aconsume_reservation(session, receipt)
+        await transaction.rollback()
+    baseline = sum(sql.lstrip().upper().startswith("SELECT") for sql in statements)
+    statements.clear()
     repo, _ = jobs(moving)
     job = (await create(moving, prepared.args, repo)).job
     assert job.total_count == count and len(job.scope_manifest) == count
     selects = [sql for sql in statements if sql.lstrip().upper().startswith("SELECT")]
-    assert len(selects) <= 70 + 16 * math.ceil(count / 200)
+    assert baseline <= 70 + 20 * math.ceil(count / 200)
+    assert len(selects) <= baseline + 10
+    print({"items": count, "original_k1_selects": baseline, "j1_acceptance_selects": len(selects)})
     statements.clear()
     async with AsyncSession(moving.engine) as session, session.begin():
         assert (await repo.aget_move_request(session, **prepared.args)).reused
-    assert len(statements) <= 3 and all(sql.lstrip().upper().startswith("SELECT") for sql in statements)
+    assert len(statements) <= 3 and all(
+        sql.lstrip().upper() == "BEGIN" or sql.lstrip().upper().startswith("SELECT") for sql in statements
+    )
