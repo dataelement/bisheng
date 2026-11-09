@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 功能并行收口中 | 先完成功能，再统一整体测试；2026-11-10按固定交付及定点证据关闭原62卡，原137队列当前106完成、31待办（含整体验收），不代表功能106项或AC通过率。最新已集成业务链见[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 功能并行收口中 | 先完成功能，再统一整体测试；2026-11-10按固定交付及定点证据关闭原71卡，原137队列当前115完成、22待办（含整体验收），不代表功能106项或AC通过率。最新已集成业务链见[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -39,7 +39,7 @@
 
 ## 本轮原卡闭合（2026-11-10）
 
-按已正常合流的实际业务链及已有定点证据关闭62张原卡；不新增编号，不把整体回归/E2E或环境演练卡计完成。路径以最终实现为准，原拟新增文件名是早期拆分计划；实际接口/文件/固定提交见[W6当前集成](./wave6-implementation-review.md#当前功能集成2026-11-10)。
+按已正常合流的实际业务链及已有定点证据关闭71张原卡；不新增编号，不把整体回归/E2E或环境演练卡计完成。路径以最终实现为准，原拟新增文件名是早期拆分计划；实际接口/文件/固定提交见[W6当前集成](./wave6-implementation-review.md#当前功能集成2026-11-10)。
 
 | 原卡 | 当前闭合依据 |
 | --- | --- |
@@ -48,9 +48,11 @@
 | T095–T100、T123/T124 | 复制/四kind/Chunk/meta及公开任务入口979e7c7458，移动后旧图片8a745d4b09，真实开放元数据值b3fecbb1f3；不扩文件edit、不以accepted报完成。 |
 | T113–T120 | 模型差集预检、普通/强删与持久投影协调afb4d255；实际两端确认1bbc16d0a9/494351123c。 |
 | T157/T158、T161–T164、T167–T174 | 原Run权限发布a576、M2/M3/M4回填dbf003及后继完整对账/CLI；正常hard-delete空索引f8320fcd65；单head和实际命令已接。T202/203真实MySQL及升级演练保持待办。 |
-| T179–T186、T188–T191 | 真实上传规则783eb1c166、非删批量a540ceeec4、移动99fe13c9e9、处理/高级工具979e7c7458、删除页面/保存引用c006b7ac64、客户端状态47a4486618及visible候选346427e2d9。T177目录/web和工具旁观Root.visible回归仍在修复，未以底层可用勾选该卡。 |
+| T179–T186、T188–T191 | 真实上传规则783eb1c166、非删批量a540ceeec4、移动99fe13c9e9、处理/高级工具979e7c7458、删除页面/保存引用c006b7ac64、客户端状态47a4486618及visible候选346427e2d9。T177真实目录/web与工具准入已由3b791157/7a0eccec8f及主树12 native/23 UI定点闭合。 |
 
-剩余31卡见[当前待办](./pending-tasks.md)：旧协议与历史检索、完整目录上传、最终装配和三语，以及整体测试/演练/评审。已实现任务若在集成发现具体缺陷仍须原Owner修复，不能用勾选状态豁免。
+本轮继续关闭：T121/T122旧/新列表创建详情已接c633a9ec73并由9aa363c8e1遵C3自动隔离、保旧preferred输入；T129/T130、T222/T223以真实Root分类接旧workflow/workstation及RAG/KPS namespace，cd363a54保原OFF/全局融合且限定新长列表，主树同叶22定点通过；T198/T199 d36ea225沿原生成链修7处namespace/插值、同步本特性13错误码，三语实际引擎解析与产物一致性通过。实际浏览器语言切换与整体验收仍保T200/T201之后执行。
+
+剩余22卡见[当前待办](./pending-tasks.md)：旧协议与历史检索、完整目录上传、最终装配和三语，以及整体测试/演练/评审。已实现任务若在集成发现具体缺陷仍须原Owner修复，不能用勾选状态豁免。
 
 ## 任务清单
 
@@ -1016,7 +1018,7 @@
   **配对测试**：T119\
   **验证 / 完成条件**：运行配对测试 T119；验证本卡预期，相关范围检查通过。
 
-- [ ] **T121 · 空间列表/管理/创建与详情 API：先写测试**
+- [x] **T121 · 空间列表/管理/创建与详情 API：先写测试**
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_api_space.py`（拟新增）\
   **逻辑 / 测试上下文**：路由动态冲突检查；普通参数不能切admin；role/tenant矩阵及直链越权；前后台同ID/内容/授权。\
@@ -1024,7 +1026,7 @@
   **覆盖 AC**: AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-14, AC-15, AC-32, AC-84\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T122 · 空间列表/管理/创建与详情 API**
+- [x] **T122 · 空间列表/管理/创建与详情 API**
   **类型 / Owner**：后端 API / KN\
   **写入文件**：`src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py`\
   **逻辑 / 测试上下文**：按 A1接普通与admin独立清单、具体租户详情/操作上下文，后台模型/默认配置入口委托已有usecase；管理员copy不豁免，DTO含真实能力/处理态、无权不泄名称。\
@@ -1080,7 +1082,7 @@
   **配对测试**：T127\
   **验证 / 完成条件**：运行配对测试 T127；验证本卡预期，相关范围检查通过。
 
-- [ ] **T129 · 工作台/工作流知识节点兼容：先写测试**
+- [x] **T129 · 工作台/工作流知识节点兼容：先写测试**
   **类型 / Owner**：测试 / EDGE\
   **写入文件**：`src/backend/test/knowledge_unification/test_edge_workstation.py`（拟新增）\
   **逻辑 / 测试上下文**：历史节点无需重新发布；sameactor检索只成功可见主版本；失效不忽略不fallback。\
@@ -1088,7 +1090,7 @@
   **覆盖 AC**: AC-35, AC-37, AC-68, AC-79, AC-82, AC-83, AC-91\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T130 · 工作台/工作流知识节点兼容**
+- [x] **T130 · 工作台/工作流知识节点兼容**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/workstation/domain/services/workstation_service.py`；`src/backend/bisheng/workflow/nodes/knowledge_retriever/knowledge_retriever.py`\
   **逻辑 / 测试上下文**：旧knowledge type/ID和原use表达委托统一解析/检索，不重写历史节点；保workbench/tenant凭证与文件可见性，失效明确报错。\
@@ -1470,7 +1472,7 @@
   **依赖**：T722, T721, T719, T698, T707, T728, T729, T730\
   **验证 / 完成条件**：菜单与角色/租户切换、无权直链、QA入口；Zustand不直接HTTP；关联规格：AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-16, AC-84。
 
-- [ ] **T177 · 平台目录/上传/版本**
+- [x] **T177 · 平台目录/上传/版本**
   **类型 / Owner**：前端 Platform / PLATFORM\
   **写入文件**：`src/frontend/platform/src/pages/KnowledgePage/detail.tsx`；`src/frontend/platform/src/pages/KnowledgePage/components/Files.tsx`\
   **逻辑 / 测试上下文**：复用空间树/文件夹上传/网页/预览下载rename版本，按相同开关相似文档/标签，按钮来自现有效动作，不新增fileedit。\
@@ -1619,14 +1621,14 @@
   **配对测试**：T196\
   **验证 / 完成条件**：运行配对测试 T196；验证本卡预期，相关范围检查通过。
 
-- [ ] **T198 · 共享三语词条唯一集成**
+- [x] **T198 · 共享三语词条唯一集成**
   **类型 / Owner**：文案集成 / INT\
   **写入文件**：`src/frontend/packages/locales/src/shared/zh-Hans.json`；`features/v3.1.0-beta1/118-knowledge-space-unification/contracts.md`（拟新增）\
   **逻辑 / 测试上下文**：汇总两端键/三语词条及归属，不手改生成api_errors；本卡只落中文源与合同清单，后续英/日源独立两文件任务。\
   **依赖**：T186, T191, T002\
   **验证 / 完成条件**：JSON可解析，无重复/缺失key，键清单审阅；不是业务实现基础设施前置，属于最终文案集成。
 
-- [ ] **T199 · 英日源词条与现有生成链**
+- [x] **T199 · 英日源词条与现有生成链**
   **类型 / Owner**：文案集成 / INT\
   **写入文件**：`src/frontend/packages/locales/src/shared/en.json`；`src/frontend/packages/locales/src/shared/ja.json`\
   **逻辑 / 测试上下文**：补齐同一键的英/日译文，执行现有生成/同步链，两端实际消费路径以T001清单为准；若遗留app locale需直接改，先拆两文件补充卡，不把产物当手改源。\
@@ -1811,7 +1813,7 @@
   **配对测试**：T220\
   **验证 / 完成条件**：运行配对测试 T220，lint/类型/序列化往返通过。
 
-- [ ] **T222 · 知识旧列表和RAG使用资格适配：先写测试**
+- [x] **T222 · 知识旧列表和RAG使用资格适配：先写测试**
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_knowledge_usage_adapters.py`\
   **逻辑 / 测试上下文**：将旧列表/知识RAG batch返回动作过滤统一visible；受支持query action=use仅边界归一化，不让业务继续按use集合判定。保scope、真实类型QA/SPACE与成功主版本。；可见无use可用、无可见/无凭证scope拒绝，旧协议不形成独立授权。\
@@ -1819,7 +1821,7 @@
   **覆盖 AC**: AC-35, AC-36, AC-37, AC-66, AC-68, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：先记录红阶段，不修改实现。
 
-- [ ] **T223 · 知识旧列表和RAG使用资格适配**
+- [x] **T223 · 知识旧列表和RAG使用资格适配**
   **类型 / Owner**：后端 Domain / KN\
   **写入文件**：`src/backend/bisheng/knowledge/domain/knowledge_rag.py`；`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`\
   **逻辑 / 测试上下文**：将旧列表/知识RAG batch返回动作过滤统一visible；受支持query action=use仅边界归一化，不让业务继续按use集合判定。保scope、真实类型QA/SPACE与成功主版本。\
