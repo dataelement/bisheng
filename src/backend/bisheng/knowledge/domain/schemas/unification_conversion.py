@@ -26,6 +26,13 @@ class ResourceConversionCommand(ConversionCommand):
     target_type: int
     target_is_released: bool
     target_migration_origin: str
+    creator_user_id: int
+    membership_action: str
+    before_member_count: int
+    before_member_digest: str
+    existing_creator_member_id: int | None
+    creator_template_digest: str
+    creator_planned_at: datetime | None
 
 
 @dataclass(frozen=True, slots=True)
