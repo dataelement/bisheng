@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史1029编号：916已完成/历史交付、111当前待办、2外移；原137队列已完成40项、剩97项，另14张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史1029编号：918已完成/历史交付、109当前待办、2外移；原137队列已完成40项、剩97项，另12张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -8163,7 +8163,7 @@
   **配对测试**：T1009\
   **验证 / 完成条件**：调用者不碰bridge.repository，原pin/Mode/tuple/checksum核验不省略。
 
-- [ ] **T1011 · 原M3成员与Root原子转换及恢复反例**
+- [x] **T1011 · 原M3成员与Root原子转换及恢复反例**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_migration_membership_writer.py`；`src/backend/test/knowledge_unification/test_migration_membership_writer_scale.py`\
   **逻辑 / 测试上下文**：W6§111实际insert/keep全set、原SP/checkpoint/ACK/resume、实际PK摘要与线性批锁。\
@@ -8171,7 +8171,7 @@
   **覆盖 AC**: AC-55, AC-57, AC-58, AC-80, AC-83, AC-85\
   **验证 / 完成条件**：先真实旧Writer漏成员红，原完整M3组合及独立复查；不以Root3就算成功。
 
-- [ ] **T1012 · 原转换仓储同事务写入创建者成员并核完整after**
+- [x] **T1012 · 原转换仓储同事务写入创建者成员并核完整after**
   **类型 / Owner**：后端 Repository / PERM\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_space_membership_repository.py`；`src/backend/bisheng/knowledge/domain/repositories/unification_conversion_repository.py`\
   **逻辑 / 测试上下文**：W6§111实际Root+Member原owned SP，Outcome绑定实际PK/fullset，原四kind不变。\

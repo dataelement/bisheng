@@ -548,3 +548,8 @@ QA官方e99e7e8158两条实际qa_retriever+FlowVersion正式M2在原source_decis
 compiled07a0f7798d由root逐行审查（旧generator/error优先级/pair语义保持、frozen+MappingProxy及新口native类型约束），正常merge204910f8bb22610e1c725a3949e142c69b003fcc；root10路径245绿55.44秒，/private/tmp/f118-root-compiled-planner-integration.xml。作者固定父10个payload/checksum逐字节对照与跨3tenant401/1001模型一次derive/matrix通过，关闭T10201021。正式整M2预算是Catalog初建1+compiled重建校验1=全局2，不随tenant再增加；未接C6 wire前不声称正式盘点已复用。
 
 原T111112同卡审计保留，已确认尾Coverage真实换TX而仍complete的P1缺口，§115先真红再窄修；其它公开入口/Coverage启用后继依原卡，不混作内部未完成。
+
+
+### 成员正式写入集成验收（2026-11-09）
+
+T1011/T1012固定作者提交3fdd21360adc2e79a2ca9145738b6594933bff60，已正常合流。作者外3项native探针及358项相关组合通过，覆盖insert/keep混合、晚取消、外catch+commit保留无关DML、插入后tenant/nested TX漂移和恢复prefix实际PK/full-set绑定。主功能全部migration测试1428 passed /134.92s，日志/private/tmp/f118-root-member-writer-suite.log及同名XML。Root已复查两生产叶diff；不以Root变3替代Member写入证明。正式namespace完整明细、SQL/FGA发布、全量停服升级与环境E2E仍待后继，未据本地回归宣称已完成升级。
