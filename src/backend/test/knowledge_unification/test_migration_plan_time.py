@@ -31,6 +31,7 @@ async def test_real_m2_freezes_one_representable_time_and_matching_templates(
 
     monkeypatch.setattr(module, "unification_now", clock)
     await complete.insert(inventory.resources.Knowledge, [inventory.resources.resource(1000, 1, model=None)])
+    await inventory.original_library_modes(complete, ((1, 1000),))
     await complete.insert(inventory.resources.KnowledgeFile, [inventory.resources.file(2, 1, knowledge_id=1000)])
     async with AsyncSession(complete.engine) as session, session.begin():
         await inventory.application(module, transport).arun(session, **transport.inputs)
