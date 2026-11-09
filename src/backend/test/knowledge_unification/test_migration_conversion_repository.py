@@ -398,8 +398,8 @@ async def test_actual_version_rows_are_not_rescanned_for_each_file_in_a_batch(re
                 scans.append(True)
                 yield row
 
-    async def measured(*args):
-        data = await original(*args)
+    async def measured(*args, **kwargs):
+        data = await original(*args, **kwargs)
         data["versions"] = MeasuredRows(data["versions"])
         return data
 

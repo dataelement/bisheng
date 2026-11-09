@@ -20,6 +20,10 @@ from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeU
 from bisheng.knowledge.domain.repositories import unification_resource_repository as raw
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import DefaultRow
 from bisheng.knowledge.domain.repositories.unification_run_repository import KnowledgeUnificationRunRepository
+from bisheng.knowledge.domain.repositories.unification_space_membership_repository import (
+    UnificationSpaceMembershipRepository,
+    _current,
+)
 from bisheng.knowledge.domain.schemas.unification_conversion import (
     DefaultConversionCommand,
     InitializeV1Command,
@@ -82,11 +86,15 @@ class UnificationConversionRepository:
     def __init__(self):
         self._scopes = WeakKeyDictionary()
         self.runs = KnowledgeUnificationRunRepository()
+        self.members = UnificationSpaceMembershipRepository()
 
     async def _read(self, session, query):
-        raw._scope(session)
+        tenant, transaction = raw._scope(session), TransactionIdentity.capture(session)
+        _current(session, tenant, transaction)
         with session.no_autoflush, strict_tenant_filter():
-            return tuple((await session.execute(query)).mappings())
+            rows = tuple((await session.execute(query)).mappings())
+        _current(session, tenant, transaction)
+        return rows
 
     async def aread_run(self, session, *, run_id, writer_contract_version, lock=False):
         """Read detached scalar facts without refreshing the caller's ORM row."""
@@ -138,6 +146,11 @@ class UnificationConversionRepository:
     async def alock_scope(self, session, *, run_id, writer_contract_version, baseline_hash, plan_hash, commands):
         _clean(session)
         tenant = raw._scope(session)
+        transaction = TransactionIdentity.capture(session)
+
+        def current():
+            _current(session, tenant, transaction)
+
         if type(commands) is not tuple or len(commands) > 200:
             _blocked("invalid_batch")
         for cmd in commands:
@@ -176,14 +189,16 @@ class UnificationConversionRepository:
         if len({cmd.command_key for cmd in commands}) != len(commands):
             _blocked("duplicate_command")
         run = await self.aread_run(session, run_id=run_id, writer_contract_version=writer_contract_version, lock=True)
+        current()
         self.runs._expected(run, "converting", baseline_hash, plan_hash)
-        value = await self._load(session, commands, False)
+        value = await self._load(session, commands, False, current=current)
+        current()
         scope = LockedConversionScope(
             run_id, writer_contract_version, tenant, baseline_hash, plan_hash, digest([asdict(cmd) for cmd in commands])
         )
         value.update(
             commands=commands,
-            transaction=TransactionIdentity.capture(session),
+            transaction=transaction,
             seal=digest(asdict(scope)),
             checkpoint=digest(run.checkpoints.get("converting", {}).get("sql_conversion")),
         )
@@ -191,12 +206,15 @@ class UnificationConversionRepository:
         self._parents(scope, value)
         return scope
 
-    async def _load(self, session, commands, root_values=True):
+    async def _load(self, session, commands, root_values=True, *, current):
         resources = {cmd.knowledge_id for cmd in commands if type(cmd) is ResourceConversionCommand}
         roots = {cmd.knowledge_id for cmd in commands if hasattr(cmd, "knowledge_id")}
-        root_rows = await self._rows(session, Knowledge, ("id", "tenant_id", "type"), roots)
+        root_rows = await self._rows(session, Knowledge, ("id", "tenant_id", "type", "user_id"), roots)
         if root_values:
             root_rows.update(await self._rows(session, Knowledge, RESOURCE_PROJECTION, resources))
+        members = await self.members._alock_conversion_sets(
+            session, roots=root_rows, commands=commands, current=current
+        )
         file_ids = {cmd.file_id for cmd in commands if hasattr(cmd, "file_id")}
         version_ids = set()
         for start in range(0, len(file_ids), 200):
@@ -253,6 +271,7 @@ class UnificationConversionRepository:
             session, Default, DEFAULT_COLUMNS, [cmd.row_id for cmd in commands if type(cmd) is DefaultConversionCommand]
         )
         return {
+            "members": members,
             "roots": root_rows,
             "files": files,
             "documents": documents,
@@ -368,6 +387,9 @@ class UnificationConversionRepository:
                     or digest(raw._values(row, raw.NEUTRAL_COLUMNS)) != cmd.before_neutral_digest
                 ):
                     _blocked("resource_before_changed")
+                self.members._assert_conversion_before(
+                    command=cmd, root=row, members=value["members"][cmd.knowledge_id]
+                )
             elif type(cmd) is InitializeV1Command:
                 if (
                     digest(value["files"][cmd.file_id]) != cmd.file_business_digest
@@ -459,14 +481,19 @@ class UnificationConversionRepository:
     async def aapply_and_read_after(self, session, *, scope):
         _clean(session)
         value = self._bound(session, scope)
+
+        def current():
+            _current(session, scope.tenant_id, value.get("owned_savepoint", value["transaction"]))
+
         try:
             await self._current_run(session, scope, value)
-            value.update(await self._load(session, value["commands"]))
+            value.update(await self._load(session, value["commands"], current=current))
             self._parents(scope, value)
             self._before(value)
             async with session.begin_nested():
                 value["owned_savepoint"] = TransactionIdentity.capture(session)
                 for cmd in value["commands"]:
+                    current()
                     if type(cmd) is ResourceConversionCommand:
                         await session.execute(
                             update(Knowledge.__table__)
@@ -478,6 +505,8 @@ class UnificationConversionRepository:
                                 update_time=value["roots"][cmd.knowledge_id]["update_time"],
                             )
                         )
+                        member_id = await self.members._aapply_conversion_member(session, command=cmd, current=current)
+                        value.setdefault("member_ids", {})[cmd.knowledge_id] = member_id
                     elif type(cmd) is TagConversionCommand:
                         await session.execute(
                             update(Tag.__table__)
@@ -486,6 +515,7 @@ class UnificationConversionRepository:
                                 business_type="knowledge_space", update_time=value["tags"][cmd.tag_id]["update_time"]
                             )
                         )
+                        current()
                     elif type(cmd) is TagLinkConversionCommand:
                         statement = (
                             delete(TagLink.__table__)
@@ -497,6 +527,7 @@ class UnificationConversionRepository:
                         await session.execute(
                             statement.where(TagLink.id == cmd.link_id, TagLink.tenant_id == scope.tenant_id)
                         )
+                        current()
                     elif type(cmd) is DefaultConversionCommand:
                         row = value["defaults"][cmd.row_id]
                         after, _ = transform_linsight_llm_config(json.loads(row["value"]))
@@ -506,16 +537,21 @@ class UnificationConversionRepository:
                             .where(Default.id == cmd.row_id, Default.tenant_id == scope.tenant_id)
                             .values(value=canonical(after).decode(), update_time=row["update_time"])
                         )
+                        current()
                     else:
                         document, version = self._templates(cmd)
                         document.pop("primary_version_key")
                         version.pop("document_key")
                         doc = Document(**document)
                         session.add(doc)
+                        current()
                         await session.flush()
+                        current()
                         version = Version(document_id=doc.id, **version)
                         session.add(version)
+                        current()
                         await session.flush()
+                        current()
                         await session.execute(
                             update(Document.__table__)
                             .where(
@@ -526,7 +562,10 @@ class UnificationConversionRepository:
                             )
                             .values(primary_version_id=version.id, update_time=cmd.planned_at)
                         )
+                        current()
+                current()
                 await session.flush()
+                current()
                 return await self.aread_after(session, scope=scope)
         except SQLAlchemyError as error:
             raise KnowledgeOperationPlanConflictError(reason="migration_conversion_sql_failed") from error
@@ -536,8 +575,12 @@ class UnificationConversionRepository:
     async def aread_after(self, session, *, scope):
         _clean(session)
         value = self._bound(session, scope)
+
+        def current_guard():
+            _current(session, scope.tenant_id, value.get("owned_savepoint", value["transaction"]))
+
         await self._current_run(session, scope, value)
-        current = await self._load(session, value["commands"])
+        current = await self._load(session, value["commands"], current=current_guard)
         self._parents(scope, current | {"commands": value["commands"]})
         result = []
         for cmd in value["commands"]:
@@ -547,7 +590,13 @@ class UnificationConversionRepository:
                 hashes = (digest(raw._values(row, raw.RESOURCE_COLUMNS)), digest(raw._values(row, raw.NEUTRAL_COLUMNS)))
                 if hashes != (cmd.after_business_digest, cmd.after_neutral_digest):
                     _blocked("resource_after_changed")
-                after = digest(hashes)
+                member_id, member_digest = self.members._assert_conversion_after(
+                    command=cmd,
+                    root=row,
+                    members=current["members"][cmd.knowledge_id],
+                    expected_member_id=value.get("member_ids", {}).get(cmd.knowledge_id),
+                )
+                after = digest((*hashes, member_id, member_digest))
             elif type(cmd) is InitializeV1Command:
                 self._templates(cmd)
                 version = current["versions_by_file"].get(cmd.file_id)

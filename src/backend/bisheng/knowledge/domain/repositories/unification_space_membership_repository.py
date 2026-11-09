@@ -7,7 +7,7 @@ repair. The separate global gate proves canonical original SPACE parents.
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import Enum
 
@@ -25,6 +25,9 @@ from bisheng.core.context.tenant import (
 from bisheng.database.models.tenant import Tenant
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import InventoryPage
+from bisheng.knowledge.domain.schemas.unification_conversion import ResourceConversionCommand
+from bisheng.knowledge.domain.schemas.unification_space_membership import creator_membership_template
+from bisheng.knowledge.domain.services.unification_fingerprints import digest
 from bisheng.resource_reference.application.contracts import TransactionIdentity
 
 HEADER_COLUMNS = ("knowledge_id", "tenant_id", "knowledge_type", "creator_user_id", "member_count")
@@ -119,6 +122,176 @@ def _current(session, tenant, transaction):
 
 
 class UnificationSpaceMembershipRepository:
+    async def _alock_conversion_sets(self, session, *, roots, commands, current):
+        current()
+        tenant, transaction = _scope(session), TransactionIdentity.capture(session)
+        selected = tuple(cmd for cmd in commands if type(cmd) is ResourceConversionCommand)
+        by_id = {cmd.knowledge_id: cmd for cmd in selected}
+        if len(by_id) != len(selected) or len(by_id) > 200:
+            _blocked("conversion_duplicate_or_large_roots")
+        for ident, cmd in by_id.items():
+            row = roots.get(ident)
+            if (
+                row is None
+                or row["tenant_id"] != tenant
+                or row["type"] not in (0, 3)
+                or not _positive(cmd.creator_user_id)
+                or type(row["user_id"]) is not int
+                or row["user_id"] != cmd.creator_user_id
+            ):
+                _blocked("conversion_root_scope_changed")
+        groups = {ident: [] for ident in by_id}
+        if not groups:
+            return groups
+        canonical = {str(ident): ident for ident in by_id}
+        member, after = SpaceChannelMember.__table__.c, None
+        while True:
+            query = select(*(member[name] for name in MEMBER_COLUMNS)).where(
+                member.business_type == BusinessTypeEnum.SPACE, member.business_id.in_(tuple(canonical))
+            )
+            if after is not None:
+                query = query.where(member.id > after)
+            current()
+            rows = await self._read(
+                session, query.order_by(member.id).limit(201).with_for_update(), tenant, transaction
+            )
+            current()
+            for row in rows[:200]:
+                if row["business_id"] not in canonical or not _positive(row["id"]):
+                    _blocked("conversion_member_scope_changed")
+                ident = canonical[row["business_id"]]
+                groups[ident].append(
+                    SpaceMembershipRow(
+                        tenant_id=tenant,
+                        knowledge_id=ident,
+                        **{
+                            name: row[name].value if isinstance(row[name], Enum) else row[name]
+                            for name in MEMBER_COLUMNS
+                        },
+                    )
+                )
+            if len(rows) <= 200:
+                return {ident: tuple(values) for ident, values in groups.items()}
+            after = rows[199]["id"]
+
+    @staticmethod
+    def _conversion_facts(command, root, members):
+        if (
+            type(command) is not ResourceConversionCommand
+            or not _positive(command.creator_user_id)
+            or type(command.before_member_count) is not int
+            or command.before_member_count < 0
+            or type(command.membership_action) is not str
+            or command.membership_action not in {"insert", "keep"}
+            or any(
+                type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                for value in (command.before_member_digest, command.creator_template_digest)
+            )
+            or root["tenant_id"] != command.tenant_id
+            or root["id"] != command.knowledge_id
+            or type(root["user_id"]) is not int
+            or root["user_id"] != command.creator_user_id
+            or type(members) is not tuple
+        ):
+            _blocked("conversion_creator_command_invalid")
+        if command.membership_action == "insert":
+            if command.existing_creator_member_id is not None:
+                _blocked("conversion_insert_identity_invalid")
+            template = creator_membership_template(
+                knowledge_id=command.knowledge_id,
+                creator_user_id=command.creator_user_id,
+                planned_at=command.creator_planned_at,
+            )
+            if digest(template) != command.creator_template_digest:
+                _blocked("conversion_template_changed")
+        elif not _positive(command.existing_creator_member_id) or command.creator_planned_at is not None:
+            _blocked("conversion_keep_identity_invalid")
+        owners, other_creator, previous = [], False, 0
+        for row in members:
+            if (
+                type(row) is not SpaceMembershipRow
+                or not _positive(row.id)
+                or row.id <= previous
+                or (row.tenant_id, row.knowledge_id, row.business_id, row.business_type)
+                != (command.tenant_id, command.knowledge_id, str(command.knowledge_id), "space")
+            ):
+                _blocked("conversion_member_facts_invalid")
+            previous = row.id
+            if row.user_id == command.creator_user_id:
+                owners.append(row)
+            elif row.user_role == "creator":
+                other_creator = True
+        return owners, other_creator, digest(tuple(asdict(row) for row in members))
+
+    def _assert_conversion_before(self, *, command, root, members):
+        owners, other, actual = self._conversion_facts(command, root, members)
+        if (
+            root["type"] != 0
+            or len(members) != command.before_member_count
+            or actual != command.before_member_digest
+            or other
+        ):
+            _blocked("conversion_member_before_changed")
+        if command.membership_action == "insert":
+            if owners:
+                _blocked("conversion_owner_already_exists")
+        elif (
+            len(owners) != 1
+            or (owners[0].id, owners[0].user_role, owners[0].status)
+            != (command.existing_creator_member_id, "creator", "ACTIVE")
+            or digest({name: getattr(owners[0], name) for name in MEMBER_COLUMNS if name != "id"})
+            != command.creator_template_digest
+        ):
+            _blocked("conversion_keep_member_changed")
+
+    async def _aapply_conversion_member(self, session, *, command, current):
+        current()
+        if session.new or session.dirty or session.deleted:
+            _blocked("conversion_caller_pending")
+        if command.membership_action == "keep":
+            return command.existing_creator_member_id
+        member = SpaceChannelMember(
+            **creator_membership_template(
+                knowledge_id=command.knowledge_id,
+                creator_user_id=command.creator_user_id,
+                planned_at=command.creator_planned_at,
+            )
+        )
+        session.add(member)
+        current()
+        await session.flush()
+        current()
+        if not _positive(member.id):
+            _blocked("conversion_insert_pk_missing")
+        return member.id
+
+    def _assert_conversion_after(self, *, command, root, members, expected_member_id=None):
+        owners, other, actual = self._conversion_facts(command, root, members)
+        if root["type"] != 3 or len(owners) != 1 or other:
+            _blocked("conversion_creator_after_invalid")
+        owner = owners[0]
+        owner_id = owner.id
+        if (
+            (owner.user_role, owner.status) != ("creator", "ACTIVE")
+            or (expected_member_id is not None and owner_id != expected_member_id)
+            or digest({name: getattr(owner, name) for name in MEMBER_COLUMNS if name != "id"})
+            != command.creator_template_digest
+        ):
+            _blocked("conversion_creator_after_changed")
+        if command.membership_action == "keep":
+            if (
+                owner_id != command.existing_creator_member_id
+                or len(members) != command.before_member_count
+                or actual != command.before_member_digest
+            ):
+                _blocked("conversion_keep_after_changed")
+        elif (
+            len(members) != command.before_member_count + 1
+            or digest(tuple(asdict(row) for row in members if row.id != owner_id)) != command.before_member_digest
+        ):
+            _blocked("conversion_insert_after_changed")
+        return owner_id, actual
+
     @staticmethod
     async def _global_read(session, statement, tenant, transaction):
         _current(session, tenant, transaction)
