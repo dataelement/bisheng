@@ -1070,6 +1070,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         del lineage
         return set()
 
+    async def require_upload_container(self, space_id: int, parent_id: int | None = None) -> None:
+        """Read upload rules with the same target action as the actual upload."""
+        await self._require_action("folder" if parent_id else "knowledge_space", parent_id or space_id, "upload_file")
+        space, _ = await self._load_space_listing_scope(space_id, parent_id)
+        self._ensure_space_async_task_tenant_consistency(space, "read_upload_settings")
+
     async def can_write_space_container(self, space_id: int, parent_id: int | None = None) -> bool:
         """F030: best-effort boolean — can the acting user upload into this container?
 

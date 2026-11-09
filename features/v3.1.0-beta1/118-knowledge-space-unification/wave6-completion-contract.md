@@ -1756,3 +1756,10 @@ M4只在重验原同before和真实Root absence后，复用原retired checkpoint
 新删除Job若operation_type非NULL且business_phase=prepared，尚未完成业务切换，不得进入新的迁移/epoch后再假定原删除可续跑。原MIG-only实际SQL guard在fresh/既有frozen M2、M3首写前和M4签证前复用；半NULL、未知新phase同样拒，旧(NULL,NULL)清理任务及finalized后只剩对象/索引清理的任务沿原分类保留。不自动取消或重绑epoch，不探测服务/进程；运维先沿原业务计划完成或正式处置，再执行正式冻结。
 
 原T222/T223同时收口知识业务内的use消费：旧HTTP/action=use和公开兼容方法名保留，入口归一为visible；RAG实际请求/筛选visible结果，不依赖use结果key。其他动作、类型、数据scope及成功主版本资格不变，不借此改分页/缓存框架。
+
+
+## 136. 实际上传页的临时规则接线（2026-11-10 已冻结）
+
+原T179实际SPACE上传页使用SpaceFileUploadPanel，旧FileUploadStep2未挂载，不能以旧组件存在视为已接。新增只读GET `/{space_id}/files/upload-settings?parent_id=...`，调用原KSS验证实际Root/Folder归属和对应upload_file动作；folder授权不增加Root.visible/edit。返回原ProcessingSettingsRead，仅规则/配置版本，不返回名称、模型或文件列表；不写默认或历史文件。现管理默认GET仍原edit规则，不改其权限。
+
+平台复用原ProcessingDefaultsEditor读取effective_defaults并保document/table两草稿；默认继承时register不附overrides，显式临时规则仅随本次上传传原ProcessingOverrides。每次drop验证并深拷贝到真实上传job，后续编辑或重试不得改变已受理批次。音视频及网页专用规则不传普通覆盖，保既有支持类型限制；不PUT空间默认、不自动重处理。保原取消/失败与真实处理中状态，actual upload_file依然服务端最终校验。不扩前台高级配置，不新增上传队列或处理平台。
