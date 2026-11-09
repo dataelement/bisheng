@@ -1604,3 +1604,11 @@ native active AsyncSession、concrete tenant/非bypass、无pending业务ORM；C
 native先红再绿：实际registered模型及知识TargetOwner facts、Source真实包含共享跨tenant绑定但Source/Brr全表字节不变；VALID→deleting→实际business SQL删除→deleted及fresh Owner读取INVALID_DELETED、同op两阶段0DML重放/时间不变。错op/type/actor/foreign/NULL/legacy/祖先删除证据/未签或copy/旧TX/nested/tenant/pending、后页冲突、第二批SQL异常和asyncio.CancelledError共同SP外catchcommit全部0半证据，外层无关已执行DML保。empty server无RRT、clear不能标space。401/10001 Targets实际读取/验证次数/SQL/参数峰值线性，Source/BRR SQL0，per-batch≤200/C2 Core编译静态，DM live免。实际业务Owner/强删确认/分享投影/模型缓存与运行准入失效仍后继，不以本helper通过宣称force delete可用。
 
 §123实际受信写补正：按exact(type,id)每批≤200短bypass读取RRT，不能用owner WHERE把同key的NULL/foreign owner行过滤掉，再逐行核两侧owner。原同TX DELETING直接证据经本operation finalize后，实际DELETED允许同op单调幂等重放0；反向证据DELETED而实际仍DELETING、祖先证据、别的operation均拒。此补正不允许helper新开SAVEPOINT。
+
+## 124. 实际检索成功主版本的正向资格：已冻结
+
+Root在原T101/T102内补真实公共检索链，先原生红测；仅新增knowledge/domain/repositories/retrieval_file_repository.py（≤600）和原knowledge_file_visibility_service.py的_successful_file_ids SQL下沉桥。原engine、F029 IN/NOTIN/none策略、来源准入/白名单/身份、原文件visible及历史delivery完全不变，不新增空间visible/edit动作。此前success减non_primary的负向集合不能证明未登记文件、坏主指针或多文档别名是主版本。
+
+KnowledgeRetrievalFileRepository.alist_successful_files(session,*,space_id:int,file_ids:Iterable[int]|None=None)->set[int]，只SQL读取原事实。实际concrete tenant、native AsyncSession、非bypass、无pending ORM；fresh原connection checkout固定同TX，await前后原tenant/TX/UOW不变。select实际Knowledge ORM根列以保原C3过滤，KnowledgeFile Core JOIN真实Root且两者tenant等值；不以File.knowledge_id单独代替owner。SPACE3须原file_type=FILE、SUCCESS、存在唯一实际File→Version→Document关联，Version.is_primary且Document.primary_version_id精确指向它，Document.knowledge_id与真实Root一致；任何额外同File版本别名均不合格。用相关EXISTS/NOT EXISTS，不用全文件×全版本联表；按PK seek≤200行，给定候选每IN≤200。返回标量ID，不查模型/Grant/任务、不修改任何数据/权限。
+
+NORMAL0/QA1维持原success及外层non_primary规则，不因为这次统一给QA增加新版本准入要求；退役类型及失效来源仍由原上游业务入口拦截。不是迁移修复：缺版本/错指针绝不自动登记、移动、升级为成功或回退历史。公共prefilter/postfilter通过同原_successful_file_ids实际桥接该Repo，读取每轮当前成功主版本；scope/status变更后不返回旧索引内容。native真实F048加载文件及SQL版本数据证明原缺口、合法非管理员独立子项、visible无use、坏指针/未登记/多链别名/跨Root、QA原行为、401/10001查询/参数/访问预算及C2 ANSI/MySQL编译。原已有F029策略单测可以保持其_successful_file_ids端口夹具，不以纯mock代替本次资格原生测试。
