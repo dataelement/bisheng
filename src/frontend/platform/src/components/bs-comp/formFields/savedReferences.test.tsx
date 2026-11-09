@@ -36,3 +36,12 @@ it('missing saved Cascader model has a disabled placeholder and a controlled pat
   expect(toModelCascaderValue('000999', [], true)).toEqual(['__saved_model__:000999', '000999']);
   expect(toGroupedModelOptions([], '000999', 'Unavailable')).toEqual([{ value: '000999', label: 'Unavailable: 000999', disabled: true }]);
 });
+
+it('repairing a single assistant slot preserves every other hidden id and type', () => {
+  const detail = { id: 1, model_name: '11', knowledge_ids: [10, 20, 30], knowledge_list: [{ id: 10, type: 0, name: 'old type' }, { id: 20, type: 1, name: 'QA' }] } as AssistantDetail;
+  useAssistantStore.getState().setAssistantDetail(detail);
+  const before = useAssistantStore.getState().assistantState;
+  useAssistantStore.getState().dispatchAssistant('setting', { knowledge_list: [before.knowledge_list![0], { id: 40, name: 'new space', type: 3 }, before.knowledge_list![2]] });
+  expect(useAssistantStore.getState().assistantState.knowledge_list).toEqual([{ id: 10, type: 0, name: 'old type' }, { id: 40, name: 'new space', type: 3 }, { id: 30 }]);
+  expect(useAssistantStore.getState().assistantState.model_name).toBe('11');
+});

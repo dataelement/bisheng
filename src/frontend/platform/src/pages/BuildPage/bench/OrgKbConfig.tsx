@@ -1,5 +1,4 @@
 import { Alert, Button, SearchInput } from '@bisheng/ui';
-import { showApiError } from '@/controllers/request';
 import { isApiError } from '@bisheng/api-client';
 
 import { Checkbox } from "@bisheng/ui";
@@ -10,7 +9,7 @@ import { Outlined } from "bisheng-icons";
 import { BookIcon } from "@/components/bs-icons/knowledge";
 
 
-import { readFileLibDatabase } from "@/controllers/API";
+import { useKnowledgeCandidates } from "@/components/bs-comp/selectComponent/useKnowledgeCandidates";
 import { Tooltip, TooltipProvider } from "@bisheng/ui";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -50,38 +49,17 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     const { t } = useTranslation();
 
     const [search, setSearch] = useState("");
-    const [list, setList] = useState<KnowledgeBase[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [loadError, setLoadError] = useState<unknown>(null);
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const fetchKbs = async (name: string) => {
-        setLoading(true);
-        try {
-            const doc: any = await readFileLibDatabase({ cursor: null, pageSize: 100, name, type: 0, action: "use" });
-            const merged = ((doc?.data || []) as KnowledgeBase[]).map((k) => ({ ...k, type: 0 }));
-            merged.sort((a, b) => {
-                const ta = a.update_time ? new Date(a.update_time).getTime() : 0;
-                const tb = b.update_time ? new Date(b.update_time).getTime() : 0;
-                return tb - ta;
-            });
-            setList(merged);
-            setLoadError(null);
-        } catch (error) {
-            if (!isApiError(error) || (error.kind !== 'canceled' && error.presentation !== 'global')) setLoadError(error);
-            showApiError(error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
+    const candidates = useKnowledgeCandidates('space');
+    const previous = useRef<{ scopeKey: string | null; list: KnowledgeBase[] }>({ scopeKey: null, list: [] });
+    const currentList = candidates.items.map(kb => ({ ...kb, type: 3 } as KnowledgeBase));
+    if (candidates.loaded && !candidates.error) previous.current = { scopeKey: candidates.scopeKey, list: currentList };
+    const list = candidates.error && previous.current.scopeKey === candidates.scopeKey ? previous.current.list : currentList;
+    const loading = candidates.loading;
+    const loadError = candidates.error && (!isApiError(candidates.error) || (candidates.error.kind !== 'canceled' && candidates.error.presentation !== 'global')) ? candidates.error : null;
     useEffect(() => {
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => fetchKbs(search.trim()), 250);
-        return () => {
-            if (debounceRef.current) clearTimeout(debounceRef.current);
-        };
-    }, [search]);
+        const timer = setTimeout(() => candidates.search(search.trim()), 250);
+        return () => clearTimeout(timer);
+    }, [search, candidates.search]);
 
     const selectedIds = useMemo(() => new Set(orgKbs.map((k) => k.id)), [orgKbs]);
 
@@ -133,6 +111,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     return (
         <div className="mt-2 min-w-0 max-w-full">
             <p className="text-sm text-muted-foreground mb-2">{t("bench.configureOrgKbs")}</p>
+            {orgKbs.some(item => !currentList.some(candidate => candidate.id === item.id)) && <p className="text-xs text-text-3">{t('references.unconfirmed')}</p>}
             <div className="flex min-w-0 w-full max-w-full gap-4">
                 {/* Selected panel */}
                 <div className="flex w-1/2 min-w-0 max-w-[50%] border rounded-lg bg-white" style={{ minHeight: 280 }}>
@@ -228,7 +207,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                         <SearchInput placeholder={t("bench.searchKbName")} value={search} onChange={(e) => setSearch(e.target.value)} className={"w-full min-w-0 max-w-full"} />
                     </div>
                     {!!loadError && <Alert type="error" live description={t('bench.fetchKbFailed')}
-                        actions={[{ label: t('build.retry'), onClick: () => void fetchKbs(search.trim()) }]} />}
+                        actions={[{ label: t('build.retry'), onClick: candidates.retry }]} />}
                     <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-2" style={{ maxHeight: 360 }}>
                         {loading && (
                             <div className="py-8 text-center text-sm text-muted-foreground">{t("bench.loading")}</div>
@@ -270,6 +249,9 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                     </label>
                                 );
                             })}
+                        {candidates.hasMore && <Button type="button" variant="text" disabled={candidates.loadingMore} onClick={candidates.loadMore}>
+                            {t('loadMore')}
+                        </Button>}
                     </div>
                 </div>
             </div>
