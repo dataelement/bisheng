@@ -23,6 +23,7 @@ from bisheng.core.context.background_execution import get_current_background_tas
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
 from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
+from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
 from bisheng.knowledge.domain.services.model_reference_extractor import (
     KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
     extract_knowledge_model_references,
@@ -595,6 +596,8 @@ class KnowledgeModelReferenceApplication:
             if locked is None or cls._facts(locked) != facts:
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_removal_plan_changed")
             run_async_safe(cls._authorize(login_user, locked, action="delete"))
+            if locked.type == KnowledgeTypeEnum.SPACE.value:
+                SourceMoveInputRepository().require_released(active, space_id=knowledge_id)
             return locked
 
         if only_clear:
@@ -628,6 +631,8 @@ class KnowledgeModelReferenceApplication:
             if locked is None or cls._facts(locked) != facts:
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_removal_plan_changed")
             await cls._authorize(login_user, locked, action="delete")
+            if locked.type == KnowledgeTypeEnum.SPACE.value:
+                await SourceMoveInputRepository().arequire_released(active, space_id=knowledge_id)
             return locked
 
         if only_clear:

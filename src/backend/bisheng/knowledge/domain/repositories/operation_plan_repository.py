@@ -25,7 +25,9 @@ def _now() -> datetime:
 
 
 def _utc(value: datetime) -> datetime:
-    return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
+    # MySQL's shipped DATETIME columns persist whole seconds. Sign the same
+    # representation that survives a fresh Session read.
+    return value.astimezone(UTC).replace(tzinfo=None, microsecond=0) if value.tzinfo else value.replace(microsecond=0)
 
 
 def _digest(value: Any) -> str:

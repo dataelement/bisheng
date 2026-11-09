@@ -254,7 +254,7 @@ class MoveJobRepository:
         if (
             type(source_space_id) is not int
             or source_space_id <= 0
-            or plan.operation != "move"
+            or plan.operation not in {"move", "move_same_space"}
             or plan.space_id != source_space_id
             or plan.plan_digest != plan_digest
         ):

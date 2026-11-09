@@ -480,7 +480,7 @@ def update_knowledge(
 
 
 @router.delete("/", status_code=200)
-def delete_knowledge(
+async def delete_knowledge(
     *,
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -488,7 +488,9 @@ def delete_knowledge(
 ):
     """Delete Knowledge Base Information."""
 
-    KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
+    from bisheng.knowledge.application.deletion_compatibility import delete_legacy_resource
+
+    await delete_legacy_resource(request=request, identity=login_user, knowledge_id=knowledge_id)
     return resp_200(message="Delete successful")
 
 
@@ -592,11 +594,13 @@ async def retry(*, request: Request, login_user: UserPayload = Depends(UserPaylo
 
 
 @router.delete("/file/{file_id}", status_code=200)
-def delete_knowledge_file(
+async def delete_knowledge_file(
     *, request: Request, file_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)
 ):
     """Delete Knowledge File Information"""
-    KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
+    from bisheng.knowledge.application.deletion_compatibility import delete_legacy_files
+
+    await delete_legacy_files(request=request, identity=login_user, file_ids=[file_id])
     return resp_200(message="Delete successful")
 
 
