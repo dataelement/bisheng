@@ -2857,6 +2857,7 @@
     "title": "システム通知"
   },
   "dshChat": {
+    "loadMoreKnowledge": "さらに読み込む",
     "backToCapabilities": "追加メニューに戻る",
     "uploadDescription": "ローカルファイルを会話に追加",
     "knowledgeDescription": "コンテキストに使うナレッジスペースを選択",

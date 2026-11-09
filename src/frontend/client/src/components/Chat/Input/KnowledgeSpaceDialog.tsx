@@ -1,12 +1,28 @@
-import { useState } from 'react';
-import { useCategorizedKnowledgeSpaces } from '~/hooks';
-import { KnowledgePickerDialog, type KnowledgePickerSelectionProps } from './KnowledgePickerDialog';
+import { useState } from "react";
+import { useVisibleKnowledgeSpaces } from "~/hooks/useVisibleKnowledgeSpaces";
+import {
+  KnowledgePickerDialog,
+  type KnowledgePickerSelectionProps,
+} from "./KnowledgePickerDialog";
 
-/** Spaces retain their own grouped catalog and selection scope. */
 export function KnowledgeSpaceDialog(props: KnowledgePickerSelectionProps) {
-  const [keyword, setKeyword] = useState('');
-  const { groups, isFetching, isError, retry } = useCategorizedKnowledgeSpaces({ keyword });
-  return <KnowledgePickerDialog {...props} kind="space" keyword={keyword} onKeywordChange={setKeyword}
-    groups={groups.map(group => ({ key: group.key, label: group.label, items: group.spaces }))}
-    isFetching={isFetching} isError={isError} onRetry={() => { void retry(); }} />;
+  const [keyword, setKeyword] = useState("");
+  const { spaces, isFetching, isError, retry, hasMore, loadMore } =
+    useVisibleKnowledgeSpaces({ keyword });
+  return (
+    <KnowledgePickerDialog
+      {...props}
+      kind="space"
+      keyword={keyword}
+      onKeywordChange={setKeyword}
+      groups={spaces.length ? [{ key: "visible", items: spaces }] : []}
+      isFetching={isFetching}
+      isError={isError}
+      onRetry={() => {
+        void retry();
+      }}
+      hasMore={hasMore}
+      onLoadMore={loadMore}
+    />
+  );
 }
