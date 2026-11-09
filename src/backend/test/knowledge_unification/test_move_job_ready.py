@@ -2,18 +2,15 @@
 
 import asyncio
 import importlib
-from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import replace
-from datetime import datetime, timedelta
-from types import SimpleNamespace
+from datetime import timedelta
 
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
-from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion as Version
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile as File
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan as Plan
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem as Item
@@ -22,162 +19,24 @@ from bisheng.knowledge.domain.repositories.move_cutover_repository import MoveCu
 from bisheng.knowledge.domain.repositories.move_job_repository import MoveJobRepository
 from bisheng.knowledge.domain.repositories.processing_job_repository import ProcessingJobRepository
 from bisheng.knowledge.domain.schemas.processing_job import JobAccepted
-from bisheng.knowledge.domain.schemas.processing_job_acceptance import ProcessingConfiguration, _digest
-from bisheng.permission.application.identity import PermissionActor
-from bisheng.permission.domain.models import AuthorizationModelRelease, PermissionCatalogRelease
-from bisheng.permission.domain.repositories.move_projection_repository import MoveProjectionExpectation
-from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.knowledge.domain.schemas.processing_job_acceptance import _digest
+from test.knowledge_unification.test_move_execution_fixtures import (
+    CONFIG,
+    complete_move,
+    item_evidence,
+    logical,
+    mark,
+    pipeline,
+)
 from test.knowledge_unification.test_move_job_reservation import accepted as accepted
-from test.knowledge_unification.test_move_job_reservation import create, jobs
+from test.knowledge_unification.test_move_job_reservation import create
 from test.knowledge_unification.test_move_job_reservation import moving as moving
 from test.knowledge_unification.test_move_job_reservation import store as store
 from test.knowledge_unification.test_move_job_reservation import tenant as tenant
-from test.knowledge_unification.test_move_projection import compose
-
-CONFIG = ProcessingConfiguration(4, "generation-4")
 
 
 def api():
     return importlib.import_module("bisheng.knowledge.domain.repositories.move_job_ready_repository")
-
-
-async def pipeline(moving, accepted, monkeypatch, *, zero=None, count=1):
-    if count > 1:
-        async with AsyncSession(moving.engine) as session:
-            await session.execute(
-                sa.insert(File.__table__),
-                [
-                    {
-                        "id": 1000 + n,
-                        "tenant_id": 101,
-                        "knowledge_id": 10,
-                        "file_name": str(n),
-                        "file_type": 1,
-                        "file_level_path": "/50",
-                        "level": 1,
-                        "status": 2,
-                    }
-                    for n in range(count - 1)
-                ],
-            )
-            await session.execute(
-                sa.insert(Version.__table__),
-                [
-                    {
-                        "id": 20000 + n,
-                        "document_id": 80,
-                        "knowledge_file_id": 1000 + n,
-                        "version_no": n + 3,
-                        "is_primary": False,
-                    }
-                    for n in range(count - 1)
-                ],
-            )
-            await session.commit()
-    confirmed = await accepted(zero=zero)
-    move, cutover = jobs(moving)
-    job = (await create(moving, confirmed.args, move)).job
-    clock = [datetime.now()]
-    cutover.clock = lambda: clock[0]
-    ready = api().MoveJobReadyRepository(move_jobs=move, clock=lambda: clock[0])
-    repo = ProcessingJobRepository(move_jobs=move, move_ready=ready, clock=lambda: clock[0])
-
-    @asynccontextmanager
-    async def sessions():
-        async with AsyncSession(moving.engine, expire_on_commit=False) as session:
-            yield session
-
-    async with sessions() as session, session.begin():
-        lease = await repo.aclaim(session, job.id, configuration=CONFIG)
-        assert lease is not None  # Job leasing must be possible before logical ready.
-    expectations = []
-    for change in confirmed.scope.parent_changes:
-        common = {
-            "tenant_id": 101,
-            "resource_type": change.resource_type,
-            "resource_id": str(change.resource_id),
-            "resource_version": change.expected_permission_version,
-            "context_version": confirmed.scope.scope_digest,
-        }
-        before = VerifiedPermissionTarget.from_business_service(
-            **common, parent_type=change.old_parent_type, parent_id=str(change.old_parent_id)
-        )
-        after = VerifiedPermissionTarget.from_business_service(
-            **common, parent_type=change.new_parent_type, parent_id=str(change.new_parent_id)
-        )
-        expectations.append(
-            MoveProjectionExpectation(
-                job.id,
-                101,
-                change.resource_type,
-                str(change.resource_id),
-                before,
-                after,
-                change.mode,
-                change.expected_permission_version,
-                confirmed.scope.changes_digest,
-                (7,),
-            )
-        )
-    p1 = await compose(SimpleNamespace(engine=moving.engine, sessions=sessions), monkeypatch, tuple(expectations))
-    async with moving.engine.begin() as connection:
-        await connection.execute(
-            sa.insert(AuthorizationModelRelease),
-            {
-                "id": 1,
-                "environment": "test",
-                "store_id": "actual-store",
-                "model_id": "actual-model",
-                "model_version": "f048",
-                "model_checksum": "a" * 64,
-                "required_relations_checksum": "b" * 64,
-                "openfga_version": "1",
-                "status": "ACTIVE",
-            },
-        )
-        await connection.execute(
-            sa.insert(PermissionCatalogRelease),
-            {
-                "id": 1,
-                "release_key": "current",
-                "version": 1,
-                "status": "CURRENT",
-                "write_fenced": False,
-                "required_authorization_model_release_id": 1,
-                "draft_owner_id": 7,
-                "idempotency_key": "catalog",
-                "checksum": "c" * 64,
-            },
-        )
-    assert (
-        await p1.bridge.aexecute_or_resume(
-            job_id=job.id, changes=tuple(expectations), actor=PermissionActor(user_id=7, current_tenant_id=101)
-        )
-    ).complete
-    cutover.projection_verifier = p1.bridge
-    return SimpleNamespace(
-        job_id=job.id,
-        confirmed=confirmed,
-        move=move,
-        cutover=cutover,
-        ready=ready,
-        repo=repo,
-        clock=clock,
-        lease=lease,
-        sessions=sessions,
-        bridge=p1.bridge,
-        expectations=tuple(expectations),
-    )
-
-
-async def logical(session, built):
-    prepared = await built.cutover.aprepare_cutover(session, job_id=built.job_id, lease=built.lease)
-    evidence = await built.bridge.arequire_finalized(session, job_id=built.job_id, expectations=built.expectations)
-    return await built.cutover.aapply_logical(session, prepared=prepared, projection_evidence=evidence)
-
-
-async def mark(session, built, receipt):
-    return await built.repo.amark_move_ready(session, logical_receipt=receipt, lease=built.lease)
 
 
 @pytest.mark.parametrize("zero", [None, "empty", "skipped"])
@@ -185,9 +44,15 @@ async def test_native_receipt_marks_items_then_job_and_zero_items_only_now_succe
     built = await pipeline(moving, accepted, monkeypatch, zero=zero)
     async with built.sessions() as session, session.begin():
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
+            await built.repo.aclaim_next_item(
+                session,
+                built.lease,
+                configuration=CONFIG,
+                _move=True,
+                move_projection_evidence=await item_evidence(session, built),
+            )
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await built.repo.afinalize(session, built.lease, configuration=CONFIG)
+            await built.repo.afinalize(session, built.lease, configuration=CONFIG, _move=True)
         await session.execute(
             sa.update(Item.__table__)
             .where(Item.job_id == built.job_id)
@@ -297,9 +162,15 @@ async def test_partial_item_markers_caught_and_committed_are_never_ready(moving,
         assert hit and 0 < sum("logical_move" in item.checkpoint for item in rows) < len(rows)
         assert (await session.get(Job, built.job_id)).move_logical_marker is None
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
+            await built.repo.aclaim_next_item(
+                session,
+                built.lease,
+                configuration=CONFIG,
+                _move=True,
+                move_projection_evidence=await item_evidence(session, built),
+            )
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await built.repo.afinalize(session, built.lease, configuration=CONFIG)
+            await built.repo.afinalize(session, built.lease, configuration=CONFIG, _move=True)
 
 
 async def test_callers_native_rollback_reverts_business_and_ready_together(moving, accepted, monkeypatch):
@@ -321,22 +192,40 @@ async def test_takeover_keeps_original_marker_and_all_checkpoint_mutations_prote
         original = deepcopy((await session.get(Job, built.job_id)).move_logical_marker)
     built.clock[0] += timedelta(seconds=901)
     async with built.sessions() as session, session.begin():
-        assert await built.repo.arenew(session, built.lease, configuration=CONFIG) is None
-        built.lease = await built.repo.aclaim(session, built.job_id, configuration=CONFIG)
+        assert await built.repo.arenew(session, built.lease, configuration=CONFIG, _move=True) is None
+        built.lease = await built.repo.aclaim(session, built.job_id, configuration=CONFIG, _move=True)
         assert built.lease.claim_generation > original["ready_claim_generation"]
-        current = await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
+        current = await built.repo.aclaim_next_item(
+            session,
+            built.lease,
+            configuration=CONFIG,
+            _move=True,
+            move_projection_evidence=await item_evidence(session, built),
+        )
         assert current is not None
         marker = deepcopy(current.item.checkpoint["logical_move"])
         assert await built.repo.asave_checkpoint(
-            session, current.lease, configuration=CONFIG, step="move_copy", checkpoint={"native": 1}
+            session,
+            current.lease,
+            configuration=CONFIG,
+            step="move_copy",
+            checkpoint={"native": 1},
+            _move=True,
+            move_projection_evidence=await item_evidence(session, built),
         )
         assert current.item.checkpoint == {"native": 1, "logical_move": marker}
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await built.repo.asave_checkpoint(
-                session, current.lease, configuration=CONFIG, step="bad", checkpoint={"logical_move": {"forged": True}}
+                session,
+                current.lease,
+                configuration=CONFIG,
+                step="bad",
+                checkpoint={"logical_move": {"forged": True}},
+                _move=True,
+                move_projection_evidence=await item_evidence(session, built),
             )
-        assert await built.repo.acomplete_item(session, current.lease, configuration=CONFIG, succeeded=True)
-        final = await built.repo.afinalize(session, built.lease, configuration=CONFIG)
+        assert await complete_move(session, built, current.lease)
+        final = await built.repo.afinalize(session, built.lease, configuration=CONFIG, _move=True)
         assert final.state == "succeeded" and final.move_logical_marker == original
 
 
@@ -347,7 +236,13 @@ async def test_modified_snapshot_target_or_ready_fact_cannot_sign_or_use_an_item
     built = await pipeline(moving, accepted, monkeypatch)
     async with built.sessions() as session, session.begin():
         await mark(session, built, await logical(session, built))
-        claimed = await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
+        claimed = await built.repo.aclaim_next_item(
+            session,
+            built.lease,
+            configuration=CONFIG,
+            _move=True,
+            move_projection_evidence=await item_evidence(session, built),
+        )
         if bad == "job-marker":
             marker = deepcopy((await session.get(Job, built.job_id)).move_logical_marker)
             marker["request_hash"] = "f" * 64
@@ -368,7 +263,14 @@ async def test_modified_snapshot_target_or_ready_fact_cannot_sign_or_use_an_item
             }[bad]
             await session.execute(sa.update(Item.__table__).where(Item.id == claimed.item.id).values(**value))
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await built.repo.acomplete_item(session, claimed.lease, configuration=CONFIG, succeeded=True)
+            await built.repo.acomplete_item(
+                session,
+                claimed.lease,
+                configuration=CONFIG,
+                succeeded=True,
+                _move=True,
+                move_projection_evidence=await item_evidence(session, built),
+            )
 
 
 async def test_unconfigured_move_ready_port_is_closed(moving, accepted):
@@ -376,11 +278,12 @@ async def test_unconfigured_move_ready_port_is_closed(moving, accepted):
     job = (await create(moving, confirmed.args)).job
     async with AsyncSession(moving.engine) as session, session.begin():
         repo = ProcessingJobRepository()
-        lease = await repo.aclaim(session, job.id, configuration=CONFIG)
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await repo.amark_move_ready(session, logical_receipt={}, lease=lease)
+            await repo.aclaim(session, job.id, configuration=CONFIG)
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await repo.aclaim_next_item(session, lease, configuration=CONFIG)
+            await repo.aclaim(session, job.id, configuration=CONFIG, _move=True)
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.amark_move_ready(session, logical_receipt={}, lease=None)
 
 
 async def test_receipt_from_committed_prior_transaction_cannot_mark_ready(moving, accepted, monkeypatch):
@@ -412,10 +315,23 @@ async def test_pre_ready_item_lease_and_checkpoint_cannot_bypass_guard(moving, a
         lease = ItemLease(built.lease, item.id, "observed-native-token", 1, built.lease.lease_until)
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await built.repo.asave_checkpoint(
-                session, lease, configuration=CONFIG, step="forged", checkpoint={"logical_move": {}}
+                session,
+                lease,
+                configuration=CONFIG,
+                step="forged",
+                checkpoint={"logical_move": {}},
+                _move=True,
+                move_projection_evidence=await item_evidence(session, built),
             )
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await built.repo.acomplete_item(session, lease, configuration=CONFIG, succeeded=True)
+            await built.repo.acomplete_item(
+                session,
+                lease,
+                configuration=CONFIG,
+                succeeded=True,
+                _move=True,
+                move_projection_evidence=await item_evidence(session, built),
+            )
 
 
 @pytest.mark.parametrize("changed", ["foreign-item", "missing-item", "file-after", "root-after"])
@@ -475,20 +391,30 @@ async def test_lease_expiring_after_item_flush_cannot_write_global_ready(moving,
         monkeypatch.setattr(session, "execute", execute)
     async with built.sessions() as session, session.begin():
         assert expired and (await session.get(Job, built.job_id)).move_logical_marker is None
-        built.lease = await built.repo.aclaim(session, built.job_id, configuration=CONFIG)
+        built.lease = await built.repo.aclaim(session, built.job_id, configuration=CONFIG, _move=True)
         assert built.lease is not None
         with pytest.raises(KnowledgeOperationPlanConflictError):
-            await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
+            await built.repo.aclaim_next_item(
+                session,
+                built.lease,
+                configuration=CONFIG,
+                _move=True,
+                move_projection_evidence=await item_evidence(session, built),
+            )
 
 
 async def test_fresh_receipt_after_takeover_preserves_historical_marker_and_successes(moving, accepted, monkeypatch):
     built = await pipeline(moving, accepted, monkeypatch, count=2)
     async with built.sessions() as session, session.begin():
         await mark(session, built, await logical(session, built))
-        done = await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
-        assert await built.repo.acomplete_item(
-            session, done.lease, configuration=CONFIG, succeeded=True, result={"original": 1}
+        done = await built.repo.aclaim_next_item(
+            session,
+            built.lease,
+            configuration=CONFIG,
+            _move=True,
+            move_projection_evidence=await item_evidence(session, built),
         )
+        assert await complete_move(session, built, done.lease)
         before = deepcopy((await session.get(Job, built.job_id)).move_logical_marker)
         completed = (
             done.item.id,
@@ -499,7 +425,7 @@ async def test_fresh_receipt_after_takeover_preserves_historical_marker_and_succ
         )
     built.clock[0] += timedelta(seconds=901)
     async with built.sessions() as session, session.begin():
-        built.lease = await built.repo.aclaim(session, built.job_id, configuration=CONFIG)
+        built.lease = await built.repo.aclaim(session, built.job_id, configuration=CONFIG, _move=True)
         result = await mark(session, built, await logical(session, built))
         assert result.reused
         assert (await session.get(Job, built.job_id)).move_logical_marker == before
@@ -526,7 +452,16 @@ async def test_unknown_result_after_final_job_marker_does_not_compensate_committ
             sa.event.remove(moving.engine.sync_engine, "after_cursor_execute", uncertain)
     async with built.sessions() as session, session.begin():
         assert hit and (await session.get(Job, built.job_id)).move_logical_marker is not None
-        assert await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG) is not None
+        assert (
+            await built.repo.aclaim_next_item(
+                session,
+                built.lease,
+                configuration=CONFIG,
+                _move=True,
+                move_projection_evidence=await item_evidence(session, built),
+            )
+            is not None
+        )
 
 
 async def test_real_ready_updates_bind_current_tenant_in_where_for_items_and_job(moving, accepted, monkeypatch):

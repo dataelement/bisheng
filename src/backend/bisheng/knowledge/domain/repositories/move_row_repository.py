@@ -17,6 +17,8 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
+from bisheng.knowledge.domain.schemas.move_processing import DOC_FIELDS, FILE_FIELDS, VERSION_FIELDS, move_path_ids
+from bisheng.resource_reference.application.contracts import TransactionIdentity
 
 PAGE = 200
 STRING_KEYS = (KnowledgeProcessingJob, KnowledgeProcessingItem, KnowledgeOperationPlan)
@@ -113,3 +115,140 @@ class MoveRowRepository:
             condition = model.__table__.c[key].in_(keys[offset : offset + PAGE])
             result += await self._rows(session, model, fields, condition, lock=lock, via=key)
         return result
+
+    async def aread_move_job_header(self, session, *, job_id):
+        """Read only the compact native locator under the original tenant/TX."""
+        tenant, transaction = get_current_tenant_id(), TransactionIdentity.capture(session)
+        if type(tenant) is not int or tenant <= 0 or is_tenant_filter_bypassed():
+            _conflict()
+        job = KnowledgeProcessingJob.__table__
+        names = (
+            "id",
+            "tenant_id",
+            "space_id",
+            "kind",
+            "parameters",
+            "request_hash",
+            "idempotency_key",
+            "actor_user_id",
+            "actor_reference",
+            "actor_subject_type",
+            "actor_subject_id",
+            "revision",
+            "total_count",
+            "succeeded_count",
+            "claim_generation",
+            "move_logical_marker",
+            "state",
+            "lease_token",
+            "lease_until",
+            "expected_model_config_revision",
+            "expected_index_generation",
+        )
+        with session.no_autoflush, strict_tenant_filter():
+            rows = (
+                (
+                    await session.execute(
+                        select(*(job.c[name] for name in names)).where(job.c.id == job_id, job.c.tenant_id == tenant)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        if get_current_tenant_id() != tenant or is_tenant_filter_bypassed():
+            _conflict()
+        transaction.assert_current(session)
+        return tuple(deepcopy(dict(row)) for row in rows)
+
+    async def aread_move_target(self, session, *, target, expected_path):
+        """Point-read one target and its primary/ancestors, never its sibling chain."""
+        tenant, transaction = get_current_tenant_id(), TransactionIdentity.capture(session)
+
+        def check():
+            if (
+                type(tenant) is not int
+                or tenant <= 0
+                or get_current_tenant_id() != tenant
+                or is_tenant_filter_bypassed()
+            ):
+                _conflict()
+            transaction.assert_current(session)
+
+        check()
+        doc, version = KnowledgeDocument.__table__, KnowledgeDocumentVersion.__table__
+        with session.no_autoflush, strict_tenant_filter():
+            header = (
+                await session.execute(
+                    select(doc.c.primary_version_id, version.c.knowledge_file_id)
+                    .select_from(doc.outerjoin(version, version.c.id == doc.c.primary_version_id))
+                    .where(doc.c.id == target.document_id)
+                )
+            ).one_or_none()
+        check()
+        if header is None or type(header.knowledge_file_id) is not int:
+            _conflict()
+        ancestors = move_path_ids(expected_path)
+        files = {
+            row["id"]: row
+            for row in await self._by_ids(
+                session,
+                KnowledgeFile,
+                FILE_FIELDS,
+                (*ancestors, target.file_id, header.knowledge_file_id),
+                lock=True,
+            )
+        }
+        check()
+        documents = await self._by_ids(session, KnowledgeDocument, DOC_FIELDS, (target.document_id,), lock=True)
+        check()
+        versions = {
+            row["id"]: row
+            for row in await self._by_ids(
+                session,
+                KnowledgeDocumentVersion,
+                VERSION_FIELDS,
+                (target.version_id, header.primary_version_id),
+                lock=True,
+            )
+        }
+        check()
+        with session.no_autoflush, strict_tenant_filter():
+            linked = (
+                (
+                    await session.execute(
+                        select(version.c.id)
+                        .where(version.c.knowledge_file_id == target.file_id)
+                        .order_by(version.c.id)
+                        .limit(2)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        check()
+        if (
+            len(documents) != 1
+            or target.file_id not in files
+            or header.knowledge_file_id not in files
+            or target.version_id not in versions
+            or header.primary_version_id not in versions
+            or documents[0]["primary_version_id"] != header.primary_version_id
+            or linked != [target.version_id]
+            or any(key not in files for key in ancestors)
+        ):
+            _conflict()
+        primary = versions[header.primary_version_id]
+        if (
+            primary["document_id"] != target.document_id
+            or not primary["is_primary"]
+            or primary["knowledge_file_id"] != header.knowledge_file_id
+        ):
+            _conflict()
+        return (
+            files[target.file_id],
+            documents[0],
+            versions[target.version_id],
+            primary,
+            files[header.knowledge_file_id],
+            tuple(files[key] for key in ancestors),
+        )

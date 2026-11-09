@@ -8,6 +8,7 @@ import sqlalchemy as sa
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem as Item
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob as Job
 from bisheng.knowledge.domain.repositories.move_job_repository import MoveJobRepository
+from test.knowledge_unification.test_move_execution_fixtures import complete_move, item_evidence
 from test.knowledge_unification.test_move_job_ready import CONFIG, logical, mark, pipeline
 from test.knowledge_unification.test_move_job_ready import accepted as accepted
 from test.knowledge_unification.test_move_job_ready import moving as moving
@@ -55,16 +56,24 @@ async def test_native_ready_pages_and_later_claims_never_reload_full_scope(movin
     statements.clear()
     async with built.sessions() as session, session.begin():
         for _ in range(3):
-            value = await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
+            value = await built.repo.aclaim_next_item(
+                session,
+                built.lease,
+                configuration=CONFIG,
+                _move=True,
+                move_projection_evidence=await item_evidence(session, built),
+            )
             assert value is not None
-            assert await built.repo.acomplete_item(session, value.lease, configuration=CONFIG, succeeded=True)
+            assert await complete_move(session, built, value.lease)
         succeeded = (await session.execute(sa.select(Job.succeeded_count).where(Job.id == built.job_id))).scalar_one()
         assert succeeded == 3
     assert calls == [True] and positions == [True]
     selects = [sql for sql, _ in statements if sql.lstrip().upper().startswith("SELECT")]
-    assert len(selects) <= 24
+    # Native dual-root/Plan prefixes and same-TX P1/after guards now run for
+    # every claim/checkpoint/ACK; the measured bound is independent of N.
+    assert len(selects) <= 181
     assert all("scope_manifest" not in sql.partition("FROM")[0] for sql in selects)
-    assert all("knowledge_operation_plan" not in sql for sql in selects)
+    assert all("knowledge_operation_plan.parameters" not in sql and "target_manifest" not in sql for sql in selects)
     claims = [sql for sql in selects if "knowledge_processing_item.state IN" in sql]
     assert len(claims) == 3 and all("LIMIT" in sql for sql in claims)
     async with built.sessions() as session:
