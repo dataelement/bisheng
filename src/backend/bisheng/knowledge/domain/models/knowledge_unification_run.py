@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import CheckConstraint, Column, Index, Integer, UniqueConstraint, text
+from sqlalchemy import BigInteger, CheckConstraint, Column, Index, Integer, UniqueConstraint, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -45,6 +45,7 @@ class KnowledgeUnificationRun(SQLModelSerializable, table=True):
     __table_args__ = (
         UniqueConstraint("tenant_id", "run_id", name="uq_kun_run_tenant"),
         Index("ix_kun_coverage", "tenant_id", "writer_contract_version", "phase", "id"),
+        Index("ix_kun_coverage_epoch", "writer_contract_version", "coverage_epoch", "tenant_id"),
         CheckConstraint("origin IN ('migration', 'empty_tenant')", name="ck_kun_origin"),
         CheckConstraint("tenant_id > 0", name="ck_kun_tenant"),
     )
@@ -65,6 +66,7 @@ class KnowledgeUnificationRun(SQLModelSerializable, table=True):
     plan_ref: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
     checkpoints: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
     source_coverage: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
+    coverage_epoch: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     verification_report: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
     error_code: int | None = Field(default=None)
     error_reason: str | None = Field(default=None, max_length=128)
