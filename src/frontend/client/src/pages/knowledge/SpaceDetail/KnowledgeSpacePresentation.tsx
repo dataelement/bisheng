@@ -42,6 +42,7 @@ export function KnowledgeSpacePresentation({
     canCreateFolder,
     canUploadFile,
     canMoveFile,
+    moveEntryIds,
     canMoveFolder,
     isSearching,
     permissionEntryIds,
@@ -220,11 +221,7 @@ export function KnowledgeSpacePresentation({
                       onDownload={() => handleSingleDownload(file.id)}
                       onRename={(newName) => onRenameFile(file.id, newName)}
                       onMove={() => openMove([file])}
-                      canMove={
-                        file.type === FileType.FOLDER
-                          ? canMoveFolder
-                          : canMoveFile
-                      }
+                      canMove={moveEntryIds.has(file.id)}
                       onDelete={() => handleDelete(file.id)}
                       onEditTags={() => handleOpenEditTags(file.id)}
                       onRetry={() => handleSingleRetry(file.id)}
@@ -284,12 +281,10 @@ export function KnowledgeSpacePresentation({
                 onRename={(id, newName) => onRenameFile(id, newName)}
                 onMove={(file) => openMove([file])}
                 canMoveFile={canMoveFile}
+                moveEntryIds={moveEntryIds}
                 canMoveFolder={canMoveFolder}
-                onMoveToFolder={
-                  canUploadFile
-                    ? (folderId, items, folderName) =>
-                        dropMoveToFolder(items, folderId, folderName)
-                    : undefined
+                onMoveToFolder={(folderId, items, folderName) =>
+                  dropMoveToFolder(items, folderId, folderName)
                 }
                 onDelete={(id) => handleDelete(id)}
                 onRetry={(id) => handleSingleRetry(id)}

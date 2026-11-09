@@ -14,6 +14,7 @@ from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.knowledge.application import move_processing_admission as admission
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
 from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
+from bisheng.knowledge.domain.repositories.move_batch_repository import touch_move_spaces
 from bisheng.knowledge.domain.repositories.move_cutover_repository import MoveCutoverRepository
 from bisheng.knowledge.domain.repositories.move_execution_repository import (
     MoveExecutionRepository,
@@ -345,6 +346,10 @@ class KnowledgeMoveProcessingOwner:
                             self.reference_owner.amove_file_ownership(
                                 session, logical=logical, reference_runtime=self.reference_runtime
                             ),
+                        )
+                        await self._call(
+                            session,
+                            touch_move_spaces(session, prepared.scope.source_space_id, job.space_id, self.clock()),
                         )
                         result = await self._call(
                             session, self.jobs.amark_move_ready(session, logical_receipt=logical, lease=lease)
