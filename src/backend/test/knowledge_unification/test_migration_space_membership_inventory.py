@@ -19,13 +19,17 @@ from bisheng.common.models.space_channel_member import SpaceChannelMember as Mem
 from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
 from bisheng.knowledge.application import unification_inventory_codec as codec
 from bisheng.knowledge.domain.models.knowledge import Knowledge
-from test.knowledge_unification.test_ref_repo import tenant as tenant
 
 NOW = datetime(2026, 11, 9, 6, 7, 8)
 
 
 def api():
     return importlib.import_module("bisheng.knowledge.domain.repositories.unification_space_membership_repository")
+
+
+@pytest.fixture(autouse=True)
+def own_tenant(tenant_context):
+    tenant_context(101)
 
 
 @pytest.fixture
