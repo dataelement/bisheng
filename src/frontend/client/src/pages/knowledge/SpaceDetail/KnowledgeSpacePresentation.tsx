@@ -1,3 +1,4 @@
+import { SpaceProcessingPanel } from "./SpaceProcessingPanel";
 import { BatchOperationDialog } from "./BatchOperationDialog";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { Button } from "@bisheng/ui";
@@ -94,6 +95,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
       onDrop={handleDrop}
     >
       <KnowledgeSpaceToolbar model={model} />
+      <SpaceProcessingPanel spaceId={space.id} canEdit={model.canEditSpace} state={space.state} />
       <KnowledgeDeletionDialog operation={model.deletion} />
       <BatchOperationDialog operation={model.batch} />
       {(model.canDeleteSpace || (model.selectedFiles.size > 0 && model.canBatchDelete)) && (
