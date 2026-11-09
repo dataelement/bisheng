@@ -58,8 +58,8 @@ async def test_native_ready_pages_and_later_claims_never_reload_full_scope(movin
             value = await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
             assert value is not None
             assert await built.repo.acomplete_item(session, value.lease, configuration=CONFIG, succeeded=True)
-        current = await session.get(Job, built.job_id)
-        assert current.succeeded_count == 3
+        succeeded = (await session.execute(sa.select(Job.succeeded_count).where(Job.id == built.job_id))).scalar_one()
+        assert succeeded == 3
     assert calls == [True] and positions == [True]
     selects = [sql for sql, _ in statements if sql.lstrip().upper().startswith("SELECT")]
     assert len(selects) <= 24

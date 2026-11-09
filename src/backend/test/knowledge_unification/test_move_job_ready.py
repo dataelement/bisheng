@@ -270,12 +270,28 @@ async def test_partial_item_markers_caught_and_committed_are_never_ready(moving,
 
     async with built.sessions() as session, session.begin():
         receipt = await logical(session, built)
-        sa.event.listen(moving.engine.sync_engine, "after_cursor_execute", inject)
+        execute = session.execute
+        if failure is asyncio.CancelledError:
+            # Cancel after the native await returns. Cancelling inside the DBAPI
+            # hook invalidates the connection and makes outer commit impossible.
+            async def cancelled(statement, *args, **kwargs):
+                result = await execute(statement, *args, **kwargs)
+                if not hit and getattr(statement, "is_update", False) and statement.table.name == Item.__tablename__:
+                    hit.append(True)
+                    raise asyncio.CancelledError("after first native item marker write")
+                return result
+
+            monkeypatch.setattr(session, "execute", cancelled)
+        else:
+            sa.event.listen(moving.engine.sync_engine, "after_cursor_execute", inject)
         try:
             with pytest.raises(failure):
                 await mark(session, built, receipt)
         finally:
-            sa.event.remove(moving.engine.sync_engine, "after_cursor_execute", inject)
+            if failure is asyncio.CancelledError:
+                monkeypatch.setattr(session, "execute", execute)
+            else:
+                sa.event.remove(moving.engine.sync_engine, "after_cursor_execute", inject)
     async with built.sessions() as session, session.begin():
         rows = (await session.execute(sa.select(Item).where(Item.job_id == built.job_id))).scalars().all()
         assert hit and 0 < sum("logical_move" in item.checkpoint for item in rows) < len(rows)
@@ -324,7 +340,7 @@ async def test_takeover_keeps_original_marker_and_all_checkpoint_mutations_prote
         assert final.state == "succeeded" and final.move_logical_marker == original
 
 
-@pytest.mark.parametrize("bad", ["snapshot", "target", "item-marker", "job-marker"])
+@pytest.mark.parametrize("bad", ["snapshot", "target", "item-marker", "job-marker", "bool-marker"])
 async def test_modified_snapshot_target_or_ready_fact_cannot_sign_or_use_an_item_lease(
     moving, accepted, monkeypatch, bad
 ):
@@ -337,6 +353,12 @@ async def test_modified_snapshot_target_or_ready_fact_cannot_sign_or_use_an_item
             marker["request_hash"] = "f" * 64
             await session.execute(
                 sa.update(Job.__table__).where(Job.id == built.job_id).values(move_logical_marker=marker)
+            )
+        elif bad == "bool-marker":
+            checkpoint = deepcopy(claimed.item.checkpoint)
+            checkpoint["logical_move"]["move_schema"] = True
+            await session.execute(
+                sa.update(Item.__table__).where(Item.id == claimed.item.id).values(checkpoint=checkpoint)
             )
         else:
             value = {
@@ -394,3 +416,114 @@ async def test_pre_ready_item_lease_and_checkpoint_cannot_bypass_guard(moving, a
             )
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await built.repo.acomplete_item(session, lease, configuration=CONFIG, succeeded=True)
+
+
+@pytest.mark.parametrize("changed", ["foreign-item", "missing-item", "file-after", "root-after"])
+async def test_receipt_does_not_hide_changed_native_closure_after_issuance(moving, accepted, monkeypatch, changed):
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+
+    built = await pipeline(moving, accepted, monkeypatch)
+    async with built.sessions() as session, session.begin():
+        receipt = await logical(session, built)
+        if changed == "foreign-item":
+            await session.execute(
+                sa.insert(Item.__table__).values(
+                    id="foreign-extra",
+                    tenant_id=202,
+                    job_id=built.job_id,
+                    file_id=999,
+                    document_id=80,
+                    version_id=999,
+                    expected_space_id=11,
+                    processing_snapshot={},
+                    checkpoint={},
+                    result={},
+                )
+            )
+        elif changed == "missing-item":
+            await session.execute(sa.delete(Item.__table__).where(Item.job_id == built.job_id))
+        elif changed == "file-after":
+            await session.execute(
+                sa.update(File.__table__).where(File.id == 81).values(object_name="changed-after-receipt")
+            )
+        else:
+            await session.execute(
+                sa.update(Knowledge.__table__).where(Knowledge.id == 10).values(model_config_revision=99)
+            )
+        with pytest.raises(Exception) as failure:
+            await mark(session, built, receipt)
+        assert type(failure.value).__module__.startswith("bisheng.common.errcode")
+        assert (await session.get(Job, built.job_id)).move_logical_marker is None
+
+
+async def test_lease_expiring_after_item_flush_cannot_write_global_ready(moving, accepted, monkeypatch):
+    built = await pipeline(moving, accepted, monkeypatch)
+    async with built.sessions() as session, session.begin():
+        receipt = await logical(session, built)
+        execute, expired = session.execute, []
+
+        async def expire(statement, *args, **kwargs):
+            result = await execute(statement, *args, **kwargs)
+            if not expired and getattr(statement, "is_update", False) and statement.table.name == Item.__tablename__:
+                expired.append(True)
+                built.clock[0] += timedelta(seconds=901)
+            return result
+
+        monkeypatch.setattr(session, "execute", expire)
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await mark(session, built, receipt)
+        monkeypatch.setattr(session, "execute", execute)
+    async with built.sessions() as session, session.begin():
+        assert expired and (await session.get(Job, built.job_id)).move_logical_marker is None
+        built.lease = await built.repo.aclaim(session, built.job_id, configuration=CONFIG)
+        assert built.lease is not None
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
+
+
+async def test_fresh_receipt_after_takeover_preserves_historical_marker_and_successes(moving, accepted, monkeypatch):
+    built = await pipeline(moving, accepted, monkeypatch, count=2)
+    async with built.sessions() as session, session.begin():
+        await mark(session, built, await logical(session, built))
+        done = await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG)
+        assert await built.repo.acomplete_item(
+            session, done.lease, configuration=CONFIG, succeeded=True, result={"original": 1}
+        )
+        before = deepcopy((await session.get(Job, built.job_id)).move_logical_marker)
+        completed = (
+            done.item.id,
+            done.item.state,
+            done.item.attempt,
+            deepcopy(done.item.result),
+            deepcopy(done.item.checkpoint),
+        )
+    built.clock[0] += timedelta(seconds=901)
+    async with built.sessions() as session, session.begin():
+        built.lease = await built.repo.aclaim(session, built.job_id, configuration=CONFIG)
+        result = await mark(session, built, await logical(session, built))
+        assert result.reused
+        assert (await session.get(Job, built.job_id)).move_logical_marker == before
+        row = await session.get(Item, completed[0])
+        assert (row.id, row.state, row.attempt, row.result, row.checkpoint) == completed
+
+
+async def test_unknown_result_after_final_job_marker_does_not_compensate_committed_ready(moving, accepted, monkeypatch):
+    built = await pipeline(moving, accepted, monkeypatch)
+    hit = []
+
+    def uncertain(_c, _cu, sql, _params, _ctx, _many):
+        if not hit and sql.lstrip().upper().startswith("UPDATE KNOWLEDGE_PROCESSING_JOB"):
+            hit.append(True)
+            raise RuntimeError("after final real Job marker write")
+
+    async with built.sessions() as session, session.begin():
+        receipt = await logical(session, built)
+        sa.event.listen(moving.engine.sync_engine, "after_cursor_execute", uncertain)
+        try:
+            with pytest.raises(RuntimeError, match="final real Job"):
+                await mark(session, built, receipt)
+        finally:
+            sa.event.remove(moving.engine.sync_engine, "after_cursor_execute", uncertain)
+    async with built.sessions() as session, session.begin():
+        assert hit and (await session.get(Job, built.job_id)).move_logical_marker is not None
+        assert await built.repo.aclaim_next_item(session, built.lease, configuration=CONFIG) is not None
