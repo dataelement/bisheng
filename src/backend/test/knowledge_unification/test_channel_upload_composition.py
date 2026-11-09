@@ -72,3 +72,29 @@ async def test_missing_channel_factory_rejects_before_storage_effects(channel_up
     context.storage.put_object_tmp.assert_not_awaited()
     context.storage.get_share_link.assert_not_awaited()
     context.upload.publish.assert_not_called()
+
+
+async def test_actual_http_composition_installs_the_real_shared_factory(upload, monkeypatch):
+    from bisheng.channel.api import dependencies
+    from bisheng.knowledge.application.space_upload import SpaceUploadApplication, make_space_upload_application
+    from bisheng.permission.application import access
+
+    monkeypatch.setattr(access, "get_f048_runtime", AsyncMock(return_value=Mock()))
+    monkeypatch.setattr(dependencies, "_get_message_service", AsyncMock())
+    async with upload.context.sessions() as session:
+        service = await dependencies.get_channel_service(session)
+    assert service.space_upload_factory is make_space_upload_application
+    app = service.space_upload_factory(upload.service)
+    assert isinstance(app, SpaceUploadApplication) and app.user is upload.context.user
+
+
+async def test_actual_worker_composition_installs_same_factory(upload, monkeypatch):
+    from bisheng.core import database
+    from bisheng.knowledge.application.space_upload import SpaceUploadApplication, make_space_upload_application
+    from bisheng.worker.information import knowledge_delivery
+
+    monkeypatch.setattr(database, "get_async_db_session", upload.context.sessions)
+    async with knowledge_delivery._service_session(include_channel_service=True) as service:
+        assert service.channel_service.space_upload_factory is make_space_upload_application
+        app = service.channel_service.space_upload_factory(upload.service)
+        assert isinstance(app, SpaceUploadApplication) and app.user is upload.context.user
