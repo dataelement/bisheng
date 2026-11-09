@@ -490,3 +490,31 @@ async def test_busy_history_still_contributes_its_exact_binding_for_later_app_cl
     assert len(result.references) == 1 and result.references[0].target == TargetKey("knowledge_file", 31)
     assert dict(result.slot_counts)["assistant"] == 1
     assert_ready(ctx)
+
+
+@pytest.mark.parametrize("corruption", ["foreign_owner", "wrong_space", "missing_space", "legacy", "unknown_owner"])
+async def test_actual_inbound_metadata_must_match_verified_physical_target_before_complete(context, corruption):
+    ctx = context
+    await seed(ctx, (30, 101, "assistant", "a", "current", "selected"))
+    values = {
+        "foreign_owner": {"target_tenant_id": 202},
+        "wrong_space": {"target_space_id": "2"},
+        "missing_space": {"target_space_id": None},
+        "legacy": {
+            "legacy_invalid_reason": "target_missing",
+            "legacy_run_id": "old-run",
+            "legacy_evidence_key": "old-evidence",
+        },
+        "unknown_owner": {
+            "target_tenant_id": None,
+            "legacy_invalid_reason": "target_missing",
+            "legacy_run_id": "old-run",
+            "legacy_evidence_key": "old-evidence",
+        },
+    }[corruption]
+    async with ctx.db.sessions() as session, session.begin():
+        await session.execute(sa.update(Binding).where(Binding.target_id == "30").values(**values))
+    ctx.db.statements.clear()
+    with pytest.raises(ReferenceCoverageNotReadyError):
+        await collect(ctx, ("knowledge_file", 30))
+    assert all(sql.lstrip().upper().startswith("SELECT") for sql, _ in ctx.db.statements)
