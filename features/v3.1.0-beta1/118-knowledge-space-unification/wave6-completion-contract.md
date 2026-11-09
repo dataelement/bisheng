@@ -1211,3 +1211,12 @@ T969新test_direct_delete_reference_query.py（规模可另test_direct_delete_re
 T973/T974 INT新test_move_logical_marker_migration.py及单Alembic revision v3_1_0_beta1_f118_move_logical_marker.py；实施前live唯一head为准（当前f118_retired_use_floor），仅同表nullable JsonType列，shared幂等/缺表留create_all/已有列数据保持，无JSON解析或补marker。MySQL原JsonType None可能是JSON null，旧加列为SQL NULL，后继以Python None/合法dict判定，不写MySQL JSON函数/不假设SQL IS NULL即全部未ready。DM静态JsonType→CLOB，用户免实测。DDL-only/单head/备份恢复规则同§92，未启用B1前不可发布move入口。
 
 后继B1新MoveJobReadyRepo+旧JobRepo：同原receipt TX、不再后来nested；Item marker全写/flush后，尾验/consume原receipt，最后才写Job marker（零项同原子写succeeded），partial Item commit仍因Job markerNone被拒；claim JobLease需在ready前允许，封item/guard/finalize及checkpoint覆盖。候选Job marker闭集move_schema/job_id/plan_id/request_hash/after_scope_digest/projection_evidence_digest/index_item_count/ready_claim_generation，最后generation只是历史，takeover/retry不清/重签。B1/retry/J1c exact API后继另冻，此S0不假报缺口已封。
+
+
+## 95. 原权限floor事实完整快照/typed artifact P1：已冻结
+
+Root已核实际SnapshotRepo select(*table.c)+_record(fields(cls))可自动读新字段，但codec为显式_SCHEMAS/_ROWS且强制字段全集；因此T975新test_permission_floor_inventory_roundtrip.py先native/typed红；T976仅原permission/migration/f118_plan.py与原knowledge/application/unification_inventory_codec.py两叶，不能只加Baseline漏codec或改第三Snapshot叶。PermissionModelBaseline最后加optional retired_use_level_floor=None，保旧positional顺序，严格None/native1..4非bool、CUSTOM/合法visibility且visibility_level==floor、原derived_level>=floor；std/不一致事实拒，借原canonical校验不另造授权规则。
+
+_compile_catalog显式携带已有floor给CustomModelSelection，afterModel保同floor，原model_key/等级/nonuse/actions/allow_same/active/legacy_source全部一致性门继续；此卡只保已有事实，不签发旧mixed的新floor、不加namespace mapping/发布。标准floor拒，合法existing floor在use已退休时可正常重建；真实old mixed use3/download1的新签发仍后继，不放宽blocker冒完成。
+
+codec permission_model闭集schema新增nullable严格floor，None/3 native记录、页、完整graph roundtrip且原canonical/hash统一；多/缺/float/bool/越界/被改数据或hash明确拒。新字段是中性DDL后正式M2盘点事实，旧准备artifact不冒正式基线；默认None不改变动作语义，不宣称旧preparatory artifact字节相同。SnapshotRepo无需修改但必须native实测从实际PermissionModel列读回floor（exclude不丢事实）。新test≤600；原大叶只必要增量。原库存/graph/permissions plans/verify全回归，无SQL/FGA写/自动签发/Coverage ready。Catalog API/control_state读写携带、正式签发与联合namespace后继另冻，未全部闭合不发布。
