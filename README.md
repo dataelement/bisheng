@@ -1,6 +1,6 @@
 > 源自中国匠心，希望我们能像 [Deepseek]、[黑神话：悟空] 团队一样，给世界带来更多美好。
 
-<img src="https://dataelem.com/bs/face.png" alt="Bisheng banner">
+<img src="docs/images/readme/bisheng-banner-zh.png" alt="Bisheng banner">
 
 <p align="center">
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
