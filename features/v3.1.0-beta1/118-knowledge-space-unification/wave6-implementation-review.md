@@ -485,3 +485,10 @@ T987 fixed3be9a417a Root全读210行Reader+codec6行，正常合流；作者10pa
 B1 fixed7d50首轮独立31native+规模/221原组合及/tmp3格均绿，但两个新Core UPDATE缺显式tenant条件（backend AGENTS）；Root与独立review同报，不以owned前置锁代替C3 SQL要求。PROC先提交实际compiled WHERE/真实bound参数红4b0d81813，再51c10b4d6只补两tenant谓词，原叶剥离两条件后AST等值、oldJobRepo无后续改。新32绿/原33path715绿，Ready280行；Root正常主合后七路径188绿如前。非作者在固定51c再次实际捕获UPDATE WHERE与tenant101，正式ready30+/tmp3为33绿4.44秒（/private/tmp/f118-b1-tenant-independent.log）；两缺口闭合，无其它可行动问题，T979980组件完成。
 
 逻辑mark仍唯一原issuer/当前TX，Item先写且Job marker最后，0Item只有真实proof后同原子成功；partial Item即使catchcommit也无Job marker，执行拒；每item不加载完整manifest/Plan，401/10001 ready SELECT27/363、快照页3/51，随后3次claim+complete均16SELECT，完整接受hash与after闭集只各验证一次。Job claim/renew可在ready前正常取得lease，不新增用户异步竞态治理。B2实际Retry/Owner/P1总装配/worker/API依旧未开，不以Repo marker推出公开移动完成。
+
+
+### 2026-11-09 完整回归真实失败与修正
+
+固定c45613899c0cac92744804bee8d87cb06f5f3382完整选择（原5160口径再加入旧v2 facade）为5560 passed/4 failed/7原F054占位skip/148558 warnings/426.02秒，/private/tmp/f118-root-ready-members-tier-stream-full.log/.xml；不记全绿。四红中，Root先前QA-only修正漏了W4 SPACE原有问答清理，test_kn_space_reference_lifecycle delete/clear两原用例如实发现；075dff767只恢复{QA,SPACE}原清理，NORMAL仍不发QA DELETE，不改原失败断言。另test_model_target_scale两个空引用规模旧oracle要求全T一次SQL，与§100明确分组预算不相容；只适配ceil(T/200)次及完整query<=204params，保原所有其它预算/结果，模型生产未为旧oracle回退大IN。
+
+Root修后六路径59 passed/1452 warnings/7.63秒（/private/tmp/f118-root-full-failures-fixed.log/.xml），非作者固定075完整导出原两失败模块+QA为28绿2.01秒（/private/tmp/f118-root075-independent.log）。独立review也明确补核此前漏掉的W4 SPACE路径。T094/T983重新闭合，但完整同选择仍须修后重新运行，尚不把局部59绿替代全回归结果。
