@@ -1240,3 +1240,6 @@ move执行读沿原metadata模式total_count/defer大manifest、claim SQL LIMIT1
 ## 98. QA既有生命周期端到组件核验：已冻结
 
 Root核原W4实际KnowledgeModelReferenceApplication及KnowledgeService：QA create/base、model change/rebuild、clear/delete已接真实R2，同Knowledge事务。T093/T094只核闭该既有实现与补原生consumer测试，不为满足剩余任务数重写业务。T093原依赖T092只是顺序编排，QA不调用跨空间移动；改实际前置T018/T258/T052与既有KN模型生命周期，不等move完成。新test_qa_bindings.py≤600，原生Knowledge/QA/File/Model/R2/原UserPayload，external projection/index/object/queue是测试边界。测试actual sync/async create wrappers与base、缺embedding沿原拒绝不新增zero-model创建、投影/R2失败回滚、clear保模型/源/引用且只清本tenantQA内容、delete解除实际outgoing、失败完整回滚、改模型保旧+pending直到原QA finalizer。type仍1，不加入SPACE处理Job或新页面。已覆盖且未改生产的行为用现有红绿历史+本次组合证明，不伪造新缺陷红；如发现真缺陷先记录实际红再窄修原叶。旧v2 FakeUser/DAO测试未代表真实新消费者，应后继改为同真实事务行为断言，不能放宽UserPayload校验。
+
+
+§98补充原行为证据：固定旧1b83a1c6的delete_knowledge只在type1显式删除QA表。当前model_reference_repository._content_deletes无条件包含QA表，原普通资源清空意图不应扩展。T093新增原生实际consumer+SQL语句断言；若确认真实红，T094实际根因叶改为model_reference_repository.py，仅保原QA条件，不改Service事务/外IO顺序/授权。旧协议两个FakeUser用例改真实consumer原生fixture，保“QA清、NORMAL不触QA”原行为断言；列入T093写文件，不能用移除测试掩盖新行为。

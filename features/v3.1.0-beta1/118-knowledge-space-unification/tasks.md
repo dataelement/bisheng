@@ -767,7 +767,7 @@
 
 - [ ] **T093 · QA 创建删除清空的模型槽位：先写测试**
   **类型 / Owner**：测试 / KN\
-  **写入文件**：`src/backend/test/knowledge_unification/test_qa_bindings.py`（拟新增）\
+  **写入文件**：`src/backend/test/knowledge_unification/test_qa_bindings.py`；`src/backend/test/knowledge/test_v2_filelib_unified.py`\
   **逻辑 / 测试上下文**：同步/异步创建QA都有零集或真实模型绑定，失败整事务回滚；clear不解除模型、delete才解除；不把QA转换SPACE。\
   **范围限制**：QA 仅复用原创建/清空/删除/模型变更及重建入口维护引用，不合并 QA，不新增空间高级处理框架或页面。\
   **依赖**：T018, T258, T052\
@@ -776,7 +776,7 @@
 
 - [ ] **T094 · QA 创建删除清空的模型槽位**
   **类型 / Owner**：后端 Domain / KN\
-  **写入文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_service.py`\
+  **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/model_reference_repository.py`（原Service接线已交付，仅根因叶恢复QA条件）\
   **逻辑 / 测试上下文**：QA type1保持独立入口与原业务；create_knowledge/create_knowledge_base/acreate_knowledge_base和delete_knowledge使用R2维护当前模型槽，删除QA解除出向模型绑定，clear保留；模型修改复用原 QA 变更/重建路径，引用随原业务槽位更新。\
   **范围限制**：QA 仅复用原创建/清空/删除/模型变更及重建入口维护引用，不合并 QA，不新增空间高级处理框架或页面。\
   **依赖**：T093\
