@@ -8,6 +8,7 @@ from sqlalchemy import inspect
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeIdempotencyConflictError,
+    KnowledgeOperationPlanConflictError,
     KnowledgeProcessingJobNotRetryableError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
@@ -101,6 +102,8 @@ async def test_zero_logical_failure_retries_and_fresh_native_k1_p1_can_finish(
         final = await mark(session, built, await logical(session, built))
         assert final.state == "succeeded"
         assert not (await built.repo.aretry_eligibility(session, built.job_id)).retryable
+        replay = await built.repo.aretry_failed(session, built.job_id, **args)
+        assert replay.reused and replay.job.state == "succeeded"
 
 
 async def test_retry_replay_keeps_original_hash_and_revision_cas(moving, accepted, monkeypatch, actual_processing_task):
@@ -183,7 +186,19 @@ async def test_ready_finalize_only_reuses_original_successes_without_new_logical
 
 
 @pytest.mark.parametrize(
-    "bad", ["false", "true", "scope", "total", "stored-success", "actual-success", "running", "bypass", "foreign"]
+    "bad",
+    [
+        "false",
+        "true",
+        "scope",
+        "scope-collision",
+        "total",
+        "stored-success",
+        "actual-success",
+        "running",
+        "bypass",
+        "foreign",
+    ],
 )
 async def test_unproved_or_wrong_scope_retry_facts_fail_closed(
     moving, accepted, monkeypatch, actual_processing_task, bad
@@ -198,9 +213,12 @@ async def test_unproved_or_wrong_scope_retry_facts_fail_closed(
             await session.execute(
                 sa.update(Job.__table__).where(Job.id == built.job_id).values(move_logical_marker=bad == "true")
             )
-        elif bad == "scope":
+        elif bad in ("scope", "scope-collision"):
             p = deepcopy(failed.parameters)
-            p.pop("source_space_id")
+            if bad == "scope":
+                p.pop("source_space_id")
+            else:
+                p["source_space_id"] = p["destination_space_id"]
             await session.execute(sa.update(Job.__table__).where(Job.id == built.job_id).values(parameters=p))
         elif bad in ("total", "stored-success"):
             await session.execute(
@@ -294,3 +312,25 @@ async def test_four_original_read_projections_do_not_gain_move_json_queries(
         and "processing_snapshot" not in sql.partition("FROM")[0]
         for sql in statements
     )
+
+
+@pytest.mark.parametrize("changed", ["destination-origin", "audit-origin", "bool-subject"])
+async def test_retry_current_subject_is_checked_by_original_source_origin_decoder(
+    moving, accepted, monkeypatch, actual_processing_task, changed
+):
+    built = await pipeline(moving, accepted, monkeypatch, zero="empty")
+    async with built.sessions() as session, session.begin():
+        failed = await fail(session, built)
+        revision = failed.revision
+        origin = retry_actor()
+        if changed == "destination-origin":
+            origin["space_id"] = 11
+        elif changed == "audit-origin":
+            origin["actor_user_id"] = 7
+        else:
+            origin["actor"]["subject_id"] = True
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await built.repo.aretry_failed(session, built.job_id, **retry_args(revision, actor_reference=origin))
+        assert (await session.get(Job, built.job_id)).state == "failed"
+        assert (await session.get(Job, built.job_id)).revision == revision
+        assert not (await session.execute(sa.select(Retry))).all()
