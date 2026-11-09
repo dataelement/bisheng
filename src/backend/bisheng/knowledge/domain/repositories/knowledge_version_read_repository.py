@@ -93,6 +93,7 @@ class KnowledgeVersionReadRepository:
             "update_time",
             "file_level_path",
             "level",
+            "simhash",
         )
         return (
             select(KnowledgeFile)

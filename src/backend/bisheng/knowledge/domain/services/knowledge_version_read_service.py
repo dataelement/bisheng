@@ -179,7 +179,53 @@ class KnowledgeVersionReadService:
             current_primary_version_no=fact.version.version_no,
             primary_uploader_name=fact.file.user_name,
             primary_upload_time=fact.file.create_time,
+            primary_knowledge_file_id=fact.file.id,
         )
+
+    async def similar_candidates(self, file_id, *, threshold, limit=3, source_only=False):
+        """Original ranking over real, visible candidates; retain only top N."""
+        from bisheng.common.utils.simhash_utils import similarity
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
+
+        if type(limit) is not int or limit < 1:
+            return []
+        anchor, context = await self._anchor(file_id)
+        if not anchor.file.simhash:
+            return []
+        scored, after = [], None
+        while True:
+            batch = await self.repository.alist_candidates(
+                tenant_id=context[1], space_id=anchor.space.id, after_document_id=after, limit=100
+            )
+            candidates = [
+                fact
+                for fact in batch.data
+                if fact.document.id != anchor.document.id
+                and fact.file.status == KnowledgeFileStatus.SUCCESS.value
+                and fact.file.simhash
+                and (not source_only or fact.version_count == 1)
+            ]
+            visible = await self._visible(anchor, [fact.file for fact in candidates], context)
+            for fact in candidates:
+                if fact.file.id not in visible:
+                    continue
+                score = similarity(anchor.file.simhash, fact.file.simhash)
+                if score >= threshold:
+                    scored.append((score, fact))
+            # Keep ties stable across bounded pages.
+            scored.sort(key=lambda row: (-row[0], row[1].file.id))
+            del scored[limit:]
+            if not batch.has_more:
+                break
+            after = batch.next_after
+        return [
+            SimilarCandidateEntry(
+                target_document_id=fact.document.id,
+                similarity=score,
+                **{key: value for key, value in self._entry(fact).model_dump().items() if key != "document_id"},
+            )
+            for score, fact in scored
+        ]
 
     async def _search(self, knowledge_id, keyword, current_file_id, *, source_only=False, page_size=None, cursor=None):
         if page_size is not None and (type(page_size) is not int or not 1 <= page_size <= 200):

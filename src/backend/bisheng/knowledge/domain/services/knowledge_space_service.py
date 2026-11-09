@@ -111,7 +111,11 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceListItemResp,
     SpaceSubscriptionStatusEnum,
 )
-from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults, ProcessingOverrides
+from bisheng.knowledge.domain.schemas.processing_settings import (
+    LegacyProcessingOverrides,
+    ProcessingDefaults,
+    ProcessingOverrides,
+)
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
     KnowledgeAuditTelemetryService,
 )
@@ -4002,7 +4006,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         skip_approval: bool = False,
         skip_dedup: bool = False,
         *,
-        processing_overrides: ProcessingOverrides | None = None,
+        processing_overrides: ProcessingOverrides | LegacyProcessingOverrides | None = None,
         _application=None,
         _deferred: _UploadDispatchBatch | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
@@ -4069,7 +4073,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_id: int | None,
         file_source: FileSource,
         skip_dedup: bool,
-        processing_overrides: ProcessingOverrides | None,
+        processing_overrides: ProcessingOverrides | LegacyProcessingOverrides | None,
         application=None,
         deferred: _UploadDispatchBatch | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
@@ -4115,8 +4119,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 tmp += f"/{folder_name}"
             return tmp
 
+        legacy_overrides = isinstance(processing_overrides, LegacyProcessingOverrides)
         explicit_rules = (
-            ProcessingOverrides.model_validate(processing_overrides).model_dump(mode="json", exclude_none=True)
+            (
+                processing_overrides if legacy_overrides else ProcessingOverrides.model_validate(processing_overrides)
+            ).model_dump(mode="json", exclude_none=True)
             if processing_overrides is not None
             else {}
         )
@@ -4139,6 +4146,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     split_rule=file_split_rule.model_dump(),
                     file_kwargs={"file_source": file_source.value},
                     processing_rule_request=file_split_rule,
+                    ordinary_overrides_only=not legacy_overrides,
                 )
                 repeat_files = KnowledgeFileDao.get_file_by_condition(
                     knowledge_id=knowledge_id,
@@ -4227,6 +4235,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         knowledge_id: int,
         items: list[FolderUploadItem],
         parent_id: int | None = None,
+        *,
+        processing_overrides: ProcessingOverrides | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         """F034 §5.5 folder upload: rebuild the client-side directory tree, then
         register every file through the regular add_file pipeline.
@@ -4256,10 +4266,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         require_space_processing_idle(db_knowledge, operation="upload_folder_items")
 
         with self._upload_execution_scope(db_knowledge):
-            return await self._upload_folder_items_in_execution_scope(db_knowledge, items, parent_id)
+            return await self._upload_folder_items_in_execution_scope(
+                db_knowledge, items, parent_id, processing_overrides=processing_overrides
+            )
 
     async def _upload_folder_items_in_execution_scope(
-        self, db_knowledge: Knowledge, items: list[FolderUploadItem], parent_id: int | None
+        self,
+        db_knowledge: Knowledge,
+        items: list[FolderUploadItem],
+        parent_id: int | None,
+        *,
+        processing_overrides: ProcessingOverrides | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         knowledge_id = db_knowledge.id
         base_path = ""
@@ -4348,6 +4365,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         knowledge_id,
                         file_paths,
                         parent_id=node_info[dir_parts][0],
+                        processing_overrides=processing_overrides,
                         _application=application,
                         _deferred=batch,
                     )

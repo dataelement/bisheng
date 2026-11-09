@@ -1757,6 +1757,10 @@ M4只在重验原同before和真实Root absence后，复用原retired checkpoint
 
 原T222/T223同时收口知识业务内的use消费：旧HTTP/action=use和公开兼容方法名保留，入口归一为visible；RAG实际请求/筛选visible结果，不依赖use结果key。其他动作、类型、数据scope及成功主版本资格不变，不借此改分页/缓存框架。
 
+T222/T223历史运行消费补充（2026-11-10 已冻结）：实际旧workflow `type=knowledge` 的 `check_auth=False` 直接读取原库并以runtime user初始化向量，不能因Root迁移成SPACE3而切换配置作者或额外开启运行者文件授权。F041 spec §1 C/D 的OFF=配置者可见范围共享仅适用于原literal `type=space`；本轮依F118 AC-37保同身份/同应用配置范围：旧knowledge ON的实际3复用F029公开prefilter/post_filter_retrievable_files，OFF仅复用正式成功主版本业务资格正向pre/postfilter，不额外FGA；literal space保原toggle身份语义。两入口均按C3 exact≤200只读id/type分组，0/1保原路径，缺失、未知和retired2不得回落为无鉴权SPACE，不改保存JSON。
+
+workflow实际3仅在原native VectorStore接只读score-pair forwarding过滤，保sync/async两入口、原store/search_kwargs不被共享修改；原MultiRetriever全局score排序/cap100及唯一KnowledgeRetrieverTool RRF/权重/rerank/max_content不变，不改成逐SPACE融合。原metadata无匹配(None,None)必须skip。Workstation沿原login_user，对旧org_bucket中的真实3也复用既有aretrieve_space_documents逐KB路径及原tag过滤；0/1/原失败隔离、源顺序、总100上限和返回DTO保留，不增加工作台Embedding重配置能力。 Workstation仅显式传原helper新增内部可选retrieval_multipliers=(1,)保原k100/ef110/单次；其他调用省略此参数，仍按原F029配置倍率与两轮策略。
+
 
 ## 136. 实际上传页的临时规则接线（2026-11-10 已冻结）
 
@@ -1785,3 +1789,23 @@ Copy图片补充：实际move保留原对象键，因此图片的space路径只�
 
 
 HTTP部署兼容补充：本次新移动/处理确认与重试键不调用仅secure context提供的crypto.randomUUID，平台复用已有getRandomValues UUID工具，client复用既有uuid依赖；不改原幂等键生命周期，不新建通用ID框架。新面板自有generateUUID原路径保持。
+
+
+## 139. 旧协议实际入口兼容与退役边界（2026-11-10 已冻结）
+
+原T125/126、T129–T134、T222/223按真实Root类型分流，而非只改枚举或use字符串。旧type=0及省略类型的文档协议创建实际SPACE3，旧输出仍type=0；显式SPACE3仍3，QA1独立。显式embedding保原实际模型、租户及凭据资格，未提供时取Workbench创建默认，不重建其他空间。机器入口不伪造web创建上下文，原机器能力准入与真实R2/P1不变。列表保原过滤、排序与响应形状，用有界原候选和实际visible；不能沿仅knowledge_library命名空间遗漏实际SPACE。公共权限HTTP边界可由已注入Knowledge Owner按实际Root分类，原typed registry的类型等值和数据scope不放松。
+
+历史workflow knowledge类型、workstation org_bucket中的已迁移ID也按真实C3 Root分类，SPACE3复用现成功主版本和file.visible检索；旧0及QA1原路径保持。保原执行身份、查询参数、权重、过滤和返回形状，不重写保存配置或检索算法。旧文件列表/处理/重试/Chunk及元数据写入同样实际分流，复用统一上传、原动作和真实索引完成证明；不可受理即伪同步完成，也不可SQL先写后忽略索引错误。审批通过、频道收藏实际KSS上传须完整装配既有application factory，保原可信业务执行者，不顺带重构审批授权。
+
+退役type=2不复活且不清理原数据。旧personal_knowledge_info返回空集合，queryKnowledge返回原空list/total envelope；旧个人上传在存储、配额、模型或资源创建之前以既有10962拒绝，service入口同样拒绝。原个人status兼容成功，不再让退役个人空间的旧重建状态阻塞其他聊天资源。会话临时附件/workstation/files、任务临时文件及其处理流程保持原行为，不能把退役个人空间映射成新SPACE。
+
+开发边界：PROC负责旧CRUD/权限分类及旧文件协议；MIG负责历史运行检索；PERM负责目录/web上传及审批/频道上传装配；Root负责退役兼容和元数据写入，并整合各lane。仍按原任务卡归档，不增helper编号；只做必要反例和定点验证，全部实际功能闭合后再整体回归、停服升级演练及E2E。
+
+
+元数据值兼容补充：实际v2依赖装配原KnowledgeIndexEditApplication；SPACE批量add/patch/delete先完整校验请求、归属、schema和原容器edit，关闭只读SQL后逐物理File沿同writer索引ACK→SQL。add不覆盖现字段，patch不创建缺失字段且保原字段时间，delete只移指定字段；未修改字段及web原对象/URL字段保持。重复File输入先按原顺序合成最终值，仅一次真实索引写；不承诺跨文件外部索引分布式原子性。已完成项仍原逐File语义，不新增Job/批量平台。单modify仍原replace语义，NORMAL/QA原路径保持；未装writer的SPACE入口拒绝，不能落旧SQL先写路径。定点原生15项覆盖真实依赖、历史版本、3操作及索引失败不提交、后项非法不提前写、重复/跨空间边界，非整体回归结论。
+
+
+历史检索语义补充：原workflow knowledge分支check_auth关闭时保持原关闭资源鉴权、runtime user构建向量的语义，迁移后只补SPACE真实成功主版本的业务资格过滤；打开时复用F029 visible公开过滤。不能通过复用literal space helper切换成配置者，也不能把原全局MultiRetriever→单次RRF/rerank/max_content变成逐空间融合后拼接。仅实际SPACE3的原native store使用窄只读forwarding适配，native prefilter与score-pair postfilter后仍入原全局融合；原0/1及literal space已有toggle语义不动。Workstation原逐KB检索使用原login_user并复用现SPACE helper。无metadata匹配的原(None,None)须skip，不能变成无条件检索。真实Root分类仅exact≤200的id/type标量批，不扫全资源JSON；原source/model运行准入不绕过。
+
+
+旧上传显式参数补充：v2只读取真实multipart中存在的已绑定规则字段，MCP只读取原command显式输入字段，再用原capture_legacy_processing_overrides进入KSS；未提供规则传None继承，不把接口schema缺省值当覆盖。KSS内部processing_overrides可接受原LegacyProcessingOverrides，原表格slice_length=0仍按旧unbounded语义规范化，不能落现代正数规则误拒；旧API显式音视频规则保原行为，现代批次普通规则仍不用于音视频。旧separator未提供伴随separator_rule时保原FileProcessBase派生的同长after数组，其他缺省字段不随之变成覆盖。MCP schema及必填model保持原协议，不借此增加新参数或放宽验证。

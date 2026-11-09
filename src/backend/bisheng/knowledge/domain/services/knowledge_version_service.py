@@ -18,7 +18,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpaceFileNotFoundError, SpaceNotFoundError
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
     KnowledgeDocumentRepository,
 )
@@ -271,67 +270,12 @@ class KnowledgeVersionService:
         *,
         limit: int = 3,
     ) -> list:
-        """Top-N single-version similar candidates for the version management dialog.
-
-        Same scoring as get_similar_candidates_for_file but additionally filters out
-        documents that already have multiple versions — multi-version docs cannot be
-        merged in (they own their own version chain).
-        """
-        from bisheng.common.utils.simhash_utils import similarity as _similarity
-        from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
-
-        kf = await self.knowledge_file_repo.find_by_id(current_file_id)
-        if kf is None or not kf.simhash:
-            return []
-
+        """Original recommendation ranking with the shared visible-read contract."""
         conf = await bisheng_settings.async_get_knowledge()
         vmc = getattr(conf, "version_management", None)
-        threshold: float = vmc.simhash_similarity_threshold if vmc else 0.85
-
-        self_v = await self.version_repo.find_by_knowledge_file_id(current_file_id)
-        self_doc_id = self_v.document_id if self_v else None
-
-        candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
-            knowledge_id=kf.knowledge_id,
-            exclude_file_id=current_file_id,
+        return await self._reads().similar_candidates(
+            current_file_id, threshold=vmc.simhash_similarity_threshold if vmc else 0.85, limit=limit, source_only=True
         )
-
-        scored: list[tuple[float, KnowledgeFile]] = []
-        for c in candidates:
-            if not c.simhash:
-                continue
-            sim = _similarity(kf.simhash, c.simhash)
-            if sim < threshold:
-                continue
-            scored.append((sim, c))
-
-        scored.sort(key=lambda x: x[0], reverse=True)
-
-        out: list[SimilarCandidateEntry] = []
-        for sim, c in scored:
-            if len(out) >= limit:
-                break
-            v = await self.version_repo.find_by_knowledge_file_id(c.id)
-            if v is None:
-                continue
-            if self_doc_id is not None and v.document_id == self_doc_id:
-                continue
-            # Single-version filter (the merge-source eligibility constraint)
-            chain = await self.version_repo.find_by_document_id(v.document_id)
-            if len(chain) != 1:
-                continue
-            out.append(
-                SimilarCandidateEntry(
-                    target_document_id=v.document_id,
-                    title=c.file_name,
-                    doc_code=getattr(c, "file_encoding", None),
-                    current_primary_version_no=v.version_no,
-                    similarity=sim,
-                    primary_uploader_name=getattr(c, "user_name", None),
-                    primary_upload_time=getattr(c, "create_time", None),
-                )
-            )
-        return out
 
     async def search_version_sources(self, knowledge_id: int, keyword: str, current_file_id: int):
         return await self._reads().search_version_sources(knowledge_id, keyword, current_file_id)
@@ -359,60 +303,9 @@ class KnowledgeVersionService:
         *,
         limit: int = 3,
     ) -> list:
-        """Top-N similar candidates above threshold, sorted by similarity desc.
-
-        Each result item is a SimilarCandidateEntry with the candidate's target document info.
-        Excludes the candidate's own document (1:1 file→version row); empty if no matches.
-        """
-        from bisheng.common.utils.simhash_utils import similarity as _similarity
-        from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
-
-        kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if kf is None or not kf.simhash:
-            return []
-
+        """Original similar-file protocol with the shared visible-read contract."""
         conf = await bisheng_settings.async_get_knowledge()
         vmc = getattr(conf, "version_management", None)
-        threshold: float = vmc.simhash_similarity_threshold if vmc else 0.85
-
-        # Exclude self-doc to avoid recommending the file's own logical document
-        self_v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
-        self_doc_id = self_v.document_id if self_v else None
-
-        candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
-            knowledge_id=kf.knowledge_id,
-            exclude_file_id=knowledge_file_id,
+        return await self._reads().similar_candidates(
+            knowledge_file_id, threshold=vmc.simhash_similarity_threshold if vmc else 0.85, limit=limit
         )
-
-        scored: list[tuple[float, KnowledgeFile]] = []
-        for c in candidates:
-            if not c.simhash:
-                continue
-            sim = _similarity(kf.simhash, c.simhash)
-            if sim < threshold:
-                continue
-            scored.append((sim, c))
-
-        # Sort desc by similarity, take top N
-        scored.sort(key=lambda x: x[0], reverse=True)
-        scored = scored[:limit]
-
-        out: list[SimilarCandidateEntry] = []
-        for sim, c in scored:
-            v = await self.version_repo.find_by_knowledge_file_id(c.id)
-            if v is None:
-                continue  # orphaned file — no version row
-            if self_doc_id is not None and v.document_id == self_doc_id:
-                continue  # exclude the requester's own document
-            out.append(
-                SimilarCandidateEntry(
-                    target_document_id=v.document_id,
-                    title=c.file_name,
-                    doc_code=getattr(c, "file_encoding", None),
-                    current_primary_version_no=v.version_no,
-                    similarity=sim,
-                    primary_uploader_name=getattr(c, "user_name", None),
-                    primary_upload_time=getattr(c, "create_time", None),
-                )
-            )
-        return out

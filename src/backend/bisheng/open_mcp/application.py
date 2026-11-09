@@ -14,10 +14,11 @@ from fastapi import BackgroundTasks, HTTPException
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 
-from bisheng.api.v1.schemas import ExcelRule, KnowledgeFileOne, KnowledgeFileProcess
+from bisheng.api.v1.schemas import ExcelRule, FileProcessBase, KnowledgeFileOne, KnowledgeFileProcess
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.application.file_processing_adapter import capture_legacy_processing_overrides
 from bisheng.knowledge.application.space_upload import SpaceUploadApplication
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
@@ -298,10 +299,14 @@ async def upload_knowledge_file(*, request: Request, command, path: str, file_na
     if not row:
         raise NotFoundError.http_exception()
     if row.type == KnowledgeTypeEnum.SPACE.value:
+        # MCP defaults are schema defaults, not caller overrides of saved rules.
+        explicit = command.model_dump(include=set(FileProcessBase.model_fields), exclude_unset=True, exclude_none=True)
+        overrides = capture_legacy_processing_overrides(FileProcessBase(**explicit))
         results = await _space_service(request, login_user, version_repo, doc_repo).add_file(
             knowledge_id=command.knowledge_id,
             file_path=[path],
             parent_id=command.parent_id,
+            processing_overrides=overrides if overrides.document is not None or overrides.table is not None else None,
         )
         return results[0]
     if row.type not in _KB_TYPES:

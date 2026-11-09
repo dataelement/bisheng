@@ -10,7 +10,9 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import DropZone from "@/components/bs-comp/knowledgeUploadComponent/DropZone";
+import DropZone, {
+  getKnowledgeUploadFormats,
+} from "@/components/bs-comp/knowledgeUploadComponent/DropZone";
 import { locationContext } from "@/contexts/locationContext";
 import {
   knowledgeUploadsApi,
@@ -32,7 +34,7 @@ import {
   validateProcessingDefaultsDraft,
   type ProcessingDefaultsDraft,
 } from "./ProcessingDefaultsEditor";
-import { FILE_STATUSES, StatusIndicator } from "./KnowledgeFileStatus";
+import { SpaceUploadProgress } from "./SpaceUploadProgress";
 
 interface SpaceFileUploadPanelProps {
   scope: KnowledgeQueryScope;
@@ -41,7 +43,7 @@ interface SpaceFileUploadPanelProps {
 }
 type Phase =
   "queued" | "uploading" | "registering" | "registered" | "error" | "cancelled";
-type Upload = {
+export type Upload = {
   id: number;
   file: File;
   phase: Phase;
@@ -51,6 +53,10 @@ type Upload = {
   token?: symbol;
   registrationStarted: boolean;
   overrides?: ProcessingOverrides;
+  folder?: {
+    name: string;
+    entries: { file: File; relativePath: string; staged?: SpaceUploadFile }[];
+  };
 };
 type Epoch = {
   id: number;
@@ -78,6 +84,14 @@ const media = new Set([
   "webm",
 ]);
 
+const uploadRelativePath = (file: File) =>
+  (
+    file.webkitRelativePath ||
+    ("path" in file && typeof file.path === "string" ? file.path : "")
+  )
+    .replace(/^\.\//, "")
+    .replace(/^\/+/, "");
+
 export function SpaceFileUploadPanel({
   scope,
   spaceId,
@@ -87,6 +101,7 @@ export function SpaceFileUploadPanel({
   const { appConfig } = useContext(locationContext);
   const instance = useId();
   const sequence = useRef(0);
+  const folderInput = useRef<HTMLInputElement>(null);
   const { identityKey, tenantId, managementTenantId, view } = scope;
   const epoch = useMemo<Epoch>(
     () => ({
@@ -180,6 +195,43 @@ export function SpaceFileUploadPanel({
         job.token === token &&
         !controller.signal.aborted;
       try {
+        if (job.folder) {
+          job.phase = "uploading";
+          sync();
+          for (const entry of job.folder.entries) {
+            if (!entry.staged) {
+              const staged = await knowledgeUploadsApi.uploadSpaceFile(
+                spaceId,
+                entry.file,
+                controller.signal,
+              );
+              if (!live()) return;
+              entry.staged = staged;
+            }
+          }
+          job.phase = "registering";
+          job.registrationStarted = true;
+          sync();
+          const rows = await knowledgeUploadsApi.registerSpaceFolder(
+            spaceId,
+            {
+              parent_id: parentId,
+              items: job.folder.entries.map((entry) => ({
+                file_path: entry.staged!.file_path,
+                relative_path: entry.relativePath,
+                size: entry.file.size,
+              })),
+              ...(job.overrides === undefined
+                ? {}
+                : { overrides: structuredClone(job.overrides) }),
+            },
+            controller.signal,
+          );
+          if (!live()) return;
+          job.rows = rows;
+          job.phase = rows.length ? "registered" : "error";
+          return;
+        }
         if (!job.staged) {
           job.phase = "uploading";
           sync();
@@ -227,17 +279,36 @@ export function SpaceFileUploadPanel({
     }
   }, [epoch, jobs, run]);
 
-  const ids = [
-    ...new Set(
-      jobs.flatMap((job) =>
-        job.phase === "registered"
-          ? (job.rows ?? [])
-              .filter((row) => validId(row.id) && !terminal(row.status))
-              .map((row) => row.id)
-          : [],
-      ),
-    ),
-  ].sort((a, b) => a - b);
+  const targets = [
+    ...new Map(
+      jobs
+        .flatMap((job) =>
+          job.phase === "registered"
+            ? (job.rows ?? [])
+                .filter((row) => validId(row.id) && !terminal(row.status))
+                .map((row) => {
+                  let parent: number | null | undefined = parentId;
+                  if (job.folder) {
+                    const parts = row.file_level_path
+                      ?.split("/")
+                      .filter(Boolean);
+                    parent =
+                      parts?.length &&
+                      parts.every(
+                        (part) =>
+                          /^[1-9][0-9]*$/.test(part) && validId(Number(part)),
+                      )
+                        ? Number(parts[parts.length - 1])
+                        : undefined;
+                  }
+                  return [row.id, { id: row.id, parent }] as const;
+                })
+            : [],
+        )
+        .map(([id, target]) => [id, target] as const),
+    ).values(),
+  ].sort((a, b) => a.id - b.id);
+  const ids = targets.map((target) => target.id);
   const status = useQuery<KnowledgeSpaceChild[]>({
     queryKey: [
       ...epoch.prefix,
@@ -245,43 +316,51 @@ export function SpaceFileUploadPanel({
       instance,
       epoch.id,
       epoch.parentId,
-      ids,
+      targets,
     ],
     enabled: ids.length > 0,
     retry: false,
     cacheTime: 0,
     queryFn: async () => {
       const rows: KnowledgeSpaceChild[] = [];
-      for (let start = 0; start < ids.length; start += 100) {
-        const selected = ids.slice(start, start + 100),
-          seen = new Set<string>();
-        let cursor: string | undefined;
-        for (let pages = 0; ; pages++) {
-          if (current.current !== epoch || epoch.retired)
-            throw new Error("Upload tracking retired");
-          if (pages >= 100)
-            throw new Error("Upload status cursor exceeded its bounded scan");
-          const result = await knowledgeSpaceApi.listChildren(spaceId, {
-            parent_id: parentId,
-            file_ids: selected,
-            page_size: 100,
-            ...(cursor === undefined ? {} : { cursor }),
-          });
-          if (current.current !== epoch || epoch.retired)
-            throw new Error("Upload tracking retired");
-          rows.push(
-            ...result.data.filter(
-              (row) =>
-                selected.includes(row.id) && row.knowledge_id === spaceId,
-            ),
-          );
-          if (!result.has_more) break;
-          if (!result.next_cursor || seen.has(result.next_cursor))
-            throw new Error("Upload status cursor did not progress");
-          cursor = result.next_cursor;
-          seen.add(cursor);
+      const groups = new Map<number | null, number[]>();
+      for (const target of targets)
+        if (target.parent !== undefined) {
+          const selected = groups.get(target.parent) ?? [];
+          selected.push(target.id);
+          groups.set(target.parent, selected);
         }
-      }
+      for (const [actualParent, scopedIds] of groups)
+        for (let start = 0; start < scopedIds.length; start += 100) {
+          const selected = scopedIds.slice(start, start + 100),
+            seen = new Set<string>();
+          let cursor: string | undefined;
+          for (let pages = 0; ; pages++) {
+            if (current.current !== epoch || epoch.retired)
+              throw new Error("Upload tracking retired");
+            if (pages >= 100)
+              throw new Error("Upload status cursor exceeded its bounded scan");
+            const result = await knowledgeSpaceApi.listChildren(spaceId, {
+              parent_id: actualParent,
+              file_ids: selected,
+              page_size: 100,
+              ...(cursor === undefined ? {} : { cursor }),
+            });
+            if (current.current !== epoch || epoch.retired)
+              throw new Error("Upload tracking retired");
+            rows.push(
+              ...result.data.filter(
+                (row) =>
+                  selected.includes(row.id) && row.knowledge_id === spaceId,
+              ),
+            );
+            if (!result.has_more) break;
+            if (!result.next_cursor || seen.has(result.next_cursor))
+              throw new Error("Upload status cursor did not progress");
+            cursor = result.next_cursor;
+            seen.add(cursor);
+          }
+        }
       return rows;
     },
     refetchInterval: (rows, query) =>
@@ -300,8 +379,9 @@ export function SpaceFileUploadPanel({
     ids.length > 0 &&
     (status.isError ||
       (status.isSuccess && ids.some((id) => !observed.has(id))));
-  const handleDrop = (files: File[]) => {
-    if (current.current !== epoch || epoch.retired) return;
+  const captureOverrides = (
+    files: File[],
+  ): ProcessingOverrides | undefined | null => {
     const validation = activeRules?.draft
       ? validateProcessingDefaultsDraft(activeRules.draft)
       : null;
@@ -317,12 +397,20 @@ export function SpaceFileUploadPanel({
             : "f118.loading_defaults",
         ),
       });
+      return null;
+    }
+    return temporary && validation?.ok
+      ? { document: validation.value.document, table: validation.value.table }
+      : undefined;
+  };
+  const handleDrop = (files: File[]) => {
+    if (current.current !== epoch || epoch.retired) return;
+    if (files.some((file) => uploadRelativePath(file).includes("/"))) {
+      handleFolder(files);
       return;
     }
-    const overrides: ProcessingOverrides | undefined =
-      temporary && validation?.ok
-        ? { document: validation.value.document, table: validation.value.table }
-        : undefined;
+    const overrides = captureOverrides(files);
+    if (overrides === null) return;
     for (const file of files) {
       const isMedia = media.has(
         file.name.split(".").pop()?.toLowerCase() ?? "",
@@ -348,6 +436,63 @@ export function SpaceFileUploadPanel({
           : {}),
       });
     }
+    sync();
+  };
+  const handleFolder = (picked: File[]) => {
+    if (current.current !== epoch || epoch.retired || !picked.length) return;
+    const root = picked
+      .map(uploadRelativePath)
+      .find((path) => path.includes("/"))
+      ?.split("/")[0];
+    if (!root || root.startsWith(".")) return;
+    if (picked.length > 1000) {
+      toast.show({ type: "warning", message: t("f118.folder_upload_limit") });
+      return;
+    }
+    const formats = new Set(
+      getKnowledgeUploadFormats(
+        appConfig.enableEtl4lm,
+        !!appConfig.enableMediaUpload,
+      ).map((value) => value.toLowerCase().slice(1)),
+    );
+    let rejected = 0;
+    const entries = picked.flatMap((file) => {
+      const relativePath = uploadRelativePath(file) || file.name;
+      if (
+        !relativePath ||
+        relativePath.split("/").some((part) => part.startsWith("."))
+      )
+        return [];
+      const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const limit = media.has(extension)
+        ? (appConfig.uploadMediaMaxSize ?? 1024)
+        : (appConfig.uploadFileMaxSize ?? 50);
+      if (!formats.has(extension) || file.size > limit * 1024 * 1024) {
+        rejected++;
+        return [];
+      }
+      return [{ file, relativePath }];
+    });
+    if (rejected)
+      toast.show({
+        type: "warning",
+        message: t("f118.folder_upload_skipped", { count: rejected }),
+      });
+    if (!entries.length) {
+      toast.show({ type: "warning", message: t("f118.folder_upload_empty") });
+      return;
+    }
+    const overrides = captureOverrides(entries.map((entry) => entry.file));
+    if (overrides === null) return;
+    const id = ++epoch.next;
+    epoch.jobs.set(id, {
+      id,
+      file: entries[0].file,
+      phase: "queued",
+      registrationStarted: false,
+      folder: { name: root, entries },
+      ...(overrides ? { overrides: structuredClone(overrides) } : {}),
+    });
     sync();
   };
   const handleCancel = (job: Upload) => {
@@ -397,73 +542,31 @@ export function SpaceFileUploadPanel({
           ))}
       </div>
       <DropZone onDrop={handleDrop} />
-      <ul className="space-y-3">
-        {jobs.map((job) => (
-          <li key={job.id} className="space-y-2 rounded-md border p-3">
-            <div className="flex items-center justify-between gap-3">
-              <span className="truncate">{job.file.name}</span>
-              {(job.phase === "queued" ||
-                job.phase === "uploading" ||
-                job.phase === "registering") && (
-                <Button variant="text" onClick={() => handleCancel(job)}>
-                  {t("cancel")}
-                </Button>
-              )}
-              {(job.phase === "error" || job.phase === "cancelled") && (
-                <Button
-                  variant="text"
-                  onClick={() => {
-                    job.phase = "queued";
-                    sync();
-                  }}
-                >
-                  {t("retry")}
-                </Button>
-              )}
-            </div>
-            <div role="status">
-              {job.phase === "queued" && t("queuing")}
-              {job.phase === "uploading" && t("importing")}
-              {job.phase === "registering" && t("f118.upload_staged")}
-              {job.phase === "registered" && t("f118.upload_registered")}
-              {job.phase === "error" && t("fileLoadFailed")}
-              {job.phase === "cancelled" && t("f118.upload_cancelled")}
-            </div>
-            {job.registrationStarted && (
-              <p className="text-sm text-text-secondary">
-                {t("f118.upload_may_continue")}
-              </p>
-            )}
-            {job.phase === "registered" &&
-              job.rows?.map((original, index) => {
-                const row = terminal(original.status)
-                  ? original
-                  : (observed.get(original.id) ?? original);
-                const unknown =
-                  !FILE_STATUSES[row.status ?? -1] ||
-                  (!terminal(original.status) &&
-                    unavailable &&
-                    !observed.has(original.id));
-                return (
-                  <div
-                    key={`${original.id}:${index}`}
-                    className="flex items-center gap-3"
-                  >
-                    <span className="truncate">{row.file_name}</span>
-                    {unknown ? (
-                      <span>{t("f118.upload_status_unavailable")}</span>
-                    ) : (
-                      <StatusIndicator
-                        status={row.status!}
-                        remark={row.remark ?? undefined}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-          </li>
-        ))}
-      </ul>
+      <Button variant="outlined" onClick={() => folderInput.current?.click()}>
+        {t("f118.upload_folder")}
+      </Button>
+      <input
+        type="file"
+        multiple
+        className="hidden"
+        aria-label={t("f118.upload_folder")}
+        ref={folderInput}
+        {...{ webkitdirectory: "", directory: "" }}
+        onChange={(event) => {
+          handleFolder(Array.from(event.target.files ?? []));
+          event.target.value = "";
+        }}
+      />
+      <SpaceUploadProgress
+        jobs={jobs}
+        observed={observed}
+        unavailable={unavailable}
+        onCancel={handleCancel}
+        onRetry={(job) => {
+          job.phase = "queued";
+          sync();
+        }}
+      />
       {unavailable && (
         <Button
           variant="outlined"

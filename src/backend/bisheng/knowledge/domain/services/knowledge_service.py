@@ -1106,18 +1106,34 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def update_knowledge_model(cls, *, login_user, knowledge_id, model_id, name=None, description=None,
-                               confirmation=None, processing_commands=None):
+    def update_knowledge_model(
+        cls,
+        *,
+        login_user,
+        knowledge_id,
+        model_id,
+        name=None,
+        description=None,
+        confirmation=None,
+        processing_commands=None,
+    ):
         """Legacy metadata/QA semantics; SPACE model changes use real PROC."""
         with get_sync_db_session() as session:
             candidate = KnowledgeModelReferenceApplication.repository.get(session, knowledge_id)
-            advanced = candidate is not None and candidate.type == KnowledgeTypeEnum.SPACE.value and str(candidate.model) != str(model_id)
+            advanced = (
+                candidate is not None
+                and candidate.type == KnowledgeTypeEnum.SPACE.value
+                and str(candidate.model) != str(model_id)
+            )
         if advanced:
             if confirmation is None or processing_commands is None:
                 raise KnowledgeOperationConfirmationRequiredError()
-            return run_async_safe(processing_commands.alegacy_model_confirm(
-                knowledge_id, confirmation, identity=login_user, name=name, description=description
-            ), timeout=60)
+            return run_async_safe(
+                processing_commands.alegacy_model_confirm(
+                    knowledge_id, confirmation, identity=login_user, name=name, description=description
+                ),
+                timeout=60,
+            )
         command = None
         repository = KnowledgeModelReferenceApplication.repository
         with get_sync_db_session() as session:
@@ -1686,8 +1702,9 @@ class KnowledgeService(KnowledgeUtils):
         return failed_files + process_files
 
     @classmethod
-    async def rebuild_knowledge_file(cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileReProcess,
-                                     *, processing_commands=None):
+    async def rebuild_knowledge_file(
+        cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileReProcess, *, processing_commands=None
+    ):
         """
         Rebuild Knowledge Base Files
         :param request:
@@ -1713,11 +1730,19 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError.http_exception()
         if knowledge.type == KnowledgeTypeEnum.SPACE.value:
             from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequest
-            if processing_commands is None or not all((req_data.confirmation_id, req_data.plan_digest, req_data.idempotency_key)):
+
+            if processing_commands is None or not all(
+                (req_data.confirmation_id, req_data.plan_digest, req_data.idempotency_key)
+            ):
                 raise KnowledgeOperationConfirmationRequiredError()
-            command = ProcessingCreateRequest(confirmation_id=req_data.confirmation_id,
-                plan_digest=req_data.plan_digest, idempotency_key=req_data.idempotency_key)
-            return await processing_commands.alegacy_file_confirm(knowledge.id, command, identity=login_user, file_id=db_file.id)
+            command = ProcessingCreateRequest(
+                confirmation_id=req_data.confirmation_id,
+                plan_digest=req_data.plan_digest,
+                idempotency_key=req_data.idempotency_key,
+            )
+            return await processing_commands.alegacy_file_confirm(
+                knowledge.id, command, identity=login_user, file_id=db_file.id
+            )
 
         db_file = await cls.process_rebuild_file(db_file, req_data, login_user.user_id, login_user.user_name)
 
@@ -1783,6 +1808,8 @@ class KnowledgeService(KnowledgeUtils):
         split_rule: dict,
         file_kwargs: dict | None = None,
         processing_rule_request: FileProcessBase | None = None,
+        *,
+        ordinary_overrides_only: bool = False,
     ) -> PreparedUpload:
         """Stage the original local file and resolve its actual saved rules.
 
@@ -1800,9 +1827,17 @@ class KnowledgeService(KnowledgeUtils):
         actual_snapshot = None
         if processing_rule_request is not None:
             from bisheng.knowledge.application.file_processing_adapter import (
+                _AUDIO_EXTENSIONS,
+                _VIDEO_EXTENSIONS,
                 capture_legacy_processing_overrides,
                 legacy_rule_from_snapshot,
             )
+
+            if ordinary_overrides_only and (
+                file_name.rsplit(".", 1)[-1].lower() in _AUDIO_EXTENSIONS | _VIDEO_EXTENSIONS
+                or (file_kwargs or {}).get("file_source") in {"web_link", "audio_transcript", "video_transcript"}
+            ):
+                processing_rule_request = FileProcessBase(knowledge_id=knowledge.id)
 
             file_overrides = (
                 capture_legacy_processing_overrides(
@@ -2484,7 +2519,8 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError.http_exception()
         require_space_processing_idle(current, operation="chunk_write")
         if (current.model_config_revision, current.index_generation) != (
-            knowledge.model_config_revision, knowledge.index_generation
+            knowledge.model_config_revision,
+            knowledge.index_generation,
         ):
             raise KnowledgeOperationPlanConflictError(reason="chunk_configuration_changed")
         return current

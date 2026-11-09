@@ -55,8 +55,7 @@ export function SpaceDirectoryRow({
   const known = folder || item.file_type === 1;
   const historyEnabled =
     appConfig.versionManagementEnabled === true &&
-    item.file_type === 1 &&
-    item.is_multi_version === true;
+    item.file_type === 1;
   const { identityKey, tenantId, managementTenantId, view } = scope;
   // Every scope/target/feature transition retires the previous opening forever.
   const epoch = useMemo(
@@ -158,6 +157,7 @@ export function SpaceDirectoryRow({
           spaceId={epoch.spaceId}
           parentId={epoch.parentId}
           fileId={epoch.fileId}
+          hasSimilar={item.has_similar === true && item.is_multi_version !== true && item.status === 2}
           open={epoch.enabled && history === epoch}
           onOpenChange={(next) => {
             if (!next) setHistory(null);

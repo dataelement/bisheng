@@ -8,7 +8,14 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, KnowledgeFileProcess, resp_200
+from bisheng.api.v1.schemas import (
+    ChunkInput,
+    ExcelRule,
+    FileProcessBase,
+    KnowledgeFileOne,
+    KnowledgeFileProcess,
+    resp_200,
+)
 from bisheng.app_publish.domain.services.capability_bus_service import (
     CapabilityBusService,
     hosted_app_access_user,
@@ -26,6 +33,7 @@ from bisheng.knowledge.api.dependencies import (
     get_knowledge_file_repository,
 )
 from bisheng.knowledge.application.deletion_compatibility import delete_legacy_files
+from bisheng.knowledge.application.file_processing_adapter import capture_legacy_processing_overrides
 from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
 from bisheng.knowledge.application.space_upload import SpaceUploadApplication
 from bisheng.knowledge.domain.models.knowledge import (
@@ -422,10 +430,32 @@ async def upload_file(
     # Knowledge space: delegate to the space file-add path (handles parent_id).
     if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
         space_svc = _build_space_service(request, loging_user, version_repo, doc_repo)
+        provided = await request.form()
+        rule_values = {
+            "split_mode": split_mode,
+            "separator": separator,
+            "separator_rule": separator_rule,
+            "chunk_size": chunk_size,
+            "chunk_overlap": chunk_overlap,
+            "hierarchy_level": hierarchy_level,
+            "append_title": append_title,
+            "max_chunk_size": max_chunk_size,
+            "retain_images": retain_images,
+            "force_ocr": force_ocr,
+            "enable_formula": enable_formula,
+            "filter_page_header_footer": filter_page_header_footer,
+            "excel_rule": excel_rule,
+        }
+        overrides = capture_legacy_processing_overrides(
+            FileProcessBase(
+                knowledge_id=knowledge_id, **{name: value for name, value in rule_values.items() if name in provided}
+            )
+        )
         res = await space_svc.add_file(
             knowledge_id=knowledge_id,
             file_path=[file_path],
             parent_id=parent_id,
+            processing_overrides=overrides if overrides.document is not None or overrides.table is not None else None,
         )
         return resp_200(data=res[0])
 

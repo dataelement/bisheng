@@ -2,11 +2,8 @@ import { Button, Dropdown, DropdownItem } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
-import {
-  knowledgeQueryKeys,
-  type KnowledgeQueryScope,
-} from "@/controllers/hooks/knowledge";
+import { checkResourceActionApi } from "@/controllers/API/permission";
+import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
 import { SpaceProcessingDialog } from "./SpaceProcessingDialog";
 import { SpaceIndexEditDialog } from "./SpaceIndexEditDialog";
@@ -19,21 +16,37 @@ interface SpaceFileToolsProps {
 }
 export function SpaceFileTools(props: SpaceFileToolsProps) {
   const { t } = useTranslation("knowledge");
-  const [active, setActive] = useState<"process" | "index" | null>(null);
+  const scopeKey = JSON.stringify([
+    ...knowledgeQueryKeys.space(props.scope, props.spaceId),
+    props.fileId,
+  ]);
+  const [opened, setOpened] = useState<{ key: string; mode: "process" | "index" } | null>(null);
+  const active = opened?.key === scopeKey ? opened.mode : null;
+  const setActive = (mode: "process" | "index" | null) =>
+    setOpened(mode ? { key: scopeKey, mode } : null);
+  useEffect(() => {
+    setOpened(null);
+  }, [scopeKey]);
   const permissions = useQuery({
-    queryKey: [
-      ...knowledgeQueryKeys.space(props.scope, props.spaceId),
-      "container-edit",
-    ],
-    queryFn: () =>
-      getMyResourcePermissionsApi("knowledge_space", String(props.spaceId)),
+    queryKey: [...knowledgeQueryKeys.space(props.scope, props.spaceId), "container-edit"],
+    queryFn: async ({ signal }) => {
+      const result = await checkResourceActionApi({
+        resource_type: "knowledge_space",
+        resource_id: String(props.spaceId),
+        action: "edit",
+      });
+      if (signal?.aborted) throw new DOMException("Retired permission read", "AbortError");
+      return result;
+    },
     enabled: Boolean(props.scope.identityKey),
     cacheTime: 0,
+    refetchOnWindowFocus: false,
   });
   useEffect(() => {
     if (permissions.error) showApiError(permissions.error);
   }, [permissions.error]);
-  if (!permissions.data?.actions.includes("edit")) return null;
+  if (permissions.isError || !permissions.data?.allowed || (permissions.isFetching && !active))
+    return null;
   return (
     <>
       <Dropdown
@@ -48,10 +61,7 @@ export function SpaceFileTools(props: SpaceFileToolsProps) {
           </>
         }
       >
-        <Button
-          variant="text"
-          disabled={[1, 4, 5].includes(props.status ?? -1)}
-        >
+        <Button variant="text" disabled={[1, 4, 5].includes(props.status ?? -1)}>
           {t("f118.processing_title_file")}
         </Button>
       </Dropdown>
