@@ -38,7 +38,7 @@ class ProcessingActorSubject:
 
 
 def processing_actor_subject(
-    reference: Mapping, *, tenant_id: int, actor_user_id: int, source_space_id: int
+    reference: Mapping, *, tenant_id: int, actor_user_id: int, source_space_id: int, required_action="move"
 ) -> ProcessingActorSubject:
     """Read the original typed subject without restoring or expiring its credential.
 
@@ -48,7 +48,8 @@ def processing_actor_subject(
     existing capture/restore path; these facts do not authorize an operation.
     """
     if (
-        not all(_positive_integer(value) for value in (tenant_id, actor_user_id, source_space_id))
+        required_action not in {"move", "delete", "upload_file"}
+        or not all(_positive_integer(value) for value in (tenant_id, actor_user_id, source_space_id))
         or not isinstance(reference, Mapping)
         or set(reference) != _ORIGIN_FIELDS
         or type(reference["schema_version"]) is not int
@@ -56,7 +57,7 @@ def processing_actor_subject(
         or any(not _positive_integer(reference[key]) for key in ("tenant_id", "actor_user_id", "space_id"))
         or (reference["tenant_id"], reference["actor_user_id"], reference["space_id"])
         != (tenant_id, actor_user_id, source_space_id)
-        or reference["required_action"] != "move"
+        or reference["required_action"] != required_action
         or reference["entry_kind"] not in ("web", "open_api")
         or not isinstance(reference["credential_reference"], Mapping)
     ):
