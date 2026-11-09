@@ -33,14 +33,28 @@ body[data-dsh-chat-theme] .dsh-add-menu [role^="menuitem"]:not(.dsh-command-skil
   transition:background-color 150ms ease-out,transform 150ms ease-out;
 }
 .dsh-chat-surface .dsh-composer-submit:disabled { background:rgb(var(--fill-3)); color:rgb(var(--text-3)); opacity:1; }
-/* Keep the send button's circle and accent inside the desktop Chat composer. */
+:root[data-bisheng-surface='desktop'] .dsh-chat-surface .dsh-composer-add {
+  background:var(--dsh-native-composer-selector);
+  corner-shape:round;
+}
+@media (hover:hover) and (pointer:fine) {
+  :root[data-bisheng-surface='desktop'] .dsh-chat-surface .dsh-composer-add:hover:enabled {
+    background:var(--dsh-native-composer-selector-hover);
+  }
+}
+/* The native InputBar uses the info button palette for its circular send action. */
 :root[data-bisheng-surface='desktop'] .dsh-chat-surface button.dsh-composer-send {
-  --dsh-primary-fill: var(--dsh-composer-submit-fill);
+  --dsh-primary-fill: var(--dsh-native-composer-send);
   --dsh-primary-foreground: white;
-  --dsh-primary-hover: var(--dsh-composer-submit-hover);
+  --dsh-primary-hover: var(--dsh-native-composer-send-hover);
   border-radius: 50%;
   corner-shape: round;
+  transition:background-color 100ms;
 }
+:root[data-bisheng-surface='desktop'] .dsh-chat-surface button.dsh-composer-send:active:enabled { transform:translateY(-2px); }
+.dsh-chat-surface .dsh-composer-send .dsh-composer-native-send-icon { display:none; }
+:root[data-bisheng-surface='desktop'] .dsh-chat-surface .dsh-composer-send .dsh-composer-web-send-icon { display:none; }
+:root[data-bisheng-surface='desktop'] .dsh-chat-surface .dsh-composer-send .dsh-composer-native-send-icon { display:block; }
 .dsh-chat-surface .dsh-composer-voice {
   display:inline-flex; flex:none; align-items:center; justify-content:center;
   width:34px !important; height:34px !important; min-width:34px; min-height:34px;
