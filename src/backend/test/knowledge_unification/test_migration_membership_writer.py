@@ -79,6 +79,18 @@ async def verify(service, session, values, goal):
     return await service.averify_committed_page(session, batch=batch)
 
 
+async def test_other_four_kinds_keep_the_actual_pre_writer_outcome_bytes(database):
+    values = tuple(row for row in database.commands if type(row) is not ResourceConversionCommand)
+    repo = UnificationConversionService().repository
+    async with AsyncSession(database.engine) as session, session.begin():
+        result = await original.apply(repo, session, values)
+    # Native fixed e2d0d23bff, before the Member Writer; no new Outcome fields.
+    assert (
+        digest(tuple(asdict(row) for row in result))
+        == "47dc19e965c9dbfb003fefb9937091400696885af93d29442b331bca6b7b0292"
+    )
+
+
 @pytest.mark.parametrize("keep", [False, True])
 async def test_real_producer_service_binds_actual_creator_pk_full_set_and_preserves_every_original_source(
     database, keep
@@ -126,7 +138,7 @@ async def test_real_producer_service_binds_actual_creator_pk_full_set_and_preser
         )
         assert (await session.get(original.raw.Knowledge, 9000)).type == 3
     after = await snapshot(database)
-    assert [row for row in after["members"] if row["id"] in {31, 41, 51}] == before["members"]
+    assert tuple(row for row in after["members"] if row["id"] in {31, 41, 51}) == before["members"]
     assert after["knowledgefile"] == before["knowledgefile"]
     fresh = UnificationConversionService()
     async with AsyncSession(database.engine) as session, session.begin():
@@ -135,7 +147,9 @@ async def test_real_producer_service_binds_actual_creator_pk_full_set_and_preser
     assert await snapshot(database) == after
 
 
-@pytest.mark.parametrize("failure", ["late-sql", "cancel", "member-trigger", "root-trigger", "checkpoint"])
+@pytest.mark.parametrize(
+    "failure", ["late-sql", "cancel", "member-trigger", "member-pk-trigger", "root-trigger", "checkpoint"]
+)
 async def test_caught_late_failure_cannot_commit_half_converted_root_member_or_run_checkpoint(
     database, monkeypatch, failure
 ):
@@ -144,9 +158,11 @@ async def test_caught_late_failure_cannot_commit_half_converted_root_member_or_r
     if failure.endswith("trigger"):
         table, event, assignment = (
             ("space_channel_member", "INSERT", "grant_binding_key='unexpected'")
-            if failure == "member-trigger"
+            if failure.startswith("member")
             else ("knowledge", "UPDATE", "update_time='2099-01-01 00:00:00.000000'")
         )
+        if failure == "member-pk-trigger":
+            assignment = "id=NEW.id+1000"
         async with database.engine.begin() as connection:
             await connection.exec_driver_sql(
                 f"CREATE TRIGGER unexpected AFTER {event} ON {table} BEGIN UPDATE {table} SET {assignment} WHERE id=NEW.id; END"
@@ -185,22 +201,36 @@ async def test_caught_late_failure_cannot_commit_half_converted_root_member_or_r
     assert await snapshot(database) == before
 
 
-@pytest.mark.parametrize("drift", ["pk", "source", "insert", "delete"])
-async def test_committed_prefix_verification_rejects_member_pk_or_complete_source_set_drift(database, drift):
-    await database.insert(Member, [member(10, "9000", grant_binding_key="frozen-source")])
+@pytest.mark.parametrize("drift", ["pk", "source", "insert", "delete", "original-source", "original-delete"])
+@pytest.mark.parametrize("keep", [False, True])
+async def test_committed_prefix_verification_rejects_member_pk_or_complete_source_set_drift(database, drift, keep):
+    await database.insert(
+        Member,
+        [
+            member(
+                10,
+                "9000",
+                user_id=7 if keep else 8,
+                user_role="CREATOR" if keep else "MEMBER",
+                grant_binding_key="frozen-source",
+            )
+        ],
+    )
     values = await commands(database)
     service = UnificationConversionService()
     async with AsyncSession(database.engine) as session, session.begin():
         await service.aapply_batch(session, batch=await issue(service, session, values, eof=True))
+        actual_id = next(row.id for row in await rows(session) if row.user_id == 7)
+    target_id = 10 if drift.startswith("original-") else actual_id
     async with database.engine.begin() as connection:
         if drift == "insert":
             await connection.execute(sa.insert(Member.__table__), member(20, "9000", user_id=8, user_role="MEMBER"))
-        elif drift == "delete":
-            await connection.execute(sa.delete(Member.__table__).where(Member.id == 10))
+        elif drift.endswith("delete"):
+            await connection.execute(sa.delete(Member.__table__).where(Member.id == target_id))
         else:
             await connection.execute(
                 sa.update(Member.__table__)
-                .where(Member.id == 10)
+                .where(Member.id == target_id)
                 .values(**({"id": 99} if drift == "pk" else {"grant_binding_key": "changed-source"}))
             )
     restarted = UnificationConversionService()
@@ -208,6 +238,21 @@ async def test_committed_prefix_verification_rejects_member_pk_or_complete_sourc
         goal = await restarted.aget_progress(session, **original.IDENTITY)
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await verify(restarted, session, values, goal)
+
+
+async def test_after_without_a_durable_checkpoint_is_never_adopted_or_inserted_again(database):
+    values = tuple(row for row in database.commands if type(row) is ResourceConversionCommand)
+    service = UnificationConversionService()
+    async with AsyncSession(database.engine) as session, session.begin():
+        scope = await service.repository.alock_scope(session, **original.IDENTITY, commands=values)
+        await service.repository.aapply_and_read_after(session, scope=scope)
+    before = await snapshot(database)
+    assert len(before["members"]) == 1 and before["knowledge"][0]["type"] == 3
+    async with AsyncSession(database.engine) as session, session.begin():
+        assert (await service.aget_progress(session, **original.IDENTITY)).processed_count == 0
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await service.aapply_batch(session, batch=await issue(service, session, values, eof=True))
+    assert await snapshot(database) == before
 
 
 @pytest.mark.parametrize(
