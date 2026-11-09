@@ -5,13 +5,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from test.telemetry_search.test_document_statistics import ts
 
 from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_CONTENT_STAT_INDEX as INDEX
 from bisheng.telemetry_search.domain.init_dataset import DASHBOARD_DATASET
 from bisheng.telemetry_search.domain.schemas.component import ComponentDataConfig, DimensionQueryFilter
 from bisheng.telemetry_search.domain.services import component, dashboard_export_detail, knowledge_document_reader
 from bisheng.telemetry_search.domain.services.knowledge_document_statistics import DocumentStatistics
-from test.telemetry_search.test_document_statistics import ts
 
 
 @pytest.fixture
@@ -89,6 +89,29 @@ async def test_original_dimensions_group_export_and_preserve_filter_values(setup
     assert any(column.field == field and column.label.startswith("原始") for column in detail.columns)
     assert name in str(load.call_args.args[0])
     assert field in str(load.call_args.args[0])
+
+
+async def test_result_limit_orders_by_primary_metric_desc(setup):
+    config = ComponentDataConfig(
+        dimensions=[{"fieldId": "uploader_department_name"}],
+        metrics=[{"fieldId": "total_file_count"}],
+        resultLimit={"limitType": "limited", "limit": 1},
+    )
+    result = await component.DataQueryService(dataset_code=INDEX, data_config=config).query_telemetry_data()
+    assert result.dimensions == [["B"]]
+    assert result.value == [[2]]
+
+
+async def test_result_limit_respects_explicit_metric_sort(setup):
+    config = ComponentDataConfig(
+        dimensions=[{"fieldId": "uploader_department_name"}],
+        metrics=[{"fieldId": "total_file_count", "sort": "asc"}],
+        field_order=[{"fieldId": "total_file_count", "fieldType": "metric"}],
+        resultLimit={"limitType": "limited", "limit": 1},
+    )
+    result = await component.DataQueryService(dataset_code=INDEX, data_config=config).query_telemetry_data()
+    assert result.dimensions == [["A"]]
+    assert result.value == [[1]]
 
 
 async def test_query_rollups_export_match_with_shared_references(setup):
