@@ -243,7 +243,7 @@ def test_catalog_verifier_rebuild_binds_the_entire_mapping_matrix_and_after_meta
 
 
 @pytest.mark.parametrize("kind", ["knowledge_library", "knowledge_space", "knowledge_file", "tool"])
-def test_mapped_catalog_cannot_authorize_any_resource_builder_or_old_before_verifier(kind):
+def test_mapped_catalog_requires_explicit_target_and_old_before_verifier_cannot_pass(kind):
     before = legacy_catalog()
     original = resource(plans, before, resource_type=kind, model_key="owner")
     unchanged = plans.build_resource_retirement_plan(catalog_plan=build(before), before=original)
@@ -254,8 +254,11 @@ def test_mapped_catalog_cannot_authorize_any_resource_builder_or_old_before_veri
         tuple(plans.build_resource_retirement_plans(catalog_plan=mapped, before=(original,)))
     with pytest.raises(PermissionMigrationBlockedError):
         verify.verify_resource_retirement(plan=replace(unchanged, catalog_plan=mapped), actual=original)
-    with pytest.raises(PermissionMigrationBlockedError):
-        tuple(verify.verify_resource_retirements(catalog_plan=mapped, plans=(), actual=()))
+    mode = replace(original.mode, resource_type="knowledge_space") if kind == "knowledge_library" else original.mode
+    result = plans.build_resource_retirement_plan(catalog_plan=mapped, before=original, namespace_target=mode)
+    assert result.namespace_target == mode
+    assert verify.verify_resource_retirement(plan=result, actual=result.after).complete
+    assert tuple(verify.verify_resource_retirements(catalog_plan=mapped, plans=(), actual=())) == ()
     assert original == unchanged.before
 
 

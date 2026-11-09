@@ -211,11 +211,21 @@ def test_child_parent_namespace_changes_without_changing_its_own_identity_or_fil
     assert verify.verify_resource_retirement(plan=result, actual=result.after).complete
 
 
-def test_existing_space_original_scope_hole_is_rejected_even_if_new_provenance_would_make_it_visible():
+@pytest.mark.parametrize("inactive", [False, True])
+def test_existing_space_original_scope_hole_is_rejected_even_if_new_provenance_would_make_it_visible(inactive):
     before_catalog = legacy_catalog()
     # Old use covers Library but never SPACE. A legacy malformed active grant
     # with zero applicable old actions must not gain visibility from C4 metadata.
     before = resource(plans, before_catalog, resource_type="knowledge_space", model_key="pure-use")
+    if inactive:
+        before = replace(
+            before,
+            grants=tuple(replace(row, state="INACTIVE") for row in before.grants),
+            visible_sources=tuple(
+                replace(row, source=row.source.model_copy(update={"state": "RETIRED"}))
+                for row in before.visible_sources
+            ),
+        )
     with pytest.raises(PermissionMigrationBlockedError):
         compile_resource(mapped(before_catalog), before, before.mode)
 
@@ -305,6 +315,55 @@ async def test_original_compiler_collision_checks_stay_active_and_new_tuple_fing
         assert ("knowledge_space", int(row.source.source_owner_key.split(":")[1]), row.source.tuple_fingerprint) in hits
     with pytest.raises(ValueError, match="collision"):
         compiler._assert_same_canonical_source(before.visible_sources[0].source, result.after.visible_sources[0].source)
+
+
+async def test_inactive_grant_retains_every_retired_row_and_its_original_backing_sources(original):
+    _, catalog, before = original
+    before = replace(
+        before,
+        grants=tuple(replace(row, state="INACTIVE") for row in before.grants),
+        visible_sources=tuple(
+            replace(row, source=row.source.model_copy(update={"state": "RETIRED"})) for row in before.visible_sources
+        ),
+    )
+    result = compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
+    assert result.after.assignees == before.assignees and not result.visible_subjects and not result.visibility_deltas
+    assert all(row.source.state == "RETIRED" for row in result.after.visible_sources)
+    assert tuple(row.id for row in result.after.visible_sources) == tuple(row.id for row in before.visible_sources)
+    assert verify.verify_resource_retirement(plan=result, actual=result.after).complete
+
+
+@pytest.mark.parametrize("bad", ["parent", "operation", "source-version", "source-operation", "migration-item"])
+async def test_mutable_original_mode_or_retired_metadata_is_never_signed(original, bad):
+    _, catalog, before = original
+    if bad in {"parent", "operation"}:
+        before = replace(
+            before,
+            mode=replace(
+                before.mode,
+                **(
+                    {"parent_type": "knowledge_library", "parent_id": ["40"]}
+                    if bad == "parent"
+                    else {"operation_id": [19]}
+                ),
+            ),
+        )
+    else:
+        field = {
+            "source-version": "source_version",
+            "source-operation": "operation_id",
+            "migration-item": "migration_item_id",
+        }[bad]
+        row = before.visible_sources[-1]
+        before = replace(
+            before,
+            visible_sources=(
+                *before.visible_sources[:-1],
+                replace(row, source=row.source.model_copy(update={field: [19]})),
+            ),
+        )
+    with pytest.raises(PermissionMigrationBlockedError):
+        compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
 
 
 @pytest.mark.parametrize(
