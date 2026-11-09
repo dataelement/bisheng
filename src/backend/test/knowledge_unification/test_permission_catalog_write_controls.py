@@ -293,3 +293,21 @@ async def test_by_id_reader_rejects_bad_or_missing_real_identity(ready, ident):
     async with ready.factory() as session, session.begin():
         with pytest.raises(PermissionMigrationBlockedError):
             await PermissionMigrationSnapshotRepository().aload_catalog_release(session, release_id=ident)
+
+
+async def test_database_managed_audit_timestamp_drift_fails_closed_and_rolls_back(ready, module):
+    async with ready.factory() as session, session.begin():
+        await session.execute(
+            sa.text(
+                f"CREATE TRIGGER force_catalog_time AFTER UPDATE ON permission_catalog_release "
+                f"WHEN NEW.id={ready.draft} BEGIN UPDATE permission_catalog_release "
+                f"SET update_time='2099-01-01 00:00:00' WHERE id=NEW.id; END"
+            )
+        )
+    async with ready.factory() as session, session.begin():
+        before = await raw(session)
+        with pytest.raises(PermissionMigrationBlockedError):
+            await module.F118CatalogWriteRepository().astage_catalog(session, **arguments(ready))
+        assert await raw(session) == before
+    async with ready.factory() as session, session.begin():
+        assert await raw(session) == before
