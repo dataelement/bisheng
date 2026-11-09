@@ -41,6 +41,7 @@ SECTIONS = frozenset(
         "resources",
         "control",
         "permission",
+        "permission_namespace",
         "catalog",
         "physical",
         "tasks",
@@ -54,6 +55,13 @@ SECTIONS = frozenset(
 KINDS = frozenset({"baseline", "plan", "permission_catalog", "permission_resources", "conversion", "verification"})
 OBJECT_KINDS = frozenset({"original", "preview", "bbox", "thumbnail", "html_snapshot"})
 _BROKER_GLOBAL_STATES = frozenset({"global_control", "target_missing", "unacked_metadata_orphan"})
+_NAMESPACE_GLOBAL = frozenset({"namespace_catalog", "namespace_applicability"})
+_NAMESPACE_RECORDS = _NAMESPACE_GLOBAL | {
+    "namespace_target_mode",
+    "namespace_after_grant",
+    "namespace_after_assignee",
+    "namespace_after_visible_source",
+}
 
 
 def _descriptor(value):
@@ -116,6 +124,13 @@ def _validate(tag, data):
         _invalid()
     for name, spec in schema.items():
         _value(data[name], spec)
+    if tag in _NAMESPACE_GLOBAL and (data["from_resource_type"], data["to_resource_type"]) != (
+        "knowledge_library",
+        "knowledge_space",
+    ):
+        _invalid()
+    if tag == "namespace_target_mode" and data["mode_id"] != data["id"]:
+        _invalid()
     if tag == "permission_model" and data["retired_use_level_floor"] not in {None, 1, 2, 3, 4}:
         _invalid()
     if tag == "broker_task" and (
@@ -361,9 +376,21 @@ def encode_inventory_page(*, run_id, section, scope, tenant_id, page_index, reco
         _invalid()
     if section == "evidence" and (scope != "global" or kind != "verification"):
         _invalid()
+    if section == "permission_namespace" and kind != "plan":
+        _invalid()
     facts = []
     for record in records:
         if type(record) is not InventoryRecord:
+            _invalid()
+        data = record.data
+        if (record.record_type in _NAMESPACE_RECORDS) != (section == "permission_namespace"):
+            _invalid()
+        if record.record_type in _NAMESPACE_RECORDS and (
+            (scope == "global") != (record.record_type in _NAMESPACE_GLOBAL)
+            or (record.record_type == "namespace_catalog" and data["run_id"] != run_id)
+        ):
+            _invalid()
+        if record.record_type == "permission_plan" and (section != "conversion" or kind != "plan"):
             _invalid()
         if record.record_type in _CONVERSION_FIELDS and (
             section != "conversion" or kind != "plan" or record.data["run_id"] != run_id
@@ -377,9 +404,8 @@ def encode_inventory_page(*, run_id, section, scope, tenant_id, page_index, reco
             _invalid()
         if (record.record_type == "evidence_material") != (section == "evidence"):
             _invalid()
-        data = record.data
         actual_tenant = data.get("tenant_id")
-        if record.record_type == "visible_source":
+        if record.record_type in {"visible_source", "namespace_after_visible_source"}:
             actual_tenant = data["source"]["tenant_id"]
         if scope == "tenant" and actual_tenant is not None and actual_tenant != tenant_id:
             _invalid()
