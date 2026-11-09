@@ -8,8 +8,6 @@ from loguru import logger
 from sqlmodel import col, select
 
 from bisheng.api.v1.schemas import (
-    KnowledgeFileOne,
-    KnowledgeFileProcess,
     KnowledgeSpaceConfig,
     LinsightConfig,
     SubscriptionConfig,
@@ -18,7 +16,7 @@ from bisheng.api.v1.schemas import (
     WSPrompt,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.server import EmbeddingModelStatusError
+from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.base import BaseService
 from bisheng.common.services.config_service import settings
@@ -34,9 +32,8 @@ from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.llm.domain.services import LLMService
 from bisheng.permission.application.access import get_f048_runtime
@@ -1102,37 +1099,8 @@ class WorkStationService(BaseService):
         *,
         upload_limit_bytes: int | None = None,
     ):
-        knowledge = await KnowledgeDao.aget_user_knowledge(
-            login_user.user_id,
-            None,
-            KnowledgeTypeEnum.PRIVATE,
-        )
-        if not knowledge:
-            model = await LLMService.aget_knowledge_llm()
-            knowledge_create = KnowledgeCreate(
-                name="Personal Knowledge Base",
-                type=KnowledgeTypeEnum.PRIVATE.value,
-                user_id=login_user.user_id,
-                model=model.embedding_model_id,
-            )
-            knowledge = await KnowledgeService.acreate_knowledge(request, login_user, knowledge_create)
-        else:
-            knowledge = knowledge[0]
-        req_data = KnowledgeFileProcess(
-            knowledge_id=knowledge.id,
-            file_list=[KnowledgeFileOne(file_path=file_path)],
-        )
-        try:
-            _ = await LLMService.get_bisheng_knowledge_embedding(login_user.user_id, int(knowledge.model))
-        except Exception as exc:
-            raise EmbeddingModelStatusError(exception=exc)
-        return await KnowledgeService.aprocess_knowledge_file(
-            request,
-            login_user,
-            background_tasks,
-            req_data,
-            upload_limit_bytes=upload_limit_bytes,
-        )
+        """Do not recreate retired type=2 through a legacy service caller."""
+        raise KnowledgeTypeNotSupportedError()
 
     @classmethod
     async def queryKnowledgeList(
@@ -1142,21 +1110,8 @@ class WorkStationService(BaseService):
         page: int,
         size: int,
     ):
-        knowledge = KnowledgeDao.get_user_knowledge(
-            login_user.user_id,
-            None,
-            KnowledgeTypeEnum.PRIVATE,
-        )
-        if not knowledge:
-            return [], 0
-        res, total, _ = await KnowledgeService.aget_knowledge_files(
-            request,
-            login_user,
-            knowledge[0].id,
-            page=page,
-            page_size=size,
-        )
-        return res, total
+        """Preserve the old list envelope without exposing retired resources."""
+        return [], 0
 
     # ------------------------------------------------------------------
     # F029 helpers — view_file filter for the workstation chat retrieval.

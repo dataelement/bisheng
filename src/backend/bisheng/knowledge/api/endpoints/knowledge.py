@@ -30,7 +30,6 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNotQAError,
     KnowledgePreviewError,
     KnowledgeQAError,
-    KnowledgeRebuildingError,
     KnowledgeSpaceListNotSupportedError,
 )
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200, resp_500
@@ -44,7 +43,6 @@ from bisheng.knowledge.api.dependencies import get_knowledge_file_service, get_k
 from bisheng.knowledge.application.knowledge_batch import get_batch_application
 from bisheng.knowledge.application.knowledge_processing_commands import KnowledgeProcessingCommands
 from bisheng.knowledge.domain.models.knowledge import (
-    KnowledgeCreate,
     KnowledgeDao,
     KnowledgeState,
     KnowledgeTypeEnum,
@@ -69,7 +67,6 @@ from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequ
 from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
-from bisheng.llm.domain import LLMService
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService, require_quota
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import calc_data_sha256, generate_uuid
@@ -517,21 +514,8 @@ async def delete_knowledge(
 # Personal Knowledge Base Information Acquisition
 @router.get("/personal_knowledge_info", status_code=200)
 def get_personal_knowledge_info(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """Get personal knowledge base information."""
-    knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None, KnowledgeTypeEnum.PRIVATE)
-
-    if not knowledge:
-        model = LLMService.get_knowledge_llm()
-        knowledgeCreate = KnowledgeCreate(
-            name="Personal Knowledge Base",
-            type=KnowledgeTypeEnum.PRIVATE.value,
-            user_id=login_user.user_id,
-            model=model.embedding_model_id,
-        )
-
-        knowledge = [KnowledgeService.create_knowledge(request, login_user, knowledgeCreate)]
-
-    return resp_200(data=knowledge)
+    """Keep the legacy response without reviving retired personal knowledge."""
+    return resp_200(data=[])
 
 
 @router.get("/file_list/{knowledge_id}", status_code=200)
@@ -980,32 +964,7 @@ def post_import_file(
 
 @router.get("/status", status_code=200)
 def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """
-    View Knowledge Base Status Interface
-    Receive:
-    1. According UsersidFirst determine if the user has a personal knowledge base and does not return directly200
-    2. If you have a knowledge base, depending on the useridView the state of your knowledge base, if the state of your personal knowledge base isREBUILDING 3 or FAILED 4 Jam
-       Return "Personal Knowledge BaseembeddingThe model has been replaced, rebuilding the knowledge base, please try again later" State Code 502
-    """
-    # Query a user's personal knowledge base
-    user_private_knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None, KnowledgeTypeEnum.PRIVATE)
-
-    # If the user does not have a personal knowledge base, go directly back to200
-    if not user_private_knowledge:
-        return resp_200({"status": "success"})
-
-    # Get the first personal knowledge base (usually users have only one personal knowledge base)
-    private_knowledge = user_private_knowledge[0]
-
-    # Check Knowledge Base Status
-
-    if private_knowledge.state == KnowledgeState.REBUILDING.value:
-        # Return502Status codes and corresponding prompts
-        raise KnowledgeRebuildingError()
-    if private_knowledge.state == KnowledgeState.FAILED.value:
-        raise KnowledgeRebuildingError()
-
-    # Knowledge base status is OK, go back200
+    """Retired personal-space state is no longer a dependency of chat."""
     return resp_200({"status": "success"})
 
 

@@ -1785,3 +1785,14 @@ Copy图片补充：实际move保留原对象键，因此图片的space路径只�
 
 
 HTTP部署兼容补充：本次新移动/处理确认与重试键不调用仅secure context提供的crypto.randomUUID，平台复用已有getRandomValues UUID工具，client复用既有uuid依赖；不改原幂等键生命周期，不新建通用ID框架。新面板自有generateUUID原路径保持。
+
+
+## 139. 旧协议实际入口兼容与退役边界（2026-11-10 已冻结）
+
+原T125/126、T129–T134、T222/223按真实Root类型分流，而非只改枚举或use字符串。旧type=0及省略类型的文档协议创建实际SPACE3，旧输出仍type=0；显式SPACE3仍3，QA1独立。显式embedding保原实际模型、租户及凭据资格，未提供时取Workbench创建默认，不重建其他空间。机器入口不伪造web创建上下文，原机器能力准入与真实R2/P1不变。列表保原过滤、排序与响应形状，用有界原候选和实际visible；不能沿仅knowledge_library命名空间遗漏实际SPACE。公共权限HTTP边界可由已注入Knowledge Owner按实际Root分类，原typed registry的类型等值和数据scope不放松。
+
+历史workflow knowledge类型、workstation org_bucket中的已迁移ID也按真实C3 Root分类，SPACE3复用现成功主版本和file.visible检索；旧0及QA1原路径保持。保原执行身份、查询参数、权重、过滤和返回形状，不重写保存配置或检索算法。旧文件列表/处理/重试/Chunk及元数据写入同样实际分流，复用统一上传、原动作和真实索引完成证明；不可受理即伪同步完成，也不可SQL先写后忽略索引错误。审批通过、频道收藏实际KSS上传须完整装配既有application factory，保原可信业务执行者，不顺带重构审批授权。
+
+退役type=2不复活且不清理原数据。旧personal_knowledge_info返回空集合，queryKnowledge返回原空list/total envelope；旧个人上传在存储、配额、模型或资源创建之前以既有10962拒绝，service入口同样拒绝。原个人status兼容成功，不再让退役个人空间的旧重建状态阻塞其他聊天资源。会话临时附件/workstation/files、任务临时文件及其处理流程保持原行为，不能把退役个人空间映射成新SPACE。
+
+开发边界：PROC负责旧CRUD/权限分类及旧文件协议；MIG负责历史运行检索；PERM负责目录/web上传及审批/频道上传装配；Root负责退役兼容和元数据写入，并整合各lane。仍按原任务卡归档，不增helper编号；只做必要反例和定点验证，全部实际功能闭合后再整体回归、停服升级演练及E2E。
