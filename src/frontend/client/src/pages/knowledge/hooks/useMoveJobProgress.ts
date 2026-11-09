@@ -1,3 +1,4 @@
+import { v4 as createOperationId } from "uuid";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -162,7 +163,7 @@ export function useMoveJobProgress(
         Number(spaceId),
         operation.id,
         {
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: createOperationId(),
           expected_job_revision: job.data.revision,
         },
         "move_index",

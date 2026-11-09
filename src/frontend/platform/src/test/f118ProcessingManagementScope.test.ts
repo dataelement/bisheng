@@ -6,6 +6,8 @@ describe("F118 processing command management scope", () => {
   it.each([
     ["POST", "/api/v1/knowledge/space/42/copy/precheck"],
     ["POST", "/api/v1/knowledge/space/42/copy/confirm"],
+    ["POST", "/api/v1/knowledge/space/42/files/move/precheck"],
+    ["POST", "/api/v1/knowledge/space/42/files/move/confirm"],
     ["PUT", "/api/v1/knowledge/space/42/processing-settings"],
     ["POST", "/api/v1/knowledge/space/42/processing-jobs"],
     ["POST", "/api/v1/knowledge/space/42/processing-jobs/precheck"],

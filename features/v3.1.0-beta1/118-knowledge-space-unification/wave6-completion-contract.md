@@ -1773,3 +1773,15 @@ M4只在重验原同before和真实Root absence后，复用原retired checkpoint
 原T188覆盖日常ChatKnowledge、KnowledgeSpaceDialog及任务模式KnowledgeSpaceSelect。当前三者的mine/joined/department并集只能证明成员分类，不是完整visible候选。改用实际GET `/api/v1/knowledge/space/list?cursor&page_size&keyword`，原envelope.data为`{data,page_size,has_more,next_cursor}`，page_size≤200；有界候选扫描允许空页且has_more，不能据空data误判终态。客户端独立API/helper和useInfiniteQuery复用真实cursor/search，按当前身份/租户及实际凭据上下文隔离，不复用成员清单缓存或首次全量加载；每个实际入口有下一页、错误和重试。
 
 保存selection不因候选缺失自动清空、替换或认定已删除，现runtime visible校验仍保留；QA/org独立路径保持。首页/sidebar已有成员分类是另一功能，不为选择器接线重写分类或扩全平台聚合。前台仍无后台高级配置和新增复制入口。
+
+
+## 138. 两端最后实际入口收口（2026-11-10 已冻结）
+
+T181平台从真实目录选择完整items进入MoveDialog，目标为可见空间分页和实际可见文件夹分页，最终以原move/目标upload_file预检为准，不以成员列表或前端权限筛掉无权选择。原files/move/precheck和confirm，confirm只三字段，管理pin沿当前scope并纳入现请求mapper；同空间同步结果，跨空间JobAccepted沿source space和明确kind=move_index查询。后台风险说明包含全部历史版本、清除/保留元数据字段、标签及继承/自定义授权变化；无效项明确skip再确认。未知ACK保同Plan/key，过期/变化才新review。移动任务入口可重新打开原任务分页/失败重试，不重发裸移动。
+
+T191客户端普通四kind面板保原Root.edit准入和逐项visible，仅安全状态、数量、错误及原任务retry；非edit可见用户从原Root.info.state显示重建/失败提示，不新增item读取权限。前台无模型/Chunk/高级配置或复制入口。查询及重试固定真实响应tenant pin、当前身份/凭据和空间，未知ACK保持同revision/key，按同原接口受理而非伪完成。
+
+Copy图片补充：实际move保留原对象键，因此图片的space路径只是历史存储前缀；复制按本次真实accepted FileID集合和安全路径映射到新空间/新FileID，发现的具体旧prefix定点读取，不扫全bucket。拒foreign FileID和路径逃逸；源对象不改。此已由移动后再次复制的真实反例闭合，不是新增通用对象迁移平台。
+
+
+HTTP部署兼容补充：本次新移动/处理确认与重试键不调用仅secure context提供的crypto.randomUUID，平台复用已有getRandomValues UUID工具，client复用既有uuid依赖；不改原幂等键生命周期，不新建通用ID框架。新面板自有generateUUID原路径保持。

@@ -1,3 +1,4 @@
+import { v4 as createOperationId } from "uuid";
 import { useCallback, useState } from "react";
 import { useMoveJobProgress } from "./useMoveJobProgress";
 
@@ -203,7 +204,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
         if (!ok || !plan.can_execute) throw new Error("move:cancelled");
       }
       if (!plan.can_execute) throw new Error("move:unavailable");
-      const key = crypto.randomUUID();
+      const key = createOperationId();
       moveProgress.remember(review, key);
       let result: Awaited<ReturnType<typeof confirmMoveFilesApi>>;
       try {

@@ -77,7 +77,7 @@ beforeEach(() => {
   sessionStorage.clear();
   Object.defineProperty(global.crypto, "randomUUID", {
     configurable: true,
-    value: () => "stable-key",
+    value: undefined,
   });
   precheck.mockResolvedValue(review);
   mockConfirm.mockResolvedValue(true);
@@ -146,7 +146,9 @@ it("same-space unknown commit survives reload with the identical opaque plan/key
   await act(async () => {
     await result.current.moveProgress.resumeConfirmation();
   });
-  expect(execute).toHaveBeenNthCalledWith(1, "10", review, "stable-key");
+  const originalKey = execute.mock.calls[0][2];
+  expect(originalKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  expect(execute).toHaveBeenNthCalledWith(1, "10", review, originalKey);
   expect(execute).toHaveBeenNthCalledWith(
     2,
     "10",
@@ -157,7 +159,7 @@ it("same-space unknown commit survives reload with the identical opaque plan/key
         plan_digest: review.precheck.plan_digest,
       },
     },
-    "stable-key",
+    originalKey,
   );
   expect(sessionStorage.length).toBe(0);
   expect(onMoved).toHaveBeenCalledTimes(1);
