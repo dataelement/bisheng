@@ -7,12 +7,10 @@ Obsolescence is returned as durable state: the owner must commit it before
 rendering the corresponding error, rather than roll it back by raising early.
 """
 
-import hashlib
-import json
 import re
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from inspect import ismethod
 from typing import Any
@@ -40,65 +38,31 @@ from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeP
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
-from bisheng.knowledge.domain.schemas.processing_job import ItemState, JobState, ProcessingKind, ResourceVersionTarget
+from bisheng.knowledge.domain.schemas.processing_job import ItemState, JobState, ProcessingKind
+from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
+    ItemLease as ItemLease,
+)
+from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
+    JobLease as JobLease,
+)
+from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
+    JobRequestResult as JobRequestResult,
+)
+from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
+    NewProcessingItem as NewProcessingItem,
+)
+from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
+    ProcessingConfiguration as ProcessingConfiguration,
+)
+from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
+    _digest as _digest,
+)
+from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
+    processing_manifest,
+    processing_request_facts,
+)
 from bisheng.knowledge.domain.services.processing_cutover_receipts import consume_cutover_receipt
 from bisheng.resource_reference.application.contracts import TransactionIdentity
-
-
-@dataclass(frozen=True)
-class ProcessingConfiguration:
-    model_config_revision: int
-    index_generation: str | None
-    metadata_schema_revision: int | None = None
-    metadata_schema_digest: str | None = None
-
-    def __post_init__(self):
-        if type(self.model_config_revision) is not int or self.model_config_revision < 0:
-            raise ValueError("model_config_revision must be a non-negative integer")
-        if self.index_generation is not None and (
-            not isinstance(self.index_generation, str) or not self.index_generation or len(self.index_generation) > 64
-        ):
-            raise ValueError("index_generation must be a nonempty stable identifier")
-        if self.metadata_schema_revision is None and self.metadata_schema_digest is None:
-            return
-        if (
-            type(self.metadata_schema_revision) is not int
-            or self.metadata_schema_revision < 0
-            or not isinstance(self.metadata_schema_digest, str)
-            or re.fullmatch(r"[0-9a-f]{64}", self.metadata_schema_digest) is None
-        ):
-            raise ValueError("metadata schema evidence requires a non-negative revision and canonical digest")
-
-
-@dataclass(frozen=True)
-class NewProcessingItem:
-    target: ResourceVersionTarget
-    expected_space_id: int
-    expected_parent_id: int | None = None
-    processing_snapshot: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class JobRequestResult:
-    job: KnowledgeProcessingJob
-    reused: bool
-
-
-@dataclass(frozen=True)
-class JobLease:
-    job_id: str
-    lease_token: str
-    claim_generation: int
-    lease_until: datetime
-
-
-@dataclass(frozen=True)
-class ItemLease:
-    job: JobLease
-    item_id: str
-    lease_token: str
-    claim_generation: int
-    lease_until: datetime
 
 
 @dataclass(frozen=True)
@@ -143,11 +107,6 @@ class TargetResetState:
 
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
-
-
-def _digest(value: Any) -> str:
-    canonical = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
@@ -573,40 +532,19 @@ class ProcessingJobRepository:
             raise ValueError("a nonempty frozen scope and non-negative settings version are required")
         if not items:
             _assert_no_pending_metadata_root(session, space_id)
-        manifest = []
-        for value in items:
-            target = ResourceVersionTarget.model_validate(value.target.model_dump(mode="json"))
-            if value.expected_space_id != space_id:
-                raise ValueError("item scope does not match the owning space")
-            manifest.append(
-                {
-                    **target.model_dump(mode="json"),
-                    "expected_space_id": value.expected_space_id,
-                    "expected_parent_id": value.expected_parent_id,
-                    "processing_snapshot": deepcopy(dict(value.processing_snapshot)),
-                }
-            )
-        manifest.sort(key=lambda value: (value["file_id"], value["version_id"], value["document_id"]))
-        if len({(value["file_id"], value["version_id"]) for value in manifest}) != len(manifest):
-            raise ValueError("duplicate file/version scope")
+        manifest = processing_manifest(space_id, items)
         payload = deepcopy(dict(parameters))
-        request_facts = {
-            "tenant_id": tenant_id,
-            "space_id": space_id,
-            "kind": kind,
-            "actor_user_id": actor_user_id,
-            "actor_reference": actor,
-            "parameters": payload,
-            "scope_manifest": manifest,
-            "model_config_revision": configuration.model_config_revision,
-            "index_generation": configuration.index_generation,
-            "space_config_version": space_config_version,
-        }
-        if kind == "metadata_schema_change":
-            request_facts.update(
-                metadata_schema_revision=configuration.metadata_schema_revision,
-                metadata_schema_digest=configuration.metadata_schema_digest,
-            )
+        request_facts = processing_request_facts(
+            tenant_id=tenant_id,
+            space_id=space_id,
+            kind=kind,
+            actor_user_id=actor_user_id,
+            actor_reference=actor,
+            parameters=payload,
+            manifest=manifest,
+            configuration=configuration,
+            space_config_version=space_config_version,
+        )
         request_hash = _digest(request_facts)
         # The verified owning resource lock serializes same-space creation;
         # the database unique key is the final cross-space collision guard.
