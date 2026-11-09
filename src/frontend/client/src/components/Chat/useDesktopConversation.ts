@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 
 declare global {
   interface Window {
-    dshChatPresentation?: { reportLanding: (landing: boolean) => void; reportKnowledgeDialog?: (open: boolean) => void; reportNavigation?: (navigation: unknown) => void; reportSettings?: (section: string) => void; requestSettingsClose?: () => void; requestSettingsFocus?: (direction: 'previous' | 'next') => void };
+    dshChatPresentation?: { reportLanding: (landing: boolean) => void; reportKnowledgeDialog?: (open: boolean) => void; reportNavigation?: (navigation: unknown) => void; reportSettings?: (section: string) => void; requestSettingsClose?: () => void; requestSettingsFocus?: (direction: 'previous' | 'next') => void; reportRunning?: (conversationIds: string[]) => void; onConversationRenamed?: (listener: (conversationId: string) => void) => () => void };
   }
 }
 

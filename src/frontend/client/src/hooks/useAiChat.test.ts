@@ -76,7 +76,7 @@ jest.mock("~/utils/mediaAttachmentUtils", () => ({
 }));
 jest.mock("uuid", () => ({ v4: () => "test-owner" }));
 jest.mock("~/hooks/useLinsightManager", () => ({
-  useLinsightManager: () => ({ createLinsight: jest.fn(), updateLinsight: jest.fn() }),
+  useLinsightManager: () => ({ createLinsight: jest.fn(), updateLinsight: jest.fn(), linsightMap: new Map() }),
 }));
 jest.mock("~/api/linsight", () => ({
   startLinsight: jest.fn().mockResolvedValue(undefined),
@@ -97,6 +97,7 @@ jest.mock("@tanstack/react-query", () => ({
 // Imported after the jest.mock calls above on purpose — the hook pulls those
 // modules in at import time.
 import useAiChat from "./useAiChat";
+import { resetDesktopConversationBridge } from "~/components/Chat/desktopConversationBridge";
 
 const historyOf = (conversationId: string) => [
   {
@@ -682,4 +683,60 @@ describe('revoked knowledge scope submission gate', () => {
         expect(result.current.messages).toEqual(originalMessages);
         expect(result.current.knowledgeAccessMessage).toBe('knowledgeAccess.revoked');
     });
+});
+
+
+describe("desktop host conversation sync", () => {
+  let renamed: ((conversationId: string) => void) | undefined;
+  const reportRunning = jest.fn();
+  beforeEach(() => {
+    resetDesktopConversationBridge();
+    reportRunning.mockClear();
+    window.sessionStorage.setItem("dsh:embedded-chat", "true");
+    window.dshChatPresentation = {
+      reportLanding: jest.fn(),
+      reportRunning,
+      onConversationRenamed: (listener) => { renamed = listener; return () => { renamed = undefined; }; },
+    };
+  });
+  afterEach(() => {
+    delete window.dshChatPresentation;
+    window.sessionStorage.clear();
+  });
+
+  it("reports an answer as running while it streams, including after switching away", async () => {
+    const { result, rerender } = renderChat("c1");
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    act(() => result.current.sendMessage("hello"));
+    const turn = latestStream();
+    act(() => turn.submission.onStart());
+    expect(reportRunning).toHaveBeenLastCalledWith(["c1"]);
+    rerender({ cid: "c2" });
+    await waitFor(() => expect(result.current.messages[0].text).toBe("c2 history"));
+    expect(reportRunning).toHaveBeenLastCalledWith(["c1"]);
+    act(() => {
+      turn.submission.onFinal({ final: true });
+      turn.submission.onEnd();
+    });
+    expect(reportRunning).toHaveBeenLastCalledWith([]);
+  });
+
+  it("rereads the open conversation's name after the host renames it", async () => {
+    mockGetSessionName.mockResolvedValue("Quarterly review");
+    const { result } = renderChat("c1");
+    await waitFor(() => expect(result.current.title).toBe("Quarterly review"));
+    mockGetSessionName.mockResolvedValue("Annual review");
+    act(() => renamed?.("c1"));
+    await waitFor(() => expect(result.current.title).toBe("Annual review"));
+    expect(mockGetSessionName).toHaveBeenLastCalledWith("c1");
+  });
+
+  it("keeps the current name when the reread fails", async () => {
+    mockGetSessionName.mockResolvedValue("Quarterly review");
+    const { result } = renderChat("c1");
+    await waitFor(() => expect(result.current.title).toBe("Quarterly review"));
+    mockGetSessionName.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => { renamed?.("c1"); });
+    expect(result.current.title).toBe("Quarterly review");
+  });
 });

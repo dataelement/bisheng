@@ -6,6 +6,7 @@ import { useLocation } from 'react-router-dom';
 import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
 import { useDesktopNavigation } from '~/components/Chat/useDesktopNavigation';
 import { useDesktopAppearance } from '~/components/Chat/useDesktopAppearance';
+import { resendConversationActivity } from '~/components/Chat/desktopConversationBridge';
 import { useWorkbenchNavLinks } from './useWorkbenchNavLinks';
 import { splitSidebarEntries, useSidebarEntries } from './WorkbenchSidebar/useSidebarEntries';
 import { usePersonalTokenEnabled } from '~/hooks/useVersionManagementEnabled';
@@ -33,5 +34,9 @@ export function DesktopShellBridge() {
   useEffect(() => {
     if (isDesktopEmbedded()) window.dshChatPresentation?.reportNavigation?.(JSON.parse(payload));
   }, [payload]);
+  // The host drops activity reported under a stale path, e.g. while /c/new becomes /c/<id>.
+  useEffect(() => {
+    resendConversationActivity();
+  }, [pathname]);
   return null;
 }
