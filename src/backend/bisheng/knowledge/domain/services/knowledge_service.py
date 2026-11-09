@@ -2831,6 +2831,8 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         knowledge_id: int,
         file_ids: list[int],
+        *,
+        batch_application=None,
     ) -> str:
         """Batch download knowledge-base files.
 
@@ -2853,6 +2855,21 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise NotFoundError(msg="knowledge not found")
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            if batch_application is None:
+                raise RuntimeError("ordinary batch application is not configured")
+            from bisheng.knowledge.domain.schemas.knowledge_batch import BatchCommand
+
+            result = await batch_application.aordinary(
+                identity=login_user,
+                space_id=knowledge_id,
+                command=BatchCommand(operation="download", items=[{"id": ident, "type": "file"} for ident in file_ids]),
+            )
+            if any(row["state"] == "failed" for row in result["items"]):
+                from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError
+
+                raise KnowledgeOperationPlanChangedError(reason="batch_download_partial_failure", result=result)
+            return result["url"]
         db_files: list[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids)
         # Keep only files that actually belong to this knowledge base
         db_files = [f for f in db_files if f.knowledge_id == knowledge_id]
@@ -2999,9 +3016,31 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def batch_add_file_tags(
-        cls, login_user: UserPayload, knowledge_id: int, file_ids: list[int], tag_ids: list[int]
+        cls,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_ids: list[int],
+        tag_ids: list[int],
+        *,
+        batch_application=None,
     ):
         """批量添加标签到文档"""
+        knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            if batch_application is None:
+                raise RuntimeError("ordinary batch application is not configured")
+            from bisheng.knowledge.domain.schemas.knowledge_batch import BatchCommand
+
+            if not file_ids or not tag_ids:
+                return
+            await batch_application.aordinary(
+                identity=login_user,
+                space_id=knowledge_id,
+                command=BatchCommand(
+                    operation="tag", items=[{"id": ident, "type": "file"} for ident in file_ids], tag_ids=tag_ids
+                ),
+            )
+            return
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
 
         await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)

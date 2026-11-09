@@ -10,6 +10,9 @@ interface SpaceDirectoryToolbarProps {
   canCreateFolder: boolean;
   onCreateFolder: () => void;
   canUpload: boolean;
+  onBatchDownload?: () => void;
+  onBatchRetry?: () => void;
+  onBatchTag?: () => void;
   selectedCount?: number;
   onDeleteSelected?: () => void;
   onReferences?: () => void;
@@ -23,6 +26,9 @@ export function SpaceDirectoryToolbar({
   canCreateFolder,
   onCreateFolder,
   canUpload,
+  onBatchDownload,
+  onBatchRetry,
+  onBatchTag,
   selectedCount = 0,
   onDeleteSelected,
   onReferences,
@@ -42,6 +48,19 @@ export function SpaceDirectoryToolbar({
   };
   return (
     <div className="flex items-center justify-end gap-3">
+      {selectedCount > 0 && (
+        <>
+          <Button variant="outlined" onClick={onBatchDownload}>
+            {t("batch.download")}
+          </Button>
+          <Button variant="outlined" onClick={onBatchTag}>
+            {t("batch.tag")}
+          </Button>
+          <Button variant="outlined" onClick={onBatchRetry}>
+            {t("batch.retry")}
+          </Button>
+        </>
+      )}
       {selectedCount > 0 && (
         <Button color="danger" variant="outlined" onClick={onDeleteSelected}>
           {t("deletion.selected")} ({selectedCount})

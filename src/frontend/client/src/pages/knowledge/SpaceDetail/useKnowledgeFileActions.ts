@@ -1,19 +1,11 @@
+import { useKnowledgeBatch } from "../hooks/useKnowledgeBatch";
+import type { BatchResult } from "~/api/knowledgeBatch";
 import { useKnowledgeDeletion } from "../hooks/useKnowledgeDeletion";
 import type { UseKnowledgeFileActionsOptions } from "./knowledgeSpaceTypes";
-import {
-  FileType,
-  type KnowledgeFile,
-  batchDownloadApi,
-  batchRetryApi,
-  getFileDownloadApi,
-} from "~/api/knowledge";
+import { FileType, type KnowledgeFile, getFileDownloadApi } from "~/api/knowledge";
 import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
 import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
-import {
-  isKnowledgeItemRetryable,
-  isKnowledgeItemUploading,
-  triggerUrlDownload,
-} from "../knowledgeUtils";
+import { isKnowledgeItemUploading, triggerUrlDownload } from "../knowledgeUtils";
 import { getFullWidthLength } from "~/utils";
 export function useKnowledgeFileActions({
   localize,
@@ -36,46 +28,31 @@ export function useKnowledgeFileActions({
   onDeleteFile,
   onEditTags,
 }: UseKnowledgeFileActionsOptions) {
+  const batch = useKnowledgeBatch(JSON.stringify([space.id, deletionScopeKey]));
+  const runOrdinaryBatch = async (operation: "download" | "retry", items: typeof selectedList) => {
+    const result = await batch.open({
+      spaceId: Number(space.id),
+      operation,
+      items: items.map((file) => ({
+        id: Number(file.id),
+        type: file.type === FileType.FOLDER ? "folder" : "file",
+        name: file.name,
+      })),
+    });
+    if (result && operation === "retry") {
+      const accepted = new Set(
+        result.items
+          .filter((item) => ["succeeded", "accepted", "running"].includes(item.state))
+          .map((item) => String(item.id)),
+      );
+      setSelectedFiles((old) => new Set([...old].filter((id) => !accepted.has(id))));
+      onDeleteFile("");
+      dispatchKnowledgeSpaceFilesRefresh(space.id);
+    }
+    return result;
+  };
   const handleBatchDownload = async () => {
-    const selectedList = displayFiles.filter((f) => selectedFiles.has(f.id));
-    const canDownloadSelected =
-      selectedList.length > 0 && selectedList.every((file) => downloadEntryIds.has(file.id));
-    if (!canDownloadSelected) {
-      showToast({
-        message: localize("com_knowledge.download_failed"),
-        status: "warning",
-      });
-      return;
-    }
-    const fileIds = selectedList.filter((f) => f.type !== FileType.FOLDER).map((f) => Number(f.id));
-    const folderIds = selectedList
-      .filter((f) => f.type === FileType.FOLDER)
-      .map((f) => Number(f.id));
-    try {
-      const url = await batchDownloadApi(space.id, {
-        file_ids: fileIds.length ? fileIds : undefined,
-        folder_ids: folderIds.length ? folderIds : undefined,
-      });
-      if (!url) {
-        showToast({
-          message: localize("com_knowledge.get_download_link_failed"),
-          status: "warning",
-        });
-        return;
-      }
-      const now = new Date();
-      const dateStr =
-        String(now.getFullYear()) +
-        String(now.getMonth() + 1).padStart(2, "0") +
-        String(now.getDate()).padStart(2, "0");
-      const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
-      triggerUrlDownload(url, `${dateStr}_${randomStr}.zip`);
-    } catch {
-      showToast({
-        message: localize("com_knowledge.download_failed"),
-        status: "warning",
-      });
-    }
+    await runOrdinaryBatch("download", selectedList);
   };
 
   const handleBatchTag = () => {
@@ -128,18 +105,7 @@ export function useKnowledgeFileActions({
     }
     try {
       if (isFolder) {
-        // Folders must use batch download (returns zip)
-        const url = await batchDownloadApi(space.id, {
-          folder_ids: [Number(fileId)],
-        });
-        if (!url) {
-          showToast({
-            message: localize("com_knowledge.get_download_link_failed"),
-            status: "warning",
-          });
-          return;
-        }
-        triggerUrlDownload(url, `${file?.name ?? "folder"}.zip`);
+        if (file) await runOrdinaryBatch("download", [file]);
       } else {
         // Single file: use preview_url for channel files, original_url for others
         const downloadData = await getFileDownloadApi(String(space.id), fileId);
@@ -259,45 +225,20 @@ export function useKnowledgeFileActions({
   };
 
   const handleBatchRetry = async () => {
-    // Find selected files/folders that have an abnormal status or descendant.
-    const retryIds = displayFiles
-      .filter((f) => selectedFiles.has(f.id) && isKnowledgeItemRetryable(f))
-      .map((f) => Number(f.id));
-
-    if (retryIds.length === 0) return;
-
-    try {
-      await batchRetryApi(space.id, retryIds);
-      showToast({
-        message: localize("com_knowledge.batch_retry_started"),
-        status: "success",
-      });
-      setSelectedFiles(new Set());
-      // Refresh list
-      onDeleteFile("");
-    } catch {
-      showToast({
-        message: localize("com_knowledge.batch_retry_failed"),
-        status: "warning",
-      });
-    }
+    await runOrdinaryBatch("retry", selectedList);
   };
-
   const handleSingleRetry = async (fileId: string) => {
-    try {
-      await batchRetryApi(space.id, [Number(fileId)]);
-      showToast({
-        message: localize("com_knowledge.retry_started"),
-        status: "success",
-      });
-      // Refresh list
-      onDeleteFile("");
-    } catch {
-      showToast({
-        message: localize("com_knowledge.retry_failed"),
-        status: "warning",
-      });
-    }
+    const file = displayFiles.find((file) => file.id === fileId);
+    if (file) await runOrdinaryBatch("retry", [file]);
+  };
+  const handleBatchTagsSaved = (result: BatchResult) => {
+    const changed = new Set(
+      result.items.filter((item) => item.state === "succeeded").map((item) => String(item.id)),
+    );
+    setSelectedFiles((old) => new Set([...old].filter((id) => !changed.has(id))));
+    setEditingTagsFileId(null);
+    setIsBatchTagging(false);
+    onEditTags("");
   };
 
   const validateFileName = (
@@ -331,6 +272,8 @@ export function useKnowledgeFileActions({
   };
 
   return {
+    batch,
+    handleBatchTagsSaved,
     deletion,
     handleClearSpace,
     handleReferences,
