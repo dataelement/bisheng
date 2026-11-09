@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import or_
 from sqlmodel import select
 
+from bisheng.dsh.domain.models.model_audit_feedback import DshModelAuditFeedbackRetraction as Retraction
 from bisheng.dsh.domain.models.model_audit_feedback import DshModelAuditMessageFeedback as Feedback
 from bisheng.dsh.domain.models.model_audit_request import DshModelAuditRequest as Request
 from bisheng.dsh.domain.repositories.admin_operation import require_tenant
@@ -19,7 +20,7 @@ def _same(row, command) -> bool:
 class DshModelAuditFeedbackRepository(DshModelAuditSettingRepository):
     def apply_feedback(self, user_id, command):
         tenant = require_tenant()
-        mode = self._row(lock=True)
+        mode = self.lock_retention()
         key = conversation_key(tenant, user_id, command.conversation_id)
         statement = select(Request.conversation_id).where(
             Request.tenant_id == tenant, Request.user_id == user_id, Request.conversation_key == key
@@ -56,25 +57,55 @@ class DshModelAuditFeedbackRepository(DshModelAuditSettingRepository):
         ).one_or_none()
         if row is not None and (row.user_id, row.conversation_id) != (user_id, command.conversation_id):
             raise ValueError("Audit feedback binding mismatch")
+        retraction = self.session.exec(
+            select(Retraction)
+            .where(
+                Retraction.tenant_id == tenant,
+                Retraction.conversation_key == key,
+                Retraction.message_id == command.message_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).one_or_none()
+        if retraction is not None and (retraction.user_id, retraction.conversation_id) != (
+            user_id,
+            command.conversation_id,
+        ):
+            raise ValueError("Audit feedback retraction binding mismatch")
+        if row is not None and retraction is not None:
+            raise ValueError("Audit feedback has conflicting states")
+        current = row if row is not None else retraction
+        if current is not None:
+            if command.event_seq < current.event_seq:
+                return {"status": "STALE", "event_seq": current.event_seq}
+            if command.event_seq == current.event_seq:
+                same = (
+                    (command.op == "delete")
+                    if retraction is not None
+                    else (command.op == "put" and _same(row, command))
+                )
+                return {"status": "UNCHANGED" if same else "CONFLICT", "event_seq": current.event_seq}
         if command.op == "delete":
-            if row is None:
-                return {"status": "UNCHANGED", "event_seq": command.event_seq}
-            if command.event_seq < row.event_seq:
-                return {"status": "STALE", "event_seq": row.event_seq}
-            if command.event_seq == row.event_seq:
-                return {"status": "CONFLICT", "event_seq": row.event_seq}
-            self.session.delete(row)
+            # The tenant settings row lock serializes even a first, absent-message
+            # deletion. Keep its watermark in the same transaction as the removal.
+            if retraction is None:
+                retraction = Retraction(
+                    conversation_key=key,
+                    message_id=command.message_id,
+                    tenant_id=tenant,
+                    user_id=user_id,
+                    conversation_id=command.conversation_id,
+                )
+            retraction.event_seq = command.event_seq
+            retraction.received_at = datetime.now(UTC).replace(tzinfo=None)
+            self.session.add(retraction)
+            if row is not None:
+                self.session.delete(row)
             self.session.flush()
-            return {"status": "UPDATED", "event_seq": command.event_seq}
-        if row is not None:
-            if command.event_seq < row.event_seq:
-                return {"status": "STALE", "event_seq": row.event_seq}
-            if command.event_seq == row.event_seq:
-                return {
-                    "status": "UNCHANGED" if _same(row, command) else "CONFLICT",
-                    "event_seq": row.event_seq,
-                }
-        else:
+            return {"status": "UPDATED" if row is not None else "UNCHANGED", "event_seq": command.event_seq}
+        if retraction is not None:
+            self.session.delete(retraction)
+        if row is None:
             row = Feedback(
                 conversation_key=key,
                 message_id=command.message_id,

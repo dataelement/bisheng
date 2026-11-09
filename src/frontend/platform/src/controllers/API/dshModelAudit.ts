@@ -21,7 +21,7 @@ import type {
 const base = "/api/v1/dsh/admin/model-audit";
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
-const nonnegative = (value: unknown) =>
+const nonnegative = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 const feedbackCategories = [
   "task-result",

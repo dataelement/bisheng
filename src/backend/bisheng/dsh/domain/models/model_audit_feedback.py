@@ -19,6 +19,20 @@ _CATEGORIES = (
 )
 
 
+class DshModelAuditFeedbackRetraction(SQLModelSerializable, table=True):
+    """Deletion watermarks retain ordering without retaining the removed feedback."""
+
+    __tablename__ = "dsh_model_audit_feedback_retraction"
+
+    conversation_key: str = Field(sa_column=Column(String(64), primary_key=True))
+    message_id: str = Field(sa_column=Column(String(256), primary_key=True))
+    tenant_id: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=False, index=True))
+    user_id: int = Field(sa_column=Column(BigInteger, nullable=False))
+    conversation_id: str = Field(sa_column=Column(String(256), nullable=False))
+    event_seq: int = Field(sa_column=Column(BigInteger, nullable=False))
+    received_at: datetime = Field(sa_column=Column(PreciseDateTime(), nullable=False))
+
+
 class DshModelAuditMessageFeedback(SQLModelSerializable, table=True):
     __tablename__ = "dsh_model_audit_message_feedback"
     __table_args__ = (

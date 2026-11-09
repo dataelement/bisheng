@@ -15,7 +15,10 @@ from bisheng.core.database import tenant_filter
 from bisheng.dsh.domain.models import model_audit_content, model_audit_request, model_audit_setting
 from bisheng.dsh.domain.models.content_safety_event import DshContentSafetyEvent
 from bisheng.dsh.domain.models.model_audit_conversation import DshModelAuditConversation
-from bisheng.dsh.domain.models.model_audit_feedback import DshModelAuditMessageFeedback
+from bisheng.dsh.domain.models.model_audit_feedback import (
+    DshModelAuditFeedbackRetraction,
+    DshModelAuditMessageFeedback,
+)
 from bisheng.dsh.domain.models.model_audit_title import DshModelAuditConversationTitle
 from bisheng.dsh.domain.models.model_audit_tree import DshAuditTreeNode, DshAuditTreePath, DshAuditTreeState
 from bisheng.dsh.infrastructure.model_audit_body_buffer import AuditBodyBuffer
@@ -26,6 +29,7 @@ AUDIT_MODELS = (
     DshContentSafetyEvent,
     DshModelAuditConversationTitle,
     DshModelAuditMessageFeedback,
+    DshModelAuditFeedbackRetraction,
     DshAuditTreeState,
     DshAuditTreeNode,
     DshAuditTreePath,

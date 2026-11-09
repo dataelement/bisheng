@@ -59,9 +59,12 @@ async def test_feedback_orders_retraction_and_counts():
         created = await client.post(PATH, headers=USER, json=UPDATE)
         assert created.status_code == 200
         assert created.json() == {"status": "UPDATED", "event_seq": 12}
-        second = {
-            key: value for key, value in UPDATE.items() if key != "note"
-        } | {"message_id": "msg-2", "event_seq": 21, "rating": "negative", "category": "other"}
+        second = {key: value for key, value in UPDATE.items() if key != "note"} | {
+            "message_id": "msg-2",
+            "event_seq": 21,
+            "rating": "negative",
+            "category": "other",
+        }
         assert (await client.post(PATH, headers=USER, json=second)).json() == {
             "status": "UPDATED",
             "event_seq": 21,
@@ -132,6 +135,52 @@ def select_feedback(repository):
     from sqlmodel import select
 
     return select(Feedback)
+
+
+@pytest.mark.parametrize("put_first", [False, True])
+async def test_retraction_watermark_rejects_replayed_feedback_and_allows_newer_rating(put_first):
+    """Retraction order survives transactions, including delete-before-put delivery."""
+    async with fixture("METADATA") as (harness, client, _objects):
+        install(harness)
+        await call(client, audit_context={"conversation_id": UPDATE["conversation_id"]})
+        await harness.drain()
+        if put_first:
+            assert (await client.post(PATH, headers=USER, json=UPDATE)).json()["status"] == "UPDATED"
+        deletion = {
+            "conversation_id": UPDATE["conversation_id"],
+            "message_id": UPDATE["message_id"],
+            "event_seq": 14,
+            "op": "delete",
+        }
+        assert (await client.post(PATH, headers=USER, json=deletion)).json() == {
+            "status": "UPDATED" if put_first else "UNCHANGED",
+            "event_seq": 14,
+        }
+        assert (await client.post(PATH, headers=USER, json=deletion)).json() == {
+            "status": "UNCHANGED",
+            "event_seq": 14,
+        }
+        for seq, expected in [(12, "STALE"), (14, "CONFLICT")]:
+            assert (await client.post(PATH, headers=USER, json={**UPDATE, "event_seq": seq})).json() == {
+                "status": expected,
+                "event_seq": 14,
+            }
+        # Inspect a fresh transaction: neither counts nor detail may expose a retraction.
+        with harness.scope(Query) as repository:
+            finish(repository)
+            item = repository.group_page()["items"][0]
+            assert (item["like_count"], item["dislike_count"]) == (0, 0)
+            assert repository.feedback_for(item["conversation_key"], item["user_id"], item["conversation_id"]) == []
+            assert repository.session.exec(select_feedback(repository)).all() == []
+        newer = {**UPDATE, "event_seq": 15, "rating": "negative"}
+        assert (await client.post(PATH, headers=USER, json=newer)).json() == {"status": "UPDATED", "event_seq": 15}
+        assert (await client.post(PATH, headers=USER, json=deletion)).json() == {"status": "STALE", "event_seq": 15}
+        assert (await client.post(PATH, headers=USER, json=newer)).json()["status"] == "UNCHANGED"
+        with harness.scope(Query) as repository:
+            finish(repository)
+            item = repository.group_page()["items"][0]
+            assert (item["like_count"], item["dislike_count"]) == (0, 1)
+        assert harness.calls == 1
 
 
 @pytest.mark.parametrize(
