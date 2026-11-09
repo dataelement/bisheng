@@ -230,3 +230,39 @@ async def test_missing_native_session_is_not_a_compatibility_fallback(impact):
     _, service, _ = impact
     with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
         await service.ainspect_removed_models(object(), identity=user, server_id=1, retained_model_ids=())
+
+
+@pytest.mark.parametrize("mode", ["replace", "nested", "tenant"])
+async def test_later_disclosure_batch_still_uses_the_first_lock_pin(impact, monkeypatch, mode):
+    session, service, _ = impact
+    owner = sources.metadata(service)
+    for index in range(401):
+        sources.seed(session, ident=f"batch-{index:03}")
+    await session.commit()
+    await session.execute(select(Tenant.id).limit(1))
+    change = Drift(session, mode)
+    after_call(monkeypatch, service.disclosure_runtime, "adisclose_sources", change, ordinal=2)
+    try:
+        with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
+            await sources.first(impact, user)
+        assert change.changed and [len(batch) for batch in owner.calls] == [200, 200]
+    finally:
+        change.restore()
+
+
+async def test_fresh_session_cannot_replace_the_naturally_started_transaction_at_tail(impact, monkeypatch):
+    session, service, _ = impact
+    await prepare(impact)
+    await session.commit()
+    async with AsyncSession(session.bind, expire_on_commit=False) as active:
+        assert not active.in_transaction()
+        ledger = original.SqlLedger(active)
+        from bisheng.resource_reference.domain.repositories.coverage_repository import CoverageRepository
+
+        service.coverage_factory = lambda _: CoverageRepository(ledger, global_port=ledger)
+        fresh = active, service, ledger
+        change = Drift(active, "replace")
+        install(monkeypatch, fresh, "global_tail", change)
+        with original.actor() as user, pytest.raises(ReferenceCoverageNotReadyError):
+            await sources.first(fresh, user)
+        assert change.changed
