@@ -1,6 +1,6 @@
 # 技术设计：文档知识库与知识空间统一
 
-**状态**：✅ 已评审；spec 和技术设计已确认，2026-11-05 用户授权按依赖多agent并行开发。实施入口见 [tasks.md](./tasks.md) 与 [parallel-development.md](./parallel-development.md)；W0/W1核心及W2保存/删除接线已实施，当前状态见§15。本文明确区分源码事实与拟议变更。\
+**状态**：✅ 已评审；spec 和技术设计已确认。按2026-11-10用户顺序先完成功能，再统一整体测试；当前整链交付见§15.11及[W6实施记录](./wave6-implementation-review.md)，历史日期段落只保留当时证据，不代表当前待办。\
 **目标版本 / 编号**：v3.1.0-beta1 / F118（暂定）\
 **日期**：2026-11-03\
 **需求**：[spec.md](./spec.md)（94 条 AC） · [版本契约草案](../release-contract.md)\
@@ -909,3 +909,13 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 2026-11-09公共检索补正：SPACE3以真实File→唯一Version→Document主指针正向证明成功主版本，未登记、错归属或坏指针不回退旧索引；原子项visible、原IN/NOTIN/none结果层防线及历史delivery不变，NORMAL0/QA1保持原规则。固定0fdda0e87c与精确旧fixture补正c9ad73cb6e的14调用方142项本地通过；401/10001候选各3/51 SELECT、max208参数，无版本表全扫。此非数据转换或环境E2E证据。
 
 整链实施合同补充（2026-11-09）：原M3权限发布按W6§125通过原Run走完整Store对账、资源SQL、固定pin差集及最后CURRENT切换；移动按§126接原EXECUTE_TASK与新明确确认/查询链，P1长批次以原compact lease续租，禁止每项全Scope。模型删除按§127使用原KnowledgeOperationPlan新增3个可NULL执行字段及provider围栏索引（先中性DDL），内部provider分享/prepare reservation与删除消费同表原子handoff，FGA期间SQL关闭；原确认hash不变，PUT恢复重交原DTO且hash一致，绝不保存credentials。代码实现及环境验收仍进行中，不能将合同冻结计为业务完成。
+
+## 15.11 功能优先收口（2026-11-10）
+
+全平台权限发布、正式M2→M3→M4及六来源回填/Coverage/CLI已集成，实际入口见[升级说明§3.1](./upgrade-guide.md#31-已实现的执行入口2026-11-10)。权限和引用来自同一停服后冻结图；新租户空业务证明与签证同事务。中性DDL保持单head `f118_knowledge_delete_execution`，原删除Job新增列可NULL且不回填。正式升级演练尚未执行；正常业务删除留下空来源索引的迁移边界仍在定点收口，不用“零引用”直接判ready。
+
+知识/模型影响查询和普通、强制删除及两端确认页面已接原Plan/SourceOwner/覆盖检查。文件和文件夹不支持force；空间强删保留入向失效引用和配置原ID。混合内容删除先按原delete动作分类：无权项只返回提交ID、类型及no_permission，不查询名称或来源；确认时重验完整选择的授权分类，变化需重新确认。client文件删除使用只读动作probe取得真实tenant pin，不把Root.visible或“每项都有delete”增加为整批预检门槛。实际引用检查仍只核授权范围，未授权范围不被当作零引用放行。
+
+删除执行仍为短事务预留→原F048投影→短事务SQL/绑定/tombstone finalize→持久清理。旧文档和历史Version入口进入同业务应用，保原响应/审计和QA独立路径；历史版本不因主版本切换扩大删除范围。只对选择位置集合建立一次索引，避免批量有效子集选择中的重复全量构造。
+
+保存的知识、模型及系统默认ID是权威配置，候选列表只用于新选择。缺候选保留原类型/值并展示未确认或真实失效状态，禁止自动清空或选第一项；assistant保存保全原knowledge_ids，保存后重新取得权威详情。候选沿普通visible分页，按身份、租户及管理pin隔离；纯可见授权展示且沿原Source移除入口撤销，不授予其他动作。复制/处理页面与非删除批量操作按W6合同并行完成，整体回归、升级/恢复及E2E等功能齐备后统一执行。无关优化见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
