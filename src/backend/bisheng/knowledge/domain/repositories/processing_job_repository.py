@@ -24,6 +24,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeIdempotencyConflictError,
+    KnowledgeOperationPlanConflictError,
     KnowledgeProcessingConflictError,
     KnowledgeProcessingJobNotFoundError,
     KnowledgeProcessingJobNotRetryableError,
@@ -252,8 +253,44 @@ async def _consume_metadata_completion(
 
 
 class ProcessingJobRepository:
-    def __init__(self, *, clock: Callable[[], datetime] = _utc_now):
+    def __init__(self, *, clock: Callable[[], datetime] = _utc_now, move_jobs=None):
         self.clock = clock
+        self.move_jobs = move_jobs
+
+    async def aget_move_request(
+        self, session, *, source_space_id, confirmation_id, plan_digest, idempotency_key, actor_user_id, actor_reference
+    ):
+        if self.move_jobs is None:
+            raise KnowledgeOperationPlanConflictError(reason="move_acceptance_not_configured")
+        return await self.move_jobs.aget_move_request(
+            session,
+            source_space_id=source_space_id,
+            confirmation_id=confirmation_id,
+            plan_digest=plan_digest,
+            idempotency_key=idempotency_key,
+            actor_user_id=actor_user_id,
+            actor_reference=actor_reference,
+        )
+
+    async def acreate_move_reserved(
+        self, session, *, source_space_id, confirmation_id, plan_digest, idempotency_key, actor_user_id, actor_reference
+    ):
+        if self.move_jobs is None:
+            raise KnowledgeOperationPlanConflictError(reason="move_acceptance_not_configured")
+        return await self.move_jobs.acreate_move_reserved(
+            session,
+            source_space_id=source_space_id,
+            confirmation_id=confirmation_id,
+            plan_digest=plan_digest,
+            idempotency_key=idempotency_key,
+            actor_user_id=actor_user_id,
+            actor_reference=actor_reference,
+        )
+
+    async def aoperator_membership(self, session, *, job_id, operator_ids):
+        if self.move_jobs is None:
+            raise KnowledgeOperationPlanConflictError(reason="move_acceptance_not_configured")
+        return await self.move_jobs.aoperator_membership(session, job_id=job_id, operator_ids=operator_ids)
 
     def _now(self) -> datetime:
         value = self.clock()
@@ -522,6 +559,8 @@ class ProcessingJobRepository:
     ) -> JobRequestResult:
         tenant_id = self._tenant_id()
         kind = ProcessingKind(kind).value
+        if kind == "move_index":
+            raise KnowledgeOperationPlanConflictError(reason="move_reservation_required")
         idempotency_key = self._key(idempotency_key)
         actor = self._actor(actor_user_id, actor_reference)
         if (
