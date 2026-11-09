@@ -253,9 +253,18 @@ async def _consume_metadata_completion(
 
 
 class ProcessingJobRepository:
-    def __init__(self, *, clock: Callable[[], datetime] = _utc_now, move_jobs=None):
+    def __init__(self, *, clock: Callable[[], datetime] = _utc_now, move_jobs=None, move_ready=None):
         self.clock = clock
         self.move_jobs = move_jobs
+        self.move_ready = move_ready
+
+    def _move_ready(self):
+        if self.move_ready is None:
+            raise KnowledgeOperationPlanConflictError(reason="move_ready_not_configured")
+        return self.move_ready
+
+    async def amark_move_ready(self, session, *, logical_receipt, lease):
+        return await self._move_ready().amark_move_ready(session, logical_receipt=logical_receipt, lease=lease)
 
     async def aget_move_request(
         self, session, *, source_space_id, confirmation_id, plan_digest, idempotency_key, actor_user_id, actor_reference
@@ -334,7 +343,7 @@ class ProcessingJobRepository:
         statement = select(KnowledgeProcessingJob).where(KnowledgeProcessingJob.id == job_id)
         if not include_manifest:
             cached = session.identity_map.get(inspect(KnowledgeProcessingJob).identity_key_from_primary_key((job_id,)))
-            if cached is not None and inspect(cached).dict.get("kind") == "metadata_schema_change":
+            if cached is not None and inspect(cached).dict.get("kind") in {"metadata_schema_change", "move_index"}:
                 # A prior query may have loaded the manifest in this Session.
                 # Expire only that immutable execution-irrelevant attribute so
                 # the explicit raiseload option cannot reuse its cached JSON.
@@ -347,9 +356,9 @@ class ProcessingJobRepository:
             row = (await session.exec(statement)).one_or_none()
         if row is None or row.tenant_id != tenant_id:
             raise KnowledgeProcessingJobNotFoundError()
-        if not include_manifest and row.kind != "metadata_schema_change":
-            # Existing kinds retain their complete historical manifest. Only
-            # metadata uses the explicit bounded execution representation.
+        if not include_manifest and row.kind not in {"metadata_schema_change", "move_index"}:
+            # Other kinds retain their complete historical manifest. Metadata
+            # and move execute from their explicitly bounded representations.
             with strict_tenant_filter():
                 await session.refresh(row, attribute_names=["scope_manifest"])
         return row
@@ -777,6 +786,8 @@ class ProcessingJobRepository:
         job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease):
             return None
+        if job.kind == "move_index":
+            self._move_ready().require_job_ready(job)
         if not self._check_configuration(job, configuration):
             await session.flush()
             return None
@@ -786,7 +797,7 @@ class ProcessingJobRepository:
             KnowledgeProcessingItem.job_id == job.id,
             KnowledgeProcessingItem.state.in_(["pending", "running"]),
         )
-        if job.kind == "metadata_schema_change":
+        if job.kind in {"metadata_schema_change", "move_index"}:
             query = query.where(
                 or_(
                     KnowledgeProcessingItem.state == "pending",
@@ -806,6 +817,8 @@ class ProcessingJobRepository:
                 raise KnowledgeProcessingJobNotFoundError()
             if row.state == "running" and row.lease_until is not None and row.lease_until > now:
                 continue
+            if job.kind == "move_index":
+                self._move_ready().require_item_ready(job, row)
             row.state = "running"
             row.attempt += 1
             row.claim_generation += 1
@@ -835,9 +848,13 @@ class ProcessingJobRepository:
         job = await self._job(session, lease.job.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease.job):
             return None
+        if job.kind == "move_index":
+            self._move_ready().require_job_ready(job)
         row = await self._item(session, job, lease.item_id)
         if not self._active_item_lease(row, lease):
             return None
+        if job.kind == "move_index":
+            self._move_ready().require_item_ready(job, row)
         if not self._check_configuration(job, configuration):
             await session.flush()
             return None
@@ -859,7 +876,9 @@ class ProcessingJobRepository:
         guarded = await self._guard_item(session, lease, configuration)
         if guarded is None:
             return False
-        _, row = guarded
+        job, row = guarded
+        if job.kind == "move_index":
+            value = self._move_ready().preserve_checkpoint(row, value)
         row.step, row.checkpoint, row.update_time = step, value, self._now()
         await session.flush()
         return True
@@ -898,7 +917,9 @@ class ProcessingJobRepository:
     async def _item_counts(self, session: AsyncSession, job: KnowledgeProcessingJob) -> dict[str, int]:
         counts = await self._state_counts(session, job.id)
         total = sum(counts.values())
-        expected_count = job.total_count if job.kind == "metadata_schema_change" else len(job.scope_manifest)
+        expected_count = (
+            job.total_count if job.kind in {"metadata_schema_change", "move_index"} else len(job.scope_manifest)
+        )
         if total != expected_count:
             raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
         return counts
@@ -917,7 +938,7 @@ class ProcessingJobRepository:
             job = (await session.execute(query)).one_or_none()
         if job is None or job.tenant_id != self._tenant_id():
             raise KnowledgeProcessingJobNotFoundError()
-        if job.kind == "metadata_schema_change":
+        if job.kind in {"metadata_schema_change", "move_index"}:
             expected_count = job.total_count
         else:
             with strict_tenant_filter():
@@ -1109,7 +1130,7 @@ class ProcessingJobRepository:
             return job
         else:
             unfinished_query = select(KnowledgeProcessingItem)
-            if job.kind == "metadata_schema_change":
+            if job.kind in {"metadata_schema_change", "move_index"}:
                 unfinished_query = unfinished_query.options(
                     defer(KnowledgeProcessingItem.processing_snapshot, raiseload=True)
                 )
@@ -1148,6 +1169,8 @@ class ProcessingJobRepository:
         job = await self._job(session, lease.job_id, lock=True, include_manifest=False)
         if not self._active_job_lease(job, lease):
             return None
+        if job.kind == "move_index":
+            self._move_ready().require_job_ready(job)
         if not self._check_configuration(job, configuration):
             await session.flush()
             return job
