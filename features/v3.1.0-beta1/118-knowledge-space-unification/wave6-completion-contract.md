@@ -1666,3 +1666,8 @@ Plan完整batch metadata仅常数次建/核索引和阶段写，禁止每批重�
 ## 128. 知识引用业务检查的实际入向资格：已冻结
 
 Root负责原T103–T110知识检查/展示至删除业务链，不新增helper任务编号。直接文件/文件夹范围复用真实D1 Scope及D2 Query，space整体绑定不进入文件范围；任何folder实际涵盖版本的直接有效引用阻断整项，所有Source配置保持。既有D2完整流还须逐raw行核target_tenant_id精确等已签Owner及target_space_id等实际空间，非legacy行的unknown/NULL/foreign/stale metadata必须10994 failclosed，不以Source ready+同revision替代完整target资格，也不能force越过。原完整legacy missing bundle则沿既有D2保留为阻断事实，owner未知不猜测/改写，不将这种原已确认的事实误改成Coverage故障；部分/非法bundle仍拒。这些facts不授予删除许可，也不恢复失效引用。只核exact删除范围，范围外既有invalid不触碰；允许原跨Source租户计数/无权只数量的披露规则，不新增Source租户等Owner的门。此校验每行O(1)，完整receipt/Scope只固定次数，无逐行目标重读或Source业务JSON扫描。后继真实知识引用Service必须经当前业务目标delete动作和来源应用批量披露，closed目标SQL后再展示，不能让这些内部facts成为授权或把无权来源名称写公共DTO。
+
+
+#### §126 补充：实际 move 查询接线与默认列表边界（已冻结）
+
+原处理列表 kind=None 仅选普通四kind（embedding_rebuild/file_reprocess/file_resplit/metadata_schema_change），Repo新增可选 ordinary_only=False 保持原默认，Service仅默认列表显式传True；COUNT及分页同一谓词，不先分页再剔除，不增加kind探测SQL。此单一读谓词的SELECT字节改变已接受，普通结果/SQL数量及原执行内核黄金值保持。显式 kind=move_index 的list/get/items/retry进入原typed actor当前权限的Move Access；kind只是路由提示，真实Job.kind、来源/目标、租户、参与者及逐项可见性仍校验，不将候选总数作为可见总数。统一前端面板后继须显式查询move类别。不得借本读路由开放copy或把旧skip_invalid=True直接传入内部全有效MoveOwner。

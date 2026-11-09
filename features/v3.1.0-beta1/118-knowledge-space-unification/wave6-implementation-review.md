@@ -614,3 +614,10 @@ RRT fixed27aa5359e990已Root完整读两生产diff，normalmerge d0c6e3872d；�
 原T103–T110业务链检查发现D2原raw flow只核Source ready/revision，未核非legacy target owner/space。官方25716首5红/37控制中，2项把完整既有legacy误当数据错误的oracle不符合原已确认行为；首次实现也使原legacy保留控制失败，已撤回该范围扩张并保持原旧断言。完整legacy（含owner未知）仍保留阻断事实、不猜/改owner、不恢复失效引用；仅非legacy owner/space漂移及非法部分bundle拒。生产仍同Scope/receipt，逐行O(1)，无额外SQL/跨源扫描。
 
 精确修正的新3红+3legacy控制，用git原HEAD源码/tmp独立加载实证0.55s（f118-delete-inbound-metadata-red-corrected），其余36已由首原选集控制，不冒称全部红。最终D1/D2四实际路径99 passed/6.68s，/private/tmp/f118-delete-inbound-metadata-corrected.log及XML，含401/10001预算；旧legacy保留、foreign Source只数量等全部原断言保持。原T103–T110仍按业务入口/删除投影/恢复完整验收，不将此校验单独计为完成。
+
+
+### 实际移动 HTTP 与原 Worker 整链集成（2026-11-09）
+
+c666adc6915e0312a77e5dac4710028447ad524c 经Root完整17文件diff生产链复查后normalmerge 1666d7ea27。主功能树实际HTTP/原任务/默认混合列表/普通执行黄金值/长P1进度/事务尾九路径62 passed/16.30s，证据 /private/tmp/f118-root-move-chain-integrated.log 及同名XML。作者固定组合657 passed、21个慢规模项排除；401/10001另测2通过，完整预算见 /private/tmp/f118-fullchain-fixed-evidence.md。此非最新全特性全选集或部署E2E。
+
+新显式预检确认到原EXECUTE_TASK、实际P1/K1/R2/Ready、原index adapter、durable target_verified/source_cleaned及五标量ACK、query/retry已接通；原同步移动/skip_invalid外层分类与同空间语义、源空间删除输入保护仍待业务闭合。默认list仅普通四kind，COUNT与page同谓词；这是读列表SQL字节的明确例外，原执行49/49/49/38黄金值保持。未据本次整合提前关闭T073–094；原137队列仍44完成、93待办，按整卡条件验收。
