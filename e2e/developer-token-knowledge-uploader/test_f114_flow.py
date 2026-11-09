@@ -162,9 +162,12 @@ def f114_sync_prep(f114_prep: dict[str, int]) -> dict[str, Any]:
     }
 
 
-def test_tc_f114_adm_01_create_token_without_uploader_rejected():
-    """TC-F114-ADM-01: POST admin developer-tokens without knowledge_uploader_user_id → 校验失败。"""
+def test_tc_f114_adm_01_create_token_without_uploader_allowed():
+    """TC-F114-ADM-01: knowledge uploader is optional on create."""
+    from sqlalchemy import text
+
     name = PREFIX + "adm01-" + uuid.uuid4().hex[:8]
+    token_id: int | None = None
     with _admin_client() as client:
         resp = client.post(
             "/api/v1/admin/developer-tokens",
@@ -174,14 +177,25 @@ def test_tc_f114_adm_01_create_token_without_uploader_rejected():
                 "enabled": True,
                 "override_ip_whitelist": False,
                 "override_rate_limit": False,
-                # intentional: no knowledge_uploader_user_id
             },
         )
-    # RequestValidationError: 全局处理器用 HTTP 200 包一层, 业务层 status_code=422 (与 main.handle_request_validation_error 一致)
-    assert resp.status_code == 200, resp.text[:500]
-    body = resp.json()
-    assert body.get("status_code") == 422, body
-    assert body.get("status_message") is not None
+        body = _api_envelope(resp)
+        token_id = int(body["data"]["token"]["id"])
+        assert body["data"]["token"].get("knowledge_uploader_user_id") is None
+    try:
+        with _engine().connect() as conn:
+            row = conn.execute(
+                text(
+                    "SELECT knowledge_uploader_user_id FROM developer_token WHERE id = :id",
+                ),
+                {"id": token_id},
+            ).one()
+        assert row.knowledge_uploader_user_id is None
+    finally:
+        if token_id is not None:
+            with _engine().connect() as conn:
+                conn.execute(text("DELETE FROM developer_token WHERE id = :id"), {"id": token_id})
+                conn.commit()
 
 
 def test_tc_f114_api_01_upload_records_uploader_not_bind_user(f114_prep: dict[str, int]):

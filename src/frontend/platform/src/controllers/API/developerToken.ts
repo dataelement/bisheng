@@ -117,7 +117,7 @@ export interface DeveloperTokenRecord {
   tenant_name?: string | null
   user_id: number
   user_name?: string | null
-  knowledge_uploader_user_id: number
+  knowledge_uploader_user_id?: number | null
   knowledge_uploader_user_name?: string | null
   name: string
   token_prefix: string
@@ -149,7 +149,7 @@ export interface DeveloperTokenPage {
 export interface DeveloperTokenPayload {
   name: string
   user_id?: number
-  knowledge_uploader_user_id?: number
+  knowledge_uploader_user_id?: number | null
   department_id?: number
   dept_id?: string
   enabled: boolean

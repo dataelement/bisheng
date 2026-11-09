@@ -26,7 +26,6 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenInvalidRouteRuleError,
     DeveloperTokenIpForbiddenError,
     DeveloperTokenKnowledgeUploaderInvalidError,
-    DeveloperTokenKnowledgeUploaderMissingError,
     DeveloperTokenLimiterUnavailableError,
     DeveloperTokenMissingError,
     DeveloperTokenRateLimitedError,
@@ -161,13 +160,16 @@ class DeveloperTokenService:
             payload.user_id,
             payload.file_sync_rule,
         )
-        await cls._validate_knowledge_uploader(tenant_id, int(payload.knowledge_uploader_user_id))
+        resolved_uploader_id: int | None = None
+        if payload.knowledge_uploader_user_id is not None:
+            resolved_uploader_id = int(payload.knowledge_uploader_user_id)
+            await cls._validate_knowledge_uploader(tenant_id, resolved_uploader_id)
 
         plaintext = cls._generate_plaintext_token()
         token = DeveloperToken(
             tenant_id=tenant_id,
             user_id=payload.user_id,
-            knowledge_uploader_user_id=int(payload.knowledge_uploader_user_id),
+            knowledge_uploader_user_id=resolved_uploader_id,
             name=payload.name.strip(),
             token_hash=cls._hash_token(plaintext),
             token_ciphertext=cls._encrypt_plaintext(plaintext),
@@ -230,10 +232,11 @@ class DeveloperTokenService:
             final_uploader_id = update_data["knowledge_uploader_user_id"]
         else:
             final_uploader_id = token.knowledge_uploader_user_id
-        if final_uploader_id is None:
-            raise DeveloperTokenKnowledgeUploaderMissingError()
-        await cls._validate_knowledge_uploader(target_tenant_id, int(final_uploader_id))
-        update_data["knowledge_uploader_user_id"] = int(final_uploader_id)
+        if final_uploader_id is not None:
+            await cls._validate_knowledge_uploader(target_tenant_id, int(final_uploader_id))
+            update_data["knowledge_uploader_user_id"] = int(final_uploader_id)
+        elif "knowledge_uploader_user_id" in update_data:
+            update_data["knowledge_uploader_user_id"] = None
 
         final_file_sync_rule = update_data.get("file_sync_rule", token.file_sync_rule)
         normalized_file_sync_rule = await cls._validate_file_sync_rule(

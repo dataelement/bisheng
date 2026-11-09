@@ -100,6 +100,32 @@ def test_update_token_does_not_rotate_secret():
     assert "plaintext_token" not in resp.json()["data"]
 
 
+def test_create_accepts_optional_knowledge_uploader():
+    app = _app(_user())
+    client = TestClient(app)
+    read = _read().model_copy(update={"knowledge_uploader_user_id": None})
+    service_mock = AsyncMock(return_value=DeveloperTokenCreateResponse(token=read, plaintext_token="bst_secret"))
+    with patch(
+        f"{ENDPOINT_MOD}.DeveloperTokenService.create_token",
+        new=service_mock,
+    ):
+        resp = client.post(
+            "/api/v1/admin/developer-tokens",
+            json={
+                "name": "api",
+                "user_id": 1,
+                "department_id": 20,
+                "enabled": True,
+                "override_ip_whitelist": False,
+                "override_rate_limit": False,
+            },
+        )
+
+    assert resp.status_code == 200
+    payload = service_mock.await_args.args[1]
+    assert payload.knowledge_uploader_user_id is None
+
+
 def test_create_accepts_structured_route_whitelist():
     app = _app(_user())
     client = TestClient(app)
