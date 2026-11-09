@@ -1439,3 +1439,43 @@ PERM只读审计确认T111112内部缺口：原SqlLedger第二次global Coverage
 可在私有facts保当前原session/tenant/transaction或显式传原session到_finish，均不入公开Inspection/cursor hash/JSON/result。每个有返回结果的关键await前后检查，特别tail全局/tenant Coverage和最后身份复验；_disclose批次及_dataset返回前要检。原full scope digest/actor/credential/data_scope narrowing、v2 f118-model-inbound-v2字节/ID顺序、global ordered stream和count/分页资格/受限名规则保持。缺少nativeSession/丢TX不得用None兼容放行；原模拟规模fixtures如需适配必须用真实AsyncSession而非改弱assert。不得每guard调用全Owner重验、重编Catalog/扫全Model，不能倒退为source×targets。
 
 native覆盖existingTX/fresh-autobegin、合法new-session continuation、首/中/尾rollback重开、nested scope漂移、tenant改变、Coverage/FGA disclosure/最后身份await时漂移均拒无业务DML；原Target锁/5产品类+实际ASR_RT、第0个模型服务、全源跨tenant摘要、oldcursor/lastID重插、epoch/hash/未ready/异常、source各Owner资格及401/10001预算必须保持。修后原同选集及作者外复查，未跑正式Coverage/Middleware仍不宣称真实删除可启用。
+
+
+## 116. 正式namespace plan独立section闭合wire：已冻结
+
+C6三卡组T1024–1029整体接正式原路径后合流，不在wire中间态伪装旧plan兼容。EDGE T1025仅原application/unification_inventory_schema.py+unification_inventory_codec.py；T1027仅新unification_permission_namespace.py（≤600）+原preflight历史大叶窄改；INT T1029仅新unification_permission_inventory.py（≤600）+原inventory App历史大叶窄改。test叶各≤600，可必要精确适配原正向M2夹具以真实旧Mode/闭合图为基线；生产绝不补造缺Mode。§111 Writer、六业务Owner、Source提取、当前运行接口、SQL/FGA Publisher均不在三卡组改动。
+
+新增SECTIONS='permission_namespace'，只kind=plan，加入原App section allowlist。不得用任意JSON扩展：以下字段闭集，沿原record_from_values/encode/decode canonical，不另造serializer/hash；plan/runtime影子旧artifact缺明细应重盘点冻结。新增tag：
+
+| tag | 字段（原schema类型） |
+| --- | --- |
+| namespace_catalog | run_id:str writer_contract_version:str before_catalog_checksum:hash target_model_checksum:hash catalog_plan_checksum:hash action_checksum:hash model_checksum:hash from_resource_type:str to_resource_type:str model_count:nonnegative |
+| namespace_applicability | catalog_plan_checksum:hash model_key:str from_resource_type:str to_resource_type:str before_action_codes:strings after_action_codes:strings reason:str |
+| namespace_target_mode | mode_id:positive + 原resource_mode完整字段（含id/tenant/type/resource_id/mode/parent/version/projection_state/operation_id） |
+| namespace_after_grant | mode_id:positive + 原grant全部字段 |
+| namespace_after_assignee | mode_id:positive + 原assignee全部字段 |
+| namespace_after_visible_source | mode_id:positive + 原visible_source完整id/source（source原完整闭集） |
+
+namespace_catalog/applicability全局page tenant=None，固定唯一mapping knowledge_library→knowledge_space；target_mode.id须等mode_id；各after原id不改，mode_id是所属原Mode ID，不是Grant ID。具体row与page tenant一致性由原page检查与§118共同核，visible的tenant在nested source中不可漏。from/to恒上述固定对；保所有动作tuple顺序而非set。catalog声明只有一个、完整模型矩阵每model_key一行，不逐grant复制。原after_grants是带模型快照的编译结果，不能误与原after.grants的SQL基线行混淆。
+
+原permission_plan tag仍位于conversion，原SQL decoder继续deferred；在既有tenant_id/resource_type/resource_id/target_resource_type/plan_checksum/before_digest/after_grants_digest/visibility_deltas_digest/expected_use_changes_digest上追加mode_id:positive、catalog_plan_checksum:hash、target_mode_digest:hash、after_digest:hash、grant_count:nonnegative、assignee_count:nonnegative、visible_source_count:nonnegative。摘要全部用原permission.migration.f118_plan._checksum SSOT（ensure_ascii=True），不混用inventory.digest（False）；新record JSON本身仍原inventory canonical。after_digest绑定完整plan.after，target_mode_digest绑定plan.namespace_target；counts包括inactive/retired全部原行。target_resource_type hint必须和完整target相同，不再独自当资格。
+
+## 117. 每tenant真实物理资格到显式namespace完整计划：已冻结
+
+PermissionNamespacePlan(*,permission_planner:ResourceRetirementPlanner)纯有限collector，observe(*,section,tenant_id,record:InventoryRecord)->None，finish()->Iterator[ResourceRetirementPlan]。同叶可提供catalog_namespace_records(permission_planner)->tuple[InventoryRecord,...]与namespace_plan_records(plan)->Iterator[(section,InventoryRecord)]供INT复用，不重复hash/typedRow恢复；需要的原Catalog/Mode/Grant/Assignee/Visible恢复函数同叶导出窄纯helper供§118用，日期/tuple/VisibleSourceProjectionDTO依原闭集恢复并用record_from_row原样回比。原Root/File索引只留资格字段，每tenant保一套R/G/S桶，不同时保旧preflight完整桶和新collector副本，不全局积全部tenant G/S。
+
+只复用原resources/files各页及权限四类PK≤200页事实，无新SQL Reader；Root+File.tenant/id/type/RootID实际一致，Mode/Grant/Assignee/Source全量由原Repo读取，不丢inactive/RETIRED来源。NORMAL0必须有唯一真实同tenant原knowledge_library Mode、CUSTOM/no parent，才声明rtype=knowledge_space；原资源0→3资格与旧Mode绑定，缺原Mode阻断报告、不补造。QA1/retired2/已有SPACE3及其它模块已有Mode显式原样；已有knowledge_library/space Mode必须匹配原物理类型（retired2原library可原样），不把同名ID或未知namespace猜成目标。
+
+对已存在folder/knowledge_file Mode核实际File kind0/1、tenant、所属Root；原parent为library必须精确其物理Root ID，且仅Root0时改parent_type为space；原parent space仅其原SPACE3 Root；原folder parent核真实同tenant/同Root DIR且有原folder Mode。原Mode图闭合无环，原parent_id/mode/version/operation/projection全保，不重选物理path末项或最近目录。原业务loader/F048 exporter虽按path末级生成，但Mode mapper只保已传边，不能据此修原继承。非知识业务原边不借机重排，不明知识关联或跨Root报告。type2及files原F048未覆盖，明确STALE_FAILED_RESOURCE也可跳过：**不新增所有物理File/Folder必须有Mode的门**，只强制待转NORMAL0 Root有原Mode，其余已存在Mode的实际资格与所需parent闭包必须完整。
+
+原UnificationPreflight.aiter_tenant(session,*,permission_planner:ResourceRetirementPlanner,planned_at)显式替换catalog_plan参数，不设None或旧分支fallback。原Member计划/creator缓存/stage0..6/physical/source/quota流程保；collector在相同原输出事实观察，取代旧permission groups桶与旧hint-only生产。每tenant沿原Mode顺序创建显式target，再同一个全局compiled.build_many消费；after Row顺序沿原plan.after tuples，不能重新按PK排序改变Assignee按Grant分组的原序。namespace_plan_records每Mode一组target→全部after Grant→全部after Assignee→全部after Visible，page199条自然跨页；permission_plan摘要仍独立conversion缓冲，不假设跨section页谁先。所有原Mode都要完整target/after，连不变者也不省。
+
+## 118. 正式namespace语义门、原Artifact顺序与峰值：已冻结
+
+INT原InventoryApp从真实native Catalog初建plan时显式mapping=(('knowledge_library','knowledge_space'),)，只构造一次ResourceRetirementPlanner并传每tenant。原global baseline Catalog、plan after Catalog及catalog_namespace_records完整写入后先await pages.finish()，再原PinnedReader/FGA/各tenant；finish仅提前原artifact上传/回读/current，无SQL flush/commit、不重跑source/FGA、不改业务TX。新permission_namespace与conversion输出都kind=plan，其它section原样。原M2 fresh通过同语义checker后才freeze，原existing freeze重验/原M3 _plan完整耗尽aiter_frozen_pages沿同一门，无新执行入口/SQL变更。
+
+PermissionInventoryVerifier(*,run_id,writer_contract_version,target_model_checksum,catalog_plan_checksum)，observe(*,kind,section,tenant_id,record)->None，finish()->None。constructor target/model checksum来自已SHA验证的**原plan根run metadata** authorization_model_checksum/catalog_digest，FrozenReader开始先预读该root并复用bytes，后续原verify不重复read、不跳root metadata/descriptor/hash/counter/material验证；不从当前代码猜targetChecksum，也不预读全部plan catalog造第二图框架。baseline根run声明的原catalog/auth checksum与原Catalog实际facts须一致；完整baseline Catalog在首个相关tenant事实前闭合，晚到catalog拒。建CatalogPlan一次+compiled原_context校验一次=全局两次derive/matrix，O(M)固定，不声称整链只有1次；fresh同理，不随tenant追加。
+
+Frozen顺序仍baseline全图→plan全图：baseline只按原resources(resource/file)/permission四类相关事实分tenant段；用同§117资格及同compiled在每段结束生成每Mode轻摘要（full before/target/after hashes、各after tuple hashes/counts、原plan checksum及header摘要），释放该tenant完整G/S。忽略physical/source/tasks等跨后段资料对tenant切换的干扰，原queued/broker可在所有tenant后再按tenant输出，不能误报重复业务段。全局仅保O(Mode)轻摘要与O(M)Catalog，不堆所有tenant G/S；峰值O(M+R+最大tenant G/S+当前Mode after)。plan namespace明细按mode_id组验证完整after，仅持当前Mode，group跨page可继续，结束立刻比counts/full after及部分摘要并释放；原permission_plan late conversion独立收小声明对同summary。after行显式mode_id，避免全局Grant→Mode大索引。原catalog after行+完整model矩阵在late plan精确比早期重建期望，不把提前finish误当已读到plan after。
+
+缺/多/重复mode/target/after行、错page/nested tenant、target_hint不一致、漏模型/改动作顺序、重签hash的错误计划/错Root/错parent/不明physical资格均拒；旧无namespace摘要图拒，不假补空模式。不把编译器当SQL/FGA proof，实际before与实时FGA parent全量对账、发布source版本与legacy_source_key保存仍后继。测试先native正反C4/C5+现真实QA/retired/已有SPACE/STALE缺Mode控制，actual fresh/frozen/M3任何写前阻断、深层页缺项/错matrix与顺序、多个tenant/4011001模型共享预算全局2、40110001资源线性/单tenant峰值/不重复sourceIO、catalog提前flush无SQL均要证明。正向M2夹具需明确真实原Mode，不能生产补默认Mode消红。
