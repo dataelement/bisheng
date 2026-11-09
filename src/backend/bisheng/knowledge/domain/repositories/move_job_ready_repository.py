@@ -12,7 +12,8 @@ from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.repositories.move_cutover_repository import MoveLogicalReceipt
-from bisheng.knowledge.domain.repositories.move_job_repository import MoveJobRepository
+from bisheng.knowledge.domain.repositories.move_job_repository import _PARAMETER_KEYS, MoveJobRepository
+from bisheng.knowledge.domain.schemas.processing_actor_subject import processing_actor_subject
 from bisheng.knowledge.domain.schemas.processing_job import JobAccepted
 from bisheng.knowledge.domain.schemas.processing_job_acceptance import JobLease, _digest
 
@@ -73,6 +74,58 @@ class MoveJobReadyRepository:
         ):
             _fail("move_logical_ready_required")
         return marker
+
+    @staticmethod
+    def _retry_scope(job):
+        p = job.parameters
+        if (
+            get_current_tenant_id() != job.tenant_id
+            or is_tenant_filter_bypassed()
+            or job.kind != "move_index"
+            or not isinstance(p, Mapping)
+            or set(p) != _PARAMETER_KEYS
+            or type(p["move_schema"]) is not int
+            or p["move_schema"] != 1
+            or p["operation_id"] != job.id
+            or any(
+                type(p[name]) is not int or p[name] <= 0
+                for name in ("source_space_id", "destination_space_id", "logical_file_count")
+            )
+            or p["destination_space_id"] != job.space_id
+            or p["source_space_id"] == p["destination_space_id"]
+            or type(p["index_item_count"]) is not int
+            or p["index_item_count"] < 0
+            or p["index_item_count"] != job.total_count
+            or not isinstance(p["confirmation_id"], str)
+            or not p["confirmation_id"]
+            or any(
+                not _checksum(p[name])
+                for name in ("plan_digest", "plan_request_hash", "scope_digest", "changes_digest")
+            )
+        ):
+            _fail("move_retry_scope_required")
+        return p
+
+    def retry_logical_pending(self, job, counts) -> bool:
+        self._retry_scope(job)
+        if job.move_logical_marker is not None:
+            self.require_job_ready(job)
+            return False
+        if type(job.succeeded_count) is not int or job.succeeded_count != 0 or counts.get("succeeded", 0):
+            _fail("move_retry_success_without_ready")
+        return True
+
+    def retry_subject(self, job, *, actor_user_id, actor_reference):
+        p = self._retry_scope(job)
+        try:
+            return processing_actor_subject(
+                actor_reference,
+                tenant_id=job.tenant_id,
+                actor_user_id=actor_user_id,
+                source_space_id=p["source_space_id"],
+            )
+        except (ValueError, TypeError, KeyError) as error:
+            raise KnowledgeOperationPlanConflictError(reason="move_retry_origin_required") from error
 
     @staticmethod
     def _item_marker(job_id, marker, target):
