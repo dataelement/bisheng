@@ -26,7 +26,6 @@ import { defalutPrompt } from "./WorkbenchModel";
 import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
 import { useSystemConfigEnvelope } from "../useSystemConfigEnvelope";
 import {
-    KnowledgeModelIdField,
     normalizeKnowledgeModelIds,
 } from "./knowledgeModelValidation";
 
@@ -147,13 +146,19 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         autoTagPrompt: ''
     });
     const lastSaveFormDataRef = useRef(null)
-    const [unavailableModelFields, setUnavailableModelFields] = useState<KnowledgeModelIdField[]>([])
+    const hydratedConfig = useRef<unknown>(null)
+    const unavailableModelFields = useMemo(() => normalizeKnowledgeModelIds({
+        embedding_model_id: form.embeddingModelId, source_model_id: form.sourceModelId,
+        extract_title_model_id: form.extractModelId, qa_similar_model_id: form.qaSimilarModelId,
+        asr_model_id: form.asrModelId,
+    }, { llmOptions, embeddings, asrModels: asrModel }).unavailableFields, [form, llmOptions, embeddings, asrModel])
 
     const { config, loading, inheritedFromRoot, fallbackBlocked, clearInherited } =
         useSystemConfigEnvelope<any>(getKnowledgeModelEnvelope)
 
     useEffect(() => {
-        if (!config) return
+        if (!config || hydratedConfig.current === config) return
+        hydratedConfig.current = config
         const {
             embedding_model_id,
             extract_title_model_id,
@@ -165,7 +170,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             abstract_prompt,
             auto_tag_prompt,
         } = config
-        const { modelIds, unavailableFields } = normalizeKnowledgeModelIds(
+        const { modelIds } = normalizeKnowledgeModelIds(
             {
                 embedding_model_id,
                 source_model_id,
@@ -192,7 +197,6 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             abstract_prompt: abstract_prompt || defalutPrompt,
             auto_tag_prompt: auto_tag_prompt || defaultAutoTagPrompt,
         }
-        setUnavailableModelFields(unavailableFields)
     }, [asrModel, config, defaultAutoTagPrompt, embeddings, llmOptions]);
 
     // Clear inherited flag on first user edit — the in-memory form no
@@ -202,15 +206,6 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         clearInherited()
         setForm(next)
     }
-
-    const handleModelChange = (
-        field: KnowledgeModelIdField,
-        next: typeof form,
-    ) => {
-        setUnavailableModelFields((current) => current.filter((item) => item !== field))
-        setFormAndClearInherited(next)
-    }
-
 
     const [saveload, setSaveLoad] = useState(false)
     const handleSave = async () => {
@@ -252,7 +247,6 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         try {
             await updateKnowledgeModelConfig(data);
             lastSaveFormDataRef.current = data;
-            setUnavailableModelFields([]);
             toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') });
         } catch (error) {
             showApiError(error);
@@ -284,7 +278,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             {unavailableModelFields.length > 0 && (
                 <Alert
                     type="warning"
-                    description={t('model.unavailableSelectionsCleared')}
+                    description={t('bs:references.unconfirmed')}
                     live
                 />
             )}
@@ -298,7 +292,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 label={t('model.defaultEmbeddingModel')}
                 value={form.embeddingModelId}
                 options={embeddings}
-                onChange={(val) => handleModelChange('embedding_model_id', { ...form, embeddingModelId: val })}
+                onChange={(val) => setFormAndClearInherited({ ...form, embeddingModelId: val })}
             />
             <ModelSelect
                 close
@@ -306,7 +300,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 tooltipText={t('model.sourceTracingModelTooltip')}
                 value={form.sourceModelId}
                 options={llmOptions}
-                onChange={(val) => handleModelChange('source_model_id', { ...form, sourceModelId: val })}
+                onChange={(val) => setFormAndClearInherited({ ...form, sourceModelId: val })}
             />
             <ModelSelect
                 close
@@ -314,7 +308,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 tooltipText={t('model.documentSummaryModelTooltip')}
                 value={form.extractModelId}
                 options={llmOptions}
-                onChange={(val) => handleModelChange('extract_title_model_id', { ...form, extractModelId: val })}
+                onChange={(val) => setFormAndClearInherited({ ...form, extractModelId: val })}
             />
             <div className="rounded-md border p-4 space-y-4">
                 <div className="flex items-center justify-between gap-6">
@@ -370,7 +364,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 tooltipText={t('model.qaSimilarModelTooltip')}
                 value={form.qaSimilarModelId}
                 options={llmOptions}
-                onChange={(val) => handleModelChange('qa_similar_model_id', { ...form, qaSimilarModelId: val })}
+                onChange={(val) => setFormAndClearInherited({ ...form, qaSimilarModelId: val })}
             />
             <ModelSelect
                 close
@@ -378,7 +372,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 tooltipText={t('model.knowledgeAsrModelTooltip')}
                 value={form.asrModelId}
                 options={asrModel}
-                onChange={(val) => handleModelChange('asr_model_id', { ...form, asrModelId: val })}
+                onChange={(val) => setFormAndClearInherited({ ...form, asrModelId: val })}
             />
             <div className="mt-10 text-center space-x-6">
                 <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>

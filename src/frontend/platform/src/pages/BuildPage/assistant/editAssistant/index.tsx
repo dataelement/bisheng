@@ -33,6 +33,7 @@ function EditAssistantContent() {
     const { assistantState, changed, setAssistantDetail, changeStatus, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
     const [checking, setChecking] = useState(true)
+    const [loadedAssistantId, setLoadedAssistantId] = useState('')
     const activeAssistant = useRef(assisId);
     activeAssistant.current = assisId;
     const assistantId = assisId ? String(assisId) : ''
@@ -48,6 +49,7 @@ function EditAssistantContent() {
         await getAssistantDetailApi(assisId, 'v1').then((res) => {
             if (activeAssistant.current !== assisId) return
             setAssistantDetail(res)
+            setLoadedAssistantId(String(assisId))
             setChecking(false)
             setShowGuideQuestion(true)
             setGuideQuestion(res.guide_question?.filter((item) => item) || [])
@@ -56,8 +58,9 @@ function EditAssistantContent() {
     }
 
     useEffect(() => {
-        void flowInit().catch(showApiError).finally(() => setChecking(false))
-    }, [])
+        setChecking(true)
+        void flowInit().catch(showApiError).finally(() => { if (activeAssistant.current === assisId) setChecking(false) })
+    }, [assisId])
 
     // Store displayed guide words independently
     const [guideQuestion, setGuideQuestion] = useState([])
@@ -162,7 +165,7 @@ function EditAssistantContent() {
         if (await handleSave(true)) blocker.proceed?.()
     }
 
-    if (checking) return null
+    if (checking || loadedAssistantId !== assistantId) return null
 
     return <div className="bg-background-main">
         <Header loca={loca} canEdit={canEdit} onSave={handleUiRequest(() => handleSave(true))} onLine={handleUiRequest(handleOnline)} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>

@@ -12,25 +12,25 @@ const row = (id: string, change: Partial<PermissionGrantAssignee> = {}): Permiss
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.getGrantablePermissionModelsApi).mockResolvedValue([model]);
-  vi.mocked(api.getResourcePermissionGrantsApi).mockResolvedValue({ data: [row('source1'), row('source2')], page_size: 50, has_more: false, next_cursor: null });
-  vi.mocked(api.mutateResourceGrantsApi).mockResolvedValue({ resource_version: 5, items: [row('source2')] });
+  vi.mocked(api.getResourcePermissionGrantsApi).mockResolvedValue({ data: [row('9007199254740999'), row('700')], page_size: 50, has_more: false, next_cursor: null });
+  vi.mocked(api.mutateResourceGrantsApi).mockResolvedValue({ resource_version: 5, items: [row('700')] });
 });
 it('shows a pure visibility source and revokes precisely one persisted assignee, leaving the other source', async () => {
   render(<PermissionListTab resourceType="knowledge_space" resourceId="9000" context={context} />);
-  await screen.findByRole('button', { name: 'grant.remove.source1' });
+  await screen.findByRole('button', { name: 'grant.remove.9007199254740999' });
   expect(screen.getAllByText('roster.visibility_only')).toHaveLength(2);
-  fireEvent.click(screen.getByRole('button', { name: 'grant.remove.source1' }));
+  fireEvent.click(screen.getByRole('button', { name: 'grant.remove.9007199254740999' }));
   await waitFor(() => expect(api.mutateResourceGrantsApi).toHaveBeenCalledOnce());
-  expect(vi.mocked(api.mutateResourceGrantsApi).mock.calls[0][2]).toMatchObject({ expected_catalog_release_id: 6, expected_resource_version: 4, changes: [{ op: 'REMOVE', assignee_id: 'source1', expected_assignee_version: 9 }] });
-  await waitFor(() => expect(screen.queryByTestId('permission-assignee-source1')).toBeNull());
-  expect(screen.getByTestId('permission-assignee-source2')).toBeInTheDocument();
+  expect(vi.mocked(api.mutateResourceGrantsApi).mock.calls[0][2]).toMatchObject({ expected_catalog_release_id: 6, expected_resource_version: 4, changes: [{ op: 'REMOVE', assignee_id: '9007199254740999', expected_assignee_version: 9 }] });
+  await waitFor(() => expect(screen.queryByTestId('permission-assignee-9007199254740999')).toBeNull());
+  expect(screen.getByTestId('permission-assignee-700')).toBeInTheDocument();
 });
 it('keeps inactive source revocation while inherited and protected sources cannot be removed', async () => {
-  vi.mocked(api.getResourcePermissionGrantsApi).mockResolvedValue({ data: [row('inactive', { model: { ...model, active: false } }), row('inherited', { scope: 'INHERITED' }), row('protected', { protected: true })], page_size: 50, has_more: false, next_cursor: null });
+  vi.mocked(api.getResourcePermissionGrantsApi).mockResolvedValue({ data: [row('701', { model: { ...model, active: false } }), row('702', { scope: 'INHERITED' }), row('703', { protected: true })], page_size: 50, has_more: false, next_cursor: null });
   render(<PermissionListTab resourceType="knowledge_space" resourceId="9000" context={context} />);
-  await screen.findByRole('button', { name: 'grant.remove.inactive' });
-  expect(screen.queryByRole('button', { name: 'grant.remove.inherited' })).toBeNull();
-  expect(screen.queryByRole('button', { name: 'grant.remove.protected' })).toBeNull();
+  await screen.findByRole('button', { name: 'grant.remove.701' });
+  expect(screen.queryByRole('button', { name: 'grant.remove.702' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'grant.remove.703' })).toBeNull();
   expect(screen.getByText('roster.inactive_existing_grant')).toBeInTheDocument();
 });
 it('summary only displays granted actions without inventing use, view_file or rename', async () => {
