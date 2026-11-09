@@ -4,6 +4,7 @@
 Only persisted Coverage status is isolated; D1, Owner, receipts and stream are real.
 """
 
+import asyncio
 import importlib
 from dataclasses import FrozenInstanceError, fields, is_dataclass
 from types import SimpleNamespace
@@ -23,6 +24,7 @@ from bisheng.resource_reference.application.contracts import (
     GlobalCoverageStatus,
     SourceKey,
     SourceType,
+    TargetKey,
     TargetLockReceipt,
     tenant_inventory_digest,
 )
@@ -59,6 +61,8 @@ class SqlStatus:
         self.ctx.events.append(("local", source_type))
         assert self.session.in_transaction()
         await self.session.execute(sa.select(Knowledge.id).where(Knowledge.id == 1).prefix_with("/*test-coverage*/"))
+        if self.local_reads == 12 and getattr(self.ctx, "tail", None) is not None:
+            await self.ctx.tail(self.session)
         ready = not (self.ctx.failure == "local" or (self.ctx.failure == "local_tail" and self.local_reads > 6))
         return CoverageStatus(tenant_id, source_type, version, ready, None if ready else "test-gap")
 
@@ -112,6 +116,7 @@ async def context(db, monkeypatch):
         return CoverageRepository(port, global_port=port)
 
     ctx.factory = factory
+    ctx.db.statements.clear()
     return ctx
 
 
@@ -300,7 +305,7 @@ async def test_coverage_failures_never_return_partial_or_zero_success_facts(cont
         await collect(ctx, ("knowledge_file", 31))
 
 
-@pytest.mark.parametrize("failure", ["missing", "revision", "inactive", "last_page"])
+@pytest.mark.parametrize("failure", ["missing", "revision", "inactive", "last_page", "source_type"])
 async def test_actual_left_join_or_late_source_failure_prevents_any_collector_result(context, failure):
     ctx = context
     await seed(ctx, *((31, 101, "assistant", "a", "current", f"slot-{n}") for n in range(201)))
@@ -309,6 +314,9 @@ async def test_actual_left_join_or_late_source_failure_prevents_any_collector_re
             await session.execute(sa.delete(SourceSet))
         elif failure == "inactive":
             await session.execute(sa.update(SourceSet).values(effective=False))
+        elif failure == "source_type":
+            await session.execute(sa.update(SourceSet).values(source_type="unknown_source"))
+            await session.execute(sa.update(Binding).values(source_type="unknown_source"))
         else:
             query = sa.update(Binding)
             if failure == "last_page":
@@ -328,10 +336,9 @@ async def test_explicit_actual_runtime_and_real_coverage_facade_are_required(con
             api().DirectDeleteReferenceQuery(runtime=object(), coverage_factory=ctx.factory)
     elif bad == "issuer":
         other = ReferenceTargetVerifier({"knowledge_file": KnowledgeReferenceTargetOwner()})
+        ctx.runtime.verifier = other
         with pytest.raises((TypeError, ValueError)):
-            api().DirectDeleteReferenceQuery(
-                runtime=ReferenceBindingRuntime(ctx.runtime.repository, other), coverage_factory=ctx.factory
-            )
+            api().DirectDeleteReferenceQuery(runtime=ctx.runtime, coverage_factory=ctx.factory)
     else:
         async with ctx.db.sessions() as session, session.begin():
             collector = api().DirectDeleteReferenceQuery(runtime=ctx.runtime, coverage_factory=lambda active: None)
@@ -339,7 +346,7 @@ async def test_explicit_actual_runtime_and_real_coverage_facade_are_required(con
                 await collector.acollect(session, space_id=1, selections=())
 
 
-@pytest.mark.parametrize("bad", ["no_tx", "pending", "bypass", "selection", "space"])
+@pytest.mark.parametrize("bad", ["no_tx", "pending", "dirty", "deleted", "bypass", "selection", "space"])
 async def test_native_clean_typed_context_is_required_before_any_sql(context, bad):
     ctx = context
     collector = query(ctx)
@@ -349,6 +356,12 @@ async def test_native_clean_typed_context_is_required_before_any_sql(context, ba
         if bad == "pending":
             pending = File(tenant_id=101, knowledge_id=1, file_name="pending")
             session.add(pending)
+        if bad in ("dirty", "deleted"):
+            cached = await session.get(File, 31)
+            if bad == "dirty":
+                cached.remark = "caller pending"
+            else:
+                await session.delete(cached)
         ctx.db.statements.clear()
         with pytest.raises((ValueError, ResourceReferenceInvalidError)):
             if bad == "bypass":
@@ -363,6 +376,10 @@ async def test_native_clean_typed_context_is_required_before_any_sql(context, ba
         assert not ctx.db.statements
         if bad == "pending":
             assert pending in session.new and pending.id is None
+        if bad == "dirty":
+            assert cached in session.dirty and cached.remark == "caller pending"
+        if bad == "deleted":
+            assert cached in session.deleted
         await session.rollback()
 
 
@@ -385,4 +402,91 @@ async def test_collection_never_opens_a_session_calls_fga_disclosure_or_flushes(
         monkeypatch.setattr(SourceDisclosureRuntime, "adisclose_sources", unexpected)
         result = await query(ctx).acollect(session, space_id=1, selections=selections(("knowledge_file", 31)))
         assert len(result.references) == 1
+    assert_ready(ctx)
+
+
+@pytest.mark.parametrize("ancestor", [False, True])
+async def test_actual_owner_deleting_receipt_cannot_become_zero_reference_success(context, ancestor):
+    ctx = context
+    async with ctx.db.sessions() as session:
+        session.add(
+            Tombstone(
+                tenant_id=101,
+                target_type="knowledge_space" if ancestor else "knowledge_file",
+                target_id="1" if ancestor else "31",
+                target_tenant_id=101,
+                stage="deleting",
+                operation_id="prior-delete",
+                operation_type="force_delete",
+                actor_type="user",
+                actor_id="7",
+            )
+        )
+        await session.commit()
+    ctx.db.statements.clear()
+    with pytest.raises(ResourceReferenceInvalidError) as failure:
+        await collect(ctx, ("knowledge_file", 31))
+    assert failure.value.kwargs["reason"] == "delete_reference_target_unavailable"
+    assert all("LEFT OUTER JOIN business_reference_set" not in sql for sql, _ in ctx.db.statements)
+
+
+@pytest.mark.parametrize("change", ["transaction", "tenant", "cancel"])
+async def test_tail_context_or_cancellation_change_cannot_return_already_aggregated_facts(context, change):
+    from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+
+    ctx = context
+    await seed(ctx, (31, 101, "assistant", "a", "current", "slot"))
+    token = []
+
+    async def tail(session):
+        if change == "transaction":
+            await session.rollback()
+            await session.begin()
+        elif change == "tenant":
+            token.append(set_current_tenant_id(202))
+        else:
+            asyncio.current_task().cancel()
+            await asyncio.sleep(0)
+
+    ctx.tail = tail
+
+    async def run():
+        async with ctx.db.sessions() as session:
+            await session.begin()
+            try:
+                return await query(ctx).acollect(session, space_id=1, selections=selections(("knowledge_file", 31)))
+            finally:
+                if token:
+                    current_tenant_id.reset(token.pop())
+
+    task = asyncio.create_task(run())
+    with pytest.raises(asyncio.CancelledError if change == "cancel" else ResourceReferenceInvalidError):
+        await task
+    assert ctx.ledgers[-1].global_reads == 2 and ctx.ledgers[-1].local_reads == 12
+    assert any("LEFT OUTER JOIN" in sql for sql, _ in ctx.db.statements)
+
+
+async def test_real_coverage_facade_without_global_adapter_fails_closed_even_for_empty_selection(context):
+    ctx = context
+    async with ctx.db.sessions() as session, session.begin():
+        collector = api().DirectDeleteReferenceQuery(
+            runtime=ctx.runtime, coverage_factory=lambda active: CoverageRepository(SqlStatus(active, ctx))
+        )
+        with pytest.raises(ReferenceCoverageNotReadyError) as failure:
+            await collector.acollect(session, space_id=1, selections=())
+    assert failure.value.kwargs["reason"] == "global_coverage_port_missing"
+
+
+@pytest.mark.parametrize("status", [1, 4, 5])
+async def test_busy_history_still_contributes_its_exact_binding_for_later_app_classification(context, status):
+    ctx = context
+    await seed(ctx, (31, 101, "assistant", "busy-history", "current", "slot"))
+    async with ctx.db.sessions() as session:
+        await session.execute(sa.update(File).where(File.id == 31).values(status=status))
+        await session.commit()
+    ctx.db.statements.clear()
+    result = await collect(ctx, ("folder", 20))
+    assert result.scope.units[0].processing_file_ids == (31,)
+    assert len(result.references) == 1 and result.references[0].target == TargetKey("knowledge_file", 31)
+    assert dict(result.slot_counts)["assistant"] == 1
     assert_ready(ctx)
