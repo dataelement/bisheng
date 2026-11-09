@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from typing import Annotated, List, Literal, Optional
+from typing import Annotated, Literal
 
 from fastapi import (
     APIRouter,
@@ -50,6 +50,7 @@ from bisheng.knowledge.rag.async_retrieval_runtime import (
     get_async_retrieval_runtime,
 )
 from bisheng.open_endpoints.api.dependencies import (
+    FilelibWriteSpaceContext,
     build_filelib_space_query_service,
     build_knowledge_space_chat_service_for_openapi,
     get_filelib_developer_token_principal,
@@ -58,9 +59,9 @@ from bisheng.open_endpoints.api.dependencies import (
     get_filelib_knowledge_document_version_repository,
     get_filelib_request_user,
     get_filelib_retrieve_source_service,
-    get_filelib_space_command_service,
     get_filelib_space_query_service,
     get_filelib_user_context_service,
+    get_filelib_write_space_context,
     get_knowledge_file_repository,
 )
 from bisheng.open_endpoints.domain.schemas.filelib import (
@@ -77,7 +78,6 @@ from bisheng.open_endpoints.domain.services.filelib_retrieve_service import File
 from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
     FilelibRetrieveSourceService,
 )
-from bisheng.open_endpoints.domain.services.filelib_space_command_service import FilelibSpaceCommandService
 from bisheng.open_endpoints.domain.services.filelib_space_query_service import (
     FilelibSpaceQueryService,
 )
@@ -122,9 +122,9 @@ def _resolve_filelib_knowledge_type(
 async def create(
     request: Request,
     knowledge: FilelibSpaceCreate,
-    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+    ctx: FilelibWriteSpaceContext = Depends(get_filelib_write_space_context),
 ):
-    return resp_200(await service.create(knowledge))
+    return resp_200(await ctx.command.create(knowledge))
 
 
 @router.put("/", status_code=201)
@@ -132,9 +132,9 @@ async def update_knowledge(
     *,
     request: Request,
     knowledge: KnowledgeUpdate,
-    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+    ctx: FilelibWriteSpaceContext = Depends(get_filelib_write_space_context),
 ):
-    result = await service.update(knowledge.knowledge_id, name=knowledge.name, description=knowledge.description)
+    result = await ctx.command.update(knowledge.knowledge_id, name=knowledge.name, description=knowledge.description)
     return resp_200(result)
 
 
@@ -171,9 +171,9 @@ async def delete_knowledge_api(
     *,
     request: Request,
     knowledge_id: int,
-    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+    ctx: FilelibWriteSpaceContext = Depends(get_filelib_write_space_context),
 ):
-    await service.delete_space(knowledge_id)
+    await ctx.command.delete_space(knowledge_id)
     return resp_200(message="knowledge deleted successfully")
 
 
@@ -183,9 +183,9 @@ async def clear_knowledge_files(
     *,
     request: Request,
     knowledge_id: int,
-    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+    ctx: FilelibWriteSpaceContext = Depends(get_filelib_write_space_context),
 ):
-    await service.clear(knowledge_id)
+    await ctx.command.clear(knowledge_id)
     return resp_200(message="knowledge clear successfully")
 
 
@@ -193,29 +193,30 @@ async def clear_knowledge_files(
 async def upload_file(
     request: Request,
     knowledge_id: int,
-    split_mode: Optional[Literal["auto", "custom", "hierarchical"]] = Form(default="auto"),
-    separator: Optional[List[str]] = Form(
+    split_mode: Literal["auto", "custom", "hierarchical"] | None = Form(default="auto"),
+    separator: list[str] | None = Form(
         default=None, description="Split text rule, If not passed on, it is the default"
     ),
-    separator_rule: Optional[List[str]] = Form(
+    separator_rule: list[str] | None = Form(
         default=None, description="Segmentation before or after the segmentation rule;before/after"
     ),
-    chunk_size: Optional[int] = Form(default=None, description="Split text length, default if not passed"),
-    chunk_overlap: Optional[int] = Form(default=None, description="Split text overlap length, default if not passed"),
-    hierarchy_level: Optional[int] = Form(default=3),
-    append_title: Optional[bool] = Form(default=False),
-    max_chunk_size: Optional[int] = Form(default=1000),
-    callback_url: Optional[str] = Form(default=None, description="Return URL"),
-    file_url: Optional[str] = Form(default=None, description="File URL"),
-    file: Optional[UploadFile] = File(default=None, description="Upload file"),
+    chunk_size: int | None = Form(default=None, description="Split text length, default if not passed"),
+    chunk_overlap: int | None = Form(default=None, description="Split text overlap length, default if not passed"),
+    hierarchy_level: int | None = Form(default=3),
+    append_title: bool | None = Form(default=False),
+    max_chunk_size: int | None = Form(default=1000),
+    callback_url: str | None = Form(default=None, description="Return URL"),
+    file_url: str | None = Form(default=None, description="File URL"),
+    file: UploadFile | None = File(default=None, description="Upload file"),
     background_tasks: BackgroundTasks = None,
-    retain_images: Optional[int] = Form(default=1, description="Keep document image"),
-    force_ocr: Optional[int] = Form(default=0, description="EnableOCR"),
-    enable_formula: Optional[int] = Form(default=1, description="latexFormula Recognition"),
-    filter_page_header_footer: Optional[int] = Form(default=0, description="Filter Header Footer"),
-    excel_rule: Optional[ExcelRule] = Form(default={}, description="excel rule"),
-    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+    retain_images: int | None = Form(default=1, description="Keep document image"),
+    force_ocr: int | None = Form(default=0, description="EnableOCR"),
+    enable_formula: int | None = Form(default=1, description="latexFormula Recognition"),
+    filter_page_header_footer: int | None = Form(default=0, description="Filter Header Footer"),
+    excel_rule: ExcelRule | None = Form(default={}, description="excel rule"),
+    ctx: FilelibWriteSpaceContext = Depends(get_filelib_write_space_context),
 ):
+    service = ctx.command
     await service.prepare_upload(knowledge_id)
     if file:
         file_name = file.filename
@@ -250,19 +251,21 @@ async def upload_file(
 
 @router.delete("/file/{file_id}", status_code=200)
 async def delete_knowledge_file(
-    request: Request, file_id: int, service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service)
+    request: Request,
+    file_id: int,
+    ctx: FilelibWriteSpaceContext = Depends(get_filelib_write_space_context),
 ):
-    await service.delete_files([file_id])
+    await ctx.command.delete_files([file_id])
     return resp_200()
 
 
 @router.post("/delete_file", status_code=200)
 async def delete_file_batch_api(
     request: Request,
-    file_ids: List[int],
-    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+    file_ids: list[int],
+    ctx: FilelibWriteSpaceContext = Depends(get_filelib_write_space_context),
 ):
-    await service.delete_files(file_ids)
+    await ctx.command.delete_files(file_ids)
     return resp_200()
 
 
@@ -271,8 +274,8 @@ async def get_filelist(
     request: Request,
     knowledge_id: int,
     login_user: UserPayload = Depends(get_filelib_request_user),
-    keyword: str = None,
-    status: List[int] = Query(default=None),
+    keyword: str | None = None,
+    status: list[int] = Query(default=None),
     page_size: int = 10,
     page_num: int = 1,
     service: FilelibSpaceQueryService = Depends(get_filelib_space_query_service),
@@ -288,7 +291,7 @@ async def get_filelist(
 async def get_file_detail(
     request: Request,
     file_encoding: str = Query(..., description="File encoding"),
-    knowledge_id: Optional[int] = Query(default=None, description="Knowledge resource id"),
+    knowledge_id: int | None = Query(default=None, description="Knowledge resource id"),
     content_format: Literal["text", "markdown"] = Query(default="text", description="Content format"),
     login_user: UserPayload = Depends(get_filelib_request_user),
     service: FilelibSpaceQueryService = Depends(get_filelib_space_query_service),
@@ -312,18 +315,19 @@ async def post_chunks(
     request: Request,
     knowledge_id: int = Form(...),
     metadata: str = Form(...),
-    split_mode: Optional[Literal["auto", "custom", "hierarchical"]] = Form(default="auto"),
-    separator: Optional[List[str]] = Form(default=None),
-    separator_rule: Optional[List[str]] = Form(default=None),
-    chunk_size: Optional[int] = Form(default=None),
-    chunk_overlap: Optional[int] = Form(default=None),
-    hierarchy_level: Optional[int] = Form(default=3),
-    append_title: Optional[bool] = Form(default=False),
-    max_chunk_size: Optional[int] = Form(default=1000),
+    split_mode: Literal["auto", "custom", "hierarchical"] | None = Form(default="auto"),
+    separator: list[str] | None = Form(default=None),
+    separator_rule: list[str] | None = Form(default=None),
+    chunk_size: int | None = Form(default=None),
+    chunk_overlap: int | None = Form(default=None),
+    hierarchy_level: int | None = Form(default=3),
+    append_title: bool | None = Form(default=False),
+    max_chunk_size: int | None = Form(default=1000),
     file: UploadFile = File(...),
-    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+    ctx: FilelibWriteSpaceContext = Depends(get_filelib_write_space_context),
 ):
     """Upload files to the knowledge base and sync the interface"""
+    service = ctx.command
     await service.prepare_upload(knowledge_id)
     file_name = file.filename
     if not file_name:
@@ -351,81 +355,89 @@ async def post_chunks(
 async def post_string_chunks(
     request: Request,
     document: ChunkInput,
-    service: FilelibSpaceCommandService = Depends(get_filelib_space_command_service),
+    ctx: FilelibWriteSpaceContext = Depends(get_filelib_write_space_context),
 ):
-    return resp_200(data=await service.ingest_strings(document.knowledge_id, document.documents))
+    return resp_200(data=await ctx.command.ingest_strings(document.knowledge_id, document.documents))
 
 
-@router.get('/download_statistic')
+@router.get("/download_statistic")
 def download_statistic_file(file_path: str):
-    suffix = file_path.split('.')[-1]
-    if suffix != 'log':
-        raise ServerError.http_exception(msg='only .log file supported download')
-    dir_path = file_path.replace('.log', '')
+    suffix = file_path.split(".")[-1]
+    if suffix != "log":
+        raise ServerError.http_exception(msg="only .log file supported download")
+    dir_path = file_path.replace(".log", "")
     if dir_path.find(".") != -1 or not dir_path.startswith("/app/data"):
-        raise ServerError.http_exception(msg='invalid file path, file path must not contain .')
+        raise ServerError.http_exception(msg="invalid file path, file path must not contain .")
 
     file_name = os.path.basename(file_path)
     return FileResponse(file_path, filename=file_name)
 
 
-@router.post('/add_qa')
-def add_qa(*,
-           knowledge_id: int = Body(embed=True),
-           data: List[APIAddQAParam] = Body(embed=True),
-           user_id: Optional[int] = Body(default=None, embed=True)):
-    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
+@router.post("/add_qa")
+def add_qa(
+    *,
+    knowledge_id: int = Body(embed=True),
+    data: list[APIAddQAParam] = Body(embed=True),
+    user_id: int | None = Body(default=None, embed=True),
+):
+    user_id = user_id if user_id else settings.get_from_db("default_operator").get("user")
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
-    logger.info('add_qa_data knowledge_id={} size={}', knowledge_id, len(data))
+    logger.info("add_qa_data knowledge_id={} size={}", knowledge_id, len(data))
     res = []
     for item in data:
-        qa_insert = QAKnowledgeUpsert(knowledge_id=knowledge_id,
-                                      questions=[item.question],
-                                      answers=item.answer,
-                                      user_id=user_id,
-                                      extra_meta=json.dumps(item.extra),
-                                      source=3)
+        qa_insert = QAKnowledgeUpsert(
+            knowledge_id=knowledge_id,
+            questions=[item.question],
+            answers=item.answer,
+            user_id=user_id,
+            extra_meta=json.dumps(item.extra),
+            source=3,
+        )
 
         res.append(knowledge_imp.add_qa(knowledge, qa_insert))
 
     return resp_200(res)
 
 
-@router.post('/add_relative_qa')
-def append_qa(*,
-              knowledge_id: int = Body(embed=True),
-              data: APIAppendQAParam = Body(embed=True),
-              user_id: Optional[int] = Body(default=None, embed=True)):
-    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
+@router.post("/add_relative_qa")
+def append_qa(
+    *,
+    knowledge_id: int = Body(embed=True),
+    data: APIAppendQAParam = Body(embed=True),
+    user_id: int | None = Body(default=None, embed=True),
+):
+    user_id = user_id if user_id else settings.get_from_db("default_operator").get("user")
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
     if not qa_db:
-        return HTTPException(404, detail='qa Right, nothing found.')
+        return HTTPException(404, detail="qa Right, nothing found.")
 
     t = qa_db.dict()
-    t['answers'] = json.loads(t['answers'])
+    t["answers"] = json.loads(t["answers"])
     qa_insert = QAKnowledgeUpsert.validate(t)
     qa_insert.questions.extend(data.relative_questions)
 
     return resp_200(knowledge_imp.add_qa(knowledge, qa_insert))
 
 
-@router.delete('/qa/{qa_id}', status_code=200)
-def delete_qa_data(*, qa_id: int, question: Optional[str] = None):
-    """ Deleteqa Question to Information """
+@router.delete("/qa/{qa_id}", status_code=200)
+def delete_qa_data(*, qa_id: int, question: str | None = None):
+    """Deleteqa Question to Information"""
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
     login_user = get_default_operator()
     if not qa:
-        raise HTTPException(status_code=404, detail='qa Does not exist')
+        raise HTTPException(status_code=404, detail="qa Does not exist")
 
     if question:
         qa.questions = [q for q in qa.questions if q != question]
         QAKnoweldgeDao.update(qa)
     else:
         QAKnoweldgeDao.delete_batch([qa_id])
-        telemetry_service.log_event_sync(user_id=login_user.user_id,
-                                         event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
-                                         trace_id=trace_id_var.get())
+        telemetry_service.log_event_sync(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
+            trace_id=trace_id_var.get(),
+        )
     try:
         knowledge = KnowledgeDao.query_by_id(qa.knowledge_id)
         knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])
@@ -433,22 +445,22 @@ def delete_qa_data(*, qa_id: int, question: Optional[str] = None):
             knowledge_imp.QA_save_knowledge(knowledge, qa)
         return resp_200()
     except Exception as e:
-        return resp_500(message=f'error e={str(e)}')
+        return resp_500(message=f"error e={e!s}")
 
 
-@router.post('/update_qa', status_code=200)
+@router.post("/update_qa", status_code=200)
 def update_qa(
-        *,
-        id: int = Body(embed=True),
-        question: Optional[str] = Body(default=None, embed=True),
-        original_question: Optional[str] = Body(default=None, embed=True),
-        answer: Optional[List[str]] = Body(default=None, embed=True),
+    *,
+    id: int = Body(embed=True),
+    question: str | None = Body(default=None, embed=True),
+    original_question: str | None = Body(default=None, embed=True),
+    answer: list[str] | None = Body(default=None, embed=True),
 ):
-    """ Deleteqa Question to Information """
+    """Deleteqa Question to Information"""
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
 
     if not qa:
-        raise HTTPException(status_code=404, detail='qa Does not exist')
+        raise HTTPException(status_code=404, detail="qa Does not exist")
 
     if original_question:
         qa.questions = [q if q != question else question for q in qa.questions]
@@ -465,12 +477,12 @@ def update_qa(
             knowledge_imp.QA_save_knowledge(knowledge, qa)
         return resp_200()
     except Exception as e:
-        return resp_500(message=f'error e={str(e)}')
+        return resp_500(message=f"error e={e!s}")
 
 
-@router.get('/detail_qa', status_code=200)
+@router.get("/detail_qa", status_code=200)
 def detail_qa(*, id: int):
-    """ Get questions on information """
+    """Get questions on information"""
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     return resp_200(qa)
 
@@ -527,13 +539,13 @@ async def retrieve_chunks(
     return resp_200(data=result)
 
 
-@router.post('/query_qa', status_code=200)
+@router.post("/query_qa", status_code=200)
 def query_qa(QueryQAParam: QueryQAParam):
-    """ Deleteqa Question to Information """
+    """Deleteqa Question to Information"""
     sources = [1, 2]  # 3 Yes apiInverted
-    qa_list = QAKnoweldgeDao.query_by_condition_v1(source=sources,
-                                                   create_start=QueryQAParam.timeRange[0],
-                                                   create_end=QueryQAParam.timeRange[1])
+    qa_list = QAKnoweldgeDao.query_by_condition_v1(
+        source=sources, create_start=QueryQAParam.timeRange[0], create_end=QueryQAParam.timeRange[1]
+    )
     if qa_list:
         for q in qa_list:
             q.answers = json.loads(q.answers)

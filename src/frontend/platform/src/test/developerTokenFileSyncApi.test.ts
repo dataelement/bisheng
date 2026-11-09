@@ -101,6 +101,7 @@ describe("developer token file-sync API client", () => {
     const basePayload = {
       name: "token",
       user_id: 7,
+      knowledge_uploader_user_id: 7,
       enabled: true,
       override_ip_whitelist: false,
       override_rate_limit: false,

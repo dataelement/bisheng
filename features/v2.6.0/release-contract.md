@@ -25,6 +25,7 @@
 | KnowledgeFilePdfArtifact | F063-unified-pdf-artifact | 知识文件统一 PDF 派生产物的当前 generation、独立处理状态、对象引用、重试信息和删除清理；不拥有 KnowledgeFile 解析状态、预览或下载行为 |
 | Tag.reviewer_id / Tag.review_time / ReviewTag.reviewer_id（扩展） | F079-tag-management-console | 标签审核留痕字段：谁审的、什么时候审的。审核通过搬运 `review_tag` → `tag` 时一并携带。不取得 `Tag` / `ReviewTag` 本身的创建、命名、打标或 Link A/Link B 解析行为所有权 |
 | DeveloperToken.file_sync_rule（扩展） | F066-token-configured-filelib-sync | 每个开发者 Token 最多一份完整的文件同步业务配置；只保存稳定分类/业务域编码、知识空间 ID、可空目录 ID、固定/动态模式及动态来源，不保存路径快照，不取得门户配置、部门、知识空间、目录或文件的所有权 |
+| DeveloperToken.knowledge_uploader_user_id（扩展） | F114-developer-token-knowledge-uploader | 每条开发者 Token **必填**「知识上传人」用户 ID（管理保存与 PRD 一致）；仅用于 Filelib 等 Open API 在**未传** `external_id` 时写入 `KnowledgeFile` 的上传人/展示元数据列，**不**作为接口鉴权或 ReBAC 权限主体；取得该列及 Token 管理侧读写语义；不取得 `file_sync_rule`、路由白名单或 User 其他字段所有权 |
 | UserPointAccount / UserPointLog / PointRule / PointCopy / PointRankSnapshot / PointSyncOutbox / PointFavoriteTierAward | F070-points-system | 积分账户、append-only 流水、规则/说明文案、排行快照、外部同步 outbox、收藏阶梯已授档位；站内信文案为代码常量（无模板表）；不拥有知识文件/审批/站内信本体写所有权 |
 | Department.org_level（扩展） | F070-points-system | 仅拥有部门节点组织层级标签（company/dept/office/squad）的写入与「指定唯一公司根 → 级联打标」行为；不拥有部门树结构、用户挂载、组织同步 |
 | Department.short_name（扩展） | F082-department-short-name | 部门简称字段的创建、修改、清空与本地维护语义；不取得 F002 对 Department 其他 CRUD、物化路径和名称唯一性的所有权，不改变 F009/F014/F015 的同步事实源 |
@@ -59,6 +60,7 @@
 | INV-16 | `POST /api/v2/filelib/retrieve` 仅可为已通过 Developer Token 校验、且已按 F069 业务用户上下文通过文件 `view_file` 可见性过滤的检索结果签发原文件预签名 URL；签发不再要求 `download_file`，也不进入门户下载额度、审计、水印或分发限制链路。URL 是签发后 7 天内无需 Developer Token 的 Bearer 凭证，必须只指向原文件对象、不得记录完整签名；无权文件不得进入响应，文件记录或原对象缺失时对应 URL 必须为空。 | DeveloperToken, KnowledgeFile, Permission, MinIO | F084 |
 | INV-17 | 知识库 / 文件夹手动顺序只写已有 `knowledge.sort_weight` 与 `knowledgefile.sort_weight`；写路径资格由毕昇 `KnowledgeSpaceService` 按角色矩阵计算并在写接口再检，Client 下发的 `can_reorder*` 不得作为唯一鉴权。系统管理员既有排序能力不得回退。部门管理员只能移动管辖部门（含下级）在 `department_knowledge_space` 上已绑定的团队/科室库。运营岗不得写入 `is_admin()`。 | Knowledge, KnowledgeFile, DepartmentKnowledgeSpace | F106 |
 | INV-18 | SPACE 租户切换到共享存储路由后，上传解析与重解析只能直接写该租户共享 collection/index，失败时不得回退每空间旧存储；租户隔离由物理 collection/index 与路由控制面保证。为兼容现有共享物理 schema，每条 chunk metadata 固定补写 `tenant_id=1`，但存储内部查询不得依赖该字段进行租户过滤。 | Knowledge, KnowledgeFile, SharedSpaceStorage | F107 |
+| INV-19 | Developer Token 认证成功后，接口**资源权限与配额**仍只使用「绑定用户」或 F069 解析出的 `external_id` 用户；`DeveloperToken.knowledge_uploader_user_id` **仅**在未传 `external_id` 时决定 `KnowledgeFile` 等落库的 `user_id`/`original_uploader_id`/上传人展示相关列，**不得**注入 PermissionService 或替代绑定用户进行鉴权。配置缺失时 Filelib 写路径拒绝且无脏文件行。 | DeveloperToken, User, KnowledgeFile | F114 |
 
 **规则**：
 - 新增不变量：先在此表追加，再写 AC
@@ -92,6 +94,7 @@ QA 和统计下载保持原状，无 Schema 变更。Knowledge 模块追加错�
 | F083-portal-department-display-name | F082, F025, F060, F064, F065 | 只读 F082 的 `Department.short_name`，统一首钢门户、嵌入式知识门户、成员管理、审批、专家和水印展示；保留正式名称、历史快照、权限与同步契约，不新增领域对象或数据迁移 |
 | F106-knowledge-reorder-auth | F013, 现有 knowledge sort_weight、department_knowledge_space、运营岗身份 | 只扩展谁能写已有 `sort_weight` 并下发 `can_reorder*`；不取得 Knowledge / KnowledgeFile / 部门绑定表写所有权，不改置顶与个人库 |
 | F107-direct-shared-space-ingestion | 现有 SPACE shared storage routing、F059 document distribution | 共享路由后的上传解析直接写租户共享存储；保留租户物理隔离与 `tenant_id=1` schema 兼容字段，移除旧库运行时 staging |
+| F114-developer-token-knowledge-uploader | F044, F069, F066, Knowledge upload 链 | 扩展 `developer_token` 列与 Principal；Filelib 写路径拆分权限用户与记录上传人；`file/sync` 在**无责任人回落**时用配置上传人；与 F066 责任人覆盖语义协调 |
 
 ---
 
@@ -136,3 +139,4 @@ QA 和统计下载保持原状，无 Schema 变更。Knowledge 模块追加错�
 | 2026-09-01 | 登记 F106 库/文件夹排序权限：新增 INV-17；不新增领域对象与错误码段，复用 18040/18041；部门管理员按绑定表，运营岗不得写入 `is_admin()` | F106, INV-17, Knowledge, KnowledgeFile |
 | 2026-09-03 | 登记 F107 共享知识空间直接解析入库：新增 INV-18，明确 shared route 禁止旧库 staging/fallback，并保留租户物理 collection/index 隔离 | F107, INV-18, Knowledge, KnowledgeFile, SharedSpaceStorage |
 | 2026-09-03 | 修正 F107 metadata 兼容契约：现有共享 collection 将 `tenant_id` 定义为非空字段，writer 固定补写 `tenant_id=1`；查询仍只依赖物理租户路由和 membership，不使用 tenant filter | F107, INV-18, SharedSpaceStorage |
+| 2026-11-06 | 登记 F114：表 1 `DeveloperToken.knowledge_uploader_user_id` 写所有权（F114）；新增 INV-19（上传人不参与鉴权）；表 3 依赖 F044/F069/F066 | F114, INV-19, DeveloperToken, KnowledgeFile |

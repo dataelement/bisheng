@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>技术设计 · F114 Developer Token 知识上传人</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--weak:#edf3ff;--ok:#17683b;--warn:#8a4b00;--bad:#a92525}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;overflow-wrap:anywhere}
+  a{color:var(--accent);text-underline-offset:3px}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  .hero{background:linear-gradient(135deg,#164789,#285eae);color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:27px;line-height:1.45}
+  .meta{font-size:13px;margin:0}
+  .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}
+  .summary-grid .item{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:12px 14px;border-radius:10px}
+  .item b{display:block;font-size:12px;margin-bottom:4px}
+  .item p{font-size:14px;margin:0}
+  .toc,.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  .toc h2{font-size:15px;margin:0 0 10px}
+  .toc ol{columns:2;column-gap:32px;padding-left:22px;margin:0}
+  .toc li{break-inside:avoid;margin:3px 0}
+  h2{font-size:21px;line-height:1.5;margin:0 0 6px}
+  h3{font-size:16px;line-height:1.6;margin:23px 0 8px}
+  .lead,.hint{color:var(--sub);font-size:13px}
+  p{margin:10px 0}
+  .badge{display:inline-block;font-size:11px;font-weight:600;color:var(--accent);background:var(--weak);padding:2px 8px;border-radius:12px;vertical-align:middle}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .callout.warn{border-color:var(--warn);background:#fff8e9}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  .callout strong{display:block;margin-bottom:4px}
+  .table-wrap{overflow-x:auto;max-width:100%;margin:12px 0;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8;color:#364459;font-weight:650}
+  tr:last-child td{border-bottom:0}
+  tr>*:last-child{border-right:0}
+  caption{text-align:left;font-weight:600;padding:10px 12px;background:#fafbfc}
+  .diagram{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;margin:14px 0}
+  .diagram-scroll{overflow-x:auto}
+  .diagram svg{display:block;width:100%;min-width:760px;height:auto}
+  figcaption{font-size:12px;color:var(--sub);margin-top:8px}
+  .diagram text{font-family:inherit;fill:#26364d}
+  code{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px}
+  .status{font-weight:600;color:var(--warn)}
+  .status.ready{color:var(--warn)}
+  .status.closed{color:var(--ok)}
+  .footer{font-size:12px;color:var(--sub);text-align:center;margin-top:26px}
+  @media(max-width:680px){.wrap{padding:16px 12px 48px}.summary-grid{grid-template-columns:1fr}.toc ol{columns:1}}
+  @media print{body{background:#fff}.hero{background:#fff!important;color:#111!important;border:1px solid #777}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero" id="top">
+  <h1>F114 · Developer Token 配置知识上传人 · 技术设计</h1>
+  <p class="meta">文档版本 0.2 · 2026-11-06 · 状态：<span class="status closed">设计已确认</span> · 需求基线：<a href="requirements.html" style="color:#fff;text-decoration:underline">requirements.html v0.2</a></p>
+  <div class="summary-grid">
+    <div class="item"><b>做什么</b><p>在 <code>developer_token</code> 增加知识上传人；Filelib 写路径拆分「权限用户」与「落库上传人」，对齐 PRD 决策表。</p></div>
+    <div class="item"><b>为什么</b><p>源码里 <code>KnowledgeFile</code> 上传字段取自 <code>login_user</code>；当前若干写依赖 <code>get_default_operator_async</code>，与「绑定用户鉴权」不一致，需一并修正。</p></div>
+    <div class="item"><b>影响谁</b><p>Platform Token 配置页；<code>/api/v1/admin/developer-tokens</code>；<code>/api/v2/filelib/*</code> 写接口；Alembic 双库迁移。</p></div>
+    <div class="item"><b>关键选择</b><p>认证成功后从 Token 行加载 <code>knowledge_uploader_user_id</code> 注入 <code>DeveloperTokenPrincipal</code>；写路径用显式依赖解析「权限用户 + 记录用户」，禁止仅改 <code>KnowledgeService</code> 全局假设。</p></div>
+    <div class="item"><b>失败后怎么办</b><p>缺上传人配置或解析失败：写请求拒绝、无文件行；Admin 保存拒绝并提示必选。</p></div>
+    <div class="item"><b>待决</b><p>设计评审确认后实施；<code>file/sync</code> 与责任人回填规则见 §5.2。</p></div>
+  </div>
+</header>
+
+<nav class="toc" id="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#summary">方案摘要</a></li>
+    <li><a href="#basis">依据与范围</a></li>
+    <li><a href="#architecture">现状与目标架构</a></li>
+    <li><a href="#flows">核心流程</a></li>
+    <li><a href="#decisions">关键决策</a></li>
+    <li><a href="#contracts">契约与数据</a></li>
+    <li><a href="#impact">影响与依赖</a></li>
+    <li><a href="#verification">验证安排</a></li>
+    <li><a href="#release">发布与恢复</a></li>
+    <li><a href="#records">待决与变更记录</a></li>
+  </ol>
+</nav>
+
+<section class="card" id="summary">
+  <h2>1. 方案摘要</h2>
+  <p>在 <code>developer_token</code> 表新增「知识上传人」外键列（存 <code>user_id</code>），管理端与 Admin API 强制校验选人。Token 认证成功时把该 ID 带入 <code>DeveloperTokenPrincipal</code>。Filelib 所有会写入 <code>KnowledgeFile</code> 的入口，在请求上下文中同时解析：</p>
+  <ul>
+    <li><strong>permission_user</strong>：沿用现有规则——无 <code>external_id</code> 时为 Token <strong>绑定用户</strong>；有 <code>external_id</code> 时为全局解析出的目标用户（F069）。用于配额、<code>PermissionService</code>、空间路由、<code>prepare_upload</code> 等。</li>
+    <li><strong>record_user</strong>：无 <code>external_id</strong> 时为 Token 配置的知识上传人（须预解析为完整 <code>UserPayload</code>）；有 <code>external_id</code> 时 <strong>等于</strong> <code>permission_user</code>（PRD 决策表）。用于 <code>KnowledgeFile.user_id</code>、<code>user_name</code>、<code>original_uploader_id</code>、<code>updater_*</code> 及依赖上传人的组织解析（与现网 <code>upload_original_file</code> 写入一致）。</li>
+  </ul>
+  <div class="callout warn">
+    <strong>现状缺口（源码事实）</strong>
+    <code>get_filelib_space_command_service</code> 使用 <code>Depends(get_default_operator_async)</code>，与 Token 绑定用户无关；<code>upload_original_file</code> 将 <code>user_id</code>/<code>original_uploader_id</code> 设为 <code>login_user</code>。实施时必须把写路径接到 Token 鉴权链，否则无法满足 AC-01/AC-03。
+  </div>
+</section>
+
+<section class="card" id="basis">
+  <h2>2. 依据与范围</h2>
+  <div class="table-wrap">
+    <table>
+      <caption>依据</caption>
+      <thead>
+        <tr><th>来源</th><th>版本</th><th>内容</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>PRD</td>
+          <td><code>requirements.html</code> v0.2</td>
+          <td>REQ-001～005，AC-01～AC-05，决策表 D-UPLOADER，涉及表 <code>developer_token</code>、<code>user</code>、<code>knowledge_file</code></td>
+        </tr>
+        <tr>
+          <td>代码</td>
+          <td>工作区当前树</td>
+          <td><code>DeveloperTokenService.authenticate_principal</code> 构建 <code>DeveloperTokenPrincipal</code>；<code>knowledge_service.upload_original_file</code> 写 <code>original_uploader_id</code>；<code>FilelibSyncService</code> 事后覆盖责任人与上传人</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>2.1 正确性约束（INV）</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>INV</th><th>规则</th><th>保证方式</th><th>验证</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>INV-F114-1</td>
+          <td>鉴权与 ReBAC/RBAC 仅使用 <code>permission_user</code>，上传人配置不扩大权限</td>
+          <td><code>prepare_upload</code>、<code>QuotaService</code>、空间 <code>route(write=True)</code> 等一律传入 <code>permission_user</code></td>
+          <td>AC-03</td>
+        </tr>
+        <tr>
+          <td>INV-F114-2</td>
+          <td>未传 <code>external_id</code> 且 Token 无有效知识上传人 → 写拒绝、无 <code>KnowledgeFile</code> 新行</td>
+          <td>依赖注入阶段校验 <code>knowledge_uploader_user_id</code> 非空且用户可用</td>
+          <td>AC-05</td>
+        </tr>
+        <tr>
+          <td>INV-F114-3</td>
+          <td>已传 <code>external_id</code> → 记录用户 = 解析用户，配置上传人不覆盖</td>
+          <td><code>record_user := permission_user</code>（解析成功后）</td>
+          <td>AC-04</td>
+        </tr>
+        <tr>
+          <td>INV-F114-4</td>
+          <td>配置不授予权限：知识上传人仅用于元数据列，不参与本次请求的权限判定</td>
+          <td>不向 <code>PermissionService.check</code> 传入 <code>record_user</code> 作为主体</td>
+          <td>AC-03、代码审查</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="architecture">
+  <h2>3. 现状与目标架构</h2>
+  <figure class="diagram">
+    <div class="diagram-scroll">
+      <svg viewBox="0 0 800 200" role="img" aria-labelledby="arch-title">
+        <title id="arch-title">F114 目标数据流</title>
+        <rect x="20" y="70" width="140" height="50" rx="8" fill="#fff" stroke="#245bb1"/>
+        <text x="90" y="99" text-anchor="middle" font-size="12">Client + Token</text>
+        <line x1="160" y1="95" x2="210" y2="95" stroke="#245bb1" marker-end="url(#m1)"/>
+        <defs><marker id="m1" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#245bb1"/></marker></defs>
+        <rect x="210" y="50" width="180" height="100" rx="8" fill="#edf3ff" stroke="#245bb1"/>
+        <text x="300" y="78" text-anchor="middle" font-size="12">DeveloperTokenService</text>
+        <text x="300" y="98" text-anchor="middle" font-size="11">principal.user = 绑定用户</text>
+        <text x="300" y="118" text-anchor="middle" font-size="11">+ knowledge_uploader_id</text>
+        <text x="300" y="138" text-anchor="middle" font-size="11">+ token_id / tenant</text>
+        <line x1="390" y1="95" x2="440" y2="95" stroke="#245bb1" marker-end="url(#m1)"/>
+        <rect x="440" y="45" width="160" height="110" rx="8" fill="#fff" stroke="#17683b"/>
+        <text x="520" y="75" text-anchor="middle" font-size="12">FilelibWriteContext</text>
+        <text x="520" y="95" text-anchor="middle" font-size="11">permission_user</text>
+        <text x="520" y="115" text-anchor="middle" font-size="11">record_user</text>
+        <text x="520" y="135" text-anchor="middle" font-size="11">(from ext_id 或配置)</text>
+        <line x1="600" y1="95" x2="650" y2="95" stroke="#17683b" marker-end="url(#m1)"/>
+        <rect x="650" y="60" width="130" height="80" rx="8" fill="#fff8e9" stroke="#8a4b00"/>
+        <text x="715" y="88" text-anchor="middle" font-size="12">KnowledgeService</text>
+        <text x="715" y="108" text-anchor="middle" font-size="11">权限入参 vs 行字段</text>
+      </svg>
+    </div>
+    <figcaption>认证层携带上传人 ID；编排层拆双用户；领域写库使用拆分后的参数。</figcaption>
+  </figure>
+
+  <h3>3.1 模块职责</h3>
+  <ul>
+    <li><code>developer_token</code>：模型 + migration + Admin CRUD + <code>authenticate_principal</code> 装载新字段；校验上传人属于 Token 租户且账号可用。</li>
+    <li><code>open_endpoints/api/dependencies.py</code>：新增 <code>get_filelib_write_context</code>（名称可最终实现定稿），替换 <code>get_filelib_space_command_service</code> 对写接口的 <code>get_default_operator_async</code> 依赖。</li>
+    <li><code>FilelibSpaceCommandService</code>：构造函数或 <code>upload</code> 方法接受 <code>record_user</code>；内部调用 <code>KnowledgeService</code> 时传入「权限用 login_user」与「行字段用 record_user」。</li>
+    <li><code>knowledge/domain/services/knowledge_service.py</code>：为 <code>aprocess_knowledge_file</code> / <code>sync_process_knowledge_file</code> / <code>upload_original_file</code> 增加可选 <code>record_user: UserPayload | None</code>；<code>None</code> 时保持现网「全部用 login_user」。</li>
+    <li><code>FilelibSyncService</code>：见 §5.2。</li>
+    <li>Platform：<code>DeveloperToken.tsx</code> + <code>controllers/API/developerToken.ts</code> 类型与表单。</li>
+  </ul>
+</section>
+
+<section class="card" id="flows">
+  <h2>4. 核心流程</h2>
+  <h3>4.1 Admin 保存 Token</h3>
+  <ol>
+    <li>请求体包含 <code>knowledge_uploader_user_id</code>（与 <code>user_id</code> 绑定用户区分）。</li>
+    <li>Service 校验：与绑定用户同租户；用户未删除、租户关系 active（对齐绑定用户校验强度）。</li>
+    <li>持久化至 <code>developer_token</code> 新列。</li>
+  </ol>
+
+  <h3>4.2 Filelib 上传（multipart / chunks / 同步）</h3>
+  <ol>
+    <li><code>Depends(get_developer_token_principal)</code> 或等价：无 Header → 保持现有「无 Token」行为（若仍存在）；有 Header → 认证。</li>
+    <li>解析 <code>permission_user</code>：<code>external_id</code> 逻辑沿用 <code>FilelibUserContextService.use_user</code>；否则为 <code>principal.user</code>。</li>
+    <li>解析 <code>record_user</code>：若有 <code>external_id</code> 成功解析 → <code>record_user = permission_user</code>；否则从 <code>principal.knowledge_uploader_user_id</code> 异步 <code>UserPayload.init_login_user</code>（或现有异步工厂）；若为空或用户无效 → 返回业务错误（198xx 模块内新增码，设计评审对齐 <code>common/errcode/</code>）。</li>
+    <li><code>FilelibSpaceCommandService.upload(...)</code>：<code>self.user = permission_user</code>；将 <code>record_user</code> 下传到 <code>KnowledgeService</code>。</li>
+    <li><code>upload_original_file</code>：配额/路由用 <code>login_user</code>（权限）；写 <code>KnowledgeFile.user_id</code>、<code>original_uploader_id</code> 等用 <code>record_user</code>；<code>KnowledgeFileOrganizationService.uploader_organization</code> 对上传人组织：入参改为 <code>record_user.user_id</code>（与 PRD「上传人展示/归属」一致）。</li>
+  </ol>
+
+  <h3>4.3 读列表/检索（不在范围）</h3>
+  <p>保持 <code>get_filelib_request_user</code>；不写库，不改。</p>
+</section>
+
+<section class="card" id="decisions">
+  <h2>5. 关键决策</h2>
+
+  <h3>5.1 列名与迁移</h3>
+  <p><strong>建议列名</strong>：<code>knowledge_uploader_user_id</code>，类型 <code>INT NOT NULL</code>（应用层新建必写）＋ Alembic 对存量行：允许短期 <code>NULL</code>，由「保存时必填」与「写接口拒绝」兜底（PRD REQ-002 建议）。列注释（中文）：「知识上传人用户 ID（Filelib 未传 external_id 时写入知识文件的上传人）」。</p>
+  <p><strong>DM8</strong>：与 MySQL 同步迁移；遵守 dual-DB 类型规范。</p>
+
+  <h3>5.2 Filelib 同步（<code>POST /filelib/file/sync</code>）</h3>
+  <div class="callout ok">
+    <strong>已决定（设计推荐，随实现前可作最终确认）</strong>
+    <ul>
+      <li>当请求解析出 <strong>责任人/负责人</strong>（<code>responsible_person*</code> 语义，见 F066）时：<strong>保持现网</strong> <code>FilelibSyncService</code> 对 <code>user_id</code>、<code>original_uploader_id</code> 的覆盖逻辑，不因 F114 覆盖责任人。</li>
+      <li>当同步路径会退回到「责任人 = Token 绑定用户」（代码注释已有「页面上传人因此不是调用方令牌用户」场景）：<strong>改为</strong> 使用 Token 配置的 <code>knowledge_uploader_user_id</code> 作为记录上传人（若该场景同时需要组织归属，同步用 <code>record_user.user_id</code> 计算 <code>belonging_organization_id</code>）。</li>
+      <li>若同步请求同时存在「可解析责任人」与「配置上传人」，以责任人为准（业务可归责对象优先于默认上传人）。</li>
+    </ul>
+  </div>
+
+  <h3>5.3 Principal 扩展</h3>
+  <p><code>DeveloperTokenPrincipal</code> 增加 <code>knowledge_uploader_user_id: int | None</code>，在 <code>authenticate_principal</code> 从 <code>token</code> ORM 行读取。Pydantic 模型与依赖注入保持不可变；不得在 endpoint 侧手改 <code>principal.user</code> 冒充上传人。</p>
+
+  <h3>5.4 无 Developer Token 的调用</h3>
+  <p>若当前环境仍存在未带 <code>X-Developer-Token</code> 的 <code>/api/v2/filelib</code> 写调用：<strong>不改语义</strong>，仍用 <code>default_operator</code> 作为唯一用户（权限与记录合一）。F114 仅在有 Token 认证时拆分。</p>
+</section>
+
+<section class="card" id="contracts">
+  <h2>6. 契约与数据</h2>
+
+  <h3>6.1 Admin API</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>端点</th><th>变更</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>POST/PUT /api/v1/admin/developer-tokens</code></td><td>请求/响应增加 <code>knowledge_uploader_user_id</code>，必填（与 PRD 一致）</td></tr>
+        <tr><td><code>GET ...</code> 列表/详情</td><td>返回 ID + 展示名（对齐 <code>user_id</code> 展示方式）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>6.2 OpenAPI Filelib</h3>
+  <p>外部 HTTP 形态不变；行为变化为落库上传人来源。文档更新：<code>docs/api/filelib-openapi-interfaces.md</code>（若存在）补充「未传 external_id 时上传人为 Token 配置的知识上传人」。</p>
+
+  <h3>6.3 KnowledgeFile 写入字段映射</h3>
+  <div class="table-wrap">
+    <table>
+      <caption>创建文件行（节选 <code>upload_original_file</code>）</caption>
+      <thead>
+        <tr><th>列</th><th>来源（F114）</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>user_id</code> / <code>user_name</code></td><td><code>record_user</code></td></tr>
+        <tr><td><code>original_uploader_id</code></td><td><code>record_user.user_id</code></td></tr>
+        <tr><td><code>updater_id</code> / <code>updater_name</code></td><td><code>record_user</code>（与现网「创建即更新者」一致）</td></tr>
+        <tr><td>配额 / <code>prepare_upload</code> / 路由</td><td><code>permission_user</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="impact">
+  <h2>7. 影响与依赖</h2>
+  <ul>
+    <li><strong>表</strong>：<code>developer_token</code> DDL；无 <code>knowledge_file</code> 表结构变更。</li>
+    <li><strong>前端</strong>：<code>src/frontend/platform/src/pages/SystemPage/components/DeveloperToken.tsx</code>、API 封装、类型。</li>
+    <li><strong>测试</strong>：<code>test/developer_token/</code>、<code>test/open_endpoints/</code> 增补鉴权与上传人断言。</li>
+    <li><strong>Release contract</strong>：在 <code>features/v2.6.0/release-contract.md</code> 登记 F114 与 DeveloperToken Principal 新字段说明。</li>
+  </ul>
+</section>
+
+<section class="card" id="verification">
+  <h2>8. 验证安排</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>AC</th><th>验证层级</th><th>方法</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>AC-01 / AC-04</td><td>后端接口</td><td>pytest：mock MinIO/异步管道边界，断言 <code>KnowledgeFileDao</code> 或 repository 抓取行的 <code>user_id</code> / <code>original_uploader_id</code></td></tr>
+        <tr><td>AC-02</td><td>Admin API</td><td>pytest：缺字段 422/业务码</td></tr>
+        <tr><td>AC-03 / AC-05</td><td>后端</td><td>构造绑定用户无写权限 + 上传人有权限；无上传人配置</td></tr>
+        <tr><td>file/sync 分支</td><td>接口</td><td>覆盖「无责任人回落」与「有责任人不覆盖」两例</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">真实 DM8/FGA/Worker 验证按项目约定标 <code>MANUAL_REQUIRED</code>；开发阶段以 mock 为主。</p>
+</section>
+
+<section class="card" id="release">
+  <h2>9. 发布与恢复</h2>
+  <ul>
+    <li>迁移先行；旧代码读新列须兼容 Nullable 直至存量 Token 全部补齐（运营或强制编辑）。</li>
+    <li>回滚代码：新列可保留；上传人行为回退为「单用户」语义需二次发布，本设计不要求自动回填历史文件。</li>
+  </ul>
+</section>
+
+<section class="card" id="records">
+  <h2>10. 待决事项与变更记录</h2>
+  <p><strong>设计确认</strong>：2026-11-06 用户文字「确认设计」。下游：<code>test-cases.html</code>、<code>tasks.md</code>、实现分支。</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>版本</th><th>日期</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0.1</td><td>2026-11-06</td><td>初稿：双用户拆分、Principal 扩展、sync 规则、KnowledgeService 入参扩展</td></tr>
+        <tr><td>0.2</td><td>2026-11-06</td><td>用户确认设计；状态改为「设计已确认」</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="footer">F114 · design.html · 毕昇</p>
+</div>
+</body>
+</html>

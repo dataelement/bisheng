@@ -42,6 +42,7 @@ export default function DeveloperTokenTable({
             <TableHead>{t("system.developerToken.columns.name")}</TableHead>
             <TableHead>{t("system.developerToken.columns.prefix")}</TableHead>
             <TableHead>{t("system.developerToken.columns.binding")}</TableHead>
+            <TableHead>{t("system.developerToken.columns.knowledgeUploader")}</TableHead>
             <TableHead>{t("system.developerToken.columns.status")}</TableHead>
             <TableHead>{t("system.developerToken.columns.controls")}</TableHead>
             <TableHead>{t("system.developerToken.columns.routes")}</TableHead>
@@ -63,6 +64,9 @@ export default function DeveloperTokenTable({
                 <TableCell className="text-xs">
                   <div>{row.user_name || row.user_id}</div>
                   <div className="text-muted-foreground">{row.tenant_name || row.tenant_id}</div>
+                </TableCell>
+                <TableCell className="text-xs">
+                  <div>{row.knowledge_uploader_user_name || row.knowledge_uploader_user_id}</div>
                 </TableCell>
                 <TableCell>
                   <Badge variant={row.enabled ? "default" : "destructive"}>

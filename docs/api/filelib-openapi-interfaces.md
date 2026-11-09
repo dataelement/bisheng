@@ -24,7 +24,7 @@ http://{bisheng-host}:7860/api/v2
 
 ### 1.3 调用资格、业务用户与数据作用域
 
-Filelib 查询接口（包括按 ID 获取原文件地址）使用双重身份：
+Filelib **查询**接口（包括按 ID 获取原文件地址）使用双重身份：
 
 - `X-Developer-Token` 始终必填，只用于验证调用方是否具备调用资格，包括 Token 状态、绑定关系、IP、路由白名单和限流。
 - `external_id` 可选，用于确定本次请求的业务用户、资源权限和数据作用域。
@@ -32,6 +32,12 @@ Filelib 查询接口（包括按 ID 获取原文件地址）使用双重身份�
 - 传入 `external_id` 时，系统按去除首尾空白后的值全局精确匹配唯一有效用户，并完整继承该用户权限；目标用户为全局超级管理员时同样继承其完整权限。
 - 找不到有效用户、用户已禁用或存在多个有效匹配时统一返回 HTTP `403`，不会披露具体原因，也不会回退到 Token 绑定用户。
 - 空字符串、纯空白或超过 255 个字符的 `external_id` 返回 HTTP `422`。
+
+**写**接口（创建空间、上传、删除文件等）在 Developer Token 场景下的用户分工（F114）如下：
+
+- 未携带 `X-Developer-Token` 时：与旧版一致，权限与知识文件落库用户均使用配置的 `default_operator`。
+- 携带 `X-Developer-Token` 且**未传** `external_id` 时：**资源权限与配额**以 Token **绑定用户**为准；**知识文件的上传人 / 文件行 `user_id` 等展示与审计字段**以管理台为该 Token 配置的「知识上传人」用户为准。未配置或上传人无效时返回业务码 `19815` / `19816`（HTTP `422`），且不落库脏文件。
+- 携带 `X-Developer-Token` 且**传入** `external_id` 时：解析出的外部用户同时作为权限用户与落库记录用户（与查询侧 F069 语义一致）。
 
 Token 校验优先于外部用户解析。Token 校验失败时返回既有 Developer Token 错误，不查询 `external_id` 对应用户，也不进入 Filelib 业务。
 
@@ -63,6 +69,8 @@ Token 校验优先于外部用户解析。Token 校验失败时返回既有 Deve
 | `19804` | `developer_token_ip_forbidden` | 请求 IP 不允许。 |
 | `19805` | `developer_token_rate_limited` | 超过限流。 |
 | `19806` | `developer_token_limiter_unavailable` | 限流存储不可用。 |
+| `19815` | `developer_token_knowledge_uploader_missing` | Developer Token 已配置但未设置知识上传人（写路径未传 `external_id` 时需要）。 |
+| `19816` | `developer_token_knowledge_uploader_invalid` | 知识上传人无效或不在 Token 租户下。 |
 
 除上述业务码外：
 
@@ -92,8 +100,7 @@ Token 校验优先于外部用户解析。Token 校验失败时返回既有 Deve
 | `GET /filelib/file/detail` | 先解析实际内容文件，再读文本产物或完整共享分块；不回退旧存储 |
 | `GET /filelib/file/source_url`、`POST /filelib/retrieve` | 仅接受已授权 SPACE；签名仍遵守现有 view_file 与原文件地址规则 |
 
-写接口沿用配置的 `default_operator`，查询接口沿用 Token 绑定用户或 `external_id`；
-本次不把业务用户切换扩展到写接口。共享路由须提前初始化，接口不会自动建库或迁移旧数据。
+未携带 `X-Developer-Token` 的写接口仍沿用配置的 `default_operator`；携带 Token 的写路径见上文「写接口」分工（F114）。共享路由须提前初始化，接口不会自动建库或迁移旧数据。
 
 创建最小请求：
 

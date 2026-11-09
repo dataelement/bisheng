@@ -39,6 +39,7 @@ def _read():
         id=1,
         tenant_id=1,
         user_id=1,
+        knowledge_uploader_user_id=1,
         name="api",
         token_prefix="bst_abc",
         enabled=True,
@@ -75,7 +76,7 @@ def test_create_token_returns_plaintext_once():
     ):
         resp = client.post(
             "/api/v1/admin/developer-tokens",
-            json={"name": "api", "user_id": 1, "department_id": 20},
+            json={"name": "api", "user_id": 1, "knowledge_uploader_user_id": 1, "department_id": 20},
         )
 
     assert resp.status_code == 200
@@ -109,6 +110,7 @@ def test_create_accepts_structured_route_whitelist():
             json={
                 "name": "api",
                 "user_id": 1,
+                "knowledge_uploader_user_id": 1,
                 "department_id": 20,
                 "route_whitelist": [{"match_type": "METHOD_PATH", "method": "GET", "path": "/api/v1/items"}],
             },
