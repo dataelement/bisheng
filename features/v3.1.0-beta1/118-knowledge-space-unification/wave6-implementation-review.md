@@ -553,3 +553,12 @@ compiled07a0f7798d由root逐行审查（旧generator/error优先级/pair语义�
 ### 成员正式写入集成验收（2026-11-09）
 
 T1011/T1012固定作者提交3fdd21360adc2e79a2ca9145738b6594933bff60，已正常合流。作者外3项native探针及358项相关组合通过，覆盖insert/keep混合、晚取消、外catch+commit保留无关DML、插入后tenant/nested TX漂移和恢复prefix实际PK/full-set绑定。主功能全部migration测试1428 passed /134.92s，日志/private/tmp/f118-root-member-writer-suite.log及同名XML。Root已复查两生产叶diff；不以Root变3替代Member写入证明。正式namespace完整明细、SQL/FGA发布、全量停服升级与环境E2E仍待后继，未据本地回归宣称已完成升级。
+
+
+### 模型inspection与移动内核主集成（2026-11-09）
+
+模型原cfef的fresh锁后pin被独审actual native 3项真红否决；合同e824末尾补正后正式红39211ec859（6红2控制）、fixed a1834887fd只原Service锁前checkout+pin。Root完整读生产diff并正常merge，原作者外失败探针4 passed/0.24s，/private/tmp/f118-root-modeltx-native.log；8条实际存在测试路径274 passed/9.80s，/private/tmp/f118-root-modeltx-wire-corrected.log。首次组合误指两个不存在文件未收集测试，已纠正路径，不计产品红。原T111/T112内部目标锁/五类模型、ASR_RT/跨tenant完整统计与受限披露具备原293审计及本波保护，关闭；公开R3确认/删除执行、Coverage正式启用仍T113–120/T169170，未宣称公开强删可用。T1022/T1023闭合。
+
+移动执行固定4359af7935正常merge，Root完整读三生产叶，无新缺陷；作者956 passed/202.04s。Root独立actual ACK探针3 passed/0.90s：错durable cleaned计数、多余敏感结果、原目标多Version别名均拒且没有File状态UPDATE；/private/tmp/f118-root-move-execution-native.log。Root9条路径116 passed/102.82s，/private/tmp/f118-root-move-execution-integration.log。T1014–T1017闭合内部kernel；实际MoveOwner/runner/scanner/API/DI及direct-file引用归属同步仍后继，未打开普通kind白名单。固定旧四kind SQL/绑定/结果oracle与AST控制已保留。
+
+C6 wire154617生产diff已读；该三卡组仍等待完整producer/consumer/M2组合，不因wire独立242通过就关闭正式迁移。

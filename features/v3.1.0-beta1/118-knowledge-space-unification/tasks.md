@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史1029编号：918已完成/历史交付、109当前待办、2外移；原137队列已完成40项、剩97项，另12张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史1029编号：926已完成/历史交付、101当前待办、2外移；原137队列已完成42项、剩95项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -911,7 +911,7 @@
   **配对测试**：T109\
   **验证 / 完成条件**：运行配对测试 T109；验证本卡预期，相关范围检查通过。
 
-- [ ] **T111 · 模型目标锁与跨租户影响：先写测试**
+- [x] **T111 · 模型目标锁与跨租户影响：先写测试**
   **类型 / Owner**：测试 / LLM\
   **写入文件**：`src/backend/test/knowledge_unification/test_llm_refs.py`（拟新增）\
   **逻辑 / 测试上下文**：五类模型及共享两租户依赖均计数；仅历史聊天审计不阻；检查失败与未ready不能当无引用，不能泄露名称。\
@@ -919,7 +919,7 @@
   **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-75, AC-76, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T112 · 模型目标锁与跨租户影响**
+- [x] **T112 · 模型目标锁与跨租户影响**
   **类型 / Owner**：后端 Domain / LLM\
   **写入文件**：`src/backend/bisheng/llm/domain/services/model_reference_service.py`（拟新增）\
   **逻辑 / 测试上下文**：按 R3 查单模型/删除清单/整服务所有模型，受信共享目标跨租户反查；现有管理员/tenant/共享只读保持，按权限展示；锁序与 R2相同，异常fail closed。\
@@ -8187,7 +8187,7 @@
   **覆盖 AC**: AC-55, AC-57, AC-83, AC-85\
   **验证 / 完成条件**：真实native红绿、原相关组合与固定作者外复查；不提前打开Owner/API/worker。
 
-- [ ] **T1014 · 原move双Root与逐项执行原生反例**
+- [x] **T1014 · 原move双Root与逐项执行原生反例**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_execution_repository.py`；`src/backend/test/knowledge_unification/test_move_execution_scale.py`\
   **逻辑 / 测试上下文**：W6§112一次全接受核验、逐项常量guard、原P1 proof和双Root/lease配置。\
@@ -8195,7 +8195,7 @@
   **覆盖 AC**: AC-24, AC-43, AC-49, AC-54, AC-83\
   **验证 / 完成条件**：真实native红绿、原相关组合与固定作者外复查；不提前打开Owner/API/worker。
 
-- [ ] **T1015 · 原move执行事实及有界SQL guard**
+- [x] **T1015 · 原move执行事实及有界SQL guard**
   **类型 / Owner**：后端 Repository / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/move_execution_repository.py`；`src/backend/bisheng/knowledge/domain/repositories/move_row_repository.py`\
   **逻辑 / 测试上下文**：W6§112native执行facts/SQL及同TX evidence，不新队列/lease/receipt，既有行Reader只必要点查复用。\
@@ -8203,7 +8203,7 @@
   **配对测试**：T1014\
   **验证 / 完成条件**：真实native红绿、原相关组合与固定作者外复查；不提前打开Owner/API/worker。
 
-- [ ] **T1016 · 原Job执行内核move硬边界与普通kind等价反例**
+- [x] **T1016 · 原Job执行内核move硬边界与普通kind等价反例**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_execution_kernel.py`；`src/backend/test/knowledge_unification/test_move_job_ready.py`\
   **逻辑 / 测试上下文**：W6§112显式_move原路径、同TX checkpoint/result/File ACK、普通4kind零额外查询。\
@@ -8211,7 +8211,7 @@
   **覆盖 AC**: AC-24, AC-43, AC-49, AC-54, AC-83\
   **验证 / 完成条件**：真实native红绿、原相关组合与固定作者外复查；不提前打开Owner/API/worker。
 
-- [ ] **T1017 · 原Job算法接move专用native执行前置**
+- [x] **T1017 · 原Job算法接move专用native执行前置**
   **类型 / Owner**：后端 Repository / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
   **逻辑 / 测试上下文**：W6§112仅move私有选路/真实prefix及after guard，原lease/CAS/count/retry/dispatch不复制。\
@@ -8251,7 +8251,7 @@
   **配对测试**：T1020\
   **验证 / 完成条件**：先实际红绿、原同范围控制及固定作者外复验，不新增产品语义或扩大权限。
 
-- [ ] **T1022 · Model影响检查尾Coverage跨事务原生反例**
+- [x] **T1022 · Model影响检查尾Coverage跨事务原生反例**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_llm_refs.py`；`src/backend/test/knowledge_unification/test_model_reference_transaction.py`\
   **逻辑 / 测试上下文**：W6§115原native目标锁TX在Coverage/disclosure/身份尾await丢失即拒；fresh Session续页合法。\
@@ -8259,7 +8259,7 @@
   **覆盖 AC**: AC-70, AC-71, AC-72, AC-73, AC-75, AC-76, AC-83, AC-89\
   **验证 / 完成条件**：真实rollback/rebegin和nested native红→绿，原v2摘要/所有owner计数与无额外SQL保持。
 
-- [ ] **T1023 · 原ModelReferenceCore贯穿原tenant及TX身份**
+- [x] **T1023 · 原ModelReferenceCore贯穿原tenant及TX身份**
   **类型 / Owner**：后端 Service / PERM\
   **写入文件**：`src/backend/bisheng/llm/domain/services/model_reference_service.py`\
   **逻辑 / 测试上下文**：W6§115仅同次inspection轻TX pin，失败10994，不新Session/begin/commit或重读全部target。\
