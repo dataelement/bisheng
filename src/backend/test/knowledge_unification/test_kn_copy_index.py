@@ -160,3 +160,57 @@ async def test_incomplete_index_ack_is_visible_and_never_removes_source(copying)
     with pytest.raises(RuntimeError, match="ACK failed"):
         await apply(copying)
     assert copying.old.rows == original and copying.objects.values["original/81.txt"] == b"source bytes"
+
+
+def test_copy_of_previously_moved_file_rewrites_its_original_image_namespace(copying):
+    # Actual move retains original object/image keys while current File ownership
+    # changes. File 81 is accepted in space 41; its original image namespace is 40.
+    objects = module.CopyObjects(
+        copying.objects,
+        source_id=41,
+        target_id=50,
+        file_ids={"81": 181},
+        object_map={"original/81.txt": "original/181.txt", "preview/81.md": "preview/181.md"},
+    )
+    before = deepcopy(copying.objects.values)
+    copied = objects.objects(copying.snapshot["source_file"], copying.snapshot["target_file"])
+    assert b"/50/181/" in copying.objects.values["preview/181.md"]
+    assert copied == {"image": "knowledge/images/50/181/same.png"}
+    assert copying.objects.values["knowledge/images/50/181/same.png"] == b"image bytes"
+    assert all(copying.objects.values[key] == value for key, value in before.items())
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "knowledge/images/40/999/foreign.png",
+        "knowledge/images/0/81/bad.png",
+        "knowledge/images/40/81/../escape.png",
+        "knowledge/images/40/81/a/../../escape.png",
+    ],
+)
+def test_historical_namespace_does_not_authorize_foreign_file_or_path_escape(copying, key):
+    from copy import deepcopy
+
+    before = deepcopy(copying.objects.values)
+    objects = module.CopyObjects(copying.objects, source_id=41, target_id=50, file_ids={"81": 181}, object_map={})
+    with pytest.raises(ValueError):
+        objects.rewrite(key)
+    assert copying.objects.values == before
+
+
+async def test_copy_after_move_rewrites_current_index_chunks_without_changing_source(copying, monkeypatch):
+    copying.snapshot["source"]["id"] = 41
+    copying.snapshot["source_file"]["knowledge_id"] = 41
+    for row in copying.old.rows:
+        row["_source"]["metadata"]["knowledge_id"] = 41
+    before = deepcopy(copying.old.rows)
+
+    async def current_es(*, knowledge, **kwargs):
+        return copying.old if knowledge.id == 41 else copying.new
+
+    monkeypatch.setattr(module.KnowledgeRag, "init_knowledge_es_vectorstore", current_es)
+    result = await apply(copying)
+    assert result.milvus_count == result.es_count == 2
+    assert all("/50/181/" in row["_source"]["text"] for row in copying.new.rows)
+    assert copying.old.rows == before
