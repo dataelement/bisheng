@@ -1583,3 +1583,22 @@ new draft checksum使用已实测与真实在线CURRENT相同的SSOT payload：p
 
 
 §121确认只读公口补正：A1需要可信原Plan bytes才能接same-subject新凭据replay，原public get-for-execution先要actor且强expiry，不能冒替；不让App直接耦合原私有_plan。PROC先独立native红/绿，仅原MoveJobRepository窄增aread_move_confirmation(session,*,source_space_id:int,confirmation_id:str,plan_digest:str)->KnowledgeOperationPlan，委托原_plan完整tenant/原Plan hash校验(check_expiry=False)，再严格operation='move'/space_id/sourceID/plan_digest精确相等（错沿原idempotency/plan错误），无新SQL或算法。它只返回原事实、不授权/消费/续期；expired未consumed的新接受仍由原acreate_move_reserved实际expiry门拒，已consumed合法重放可读旧facts。App不接外来actor bytes、不回传private参数，当前身份资格另核；worker逐item不能用此口读大Plan。只此2–3行窄转发/校验，不扩原普通PlanGetter/Schema。与claimpeek两Repo子片可同波独立提交后再A1消费，原方法AST不改。
+
+
+## 123. 原真实目标删除证据RRT的受信写边界：已冻结
+
+PERM为原T115–118及T109110准备共享小前置，不新任务编号、不提前勾业务删除整卡。现RRT已有模型/DDL、原TargetOwner/resolve_target_state读协议，但无受信生产写入口；只新增resource_reference/domain/repositories/target_deletion_repository.py（≤600）+原application/write_runtime.py必要窄桥。不改Model/Knowledge业务Repo/Core、PlanRepo、API、FGA、任何Source/Brr或Coverage。不是通用任务/依赖平台，只写已有3种Target的原RRT证据。
+
+原ReferenceBindingRuntime constructor可追加可选target_deletions=None，默认创建与本实例repository关联的实际TargetDeletionRepository，构造0IO/0SQL；原构造两位置参数及全部Source writer行为保。Runtime新增aprepare_target_deletion(session,*,receipts,operation_id:str,operation_type:str,actor:PermissionActor)->int与afinalize_target_deletion同参→int，返回本次新增/推进数，exact replay0。它们用本runtime.verifier.validate_owner_receipts及原repository.target_owner_scope，不新receipt/capability/issued registry；repository.verifier必须同runtime实例，复制/他issuer/旧TX/跨tenant Scope拒。新Repo对应aprepare/afinalize(session,*,scope:OwnerTargetScope,operation_id,operation_type,actor)->int，只消费原受信scope，不从裸TargetKey生成许可，不查business ORM。
+
+这些口只记录事实，不授权业务删除、检查引用/force或证明外部FGA完成。实际业务Owner必须先核原动作/管理员、完整影响及原确认Plan，持实际Root/Model/File target锁，关联原同operation；调用方保证真实业务SQL已删/清对应target后才finalize，并将最后业务SQL+finalize+原Plan/进度置于同一原TX/SAVEPOINT。不能用此RRT helper当删除或强制许可，也不以先写DELETED替代业务验证。模型分享IO前若需持久DELETING fence，其prepare原事务与原Plan.consume要由后继Owner协调；本片不打开API或另造协调账。
+
+只原已有stage='deleting'→'deleted'，不降级、不删除/改写其它operation evidence。operation_id原非空无NUL≤64字符串，固定业务operation_type闭集：model_update_server/model_delete_server仅MODEL；knowledge_file_delete仅KNOWLEDGE_FILE；knowledge_space_clear仅KNOWLEDGE_FILE（space保留，不能标space）；knowledge_space_delete仅KNOWLEDGE_SPACE/KNOWLEDGE_FILE。actor只真实PermissionActor的user/service_account及严格正int subject_id，以typed主体存actor_type/id，不用audit user替代、不存credential/角色/姓名；home tenant不强制等执行tenant，实际目标Owner必须全部同当前concrete tenant。空receipts可在全部native上下文/参数检查后返回0，不造scope/tombstone，支持空server；空结果不授权任何业务写。
+
+native active AsyncSession、concrete tenant/非bypass、无pending业务ORM；Context在入口固定、每await O(1)检查原tenant/TX与UOW，不重新capture替换。允许Repo在获取原Scope前由Runtime建立原SAVEPOINT（先begin_nested再实际Receipt会失效，故本片不得在已签receipts后增加nested）：**实际caller须在签receipts之前建共同SP**；本两叶不begin/nested/commit/rollback。错误传播给业务Owner；其外catchcommit不得留下半证据。所有候选先完整有界锁读和验证、再批量写，后页冲突/无效Evidence校验阶段0DML；SQL/取消等异常由共同caller SP回滚。
+
+新Repo按scope真实keys/owner tenant分组seek/批≤200查询RRT（不用全表/Source扫描）；一次建立TargetKey→verified事实索引。先完整核现有行唯一、owner/type/id、operation/type/actor精确一致、stage与deleted_at合法；缺行仅prepare可插入，finalize缺行拒。prepare首次只VALID目标可新建deleting；原INVALID_LEGACY禁止造‘被删’原因。已有同op deleting/deleted只幂等不退回；若fresh receipt为DELETING/INVALID_DELETED，其真实DeletionEvidence也须exact同目标/owner/operation/stage，不能拿ancestor或别的op当本target直接记录。已有同TX原VALID receipt可完成其自身新建RRT，前提actual RRT行与该operation精确一致；不让receipt状态替代实际表核验。不同op/metadata/NULL owner/未知stage/缺末页或copy均拒，不覆盖原证据。
+
+只原RRT插入及stage/deleted_at/update_time推进，actor/operation/target/create_time一经存在原样；stage deleting.deleted_at为NULL，deleted.deleted_at非NULL，同op重放保第一次时间。clock使用UTC naive秒精度（可构造注入测试），不靠方言upsert/JSON SQL；真实唯一target owner锁保证并发次序，bulk Core每批≤200。最终DML明确PK+owner tenant+type+id+原stage+operation，rowcount准确；不update任何BRR.target_*或legacy字段、Source revision/digest、模型配置/任务或Grant。完整Scope/receipts核入口/尾部固定常数次，不每行/每页重扫全targets，跨await仅O(1)guard。
+
+native先红再绿：实际registered模型及知识TargetOwner facts、Source真实包含共享跨tenant绑定但Source/Brr全表字节不变；VALID→deleting→实际business SQL删除→deleted及fresh Owner读取INVALID_DELETED、同op两阶段0DML重放/时间不变。错op/type/actor/foreign/NULL/legacy/祖先删除证据/未签或copy/旧TX/nested/tenant/pending、后页冲突、第二批SQL异常和asyncio.CancelledError共同SP外catchcommit全部0半证据，外层无关已执行DML保。empty server无RRT、clear不能标space。401/10001 Targets实际读取/验证次数/SQL/参数峰值线性，Source/BRR SQL0，per-batch≤200/C2 Core编译静态，DM live免。实际业务Owner/强删确认/分享投影/模型缓存与运行准入失效仍后继，不以本helper通过宣称force delete可用。
