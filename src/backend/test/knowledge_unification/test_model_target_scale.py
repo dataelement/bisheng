@@ -42,15 +42,18 @@ async def test_complete_native_targets_do_not_create_per_target_sql_or_expressio
     assert len(result.targets) == count and result.check_complete and not result.blocked
     by_table = Counter(re.search(r"\bFROM\s+([^\s,]+)", statement, re.I)[1] for statement, _ in statements)
     assert by_table["resource_reference_tombstone"] == math.ceil(count / 200)
-    assert by_table["llm_model"] == 4 and by_table["business_resource_reference"] == 1
+    assert by_table["llm_model"] == 4
+    assert by_table["business_resource_reference"] == math.ceil(count / 200)
     assert len(statements) <= 40
     for statement, _ in statements:
         for values in re.findall(r"\bIN\s*\(([^)]*)\)", statement, re.I):
             assert values.count("?") <= 200
-    # This is a fragment bound, not a claim that the complete owner scope has
-    # <=200 parameters. Its one BRR SELECT deliberately covers all targets.
-    br_statement, br_parameters = next(row for row in statements if "FROM business_resource_reference" in row[0])
-    assert len(br_parameters) > 200 and br_statement.count(" OR ") <= math.ceil(count / 200)
+    # Exact target groups bound the whole query as well as each IN fragment.
+    # Empty groups still need one query to prove the complete absence of refs.
+    inbound = [row for row in statements if "FROM business_resource_reference" in row[0]]
+    assert len(inbound) == math.ceil(count / 200)
+    assert all(len(parameters) <= 204 for _, parameters in inbound)
+    assert all("LEFT OUTER JOIN business_reference_set" in statement for statement, _ in inbound)
 
 
 def deleted(ident, owner=101):
