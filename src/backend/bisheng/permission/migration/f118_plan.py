@@ -10,6 +10,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime
 from hashlib import sha256
+from itertools import zip_longest
 
 from pydantic import BaseModel
 
@@ -288,6 +289,8 @@ class ResourceRetirementPlan:
     visibility_deltas: tuple
     expected_use_changes: tuple[str, ...]
     checksum: str
+    after: PermissionResourceBaseline | None = None
+    namespace_target: ResourceModeBaseline | None = None
 
 
 def _validate_catalog(before):
@@ -618,7 +621,7 @@ def _grants(resource, by_model, scopes, sources_by_grant):
 
 
 def _resource_payload(plan):
-    return (
+    original = (
         plan.catalog_plan.checksum,
         plan.before,
         plan.after_grants,
@@ -626,6 +629,9 @@ def _resource_payload(plan):
         plan.visibility_deltas,
         plan.expected_use_changes,
     )
+    if plan.catalog_plan.namespace_type_mappings:
+        return (*original, plan.namespace_target, plan.after)
+    return original
 
 
 @dataclass(frozen=True, slots=True)
@@ -649,8 +655,6 @@ def _resource_context(catalog_plan):
     )
     if rebuilt != catalog_plan:
         _blocked("catalog_plan_changed")
-    if catalog_plan.namespace_type_mappings:
-        _blocked("namespace_resource_target_required")
     return _ResourceRetirementContext(
         catalog_plan,
         {model.model_key: model for model in catalog_plan.before.models},
@@ -660,27 +664,132 @@ def _resource_context(catalog_plan):
     )
 
 
-def _build_resource_retirement_plan(context, before):
+def _namespace_after(before, target):
+    if type(target) is not ResourceModeBaseline:
+        _blocked("namespace_resource_target_required")
+    previous = before.mode
+    if (
+        any(
+            type(getattr(previous, name)) is not str
+            for name in ("resource_type", "resource_id", "mode", "projection_state")
+        )
+        or any(
+            getattr(previous, name) is not None and type(getattr(previous, name)) is not str
+            for name in ("parent_type", "parent_id")
+        )
+        or (previous.operation_id is not None and not _positive(previous.operation_id))
+    ):
+        _blocked("namespace_mode_baseline_invalid")
+    if (
+        any(
+            type(getattr(target, field.name)) is not type(getattr(previous, field.name))
+            or getattr(target, field.name) != getattr(previous, field.name)
+            for field in fields(previous)
+            if field.name not in {"resource_type", "parent_type"}
+        )
+        or type(target.resource_type) is not str
+        or (
+            target.resource_type != previous.resource_type
+            and (previous.resource_type, target.resource_type) != ("knowledge_library", "knowledge_space")
+        )
+        or (
+            target.parent_type != previous.parent_type
+            and (previous.parent_type, target.parent_type) != ("knowledge_library", "knowledge_space")
+        )
+        or type(target.parent_type) is not type(previous.parent_type)
+    ):
+        _blocked("namespace_target_mode_changed")
+    return replace(
+        before,
+        resource_type=target.resource_type,
+        mode=target,
+        grants=tuple(replace(row, resource_type=target.resource_type) for row in before.grants),
+    )
+
+
+def _namespace_visible(before, after, old_grants, new_grants, compiler):
+    canonical = {}
+    for previous, current in zip(old_grants, new_grants, strict=True):
+        for source in previous.sources:
+            old = compiler._compile_source(before.tenant_id, previous, source)
+            new = compiler._compile_source(before.tenant_id, current, source)
+            if old.contribution_fingerprint in canonical:
+                _blocked("namespace_source_duplicate")
+            canonical[old.contribution_fingerprint] = old, new
+    visible, seen = [], set()
+    for row in before.visible_sources:
+        if (
+            type(row.source.source_version) is not int
+            or row.source.source_version < 0
+            or any(
+                value is not None and not _positive(value)
+                for value in (row.source.operation_id, row.source.migration_item_id)
+            )
+        ):
+            _blocked("namespace_source_metadata_invalid")
+        key = row.source.contribution_fingerprint
+        if key not in canonical or key in seen:
+            _blocked("namespace_source_backing_missing_or_duplicate")
+        seen.add(key)
+        old, new = canonical[key]
+        compiler._assert_same_canonical_source(row.source, old)
+        changed = row.source.model_copy(
+            update={"resource_type": after.resource_type, "tuple_fingerprint": new.tuple_fingerprint}
+        )
+        compiler._assert_same_canonical_source(changed, new)
+        visible.append(replace(row, source=changed))
+    return replace(after, visible_sources=tuple(visible))
+
+
+def _build_resource_retirement_plan(context, before, namespace_target=None):
     _validate_resource(before)
+    mapped = bool(context.catalog_plan.namespace_type_mappings)
+    if not mapped and namespace_target is not None:
+        _blocked("namespace_mapping_required")
+    after_resource = _namespace_after(before, namespace_target) if mapped else before
     try:
         sources_by_grant = {}
         for source in before.assignees:
             sources_by_grant.setdefault(source.grant_id, []).append(source.to_source_record())
         sources_by_grant = {key: tuple(sources) for key, sources in sources_by_grant.items()}
         old = _grants(before, context.before_models, context.before_scopes, sources_by_grant)
-        after = _grants(before, context.after_models, context.after_scopes, sources_by_grant)
+        after = _grants(after_resource, context.after_models, context.after_scopes, sources_by_grant)
+        if (
+            mapped
+            and before.resource_type == "knowledge_space"
+            and any(
+                not previous.model.action_codes and not previous.model.visibility_only and current.model.visibility_only
+                for previous, current in zip(old, after, strict=True)
+            )
+        ):
+            _blocked("existing_space_scope_hole")
         existing = tuple(row.source for row in before.visible_sources)
         compiler = VisibilityProjectionCompiler()
         first = compiler.compile(tenant_id=before.tenant_id, grants=old, existing_sources=existing)
+        if first.deltas or first.retired_sources:
+            _blocked("visible_source_drift")
+        if mapped:
+            after_resource = _namespace_visible(before, after_resource, old, after, compiler)
+            existing = tuple(row.source for row in after_resource.visible_sources)
         second = compiler.compile(tenant_id=before.tenant_id, grants=after, existing_sources=existing)
         if (
-            first.deltas
-            or second.deltas
-            or first.active_sources != second.active_sources
-            or first.retired_sources
+            second.deltas
             or second.retired_sources
+            or (not mapped and first.active_sources != second.active_sources)
+            or {row.contribution_fingerprint for row in first.active_sources}
+            != {row.contribution_fingerprint for row in second.active_sources}
+            or {row.projected_subject for row in first.active_sources}
+            != {row.projected_subject for row in second.active_sources}
         ):
             _blocked("visible_source_drift")
+        deltas = (
+            compiler._aggregate_deltas(
+                before={(row.resource_type, row.resource_id, row.projected_subject) for row in first.active_sources},
+                after={(row.resource_type, row.resource_id, row.projected_subject) for row in second.active_sources},
+            )
+            if mapped
+            else second.deltas
+        )
         subjects = tuple(sorted({row.projected_subject for row in first.active_sources}))
         previous_use = {
             source.projected_subject
@@ -692,20 +801,45 @@ def _build_resource_retirement_plan(context, before):
         changes = tuple(sorted(set(subjects) - previous_use))
     except (TypeError, ValueError, KeyError) as error:
         raise PermissionMigrationBlockedError(reason="f118_permission_invalid_visibility") from error
-    plan = ResourceRetirementPlan(context.catalog_plan, before, after, subjects, second.deltas, changes, "")
+    plan = ResourceRetirementPlan(
+        context.catalog_plan, before, after, subjects, deltas, changes, "", after_resource, namespace_target
+    )
     return replace(plan, checksum=_checksum(_resource_payload(plan)))
 
 
 def build_resource_retirement_plans(
-    *, catalog_plan: CatalogRetirementPlan, before: Iterable[PermissionResourceBaseline]
+    *,
+    catalog_plan: CatalogRetirementPlan,
+    before: Iterable[PermissionResourceBaseline],
+    target_modes: Iterable[ResourceModeBaseline] | None = None,
 ) -> Iterator[ResourceRetirementPlan]:
     """Compile one frozen directory per batch; retain no context beyond iteration."""
     context = _resource_context(catalog_plan)
-    for resource in before:
-        yield _build_resource_retirement_plan(context, resource)
+    if not catalog_plan.namespace_type_mappings:
+        if target_modes is not None:
+            _blocked("namespace_mapping_required")
+        for resource in before:
+            yield _build_resource_retirement_plan(context, resource)
+    else:
+        if target_modes is None:
+            _blocked("namespace_resource_target_required")
+        missing = object()
+        for resource, target in zip_longest(before, target_modes, fillvalue=missing):
+            if resource is missing or target is missing:
+                _blocked("namespace_target_batch_length_changed")
+            yield _build_resource_retirement_plan(context, resource, target)
 
 
 def build_resource_retirement_plan(
-    *, catalog_plan: CatalogRetirementPlan, before: PermissionResourceBaseline
+    *,
+    catalog_plan: CatalogRetirementPlan,
+    before: PermissionResourceBaseline,
+    namespace_target: ResourceModeBaseline | None = None,
 ) -> ResourceRetirementPlan:
-    return next(build_resource_retirement_plans(catalog_plan=catalog_plan, before=(before,)))
+    return next(
+        build_resource_retirement_plans(
+            catalog_plan=catalog_plan,
+            before=(before,),
+            target_modes=None if namespace_target is None else (namespace_target,),
+        )
+    )

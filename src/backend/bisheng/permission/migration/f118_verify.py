@@ -95,10 +95,10 @@ def verify_resource_retirements(
         # deserialized copies still have to match every frozen catalog fact.
         if plan.catalog_plan is not catalog_plan and plan.catalog_plan != catalog_plan:
             _blocked("catalog_plan_changed")
-        rebuilt = _build_resource_retirement_plan(context, plan.before)
+        rebuilt = _build_resource_retirement_plan(context, plan.before, plan.namespace_target)
         if rebuilt != plan:
             _blocked("resource_plan_changed")
         _validate_resource(resource)
-        if resource != plan.before:
+        if resource != plan.after:
             _blocked("resource_provenance_changed")
         yield PermissionVerification(True, plan.checksum, _checksum(resource), plan.expected_use_changes)
