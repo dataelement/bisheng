@@ -40,25 +40,23 @@ def current_tenant(source_key, operation):
     return tenant_id
 
 
-def original_statement(source, keys):
-    return (
-        select(BusinessResourceReference)
-        .where(
-            BusinessResourceReference.source_type == source.source_type.value,
-            BusinessResourceReference.source_id == source.source_id,
-            BusinessResourceReference.source_version == source.source_version,
-            or_(
-                *(
-                    and_(
-                        BusinessResourceReference.target_type == key.target_type.value,
-                        BusinessResourceReference.target_id == key.target_id,
-                    )
-                    for key in keys
-                )
-            ),
+def original_statements(source, keys):
+    ordered = sorted(keys, key=lambda key: (key.target_type.value, key.target_id))
+    model = BusinessResourceReference
+    for start in range(0, len(ordered), 200):
+        groups = {}
+        for key in ordered[start : start + 200]:
+            groups.setdefault(key.target_type.value, []).append(key.target_id)
+        yield (
+            select(model)
+            .where(
+                model.source_type == source.source_type.value,
+                model.source_id == source.source_id,
+                model.source_version == source.source_version,
+                or_(*(and_(model.target_type == kind, model.target_id.in_(ids)) for kind, ids in groups.items())),
+            )
+            .execution_options(populate_existing=True)
         )
-        .execution_options(populate_existing=True)
-    )
 
 
 def original_for(rows, key):
@@ -156,11 +154,16 @@ class KnowledgeReferenceTargetRepository:
         return tuple(sorted(set(target_keys), key=lambda key: key.lock_order_key))
 
     @staticmethod
-    def _business_statement(model, ids, *, lock):
-        statement = (
-            select(model).where(model.id.in_(sorted(ids))).order_by(model.id).execution_options(populate_existing=True)
-        )
-        return statement.with_for_update() if lock else statement
+    def _business_statements(model, ids, *, lock):
+        ordered = sorted(ids)
+        for start in range(0, len(ordered), 200):
+            statement = (
+                select(model)
+                .where(model.id.in_(ordered[start : start + 200]))
+                .order_by(model.id)
+                .execution_options(populate_existing=True)
+            )
+            yield statement.with_for_update() if lock else statement
 
     @staticmethod
     def _tombstone_statements(entries):
@@ -270,32 +273,19 @@ class KnowledgeReferenceTargetRepository:
         tenant_id, keys = current_tenant(source_key, operation), self._keys(target_keys)
         file_ids = {int(key.target_id) for key in keys if key.target_type == TargetType.KNOWLEDGE_FILE}
         with strict_tenant_filter():
-            originals = (
-                list(session.execute(original_statement(source_key, keys)).scalars()) if source_key and keys else []
-            )
-            candidates = (
-                list(session.execute(self._business_statement(KnowledgeFile, file_ids, lock=False)).scalars())
-                if file_ids
-                else []
-            )
+            originals, candidates = [], []
+            for statement in original_statements(source_key, keys) if source_key else ():
+                originals.extend(session.execute(statement).scalars())
+            for statement in self._business_statements(KnowledgeFile, file_ids, lock=False):
+                candidates.extend(session.execute(statement).scalars())
             candidate_owners, space_ids = self._plan(keys, candidates, originals)
             self._check_prelock(session, source_key, operation, keys, space_ids, file_ids)
-            spaces = (
-                {
-                    row.id: row
-                    for row in session.execute(self._business_statement(Knowledge, space_ids, lock=True)).scalars()
-                }
-                if space_ids
-                else {}
-            )
-            files = (
-                {
-                    row.id: row
-                    for row in session.execute(self._business_statement(KnowledgeFile, file_ids, lock=True)).scalars()
-                }
-                if file_ids
-                else {}
-            )
+            spaces, files = {}, {}
+            # Complete the numeric Root lock phase before starting File locks.
+            for statement in self._business_statements(Knowledge, space_ids, lock=True):
+                spaces.update((row.id, row) for row in session.execute(statement).scalars())
+            for statement in self._business_statements(KnowledgeFile, file_ids, lock=True):
+                files.update((row.id, row) for row in session.execute(statement).scalars())
         plan = self._tombstone_plan(
             session, keys, tenant_id, source_key, operation, spaces, files, candidate_owners, originals
         )
@@ -312,38 +302,18 @@ class KnowledgeReferenceTargetRepository:
         tenant_id, keys = current_tenant(source_key, operation), self._keys(target_keys)
         file_ids = {int(key.target_id) for key in keys if key.target_type == TargetType.KNOWLEDGE_FILE}
         with strict_tenant_filter():
-            originals = (
-                list((await session.execute(original_statement(source_key, keys))).scalars())
-                if source_key and keys
-                else []
-            )
-            candidates = (
-                list((await session.execute(self._business_statement(KnowledgeFile, file_ids, lock=False))).scalars())
-                if file_ids
-                else []
-            )
+            originals, candidates = [], []
+            for statement in original_statements(source_key, keys) if source_key else ():
+                originals.extend((await session.execute(statement)).scalars())
+            for statement in self._business_statements(KnowledgeFile, file_ids, lock=False):
+                candidates.extend((await session.execute(statement)).scalars())
             candidate_owners, space_ids = self._plan(keys, candidates, originals)
             self._check_prelock(session, source_key, operation, keys, space_ids, file_ids)
-            spaces = (
-                {
-                    row.id: row
-                    for row in (
-                        await session.execute(self._business_statement(Knowledge, space_ids, lock=True))
-                    ).scalars()
-                }
-                if space_ids
-                else {}
-            )
-            files = (
-                {
-                    row.id: row
-                    for row in (
-                        await session.execute(self._business_statement(KnowledgeFile, file_ids, lock=True))
-                    ).scalars()
-                }
-                if file_ids
-                else {}
-            )
+            spaces, files = {}, {}
+            for statement in self._business_statements(Knowledge, space_ids, lock=True):
+                spaces.update((row.id, row) for row in (await session.execute(statement)).scalars())
+            for statement in self._business_statements(KnowledgeFile, file_ids, lock=True):
+                files.update((row.id, row) for row in (await session.execute(statement)).scalars())
         plan = self._tombstone_plan(
             session, keys, tenant_id, source_key, operation, spaces, files, candidate_owners, originals
         )
@@ -360,9 +330,18 @@ class KnowledgeReferenceTargetRepository:
         self, session, keys, tenant_id, source_key, operation, spaces, files, candidate_owners, originals
     ):
         planned, entries = [], set()
+        by_key = {}
+        for original in originals:
+            by_key.setdefault((original.target_type, original.target_id), []).append(original)
         for key in keys:
             original, row, parent, space_id, owner = self._facts(
-                key, tenant_id, operation, spaces, files, candidate_owners, originals
+                key,
+                tenant_id,
+                operation,
+                spaces,
+                files,
+                candidate_owners,
+                by_key.get((key.target_type.value, key.target_id), ()),
             )
             self._check_tombstone_prelock(session, source_key, operation, key, space_id, owner)
             planned.append((key, original, row, parent, space_id, owner))
@@ -398,14 +377,43 @@ class KnowledgeReferenceTargetRepository:
     def _physical_plan(self, target_keys, source_keys):
         keys, sources = self._keys(target_keys), self._sources(source_keys)
         originals = []
-        for source in sources:
-            if keys:
-                originals.extend((yield original_statement(source, keys), False))
+        wanted = {(key.target_type.value, key.target_id) for key in keys}
+        model, root = BusinessResourceReference, sources[0]
+        # Each selected version is read in exactly one version group. PK seek
+        # consumes raw pages, including pages with no selected target at all.
+        for start in range(0, len(sources), 200) if keys else ():
+            versions, after = [source.source_version for source in sources[start : start + 200]], 0
+            while True:
+                rows = yield (
+                    (
+                        select(model)
+                        .where(
+                            model.source_type == root.source_type.value,
+                            model.source_id == root.source_id,
+                            model.source_version.in_(versions),
+                            model.target_type.in_((TargetType.KNOWLEDGE_SPACE.value, TargetType.KNOWLEDGE_FILE.value)),
+                            model.id > after,
+                        )
+                        .order_by(model.id)
+                        .limit(200)
+                        .execution_options(populate_existing=True)
+                    ),
+                    False,
+                )
+                originals.extend(row for row in rows if (row.target_type, row.target_id) in wanted)
+                if len(rows) < 200:
+                    break
+                after = rows[-1].id
         file_ids = {int(key.target_id) for key in keys if key.target_type == TargetType.KNOWLEDGE_FILE}
-        candidates = (yield self._business_statement(KnowledgeFile, file_ids, lock=False), False) if file_ids else []
+        candidates = []
+        for statement in self._business_statements(KnowledgeFile, file_ids, lock=False):
+            candidates.extend((yield statement, False))
         candidate_owners, space_ids = self._plan(keys, candidates, originals)
-        spaces = (yield self._business_statement(Knowledge, space_ids, lock=True), False) if space_ids else []
-        files = (yield self._business_statement(KnowledgeFile, file_ids, lock=True), False) if file_ids else []
+        spaces, files = [], []
+        for statement in self._business_statements(Knowledge, space_ids, lock=True):
+            spaces.extend((yield statement, False))
+        for statement in self._business_statements(KnowledgeFile, file_ids, lock=True):
+            files.extend((yield statement, False))
         if {row.id: row.knowledge_id for row in files} != candidate_owners:
             raise ResourceReferenceConflictError(reason="reference_lock_plan_changed")
         tombstones = {(TargetKey("knowledge_space", str(row.id)), row.tenant_id) for row in spaces}

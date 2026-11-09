@@ -122,7 +122,7 @@ def test_native_sync_tombstone_query_budget(engine, path, count):
                 assert_observations(repository.lock_targets(session, keys, None, "owner_query"), ids)
         assert len(reads.tombstones) == math.ceil((count + 1) / 200)
         assert max(len(params) for _, params in reads.tombstones) <= 800
-        assert reads.business_locks == [Knowledge, KnowledgeFile]
+        assert reads.business_locks == [Knowledge] + [KnowledgeFile] * math.ceil(count / 200)
         assert not session.new and not session.dirty and not session.deleted
 
 
@@ -140,7 +140,7 @@ async def test_native_async_tombstone_query_budget(path, count):
                 assert_observations(await repository.alock_targets(session, keys, None, "owner_query"), ids)
         assert len(reads.tombstones) == math.ceil((count + 1) / 200)
         assert max(len(params) for _, params in reads.tombstones) <= 800
-        assert reads.business_locks == [Knowledge, KnowledgeFile]
+        assert reads.business_locks == [Knowledge] + [KnowledgeFile] * math.ceil(count / 200)
         assert not session.new and not session.dirty and not session.deleted
 
 
