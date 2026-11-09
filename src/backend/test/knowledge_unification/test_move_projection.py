@@ -420,3 +420,118 @@ async def test_stale_operation_cannot_fail_closed_another_real_operation_mode(da
         mode = (await connection.execute(sa.select(native.Mode.__table__))).mappings().one()
         assert mode["operation_id"] == 2 and mode["projection_state"] == "PROJECTING" and mode["version"] == 4
     assert not built.transport.calls
+
+
+@pytest.mark.parametrize("lock", [False, True])
+@pytest.mark.parametrize("status", ["PREPARED", "STAGING", "FAILED_CLOSED", "FINALIZED"])
+async def test_owned_fact_bridge_keeps_actual_native_session_transaction_and_lock(database, monkeypatch, lock, status):
+    item = native.expectation()
+    await native.seed(database, (item,), status=status)
+    repo = native.api().MoveProjectionRepository(environment="test")
+    bridge = api().KnowledgeMoveProjectionApplication(
+        repository=repo, session_factory=lambda: pytest.fail("owned fact read must not create a session")
+    )
+    observed = []
+    sa.event.listen(
+        database.engine.sync_engine,
+        "before_cursor_execute",
+        lambda c, u, sql, p, context, many: observed.append(context.compiled.statement),
+    )
+    async with database.sessions() as session, session.begin():
+        transaction = session.sync_session.get_transaction()
+        original = repo.alist_owned_operations
+
+        async def actual_native(current, *, expectations, lock=False):
+            assert current is session and current.sync_session.get_transaction() is transaction
+            assert expectations is requested
+            return await original(current, expectations=expectations, lock=lock)
+
+        monkeypatch.setattr(repo, "alist_owned_operations", actual_native)
+        monkeypatch.setattr(session, "commit", AsyncMock(side_effect=AssertionError("unexpected commit")))
+        requested = (item,)
+        (fact,) = await bridge.alist_owned_operations(session, expectations=requested, lock=lock)
+        assert type(fact) is api().MoveProjectionFact is native.api().MoveProjectionFact
+        assert (fact.id, fact.status, fact.operator_id, fact.parent_state.operation_id) == (1, status, 7, 1)
+        assert fact.parent_state.parent_id == "12"
+        assert session.sync_session.get_transaction() is transaction and session.in_transaction()
+        session.commit.assert_not_awaited()
+        operations = [
+            statement
+            for statement in observed
+            if any(
+                getattr(table, "name", None) == "permission_projection_operation"
+                for table in statement.get_final_froms()
+            )
+        ]
+        assert operations and all((statement._for_update_arg is not None) == lock for statement in operations)
+        assert all(statement.is_select for statement in observed)
+        if status != "FINALIZED":
+            with pytest.raises(PermissionPublishNotReadyError):
+                await bridge.arequire_finalized(session, job_id=native.JOB, expectations=(item,))
+
+
+@pytest.mark.parametrize("bad", ["scope", "pin", "tuple", "checksum", "operator"])
+async def test_owned_fact_bridge_retains_original_native_fail_closed_controls(database, bad):
+    item = native.expectation()
+    await native.seed(database, (item,))
+    patch = {
+        "scope": {"scope_key": "folder:1"},
+        "pin": {"store_id": "foreign-store"},
+        "checksum": {"request_checksum": "a" * 64},
+        "operator": {"operator_id": 999},
+    }
+    async with database.engine.begin() as connection:
+        if bad == "tuple":
+            await connection.execute(sa.update(native.TupleRow).where(native.TupleRow.id == 1).values(fga_object="bad"))
+        else:
+            await connection.execute(sa.update(native.Operation).values(**patch[bad]))
+    repo = native.api().MoveProjectionRepository(environment="test")
+    bridge = api().KnowledgeMoveProjectionApplication(repository=repo)
+    async with database.sessions() as session, session.begin():
+        with pytest.raises(PermissionPublishNotReadyError):
+            await repo.alist_owned_operations(session, expectations=(item,))
+        with pytest.raises(PermissionPublishNotReadyError):
+            await bridge.alist_owned_operations(session, expectations=(item,))
+
+
+async def test_owned_fact_bridge_returns_actual_mode_facts_but_never_claims_finalized_authority(database):
+    item = native.expectation()
+    await native.seed(database, (item,))
+    async with database.engine.begin() as connection:
+        await connection.execute(sa.update(native.Mode).values(operation_id=999, parent_id="88"))
+    repo = native.api().MoveProjectionRepository(environment="test")
+    bridge = api().KnowledgeMoveProjectionApplication(repository=repo)
+    async with database.sessions() as session, session.begin():
+        facts = await bridge.alist_owned_operations(session, expectations=(item,))
+        assert facts == await repo.alist_owned_operations(session, expectations=(item,))
+        assert facts[0].parent_state.operation_id == 999 and facts[0].parent_state.parent_id == "88"
+        with pytest.raises(PermissionPublishNotReadyError):
+            await bridge.arequire_finalized(session, job_id=native.JOB, expectations=(item,))
+
+
+async def test_owned_fact_bridge_preserves_empty_missing_foreign_and_native_batch_bound(database):
+    repo = native.api().MoveProjectionRepository(environment="test")
+    bridge = api().KnowledgeMoveProjectionApplication(repository=repo)
+    async with database.sessions() as session:
+        with pytest.raises(PermissionPublishNotReadyError):
+            await bridge.alist_owned_operations(session, expectations=())
+    async with database.sessions() as session, session.begin():
+        database.queries.clear()
+        assert await bridge.alist_owned_operations(session, expectations=()) == () and not database.queries
+        item = native.expectation()
+        assert await bridge.alist_owned_operations(session, expectations=(item,)) == ()
+        foreign = replace(
+            item,
+            tenant_id=202,
+            before=item.before.model_copy(update={"tenant_id": 202}),
+            after=item.after.model_copy(update={"tenant_id": 202}),
+        )
+        database.queries.clear()
+        with pytest.raises(PermissionPublishNotReadyError):
+            await bridge.alist_owned_operations(session, expectations=(foreign,))
+        assert not database.queries
+        with pytest.raises(PermissionPublishNotReadyError):
+            await bridge.alist_owned_operations(
+                session, expectations=tuple(native.expectation(i) for i in range(1, 202))
+            )
+        assert not database.queries
