@@ -2,13 +2,11 @@ import asyncio
 import json
 import logging
 import re
-import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from hashlib import sha256
-from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -28,7 +26,7 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.admin_scope import AdminScopeTenantRequiredError
-from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError, KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpacePrivateError,
     KnowledgeSpaceInvalidCursorError,
@@ -163,7 +161,7 @@ from bisheng.permission.application.prospective_grant import ProspectiveGrantApp
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import generate_knowledge_index_name, generate_uuid, get_request_ip
+from bisheng.utils import generate_knowledge_index_name, get_request_ip
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
@@ -4685,24 +4683,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, self.login_user.user_id)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
+    async def _ordinary_batch(self, space_id, operation, items, **parameters):
+        from bisheng.knowledge.domain.schemas.knowledge_batch import BatchCommand
+
+        factory = getattr(self, "batch_application_factory", None)
+        if factory is None:
+            raise RuntimeError("ordinary batch application is not configured")
+        app = factory()
+        if hasattr(app, "__await__"):
+            app = await app
+        return await app.aordinary(
+            identity=self.login_user,
+            space_id=space_id,
+            command=BatchCommand(operation=operation, items=items, **parameters),
+        )
+
     async def batch_add_file_tags(self, space_id: int, file_ids: list[int], tag_ids: list[int]):
-        """Batch add tags to files."""
-        await self._require_read_permission(space_id)
         if not file_ids or not tag_ids:
             return
-
-        files = await self._get_space_files_or_raise(space_id, file_ids)
-
-        resource_type = ResourceTypeEnum.SPACE_FILE
-        for file_record in files:
-            await self._require_action(
-                "knowledge_file",
-                file_record.id,
-                "rename",
-            )
-            await TagDao.add_tags(tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
-
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        await self._ordinary_batch(
+            space_id, "tag", [{"id": ident, "type": "file"} for ident in file_ids], tag_ids=tag_ids
+        )
 
     async def retry_space_files(self, space_id: int, req_data: dict) -> list:
         """
@@ -4743,57 +4744,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return []
 
     async def batch_retry_failed_files(self, space_id: int, file_ids: list[int]):
-        from bisheng.worker import retry_knowledge_file_celery
-
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space:
-            raise SpaceNotFoundError()
-        await self._require_read_permission(space_id)
-        self._ensure_space_async_task_tenant_consistency(space, "batch_retry_failed_files")
-
-        retry_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
-        all_file_ids = []
-        all_file_level_path = set()
-        retryable_status = KnowledgeFileStatus.abnormal_values()
-        for file in retry_files:
-            if file.knowledge_id != space_id:
-                continue
-            if file.file_type == FileType.FILE.value and file.status in retryable_status:
-                await self._require_resource_action(
-                    "rename",
-                    "knowledge_file",
-                    file.id,
-                )
-                retry_knowledge_file_celery.delay(file.id)
-                all_file_ids.append(file.id)
-                all_file_level_path.add(file.file_level_path)
-            elif file.file_type == FileType.DIR.value:
-                await self._require_resource_action(
-                    "rename",
-                    "folder",
-                    file.id,
-                )
-                all_failed_files = await SpaceFileDao.get_children_by_prefix(
-                    knowledge_id=space_id, prefix=file.file_level_path + f"/{file.id}"
-                )
-                for item in all_failed_files:
-                    if item.status in retryable_status and item.file_type == FileType.FILE.value:
-                        await self._require_resource_action(
-                            "rename",
-                            "knowledge_file",
-                            item.id,
-                        )
-                        retry_knowledge_file_celery.delay(item.id)
-                        all_file_ids.append(item.id)
-                        all_file_level_path.add(file.file_level_path)
-        if all_file_ids:
-            await KnowledgeFileDao.aupdate_file_status(
-                all_file_ids, KnowledgeFileStatus.WAITING, "batch_retry_failed_files"
-            )
-            await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
-        for one in all_file_level_path:
-            if one:
-                await self.update_folder_update_time(one)
+        records = await KnowledgeFileDao.aget_file_by_ids(file_ids)
+        types = {row.id: "folder" if row.file_type == 0 else "file" for row in records}
+        await self._ordinary_batch(
+            space_id, "retry", [{"id": ident, "type": types.get(ident, "file")} for ident in file_ids]
+        )
         return True
 
     # ──────────────────────────── Batch Ops ───────────────────────────────────
@@ -4821,173 +4776,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
 
     async def batch_download(self, space_id: int, file_ids: list[int], folder_ids: list[int]) -> str:
-        """
-        Download selected files and folders, preserving the original directory structure,
-        compress into a zip archive, upload to the MinIO tmp bucket, and return a
-        presigned URL (valid for 7 days).
-
-        Directory structure is reconstructed from file_level_path (e.g. '/7/42') by
-        resolving each segment id to the corresponding folder name.
-        """
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-
-        # ── 1. Collect all file records to include ────────────────────────────
-        # Explicit files requested directly
-        direct_files = []
-        for file_id in self._dedupe_ids(file_ids):
-            file_record = await self._get_file_for_action(file_id, space_id=space_id)
-            await self._require_action(
-                "knowledge_file",
-                file_id,
-                "download",
-            )
-            direct_files.append(file_record)
-
-        # Files & sub-folders under every requested folder_id
-        folder_db_records: list[KnowledgeFile] = []
-        for folder_id in self._dedupe_ids(folder_ids):
-            folder = await self._get_folder_for_action(space_id, folder_id)
-            await self._require_action("folder", folder_id, "download")
-            prefix = f"{folder.file_level_path}/{folder.id}"
-            descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
-            for descendant in descendants:
-                if descendant.file_type == FileType.DIR.value:
-                    await self._require_action(
-                        "folder",
-                        descendant.id,
-                        "download",
-                    )
-                else:
-                    await self._require_action(
-                        "knowledge_file",
-                        descendant.id,
-                        "download",
-                    )
-            folder_db_records.append(folder)
-            folder_db_records.extend(descendants)
-
-        # All KnowledgeFile objects this download touches
-        all_records: list[KnowledgeFile] = direct_files + folder_db_records
-
-        # ── 2. Build id→name map for every folder encountered ─────────────────
-        #       We need this to translate '/7/42' → 'Reports/Q1'
-        folder_id_to_name: dict[int, str] = {}
-        for rec in all_records:
-            if rec.file_type == FileType.DIR.value:
-                folder_id_to_name[rec.id] = rec.file_name
-
-        # Collect any ancestor folder IDs referenced in file_level_path but not yet known
-        missing_ids: set[int] = set()
-        for rec in all_records:
-            if not rec.file_level_path:
-                continue
-            for part in rec.file_level_path.split("/"):
-                if not part:
-                    continue
-                try:
-                    fid = int(part)
-                    if fid not in folder_id_to_name:
-                        missing_ids.add(fid)
-                except ValueError:
-                    pass
-
-        if missing_ids:
-            extra_folders = await KnowledgeFileDao.aget_file_by_ids(list(missing_ids))
-            for f in extra_folders:
-                if f.file_type == FileType.DIR.value:
-                    folder_id_to_name[f.id] = f.file_name
-
-        def resolve_dir_path(file_level_path: str | None) -> str:
-            """Convert '/7/42' to 'FolderA/SubFolderB' using the name map."""
-            if not file_level_path:
-                return ""
-            parts = [p for p in file_level_path.split("/") if p]
-            names = []
-            for part in parts:
-                try:
-                    fid = int(part)
-                    names.append(folder_id_to_name.get(fid, str(fid)))
-                except ValueError:
-                    names.append(part)
-            return "/".join(names)
-
-        # ── 3. Download files from MinIO and write into a temp dir ────────────
-        from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
-
-        minio = get_minio_storage_sync()
-
-        import os
-        import zipfile
-        from datetime import datetime
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for rec in all_records:
-                rel_dir = resolve_dir_path(rec.file_level_path)
-                local_dir = os.path.join(tmp_dir, rel_dir) if rel_dir else tmp_dir
-                os.makedirs(local_dir, exist_ok=True)
-                local_path = os.path.join(local_dir, rec.file_name)
-
-                if rec.file_type == FileType.DIR.value:
-                    # Create the folder explicitly so empty folders exist in tmp_dir
-                    os.makedirs(local_path, exist_ok=True)
-                    continue
-
-                target_object_name = rec.object_name
-                # If file source is CHANNEL, use preview_object_name to download the HTML file
-                if rec.file_source == FileSource.CHANNEL.value and rec.preview_file_object_name:
-                    target_object_name = rec.preview_file_object_name
-                    name, _ = os.path.splitext(rec.file_name)
-                    local_path = os.path.join(local_dir, f"{name}.html")
-
-                if not target_object_name:  # No stored object to download.
-                    continue
-
-                try:
-                    response = minio.download_object_sync(object_name=target_object_name)
-                    with open(local_path, "wb") as f:
-                        for one in response.stream(65536):
-                            f.write(one)
-                except Exception:
-                    # Skip files that cannot be fetched (e.g. not yet parsed)
-                    continue
-                finally:
-                    response.close()
-                    response.release_conn()
-
-            # ── 4. Create zip archive ─────────────────────────────────────────
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            zip_folder = generate_uuid()
-            zip_name = f"{timestamp}_{zip_folder[:6]}.zip"
-            zip_path = os.path.join(tmp_dir, zip_name)
-
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for root, dirs, files in os.walk(tmp_dir):
-                    # Add directories to ensure empty directories are included in the zip
-                    for dirname in dirs:
-                        dir_path = os.path.join(root, dirname)
-                        arcname = os.path.relpath(dir_path, tmp_dir)
-                        zf.write(dir_path, arcname)
-                    # Add files
-                    for filename in files:
-                        if filename == zip_name:
-                            continue  # don't zip the zip itself
-                        full_path = os.path.join(root, filename)
-                        arcname = os.path.relpath(full_path, tmp_dir)
-                        zf.write(full_path, arcname)
-
-            # ── 5. Upload zip to MinIO tmp bucket & return presigned URL ──────
-            minio_object_name = f"download/{zip_folder}/{zip_name}"
-            await minio.put_object_tmp(minio_object_name, Path(zip_path), content_type="application/zip")
-            share_url = await minio.get_share_link(
-                minio_object_name,
-                bucket=minio.tmp_bucket,
-                clear_host=True,
-                expire_days=7,
-            )
-
-        return share_url
+        result = await self._ordinary_batch(
+            space_id,
+            "download",
+            [{"id": ident, "type": "file"} for ident in file_ids]
+            + [{"id": ident, "type": "folder"} for ident in folder_ids],
+        )
+        if any(row["state"] == "failed" for row in result["items"]):
+            raise KnowledgeOperationPlanChangedError(reason="batch_download_partial_failure", result=result)
+        return result["url"]
 
     # ──────────────────────────── Subscribe ───────────────────────────────────
 

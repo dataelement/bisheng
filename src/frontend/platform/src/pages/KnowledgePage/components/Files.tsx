@@ -1,3 +1,6 @@
+import { useKnowledgeBatch } from "../hooks/useKnowledgeBatch";
+import { BatchOperationDialog } from "./BatchOperationDialog";
+import { BatchTagDraftDialog } from "./BatchTagDraftDialog";
 import { Button } from "@bisheng/ui";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -344,6 +347,27 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
     isCurrent: () => current.current === epoch,
     onDeleted: () => client.invalidateQueries({ queryKey: base }),
   });
+  const batch = useKnowledgeBatch(JSON.stringify([...base, parentId, selectedKeys]));
+  const [batchTagsOpen, setBatchTagsOpen] = useState(false);
+  const runBatch = async (
+    operation: "download" | "tag" | "retry",
+    tag_ids?: number[],
+    new_tag_names?: string[],
+  ) => {
+    setBatchTagsOpen(false);
+    const outcome = await batch.open({
+      spaceId,
+      operation,
+      items: selectedRows.map((item) => ({
+        id: item.id,
+        type: item.file_type === 0 ? "folder" : "file",
+        name: item.file_name,
+      })),
+      ...(operation === "tag" ? { tag_ids, new_tag_names } : {}),
+    });
+    if (outcome && current.current === epoch && operation !== "download")
+      await client.invalidateQueries({ queryKey: base });
+  };
   const containerActions = container?.epoch === epoch ? container.actions : [];
   return (
     <div className="relative space-y-4">
@@ -359,6 +383,13 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         canCreateFolder={containerActions.includes("create_folder")}
         onCreateFolder={() => handleEdit()}
         canUpload={containerActions.includes("upload_file")}
+        onBatchDownload={() => {
+          void runBatch("download");
+        }}
+        onBatchRetry={() => {
+          void runBatch("retry");
+        }}
+        onBatchTag={() => setBatchTagsOpen(true)}
         selectedCount={selectedRows.length}
         onDeleteSelected={() => {
           void remove(selectedRows);
@@ -500,6 +531,16 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         closePreview={closePreview}
       />
       <KnowledgeDeletionDialog operation={deletion} />
+      <BatchOperationDialog operation={batch} />
+      <BatchTagDraftDialog
+        spaceId={spaceId}
+        availableTags={selectedRows.flatMap((item) => item.tags ?? [])}
+        open={batchTagsOpen}
+        onClose={() => setBatchTagsOpen(false)}
+        onReview={(ids, names) => {
+          void runBatch("tag", ids, names);
+        }}
+      />
     </div>
   );
 }
