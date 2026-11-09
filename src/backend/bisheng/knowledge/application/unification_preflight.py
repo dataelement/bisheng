@@ -55,6 +55,9 @@ def source_decision(record, *, tenant_id):
         or record.physical_fact.key != record.target
     ):
         _blocked("source_identity")
+    from bisheng.knowledge.application.unification_reference_state import parse_frozen
+
+    state = parse_frozen(record.frozen_state)
     fact = record.physical_fact
     if not fact.exists:
         if record.origin != "explicit_id":
@@ -80,6 +83,92 @@ def source_decision(record, *, tenant_id):
         ):
             _blocked("knowledge_physical_parent")
         disposition = "existing_saved_slot"
+    original, direct, ancestors, legacy = (
+        state[name] for name in ("original", "target_tombstones", "ancestor_tombstones", "legacy")
+    )
+    if original is not None and (
+        (
+            original["tenant_id"],
+            original["source_type"],
+            original["source_id"],
+            original["source_version"],
+            original["slot_key"],
+            original["target_type"],
+            original["target_id"],
+        )
+        != (
+            tenant_id,
+            record.source_key.source_type.value,
+            record.source_key.source_id,
+            record.source_key.source_version,
+            record.slot_key,
+            record.target.target_type.value,
+            record.target.target_id,
+        )
+        or (
+            fact.exists
+            and original["target_tenant_id"] is not None
+            and original["target_tenant_id"] != fact.target_tenant_id
+        )
+    ):
+        _blocked("original_binding_identity")
+    for row in direct:
+        if (row["target_type"], row["target_id"]) != (record.target.target_type.value, record.target.target_id):
+            _blocked("deletion_target_identity")
+    for row in ancestors:
+        if (
+            record.target.target_type.value != "knowledge_file"
+            or row["target_type"] != "knowledge_space"
+            or (original is None and not fact.exists)
+            or (original is not None and original["target_space_id"] != row["target_id"])
+            or (original is None and fact.exists and str(fact.knowledge_id) != row["target_id"])
+        ):
+            _blocked("deletion_ancestor_identity")
+    if (
+        original is not None
+        and fact.exists
+        and record.target.target_type.value == "knowledge_file"
+        and (original["target_space_id"] != str(fact.knowledge_id))
+    ):
+        _blocked("original_file_parent_metadata")
+    if legacy is not None:
+        if (
+            fact.exists
+            or original is None
+            or direct
+            or (original["legacy_invalid_reason"], original["legacy_run_id"], original["legacy_evidence_key"])
+            != ("target_missing", legacy["run_id"], legacy["evidence_key"])
+        ):
+            _blocked("original_legacy_conflict")
+        disposition = "existing_invalid_legacy"
+    elif original is not None and original["legacy_invalid_reason"] is not None:
+        _blocked("original_legacy_proof_missing")
+    elif direct or ancestors:
+        evidence = direct or ancestors
+        if len(evidence) != 1:
+            _blocked("deletion_owner_conflict")
+        row = evidence[0]
+        if (
+            (fact.exists and row["stage"] == "deleted")
+            or (fact.exists and row["target_tenant_id"] != fact.target_tenant_id)
+            or (
+                original is not None
+                and original["target_tenant_id"] is not None
+                and original["target_tenant_id"] != row["target_tenant_id"]
+            )
+            or (
+                not direct
+                and (
+                    (not fact.exists and original is None)
+                    or (original is not None and original["target_space_id"] != row["target_id"])
+                    or (fact.exists and str(fact.knowledge_id) != row["target_id"])
+                )
+            )
+        ):
+            _blocked("deletion_physical_conflict")
+        disposition = "existing_invalid_deleted"
+    elif original is not None and not fact.exists:
+        _blocked("original_missing_without_evidence")
     return record_from_values(
         "source_decision",
         tenant_id=tenant_id,
@@ -92,6 +181,7 @@ def source_decision(record, *, tenant_id):
         exists=fact.exists,
         disposition=disposition,
         revision_digest=fact.revision_digest,
+        frozen_state_digest=digest(state),
     )
 
 

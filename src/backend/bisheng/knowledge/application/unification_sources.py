@@ -8,7 +8,7 @@ and canonical digests. Nothing freezes a run, writes bindings or marks ready.
 import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime
 from typing import Literal
 from weakref import WeakSet
@@ -107,6 +107,7 @@ class RootInventoryRecord:
     configuration_digest: str
     retained_version_count: int
     business_revision_digest: str
+    frozen_index: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +119,7 @@ class SourceInventoryRecord:
     reference_count: int
     lifecycle: Lifecycle
     business_revision_digest: str
+    frozen_index: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +129,7 @@ class ReferenceInventoryRecord:
     target: TargetKey
     origin: Literal["explicit_id", "resolved_name"]
     physical_fact: PhysicalFact
+    frozen_state: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +139,7 @@ class RetiredInventoryRecord:
     lifecycle: Lifecycle
     configuration_digest: str
     business_revision_digest: str
+    frozen_index: str | None = field(default=None, repr=False)
 
 
 def _blocked(reason):
@@ -180,6 +184,7 @@ class UnificationSourceInventory:
         model_names_repository=None,
         knowledge_targets=None,
         model_targets=None,
+        original_state=None,
     ):
         if not isinstance(sharing_reader, PinnedMigrationPermissionReader):
             _blocked("original_sharing_reader_required")
@@ -192,6 +197,9 @@ class UnificationSourceInventory:
             knowledge_targets if knowledge_targets is not None else KnowledgeMigrationTargetRepository()
         )
         self.model_targets = model_targets if model_targets is not None else ModelMigrationTargetRepository()
+        from bisheng.knowledge.application.unification_reference_state import OriginalReferenceState
+
+        self.original_state = original_state or OriginalReferenceState()
         self._contexts: WeakSet[PreparedSourceInventoryContext] = WeakSet()
 
     async def _pages(self, session, method, **kwargs):
@@ -208,6 +216,7 @@ class UnificationSourceInventory:
     async def _sources(self, session, entries, cache):
         if not entries:
             return
+        cache, tombstones, *_ = cache
         active = [entry for entry in entries if not isinstance(entry, RetiredInventoryRecord)]
         unseen = tuple(
             dict.fromkeys(ref.target for _, _, _, refs, _, _, _ in active for ref in refs if ref.target not in cache)
@@ -222,11 +231,27 @@ class UnificationSourceInventory:
                 if len(facts) != len(batch) or tuple(fact.key for fact in facts) != batch:
                     _blocked("incomplete_physical_facts")
                 cache.update((fact.key, fact) for fact in facts)
+        snapshots = {}
+        keys = tuple(entry[0] for entry in active)
+        for offset in range(0, len(keys), 200):
+            snapshots.update(
+                await self.original_state.repository.aload_raw_snapshots(
+                    session, source_keys=keys[offset : offset + 200]
+                )
+            )
         for entry in entries:
             if isinstance(entry, RetiredInventoryRecord):
                 yield entry
                 continue
             key, extractor, configuration, references, lifecycle, origins, revision = entry
+            frozen_index, states = await self.original_state.acapture(
+                session,
+                source_key=key,
+                references=references,
+                physical=cache,
+                tombstone_cache=tombstones,
+                snapshot=snapshots[key],
+            )
             yield SourceInventoryRecord(
                 key,
                 extractor,
@@ -235,10 +260,16 @@ class UnificationSourceInventory:
                 len(references),
                 lifecycle,
                 revision,
+                frozen_index,
             )
             for ref in references:
                 yield ReferenceInventoryRecord(
-                    key, ref.slot_key, ref.target, origins.get(ref.slot_key, "explicit_id"), cache[ref.target]
+                    key,
+                    ref.slot_key,
+                    ref.target,
+                    origins.get(ref.slot_key, "explicit_id"),
+                    cache[ref.target],
+                    states[(ref.slot_key, ref.target.target_type.value, ref.target.target_id)],
                 )
 
     async def _versioned(self, session, tenant, kind, index, cache):
@@ -260,6 +291,7 @@ class UnificationSourceInventory:
                 # as an additional version or retain all root prompts in memory.
                 roots[row.id] = (key, creator, lifecycle, _digest(asdict(row)), deleted)
                 counts[row.id] = 0
+        cache[2].update(row[0] for row in roots.values() if row[4])
         async for page in self._pages(session, f"alist_{prefix}_versions"):
             entries = []
             for row in page:
@@ -304,6 +336,11 @@ class UnificationSourceInventory:
                 counts[parent] += 1
             async for record in self._sources(session, entries, cache):
                 yield record
+        empty = tuple(value[0] for ident, value in roots.items() if not value[4] and counts[ident] == 0)
+        for offset in range(0, len(empty), 200):
+            cache[3].update(
+                await self.original_state.repository.aload_root_guards(session, root_keys=empty[offset : offset + 200])
+            )
         for ident, (root, creator, lifecycle, digest, deleted) in roots.items():
             if deleted:
                 yield RetiredInventoryRecord(root, None, lifecycle, digest, digest)
@@ -526,19 +563,45 @@ class UnificationSourceInventory:
 
         current()
         tenant, index, knowledge = context.tenant_id, context.name_index, context.knowledge_rows
-        cache = {}
+        cache = ({}, {}, set(), {})
+
+        async def prepared(record):
+            if isinstance(record, RootInventoryRecord) and record.retained_version_count == 0:
+                from bisheng.knowledge.application.unification_reference_state import parse_root_index, sql_value
+
+                state = sql_value({"root_guard": cache[3][record.root_key]})
+                parse_root_index(state)
+                return replace(
+                    record, frozen_index=json.dumps(state, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+                )
+            if isinstance(record, RetiredInventoryRecord) and (
+                record.source_key is None or record.root_key not in cache[2]
+            ):
+                from bisheng.knowledge.application.unification_reference_state import retired_index
+
+                state = await retired_index(
+                    session,
+                    repository=self.original_state.repository,
+                    legacy=self.original_state.legacy,
+                    root_key=record.root_key,
+                    source_key=record.source_key,
+                )
+                current()
+                return replace(record, frozen_index=state)
+            return record
+
         try:
             for kind in (SourceType.WORKFLOW_VERSION, SourceType.HOSTED_APP_VERSION):
                 async for record in self._versioned(session, tenant, kind, index, cache):
                     current()
-                    yield record
+                    yield await prepared(record)
             for kind in (SourceType.ASSISTANT, SourceType.CHANNEL_SYNC):
                 async for record in self._linked(session, tenant, kind, cache):
                     current()
-                    yield record
+                    yield await prepared(record)
             async for record in self._configured(session, tenant, knowledge, cache):
                 current()
-                yield record
+                yield await prepared(record)
             current()
         except (TypeError, ValueError, KeyError) as error:
             raise KnowledgeOperationPlanConflictError(reason="unification_sources_malformed_configuration") from error

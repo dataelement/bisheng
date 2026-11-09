@@ -110,3 +110,60 @@ class UnificationCoverageRepository:
 
     async def aload_tenants(self, session):
         return tuple(row["id"] for row in await self._adrive(session, self._pages(tenants=True)))
+
+    async def aallocate_epoch(self, session):
+        """Global Tenant anchor serializes actual MAX+1, including tenant creation."""
+        from sqlalchemy import func
+
+        context = CoverageContext(session)
+        with context.read():
+            anchor = (
+                await session.execute(select(Tenant.id).where(Tenant.id == 1).with_for_update())
+            ).scalar_one_or_none()
+        if anchor != 1:
+            blocked("global_anchor_missing")
+        with context.read():
+            maximum = (await session.execute(select(func.max(Run.coverage_epoch)))).scalar_one()
+        if maximum is not None and (type(maximum) is not int or not 0 < maximum < 2**63 - 1):
+            blocked("epoch_exhausted")
+        return (maximum or 0) + 1
+
+    async def awrite_certificate(self, session, *, row, certificate, source_coverage):
+        from sqlalchemy import update
+
+        context = CoverageContext(session)
+        with context.read():
+            result = await session.execute(
+                update(Run.__table__)
+                .where(
+                    Run.id == row["id"],
+                    Run.tenant_id == row["tenant_id"],
+                    Run.run_id == row["run_id"],
+                    Run.phase == row["phase"],
+                    Run.coverage_epoch.is_(None),
+                )
+                .values(
+                    phase="completed",
+                    coverage_epoch=certificate["coverage_epoch"],
+                    source_coverage=source_coverage,
+                    verification_report={**row["verification_report"], "reference_coverage": certificate},
+                )
+            )
+        if result.rowcount != 1:
+            blocked("certificate_compare_failed")
+
+    async def ainsert_empty_certificate(self, session, *, row):
+        from sqlalchemy import insert
+
+        context = CoverageContext(session)
+        with context.read():
+            await session.execute(insert(Run.__table__).values(**row))
+
+    async def aflush_created_root(self, session, *, tenant):
+        from sqlalchemy import inspect
+
+        context = CoverageContext(session)
+        if tenant not in session.new or not inspect(tenant).pending or tenant.id != 1:
+            blocked("actual_new_root_required")
+        await session.flush()
+        context.check()

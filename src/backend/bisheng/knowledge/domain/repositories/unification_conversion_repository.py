@@ -143,7 +143,9 @@ class UnificationConversionRepository:
             _blocked("scope_changed")
         return value
 
-    async def alock_scope(self, session, *, run_id, writer_contract_version, baseline_hash, plan_hash, commands):
+    async def alock_scope(
+        self, session, *, run_id, writer_contract_version, baseline_hash, plan_hash, commands, verification=False
+    ):
         _clean(session)
         tenant = raw._scope(session)
         transaction = TransactionIdentity.capture(session)
@@ -190,7 +192,7 @@ class UnificationConversionRepository:
             _blocked("duplicate_command")
         run = await self.aread_run(session, run_id=run_id, writer_contract_version=writer_contract_version, lock=True)
         current()
-        self.runs._expected(run, "converting", baseline_hash, plan_hash)
+        self._verification_phase(run, baseline_hash, plan_hash, verification)
         value = await self._load(session, commands, False, current=current)
         current()
         scope = LockedConversionScope(
@@ -201,6 +203,7 @@ class UnificationConversionRepository:
             transaction=transaction,
             seal=digest(asdict(scope)),
             checkpoint=digest(run.checkpoints.get("converting", {}).get("sql_conversion")),
+            verification=verification,
         )
         self._scopes[scope] = value
         self._parents(scope, value)
@@ -470,17 +473,28 @@ class UnificationConversionRepository:
             _blocked("template_changed")
         return templates
 
+    def _verification_phase(self, run, baseline_hash, plan_hash, verification):
+        self.runs._hashes(run, baseline_hash, plan_hash)
+        if run.phase != "converting" and not (
+            verification
+            and run.phase in {"backfilling", "verifying", "verified", "completed"}
+            and run.checkpoints.get("converting", {}).get("sql_conversion", {}).get("complete") is True
+        ):
+            _blocked("phase_changed")
+
     async def _current_run(self, session, scope, value):
         run = await self.aread_run(
             session, run_id=scope.run_id, writer_contract_version=scope.writer_contract_version, lock=True
         )
-        self.runs._expected(run, "converting", scope.baseline_hash, scope.plan_hash)
+        self._verification_phase(run, scope.baseline_hash, scope.plan_hash, value["verification"])
         if digest(run.checkpoints.get("converting", {}).get("sql_conversion")) != value["checkpoint"]:
             _blocked("checkpoint_changed")
 
     async def aapply_and_read_after(self, session, *, scope):
         _clean(session)
         value = self._bound(session, scope)
+        if value["verification"]:
+            _blocked("verification_scope_cannot_write")
 
         def current():
             _current(session, scope.tenant_id, value.get("owned_savepoint", value["transaction"]))

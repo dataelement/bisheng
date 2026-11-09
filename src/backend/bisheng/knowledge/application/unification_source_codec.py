@@ -63,6 +63,7 @@ _RECORDS = {
             "configuration_digest",
             "retained_version_count",
             "business_revision_digest",
+            "frozen_index",
         ),
     ),
     SourceInventoryRecord: (
@@ -75,12 +76,16 @@ _RECORDS = {
             "reference_count",
             "lifecycle",
             "business_revision_digest",
+            "frozen_index",
         ),
     ),
-    ReferenceInventoryRecord: ("reference", ("source_key", "slot_key", "target", "origin", "physical_fact")),
+    ReferenceInventoryRecord: (
+        "reference",
+        ("source_key", "slot_key", "target", "origin", "physical_fact", "frozen_state"),
+    ),
     RetiredInventoryRecord: (
         "retired",
-        ("root_key", "source_key", "lifecycle", "configuration_digest", "business_revision_digest"),
+        ("root_key", "source_key", "lifecycle", "configuration_digest", "business_revision_digest", "frozen_index"),
     ),
 }
 _BY_TAG = {tag: (cls, names) for cls, (tag, names) in _RECORDS.items()}
@@ -136,7 +141,24 @@ def _wire(value):
             tag, names = _RECORDS[cls]
         if {field.name for field in fields(cls)} != set(names):
             _invalid()
-        result = {name: _wire(getattr(value, name)) for name in names}
+        from bisheng.knowledge.application.unification_reference_state import (
+            parse_frozen,
+            parse_retired,
+            parse_root_index,
+        )
+
+        result = {
+            name: (
+                parse_root_index(getattr(value, name))
+                if cls is RootInventoryRecord and getattr(value, name) is not None
+                else parse_retired(getattr(value, name))
+                if cls is RetiredInventoryRecord and getattr(value, name) is not None
+                else parse_frozen(getattr(value, name), index=name == "frozen_index", allow_none=True)
+            )
+            if name in {"frozen_index", "frozen_state"}
+            else _wire(getattr(value, name))
+            for name in names
+        }
         return {"record_type": tag, **result} if cls in _RECORDS else result
     if isinstance(value, StrEnum):
         return value.value
@@ -229,6 +251,17 @@ def _record(value, tenant_id):
             _integer(item[name], minimum=0)
     if "creator_id" in item and item["creator_id"] is not None:
         _integer(item["creator_id"])
+    from bisheng.knowledge.application.unification_reference_state import frozen_json, parse_retired, parse_root_index
+
+    for name in ("frozen_index", "frozen_state"):
+        if name in item and item[name] is not None:
+            item[name] = (
+                _canonical(parse_root_index(item[name])).decode()
+                if cls is RootInventoryRecord
+                else _canonical(parse_retired(item[name])).decode()
+                if cls is RetiredInventoryRecord
+                else frozen_json(item[name], index=name == "frozen_index")
+            )
     if cls is SourceInventoryRecord:
         _text(item["extractor_version"], 64)
     if cls is ReferenceInventoryRecord:

@@ -5,7 +5,7 @@ Implements spec AC-02, AC-03, AC-04a/b/c/d, AC-07:
   - ``mount_child``: global-super marks a department as a Child Tenant
     mount point. Enforces INV-T1 (2-layer lock), records audit_log.
   - ``unmount_child``: removes a Child mount. v2.5.1 收窄到唯一路径
-    （资源迁回 Root + Child 归档）。旧的 archive / manual 策略已删除——
+    (资源迁回 Root + Child 归档)。旧的 archive / manual 策略已删除——
     "冻结子公司不迁移资源" 的需求归到 §5.1.3 的 disable Child 动作。
   - ``migrate_resources_from_root``: AC-04d Root→Child resource sinking
     (INV-T10 — the one path that does NOT go through F018 transfer-owner).
@@ -149,6 +149,14 @@ async def _require_super(operator) -> None:
 class TenantMountService:
     """Stateless service implementing the Child Tenant lifecycle."""
 
+    _creation_factory = None
+
+    @classmethod
+    def configure_creation(cls, factory):
+        if not callable(factory):
+            raise TypeError("mounted tenant creation application factory required")
+        cls._creation_factory = staticmethod(factory)
+
     # -----------------------------------------------------------------------
     # mount_child
     # -----------------------------------------------------------------------
@@ -225,23 +233,18 @@ class TenantMountService:
         # (dept.mounted_tenant_id ↔ tenant.root_dept_id) is set in one shot —
         # downstream readers (e.g. TenantUserDialog member-picker scope) rely
         # on this column being populated.
-        async with get_async_db_session() as session:
-            new_tenant = Tenant(
-                tenant_code=tenant_code,
-                tenant_name=tenant_name,
-                parent_tenant_id=ROOT_TENANT_ID,
-                status="active",
-                root_dept_id=dept_id,
-            )
-            session.add(new_tenant)
-            await session.flush()  # populate new_tenant.id for the dept update
-            await session.execute(
-                sa_update(Department)
-                .where(Department.id == dept_id)
-                .values(is_tenant_root=1, mounted_tenant_id=new_tenant.id)
-            )
-            await session.commit()
-            await session.refresh(new_tenant)
+        new_tenant = Tenant(
+            tenant_code=tenant_code,
+            tenant_name=tenant_name,
+            parent_tenant_id=ROOT_TENANT_ID,
+            status="active",
+            root_dept_id=dept_id,
+        )
+        if cls._creation_factory is None:
+            raise TenantTreeMountConflictError()
+        new_tenant = await cls._creation_factory(
+            tenant=new_tenant, department_id=dept_id, department_tenant_id=dept.tenant_id
+        )
 
         from bisheng.workstation.domain.services import WorkStationService
 
@@ -530,9 +533,9 @@ class TenantMountService:
     ) -> dict[str, Any]:
         """Reverse a mount.
 
-        v2.5.1 收窄到唯一路径：资源整体迁回 Root + Child 归档（PRD §5.2.2）。
+        v2.5.1 收窄到唯一路径: 资源整体迁回 Root + Child 归档(PRD §5.2.2)。
         旧的 archive / manual 策略已删除——"冻结子公司不迁移资源"的需求归到
-        §5.1.3 的 disable Child Tenant 动作，与 unmount 完全分开。
+        §5.1.3 的 disable Child Tenant 动作, 与 unmount 完全分开。
 
         Stale-flag idempotency: if a department carries ``is_tenant_root=1``
         but ``mounted_tenant_id IS NULL`` (legacy/half-written rows from
@@ -569,7 +572,7 @@ class TenantMountService:
                 }
             raise TenantTreeMountConflictError()
 
-        # 1. 资源迁移：Child 名下所有 tenant_aware 业务表批量改为 Root
+        # 1. 资源迁移: Child 名下所有 tenant_aware 业务表批量改为 Root
         migrated_counts = await cls._migrate_child_resources_to_root(
             child_tenant_id,
         )

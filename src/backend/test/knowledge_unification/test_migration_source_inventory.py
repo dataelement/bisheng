@@ -37,6 +37,9 @@ from bisheng.permission.migration.f118_plan import (
     PermissionCatalogBaseline,
 )
 from bisheng.resource_reference.application.contracts import ReferenceSpec, SourceKey, TargetKey, reference_set_digest
+from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from test.knowledge_unification import test_migration_inventory_repository as raw
 from test.knowledge_unification import test_migration_permission_read as original_pin
 
@@ -53,6 +56,8 @@ def module():
 @pytest.fixture
 async def database(storage):
     async with storage.begin() as connection:
+        for model in (BusinessReferenceSet, BusinessResourceReference, ResourceReferenceTombstone):
+            await connection.run_sync(lambda conn, model=model: model.__table__.create(conn, checkfirst=True))
         await connection.run_sync(lambda conn: KnowledgeFile.__table__.create(conn, checkfirst=True))
     async with AsyncSession(storage) as session, session.begin():
         session.add_all(
@@ -279,6 +284,7 @@ async def test_actual_six_sources_preserve_versions_zero_roots_retired_and_priva
         "reference_count",
         "lifecycle",
         "business_revision_digest",
+        "frozen_index",
     ]
 
 
@@ -336,7 +342,16 @@ async def test_401_pages_child_batches_and_duplicate_targets_do_not_repeat_direc
             "model_fact_queries": sum("llm_server.update_time AS parent_update_time" in query for query in queries),
         }
     )
-    assert len(queries) < 55
+    original_queries = [
+        query
+        for query in queries
+        if not any(name in query for name in ("business_reference_set", "business_resource_reference", "m4_exact_rrt"))
+    ]
+    assert len(original_queries) < 55
+    assert sum("business_reference_set" in query for query in queries) == 14
+    assert sum("business_resource_reference" in query for query in queries) == 14
+    assert sum("m4_exact_rrt" in query for query in queries) == 3
+    assert len(queries) - len(original_queries) == 31
     assert all(statement._offset_clause is None for statement in statements)
 
 
