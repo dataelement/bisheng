@@ -421,7 +421,7 @@ export function SpaceFileUploadPanel({
       if (file.size > limit * 1024 * 1024) {
         toast.show({
           type: "error",
-          message: t("code.sizeExceedsLimit", { size: `${limit}MB` }),
+          message: t("code.sizeExceedsLimit", { ns: "bs", size: limit }),
         });
         continue;
       }

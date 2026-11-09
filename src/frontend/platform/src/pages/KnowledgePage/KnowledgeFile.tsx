@@ -296,7 +296,7 @@ export default function KnowledgeFile({
               setPermissionTarget(row);
             }}
           >
-            {t("managePermission")}
+            {t("managePermission", { ns: "permission" })}
           </DropdownItem>
         )}
         {hasAction(row, "edit") && (
