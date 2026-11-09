@@ -212,6 +212,29 @@ async def test_other_users_noncreator_sources_stay_frozen_while_missing_owner_ge
     assert rows[0].status == "PENDING" and rows[1].status == "REJECTED"
 
 
+async def test_keep_binds_actual_member_pk_without_changing_persistable_template(inventoried):
+    await original.seed(inventoried, [original.member(10)])
+    header, rows, creator = await facts(inventoried)
+    _, plan = api()
+    first = plan(header, rows, creator, planned_at=NOW)
+    await inventoried.session.execute(update(original.Member.__table__).values(id=99))
+    header, changed, creator = await facts(inventoried)
+    second = plan(header, changed, creator, planned_at=NOW)
+    assert first.existing_creator_member_id == 10 and second.existing_creator_member_id == 99
+    assert first.before_member_digest != second.before_member_digest
+    assert first.creator_template_digest == second.creator_template_digest
+
+
+async def test_actual_absent_user_creator_fact_cannot_compile_an_insert(inventoried):
+    await inventoried.session.execute(User.__table__.delete())
+    header, rows, creator = await facts(inventoried)
+    assert creator == CreatorFact(7, False, None)
+    before_sql = len(inventoried.statements)
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        api()[1](header, rows, creator, planned_at=NOW)
+    assert len(inventoried.statements) == before_sql
+
+
 async def test_existing_space_returns_no_plan_even_with_historical_conflicting_members_or_missing_creator(inventoried):
     await original.seed(
         inventoried,
