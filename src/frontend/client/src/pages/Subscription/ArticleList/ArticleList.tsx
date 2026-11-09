@@ -165,7 +165,7 @@ export function ArticleList({
                   value={searchKey}
                   onChange={setSearchQuery}
                   placeholder={localize("com_subscription.search_articles_of_interest")}
-                  className="w-full"
+                  fullWidth
                 />
               </div>
             ) : null}
@@ -315,17 +315,15 @@ export function ArticleList({
             </div>
           </div>
 
-          {/* 子频道 Tabs + 搜索/筛选. Single row on PC: tabs scroll horizontally
-                        (with edge shadows) while the toolbar stays fixed on the right. Hide
-                        the tab row when there are no sub-channels (a lone 全部 tab adds no value). */}
-          <div className="flex flex-row items-center justify-between gap-3">
+          {/* Tabs and filters share a row when the article pane has room for both. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
             {subChannels.length > 0 && (
               // Controlled @bisheng/ui Tabs used as a bare tab strip (no children —
               // the article list below is the content area). Overflow scroll +
               // edge fades and the count badges are built into the component.
               // divider off: this header row draws no full-width edge today.
               <Tabs
-                className="min-w-0 flex-1"
+                className="min-w-0 flex-[1_1_10rem]"
                 divider={false}
                 activeKey={selectedSubChannelName || "all"}
                 onChange={handleSubChannelChange}
@@ -344,34 +342,33 @@ export function ArticleList({
               />
             )}
 
-            {/* ml-auto keeps the toolbar right-aligned even when the tab row is hidden.
-                            shrink-0 + no wrap keeps it on one line; the tabs absorb the overflow. */}
-            <div className="ml-auto flex shrink-0 flex-row items-center justify-end gap-3">
+            <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-3">
               <SearchInput
                 key={channel.id}
                 value={searchKey}
                 onChange={setSearchQuery}
                 placeholder={localize("com_subscription.search_articles_of_interest")}
-                className="min-w-0"
               />
-              <MultiSourceSelect
-                className="h-8 min-w-[140px] max-w-full shrink-0 rounded-md"
-                options={sourceOptions}
-                value={selectedSources}
-                onChange={handleSourcesChange}
-              />
-              <button
-                type="button"
-                onClick={handleToggleUnread}
-                className={cn(
-                  "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
-                  onlyUnread
-                    ? "border-transparent bg-primary/20 text-primary"
-                    : "border-border-base bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
-                )}
-              >
-                {localize("com_subscription.show_unread_only")}
-              </button>
+              <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-3">
+                <MultiSourceSelect
+                  className="h-8 min-w-[140px] max-w-full shrink-0 rounded-md"
+                  options={sourceOptions}
+                  value={selectedSources}
+                  onChange={handleSourcesChange}
+                />
+                <button
+                  type="button"
+                  onClick={handleToggleUnread}
+                  className={cn(
+                    "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                    onlyUnread
+                      ? "border-transparent bg-primary/20 text-primary"
+                      : "border-border-base bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
+                  )}
+                >
+                  {localize("com_subscription.show_unread_only")}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -494,6 +491,7 @@ export function ArticleList({
                       isSelected={selectedArticleId === article.id}
                       searchQuery={searchQuery}
                       variant="grid"
+                      showBottomDivider
                     />
                   ))}
                 </div>
