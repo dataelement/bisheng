@@ -4381,5 +4381,14 @@
       "admin": "管理者",
       "children": "下位部門を含む"
     }
+  },
+  "references": {
+    "saved": "保存済みの参照",
+    "unavailable": "現在選択できません",
+    "unconfirmed": "一部の保存済み ID は現在の候補にありません。ここでは状態を確認できないため、元の ID を保持します。",
+    "partialRepair": "一部の修正を保存できます。実行や公開にはすべての参照が有効である必要があります。",
+    "invalid_deleted": "削除済み",
+    "invalid_legacy": "過去の参照が見つかりません",
+    "deleting": "削除中"
   }
 }

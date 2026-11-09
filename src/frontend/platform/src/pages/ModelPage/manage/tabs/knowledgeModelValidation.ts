@@ -29,7 +29,7 @@ function normalizeVisibleModelId(
     options: ModelOptionGroup[],
 ): { value: ModelId; unavailable: boolean } {
     if (value === null || value === undefined || value === "") {
-        return { value: null, unavailable: false };
+        return { value, unavailable: false };
     }
 
     const visible = options.some((group) =>
@@ -37,7 +37,7 @@ function normalizeVisibleModelId(
     );
     return visible
         ? { value, unavailable: false }
-        : { value: null, unavailable: true };
+        : { value, unavailable: true };
 }
 
 export function normalizeKnowledgeModelIds(
