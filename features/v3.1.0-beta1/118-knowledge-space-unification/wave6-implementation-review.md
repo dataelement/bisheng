@@ -591,3 +591,12 @@ Root合并后实际三条Catalog测试路径84 passed/7.67s，/private/tmp/f118-
 fixed0fdda0e87c新增131行实际读取Repo和原Visibility薄桥，SPACE3正向核File唯一Version、Document归属/primary_version_id/is_primary及SUCCESS；原文件可见性、IN/NOTIN/none、历史delivery、NORMAL0/QA1不扩。401/10001实际全集及显式候选各3/51 SELECT，最大208 bind，seek≤200；EXPLAIN确认Version/File alias使用索引查找，无版本表全扫或文件×版本积；C2 ANSI/MySQL编译、Ruff、两生产叶逐路径arch通过。首6路径67 passed/1.56s。
 
 14实际调用方路径首次140 pass/2 fail，旧test_rebuild_failed_visibility的状态控制File2–8没有Doc/Version却预期作为主版本；仅fixture补齐真实各自primary链（c9ad73cb6e），原所有状态/可见/QA断言保留，新未登记拒绝测试独立保留。生产fixed未变，最终同14路径142 passed/1.94s，/private/tmp/f118-primary-full-callers-corrected.log及XML。原T101/T102是否完整闭合仍待独立复查，不据本组件通过提前关闭后继节点/旧协议入口。
+
+
+### 以业务闭环统计进度（2026-11-09）
+
+原T101/T102经独立审查具备本卡完成条件，关闭；原137队列完成44项、剩93项。任务含测试配对，不换算成功能百分比，历史细分接缝数不再作为总体交付进度。原节点适配、模型/空间删除、正式权限发布、回填/Coverage、页面与环境E2E仍按实际业务链推进。
+
+§124独立固定export c9ad73cb6e：37项新native/边界1.30s通过，真实fresh checkout tenant变化在0查询前拒、nested drift拒、跨Root非primary alias/坏version_no/DIR/dangling Doc拒。额外facade_equality路径组合161通过、1原fixture失败：test_a_permission_outage_returns_an_error_and_zero_chunks_at_every_door[hosted_runtime]，旧helper不接principal关键字；测试叶与CapabilityBus完整AST在e3a3da6983和c9ad73cb6e一致，确认本波baseline，不冒该额外路径全绿。Root14路径142绿保持独立口径。
+
+RRT fixed27aa5359e990已Root完整读两生产diff，normalmerge d0c6e3872d；主树3实际路径52 passed/2.69s，/private/tmp/f118-root-target-deletion-integrated.log及XML。原Source方法AST保持，只有已有目标删除证据写入和窄runtime桥；实际模型/空间删除业务整卡待闭，不把证据组件当公开删除交付。
