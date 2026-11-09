@@ -151,18 +151,17 @@ def test_existing_floor_is_carried_through_canonical_rebuild_and_original_verifi
         verify.verify_catalog_retirement(plan=tampered, actual=after_catalog(tampered))
 
 
-def test_existing_floor_support_does_not_issue_new_floor_for_old_mixed_use():
-    before = baseline(plans)
-    before = replace(
-        before,
-        actions=tuple(replace(action, level=3) if action.code == "use" else action for action in before.actions),
-        models=tuple(
-            replace(model, derived_level=3) if model.model_key == "file-use" else model for model in before.models
-        ),
-    )
-    with pytest.raises(PermissionMigrationBlockedError) as error:
-        build(before)
-    assert error.value.kwargs["reason"] == "f118_permission_non_use_or_management_changed"
+def test_old_mixed_support_now_issues_only_its_exact_original_floor():
+    from test.knowledge_unification.test_permission_floor_retirement_signing import legacy_catalog
+
+    before = legacy_catalog()
+    result = build(before)
+    old = next(model for model in before.models if model.model_key == "mixed-use")
+    after = next(model for model in result.after_models if model.model_key == "mixed-use")
+    pure = next(model for model in result.after_models if model.model_key == "pure-use")
+    assert old.retired_use_level_floor is None and old.derived_level == 3
+    assert after.retired_use_level_floor == after.derived_level == 3
+    assert pure.retired_use_level_floor is None and pure.derived_level == 3
 
 
 async def test_native_snapshot_reflection_keeps_excluded_floor_without_repo_changes(storage):
