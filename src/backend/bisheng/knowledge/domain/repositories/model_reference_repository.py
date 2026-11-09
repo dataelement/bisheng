@@ -336,10 +336,8 @@ class KnowledgeModelReferenceRepository:
         tenant = self._tenant_id()
         # Bulk DML does not receive C3's SELECT injection. The current owned
         # parent and exact tenant protect both files/folders and QA pairs.
-        return tuple(
-            delete(model).where(model.knowledge_id == row.id, model.tenant_id == tenant)
-            for model in (KnowledgeFile, QAKnowledge)
-        )
+        models = (KnowledgeFile, QAKnowledge) if row.type == KnowledgeTypeEnum.QA.value else (KnowledgeFile,)
+        return tuple(delete(model).where(model.knowledge_id == row.id, model.tenant_id == tenant) for model in models)
 
     def clear_contents(self, session, row):
         for query in self._content_deletes(session, row):
