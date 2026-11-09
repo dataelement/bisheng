@@ -25,10 +25,10 @@ upload = native.upload
 
 async def rows(case):
     async with case.context.sessions() as session:
-        return tuple(
-            tuple((await session.execute(select(model.__table__).order_by(model.id))).mappings())
-            for model in (KnowledgeFile, KnowledgeDocument, KnowledgeDocumentVersion)
-        )
+        result = []
+        for model in (KnowledgeFile, KnowledgeDocument, KnowledgeDocumentVersion):
+            result.append(tuple((await session.execute(select(model.__table__).order_by(model.id))).mappings()))
+        return tuple(result)
 
 
 def request():
