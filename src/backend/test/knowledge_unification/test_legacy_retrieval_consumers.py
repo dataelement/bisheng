@@ -169,6 +169,8 @@ async def test_workflow_old_selector_keeps_one_global_weighted_fusion_and_origin
     port = Mock(return_value=sources)
     monkeypatch.setattr(workstation.KnowledgeRag, "get_multi_knowledge_vectorstore_sync", port)
     value = node(roots, auth=auth)
+    fetch = Mock(wraps=value._fetch_non_primary_file_ids)
+    monkeypatch.setattr(value, "_fetch_non_primary_file_ids", fetch)
     calls = []
     fusion = KnowledgeRetrieverTool._rrf_rerank
 
@@ -178,6 +180,7 @@ async def test_workflow_old_selector_keeps_one_global_weighted_fusion_and_origin
 
     monkeypatch.setattr(KnowledgeRetrieverTool, "_rrf_rerank", counted)
     await asyncio.to_thread(value.init_multi_retriever)
+    assert fetch.call_args.args == ([20, 30],)
     actual = await asyncio.to_thread(value.retrieve_question, "q")
     assert calls == [([0.25, 0.75], 10)]
     assert all(row.metadata["document_id"] not in {10001, 10003} for row in actual)
@@ -339,3 +342,34 @@ async def test_default_f029_attempts_remain_unchanged_while_actual_workstation_k
     assert [call["k"] for call in elastic.calls] == [100]
     roots.build_user.assert_not_awaited()
     legacy.assert_not_awaited()
+
+
+@pytest.mark.parametrize("threshold,strategy", [(2, "none"), (3, "in")])
+async def test_off_large_positive_set_uses_original_threshold_none_and_still_rejects_stale_scores(
+    roots, monkeypatch, threshold, strategy
+):
+    from bisheng.common.services.config_service import settings
+    from bisheng.core.config.settings import KnowledgeQAFilterConf
+
+    monkeypatch.setattr(settings, "knowledge_qa_filter", KnowledgeQAFilterConf(index_filter_threshold=threshold))
+    await roots.catalog.seed([*chain(4), *chain(5)])
+    store = Store(
+        [(doc(10001, 10, "history"), 1.0), (doc(10003, 10, "orphan"), 0.99), (doc(10002, 10, "primary"), 0.7)]
+    )
+    sources = {10: {"knowledge": space(), "milvus": store, "es": None}}
+    monkeypatch.setattr(workstation.KnowledgeRag, "get_multi_knowledge_vectorstore_sync", Mock(return_value=sources))
+    value = node(roots, auth=False)
+    value._knowledge_value = ["10"]
+    await asyncio.to_thread(value.init_multi_retriever)
+    index = value._legacy_space_filters[10]
+    assert index.accessible_size == 3 and index.strategy == strategy
+    if strategy == "none":
+        assert index.milvus_expr is None and not index.es_filter
+    else:
+        assert index.es_filter == [{"terms": {"metadata.document_id": [10002, 40001, 50001]}}]
+    result = await asyncio.to_thread(value._multi_milvus_retriever.invoke, "q")
+    assert [row.metadata["document_id"] for row in result] == [10002]
+    if strategy == "none":
+        assert "expr" not in store.calls[0]
+    roots.build_user.assert_not_awaited()
+    assert roots.pre == roots.post == []

@@ -396,13 +396,26 @@ class RagUtils(BaseNode):
                         None, self._legacy_space_identity
                     ).build_index_prefilter(ident, None)
             else:
+                from bisheng.common.services.config_service import settings
+                from bisheng.core.config.settings import KnowledgeQAFilterConf
+
                 async with get_async_db_session() as session:
-                    eligible = sorted(await repository.alist_successful_files(session, space_id=ident))
-                index = IndexFilter(
-                    strategy="in" if eligible else "empty",
-                    milvus_expr=f"document_id in {eligible}",
-                    es_filter=[{"terms": {"metadata.document_id": eligible}}],
-                )
+                    eligible = await repository.alist_successful_files(session, space_id=ident)
+                threshold = (
+                    getattr(settings, "knowledge_qa_filter", None) or KnowledgeQAFilterConf()
+                ).index_filter_threshold
+                if not eligible:
+                    index = IndexFilter(strategy="empty", accessible_size=0)
+                elif len(eligible) <= threshold:
+                    selected = sorted(eligible)
+                    index = IndexFilter(
+                        strategy="in",
+                        milvus_expr=f"document_id in {selected}",
+                        es_filter=[{"terms": {"metadata.document_id": selected}}],
+                        accessible_size=len(eligible),
+                    )
+                else:
+                    index = IndexFilter(strategy="none", accessible_size=len(eligible))
             self._legacy_space_filters[ident] = index
 
     async def _apostfilter_legacy_space_scores(self, ident, rows):
@@ -531,10 +544,10 @@ class RagUtils(BaseNode):
         self._multi_milvus_retriever = None
         self._multi_es_retriever = None
 
-        # Bulk-fetch non-primary file ids once for all knowledges in the retriever.
-        # Applying the union to every knowledge's filter is correct — each collection
-        # only contains its own files, so cross-knowledge ids are no-ops.
-        knowledge_ids = list(self._knowledge_vector_list.keys())
+        # Legacy libraries/QA retain the original union; actual SPACE roots have
+        # their own positive qualification and must not expand this negative list.
+        scoped_spaces = getattr(self, "_legacy_space_filters", {})
+        knowledge_ids = [key for key in self._knowledge_vector_list if int(key) not in scoped_spaces]
         excluded_file_ids = self._fetch_non_primary_file_ids(knowledge_ids)
 
         for knowledge_id, knowledge_info in self._knowledge_vector_list.items():
@@ -571,7 +584,7 @@ class RagUtils(BaseNode):
             #   base_es_filter: List[dict] | None  (the list under the "filter" key)
             base_es_list = es_filter.get("filter") if es_filter else None
             combined_milvus_expr, combined_es_list = build_primary_only_filter(
-                excluded_file_ids,
+                excluded_file_ids if scoped is None else [],
                 base_milvus_expr=milvus_filter_str or None,
                 base_es_filter=base_es_list,
             )
