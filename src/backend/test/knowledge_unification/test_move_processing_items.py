@@ -11,6 +11,7 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem as Item
 from bisheng.worker.knowledge.move_worker import MoveIndexCheckpoint, MoveMetadataPolicy, _scope
 from test.knowledge_unification import test_move_processing_owner as base
+from test.knowledge_unification.test_move_worker import native as native
 
 store, tenant, moving, accepted, application = base.store, base.tenant, base.moving, base.accepted, base.application
 
@@ -148,3 +149,78 @@ async def test_real_common_savepoint_and_peek_claim_mismatch_roll_back(applicati
         await app.owner.aensure_logical(app.built.lease)
     assert await base.refs.facts(app.built) == before
     assert not app.chat
+
+
+async def test_actual_index_adapter_uses_native_owner_checkpoint_ack_before_source_cleanup(
+    application, native, monkeypatch
+):
+    from dataclasses import fields
+    from types import SimpleNamespace
+
+    from bisheng.worker.knowledge import move_worker
+
+    app = application
+    await app.owner.aensure_logical(app.built.lease)
+    lease = await app.owner.aclaim_item(app.built.lease)
+    snapshot = await app.owner.aguard_item(lease)
+    source, destination = Knowledge(**snapshot.source), Knowledge(**snapshot.destination)
+    for row in native.source_es.rows:
+        if row["_source"]["metadata"]["document_id"] == 81:
+            row["_source"]["metadata"]["knowledge_id"] = source.id
+
+    async def vector(user_id, *, knowledge, embeddings=None, **kwargs):
+        assert not any(session.in_transaction() for session in app.sessions_seen)
+        assert user_id == 7 and kwargs["expected_model_config_revision"] == knowledge.model_config_revision
+        return SimpleNamespace(
+            col=native.source_mv if knowledge.id == source.id else native.target_mv,
+            embedding_func=native.embedding if embeddings is None else embeddings,
+        )
+
+    async def elasticsearch(*, knowledge, **kwargs):
+        assert not any(session.in_transaction() for session in app.sessions_seen)
+        return native.source_es if knowledge.id == source.id else native.target_es
+
+    monkeypatch.setattr(move_worker.KnowledgeRag, "init_knowledge_milvus_vectorstore", vector)
+    monkeypatch.setattr(move_worker.KnowledgeRag, "init_knowledge_es_vectorstore", elasticsearch)
+
+    async def guard():
+        if await app.owner.aguard_item(lease) is None:
+            raise KnowledgeOperationPlanConflictError(reason="actual_adapter_guard_stopped")
+
+    async def load():
+        current = await app.owner.aguard_item(lease)
+        if current.checkpoint.get("step") not in {"move_target_verified", "move_source_cleaned"}:
+            return None
+        return MoveIndexCheckpoint(
+            **{field.name: current.checkpoint[field.name] for field in fields(MoveIndexCheckpoint)}
+        )
+
+    async def save(value):
+        assert await app.owner.asave_item_checkpoint(lease, step=value.step, checkpoint=asdict(value))
+        # A separate native session sees the durable ACK before adapter clears source.
+        async with app.built.sessions() as session:
+            row = await session.get(Item, lease.item_id)
+            assert row.checkpoint["step"] == value.step and row.checkpoint["logical_move"]
+
+    policy = snapshot.snapshot["metadata_policy"]
+    result = await move_worker.apply_move_index_item(
+        operation_id=app.built.job_id,
+        target=snapshot.leaf.target,
+        source=source,
+        destination=destination,
+        invoke_user_id=7,
+        metadata_policy=MoveMetadataPolicy(tuple(policy["retained_fields"]), tuple(policy["removed_fields"])),
+        guard=guard,
+        checkpoints=SimpleNamespace(aload=load, asave=save),
+    )
+    assert isinstance(result, move_worker.MoveIndexResult) and result.file_id == 81
+    assert result.source_count == result.milvus_count == result.es_count == 2
+    assert not any(row["_source"]["metadata"]["document_id"] == 81 for row in native.source_es.rows)
+    assert await app.owner.acomplete_item(
+        lease,
+        **{
+            name: getattr(result, name)
+            for name in ("source_count", "milvus_count", "es_count", "source_digest", "target_payload_digest")
+        },
+    )
+    assert (await app.owner.afinalize_attempt(app.built.lease)).state == "succeeded"

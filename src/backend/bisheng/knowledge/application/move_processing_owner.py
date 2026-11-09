@@ -97,8 +97,21 @@ class KnowledgeMoveProcessingOwner:
                 transaction = TransactionIdentity.capture(session)
                 yield session
                 transaction.assert_current(session)
+                self._quiescent(session)
                 if admission.tenant() != tenant:
                     raise ValueError("move tenant changed")
+
+    @staticmethod
+    def _quiescent(session):
+        if session.new or session.dirty or session.deleted:
+            raise KnowledgeOperationPlanConflictError(reason="move_owner_pending_tail")
+
+    @asynccontextmanager
+    async def _savepoint(self, session):
+        self._quiescent(session)
+        async with session.begin_nested():
+            yield
+            self._quiescent(session)
 
     @staticmethod
     async def _call(session, operation):
@@ -312,7 +325,7 @@ class KnowledgeMoveProcessingOwner:
                 job_id=job.id, changes=expected, actor=get_current_permission_actor()
             )
             async with self._session() as session:
-                async with session.begin_nested():
+                async with self._savepoint(session):
                     prepared = await self._call(
                         session, self.cutover.aprepare_cutover(session, job_id=job.id, lease=lease)
                     )
@@ -377,7 +390,7 @@ class KnowledgeMoveProcessingOwner:
                 destination_folder_id=job.parameters["destination_folder_id"],
             )
             async with self._session() as session:
-                async with session.begin_nested():
+                async with self._savepoint(session):
                     current = await self._item_snapshot(session, lease, claim=claim)
                     if current is None:
                         return None
@@ -494,11 +507,23 @@ class KnowledgeMoveProcessingOwner:
                 if not self.jobs._check_configuration(locked, None, move_current=configuration):
                     await self._call(session, session.flush())
                     return None
-                scope = await self._scope_for(session, job)
-                expected, facts = await self._materials(
-                    session, job, scope.parent_changes, actor_id=admission.subject(reference).subject_id
+                bounded = not finalize and locked.move_logical_marker is not None
+                if bounded:
+                    self.ready.require_job_ready(locked)
+                else:
+                    scope = await self._scope_for(session, job)
+                    expected, facts = await self._materials(
+                        session, job, scope.parent_changes, actor_id=admission.subject(reference).subject_id
+                    )
+            if bounded:
+                await admission.authorize(
+                    actual,
+                    roots=(),
+                    destination_space_id=job.space_id,
+                    destination_folder_id=job.parameters["destination_folder_id"],
                 )
-            await self._authorize_scope(actual, scope, expected, facts)
+            else:
+                await self._authorize_scope(actual, scope, expected, facts)
             async with self._session() as session:
                 if finalize:
                     result = await self._call(

@@ -170,6 +170,9 @@ async def test_independent_changes_full_attempt_linear_and_actual_item_ports_con
     assert lease is not None
     assert await app.owner.aensure_logical(lease) is not None
     stop("attempt_logical")
+    start()
+    assert await app.owner.arenew_attempt(lease)
+    stop("ready_renew")
     # Measure complete ports against N independent operations. No whole-plan/manifest read.
     start()
     item_lease = await app.owner.aclaim_item(lease)
@@ -188,7 +191,7 @@ async def test_independent_changes_full_attempt_linear_and_actual_item_ports_con
         item_lease, source_count=0, milvus_count=0, es_count=0, source_digest="1" * 64, target_payload_digest="2" * 64
     )
     stop("ack")
-    for name in ("claim", "guard", "checkpoint", "ack"):
+    for name in ("ready_renew", "claim", "guard", "checkpoint", "ack"):
         statements = phases[name]
         assert len(statements) < 130
         assert not any(
@@ -197,7 +200,7 @@ async def test_independent_changes_full_attempt_linear_and_actual_item_ports_con
         assert max(arity for _, arity in statements) < 30
     linear_updates = {
         table: sum(text.startswith("UPDATE " + table + " SET") for text, _ in phases["attempt_logical"])
-        for table in ("knowledge_file", "knowledge_document", "knowledge_processing_item")
+        for table in (base.File.__tablename__, Doc.__tablename__, items.Item.__tablename__)
     }
     assert set(linear_updates.values()) == {count}
     async with app.built.sessions() as session:

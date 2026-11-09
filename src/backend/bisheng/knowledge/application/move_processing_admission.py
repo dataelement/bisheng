@@ -93,7 +93,7 @@ async def authorize(identity, *, roots, destination_space_id, destination_folder
     for root in roots:
         kind, ident = resource(root)
         groups.setdefault(kind, set()).add(str(ident))
-    if actor.data_scope == DATA_SCOPE_PERSONAL:
+    if actor.data_scope == DATA_SCOPE_PERSONAL and groups:
         resolver = get_data_scope_resolver()
         if resolver is None or actor.subject_type != "user":
             raise PermissionDeniedError(reason="move_ownership_resolver_required")
