@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from weakref import ReferenceType, WeakKeyDictionary, ref
 
@@ -598,9 +599,17 @@ class ReferenceRepository:
             raise ValueError("inbound page limit must be 1..200")
         if after_id is not None and (type(after_id) is not int or after_id < 0):
             raise ValueError("inbound cursor must be a non-negative reference ID")
+        with bypass_tenant_filter():
+            rows = (await session.execute(self._inbound_owner_statement(scope.targets, after_id, limit))).all()
+        result = self._inbound_owner_rows(rows)
+        self._check_scope(session, scope)
+        return result
+
+    @classmethod
+    def _inbound_owner_statement(cls, targets, after_id, limit):
         source, binding = BusinessReferenceSet, BusinessResourceReference
         query = (
-            self._target_query(scope.targets)
+            cls._target_query(targets)
             .add_columns(source)
             .outerjoin(
                 source,
@@ -616,8 +625,10 @@ class ReferenceRepository:
         )
         if after_id is not None:
             query = query.where(binding.id > after_id)
-        with bypass_tenant_filter():
-            rows = (await session.execute(query)).all()
+        return query
+
+    @staticmethod
+    def _inbound_owner_rows(rows):
         result = []
         for reference, indexed in rows:
             if (
@@ -629,5 +640,59 @@ class ReferenceRepository:
             ):
                 raise ReferenceCoverageNotReadyError(reason="reference_inbound_source_incomplete")
             result.append(reference)
-        self._check_scope(session, scope)
         return tuple(result)
+
+    async def aiter_inbound_for_owner_pages(
+        self, session: AsyncSession, scope: OwnerTargetScope, *, limit: int = 200
+    ) -> AsyncIterator[tuple[BusinessResourceReference, ...]]:
+        """Stream exact target groups, then BRR IDs within each group.
+
+        This is not a global BRR lock order. Only exhausting the stream runs
+        its final full scope validation; partial pages grant no authorization.
+        """
+        self._check_scope(session, scope)
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise ValueError("inbound page limit must be 1..200")
+        # Copy primitive values before awaiting: neither a changed scope nor a
+        # changed original TargetKey may redirect a later target group's SQL.
+        raw_targets = tuple((key.target_type.value, key.target_id) for key in scope.targets)
+        transaction = TransactionIdentity.capture(session)
+        owner = self.current_tenant_id()
+        registration = self._issued_scopes.get(scope)
+        authority = self._scope_authority
+
+        def current():
+            try:
+                transaction.assert_current(session)
+            except (TypeError, ValueError) as error:
+                raise _invalid("target_owner_scope_expired") from error
+            if (
+                self.current_tenant_id() != owner
+                or self._issued_scopes.get(scope) is not registration
+                or registration() is not scope
+                or scope._authority is not authority
+                or scope.owner_tenant_id != owner
+            ):
+                raise _invalid("target_owner_scope_invalid")
+
+        for start in range(0, len(raw_targets), 200):
+            targets = tuple(TargetKey(kind, ident) for kind, ident in raw_targets[start : start + 200])
+            after = None
+            while True:
+                current()
+                with session.no_autoflush, bypass_tenant_filter():
+                    rows = (await session.execute(self._inbound_owner_statement(targets, after, limit))).all()
+                current()
+                page = self._inbound_owner_rows(rows)
+                if not page:
+                    break
+                # The ORM rows are public and mutable after yielding. Capture
+                # the SQL cursor first so their mutation cannot skip later rows.
+                after = page[-1].id
+                yield page
+                if len(page) < limit:
+                    break
+        current()
+        self._check_scope(session, scope)
+        if tuple((key.target_type.value, key.target_id) for key in scope.targets) != raw_targets:
+            raise _invalid("target_owner_scope_invalid")
