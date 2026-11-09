@@ -1757,6 +1757,10 @@ M4只在重验原同before和真实Root absence后，复用原retired checkpoint
 
 原T222/T223同时收口知识业务内的use消费：旧HTTP/action=use和公开兼容方法名保留，入口归一为visible；RAG实际请求/筛选visible结果，不依赖use结果key。其他动作、类型、数据scope及成功主版本资格不变，不借此改分页/缓存框架。
 
+T222/T223历史运行消费补充（2026-11-10 已冻结）：实际旧workflow `type=knowledge` 的 `check_auth=False` 直接读取原库并以runtime user初始化向量，不能因Root迁移成SPACE3而切换配置作者或额外开启运行者文件授权。F041 spec §1 C/D 的OFF=配置者可见范围共享仅适用于原literal `type=space`；本轮依F118 AC-37保同身份/同应用配置范围：旧knowledge ON的实际3复用F029公开prefilter/post_filter_retrievable_files，OFF仅复用正式成功主版本业务资格正向pre/postfilter，不额外FGA；literal space保原toggle身份语义。两入口均按C3 exact≤200只读id/type分组，0/1保原路径，缺失、未知和retired2不得回落为无鉴权SPACE，不改保存JSON。
+
+workflow实际3仅在原native VectorStore接只读score-pair forwarding过滤，保sync/async两入口、原store/search_kwargs不被共享修改；原MultiRetriever全局score排序/cap100及唯一KnowledgeRetrieverTool RRF/权重/rerank/max_content不变，不改成逐SPACE融合。原metadata无匹配(None,None)必须skip。Workstation沿原login_user，对旧org_bucket中的真实3也复用既有aretrieve_space_documents逐KB路径及原tag过滤；0/1/原失败隔离、源顺序、总100上限和返回DTO保留，不增加工作台Embedding重配置能力。 Workstation仅显式传原helper新增内部可选retrieval_multipliers=(1,)保原k100/ef110/单次；其他调用省略此参数，仍按原F029配置倍率与两轮策略。
+
 
 ## 136. 实际上传页的临时规则接线（2026-11-10 已冻结）
 

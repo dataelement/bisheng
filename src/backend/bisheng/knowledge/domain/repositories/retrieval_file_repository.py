@@ -19,6 +19,55 @@ def _invalid():
 
 
 class KnowledgeRetrievalFileRepository:
+    async def aload_actual_types(self, session: AsyncSession, *, knowledge_ids) -> dict[int, int]:
+        """Classify only the exact selected Roots, under their existing C3 scope."""
+        tenant = get_current_tenant_id()
+        if (
+            not isinstance(session, AsyncSession)
+            or type(tenant) is not int
+            or tenant <= 0
+            or is_tenant_filter_bypassed()
+            or session.new
+            or session.dirty
+            or session.deleted
+        ):
+            _invalid()
+        ids = []
+        for raw in knowledge_ids:
+            if type(raw) not in (str, int) or not str(raw).isdecimal() or not 0 < int(raw) <= 2**63 - 1:
+                _invalid()
+            ids.append(int(raw))
+        ids = tuple(dict.fromkeys(ids))
+        if not ids:
+            return {}
+        if not session.in_transaction():
+            await session.connection()
+        if get_current_tenant_id() != tenant or is_tenant_filter_bypassed():
+            _invalid()
+        transaction = TransactionIdentity.capture(session)
+        result = {}
+        for start in range(0, len(ids), 200):
+            transaction.assert_current(session)
+            if get_current_tenant_id() != tenant or is_tenant_filter_bypassed():
+                _invalid()
+            with session.no_autoflush, strict_tenant_filter():
+                rows = (
+                    await session.execute(
+                        select(Knowledge.id, Knowledge.type).where(Knowledge.id.in_(ids[start : start + 200]))
+                    )
+                ).all()
+            transaction.assert_current(session)
+            if (
+                get_current_tenant_id() != tenant
+                or is_tenant_filter_bypassed()
+                or session.new
+                or session.dirty
+                or session.deleted
+            ):
+                _invalid()
+            result.update(rows)
+        return result
+
     @staticmethod
     def _query(space_id):
         file = KnowledgeFile.__table__
