@@ -1415,3 +1415,16 @@ afail_attempt已读无锁candidate，move直接同prefix→Job，普通仍原目
 
 
 §112签名补正：aread_projection显式接jobs，与attempt/item口相同，只复用原Job内核obsolete落库/lease算法；不import旧JobRepo、不复制obsolete尾部、不以callback或Session隐式许可绕开实际native前置。该口同样Root↑/Plan→Job后判source/dest当前配置，None结果也须caller commit ACK。原只读aread_configuration不制造状态写。无实际生产调用方，freeze后再实现。
+
+
+## 113. 保存QA知识引用的原类型资格保留：已冻结
+
+INT T1018官方native红测、T1019仅原unification_preflight.py的source_decision窄改。现真实workflow reference_extractor已把qa_retriever.qa_knowledge_id解析为knowledge_space TargetKey，原ReferenceTargetRepository._facts对Root及file父允许NORMAL0/QA1/SPACE3；但source_decision硬限0/3会拒原已保存QA。按spec AC-37/55/65/88，保存QA槽位应沿相同原native物理资格保留existing_saved_slot，QA仍type1、旧模型/内容/权限namespace/成员不转换。只把该物理类型集合与原Owner统一0/1/3；exact tenant/父记录存在/file kind、type2/未知拒、explicit missing initial_missing、无新bind授权和不造Grant均原样。测试从实际qa_retriever提取器＋native KnowledgeMigrationTargetRepository读原QA（可含原File父为QA）构造真实来源事实，before source_decision拒→after保原ID/source/slot/disposition；并真实M2冻结后QA仍type1无ResourceConversionCommand或成员计划，原type2/跨tenant/坏file父继续拒。此非QA合并，不因改集合扩任意线上资源准入。
+
+## 114. 全M2复用原纯Catalog编译上下文：已冻结
+
+EDGE T1020先native C4/C5事实驱动红测，T1021仅permission/migration/f118_plan.py历史大叶必要窄API增量。新增frozen slots ResourceRetirementPlanner(*,catalog_plan)纯类，构造仅一次原_resource_context的Catalog重建/完整matrix校验，并以只读映射保原before/after model与scope索引；不公开可写dict，避免普通字段重赋值或映射修改。Context不是authority/receipt/registry，不Session/SQL/FGA，不缓存资源或跨run全局单例。
+
+build(*,before:PermissionResourceBaseline,namespace_target:ResourceModeBaseline|None=None)->ResourceRetirementPlan直接复用原_build_resource_retirement_plan；build_many(*,before:Iterable,target_modes:Iterable|None=None)->Iterator复用原exact zip_longest/mapping规则及所有baseline/target/visible canonical验证。旧point/batch APIs保持签名/返回/错误语义和payload/hash字节；可共享该class实现，但不得改变C4/C5/旧无mapping checksum或绕badCatalogPlan原重建。单条build与旧point一样：有mapping必须显式target，无mapping拒多余target。空批、late missing/more/错target、跨合法tenant纯资源不同输入均原约束，不按资源数重编Catalog。
+
+后继原InventoryApp每正式freeze显式构造一次planner，并交原tenant preflight复用；frozen verifier每graph一次。先交此纯接口再冻原M2 wire/资格/consumer卡，不为了消除tenant×Model把所有租户G/S全局堆进内存，也不把private_context跨层强拿。测试实际旧C4/C5 native Source/Mode/retired数据与旧point/batch全等/旧payload字节，badCatalog/mutable target/canonical source照拒、compiled映射不能普通改；401/1001 models独立混合tenant批/资源预算总Catalog derive与matrix各1、模型候选M、资源Source O(G+S)，SQL0。后继actual Parent namespace完整frozen wire/SQL/FGA Publisher仍未接，本卡不闭T157158。
