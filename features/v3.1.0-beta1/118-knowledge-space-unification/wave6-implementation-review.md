@@ -430,3 +430,8 @@ K1仓储整卡复查闭合：47563b0de（§83新test8dd56f1bc的5真红/3首绿�
 ### 2026-11-09 有界原证据读取主树验收
 
 T953954固定0f54272ee经Root全读diff，正常合流；Root七路径101 passed/1206 warnings/10.59秒，/private/tmp/f118-root-target-original-bounded.log/.xml。Root另独立核16原authority/revision/proof函数AST完全不变。新12预算/原OR真红转绿，原19旧锁列表仅两处随已冻分页适配，不改RRT预算/结果；KN Repo453行。单版401/1001三槽匹配变1203/3003，10001为30003；稀疏401/1001版本BRR读取5/11次，每raw页≤200、最大208参数，已选版本内每行一次，不做版本×union目标。sync/async实际10001 bind/prelock各205 SELECT成功，不是捕旧错误计绿；Root页全部先于File页，原权限/身份/写口不变。T953954组件闭合，读侧T958仍实施中，正式迁移/E2E未完成。
+
+
+T959960已Root全读128行Schema及旧Repo完整diff，并正常主合9d253f256。作者原27缺模块红/12原控制绿→39首绿，22路径512绿；Root八路径150 passed/2954 warnings/5.52秒（/private/tmp/f118-root-acceptance-ssot.log/.xml）。五原DTO及_digest同对象显式reexport，原manifest仅原一次deepcopy、request_facts复用已准备值，canonical四oracle不变；其他Job gate/metadata空proof/事务/锁位置保留。两卡闭合，不提前开move。J1a新受理接口按实际K1 native SAVEPOINT接缝在§89另冻。
+
+D1 bc8独立复查52原绿但2原生额外格1红1绿，真实祖先较晚重读覆盖physical基线被锁比较漏检；原probe/private/tmp/f118-d1-independent-probe.log保留。T956原合同要求重读一致，退回同卡修，不先主合或记完成。修复39199d3bc已候验，不把原52绿当整体安全。旧version switch_off测试独立父基线同样期待HTTPException但原Service抛VersionManagementDisabledError，故组合明确单列已证旧失败，后继旧协议卡处理，未放宽生产门槛。
