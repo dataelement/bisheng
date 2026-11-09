@@ -295,13 +295,13 @@ async def test_by_id_reader_rejects_bad_or_missing_real_identity(ready, ident):
             await PermissionMigrationSnapshotRepository().aload_catalog_release(session, release_id=ident)
 
 
-async def test_database_managed_audit_timestamp_drift_fails_closed_and_rolls_back(ready, module):
+async def test_database_immutable_create_time_drift_fails_closed_and_rolls_back(ready, module):
     async with ready.factory() as session, session.begin():
         await session.execute(
             sa.text(
                 f"CREATE TRIGGER force_catalog_time AFTER UPDATE ON permission_catalog_release "
                 f"WHEN NEW.id={ready.draft} BEGIN UPDATE permission_catalog_release "
-                f"SET update_time='2099-01-01 00:00:00' WHERE id=NEW.id; END"
+                f"SET create_time='2099-01-01 00:00:00' WHERE id=NEW.id; END"
             )
         )
     async with ready.factory() as session, session.begin():
@@ -311,3 +311,29 @@ async def test_database_managed_audit_timestamp_drift_fails_closed_and_rolls_bac
         assert await raw(session) == before
     async with ready.factory() as session, session.begin():
         assert await raw(session) == before
+
+
+async def test_database_managed_update_time_is_allowed_without_clock_tolerance(ready, module):
+    async with ready.factory() as session, session.begin():
+        await session.execute(
+            sa.text(
+                f"CREATE TRIGGER managed_catalog_update AFTER UPDATE ON permission_catalog_release "
+                f"WHEN NEW.id={ready.draft} BEGIN UPDATE permission_catalog_release "
+                f"SET update_time='2099-01-01 00:00:00' WHERE id=NEW.id; END"
+            )
+        )
+    async with ready.factory() as session, session.begin():
+        before = await raw(session)
+        result = await module.F118CatalogWriteRepository().astage_catalog(session, **arguments(ready))
+        after = await raw(session)
+        assert result.release.status == "DRAFT"
+        draft_before = next(row for row in before["permission_catalog_release"] if row["id"] == ready.draft)
+        draft_after = next(row for row in after["permission_catalog_release"] if row["id"] == ready.draft)
+        assert draft_after["update_time"].year == 2099
+        mutable = {"checksum", "required_authorization_model_release_id", "update_time"}
+        assert {key: value for key, value in draft_before.items() if key not in mutable} == {
+            key: value for key, value in draft_after.items() if key not in mutable
+        }
+        assert before["authorization_model_release"] == after["authorization_model_release"]
+        original = next(row for row in before["permission_catalog_release"] if row["id"] == ready.before.release.id)
+        assert original in after["permission_catalog_release"]

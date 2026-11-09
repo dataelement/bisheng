@@ -400,6 +400,12 @@ class F118CatalogWriteRepository:
             final = await self._locked(
                 owned, plan, draft_id, target_authorization_release_id, operator_id, idempotency_key
             )
+            if any(
+                final[name] != value
+                for name, value in draft.items()
+                if name not in {"checksum", "required_authorization_model_release_id", "update_time"}
+            ):
+                _blocked("reservation_audit_or_identity_changed")
             result = await self._verified(owned, plan, final, target_authorization_release_id)
             owned.check()
         current.check()

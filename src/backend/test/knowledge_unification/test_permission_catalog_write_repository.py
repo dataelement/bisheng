@@ -216,9 +216,11 @@ async def test_actual_reserved_catalog_preserves_all_provenance_and_replays_with
                     assert {
                         k: v
                         for k, v in after.items()
-                        if k not in {"checksum", "required_authorization_model_release_id"}
+                        if k not in {"checksum", "required_authorization_model_release_id", "update_time"}
                     } == {
-                        k: v for k, v in row.items() if k not in {"checksum", "required_authorization_model_release_id"}
+                        k: v
+                        for k, v in row.items()
+                        if k not in {"checksum", "required_authorization_model_release_id", "update_time"}
                     }
                 else:
                     assert row in actual[name]
