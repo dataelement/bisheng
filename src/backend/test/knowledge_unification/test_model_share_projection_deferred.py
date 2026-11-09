@@ -77,7 +77,8 @@ async def test_actual_unbound_native_ledger_is_deferred_only_for_explicit_model_
         await service.reconcile_operation(operation.id)
     stored = await repository.aget_operation(operation.id)
     assert stored.status == ("PREPARED" if deferred else "FAILED_CLOSED")
-    assert scope.failed is (not deferred) and transport.writes == 0
+    # Original abandon_prepared closes only its journal, not an unbound scope.
+    assert scope.failed is False and transport.writes == 0
     if deferred:
         scope.bound = True
         outcome = await service.reconcile_operation(operation.id)
