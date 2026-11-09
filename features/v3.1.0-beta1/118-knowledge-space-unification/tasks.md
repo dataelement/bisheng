@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史982编号：875已完成/历史交付、105当前待办、2外移；原137队列已完成38项、剩99项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史982编号：879已完成/历史交付、101当前待办、2外移；原137队列已完成40项、剩97项，另4张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -765,7 +765,7 @@
   **配对测试**：T091\
   **验证 / 完成条件**：运行配对测试 T091；验证本卡预期，相关范围检查通过。
 
-- [ ] **T093 · QA 创建删除清空的模型槽位：先写测试**
+- [x] **T093 · QA 创建删除清空的模型槽位：先写测试**
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_qa_bindings.py`；`src/backend/test/knowledge/test_v2_filelib_unified.py`\
   **逻辑 / 测试上下文**：同步/异步创建QA都有零集或真实模型绑定，失败整事务回滚；clear不解除模型、delete才解除；不把QA转换SPACE。\
@@ -774,7 +774,7 @@
   **覆盖 AC**: AC-55, AC-65, AC-70, AC-71, AC-74, AC-87, AC-88, AC-89\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T094 · QA 创建删除清空的模型槽位**
+- [x] **T094 · QA 创建删除清空的模型槽位**
   **类型 / Owner**：后端 Domain / KN\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/model_reference_repository.py`（原Service接线已交付，仅根因叶恢复QA条件）\
   **逻辑 / 测试上下文**：QA type1保持独立入口与原业务；create_knowledge/create_knowledge_base/acreate_knowledge_base和delete_knowledge使用R2维护当前模型槽，删除QA解除出向模型绑定，clear保留；模型修改复用原 QA 变更/重建路径，引用随原业务槽位更新。\
@@ -7893,7 +7893,7 @@
   **配对测试**：T975\
   **验证 / 完成条件**：原等级门不松、完整native/typed roundtrip、固定非作者复验，不发布。
 
-- [ ] **T977 · 既有floor的Catalog存取和CURRENT原生反例**
+- [x] **T977 · 既有floor的Catalog存取和CURRENT原生反例**
   **类型 / Owner**：测试 / PERM\
   **写入文件**：`src/backend/test/knowledge_unification/test_permission_floor_catalog_roundtrip.py`\
   **逻辑 / 测试上下文**：W6§96真实API SQL存取、普通None控制及HTTP拒caller field。\
@@ -7901,7 +7901,7 @@
   **覆盖 AC**: AC-78, AC-80, AC-81, AC-83\
   **验证 / 完成条件**：真实红绿、原控制与固定作者外复验；不冒正式发布或E2E。
 
-- [ ] **T978 · Catalog和CURRENT携带既有受控floor**
+- [x] **T978 · Catalog和CURRENT携带既有受控floor**
   **类型 / Owner**：后端 Application / PERM\
   **写入文件**：`src/backend/bisheng/permission/application/catalog_api.py`；`src/backend/bisheng/permission/application/control_state.py`\
   **逻辑 / 测试上下文**：W6§96仅两叶携带验证既有floor，不签新值。\

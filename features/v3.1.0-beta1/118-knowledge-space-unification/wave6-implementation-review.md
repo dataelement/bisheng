@@ -462,3 +462,10 @@ Root全读原Repo stream +69/-4（含private helper和原page复用）并主合e
 Root提交中性marker DDL8d7f757c5，正常合流floor typed transport d8c2b2b3及D3 collector900632d2a；主树九路径206 passed/4626 warnings/9.21秒（/private/tmp/f118-root-storage-delete-query-inventory.log/.xml）。另floor policy56绿、floor DDL41绿/独立8绿、marker storage58绿已分别记录真实日志。T965–976只闭各存储/携带/查询组件；尚无floor新签发、namespace正式转换、move ready或公开删除。D3真实Owner/原stream/尾Coverage，没有FGA/外IO；401/1001/10001规模SQL分别按目标页和引用页增长，不把Coverage测试adapter当正式ReadyAdapter。floor transport作者外复查另行记录。
 
 后继P2与B1先按§96/97冻结两生产叶边界；Root继续集成和验证，不扩大use退役范围。停服/备份→中性DDL→正式盘点冻结时序保持，DM8免实测，MySQL正式升级/恢复和E2E仍未完成。
+
+
+### 2026-11-09 Catalog携带及QA原边界闭合
+
+P1 floor transport非作者8路径251绿，另真实SQL坏provenance7绿（/private/tmp/f118-floor-independent-regression.log及f118-floor-native-provenance-review.log）；默认None旧canonical checksum保持，typed artifact新增null字段按正式中性DDL后新盘点schema，不承诺旧准备artifact字节不变。P2作者固定6e6983759仅Catalog API5行/CURRENT1行、新native14绿/原组合190绿；Root全读并正常主合，corrected真实六路径103 passed/426 warnings/1.11秒（/private/tmp/f118-root-floor-catalog-roundtrip-corrected.log/.xml）。首命令误拼测试路径未运行，不计验证。T977978组件闭合，HTTP继续拒floor写，旧mixed新签发按§99后继，不宣称全平台迁移完成。原无floor UPDATE_MODEL动作数组乱序也可复现的旧checksum问题单列既有缺陷，未扩大本需求修复。
+
+T093实际native13例在70e49b34b为1真红12绿：NORMAL clear误发QA表DELETE；旧1b83a1c6 Service仅type1删QA。ff943f013只共享Repo恢复QA条件，原两个FakeUser用例以同名迁入新native文件，真实Consumer的UserPayload/tenant/SQL/R2/回滚与transport顺序保留。Root七路径110 passed/3077 warnings/5.47秒（/private/tmp/f118-root-qa-native-green.log/.xml）；独立agent固定原红和修正树同选择重跑1红12绿→110绿，/private/tmp/f118-qa-independent-{red,combined}.log。T093094闭组件，无新增零模型创建、无SPACE QA合并/Job框架；现QA缺embedding仍原拒绝，模型切换保old/pending至原finalizer。非生产升级/E2E结论。
