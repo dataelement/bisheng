@@ -365,7 +365,7 @@ async def test_native_fact_reads_preserve_unrelated_pending_and_cached_objects(d
         assert_read_only(db)
 
 
-@pytest.mark.parametrize("invalid", ["bypass", "missing-tenant", "bool-lock", "non-native"])
+@pytest.mark.parametrize("invalid", ["bypass", "missing-tenant", "bool-lock", "non-native", "no-transaction"])
 async def test_invalid_execution_context_is_rejected_before_io(db, invalid):
     async with db.sessions() as session:
         repo = KnowledgeSpaceDeleteRepository()
@@ -390,3 +390,58 @@ async def test_original_prepare_retains_its_historical_only_scope_and_native_loc
         assert manifest["rows"] == [31] and manifest["version_ids"] == [301]
         assert manifest["document_ids"] == []
     assert_read_only(db)
+
+
+@pytest.mark.parametrize("change", ["tenant", "bypass"])
+async def test_execution_tenant_change_during_native_read_cannot_return_the_prior_tenant_scope(db, monkeypatch, change):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+
+    repo = KnowledgeSpaceDeleteRepository()
+    original = repo._delete_ids
+    tokens = []
+
+    async def changed(*args, **kwargs):
+        rows = await original(*args, **kwargs)
+        if not tokens:
+            if change == "tenant":
+                tokens.append(scope_context.set_current_tenant_id(202))
+            else:
+                context = scope_context.bypass_tenant_filter()
+                context.__enter__()
+                tokens.append(context)
+        return rows
+
+    monkeypatch.setattr(repo, "_delete_ids", changed)
+    async with db.sessions() as session, session.begin():
+        try:
+            with pytest.raises(KnowledgeOperationPlanConflictError):
+                await repo.aread_delete_scope(session, space_id=1, selections=selections(("knowledge_file", 60)))
+        finally:
+            if change == "tenant":
+                scope_context.current_tenant_id.reset(tokens[0])
+            else:
+                tokens[0].__exit__(None, None, None)
+    assert_read_only(db)
+
+
+async def test_native_lock_reread_rejects_changed_facts_before_returning_scope(db, monkeypatch):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+
+    async with db.sessions() as session, session.begin():
+        original, injected = session.execute, []
+
+        async def execute(statement, *args, **kwargs):
+            if (
+                not injected
+                and getattr(statement, "_for_update_arg", None) is not None
+                and next(iter(statement.selected_columns)).table.name == "knowledgefile"
+            ):
+                injected.append(True)
+                await original(sa.update(File.__table__).where(File.id == 31).values(status=4))
+            return await original(statement, *args, **kwargs)
+
+        monkeypatch.setattr(session, "execute", execute)
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await read(db, ("folder", 20), lock=True, session=session)
+        assert injected == [True]
+    assert len([sql for sql, _ in db.statements if sql.startswith("UPDATE")]) == 1
