@@ -9,7 +9,7 @@ from dataclasses import asdict, fields, replace
 from datetime import UTC, datetime
 from hashlib import sha256
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.permission import PermissionMigrationBlockedError
@@ -195,7 +195,7 @@ class F118CatalogWriteRepository:
         return draft
 
     @staticmethod
-    def _target(plan, target, target_id):
+    def _target(plan, target, target_id, *, status="STAGED"):
         before = plan.before.authorization
         if target["id"] != target_id:
             _blocked("target_authorization_changed")
@@ -204,7 +204,7 @@ class F118CatalogWriteRepository:
                 _blocked("same_schema_pin_changed")
         elif (
             target_id == before.id
-            or target["status"] != "STAGED"
+            or target["status"] != status
             or target["environment"] != before.environment
             or target["store_id"] != before.store_id
             or target["model_checksum"] != plan.target_model_checksum
@@ -407,6 +407,181 @@ class F118CatalogWriteRepository:
             ):
                 _blocked("reservation_audit_or_identity_changed")
             result = await self._verified(owned, plan, final, target_authorization_release_id)
+            owned.check()
+        current.check()
+        return result
+
+    async def aresolve_target(self, session, *, permission_planner, model_id):
+        current = _Current(session)
+        plan = permission_planner.catalog_plan
+        table = AuthorizationModelRelease.__table__
+        rows = (
+            (
+                await current.execute(
+                    select(*table.c).where(
+                        table.c.environment == plan.before.authorization.environment,
+                        table.c.store_id == plan.before.authorization.store_id,
+                        table.c.model_id == model_id,
+                    )
+                )
+            )
+            .mappings()
+            .all()
+        )
+        if len(rows) != 1:
+            _blocked("target_authorization_missing")
+        self._target(plan, rows[0], rows[0]["id"])
+        return plans.AuthorizationPinBaseline(
+            **{field.name: rows[0][field.name] for field in fields(plans.AuthorizationPinBaseline)}
+        )
+
+    async def averify_published(
+        self, session, *, permission_planner, draft_id, target_authorization_release_id, operator_id, idempotency_key
+    ):
+        from bisheng.permission.migration.f118_verify import verify_catalog_retirement
+
+        plan = self._arguments(
+            permission_planner, draft_id, target_authorization_release_id, operator_id, idempotency_key
+        )
+        current = _Current(session)
+        result = await self._read(current, draft_id)
+        if (
+            result.release.status != "CURRENT"
+            or result.release.write_fenced
+            or result.release.draft_owner_id != operator_id
+            or result.release.idempotency_key != idempotency_key
+            or result.release.release_key
+            != f"catalog-v{result.release.version}-{sha256(idempotency_key.encode()).hexdigest()[:10]}"
+        ):
+            _blocked("published_binding_changed")
+        self._target(plan, asdict(result.authorization), target_authorization_release_id, status="ACTIVE")
+        verify_catalog_retirement(plan=plan, actual=result)
+        previous = await self._read(current, plan.before.release.id)
+        if (
+            previous.release.status != "RETIRED"
+            or any(
+                getattr(previous.release, field.name) != getattr(plan.before.release, field.name)
+                for field in fields(plans.CatalogReleaseBaseline)
+                if field.name != "status"
+            )
+            or previous.actions != plan.before.actions
+            or previous.models != plan.before.models
+        ):
+            _blocked("original_catalog_history_changed")
+        wanted = "ACTIVE" if target_authorization_release_id == plan.before.authorization.id else "RETIRED"
+        if previous.authorization.status != wanted or any(
+            getattr(previous.authorization, field.name) != getattr(plan.before.authorization, field.name)
+            for field in fields(plans.AuthorizationPinBaseline)
+            if field.name != "status"
+        ):
+            _blocked("original_authorization_history_changed")
+        rows = (
+            await current.execute(
+                select(PermissionCatalogRelease.__table__.c.id).where(
+                    PermissionCatalogRelease.__table__.c.status == "CURRENT"
+                )
+            )
+        ).all()
+        if rows != [(draft_id,)]:
+            _blocked("current_catalog_changed")
+        current.check()
+        return result
+
+    async def afinalize_catalog(
+        self,
+        session,
+        *,
+        permission_planner,
+        draft_id,
+        target_authorization_release_id,
+        operator_id,
+        idempotency_key,
+        commit_checksum,
+    ):
+        plans._digest(commit_checksum)
+        current = _Current(session)
+        release, auth = PermissionCatalogRelease.__table__, AuthorizationModelRelease.__table__
+        state = (await current.execute(select(release.c.status).where(release.c.id == draft_id))).scalar_one_or_none()
+        args = {
+            "permission_planner": permission_planner,
+            "draft_id": draft_id,
+            "target_authorization_release_id": target_authorization_release_id,
+            "operator_id": operator_id,
+            "idempotency_key": idempotency_key,
+        }
+        if state == "CURRENT":
+            result = await self.averify_published(session, **args)
+            if result.release.commit_checksum != commit_checksum:
+                _blocked("published_commit_changed")
+            return result
+        plan = self._arguments(
+            permission_planner, draft_id, target_authorization_release_id, operator_id, idempotency_key
+        )
+        draft = await self._locked(
+            current, plan, draft_id, target_authorization_release_id, operator_id, idempotency_key
+        )
+        await self._verified(current, plan, draft, target_authorization_release_id)
+        original_rows = []
+        for table, ids in (
+            (release, (plan.before.release.id, draft_id)),
+            (auth, tuple({plan.before.authorization.id, target_authorization_release_id})),
+        ):
+            rows = (
+                (await current.execute(select(*table.c).where(table.c.id.in_(ids)).order_by(table.c.id)))
+                .mappings()
+                .all()
+            )
+            original_rows.append((table, rows))
+        async with session.begin_nested():
+            owned = _Current(session)
+            if owned.tenant != current.tenant:
+                _blocked("native_context_changed")
+            for ident, values in (
+                (plan.before.release.id, {"status": "RETIRED"}),
+                (draft_id, {"status": "CURRENT", "published_at": func.now(), "commit_checksum": commit_checksum}),
+            ):
+                changed = await owned.execute(update(release).where(release.c.id == ident).values(**values))
+                if changed.rowcount != 1:
+                    _blocked("catalog_finalize_conflict")
+            if target_authorization_release_id != plan.before.authorization.id:
+                await owned.execute(
+                    update(auth)
+                    .where(auth.c.id == plan.before.authorization.id, auth.c.status == "ACTIVE")
+                    .values(status="RETIRED", retired_at=func.now())
+                )
+                await owned.execute(
+                    update(auth)
+                    .where(auth.c.id == target_authorization_release_id, auth.c.status == "STAGED")
+                    .values(status="ACTIVE", activated_at=func.now(), retired_at=None)
+                )
+            result = await self.averify_published(session, **args)
+            for table, previous_rows in original_rows:
+                rows = (
+                    (
+                        await owned.execute(
+                            select(*table.c)
+                            .where(table.c.id.in_(tuple(row["id"] for row in previous_rows)))
+                            .order_by(table.c.id)
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                if len(rows) != len(previous_rows):
+                    _blocked("final_raw_rows_changed")
+                for previous, row in zip(previous_rows, rows, strict=True):
+                    if table is release:
+                        allowed = {"status", "update_time"} | (
+                            {"published_at", "commit_checksum"} if row["id"] == draft_id else set()
+                        )
+                    elif target_authorization_release_id == plan.before.authorization.id:
+                        allowed = set()
+                    else:
+                        allowed = {"status", "retired_at", "update_time"} | (
+                            {"activated_at"} if row["id"] == target_authorization_release_id else set()
+                        )
+                    if any(row[name] != value for name, value in previous.items() if name not in allowed):
+                        _blocked("final_raw_history_changed")
             owned.check()
         current.check()
         return result

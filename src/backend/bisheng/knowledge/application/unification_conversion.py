@@ -257,6 +257,21 @@ class UnificationSQLConversionApplication:
             current = continuation.progress
         return TenantSQLConversionProgress(tenant, total, deferred, current)
 
+    async def arun_permissions(
+        self, *, run_id, writer_contract_version, environment, backup_ref, schema_ref, operator_id
+    ):
+        from bisheng.knowledge.application.unification_permissions import run_permissions
+
+        return await run_permissions(
+            self,
+            run_id=run_id,
+            writer_contract_version=writer_contract_version,
+            environment=environment,
+            backup_ref=backup_ref,
+            schema_ref=schema_ref,
+            operator_id=operator_id,
+        )
+
     async def arun(self, *, run_id, writer_contract_version, environment, backup_ref, schema_ref):
         state = {"run_id": None, "tenant_id": None, "stage": "read_frozen", "last_acknowledged_progress": None}
         try:
