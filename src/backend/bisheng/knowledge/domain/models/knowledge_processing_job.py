@@ -41,6 +41,11 @@ class KnowledgeProcessingJob(SQLModelSerializable, table=True):
     parameters: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
     scope_manifest: list[dict] = Field(default_factory=list, sa_column=Column(JsonType, nullable=False))
 
+    # Private durable facts; only the later receipt-bound ready path may issue them.
+    move_logical_marker: dict | None = Field(
+        default=None, exclude=True, repr=False, sa_column=Column(JsonType, nullable=True)
+    )
+
     # Only the relevant model/index revision determines obsolescence.
     # space_config_version is provenance for frozen parsing defaults instead.
     expected_model_config_revision: int
