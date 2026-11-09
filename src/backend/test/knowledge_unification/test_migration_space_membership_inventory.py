@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.models.space_channel_member import SpaceChannelMember as Member
 from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
 from bisheng.knowledge.application import unification_inventory_codec as codec
@@ -168,7 +168,7 @@ async def test_exact_parent_reads_preserve_all_member_source_columns_and_conflic
     content = codec.encode_inventory_page(**args, records=(record,))
     assert codec.decode_inventory_page(content, **args).records == (record,)
     for changes in ({"user_id": True}, {"grant_include_children": 1}, {"unexpected": "field"}):
-        with pytest.raises(ReferenceCoverageNotReadyError):
+        with pytest.raises(KnowledgeOperationPlanConflictError):
             codec.record_from_values(record.record_type, **(record.data | changes))
 
 

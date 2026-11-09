@@ -21,6 +21,7 @@ from bisheng.knowledge.application.unification_inventory_schema import (
 )
 from bisheng.knowledge.domain.repositories import unification_control_repository as control
 from bisheng.knowledge.domain.repositories import unification_resource_repository as resource
+from bisheng.knowledge.domain.repositories import unification_space_membership_repository as space_membership
 from bisheng.knowledge.domain.services.unification_fingerprints import (
     _invalid as _invalid,
 )
@@ -219,6 +220,11 @@ _ROWS = {
     resource.DepartmentSpaceRow: ("department_space", resource.DEPARTMENT_COLUMNS),
     control.TenantControlFact: ("tenant", control.TENANT_COLUMNS),
     control.MembershipRow: ("membership", control.MEMBERSHIP_COLUMNS),
+    space_membership.SpaceMembershipHeader: ("space_membership_header", space_membership.HEADER_COLUMNS),
+    space_membership.SpaceMembershipRow: (
+        "space_member",
+        ("tenant_id", "knowledge_id", *space_membership.MEMBER_COLUMNS),
+    ),
     control.DepartmentRow: ("department", control.DEPARTMENT_COLUMNS),
     control.RoleRow: ("role", control.ROLE_COLUMNS),
     control.UserRoleRow: ("user_role", control.USER_ROLE_COLUMNS),
