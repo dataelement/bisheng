@@ -445,3 +445,25 @@ async def test_native_lock_reread_rejects_changed_facts_before_returning_scope(d
             await read(db, ("folder", 20), lock=True, session=session)
         assert injected == [True]
     assert len([sql for sql, _ in db.statements if sql.startswith("UPDATE")]) == 1
+
+
+async def test_ancestor_reread_cannot_replace_selected_folder_lock_baseline(db, monkeypatch):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+
+    repo = KnowledgeSpaceDeleteRepository()
+    original, injected = repo._delete_ids, []
+    async with db.sessions() as session, session.begin():
+
+        async def read_ids(active, space_id, model, names, ids, **kwargs):
+            if model is File and set(ids) == {10, 20} and not injected:
+                injected.append(True)
+                await active.execute(
+                    sa.update(File.__table__).where(File.id == 20).values(file_name="changed-before-ancestor-read")
+                )
+            return await original(active, space_id, model, names, ids, **kwargs)
+
+        monkeypatch.setattr(repo, "_delete_ids", read_ids)
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await repo.aread_delete_scope(session, space_id=1, selections=selections(("folder", 20)), for_update=True)
+        assert injected == [True]
+    assert len([sql for sql, _ in db.statements if sql.startswith("UPDATE")]) == 1
