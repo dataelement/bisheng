@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史1029编号：932已完成/历史交付、95当前待办、2外移；原137队列已完成42项、剩95项，另0张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；原137队列已完成44项、剩93项。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)；按业务入口至E2E闭环验收，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -835,7 +835,7 @@
   **配对测试**：T099\
   **验证 / 完成条件**：运行配对测试 T099；验证本卡预期，相关范围检查通过。
 
-- [ ] **T101 · 统一检索可见性与成功主版本：先写测试**
+- [x] **T101 · 统一检索可见性与成功主版本：先写测试**
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_kn_retrieval.py`（拟新增）\
   **逻辑 / 测试上下文**：仅可见无use可选可检索；独立子项不扩可见面；旧ID同授权，sameidentity/config/question 对账，use预期增量单列。\
@@ -843,13 +843,17 @@
   **覆盖 AC**: AC-08, AC-30, AC-35, AC-36, AC-37, AC-60, AC-67, AC-79, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T102 · 统一检索可见性与成功主版本**
+  **本轮验收**：实际共同检索链正向成功主版本 fixed0fdda0e87c，旧状态fixture精确补正c9ad73cb6e；14调用方142项通过，独立37项原生/边界通过，Source身份/白名单、QA与历史delivery原规则保留。真实ES/Milvus与同问题来源对账仍由环境E2E/升级验收完成；不提前完成T129/T130。
+
+- [x] **T102 · 统一检索可见性与成功主版本**
   **类型 / Owner**：后端 Domain / KN\
   **写入文件**：`src/backend/bisheng/knowledge/domain/services/retrieval_facade_service.py`\
   **逻辑 / 测试上下文**：空间/library/QA 原 use gate改visible，旧类型映射到真实资源；保原actor、token、capability白名单、tenant及文件过滤；只成功主版本，无旧归属/失败项/重建空间结果。\
   **依赖**：T101\
   **配对测试**：T101\
   **验证 / 完成条件**：运行配对测试 T101；验证本卡预期，相关范围检查通过。
+
+  **本轮验收**：实际共同检索链正向成功主版本 fixed0fdda0e87c，旧状态fixture精确补正c9ad73cb6e；14调用方142项通过，独立37项原生/边界通过，Source身份/白名单、QA与历史delivery原规则保留。真实ES/Milvus与同问题来源对账仍由环境E2E/升级验收完成；不提前完成T129/T130。
 
 - [ ] **T103 · 知识目标检查与引用展示：先写测试**
   **类型 / Owner**：测试 / KN\

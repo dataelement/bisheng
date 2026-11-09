@@ -832,7 +832,7 @@ Skill的可见性不能兼任全局enabled状态：真实使用/选择边界avai
 
 ## W6持续实施（2026-11-07）
 
-W6持续实施；历史1029编号：932已完成/历史交付、95当前待办、2外移；原137队列已完成42项、剩95项，另0张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+W6持续实施；原137队列已完成44项、剩93项。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)；按业务入口至E2E闭环验收，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
 
 109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
 
@@ -904,4 +904,6 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 2026-11-09成员盘点实施：正式Command签入原创建者成员七字段；原preflight真实读取Header/全部Member/Creator并生成insert或keep计划，原fresh freeze、既有freeze重验和M3写前完整耗尽均检查闭集，不兼容缺字段的旧artifact。全部迁移本地选集1384通过，独立3 native+244组合通过。实际Root+Member原子写按[W6§111](./wave6-completion-contract.md#111-原m3-root与创建者member原子写已冻结)完成本地集成，Writer阶段全部迁移选集1428通过，作者外3 native+358组合通过；实际PK及完整after成员集合进入原Outcome，insert/keep原子回滚和恢复已验。正式namespace转换与升级/E2E仍待执行。
 
 
-2026-11-09后继集成：模型inspection对已有事务入口固定、fresh在原native connection checkout后且目标锁前固定原事务；关键await及最终Coverage/身份均核同tenant/TX，不加SQL。独审原3漏检已修，Root原生4项及274组合通过。移动内核Root独立3项及116组合通过，但实际MoveOwner/worker/HTTP尚未装配；[W6§119](./wave6-completion-contract.md#119-移动逻辑切换的原直接file引用归属维护已冻结)先补File逻辑切换同事务的直接引用target_space_id维护，保全部来源配置/版本/失效证据。原全平台权限计划正补完整target/after明细和正式语义门，不接受仅摘要的新冻结，也不据本地组件回归宣称正式迁移完成。
+2026-11-09后继集成：模型inspection在原目标锁前固定native事务，关键await及最终Coverage/身份核同tenant/TX；原4项独审及274组合通过。移动内核与[W6§119](./wave6-completion-contract.md#119-移动逻辑切换的原直接file引用归属维护已冻结)直接File引用target_space_id维护已集成，保全部来源配置/版本/失效证据；实际MoveOwner/worker/HTTP仍按依赖实施。正式权限namespace完整target/after明细及fresh、frozen、M3写前语义门已闭合，全部迁移1527项通过。固定0c746ab294的完整本地选集6308通过、7项原中间件占位跳过；此快照不含后继新ModelDeletePlan模块，该模块另经175项集成和尾部pending ORM独立探针通过。Catalog DRAFT精确写入已集成，保ACTIVE复用/STAGED分支和完整provenance，正式资源SQL、FGA发布、CURRENT切换、停服升级与环境E2E仍待执行。
+
+2026-11-09公共检索补正：SPACE3以真实File→唯一Version→Document主指针正向证明成功主版本，未登记、错归属或坏指针不回退旧索引；原子项visible、原IN/NOTIN/none结果层防线及历史delivery不变，NORMAL0/QA1保持原规则。固定0fdda0e87c与精确旧fixture补正c9ad73cb6e的14调用方142项本地通过；401/10001候选各3/51 SELECT、max208参数，无版本表全扫。此非数据转换或环境E2E证据。

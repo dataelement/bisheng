@@ -14,7 +14,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from fastapi import Request
-from sqlmodel import select
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
@@ -22,6 +21,7 @@ from bisheng.common.errcode.permission import InvalidCatalogActionError
 from bisheng.core.config.settings import KnowledgeQAFilterConf
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
+from bisheng.knowledge.domain.repositories.retrieval_file_repository import KnowledgeRetrievalFileRepository
 from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.permission.application.access import get_f048_resource_adapter
 from bisheng.permission.application.business_authorization import (
@@ -331,26 +331,11 @@ class KnowledgeFileVisibilityService:
         return all_ids - excluded
 
     async def _successful_file_ids(self, space_id: int, file_ids: Iterable[int] | None = None) -> set[int]:
-        """Re-read SQL status for each retrieval round; retained ES text is retry input."""
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
-
-        statement = select(KnowledgeFile.id).where(
-            KnowledgeFile.knowledge_id == space_id, KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value
-        )
-        if file_ids is None:
-            statements = [statement]
-        else:
-            ids = sorted({int(value) for value in file_ids})
-            statements = [
-                statement.where(KnowledgeFile.id.in_(ids[offset : offset + _FILE_PERMISSION_BATCH_SIZE]))
-                for offset in range(0, len(ids), _FILE_PERMISSION_BATCH_SIZE)
-            ]
-        successful = set()
-        if statements:
-            async with get_async_db_session() as session:
-                for query in statements:
-                    successful.update(int(value) for value in (await session.exec(query)).all())
-        return successful
+        """Re-read success and actual SPACE primary links on each retrieval round."""
+        async with get_async_db_session() as session:
+            return await KnowledgeRetrievalFileRepository().alist_successful_files(
+                session, space_id=space_id, file_ids=file_ids
+            )
 
     async def _non_primary_ids(self, space_id: int) -> set[int]:
         """Resolve the set of non-primary file ids for the given space."""
