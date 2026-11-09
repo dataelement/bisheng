@@ -1485,3 +1485,18 @@ Frozen顺序仍baseline全图→plan全图：baseline只按原resources(resource
 
 
 §115 fresh锁前pin补正（独审实证）：cfefdc9dc9仅在removal返回后pin不能保护fresh原锁，actual Repo await结束前rollback/rebegin或nested切换3项真红；不可交付为已闭合。仍只原Service单叶：在第一次actual removal锁调用前，guard.transaction为空时，如原Session尚无TX则await session.connection()取得其原生checkout/autobegin（无新Session、无SELECT/显式BEGIN SQL/commit/事件/private API），返回立即guard.pin；如早期合法callback已自然开启TX，直接pin不再checkout。其后原guard.call包裹actual removal整个await，此时任何锁内换TX/nested/tenant都已受before/after guard保护，禁止锁后重捕替换。连接尚未返回前无目标锁，pin连接返回的原TX不会丢原锁；连接异常须沿原公开口保cause、target lock调用0。独立候选6通过：existing额外checkout0/fresh1，25条原SQL逐条同、Inspection及cursor字节同；正式作者仍须先固化3漏检真红，再源修及相关组合/作者外复查，不能拿/tmp候选直接闭合T111112。
+
+
+## 119. 移动逻辑切换的原直接File引用归属维护：已冻结
+
+原T091/T092中的R2前置，由PROC先native红再三生产叶窄实现，不新编号/不提前关闭整卡。独立实际P1→K1→ready证明File50/81/82已经归目标11而3条BRR.target_space_id仍10，旧空间影响3条/新空间0条；修派生归属属于原design R2，不增加业务绑定种类或任务模型绑定。
+
+仅原knowledge/application/reference_target_owner.py、原resource_reference/application/write_runtime.py、原resource_reference/domain/repositories/reference_repository.py（原746行旧叶窄方法例外）。KnowledgeReferenceTargetOwner constructor追加可选move_cutover=None保持原非move构造；新增amove_file_ownership(session,*,logical,reference_runtime)要求注入真实K1 issuer及原ReferenceBindingRuntime，同issuer.assert_logical_current(logical,session)通过后取原logical._prepared.scope.files全部真实ID（具体原字段由实际typed receipt接口取得，不私造scope），含DIR、历史、failed及非索引参与项。不得以leaves/selected roots/Item集合代替logical全闭包。新归属仅原实际registered verifier的owner_query receipts所得；源空间只来自原prepared.scope.source。原构造及普通target read语义不变。
+
+Runtime新增arefresh_file_target_ownership(session,*,receipts,expected_space_id)：必须本runtime原verifier验证原同Session/TX receipts，且repository.verifier为同实例，非空keys全knowledge_file、原VALID、同concrete tenant且actual after空间唯一；用原repository.target_owner_scope，不新capability/receipt。Repo新增aupdate_file_target_ownership(session,*,scope,expected_space_id)，新值由原Scope receipts取，不接任意caller destination；先原_check_scope与native context，按原Owner exact-target bounded stream（不include_space_contents）锁BRR.id seek≤200，先完整验证所有候选再第二遍有界UPDATE，避免后页坏行已有半修改。保持一页Rows及一次TargetKey→actual space索引，不留全BRR行，不逐Source重保存，不锁SourceRoot。
+
+精确命中BRR必须source tenant和target tenant均当前tenant、target_type=knowledge_file、target_id为scope实际keys、target_space_id为expected before或actual after；任意NULL/foreign/其它归属、legacy_invalid_reason/run_id/evidence_key任一非NULL均拒且校验阶段0 UPDATE。原因沿原resolve_target_state的live+legacy_target_reappeared拒绝规则，不修复/猜测存量失效；scope外legacy行不读取、不修改。已是actual after只幂等不写。只set target_space_id；原PK/source type/id/version/slot/SourceRevision/config/set digest/显式space binding/所有legacy证据与tombstone不变。DML绑定page实际rowPK+tenant+targettenant+knowledge_file+真实target IDs+expected before空间，IN每组≤200，实际参数上界如两个IN合并可≤406固定项，必须实测而不误报204。
+
+共同原业务SAVEPOINT由后继MoveOwner在签P1/K1之前建立，覆盖K1 prepare（Root↑→Plan→Job→Items→File/Doc/Version）→P1同TX finalized→K1 apply→本R2→ready；本三叶不在已有receipts后新建nested/SP，不提交/换Session。任何R2/ready错误由该共同SP回滚，SP外catch+commit不能留下File after/BRR before/ready混合。本Repo独立方法不是自动commit API；异常传递给实际业务Owner。先持真实Root/File再BRR，原绑定writer target-first故不新增SourceRoot反向锁。外部worker IO/用户并发仍按既有排除，不追加新控制体系。
+
+仅在入口/尾部做完整原logical及OwnerScope/receipt验证、每await O(1)检查native tenant/TX，原Owner有界分批读取/原stream fullscope验证数量单独测，禁止每BRR页重扫full logical/files或逐slot重验全部targets。401/10001文件及同file多Source/Slot实际SQL、参数、验证次数/读取字段/峰值均实测，不以固定SQL条数冒O(N)。native先红覆盖真实before→after入向空间查询、DIR/history/非参与项、显式space/model/其它File不变、scope/issuer/TX缺失/复制/嵌套错误、后页invalid与foreign/NULL、重放0UPDATE、故障/晚cancel/外catchcommit回滚共同SP。完成后Root复查合流，再冻结实际MoveOwner、runner、HTTP装配，不在本卡提前加move到普通kind白名单。

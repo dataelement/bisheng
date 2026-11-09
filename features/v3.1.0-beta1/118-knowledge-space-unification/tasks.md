@@ -765,6 +765,8 @@
   **配对测试**：T091\
   **验证 / 完成条件**：运行配对测试 T091；验证本卡预期，相关范围检查通过。
 
+  **W6实施边界**：先按[§119](./wave6-completion-contract.md#119-移动逻辑切换的原直接file引用归属维护已冻结)闭合原R2派生索引三叶；实际MoveOwner/runner/API仍后继，整卡不提前勾选。
+
 - [x] **T093 · QA 创建删除清空的模型槽位：先写测试**
   **类型 / Owner**：测试 / KN\
   **写入文件**：`src/backend/test/knowledge_unification/test_qa_bindings.py`；`src/backend/test/knowledge/test_v2_filelib_unified.py`\
