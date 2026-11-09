@@ -117,33 +117,52 @@ To customize the client (for example, to replace the logo), you can modify the [
    <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>
 
 
-## Quick start 
+## Quick start
 
-Please ensure the following conditions are met before installing BISHENG:
-- CPU >= 8 Core
+Before installing BISHENG, ensure the following requirements are met:
+
+- CPU >= 8 cores
 - RAM >= 32 GB
-- Docker 19.03.9+
-- Docker Compose 1.25.1+
-> In addition to installing BISHENG, we will also install the following third-party components by default: ES, Milvus, and Onlyoffice.
+- Docker installed and running
+- Docker Compose (V2 recommended)
+- Bash
 
-Download BISHENG
+The default deployment includes MySQL, Redis, MinIO, OpenFGA, ES, and Milvus, among other components. OnlyOffice is optional and is not started by the base deployment.
+
+Download BISHENG using either of the following methods:
+
 ```bash
 git clone https://github.com/dataelement/bisheng.git
-# Enter the installation directory
-cd bisheng/docker
-
-# If the system does not have the git command, you can download the BISHENG code as a zip file.
-wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
-# Unzip and enter the installation directory
-unzip main.zip && cd bisheng-main/docker
+cd bisheng
 ```
-Start BISHENG
+
+If Git is unavailable, download and extract the ZIP archive:
+
 ```bash
-docker compose -f docker-compose.yml -p bisheng up -d
+wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
+unzip main.zip
+cd bisheng-main
 ```
-After the startup is complete, access http://IP:3001 in the browser. The login page will appear, proceed with user registration. 
 
-By default, the first registered user will become the system admin. 
+Run the installer from the repository root:
+
+```bash
+bash docker/install.sh
+```
+
+On the first run, the installer creates `docker/.env` from `docker/.env.example`, validates the configuration, logs in to the image registry, pulls images, and starts the services. An existing `.env` is preserved. Run the installer before using `docker compose up`; the Compose configuration requires `.env`. Deployment uses prebuilt images and does not compile the downloaded source code.
+
+Check service status and startup logs:
+
+```bash
+cd docker
+docker compose ps
+docker compose logs -f backend backend_worker
+```
+
+Once the services are ready, open `http://SERVER_IP:3001` in your browser and register a user. By default, the first registered user becomes the system admin. Configure your models afterward.
+
+Gateway is disabled by default, and the VibeApp runtime requires additional configuration. For Gateway, VibeApp, OnlyOffice, ARM images, and custom deployment settings, see the [Docker deployment guide](docker/README.md).
 
 To enable all features (BISHENG Desktop, hosted applications, fine-tuning, and more), see the documentation: [Self-hosting](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 

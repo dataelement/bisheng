@@ -116,36 +116,54 @@ BISHENG 桌面端基于 DeepSeek Harness（DSH）开发，与 BISHENG 平台协�
 8. **🔍 高精度文档解析**：5年海量数据沉淀，高精度文档解析模型支持免费私有化部署使用，包括高精度印刷体、手写体与生僻字识别模型、表格识别模型、版式分析模型、印章模型...
    <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>
 
-## 快速安装 
+## 快速安装
 
-安装BISHENG前请先确保满足以下条件：
+安装 BISHENG 前请先确保满足以下条件：
+
 - CPU >= 8 Core
 - RAM >= 32 GB
-- Docker 19.03.9+
-- Docker Compose 1.25.1+
-> 除了BISHENG前后端，我们默认还会安装第三方组件ES、Milvus、Onlyoffice
+- 已安装并启动 Docker
+- Docker Compose（推荐 V2）
+- Bash
 
-下载BISHENG代码
+默认部署包括 MySQL、Redis、MinIO、OpenFGA、ES 和 Milvus 等组件。OnlyOffice 为可选服务，不随基础部署启动。
+
+下载 BISHENG 代码（以下两种方式任选其一）：
+
 ```bash
-# 如果系统中有git命令，可以直接下载BISHENG代码
 git clone https://github.com/dataelement/bisheng.git
-# 进入安装目录
-cd bisheng/docker
+cd bisheng
+```
 
-# 如果系统没有没有git命令，可以下载BISHENG代码zip包
-wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
-# 解压并进入安装目录
-unzip main.zip && cd bisheng-main/docker
-```
-启动BISHENG
+没有 Git 时，可下载并解压 ZIP 包：
+
 ```bash
-# 进入bisheng/docker或bisheng-main/docker目录，执行
-docker compose -f docker-compose.yml -p bisheng up -d
+wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
+unzip main.zip
+cd bisheng-main
 ```
-启动后，在浏览器中访问 http://IP:3001 ，出现登录页，进行用户注册。默认第一个注册的用户会成为系统admin。
+
+在代码根目录执行安装脚本：
+
+```bash
+bash docker/install.sh
+```
+
+脚本首次会从 `docker/.env.example` 生成 `docker/.env`，校验配置，登录镜像仓库、拉取镜像并启动服务；已有 `.env` 会保留。请先运行安装脚本，不要在缺少 `.env` 的情况下直接执行 `docker compose up`。部署使用预构建镜像，不会编译下载的源码。
+
+查看服务状态和启动日志：
+
+```bash
+cd docker
+docker compose ps
+docker compose logs -f backend backend_worker
+```
+
+服务就绪后，在浏览器中访问 `http://服务器IP:3001` 并注册用户，默认第一个注册的用户会成为系统 admin。随后需配置模型。
+
+默认不启用 Gateway；VibeApp 运行环境需要额外配置。Gateway、VibeApp、OnlyOffice、ARM 镜像及自定义部署配置见 [Docker 部署说明](docker/README.md)。
 
 打开全量功能（BISHENG客户端、托管应用、微调等）参见文档：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
-
 
 ## 感谢 
 

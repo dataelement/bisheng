@@ -120,30 +120,49 @@ BISHENG Desktop создан на базе DeepSeek Harness (DSH) и вмест�
 ## Быстрый старт
 
 Перед установкой BISHENG убедитесь, что выполнены следующие требования:
+
 - CPU >= 8 ядер
 - RAM >= 32 GB
-- Docker 19.03.9+
-- Docker Compose 1.25.1+
-> Помимо BISHENG, по умолчанию устанавливаются следующие сторонние компоненты: ES, Milvus и Onlyoffice.
+- Docker установлен и запущен
+- Docker Compose (рекомендуется V2)
+- Bash
 
-Скачайте BISHENG
+По умолчанию развертываются MySQL, Redis, MinIO, OpenFGA, ES, Milvus и другие компоненты. OnlyOffice является дополнительным сервисом и не запускается в базовой конфигурации.
+
+Скачайте BISHENG одним из следующих способов:
+
 ```bash
 git clone https://github.com/dataelement/bisheng.git
-# Перейдите в каталог установки
-cd bisheng/docker
-
-# Если в системе нет команды git, можно скачать исходный код BISHENG в виде zip-архива.
-wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
-# Распакуйте архив и перейдите в каталог установки
-unzip main.zip && cd bisheng-main/docker
+cd bisheng
 ```
-Запустите BISHENG
+
+Если Git недоступен, скачайте и распакуйте ZIP-архив:
+
 ```bash
-docker compose -f docker-compose.yml -p bisheng up -d
+wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
+unzip main.zip
+cd bisheng-main
 ```
-После завершения запуска откройте в браузере http://IP:3001. Появится страница входа; зарегистрируйте пользователя.
 
-По умолчанию первый зарегистрированный пользователь становится системным администратором.
+Запустите установщик из корневого каталога репозитория:
+
+```bash
+bash docker/install.sh
+```
+
+При первом запуске установщик создает `docker/.env` из `docker/.env.example`, проверяет конфигурацию, выполняет вход в реестр образов, загружает образы и запускает сервисы. Существующий файл `.env` сохраняется. Запустите установщик перед использованием `docker compose up`: конфигурация Compose требует наличия `.env`. Для развертывания используются готовые образы; скачанный исходный код не компилируется.
+
+Проверьте состояние сервисов и журналы запуска:
+
+```bash
+cd docker
+docker compose ps
+docker compose logs -f backend backend_worker
+```
+
+Когда сервисы будут готовы, откройте `http://IP_СЕРВЕРА:3001` в браузере и зарегистрируйте пользователя. Первый зарегистрированный пользователь станет администратором системы. Затем настройте модели.
+
+По умолчанию Gateway отключен. Среда выполнения VibeApp требует дополнительной настройки. Сведения о Gateway, VibeApp, OnlyOffice, образах ARM и пользовательских настройках приведены в [руководстве по развертыванию с Docker](docker/README.md).
 
 Чтобы включить все возможности (BISHENG Desktop, размещаемые приложения, дообучение и другие), см. документацию: [Самостоятельное развёртывание](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 

@@ -119,34 +119,50 @@ BISHENG デスクトップクライアントは DeepSeek Harness（DSH）を基�
 
 ## クイックスタート
 
-BISHENGをインストールする前に、以下の条件を満たしていることを確認してください:
+BISHENG をインストールする前に、以下の条件を満たしていることを確認してください：
+
 - CPU >= 8 コア
 - RAM >= 32 GB
-- Docker 19.03.9以上
-- Docker Compose 1.25.1以上
+- Docker がインストールされ、起動していること
+- Docker Compose（V2 推奨）
+- Bash
 
-> BISHENGをインストールする際、デフォルトで以下のサードパーティコンポーネントもインストールされます: ES, Milvus, Onlyoffice。
+デフォルトのデプロイには MySQL、Redis、MinIO、OpenFGA、ES、Milvus などが含まれます。OnlyOffice はオプションで、基本構成では起動しません。
 
-BISHENGのダウンロード
+次のいずれかの方法で BISHENG をダウンロードします：
+
 ```bash
 git clone https://github.com/dataelement/bisheng.git
-# インストールディレクトリに移動
-cd bisheng/docker
-
-# システムにgitコマンドがない場合は、BISHENGのコードをzipファイルとしてダウンロードできます。
-wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
-# 解凍してインストールディレクトリに移動
-unzip main.zip && cd bisheng-main/docker
+cd bisheng
 ```
 
-BISHENGの起動
+Git がない場合は、ZIP ファイルをダウンロードして展開します：
+
 ```bash
-docker compose -f docker-compose.yml -p bisheng up -d
+wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
+unzip main.zip
+cd bisheng-main
 ```
 
-起動完了後、ブラウザでhttp://IP:3001にアクセスします。ログインページが表示されるので、ユーザー登録を行います。
+リポジトリのルートディレクトリでインストーラーを実行します：
 
-デフォルトでは、最初に登録されたユーザーがシステム管理者となります。
+```bash
+bash docker/install.sh
+```
+
+初回実行時に `docker/.env.example` から `docker/.env` を生成し、設定の検証、イメージレジストリへのログイン、イメージの取得、サービスの起動を行います。既存の `.env` は保持されます。Compose の設定には `.env` が必要なため、`docker compose up` を直接実行する前にインストーラーを実行してください。デプロイにはビルド済みイメージを使用し、ダウンロードしたソースコードはコンパイルしません。
+
+サービスの状態と起動ログを確認します：
+
+```bash
+cd docker
+docker compose ps
+docker compose logs -f backend backend_worker
+```
+
+サービスの準備ができたら、ブラウザで `http://サーバーIP:3001` にアクセスしてユーザー登録を行います。最初に登録したユーザーがシステム管理者になります。その後、モデルを設定してください。
+
+Gateway はデフォルトでは無効です。VibeApp の実行環境には追加設定が必要です。Gateway、VibeApp、OnlyOffice、ARM イメージ、デプロイ設定の詳細は [Docker デプロイガイド](docker/README.md) を参照してください。
 
 すべての機能（BISHENG クライアント、ホスティングアプリ、ファインチューニングなど）を有効にするには、ドキュメントをご参照ください：[プライベート環境へのデプロイ](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
