@@ -236,7 +236,9 @@ class MoveJobReadyRepository:
                 if self.move_jobs._context(session) != tenant:
                     _fail("move_ready_context_changed")
                 result = await session.execute(
-                    update(table).where(table.c.id == row["id"], table.c.job_id == job.id).values(checkpoint=checkpoint)
+                    update(table)
+                    .where(table.c.id == row["id"], table.c.job_id == job.id, table.c.tenant_id == tenant)
+                    .values(checkpoint=checkpoint)
                 )
                 if result.rowcount != 1:
                     _fail("move_ready_item_missing")
@@ -268,7 +270,9 @@ class MoveJobReadyRepository:
                     pending_count=0,
                 )
             result = await session.execute(
-                update(KnowledgeProcessingJob.__table__).where(KnowledgeProcessingJob.id == job.id).values(**values)
+                update(KnowledgeProcessingJob.__table__)
+                .where(KnowledgeProcessingJob.id == job.id, KnowledgeProcessingJob.tenant_id == tenant)
+                .values(**values)
             )
             if result.rowcount != 1:
                 _fail("move_ready_job_missing")
