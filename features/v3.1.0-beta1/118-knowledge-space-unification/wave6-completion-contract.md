@@ -1183,3 +1183,10 @@ canonical _model_payload只在floor非None时纳入该事实；默认None的普�
 正式floor签发后继仅当旧CUSTOM before确有effective use、移除后仍有具体动作且其最大等级低于原合法derived_level时，取原等级；pure-use/普通visibility metadata均不设，原等级一致性门继续保留。Snapshot/typed codec/Catalog保存加载与编辑原样携带、正式DDL、签发及namespace声明/hash/verify必须后继逐卡冻结装配；缺接缝前不发布、不能关闭T157158。T965/966只证明默认None存储和原canonical不变/受控floor类型，不假报完整pipeline。
 
 原namespace_type_mappings仅空或library→space、须进入原Plan/hash且不改action scopes的方向保留，但其接口本阶段仍未实现；现有SPACE需后继逐资源对Grant/Source/可见矩阵核验，不能仅Catalog成功就放行。
+
+
+## 92. 退役use管理等级中性结构准备：已冻结
+
+Root已读Alembic AGENTS，实施前实际alembic heads唯一f118_move_actor_subject（2026-11-09），新revision f118_retired_use_floor父接此head，编写后再验单head及原database/test_alembic_single_head。INT T967968单revision仅permission_model.retired_use_level_floor Integer nullable/defaultNone、无server_default，无JSON解析/回填/签发/seed/新授权；shared table_exists/column_exists大小写兼容守卫，缺整个表留原Model.create_all，已有列/值保持，重复upgrade无改。标准DDL/C2静态保，DM8免实测。downgrade仍要求停服一致备份恢复，不删除业务或猜历史值。
+
+旧Model行新列NULL，不据visibility_level/derived_level自动补；正式floor来源只后继已核旧mixed Plan，Snapshot/API/codec/联合verify未装配前不发布。正式停服→备份→此中性DDL→全局实际权限盘点/基线冻结→计划/转换时序不变，脚本不探测停服。升级演练/MySQL验证另执行，不以SQLite原生DDL替代。测试覆盖缺文件红、旧表无列/已有列3/缺表/create_all同形/重复/保旧行及同parent/DDL-only，禁止迁移扫描业务表推导floor。

@@ -450,3 +450,8 @@ D1正式反例b78c14b59原1红→39199d3bc单合并优先级修正；独立原2p
 
 
 2026-11-09 C1合同收窄：真实旧use3 mixed输入需保原tier，但普通受控visibility3+download1全局tier1为既有合法语义，不能改旧测试oracle追求普遍max。原§91候选未写生产（只有未跟踪测试草稿且初轮混夹具问题，不计全部真红），现改独立retired_use_level_floor事实前置，不改普通visibility行为；默认None旧checksum保，DDL/签发/存取/联合verify后继装配。用户产品确认不变，技术实现不以扩大现规则求迁移通过。
+
+
+2026-11-09 J1a/精确引用流主合闭合：Root全读466新MoveRepo+旧Repo40窄委托/拒普通move、同K1 savepoint/完整接受hash/typed代表membership；非作者独立两native为2绿（调用方SAVEPOINT回滚仍可新受理、consume后Task取消外catchcommit无半状态）。原29path659绿，Root新39+原独立2共41 passed/3782 warnings/23.19秒（/private/tmp/f118-root-j1a-reviewed.log/.xml）。T961962闭内部reserved，不开放ready/Owner/worker/实际入口。
+
+Root全读原Repo stream +69/-4（含private helper和原page复用）并主合e015df4b8；Root四路径104 passed/2260 warnings/9.20秒（/private/tmp/f118-root-inbound-stream.log/.xml），完整receipt验证仅首尾两次、SQL使用初始raw key副本，cursor在yield前捕获，取消/partial不证明完成。T963964闭前置；D3资格/披露/删除许可尚未实施，未新增child FGA gate或跨SQL/FGA IO。原rawModelFloor前置fb04待Root整合/中性DDL，C1后续签发/读写/Namespace仍不计完成。
