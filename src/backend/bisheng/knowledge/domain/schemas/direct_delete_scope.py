@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
@@ -144,3 +144,30 @@ class DeleteScope:
         }:
             raise ValueError("only the original cleanup identity may be retained")
         object.__setattr__(self, "cleanup_identity", deepcopy(self.cleanup_identity))
+
+
+def select_delete_scope(scope, positions):
+    if positions == tuple(range(len(scope.selections))) and not scope.issues:
+        return scope
+    remap = {position: index for index, position in enumerate(positions)}
+    units = tuple(
+        replace(unit, selection_positions=tuple(remap[pos] for pos in unit.selection_positions))
+        for unit in scope.units
+        if set(unit.selection_positions) <= set(positions)
+    )
+    ids = {ident for unit in units for ident in unit.resource_ids}
+    version_ids = {ident for unit in units for ident in unit.version_ids}
+    documents = {row.document_id for row in scope.versions if row.id in version_ids}
+    resources = tuple(row for row in scope.resources if row.id in ids)
+    return DeleteScope(
+        scope.tenant_id,
+        scope.space_id,
+        tuple(scope.selections[pos] for pos in positions),
+        resources,
+        tuple(row for row in scope.documents if row.id in documents),
+        tuple(row for row in scope.versions if row.document_id in documents),
+        units,
+        (),
+        scope.cleanup_identity,
+        tuple(sorted({name for row in resources for name in row.object_names})),
+    )

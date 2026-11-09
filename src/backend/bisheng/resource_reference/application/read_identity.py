@@ -7,6 +7,8 @@ registered SourceOwner still authorizes the exact real business configuration.
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.core.context.tenant import (
+    get_admin_scope_tenant_id,
+    get_is_management_api,
     get_visible_tenant_ids,
     is_management_all_tenants,
     is_tenant_filter_bypassed,
@@ -25,6 +27,17 @@ from bisheng.resource_reference.application.source_contracts import (
 
 class AuthenticatedSourceReadIdentity:
     async def acapture(self, identity: object) -> ReadIdentityFacts:
+        return await self._capture(identity, stable=False)
+
+    async def astable_capture(self, identity: object) -> ReadIdentityFacts:
+        """Pagination context excludes only trace and binds the management pin.
+
+        This fingerprint is a stale-page check, never an authorization grant.
+        Every continuation still captures and authorizes the current request.
+        """
+        return await self._capture(identity, stable=True)
+
+    async def _capture(self, identity: object, *, stable: bool) -> ReadIdentityFacts:
         if not isinstance(identity, UserPayload) or is_tenant_filter_bypassed():
             raise ResourceReferenceInvalidError(reason="reference_read_identity_required")
         tenant_id = _resolve_tenant_id()
@@ -63,6 +76,14 @@ class AuthenticatedSourceReadIdentity:
                 "management_all_tenants": is_management_all_tenants(),
                 "trace_id": trace_id_var.get(),
             }
+            if stable:
+                facts.pop("trace_id")
+                facts["management_api"] = get_is_management_api()
+                # A same-tenant worker restoration sets an explicit pin where
+                # the originating ordinary request used its concrete tenant.
+                # Those represent the same scope; a different pin stays distinct.
+                pin = get_admin_scope_tenant_id()
+                facts["management_pin"] = tenant_id if pin is None else pin
             fingerprint = payload_digest(canonical_payload_json(facts))
         except (TypeError, ValueError, AttributeError) as exc:
             raise ResourceReferenceInvalidError(reason="reference_read_identity_context_invalid") from exc

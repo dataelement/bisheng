@@ -163,7 +163,7 @@ class KnowledgeMoveApplication:
                     session,
                     self.owner.plans.acreate(
                         session,
-                        operation="move",
+                        operation="move_same_space" if same else "move",
                         space_id=source,
                         actor_reference=reference,
                         targets=targets,
@@ -195,6 +195,8 @@ class KnowledgeMoveApplication:
             if not plan.impact.get("can_execute", True):
                 conflict("no_valid_items")
             same = plan.parameters.get("same_space_move") == 1
+            if (plan.operation == "move_same_space") != same:
+                raise KnowledgeOperationPlanChangedError()
             self.owner.plans._validate(plan)
         if not same:
             if plan.operation_id is None:

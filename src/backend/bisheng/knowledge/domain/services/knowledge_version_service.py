@@ -12,10 +12,7 @@ Switch off => all write methods raise 403; read methods stay available.
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import HTTPException, Request
-from loguru import logger
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpaceFileNotFoundError, SpaceNotFoundError
@@ -138,75 +135,30 @@ class KnowledgeVersionService:
         return SetPrimaryResponse(document_id=result.document_id, new_primary_version_no=result.new_primary_version_no)
 
     async def delete_version(self, version_id: int):
-        """Delete a historical (non-primary) version. Primary version must be promoted first.
-
-        Cleans Milvus/ES chunks and MinIO objects for the deleted file (best-effort).
-        """
-        # Deferred import to avoid circular dependency (knowledge_imp imports KnowledgeVersionService
-        # at runtime, so top-level import would create a cycle).
-        from bisheng.api.services.knowledge_imp import delete_minio_files, delete_vector_files
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+        """Keep the historical-version protocol on the exact physical delete chain."""
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import DeleteVersionResponse
         from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
             KnowledgeAuditTelemetryService,
         )
 
         await self._require_version_management_enabled()
-
-        v = await self.version_repo.find_by_id(version_id)
-        if v is None:
+        version = await self.version_repo.find_by_id(version_id)
+        if version is None:
             raise HTTPException(status_code=404, detail="version not found")
-        if v.is_primary:
+        if version.is_primary:
             raise HTTPException(
-                status_code=409,
-                detail="cannot delete the primary version; promote another version first",
+                status_code=409, detail="cannot delete the primary version; promote another version first"
             )
-
-        kf = await self.knowledge_file_repo.find_by_id(v.knowledge_file_id)
-        doc_id = v.document_id
-        version_no = v.version_no
-        kf_knowledge_id = kf.knowledge_id if kf else None
-        kf_file_name = kf.file_name if kf else ""
-
-        # Look up the knowledge space BEFORE deleting DB rows so the object is still
-        # accessible even if the backing store flushes references on delete.
-        knowledge = None
-        if kf is not None and kf.knowledge_id is not None:
-            knowledge = await KnowledgeDao.aquery_by_id(kf.knowledge_id)
-
-        await self.version_repo.delete(version_id)
-        if kf is not None:
-            await self.knowledge_file_repo.delete(kf.id)
-
-        # Best-effort cleanup: failures are logged but must not affect DB consistency.
-        if kf is not None:
-            if knowledge is not None:
-                try:
-                    await asyncio.to_thread(delete_vector_files, [kf.id], knowledge)
-                except Exception as exc:
-                    logger.warning(
-                        "delete_version: vector cleanup failed for file_id={} knowledge_id={}: {}",
-                        kf.id,
-                        knowledge.id,
-                        exc,
-                    )
-            try:
-                await asyncio.to_thread(delete_minio_files, kf)
-            except Exception as exc:
-                logger.warning(
-                    "delete_version: MinIO cleanup failed for file_id={}: {}",
-                    kf.id,
-                    exc,
-                )
-
+        factory = getattr(self, "deletion_application_factory", None)
+        if factory is None:
+            raise RuntimeError("historical version deletion composition is not configured")
+        deleted = await factory().adelete_historical_version(identity=self.login_user, version_id=version_id)
         KnowledgeAuditTelemetryService.audit_delete_file_version(
-            self.login_user,
-            self.request,
-            kf_knowledge_id or 0,
-            kf_file_name,
-            version_no,
+            self.login_user, self.request, deleted["knowledge_id"], deleted["file_name"], deleted["deleted_version_no"]
         )
-        return DeleteVersionResponse(document_id=doc_id, deleted_version_no=version_no)
+        return DeleteVersionResponse(
+            document_id=deleted["document_id"], deleted_version_no=deleted["deleted_version_no"]
+        )
 
     async def scan_similar_for_file(
         self,

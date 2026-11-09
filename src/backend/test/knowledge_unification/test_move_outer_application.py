@@ -7,6 +7,7 @@ from bisheng.common.errcode.knowledge import KnowledgeOperationConfirmationRequi
 from bisheng.knowledge.application import move_application as module
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument as Doc
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob as Job
+from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import FileMoveReq
 from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequest
 from test.knowledge_unification import test_move_processing_admission as stages
@@ -68,6 +69,8 @@ async def test_same_space_real_p1_then_atomic_document_history_paths_and_replay(
         assert (await session.get(base.File, 82)).file_level_path == ""
         assert (await session.get(Doc, 80)).file_level_path == ""
         assert (await session.execute(sa.select(sa.func.count()).select_from(Job))).scalar_one() == 0
+        # A synchronous same-space P1 is not an asynchronous source-index lease.
+        await SourceMoveInputRepository().arequire_released(session, space_id=10)
 
 
 async def test_legacy_cross_request_cannot_mutate_or_dispatch(outer):

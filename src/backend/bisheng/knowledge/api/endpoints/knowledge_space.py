@@ -623,7 +623,7 @@ async def delete_file(
     file_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    await svc.delete_file(file_id)
+    await svc.delete_file(file_id, space_id=space_id)
     return resp_200()
 
 

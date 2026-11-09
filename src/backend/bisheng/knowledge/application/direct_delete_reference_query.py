@@ -18,6 +18,7 @@ from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_
 from bisheng.knowledge.domain.repositories.knowledge_space_delete_repository import KnowledgeSpaceDeleteRepository
 from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteScope, DeleteSelection
 from bisheng.resource_reference.application.contracts import (
+    DeletionEvidence,
     ReferenceState,
     SourceKey,
     SourceType,
@@ -120,6 +121,15 @@ class DirectDeleteReferenceQuery:
             raise ResourceReferenceInvalidError(reason="delete_reference_context_changed")
 
     @staticmethod
+    def _available(target, operation_id=None):
+        return target.state == ReferenceState.VALID or (
+            operation_id is not None
+            and target.state == ReferenceState.DELETING
+            and isinstance(target.evidence, DeletionEvidence)
+            and target.evidence.operation_id == operation_id
+        )
+
+    @staticmethod
     def _targets(scope):
         units = {}
         for index, unit in enumerate(scope.units):
@@ -160,7 +170,7 @@ class DirectDeleteReferenceQuery:
         return DeleteReferenceSlotFact(row.id, units[raw], source, row.slot_key, targets[raw], row.source_revision)
 
     async def acollect(
-        self, session: AsyncSession, *, space_id: int, selections: tuple[DeleteSelection, ...]
+        self, session: AsyncSession, *, space_id: int, selections: tuple[DeleteSelection, ...], operation_id=None
     ) -> DeleteReferenceFacts:
         tenant, transaction = self._context(session, space_id, selections)
         with session.no_autoflush:
@@ -185,7 +195,7 @@ class DirectDeleteReferenceQuery:
                     len(receipts) != len(targets)
                     or {receipt.target.key for receipt in receipts} != set(targets)
                     or any(
-                        receipt.target.state != ReferenceState.VALID
+                        not self._available(receipt.target, operation_id)
                         or receipt.target.target_tenant_id != tenant
                         or receipt.target.target_space_id != str(space_id)
                         for receipt in receipts

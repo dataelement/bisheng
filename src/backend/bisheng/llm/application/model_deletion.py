@@ -561,9 +561,11 @@ class ModelDeletionApplication:
 
 
 async def get_model_deletion_application():
+    from bisheng.knowledge.application.unification_coverage import production_coverage_factory
     from bisheng.llm.domain.services.llm import LLMService
 
     return ModelDeletionApplication(
+        references=ModelReferenceService(coverage_factory=production_coverage_factory),
         after_delete=LLMService._after_protected_server_delete,
         after_update=LLMService._after_protected_server_update,
     )

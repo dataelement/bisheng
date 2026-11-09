@@ -25,6 +25,8 @@ from bisheng.knowledge.api.dependencies import (
     get_knowledge_document_version_repository,
     get_knowledge_file_repository,
 )
+from bisheng.knowledge.application.deletion_compatibility import delete_legacy_files
+from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
 from bisheng.knowledge.application.space_upload import SpaceUploadApplication
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
@@ -138,6 +140,7 @@ def _build_space_service(
     )
     svc.version_repo = version_repo
     svc.doc_repo = doc_repo
+    svc.deletion_application_factory = get_deletion_application
     svc.upload_application_factory = lambda: SpaceUploadApplication(
         login_user=login_user,
         session_factory=get_async_db_session,
@@ -442,19 +445,19 @@ async def upload_file(
 
 @router.delete("/file/{file_id}", status_code=200)
 @open_api_scope("knowledge:write")
-def delete_knowledge_file(request: Request, file_id: int):
+async def delete_knowledge_file(request: Request, file_id: int):
     """Delete files in the Knowledge Base"""
-    login_user = get_open_api_operator()
-    KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
+    login_user = await get_open_api_operator_async()
+    await delete_legacy_files(request=request, identity=login_user, file_ids=[file_id])
     return resp_200()
 
 
 @router.post("/delete_file", status_code=200)
 @open_api_scope("knowledge:write")
-def delete_file_batch_api(request: Request, file_ids: list[int]):
+async def delete_file_batch_api(request: Request, file_ids: list[int]):
     """Bulk delete knowledge file information"""
-    login_user = get_open_api_operator()
-    KnowledgeService.delete_knowledge_file(request, login_user, file_ids)
+    login_user = await get_open_api_operator_async()
+    await delete_legacy_files(request=request, identity=login_user, file_ids=file_ids)
     return resp_200()
 
 
