@@ -31,6 +31,15 @@ class DshModelAuditFeedbackRetraction(SQLModelSerializable, table=True):
     conversation_id: str = Field(sa_column=Column(String(256), nullable=False))
     event_seq: int = Field(sa_column=Column(BigInteger, nullable=False))
     received_at: datetime = Field(sa_column=Column(PreciseDateTime(), nullable=False))
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT, onupdate=text("CURRENT_TIMESTAMP")
+        ),
+    )
 
 
 class DshModelAuditMessageFeedback(SQLModelSerializable, table=True):
