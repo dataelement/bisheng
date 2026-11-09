@@ -1391,3 +1391,40 @@ MemberRepo私有_alock_conversion_sets(session,*,roots,commands,current)->dict[r
 Resource actual_after_digest固定为digest((rootBusinessHash,rootNeutralHash,actualCreatorPK,fullAfterMemberSetDigest))，原Root after两hash核验保留；ConversionOutcome字段/其它四kind实际Outcome字节、Service._fold/checkpoint算法与App commit ACK均不改。原Service外owned SP继续把Repo内SP写入和Run checkpoint同包；晚SQL/取消/触发器改模板即便caller catch+commit也无Root3但Member0的半转换。恢复沿原verified committed prefix，实际PK换掉/原Member增删改source等使摘要变动拒；unknown commit停止，重新原prefix核验后再继续，不新重试框架。
 
 §108独立/tmp actual原Writer已证1真红：原SQLService完成且Root3，creator Member仍0（/private/tmp/f118-member-writer-unmet-dependency.log/.xml）；另只读原实际Member creator_ids/我创建集合也空（/private/tmp/f118-member-writer-readonly-gap.log）。新官方native须覆盖真实SQLService/App路径insert/keep/旧source全保、晚失败与cancel外catchcommit、触发器改Member/Root、原after PK及fullset漂移resume、缺/foreign Root/原creator字段错、pending/TX、ACK重复与zero extra insert、401/10001和多Root参数≤200/单遍候选，原四kind不变。正式permission namespace Publisher/Coverage/全升级仍后继，本卡不冒全部迁移已完。
+
+
+## 112. 原move native执行与原Job算法接线 J1c：已冻结
+
+PROC T1014–T1017两卡组：T1015新knowledge/domain/repositories/move_execution_repository.py（同叶frozen slots小DTO，≤600）及原move_row_repository.py仅必要SQL点查复用；T1017原processing_job_repository.py历史大叶必要窄hook增量例外，不复制原Job lease/count/Receipt算法。每测试叶≤600，可按实际上下文追加明确测试叶；原B1/B2夹具必须升级真实组合与原P1证据，不软放行未配置的move。原Scope/K1/MoveJob/Ready/P1数据与私有receipt不变。若两组3叶仍无法合理≤600，先报精确拆分，不压行/另造任务框架。本波只内部native执行，不写MoveOwner/API/worker。
+
+MoveExecutionRepository构造绑定同一实际MoveJobRepository、MoveJobReadyRepository及原cutover.projection_verifier（同一真实P1 issuer）；不import旧ProcessingJobRepository而由调用参数jobs复用实际内核。小值DTO MoveConfiguration（原source/destination八配置字段，带target ProcessingConfiguration投影）、MoveAttemptFacts（原MoveScope+before|after position+Job/Plan定位）、MoveProjectionFacts（单个实际File/parent+双Root/compact Job/Plan事实）、MoveExecutionSnapshot（一个Item原MoveLeaf/snapshot/checkpoint+实际File/Doc/Version/primary/parent+双Root）。全部仅detached数据，不是跨TX proof，不存权限凭据/模型绑定/全manifest或整doc历史。
+
+公开内部口：aread_configuration(session,*,job_id)->MoveConfiguration；avalidate_attempt(session,*,lease:JobLease,jobs)->MoveAttemptFacts|None；aread_projection(session,*,lease,resource_type,resource_id,jobs)->MoveProjectionFacts|None；aread_item(session,*,job_id,item_id)->MoveExecutionSnapshot；aguard_item(session,lease:ItemLease,*,jobs,projection_evidence)->MoveExecutionSnapshot|None；acomplete_item(session,lease,*,jobs,projection_evidence,source_count,milvus_count,es_count,source_digest,target_payload_digest)->bool。私有_alock_prefix只native SQL，_aassert_item_after只SQL+原same-TX P1 verifier；不得反调Job guard造成递归。helper可复用原RowRepo/MoveLeaf类构造及原checksum SSOT，不导知识App或permission Domain/ORM。
+
+首次每attempt外IO前一次完整验证：原双Root ID升序→Plan→Job（再Item），复用真实MoveJob.aget_move_request/_replay完整接受hash/compact manifest，而非只K1；真实Item snapshots/targets集合按≤200分页一次索引与原accepted projection逐项等值，再原K1 fullScope/closure/position，返回detached事实后丢弃原prepared receipt。K1.aprepare_cutover本身不证明完整J1接受和Item snapshot，不能误报已核。逻辑cutover稍后仍fresh同TX全量重核；逐projection从此真实Scope一次建索引，仅处理接受changes，当前dual roots/lease+单个actual资源/parent读取，不重载Plan.parameters/全manifest；detached facts本身不能证明接受成员关系。
+
+逐Item必须原ready marker/snapshot digest、actual File/Doc/Version/primary精确PK关系和实际after_revision/target ownership，duplicate file→version用indexed exact count/EXISTS；不把K1._position缩成小Scope调用（它仍会扫doc全部历史），不每item拉全Scope/manifest/其它Item snapshots。单anchor原P1 evidence必须同实际issuer/session/TX/job/accepted changes_digest，expected anchor来自该Item已绑定snapshot；None/复制对象/旧TX/错anchor均拒，不用裸FINALIZED dict或新receipt。原4→3→2允许范围沿K1实际(2,3,4)状态规则，7不能变成功。source与destination的R/G/index identity均当前核，正常配置变化沿原obsolete落库尾部并返回停止结果，caller commit ACK，不能抛错回滚obsolete；tenant/TX/pending严格、每await O(1)守卫。
+
+原_job保持getter原样，不全局探测/拦move，原scanner arecord_dispatch仍只更新transport intent。新增私有_execution_job(session,job_id,*,_move=False)->(Job,MoveCurrentFacts|None)：False仅一次原_job(lock=True,include_manifest=False)，普通kind原样、实际move在任何变更前拒；True须真实composition，先_alock_prefix锁Root↑/Plan后原_job锁Job，并核compact绑定。_move只选择实际SQL前置，不表示已授权，禁止Session缓存/ContextVar隐式许可。aclaim/arenew/claim_next/finalize/aretry_failed等执行/重试方法增私有_move=False；原四kind零额外SQL/compact JSON探测，原lease/CAS/count/retry hash与状态算法不复制。prefix不提前推进obsolete，特别retry必须原receipt重放优先后再当前配置判定，不因新配置破坏已完成幂等重放。
+
+_guard_item/asave_checkpoint/arenew_item/acomplete_item增加_move=False及move_projection_evidence=None，显式move才先真实prefix，再原lease/ready，再bounded after/P1 guard。仅旧move_jobs+move_ready DI即便marker齐全仍不能执行；完整DI默认普通口也拒move；配置完整但缺原P1仍拒Item变更。claim前可在同持锁TX peek一项的anchor取得P1 evidence，再原LIMIT1 claim，最终实际选中Item还必须核同证据，不信peekID。成功完成必须原内核ACK路径内检查durable move_source_cleaned checkpoint与真实MoveIndexResult五标量/source digest/target digest精确匹配，并同TX实际File status/脱敏remark更新（tenant/space/file/version精确条件）；失败沿原public error code及FAILED策略，不持久凭据/provider原文，成功项不重置。不能只外围wrapper更新File而留可绕过通用成功口。guard/checkpoint本身不新开SP；若具体原子ACK需SP，调用方必须在签P1 evidence前建立，避免nested导致证据TX漂移。
+
+afail_attempt已读无锁candidate，move直接同prefix→Job，普通仍原目标Root→Job，不能先锁目标再补较小source。alatest_retry_actor仅move分支用原已加载字段+ready.retry_subject核真实typed列、audit/reference及accepted revision<=当前revision，原四kind读/字节不变，不扫描所有Retry历史。原areset_target_state/aacknowledge_cutover不作move替代路径；move logical ready沿原K1/B1。
+
+测试先native红再两卡组绿：401/10001的单次projection/item guard SELECT数相同，每次最多一个snapshot、零fullScope/manifest；accepted首次/最终全Scope各线性，原_refresh_counts原group聚合扫描成本另实测，不能只固定SQL条数称全任务O(N)。实际双Root锁序、source/dest drift→obsolete durable、zero-item逻辑、partial retry/主体、原P1坏proof、ready历史marker、原ordinary四kind同输入SQL数/JSON/lease/count字节等价、missing DI/default wrongpath拒、source_cleaned与File/Item/count ACK及外catchcommit行为均需覆盖。完成后实际MoveOwner→runner原EXECUTE_TASK/scanner→旧move_items/确认DTO/DI再分别冻结接线，不向edit-only普通kind白名单直接加move。
+
+
+§112签名补正：aread_projection显式接jobs，与attempt/item口相同，只复用原Job内核obsolete落库/lease算法；不import旧JobRepo、不复制obsolete尾部、不以callback或Session隐式许可绕开实际native前置。该口同样Root↑/Plan→Job后判source/dest当前配置，None结果也须caller commit ACK。原只读aread_configuration不制造状态写。无实际生产调用方，freeze后再实现。
+
+
+## 113. 保存QA知识引用的原类型资格保留：已冻结
+
+INT T1018官方native红测、T1019仅原unification_preflight.py的source_decision窄改。现真实workflow reference_extractor已把qa_retriever.qa_knowledge_id解析为knowledge_space TargetKey，原ReferenceTargetRepository._facts对Root及file父允许NORMAL0/QA1/SPACE3；但source_decision硬限0/3会拒原已保存QA。按spec AC-37/55/65/88，保存QA槽位应沿相同原native物理资格保留existing_saved_slot，QA仍type1、旧模型/内容/权限namespace/成员不转换。只把该物理类型集合与原Owner统一0/1/3；exact tenant/父记录存在/file kind、type2/未知拒、explicit missing initial_missing、无新bind授权和不造Grant均原样。测试从实际qa_retriever提取器＋native KnowledgeMigrationTargetRepository读原QA（可含原File父为QA）构造真实来源事实，before source_decision拒→after保原ID/source/slot/disposition；并真实M2冻结后QA仍type1无ResourceConversionCommand或成员计划，原type2/跨tenant/坏file父继续拒。此非QA合并，不因改集合扩任意线上资源准入。
+
+## 114. 全M2复用原纯Catalog编译上下文：已冻结
+
+EDGE T1020先native C4/C5事实驱动红测，T1021仅permission/migration/f118_plan.py历史大叶必要窄API增量。新增frozen slots ResourceRetirementPlanner(*,catalog_plan)纯类，构造仅一次原_resource_context的Catalog重建/完整matrix校验，并以只读映射保原before/after model与scope索引；不公开可写dict，避免普通字段重赋值或映射修改。Context不是authority/receipt/registry，不Session/SQL/FGA，不缓存资源或跨run全局单例。
+
+build(*,before:PermissionResourceBaseline,namespace_target:ResourceModeBaseline|None=None)->ResourceRetirementPlan直接复用原_build_resource_retirement_plan；build_many(*,before:Iterable,target_modes:Iterable|None=None)->Iterator复用原exact zip_longest/mapping规则及所有baseline/target/visible canonical验证。旧point/batch APIs保持签名/返回/错误语义和payload/hash字节；可共享该class实现，但不得改变C4/C5/旧无mapping checksum或绕badCatalogPlan原重建。单条build与旧point一样：有mapping必须显式target，无mapping拒多余target。空批、late missing/more/错target、跨合法tenant纯资源不同输入均原约束，不按资源数重编Catalog。
+
+后继原InventoryApp每正式freeze显式构造一次planner，并交原tenant preflight复用；frozen verifier每graph一次。先交此纯接口再冻原M2 wire/资格/consumer卡，不为了消除tenant×Model把所有租户G/S全局堆进内存，也不把private_context跨层强拿。测试实际旧C4/C5 native Source/Mode/retired数据与旧point/batch全等/旧payload字节，badCatalog/mutable target/canonical source照拒、compiled映射不能普通改；401/1001 models独立混合tenant批/资源预算总Catalog derive与matrix各1、模型候选M、资源Source O(G+S)，SQL0。后继actual Parent namespace完整frozen wire/SQL/FGA Publisher仍未接，本卡不闭T157158。

@@ -518,3 +518,22 @@ C5 fixed6fc47d8983通过作者外3 native+280原组合；root正常merge为74f69
 原Member global fixed94c1d61cc3通过root逐行独立复查（numeric PK IN+LEFT Tenant，无CAST/Member-parent积）、原3路径169 passed/4.05秒，/private/tmp/f118-root-member-global-independent.xml；正常merge至b03d6d595a7c05f089d0a44b678784cdb78bc410。作者新67绿、原11路径421绿/39.32秒；actual旧M2 alias09000/orphan999999两条原源DID NOT RAISE真红→新门拒且无artifact/FGA新请求。原四SQL不改，空Member多1页；401/10001实际10/106SELECT，父参数≤200。关闭T997998；根§109新App门正待§108producer依赖合组，不用旧不完整artifact兼容。
 
 move exact candidates fixed67863351d3经root独立完整diff/原Scope/pending/SQL读取复核与2条额外native探针通过（/private/tmp/f118-operator-candidates-root-review.xml）：候选返回operator19并不让允许集仅7的完整ledger通过；原tuple损坏时候选仍只是locator，完整P1拒；Catalog write-fence也不能使候选本身成为pin/ready证明；原rollback后fresh重读原19。主树5路径114 passed/34.52秒，/private/tmp/f118-root-move-candidate-integration.xml，关闭T9991000。作者49新绿、11路径289绿，401/10001 dense+sparse3/51SELECT、每查询201params。后继J1c/实际Owner/runner尚待装配，原scope/accept身份和业务动作不扩。
+
+
+### 2026-11-09 成员正式门禁合组首轮
+
+root26f45ec4a4两生产叶+真实M2/M3写前门禁42 passed/3.20秒，原33缺模块真红2c0cea3d10。首轮38条失败是新夹具未注册原C3 SELECT事件导致foreign Root5入页及测试旧artifact包装器误读SourceRoot.record_type，已只改新夹具/包装器，生产不放宽C3。10001 Member checker raw visits10001、SQL0、tracemalloc peak31190037B；401为401/0/2143454B，不是全局O(1)，保一个Root原raw rows与全局轻PK索引。
+
+随后全部test_migration*.py实际1382通过/2失败/122.16秒（/private/tmp/f118-root-member-formal-suite.xml）。两旧frozen_plan_reader结构控制把空baseline接非空Resource plan、深度62仅保Root而丢Header/Creator，按新完整闭集必须拒；T1013仅适配原oracle：前者新增该错配拒断言并建真正空baseline/plan，后者保实际原全leaf图再包相同62/63层，64原边界不降。单文件15通过/3.25秒（/private/tmp/f118-root-frozen-graph-controls.xml），同大选集尚待重跑，不能报全组合已绿。§108原组1项deselect已恢复至实际根组合；Writer漏成员仍按§111实际实施，未计完成。
+
+P1桥e414060d67逐行独审只有原类型re-export和实际Repo薄转发5行；主树4路径113 passed/13.93秒（/private/tmp/f118-root-owned-bridge-integration.xml）。原scope/pin/tuple/checksum/Mode/typed operator验证不变，原getter与transport未加业务授权。
+
+
+### 2026-11-09 成员原M2/M3写前链路完整组合闭合
+
+固定源码0669733876（§109两生产叶仍26f45ec4a4原样）同一全部test_migration*.py选集复跑 **1384 passed / 0 fail、129.77秒**，/private/tmp/f118-root-member-formal-suite-corrected.xml；原两处frozen graph测试按已记录真实完整图修正后无新失败。作者外§109 3条native+244原组合PASS，/private/tmp/f118-member-baseline-independent-review-corrected.xml与f118-member-baseline-independent-regression.xml：原Creator是globalUser但必须原tenant页事实、错tenant不能补owner证明；跨Root物理Member PK复用拒；真实hash一致错Creator归属冻结图在M2 replay和实际M3前拒，writer_calls0/DML0。此前§108临时deselect的real_m2_deferred...已恢复真实执行并绿。
+
+root逐行§108六叶与§110五行bridge独立复核、全部迁移组合及§109独立PASS共同关闭T1001–T1010；T1013原图深度/空集合控制也完成。原Writer仍漏创建者成员的已复现缺口由§111/T1011–1012独立开发，未把“写前检查已完”等同“实际成员已转换”。原94AC/140QA不变，SQL Writer/FGA Publisher/Coverage/公开业务/E2E仍按当前待办推进。
+
+
+0669733876的78个本轮Python文件ruff format/check通过；逐文件arch-guard新增违规0，1条原测试诊断单列：test_migration_inventory_application原FGAClient/OpenFGAConf imports AST与52892298完全相同，脚本RULE-9用任意/bisheng/路径片段将repo目录名下test误作业务模块，属于原测试/原诊断，不为绿灯改测试基础设施或扩改arch-guard。实际原/新imports与同路径形状baseline复验另存/tmp。本轮所有生产叶无架构消息。
