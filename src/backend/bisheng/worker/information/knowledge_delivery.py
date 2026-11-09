@@ -116,12 +116,15 @@ async def _service_session(*, include_channel_service: bool):
         channel_service = None
         prepare_delivery = None
         if include_channel_service:
+            from bisheng.knowledge.application.space_upload import make_space_upload_application
+
             channel_service = ChannelService(
                 channel_repository=channel_repository,
                 space_channel_member_repository=SpaceChannelMemberRepositoryImpl(session),
                 channel_info_source_repository=ChannelInfoSourceRepositoryImpl(session),
                 article_es_service=article_service,
                 article_read_repository=ArticleReadRepositoryImpl(session),
+                space_upload_factory=make_space_upload_application,
             )
 
             async def prepare_delivery(tenant_id, channel_id, config_id, detected_at):

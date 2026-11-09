@@ -251,6 +251,7 @@ class ChannelService:
         approval_gate: ApprovalGate | None = None,
         initial_grant_application: InitialGrantApplication | None = None,
         prospective_grant_application: ProspectiveGrantApplication | None = None,
+        space_upload_factory=None,
     ):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
@@ -261,6 +262,7 @@ class ChannelService:
         self.approval_gate = approval_gate
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
+        self.space_upload_factory = space_upload_factory
 
     async def _get_channel_actions(
         self,
@@ -2776,6 +2778,13 @@ class ChannelService:
         if role not in _WRITE_ROLES:
             raise SpacePermissionDeniedError()
 
+        if not callable(self.space_upload_factory):
+            raise RuntimeError("Channel SPACE upload factory is not configured")
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+        space_service = KnowledgeSpaceService(request=request, login_user=login_user)
+        space_service.upload_application_factory = lambda: self.space_upload_factory(space_service)
+
         # 3. Upload articles to minio
         minio_client = await get_minio_storage()
         md_file_paths = []
@@ -2800,9 +2809,6 @@ class ChannelService:
             preview_map[index] = article.content_html
 
         # 4. Call KnowledgeSpaceService.add_file
-        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
-
-        space_service = KnowledgeSpaceService(request=request, login_user=login_user)
         knowledge_files = await space_service.add_file(
             knowledge_id=req.knowledge_id,
             file_path=md_file_paths,
@@ -2813,10 +2819,18 @@ class ChannelService:
         # 5. Update preview_file_object_name for successful files
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
 
+        successful_ids = [kf.id for kf in knowledge_files if kf.status != KnowledgeFileStatus.FAILED.value]
+        saved_files = (
+            {row.id: row for row in await KnowledgeFileDao.aget_file_by_ids(successful_ids)} if successful_ids else {}
+        )
         result = []
         failed = False
         for index, kf in enumerate(knowledge_files):
             if kf.status != KnowledgeFileStatus.FAILED.value:
+                saved = saved_files.get(kf.id)
+                if saved is None or saved.knowledge_id != req.knowledge_id or saved.tenant_id != kf.tenant_id:
+                    raise SpacePermissionDeniedError()
+                kf = saved
                 html_content = preview_map[index]
                 preview_object_name = f"preview/{kf.id}.html"
                 await minio_client.put_object(
