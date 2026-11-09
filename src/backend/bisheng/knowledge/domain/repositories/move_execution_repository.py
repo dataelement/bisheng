@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from types import SimpleNamespace
 
-from sqlalchemy import inspect, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
@@ -19,7 +19,7 @@ from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeP
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.repositories.move_job_ready_repository import MoveJobReadyRepository
 from bisheng.knowledge.domain.repositories.move_job_repository import MoveJobRepository
-from bisheng.knowledge.domain.repositories.move_row_repository import MoveRowRepository
+from bisheng.knowledge.domain.repositories.move_row_repository import MoveRowRepository, _fail
 from bisheng.knowledge.domain.repositories.move_scope_repository import revision
 from bisheng.knowledge.domain.schemas.move_processing import (
     FILE_FIELDS,
@@ -109,10 +109,6 @@ class MoveExecutionSnapshot:
     configuration: MoveConfiguration
 
 
-def _fail(reason):
-    raise KnowledgeOperationPlanConflictError(reason="move_execution_" + reason)
-
-
 class MoveExecutionRepository(MoveRowRepository):
     def __init__(self, *, move_jobs: MoveJobRepository, move_ready: MoveJobReadyRepository):
         if (
@@ -152,23 +148,6 @@ class MoveExecutionRepository(MoveRowRepository):
             rows = tuple((await session.execute(statement)).mappings())
         self._tail(session, context)
         return tuple(deepcopy(dict(row)) for row in rows)
-
-    @staticmethod
-    def _pending(session, ids):
-        for row in (*session.new, *session.dirty, *session.deleted):
-            state = inspect(row)
-            keys = (state.dict.get("id"), *(state.identity or ()))
-            related = any(key in ids.get(type(row), ()) for key in keys)
-            if isinstance(row, KnowledgeDocumentVersion):
-                for name, model in (("knowledge_file_id", KnowledgeFile), ("document_id", KnowledgeDocument)):
-                    values = (
-                        state.dict.get(name),
-                        *state.attrs[name].history.added,
-                        *state.attrs[name].history.deleted,
-                    )
-                    related = related or any(value in ids.get(model, ()) for value in values)
-            if related:
-                _fail("pending_business_facts")
 
     async def _prefix(self, session, job_id, *, lock):
         context = self._context(session)
@@ -453,6 +432,23 @@ class MoveExecutionRepository(MoveRowRepository):
             current.destination,
             current.configuration,
         )
+
+    async def apeek_claimable_item(self, session, *, lease, jobs) -> MoveExecutionSnapshot | None:
+        context = self._context(session)
+        if jobs._move_execution() is not self:
+            _fail("execution_composition_changed")
+        job, current = await jobs._execution_job(session, lease.job_id, _move=True)
+        if not jobs._active_job_lease(job, lease):
+            return None
+        self.ready.require_job_ready(job)
+        if not jobs._check_configuration(job, None, move_current=current):
+            await session.flush()
+            return None
+        item_id = await self.aread_move_claimable_id(session, job_id=job.id, now=jobs._now())
+        self._tail(session, context)
+        if item_id is None:
+            return None
+        return await self.aread_item(session, job_id=job.id, item_id=item_id)
 
     async def aread_item(self, session, *, job_id, item_id) -> MoveExecutionSnapshot:
         current = await self._alock_prefix(session, job_id=job_id)

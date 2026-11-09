@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 
+from sqlalchemy import inspect, or_
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -28,7 +29,28 @@ def _conflict():
     raise KnowledgeOperationPlanConflictError(reason="move_owned_row_chain_invalid")
 
 
+def _fail(reason):
+    raise KnowledgeOperationPlanConflictError(reason="move_execution_" + reason)
+
+
 class MoveRowRepository:
+    @staticmethod
+    def _pending(session, ids):
+        for row in (*session.new, *session.dirty, *session.deleted):
+            state = inspect(row)
+            keys = (state.dict.get("id"), *(state.identity or ()))
+            related = any(key in ids.get(type(row), ()) for key in keys)
+            if isinstance(row, KnowledgeDocumentVersion):
+                for name, model in (("knowledge_file_id", KnowledgeFile), ("document_id", KnowledgeDocument)):
+                    values = (
+                        state.dict.get(name),
+                        *state.attrs[name].history.added,
+                        *state.attrs[name].history.deleted,
+                    )
+                    related = related or any(value in ids.get(model, ()) for value in values)
+            if related:
+                _fail("pending_business_facts")
+
     @staticmethod
     def _owned_query(model, fields, *, via):
         root, file = Knowledge.__table__, KnowledgeFile.__table__
@@ -114,6 +136,38 @@ class MoveRowRepository:
         for offset in range(0, len(keys), PAGE):
             condition = model.__table__.c[key].in_(keys[offset : offset + PAGE])
             result += await self._rows(session, model, fields, condition, lock=lock, via=key)
+        return result
+
+    async def aread_move_claimable_id(self, session, *, job_id, now):
+        tenant = get_current_tenant_id()
+        if (
+            not isinstance(session, AsyncSession)
+            or type(tenant) is not int
+            or tenant <= 0
+            or is_tenant_filter_bypassed()
+        ):
+            _fail("native_context_required")
+        transaction = TransactionIdentity.capture(session)
+        if session.new or session.dirty or session.deleted:
+            _fail("pending_business_facts")
+        table = KnowledgeProcessingItem.__table__
+        query = (
+            select(table.c.id)
+            .where(
+                table.c.job_id == job_id,
+                table.c.tenant_id == tenant,
+                table.c.state.in_(("pending", "running")),
+                or_(table.c.state == "pending", table.c.lease_until.is_(None), table.c.lease_until <= now),
+            )
+            .order_by(table.c.file_id, table.c.version_id)
+            .limit(1)
+            .with_for_update()
+        )
+        with session.no_autoflush, strict_tenant_filter():
+            result = (await session.execute(query)).scalar_one_or_none()
+        transaction.assert_current(session)
+        if get_current_tenant_id() != tenant or is_tenant_filter_bypassed():
+            _fail("tenant_changed")
         return result
 
     async def aread_move_job_header(self, session, *, job_id):
