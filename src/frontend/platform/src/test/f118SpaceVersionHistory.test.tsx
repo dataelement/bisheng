@@ -18,6 +18,10 @@ vi.mock("@/controllers/request", () => ({
   default: { get: vi.fn() },
   showApiError: mocks.error,
 }));
+// Advanced processing tools have their own entry tests; keep history reads isolated.
+vi.mock("@/pages/KnowledgePage/components/SpaceFileTools", () => ({
+  SpaceFileTools: () => null,
+}));
 const scope: KnowledgeQueryScope = {
   identityKey: "user:7",
   tenantId: 101,

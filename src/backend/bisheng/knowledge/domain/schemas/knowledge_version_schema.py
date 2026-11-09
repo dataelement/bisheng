@@ -34,6 +34,7 @@ class AssociableDocumentEntry(BaseModel):
     current_primary_version_no: int
     primary_uploader_name: str | None = None
     primary_upload_time: datetime | None = None
+    primary_knowledge_file_id: int | None = None
 
 
 class VersionCandidatePage(BaseModel):
@@ -81,6 +82,7 @@ class SimilarCandidateEntry(BaseModel):
     similarity: float
     primary_uploader_name: str | None = None
     primary_upload_time: datetime | None = None
+    primary_knowledge_file_id: int | None = None
 
 
 class PendingSimilarFileEntry(BaseModel):
