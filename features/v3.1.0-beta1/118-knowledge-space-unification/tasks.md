@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史987编号：879已完成/历史交付、106当前待办、2外移；原137队列已完成40项、剩97项，另9张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史988编号：880已完成/历史交付、106当前待办、2外移；原137队列已完成40项、剩97项，另9张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7957,7 +7957,7 @@
   **配对测试**：T983\
   **验证 / 完成条件**：真预算红绿、完整原digest与身份控制、固定作者外复验；不扩大范围。
 
-- [ ] **T985 · 库存wire闭集schema SSOT提纯**
+- [x] **T985 · 库存wire闭集schema SSOT提纯**
   **类型 / Owner**：基础设施定义 / INT\
   **写入文件**：`src/backend/bisheng/knowledge/application/unification_inventory_schema.py`；`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§101原wire定义同对象搬移，原typed字节和验证不变。\
@@ -7976,9 +7976,16 @@
   **类型 / Owner**：后端 Repository / INT\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/unification_space_membership_repository.py`；`src/backend/bisheng/knowledge/application/unification_inventory_codec.py`\
   **逻辑 / 测试上下文**：W6§101真实ownRoot锚、完整raw Member列和closed codec，无转换写。\
-  **依赖**：T986\
+  **依赖**：T986, T988\
   **配对测试**：T986\
   **验证 / 完成条件**：原typed/codec控制、native边界/规模及固定复查，不冒M2正式基线/转换完成。
+
+- [ ] **T988 · 原SPACE成员wire闭集定义**
+  **类型 / Owner**：基础设施定义 / INT\
+  **写入文件**：`src/backend/bisheng/knowledge/application/unification_inventory_schema.py`\
+  **逻辑 / 测试上下文**：W6§101 header显式空集与真实Member列schema，既有定义不变。\
+  **依赖**：T985, T986\
+  **验证 / 完成条件**：同原codec字段闭集和canonical验证，新事实仍无转换授权。
 
 ## 自动化覆盖索引
 
