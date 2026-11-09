@@ -276,6 +276,44 @@ _llm_node_type: dict = {
 }
 
 
+# Request-body fragments that switch a model's thinking off, keyed by provider.
+# Only switches the provider is known to read are listed; every other provider
+# gets nothing (an unknown field can make a strict API reject the request).
+# Inference servers render the model's own chat template, so the switch is a
+# template variable; the two names cover the DeepSeek (`thinking`) and Qwen3 /
+# GLM (`enable_thinking`) templates — a template ignores variables it never reads.
+_CHAT_TEMPLATE_THINKING_OFF: dict = {"chat_template_kwargs": {"thinking": False, "enable_thinking": False}}
+_THINKING_OFF_EXTRA_BODY: dict = {
+    LLMServerType.VLLM.value: _CHAT_TEMPLATE_THINKING_OFF,
+    LLMServerType.LLAMACPP.value: _CHAT_TEMPLATE_THINKING_OFF,
+    LLMServerType.XINFERENCE.value: _CHAT_TEMPLATE_THINKING_OFF,
+    LLMServerType.MIND_IE.value: _CHAT_TEMPLATE_THINKING_OFF,
+    LLMServerType.OPENAI_COMPATIBLE.value: _CHAT_TEMPLATE_THINKING_OFF,
+    LLMServerType.QWEN.value: {"enable_thinking": False},
+    LLMServerType.SILICON.value: {"enable_thinking": False},
+    LLMServerType.VOLCENGINE.value: {"thinking": {"type": "disabled"}},
+}
+
+
+def thinking_off_extra_body(server_type: str, current: dict | None) -> dict | None:
+    """Return ``current`` merged with the provider's thinking-off switch, or None.
+
+    ``extra_body`` passed at call time REPLACES the client's own (langchain-openai
+    builds the payload as ``{**defaults, **kwargs}``), so the client's existing
+    body — e.g. Qwen's ``enable_search`` — is carried over rather than dropped.
+    """
+    fragment = _THINKING_OFF_EXTRA_BODY.get(server_type)
+    if not fragment:
+        return None
+    merged = dict(current or {})
+    for key, value in fragment.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = {**merged[key], **value}
+        else:
+            merged[key] = dict(value) if isinstance(value, dict) else value
+    return merged
+
+
 def _raise_as_context_overflow(exc: Exception) -> None:
     """Re-raise a provider's context-window rejection as ``ContextOverflowError``.
 
@@ -306,6 +344,18 @@ class BishengLLM(BishengBase, BaseChatModel):
     @classmethod
     async def get_bisheng_llm(cls, **kwargs) -> Self:
         return await cls.get_class_instance(**kwargs)
+
+    def thinking_off_kwargs(self) -> dict:
+        """Call-time kwargs that ask this model to answer without thinking.
+
+        For short utility calls (conversation titles) where reasoning only adds
+        latency. Empty when the provider has no known switch.
+        """
+        server_info = getattr(self, "server_info", None)
+        if not server_info or not self.llm:
+            return {}
+        extra_body = thinking_off_extra_body(server_info.type, getattr(self.llm, "extra_body", None))
+        return {"extra_body": extra_body} if extra_body is not None else {}
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
