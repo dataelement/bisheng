@@ -8,7 +8,10 @@ from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-from bisheng.knowledge.domain.repositories.reference_target_repository import original_for
+from bisheng.knowledge.domain.repositories.reference_target_repository import (
+    KnowledgeReferenceTargetRepository,
+    original_for,
+)
 from bisheng.resource_reference.application.contracts import DeletionEvidence, TargetKey, TargetType
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
@@ -41,9 +44,16 @@ class KnowledgeSourceReadTargetRepository:
             if model is Knowledge
             else (model.id, model.tenant_id, model.knowledge_id)
         )
-        statement = select(*columns).where(model.tenant_id == tenant_id, model.id.in_(sorted(ids))).order_by(model.id)
-        rows = await self._rows(session, statement.with_for_update() if lock else statement) if ids else ()
-        return {row.id: row for row in rows}
+        ordered, found = sorted(ids), {}
+        for start in range(0, len(ordered), 200):
+            statement = (
+                select(*columns)
+                .where(model.tenant_id == tenant_id, model.id.in_(ordered[start : start + 200]))
+                .order_by(model.id)
+            )
+            rows = await self._rows(session, statement.with_for_update() if lock else statement)
+            found.update((row.id, row) for row in rows)
+        return found
 
     async def alock_targets(self, session, scope, target_keys, *, identity, transient=False):
         snapshot = await self.verifier.aassert_target_keys(
@@ -57,7 +67,11 @@ class KnowledgeSourceReadTargetRepository:
             tenant_id = snapshot.source_key.tenant_id
             originals = (await self.sources.aread_source(session, scope, identity)).references
         keys = tuple(sorted(target_keys, key=lambda key: key.lock_order_key))
-        originals = tuple(row for row in originals if TargetKey(row.target_type, row.target_id) in keys)
+        selected = {(key.target_type.value, key.target_id) for key in keys}
+        originals = tuple(row for row in originals if (row.target_type, row.target_id) in selected)
+        originals_by_key = {}
+        for original in originals:
+            originals_by_key.setdefault((original.target_type, original.target_id), []).append(original)
         if any(row.target_tenant_id not in (None, tenant_id) for row in originals):
             raise ResourceReferenceInvalidError(reason="knowledge_reference_target_unavailable")
         file_ids = {int(key.target_id) for key in keys if key.target_type == TargetType.KNOWLEDGE_FILE}
@@ -72,7 +86,7 @@ class KnowledgeSourceReadTargetRepository:
             raise KnowledgeOperationPlanConflictError(reason="reference_read_target_plan_changed")
         planned, tombstone_keys = [], set()
         for key in keys:
-            original = original_for(originals, key)
+            original = original_for(originals_by_key.get((key.target_type.value, key.target_id), ()), key)
             row = (spaces if key.target_type == TargetType.KNOWLEDGE_SPACE else files).get(int(key.target_id))
             space_id = (
                 key.target_id
@@ -97,20 +111,33 @@ class KnowledgeSourceReadTargetRepository:
                     tombstone_keys.add((TargetKey("knowledge_space", space_id), owner))
         tombstones = {}
         model = ResourceReferenceTombstone
-        for key, owner in sorted(tombstone_keys, key=lambda item: (*item[0].lock_order_key, item[1])):
+        for statement in KnowledgeReferenceTargetRepository._tombstone_statements(tombstone_keys):
             rows = await self._rows(
                 session,
-                select(model.operation_id, model.stage)
-                .where(
-                    model.tenant_id == owner,
-                    model.target_tenant_id == owner,
-                    model.target_type == key.target_type.value,
-                    model.target_id == key.target_id,
-                )
-                .with_for_update(),
+                statement.with_only_columns(
+                    model.operation_id,
+                    model.stage,
+                    model.target_type,
+                    model.target_id,
+                    model.target_tenant_id,
+                    model.tenant_id,
+                ),
             )
-            if rows:
-                tombstones[key, owner] = DeletionEvidence(rows[0].operation_id, key, owner, rows[0].stage)
+            for row in rows:
+                try:
+                    entry = TargetKey(row.target_type, row.target_id), row.target_tenant_id
+                except (TypeError, ValueError) as error:
+                    raise ResourceReferenceInvalidError(
+                        reason="knowledge_reference_tombstone_result_invalid"
+                    ) from error
+                if (
+                    entry not in tombstone_keys
+                    or entry in tombstones
+                    or row.target_id != entry[0].target_id
+                    or row.tenant_id != entry[1]
+                ):
+                    raise ResourceReferenceInvalidError(reason="knowledge_reference_tombstone_result_invalid")
+                tombstones[entry] = DeletionEvidence(row.operation_id, entry[0], entry[1], row.stage)
         await self.verifier.aassert_target_keys(
             session, scope, identity, target_keys, allowed_types=(TargetType.KNOWLEDGE_SPACE, TargetType.KNOWLEDGE_FILE)
         )
