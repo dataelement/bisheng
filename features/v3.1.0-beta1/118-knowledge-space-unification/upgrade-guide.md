@@ -236,3 +236,6 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 
 
 2026-11-09实施合同补充：原Member没有tenant，正式盘点前通过[W6§106](./wave6-completion-contract.md#106-原member全局完整性实际前置-a已冻结)全局SPACE PK分页与canonical ID、indexed Root/Tenant精确核验，alias/orphan阻断，合法QA/type2历史成员原样保留。移动部分P1断点按[§107](./wave6-completion-contract.md#107-p1精确操作者候选读取与原move断点分类已冻结)只恢复本job原ledger，全部P1与业务logical/ready提交成功后才处理index；新主体仍须真实当前move准入。两项是现有范围的实际接线，不改变动作范围，不把内部组件通过当升级验收。
+
+
+2026-11-09验证快照：源码f8ee86f116的原完整本地选集5690通过/7原中间件占位skip/0失败，之前四项回归已闭合；47个本轮Python改动静态通过。证据和适用范围见[W6完整复验](./wave6-implementation-review.md)。正式停服盘点、转换/恢复和真实接口E2E尚未执行。

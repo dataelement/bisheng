@@ -499,3 +499,10 @@ Root修后六路径59 passed/1452 warnings/7.63秒（/private/tmp/f118-root-full
 固定主树f8ee86f11626bd2050256d5d5e6bcbb9ded4a768已含namespace Catalog80cd93247、原成员纯计划5a4dfc348、move retry4640bb36e及075dff767四红修正。C4/成员主树9路径316 passed（/private/tmp/f118-root-namespace-member-plan.xml），B2主树10路径220 passed（/private/tmp/f118-root-move-retry-integration-corrected.xml）。作者外C4 3 native+233原控制、成员116原控制+3 native、B2 2 native+211组合均PASS；关闭T989–T994。C5尚待独立复查与root合流，不能据纯计划宣称正式转换完成。
 
 同固定主树正在重跑此前5560绿4红7skip的完整选集，结果未出；历史四红已由075修正，定向59绿并有独审28绿，但尚不替代完整回归。下一步按§106实际Member全局前置、§107 P1精确operator候选冻结并行，原Owner/正式Member M2/M3后继不能只停留于helper。
+
+
+### 2026-11-09 同选集完整复验与静态
+
+受测源码f8ee86f11626bd2050256d5d5e6bcbb9ded4a768（随后c54cb1b880/7917529829只文档，不变源）：完整test/knowledge_unification（唯一忽略本来独立TCP mock合同）加creator_delete_batch、service_account_creator_delete、app_permission_registration、folder_upload与API、Web dedup与Service、v2_filelib_unified共原同选集 **5690 passed / 7 skipped / 0 fail、418.79秒**。日志/private/tmp/f118-root-move-namespace-member-full.log，JUnit同名.xml；7skip仍为原F054真实中间件占位。此前c456的4红已全部消失，没有将其归为既有失败或改成skip。
+
+相对52892298a7901c3a02876eeafb5fa8d4c4d31730的47个改动Python文件ruff format/check通过；arch-guard逐文件47次、messages0，证据/private/tmp/f118-root-wave-static-{format,check}.log及f118-root-wave-static-arch.json。HTML13 SVG/唯一ID/导航与Markdown本地链接通过，diff-check通过。此结果不是CI、真实迁移/恢复/中间件E2E或部署证明；C5仍隔离review，§106–108继续依赖实施。
