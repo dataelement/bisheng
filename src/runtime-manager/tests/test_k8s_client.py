@@ -1,6 +1,7 @@
 """F059 coverage: AC-03, AC-04, AC-13, AC-14, AC-48, AC-49, AC-52."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import certifi
@@ -426,6 +427,16 @@ def test_log_contract_covers_only_real_fixed_template_names(client_factory):
             material_secret="material-a",
             schema_plan=({"op": "create_table", "table": "items", "columns": []},),
         )
+        if purpose == "image-check":
+            plan = replace(
+                plan,
+                image=plan.helper_image,
+                mode="image",
+                command=("python", "-I", "-m", "runtime_manager.image_check"),
+                material_secret="",
+                schema_plan=(),
+                temporary_mb=256,
+            )
         spec = pod_template(plan)["spec"]
         names.update(c["name"] for c in spec["initContainers"] + spec["containers"])
     assert names == {
@@ -440,6 +451,7 @@ def test_log_contract_covers_only_real_fixed_template_names(client_factory):
         "storage-guard",
         "schema-init",
         "assembler",
+        "image-check",
     }
     calls = []
     client = client_factory(lambda request: calls.append(request) or httpx.Response(200, text="fixed log"))

@@ -11,9 +11,12 @@ from runtime_manager.config import Config
 from runtime_manager.container_runner import ExecutionError
 from runtime_manager.operations import OperationExecutor
 from runtime_manager.platform_client import PREFIX, PlatformClient, PlatformError
+from tests.fakes import stage_permit
 
 
 class Platform:
+    authorize_step = staticmethod(stage_permit)
+
     def __init__(self, kind="stop"):
         self.op = {
             "operation_id": "operation-a",
@@ -338,6 +341,7 @@ def test_preflight_records_starting_before_readiness_failure(tmp_path, monkeypat
     """AC-17, AC-63: terminal cleanup retains the last actual execution stage."""
     platform = Platform(kind)
     executor = OperationExecutor(Config(data_root=tmp_path, node_id="node-a"), platform, Docker())
+    monkeypatch.setattr(executor.runtime, "preflight", lambda operation: None)
 
     def failed_launch(*args, **kwargs):
         raise ExecutionError("readiness_timeout")
@@ -604,6 +608,7 @@ def cleanup_runtime(platform, outcomes):
         return cleanup(None) if action == "finish-session" else {"exec_ref": "data-pod"}
 
     runtime = SimpleNamespace(
+        preflight=lambda operation: None,
         prepare=prepare,
         cleanup=cleanup,
         launch=launch,

@@ -1173,6 +1173,37 @@ def test_chart_cni_identity_is_admission_source_and_invalidates_only_old_report(
 @contextmanager
 def chart_lookup_api(objects):
     requests = []
+    # Newer Helm server-side dry runs map every rendered resource, in addition
+    # to the ConfigMap lookups performed by the templates. These are discovery
+    # facts only; this server never accepts resource writes.
+    resources = {
+        "v1": [
+            ("configmaps", "ConfigMap", True),
+            ("namespaces", "Namespace", False),
+            ("resourcequotas", "ResourceQuota", True),
+            ("limitranges", "LimitRange", True),
+            ("serviceaccounts", "ServiceAccount", True),
+            ("services", "Service", True),
+            ("persistentvolumes", "PersistentVolume", False),
+        ],
+        "apps/v1": [("deployments", "Deployment", True)],
+        "networking.k8s.io/v1": [("networkpolicies", "NetworkPolicy", True)],
+        "rbac.authorization.k8s.io/v1": [("roles", "Role", True), ("rolebindings", "RoleBinding", True)],
+        "admissionregistration.k8s.io/v1": [
+            ("validatingwebhookconfigurations", "ValidatingWebhookConfiguration", False)
+        ],
+    }
+
+    def resource_list(version):
+        return {
+            "kind": "APIResourceList",
+            "apiVersion": "v1",
+            "groupVersion": version,
+            "resources": [
+                {"name": name, "singularName": "", "namespaced": scoped, "kind": kind, "verbs": ["get"]}
+                for name, kind, scoped in resources[version]
+            ],
+        }
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -1191,22 +1222,23 @@ def chart_lookup_api(objects):
                     "serverAddressByClientCIDRs": [],
                 }
             elif path == "/apis":
-                response = {"kind": "APIGroupList", "apiVersion": "v1", "groups": []}
-            elif path == "/api/v1":
                 response = {
-                    "kind": "APIResourceList",
+                    "kind": "APIGroupList",
                     "apiVersion": "v1",
-                    "groupVersion": "v1",
-                    "resources": [
+                    "groups": [
                         {
-                            "name": "configmaps",
-                            "singularName": "",
-                            "namespaced": True,
-                            "kind": "ConfigMap",
-                            "verbs": ["get"],
+                            "name": version.rsplit("/", 1)[0],
+                            "versions": [{"groupVersion": version, "version": "v1"}],
+                            "preferredVersion": {"groupVersion": version, "version": "v1"},
                         }
+                        for version in resources
+                        if version != "v1"
                     ],
                 }
+            elif path == "/api/v1":
+                response = resource_list("v1")
+            elif path.startswith("/apis/") and path.removeprefix("/apis/") in resources:
+                response = resource_list(path.removeprefix("/apis/"))
             else:
                 response = objects.get(path)
             payload = json.dumps(
@@ -1318,6 +1350,9 @@ def render_upgrade(values, tmp_path, objects, *, expect_success=True):
                 str(values_path),
                 "--is-upgrade",
                 "--dry-run=server",
+                # This API fixture implements discovery/lookup only, not an
+                # OpenAPI schema server. Keep chart values validation enabled.
+                "--disable-openapi-validation",
                 "--kubeconfig",
                 str(config_path),
             ],

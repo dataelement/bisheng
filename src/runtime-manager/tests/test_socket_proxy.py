@@ -35,7 +35,11 @@ from runtime_manager.docker_backend import (
 def test_every_backend_method_is_covered_by_an_enabled_permission():
     """The lockstep that makes "D2-A → D2-B is a base URL" stay true."""
     covered = {method for methods in SOCKET_PROXY_PERMISSIONS.values() for method in methods}
-    missing = sorted(set(protocol_methods()) - covered)
+    # This local proof combines existing INFO / CONTAINERS / NETWORKS reads;
+    # it does not introduce another Docker API endpoint or proxy permission.
+    local_checks = {"assert_host_isolation"}
+    assert {"INFO", "CONTAINERS", "NETWORKS"} <= set(SOCKET_PROXY_PERMISSIONS)
+    missing = sorted(set(protocol_methods()) - covered - local_checks)
     assert not missing, (
         f"{missing} would be called through the socket proxy with no endpoint permission — "
         f"the call answers 403 and the platform reports 编排器不可用 with a healthy daemon behind it"

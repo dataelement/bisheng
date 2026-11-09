@@ -179,10 +179,12 @@ class TestFailClosed:
     def test_fail_closed_is_not_cached(self, logged_in, fake_backend):
         """Caching an outage would extend a 1s blip into a 3s one for everybody."""
         fake_backend.status_code = 500
-        assert "暂时无法" in logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS).text
+        # Use the canonical URL so the recovered navigation does not add the
+        # separate, intentionally reauthorized trailing-slash redirect.
+        assert "暂时无法" in logged_in.get("/apps/foo/", headers=NAVIGATE_HEADERS).text
 
         fake_backend.status_code = 200
-        recovered = logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
+        recovered = logged_in.get("/apps/foo/", headers=NAVIGATE_HEADERS)
         assert "暂时无法" not in recovered.text, "the blip must not linger for the rest of the TTL"
         assert len(fake_backend.calls) == 2, "the failed attempt was re-asked, not cached"
 

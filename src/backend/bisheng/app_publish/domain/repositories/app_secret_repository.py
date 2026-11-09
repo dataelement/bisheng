@@ -17,8 +17,8 @@ from bisheng.database.models.audit_log import AuditLog
 
 
 class AppSecretConfigRepository:
-    def __init__(self, session_factory=get_async_db_session):
-        self._factory = session_factory
+    def __init__(self, session_factory=None):
+        self._factory = session_factory or get_async_db_session
 
     @asynccontextmanager
     async def transaction(self):

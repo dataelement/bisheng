@@ -1,6 +1,7 @@
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { Button } from '@bisheng/ui';
 import { ModuleHomeHeader } from '~/components/ModuleHome';
 import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
@@ -180,6 +181,7 @@ export default function AppCenter() {
                         >
                             {recentAppsHint}
                         </p>
+                        <Link to="/apps/cloud-workbenches" className="text-body-sm text-primary">{localize('shared:cloudWorkbenches.title')}</Link>
                         {exploreLink}
                     </header>
                     <div className="mt-3 mb-4 w-full max-w-[1000px] shrink-0 min-w-0">
@@ -193,6 +195,7 @@ export default function AppCenter() {
                         Discovering apps is the sidebar's 广场; the 探索更多应用 link stays on
                         mobile only. */}
                     <ModuleHomeHeader title={menuNames.apps}>
+                        <Button variant="link" asChild><Link to="/apps/cloud-workbenches">{localize('shared:cloudWorkbenches.title')}</Link></Button>
                         <div className="w-auto min-w-[120px] shrink-0">
                             <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
                         </div>

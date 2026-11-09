@@ -264,6 +264,7 @@ class KubernetesClient:
             "storage-guard",
             "schema-init",
             "assembler",
+            "image-check",
         }:
             raise ValueError("k8s_log_container_invalid")
         path = self._path("pods", pod_name) + "/log"
