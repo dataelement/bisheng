@@ -796,7 +796,7 @@ const AiChatInput = memo(
                                         fileUploading ||
                                         filesParsing
                                     }
-                                    className="dsh-composer-submit btn-brand-primary"
+                                    className="dsh-composer-submit dsh-composer-send btn-brand-primary"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >
