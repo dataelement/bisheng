@@ -189,6 +189,7 @@ class SqlPermissionControlState:
                     "active",
                     "allow_same_level",
                     "visibility_level",
+                    "retired_use_level_floor",
                 )
                 for row in model_rows:
                     expected = canonical[row.model_key]
