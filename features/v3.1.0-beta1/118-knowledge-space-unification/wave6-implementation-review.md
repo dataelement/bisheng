@@ -506,3 +506,8 @@ Root修后六路径59 passed/1452 warnings/7.63秒（/private/tmp/f118-root-full
 受测源码f8ee86f11626bd2050256d5d5e6bcbb9ded4a768（随后c54cb1b880/7917529829只文档，不变源）：完整test/knowledge_unification（唯一忽略本来独立TCP mock合同）加creator_delete_batch、service_account_creator_delete、app_permission_registration、folder_upload与API、Web dedup与Service、v2_filelib_unified共原同选集 **5690 passed / 7 skipped / 0 fail、418.79秒**。日志/private/tmp/f118-root-move-namespace-member-full.log，JUnit同名.xml；7skip仍为原F054真实中间件占位。此前c456的4红已全部消失，没有将其归为既有失败或改成skip。
 
 相对52892298a7901c3a02876eeafb5fa8d4c4d31730的47个改动Python文件ruff format/check通过；arch-guard逐文件47次、messages0，证据/private/tmp/f118-root-wave-static-{format,check}.log及f118-root-wave-static-arch.json。HTML13 SVG/唯一ID/导航与Markdown本地链接通过，diff-check通过。此结果不是CI、真实迁移/恢复/中间件E2E或部署证明；C5仍隔离review，§106–108继续依赖实施。
+
+
+### 2026-11-09 显式资源namespace C5合流
+
+C5 fixed6fc47d8983通过作者外3 native+280原组合；root正常merge为74f6987ac34162ddbb18a10387b4af0a570ea8b1，12路径312 passed/38.23秒（/private/tmp/f118-root-namespace-resource-integration.xml）。旧无mapping payload/checksum独立逐字节一致；原Grant/Assignee/ACTIVE与RETIRED Source身份/版本/metadata保留，existingSPACE inactive scope洞阻断；401/1001资源及独立models预算线性。关闭T995996，正式物理type资格/SQL写/FGA Publisher仍待接线，不以C5验收T157158。
