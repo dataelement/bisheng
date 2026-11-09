@@ -39,7 +39,7 @@ async def test_actual_configuration_and_full_attempt_keep_original_scope_and_pos
     repo = execution(built)
     async with built.sessions() as session, session.begin():
         config = await repo.aread_configuration(session, job_id=built.job_id)
-        assert config.source_space_id == 10 and config.destination_space_id == 20
+        assert config.source_space_id == 10 and config.destination_space_id == 11
         assert config.target == ready.CONFIG
         facts = await repo.avalidate_attempt(session, lease=built.lease, jobs=built.repo)
         assert facts.position == "before" and facts.scope == built.confirmed.scope
@@ -53,15 +53,19 @@ async def test_actual_configuration_and_full_attempt_keep_original_scope_and_pos
 async def test_projection_point_read_has_real_before_then_after_without_plan_payload(built):
     repo = execution(built)
     async with built.sessions() as session, session.begin():
-        fact = await repo.aread_projection(session, lease=built.lease, resource_type="folder", resource_id=50)
+        fact = await repo.aread_projection(
+            session, lease=built.lease, resource_type="folder", resource_id=50, jobs=built.repo
+        )
         assert fact.file["knowledge_id"] == 10 and fact.file["id"] == 50
-        assert fact.configuration.destination_space_id == 20
+        assert fact.configuration.destination_space_id == 11
         logical = await ready.logical(session, built)
         await built.repo.amark_move_ready(session, logical_receipt=logical, lease=built.lease)
     async with built.sessions() as session, session.begin():
-        assert (await repo.aread_projection(session, lease=built.lease, resource_type="folder", resource_id=50)).file[
-            "knowledge_id"
-        ] == 20
+        assert (
+            await repo.aread_projection(
+                session, lease=built.lease, resource_type="folder", resource_id=50, jobs=built.repo
+            )
+        ).file["knowledge_id"] == 11
 
 
 async def test_item_read_binds_original_snapshot_after_chain_and_primary(built):
@@ -72,7 +76,7 @@ async def test_item_read_binds_original_snapshot_after_chain_and_primary(built):
         item = (await session.execute(sa.select(Item).where(Item.job_id == built.job_id))).scalars().one()
         result = await repo.aread_item(session, job_id=built.job_id, item_id=item.id)
         assert result.leaf.target.file_id == item.file_id
-        assert result.file["knowledge_id"] == result.document["knowledge_id"] == 20
+        assert result.file["knowledge_id"] == result.document["knowledge_id"] == 11
         assert result.version["knowledge_file_id"] == item.file_id
         assert result.primary_version["id"] == result.document["primary_version_id"]
         assert result.checkpoint["logical_move"] == item.checkpoint["logical_move"]
