@@ -14,7 +14,7 @@ from bisheng.llm.domain.repositories.reference_target_repository import (
     ModelReferenceTargetRepository,
     _original,
 )
-from bisheng.resource_reference.application.contracts import DeletionEvidence, TargetType
+from bisheng.resource_reference.application.contracts import DeletionEvidence, TargetKey, TargetType
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
 
@@ -46,17 +46,61 @@ class ModelSourceReadTargetRepository:
         with session.no_autoflush, bypass_tenant_filter():
             return tuple(await session.execute(statement.with_for_update() if lock else statement))
 
-    async def _models(self, session, ids, owners, *, lock):
-        statement = (
-            select(LLMModel.id, LLMModel.tenant_id, LLMModel.server_id)
-            .where(
-                LLMModel.tenant_id.in_(owners),
-                LLMModel.id.in_(sorted(ids)),
+    @staticmethod
+    def _business_statements(model, ids, owners):
+        columns = (model.id, model.tenant_id, model.server_id) if model is LLMModel else (model.id, model.tenant_id)
+        ordered = sorted(ids)
+        for start in range(0, len(ordered), 200):
+            yield (
+                select(*columns)
+                .where(model.tenant_id.in_(owners), model.id.in_(ordered[start : start + 200]))
+                .order_by(model.id)
             )
-            .order_by(LLMModel.id)
-        )
-        rows = await self._rows(session, statement, lock=lock) if ids else ()
-        return {row.id: row for row in rows}
+
+    async def _models(self, session, ids, owners, *, lock):
+        found = {}
+        for statement in self._business_statements(LLMModel, ids, owners):
+            found.update((row.id, row) for row in await self._rows(session, statement, lock=lock))
+        return found
+
+    @staticmethod
+    def _originals_by_key(originals, keys):
+        selected = {(key.target_type.value, key.target_id) for key in keys}
+        found = {}
+        for original in originals:
+            raw_key = original.target_type, original.target_id
+            if raw_key in selected:
+                found.setdefault(raw_key, []).append(original)
+        return found
+
+    @staticmethod
+    def _tombstone_statements(entries):
+        model = ResourceReferenceTombstone
+        for statement in ModelReferenceTargetRepository._tombstone_statements(entries):
+            yield statement.with_only_columns(
+                model.operation_id,
+                model.stage,
+                model.target_type,
+                model.target_id,
+                model.target_tenant_id,
+                model.tenant_id,
+            )
+
+    @staticmethod
+    def _add_tombstones(rows, expected, found):
+        for row in rows:
+            try:
+                entry = TargetKey(row.target_type, row.target_id), row.target_tenant_id
+            except (TypeError, ValueError) as error:
+                raise ResourceReferenceInvalidError(reason="model_reference_tombstone_result_invalid") from error
+            if (
+                entry not in expected
+                or entry in found
+                or row.target_id != entry[0].target_id
+                or row.tenant_id != entry[1]
+            ):
+                raise ResourceReferenceInvalidError(reason="model_reference_tombstone_result_invalid")
+            found[entry] = DeletionEvidence(row.operation_id, entry[0], entry[1], row.stage)
 
     async def _topology(self, session, tenant_id, *, lock):
         rows = await self._rows(
@@ -94,11 +138,8 @@ class ModelSourceReadTargetRepository:
             tenant_id = snapshot.source_key.tenant_id
             originals = (await self.sources.aread_source(session, scope, identity)).references
         keys = tuple(sorted(target_keys, key=lambda key: key.lock_order_key))
-        originals = tuple(
-            row
-            for row in originals
-            if row.target_type == TargetType.MODEL.value and row.target_id in {key.target_id for key in keys}
-        )
+        originals_by_key = self._originals_by_key(originals, keys)
+        originals = tuple(row for bucket in originals_by_key.values() for row in bucket)
         owners = tuple(sorted({tenant_id, ROOT_TENANT_ID}))
         if any(row.target_tenant_id not in (*owners, None) or row.target_space_id is not None for row in originals):
             raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
@@ -112,21 +153,9 @@ class ModelSourceReadTargetRepository:
         candidates = await self._models(session, all_ids, owners, lock=False)
         mapping = {row.id: row.server_id for row in candidates.values()}
         server_ids = set(mapping.values())
-        server_rows = (
-            await self._rows(
-                session,
-                select(LLMServer.id, LLMServer.tenant_id)
-                .where(
-                    LLMServer.id.in_(sorted(server_ids)),
-                    LLMServer.tenant_id.in_(owners),
-                )
-                .order_by(LLMServer.id),
-                lock=True,
-            )
-            if server_ids
-            else ()
-        )
-        servers = {row.id: row for row in server_rows}
+        servers = {}
+        for statement in self._business_statements(LLMServer, server_ids, owners):
+            servers.update((row.id, row) for row in await self._rows(session, statement, lock=True))
         models = await self._models(session, all_ids, owners, lock=True)
         if {row.id: row.server_id for row in models.values()} != mapping:
             raise KnowledgeOperationPlanConflictError(reason="reference_read_target_plan_changed")
@@ -143,10 +172,12 @@ class ModelSourceReadTargetRepository:
             and row.server_id in servers
             and servers[row.server_id].tenant_id == ROOT_TENANT_ID
         )
-        result = []
-        tombstone = ResourceReferenceTombstone
+        planned = []
         for key in keys:
-            row, original = models.get(int(key.target_id)), _original(originals, key)
+            row, original = (
+                models.get(int(key.target_id)),
+                _original(originals_by_key.get((key.target_type.value, key.target_id), ()), key),
+            )
             server = servers.get(row.server_id) if row else None
             if row is not None and (
                 server is None
@@ -161,25 +192,22 @@ class ModelSourceReadTargetRepository:
             ):
                 raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
             owner = row.tenant_id if row else original.target_tenant_id if original else None
-            evidence = None
-            if owner is not None:
-                rows = await self._rows(
-                    session,
-                    select(tombstone.operation_id, tombstone.stage).where(
-                        tombstone.tenant_id == owner,
-                        tombstone.target_tenant_id == owner,
-                        tombstone.target_type == TargetType.MODEL.value,
-                        tombstone.target_id == key.target_id,
-                    ),
-                    lock=True,
-                )
-                if rows:
-                    evidence = DeletionEvidence(rows[0].operation_id, key, owner, rows[0].stage)
-            result.append(
-                ModelReadObservation(
-                    key, row is not None, owner, str(row.server_id) if row else None, original, evidence
-                )
+            planned.append((key, row, original, owner))
+        entries = {(key, owner) for key, _, _, owner in planned if owner is not None}
+        tombstones = {}
+        for statement in self._tombstone_statements(entries):
+            self._add_tombstones(await self._rows(session, statement), entries, tombstones)
+        result = tuple(
+            ModelReadObservation(
+                key,
+                row is not None,
+                owner,
+                str(row.server_id) if row else None,
+                original,
+                tombstones.get((key, owner)),
             )
+            for key, row, original, owner in planned
+        )
         await self.verifier.aassert_target_keys(
             session, scope, identity, target_keys, allowed_types=(TargetType.MODEL,)
         )
@@ -191,16 +219,10 @@ class ModelSourceReadTargetRepository:
             return tuple(session.execute(statement.with_for_update() if lock else statement))
 
     def _models_sync(self, session, ids, owners, *, lock):
-        statement = (
-            select(LLMModel.id, LLMModel.tenant_id, LLMModel.server_id)
-            .where(
-                LLMModel.tenant_id.in_(owners),
-                LLMModel.id.in_(sorted(ids)),
-            )
-            .order_by(LLMModel.id)
-        )
-        rows = self._rows_sync(session, statement, lock=lock) if ids else ()
-        return {row.id: row for row in rows}
+        found = {}
+        for statement in self._business_statements(LLMModel, ids, owners):
+            found.update((row.id, row) for row in self._rows_sync(session, statement, lock=lock))
+        return found
 
     def _topology_sync(self, session, tenant_id, *, lock):
         rows = self._rows_sync(
@@ -234,11 +256,8 @@ class ModelSourceReadTargetRepository:
         tenant_id = snapshot.source_key.tenant_id
         originals = self.sources.read_source(session, scope, identity).references
         keys = tuple(sorted(target_keys, key=lambda key: key.lock_order_key))
-        originals = tuple(
-            row
-            for row in originals
-            if row.target_type == TargetType.MODEL.value and row.target_id in {key.target_id for key in keys}
-        )
+        originals_by_key = self._originals_by_key(originals, keys)
+        originals = tuple(row for bucket in originals_by_key.values() for row in bucket)
         owners = tuple(sorted({tenant_id, ROOT_TENANT_ID}))
         if any(row.target_tenant_id not in (*owners, None) or row.target_space_id is not None for row in originals):
             raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
@@ -252,21 +271,9 @@ class ModelSourceReadTargetRepository:
         candidates = self._models_sync(session, all_ids, owners, lock=False)
         mapping = {row.id: row.server_id for row in candidates.values()}
         server_ids = set(mapping.values())
-        server_rows_sync = (
-            self._rows_sync(
-                session,
-                select(LLMServer.id, LLMServer.tenant_id)
-                .where(
-                    LLMServer.id.in_(sorted(server_ids)),
-                    LLMServer.tenant_id.in_(owners),
-                )
-                .order_by(LLMServer.id),
-                lock=True,
-            )
-            if server_ids
-            else ()
-        )
-        servers = {row.id: row for row in server_rows_sync}
+        servers = {}
+        for statement in self._business_statements(LLMServer, server_ids, owners):
+            servers.update((row.id, row) for row in self._rows_sync(session, statement, lock=True))
         models = self._models_sync(session, all_ids, owners, lock=True)
         if {row.id: row.server_id for row in models.values()} != mapping:
             raise KnowledgeOperationPlanConflictError(reason="reference_read_target_plan_changed")
@@ -283,10 +290,12 @@ class ModelSourceReadTargetRepository:
             and row.server_id in servers
             and servers[row.server_id].tenant_id == ROOT_TENANT_ID
         )
-        result = []
-        tombstone = ResourceReferenceTombstone
+        planned = []
         for key in keys:
-            row, original = models.get(int(key.target_id)), _original(originals, key)
+            row, original = (
+                models.get(int(key.target_id)),
+                _original(originals_by_key.get((key.target_type.value, key.target_id), ()), key),
+            )
             server = servers.get(row.server_id) if row else None
             if row is not None and (
                 server is None
@@ -301,24 +310,21 @@ class ModelSourceReadTargetRepository:
             ):
                 raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
             owner = row.tenant_id if row else original.target_tenant_id if original else None
-            evidence = None
-            if owner is not None:
-                rows = self._rows_sync(
-                    session,
-                    select(tombstone.operation_id, tombstone.stage).where(
-                        tombstone.tenant_id == owner,
-                        tombstone.target_tenant_id == owner,
-                        tombstone.target_type == TargetType.MODEL.value,
-                        tombstone.target_id == key.target_id,
-                    ),
-                    lock=True,
-                )
-                if rows:
-                    evidence = DeletionEvidence(rows[0].operation_id, key, owner, rows[0].stage)
-            result.append(
-                ModelReadObservation(
-                    key, row is not None, owner, str(row.server_id) if row else None, original, evidence
-                )
+            planned.append((key, row, original, owner))
+        entries = {(key, owner) for key, _, _, owner in planned if owner is not None}
+        tombstones = {}
+        for statement in self._tombstone_statements(entries):
+            self._add_tombstones(self._rows_sync(session, statement), entries, tombstones)
+        result = tuple(
+            ModelReadObservation(
+                key,
+                row is not None,
+                owner,
+                str(row.server_id) if row else None,
+                original,
+                tombstones.get((key, owner)),
             )
+            for key, row, original, owner in planned
+        )
         self.verifier.assert_target_keys(session, scope, identity, target_keys, allowed_types=(TargetType.MODEL,))
         return ModelReadPlan(tenant_id, tuple(result), inherited_servers)
