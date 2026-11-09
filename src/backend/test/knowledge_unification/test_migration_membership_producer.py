@@ -41,7 +41,9 @@ async def collect(database, *, memberships=None, controls=None):
         rows = [
             item
             async for item in module.UnificationPreflight(memberships=memberships, controls=controls).aiter_tenant(
-                session, catalog_plan=original.catalog_plan(), planned_at=NOW
+                session,
+                permission_planner=module.ResourceRetirementPlanner(catalog_plan=original.catalog_plan()),
+                planned_at=NOW,
             )
         ]
         assert not session.new and not session.dirty and not session.deleted and not session.identity_map
@@ -60,6 +62,7 @@ async def acquire_plans(database):
 @pytest.mark.parametrize("keep", [False, True])
 async def test_actual_producer_emits_header_then_complete_members_and_binds_flat_command(complete, keep):
     await complete.insert(original.original.Knowledge, [original.original.resource(9000)])
+    await original.seed_original_modes(complete, (9000,))
     if keep:
         await complete.insert(
             Member,
@@ -115,6 +118,7 @@ async def test_mixed_original_types_only_inventory_zero_and_space_and_never_repa
             member_fixture.member(11, "9003", user_id=8),
         ],
     )
+    await original.seed_original_modes(complete, (9000,))
     records, _ = await collect(complete)
     headers = [row.data for _, row in records if row.record_type == "space_membership_header"]
     assert [(row["knowledge_id"], row["knowledge_type"], row["member_count"]) for row in headers] == [
@@ -187,7 +191,9 @@ async def test_omitted_resource_cannot_hide_an_additional_real_header(complete):
             _ = [
                 row
                 async for row in module.UnificationPreflight(resources=resources).aiter_tenant(
-                    session, catalog_plan=original.catalog_plan(), planned_at=NOW
+                    session,
+                    permission_planner=module.ResourceRetirementPlanner(catalog_plan=original.catalog_plan()),
+                    planned_at=NOW,
                 )
             ]
 

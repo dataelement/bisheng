@@ -75,14 +75,41 @@ async def native(resource_native, monkeypatch):
 
 
 def catalog_plan():
-    return pure.catalog_plan(f118_plan)
+    original = pure.catalog_plan(f118_plan)
+    return f118_plan.build_catalog_retirement_plan(
+        run_id=original.run_id,
+        writer_contract_version=original.writer_contract_version,
+        before=original.before,
+        target_model_checksum=original.target_model_checksum,
+        namespace_type_mappings=(("knowledge_library", "knowledge_space"),),
+    )
+
+
+async def seed_original_modes(database, knowledge_ids):
+    await database.insert(
+        snapshot.ResourcePermissionMode,
+        [
+            {
+                "id": ident,
+                "tenant_id": 101,
+                "resource_type": "knowledge_library",
+                "resource_id": str(ident),
+                "mode": "CUSTOM",
+                "version": 1,
+                "projection_state": "CURRENT",
+            }
+            for ident in knowledge_ids
+        ],
+    )
 
 
 async def collect(module, session):
     return [
         item
         async for item in module.UnificationPreflight().aiter_tenant(
-            session, catalog_plan=catalog_plan(), planned_at=datetime(2026, 11, 7, 2, 3, 4)
+            session,
+            permission_planner=f118_plan.ResourceRetirementPlanner(catalog_plan=catalog_plan()),
+            planned_at=datetime(2026, 11, 7, 2, 3, 4),
         )
     ]
 
@@ -101,6 +128,7 @@ async def test_real_original_type_retirement_creator_and_quota_facts_preserve_hi
         original.KnowledgeFile,
         [original.file(1, file_source="channel", file_size=17), original.file(2, file_source="upload", file_size=99)],
     )
+    await seed_original_modes(native, (9000,))
     async with AsyncSession(native.engine) as session, session.begin():
         items = await collect(module, session)
         plans = [
@@ -149,6 +177,7 @@ async def test_null_creator_on_nonconverted_resource_does_not_invent_new_convers
 
 async def test_legacy_overdeep_chain_and_null_empty_paths_are_preserved_not_new_write_capped(module, native):
     await native.insert(original.Knowledge, [original.resource(9000)])
+    await seed_original_modes(native, (9000,))
     folders = [
         original.file(
             i, file_type=0, level=i - 1, file_level_path="" if i == 1 else "/" + "/".join(map(str, range(1, i)))
@@ -186,6 +215,7 @@ async def test_real_ancestor_bad_chains_are_explicitly_rejected(
 
 async def test_doc_version_primary_chain_and_unregistered_file_plan_are_distinct(module, native):
     await native.insert(original.Knowledge, [original.resource(9000)])
+    await seed_original_modes(native, (9000,))
     await native.insert(original.KnowledgeFile, [original.file(1), original.file(2)])
     await native.insert(original.KnowledgeDocument, [original.data("documents", 1) | {"primary_version_id": 1}])
     await native.insert(original.KnowledgeDocumentVersion, [original.data("versions", 1)])
@@ -201,6 +231,7 @@ async def test_doc_version_primary_chain_and_unregistered_file_plan_are_distinct
 
 async def test_native_401_files_use_bounded_pages_and_unique_creator_ancestor_reads(module, native):
     await native.insert(original.Knowledge, [original.resource(9000)])
+    await seed_original_modes(native, (9000,))
     await native.insert(
         original.KnowledgeFile,
         [original.file(1, file_type=0)] + [original.file(i, file_level_path="/1", level=1) for i in range(2, 403)],
@@ -215,6 +246,7 @@ async def test_native_401_files_use_bounded_pages_and_unique_creator_ancestor_re
 
 
 async def test_actual_permission_snapshot_keeps_inactive_protected_and_compiles_once(module, native):
+    await native.insert(original.Knowledge, [original.resource(40, type=3)])
     async with AsyncSession(native.engine) as session, session.begin():
         await snapshot.seed_catalog(session)
         original_permission = await snapshot.seed_rows(session)
