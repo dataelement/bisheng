@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   post: vi.fn(),
   put: vi.fn(),
   permissions: vi.fn(),
+  action: vi.fn(),
   error: vi.fn(),
   legacy: vi.fn(),
 }));
@@ -27,11 +28,14 @@ vi.mock("@/controllers/request", () => ({
 }));
 vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: mocks.permissions,
+  checkResourceActionApi: mocks.action,
 }));
 vi.mock("@/controllers/API", () => ({
   readFileByLibDatabase: mocks.legacy,
   getKnowledgeDetailApi: mocks.legacy,
 }));
+// Defaults render only controlled fields, not the legacy drag-and-drop editor.
+vi.mock("@/pages/KnowledgePage/components/FileUploadSplitStrategy", () => ({ default: () => null }));
 vi.mock("@/pages/KnowledgePage/components/PreviewFile", () => ({
   default: () => null,
 }));
@@ -118,6 +122,7 @@ function mount(parentId: number | null = null) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.action.mockResolvedValue({ allowed: false });
   currentScope = base;
   grants = new Map();
   mocks.permissions.mockImplementation(async (type: string, id: string) =>

@@ -526,6 +526,7 @@ async def upload_folder(
         knowledge_id=space_id,
         items=req.items,
         parent_id=req.parent_id,
+        **({"processing_overrides": req.overrides} if req.overrides is not None else {}),
     )
     return resp_200(files)
 

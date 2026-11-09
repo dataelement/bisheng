@@ -2068,17 +2068,6 @@
       "count": 1
     }
   },
-  "src/pages/KnowledgePage/components/WebLinkImportDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 17
-    }
-  },
   "src/pages/KnowledgePage/components/tags/KnowledgeTagSelect.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 1

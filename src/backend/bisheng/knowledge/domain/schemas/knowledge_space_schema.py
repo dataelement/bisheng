@@ -235,6 +235,7 @@ class FolderUploadItem(BaseModel):
 
 
 class FolderUploadReq(BaseModel):
+    overrides: ProcessingOverrides | None = None
     parent_id: int | None = Field(None, description="Target folder id; None = space root")
     items: list[FolderUploadItem] = Field(..., min_length=1, description="Files with relative paths")
 
