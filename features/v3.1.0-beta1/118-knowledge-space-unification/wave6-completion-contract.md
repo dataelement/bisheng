@@ -1299,3 +1299,14 @@ aretry_failed仍单原算法，move先校原完整资格再改行；零项逻辑
 move RetryReceipt.actor_subject_type/id必须由原processing_actor_subject解码当前真实retry actor_reference（tenant/actor_user_id/source_space_id取原Job实际compact事实），不据audit numeric代替，也不覆盖原Job.actor_reference/typed原主体。新receipt写两typed标量；旧同key重放除了原request_hash还须与本次decoded主体相符，NULL/错typed旧trial failclosed，不在线补猜。新重试主体可不同于原受理主体，沿已授权retry事实保留，由后继Owner重验实际来源/目标动作与credential ceiling；本卡不引入权限动作或任务模型绑定。
 
 native覆盖零项logical失败→retry→fresh K1/P1 logical ready成功，nonzero before/after marker，same-key actor/key/CAS冲突、service account/user类型和最新membership读取、伪旧NULL receipt拒、partial success原值与原Job actor保留、false/True marker拒、wrongtenant/bypass/丢scope/总数不全、过期R/G obsolete，原四kind组合以及401/10001避免全snapshot/manifest重读。此卡不装Owner/worker/API，不把内部资格当授权；B1固定窄修与独立复验通过后才实施。
+
+
+## 104. 原NORMAL创建者成员纯子计划 B：已冻结
+
+T993先native事实驱动反例，T994仅新domain/schemas/unification_space_membership.py与domain/services/unification_space_membership_plan.py两叶各≤600。纯值/规则，不SQL/IO/Session/UUID/now/Grant。新frozen CreatorMembershipPlan字段tenant_id/knowledge_id/creator_user_id/membership_action(insert|keep)/before_member_count/before_member_digest/existing_creator_member_id(nullable)/creator_template_digest/planned_at(nullable)。Schema同文件creator_membership_template(*,knowledge_id,creator_user_id,planned_at)输出原SPACE创建者Member全部默认列（除自增id）和签入时间，必须与实际aadd_space_creator/Model defaults等值，不复制授权算法。原Reader DTO留原Repo；Schema不反向import Repo/Service，后继Writer可安全复用模板无循环。
+
+plan_space_creator_membership(header:SpaceMembershipHeader,members:tuple[SpaceMembershipRow,...],creator:CreatorFact|None,*,planned_at)->CreatorMembershipPlan|None。真实完整头/成员属于同一tenant/root/canonical SPACE business_id，严格native typed/唯一递增MemberPK/count相等，原完整raw成员set按既有fingerprint digest签入（含实际ID/来源/nullable/time；派生tenant/root也绑定），O(R)一次检查/索引，不能每用户/每Root重扫全R。已存在SPACE3只保完整事实、返回None，不修其历史成员；QA/retired2输入拒。NORMAL0要求header原creator_user_id为positive native int，并有同ID真实CreatorFact.exists=True；物理存在但软删除delete1仍历史owner，不任换owner。原M2 resources.user_id关联在后继builder接线再比，本纯函数本身不是迁移授权。
+
+NORMAL0无owner自然键且无其它CREATOR→insert；唯一同owner CREATOR+ACTIVE→keep全部原字段；owner已有其它role/status、重复owner行、其它用户CREATOR、缺creator事实/不完整/跨scope明确阻断，不提升/激活/选first。其它用户非creator行原样保持，不据其成员身份授新Grant。insert模板SPACE/CREATOR/ACTIVE/manual与其余原模型默认值，create/update_time均原planned_at（严格naive/秒精度），不现场取now；keep既有完整row除ID的digest作为templateDigest、planned_at=None，existingID保原。旧Member来源、relation/grant/binding/pin全冻，不将Member当新F048 Source。
+
+测试复用真实MemberReader和raw模型默认作oracle，空/keep/各冲突/跨tenant/错Root/缺末页/重复PK/坏Header/软删除creator/全部source字段保留；401/10001其它成员单遍预算，不建用户×成员表。此卡只纯子计划，不改原ResourceConversionCommand/codec/M2 App/M3写，后继显式冻结接线；不冒原“我创建的”迁移缺口已执行修复。
