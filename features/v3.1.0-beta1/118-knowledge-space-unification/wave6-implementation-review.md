@@ -511,3 +511,10 @@ Root修后六路径59 passed/1452 warnings/7.63秒（/private/tmp/f118-root-full
 ### 2026-11-09 显式资源namespace C5合流
 
 C5 fixed6fc47d8983通过作者外3 native+280原组合；root正常merge为74f6987ac34162ddbb18a10387b4af0a570ea8b1，12路径312 passed/38.23秒（/private/tmp/f118-root-namespace-resource-integration.xml）。旧无mapping payload/checksum独立逐字节一致；原Grant/Assignee/ACTIVE与RETIRED Source身份/版本/metadata保留，existingSPACE inactive scope洞阻断；401/1001资源及独立models预算线性。关闭T995996，正式物理type资格/SQL写/FGA Publisher仍待接线，不以C5验收T157158。
+
+
+### 2026-11-09 原入口Member全局门与move候选读取合流
+
+原Member global fixed94c1d61cc3通过root逐行独立复查（numeric PK IN+LEFT Tenant，无CAST/Member-parent积）、原3路径169 passed/4.05秒，/private/tmp/f118-root-member-global-independent.xml；正常merge至b03d6d595a7c05f089d0a44b678784cdb78bc410。作者新67绿、原11路径421绿/39.32秒；actual旧M2 alias09000/orphan999999两条原源DID NOT RAISE真红→新门拒且无artifact/FGA新请求。原四SQL不改，空Member多1页；401/10001实际10/106SELECT，父参数≤200。关闭T997998；根§109新App门正待§108producer依赖合组，不用旧不完整artifact兼容。
+
+move exact candidates fixed67863351d3经root独立完整diff/原Scope/pending/SQL读取复核与2条额外native探针通过（/private/tmp/f118-operator-candidates-root-review.xml）：候选返回operator19并不让允许集仅7的完整ledger通过；原tuple损坏时候选仍只是locator，完整P1拒；Catalog write-fence也不能使候选本身成为pin/ready证明；原rollback后fresh重读原19。主树5路径114 passed/34.52秒，/private/tmp/f118-root-move-candidate-integration.xml，关闭T9991000。作者49新绿、11路径289绿，401/10001 dense+sparse3/51SELECT、每查询201params。后继J1c/实际Owner/runner尚待装配，原scope/accept身份和业务动作不扩。

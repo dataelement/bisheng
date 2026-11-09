@@ -1369,3 +1369,8 @@ INT T1007先事实驱动红测，T1008仅新application/unification_space_member
 baseline与plan原顺序保留，七字段Resource command可晚到，finish才要求全部NORMAL0恰一条对应Command并逐项核tenant/root/user/count/beforeDigest。insert必须无owner自然键/无其它CREATOR、existingIDNone，使用该命令真实签入plannedAt调用原creator_membership_template验templateDigest；keep必须唯一CREATOR+ACTIVE owner且无其它CREATOR，existingID与原PK、原17列templateDigest相同、plannedAtNone。原SPACE3仅完整事实/无Command，不对其角色冲突做迁移修复。不要为调用要求时间的纯planner造临时时间，不复制canonical算法；独立少量验证谓词与原pure planner同组冲突native用例核一致性。
 
 缺Root/Header/Member/Creator/Command、错tenant/id/type/user/digest/template、重复/跨Root/丢尾页和旧缺七字段artifact均failclosed，不能补空Header或兼容默认None。fresh消费可能conversion晚于某Header，frozen图不同section页可交错，使用闭集摘要而非错误假设resources页必先落盘；每section内原顺序保留。测试含实际原Reader/Builder/codec、原App fresh/frozen重验+M3任何写前拒不完整图、401/10001单遍候选和内存边界，原业务SQL写不在本卡。
+
+
+## 110. P1完整owned事实应用窄口：已冻结
+
+PROC T1009先原test_move_projection.py的native红测，T1010仅原permission/application/knowledge_move_projection.py一生产叶（≤600），导出原MoveProjectionFact类型（不复制DTO）及alist_owned_operations(session,*,expectations,lock=False)->tuple[MoveProjectionFact,...]薄转发实际nativeRepo。Owner不得经bridge.repository读permission Domain；permission Repo不导知识表。只延续原外部Session/TX，不开Session/commit、不做FGA、不新增receipt或重新编译ledger。完整Repo原scope/CURRENT pin/expectation/allowed_operator_ids/完整tuple/checksum/Mode facts校验与≤200原边界不变；lock只原语义，不用候选或裸status替代。此口可返回own nonfinalized实际事实供§107分类，FINALIZED/after仍由原arequire_finalized同TX证据证明，业务权限准入仍Owner职责。原P1桥/Repo全部控制及实际candidate→membership后继一致，未提前开放API/worker。
