@@ -1428,3 +1428,14 @@ EDGE T1020先native C4/C5事实驱动红测，T1021仅permission/migration/f118_
 build(*,before:PermissionResourceBaseline,namespace_target:ResourceModeBaseline|None=None)->ResourceRetirementPlan直接复用原_build_resource_retirement_plan；build_many(*,before:Iterable,target_modes:Iterable|None=None)->Iterator复用原exact zip_longest/mapping规则及所有baseline/target/visible canonical验证。旧point/batch APIs保持签名/返回/错误语义和payload/hash字节；可共享该class实现，但不得改变C4/C5/旧无mapping checksum或绕badCatalogPlan原重建。单条build与旧point一样：有mapping必须显式target，无mapping拒多余target。空批、late missing/more/错target、跨合法tenant纯资源不同输入均原约束，不按资源数重编Catalog。
 
 后继原InventoryApp每正式freeze显式构造一次planner，并交原tenant preflight复用；frozen verifier每graph一次。先交此纯接口再冻原M2 wire/资格/consumer卡，不为了消除tenant×Model把所有租户G/S全局堆进内存，也不把private_context跨层强拿。测试实际旧C4/C5 native Source/Mode/retired数据与旧point/batch全等/旧payload字节，badCatalog/mutable target/canonical source照拒、compiled映射不能普通改；401/1001 models独立混合tenant批/资源预算总Catalog derive与matrix各1、模型候选M、资源Source O(G+S)，SQL0。后继actual Parent namespace完整frozen wire/SQL/FGA Publisher仍未接，本卡不闭T157158。
+
+
+## 115. 原ModelReferenceCore完整原事务保护：已冻结
+
+PERM只读审计确认T111112内部缺口：原SqlLedger第二次global Coverage已取合法ready后真实rollback并SELECT建新TX，原5类Model完整inspection仍check_complete=True，目标锁原TX已丢。T1022先官方native真红，T1023只原llm/domain/services/model_reference_service.py一生产叶必要窄修；不改ModelDeleteRepo/ReferenceRepo/Coverage协议/六Owner或公开API。普通API/执行删除仍T113–120、正式Coverage adapter/启用仍T169170，不能把这些后继错算本卡未实现。原T111112完整Source/目标锁/ASR_RT/规模已由作者外审计293通过，真实TX缺口闭合后再验是否关闭。
+
+同一次ainspect_removed_models/alist_removed_model_sources沿实际native Session的原tenant/TransactionIdentity保护目标锁和全部结果，轻守卫O(1)、零额外SQL/全targets扫描。既有TX在入口先捕获，再跨原authorize/stable identity/removal/Owner/Coverage/完整BRR/disclosure及尾Coverage/identity核原TX/tenant；实际callback rollback/rebegin或换nested均failclosed 10994，不能check_complete=True。保原合法fresh native AsyncSession：原Repo首条SQL自然autobegin后立即pin该真实TX，不强制客户端预先begin，不新开Session/BEGIN/SELECT1/commit，不加Session事件监听/ContextVar或registry；actual原Repository内部无commit，capture完成后不得重捕替换pin。同新HTTP页可新Session按原cursor continue，每次inspection各自pin，不把上一页SQLTX当跨请求capability。
+
+可在私有facts保当前原session/tenant/transaction或显式传原session到_finish，均不入公开Inspection/cursor hash/JSON/result。每个有返回结果的关键await前后检查，特别tail全局/tenant Coverage和最后身份复验；_disclose批次及_dataset返回前要检。原full scope digest/actor/credential/data_scope narrowing、v2 f118-model-inbound-v2字节/ID顺序、global ordered stream和count/分页资格/受限名规则保持。缺少nativeSession/丢TX不得用None兼容放行；原模拟规模fixtures如需适配必须用真实AsyncSession而非改弱assert。不得每guard调用全Owner重验、重编Catalog/扫全Model，不能倒退为source×targets。
+
+native覆盖existingTX/fresh-autobegin、合法new-session continuation、首/中/尾rollback重开、nested scope漂移、tenant改变、Coverage/FGA disclosure/最后身份await时漂移均拒无业务DML；原Target锁/5产品类+实际ASR_RT、第0个模型服务、全源跨tenant摘要、oldcursor/lastID重插、epoch/hash/未ready/异常、source各Owner资格及401/10001预算必须保持。修后原同选集及作者外复查，未跑正式Coverage/Middleware仍不宣称真实删除可启用。

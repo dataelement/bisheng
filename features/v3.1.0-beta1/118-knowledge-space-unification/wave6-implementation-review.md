@@ -537,3 +537,14 @@ root逐行§108六叶与§110五行bridge独立复核、全部迁移组合及§1
 
 
 0669733876的78个本轮Python文件ruff format/check通过；逐文件arch-guard新增违规0，1条原测试诊断单列：test_migration_inventory_application原FGAClient/OpenFGAConf imports AST与52892298完全相同，脚本RULE-9用任意/bisheng/路径片段将repo目录名下test误作业务模块，属于原测试/原诊断，不为绿灯改测试基础设施或扩改arch-guard。实际原/新imports与同路径形状baseline复验另存/tmp。本轮所有生产叶无架构消息。
+
+
+### 2026-11-09 完整特性本地复验、QA保存槽位与编译器
+
+固定源码cde8bf371b2b26f2ed47593ce8f1b7d5c543ffa1（随后9e11909212仅文档）同原完整选集 **5969 passed / 7原中间件占位skip / 0 fail、529.07秒**，/private/tmp/f118-root-formal-member-complete-full.xml。受测时尚未包含后继Member Writer/QA窄修/compiled；不冒其真实迁移或部署证据。
+
+QA官方e99e7e8158两条实际qa_retriever+FlowVersion正式M2在原source_decision拒knowledge_physical_parent真红，036c0b69ec一行允许原NativeOwner已有0/1/3后root7路径134绿14.91秒。作者外3 native+136组合PASS（f118-qa-independent-{native,regression}.xml）：固定父旧函数仍拒同真实QA；QA父DIR/File原资格通过，9类坏target仍拒；QA保持1、无Resource或Member转换。初期测试file选择并非workflow支持槽、Flow mirror非真实Version及测试import/时间夹具问题未计真红，正式红只最终两条相同业务错误。关闭T10181019。
+
+compiled07a0f7798d由root逐行审查（旧generator/error优先级/pair语义保持、frozen+MappingProxy及新口native类型约束），正常merge204910f8bb22610e1c725a3949e142c69b003fcc；root10路径245绿55.44秒，/private/tmp/f118-root-compiled-planner-integration.xml。作者固定父10个payload/checksum逐字节对照与跨3tenant401/1001模型一次derive/matrix通过，关闭T10201021。正式整M2预算是Catalog初建1+compiled重建校验1=全局2，不随tenant再增加；未接C6 wire前不声称正式盘点已复用。
+
+原T111112同卡审计保留，已确认尾Coverage真实换TX而仍complete的P1缺口，§115先真红再窄修；其它公开入口/Coverage启用后继依原卡，不混作内部未完成。
