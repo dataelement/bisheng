@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 依赖推进中 | W6持续实施；历史994编号：887已完成/历史交付、105当前待办、2外移；原137队列已完成40项、剩97项，另8张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 依赖推进中 | W6持续实施；历史994编号：889已完成/历史交付、103当前待办、2外移；原137队列已完成40项、剩97项，另6张既有需求接缝卡待办。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -7909,7 +7909,7 @@
   **配对测试**：T977\
   **验证 / 完成条件**：真实红绿、原控制与固定作者外复验；不冒正式发布或E2E。
 
-- [ ] **T979 · move逻辑ready封口native反例**
+- [x] **T979 · move逻辑ready封口native反例**
   **类型 / Owner**：测试 / PROC\
   **写入文件**：`src/backend/test/knowledge_unification/test_move_job_ready.py`\
   **逻辑 / 测试上下文**：W6§97零项/partial提交/lease/私有marker和有界执行。\
@@ -7917,7 +7917,7 @@
   **覆盖 AC**: AC-24, AC-43, AC-49, AC-54, AC-83\
   **验证 / 完成条件**：真实红绿、原控制与固定作者外复验；不冒正式发布或E2E。
 
-- [ ] **T980 · move逻辑ready持久证明与item执行封口**
+- [x] **T980 · move逻辑ready持久证明与item执行封口**
   **类型 / Owner**：后端 Repository / PROC\
   **写入文件**：`src/backend/bisheng/knowledge/domain/repositories/move_job_ready_repository.py`；`src/backend/bisheng/knowledge/domain/repositories/processing_job_repository.py`\
   **逻辑 / 测试上下文**：W6§97原TX验证、Item先Job后、薄委托及原kind控制。\

@@ -480,3 +480,8 @@ Root全读22b2b38ba两个生产叶diff并正常合流；10路径261 passed/11299
 T985仅搬wire定义与函数至127行pure schema，Root逐AST证明原所有定义与剩余codec语句等值；原codec483行，8路径193 passed/34032 warnings/47.58秒（/private/tmp/f118-root-inventory-schema-ssot.log/.xml）。T988随后只加两种冻结Member记录，Root逐旧schema dict比对全部旧spec相同，无旧wire变化。T986 Root corrected原生17缺模块红，原错误import的是普通tenant contextmanager，改显式fixture tenant101后重跑仍17个真实缺模块失败；无生产已实现时伪称首绿。之后Member坏typed异常期待误写ReferenceCoverage，授权改为原codec真实KnowledgeOperationPlanConflict；作者先固定旧codec三坏值独证（/private/tmp/f118-t987-original-codec-exception-proof.log），不改生产异常。
 
 T987 fixed3be9a417a Root全读210行Reader+codec6行，正常合流；作者10path359绿，native202/403/10003Root的header及member阶段各4/6/102SQL、maxparams203，含空/完整401Member页/完整source字段/nullable/原枚举与不flush/不刷新及SQLawait后tenant/TX变化。Root在241d5bd4692a86e49e30ac7977301c65b53a2df0源码联合B1七路径188 passed/32355 warnings/52.59秒（/private/tmp/f118-root-ready-member-integration-corrected.log/.xml）；首命令误拼boundaries文件未执行，不计验证。T986987988闭只读事实，不冒M2 App/preflight/全局孤儿检查或Member转换写已接，正式停服基线尚未执行。
+
+
+B1 fixed7d50首轮独立31native+规模/221原组合及/tmp3格均绿，但两个新Core UPDATE缺显式tenant条件（backend AGENTS）；Root与独立review同报，不以owned前置锁代替C3 SQL要求。PROC先提交实际compiled WHERE/真实bound参数红4b0d81813，再51c10b4d6只补两tenant谓词，原叶剥离两条件后AST等值、oldJobRepo无后续改。新32绿/原33path715绿，Ready280行；Root正常主合后七路径188绿如前。非作者在固定51c再次实际捕获UPDATE WHERE与tenant101，正式ready30+/tmp3为33绿4.44秒（/private/tmp/f118-b1-tenant-independent.log）；两缺口闭合，无其它可行动问题，T979980组件完成。
+
+逻辑mark仍唯一原issuer/当前TX，Item先写且Job marker最后，0Item只有真实proof后同原子成功；partial Item即使catchcommit也无Job marker，执行拒；每item不加载完整manifest/Plan，401/10001 ready SELECT27/363、快照页3/51，随后3次claim+complete均16SELECT，完整接受hash与after闭集只各验证一次。Job claim/renew可在ready前正常取得lease，不新增用户异步竞态治理。B2实际Retry/Owner/P1总装配/worker/API依旧未开，不以Repo marker推出公开移动完成。
