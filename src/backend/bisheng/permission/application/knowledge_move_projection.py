@@ -17,6 +17,7 @@ from bisheng.permission.application.control_state import SqlPermissionControlSta
 from bisheng.permission.application.identity import PermissionActor
 from bisheng.permission.application.runtime import F048PermissionRuntime, F048RuntimeComponents
 from bisheng.permission.domain.repositories.move_projection_repository import (
+    MoveOperatorCandidate,
     MoveParentState,
     MoveProjectionEvidence,
     MoveProjectionExpectation,
@@ -27,6 +28,7 @@ from bisheng.permission.domain.services.projection_service import ProjectionServ
 
 __all__ = [
     "KnowledgeMoveProjectionApplication",
+    "MoveOperatorCandidate",
     "MoveParentState",
     "MoveProjectionEvidence",
     "MoveProjectionExpectation",
@@ -96,6 +98,9 @@ class KnowledgeMoveProjectionApplication:
 
     async def aread_parent_states(self, session, *, targets) -> tuple[MoveParentState, ...]:
         return await self.repository.aread_parent_states(session, targets=targets)
+
+    async def alist_operator_candidates(self, session, *, job_id, targets) -> tuple[MoveOperatorCandidate, ...]:
+        return await self.repository.alist_operator_candidates(session, job_id=job_id, targets=targets)
 
     async def arequire_finalized(self, session, *, job_id, expectations) -> MoveProjectionEvidence:
         # The full Owner sequence is mandatory. Native issuance verifies every
