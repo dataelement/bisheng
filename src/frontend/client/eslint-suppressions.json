@@ -2671,16 +2671,6 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/sidebar/KnowledgeSpaceCardItem.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/sidebar/KnowledgeSpaceItem.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    }
-  },
   "src/pages/knowledge/sidebar/KnowledgeSpaceSidebar.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 3

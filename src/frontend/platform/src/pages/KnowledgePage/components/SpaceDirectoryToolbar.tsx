@@ -10,6 +10,9 @@ interface SpaceDirectoryToolbarProps {
   canCreateFolder: boolean;
   onCreateFolder: () => void;
   canUpload: boolean;
+  selectedCount?: number;
+  onDeleteSelected?: () => void;
+  onReferences?: () => void;
 }
 
 export function SpaceDirectoryToolbar({
@@ -20,6 +23,9 @@ export function SpaceDirectoryToolbar({
   canCreateFolder,
   onCreateFolder,
   canUpload,
+  selectedCount = 0,
+  onDeleteSelected,
+  onReferences,
 }: SpaceDirectoryToolbarProps) {
   const { t } = useTranslation("knowledge");
   const navigate = useNavigate();
@@ -36,15 +42,23 @@ export function SpaceDirectoryToolbar({
   };
   return (
     <div className="flex items-center justify-end gap-3">
+      {selectedCount > 0 && (
+        <Button color="danger" variant="outlined" onClick={onDeleteSelected}>
+          {t("deletion.selected")} ({selectedCount})
+        </Button>
+      )}
+      {onReferences && (
+        <Button variant="outlined" onClick={onReferences}>
+          {t("deletion.references")}
+        </Button>
+      )}
       <SearchInput
         aria-label={t("searchFileName")}
         placeholder={t("searchFileName")}
         value={keyword}
         onChange={(event) => onKeywordChange(event.target.value)}
       />
-      {canCreateFolder && (
-        <Button onClick={onCreateFolder}>{t("f118.create_folder")}</Button>
-      )}
+      {canCreateFolder && <Button onClick={onCreateFolder}>{t("f118.create_folder")}</Button>}
       {canUpload && (
         <Button variant="link" onClick={handleUpload}>
           {t("uploadFile")}
