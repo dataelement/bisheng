@@ -309,10 +309,7 @@ async def test_whole_chain_uses_bounded_linear_scalar_batches(database, count):
             not any(field in sql.lower() for field in ("split_rule", "user_metadata", "abstract", "object_name"))
             for sql, _ in database.queries
         )
-        assert all(
-            "knowledge.model_transition" not in sql or "knowledge.model_transition IS NOT NULL" in sql
-            for sql, _ in database.queries
-        )
+        assert all("knowledge.model_transition IS NOT NULL" not in sql for sql, _ in database.queries)
         print(
             {
                 "chain": count + 2,
@@ -321,3 +318,42 @@ async def test_whole_chain_uses_bounded_linear_scalar_batches(database, count):
             }
         )
         await session.rollback()
+
+
+@pytest.mark.parametrize("stored", ["sql_null", "json_null", "empty_object", "transition"])
+async def test_native_nullable_json_transition_uses_typed_value_and_keeps_empty_object_busy(database, stored):
+    from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
+    from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
+
+    value = {
+        "sql_null": sa.null(),
+        "json_null": sa.literal("null", type_=sa.Text()),
+        "empty_object": {},
+        "transition": {"operation_id": "native-transition"},
+    }[stored]
+    async with database.engine.begin() as connection:
+        await connection.execute(
+            sa.update(Knowledge.__table__).where(Knowledge.id == 9700).values(model_transition=value)
+        )
+    before = await snapshot(database)
+    busy = stored in {"empty_object", "transition"}
+    repo = api().KnowledgeVersionMutationRepository()
+    async with AsyncSession(database.engine) as session, session.begin():
+        physical = (
+            await session.execute(
+                sa.select(sa.cast(Knowledge.__table__.c.model_transition, sa.Text())).where(Knowledge.id == 9700)
+            )
+        ).scalar_one()
+        if stored == "sql_null":
+            assert physical is None
+        elif stored == "json_null":
+            assert physical == "null"  # Persisted JSON null is distinct from SQL NULL.
+        locked = await state(repo, session)
+        assert locked.space.model_transition is (True if busy else None)
+        if busy:
+            with pytest.raises(KnowledgeProcessingConflictError):
+                require_space_processing_idle(locked.space, operation="link_version")
+        else:
+            require_space_processing_idle(locked.space, operation="link_version")
+        await session.rollback()
+    assert await snapshot(database) == before

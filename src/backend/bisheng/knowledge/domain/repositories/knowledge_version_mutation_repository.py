@@ -207,14 +207,18 @@ class KnowledgeVersionMutationRepository:
                 root.c.tenant_id,
                 root.c.type,
                 root.c.state,
-                root.c.model_transition.is_not(None).label("model_transition"),
+                root.c.model_transition,
             )
             .where(root.c.id.in_(sorted(space_ids)), root.c.tenant_id == tenant)
             .order_by(root.c.id)
             .with_for_update(),
         )
+        # Native JSON null is not SQL NULL. Decode the typed column first;
+        # every other value, including an empty object, still means busy.
         spaces = tuple(
-            VersionSpaceFact(**(dict(row) | {"model_transition": True if row["model_transition"] else None}))
+            VersionSpaceFact(
+                **(dict(row) | {"model_transition": True if row["model_transition"] is not None else None})
+            )
             for row in roots
         )
         if {row.id for row in spaces} != space_ids or any(row.type != 3 for row in spaces):

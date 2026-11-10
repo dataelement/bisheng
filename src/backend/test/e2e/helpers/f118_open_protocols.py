@@ -182,7 +182,7 @@ class F118OpenProtocols:
         """
         env = self.target
         base = f"/permissions/resources/knowledge_space/{sid}"
-        catalog = await env.ok("GET", "/permissions/catalog")
+        catalog = await env.ok("GET", "/permissions/catalog", actor=env.root)
         manager = next(row for row in catalog["models"] if row["key"] == "manager")
         assert manager["active"] and "delete" not in manager["action_codes"]
         roster = await env.ok("GET", base + "/grants")

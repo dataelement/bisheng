@@ -145,7 +145,7 @@ async def test_ac30_visible_reads_do_not_grant_rename_download_or_delete(target)
         actor=target.reader,
         json={"name": "denied-folder"},
     )
-    await target.error("GET", f"/knowledge/space/{sid}/files/{file['id']}/download", 19000, actor=target.reader)
+    await target.error("GET", f"/knowledge/space/{sid}/files/{file['id']}/download", 18040, actor=target.reader)
     review = await target.ok(
         "POST",
         f"/knowledge/space/{sid}/files/delete/precheck",
