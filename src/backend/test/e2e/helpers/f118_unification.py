@@ -48,6 +48,11 @@ RESOURCE_NAMES = (
     "delete-files",
     "clear",
     "delete-space",
+    "move-source",
+    "move-target",
+    "copy-source",
+    "copy-result",
+    "stale-plan",
 )
 
 
@@ -467,6 +472,40 @@ class F118Environment:
         )
         remaining = await self.ok("GET", "/llm")
         assert not any(row["id"] == server["id"] for row in remaining)
+
+    async def linked_history(self, space_id):
+        first = await self.upload(space_id, "history-one.txt", b"e2e-f118 immutable history one\n")
+        original = await self.ok("GET", f"/knowledge/space/file/{first['id']}/versions")
+        second = await self.upload(space_id, "history-two.txt", b"e2e-f118 immutable history two\n")
+        await self.ok(
+            "POST",
+            "/knowledge/space/document/link",
+            json={
+                "knowledge_file_id": second["id"],
+                "target_document_id": original["document_id"],
+            },
+        )
+        chain = await self.ok("GET", f"/knowledge/space/file/{first['id']}/versions")
+        assert len(chain["versions"]) == 2
+
+        return first, second, chain
+
+    async def wait_native_job(self, space_id, accepted, kind):
+        assert accepted["accepted"] is True and accepted["job_id"]
+        deadline = time.monotonic() + self.timeout
+        while time.monotonic() < deadline:
+            path = f"/knowledge/space/{space_id}/processing-jobs/{accepted['job_id']}"
+            job = await self.ok("GET", path, params={"kind": kind})
+            assert job["space_id"] == space_id and job["kind"] == kind
+            if job["state"] in {"succeeded", "partial_failed", "failed", "obsolete"}:
+                assert job["state"] == "succeeded", f"{kind} ended {job['state']} code={job.get('error_code')}"
+                assert job["total_count"] > 0 and job["succeeded_count"] == job["total_count"]
+                assert job["failed_count"] == job["pending_count"] == 0
+                items = await self.ok("GET", path + "/items", params={"kind": kind, "page_size": 200})
+                assert items["data"] and all(row["state"] == "succeeded" for row in items["data"])
+                return job
+            await asyncio.sleep(1)
+        raise AssertionError(f"{kind} did not reach a real worker terminal state")
 
     async def cleanup(self):
         await self.clean_business_resources()
