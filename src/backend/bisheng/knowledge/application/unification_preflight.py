@@ -350,7 +350,16 @@ class UnificationPreflight:
                         if row.space_id not in spaces:
                             _blocked("department_space_parent")
                     creator = getattr(row, "user_id", getattr(row, "created_by", None))
-                    if creator is not None:
+                    # F038 seeded public builtin libraries with the system
+                    # sentinel 0. Preserve that original row, not a User(0).
+                    system_library = (
+                        method == "tag_libraries"
+                        and type(creator) is int
+                        and creator == 0
+                        and row.is_builtin is True
+                        and row.owner_knowledge_id is None
+                    )
+                    if creator is not None and not system_library:
                         creators.add(creator)
                     namespace.observe(section="resources", tenant_id=tenant, record=record)
                     yield "resources", record
