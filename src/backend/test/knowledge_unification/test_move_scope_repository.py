@@ -21,6 +21,7 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
+from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
 from bisheng.knowledge.domain.repositories.move_scope_repository import MoveRoot, MoveScopeRepository
 from bisheng.permission.domain.models.grant import ResourcePermissionMode
 from bisheng.permission.domain.repositories.move_projection_repository import MoveProjectionRepository
@@ -33,6 +34,7 @@ store, tenant = fixtures.store, fixtures.tenant
 async def moving(store, monkeypatch):
     sync, engine = store
     models = (
+        KnowledgeSpaceDeleteJob,
         KnowledgeFile,
         KnowledgeDocument,
         KnowledgeDocumentVersion,

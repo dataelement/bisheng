@@ -31,6 +31,7 @@ from bisheng.common.repositories.implementations.space_channel_member_repository
 from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
 from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
@@ -49,7 +50,12 @@ async def business(store, monkeypatch):
     async with store.begin() as connection:
         await connection.run_sync(lambda conn: Knowledge.__table__.create(conn))
         await connection.run_sync(lambda conn: KnowledgeFile.__table__.create(conn))
-        for model in (BusinessReferenceSet, BusinessResourceReference, ResourceReferenceTombstone):
+        for model in (
+            KnowledgeSpaceDeleteJob,
+            BusinessReferenceSet,
+            BusinessResourceReference,
+            ResourceReferenceTombstone,
+        ):
             await connection.run_sync(lambda conn, model=model: model.__table__.create(conn))
 
     @asynccontextmanager

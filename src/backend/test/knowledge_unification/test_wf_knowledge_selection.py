@@ -18,6 +18,7 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.database import tenant_filter
 from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
 from bisheng.permission.application import business_authorization as authorization
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.data_scope import DATA_SCOPE_PERSONAL
@@ -41,8 +42,10 @@ rows = create_fixtures.rows
 @pytest.fixture
 async def knowledge(saved, monkeypatch):
     Knowledge.__table__.create(saved.sync_engine)
+    KnowledgeSpaceDeleteJob.__table__.create(saved.sync_engine)
     names = tenant_filter._tenant_aware_tables | {
         "knowledge",
+        KnowledgeSpaceDeleteJob.__tablename__,
         "flow",
         "flowversion",
         "business_reference_set",
