@@ -30,6 +30,37 @@ from loguru import logger
 
 from bisheng.app_publish.domain.services.app_publish_scenario_handler import SCENARIO_CODE
 
+_app_reference_read_runtime = None
+
+
+def _app_reference_runtime(identity_port, authorization_context=None):
+    from bisheng.app_publish.application.reference_access import HostedAppReferenceReadRuntime
+    from bisheng.app_publish.application.reference_source_owner import HostedAppReferenceSourceOwner
+    from bisheng.knowledge.application.reference_read_legacy_evidence import KnowledgeReferenceReadLegacyEvidence
+    from bisheng.knowledge.application.source_read_target_owner import KnowledgeSourceReadTargetOwner
+    from bisheng.llm.application.source_read_target_owner import ModelSourceReadTargetOwner
+    from bisheng.resource_reference.application.contracts import SourceType, TargetType
+    from bisheng.resource_reference.application.source_verification import SourceReadVerifier
+    from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
+
+    owner = HostedAppReferenceSourceOwner(authorization_context=authorization_context)
+    verifier = SourceReadVerifier({SourceType.HOSTED_APP_VERSION: owner}, identity_port)
+    legacy = KnowledgeReferenceReadLegacyEvidence(verifier)
+    model = ModelSourceReadTargetOwner(verifier, legacy_evidence=legacy)
+    knowledge = KnowledgeSourceReadTargetOwner(verifier, legacy_evidence=legacy)
+    return HostedAppReferenceReadRuntime(
+        owner,
+        verifier,
+        SourceReadRepository(verifier),
+        {TargetType.MODEL: model, TargetType.KNOWLEDGE_SPACE: knowledge, TargetType.KNOWLEDGE_FILE: knowledge},
+    )
+
+
+def _app_user_reference_runtime(authorization_context=None):
+    from bisheng.app_publish.application.reference_read_identity import AppManagementSourceReadIdentity
+
+    return _app_reference_runtime(AppManagementSourceReadIdentity(authorization_context), authorization_context)
+
 
 async def on_app_deleted_revoke_credential(*, app_id: str, actor_user_id: int, tenant_id: int) -> None:
     """Revoke the deleted application's runtime credential (AC-58).
@@ -109,6 +140,14 @@ def register() -> None:
     ``lifecycle_hooks.register_app_deleted_hook``, which matters because a
     worker that re-initialises would otherwise cancel the same approval twice.
     """
+    from bisheng.app_publish.application.reference_access import configure_hosted_app_reference_runtimes
+    from bisheng.app_publish.application.reference_read_identity import AppSourceReadIdentity
+
+    global _app_reference_read_runtime
+    if _app_reference_read_runtime is None:
+        _app_reference_read_runtime = _app_reference_runtime(AppSourceReadIdentity())
+    configure_hosted_app_reference_runtimes(_app_reference_read_runtime, _app_user_reference_runtime)
+
     from bisheng.app_publish.domain.services.app_credential_service import (
         assert_hosted_app_executable,
         resolve_hosted_app,

@@ -38,7 +38,7 @@ async def invoke_workflow(body: OpenWorkflowInvokeRequest):
         login_user,
         resource_type="workflow",
         resource_id=workflow_id,
-        action="use",
+        action="visible",
     )
 
     principal = get_current_open_api_principal()
@@ -61,7 +61,7 @@ async def invoke_workflow(body: OpenWorkflowInvokeRequest):
     try:
         invocation = await PublishedWorkflowService.prepare_invocation(
             workflow_id=workflow_id,
-            operator_user_id=login_user.user_id,
+            operator=login_user,
             session_subject=session_subject,
             execution_snapshot=execution_snapshot,
             session_id=body.session_id,

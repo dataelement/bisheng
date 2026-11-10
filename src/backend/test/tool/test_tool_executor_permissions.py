@@ -10,7 +10,7 @@ from bisheng.tool.domain.services.executor import ToolExecutor, ToolInitializati
 
 
 @pytest.mark.asyncio
-async def test_preset_tool_execution_still_checks_exact_use_action(monkeypatch):
+async def test_preset_tool_execution_still_checks_visibility(monkeypatch):
     check_action = AsyncMock(return_value=True)
     check_global_super = AsyncMock(return_value=True)
     monkeypatch.setattr(
@@ -37,7 +37,7 @@ async def test_preset_tool_execution_still_checks_exact_use_action(monkeypatch):
     assert check_action.await_args.kwargs == {
         "resource_type": "tool",
         "resource_id": 10,
-        "action": "use",
+        "action": "visible",
     }
 
 

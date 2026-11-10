@@ -6,6 +6,8 @@ from hashlib import sha256
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy.exc import IntegrityError
+
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
@@ -13,15 +15,13 @@ from bisheng.approval.domain.services.channel_subscribe_scenario_handler import 
 from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
-from bisheng.channel.domain.models.channel_knowledge_sync import (
-    ChannelKnowledgeSync,
-    ChannelKnowledgeSyncDao,
-)
+from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSync
 from bisheng.channel.domain.models.channel_user_pin import ChannelUserPinDao
 from bisheng.channel.domain.repositories.implementations.channel_repository_impl import ChannelRepositoryImpl
 from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
 from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
+from bisheng.channel.domain.repositories.reference_binding_repository import ChannelReferenceBindingRepository
 from bisheng.channel.domain.schemas.article_schema import (
     ArticleDetailResponse,
     ArticleFullDocument,
@@ -43,6 +43,7 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     CreateChannelResponse,
     KnowledgeSyncConfig,
     KnowledgeSyncMainConfig,
+    KnowledgeSyncReferenceState,
     KnowledgeSyncSpaceItem,
     KnowledgeSyncSubConfig,
     MyChannelQueryRequest,
@@ -60,6 +61,10 @@ from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.channel.domain.services.f048_channel_permission import (
     ChannelPermissionRecord,
 )
+from bisheng.channel.domain.services.reference_extractor import (
+    CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
+    extract_channel_sync_references,
+)
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.channel import (
@@ -72,6 +77,11 @@ from bisheng.common.errcode.channel import (
     ChannelNotFoundError,
     ChannelNotSubscribedError,
     ChannelOrganizationGrantUnsubscribeDeniedError,
+)
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileNameDuplicateError, SpacePermissionDeniedError
 from bisheng.common.models.space_channel_member import (
@@ -86,8 +96,10 @@ from bisheng.common.models.space_channel_member import (
 )
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.common.services.metric_log import emit_metric
+from bisheng.core.database import get_async_db_session
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
 from bisheng.message.domain.services.notification_content import build_notify_content
@@ -107,6 +119,10 @@ from bisheng.permission.application.prospective_grant import ProspectiveGrantApp
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
+from bisheng.resource_reference.application.access import get_reference_binding_runtime
+from bisheng.resource_reference.application.contracts import ReferenceState, SourceKey, SourceType, reference_set_digest
+from bisheng.resource_reference.application.source_access import get_reference_read_runtime
+from bisheng.resource_reference.application.source_contracts import SourceReadRequest
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
@@ -235,6 +251,7 @@ class ChannelService:
         approval_gate: ApprovalGate | None = None,
         initial_grant_application: InitialGrantApplication | None = None,
         prospective_grant_application: ProspectiveGrantApplication | None = None,
+        space_upload_factory=None,
     ):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
@@ -245,6 +262,7 @@ class ChannelService:
         self.approval_gate = approval_gate
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
+        self.space_upload_factory = space_upload_factory
 
     async def _get_channel_actions(
         self,
@@ -450,13 +468,19 @@ class ChannelService:
         payload_hash = self._creation_payload_hash(channel_data)
         existing = None
         if channel_data.creation_request_id is not None:
-            existing = await self.channel_repository.find_by_creation_request(
-                tenant_id=tenant_id,
-                user_id=login_user.user_id,
-                creation_request_id=channel_data.creation_request_id,
-            )
+            async with get_async_db_session() as session:
+                existing = await ChannelReferenceBindingRepository().aget_by_creation_request(
+                    session,
+                    login_user.user_id,
+                    channel_data.creation_request_id,
+                )
         if existing is not None:
             self._require_matching_creation(existing, payload_hash)
+            existing = await self._persist_channel_configuration(
+                login_user,
+                channel_id=existing.id,
+                resume=True,
+            )
             return await self._complete_channel_creation(
                 existing,
                 channel_data=channel_data,
@@ -511,12 +535,28 @@ class ChannelService:
         )
 
         created = True
-        if channel_data.creation_request_id is None:
-            channel_model = await self.channel_repository.save(channel_model)
-        else:
-            channel_model, created = await self.channel_repository.save_creation(channel_model)
-            self._require_matching_creation(channel_model, payload_hash)
-
+        try:
+            channel_model = await self._persist_channel_configuration(
+                login_user,
+                new_channel=channel_model,
+                sync_cfg=channel_data.knowledge_sync,
+            )
+        except IntegrityError:
+            if channel_data.creation_request_id is None:
+                raise
+            # The competing create committed the unique request key. A new
+            # read transaction must observe it, not a stale request snapshot.
+            async with get_async_db_session() as session:
+                existing = await ChannelReferenceBindingRepository().aget_by_creation_request(
+                    session,
+                    login_user.user_id,
+                    channel_data.creation_request_id,
+                )
+            if existing is None:
+                raise
+            self._require_matching_creation(existing, payload_hash)
+            channel_model = await self._persist_channel_configuration(login_user, channel_id=existing.id, resume=True)
+            created = False
         return await self._complete_channel_creation(
             channel_model,
             channel_data=channel_data,
@@ -534,64 +574,11 @@ class ChannelService:
         request,
         created: bool,
     ) -> CreateChannelResponse:
-        tenant_id = int(channel_model.tenant_id or self._current_tenant_id(login_user))
         adapter = await get_f048_resource_adapter("channel")
         actor = await resolve_permission_actor(login_user)
-        await adapter.authorize_created(
-            record=ChannelPermissionRecord(
-                tenant_id=tenant_id,
-                resource_id=str(channel_model.id),
-                status="ACTIVE",
-                creator_user_id=login_user.user_id,
-                permission_version=0,
-                context_version=f"channel-create:{channel_model.id}"[:64],
-            ),
-            actor=actor,
-        )
-
-        # The request-key path may resume after the row was committed. Ensure the
-        # legacy creator projection without duplicating it on retry.
-        creator_exists = False
-        if channel_data.creation_request_id is not None:
-            creator_exists = (
-                await self.space_channel_member_repository.find_membership(
-                    business_id=channel_model.id,
-                    business_type=BusinessTypeEnum.CHANNEL,
-                    user_id=login_user.user_id,
-                    include_inactive=True,
-                )
-                is not None
-            )
-        if not creator_exists:
-            await self.space_channel_member_repository.add_member(
-                business_id=channel_model.id,
-                business_type=BusinessTypeEnum.CHANNEL,
-                user_id=login_user.user_id,
-                role=UserRoleEnum.CREATOR,
-                relation=ChannelRelationEnum.OWNER,
-                grant_subject_type="self",
-                grant_subject_id=login_user.user_id,
-                grant_relation=ChannelRelationEnum.OWNER,
-                grant_model_id=ChannelRelationEnum.OWNER.value,
-                grant_binding_key=_self_channel_binding_key(
-                    str(channel_model.id),
-                    login_user.user_id,
-                    ChannelRelationEnum.OWNER,
-                ),
-            )
-
-        # Update latest_article_update_time for the new channel
-        if channel_model.source_list:
-            await self.update_channels_latest_article_time([channel_model])
-
-        # Persist knowledge-sync config, if provided, using the freshly-assigned id.
-        if channel_data.knowledge_sync is not None:
-            await self._save_knowledge_sync(
-                channel_id=channel_model.id,
-                cfg=channel_data.knowledge_sync,
-                user_id=login_user.user_id,
-            )
-
+        # Channel, creator membership, sync rows and source set are already
+        # durable together. Ordinary initial grants retain their established
+        # post-creation result/retry protocol.
         # Audit log
         from bisheng.api.services.audit_log import AuditLogService
 
@@ -1832,167 +1819,20 @@ class ChannelService:
         )
 
     async def update_channel(self, channel_id: str, req: UpdateChannelRequest, login_user: UserPayload):
-        """
-        Update channel settings.
-        Channel owner, manager, and editor can update the channel.
-        """
-        # 1. Verify channel existence
-        channel = await self.channel_repository.find_by_id(channel_id)
-        if not channel:
-            raise ChannelNotFoundError()
-
-        await require_business_action(
-            login_user,
-            resource_type="channel",
-            resource_id=channel_id,
-            action="edit",
-        )
-
-        # 3. Update channel information
-        if req.name is not None:
-            channel.name = req.name
-        if req.description is not None:
-            channel.description = req.description
-        if req.is_released is not None:
-            channel.is_released = req.is_released
+        changes = req.model_dump(exclude_none=True, exclude={"knowledge_sync"})
         if req.filter_rules is not None:
-            channel.filter_rules = [f.model_dump() for f in req.filter_rules]
-        visibility_transition: tuple[ChannelVisibilityEnum, ChannelVisibilityEnum] | None = None
+            changes["filter_rules"] = [rule.model_dump() for rule in req.filter_rules]
         if req.visibility is not None:
-            new_visibility = ChannelVisibilityEnum(req.visibility)
-            old_visibility = channel.visibility
-            if old_visibility != new_visibility:
-                visibility_transition = (old_visibility, new_visibility)
-            channel.visibility = new_visibility
-
-        # Track if source_list changed for updating latest_article_update_time
-        source_list_changed = False
-        if req.source_list is not None:
-            old_sources = set(channel.source_list or [])
-            new_sources = set(req.source_list)
-            to_add_sources = list(new_sources - old_sources)
-            to_remove_sources = list(old_sources - new_sources)
-
-            # Mark as changed if there are any additions or removals
-            if to_add_sources or to_remove_sources:
-                source_list_changed = True
-
-            if to_add_sources:
-                # Enforce the `info_source_subscribe` quota against the channel CREATOR's
-                # allowance — the spec's quota owner — not the operator's: managers and
-                # editors can add sources to someone else's channel, and those sources
-                # count toward the creator's deduped total in every later check.
-                await QuotaService.check_info_source_subscribe_limit(
-                    channel.user_id,
-                    channel.tenant_id or login_user.tenant_id,
-                    to_add_sources,
-                    login_user=login_user,
-                )
-
-            channel.source_list = req.source_list
-
-        channel = await self.channel_repository.update(channel)
-
-        if visibility_transition is not None:
-            await self._apply_channel_visibility_transition(
-                channel,
-                old_visibility=visibility_transition[0],
-                new_visibility=visibility_transition[1],
-                login_user=login_user,
-            )
-
-        # Update latest_article_update_time if source_list changed
-        if source_list_changed:
-            await self.update_channels_latest_article_time([channel])
-
+            changes["visibility"] = ChannelVisibilityEnum(req.visibility)
+        channel = await self._persist_channel_configuration(
+            login_user,
+            channel_id=channel_id,
+            changes=changes,
+            sync_cfg=req.knowledge_sync,
+        )
         if channel.source_list:
             await self._best_effort_sync_channel_info_source_metadata(channel.source_list)
-
-        # Replace knowledge-sync config atomically if caller provided one.
-        if req.knowledge_sync is not None:
-            await self._save_knowledge_sync(
-                channel_id=channel.id,
-                cfg=req.knowledge_sync,
-                user_id=login_user.user_id,
-            )
-
         return channel
-
-    async def _apply_channel_visibility_transition(
-        self,
-        channel: Channel,
-        *,
-        old_visibility: ChannelVisibilityEnum,
-        new_visibility: ChannelVisibilityEnum,
-        login_user: UserPayload,
-    ) -> None:
-        channel_id = str(channel.id)
-        if new_visibility == ChannelVisibilityEnum.PRIVATE:
-            adapter = await get_f048_resource_adapter("channel")
-            record = await adapter.load_permission_record(channel_id)
-            if record is None:
-                raise ChannelNotFoundError()
-            await adapter.remove_ordinary_sources(
-                record=record,
-                actor=await resolve_permission_actor(login_user),
-            )
-            owners = await self.space_channel_member_repository.find_members_by_role(
-                channel_id,
-                UserRoleEnum.CREATOR,
-            )
-            owner_user_ids = {owner.user_id for owner in owners}
-            removed_user_ids = []
-            if self.message_service:
-                existing_members = await self.space_channel_member_repository.find_all(
-                    business_id=channel_id,
-                    business_type=BusinessTypeEnum.CHANNEL,
-                )
-                removed_user_ids = [
-                    member.user_id
-                    for member in existing_members
-                    if member.status == MembershipStatusEnum.ACTIVE and member.user_id not in owner_user_ids
-                ]
-            # Projection has committed, so membership cleanup cannot leave stale
-            # ALLOW tuples if OpenFGA or SQL permission state rejects the change.
-            await self.space_channel_member_repository.remove_non_creator_members(channel_id)
-            if removed_user_ids and self.message_service:
-                final_removed_user_ids = []
-                for user_id in removed_user_ids:
-                    if not await self._user_can_read_channel(user_id, channel_id):
-                        final_removed_user_ids.append(user_id)
-                await self._send_channel_event_notification(
-                    action_code=CHANNEL_MADE_PRIVATE_MESSAGE,
-                    operator_user_id=login_user.user_id,
-                    operator_user_name=getattr(login_user, "user_name", None),
-                    receiver_user_ids=final_removed_user_ids,
-                    channel_id=channel_id,
-                    channel_name=channel.name,
-                    navigable=False,
-                )
-            return
-
-        if old_visibility == ChannelVisibilityEnum.REVIEW and new_visibility == ChannelVisibilityEnum.PUBLIC:
-            members = await self.space_channel_member_repository.find_all(
-                business_id=channel_id,
-                business_type=BusinessTypeEnum.CHANNEL,
-            )
-            for member in members:
-                if member.status == MembershipStatusEnum.PENDING:
-                    await self.__class__.sync_direct_channel_user_permissions(
-                        channel_id,
-                        member.user_id,
-                        member.user_role,
-                        is_active=True,
-                        operator_user_id=login_user.user_id,
-                    )
-                    member.status = MembershipStatusEnum.ACTIVE
-                    await self.space_channel_member_repository.update(member)
-            await self.space_channel_member_repository.remove_rejected_members(channel_id)
-            if self.message_service:
-                await self.message_service.batch_approve_channel_subscription_messages(
-                    channel_id=channel_id,
-                    operator_user_id=login_user.user_id,
-                )
 
     async def get_channel_detail(self, channel_id: str, login_user: UserPayload) -> ChannelDetailResponse:
         """
@@ -2091,7 +1931,7 @@ class ChannelService:
             current_membership is not None and resolve_channel_relation(current_membership) == ChannelRelationEnum.OWNER
         )
         if is_creator:
-            knowledge_sync_cfg = await self._load_knowledge_sync(channel.id)
+            knowledge_sync_cfg = await self._load_knowledge_sync(channel.id, login_user)
 
         relation = _effective_relation_value(current_membership)
 
@@ -2121,206 +1961,317 @@ class ChannelService:
     # `get_channel_detail` re-hydrates the same shape for the creator's UI.
     # ------------------------------------------------------------------ #
 
-    async def _save_knowledge_sync(
-        self,
-        channel_id: str,
-        cfg: KnowledgeSyncConfig,
-        user_id: int,
-    ) -> None:
-        """Replace every sync row for `channel_id` with the rows derived from `cfg`.
-
-        One row per (channel, sub_channel_name?, space_id + folder_id).
-        When a scope's `enabled` flag is False we still persist the rows but
-        mark them `is_enabled=False` so the worker skips them; dropping them
-        entirely would lose the user's selected spaces once they flip the
-        switch back on.
-        """
-        # TC-037 defence-in-depth: the UI restricts the picker to spaces the
-        # current user created, but the server must not trust the client —
-        # reject any binding whose space is not owned by `user_id`.
-        referenced_ids = {s.knowledge_space_id for s in cfg.main.spaces}
-        for sub in cfg.subs:
-            referenced_ids.update(s.knowledge_space_id for s in sub.spaces)
-        if referenced_ids:
-            owned_members = await SpaceChannelMemberDao.async_get_user_created_members(int(user_id))
-            owned_ids = {m.business_id for m in owned_members}
-            if not referenced_ids.issubset(owned_ids):
-                raise SpacePermissionDeniedError()
-
-        rows: list[ChannelKnowledgeSync] = []
-
-        # main-channel scope
-        for space in cfg.main.spaces:
-            rows.append(
+    @staticmethod
+    def _sync_rows(channel_id: str, cfg: KnowledgeSyncConfig, user_id: int) -> list[ChannelKnowledgeSync]:
+        rows = []
+        for name, enabled, selections in [(None, cfg.main.enabled, cfg.main.spaces)] + [
+            (sub.sub_channel_name, sub.enabled, sub.spaces) for sub in cfg.subs
+        ]:
+            if name == "":
+                continue
+            rows.extend(
                 ChannelKnowledgeSync(
                     channel_id=channel_id,
-                    sub_channel_name=None,
-                    knowledge_space_id=space.knowledge_space_id,
-                    folder_id=space.folder_id,
-                    folder_path=space.folder_path,
-                    is_enabled=cfg.main.enabled,
-                    user_id=int(user_id),
+                    sub_channel_name=name,
+                    knowledge_space_id=selection.knowledge_space_id,
+                    folder_id=selection.folder_id,
+                    folder_path=selection.folder_path,
+                    is_enabled=enabled,
+                    user_id=user_id,
                 )
+                for selection in selections
             )
+        return rows
 
-        # sub-channel scopes
-        for sub in cfg.subs:
-            if not sub.sub_channel_name:
-                continue
-            for space in sub.spaces:
-                rows.append(
-                    ChannelKnowledgeSync(
+    @staticmethod
+    def _sync_references(rows):
+        return extract_channel_sync_references(tuple(row.model_dump() for row in rows))
+
+    @staticmethod
+    def _configuration_fingerprint(channel, rows):
+        payload = {
+            "channel": channel.model_dump(mode="json"),
+            "sync": sorted((row.model_dump(mode="json") for row in rows), key=lambda row: row["id"]),
+        }
+        return sha256(
+            json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
+        ).hexdigest()
+
+    async def _persist_channel_configuration(
+        self,
+        login_user: UserPayload,
+        *,
+        channel_id=None,
+        new_channel=None,
+        changes=None,
+        sync_cfg=None,
+        deleting=False,
+        resume=False,
+    ) -> Channel:
+        repository = ChannelReferenceBindingRepository()
+        runtime = await get_reference_binding_runtime()
+        visibility_transition = None
+        async with get_async_db_session() as session:
+            is_new = new_channel is not None
+            candidate = (
+                await repository.ainsert(session, new_channel) if is_new else await repository.aget(session, channel_id)
+            )
+            if candidate is None:
+                raise ChannelNotFoundError()
+            channel_id = candidate.id
+            action = "delete" if deleting else "edit"
+            if not is_new:
+                await require_business_action(
+                    login_user, resource_type="channel", resource_id=channel_id, action=action
+                )
+            old_rows = await repository.alist_sync_rows(session, channel_id)
+            fingerprint = self._configuration_fingerprint(candidate, old_rows)
+            try:
+                old_references = self._sync_references(old_rows)
+            except (ValueError, TypeError, KeyError) as error:
+                raise ReferenceCoverageNotReadyError(reason="channel_source_configuration_invalid") from error
+            final_rows = self._sync_rows(channel_id, sync_cfg, login_user.user_id) if sync_cfg is not None else old_rows
+            try:
+                references = () if deleting else self._sync_references(final_rows)
+            except (ValueError, TypeError, KeyError) as error:
+                raise ResourceReferenceInvalidError(reason="channel_selection_invalid") from error
+            locked = None
+
+            async def lock_root(active):
+                nonlocal locked
+                locked = await repository.aget(active, channel_id, for_update=True)
+                if locked is None:
+                    raise KnowledgeOperationPlanConflictError(reason="channel_source_changed")
+                rows = await repository.alist_sync_rows(active, channel_id, for_update=True)
+                if self._configuration_fingerprint(locked, rows) != fingerprint:
+                    raise KnowledgeOperationPlanConflictError(reason="channel_source_changed")
+                if not is_new:
+                    await require_business_action(
+                        login_user, resource_type="channel", resource_id=channel_id, action=action
+                    )
+                return locked
+
+            source = SourceKey(candidate.tenant_id, SourceType.CHANNEL_SYNC, channel_id, "current")
+            prepared = await runtime.aprepare_source_bindings(
+                session,
+                source,
+                references,
+                extractor_version=CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
+                lock_source_root=lock_root,
+                new_source=is_new,
+                effective=not deleting,
+            )
+            if prepared.verified.context.old_references_digest != reference_set_digest(old_references):
+                raise ReferenceCoverageNotReadyError(reason="source_configuration_drift")
+            added = set(references) - set(old_references)
+            facts = {receipt.target.key: receipt.target for receipt in prepared.verified.context.receipts}
+            if any(facts[ref.target].state != ReferenceState.VALID for ref in added):
+                raise ResourceReferenceInvalidError(reason="new_invalid_reference")
+            selected = [row.model_dump() for row in final_rows if added.intersection(self._sync_references((row,)))]
+            await repository.acheck_new_selections(session, locked, user_id=login_user.user_id, rows=selected)
+            if is_new:
+                adapter = await get_f048_resource_adapter("channel")
+                await adapter.authorize_created(
+                    record=ChannelPermissionRecord(
+                        tenant_id=locked.tenant_id,
+                        resource_id=channel_id,
+                        status="ACTIVE",
+                        creator_user_id=locked.user_id,
+                        permission_version=0,
+                        context_version=f"channel-create:{channel_id}"[:64],
+                    ),
+                    actor=await resolve_permission_actor(login_user),
+                )
+            members = await repository.alist_members(session, channel_id)
+            if deleting:
+                adapter = await get_f048_resource_adapter("channel")
+                record = await adapter.load_permission_record(channel_id)
+                if record is None:
+                    raise ChannelNotFoundError()
+                await adapter.project_delete(record=record, actor=await resolve_permission_actor(login_user))
+                await repository.adelete_channel_configuration(session, locked)
+            else:
+                old_visibility = locked.visibility
+                changes = changes or {}
+                if "source_list" in changes:
+                    additions = set(changes["source_list"]) - set(locked.source_list or [])
+                    if additions:
+                        await QuotaService.check_info_source_subscribe_limit(
+                            locked.user_id,
+                            locked.tenant_id,
+                            list(additions),
+                            login_user=login_user,
+                        )
+                for key, value in changes.items():
+                    setattr(locked, key, value)
+                if is_new or resume:
+                    await repository.aensure_creator(
+                        session,
+                        locked,
+                        binding_key=_self_channel_binding_key(
+                            channel_id,
+                            locked.user_id,
+                            ChannelRelationEnum.OWNER,
+                        ),
+                    )
+                if locked.source_list and (is_new or "source_list" in changes):
+                    try:
+                        locked.latest_article_update_time = await self._get_channel_latest_article_create_time(locked)
+                    except Exception:
+                        # Display-only freshness must not prevent saving the
+                        # channel when the optional article search is down.
+                        logger.exception("Failed to query channel latest article timestamp")
+                if sync_cfg is not None:
+                    await repository.areplace_sync_rows(session, locked, final_rows)
+                await repository.asave(session, locked)
+                if locked.visibility != old_visibility:
+                    visibility_transition = (old_visibility, locked.visibility)
+                    await self._transition_channel_members(session, repository, locked, old_visibility, login_user)
+            if not resume:
+                await runtime.aapply_source_bindings(session, prepared)
+            await session.commit()
+        if deleting:
+            await self._send_channel_event_notification(
+                action_code=CHANNEL_DISMISSED_MESSAGE,
+                operator_user_id=login_user.user_id,
+                operator_user_name=getattr(login_user, "user_name", None),
+                receiver_user_ids=sorted(
+                    {member.user_id for member in members if member.status == MembershipStatusEnum.ACTIVE}
+                ),
+                channel_id=channel_id,
+                channel_name=locked.name,
+                navigable=False,
+            )
+        if visibility_transition is not None and self.message_service:
+            old_visibility, new_visibility = visibility_transition
+            if new_visibility == ChannelVisibilityEnum.PRIVATE:
+                removed = sorted(
+                    {
+                        member.user_id
+                        for member in members
+                        if member.user_role != UserRoleEnum.CREATOR and member.status == MembershipStatusEnum.ACTIVE
+                    }
+                )
+                inaccessible = [
+                    user_id for user_id in removed if not await self._user_can_read_channel(user_id, channel_id)
+                ]
+                if inaccessible:
+                    await self._send_channel_event_notification(
+                        action_code=CHANNEL_MADE_PRIVATE_MESSAGE,
+                        operator_user_id=login_user.user_id,
+                        operator_user_name=getattr(login_user, "user_name", None),
+                        receiver_user_ids=inaccessible,
                         channel_id=channel_id,
-                        sub_channel_name=sub.sub_channel_name,
-                        knowledge_space_id=space.knowledge_space_id,
-                        folder_id=space.folder_id,
-                        folder_path=space.folder_path,
-                        is_enabled=sub.enabled,
-                        user_id=int(user_id),
+                        channel_name=locked.name,
+                        navigable=False,
+                    )
+            elif old_visibility == ChannelVisibilityEnum.REVIEW and new_visibility == ChannelVisibilityEnum.PUBLIC:
+                await self.message_service.batch_approve_channel_subscription_messages(
+                    channel_id=channel_id,
+                    operator_user_id=login_user.user_id,
+                )
+        return locked
+
+    async def _transition_channel_members(self, session, repository, channel, old_visibility, login_user):
+        if channel.visibility == ChannelVisibilityEnum.PRIVATE:
+            adapter = await get_f048_resource_adapter("channel")
+            record = await adapter.load_permission_record(channel.id)
+            if record is None:
+                raise ChannelNotFoundError()
+            await adapter.remove_ordinary_sources(record=record, actor=await resolve_permission_actor(login_user))
+            await repository.amutate_members(session, channel, remove_non_creators=True)
+        elif old_visibility == ChannelVisibilityEnum.REVIEW and channel.visibility == ChannelVisibilityEnum.PUBLIC:
+            members = await repository.alist_members(session, channel.id)
+            for member in members:
+                if member.status == MembershipStatusEnum.PENDING:
+                    await self.__class__.sync_direct_channel_user_permissions(
+                        channel.id,
+                        member.user_id,
+                        member.user_role,
+                        is_active=True,
+                        operator_user_id=login_user.user_id,
+                    )
+            await repository.amutate_members(session, channel, activate_pending=True, remove_rejected=True)
+        # Message projection is handled after the business transaction; it must
+        # never commit a partial Channel/configuration/source unit.
+
+    async def _load_knowledge_sync(self, channel_id: str, login_user: UserPayload) -> KnowledgeSyncConfig:
+        runtime = await get_reference_read_runtime()
+        async with get_async_db_session() as session, session.begin():
+            scope = await runtime.verifier.aissue_scope(
+                session,
+                SourceReadRequest(SourceType.CHANNEL_SYNC, channel_id, "current", "inspect"),
+                login_user,
+            )
+            inspected = await runtime.ainspect_source(session, scope, login_user)
+            rows = json.loads(inspected.snapshot.payload_json)["sync"]
+        facts = {fact.key: fact for fact in inspected.target_states}
+        # Metadata is optional decoration after the complete, authoritative
+        # config/index read. Missing or hidden targets retain their original IDs.
+        space_ids = sorted({int(row["knowledge_space_id"]) for row in rows})
+        visible = (
+            await batch_check_business_visible(
+                login_user,
+                resource_type="knowledge_space",
+                resource_ids=tuple(str(ident) for ident in space_ids),
+            )
+            if space_ids
+            else {}
+        )
+        names = (
+            {
+                str(row.id): row.name
+                for row in await KnowledgeDao.aget_list_by_ids(
+                    [ident for ident in space_ids if visible.get(str(ident), False)]
+                )
+            }
+            if space_ids
+            else {}
+        )
+        main, subs = [], {}
+        for row in sorted(rows, key=lambda value: (value["create_time"], value["id"])):
+            states = []
+            for reference in extract_channel_sync_references((row,)):
+                fact = facts[reference.target]
+                states.append(
+                    KnowledgeSyncReferenceState(
+                        slot_key=reference.slot_key,
+                        target_type=reference.target.target_type.value,
+                        target_id=reference.target.target_id,
+                        state=fact.state.value,
+                        is_valid=fact.is_valid,
                     )
                 )
-
-        await ChannelKnowledgeSyncDao.areplace_for_channel(channel_id, rows)
-
-    async def _load_knowledge_sync(
-        self,
-        channel_id: str,
-    ) -> KnowledgeSyncConfig:
-        """Build a KnowledgeSyncConfig from the stored rows, plus display
-        names for the bound knowledge spaces."""
-        rows = await ChannelKnowledgeSyncDao.alist_by_channel_id(channel_id)
-        # Sort by create_time for stable, creation-order display (requirement 3.1.1).
-        rows.sort(key=lambda r: r.create_time)
-
-        # Resolve knowledge-space display names for the UI.
-        space_name_by_id: dict[str, str] = {}
-        numeric_ids = [
-            int(r.knowledge_space_id) for r in rows if r.knowledge_space_id and str(r.knowledge_space_id).isdigit()
-        ]
-        if numeric_ids:
-            from sqlmodel import select as _select
-
-            from bisheng.core.database import get_async_db_session
-            from bisheng.knowledge.domain.models.knowledge import Knowledge
-
-            async with get_async_db_session() as session:
-                q = _select(Knowledge).where(Knowledge.id.in_(numeric_ids))
-                for kb in (await session.exec(q)).all():
-                    space_name_by_id[str(kb.id)] = kb.name
-
-        # Defensive filter: drop bindings whose target space or folder no longer
-        # exists. There is a race window between space/folder deletion and
-        # channel_knowledge_sync cleanup; this keeps the UI clean if a row leaks.
-        existing_space_ids = set(space_name_by_id.keys())
-        rows = [
-            r
-            for r in rows
-            if r.knowledge_space_id
-            and str(r.knowledge_space_id).isdigit()
-            and str(r.knowledge_space_id) in existing_space_ids
-        ]
-        folder_ids_to_check = {int(r.folder_id) for r in rows if r.folder_id is not None and str(r.folder_id).isdigit()}
-        if folder_ids_to_check:
-            from sqlmodel import select as _select
-
-            from bisheng.core.database import get_async_db_session
-            from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-
-            existing_folder_ids: set = set()
-            async with get_async_db_session() as session:
-                q = _select(KnowledgeFile.id).where(KnowledgeFile.id.in_(list(folder_ids_to_check)))
-                for row in (await session.exec(q)).all():
-                    fid = row[0] if isinstance(row, tuple) else row
-                    existing_folder_ids.add(int(fid))
-            rows = [r for r in rows if r.folder_id is None or int(r.folder_id) in existing_folder_ids]
-
-        def _to_item(r: ChannelKnowledgeSync) -> KnowledgeSyncSpaceItem:
-            return KnowledgeSyncSpaceItem(
-                knowledge_space_id=str(r.knowledge_space_id),
-                knowledge_space_name=space_name_by_id.get(str(r.knowledge_space_id), ""),
-                folder_id=r.folder_id,
-                folder_path=r.folder_path,
+            item = KnowledgeSyncSpaceItem(
+                knowledge_space_id=row["knowledge_space_id"],
+                knowledge_space_name=names.get(str(int(row["knowledge_space_id"]))),
+                folder_id=row["folder_id"],
+                folder_path=row["folder_path"],
+                reference_states=states,
             )
-
-        main_rows = [r for r in rows if not r.sub_channel_name]
-        sub_rows_by_name: dict[str, list[ChannelKnowledgeSync]] = {}
-        for r in rows:
-            if r.sub_channel_name:
-                sub_rows_by_name.setdefault(r.sub_channel_name, []).append(r)
-
-        main_cfg = KnowledgeSyncMainConfig(
-            enabled=bool(main_rows) and all(r.is_enabled for r in main_rows),
-            spaces=[_to_item(r) for r in main_rows],
-        )
-        subs: list[KnowledgeSyncSubConfig] = []
-        for name, rlist in sub_rows_by_name.items():
-            subs.append(
+            (subs.setdefault(row["sub_channel_name"], []) if row["sub_channel_name"] else main).append((row, item))
+        return KnowledgeSyncConfig(
+            main=KnowledgeSyncMainConfig(
+                enabled=bool(main) and all(row["is_enabled"] for row, _ in main), spaces=[item for _, item in main]
+            ),
+            subs=[
                 KnowledgeSyncSubConfig(
                     sub_channel_name=name,
-                    enabled=bool(rlist) and all(r.is_enabled for r in rlist),
-                    spaces=[_to_item(r) for r in rlist],
+                    enabled=all(row["is_enabled"] for row, _ in entries),
+                    spaces=[item for _, item in entries],
                 )
-            )
-        return KnowledgeSyncConfig(main=main_cfg, subs=subs)
+                for name, entries in subs.items()
+            ],
+        )
 
     async def dismiss_channel(self, channel_id: str, login_user: UserPayload, request=None):
-        """
-        Dismiss a channel:
-        - Must be creator
-        - Delete all user relationships
-        - Delete channel
-        - Information sources are unsubscribed lazily by the daily reconcile, not here
-        """
-        # 1. Verify channel existence
-        channels = await self.channel_repository.find_channels_by_ids([channel_id])
-        if not channels:
-            raise ChannelNotFoundError()
-        channel = channels[0]
-
-        await require_business_action(
-            login_user,
-            resource_type="channel",
-            resource_id=channel_id,
-            action="delete",
-        )
-
-        members = await self.space_channel_member_repository.find_all(
-            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL
-        )
-        original_member_ids = {member.user_id for member in members if member.status == MembershipStatusEnum.ACTIVE}
-        await self._send_channel_event_notification(
-            action_code=CHANNEL_DISMISSED_MESSAGE,
-            operator_user_id=login_user.user_id,
-            operator_user_name=getattr(login_user, "user_name", None),
-            receiver_user_ids=sorted(original_member_ids),
-            channel_id=channel_id,
-            channel_name=channel.name,
-            navigable=False,
-        )
-        adapter = await get_f048_resource_adapter("channel")
-        record = await adapter.load_permission_record(channel_id)
-        if record is None:
-            raise ChannelNotFoundError()
-        await adapter.project_delete(
-            record=record,
-            actor=await resolve_permission_actor(login_user),
-        )
-        for member in members:
-            await self.space_channel_member_repository.delete(member.id)
-
-        await self.channel_repository.delete(channel_id)
-
-        # 5. Information sources are NOT unsubscribed here. Unsubscription is deferred to
-        #    the daily reconcile, which unsubscribes a source only once no channel
-        #    references it — dismissing one channel must not unsubscribe a source still
-        #    used by other channels.
-
-        # Audit log
-        from bisheng.api.services.audit_log import AuditLogService
-
+        channel = await self._persist_channel_configuration(login_user, channel_id=channel_id, deleting=True)
+        # Public information-source subscriptions converge through the existing
+        # daily reconcile, independently of deleting this one channel.
         if request:
-            await AuditLogService.delete_channel(login_user, get_request_ip(request), channel_id, channel.name)
+            from bisheng.api.services.audit_log import AuditLogService
 
+            await AuditLogService.delete_channel(login_user, get_request_ip(request), channel_id, channel.name)
         return True
 
     async def unsubscribe_channel(self, channel_id: str, login_user: UserPayload):
@@ -2827,6 +2778,13 @@ class ChannelService:
         if role not in _WRITE_ROLES:
             raise SpacePermissionDeniedError()
 
+        if not callable(self.space_upload_factory):
+            raise RuntimeError("Channel SPACE upload factory is not configured")
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+        space_service = KnowledgeSpaceService(request=request, login_user=login_user)
+        space_service.upload_application_factory = lambda: self.space_upload_factory(space_service)
+
         # 3. Upload articles to minio
         minio_client = await get_minio_storage()
         md_file_paths = []
@@ -2851,9 +2809,6 @@ class ChannelService:
             preview_map[index] = article.content_html
 
         # 4. Call KnowledgeSpaceService.add_file
-        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
-
-        space_service = KnowledgeSpaceService(request=request, login_user=login_user)
         knowledge_files = await space_service.add_file(
             knowledge_id=req.knowledge_id,
             file_path=md_file_paths,
@@ -2864,10 +2819,18 @@ class ChannelService:
         # 5. Update preview_file_object_name for successful files
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
 
+        successful_ids = [kf.id for kf in knowledge_files if kf.status != KnowledgeFileStatus.FAILED.value]
+        saved_files = (
+            {row.id: row for row in await KnowledgeFileDao.aget_file_by_ids(successful_ids)} if successful_ids else {}
+        )
         result = []
         failed = False
         for index, kf in enumerate(knowledge_files):
             if kf.status != KnowledgeFileStatus.FAILED.value:
+                saved = saved_files.get(kf.id)
+                if saved is None or saved.knowledge_id != req.knowledge_id or saved.tenant_id != kf.tenant_id:
+                    raise SpacePermissionDeniedError()
+                kf = saved
                 html_content = preview_map[index]
                 preview_object_name = f"preview/{kf.id}.html"
                 await minio_client.put_object(

@@ -1,11 +1,15 @@
+import hashlib
 import json
+from dataclasses import dataclass, field
 from functools import cached_property
 
-from langchain_core.documents import BaseDocumentTransformer
+from langchain_core.documents import BaseDocumentTransformer, Document
 
 from bisheng.api.v1.schemas import FileProcessBase
+from bisheng.knowledge.application.file_processing_adapter import legacy_rule_from_snapshot
 from bisheng.knowledge.domain.models.knowledge_file import FileSource, KnowledgeFile
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+from bisheng.knowledge.domain.schemas.processing_settings import EffectiveProcessingSnapshot
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
@@ -27,6 +31,74 @@ from bisheng.utils.file import download_minio_file
 _WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]  # noqa: RUF001
 _WEB_LINK_SEPARATOR_RULES = ["after"] * len(_WEB_LINK_SEPARATORS)
 
+FILE_PROCESSING_PATCH_FIELDS = frozenset(
+    {
+        "parse_type",
+        "preview_file_object_name",
+        "bbox_object_name",
+        "abstract",
+        "user_metadata",
+        "simhash",
+        "similar_status",
+        "file_encoding",
+        "thumbnails",
+    }
+)
+
+
+def physical_processing_source_digest(row):
+    fields = (
+        "id",
+        "tenant_id",
+        "knowledge_id",
+        "file_type",
+        "file_source",
+        "object_name",
+        "md5",
+        "file_size",
+        "file_name",
+        "file_level_path",
+        "user_metadata",
+    )
+    return hashlib.sha256(
+        json.dumps(
+            {key: getattr(row, key) for key in fields},
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode()
+    ).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedFileProcessing:
+    file_id: int
+    tenant_id: int
+    space_id: int
+    model_config_revision: int
+    index_generation: str
+    physical_source_digest: str
+    source_revision: str
+    documents: tuple[Document, ...] = field(repr=False)
+    file_patch: dict = field(repr=False)
+    status: int = 2
+    error_code: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FileProcessingResult:
+    file_id: int
+    source_revision: str
+    status: int
+    chunk_count: int
+    file_patch: dict = field(default_factory=dict, repr=False)
+    error_code: int | None = None
+
+    @property
+    def succeeded(self):
+        return self.status == 2
+
 
 class KnowledgeFilePipeline(BaseFilePipeline):
     def __init__(
@@ -36,10 +108,13 @@ class KnowledgeFilePipeline(BaseFilePipeline):
         preview_cache_key: str | None = None,
         no_summary: bool = False,
         need_thumbnail: bool = False,
+        effective_processing: EffectiveProcessingSnapshot | None = None,
         **kwargs,
     ):
         split_rule = FileProcessBase(knowledge_id=db_file.knowledge_id)
-        if db_file.split_rule and isinstance(db_file.split_rule, str):
+        if effective_processing is not None:
+            split_rule = legacy_rule_from_snapshot(effective_processing, space_id=db_file.knowledge_id)
+        elif db_file.split_rule and isinstance(db_file.split_rule, str):
             split_rule = FileProcessBase(**json.loads(db_file.split_rule))
         split_rule.knowledge_id = db_file.knowledge_id
         if db_file.file_source == FileSource.WEB_LINK.value:

@@ -96,7 +96,7 @@ function ExistingAssigneeRow({
         </div>
         <div className="mt-1 flex flex-wrap gap-1">
           <SourceBadge source={assignee.source} />
-          <PermissionModelStatus active={assignee.model.active} />
+          <PermissionModelStatus active={assignee.model.active} visibilityOnly={assignee.model.visibility_only} />
           {assignee.scope === "INHERITED" && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               {t("scope.inherited")}

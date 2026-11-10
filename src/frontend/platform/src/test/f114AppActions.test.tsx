@@ -1,8 +1,10 @@
+// AC coverage: AC-78, AC-79, AC-81, AC-83.
 import { expect,it } from 'vitest'
 import { appActionState } from '@/pages/BuildPage/hostedApp/appActions'
+import type { HostedAppAction } from '@/controllers/API/hostedApp'
 
 it('separates basic management from private content and never uses owner identity',()=>{
-  expect(appActionState(['use']).management).toBe(false)
+  expect(appActionState(['visible']).management).toBe(false)
   for(const action of ['edit','publish','unpublish','delete','manage_permission'] as const){
     const state=appActionState([action])
     expect(state.management).toBe(true)
@@ -11,6 +13,34 @@ it('separates basic management from private content and never uses owner identit
   }
   expect(appActionState(['edit','publish']).rebuild).toBe(true)
   expect(appActionState(undefined).management).toBe(false)
+  expect(appActionState([]).management).toBe(false)
+})
+
+it.each(['use', 'unknown', 'share', 'owner'])('does not infer management from unexpected wire action %s', action => {
+  const state = appActionState([action as HostedAppAction])
+  expect(state).toEqual({ management: false, edit: false, publish: false,
+    unpublish: false, delete: false, managePermission: false, rebuild: false })
+})
+
+it.each([
+  ['edit', 'edit'],
+  ['publish', 'publish'],
+  ['unpublish', 'unpublish'],
+  ['delete', 'delete'],
+  ['manage_permission', 'managePermission'],
+] as const)('visible plus %s grants only that independent management action', (action, stateKey) => {
+  expect(appActionState(['visible', action])).toEqual({
+    management: true, edit: false, publish: false, unpublish: false,
+    delete: false, managePermission: false, rebuild: false,
+    [stateKey]: true,
+  })
+})
+
+it('visible together with an unknown action grants no management action', () => {
+  expect(appActionState(['visible', 'share' as HostedAppAction])).toEqual({
+    management: false, edit: false, publish: false, unpublish: false,
+    delete: false, managePermission: false, rebuild: false,
+  })
 })
 
 
@@ -45,4 +75,10 @@ it('publish-only direct data-tab URL mounts no private data or environment compo
 it('edit mounts the requested private tab',()=>{
  fixture.actions=['edit'];detail()
  expect(screen.getByText('private-data')).toBeInTheDocument()
+})
+it('visible-only direct data-tab URL mounts no private tab or environment component',()=>{
+ fixture.actions=['visible'];detail()
+ expect(screen.queryByText('private-data')).toBeNull()
+ expect(screen.queryByText('private-secrets')).toBeNull()
+ expect(screen.queryByRole('tab',{name:'hostedApp.detail.tabs.data'})).toBeNull()
 })

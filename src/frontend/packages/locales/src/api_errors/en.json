@@ -759,5 +759,18 @@
   "failure_service_network": "Network connection",
   "failure_service_etl4lm": "Document parsing service",
   "failure_service_bisheng_knowledge": "Knowledge search service",
-  "failure_service_openfga": "Authorization service"
+  "failure_service_openfga": "Authorization service",
+  "10994": "Reference coverage is not ready; this operation cannot be checked completely",
+  "10995": "The resource is referenced by saved configuration. Update the references in the related business configuration first.",
+  "10996": "A saved resource reference is invalid or its revision changed. Review and repair it.",
+  "10997": "The business model or index configuration changed. This task is obsolete; start a new task.",
+  "10998": "The operation no longer matches its frozen reference plan. Check it again.",
+  "10999": "A conflicting operation is processing this resource. Try again later.",
+  "18082": "Processing defaults changed. Reload before saving.",
+  "18083": "The processing task does not exist or is not accessible.",
+  "18084": "The task cannot be retried in its current state.",
+  "18085": "This idempotency key was used for a different request. Submit a new operation.",
+  "18086": "Review the impact and confirm the operation first.",
+  "18087": "The operation impact changed. Review and confirm it again.",
+  "18088": "The operation confirmation expired. Review and confirm it again."
 }

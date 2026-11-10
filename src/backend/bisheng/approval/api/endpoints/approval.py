@@ -6,12 +6,12 @@ It is kept only for backward compatibility with existing data and MUST NOT be
 extended. New approval needs go through the unified approval center
 (`approval_gate.py` / `approval_center_service.py`).
 """
-from __future__ import annotations
 
-from typing import List, Optional
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
+from bisheng.approval.application.legacy_upload import get_legacy_upload_finalizer
 from bisheng.approval.domain.schemas.approval_schema import (
     ApprovalRequestDecisionReq,
     ApprovalRequestListResp,
@@ -22,10 +22,10 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
 
-router = APIRouter(prefix='/approval', tags=['approval'])
+router = APIRouter(prefix="/approval", tags=["approval"])
 
 
-@router.get('/department-knowledge-space/settings/{space_id}', deprecated=True)
+@router.get("/department-knowledge-space/settings/{space_id}", deprecated=True)
 async def get_department_knowledge_space_approval_settings(
     space_id: int,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -37,7 +37,7 @@ async def get_department_knowledge_space_approval_settings(
         return e.return_resp_instance()
 
 
-@router.put('/department-knowledge-space/settings/{space_id}', deprecated=True)
+@router.put("/department-knowledge-space/settings/{space_id}", deprecated=True)
 async def update_department_knowledge_space_approval_settings(
     space_id: int,
     settings: DepartmentKnowledgeSpaceApprovalSettings,
@@ -54,10 +54,10 @@ async def update_department_knowledge_space_approval_settings(
         return e.return_resp_instance()
 
 
-@router.get('/requests', deprecated=True)
+@router.get("/requests", deprecated=True)
 async def list_approval_requests(
-    space_id: Optional[int] = Query(default=None),
-    statuses: Optional[List[str]] = Query(default=None),
+    space_id: int | None = Query(default=None),
+    statuses: list[str] | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -75,7 +75,7 @@ async def list_approval_requests(
         return e.return_resp_instance()
 
 
-@router.get('/requests/{request_id}', deprecated=True)
+@router.get("/requests/{request_id}", deprecated=True)
 async def get_approval_request(
     request_id: int,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -90,11 +90,12 @@ async def get_approval_request(
         return e.return_resp_instance()
 
 
-@router.post('/requests/{request_id}/decision', deprecated=True)
+@router.post("/requests/{request_id}/decision", deprecated=True)
 async def decide_approval_request(
     request_id: int,
     req: ApprovalRequestDecisionReq,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
+    upload_finalizer=Depends(get_legacy_upload_finalizer),
 ):
     try:
         row = await ApprovalService.decide_request(
@@ -102,6 +103,7 @@ async def decide_approval_request(
             operator_user_id=login_user.user_id,
             action=req.action,
             reason=req.reason,
+            upload_finalizer=upload_finalizer,
         )
         return resp_200(ApprovalService._to_resp(row).model_dump())
     except BaseErrorCode as e:

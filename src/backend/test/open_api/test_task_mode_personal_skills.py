@@ -1,9 +1,8 @@
 """Task mode offers the caller's candidates. Daily chat is unchanged."""
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-
-from contextlib import asynccontextmanager
 
 import pytest
 
@@ -73,8 +72,10 @@ async def skills(monkeypatch):
         AsyncMock(return_value=set()),
     )
 
-    async def permitted(_user, *, resource_ids, **kwargs):
-        return {str(skill_id): {"use"} for skill_id in resource_ids}
+    async def permitted(_user, *, resource_ids, resource_type, actions):
+        assert resource_type == "linsight_skill"
+        assert actions == ("visible",)
+        return {str(skill_id): {"visible"} for skill_id in resource_ids}
 
     monkeypatch.setattr("bisheng.permission.application.business_authorization.batch_check_business_actions", permitted)
     with bypass_tenant_filter():

@@ -82,6 +82,7 @@ def _register_permission_runtime_contexts() -> None:
         get_department_projection_scope,
         register_department_projection_runtime_context,
     )
+    from bisheng.llm.application.model_provider_projection import get_model_provider_projection_scope
     from bisheng.permission.application.process_runtime import (
         register_f048_permission_runtime_context,
     )
@@ -91,6 +92,7 @@ def _register_permission_runtime_contexts() -> None:
             client,
             external_scopes={
                 "department": get_department_projection_scope(),
+                "llm_model_deletion": get_model_provider_projection_scope(),
             },
         )
 
@@ -114,6 +116,31 @@ def _register_app_publish_composition() -> None:
         logger.exception("app_publish composition root failed to register; continuing startup")
 
 
+def _register_resource_reference_composition() -> None:
+    from bisheng.resource_reference.composition import register
+
+    register()
+    from bisheng.tenant.application.tenant_creation import (
+        create_mounted_tenant_with_coverage,
+        create_tenant_with_coverage,
+    )
+    from bisheng.tenant.domain.services.tenant_service import TenantService
+
+    TenantService.configure_creation(create_tenant_with_coverage)
+    from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService
+
+    TenantMountService.configure_creation(create_mounted_tenant_with_coverage)
+
+
+async def _prepare_native_reference_permissions() -> None:
+    """Await permission readiness before synchronous business readers run."""
+    if not settings.openfga.enabled:
+        return
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+    await get_f048_process_runtime()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with AsyncExitStack() as stack:
@@ -121,7 +148,9 @@ async def lifespan(app: FastAPI):
         await stack.enter_async_context(app.state.work_mcp_runtime.run())
         await initialize_app_context(config=settings)
         _register_permission_runtime_contexts()
+        await _prepare_native_reference_permissions()
         _register_app_publish_composition()
+        _register_resource_reference_composition()
         from bisheng.app_runtime.domain.services.entry_authz_service import diagnose_obo_configuration
 
         diagnose_obo_configuration()
@@ -131,7 +160,9 @@ async def lifespan(app: FastAPI):
         # by a face a local coding agent calls in a loop.
         model_call_record_writer.start()
         try:
-            await init_default_data()
+            from bisheng.knowledge.application.unification_coverage import bootstrap_created_root
+
+            await init_default_data(reference_bootstrap=bootstrap_created_root)
             # F035 task-mode compatibility data remains unrelated to F048 resource
             # authorization and is safe to maintain independently.
             try:
@@ -142,23 +173,9 @@ async def lifespan(app: FastAPI):
                 await backfill_linsight_task_mode_web_menu()
             except Exception:
                 logger.exception("linsight task-mode menu backfill failed; continuing startup")
-            try:
-                from bisheng.llm.domain.services.linsight_default_model_backfill import (
-                    backfill_linsight_default_model,
-                )
-
-                await backfill_linsight_default_model()
-            except Exception:
-                logger.exception("linsight default-model backfill failed; continuing startup")
-            # Pre-3.0 workbench configs: daily-mode default = the last listed model
-            # (what the old client picked), and the listed models stay visible to
-            # every member once DSH visibility drives the picker.
-            try:
-                from bisheng.llm.domain.services.chat_default_model_backfill import backfill_chat_default_model
-
-                await backfill_chat_default_model()
-            except Exception:
-                logger.exception("chat default-model backfill failed; continuing startup")
+            # F118: legacy default JSON conversion is an offline upgrade step
+            # after service shutdown and formal baseline freeze. API startup
+            # must never change a source payload without its reference index.
             try:
                 from bisheng.dsh.domain.services.workbench_visibility_backfill import (
                     backfill_workbench_model_visibility,

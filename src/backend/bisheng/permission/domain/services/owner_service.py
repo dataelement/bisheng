@@ -271,7 +271,7 @@ class F048OwnerProjectionService:
             or context.owner_grant is not None
             or context.owner_user_id is not None
             or not context.system_action_codes
-            or any(action not in {"visible", "download", "use"} for action in context.system_action_codes)
+            or any(action not in {"visible", "download"} for action in context.system_action_codes)
         ):
             raise PermissionInvalidResourceError()
 

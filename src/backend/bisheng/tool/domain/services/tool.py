@@ -90,7 +90,7 @@ class ToolServices(BaseModel):
     async def get_tool_list(
         self,
         is_preset: int | None = None,
-        action: str = "use",
+        action: str = "visible",
     ) -> list[GptsToolsTypeRead]:
         """Get a list of tools visible to users"""
         total_start = perf_counter()

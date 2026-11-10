@@ -3,8 +3,10 @@ import {
   getGrantablePermissionModels,
   getMyResourcePermissions,
   getResourcePermissionGrants,
+  mutateResourceGrants,
 } from "~/api/permission";
 import type {
+  GrantablePermissionModel,
   PermissionGrantAssignee,
   ResourcePermissionContext,
 } from "~/api/permission";
@@ -30,7 +32,7 @@ jest.mock("~/hooks", () => ({
 }));
 
 jest.mock("~/Providers", () => ({
-  useConfirm: () => jest.fn(),
+  useConfirm: () => jest.fn().mockResolvedValue(true),
 }));
 
 const mockedGetGrants = getResourcePermissionGrants as jest.MockedFunction<
@@ -42,6 +44,10 @@ const mockedGetSummary = getMyResourcePermissions as jest.MockedFunction<
 const mockedGetModels = getGrantablePermissionModels as jest.MockedFunction<
   typeof getGrantablePermissionModels
 >;
+const mockedMutate = mutateResourceGrants as jest.MockedFunction<typeof mutateResourceGrants>;
+const pureModel: GrantablePermissionModel = {
+  key: "pure-visible", name: "Pure visibility", level: 3, active: true, visibility_only: true,
+};
 
 const context: ResourcePermissionContext = {
   mode: "CUSTOM",
@@ -62,7 +68,7 @@ function assignee(
     assignee_id: id,
     assignee_version: 2,
     subject: { type: "user", id: "7", name: "Alice" },
-    model: { key: "standard-viewer", name: "Viewer", level: 1, active: true },
+    model: pureModel,
     source: { type: source, include_children: source === "DEPARTMENT" },
     scope: "LOCAL",
     inherited_from: null,
@@ -74,9 +80,7 @@ function assignee(
 
 describe("F048 Client PermissionListTab", () => {
   beforeEach(() => {
-    mockedGetModels.mockResolvedValue([
-      { key: "standard-viewer", name: "Viewer", level: 1, active: true },
-    ]);
+    mockedGetModels.mockResolvedValue([pureModel]);
     mockedGetGrants.mockResolvedValue({
       data: [assignee("1", "DIRECT"), assignee("2", "DEPARTMENT")],
       page_size: 2,
@@ -85,7 +89,7 @@ describe("F048 Client PermissionListTab", () => {
     });
     mockedGetSummary.mockResolvedValue({
       mode: "CUSTOM",
-      actions: ["visible", "use"],
+      actions: ["visible"],
       sources: [{ type: "DIRECT", include_children: false }],
       roster_complete: false,
     });
@@ -132,6 +136,80 @@ describe("F048 Client PermissionListTab", () => {
     const departmentRow = screen.getByTestId("permission-assignee-2");
     expect(departmentRow).toHaveTextContent("f048_permission.source.department");
     expect(departmentRow).toHaveTextContent("f048_permission.source.include_children");
+    await waitFor(() => expect(departmentRow).toHaveAttribute("data-editable", "true"));
+    expect(screen.getByLabelText("grant.model.1")).toHaveValue("pure-visible");
+    expect(screen.getByLabelText("grant.model.2")).toHaveValue("pure-visible");
+    expect(pureModel.level).toBe(3);
+  });
+
+  it("removes only the selected pure-visible source with its exact version", async () => {
+    const remaining = assignee("2", "DEPARTMENT");
+    const onRosterChange = jest.fn();
+    mockedMutate.mockResolvedValueOnce({ resource_version: 5, items: [remaining] });
+    render(<PermissionListTab resourceType="knowledge_file" resourceId="file-1"
+      context={context} onRosterChange={onRosterChange} />);
+    const direct = await screen.findByTestId("permission-assignee-1");
+    await waitFor(() => expect(direct).toHaveAttribute("data-editable", "true"));
+    fireEvent.click(screen.getByLabelText("f048_permission.grant.remove.1"));
+    await waitFor(() => expect(mockedMutate).toHaveBeenCalledTimes(1));
+    expect(mockedMutate).toHaveBeenCalledWith("knowledge_file", "file-1", {
+      idempotency_key: expect.any(String), expected_resource_version: 4, expected_catalog_release_id: 11,
+      changes: [{ op: "REMOVE", assignee_id: "1", expected_assignee_version: 2 }],
+    });
+    await waitFor(() => expect(screen.queryByTestId("permission-assignee-1")).not.toBeInTheDocument());
+    expect(screen.getByTestId("permission-assignee-2")).toHaveTextContent("f048_permission.source.department");
+    expect(onRosterChange).toHaveBeenLastCalledWith([remaining]);
+    expect(JSON.stringify(mockedMutate.mock.calls[0][2])).not.toMatch(/"visibility_only"|"level"|"actions"|"use"/);
+  });
+
+  it("keeps an inactive pure-visible source revocable when the server permits it", async () => {
+    mockedGetGrants.mockResolvedValueOnce({
+      data: [assignee("retired", "DIRECT", {
+        assignee_version: 9,
+        model: { ...pureModel, key: "retired-pure", name: "Retired visibility", active: false },
+      })], page_size: 50, has_more: false, next_cursor: null,
+    });
+    mockedMutate.mockResolvedValueOnce({ resource_version: 5, items: [] });
+    render(<PermissionListTab resourceType="knowledge_file" resourceId="file-1" context={context} />);
+    const retired = await screen.findByTestId("permission-assignee-retired");
+    expect(retired).toHaveAttribute("data-editable", "true");
+    expect(retired).toHaveTextContent("f048_permission.roster.inactive_existing_grant");
+    expect(screen.getByLabelText("grant.model.retired")).toHaveValue("retired-pure");
+    fireEvent.click(screen.getByLabelText("f048_permission.grant.remove.retired"));
+    await waitFor(() => expect(mockedMutate).toHaveBeenCalledTimes(1));
+    expect(mockedMutate.mock.calls[0][2].changes).toEqual([
+      { op: "REMOVE", assignee_id: "retired", expected_assignee_version: 9 },
+    ]);
+  });
+
+  it.each([
+    { protected: true },
+    { editable: false },
+    { scope: "INHERITED" as const },
+    { model: { ...pureModel, key: "not-grantable" } },
+  ])("does not let visibility_only bypass row eligibility: %j", async (overrides) => {
+    mockedGetGrants.mockResolvedValueOnce({
+      data: [assignee("locked", "DIRECT", overrides), assignee("eligible", "DIRECT")],
+      page_size: 50, has_more: false, next_cursor: null,
+    });
+    render(<PermissionListTab resourceType="knowledge_file" resourceId="file-1" context={context} />);
+    const row = await screen.findByTestId("permission-assignee-locked");
+    await waitFor(() => expect(screen.getByTestId("permission-assignee-eligible"))
+      .toHaveAttribute("data-editable", "true"));
+    expect(row).toHaveAttribute("data-editable", "false");
+    expect(screen.queryByLabelText("f048_permission.grant.remove.locked")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("grant.model.locked")).not.toBeInTheDocument();
+    expect(mockedMutate).not.toHaveBeenCalled();
+  });
+
+  it("does not mutate local pure-visible sources while the resource inherits permissions", async () => {
+    render(<PermissionListTab resourceType="knowledge_file" resourceId="file-1"
+      context={{ ...context, mode: "INHERIT" }} />);
+    const row = await screen.findByTestId("permission-assignee-1");
+    expect(row).toHaveAttribute("data-editable", "false");
+    expect(screen.queryByLabelText("f048_permission.grant.remove.1")).not.toBeInTheDocument();
+    expect(mockedGetModels).not.toHaveBeenCalled();
+    expect(mockedMutate).not.toHaveBeenCalled();
   });
 
   it("displays and searches the localized standard role from the server key", async () => {
@@ -256,10 +334,14 @@ describe("F048 Client PermissionListTab", () => {
       await screen.findByText("f048_permission.roster.summary_only"),
     ).toBeInTheDocument();
     expect(screen.getByText("visible")).toBeInTheDocument();
+    for (const action of ["use", "edit", "download", "rename"])
+      expect(screen.queryByText(action)).not.toBeInTheDocument();
     expect(mockedGetSummary).toHaveBeenCalledWith(
       "knowledge_file",
       "file-1",
     );
     expect(mockedGetGrants).not.toHaveBeenCalled();
+    expect(mockedGetModels).not.toHaveBeenCalled();
+    expect(mockedMutate).not.toHaveBeenCalled();
   });
 });

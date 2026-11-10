@@ -924,7 +924,7 @@
   },
   "src/components/Linsight/Input/KnowledgeSpaceSelect.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 8
+      "count": 5
     }
   },
   "src/components/Linsight/Input/ModelSelector.tsx": {
@@ -2668,16 +2668,6 @@
   },
   "src/pages/knowledge/selectionStore.ts": {
     "no-restricted-imports": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/sidebar/KnowledgeSpaceCardItem.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/sidebar/KnowledgeSpaceItem.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
       "count": 1
     }
   },

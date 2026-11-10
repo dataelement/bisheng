@@ -1,3 +1,4 @@
+import { useKnowledgeDeletion } from "./hooks/useKnowledgeDeletion";
 // @ts-strict-ignore
 import { knowledgePathWithTab } from "./knowledgeListNavigation";
 import { useKnowledgeSpaceLists } from "./hooks/useKnowledgeSpaceLists";
@@ -13,7 +14,6 @@ import {
   SpaceSortType,
   getSpaceInfoApi,
   getMineSpacesApi,
-  deleteSpaceApi,
   unsubscribeSpaceApi,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -402,29 +402,13 @@ function useKnowledgePage({
   };
 
   // Delete the current space from the file-page top-bar menu, then return to the list.
+  const spaceDeletion = useKnowledgeDeletion(JSON.stringify([activeSpace?.id, "active-space"]));
   const handleDeleteActiveSpace = async (sp: KnowledgeSpace | null) => {
-    if (!sp) return;
-
-    const ok = await confirm({
-      description: `${localize("com_knowledge.confirm_delete_space")}${localize("com_knowledge.delete_irreversible_warning")}`,
-      variant: "destructive",
-    });
-    if (!ok) return;
-    try {
-      await deleteSpaceApi(sp.id);
-      queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-      showToast({
-        message: localize("com_knowledge.space_deleted"),
-        severity: NotificationSeverity.SUCCESS,
-      });
-      setActiveSpace(null);
-      navigate(knowledgePathWithTab("/knowledge", location.search));
-    } catch {
-      showToast({
-        message: localize("com_knowledge.delete_space_failed"),
-        severity: NotificationSeverity.WARNING,
-      });
-    }
+    if (!sp || !await spaceDeletion.open({ spaceId: Number(sp.id), kind: "delete" })) return;
+    void queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+    showToast({ message: localize("com_knowledge.space_deleted"), severity: NotificationSeverity.SUCCESS });
+    setActiveSpace(null);
+    navigate(knowledgePathWithTab("/knowledge", location.search));
   };
 
   // Leave the current joined space from the space page, then return to the list.
@@ -540,6 +524,7 @@ function useKnowledgePage({
     handleActiveSpaceUpdate,
     handleCreateSpace,
     handleSpaceSettings,
+    spaceDeletion,
     handleDeleteActiveSpace,
     handleLeaveActiveSpace,
     handleDragStateChange,

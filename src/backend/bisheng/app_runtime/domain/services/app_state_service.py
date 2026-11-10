@@ -28,14 +28,17 @@ resume" (AC-04) true without a sixth state.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 from loguru import logger
 
+from bisheng.app_publish.application.reference_access import get_hosted_app_user_reference_runtime
 from bisheng.app_publish.application.release_tenancy import ApprovedReleaseSource, require_release_eligible
 from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
+from bisheng.app_runtime.application.runtime_authorization import user_authorization_context
 from bisheng.app_runtime.domain.constants import (
     DEFAULT_TIER_ID,
     AppAuditAction,
@@ -60,7 +63,11 @@ from bisheng.database.models.app import App, AppDao
 from bisheng.database.models.app_instance import PHASE_RUNNING, PHASE_STOPPED, AppInstanceDao
 from bisheng.database.models.app_version import TERMINAL_STATE_ONLINE, AppVersion, AppVersionDao
 from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.resource_reference.application.access import get_reference_binding_runtime
+from bisheng.resource_reference.application.contracts import SourceType
+from bisheng.resource_reference.application.source_contracts import SourceReadRequest
 
 #: Health probe defaults when the manifest declares none. Mirrors
 #: runtime-manager's ``HealthIn`` so an omitted block means the same thing on
@@ -200,74 +207,166 @@ class AppStateService:
 
     @classmethod
     async def delete(cls, app_id: str, *, actor) -> ActionResult:
-        """Explicit deletion — the **only** path that destroys an app's data (AC-40).
+        """Release all real saved versions and stage durable cleanup atomically."""
+        from types import SimpleNamespace
+        from uuid import uuid4
 
-        Requires the concrete delete action and is blocked while online: stopping first is
-        what guarantees the container and its host volume are torn down by a
-        state action instead of orphaned by a row that disappeared.
-        """
+        from bisheng.app_publish.domain.repositories.reference_source_repository import (
+            HostedAppReferenceSourceRepository,
+        )
+        from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
+        from bisheng.app_publish.domain.services.reference_extractor import (
+            APP_REFERENCE_EXTRACTOR_VERSION,
+            extract_app_references,
+        )
+        from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeDeliveryRepository
+        from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+        from bisheng.app_runtime.domain.services.runtime_projection_service import RuntimeProjectionService
+        from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
+        from bisheng.resource_reference.application.batch import BatchReferenceBindings, SourceBindingRequest
+        from bisheng.resource_reference.application.contracts import (
+            SourceKey,
+            SourceRootKey,
+            SourceType,
+            TargetKey,
+            reference_set_digest,
+        )
+
         app = await cls._load(app_id)
         await cls._require_deleter(app, actor)
         if app.state == AppState.ONLINE.value:
             raise AppOnlineCannotDeleteError(app_id=app_id)
         if not is_transition_allowed(app.state, AppState.DELETED.value):
             raise AppStateConflictError(msg="当前状态不支持删除", app_id=app_id, state=app.state)
-
-        # Read the permission record while the row still carries a live state, and
-        # before anything destructive runs. The app adapter refuses to build a
-        # target for a deleted app (one error for absent / foreign / deleted,
-        # AC-29), so loading it after the transition failed every delete with 25022
-        # once the state had already flipped — and skipped the audit, the grant
-        # cleanup and the lifecycle hooks. The permission mirror compares versions,
-        # not app state, so the pre-transition record still projects the removal.
         adapter = await get_f048_resource_adapter("app")
         permission_record = await adapter.load_permission_record(app.id)
+        repository = HostedAppReferenceSourceRepository()
+        runtime = await get_reference_binding_runtime()
+        coordinator = RuntimeDeliveryCoordinator(repository=RuntimeDeliveryRepository(get_async_db_session))
+        operation = None
+        async with coordinator.repo.transaction() as session:
+            if not session.in_transaction():
+                await session.begin()
+            root = await repository.aget_root(session, app_id)
+            versions = await repository.alist_versions(session, root)
+            root_key = SourceRootKey(root["tenant_id"], SourceType.HOSTED_APP_VERSION, root["id"])
+            locked_root = None
+            locked_versions = None
 
-        # Assets first: a row that says "deleted" while the volume survives is
-        # invisible garbage; a purged volume with the row still present is a
-        # visible, retryable failure.
-        from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+            async def lock_root(sql, canonical_keys=()):
+                nonlocal locked_root, locked_versions
+                locked_root = await repository.aget_root(sql, app_id, for_update=True)
+                locked_versions = await repository.alist_versions(sql, locked_root, for_update=True)
+                if locked_root != root or locked_versions != versions:
+                    raise KnowledgeOperationPlanConflictError(reason="app_delete_manifest_changed")
+                await cls._require_deleter(SimpleNamespace(**locked_root), actor)
+                if locked_root["state"] == AppState.ONLINE.value or not is_transition_allowed(
+                    locked_root["state"], AppState.DELETED.value
+                ):
+                    raise AppStateConflictError(app_id=app_id, action="delete")
+                return tuple(
+                    SourceKey(root_key.tenant_id, root_key.source_type, root_key.source_id, version["id"])
+                    for version in locked_versions
+                )
 
-        await RuntimeDeliveryCoordinator().stop(app, destroy=True, purge_volume=True)
-
-        reason = "deleted by authorized operator"
-        won = await cls._transition(
-            app_id, to_state=AppState.DELETED, from_states=(app.state,), reason=reason, actor=actor
-        )
-        if not won:
-            raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action="delete")
-
-        # The deletion is a fact from here on: audit it before any follow-up step
-        # that can fail, so the record never depends on the cleanup succeeding.
-        await cls._audit(AppAuditAction.DELETE, app, actor, version_id=app.current_version_id, reason=reason)
-
-        failures: list[str | Exception] = []
-        try:
+            batch = BatchReferenceBindings(runtime.repository, runtime.verifier)
+            if versions:
+                requests = tuple(
+                    SourceBindingRequest(
+                        SourceKey(root_key.tenant_id, root_key.source_type, root_key.source_id, version["id"]),
+                        (),
+                        APP_REFERENCE_EXTRACTOR_VERSION,
+                        effective=False,
+                    )
+                    for version in versions
+                )
+                prepared = await batch.aprepare_source_batch(session, requests, lock_source_root=lock_root)
+            else:
+                await lock_root(session)
+                prepared = None
+            # The root (and batch guard when present) is held before reading
+            # all raw details. Orphan rows cannot hide behind a missing set.
+            indexed = await runtime.repository.alist_source_sets_for_root(session, root_key, for_update=True)
+            raw = await runtime.repository.alist_source_references_for_root(session, root_key, for_update=True)
+            version_by_id = {version["id"]: version for version in locked_versions}
+            if {item.source_version for item in indexed} != set(version_by_id) or any(
+                item.source_version not in version_by_id for item in raw
+            ):
+                raise ReferenceCoverageNotReadyError(reason="app_delete_inventory_incomplete")
+            prepared_by_version = (
+                {item.source_key.source_version: item for item in prepared.sources} if prepared else {}
+            )
+            for item in indexed:
+                details = [row for row in raw if row.source_version == item.source_version]
+                try:
+                    declaration = CapabilityDeclaration.model_validate(
+                        version_by_id[item.source_version]["capabilities"]
+                    )
+                    mapping = {row.slot_key: TargetKey(row.target_type, row.target_id) for row in details}
+                    references = extract_app_references(declaration, resolved_targets=mapping)
+                except (TypeError, ValueError) as error:
+                    raise ReferenceCoverageNotReadyError(reason="app_delete_configuration_drift") from error
+                planned = prepared_by_version[item.source_version]
+                if (
+                    not item.ready
+                    or not item.effective
+                    or len(mapping) != len(details)
+                    or item.extractor_version != APP_REFERENCE_EXTRACTOR_VERSION
+                    or item.digest != reference_set_digest(references)
+                    or any(row.source_revision != item.source_revision for row in details)
+                    or item.source_revision != planned.expected_revision
+                    or reference_set_digest(references) != planned.verified.context.old_references_digest
+                ):
+                    raise ReferenceCoverageNotReadyError(reason="app_delete_inventory_inconsistent")
+            await RuntimeProjectionService(coordinator.repo).block(app.id, "stopped")
+            operation = await coordinator.submit(
+                SimpleNamespace(**locked_root),
+                kind="destroy",
+                key="destroy:" + uuid4().hex,
+                payload={"purge_volume": True, "delete_secret_config": True},
+            )
+            if prepared is not None:
+                await batch.aapply_source_batch(session, prepared)
+            # Existing durable FGA ledger/projection succeeds before SQL finalize.
             await cls._project_delete(adapter, permission_record, app, actor)
-        except Exception as exc:
-            # Same contract as the lifecycle hooks below: the assets and the row are
-            # already gone, so raising would report a completed delete as failed and
-            # skip the hooks. The failure is logged and audited, and the leftover
-            # grants are an operator repair, not a user retry.
-            logger.exception("app delete: permission projection failed app_id={}", app_id)
-            failures.append(f"permission projection failed: {exc}")
-
+            await repository.aset_deleted(session, locked_root)
+        reason = "deleted by authorized operator"
+        logger.bind(
+            event=EVENT_STATE_TRANSITION,
+            app_id=app_id,
+            from_state=app.state,
+            to_state=AppState.DELETED.value,
+            reason=reason,
+            actor=_audit_operator_id(actor),
+            result="applied",
+        ).info("{} app_id={} {} -> deleted result=applied", EVENT_STATE_TRANSITION, app_id, app.state)
+        await cls._audit(AppAuditAction.DELETE, app, actor, version_id=app.current_version_id, reason=reason)
+        failures = []
+        cleanup_pending = False
+        try:
+            await coordinator.wake(operation)
+            await coordinator.wait(operation)
+        except Exception as error:
+            # SQL deletion is committed. Keep the durable operation for control-
+            # plane inspection/repair; external cleanup cannot be SQL-rolled back.
+            logger.exception("app cleanup remains durable app_id={} operation={}", app_id, operation.id)
+            cleanup_pending = True
+            failures.append(error)
         failures.extend(
             await lifecycle_hooks.on_app_deleted(
-                app_id=app_id,
-                actor_user_id=int(getattr(actor, "user_id", 0) or 0),
-                tenant_id=int(app.tenant_id or 0),
+                app_id=app_id, actor_user_id=int(getattr(actor, "user_id", 0) or 0), tenant_id=int(app.tenant_id or 0)
             )
         )
         for failure in failures:
             await cls._audit(
-                AppAuditAction.DELETE_HOOK_FAILED,
-                app,
-                actor,
-                version_id=app.current_version_id,
-                reason=str(failure),
+                AppAuditAction.DELETE_HOOK_FAILED, app, actor, version_id=app.current_version_id, reason=str(failure)
             )
-        return ActionResult(app_id=app_id, state=AppState.DELETED.value, version_id=app.current_version_id)
+        return ActionResult(
+            app_id=app_id,
+            state=AppState.DELETED.value,
+            version_id=app.current_version_id,
+            detail={"cleanup_operation_id": operation.id, "cleanup_pending": cleanup_pending},
+        )
 
     # ------------------------------------------------------------------
     # start pipeline shared by publish / manual_publish / resume
@@ -337,6 +436,7 @@ class AppStateService:
                 else await RuntimeAuthorizationService.capture_user(actor, app, "approved_start", version_id=version.id)
             )
             await RuntimeAuthorizationService.validate_user(authorization_context, app, version_id=version.id)
+            await cls._admit_start_reference_source(app, version, actor, authorization_context)
             deployed = await RuntimeDeliveryCoordinator().deploy(
                 app, version, tier, authorization_context=authorization_context
             )
@@ -362,6 +462,37 @@ class AppStateService:
         if audit_action == AppAuditAction.RESUME:
             await cls._resume_notice(app, actor)
         return ActionResult(app_id=app.id, state=AppState.ONLINE.value, version_id=version.id, detail=deployed)
+
+    @staticmethod
+    async def _admit_start_reference_source(app, version, actor, authorization_context):
+        from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+
+        async def admit(identity):
+            runtime = await get_hosted_app_user_reference_runtime(authorization_context)
+            async with get_async_db_session() as session, session.begin():
+                scope = await runtime.verifier.aissue_scope(
+                    session, SourceReadRequest(SourceType.HOSTED_APP_VERSION, app.id, version.id), identity
+                )
+                result = await runtime.arequire_source_valid(session, scope, identity)
+                current = json.loads(result.snapshot.payload_json)["root"]
+                if any(
+                    current[field] != getattr(app, field)
+                    for field in (
+                        "id",
+                        "tenant_id",
+                        "state",
+                        "current_version_id",
+                        "pending_version_id",
+                        "owner_user_id",
+                    )
+                ):
+                    raise KnowledgeOperationPlanConflictError(reason="app_start_source_changed")
+
+        if isinstance(actor, ApprovedReleaseSource):
+            async with user_authorization_context(authorization_context, app, version_id=version.id) as original:
+                await admit(original)
+        else:
+            await admit(get_current_open_api_principal() or actor)
 
     @classmethod
     async def _park(

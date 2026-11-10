@@ -1,6 +1,5 @@
 // @ts-strict-ignore
 import { LoadingIcon } from "@/components/bs-icons/loading";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
   Alert,
   Button,
@@ -19,14 +18,10 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import {
   addLLmServer,
-  deleteLLmServer,
   getLLmServerDetail,
   updateLLmServer,
 } from "@/controllers/API/finetune";
-import {
-  captureAndAlertRequestErrorHoc,
-  showApiError,
-} from "@/controllers/request";
+import { showApiError } from "@/controllers/request";
 import { useAdminScope } from "@/hooks/useAdminScope";
 import { ArrowLeft, Plus } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -35,13 +30,24 @@ import { useTranslation } from "react-i18next";
 import { CustomForm } from "./CustomForm";
 import { ModelDiscovery } from "./ModelDiscovery";
 import { ModelItem } from "./ModelItem";
-import { bishengModelProvider, matchesProviderSearch, modelProvider, providerSelectOptions } from "./modelProviders";
 import {
   hasDuplicateModelName,
   hasInvalidModelName,
   trimModelNames,
 } from "./modelNameTrim";
-import { canShareToChildren, isGlobalSuperUser } from "./permissions";
+import {
+  bishengModelProvider,
+  matchesProviderSearch,
+  modelProvider,
+  providerSelectOptions,
+} from "./modelProviders";
+import {
+  canManageModelSettings,
+  canShareToChildren,
+  isGlobalSuperUser,
+} from "./permissions";
+import { ModelConfigActions, ModelRemovalDialog } from "./ModelRemovalDialog";
+import { useModelRemoval } from "./useModelRemoval";
 import { useLinsightConfig } from "./tabs/WorkbenchModel";
 import { useModelProviderInfo } from "./useLink";
 
@@ -89,6 +95,21 @@ export default function ModelConfig({
   const [detailLoading, setDetailLoading] = useState(id !== -1);
   const [detailReload, setDetailReload] = useState(0);
   const [connectionVersion, setConnectionVersion] = useState(0);
+  const writable =
+    canManageModelSettings(user, appConfig.multiTenantEnabled) &&
+    !formData.is_root_shared_readonly;
+  const removal = useModelRemoval({
+    enabled: writable && !detailLoading && !detailError,
+    identityKey: [
+      id,
+      user?.user_id,
+      user?.tenant_id,
+      user?.role,
+      user?.is_global_super,
+      user?.is_child_admin,
+    ].join(":"),
+  });
+  const { rememberBaseline } = removal;
 
   // Create mode reads the admin scope fresh instead of taking it from the
   // list page: the scope is a server-side lease that can expire while the
@@ -111,11 +132,15 @@ export default function ModelConfig({
     let active = true;
     setDetailError(null);
     setFormData({ ...defaultForm });
+    rememberBaseline([]);
     setDetailLoading(id !== -1);
     if (id === -1) return;
     void getLLmServerDetail(id)
       .then((res) => {
-        if (active) setFormData(res);
+        if (active) {
+          rememberBaseline(res.models);
+          setFormData(res);
+        }
       })
       .catch((error) => {
         if (!active) return;
@@ -128,7 +153,7 @@ export default function ModelConfig({
     return () => {
       active = false;
     };
-  }, [id, detailReload]);
+  }, [id, detailReload, rememberBaseline]);
 
   const handleTypeChange = (val) => {
     const name = onGetName(
@@ -197,6 +222,7 @@ export default function ModelConfig({
   const formRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
   const handleSave = async () => {
+    if (!writable || isLoading || removal.active) return;
     if (
       formData.limit_flag &&
       (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1)
@@ -264,10 +290,9 @@ export default function ModelConfig({
           onBack();
         });
       } else {
-        await updateLLmServer(saveData).then(() => {
-          onAfterSave(t("model.updateSuccess"));
-          onBack();
-        });
+        if (!(await removal.saveUpdate(saveData, updateLLmServer))) return;
+        onAfterSave(t("model.updateSuccess"));
+        onBack();
       }
       refetchConfig();
     } catch (error) {
@@ -287,20 +312,12 @@ export default function ModelConfig({
     }
   };
 
-  const handleModelDel = () => {
-    bsConfirm({
-      desc: t("model.deleteConfirmation"),
-      onOk(next) {
-        captureAndAlertRequestErrorHoc(
-          deleteLLmServer(id).then(() => {
-            onAfterSave(t("model.deleteSuccess"));
-            refetchConfig();
-          }),
-        );
-        onBack();
-        next();
-      },
-    });
+  const handleModelDel = async () => {
+    if (!writable || isLoading || removal.active) return;
+    if (!(await removal.requestDelete(id))) return;
+    onAfterSave(t("model.deleteSuccess"));
+    refetchConfig();
+    onBack();
   };
 
   const _modelProvider = useMemo(() => {
@@ -352,6 +369,7 @@ export default function ModelConfig({
         <ShadTooltip content={t("back", { ns: "bs" })} side="right">
           <button
             className="extra-side-bar-buttons w-[36px]"
+            disabled={isLoading || removal.active}
             onClick={() => onBack()}
           >
             <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
@@ -361,7 +379,10 @@ export default function ModelConfig({
           {id === -1 ? t("model.addModel") : t("model.modelConfiguration")}
         </span>
       </div>
-      <div className="w-full max-w-4xl min-w-64 px-4 pb-10 mx-auto mt-6 h-[calc(100vh-220px-var(--license-banner-h,0px))] overflow-y-auto">
+      <fieldset
+        disabled={!writable || isLoading || removal.active}
+        className="w-full max-w-4xl min-w-64 px-4 pb-10 mx-auto mt-6 h-[calc(100vh-220px-var(--license-banner-h,0px))] overflow-y-auto"
+      >
         <h3 className="mb-3 text-sm font-medium">
           {t("model.connectionSettings", { ns: "model" })}
         </h3>
@@ -379,9 +400,15 @@ export default function ModelConfig({
               if (value) handleTypeChange(value);
             }}
             filterOption={(keyword, option) =>
-              matchesProviderSearch(keyword, option, t("model.openaiCompatibleSearchWords"))}
+              matchesProviderSearch(
+                keyword,
+                option,
+                t("model.openaiCompatibleSearchWords"),
+              )
+            }
             options={providerSelectOptions(_modelProvider, (group) =>
-              t(`model.providerGroups.${group}`))}
+              t(`model.providerGroups.${group}`),
+            )}
           />
         </div>
         <div className="mb-2">
@@ -582,24 +609,25 @@ export default function ModelConfig({
             )}
           </section>
         </div>
-      </div>
-      <div className="absolute right-0 bottom-0 p-4 flex gap-4">
-        {id !== -1 && (
-          <Button variant="outlined" color="danger" onClick={handleModelDel}>
-            {t("model.delete")}
-          </Button>
-        )}
-        <Button variant="outlined" color="default" onClick={() => onBack()}>
-          {t("model.cancel")}
-        </Button>
-        <Button
-          disabled={!formData.type}
-          loading={isLoading}
-          onClick={handleSave}
-        >
-          {isLoading ? t("model.modelStatusChecking") : t("model.save")}
-        </Button>
-      </div>
+      </fieldset>
+      <ModelConfigActions
+        showDelete={!isCreate}
+        writable={writable}
+        canSave={!!formData.type}
+        saving={isLoading}
+        active={removal.active}
+        onDelete={handleModelDel}
+        onCancel={onBack}
+        onSave={handleSave}
+      />
+      <ModelRemovalDialog
+        view={removal.view}
+        onCancel={removal.cancel}
+        onConfirm={removal.confirm}
+        onForce={removal.requestForce}
+        onRefresh={removal.refresh}
+        onLoadMore={removal.loadMore}
+      />
     </div>
   );
 }

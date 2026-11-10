@@ -13,8 +13,10 @@ from langchain_core.tools import ArgsSchema, BaseTool
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
 from pydantic import Field, SkipValidation
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.api.services.assistant_base import AssistantUtils
+from bisheng.assistant.application.execution_admission import AssistantExecutionAdmission
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
     CitationRegistryCollector,
@@ -31,12 +33,14 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     is_web_fetch_tool,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import (
     AssistantAutoLLMError,
     AssistantModelEmptyError,
     AssistantModelNotConfigError,
 )
-from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
+from bisheng.database.models.assistant import Assistant, AssistantLink
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain.services import LLMService
@@ -208,8 +212,22 @@ class AssistantAgent(AssistantUtils):
     - When there is time information involved in a question, such as recently6Months, yesterday, last year, etc., you need to use the time tool to query the time information.
     """
 
-    def __init__(self, assistant_info: Assistant, chat_id: str, invoke_user_id: int):
+    def __init__(
+        self,
+        assistant_info: Assistant,
+        chat_id: str,
+        invoke_user_id: int,
+        *,
+        login_user: UserPayload | None = None,
+        reference_session: AsyncSession | None = None,
+        runtime_temperature: float | None = None,
+    ):
         self.assistant = assistant_info
+        self.login_user = login_user
+        self.reference_session = reference_session
+        self.runtime_temperature = runtime_temperature
+        self._source_digest: str | None = None
+        self._source_links: tuple[AssistantLink, ...] | None = None
 
         # To record the data tracking points
         self.invoke_user_id = invoke_user_id
@@ -230,9 +248,28 @@ class AssistantAgent(AssistantUtils):
         self.citation_registry_collector = CitationRegistryCollector()
 
     async def init_assistant(self, callbacks: Callbacks = None):
+        await self._require_current_source()
         await self.init_llm()
         await self.init_tools(callbacks)
         await self.init_agent()
+
+    async def _require_current_source(self):
+        if not isinstance(self.login_user, UserPayload):
+            raise ResourceReferenceInvalidError(reason="assistant_original_identity_required")
+        result = await AssistantExecutionAdmission.prepare(
+            self.login_user, self.assistant.id, session=self.reference_session
+        )
+        snapshot = result.snapshot
+        if self._source_digest is not None and self._source_digest != snapshot.configuration_digest:
+            # The caller clears a cached Agent on this error. A subsequent
+            # request can initialize from the new configuration normally.
+            raise KnowledgeOperationPlanConflictError(reason="assistant_cached_configuration_changed")
+        payload = json.loads(snapshot.payload_json)
+        self.assistant = Assistant.model_validate(payload["assistant"])
+        self._source_links = tuple(AssistantLink.model_validate(link) for link in payload["links"])
+        if self.runtime_temperature is not None:
+            self.assistant.temperature = self.runtime_temperature
+        self._source_digest = snapshot.configuration_digest
 
     async def init_llm(self):
         # Get a list of configured helper models
@@ -244,7 +281,7 @@ class AssistantAgent(AssistantUtils):
             if str(one.model_id) == self.assistant.model_name:
                 default_llm = one
                 break
-            elif not default_llm and one.default:
+            elif not self.assistant.model_name and not default_llm and one.default:
                 default_llm = one
         if not default_llm:
             raise AssistantModelNotConfigError()
@@ -286,7 +323,9 @@ class AssistantAgent(AssistantUtils):
         """Get by nametool Vertical
         tools_name_param:: {name: params}
         """
-        links: list[AssistantLink] = await AssistantLinkDao.get_assistant_link(assistant_id=self.assistant.id)
+        if self._source_links is None:
+            raise ResourceReferenceInvalidError(reason="assistant_authorized_links_required")
+        links = self._source_links
         # tool
         tools: list[BaseTool] = []
         tool_ids = []
@@ -326,16 +365,9 @@ class AssistantAgent(AssistantUtils):
             allowed_kb_ids: set[int] | None = None
             if self.assistant.knowledge_auth:
                 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-                from bisheng.knowledge.domain.services.space_flow_retrieval import (
-                    abuild_scoped_login_user,
-                )
 
-                identity_user = await abuild_scoped_login_user(
-                    self.invoke_user_id,
-                    self.assistant.tenant_id,
-                )
                 allowed_kb_ids = await KnowledgeRag.afilter_usable_knowledge_ids(
-                    identity_user,
+                    self.login_user,
                     [
                         knowledge_id
                         for knowledge_id in link_knowledge_ids
@@ -573,10 +605,11 @@ class AssistantAgent(AssistantUtils):
 
         return get_finally_message(messages)
 
-    async def run(self, query: str, chat_history: list = None, callback: Callbacks = None) -> list[BaseMessage]:
+    async def run(self, query: str, chat_history: list | None = None, callback: Callbacks = None) -> list[BaseMessage]:
         """
         Run Agent Conversation
         """
+        await self._require_current_source()
         from bisheng_langchain.gpts.tools.code_interpreter.factory import refresh_open_code_executors
 
         refresh_open_code_executors(self.tools)
@@ -602,10 +635,11 @@ class AssistantAgent(AssistantUtils):
 
         return result
 
-    async def astream(self, query: str, chat_history: list = None, callback: Callbacks = None):
+    async def astream(self, query: str, chat_history: list | None = None, callback: Callbacks = None):
         """
         Run Agent Conversation - Streaming version
         """
+        await self._require_current_source()
         await self.fake_callback(callback)
 
         if chat_history:
@@ -640,7 +674,7 @@ class AssistantAgent(AssistantUtils):
                     # stream_mode="messages" Return (message, metadata) Meta Group
                     message = None
                     if isinstance(chunk, tuple) and len(chunk) >= 2:
-                        message, metadata = chunk[:2]
+                        message, _metadata = chunk[:2]
                     elif hasattr(chunk, "content"):
                         # Directly to the message object
                         message = chunk
@@ -675,7 +709,7 @@ class AssistantAgent(AssistantUtils):
         logger.debug(f"react_run result: {result}")
         output = result["agent_outcome"].return_values["output"]
         if isinstance(output, dict):
-            output = list(output.values())[0]
+            output = next(iter(output.values()))
         for one in result["intermediate_steps"]:
             inputs.append(one[0])
         inputs.append(AIMessage(content=output))

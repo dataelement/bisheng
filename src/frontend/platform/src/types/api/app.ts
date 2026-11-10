@@ -36,4 +36,10 @@ export type AppConfig = {
      * `open_platform_enabled`, which only gates the three dev-toolkit scopes.
      */
     open_api_management_enabled?: boolean;
+    knowledges?: {
+        version_management?: {
+            enabled?: boolean;
+            simhash_similarity_threshold?: number;
+        };
+    };
 };

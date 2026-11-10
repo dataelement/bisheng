@@ -13,6 +13,20 @@ from bisheng.open_api.domain.services.access_context import (
 from bisheng.permission.application.identity import get_current_permission_actor
 
 
+@pytest.fixture(autouse=True)
+def isolated_ambient_tenant():
+    # These cases start at the empty transport boundary, independently of a
+    # previous single-tenant test's initialized default. Restore that ambient
+    # state afterwards; production restoration remains under the assertions.
+    tenant_token = current_tenant_id.set(None)
+    visible_token = visible_tenant_ids.set(None)
+    try:
+        yield
+    finally:
+        visible_tenant_ids.reset(visible_token)
+        current_tenant_id.reset(tenant_token)
+
+
 def _principal(*, actor_kind="service_account", scopes=frozenset({"knowledge:read"})):
     is_person = actor_kind == "natural_person"
     return OpenApiPrincipal(
