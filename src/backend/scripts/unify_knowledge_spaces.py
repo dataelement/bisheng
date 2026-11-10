@@ -60,7 +60,7 @@ def parser():
 async def _runtime(args):
     from bisheng.common.services.config_service import settings
     from bisheng.core.cache.redis_manager import RedisManager
-    from bisheng.core.context.manager import app_context, close_app_context
+    from bisheng.core.context.manager import app_context
     from bisheng.core.database import get_async_db_session
     from bisheng.core.database.manager import DatabaseManager
     from bisheng.knowledge.application.unification_artifacts import UnificationArtifactStore
@@ -76,11 +76,16 @@ async def _runtime(args):
     # constructs MinioStorage and can create buckets/policies. Register only
     # the original DB/Redis managers with the service's exact settings; all
     # other clients below are the already-reviewed owned raw read adapters.
-    app_context.register_context(
-        DatabaseManager(database_url=settings.database_url, engine_config=settings.database_pool.as_engine_kwargs())
-    )
-    app_context.register_context(RedisManager(redis_url=settings.redis_url))
+    owned = []
     try:
+        database = DatabaseManager(
+            database_url=settings.database_url, engine_config=settings.database_pool.as_engine_kwargs()
+        )
+        owned.append(database)
+        app_context.register_context(database)
+        redis = RedisManager(redis_url=settings.redis_url)
+        owned.append(redis)
+        app_context.register_context(redis)
         await app_context.async_get_instance(DatabaseManager.name)
         await app_context.async_get_instance(RedisManager.name)
         async with UnificationMinio.aopen(settings.get_minio_conf()) as storage:
@@ -104,7 +109,10 @@ async def _runtime(args):
 
             yield SimpleNamespace(store=store, sessions=get_async_db_session, inventory=inventory)
     finally:
-        await close_app_context()
+        # Lazy acquisition does not mark ApplicationContext initialized, so
+        # its global close helper intentionally skips these owned managers.
+        for manager in reversed(owned):
+            await manager.async_close()
 
 
 async def arun(args, *, runtime_factory=_runtime):
