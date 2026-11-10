@@ -1,6 +1,6 @@
 # 升级说明：知识空间统一与全平台 use 动作退役
 
-**状态（2026-11-10）**：功能开发已收齐，修正样本后的backup2及clone2完整还原/中性DDL通过；隔离clone2已正式M2冻结并同run apply/replay ready。原项目也已完成正式冻结及同run apply/replay ready，并部署新版API/Worker/frontend；API19服务器运行中、结果待出，UI21未执行。当前仍为演练说明，不据此开放生产升级；SDK无本次代码改动，全托管SDK场景单列未执行。最新入口见§3.1，后文日期章节保留历史证据边界。\
+**状态（2026-11-10）**：功能开发已收齐，修正样本后的backup2及clone2完整还原/中性DDL通过；隔离clone2已正式M2冻结并同run apply/replay ready。原项目也已完成正式冻结及同run apply/replay ready，并部署新版API/Worker/frontend；API19仍在71dd运行、结果待出，初次删除claim的MySQL秒精度问题正修且尚未合流/部署/复测，UI21未启动。当前仍为演练说明，不据此开放生产升级；SDK无本次代码改动，全托管SDK场景单列未执行。最新入口见§3.1，后文日期章节保留历史证据边界。\
 **日期**：2026-11-03\
 **关联**：[spec.md](./spec.md)（AC-63、AC-85、AC-89、AC-91、AC-92、AC-93、AC-94） · [design.md](./design.md) §7。
 
@@ -277,7 +277,9 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 
 最终77f737fe3c后端完整单轮8208 passed、34 failed、23 skipped、0 errors，另8 subtests passed，27分35秒；34失败均与共同祖先旧红相等、未归因0，23均为相同Redis依赖跳过。此为本地回归，不是全绿或升级E2E。升级后Move仍须实测：预检及确认锁前先核原move/目标upload_file并分类，仅有效根检查源/目标idle；无权或缺失项分类不被忙态覆盖，锁后仍重验忙态，拒绝时Plan/File/Job/chat零副作用。2bb10ce9df不改变原动作范围。
 
-前端22f修复真实类型错误后，锁依赖类型及两端Vite构建通过，新树339831ed64e7c19da3af69c3b326565a2fff3458已取代旧ca37581树；后端77f仅为历史快照；当前实际部署backend/Worker固定71dd镜像（SHA256前缀162f）及22f前端镜像e0b7…，原cmd/queue/mount保持、mock正常。`31818:3001`及`frontend:3001`两SPA/API proxy sanity通过，但不算E2E。摘要见[W6记录](./wave6-implementation-review.md#统一测试进行中2026-11-10)。现有测试工具镜像内Chromium无网络/无凭据launch/data HTML/close验证通过，只证工具可用；镜像摘要见W6，不是UI验收。19条API E2E已显式5 suites在服务器run `n10api1`运行中，尚无最终结果；21项UI未执行，T200–T213的14张验收卡仍待完成。本次未改SDK，不为测试新增SDK/扩托管运行时；既有SDK双凭据全托管场景缺真实运行材料单列未执行，v2/MCP协议验证不冒称SDK通过，也不新增runtime功能依赖。
+前端22f修复真实类型错误后，锁依赖类型及两端Vite构建通过，新树339831ed64e7c19da3af69c3b326565a2fff3458已取代旧ca37581树；后端77f仅为历史快照；当前实际部署backend/Worker固定71dd镜像（SHA256前缀162f）及22f前端镜像e0b7…，原cmd/queue/mount保持、mock正常。`31818:3001`及`frontend:3001`两SPA/API proxy sanity通过，但不算E2E。摘要见[W6记录](./wave6-implementation-review.md#统一测试进行中2026-11-10)。现有测试工具镜像内Chromium无网络/无凭据launch/data HTML/close验证通过，只证工具可用；镜像摘要见W6，不是UI验收。19条API E2E已显式5 suites在服务器run `n10api1`原候选71dd运行中，尚无最终结果、不算通过；21项UI未执行，T200–T213的14张验收卡仍待完成。本次未改SDK，不为测试新增SDK/扩托管运行时；既有SDK双凭据全托管场景缺真实运行材料单列未执行，v2/MCP协议验证不冒称SDK通过，也不新增runtime功能依赖。
+
+Root独立只读探针发现知识deletejob为3成功/3 prepared-pending、attempt0，两条精确既有任务due无lease且当时表lock wait为0；真实MySQL相关列精度0、探针连接无`TIME_TRUNCATE_FRACTIONAL`，临时表INSERT `.900000`向上舍入下一秒，初次claim跳过/实际舍入/秒向下取整后立即eligible三个固定布尔均1。会话临时表已drop、业务表未改；PROC正修初次claim时钟精度，尚未合流、部署及复测，不能写成任务已恢复或API19通过。详情见W6当前记录。
 
 backup1完成（manifest SHA256 `2e8bb87fae241b3e777b0c9aba5dbb03acc8609aa8a8bbf5873f0dee04169552`，旧镜像8.447GB保存），隔离full restore的7检查全true，含187表/798 tuple/67对象版本/4 ES/3 Milvus及22逻辑向量、原schema head；clone中性DDL通过，180张原business表原列不变、8张新表为空。这是backup1的组件恢复证据，后续clone2及原项目正式run另见下文，不替代完整验收。CLI收尾、原FGA null格式及内置user0哨兵窄修仅为定点证据，未重跑8208整轮，详见W6。
 

@@ -67,7 +67,9 @@ Root最终四路径`test_wire_router`、`test_legacy_document_contract`、`test_
 
 既有测试工具镜像`sha256:9d283aa38710d8ca5b39cbd3ed02021beee3663e51da1d6532dfa5b5753a384b`内Chromium已完成无网络、无凭据的launch/data HTML/close验证，仅证明工具可用，不是UI验收。
 
-API E2E **19条已在服务器实际运行中**（run `n10api1`，显式选择全部5 suites，包含v2/MCP），最终结果尚未产出；此前本地collect-only不再作为当前执行状态。[浏览器清单](./e2e-checklist.md)21场景全部未执行，14张验收卡不改勾。覆盖验证读取真实Chunk，不附加MD5变化假设；协议兼容测试不是完整SDK验收。
+API E2E **19条已在服务器实际运行中**（run `n10api1`，显式选择全部5 suites，包含v2/MCP），仍在原候选71dd运行、最终结果尚未产出，不算通过；此前本地collect-only不再作为当前执行状态。[浏览器清单](./e2e-checklist.md)21场景全部未执行，14张验收卡不改勾。覆盖验证读取真实Chunk，不附加MD5变化假设；协议兼容测试不是完整SDK验收。
+
+Root独立只读探针观察到知识deletejob为3成功、3条prepared/pending且attempt=0；其中两条精确既有任务已due、无lease，当时该表MySQL lock wait为0。相关时间列`DATETIME_PRECISION=0`，探针连接未启用`TIME_TRUNCATE_FRACTIONAL`；会话临时表真实INSERT `.900000`向上舍入至下一秒，固定布尔`initial_claim_would_skip`、`actual_insert_rounds_up`、`floored_due_is_immediately_eligible`均为1。临时表已drop，业务表未改；这证明初次claim的时钟精度边界，不是修复后的任务完成证据。PROC正在修复，尚未合流、部署或复测；UI未启动。
 
 **本次没有SDK代码改动。** Git核对`src/bisheng-sdk`无需求diff；不为测试新增SDK或扩展托管运行时。现有公共SDK双凭据的全托管场景需真实运行材料，单列未执行，不将新增runtime列为F118功能依赖，也不因此暂停迁移和知识库验收。
 
