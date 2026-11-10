@@ -179,7 +179,7 @@ async def test_actual_purge_step_keeps_new_index_data_and_cleans_frozen_old_targ
 
     module.MilvusFactory.init_vectorstore.side_effect = lambda name, embedding: SimpleNamespace(col=Collection(name))
     module.ElasticsearchFactory.init_vectorstore_sync.side_effect = lambda name: SimpleNamespace(client=Client())
-    await KnowledgeSpaceDirectDeleteService()._purge_step(step, job)
+    await KnowledgeSpaceDirectDeleteService(session_factory=context.sessions)._purge_step(step, job)
     assert collections["actual_collection"] == {1} and indices["actual_index"] == {1}
     assert not (collections["historical_collection"] if step == "milvus" else indices["historical_index"])
     module.LLMService.get_bisheng_knowledge_embedding_sync.assert_not_called()
