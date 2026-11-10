@@ -21,6 +21,7 @@ from bisheng.core.database import tenant_filter
 from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
 from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun
 from bisheng.knowledge.domain.repositories.reference_target_repository import KnowledgeReferenceTargetRepository
 from bisheng.resource_reference.application.contracts import LegacyEvidence, SourceKey, TargetKey
@@ -30,6 +31,7 @@ from bisheng.resource_reference.domain.models.resource_reference_tombstone impor
 from test.knowledge_unification.test_ref_repo import tenant
 
 TABLES = [
+    KnowledgeSpaceDeleteJob.__table__,
     Knowledge.__table__,
     KnowledgeFile.__table__,
     BusinessResourceReference.__table__,

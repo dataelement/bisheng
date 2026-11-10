@@ -17,6 +17,7 @@ from bisheng.database.models.tenant import Tenant
 from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
 from bisheng.llm.application.reference_target_owner import ModelReferenceTargetOwner
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.permission.application.identity import PermissionActor
@@ -39,6 +40,7 @@ async def built(monkeypatch):
     engine = await original.async_database()
     names = {
         "knowledge",
+        KnowledgeSpaceDeleteJob.__tablename__,
         "knowledge_file",
         "business_reference_set",
         "business_resource_reference",
@@ -51,6 +53,7 @@ async def built(monkeypatch):
                 table.create(sync, checkfirst=True)
                 for table in (
                     Knowledge.__table__,
+                    KnowledgeSpaceDeleteJob.__table__,
                     KnowledgeFile.__table__,
                     Source.__table__,
                     BRR.__table__,
