@@ -46,8 +46,8 @@ Para personalizar el cliente (por ejemplo, sustituir el logotipo), puede modific
 
    - **Dos formas de trabajar: Chat y Work**: Chat permite realizar consultas sobre el conocimiento y tareas en la nube de varios pasos. Work organiza los materiales en directorios locales autorizados, genera archivos editables de Word, Excel y PowerPoint y sigue perfeccionándolos a partir de sus comentarios.
    - **Recursos empresariales autorizados según la identidad**: Utilice su cuenta empresarial para acceder a modelos, herramientas API/MCP, habilidades y espacios de conocimiento aprobados, o abra aplicaciones publicadas en el Centro de aplicaciones. La recuperación de conocimiento solo devuelve los espacios y el contenido de archivos a los que el empleado tiene permiso de acceso.
-   - **Créditos y consumo transparentes**: Las llamadas a modelos empresariales en Chat y Work comparten el registro de créditos del usuario actual. Los usuarios pueden consultar su saldo y consumo en cualquier momento.
-   - **Extensiones empresariales según autorización**: Los empleados obtienen los complementos y entornos de trabajo que distribuyen los administradores, según la configuración y las autorizaciones de la empresa.
+   - **Gestión centralizada de modelos y créditos**: Los administradores gestionan el acceso a los modelos, los créditos mensuales y los registros de llamadas. Las llamadas a modelos empresariales en Chat y Work comparten el registro de créditos del usuario actual; los usuarios pueden consultar su saldo y consumo.
+   - **Distribución centralizada de extensiones empresariales**: Los administradores importan complementos y entornos de trabajo de forma centralizada. Los empleados los reciben según la configuración y las autorizaciones de la empresa.
 
 2. **🛠️ Aplicaciones alojadas: publique para sus compañeros las aplicaciones que desarrolla su equipo**
 
@@ -60,7 +60,7 @@ Para personalizar el cliente (por ejemplo, sustituir el logotipo), puede modific
    ![Gestión de publicaciones de una aplicación alojada de BISHENG](docs/images/readme/bisheng-vibe-app.png)
 
 3. **🚀 Modo de tareas: un agente de propósito general para trabajos complejos de varios pasos**
-   Usted le indica un objetivo y, si es necesario, adjunta archivos, bases de conocimiento, herramientas y habilidades. El agente divide el objetivo en tareas, las ejecuta paso a paso y entrega un informe HTML o un archivo de PPT, Excel o Word.
+   Usted le indica un objetivo y, si es necesario, adjunta archivos, bases de conocimiento, herramientas y habilidades. El agente divide el objetivo en tareas, las ejecuta paso a paso y entrega un archivo HTML, Markdown, PPT, Excel o Word.
 
    - 🧠 **Planificación de tareas + subagentes en paralelo**: El agente principal crea una lista de tareas, sigue el progreso y asigna investigaciones independientes a subagentes que se ejecutan en paralelo.
    - 🙋 **Intervención humana**: Cuando el agente necesita información que solo usted conoce, la tarea se pausa hasta que responda.

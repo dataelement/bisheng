@@ -46,8 +46,8 @@ To customize the client (for example, to replace the logo), you can modify the [
 
    - **Two ways to work: Chat and Work**: Chat supports knowledge Q&A and multi-step cloud tasks. Work organizes materials in authorized local directories, generates editable Word, Excel and PowerPoint files, and keeps refining them based on your feedback.
    - **Enterprise resources authorized by identity**: Use your enterprise account to access approved models, API/MCP tools, skills and knowledge spaces, or open published apps in the Application Center. Knowledge retrieval returns only the spaces and file content that the employee has permission to access.
-   - **Transparent credits and usage**: Enterprise model calls in Chat and Work share the current user's credit ledger. Users can check their balance and usage at any time.
-   - **Enterprise extensions by authorization**: Employees get the plugins and workbenches that administrators distribute, according to enterprise configuration and authorization.
+   - **Central model and credit management**: Administrators manage model access, monthly credits and call records. Enterprise model calls in Chat and Work share the current user's credit ledger; users can check their balance and usage.
+   - **Central distribution of enterprise extensions**: Administrators import plugins and workbenches centrally. Employees receive them according to enterprise configuration and authorization.
 
 2. **🛠️ Hosted Apps: publish apps your team builds to your colleagues**
 
@@ -60,7 +60,7 @@ To customize the client (for example, to replace the logo), you can modify the [
    ![Release management of a BISHENG Hosted App](docs/images/readme/bisheng-vibe-app.png)
 
 3. **🚀 Task Mode: a general-purpose agent for complex, multi-step work**
-   You give it a goal and, if needed, attach files, knowledge bases, tools and skills. The agent breaks the goal into tasks, runs them step by step, and delivers an HTML report or a PPT, Excel or Word file.
+   You give it a goal and, if needed, attach files, knowledge bases, tools and skills. The agent breaks the goal into tasks, runs them step by step, and delivers an HTML, Markdown, PPT, Excel or Word file.
 
    - 🧠 **Task planning + parallel sub-agents**: The main agent builds a task checklist, tracks progress, and gives independent research tasks to sub-agents that run in parallel.
    - 🙋 **Human in the loop**: When the agent needs information that only you have, the task pauses until you answer.
