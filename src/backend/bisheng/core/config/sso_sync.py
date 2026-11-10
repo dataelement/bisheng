@@ -43,3 +43,15 @@ class SSOSyncConf(BaseModel):
             "synthetic config row."
         ),
     )
+
+    initial_password: str = Field(
+        default="",
+        description=(
+            "Password given to synced users (``source`` = wecom/sso) that have none; "
+            "empty disables the feature. Only empty passwords are filled — a password "
+            "the user or an admin already set is never overwritten. While an account "
+            "still holds this value, login fails with 10601 (password expired) and the "
+            "frontend sends the user to the change-password page, so the shared initial "
+            "password cannot be kept. Rotating it does not lock users who already changed."
+        ),
+    )

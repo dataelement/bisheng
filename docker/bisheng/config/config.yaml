@@ -54,6 +54,9 @@ openfga:
 sso_sync:
   gateway_hmac_secret: !env ${BISHENG_GATEWAY_HMAC_SECRET}
   signature_header: "X-Signature"
+  # 同步用户（企微/SSO）的初始密码；留空=不启用（同步用户只能用 SSO 登录）。
+  # 设置后只补“空密码”账号；仍使用该密码的账号登录返回 10601，前端强制跳转改密。
+  initial_password: ""
 
 # 集群模式或者哨兵模式（只能选其一）:
 # redis_url: 

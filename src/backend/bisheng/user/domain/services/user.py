@@ -317,6 +317,17 @@ class UserService:
         (await get_redis_client()).delete(error_key)
 
     @classmethod
+    @staticmethod
+    def _is_initial_password(stored: str) -> bool:
+        """True while an account still holds the shared org-sync initial password.
+
+        Login rejects it (10601) so the frontend routes the user through the
+        change-password page; once they set their own password this no longer matches.
+        """
+        initial = (getattr(settings.sso_sync, "initial_password", "") or "").strip()
+        return bool(initial) and stored == md5_hash(initial)
+
+    @classmethod
     async def judge_user_password(cls, db_user: User, password: str) -> None:
         redis_client = await get_redis_client()
 
@@ -325,6 +336,9 @@ class UserService:
             raise UserValidateError()
 
         if db_user.password == password:
+            # Shared initial password from org sync: force a change before login.
+            if cls._is_initial_password(db_user.password):
+                raise UserPasswordExpireError()
             # Determine if the password has not been changed for a long time
             if password_conf.password_valid_period and password_conf.password_valid_period > 0:
                 if (datetime.now() - db_user.password_update_time).days >= password_conf.password_valid_period:

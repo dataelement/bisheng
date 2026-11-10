@@ -76,6 +76,7 @@ from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 from bisheng.user.domain.services.user import UserService
+from bisheng.utils import md5_hash
 
 _USER_LOCK_KEY = "user:sso_lock:{external_user_id}"
 
@@ -281,6 +282,7 @@ class LoginSyncService:
                     full_department_override = old_source == "local"
                     user = legacy
                 cls._apply_user_attrs(user, attrs)
+                cls._ensure_initial_password(user)
                 cls._touch_user_sync_time(user)
                 user = await UserService.apersist_profile_update(user)
                 if write_migration_audit:
@@ -308,7 +310,7 @@ class LoginSyncService:
                     phone_number=cls._normalize_contact_field(attrs.phone),
                     external_id=ext,
                     source=row_source,
-                    password="",
+                    password=cls._initial_password_hash(),
                     delete=new_delete,
                     disable_source=ds,
                 )
@@ -357,6 +359,7 @@ class LoginSyncService:
                 if payload.account_disabled is None:
                     raise UserForbiddenError.http_exception()
             cls._apply_user_attrs(user, attrs)
+            cls._ensure_initial_password(user)
             cls._touch_user_sync_time(user)
             user = await UserService.apersist_profile_update(user)
 
@@ -379,6 +382,28 @@ class LoginSyncService:
             return None
         s = val.strip()
         return s if s else None
+
+    @staticmethod
+    def _initial_password_hash() -> str:
+        """Hash of the configured initial password (empty string = feature off)."""
+        initial = (getattr(settings.sso_sync, "initial_password", "") or "").strip()
+        return md5_hash(initial) if initial else ""
+
+    @classmethod
+    def _ensure_initial_password(cls, user: User) -> None:
+        """Give a passwordless synced account the configured initial password.
+
+        Only empty passwords are filled: a value the user or an admin already set
+        is never overwritten. Members of the same tenant share this value until
+        their first login, where login rejects it (10601) and forces a change.
+        """
+        if getattr(user, "password", ""):
+            return
+        hashed = cls._initial_password_hash()
+        if not hashed:
+            return
+        user.password = hashed
+        user.password_update_time = datetime.now()
 
     @classmethod
     def _apply_user_attrs(cls, user: User, attrs) -> None:
