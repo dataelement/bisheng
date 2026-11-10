@@ -8,7 +8,6 @@
 | Worker在途外部IO与用户配置修改的竞态治理 | 用户已排除；另行设计跨资源/索引世代并发一致性，当前仅保正常冲突、幂等和配置过期检查。 | 待排期 |
 | 通用权限Projection大批STAGE/FAILED_CLOSED恢复扩展 | 本轮模型共享仅复用既有COMMIT-only有界批；通用状态机/重试扫描平台另评估。 | 待排期 |
 | 普通知识处理多kind列表与缓存的通用性能改造 | 原四kind结果/执行内核保持；本轮新move分页缺陷须就地修正，不借机改所有任务查询/缓存框架。 | 待排期 |
-| 无关既有hosted_runtime测试夹具整理 | 额外组合发现旧facade helper不接principal关键字，原测试与生产AST在本波前后一致；本轮不以改旧不相关夹具扩大业务范围。整体测试阶段单独记录影响。 | 待排期 |
 | 旧knowledge endpoint静态问题整理 | 本次旧删除适配涉及knowledge.py，按同一Ruff规则对HEAD和工作树比对均为10条既有诊断、无新增；包括旧QA同名handler/闲置局部变量及旧可选类型/标点。保持无关QA行为，另行整理。 | 待排期 |
 | 旧v2 filelib跨模块API依赖整理 | 既有filelib从knowledge.api.dependencies导入仓储依赖，当前arch-guard RULE5输出与f06ee9889a父提交逐字相同；本次上传只新增application纯适配，不引入该跨API依赖。后续统一梳理原DI导出边界。 | 待排期 |
 
