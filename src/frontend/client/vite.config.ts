@@ -29,10 +29,10 @@ function buildVersion(): string {
   return `v${pkg.version} (${stamp})`;
 }
 
-const app_env = {
-  BASE_URL: '/workspace',
-  BISHENG_HOST: '/admin'
-}
+/** Sub-path this app is served under. */
+const APP_BASE_URL = '/workspace';
+/** Sub-path of the admin/platform app, for cross-app links and redirects. */
+const APP_ADMIN_PATH = '/admin';
 
 const minioPathRE = /^\/(?:workspace\/)?(?:bisheng|tmp-dir)(?:\/|$)/;
 
@@ -98,6 +98,20 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
   const env = loadFrontendEnv(mode, __dirname);
+  // Explicit absolute origin of the platform app, used by every cross-app
+  // redirect (`getPlatformAdminPanelUrl`: 401 → login, workbench denied).
+  // Empty is the normal case: a built bundle stays same-origin, and `vite`
+  // serve derives the platform port from the browser's hostname at runtime
+  // (`src/utils/platformAdminUrl.ts`), so localhost / 127.0.0.1 / LAN IP all
+  // reach the sibling dev server. Set VITE_PLATFORM_ORIGIN only for hosts
+  // where that derivation is wrong.
+  const platformOrigin = env.VITE_PLATFORM_ORIGIN?.trim().replace(/\/$/, '') || '';
+  const app_env = {
+    BASE_URL: APP_BASE_URL,
+    BISHENG_HOST: APP_ADMIN_PATH,
+    PLATFORM_ORIGIN: platformOrigin,
+  };
+
   // MinIO object proxy for bucket paths (/bisheng/...): these must reach MinIO,
   // NOT the backend (7860 only 404s on object keys). Override per environment via
   // VITE_DEV_MINIO_TARGET, whose host MUST match the backend `sharepoint` config —

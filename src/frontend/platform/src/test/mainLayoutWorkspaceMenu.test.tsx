@@ -171,7 +171,9 @@ describe("MainLayout workspace entry", () => {
     expect(workspaceEntry).toBeInTheDocument();
 
     await user.click(workspaceEntry);
-    expect(openSpy).toHaveBeenCalledWith("/workspace/");
+    // dev derives the client origin from the browser host (:4001); the path
+    // stays /workspace — see utils/workspaceUrl.ts.
+    expect(openSpy).toHaveBeenCalledWith(expect.stringMatching(/^http:\/\/[^/]+:4001\/workspace\/$/));
   });
 
   it("keeps the workspace entry visible for legacy frontend menu data", async () => {

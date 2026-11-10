@@ -18,6 +18,12 @@ declare const __APP_ENV__: {
   BASE_URL: string;
   /** Sub-path of the admin/platform app, for cross-app links. */
   BISHENG_HOST: string;
+  /**
+   * Absolute origin of the admin/platform app, used for cross-app redirects.
+   * Empty means same origin (the deployed shape); `vite` serve defaults it to
+   * the platform dev server, overridable via `VITE_PLATFORM_ORIGIN`.
+   */
+  PLATFORM_ORIGIN?: string;
 };
 
 declare const __VCONSOLE_ENABLED__: boolean;

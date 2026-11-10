@@ -13,6 +13,7 @@ import i18next from "i18next";
 import { GanttChartIcon, Lock, MoonStar, Sun } from "lucide-react";
 
 import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
+import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { Tooltip, TooltipProvider } from "@bisheng/ui";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -205,7 +206,7 @@ export default function MainLayout() {
                                 menu={
                                     <>
                                         {hasWorkbenchEntry && (
-                                            <DropdownItem icon={<GanttChartIcon />} onSelect={() => window.open("/workspace/")}>
+                                            <DropdownItem icon={<GanttChartIcon />} onSelect={() => window.open(getWorkspaceClientUrl("/"))}>
                                                 {t("menu.workspace")}
                                             </DropdownItem>
                                         )}

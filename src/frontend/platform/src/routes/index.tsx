@@ -2,6 +2,7 @@
 import { lazy, useEffect } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import MainLayout from "../layout/MainLayout";
+import { getWorkspaceClientUrl, resolveWorkspaceOrigin } from "@/utils/workspaceUrl";
 import { LoginPage } from "../pages/LoginPage/login";
 import { ResetPwdPage } from "../pages/LoginPage/resetPwd";
 import Page403 from "../pages/Page403";
@@ -65,7 +66,31 @@ const RedirectToExternalLink = () => {
 // Redirect standalone chat routes to client app (separate SPA at /workspace)
 const RedirectToClient = () => {
   useEffect(() => {
-    window.location.replace('/workspace' + window.location.pathname + window.location.search);
+    // Cross-app link: build it from __APP_ENV__.WORKSPACE_ORIGIN so local dev
+    // reaches :4001 instead of landing on this app's own /workspace → 404.
+    window.location.replace(getWorkspaceClientUrl(window.location.pathname + window.location.search));
+  }, []);
+
+  return null;
+};
+
+/**
+ * Hand a platform URL that already points at the client (`/workspace/...`,
+ * e.g. a bookmark made against the production origin) to the client origin.
+ * Same-origin deployments never reach this: nginx serves `/workspace` first.
+ */
+const RedirectWorkspaceToClient = () => {
+  useEffect(() => {
+    // Same derivation as getWorkspaceClientUrl: configured origin, else the
+    // sibling dev port on the browser's own host.
+    const origin = resolveWorkspaceOrigin(
+      __APP_ENV__,
+      typeof location !== "undefined" ? location : null,
+      Boolean(import.meta.env?.DEV),
+    );
+    if (!origin) return;
+    const target = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.replace(origin + target);
   }, []);
 
   return null;
@@ -156,6 +181,10 @@ const privateRouter = [
   // prefix takes the request and this never matches. Must be declared before
   // the catch-all, which would otherwise send it to /404.
   { path: "/apps/*", element: <AppRuntimeGuide />, errorElement: <RouteErrorBoundary /> },
+  // Old bookmarks pointing at the client path land on this app in local dev;
+  // hand them to the client origin instead of the 404 catch-all.
+  { path: "/workspace", element: <RedirectWorkspaceToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/workspace/*", element: <RedirectWorkspaceToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "*", element: <Navigate to="/404" replace /> }
 ]
 
@@ -268,6 +297,9 @@ export const publicRouter = createBrowserRouter([
   // F054 AC-30 — the logged-out half: without this the guide URL would show a
   // login page, which tells the visitor nothing about why the app is missing.
   { path: "/apps/*", element: <AppRuntimeGuide />, errorElement: <RouteErrorBoundary /> },
+  // Same hand-off for a logged-out visitor: otherwise `*` renders the login page.
+  { path: "/workspace", element: <RedirectWorkspaceToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/workspace/*", element: <RedirectWorkspaceToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "*", element: <LoginPage /> }
 ],
   baseConfig)

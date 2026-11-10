@@ -6,6 +6,7 @@ import {
   getLoginUrl,
   redirectToLogin,
 } from './loginRedirect';
+import { resolvePlatformOrigin } from './platformAdminUrl';
 
 const ORIGIN = 'http://localhost:3080';
 
@@ -51,6 +52,22 @@ describe('getLoginUrl', () => {
   it('falls back to the platform login when no SSO url is stored', () => {
     stubLocation({ pathname: '/workspace/share/tok' });
     expect(getLoginUrl()).toBe(`${ORIGIN}/admin`);
+  });
+
+  it('uses the platform origin injected for local dev instead of this origin', () => {
+    // `vite` serve injects PLATFORM_ORIGIN (:3001) so a logged-out visit lands on
+    // the platform login page rather than this app's own 404 — see vite.config.ts.
+    const appEnv = globalThis as unknown as {
+      __APP_ENV__: { BASE_URL: string; PLATFORM_ORIGIN?: string };
+    };
+    const previous = appEnv.__APP_ENV__;
+    appEnv.__APP_ENV__ = { ...previous, PLATFORM_ORIGIN: 'http://localhost:3001/' };
+    try {
+      stubLocation({ pathname: '/workspace/share/tok' });
+      expect(getLoginUrl()).toBe('http://localhost:3001/admin');
+    } finally {
+      appEnv.__APP_ENV__ = previous;
+    }
   });
 });
 
@@ -103,5 +120,32 @@ describe('redirectToLogin', () => {
     redirectToLogin('https://evil.example.com/steal');
 
     expect(localStorage.getItem(LOGIN_PATHNAME_KEY)).toBeNull();
+  });
+});
+
+describe('resolvePlatformOrigin', () => {
+  it('derives the platform dev port from the browser host (127.0.0.1 / LAN IP)', () => {
+    expect(resolvePlatformOrigin({}, { protocol: 'http:', hostname: '127.0.0.1' }, true)).toBe(
+      'http://127.0.0.1:3001',
+    );
+    expect(resolvePlatformOrigin({}, { protocol: 'http:', hostname: '192.168.1.88' }, true)).toBe(
+      'http://192.168.1.88:3001',
+    );
+  });
+
+  it('prefers an explicitly configured origin', () => {
+    expect(
+      resolvePlatformOrigin({ PLATFORM_ORIGIN: 'https://admin.example.com/' }, { hostname: 'x' }, true),
+    ).toBe('https://admin.example.com');
+  });
+
+  it('falls back to the current origin outside dev', () => {
+    expect(
+      resolvePlatformOrigin(
+        {},
+        { origin: 'http://192.168.1.88:4001', hostname: '192.168.1.88' },
+        false,
+      ),
+    ).toBe('http://192.168.1.88:4001');
   });
 });

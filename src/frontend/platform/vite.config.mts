@@ -187,7 +187,12 @@ export default defineConfig(({ command, mode }) => {
   }
   const app_env_define = {
     ...app_env,
-    WORKSPACE_ORIGIN: env.VITE_WORKSPACE_ORIGIN || '',
+    // Explicit origin of the end-user client app. Empty is the normal case:
+    // a built bundle is same-origin, and `vite` serve derives the client port
+    // from the browser's hostname at runtime (`src/utils/workspaceUrl.ts`), so
+    // localhost / 127.0.0.1 / LAN IP all reach the sibling dev server. Set
+    // VITE_WORKSPACE_ORIGIN only where that derivation is wrong.
+    WORKSPACE_ORIGIN: env.VITE_WORKSPACE_ORIGIN?.trim().replace(/\/$/, '') || '',
     // Origin the OnlyOffice Document Server can reach us at. It downloads the report
     // template and POSTs the save callback server-side, so `location.origin`
     // (localhost in dev) is unreachable for it — set this to your LAN IP / tunnel.
