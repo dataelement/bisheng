@@ -133,7 +133,13 @@ class SpaceUploadApplication:
             actor.current_tenant_id != self.user.tenant_id
             or (actor.subject_type == "user" and actor.subject_id != self.user.user_id)
             or (actor.current_tenant_id != tenant and not (super_scope and management == (True, tenant)))
-            or (management[1] is not None and not (super_scope and management == (True, tenant)))
+            or (
+                management[1] is not None
+                and not (
+                    management == (True, tenant)
+                    and (super_scope or actor.current_tenant_id == self.user.tenant_id == tenant)
+                )
+            )
         ):
             _identity_error()
         facts = await self.identity.acapture(self.user)
