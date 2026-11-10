@@ -92,7 +92,7 @@ after_revision 只覆盖移动后稳定归属/路径、File 身份/源对象/名
 非参与文件也一起迁移逻辑链，保原失败/安全状态，不造索引 item。
 
 Row/scope 摘要复用现 `operation_plan_repository._digest` 内部 JSON SSOT；Plan request/plan hash
-仍只由 OperationPlanRepository 算。FGA checksum 只用原 build_move_plan / normalize / 
+仍只由 OperationPlanRepository 算。FGA checksum 只用原 build_move_plan / normalize /
 projection_request_checksum / restore_projection_plan。不在新叶复制 canonical/hash 算法。
 Worker 的 MoveMetadataPolicy / MoveIndexCheckpoint / MoveIndexResult 沿现 class，不搬迁/镜像。
 

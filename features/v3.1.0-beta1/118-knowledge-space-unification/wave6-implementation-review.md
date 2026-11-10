@@ -712,3 +712,16 @@ RRT fixed27aa5359e990已Root完整读两生产diff，normalmerge d0c6e3872d；�
 c666adc6915e0312a77e5dac4710028447ad524c 经Root完整17文件diff生产链复查后normalmerge 1666d7ea27。主功能树实际HTTP/原任务/默认混合列表/普通执行黄金值/长P1进度/事务尾九路径62 passed/16.30s，证据 /private/tmp/f118-root-move-chain-integrated.log 及同名XML。作者固定组合657 passed、21个慢规模项排除；401/10001另测2通过，完整预算见 /private/tmp/f118-fullchain-fixed-evidence.md。此非最新全特性全选集或部署E2E。
 
 新显式预检确认到原EXECUTE_TASK、实际P1/K1/R2/Ready、原index adapter、durable target_verified/source_cleaned及五标量ACK、query/retry已接通；原同步移动/skip_invalid外层分类与同空间语义、源空间删除输入保护仍待业务闭合。默认list仅普通四kind，COUNT与page同谓词；这是读列表SQL字节的明确例外，原执行49/49/49/38黄金值保持。未据本次整合提前关闭T073–094；原137队列仍44完成、93待办，按整卡条件验收。
+
+
+### 本轮主流程收尾（2026-11-10）
+
+用户将本轮终点调整为主流程验收后结束开发、合入`feat/3.1.0-beta1`并清理本次临时工作区/分支，不整理提测包。原14项完整QA保留，不冒称全部94条AC或140用例通过，不再据此扩大开发。
+
+最终功能候选`170d1a4d0d2d858e8271da83e0b8ad332392bb88`：真实环境先修正删除任务秒级时间精度和同租户管理上传；随后`9db41bc18c`修复原生MySQL JSON null被版本关联误判为处理中，保持空对象/真实transition仍为忙；最后服务账号删除复用原受信审计DTO适配，原SA principal、typed actor、租户和scope仍负责授权，通用SourceRead身份规则未放宽。
+
+`n10main3`的6条核心Web API全部通过，涵盖旧0/真实3及QA独立、工作台embedding仅初始化、pure-visible读/拒操作与owner重命名、真实上传及重复覆盖保持File/Doc/Version、版本关联/主版本、文件/文件夹删除及清空/空间删除、模型绑定保护。附加v2/MCP已完成真实上传、检索及跨租户/scope拒绝，其末尾10996暴露上述SA衔接问题。最终`n10main4`按同一8条冻结流程复跑：8 passed、0失败/0错误/0跳过，suite_complete=true，主流程验收完成，本轮开发结束。镜像`sha256:7724555f65416fa14edb0dc7bd35ce7f2a4fd63836031f768bea4a04bfb90848`；实际健康200及修复叶SHA已核。
+
+发布线正常合并保留其配置、审计、模型校验和活动续期改动；已纳入最新`9258169f7b`。集成14路径200 passed/7.64s，证据`/private/tmp/f118-release-closeout-final.{log,xml}`。SA边界四路径49项、JSON-null关联86项为各自定点证据，不相加。正式MySQL升级/恢复/回放、原始ID和429引用独立审计的既有真实证据保持有效。
+
+验证边界：完整UI尚未通过（页面脚本入口资格仍待核实）；首次高级重处理失败10998尚未复验，初始环境缺少Beat，已补原60秒调度；托管SDK双凭据未执行，F118相对发布线不修改SDK。独立`bc78`固定620文件选集实际8348 testcase nodes＝8246通过/33失败/38错误/31跳过，日志和XML在`/private/tmp/f118-knowledge-unification-oldmcp-bc78-20261110/`；不是完整backend、最终HEAD或现场E2E，未逐项归因，不统称baseline。以上均不记录为已通过。
