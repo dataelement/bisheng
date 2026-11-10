@@ -201,6 +201,14 @@ export default defineConfig(({ command, mode }) => {
   const gatewayProxyConfig = createFrontendProxy(gatewayTarget, { rewrite, verbose: proxyLog });
   const fileServiceProxyConfig = createFrontendProxy(fileServiceTarget, { rewrite, verbose: proxyLog, minioEnvName: 'VITE_MINIO_PROXY_TARGET' });
   const proxyTargets: Record<string, ReturnType<typeof createFrontendProxy>> = {};
+  // Desktop embeds the client under the enterprise origin, as production nginx
+  // does. Opt in when running the two Vite apps separately for integration QA.
+  if (env.VITE_WORKSPACE_PROXY_TARGET) {
+    proxyTargets[`${app_env.BASE_URL}/workspace`] = createFrontendProxy(
+      env.VITE_WORKSPACE_PROXY_TARGET,
+      { rewrite, verbose: proxyLog },
+    );
+  }
   // MCP validates the public Host against the configured enterprise URL.
   proxyTargets[`${app_env.BASE_URL}/api/v1/dsh/work/mcp`] = {
     ...apiProxyConfig,

@@ -37,6 +37,8 @@ Business APIs obtain trusted visitor identity from the platform and enforce thei
 
 Cloud scheduling, background workers and webhooks must continue without an open page; page timers do not satisfy a continuous-processing requirement. After release, guide the owner to team visibility management without changing permissions automatically.
 
+Only a validated successful mutation receipt may clear a pending operation or unsaved draft. A snapshot fetched after HTTP 409 is still a read result, never a save receipt: preserve the draft and its baseline until explicit rebase and a successful mutation. Test the actual asynchronous UI handler for this path. Reconnect must survive several consecutive network or snapshot failures using bounded backoff; one failed recovery fetch must not stop future attempts. Preserve the cursor and draft, stop on authentication/authorization denial, and resume after explicit reload following restored permission.
+
 ## Acceptance
 
 Verify ordinary-user allow/deny pairs, two distinct users synchronizing records, conflicts, retries, reconnect replay, revocation, code updates and process replacement with persistent data. Verify required jobs after Desktop closes. List unverified items honestly; builds do not prove deployment or installation.
