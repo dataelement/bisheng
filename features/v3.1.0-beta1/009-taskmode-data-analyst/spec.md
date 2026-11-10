@@ -22,6 +22,7 @@
 - **AC-04** — WHEN 装配 data-analyst，THE SYSTEM SHALL 只给它代码执行器这一个业务工具（另有框架自带的文件工具），不给知识库检索、联网、ask_user、写文件类导出工具和 check_html。
 - **AC-05** — WHEN data-analyst 运行，THE SYSTEM SHALL 使用与 researcher 相同顺序的中间件栈（压缩、容错、防循环、二进制守卫、结果预算、语言尾注、调用修复），不挂引用相关中间件。
 - **AC-06** — WHEN data-analyst 遇到靠查库和技能都无法消除、且只有用户知道的歧义，THE SYSTEM SHALL 让子代理返回以 `NEED_CLARIFICATION:` 开头的问题列表；主图判断确有必要时调用 ask_user，拿到答案后写进新的委派说明重新委派；主图不把 `NEED_CLARIFICATION` 当作最终结果。
+  - **验证状态（2026-11-11）**：E2E 中 3 次均未触发（主图总在委派前确定口径），用户决定接受现状，不作为阻断门槛；见 e2e-report.md。
 - **AC-07** — WHEN 主图系统提示词生成（任意深度研究任务），THE SYSTEM SHALL 不含任何澄清次数上限（如"整个会话最多澄清一轮""绝不第二次调用 ask_user"），并写明提问判断原则：只有用户知道、且按默认假设大概率做错或返工代价大时才问；能补默认值的采用假设并在交付物写明；同一时刻的多个缺口合并为一次提问；用户已回答过的问题不再问。
 - **AC-07b**（行为观察，不作为阻断门槛）— WHEN 在端到端中运行一组会话（含明确请求与含糊请求），THE SYSTEM SHOULD 对明确请求不弹澄清卡，对同一问题不重复提问；结果按会话数和人工判定记录在验证报告中。
 - **AC-08** — WHEN 任务以无人值守方式运行（Open API），THE SYSTEM SHALL 不出现 ask_user 相关指引；主图收到 `NEED_CLARIFICATION` 时选择最合理的候选项作为假设，重新委派，并在交付物中写明假设。
