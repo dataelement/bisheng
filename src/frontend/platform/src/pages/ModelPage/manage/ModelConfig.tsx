@@ -283,13 +283,17 @@ export default function ModelConfig({
       }
       refetchConfig();
     } catch (error) {
-      if (error && typeof error === "object") {
-        const reported = error as { message?: string };
-        const generic = String(i18next.t("api_errors:fallback"));
-        if (!reported.message || reported.message === generic)
-          reported.message = t("model.saveFailed", { ns: "model" });
-      }
-      showApiError(error);
+      const generic = String(i18next.t("api_errors:fallback"));
+      const reported =
+        error && typeof error === "object"
+          ? (error as { message?: unknown }).message
+          : undefined;
+      const specific =
+        typeof reported === "string" && reported.trim() && reported !== generic;
+      toast.show({
+        type: "error",
+        message: specific ? reported : t("model.saveFailed"),
+      });
     } finally {
       setIsLoading(false);
     }
