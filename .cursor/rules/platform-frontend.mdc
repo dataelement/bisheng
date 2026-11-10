@@ -1,0 +1,13 @@
+---
+description: Platform admin UI — patterns not covered by AGENTS.md
+globs: src/frontend/platform/**
+alwaysApply: false
+---
+
+# Platform (`src/frontend/platform/`)
+
+P0 rules: root `AGENTS.md` §4 (Platform column).
+
+- Tests: `npx vitest run <files>` (cwd `src/frontend/platform/`). No lint or typecheck script exists; do not invent one.
+- API functions live in `@/controllers/API/`; wrap calls with `captureAndAlertRequestErrorHoc` from `@/controllers/request`.
+- MinIO image 403 means Vite `fileServiceTarget` does not match `object_storage.minio.sharepoint` in `src/backend/bisheng/config.yaml`.

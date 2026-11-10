@@ -1,0 +1,80 @@
+---
+description: "BiSheng agent behavior — Always / Ask First / Never"
+alwaysApply: true
+---
+
+# BiSheng
+
+Enterprise LLM application DevOps platform. Monorepo: FastAPI backend, Platform admin UI, Client chat UI.
+Team P0 rules (layering, dual DB, tenancy, permissions, frontend split, arch-guard) live in root `AGENTS.md`, which is loaded every session. This rule adds agent behavior only; do not copy `AGENTS.md` here.
+
+## Stack
+
+- Backend `src/backend/`: Python 3.10+, uv, FastAPI, SQLModel, Celery, LangGraph; MySQL + DM8
+- Platform `src/frontend/platform/`: Vite 5, React 18, Zustand, react-query v3, vitest
+- Client `src/frontend/client/`: Vite 6, React 18, Recoil, react-query v5, jest
+
+## Commands
+
+```bash
+# Backend (cwd: src/backend/)
+uv run pytest test/<module>/test_xxx.py::test_fn
+uv run ruff format <file> && uv run ruff check --fix <file>
+# Platform (cwd: src/frontend/platform/)
+npx vitest run <files>
+# Client (cwd: src/frontend/client/)
+npx jest <files> --coverage=false --watchAll=false
+# Architecture guard (repo root)
+bash scripts/arch-guard.sh <file>
+```
+
+## Always
+
+- Think before coding: state assumptions; if ambiguous, ask — do not silently pick an interpretation.
+- Simplicity first: minimum code for the ask; no speculative features or abstractions.
+- Surgical changes: only what the task needs; no drive-by refactors or formatting.
+- Match existing patterns; prefer exemplars below.
+- Search callers before public API / schema / route / error-code contract changes.
+- Run the smallest relevant verify commands; report what you skipped and why.
+- Local verify = mocked unit/API tests + `ruff` (backend) + `scripts/arch-guard.sh` only. Do not start services, drive a browser, or hit the shared 171 MySQL during implementation. Write real-environment checks into root `e2e/<feature>/` and run them only when the user asks ("跑 e2e" / `/e2e-test`). Report which e2e checks were written but not run.
+- Run `scripts/arch-guard.sh` on edited backend/frontend files; fix every VIOLATION.
+- For Cursor this rule overrides `AGENTS.md` §5 and §6 step 6: no Cursor hook runs arch-guard, so run it yourself; e2e checks are written during implementation and run only when the user asks.
+- Preserve unrelated user worktree changes.
+- **Boundary (narrow):** upgrade only if the change alters shared semantics, an external contract, or irreversible data/authz. Then report blast radius in ≤5 lines before editing; pause on high risk. Multi-file edits alone are not a pause. If unsure and not one of those three types → 改 → 验 → 报 and note residual risk in the report.
+- The narrow-boundary rule decides when to pause inside a task; it does not replace the SDD workflow in `AGENTS.md` §6 for new features.
+
+## Ask First
+
+- Auth, SSO, JWT, tenant resolution, permission / visibility changes.
+- Public API, `/api/v2` open endpoints, response shape, 5-digit error codes.
+- Destructive migrations (drop or rename a table/column, change column meaning, data backfill), data repair, bulk delete/update. Additive migrations need no pause but must follow `AGENTS.md` §3.2 dual-DB rules.
+- `config.yaml`, secrets, `docker/`, `.github/workflows/`.
+- Major dependency / runtime upgrades, new frameworks, new UI or state libraries.
+- Resolving merge/rebase conflicts: list conflicting files and sides first; never auto-pick ours/theirs or force-push a resolution.
+
+## Never
+
+- Commit secrets or plaintext passwords (`config.yaml` passwords are Fernet-encrypted).
+- Log tokens, passwords, or sensitive PII.
+- Delete, skip, or weaken tests to go green.
+- Invent scripts that are not in `package.json` / `pyproject.toml`.
+- Overwrite unrelated user changes.
+- Irreversible cleanup or permission tightening without explicit confirmation.
+
+## Exemplars
+
+- Permission entry: `src/backend/bisheng/permission/domain/services/permission_service.py`
+- New module layout: `src/backend/bisheng/approval/`, `src/backend/bisheng/points/`
+- Dual-DB types: `src/backend/bisheng/core/database/dialect_helpers.py`
+- Platform HTTP: `src/frontend/platform/src/controllers/request.ts`
+- Client HTTP: `src/frontend/client/src/api/request.ts`
+
+## Deep docs
+
+- `.cursor/ai-governance/verification-matrix.md`
+- `.cursor/ai-governance/sensitive-areas.md`
+- `.cursor/ai-governance/architecture.md`
+
+Living document: when the agent repeats a mistake, add one concrete Always/Ask/Never bullet here.
+
+Personal taste (tone, private checklists) belongs in gitignored `.cursor/rules/*.local.mdc` or `.cursor/rules/personal/` — see `.cursor/rules/personal/README.md`. Do not put it in this team rule.

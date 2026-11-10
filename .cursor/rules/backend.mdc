@@ -1,0 +1,16 @@
+---
+description: BiSheng backend — commands and pitfalls not covered by AGENTS.md
+globs: src/backend/**
+alwaysApply: false
+---
+
+# Backend (`src/backend/`)
+
+P0 rules: root `AGENTS.md` §3. Module map: `src/backend/AGENTS.md`. Command reference: `src/backend/CLAUDE.md`.
+
+- New tests go under `test/<module>/`, not `test/` root. `asyncio_mode=auto`, no `@pytest.mark.asyncio`.
+- Never run `test/test_knowledge_space_service.py` (11k+ lines) as a whole file; select tests with `::test_fn` or `-k`, and put new tests in a new file under `test/<module>/`.
+- Do not keep growing `bisheng/knowledge/domain/services/knowledge_space_service.py`; put new behavior in a small file and leave a call site.
+- Never swallow exceptions; `logger.exception(...)` then re-raise or raise a `BaseErrorCode` subclass. Do not return `resp_500(message=str(e))`.
+- `uv run alembic revision --autogenerate` reflects MySQL only; review DM8 compatibility by hand.
+- Celery Beat iterates all active tenants; a new periodic task multiplies load by tenant count.
