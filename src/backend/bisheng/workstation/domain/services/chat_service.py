@@ -83,7 +83,7 @@ from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.chat_attachment import promote_chat_attachments
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
-from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.department.domain.services.department_flow_service import (
     DepartmentFlowService,
     SlotOutcome,
@@ -112,6 +112,7 @@ from .content_safety import (
     blocked_answer_payload,
     build_blocked_answer_row,
     iter_blocked_sse,
+    mark_session_content_violation,
     workbench_tenant_id,
 )
 from .daily_citation import (
@@ -1511,10 +1512,11 @@ async def _agent_initialize_chat(
             ),
             category="question",
             source=0,
+            sensitive_status=SensitiveStatus.VIOLATIONS.value if skip_llm else SensitiveStatus.PASS.value,
         )
     )
-
     if skip_llm:
+        mark_session_content_violation(conversation_id)
         return ws_config, conversation, message, None, model_info, is_new_conversation
     bisheng_llm = await LLMService.get_bisheng_llm(
         model_id=data.model,
@@ -1731,6 +1733,7 @@ def _respond_blocked_workbench(conversation, message, model_info, data: APIChatC
             auto_reply=auto_reply,
         )
         resp = await ChatMessageDao.ainsert_one(row)
+        mark_session_content_violation(conversation.chat_id)
         for chunk in iter_blocked_sse(
             conversation_id=conversation.chat_id,
             user_message_id=message.id,
@@ -1957,6 +1960,9 @@ async def _agent_stream_chat_completion(
             db_content = blocked_answer_payload(auto_reply)
             row = build_answer_row(db_content)
             row.extra = blocked_answer_extra()
+            message.sensitive_status = SensitiveStatus.VIOLATIONS.value
+            await ChatMessageDao.aupdate_message_model(message)
+            mark_session_content_violation(conversation_id)
             resp_msg = await ChatMessageDao.ainsert_one(row)
             yield _sse_resp(
                 "agent_answer",
