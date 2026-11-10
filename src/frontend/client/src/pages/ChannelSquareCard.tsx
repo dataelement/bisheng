@@ -45,7 +45,7 @@ export function ChannelSquareCard({
       case "private":
         return { text: localize("private"), variant: "secondary" as const, disabled: true };
       default:
-        return { text: localize("subscribe") || "订阅", variant: "outline" as const, disabled: false };
+        return { text: localize("subscribe"), variant: "outline" as const, disabled: false };
     }
   };
 
