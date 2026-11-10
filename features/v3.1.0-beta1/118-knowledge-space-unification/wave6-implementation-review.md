@@ -8,7 +8,7 @@
 
 | 实际集成链 | 固定实现 / 集成点 | 当前证据边界 |
 | --- | --- | --- |
-| 原Run全平台权限发布、六来源回填/对账、Coverage、新租户及CLI | 权限a576；回填dbf003、删除证据窄修d4070de444，均已正常合流 | 原项目及clone2正式同run迁移/重入ready；真实API/UI整体验收仍待结果 |
+| 原Run全平台权限发布、六来源回填/对账、Coverage、新租户及CLI | 权限a576；回填dbf003、删除证据窄修d4070de444，均已正常合流 | 原项目及clone2正式同run迁移/重入ready；原API19失败；修复后现场复测及UI仍待完成 |
 | 跨空间与同步移动、旧入口及源输入保护 | 3f358、575b0792ca及2bb10ce9df | 实际应用/Worker/调用方已接；预检及确认锁前权限分类先于有效根idle检查，锁后重验保留；环境测试待执行 |
 | 知识引用/文件夹闭集删除/空间删除与清空、旧文档及Version | 575b0792ca、混合权限与DDL a1c4aa2ce2 | 原Plan→F048→SQL→持久清理已接，必要native闭环已验；不报整体通过 |
 | 模型删除/共享协调及两端知识删除页面 | afb4d255、1bbc16d0a9、494351123c；集成2e9fd102d5 | 原PUT差集与强删确认、未知ACK/受限来源按原合同；无签发加固 |
@@ -67,7 +67,11 @@ Root最终四路径`test_wire_router`、`test_legacy_document_contract`、`test_
 
 既有测试工具镜像`sha256:9d283aa38710d8ca5b39cbd3ed02021beee3663e51da1d6532dfa5b5753a384b`内Chromium已完成无网络、无凭据的launch/data HTML/close验证，仅证明工具可用，不是UI验收。
 
-API E2E **19条已在服务器实际运行中**（run `n10api1`，显式选择全部5 suites，包含v2/MCP），最终结果尚未产出；此前本地collect-only不再作为当前执行状态。[浏览器清单](./e2e-checklist.md)21场景全部未执行，14张验收卡不改勾。覆盖验证读取真实Chunk，不附加MD5变化假设；协议兼容测试不是完整SDK验收。
+API E2E **原run `n10api1`已在候选71dd失败结束**，显式全部5 suites（含v2/MCP）：`pytest_exit=1`、`tests=19 / failures=12 / errors=6 / skipped=0`、`suite_complete=false`。同case存在teardown error，不用19−12−6推算通过数。12个failure均停在F118 upload helper的native POST `/knowledge/space/{sid}/files`业务10996；另已定位OpenProtocols的Child owner误调用super-only management-scope导致26022，以及CAS纯可见fixture错误期待actions={visible}。[浏览器清单](./e2e-checklist.md)21场景全部未执行，14张验收卡不改勾。覆盖验证读取真实Chunk，不附加MD5变化假设；协议兼容测试不是完整SDK验收。
+
+Root独立只读探针观察到知识deletejob为3成功、3条prepared/pending且attempt=0；其中两条精确既有任务已due、无lease，当时该表MySQL lock wait为0。相关时间列`DATETIME_PRECISION=0`，探针连接未启用`TIME_TRUNCATE_FRACTIONAL`；会话临时表真实INSERT `.900000`向上舍入至下一秒，固定布尔`initial_claim_would_skip`、`actual_insert_rounds_up`、`floored_due_is_immediately_eligible`均为1。临时表已drop，业务表未改；这证明初次claim的时钟精度边界，不是修复后的任务完成证据。初次claim精度02fae7e111及原租户管理上传准入f826aa8c63两项生产修复已由Root合流至fa49aa899a、独立65项本地测试通过；新candidate尚未部署或现场复测，UI未启动。
+
+F118专用SA fixture已改走原Child owner cookie及本Child的`X-Service-Account-Tenant`，不调用超管scope接口（55f1a0b40e）；CAS专用fixture按原explanation语义断actions=[]，另用真实空间读取/visible检查证明可见，edit/delete检查仍false（1c163ed2d1）。Root此前以真实专属reader只读确认actions=[]且空间可读。新增合同回归含错误放行/拒绝反例，本地相关组24通过、原5 suites仍19 collect；未改通用SA helper、生产权限或SDK，不作远端复跑证明。
 
 **本次没有SDK代码改动。** Git核对`src/bisheng-sdk`无需求diff；不为测试新增SDK或扩展托管运行时。现有公共SDK双凭据的全托管场景需真实运行材料，单列未执行，不将新增runtime列为F118功能依赖，也不因此暂停迁移和知识库验收。
 
@@ -83,7 +87,7 @@ clone2以实际材料盘点3租户并完成正式M2 frozen；同run `e2e-f118-20
 
 原pure-use Grant74/Source `3181446261062334809`已真实HTTP验证：迁移后visible/use兼容别名true、其他space动作false；正规REMOVE后visible/use及全部动作false，children拒绝18040，owner原Source343… DTO完全不变。安全证据为Root原环境证据目录`originalEV/pure-visible-revoke.json`。PUBLIC/APPROVAL基本信息preview仍按原规则返回actions=[]，不为错误18040测试Oracle改业务；临时准备model/grant ID原wire为str `9`/`74`，Root仅修类型断言，非产品bug。
 
-原项目升级及新API/Worker/frontend部署已有上述证据；API19运行中未出最终结果，UI21未执行、14卡仍pending。109:3005及范围排除项保持不动，不将sanity或独立HTTP路径当完整E2E通过。
+原项目升级及新API/Worker/frontend部署已有上述证据；原API19已失败结束、修复后现场复测待执行，UI21未启动、14卡仍pending。109:3005及范围排除项保持不动，不将sanity或独立HTTP路径当完整E2E通过。
 
 两项oneoff工具问题仅收窄适配短/完整容器ID与只读rootfs缓存路径；`XDG_CACHE_HOME=/tmp/f118-cache`下真实broker只读检查通过，旧失败留证。这不是新增产品或SDK修复，不增加RTM。
 
