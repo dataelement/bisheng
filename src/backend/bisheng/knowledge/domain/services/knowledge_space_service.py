@@ -4,6 +4,7 @@ import logging
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from hashlib import sha256
@@ -1282,7 +1283,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if entry_kind not in {"web", "open_api"}:
             raise PermissionDeniedError()
-        advanced = embedding_model_id is not None or processing_defaults is not None or initial_metadata_fields is not None
+        advanced = (
+            embedding_model_id is not None or processing_defaults is not None or initial_metadata_fields is not None
+        )
         if entry_kind == "open_api":
             from bisheng.open_api.domain.context import get_current_open_api_principal
 
@@ -1312,7 +1315,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if initial_metadata_fields is not None:
             from bisheng.knowledge.domain.schemas.knowledge_schema import MetadataField
 
-            initial_metadata_fields = [MetadataField.model_validate(value).model_dump(mode="json") for value in initial_metadata_fields]
+            initial_metadata_fields = [
+                MetadataField.model_validate(value).model_dump(mode="json") for value in initial_metadata_fields
+            ]
         existing = await self._existing_creation(creation_request_id, None)
         selected_model_id = embedding_model_id
         if existing is None:
@@ -1348,7 +1353,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             processing_defaults=defaults,
         )
         if initial_metadata_fields is not None:
-            schema_input = json.dumps(initial_metadata_fields, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+            schema_input = json.dumps(
+                initial_metadata_fields, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+            )
             payload_hash = sha256(f"{payload_hash}|initial_metadata|{schema_input}".encode()).hexdigest()
         if existing is not None:
             if existing.creation_payload_hash != payload_hash:
@@ -4009,9 +4016,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
         skip_dedup: bool = False,
         *,
         processing_overrides: ProcessingOverrides | LegacyProcessingOverrides | None = None,
+        callback_url: str | None = None,
+        _legacy_inputs: tuple[KnowledgeFileOne, ...] | None = None,
+        _legacy_request: FileProcessBase | None = None,
         _application=None,
         _deferred: _UploadDispatchBatch | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
+        if (_legacy_inputs is None) != (_legacy_request is None):
+            raise ValueError("Legacy inputs and request must be paired")
+        if _legacy_inputs is not None:
+            if (
+                not isinstance(_legacy_inputs, tuple)
+                or not isinstance(_legacy_request, FileProcessBase)
+                or _legacy_request.knowledge_id != knowledge_id
+                or processing_overrides is not None
+                or len(_legacy_inputs) != len(file_path)
+                or any(
+                    not isinstance(one, KnowledgeFileOne) or one.file_path != path
+                    for one, path in zip(_legacy_inputs, file_path, strict=True)
+                )
+            ):
+                raise ValueError("Legacy upload inputs must exactly match this SPACE batch")
+            _legacy_inputs, _legacy_request = deepcopy((_legacy_inputs, _legacy_request))
+        if _deferred is not None and callback_url is not None:
+            raise ValueError("Deferred uploads cannot dispatch callbacks")
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
         if parent_id:
@@ -4039,6 +4067,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 file_source=file_source,
                 skip_dedup=skip_dedup,
                 processing_overrides=processing_overrides,
+                callback_url=callback_url,
+                legacy_inputs=_legacy_inputs,
+                legacy_request=_legacy_request,
                 application=_application,
                 deferred=_deferred,
             )
@@ -4076,6 +4107,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_source: FileSource,
         skip_dedup: bool,
         processing_overrides: ProcessingOverrides | LegacyProcessingOverrides | None,
+        callback_url: str | None = None,
+        legacy_inputs: tuple[KnowledgeFileOne, ...] | None = None,
+        legacy_request: FileProcessBase | None = None,
         application=None,
         deferred: _UploadDispatchBatch | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
@@ -4132,7 +4166,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if processing_overrides is not None
             else {}
         )
-        file_split_rule = FileProcessBase(
+        file_split_rule = legacy_request or FileProcessBase(
             knowledge_id=knowledge_id,
             **explicit_rules.get("document", {}),
             **({"excel_rule": explicit_rules["table"]} if explicit_rules.get("table") else {}),
@@ -4143,17 +4177,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         application = application if application is not None else self.upload_application_factory()
 
         try:
-            for one in file_path:
+            for index, one in enumerate(file_path):
                 if self._upload_execution_guard is not None:
                     await self._upload_execution_guard()
                 prepared = KnowledgeService.prepare_one_file(
                     self.login_user,
                     knowledge=db_knowledge,
-                    file_info=KnowledgeFileOne(file_path=one),
+                    file_info=legacy_inputs[index] if legacy_inputs is not None else KnowledgeFileOne(file_path=one),
                     split_rule=file_split_rule.model_dump(),
                     file_kwargs={"file_source": file_source.value},
                     processing_rule_request=file_split_rule,
-                    ordinary_overrides_only=not legacy_overrides,
+                    ordinary_overrides_only=legacy_inputs is None and not legacy_overrides,
                 )
                 if self._upload_execution_guard is not None:
                     await self._upload_execution_guard()
@@ -4200,7 +4234,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     failed_file = KnowledgeSpaceFileResponse(**db_file.model_dump())
                     failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
                     failed_file.file_level_path = file_level_path
-                    failed_files.append(failed_file)
+                    failed_files.append(
+                        {**failed_file.model_dump(), "file_path": one} if legacy_inputs is not None else failed_file
+                    )
         except BaseException:
             if deferred is None:
                 await self._compensate_upload(application)
@@ -4209,7 +4245,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         batch.files.extend(zip(process_files, preview_cache_keys, strict=True))
         batch.folder_paths.append(file_level_path)
         if deferred is None:
-            await self._dispatch_upload_batch(knowledge_id, batch)
+            await self._dispatch_upload_batch(knowledge_id, batch, callback_url=callback_url)
         return failed_files + process_files
 
     @staticmethod
@@ -4220,7 +4256,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # Keep the staging error primary; uncertain ownership is retained.
             logger.opt(exception=True).error("Initial SPACE upload compensation requires reconciliation")
 
-    async def _dispatch_upload_batch(self, knowledge_id: int, batch: _UploadDispatchBatch) -> None:
+    async def _dispatch_upload_batch(
+        self, knowledge_id: int, batch: _UploadDispatchBatch, *, callback_url: str | None = None
+    ) -> None:
         from bisheng.worker.knowledge import scheduler as file_scheduler
 
         if self._upload_execution_guard is not None:
@@ -4233,7 +4271,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 file_id=row.id,
                 file_name=row.file_name,
                 preview_cache_key=cache_key,
-                callback_url=None,
+                callback_url=callback_url,
             )
         for folder_path in dict.fromkeys(batch.folder_paths):
             await self.update_folder_update_time(folder_path)

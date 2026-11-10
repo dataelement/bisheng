@@ -1453,6 +1453,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=None, identity=login_user)
+            return run_async_safe(owner.astage(req_data), timeout=3600)
         try:
             cls.permission_service.ensure_knowledge_write_sync(
                 login_user=login_user,
@@ -1523,6 +1528,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=None, identity=login_user)
+            return await owner.astage(req_data)
         try:
             await cls.permission_service.ensure_knowledge_write_async(
                 login_user=login_user,
@@ -1633,6 +1643,13 @@ class KnowledgeService(KnowledgeUtils):
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
         """Process uploaded files"""
+        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
+        if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            return run_async_safe(owner.aprocess(req_data), timeout=3600)
+
         knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(
             login_user, req_data, upload_limit_bytes=upload_limit_bytes
         )
@@ -1663,6 +1680,13 @@ class KnowledgeService(KnowledgeUtils):
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
 
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            return await owner.aprocess(req_data)
+
         knowledge, failed_files, process_files, preview_cache_keys = await cls.asave_knowledge_file(
             login_user, req_data, upload_limit_bytes=upload_limit_bytes
         )
@@ -1691,6 +1715,13 @@ class KnowledgeService(KnowledgeUtils):
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
         """Sync uploaded files"""
+        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
+        if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            return run_async_safe(owner.aprocess(req_data, inline=True), timeout=3600)
+
         knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(
             login_user, req_data, upload_limit_bytes=upload_limit_bytes
         )
@@ -2046,6 +2077,23 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
+        if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            result, writeable = run_async_safe(
+                owner.alist(
+                    knowledge=db_knowledge,
+                    decorate=cls._adecorate_knowledge_files,
+                    keyword=file_name,
+                    status=status,
+                    file_ids=file_ids,
+                    page=page,
+                    page_size=page_size,
+                ),
+                timeout=300,
+            )
+            return result[0], result[1], writeable
 
         try:
             cls.permission_service.ensure_knowledge_read_sync(
@@ -2101,6 +2149,20 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
+        if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            result, writeable = await owner.alist(
+                knowledge=db_knowledge,
+                decorate=cls._adecorate_knowledge_files,
+                keyword=file_name,
+                status=status,
+                file_ids=file_ids,
+                page=page,
+                page_size=page_size,
+            )
+            return result[0], result[1], writeable
 
         try:
             await cls.permission_service.ensure_knowledge_read_async(
@@ -2166,7 +2228,9 @@ class KnowledgeService(KnowledgeUtils):
         file_tags_map = (
             await asyncio.to_thread(
                 TagDao.get_tags_by_resource,
-                ResourceTypeEnum.KNOWLEDGE_FILE,
+                ResourceTypeEnum.SPACE_FILE
+                if db_knowledge.type == KnowledgeTypeEnum.SPACE.value
+                else ResourceTypeEnum.KNOWLEDGE_FILE,
                 [str(one.id) for one in res],
             )
             if res
@@ -2207,6 +2271,24 @@ class KnowledgeService(KnowledgeUtils):
         meaning, so an old page-number cursor fails with 10991 instead of
         being read as an id.
         """
+        db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+        if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            return await owner.alist(
+                knowledge=db_knowledge,
+                decorate=cls._adecorate_knowledge_files,
+                keyword=file_name,
+                status=status,
+                file_ids=file_ids,
+                page_size=page_size,
+                cursor=cursor,
+                use_cursor=True,
+            )
+
         context = "filelib_file|kb|id_desc"
         try:
             decoded = decode_cursor(cursor, expected_key_len=1, expected_context=context)
@@ -2216,9 +2298,6 @@ class KnowledgeService(KnowledgeUtils):
         if after_id is not None and (isinstance(after_id, bool) or not isinstance(after_id, int) or after_id < 1):
             raise KnowledgeInvalidCursorError()
 
-        db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
-        if not db_knowledge:
-            raise NotFoundError.http_exception()
         try:
             await cls.permission_service.ensure_knowledge_read_async(
                 login_user=login_user,
