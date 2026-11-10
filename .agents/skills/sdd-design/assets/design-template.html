@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>技术设计文档 · 可复用模板</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#202733;--sub:#515d6d;--line:#dce2eb;--accent:#245bb1;--weak:#edf3ff;--ok:#17683b;--warn:#8a4b00;--bad:#a92525}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;overflow-wrap:anywhere}
+  a{color:var(--accent);text-underline-offset:3px}
+  a:hover{text-decoration-thickness:2px}
+  a:focus-visible,button:focus-visible,summary:focus-visible,.table-wrap:focus-visible{outline:3px solid #b25b00;outline-offset:4px}
+  .wrap{max-width:1060px;margin:auto;padding:28px 24px 72px}
+  #progress{position:fixed;inset:0 auto auto 0;height:3px;background:var(--accent);width:0;z-index:20}
+  .hero{background:linear-gradient(135deg,#164789,#285eae);color:#fff;padding:28px;border-radius:16px;margin-bottom:20px}
+  h1{margin:0 0 8px;font-size:27px;line-height:1.45}
+  .meta{font-size:13px;margin:0 0 16px}
+  .summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .summary-grid .item{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:12px 14px;border-radius:10px}
+  .item b{display:block;font-size:12px;margin-bottom:4px}
+  .item p{font-size:14px;margin:0}
+  .template-note{border:1px solid #d9b768;background:#fff8e6;color:#684100;border-radius:10px;padding:12px 16px;margin:0 0 20px}
+  .toc,.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:24px;margin:0 0 20px}
+  .toc h2{font-size:15px;margin:0 0 10px}
+  .toc ol{columns:2;column-gap:32px;padding-left:22px;margin:0}
+  .toc li{break-inside:avoid;margin:3px 0}
+  .toolbar{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0 0}
+  [hidden]{display:none!important}
+  button{font:inherit;font-size:13px;padding:7px 13px;min-height:38px;color:var(--accent);background:#fff;border:1px solid #b9c9e4;border-radius:8px;cursor:pointer}
+  button:hover{background:var(--weak)}
+  .card,h3,[id]{scroll-margin-top:22px}
+  h2{font-size:21px;line-height:1.5;margin:0 0 6px}
+  h3{font-size:16px;line-height:1.6;margin:23px 0 8px}
+  .lead,.hint{color:var(--sub);font-size:13px}
+  .lead{margin:0 0 16px}
+  p{margin:10px 0}
+  .badge{display:inline-block;font-size:11px;font-weight:600;color:var(--accent);background:var(--weak);padding:2px 8px;border-radius:12px;vertical-align:middle}
+  .callout{border-left:4px solid var(--accent);background:#f1f5fc;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .callout.warn{border-color:var(--warn);background:#fff8e9}
+  .callout.ok{border-color:var(--ok);background:#eff8f2}
+  .callout strong{display:block;margin-bottom:4px}
+  .table-wrap{overflow-x:auto;max-width:100%;margin:12px 0;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;min-width:700px;font-size:13px}
+  th,td{text-align:left;vertical-align:top;padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  th{background:#f0f3f8;color:#364459;font-weight:650}
+  tr:last-child td{border-bottom:0}
+  tr>*:last-child{border-right:0}
+  caption{text-align:left;font-weight:600;padding:10px 12px;background:#fafbfc}
+  td ol{margin:0;padding-left:20px}
+  .fill{color:#4c5a6f}
+  .diagram{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;margin:14px 0}
+  .diagram-scroll{overflow-x:auto}
+  .diagram svg{display:block;width:100%;min-width:640px;height:auto}
+  figcaption{font-size:12px;color:var(--sub);margin-top:8px}
+  .diagram text{font-family:inherit;fill:#26364d}
+  details{border:1px solid var(--line);border-radius:9px;margin:12px 0;background:#fafbfd}
+  details[open]{background:#fff}
+  summary{font-size:14px;font-weight:600;padding:13px 16px;cursor:pointer}
+  summary::marker{color:var(--accent)}
+  details .inner{padding:0 16px 15px}
+  .reading-label{font-size:12px;color:var(--sub);margin-bottom:12px}
+  .status{font-weight:600;color:var(--warn)}
+  code{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#f0f3f8;padding:1px 4px;border-radius:4px;overflow-wrap:anywhere}
+  .footer{font-size:12px;color:var(--sub);text-align:center;margin-top:26px}
+  @media(max-width:680px){
+    .wrap{padding:16px 12px 48px}.hero,.card,.toc{padding:20px 16px}
+    h1{font-size:23px}h2{font-size:19px}.summary-grid{grid-template-columns:1fr}
+    .toc ol{columns:1}.toolbar button{flex:1 1 auto}.diagram{padding:10px}
+  }
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  @page{size:A4;margin:14mm 12mm}
+  @media print{
+    html{scroll-behavior:auto}
+    body{background:#fff;color:#111;font-size:10pt;line-height:1.6}
+    .wrap{max-width:none;padding:0;margin:0}
+    #progress,.toolbar,.noscript-note{display:none!important}
+    .hero{background:#fff!important;color:#111!important;border:1px solid #777;border-radius:0;padding:14px}
+    .hero *{color:#111!important}
+    .summary-grid .item{background:#fff;border:1px solid #aaa}
+    .card,.toc{border:0;border-radius:0;box-shadow:none;padding:10px 0;margin:0 0 12px}
+    .template-note{background:#fff;color:#111;border:1px solid #777}
+    .table-wrap,.diagram-scroll{overflow:visible;border-radius:0}
+    table{min-width:0!important;table-layout:fixed;font-size:8.5pt}
+    th,td{padding:6px;overflow-wrap:anywhere}
+    thead{display:table-header-group}
+    tr{break-inside:avoid}
+    h2,h3,summary{break-after:avoid}
+    .diagram{background:#fff;border-radius:0;padding:8px;break-inside:avoid}
+    .diagram svg{min-width:0}
+    details{border-color:#aaa;background:#fff!important;break-inside:auto}
+    details .inner{padding:0 12px 12px}
+    .badge{border:1px solid #aaa;background:#fff;color:#111}
+    .callout,.callout.warn,.callout.ok{background:#fff;color:#111}
+    a{color:#111}.footer{text-align:left}
+  }
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+<main class="wrap">
+  <header class="hero" id="top">
+    <h1>【项目／功能名称】技术设计</h1>
+    <p class="meta">项目文档版本：【填写】　作者：【填写】　更新日期：【填写】　状态：【草案／待确认／已确认，填写实际状态】</p>
+    <div class="summary-grid">
+      <div class="item"><b>做什么</b><p>【用一句话说明系统将发生的主要改变】</p></div>
+      <div class="item"><b>为什么</b><p>【关联已确认目标及来源，不另编收益数字】</p></div>
+      <div class="item"><b>影响谁</b><p>【用户、业务方、使用方及上下游】</p></div>
+      <div class="item"><b>关键选择</b><p>【推荐什么、理由是什么；是否已经确认】</p></div>
+      <div class="item"><b>失败后怎么办</b><p>【最重要的失败结果、结果核实及恢复入口】</p></div>
+      <div class="item"><b>当前进度与待决</b><p>【本阶段状态、阻塞项、下一步；上线时间未定则写未定】</p></div>
+    </div>
+  </header>
+  <aside class="template-note" data-authoring>
+    <strong>这是待填写模板，不是具体项目方案。</strong>
+    模板版本 0.2.5，维护日期 2026-11-02。所有【填写项】需替换为有依据的内容；未知写成编号问题和影响。
+    本模板不含实际项目指标、审批或执行结论。生成正式设计时移除撰写提示，保留真实的状态和未决事项。
+  </aside>
+  <nav class="toc" aria-label="文档目录">
+    <h2>按需要选择阅读深度</h2>
+    <p class="reading-label">先读摘要及第 1–4 节理解方案；研发与测试继续核对契约、影响和验证；所有读者均可查看风险与决定。</p>
+    <ol>
+      <li><a href="#summary">方案摘要</a></li><li><a href="#basis">依据与范围</a>（<a href="#correctness">正确性约束</a>／<a href="#visual-plan">图解导读</a>）</li>
+      <li><a href="#architecture">现状及目标架构</a></li><li><a href="#flows">核心流程与状态</a></li>
+      <li><a href="#decisions">关键决策</a></li><li><a href="#contracts">详细契约</a>（<a href="#contract-fields">直接看字段</a>）</li>
+      <li><a href="#impact">影响与依赖</a></li><li><a href="#verification">验证安排</a></li>
+      <li><a href="#release">发布与恢复</a></li><li><a href="#records">待决事项及变更记录</a></li>
+    </ol>
+    <div class="toolbar" id="toolbar" hidden>
+      <button type="button" id="expand-all">展开技术细节</button>
+      <button type="button" id="collapse-all">收起技术细节</button>
+      <button type="button" id="print-document">打印／另存 PDF</button>
+    </div>
+    <noscript><p class="hint noscript-note">未启用脚本：技术细节默认展开，目录、原生折叠和正文仍可使用。</p></noscript>
+  </nav>
+
+  <section class="card" id="summary">
+    <h2>1. 方案摘要 <span class="badge">所有人可读</span></h2>
+    <p class="lead" data-authoring>用一段话解释目标、主要改变、边界与代价。复杂知识点优先用图建立直观理解，再补精确定义；首次术语先解释，再保留技术名称。</p>
+    <p class="fill">【谁在什么场景遇到什么问题；本方案沿用什么、改变什么；用户将观察到什么；最重要的取舍和失败结果是什么。】</p>
+    <div class="callout"><strong>方案结论与状态</strong>【建议／已决定／待决定】明确标注。方案建议、专业自检完成、用户已确认与执行验证通过分别记录。</div>
+  </section>
+
+  <section class="card" id="basis">
+    <h2>2. 依据与范围</h2>
+    <p class="lead" data-authoring>引用一份有效需求依据。业务指标沿用 PRD；设计补充实现与测量方式，不维护另一套目标。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="来源与基线表">
+      <table><thead><tr><th scope="col">依据</th><th scope="col">版本／定位</th><th scope="col">已知内容与证据类型</th><th scope="col">确认或限制</th></tr></thead><tbody>
+      <tr><td>PRD／需求与验收条件</td><td>【可访问的来源、版本、完整 REQ／AC】</td><td>【用户要求／已确认决定】</td><td>【确认人、时间及对应内容；缺失则如实记录】</td></tr>
+      <tr><td>代码、配置与依赖</td><td>【提交＋相关改动指纹，或文件快照／契约版本】</td><td>【源码观察／运行证据／文档；不要混为生产事实】</td><td>【查证范围及未验证环境】</td></tr>
+      </tbody></table>
+    </div>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="范围与约束表">
+      <table><thead><tr><th scope="col">本次改变</th><th scope="col">明确不做</th><th scope="col">继续沿用</th><th scope="col">约束与依据</th></tr></thead><tbody>
+      <tr><td>【模块／行为与关联需求】</td><td>【排除项及原因】</td><td>【现有业务规则、机制与接口】</td><td>【真实约束和来源；未知关联问题编号】</td></tr>
+      </tbody></table>
+    </div>
+  <section class="card" id="domain-mapping">
+    <h3>业务概念与技术名称映射</h3>
+    <p class="lead" data-authoring>沿用项目有效词典，注明来源／修订与本次概念增量及确认状态。只列相关对象和重要抽象，历史技术名可有兼容映射；候选不写成已确认定义。无相关变化时引用有效来源即可。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="业务与技术名称映射">
+      <table><thead><tr><th scope="col">业务范围／概念</th><th scope="col">规范名、定义与关系</th><th scope="col">模块职责／代码标识</th><th scope="col">接口／存储／展示名</th><th scope="col">别名、兼容与影响</th><th scope="col">来源／修订／确认</th></tr></thead><tbody>
+        <tr><td>【相关范围及稳定标识】</td><td>【规范名及与相近对象的区别】</td><td>【实际职责及标识，未实现注明】</td><td>【本次需要的实际对应关系】</td><td>【保留或改名理由及受影响引用】</td><td>【词典基线、本次增量与确认依据】</td></tr>
+      </tbody></table>
+    </div>
+  </section>
+
+  <section id="correctness">
+    <h3>2.1 正确性约束：系统必须守住什么</h3>
+    <p class="lead" data-authoring>从已确认需求与契约提取关键规则，再说明设计保证。区分始终成立、合法中间状态与限定窗口内完成的结果；规则不明时列问题，不自定业务承诺。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="正确性约束与设计验证映射表">
+      <table><thead><tr><th scope="col">约束 ID／规则</th><th scope="col">需求／契约来源</th><th scope="col">条件／范围／窗口</th><th scope="col">负责模块与机制</th><th scope="col">失败／并发与恢复</th><th scope="col">验证与证据边界</th></tr></thead><tbody>
+      <tr><td>【稳定 INV 标识；必须得到／禁止出现的结果】</td><td>【完整 REQ／AC 及版本，不能从错误实现反推】</td><td>【角色、资源、进程／节点、时间条件；允许的中间状态】</td><td>【检查与写入的原子性边界；不能只写“加锁／幂等”】</td><td>【相关拒绝、重复、超时、竞争、取消路径；不适用说明原因】</td><td>【可观察判据、保留真实机制、需要真实验证的缺口】</td></tr>
+      </tbody></table>
+    </div>
+    <p class="hint">“无业务写入”和允许的审计等副作用分别说明；本地锁／替身不能自动证明跨进程或真实存储保证。相关流程与验证通过同一约束编号关联。</p>
+  </section>
+  <section id="visual-plan">
+    <h3>2.2 图解导读：哪些难点用什么图讲清</h3>
+    <p class="lead" data-authoring>优先图解复杂知识、关系、分支、生命周期和时序；概览与细节分层。只列本次实际需要的图及重要省略理由，不要求画齐所有类型。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="复杂难点与选图安排表">
+      <table><thead><tr><th scope="col">难点／要回答的问题</th><th scope="col">图类型</th><th scope="col">图标识与位置</th><th scope="col">关联依据</th><th scope="col">选择理由与解读</th></tr></thead><tbody>
+      <tr><td>【读者难以理解的原理、关系、流程或边界】</td><td>【上下文／架构／流程泳道／时序／状态／ER／数据流／部署／原理解释，按场景选用】</td><td>【实际可见图的稳定标识及章节】</td><td>【相关 REQ／INV／决策／契约版本】</td><td>【图要说明的结论、怎么读、适用限制；重要省略说明原因】</td></tr>
+      </tbody></table>
+    </div>
+    <p class="hint">图旁保留简短解读和必要图例，用表格补齐精确条件；复杂机制不要仅用一张概览图或长段文字带过。</p>
+  </section>
+  </section>
+
+  <section class="card" id="architecture">
+    <h2>3. 现状及目标架构</h2>
+    <p class="lead" data-authoring>先给角色和动作，再对应真实组件；说明现状到目标的差异、数据与信任边界。</p>
+    <figure class="diagram">
+      <div class="diagram-scroll">
+        <svg viewBox="0 0 880 154" role="img" aria-labelledby="architecture-title architecture-desc">
+          <title id="architecture-title">上下文图填写结构示意</title>
+          <desc id="architecture-desc">使用方发起操作，真实业务组件校验并处理，经契约调用外部依赖，再返回可观察结果。节点需要替换为本项目实际角色和组件。</desc>
+          <defs><marker id="arrow-context" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="none" stroke="#40618e" stroke-width="1.5"/></marker></defs>
+          <rect x="12" y="40" width="220" height="80" rx="10" fill="#fff" stroke="#9baec9"/>
+          <rect x="330" y="40" width="220" height="80" rx="10" fill="#edf3ff" stroke="#4f79b5"/>
+          <rect x="648" y="40" width="220" height="80" rx="10" fill="#fff" stroke="#9baec9"/>
+          <text x="122" y="72" text-anchor="middle" font-size="16">【使用方／用户入口】</text><text x="122" y="99" text-anchor="middle" font-size="13">实际角色、触发与结果</text>
+          <text x="440" y="72" text-anchor="middle" font-size="16">【真实业务组件】</text><text x="440" y="99" text-anchor="middle" font-size="13">业务名＋技术名、校验和状态</text>
+          <text x="758" y="72" text-anchor="middle" font-size="16">【外部依赖】</text><text x="758" y="99" text-anchor="middle" font-size="13">边界、责任与返回契约</text>
+          <path d="M232 80H323" fill="none" stroke="#40618e" stroke-width="2" marker-end="url(#arrow-context)"/>
+          <path d="M550 80H641" fill="none" stroke="#40618e" stroke-width="2" marker-end="url(#arrow-context)"/>
+          <text x="281" y="60" text-anchor="middle" font-size="12">发起操作</text><text x="599" y="60" text-anchor="middle" font-size="12">按契约调用</text>
+        </svg>
+      </div>
+      <figcaption>图为填写结构示意，不代表实际系统拓扑。正式方案替换节点、边界、方向及调用说明。</figcaption>
+    </figure>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="架构差异与模块职责表">
+      <table><thead><tr><th scope="col">角色／模块</th><th scope="col">现状与实际入口</th><th scope="col">目标变化</th><th scope="col">职责／数据／信任边界</th><th scope="col">关联需求与证据</th></tr></thead><tbody>
+      <tr><td>【业务名＋真实技术名】</td><td>【已查证调用方、配置与行为】</td><td>【新增／调整／保持】</td><td>【谁负责、谁可访问、哪里产生状态或副作用】</td><td>【REQ／AC、代码定位与证据】</td></tr>
+      </tbody></table>
+    </div>
+  </section>
+
+  <section class="card" id="flows">
+    <h2>4. 核心流程与状态</h2>
+    <p class="lead" data-authoring>每个关键场景说明前提、动作、结果和后续处理。分支／多角色协作配流程／泳道图，生命周期配状态图，关键调用／异步／竞争配时序或对照图；再用下表补精确结果。按实际需要插入可见图形。</p>
+    <ol>
+      <li>【角色在什么前提下发起哪个动作。】</li>
+      <li>【哪个模块执行什么校验或状态变更；失败时用户观察到什么。】</li>
+      <li>【如何得到最终结果、产生哪些副作用、由谁释放资源。】</li>
+    </ol>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="状态与异常结果表">
+      <table><thead><tr><th scope="col">场景／状态</th><th scope="col">触发与判断依据</th><th scope="col">可观察结果／终态</th><th scope="col">副作用与恢复</th><th scope="col">责任与证据</th></tr></thead><tbody>
+      <tr><td>明确成功</td><td>【确认完成的条件】</td><td>【返回／展示及业务后态】</td><td>【写入、事件、资源结束】</td><td>【负责模块、关联需求／契约】</td></tr>
+      <tr><td>明确失败</td><td>【拒绝／失败证据】</td><td>【错误及保持／改变的状态】</td><td>【必要无写入、回退或补偿边界】</td><td>【负责方与可查证据】</td></tr>
+      <tr><td>超时／结果未知</td><td>【等待窗口及协议；不要直接当作未生效】</td><td>【已知与未知状态、用户如何获知】</td><td>【核实结果、重试条件、恢复或人工介入】</td><td>【核实与恢复负责方】</td></tr>
+      <tr><td>部分成功／重复／并发</td><td>【按实际场景拆行，或说明不适用】</td><td>【合法终态、冲突或重复结果】</td><td>【外部已发生动作、次数与后续处理】</td><td>【事务／外部边界及验证来源】</td></tr>
+      </tbody></table>
+    </div>
+    <div class="callout warn"><strong>关键失败结果也要让非技术读者理解</strong>【用通俗语言说明影响、用户下一步及恢复条件。补偿、幂等、降级等术语首次出现时解释其在本方案里的具体含义。】</div>
+  </section>
+
+  <section class="card" id="decisions">
+    <h2>5. 关键决策</h2>
+    <p class="lead" data-authoring>比较真实可行的选择；只有一个满足约束的方案时说明原因。没有依据的工期与收益保持未知。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="关键方案对比表">
+      <table><thead><tr><th scope="col">决策 ID／选项</th><th scope="col">做法与约束</th><th scope="col">收益与证据</th><th scope="col">成本／风险／依赖</th><th scope="col">建议及理由</th><th scope="col">实际决定与重审条件</th></tr></thead><tbody>
+      <tr><td>【稳定决策 ID 与可行选项；需要时增行】</td><td>【复用机制与适用范围】</td><td>【实测／目标／估算，引用来源】</td><td>【具体原因、代价及尚未核实事项】</td><td>【AI 建议或其他建议及取舍】</td><td>【未决定，或真实决定人／版本／时间；何时重审】</td></tr>
+      </tbody></table>
+    </div>
+    <div class="callout ok"><strong>结论的代价与适用边界</strong>【选什么、为什么、接受什么代价；放弃真实备选的原因；若关键假设不成立将如何重新评估。】</div>
+  </section>
+
+  <section class="card" id="contracts">
+    <h2>6. 详细契约 <span class="badge">按需展开</span></h2>
+    <p class="lead" data-authoring>下面各项按实际风险使用；不适用说明原因，关键未知进入待决事项。技术细节与主流程使用同一套状态和规则。</p>
+    <details data-technical open>
+      <summary>接口、字段与错误行为</summary><div class="inner">
+      <h3 id="contract-fields">字段与协议定义</h3>
+      <p class="hint">【真实入口／方法或协议、调用方、版本、认证来源、权限边界、超时及兼容策略。未知路径不能编造。】</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="接口字段契约表">
+        <table><thead><tr><th scope="col">字段／方向</th><th scope="col">含义／类型</th><th scope="col">必填／条件</th><th scope="col">边界／默认／校验</th><th scope="col">来源与权限</th><th scope="col">对应需求／版本</th></tr></thead><tbody>
+        <tr><td>【实际字段名及输入／输出】</td><td>【精确含义、类型、单位】</td><td>【条件写清；允许空值与否】</td><td>【确定约束及规则来源】</td><td>【值的产生方、可见与修改范围】</td><td>【完整 REQ／AC 与契约版本】</td></tr>
+        </tbody></table>
+      </div>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="接口错误与副作用契约表">
+        <table><thead><tr><th scope="col">条件</th><th scope="col">返回／错误语义</th><th scope="col">状态与副作用</th><th scope="col">重试／重复行为</th><th scope="col">版本与依据</th></tr></thead><tbody>
+        <tr><td>【精确触发条件】</td><td>【状态码／字段／消息规则，视协议适用】</td><td>【终态、拒绝无写入或已发生动作】</td><td>【是否允许、去重范围与窗口】</td><td>【现有契约／拟变更，标明状态】</td></tr>
+        </tbody></table>
+      </div>
+      </div>
+    </details>
+    <details data-technical open>
+      <summary>数据、一致性与迁移</summary><div class="inner">
+      <div class="table-wrap" tabindex="0" role="region" aria-label="数据与迁移设计表">
+        <table><thead><tr><th scope="col">对象／存储归属</th><th scope="col">数据变化与约束</th><th scope="col">事务／外部边界</th><th scope="col">生命周期／隐私</th><th scope="col">迁移／历史兼容</th></tr></thead><tbody>
+        <tr><td>【实际模型及维护方】</td><td>【字段、索引、唯一性与状态规则】</td><td>【原子性范围、外部已发生动作与一致性】</td><td>【保留、删除、敏感信息及依据】</td><td>【顺序、校验、可逆性、无法撤销部分】</td></tr>
+        </tbody></table>
+      </div>
+      </div>
+    </details>
+    <details data-technical open>
+      <summary>并发、失败处理与资源生命周期</summary><div class="inner">
+      <p class="hint">【引用第 4 节状态，不另造一套业务结果；说明实现这些结果的机制及其证明边界。】</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="并发失败与资源机制表">
+        <table><thead><tr><th scope="col">风险／资源</th><th scope="col">机制及条件</th><th scope="col">所有权／释放责任</th><th scope="col">失败与恢复</th><th scope="col">验证与未知</th></tr></thead><tbody>
+        <tr><td>【重复、竞争、超时、取消、连接、文件或任务；按适用项拆行】</td><td>【锁／请求标识／时钟等真实机制及作用范围】</td><td>【谁创建、何时结束、谁清理】</td><td>【资源释放、结果核实、补偿的限制】</td><td>【可隔离证明部分与需真实组件验证部分】</td></tr>
+        </tbody></table>
+      </div>
+      </div>
+    </details>
+    <details data-technical open>
+      <summary>安全、性能与可观测性</summary><div class="inner">
+      <div class="table-wrap" tabindex="0" role="region" aria-label="非功能要求实现表">
+        <table><thead><tr><th scope="col">领域／来源</th><th scope="col">设计安排</th><th scope="col">测量／观察方式</th><th scope="col">适用条件与限制</th><th scope="col">风险／待补</th></tr></thead><tbody>
+        <tr><td>安全、权限与合规</td><td>【信任、允许／拒绝、脱敏、审计及适用义务】</td><td>【正反例及必要证据】</td><td>【依据与环境边界】</td><td>【按实际影响判断是否阻塞】</td></tr>
+        <tr><td>性能与容量</td><td>【引用确认目标；有依据时给估算和扩展安排】</td><td>【负载、指标口径、时间窗口与数据来源】</td><td>【无容量相关改变时说明适用性】</td><td>【实测、估算与未知分开】</td></tr>
+        <tr><td>日志、指标、追踪与告警</td><td>【关键事件、字段、关联标识、隐私与噪声控制】</td><td>【触发与接收、阈值来源、排查入口】</td><td>【是否已有设施；不能假定已上线】</td><td>【工具／配置／责任待补项】</td></tr>
+        </tbody></table>
+      </div>
+      </div>
+    </details>
+  </section>
+
+  <section class="card" id="impact">
+    <h2>7. 影响与依赖</h2>
+    <p class="lead" data-authoring>说明业务感知、调用方兼容、配置和数据变化，谁需要先准备什么；不承诺未知工期。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="影响与上线依赖表">
+      <table><thead><tr><th scope="col">使用方／模块</th><th scope="col">变化与用户感知</th><th scope="col">契约／配置／迁移</th><th scope="col">前置与上线顺序</th><th scope="col">责任与风险</th></tr></thead><tbody>
+      <tr><td>【真实上下游、业务／运营、相关模块】</td><td>【需操作、培训、公告或保持的行为】</td><td>【键名、版本、兼容；凭据只说明获取方式】</td><td>【环境／接口／数据前提；顺序依据】</td><td>【已确定负责人或待定；影响和处理】</td></tr>
+      </tbody></table>
+    </div>
+  </section>
+
+  <section class="card" id="verification">
+    <h2>8. 验证安排</h2>
+    <p class="lead" data-authoring>每项需求都有验证安排。已有用例引用编号；尚无用例则说明方法和待补，不编造已执行证据。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="需求设计验证追溯表">
+      <table><thead><tr><th scope="col">完整 REQ／AC</th><th scope="col">设计／模块</th><th scope="col">验证方法／用例</th><th scope="col">岗位／代码工程</th><th scope="col">阶段／环境</th><th scope="col">真实／替身与证据限制</th></tr></thead><tbody>
+      <tr><td>【当前需求标识与版本】</td><td>【相关 INV／决策、契约、状态】</td><td>【正常、异常、边界、副作用；已有用例 ID】</td><td>研发／对应项目 <code>test/</code></td><td>开发期 mock／隔离；非 UI</td><td>【保留真实被测机制；替换什么；不能证明什么】</td></tr>
+      <tr><td>【需真实证据的关联项】</td><td>【实际依赖与用户旅程】</td><td>【UI、真实集成／部署 E2E，按风险选择】</td><td>测试工程师／指定独立验收工程</td><td>研发交付后，由测试岗位独立发起</td><td>【真实环境前提、差异、当前未验证部分】</td></tr>
+      </tbody></table>
+    </div>
+    <div class="callout"><strong>验证计划不等于执行通过</strong>研发在开发验证、审核和提测后结束，不自动调用或等待独立验收。文档的浏览器／打印检查只证明相应文档表现，不证明产品行为。</div>
+  </section>
+
+  <section class="card" id="release">
+    <h2>9. 发布与恢复</h2>
+    <p class="lead" data-authoring>根据实际发布能力填写。不要求凭空建设灰度设施；已有外部副作用和数据恢复分别处理。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="发布与恢复计划表">
+      <table><thead><tr><th scope="col">环节</th><th scope="col">具体安排与依据</th><th scope="col">触发／判断标准</th><th scope="col">责任与限制</th></tr></thead><tbody>
+      <tr><td>部署／启用</td><td>【构建、依赖、配置、迁移、实际启用方式】</td><td>【上线前提及版本兼容】</td><td>【确定负责方或待定】</td></tr>
+      <tr><td>观察／暂停</td><td>【已有监测、观察窗口、受影响用户与处置】</td><td>【有来源的阈值；无数据不编数字】</td><td>【谁发现、谁决定、谁处理】</td></tr>
+      <tr><td>代码／配置恢复</td><td>【执行顺序、版本、开关及依赖兼容】</td><td>【恢复触发、验证目标及时间依据】</td><td>【不能自动撤销的数据或动作】</td></tr>
+      <tr><td>数据／外部副作用处理</td><td>【核实、补偿／修复或人工介入；不可逆部分明确】</td><td>【终态、完整性及对账等实际判据】</td><td>【权限、责任、风险与恢复边界】</td></tr>
+      </tbody></table>
+    </div>
+  </section>
+
+  <section class="card" id="records">
+    <h2>10. 待决事项及变更记录</h2>
+    <h3>待决事项</h3>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="待决事项表">
+      <table><thead><tr><th scope="col">问题 ID／类型</th><th scope="col">已知与缺口</th><th scope="col">影响／是否阻塞</th><th scope="col">下一步与依赖</th><th scope="col">实际决定</th></tr></thead><tbody>
+      <tr><td>【稳定 ID；事实待查／需人决策】</td><td>【事实、建议、假设和未知分别写】</td><td>【受影响需求、契约与验收】</td><td>【AI 可查事实先查；需选择给出选项和建议】</td><td>【未决定，或真实确认依据与版本】</td></tr>
+      </tbody></table>
+    </div>
+    <h3>专业检查与评审记录</h3>
+    <p class="hint">依据与发现记录在表中。自检不等于人工确认；关键问题按实际风险判断是否阻塞，不固定把安全归为低优先级。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="设计检查与评审证据表">
+      <table><thead><tr><th scope="col">检查项</th><th scope="col">适用性与依据</th><th scope="col">发现与证据</th><th scope="col">处理／复核状态</th><th scope="col">是否阻塞及理由</th></tr></thead><tbody>
+      <tr><td>需求、范围与追溯</td><td>【真实需求与确认版本】</td><td>【关联位置／缺口】</td><td>【未检查／已检查／待修复】</td><td>【按影响判断】</td></tr>
+      <tr><td>关键正确性约束</td><td>【来源、条件和作用范围】</td><td>【保证机制、失败／并发推演及验证】</td><td>【实际检查与限制】</td><td>【关键规则或保证是否缺失】</td></tr>
+      <tr><td>复杂难点与图解</td><td>【选图覆盖实际难点；不按数量凑图】</td><td>【图与正文／契约／状态／边界一致，图例解读与显示可用】</td><td>【内容核对及实际呈现检查】</td><td>【必要图缺失、难懂或矛盾是否处理】</td></tr>
+      <tr><td>机制、契约、状态及失败</td><td>【本次适用机制】</td><td>【来源与验证限制】</td><td>【作者自查／实际独立复核】</td><td>【关键未知是否解决】</td></tr>
+      <tr><td>安全、资源、运行与恢复</td><td>【按风险说明适用性】</td><td>【检查事实及未验证项】</td><td>【实际处理与复核】</td><td>【不能仅凭打勾通过】</td></tr>
+      <tr><td>非技术理解与专业接手</td><td>【能否复述流程、取舍、失败；能否实施与推导测试】</td><td>【实际阅读／检查方式及发现】</td><td>【真实状态】</td><td>【剩余影响】</td></tr>
+      </tbody></table>
+    </div>
+    <div class="callout warn"><strong>当前设计确认</strong><span class="status">模板尚未形成项目设计，未获得项目确认。</span> 正式稿填写：当前版本、实际确认人、时间、对应内容及保留事项。专业检查完成且阻塞处理后为“设计就绪，待确认”，真实确认后再进入依赖实施。</div>
+    <h3>术语与通俗解释</h3>
+    <p class="hint">解释与前述概念映射使用同一来源，必要摘录注明修订；这里不独立重定义业务对象。</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="术语解释表">
+      <table><thead><tr><th scope="col">术语／真实技术名</th><th scope="col">在本方案中的通俗解释</th><th scope="col">含义边界与引用</th></tr></thead><tbody>
+      <tr><td>【首次出现时正文也要解释】</td><td>【具体解决什么、如何影响用户】</td><td>【不作超出实际机制的承诺】</td></tr>
+      </tbody></table>
+    </div>
+    <h3>变更记录</h3>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="文档变更记录表">
+      <table><thead><tr><th scope="col">版本／日期</th><th scope="col">变更及原因</th><th scope="col">关联 REQ／AC／用例</th><th scope="col">影响与更新状态</th><th scope="col">决定／确认依据</th></tr></thead><tbody>
+      <tr><td>【实际项目版本及日期】</td><td>【本次为何调整】</td><td>【完整标识；未知不编造】</td><td>【受影响设计、代码及证据】</td><td>【对应实际内容；无确认则明确记录】</td></tr>
+      </tbody></table>
+    </div>
+  </section>
+  <p class="footer">通用 SDD 技术设计模板 · 0.2.5 · 单文件、无外部脚本与字体依赖 · <a href="#top">返回顶部</a></p>
+</main>
+<script>
+(function () {
+  "use strict";
+  var panels = Array.from(document.querySelectorAll("details[data-technical]"));
+  var bar = document.getElementById("progress");
+  var printState = null;
+  document.getElementById("toolbar").hidden = false;
+  panels.forEach(function (panel) { panel.open = false; });
+  document.getElementById("expand-all").addEventListener("click", function () {
+    panels.forEach(function (panel) { panel.open = true; });
+  });
+  document.getElementById("collapse-all").addEventListener("click", function () {
+    panels.forEach(function (panel) { panel.open = false; });
+  });
+  document.getElementById("print-document").addEventListener("click", function () { window.print(); });
+  function revealHash() {
+    var id;
+    try { id = decodeURIComponent(window.location.hash.slice(1)); } catch (error) { return; }
+    if (!id) return;
+    var target = document.getElementById(id);
+    if (!target) return;
+    var node = target.parentElement;
+    while (node) {
+      if (node.tagName === "DETAILS") node.open = true;
+      node = node.parentElement;
+    }
+    window.requestAnimationFrame(function () { target.scrollIntoView({ block: "start" }); });
+  }
+  function preparePrint() {
+    if (printState !== null) return;
+    printState = panels.map(function (panel) { return panel.open; });
+    panels.forEach(function (panel) { panel.open = true; });
+  }
+  function restorePrint() {
+    if (printState === null) return;
+    panels.forEach(function (panel, index) { panel.open = printState[index]; });
+    printState = null;
+  }
+  var scrollQueued = false;
+  function updateProgress() {
+    scrollQueued = false;
+    var root = document.documentElement;
+    var range = root.scrollHeight - root.clientHeight;
+    var percentage = range > 0 ? Math.max(0, Math.min(100, root.scrollTop / range * 100)) : 0;
+    bar.style.width = percentage + "%";
+  }
+  function queueProgress() {
+    if (scrollQueued) return;
+    scrollQueued = true;
+    window.requestAnimationFrame(updateProgress);
+  }
+  window.addEventListener("hashchange", revealHash);
+  window.addEventListener("beforeprint", preparePrint);
+  window.addEventListener("afterprint", restorePrint);
+  window.addEventListener("scroll", queueProgress, { passive: true });
+  window.addEventListener("resize", queueProgress);
+  document.addEventListener("toggle", queueProgress, true);
+  revealHash();
+  updateProgress();
+}());
+</script>
+</body>
+</html>

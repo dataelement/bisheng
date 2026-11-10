@@ -1,0 +1,3 @@
+interface:
+  display_name: "SDD 需求验证"
+  short_description: "Validate requirements and clarify decisions with grilling"

@@ -1,0 +1,3 @@
+interface:
+  display_name: "SDD 测试用例设计"
+  short_description: "Derive observable test cases from requirements and risks"

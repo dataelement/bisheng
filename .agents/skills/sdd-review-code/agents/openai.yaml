@@ -1,0 +1,3 @@
+interface:
+  display_name: "SDD 代码审核"
+  short_description: "Review actual changes against requirements and risks"

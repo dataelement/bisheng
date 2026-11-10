@@ -1,0 +1,29 @@
+# Copy only when the project has no equivalent feature registry.
+# Fill unknown values from evidence. Paths below are planned locations, not completion claims.
+# Paths are relative to this file. Retain only artifacts needed by the current task.
+schema_version: 1
+feature_id: null
+title: null
+kind: null
+primary_module: null
+affected_modules: []
+target_release: null
+related_features: []
+development_status: null
+acceptance_status: null
+deliveries: []
+artifacts:
+  requirements: requirements.html
+  design: design.html
+  development_cases: test-cases.html
+  tasks: tasks.md
+  resume: state.md
+  handoff: handoff.md
+# Store QA artifacts in the identified independent acceptance project.
+# Cross-repository references identify repository, revision and path or an accessible artifact.
+# Optional references only; reuse an equivalent project registry.
+# Each entry may identify source, revision, change_ref and mapping_ref.
+# Keep candidate definitions in their requirement/design draft, not in this index.
+terminology: []
+
+acceptance_reference: null

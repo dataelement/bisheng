@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "skills": {
+    "domain-modeling": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/domain-modeling/SKILL.md",
+      "computedHash": "b489d9784c696fe121105bce243c293a83e91d2c6c7c54eb893ef2df2fa10acf"
+    },
+    "grilling": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/grilling/SKILL.md",
+      "computedHash": "294987456e2d9e508cd23a294d3f280da4634e46aa26ce1f128bdc982734e8f2"
+    },
+    "sdd-acceptance": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-acceptance/SKILL.md",
+      "computedHash": "5aa5fb1d31859dc29ed52fc89a86880a8c86679b9b9910b4f459c9a48e1c7797"
+    },
+    "sdd-design": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-design/SKILL.md",
+      "computedHash": "28383c27eaf36c0034b41903d417870ad5919cbaf202d68fe3e766f1cdb9f03b"
+    },
+    "sdd-implement": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-implement/SKILL.md",
+      "computedHash": "e8d02f22e1f33acd798440815b2b36b60fc43a55d0fc2f66e53fff8414c47e05"
+    },
+    "sdd-plan": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-plan/SKILL.md",
+      "computedHash": "472e88ebc4cb307b856cde17a74ee71b378ec082effe1c22b18d9994e7863963"
+    },
+    "sdd-requirement-validation": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-requirement-validation/SKILL.md",
+      "computedHash": "e4a40b09ca21089888f1aa48dbb67f66ce19cc6c155dd178947dbbaf37e879a6"
+    },
+    "sdd-review-code": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-review-code/SKILL.md",
+      "computedHash": "208fcafffbf63d88b749868642f2e570954059998e3ff8c08cb5e152d1f7cca1"
+    },
+    "sdd-test-cases": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-test-cases/SKILL.md",
+      "computedHash": "8cf8f75d19192f3c57fac77c90ce8d2a6db4fd422c307f29b05d1cb38603b99e"
+    },
+    "sdd-triage": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-triage/SKILL.md",
+      "computedHash": "8f9f6cb2adc11c87bc6d3d495d024345cc757d3cbc1d6a1add50c43b1a512398"
+    },
+    "sdd-workflow": {
+      "source": "likaiaki/sdd-workflow-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-workflow/SKILL.md",
+      "computedHash": "0528860031533f00e977367fa13d2ba325c86fb4c27091389ee1d21f98eb431b"
+    }
+  }
+}
