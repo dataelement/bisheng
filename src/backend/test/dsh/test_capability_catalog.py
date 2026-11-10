@@ -197,6 +197,22 @@ async def test_only_authorized_tools_can_change_account_availability(monkeypatch
     save = AsyncMock()
     monkeypatch.setattr(UserToolAvailabilityService, "save", save)
     app, work = make_service(monkeypatch, [tool(38, key="web_search"), tool()])
+    from bisheng.core.context import tenant
+    from bisheng.permission.application import business_authorization
+    from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+
+    monkeypatch.setattr(tenant, "get_current_tenant_id", lambda: 2)
+    load = AsyncMock(
+        side_effect=lambda tool_id: (
+            SimpleNamespace(id=tool_id, type=12, tenant_id=2, is_delete=0, is_preset=1) if tool_id in (38, 1) else None
+        )
+    )
+    monkeypatch.setattr(GptsToolsDao, "aget_one_tool", load)
+    monkeypatch.setattr(
+        GptsToolsDao, "aget_one_tool_type", AsyncMock(return_value=SimpleNamespace(id=12, tenant_id=2, is_delete=0))
+    )
+    permission = AsyncMock(return_value=True)
+    monkeypatch.setattr(business_authorization, "check_business_action", permission)
     work.publications.audit = AsyncMock()
     assert await app.set_availability(38, False) == {"tool_id": 38, "enabled": False}
     save.assert_awaited_once_with(38, False)
