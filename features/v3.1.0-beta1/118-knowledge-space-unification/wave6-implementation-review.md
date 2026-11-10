@@ -41,29 +41,33 @@ Root最终四路径`test_wire_router`、`test_legacy_document_contract`、`test_
 
 ### 统一测试进行中（2026-11-10）
 
-当前14张验收卡继续待办，不以开发闭合或定点通过计整体验收。后端首个完整单轮代码c5218a0c99，`test/knowledge_unification + test/knowledge + test/open_mcp`实际收集8249项：7853 passed、304 failed、69 errors、23 skipped，另8 subtests passed，1929.90秒。日志/报告`/private/tmp/f118-full-backend-20261110.log`及`.xml`；没有-k/maxfail或新增skip。23 skip来自原Redis可达性条件，尚非Redis实测结论。
+最终后端固定77f737fe3c，`test/knowledge_unification + test/knowledge + test/open_mcp`完整单轮为 **8208 passed、34 failed、23 skipped、0 errors，另8 subtests passed**，27分35秒。Root独立解析`/private/tmp/f118-full-backend-final-20261110.log`、`.xml`及`-comparison.json`：34失败与共同祖先9eef0016de旧红逐项相等，未归因0；首轮339个相关红节点已恢复，23个Redis依赖跳过节点及原因完全相同。不是全绿，也不是环境E2E。原137队列123闭合、T200–T213共14张验收卡继续待办。
+
+下表保留归因与必要定点证据，不与最终单轮数字累加。
 
 | 当前复核范围 | 实际结果与边界 |
 | --- | --- |
 | 新删除guard依赖的native结构 | 原219个节点均因SQLite夹具漏建KnowledgeSpaceDeleteJob；仅6个共用fixture补真实表与租户登记2d431f0606，原断言/SQL预算不改。精确219节点重验219通过（257.34秒）；另原move runner/http两路径20通过，旧间接KeyError同源。不与首轮数字累加。 |
 | mock上游本地监听 | 首轮38 setup error为sandbox禁止127.0.0.1绑定，允许本地监听后同原路径39通过（含原控制项）；未改产品、服务或skip。 |
-| 万级迁移规模 | 原单轮permission_publication_scale的10001 Root和10001 Source用例最终均通过，tracemalloc开启时各506.174/144.451秒；SQL上限公式、派生次数、全Store扫描3次、IN/bulk≤200及FGA write≤90断言均通过。不伪造未保存的精确计数，也不当MySQL或环境升级性能证明。 |
+| 万级迁移与Move规模 | 最终单轮10001 Publication Roots/Sources分别450.156/130.415秒，Move完整链122.504秒；原SQL/派生/全Store扫描、IN/bulk≤200及FGA write≤90预算通过。仅本机规模证据，不当MySQL、环境升级或部署性能证明。 |
 | 旧文件真实调用方 | 80f5cbee08仅补当前native上传Owner/Doc/V1夹具和AnyIO同步桥；忙态经真实Commands预检，公开缺确认零修改控制新增。原14项及必要四路径62项通过，生产0改。 |
 | 上传/补偿与历史版本native夹具 | 9740178ba0、9a3079c62d已正常整合至77f737fe3c，旧上传/版本测试接真实Owner、Session、Plan及持久清理，保原ID、失败补偿和动作断言；不改生产行为。原principal由F118实际业务链要求，4b3099878b已修调用方测试，不能列为范围外旧夹具。 |
 | Move权限与忙态顺序 | 2bb10ce9df修复真实产品顺序：预检及确认锁前先按原move/目标upload_file分类，仅有效根再核源/目标idle，锁后重验继续保留。无权/缺失不被忙态覆盖，拒绝时Plan、File、Job及chat零副作用；不扩大edit/use。 |
 | 平台端相关全组 | 原98文件在实际特性workspace包、校验锁定图标、Node WebStorage兼容环境执行：94套件通过/4失败，727断言通过/3失败；另1收集失败为未安装dnd。剩余4路径在共同祖先9eef0016de同配置全部复现（3失败/17通过及同dnd错误）；本次QA上下文及两DTO测试字段已修，保原行为断言。 |
 | 客户端相关全组 | 原83文件真实源码/锁定图标及Babel/Node编码器环境：79套件通过/4失败，504断言通过/13失败，0skip/0启动失败。13节点在共同祖先同环境精确复现；仅本次Home/Content/删除Owner的3个旧fixture修正74a6fea280，生产0改。 |
-| 静态与三语 | 前端工作区全量pnpm lint及check-i18n通过。native typecheck平台仍22诊断、client145，存在本机依赖/图标版本等环境缺口；本次6条新增测试DTO诊断已消除，不能宣称全量typecheck通过。 |
+| 静态与真实锁依赖类型 | 前端全量pnpm lint及check-i18n通过。真实锁依赖builder中client strict（1855）及shared file-viewers/chat/api-client tsc通过；平台仅2处F118删除API泛型错误，由22f5261181改具体DTO后platform strict（1149）全部通过。原本地22/145为依赖环境缺口，不再当作产品基线失败；类型通过不替代组件/UI验收。 |
 
-旧MCP apps15项及两端既有失败归入[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)，不是本次新缺陷豁免。上传/版本native夹具整合后，Root在77f737fe3c执行最终后端完整单轮；当前仍在运行，尚无最终全绿结论，不得把上述分组数字相加。原8张开发卡保持关闭，14张验收卡仍待实际接口、升级/恢复、E2E与最终评审。
+剩余34个基线旧失败及两端既有测试问题按既有归因处理，不豁免本次新缺陷。原8张开发卡保持关闭；14张验收卡仍待真实接口、升级/恢复、E2E与最终评审，不因本地回归或构建结果改勾。
 
-109独立旧标准环境已补：1个未发布的hosted App/初始Version（原Service写且真MinIO代码对象，明确synthetic fixture），1个真实旧API workflow/version206引用已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置摘要保持；证据`/opt/server/f118-e2e/prep/additional-source-manifest.json`及`evidence/preparation-additional-sources.json`，权限600，均formal_baseline=false。尚未停服/DDL/正式freeze/apply/restore。
+109独立旧标准环境已补：1个未发布的hosted App/初始Version（原Service写且真MinIO代码对象，明确synthetic fixture），1个真实旧API workflow/version206引用已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置摘要保持；证据`/opt/server/f118-e2e/prep/additional-source-manifest.json`及`evidence/preparation-additional-sources.json`，权限600，均formal_baseline=false，不能替代停服后的正式冻结基线。
 
-前端候选550561c443已完成构建，镜像`sha256:b0b4baa3d609d8df793cc496ddbed0201f0a1fcce8dd1a73602c6a5cf2de8982`；本地Git逐项核验550561c443、82ae4ea98d和77f737fe3c的`src/frontend`树均为`ca37581a70c5ad3de15dbc0786cf97638203673c`。公共镜像源403后的替代基础镜像仅在项目候选Dockerfile，原锁和产品Dockerfile未改。
+新前端候选22f5261181已完成真实锁依赖类型检查及两端Vite构建，镜像`sha256:e0b7b3479099b6add0fd81070f634135bc90881f66afea10e2978f8df3505b78`，归档SHA256 `c95fa28d20f477ac7e79fd2df11166084258fce4fee66f2051b501dbc17b30f3`。当前`src/frontend`树为`339831ed64e7c19da3af69c3b326565a2fff3458`，已与旧550561候选的ca37581树不同，不能继续声称旧镜像与当前源码等价。原锁和产品Dockerfile未改。
 
 旧550561c443归档及其API/Worker镜像已由Move修复取代，不作为当前后端候选。Root已按最终77f737fe3c构建`f118-e2e-backend:candidate-77f737fe3c`，镜像`sha256:bef3f456f67c21c24d81bfcd0c840ad9db5a7658d602d886680640c66eb1621b`，归档SHA256 `1c560dacb4c24d3d2512214939283d9ae920598c0f7776246d836bd52002e575`。当前未部署新版、未执行正式升级/恢复或环境E2E，构建完成不能替代这些证据。
 
-真实HTTP E2E脚本12506a5500已准备并合流，Root改以实际新Chunk内容验证覆盖，不附加原合同未承诺的MD5变化。8条仅collect/静态通过，未向旧runtime写E2E；部分AC语义、UI、跨租户、引用强删、移动/复制及恢复仍待真实执行。
+真实HTTP E2E脚本本地 **13条collect-only**：原8条、移动/复制/过期3条、空间及模型强删后修复2条，尚非live结果。覆盖验证读取实际新Chunk内容，不附加MD5变化假设。[浏览器清单](./e2e-checklist.md)21场景全部未执行，API收集/单测/构建不算UI通过。
+
+Root独占独立维护操作：旧API/Worker及派发已停；Milvus按原生1800秒退出超时exit1，无OOM/外部kill，异常已单列且其余服务已核正常停止。冷备数据、双schema及私密配置已归档，旧镜像备份仍在进行。SQL/broker/MinIO/ES/向量逐行hash准备检查通过但非正式基线；真实还原及向量逐行hash复验通过后才允许DDL。目前restore、DDL、M2均未完成，新服务镜像未部署，不称维护或演练完成；109:3005未动。
 
 新DeleteJob中性DDL单head为f118_knowledge_delete_execution；原行和两新列NULL已做必要定点验证，最新真实MySQL升级尚未执行。定点用例数量不相加为完整特性覆盖。范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
 
