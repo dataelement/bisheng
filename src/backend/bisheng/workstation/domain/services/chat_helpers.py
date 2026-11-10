@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 
 import aiofiles
+from loguru import logger
 from fastapi import Request
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
@@ -108,6 +109,37 @@ async def final_message(
     return f"event: message\ndata: {msg}\n\n"
 
 
+async def resolve_title_llm(chat_llm: BaseChatModel, login_user: UserPayload) -> BaseChatModel:
+    """Pick the model that names a workbench conversation.
+
+    The admin's 会话标题生成模型 (workbench config ``chat_title_llm``) wins when
+    set, so a fast non-thinking model can take naming off the chat model; with
+    none set, the conversation's own chat model names it, as before.
+    """
+    from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+    from bisheng.llm.domain import LLMService
+
+    model_id = None
+    try:
+        conf = await LLMService.get_workbench_llm()
+        model_id = conf.chat_title_llm.id if conf and conf.chat_title_llm else None
+        if not model_id:
+            return chat_llm
+        return await LLMService.get_bisheng_llm(
+            model_id=model_id,
+            app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+            app_name="workstation_chat_title",
+            app_type=ApplicationTypeEnum.DAILY_CHAT,
+            user_id=login_user.user_id,
+        )
+    except Exception:
+        # Offline or deleted: naming is not worth failing over; say so in the log.
+        logger.opt(exception=True).warning(
+            f"Chat title model {model_id!r} could not be loaded; naming with the chat model"
+        )
+        return chat_llm
+
+
 async def gen_title(
     human: str,
     llm: BaseChatModel,
@@ -119,11 +151,16 @@ async def gen_title(
 
     The assistant's reply is deliberately NOT used: waiting for it is what tied
     the title to the end of a round, and the question already states the topic.
+    ``llm`` is the conversation's chat model; the configured title model, when
+    set, takes its place (``resolve_title_llm``).
     """
-    title = await generate_conversation_title_async(question=human, llm=llm)
+    title_llm = await resolve_title_llm(llm, login_user)
+    title = await generate_conversation_title_async(question=human, llm=title_llm)
     session = await MessageSessionDao.async_get_one(conversation_id)
     if session:
-        await MessageSessionDao.update_session_name(chat_id=session.chat_id, name=title)
+        from bisheng.chat_session.domain.chat import ChatSessionService
+
+        await ChatSessionService.update_generated_session_name(chat_id=session.chat_id, name=title)
         await AuditLogService.create_chat_message(
             user=login_user,
             ip_address=get_request_ip(request),

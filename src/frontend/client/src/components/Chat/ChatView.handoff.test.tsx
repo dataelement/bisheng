@@ -1,6 +1,6 @@
 import React, { useCallback as mockUseCallback, useState as mockUseState } from 'react';
-import { act, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import ChatView from './ChatView';
 import { parkChatAsk } from './chatAskHandoff';
 
@@ -96,7 +96,10 @@ jest.mock('./DailyFeaturedApps', () => ({ DailyFeaturedApps: () => <div>Featured
 jest.mock('./Presentation', () => ({ __esModule: true, default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 jest.mock('~/components/Chat/AiChatInput', () => ({
   __esModule: true,
-  default: ({ elevated, value }: { elevated?: boolean; value: string }) => <input aria-label={elevated ? 'Landing composer' : 'Conversation composer'} value={value} readOnly />,
+  default: ({ elevated, value, onChange, onSend }: { elevated?: boolean; value: string; onChange: (value: string) => void; onSend: (text: string) => void }) => <>
+    <input aria-label={elevated ? 'Landing composer' : 'Conversation composer'} value={value} onChange={event => onChange(event.target.value)} />
+    <button onClick={() => onSend(value)}>Send</button>
+  </>,
 }));
 jest.mock('~/components/Chat/AiChatMessages', () => ({
   __esModule: true,
@@ -148,4 +151,43 @@ test('an unavailable model returns to the editable welcome composer', () => {
   open();
   expect(screen.getByRole('textbox', { name: 'Landing composer' })).toHaveValue('Keep my question');
   expect(mockSend).not.toHaveBeenCalled();
+});
+
+
+function PersistentView({ onNavigate }: { onNavigate: (navigate: ReturnType<typeof useNavigate>) => void }) {
+  onNavigate(useNavigate());
+  // Like the KeepAlive shell, keep the chat mounted while location is settings.
+  return <ChatView id="new" />;
+}
+
+test('a cached unsent project draft survives settings and resets on an explicit new intent', () => {
+  let navigate: ReturnType<typeof useNavigate> = () => undefined;
+  const projectPath = '/c/new?projectId=11111111-1111-4111-8111-111111111111';
+  render(<MemoryRouter initialEntries={[{ pathname: '/c/new', search: projectPath.slice('/c/new'.length), state: { newChatKey: 'draft-a' } }]}>
+    <PersistentView onNavigate={value => { navigate = value; }} />
+  </MemoryRouter>);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Unsent project question' } });
+  act(() => navigate('/settings/account?dshSettings=1'));
+  expect(screen.getByRole('textbox')).toHaveValue('Unsent project question');
+  act(() => navigate(projectPath, { state: { newChatKey: 'draft-a' } }));
+  expect(screen.getByRole('textbox')).toHaveValue('Unsent project question');
+  act(() => navigate(projectPath, { state: { newChatKey: 'draft-b' } }));
+  expect(screen.getByRole('textbox')).toHaveValue('');
+});
+
+test('an old pending send does not clear the next project draft text', async () => {
+  let finish: (accepted: boolean) => void = () => undefined;
+  mockSend.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  mockConfigReady = true;
+  let navigate: ReturnType<typeof useNavigate> = () => undefined;
+  render(<MemoryRouter initialEntries={[{ pathname: '/c/new', state: { newChatKey: 'draft-a' } }]}>
+    <PersistentView onNavigate={value => { navigate = value; }} />
+  </MemoryRouter>);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Question A' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(mockSend).toHaveBeenCalledWith('Question A');
+  act(() => navigate('/c/new', { state: { newChatKey: 'draft-b' } }));
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Question B' } });
+  await act(async () => { finish(true); });
+  expect(screen.getByRole('textbox')).toHaveValue('Question B');
 });

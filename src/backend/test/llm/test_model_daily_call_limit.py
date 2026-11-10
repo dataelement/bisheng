@@ -12,7 +12,12 @@ import pytest
 @pytest.fixture
 def quota():
     path = Path(__file__).parents[2] / "bisheng/llm/domain/utils.py"
-    names = {"bisheng_model_limit_check", "sync_bisheng_model_limit_check", "LlmProviderDailyLimitExceededError"}
+    names = {
+        "bisheng_model_limit_check",
+        "sync_bisheng_model_limit_check",
+        "LlmProviderDailyLimitExceededError",
+        "_daily_limit_ttl_seconds",
+    }
     nodes = [
         n
         for n in ast.parse(path.read_text()).body
@@ -20,7 +25,7 @@ def quota():
     ]
     counts = {}
 
-    def increment(key):
+    def increment(key, expiration=None):
         counts[key] = counts.get(key, 0) + 1
         return counts[key]
 

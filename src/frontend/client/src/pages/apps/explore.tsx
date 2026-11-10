@@ -9,10 +9,11 @@ import { Button } from "~/components/ui/Button";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { SquareBanner } from "~/pages/square/SquareBanner";
 import { cn, copyText } from "~/utils";
 import { getAppShareUrl } from "./appUtils";
 import { AgentCard } from "./components/AgentCard";
-import { AgentNavigation } from "./components/AgentNavigation";
+import { AgentNavigation, type AppCategoryId } from "./components/AgentNavigation";
 import { AppSearchBar } from "./components/AppSearchBar";
 import { squareTypePath } from "~/pages/square/squarePaths";
 
@@ -20,15 +21,11 @@ const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = "app-last-origin";
 /** F054 hosted application — the one card type that leaves this SPA. */
 const HOSTED_APP_FLOW_TYPE = 35;
-/** Catch-all tab id shared with AgentNavigation — apps carrying no home tag. */
-const UNCATEGORIZED = "uncategorized";
 /** Sentinel understood by `getChatOnlineApi` as "do not filter by tag". */
 const ALL_CATEGORIES = -1;
 
 export default function ExplorePlaza() {
-  // Null until the navigation has its tags and can say which tab is the
-  // default; fetching before that would show one tab's apps and then swap.
-  const [activeTabId, setActiveTabId] = useState<number | string | null>(null);
+  const [activeTabId, setActiveTabId] = useState<AppCategoryId | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,14 +65,14 @@ export default function ExplorePlaza() {
   // every category, so picking a tab drops the keyword and gives the user
   // that tab's own contents back. Must stay referentially stable —
   // AgentNavigation keys its initial tag load off this callback.
-  const handleCategoryChange = useCallback((categoryId: number | string) => {
+  const handleCategoryChange = useCallback((categoryId: AppCategoryId) => {
     setActiveTabId(categoryId);
     setSearchQuery("");
   }, []);
 
   // Fetch one cursor page. `cursor === null` starts a fresh list (first page).
   const fetchAgents = useCallback(
-    async (query: string, categoryId: number | string, cursor: string | null, isAppend: boolean) => {
+    async (query: string, categoryId: AppCategoryId, cursor: string | null, isAppend: boolean) => {
       // Infinite scroll stays serialized. A first-page request never is: it
       // carries a new tab or keyword, and the old shared lock silently dropped
       // it whenever one was still in flight — the grid then kept showing the
@@ -86,17 +83,11 @@ export default function ExplorePlaza() {
       else setLoading(true);
       try {
         const keyword = query.trim();
-        // Search spans every category. An app carrying no home tag only ever
-        // shows up under the "uncategorised" tab, so a tag-scoped search made
-        // it unfindable from any other tab — the tab the plaza lands on by
-        // default whenever home tags are configured (F056 AC-08). While a
-        // keyword is present the tab filter is therefore dropped, and the
-        // active tab is un-highlighted so the widened scope is visible.
-        const result = keyword
-          ? await getChatOnlineApi(cursor, keyword, ALL_CATEGORIES, pageSize)
-          : categoryId === UNCATEGORIZED
-            ? await getUncategorized(cursor, pageSize)
-            : await getChatOnlineApi(cursor, "", categoryId as number, pageSize);
+        // Both All and keyword searches omit the tag filter.
+        const tagId = keyword || typeof categoryId !== "number" ? ALL_CATEGORIES : categoryId;
+        const result = !keyword && categoryId === "uncategorized"
+          ? await getUncategorized(cursor, pageSize)
+          : await getChatOnlineApi(cursor, keyword, tagId, pageSize);
 
         if (seq !== listSeqRef.current) return;
         const pageData = result.list || [];
@@ -166,10 +157,7 @@ export default function ExplorePlaza() {
     return () => observer.disconnect();
   }, [loading, loadingMore, hasMore, searchQuery, activeTabId, fetchAgents]);
 
-  // The spinner also covers the wait for the navigation's tags, which decide
-  // the default tab. `loading` itself must stay false until a request is
-  // actually in flight — fetchAgents treats it as a re-entry guard and would
-  // skip the very first fetch, leaving the spinner up for good.
+  // Show the spinner while the navigation initializes the default tab.
   const showLoading = loading || activeTabId === null;
 
   const handleCardClick = (agent: any) => {
@@ -238,24 +226,7 @@ export default function ExplorePlaza() {
         "max-[767px]:h-[100dvh]",
       )}
     >
-      {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
-      <div className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]">
-        {/* Decorative scattered icons — kept from the original banner art, recolored
-                    via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-blue-200"
-          style={{
-            WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ""}/assets/channel/apptab-icons.svg)`,
-            maskImage: `url(${__APP_ENV__.BASE_URL || ""}/assets/channel/apptab-icons.svg)`,
-            WebkitMaskSize: "cover",
-            maskSize: "cover",
-            WebkitMaskPosition: "center",
-            maskPosition: "center",
-            WebkitMaskRepeat: "no-repeat",
-            maskRepeat: "no-repeat",
-          }}
-        />
+      <SquareBanner title={bannerTitle} description={bannerDescription}>
         {/* The unified square owns navigation; only the standalone mobile page needs a back button. */}
         {!isUnifiedSquare && (
           <div className="absolute left-4 top-4 z-10 md:hidden">
@@ -268,13 +239,7 @@ export default function ExplorePlaza() {
             </Button>
           </div>
         )}
-        <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
-          <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-blue-500">{bannerTitle}</h1>
-          <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
-            {bannerDescription}
-          </p>
-        </div>
-      </div>
+      </SquareBanner>
 
       {/* 过滤栏：桌面与原先一致；窄屏搜索独占一行（移动端始终展开搜索） */}
       <div className="w-full max-w-[1000px] shrink-0 flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">

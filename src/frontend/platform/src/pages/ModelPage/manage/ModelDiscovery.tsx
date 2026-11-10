@@ -31,6 +31,67 @@ import {
 
 import { ModelDiscoveryOptions } from "./ModelDiscoveryOptions";
 
+const discoveryReasons = new Set([
+  "auth",
+  "timeout",
+  "unsupported",
+  "address",
+  "connection",
+  "format",
+  "limit",
+  "credentials",
+  "workspace",
+  "resource",
+  "region",
+  "rate_limit",
+]);
+
+function discoveryFailureReason(
+  failure: unknown,
+  depth = 0,
+): string | undefined {
+  if (!failure || typeof failure !== "object" || depth > 2) return undefined;
+  const record = failure as {
+    kind?: string;
+    code?: string;
+    message?: string;
+    httpStatus?: number;
+    cause?: unknown;
+    data?: { reason?: string };
+    response?: { status?: number; data?: { data?: { reason?: string } } };
+  };
+  const reason = record.data?.reason ?? record.response?.data?.data?.reason;
+  if (reason && discoveryReasons.has(reason)) return reason;
+  const status = record.httpStatus ?? record.response?.status;
+  if (
+    record.kind === "timeout" ||
+    record.code === "ECONNABORTED" ||
+    record.code === "ETIMEDOUT" ||
+    status === 408 ||
+    status === 504
+  )
+    return "timeout";
+  if (
+    record.kind === "network" ||
+    record.code === "ERR_NETWORK" ||
+    record.code === "ERR_INTERNET_DISCONNECTED" ||
+    status === 0 ||
+    status === 502 ||
+    status === 503
+  )
+    return "connection";
+  const message = typeof record.message === "string" ? record.message : "";
+  if (/timeout of \d+ms exceeded|ECONNABORTED|ETIMEDOUT/i.test(message))
+    return "timeout";
+  if (
+    /Network Error|ERR_NETWORK|ERR_INTERNET_DISCONNECTED|Failed to fetch/i.test(
+      message,
+    )
+  )
+    return "connection";
+  return discoveryFailureReason(record.cause, depth + 1);
+}
+
 const manualSpeechProviders = new Set([
   "volcengine",
   "qianfan",
@@ -168,13 +229,7 @@ export function ModelDiscovery({
       }
     } catch (failure: unknown) {
       if (version === requestVersion.current) {
-        const failureData = failure as {
-          data?: { reason?: string };
-          response?: { data?: { data?: { reason?: string } } };
-        };
-        const reason =
-          failureData?.data?.reason ??
-          failureData?.response?.data?.data?.reason;
+        const reason = discoveryFailureReason(failure);
         setRequiredReason(
           ["workspace", "credentials", "resource", "region"].includes(
             reason || "",
@@ -182,23 +237,9 @@ export function ModelDiscovery({
             ? reason!
             : "",
         );
-        const reasons = new Set([
-          "auth",
-          "timeout",
-          "unsupported",
-          "address",
-          "connection",
-          "format",
-          "limit",
-          "credentials",
-          "workspace",
-          "resource",
-          "region",
-          "rate_limit",
-        ]);
         setError(
           t(
-            reason && reasons.has(reason)
+            reason
               ? `model.discoveryError_${reason}`
               : "model.discoveryFailure",
           ),

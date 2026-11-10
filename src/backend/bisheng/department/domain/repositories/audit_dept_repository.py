@@ -21,11 +21,33 @@ from bisheng.database.models.org_snapshot import DEPT_STATUS_ACTIVE, AuditDeptSc
 DEPT_STATUS_ARCHIVED = "archived"
 
 
+def _in_audit_tenant(dept, tenant_scope: int):
+    """Departments the audit tenant may offer.
+
+    A child tenant's departments stay on the parent tree: ``tenant_id`` is the
+    parent, and the mount point is ``mounted_tenant_id``. Matching only
+    ``tenant_id`` hides that whole subtree from the child tenant's administrator.
+    """
+    mount = aliased(Department)
+    under_mount = (
+        select(mount.id)
+        .where(
+            mount.is_deleted == 0,
+            mount.is_tenant_root == 1,
+            mount.mounted_tenant_id == tenant_scope,
+            mount.path != "",
+            dept.path.startswith(mount.path),
+        )
+        .exists()
+    )
+    return or_(dept.tenant_id == tenant_scope, under_mount)
+
+
 def _closure(scope: AuditDeptScope, tenant_scope: int | None, dept=Department) -> list:
     """Closure conditions on ``dept`` (the model or an alias of it)."""
     conditions = [dept.is_deleted == 0]
     if tenant_scope is not None:
-        conditions.append(dept.tenant_id == tenant_scope)
+        conditions.append(_in_audit_tenant(dept, tenant_scope))
     if not scope.unrestricted:
         parts = [dept.path.startswith(path) for path in scope.admin_paths]
         if scope.exact_ids:
@@ -47,6 +69,29 @@ class AuditDeptRepository:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 return list((await session.exec(statement)).all())
+
+    @classmethod
+    async def root_paths(cls, tenant_scope: int) -> list[str]:
+        """Paths of every department root in the audit tenant.
+
+        A tenant administrator's list, export and picker are limited to these
+        paths. A child tenant's root is its mount point, so the path covers
+        the mounted subtree and nothing above it.
+        """
+        scope = AuditDeptScope.unlimited()
+        parent = aliased(Department)
+        parent_in_closure = (
+            select(parent.id).where(parent.id == Department.parent_id, *_closure(scope, tenant_scope, parent)).exists()
+        )
+        statement = (
+            select(Department.path)
+            .where(*_closure(scope, tenant_scope), ~parent_in_closure, Department.path != "")
+            .distinct()
+            .order_by(Department.path)
+        )
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                return [path for path in (await session.exec(statement)).all() if path]
 
     @classmethod
     async def top_level(cls, scope: AuditDeptScope, tenant_scope: int | None, limit: int) -> list[Department]:

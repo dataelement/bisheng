@@ -1,0 +1,78 @@
+/* DSH ui-primitives/Switch, scoped to the shared control's stable slots.
+ * Maintenance notes and source map: ../docs/dsh-adaptation.md.
+ */
+:root[data-bisheng-surface='desktop'] {
+  --dsh-switch-track-off: var(--dsw-alias-border-l3, #0000001f);
+  --dsh-switch-track-on: var(--dsw-alias-brand-primary, rgb(15 17 21));
+  --dsh-switch-thumb-off: var(--dsw-alias-switch-thumb, rgb(255 255 255));
+  --dsh-switch-thumb-on: var(--dsw-alias-label-primary-foreground, rgb(255 255 255));
+}
+
+:root[data-bisheng-surface='desktop']:is(.dark, [data-dsh-host-theme='dark']) {
+  --dsh-switch-track-off: var(--dsw-alias-border-l3, #ffffff29);
+  --dsh-switch-track-on: var(--dsw-alias-brand-primary, rgb(249 250 251));
+  --dsh-switch-thumb-off: var(--dsw-alias-switch-thumb, rgb(173 178 184));
+  --dsh-switch-thumb-on: var(--dsw-alias-label-primary-foreground, rgb(15 17 21));
+}
+
+/* Plain switches are 36x20. Keep intrinsic widening for existing inner labels. */
+:root[data-bisheng-surface='desktop'] [data-slot='switch'][role='switch'] {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 36px;
+  height: 20px;
+  padding: 2px;
+  border: 0;
+  border-radius: 999px;
+  corner-shape: round;
+  background: var(--dsh-switch-track-off);
+  color: var(--dsh-switch-track-on);
+  transition: none;
+}
+
+:root[data-bisheng-surface='desktop'] [data-slot='switch'][aria-checked='true'] {
+  background: var(--dsh-switch-track-on);
+  color: var(--dsh-switch-thumb-on);
+}
+
+/* Retain the shared thumb's positioning: its existing 2px inset also yields
+ * DSH's 16px travel on the 36px track. Do not apply the theme's superellipse.
+ */
+:root[data-bisheng-surface='desktop'] [data-slot='switch'] > [data-slot='switch-thumb'] {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--dsh-switch-thumb-off);
+  transition-duration: 120ms;
+  transition-timing-function: ease;
+}
+
+:root[data-bisheng-surface='desktop'] [data-slot='switch'][aria-checked='true'] > [data-slot='switch-thumb'] {
+  background: var(--dsh-switch-thumb-on);
+}
+
+:root[data-bisheng-surface='desktop'] [data-slot='switch'] > span:not([data-slot='switch-thumb']) {
+  color: inherit;
+}
+
+/* Loading stays owned by the shared component; keep its spinner legible. */
+:root[data-bisheng-surface='desktop'] [data-slot='switch'] > [data-slot='switch-thumb'] svg {
+  color: rgb(15 17 21);
+}
+
+:root[data-bisheng-surface='desktop'] [data-slot='switch'][aria-checked='true'] > [data-slot='switch-thumb'] svg {
+  color: var(--dsh-switch-track-on);
+}
+
+:root[data-bisheng-surface='desktop'] [data-slot='switch']:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+:root[data-bisheng-surface='desktop'] [data-slot='switch']:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary, rgb(var(--brand-500))));
+  outline-offset: 2px;
+  box-shadow: none;
+}

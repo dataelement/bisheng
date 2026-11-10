@@ -1,5 +1,6 @@
 @import './desktop-buttons.css';
 @import './desktop-tabs.css';
+@import './desktop-switches.css';
 
 @tailwind base;
 @tailwind components;

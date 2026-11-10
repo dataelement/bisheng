@@ -1,4 +1,17 @@
 {
+  "project_sync": {
+    "reason": { "cloud_membership_kept": "已保留云端归属", "project_unavailable": "项目已不可用", "conversation_unavailable": "对话已删除或不属于当前账号", "invalid_date": "创建日期无效", "invalid_local_data": "本机记录损坏或格式无效", "unknown": "此项未导入" },
+    "connecting": "正在连接项目同步…",
+    "degraded": "项目已保存，同步暂有延迟",
+    "offline": "项目尚未同步，正在重新连接",
+    "auth_required": "请重新登录以同步项目",
+    "loading": "正在加载…",
+    "more": "加载更多",
+    "save_failed": "项目未能保存，请重试。输入已保留。",
+    "import_running": "正在自动迁移旧版项目…",
+    "import_failed": "旧版项目暂未迁移，正在自动重试。原记录已保留。",
+    "import_done": "迁移完成，{{count}} 项未迁移或保留了云端归属。"
+  },
   "admin": "管理员",
   "bisheng": "{{bishengZh}}",
   "cancel": "取消",
@@ -1211,9 +1224,11 @@
     "session_kicked_title": "会话已注销"
   },
   "com_app": {
+    "all": "全部",
     "center_title": "应用中心",
     "empty_go_explore": "暂无使用过的应用，可以前往应用广场",
     "explore_more": "探索更多应用",
+    "explore_plaza": "前往应用广场 <cta>探索更多应用<arrow /></cta>",
     "recent_apps_hint": "最近使用过的应用都在这里～",
     "service_maintenance_title": "哎呀，系统出了点小状况",
     "service_maintenance": "短暂停留一下，马上恢复正常使用",
@@ -1229,6 +1244,11 @@
       "all": "全部空间",
       "created": "我的创建",
       "department": "部门知识空间",
+      "empty_all": "现在还没有知识空间",
+      "empty_content": "现在还没有内容",
+      "empty_created": "现在还没有内容，<cta>立即创建</cta>",
+      "empty_department": "现在还没有部门知识空间",
+      "empty_joined": "现在还没有内容，<cta>前往广场</cta>看看吧",
       "joined": "已加入空间",
       "load_error": "知识空间加载失败，请重试",
       "more": "更多操作",

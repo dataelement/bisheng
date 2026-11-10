@@ -46,6 +46,10 @@ class AuditDeptScopeService:
         tenant_id = tenant_scope if tenant_scope is not None else get_current_tenant_id()
         if await cls.is_audit_admin(login_user, tenant_id):
             return AuditDeptScope.unlimited()
+        if tenant_id is not None and await cls._is_tenant_admin(login_user.user_id, tenant_id):
+            # The tenant's own department tree, including a child tenant mounted
+            # on the parent tree. Operators from outside that tree stay hidden.
+            return AuditDeptScope.restricted(admin_paths=await AuditDeptRepository.root_paths(tenant_id))
 
         admin_departments = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
         if not await cls._has_audit_menu(login_user, is_department_admin=bool(admin_departments)):
@@ -98,19 +102,19 @@ class AuditDeptScopeService:
         }
 
     @classmethod
-    async def is_audit_admin(cls, login_user: UserPayload, tenant_id: int | None) -> bool:
-        """Global super or the audit tenant's administrator: no department limit.
+    async def is_audit_admin(cls, login_user: UserPayload, _tenant_id: int | None) -> bool:
+        """Global super or the system administrator role: no department limit.
 
-        Checked before department administration on purpose — a tenant admin
-        who also manages one department still audits the whole tenant.
+        A tenant administrator is not in this set. ``resolve`` limits them to
+        the current tenant's department tree.
         """
-        if login_user.is_global_super or login_user.is_admin():
-            return True
-        if tenant_id is None:
-            return False
+        return bool(login_user.is_global_super or login_user.is_admin())
+
+    @staticmethod
+    async def _is_tenant_admin(user_id: int, tenant_id: int) -> bool:
         from bisheng.common.permission_identity import check_tenant_admin
 
-        return await check_tenant_admin(login_user.user_id, tenant_id)
+        return await check_tenant_admin(user_id, tenant_id)
 
     @classmethod
     async def _has_audit_menu(cls, login_user: UserPayload, *, is_department_admin: bool) -> bool:

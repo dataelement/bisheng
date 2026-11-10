@@ -1007,7 +1007,7 @@ class LLMService:
 
             workbench_llm = await cls.get_workbench_llm()
             workbench_change = False
-            if not workbench_llm.chat_title_llm:
+            if not workbench_llm.chat_title_llm or not workbench_llm.chat_title_llm.id:
                 workbench_llm.chat_title_llm = WSModel(id=str(model.id), name=model.model_name)
                 workbench_change = True
             if workbench_change:

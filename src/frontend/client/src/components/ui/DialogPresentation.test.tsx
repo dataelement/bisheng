@@ -6,10 +6,15 @@ import { OGDialog, OGDialogContent, OGDialogTitle } from './OriginalDialog';
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogCancel } from './AlertDialog';
 import { dialogOverlayStyle } from './dialogOverlayStyle';
 
+let mockDesktop = false;
+jest.mock('~/components/Chat/desktopEmbedding', () => ({
+  isDesktopEmbedded: () => mockDesktop,
+}));
 jest.mock('~/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' ') }));
 jest.mock('../../utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' ') }));
 
 beforeEach(() => {
+  mockDesktop = false;
   sessionStorage.clear();
   window.history.replaceState({}, '', '/workspace/skills');
 });
@@ -44,6 +49,7 @@ it.each([
 });
 
 it.each(cases)('%s dims the full desktop viewport in both themes', (_name, content) => {
+  mockDesktop = true;
   window.history.replaceState({}, '', '/workspace/skills?embed=dsh');
   const { rerender } = render(content);
   expect(document.querySelector('[data-state="open"][style*="background"]')).toHaveStyle({ background: 'rgba(0, 0, 0, 0.4)' });
@@ -54,6 +60,7 @@ it.each(cases)('%s dims the full desktop viewport in both themes', (_name, conte
 });
 
 it('preserves overlay layout styles while applying the desktop mask', () => {
+  mockDesktop = true;
   window.history.replaceState({}, '', '/workspace/skills?embed=dsh');
   const style = { background: 'transparent', zIndex: 160 };
   expect(dialogOverlayStyle(style)).toEqual({ background: 'rgba(0, 0, 0, 0.4)', zIndex: 160 });
@@ -72,6 +79,7 @@ it.each(cases)('%s uses its normal web presentation in a browser', (_name, conte
 });
 
 it('retains keyboard dismissal, focus containment and return to the trigger', async () => {
+  mockDesktop = true;
   window.history.replaceState({}, '', '/workspace/skills?embed=dsh');
   const user = userEvent.setup();
   render(<Dialog><DialogTrigger>Upload</DialogTrigger><DialogContent><DialogTitle>Upload skill</DialogTitle><input aria-label="Skill file" /><button>Save</button></DialogContent></Dialog>);

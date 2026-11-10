@@ -269,9 +269,7 @@ export function KnowledgeSpaceHeader({
                 row's px-4 — that padding is shared with the right-hand actions, so
                 shrinking it there would drag those 8px right along with it. */}
       <div className="-ml-2 flex min-w-0 flex-1 items-center gap-1 text-sm">
-        {/* Desktop back button. The module has no space / folder column any more,
-                    so this is the way up: folder → parent folder → space root → the
-                    知识空间 home. Mobile keeps its own top bar and Title ▾ drawer. */}
+        {/* This header is desktop-only, including when the DSH pane is narrow. */}
         <button
           type="button"
           onClick={() => {
@@ -283,11 +281,11 @@ export function KnowledgeSpaceHeader({
             onNavigateFolder(parent?.id);
           }}
           aria-label={localize("com_ui_go_back")}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1 max-[767px]:hidden"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1"
         >
           <Outlined.ArrowLeft className="size-4" />
         </button>
-        <div className="mx-1 h-4 w-px shrink-0 bg-border-base max-[767px]:hidden" aria-hidden />
+        <div className="mx-1 h-4 w-px shrink-0 bg-border-base" aria-hidden />
         <SpaceBreadcrumb
           space={space}
           currentPath={currentPath}

@@ -8,7 +8,7 @@ import { getCapabilities, setCapabilityAvailability, type Capability } from '~/a
 import { getSkillScope } from '~/api/skillCenter';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { QueryKeys } from '~/types/chat';
-import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_TOOLBAR, ModuleHomeHeader } from '~/components/ModuleHome';
+import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_SEARCH, MODULE_HOME_TOOLBAR, ModuleHomeHeader } from '~/components/ModuleHome';
 import { SkillCenterPane } from '~/pages/skills/SkillCenterPane';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
 import { SkillListSkeleton } from '~/pages/skills/SkillList';
@@ -67,7 +67,7 @@ export function CapabilityCenterPage() {
   };
   return <div className={MODULE_HOME_FRAME}>
     <ModuleHomeHeader title={t('title')} mobileTitleInShell>
-      <SearchInput className="w-full min-w-0 min-[768px]:w-64" value={search} onChange={event => setSearch(event.target.value)} onClear={() => setSearch('')} placeholder={t('search')} aria-label={t('search')} />
+      <SearchInput className={`${MODULE_HOME_SEARCH} w-full min-w-0 min-[768px]:w-64`} value={search} onChange={event => setSearch(event.target.value)} onClear={() => setSearch('')} placeholder={t('search')} aria-label={t('search')} />
     </ModuleHomeHeader>
     <div className={`${MODULE_HOME_COLUMN} ${MODULE_HOME_TOOLBAR} mt-4 flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-3`}>
       <Tabs className="dsh-home-tabs min-w-0 flex-1 max-[575px]:basis-full" size="large" variant="neutral" activeKey={active} items={CAPABILITY_TABS.map(tab => ({ key: tab, label: t(tab), badge: counts[tab] }))}

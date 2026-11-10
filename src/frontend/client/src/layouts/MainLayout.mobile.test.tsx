@@ -42,7 +42,19 @@ jest.mock("~/hooks", () => ({
   }),
   useLocalize: () => (key: string) => key,
   useWorkbenchMenuNames: () => ({ apps: "Applications" }),
-  usePrefersMobileLayout: () =>
+  useScrollRevealRef: () => noop,
+}));
+jest.mock("~/utils/clientEnvironment", () => {
+  const web = { channel: "web" };
+  const desktop = { channel: "desktop" };
+  return {
+    getClientEnvironment: () => (mockEmbedded ? desktop : web),
+    subscribeClientEnvironment: () => noop,
+  };
+});
+jest.mock("~/hooks/useMediaQuery", () => ({
+  __esModule: true,
+  default: () =>
     jest.requireActual("react").useSyncExternalStore(
       (listener: () => void) => {
         mockViewportListeners.add(listener);
@@ -52,21 +64,6 @@ jest.mock("~/hooks", () => ({
       },
       () => mockMobile,
     ),
-  useScrollRevealRef: () => noop,
-}));
-jest.mock("~/hooks/useClientEnvironment", () => ({
-  useClientEnvironment: () => ({
-    channel: mockEmbedded ? "desktop" : "web",
-    layout: {
-      isNarrowViewport: jest.requireActual("react").useSyncExternalStore(
-        (listener: () => void) => {
-          mockViewportListeners.add(listener);
-          return () => mockViewportListeners.delete(listener);
-        },
-        () => mockMobile,
-      ),
-    },
-  }),
 }));
 jest.mock("~/hooks/queries/data-provider", () => ({
   useGetBsConfig: () => ({ data: {} }),
@@ -217,9 +214,12 @@ it("returns to narrow layout with the menu closed after a desktop round trip", a
   );
 });
 
-it("leaves navigation to the desktop host even when its content is narrow", () => {
+it("uses the desktop shell and host navigation even when its content is narrow", () => {
   mockEmbedded = true;
   render(createHarness().page);
+  expect(screen.getByRole("main").parentElement).not.toHaveClass(
+    "workbench-mobile-shell",
+  );
   expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "com_nav_open_sidebar" }),

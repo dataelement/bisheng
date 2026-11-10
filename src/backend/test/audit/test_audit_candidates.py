@@ -16,15 +16,18 @@ from bisheng.database.models.session import MessageSession
 from bisheng.user.domain.models.user import User
 from test.fixtures.table_definitions import TABLE_DEFINITIONS
 
-# (id, name, parent_id, path, status, tenant_id, is_tenant_root, external_id)
+# (id, name, parent_id, path, status, tenant_id, is_tenant_root, external_id, mounted_tenant_id)
+# MountCo keeps the parent tree's tenant_id; the child tenant is mounted_tenant_id.
 _DEPTS = [
-    (1, "Root", None, "/1/", "active", 1, 1, None),
-    (2, "Sales", 1, "/1/2/", "active", 1, 0, None),
-    (3, "East", 2, "/1/2/3/", "active", 1, 0, "E-110"),
-    (4, "OldTeam", 2, "/1/2/4/", "archived", 1, 0, None),
-    (20, "R&D", 1, "/1/20/", "active", 1, 0, None),
-    (50, "ChildCo", 1, "/1/50/", "active", 5, 1, None),
-    (51, "ChildOps", 50, "/1/50/51/", "active", 5, 0, None),
+    (1, "Root", None, "/1/", "active", 1, 1, None, None),
+    (2, "Sales", 1, "/1/2/", "active", 1, 0, None, None),
+    (3, "East", 2, "/1/2/3/", "active", 1, 0, "E-110", None),
+    (4, "OldTeam", 2, "/1/2/4/", "archived", 1, 0, None, None),
+    (20, "R&D", 1, "/1/20/", "active", 1, 0, None, None),
+    (50, "ChildCo", 1, "/1/50/", "active", 5, 1, None, None),
+    (51, "ChildOps", 50, "/1/50/51/", "active", 5, 0, None, None),
+    (70, "MountCo", 1, "/1/70/", "active", 1, 1, None, 9),
+    (71, "MountOps", 70, "/1/70/71/", "active", 1, 0, None, None),
 ]
 
 
@@ -35,11 +38,12 @@ async def db(monkeypatch):
         await conn.execute(text(TABLE_DEFINITIONS["department"]))
         await conn.run_sync(lambda sync: MessageSession.__table__.create(sync))
         await conn.run_sync(lambda sync: User.__table__.create(sync))
-        for dept_id, name, parent_id, path, status, tenant_id, is_root, external_id in _DEPTS:
+        for dept_id, name, parent_id, path, status, tenant_id, is_root, external_id, mounted_tenant_id in _DEPTS:
             await conn.execute(
                 text(
                     "INSERT INTO department (id, dept_id, name, parent_id, path, status, tenant_id, "
-                    "is_tenant_root, external_id) VALUES (:i, :c, :n, :p, :path, :s, :t, :r, :e)"
+                    "is_tenant_root, external_id, mounted_tenant_id) "
+                    "VALUES (:i, :c, :n, :p, :path, :s, :t, :r, :e, :m)"
                 ),
                 {
                     "i": dept_id,
@@ -51,6 +55,7 @@ async def db(monkeypatch):
                     "t": tenant_id,
                     "r": is_root,
                     "e": external_id,
+                    "m": mounted_tenant_id,
                 },
             )
         for user_id, name, dept_id in [(31, "alice", 2), (32, "bob", 3), (34, "carol", 20)]:
@@ -117,7 +122,27 @@ class TestTopLevel:
 
     async def test_global_super_gets_every_tenant_root(self, db):
         data = await _departments(_user(admin=True, global_super=True))
-        assert [(node["id"], node["tenant_id"]) for node in data["active"]] == [(1, 1), (50, 5)]
+        assert [(node["id"], node["tenant_id"]) for node in data["active"]] == [(1, 1), (70, 1), (50, 5)]
+
+    async def test_child_tenant_admin_sees_the_mounted_department(self, db, monkeypatch):
+        async def _tenant_admin(user_id, tenant_id):
+            return tenant_id == 9
+
+        monkeypatch.setattr("bisheng.common.permission_identity.check_tenant_admin", _tenant_admin)
+        data = await _departments(_user(), tenant=9)
+        assert _ids(data["active"]) == [70]
+        assert (data["show_none"], data["show_unrecorded"]) == (False, False)
+        children = await _departments(_user(), tenant=9, parent_id=70)
+        assert _ids(children["active"]) == [71]
+
+    async def test_rbac_admin_sees_the_mounted_department(self, db):
+        data = await _departments(_user(admin=True), tenant=9)
+        assert _ids(data["active"]) == [70]
+        assert data["active"][0]["has_children"] is True
+        children = await _departments(_user(admin=True), tenant=9, parent_id=70)
+        assert _ids(children["active"]) == [71]
+        found = await _departments(_user(admin=True), tenant=9, keyword="MountOps")
+        assert _ids(found["active"]) == [71]
 
     async def test_global_super_narrowed_by_tenant_id(self, db):
         data = await _departments(_user(admin=True, global_super=True), tenant_id=5)
