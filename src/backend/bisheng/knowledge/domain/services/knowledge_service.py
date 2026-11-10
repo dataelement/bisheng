@@ -1792,6 +1792,8 @@ class KnowledgeService(KnowledgeUtils):
         request: Request,
         login_user: UserPayload,
         req_data: dict,
+        *,
+        retry_application=None,
     ):
 
         db_file_retry = req_data.get("file_objs")
@@ -1805,6 +1807,22 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(db_files[0].knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            if retry_application is None:
+                raise RuntimeError("SPACE legacy retry application is not configured")
+            result = await retry_application.aretry(
+                request=request,
+                identity=login_user,
+                req_data=req_data,
+                space_id=knowledge.id,
+            )
+            if not isinstance(result, tuple):
+                return result
+            actual_space, files, paths = result
+            cls.upload_knowledge_file_hook(request, login_user, actual_space, files)
+            for path in paths:
+                await cls.update_folder_update_time(path)
+            return []
         await cls.permission_service.ensure_knowledge_write_async(
             login_user=login_user,
             owner_user_id=knowledge.user_id,
