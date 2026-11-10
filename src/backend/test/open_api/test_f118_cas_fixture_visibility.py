@@ -31,8 +31,10 @@ async def test_cas_setup_separates_visibility_from_empty_explained_actions(monke
         path = request.url.path.removeprefix("/api/v1")
         actor = request.headers["Cookie"]
         if path == "/tenants/31":
+            assert actor == "unit-root"
             data = {"root_dept_id": 41}
         elif path == "/departments/41":
+            assert actor == "unit-root"
             data = {"id": 41, "dept_id": "unit-dept", "name": "e2e-f118-unit-mysql-cas-tenant", "parent_id": 1}
         elif path.endswith("/assignable-roles"):
             data = [{"id": 2, "role_name": "ordinary"}, {"id": 7, "role_name": "creator"}]
