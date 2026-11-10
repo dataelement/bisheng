@@ -8,7 +8,7 @@
 
 | 实际集成链 | 固定实现 / 集成点 | 当前证据边界 |
 | --- | --- | --- |
-| 原Run全平台权限发布、六来源回填/对账、Coverage、新租户及CLI | 权限a576；回填dbf003、删除证据窄修d4070de444，均已正常合流 | 本地原生链和线性分页证明；尚非真实停服升级 |
+| 原Run全平台权限发布、六来源回填/对账、Coverage、新租户及CLI | 权限a576；回填dbf003、删除证据窄修d4070de444，均已正常合流 | 原项目及clone2正式同run迁移/重入ready；真实API/UI整体验收仍待结果 |
 | 跨空间与同步移动、旧入口及源输入保护 | 3f358、575b0792ca及2bb10ce9df | 实际应用/Worker/调用方已接；预检及确认锁前权限分类先于有效根idle检查，锁后重验保留；环境测试待执行 |
 | 知识引用/文件夹闭集删除/空间删除与清空、旧文档及Version | 575b0792ca、混合权限与DDL a1c4aa2ce2 | 原Plan→F048→SQL→持久清理已接，必要native闭环已验；不报整体通过 |
 | 模型删除/共享协调及两端知识删除页面 | afb4d255、1bbc16d0a9、494351123c；集成2e9fd102d5 | 原PUT差集与强删确认、未知ACK/受限来源按原合同；无签发加固 |
@@ -59,15 +59,15 @@ Root最终四路径`test_wire_router`、`test_legacy_document_contract`、`test_
 
 剩余34个基线旧失败及两端既有测试问题按既有归因处理，不豁免本次新缺陷。原8张开发卡保持关闭；14张验收卡仍待真实接口、升级/恢复、E2E与最终评审，不因本地回归或构建结果改勾。
 
-旧环境补齐的未发布hosted AppVersion是本次synthetic fixture，不是runtime；另一workflow/version206用于已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置证据保留。M2此前发现synthetic版本将模型display名`e2e-f118-chat`误作capability声明；旧/新resolver均要求vendor名`f118-chat`，26511为正确阻断。Root已用旧镜像a1b完成fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；旧code保留，其他SQL/FGA/模型默认/文件/WF核对不变。不UPDATE真实历史版本、不走Runtime删除、不加名称fallback或伪造invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目安全路径`prep/revision2/fixture-reset.json`（私密原文留服务器）。backup1及failed clone证据保留；backup2及clone2后续还原/迁移结果见下，原测试项目尚未升级或部署。
+旧环境补齐的未发布hosted AppVersion是本次synthetic fixture，不是runtime；另一workflow/version206用于已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置证据保留。M2此前发现synthetic版本将模型display名`e2e-f118-chat`误作capability声明；旧/新resolver均要求vendor名`f118-chat`，26511为正确阻断。Root已用旧镜像a1b完成fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；旧code保留，其他SQL/FGA/模型默认/文件/WF核对不变。不UPDATE真实历史版本、不走Runtime删除、不加名称fallback或伪造invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目安全路径`prep/revision2/fixture-reset.json`（私密原文留服务器）。backup1及failed clone证据保留；backup2、clone2及原项目后续升级/部署证据见下，仍不表示完整API/UI验收通过。
 
-新前端候选22f5261181已完成真实锁依赖类型检查及两端Vite构建，镜像`sha256:e0b7b3479099b6add0fd81070f634135bc90881f66afea10e2978f8df3505b78`，归档SHA256 `c95fa28d20f477ac7e79fd2df11166084258fce4fee66f2051b501dbc17b30f3`。当前`src/frontend`树为`339831ed64e7c19da3af69c3b326565a2fff3458`，已与旧550561候选的ca37581树不同，不能继续声称旧镜像与当前源码等价。原锁和产品Dockerfile未改。
+已部署前端22f5261181完成过真实锁依赖类型检查及两端Vite构建，镜像`sha256:e0b7b3479099b6add0fd81070f634135bc90881f66afea10e2978f8df3505b78`，归档SHA256 `c95fa28d20f477ac7e79fd2df11166084258fce4fee66f2051b501dbc17b30f3`。当前`src/frontend`树为`339831ed64e7c19da3af69c3b326565a2fff3458`，已与旧550561候选的ca37581树不同，不能继续声称旧镜像与当前源码等价。原锁和产品Dockerfile未改。
 
-旧550561c443归档及其API/Worker镜像已由Move修复取代。已构建77f737fe3c快照`f118-e2e-backend:candidate-77f737fe3c`，镜像`sha256:bef3f456f67c21c24d81bfcd0c840ad9db5a7658d602d886680640c66eb1621b`，归档SHA256 `1c560dacb4c24d3d2512214939283d9ae920598c0f7776246d836bd52002e575`，尚不含后续M2窄修。原测试项目新版未部署，其正式M2→M4及恢复业务未完成，环境E2E未执行；构建不能替代这些证据。
+旧550/77f后端仅为历史构建。原项目现已实际部署backend/Worker固定71dd镜像（SHA256前缀`162f`）及上述22f前端；原cmd、queue、mount保持，mock正常。前端`31818:3001`、独立网络`frontend:3001`的两SPA/API proxy sanity通过；这是部署/基本连通证据，不是E2E证明。
 
 既有测试工具镜像`sha256:9d283aa38710d8ca5b39cbd3ed02021beee3663e51da1d6532dfa5b5753a384b`内Chromium已完成无网络、无凭据的launch/data HTML/close验证，仅证明工具可用，不是UI验收。
 
-API E2E本地 **19条仅collect-only**：原8条、移动/复制/过期3条、强删修复2条、处理恢复2条、MySQL CAS 2条及v2/MCP协议兼容2条，尚非live结果。[浏览器清单](./e2e-checklist.md)21场景全部未执行，14张验收卡不改勾。覆盖验证读取真实Chunk，不附加MD5变化假设；协议兼容测试不是完整SDK验收。
+API E2E **19条已在服务器实际运行中**（run `n10api1`，显式选择全部5 suites，包含v2/MCP），最终结果尚未产出；此前本地collect-only不再作为当前执行状态。[浏览器清单](./e2e-checklist.md)21场景全部未执行，14张验收卡不改勾。覆盖验证读取真实Chunk，不附加MD5变化假设；协议兼容测试不是完整SDK验收。
 
 **本次没有SDK代码改动。** Git核对`src/bisheng-sdk`无需求diff；不为测试新增SDK或扩展托管运行时。现有公共SDK双凭据的全托管场景需真实运行材料，单列未执行，不将新增runtime列为F118功能依赖，也不因此暂停迁移和知识库验收。
 
@@ -75,13 +75,19 @@ backup1已完成，manifest SHA256 `2e8bb87fae241b3e777b0c9aba5dbb03acc8609aa8a8
 
 正式M2前的窄修已合：CLI owned lazy manager收尾d46944ba42（Root10绿）、原FGA `condition:null`格式5c5497dc6b（相关77绿）、F038内置公共tag库user0精确哨兵01eff15ba2（相关114绿）。保原常规creator、未知条件字段拒绝及权限边界；这些定点不是8208整轮重跑，也不表示旧77f镜像已更新。
 
-窗口1的原API/Worker/mock/Milvus/ES/etcd持续停止；Milvus原生1800秒超时exit1（无OOM/外部kill）证据保留。限定fixture reset后，原API/Worker及全部11个服务现均stopped。backup2于2026-11-10 06:58:24 UTC实际完成：manifest SHA256 `fd7dd63b37ba45d6503d02f1d5de01cf078a38182832f8aed1635f9bf60e9630`，24 files，187张SQL表/798条FGA tuple/68个MinIO对象版本；旧镜像归档8447341568 bytes，以同一旧inode硬链接保存。retained broker及其他SQL/FGA不变，仅已记录synthetic版本替换和其唯一新code；Root另在服务器独立核对summary固定字段，未取认证、配置或日志原文。该备份已用于隔离clone2完整还原，7项检查全true（187 SQL/798 FGA/68对象版本/4 ES/3 Milvus/22逻辑向量）；新中性DDL保180张原表旧列不变、8张新表空。clone根位于独立项目`restore-check/e2e-f118-20261110-prep2/.restore2`，非原测试项目。
+窗口1停服及Milvus原生1800秒超时exit1（无OOM/外部kill）历史证据保留；其后限定fixture reset和一致backup2完成，当前原项目已升级并部署，不再处于全部11服务stopped状态。backup2于2026-11-10 06:58:24 UTC实际完成：manifest SHA256 `fd7dd63b37ba45d6503d02f1d5de01cf078a38182832f8aed1635f9bf60e9630`，24 files，187张SQL表/798条FGA tuple/68个MinIO对象版本；旧镜像归档8447341568 bytes，以同一旧inode硬链接保存。retained broker及其他SQL/FGA不变，仅已记录synthetic版本替换和其唯一新code；Root另在服务器独立核对summary固定字段，未取认证、配置或日志原文。该备份已用于隔离clone2完整还原，7项检查全true（187 SQL/798 FGA/68对象版本/4 ES/3 Milvus/22逻辑向量）；新中性DDL保180张原表旧列不变、8张新表空。clone根位于独立项目`restore-check/e2e-f118-20261110-prep2/.restore2`，非原测试项目。
 
-clone2以实际材料盘点3租户并完成正式M2 frozen；同run `e2e-f118-20261110-prep2-restore` CLI apply得到ready `[1,2,3]`，同run replay仍ready，apply/replay JSON证据SHA256完全相同`5b9c51a2fea64f1c285b772e52c532dcb7de9293c1ba4bc24adbb3984542a76f`。这是隔离还原环境的实际迁移/重入证明；原项目全部11服务仍停且保旧schema，原环境升级及新版API/Worker/frontend部署未执行，API19只collect、UI21未执行、14卡仍pending。109:3005及范围排除项保持不动，不称原项目升级或恢复业务完成。
+clone2以实际材料盘点3租户并完成正式M2 frozen；同run `e2e-f118-20261110-prep2-restore` CLI apply得到ready `[1,2,3]`，同run replay仍ready，apply/replay JSON证据SHA256完全相同`5b9c51a2fea64f1c285b772e52c532dcb7de9293c1ba4bc24adbb3984542a76f`。这是隔离还原环境的迁移/重入证明。原项目随后起七store，Native7比对backup2全true；原中性DDL保持180张原表旧列/8张新表空，正式M2冻结3租户，同run `e2e-f118-20261110-prep2-upgrade` apply/replay均ready `[1,2,3]`，结果SHA256同为`fa19a571fdedfe61c4d67ed807c9ebcb1c42fa75108f3af75675eceae274be34`。
+
+原项目和clone2迁移后、撤销测试前各自独立只读审计均PASS：429条引用与冻结集合完全相同、组合无重复；5 File/2 Doc/3 Version/QA1保留，旧type0→3且QA保持1；WF206仍保missing知识ID911800001原配置及invalid_legacy，原Grant61/74主体/等级与新AppVersion d58 caps保持，六kind×3租户及global ready，无Embedding重建。两环境`reference_identity_set`摘要同为`c31065a8655d13f7274e7d53b987eb776e21ea61417a835681415cc85ec0233f`。
+
+原pure-use Grant74/Source `3181446261062334809`已真实HTTP验证：迁移后visible/use兼容别名true、其他space动作false；正规REMOVE后visible/use及全部动作false，children拒绝18040，owner原Source343… DTO完全不变。安全证据为Root原环境证据目录`originalEV/pure-visible-revoke.json`。PUBLIC/APPROVAL基本信息preview仍按原规则返回actions=[]，不为错误18040测试Oracle改业务；临时准备model/grant ID原wire为str `9`/`74`，Root仅修类型断言，非产品bug。
+
+原项目升级及新API/Worker/frontend部署已有上述证据；API19运行中未出最终结果，UI21未执行、14卡仍pending。109:3005及范围排除项保持不动，不将sanity或独立HTTP路径当完整E2E通过。
 
 两项oneoff工具问题仅收窄适配短/完整容器ID与只读rootfs缓存路径；`XDG_CACHE_HOME=/tmp/f118-cache`下真实broker只读检查通过，旧失败留证。这不是新增产品或SDK修复，不增加RTM。
 
-新DeleteJob中性DDL单head为f118_knowledge_delete_execution，clone2结构及同run迁移验证见上；原测试项目的数据转换、M4及恢复业务仍待完成。定点数字不相加为完整覆盖；范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
+新DeleteJob中性DDL单head为f118_knowledge_delete_execution，clone2与原项目结构、正式迁移及部署验证见上；完整API/UI及最终验收仍待结果。定点数字不相加为完整覆盖；范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
 
 ## 本次账本快照
 
