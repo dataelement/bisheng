@@ -105,7 +105,10 @@ class GptsToolsType(GptsToolsTypeBase, table=True):
     __tablename__ = "t_gpts_tools_type"
     openapi_schema: str = Field(
         default="",
-        sa_column=Column(Text),
+        # Real-world OpenAPI documents exceed MySQL TEXT's 64 KB; LargeText
+        # maps to LONGTEXT (MySQL) / CLOB (DaMeng). Migration:
+        # v3_0_0_tool_openapi_schema_longtext.
+        sa_column=Column(LargeText),
         description="of the tool categoryschemaContent, complies withopenapiSpecified Data",
     )
 
