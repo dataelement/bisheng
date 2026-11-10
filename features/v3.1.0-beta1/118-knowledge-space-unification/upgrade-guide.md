@@ -1,6 +1,6 @@
 # 升级说明：知识空间统一与全平台 use 动作退役
 
-**状态（2026-11-10）**：正式CLI、全平台权限发布、六来源回填及Coverage已集成；正常业务删除后迁移的边界正在收口。当前仍为开发版操作说明，完整停服升级/恢复与E2E尚未执行，不据此开放生产升级。最新执行入口见§3.1，后文日期章节保留各阶段当时的证据边界。\
+**状态（2026-11-10）**：功能开发已收齐，backup1、隔离完整还原和clone中性DDL通过；正式M2因本次synthetic样本错误尚未freeze/convert，新版未部署。当前仍为演练说明，不据此开放生产升级；SDK无本次代码改动，全托管SDK场景单列未执行。最新入口见§3.1，后文日期章节保留历史证据边界。\
 **日期**：2026-11-03\
 **关联**：[spec.md](./spec.md)（AC-63、AC-85、AC-89、AC-91、AC-92、AC-93、AC-94） · [design.md](./design.md) §7。
 
@@ -31,7 +31,7 @@
 
 ### 3.1 已实现的执行入口（2026-11-10）
 
-从本版本的 `src/backend/` 运行，使用API/Worker同一配置、已安装依赖和环境凭据。先保持业务停止，执行 `python -m alembic upgrade head`；当前单一head为 `f118_knowledge_delete_execution`，仅准备结构，不进行正式业务盘点或回填。最新DDL尚未完成本轮真实MySQL升级演练，不能借用早期DDL的验证结论。
+从本版本的 `src/backend/` 运行，使用API/Worker同一配置、已安装依赖和环境凭据。先保持业务停止，执行 `python -m alembic upgrade head`；当前单一head为 `f118_knowledge_delete_execution`，仅准备结构，不进行正式业务盘点或回填。该DDL已在隔离完整还原clone验证，正式M2尚未冻结，不把clone结构通过当作完整升级/恢复业务验收。
 
 正式入口为 `scripts/unify_knowledge_spaces.py`。下面所有环境名、run、操作人及描述符必须替换为实际值；`object_key/sha256`必须指向同一维护窗口中已持久保存并验证的真实备份、结构证据，不是随意生成的占位hash。
 
@@ -277,8 +277,10 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 
 最终77f737fe3c后端完整单轮8208 passed、34 failed、23 skipped、0 errors，另8 subtests passed，27分35秒；34失败均与共同祖先旧红相等、未归因0，23均为相同Redis依赖跳过。此为本地回归，不是全绿或升级E2E。升级后Move仍须实测：预检及确认锁前先核原move/目标upload_file并分类，仅有效根检查源/目标idle；无权或缺失项分类不被忙态覆盖，锁后仍重验忙态，拒绝时Plan/File/Job/chat零副作用。2bb10ce9df不改变原动作范围。
 
-前端22f修复真实类型错误后，锁依赖类型及两端Vite构建通过，新树339831ed64e7c19da3af69c3b326565a2fff3458已取代旧ca37581树；后端候选固定77f737fe3c。两者镜像均未部署，精确摘要见[W6记录](./wave6-implementation-review.md#统一测试进行中2026-11-10)。本地13条E2E仅collect-only，T200–T213的14张验收卡仍待实际完成。
+前端22f修复真实类型错误后，锁依赖类型及两端Vite构建通过，新树339831ed64e7c19da3af69c3b326565a2fff3458已取代旧ca37581树；已构建后端77f快照尚不含后续M2窄修。两端镜像均未部署，摘要见[W6记录](./wave6-implementation-review.md#统一测试进行中2026-11-10)。本地19条API E2E仅collect-only、21项UI未执行，T200–T213的14张验收卡仍待完成。本次未改SDK，不为测试新增SDK/扩托管运行时；既有SDK双凭据全托管场景缺真实运行材料单列未执行，v2/MCP协议验证不冒称SDK通过，也不新增runtime功能依赖。
 
-当前独立维护已停止旧API/Worker/派发及中间件；Milvus原生1800秒优雅退出超时exit1（无OOM/外部kill）已专门记录，不作正常退出证明。冷备数据、双schema及私密配置已归档，旧镜像备份仍进行；非formal的逐行hash准备检查不替代正式基线。须先完成真实还原及向量逐行hash复验才准DDL，当前restore/DDL/M2尚未完成，不据此恢复服务或宣布演练通过。109:3005保持不动。
+backup1完成（manifest SHA256 `2e8bb87fae241b3e777b0c9aba5dbb03acc8609aa8a8bbf5873f0dee04169552`，旧镜像8.447GB保存），隔离full restore的7检查全true，含187表/798 tuple/67对象版本/4 ES/3 Milvus及22逻辑向量、原schema head；clone中性DDL通过，180张原business表原列不变、8张新表为空。这不等于正式M2已冻结或升级通过。CLI收尾、原FGA null格式及内置user0哨兵窄修仅为定点证据，未重跑8208整轮，详见W6。
+
+M2当前正确拒绝本次synthetic AppVersion的display/vendor名称混淆（26511）：旧/新resolver均要求`f118-chat`，fixture误写`e2e-f118-chat`。保backup1/failed clone/旧code，拟严格撤销本次未发布synthetic版本后新UUID完整重建，不UPDATE真实历史版本、不走Runtime删除、不添加fallback或伪invalid_legacy；prep2/reset/backup2脚本尚未执行，之后须重新备份、还原及正式run。旧API/Worker/mock/Milvus/ES/etcd自窗口1持续停，仅Root开启MySQL/Redis/MinIO/FGA四存储作准备；Milvus原生1800秒超时exit1无OOM/外部kill单列保留。正式freeze/convert/deploy均未发生，3005保持不动。
 
 旧重复文件覆盖/重试保原File/Doc/Version和目录，原处理版本是来源快照，更新空间默认不重算旧文件；正式升级后需用原ID及存量快照核对这一兼容路径。整批WAITING提交与原worker派发均需实测，未知ACK不作为成功证据。仍按停服/排空/一致备份→中性DDL→停服后正式盘点冻结→同run转换/权限发布→六来源回填/对账/Coverage→校验后恢复的原顺序，不由迁移脚本判断停服。
