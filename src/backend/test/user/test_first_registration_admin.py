@@ -14,7 +14,7 @@ from bisheng.user.domain.models.user import User, UserCreate
 from bisheng.user.domain.services import user as users
 
 
-def test_retired_admin_yaml_is_ignored_without_disabling_unknown_key_validation(tmp_path, monkeypatch):
+def test_retired_admin_and_unknown_yaml_keys_warn_without_blocking_startup(tmp_path, monkeypatch):
     from bisheng.common.services import config_service
 
     log = MagicMock()
@@ -26,9 +26,12 @@ def test_retired_admin_yaml_is_ignored_without_disabling_unknown_key_validation(
     assert not hasattr(loaded, "admin")
     assert "must-not-log-this" not in str(log.mock_calls)
     log.warning.assert_called_once()
+    log.reset_mock()
     source.write_text("unknown_deployment_setting: true\n")
-    with pytest.raises(KeyError, match="unknown_deployment_setting"):
-        ConfigService.load_settings_from_yaml(str(source))
+    loaded = ConfigService.load_settings_from_yaml(str(source))
+    assert "unknown_deployment_setting" not in loaded.model_dump()
+    log.warning.assert_called_once()
+    assert "unknown_deployment_setting" in str(log.warning.call_args)
 
 
 async def test_startup_never_creates_a_user_even_if_legacy_configuration_is_present(monkeypatch):

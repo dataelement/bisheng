@@ -179,12 +179,17 @@ class ConfigService(Settings):
             settings_dict.pop("admin")
             logger.warning("Ignoring retired admin bootstrap setting; the first registered user becomes administrator")
 
-        for key in settings_dict:
-            if key not in Settings.model_fields.keys():
-                raise KeyError(f"Key {key} not found in settings")
+        known_settings = {}
+        for key, value in settings_dict.items():
+            if key not in Settings.model_fields:
+                logger.warning(
+                    "Ignoring unknown top-level config key {!r} in {}; this setting has no effect", key, file_path
+                )
+                continue
+            known_settings[key] = value
             logger.debug(f"Loading {key} from {file_path}")
 
-        return ConfigService(**settings_dict)
+        return ConfigService(**known_settings)
 
     async def init_config(self):
         # Inisialisasiconfig

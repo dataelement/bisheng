@@ -56,7 +56,7 @@
     "modelNameTooltip": "Name for local deployment or API request",
     "modelType": "Type",
     "voiceType": "Voice Type",
-    "voiceTypeRequired": "Voice type is required",
+    "voiceTypeRequired": "Voice type cannot be empty",
     "webSearch": "Online Search",
     "systemModelSettings": "System Settings",
     "knowledgeBaseModel": "Knowledge",

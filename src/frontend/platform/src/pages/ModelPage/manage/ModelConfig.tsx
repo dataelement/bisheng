@@ -317,7 +317,7 @@ export default function ModelConfig({
         typeof reported === "string" && reported.trim() && reported !== generic;
       toast.show({
         type: "error",
-        message: specific ? reported : t("model.saveFailed"),
+        message: specific ? reported : t("model.saveFailed", { ns: "model" }),
       });
     } finally {
       setIsLoading(false);

@@ -16,10 +16,9 @@ app does not exist" (AC-30 / AC-62); without it the entry path degrades to a
 Sibling, not sub-key, of ``open_platform`` (F049). The two switches are
 independent and any combination must boot (AC-61) — do not merge them.
 
-**Deployment order** (design pit 23): ``load_settings_from_yaml`` raises
-``KeyError`` on an unknown top-level key, so a config.yaml carrying
-``app_runtime:`` in front of code that knows it makes the backend refuse to
-start. Ship the code first, add the key second, restart third.
+**Deployment order** (design pit 23): older loaders reject unknown top-level
+keys; current loaders warn and ignore them. An ignored ``app_runtime:`` still
+cannot enable the feature. Ship code first, add the key second, restart third.
 
 Secrets (``manager_hmac_secret`` / ``proxy_hmac_secret`` / ``obo_secret``) come
 from ``!env`` or the Fernet-encrypted YAML — never a literal (C6). An empty
