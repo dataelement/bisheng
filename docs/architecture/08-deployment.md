@@ -37,9 +37,11 @@ bisheng-milvus-standalone
   └── depends_on: minio
 ```
 
-### 附加 Compose 文件
+### 可选服务
 
-除主编排文件外，项目还提供三个可选编排文件，按需独立启动：
+模型微调 `bisheng-ft` 已恢复为主编排文件的 `ft` profile（默认关闭），通过 `bash docker/install.sh --ft` 启用。沿用 `ft_server` 服务名、NVIDIA GPU 预留和旧版模型/训练输出挂载路径；配置及平台服务登记见 [部署说明](../../docker/README.md#模型微调-bisheng-ft可选)。
+
+附加 Compose 文件：
 
 | 文件 | 容器名 | 镜像 | 端口 | 用途 |
 |------|--------|------|------|------|
