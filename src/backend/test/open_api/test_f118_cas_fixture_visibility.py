@@ -12,6 +12,12 @@ from test.e2e.helpers.f118_unification import F118Environment
 @pytest.mark.parametrize("broken_decision", [None, "visible", "edit", "delete"])
 async def test_cas_setup_separates_visibility_from_empty_explained_actions(monkeypatch, broken_decision):
     spaces, reads, decisions = {}, [], []
+    roles = {2}
+
+    async def login(*_args):
+        return "unit-child-reader"
+
+    monkeypatch.setattr("test.e2e.helpers.f118_cas_creator.get_user_token", login)
 
     async def prepared_child(env):
         env.tenant_id, env.owner_id, env.reader_id = 31, 131, 231
@@ -24,9 +30,32 @@ async def test_cas_setup_separates_visibility_from_empty_explained_actions(monke
     async def transport(request):
         path = request.url.path.removeprefix("/api/v1")
         actor = request.headers["Cookie"]
-        if path == "/user/info":
-            assert actor == "unit-child-reader"
-            data = {"role": "user", "is_child_admin": False, "leaf_tenant_id": 31}
+        if path == "/tenants/31":
+            data = {"root_dept_id": 41}
+        elif path == "/departments/41":
+            data = {"id": 41, "dept_id": "unit-dept", "name": "e2e-f118-unit-mysql-cas-tenant", "parent_id": 1}
+        elif path.endswith("/assignable-roles"):
+            data = [{"id": 2, "role_name": "ordinary"}, {"id": 7, "role_name": "creator"}]
+        elif path.endswith("/menu"):
+            data = ["admin", "build", "create_app"] if path == "/roles/7/menu" else ["workstation", "home"]
+        elif path.endswith("/edit-form"):
+            data = {
+                "edit_mode": "local_primary",
+                "affiliate_rows": [],
+                "primary_department": {"id": 41, "role_ids": sorted(roles)},
+            }
+        elif path.endswith("/apply-edit"):
+            roles.update(json.loads(request.content)["primary_role_ids"])
+            data = None
+        elif path == "/user/info":
+            assert actor == "access_token_cookie=unit-child-reader"
+            data = {
+                "role": "user",
+                "is_child_admin": False,
+                "leaf_tenant_id": 31,
+                "user_name": "e2e-f118-unit-mysql-cas-reader",
+                "web_menu": ["admin", "build", "create_app"],
+            }
         elif path == "/knowledge/space" and request.method == "POST":
             assert actor == "unit-child-owner"
             body = json.loads(request.content)
@@ -52,11 +81,11 @@ async def test_cas_setup_separates_visibility_from_empty_explained_actions(monke
             ]
             data = {}
         elif path.endswith("/my-permissions"):
-            assert actor == "unit-child-reader"
+            assert actor == "access_token_cookie=unit-child-reader"
             data = {"mode": "CUSTOM", "actions": [], "projection_degraded": False}
         elif path == "/permissions/check":
             body = json.loads(request.content)
-            assert actor == "unit-child-reader"
+            assert actor == "access_token_cookie=unit-child-reader"
             assert body["resource_type"] == "knowledge_space"
             sid, action = int(body["resource_id"]), body["action"]
             assert sid in spaces and action in {"visible", "edit", "delete"}
@@ -64,7 +93,7 @@ async def test_cas_setup_separates_visibility_from_empty_explained_actions(monke
             allowed = action == "visible"
             data = {"allowed": not allowed if action == broken_decision else allowed}
         elif path.startswith("/knowledge/space/") and path.endswith("/info"):
-            assert actor == "unit-child-reader"
+            assert actor == "access_token_cookie=unit-child-reader"
             sid = int(path.split("/")[-2])
             reads.append(sid)
             data = spaces[sid]
