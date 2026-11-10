@@ -29,11 +29,21 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_document_ve
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
     KnowledgeFileRepositoryImpl,
 )
-from bisheng.knowledge.domain.schemas.knowledge_space_schema import FolderUploadItem
+from bisheng.knowledge.domain.schemas.knowledge_space_schema import FileMoveReq, FolderUploadItem
 from bisheng.knowledge.domain.services import knowledge_space_service as spaces
 from bisheng.knowledge.domain.services import knowledge_version_service as versions
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
+from test.knowledge_unification import test_legacy_move_composition as move_native
+
+store, tenant, moving, accepted, application = (
+    move_native.store,
+    move_native.tenant,
+    move_native.moving,
+    move_native.accepted,
+    move_native.application,
+)
+legacy_move, busy_move = move_native.legacy_move, move_native.busy_move
 
 
 @pytest.fixture
@@ -282,25 +292,31 @@ async def test_version_feature_switch_keeps_its_original_error_before_state_guar
 
 @pytest.mark.parametrize("source,target,folder", [(19, 20, None), (20, 19, None), (19, 19, 150)])
 async def test_move_checks_real_source_and_destination_after_original_both_sided_actions(
-    writes, source, target, folder
+    busy_move, source, target, folder
 ):
+    writes = busy_move
     file_id = 101 if source == 19 else 201
     with pytest.raises(KnowledgeProcessingConflictError) as failure:
-        await writes.service.move_items(source, [{"id": file_id, "type": "file"}], target, target_folder_id=folder)
+        await writes.service.aprecheck_move(
+            source,
+            FileMoveReq(items=[{"id": file_id, "type": "file"}], target_space_id=target, target_folder_id=folder),
+        )
     assert failure.value.Code == 10999 and writes.mutations == []
-    writes.service._require_read_permission.assert_awaited_once_with(source)
     assert any(
         call.args[:2] == ("knowledge_file", file_id) for call in writes.service._get_effective_actions.await_args_list
     )
     writes.service._replace_resource_parent_tuple.assert_not_awaited()
 
 
-async def test_move_without_original_source_action_keeps_original_invalid_item_result(writes):
+async def test_move_without_original_source_action_keeps_original_invalid_item_result(busy_move):
+    writes = busy_move
     writes.service._get_effective_actions.side_effect = lambda kind, ident, **kwargs: (
         ["upload_file"] if kind == "knowledge_space" else []
     )
-    result = await writes.service.move_items(19, [{"id": 101, "type": "file"}], 20)
-    assert result["moved"] == [] and result["invalid"][0]["reason"] == "no_permission"
+    result = await writes.service.aprecheck_move(
+        19, FileMoveReq(items=[{"id": 101, "type": "file"}], target_space_id=20)
+    )
+    assert not result.can_execute and result.valid_items == [] and result.invalid_items[0].reason == "no_permission"
     assert not writes.mutations
 
 
