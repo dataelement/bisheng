@@ -115,9 +115,8 @@ async def get_knowledge_file_service(
     knowledge_file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
 ) -> "KnowledgeFileService":
     """DapatkanKnowledgeFileServiceInstance Dependencies"""
-    from bisheng.knowledge.domain.services.knowledge_file_service import KnowledgeFileService as _KnowledgeFileService
-
     from bisheng.knowledge.application.knowledge_index_edit import get_knowledge_index_editor
+    from bisheng.knowledge.domain.services.knowledge_file_service import KnowledgeFileService as _KnowledgeFileService
 
     return _KnowledgeFileService(
         knowledge_repository=knowledge_repository,
@@ -176,6 +175,9 @@ async def get_knowledge_space_service(
     from bisheng.knowledge.application.knowledge_batch import get_batch_application
 
     service.batch_application_factory = get_batch_application
+    from bisheng.knowledge.application.legacy_retry import get_legacy_retry_application
+
+    service.legacy_retry_factory = get_legacy_retry_application
     return service
 
 

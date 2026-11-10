@@ -15,13 +15,15 @@
 | 保存引用选择器及纯可见授权 | c006b7ac64，集成332001b408 | 定点34项通过；平台整体typecheck仍有既有依赖/页面错误，不宣称全绿 |
 | 批量下载/标签/重试，两端确认及逐项结果 | a540ceeec4，retry冲突fence d1504cbcb2 | 原Plan、实际权限及派发语义；下载失败不假成功，未做整体环境验收 |
 | 独立复制、四kind高级处理、物理版本Chunk/meta与平台页面 | 979e7c7458，历史图片前缀8a745d4b09 | 真实Worker/P1/索引ACK接线，非受理即完成；无工作台Embedding全空间重建 |
-| 实际上传临时规则、移动风险与任务恢复 | 783eb1c166、99fe13c9e9 | upload_file原动作，原确认和HTTP安全幂等键；目录批上传与web挂载仍在收口 |
+| 实际上传临时规则、移动风险与任务恢复 | 783eb1c166、99fe13c9e9 | upload_file原动作，原确认和HTTP安全幂等键；目录/web已由3b791157/7a0eccec8f接通 |
 | 客户端四kind状态面板及visible候选 | 47a4486618、346427e2d9 | 原scope和真实tenant pin；无后台高级设置；真实API fresh导入循环已闭合 |
 | 平台版本/相似文档实际操作 | edf3f55799，集成eedf6cc8e0 | 真实单版本上传后明确关联、切主、非主历史删除、merge/link/keep-two；推荐复用visible有界读取 |
 | 已正常删除业务的迁移空索引闭合 | f8320fcd65 | 只原KN/Channel全球业务不存在的完整inactive零引用索引对；未知/残引用仍拒；新删除prepared阻冻结 |
 | 退役个人知识及开放接口元数据值 | d99808524e、b3fecbb1f3 | type2不创建/不清理，临时会话附件不变；SPACE值操作实际索引ACK后提交，保原容器edit和增删改语义 |
 
-**当前仍在开发的实际入口**：旧文件处理/列表/重试/Chunk的协议兼容及原上传callback派发透传、存量审批finalize的真实执行身份和申请人署名/配额。旧CRUD/公共权限别名c633a9ec73、真实检索cd363a54、目录/web 3b791157、频道HTTP/worker de20b10ef9及三语d36ea225已正常合流。Root 9aa363c8e1去新手写tenant谓词、补真实C3事件及保原preferred_ids输入；原外租户/个人scope控制仍通过。剩余22卡中14为整体接口/数据库/升级/E2E及最终评审；其余8卡覆盖上述旧协议、最终装配。它们均沿原任务卡，不能因helper或测试存在而报完成；整体测试尚未开始。
+旧文件处理/列表/Chunk及callback已由2fdb72b71b合入02b0ae12dc：按实际SPACE接原上传Owner，保逐文件旧规则、Doc/Version及原worker回调；同步/文本路径实际重读持久文件，避免瞬态ORM重复插入。存量审批执行2829c7de65及45ec5357b5保真实执行人校验、申请人署名/配额和原租户，原目录类型及C3隔离已修正。Root在合流树执行上述旧文件/Chunk与存量审批三个相关路径，36项通过；这是开发定点证据，不是整体回归。退役type2通用创建/列表由bb72fdedf2在DB/模型访问前拒绝，保旧0/QA1/新3。
+
+**当前仍在开发的实际入口**：重复文件覆盖/重试及最终路由/旧响应装配。旧CRUD/公共权限别名c633a9ec73、真实检索cd363a54、目录/web 3b791157、频道HTTP/worker de20b10ef9及三语d36ea225已正常合流。Root 9aa363c8e1去新手写tenant谓词、补真实C3事件及保原preferred_ids输入；原外租户/个人scope控制仍通过。剩余22卡中14为整体接口/数据库/升级/E2E及最终评审；其余8卡覆盖上述旧协议、最终装配。它们均沿原任务卡，不能因helper或测试存在而报完成；整体测试尚未开始。
 
 新DeleteJob中性DDL单head为f118_knowledge_delete_execution；原行和两新列NULL已做必要定点验证，最新真实MySQL升级尚未执行。定点用例数量不相加为完整特性覆盖。范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
 

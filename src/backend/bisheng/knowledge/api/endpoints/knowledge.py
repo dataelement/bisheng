@@ -42,6 +42,7 @@ from bisheng.database.models.role_access import WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_file_service, get_knowledge_service
 from bisheng.knowledge.application.knowledge_batch import get_batch_application
 from bisheng.knowledge.application.knowledge_processing_commands import KnowledgeProcessingCommands
+from bisheng.knowledge.application.legacy_retry import get_legacy_retry_application
 from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeDao,
     KnowledgeState,
@@ -615,10 +616,18 @@ async def get_QA_list(
 
 
 @router.post("/retry", status_code=200)
-async def retry(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: dict):
+async def retry(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    req_data: dict,
+    retry_application=Depends(get_legacy_retry_application),
+):
     """Failed Retry"""
-    await KnowledgeService.retry_files(request, login_user, req_data)
-    return resp_200()
+    from bisheng.knowledge.domain.schemas.processing_job import JobAccepted
+
+    result = await KnowledgeService.retry_files(request, login_user, req_data, retry_application=retry_application)
+    return resp_200(result) if isinstance(result, JobAccepted) else resp_200()
 
 
 @router.delete("/file/{file_id}", status_code=200)
