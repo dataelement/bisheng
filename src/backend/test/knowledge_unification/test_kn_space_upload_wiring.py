@@ -197,3 +197,52 @@ async def test_scoped_failure_restores_original_management_pin_and_raw_home(uplo
     finally:
         context.current_tenant_id.reset(raw)
         reset_current_permission_actor(actor_token)
+
+
+@pytest.mark.parametrize("tenant_admin", [False, True])
+async def test_native_upload_accepts_actual_management_middleware_own_pin(upload, monkeypatch, tenant_admin):
+    from starlette.responses import JSONResponse
+
+    from bisheng.admin.domain.services.tenant_scope import TenantScopeService
+    from bisheng.common.middleware import admin_scope
+
+    actor = PermissionActor(
+        user_id=upload.context.user.user_id,
+        tenant_id=101,
+        tenant_admin_tenant_ids=frozenset({101}) if tenant_admin else frozenset(),
+    )
+    token = set_current_permission_actor(actor)
+    monkeypatch.setattr(admin_scope, "_extract_http_access_token", lambda request: "transport-only")
+    monkeypatch.setattr(admin_scope, "_decode_jwt_subject", lambda token: {"user_id": actor.subject_id})
+    monkeypatch.setattr(admin_scope, "_check_is_global_super", AsyncMock(return_value=False))
+    monkeypatch.setattr(TenantScopeService, "_own_tenant", AsyncMock(return_value=101))
+    middleware = admin_scope.AdminScopeMiddleware(app=None)
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/knowledge/space/40/files",
+            "headers": [(b"x-management-tenant", b"101")],
+        }
+    )
+    user_before = upload.context.user.model_dump()
+    before = await chain_snapshot(upload)
+
+    async def call_next(request):
+        assert context.get_is_management_api() and context.get_admin_scope_tenant_id() == 101
+        rows = await upload.service.add_file(40, ["opaque-document"])
+        assert len(rows) == 1 and rows[0].tenant_id == 101
+        return JSONResponse({"file_id": rows[0].id})
+
+    try:
+        with context.tenant_execution_scope(101):
+            response = await middleware.dispatch(request, call_next)
+        assert response.status_code == 200 and response.headers["X-Management-Tenant"] == "101"
+        after = await chain_snapshot(upload)
+        for table in before:
+            assert len(after[table]) == len(before[table]) + 1
+        upload.publish.assert_called_once()
+        upload.projection._permission.authorize_created.assert_awaited_once()
+        assert upload.context.user.model_dump() == user_before
+    finally:
+        reset_current_permission_actor(token)
