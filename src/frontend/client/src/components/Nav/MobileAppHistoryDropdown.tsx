@@ -163,9 +163,9 @@ export function MobileAppHistoryDropdown({
                                 onClick={() => {
                                     shareApp();
                                 }}
-                                className="flex h-[28px] min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-border-base bg-white px-2 text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50"
+                                className="flex h-[28px] min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-border-base bg-white px-2 whitespace-nowrap text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50"
                             >
-                                {localize('com_app_share_app')}
+                                <span className="truncate" title={localize('com_app_share_app')}>{localize('com_app_share_app')}</span>
                             </button>
                         ) : null}
                         <button
@@ -175,11 +175,11 @@ export function MobileAppHistoryDropdown({
                                 onClose();
                             }}
                             className={cn(
-                                'flex h-[28px] min-w-0 items-center justify-center gap-1 rounded-md border border-border-base bg-white px-2 text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50',
+                                'flex h-[28px] min-w-0 items-center justify-center gap-1 rounded-md border border-border-base bg-white px-2 whitespace-nowrap text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50',
                                 showShareApp ? 'flex-1' : 'w-full',
                             )}
                         >
-                            {localize('com_knowledge_start_new_chat')}
+                            <span className="truncate" title={localize('com_knowledge_start_new_chat')}>{localize('com_knowledge_start_new_chat')}</span>
                         </button>
                     </div>
                 </div>
