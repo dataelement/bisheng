@@ -59,11 +59,11 @@ Root最终四路径`test_wire_router`、`test_legacy_document_contract`、`test_
 
 剩余34个基线旧失败及两端既有测试问题按既有归因处理，不豁免本次新缺陷。原8张开发卡保持关闭；14张验收卡仍待真实接口、升级/恢复、E2E与最终评审，不因本地回归或构建结果改勾。
 
-旧环境补齐的未发布hosted AppVersion是本次synthetic fixture，不是runtime；另一workflow/version206用于已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置证据保留。M2此前发现synthetic版本将模型display名`e2e-f118-chat`误作capability声明；旧/新resolver均要求vendor名`f118-chat`，26511为正确阻断。Root已用旧镜像a1b完成fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；旧code保留，其他SQL/FGA/模型默认/文件/WF核对不变。不UPDATE真实历史版本、不走Runtime删除、不加名称fallback或伪造invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目安全路径`prep/revision2/fixture-reset.json`（私密原文留服务器）。backup1及failed clone证据保留；backup2已完成，restore2/stage2/新中性DDL/正式M2/deploy均未执行，尚未freeze/convert。
+旧环境补齐的未发布hosted AppVersion是本次synthetic fixture，不是runtime；另一workflow/version206用于已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置证据保留。M2此前发现synthetic版本将模型display名`e2e-f118-chat`误作capability声明；旧/新resolver均要求vendor名`f118-chat`，26511为正确阻断。Root已用旧镜像a1b完成fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；旧code保留，其他SQL/FGA/模型默认/文件/WF核对不变。不UPDATE真实历史版本、不走Runtime删除、不加名称fallback或伪造invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目安全路径`prep/revision2/fixture-reset.json`（私密原文留服务器）。backup1及failed clone证据保留；backup2及clone2后续还原/迁移结果见下，原测试项目尚未升级或部署。
 
 新前端候选22f5261181已完成真实锁依赖类型检查及两端Vite构建，镜像`sha256:e0b7b3479099b6add0fd81070f634135bc90881f66afea10e2978f8df3505b78`，归档SHA256 `c95fa28d20f477ac7e79fd2df11166084258fce4fee66f2051b501dbc17b30f3`。当前`src/frontend`树为`339831ed64e7c19da3af69c3b326565a2fff3458`，已与旧550561候选的ca37581树不同，不能继续声称旧镜像与当前源码等价。原锁和产品Dockerfile未改。
 
-旧550561c443归档及其API/Worker镜像已由Move修复取代。已构建77f737fe3c快照`f118-e2e-backend:candidate-77f737fe3c`，镜像`sha256:bef3f456f67c21c24d81bfcd0c840ad9db5a7658d602d886680640c66eb1621b`，归档SHA256 `1c560dacb4c24d3d2512214939283d9ae920598c0f7776246d836bd52002e575`，尚不含后续M2窄修。当前新版未部署、正式M2→M4及恢复业务未完成，环境E2E未执行；构建不能替代这些证据。
+旧550561c443归档及其API/Worker镜像已由Move修复取代。已构建77f737fe3c快照`f118-e2e-backend:candidate-77f737fe3c`，镜像`sha256:bef3f456f67c21c24d81bfcd0c840ad9db5a7658d602d886680640c66eb1621b`，归档SHA256 `1c560dacb4c24d3d2512214939283d9ae920598c0f7776246d836bd52002e575`，尚不含后续M2窄修。原测试项目新版未部署，其正式M2→M4及恢复业务未完成，环境E2E未执行；构建不能替代这些证据。
 
 既有测试工具镜像`sha256:9d283aa38710d8ca5b39cbd3ed02021beee3663e51da1d6532dfa5b5753a384b`内Chromium已完成无网络、无凭据的launch/data HTML/close验证，仅证明工具可用，不是UI验收。
 
@@ -75,9 +75,13 @@ backup1已完成，manifest SHA256 `2e8bb87fae241b3e777b0c9aba5dbb03acc8609aa8a8
 
 正式M2前的窄修已合：CLI owned lazy manager收尾d46944ba42（Root10绿）、原FGA `condition:null`格式5c5497dc6b（相关77绿）、F038内置公共tag库user0精确哨兵01eff15ba2（相关114绿）。保原常规creator、未知条件字段拒绝及权限边界；这些定点不是8208整轮重跑，也不表示旧77f镜像已更新。
 
-窗口1的原API/Worker/mock/Milvus/ES/etcd持续停止；Milvus原生1800秒超时exit1（无OOM/外部kill）证据保留。限定fixture reset后，原API/Worker及全部11个服务现均stopped。backup2于2026-11-10 06:58:24 UTC实际完成：manifest SHA256 `fd7dd63b37ba45d6503d02f1d5de01cf078a38182832f8aed1635f9bf60e9630`，24 files，187张SQL表/798条FGA tuple/68个MinIO对象版本；旧镜像归档8447341568 bytes，以同一旧inode硬链接保存。retained broker及其他SQL/FGA不变，仅已记录synthetic版本替换和其唯一新code；Root另在服务器独立核对summary固定字段，未取认证、配置或日志原文。restore2/stage2/新中性DDL/正式M2/deploy/API19仍未执行。109:3005及范围排除项保持不动，不称正式升级或恢复业务完成。
+窗口1的原API/Worker/mock/Milvus/ES/etcd持续停止；Milvus原生1800秒超时exit1（无OOM/外部kill）证据保留。限定fixture reset后，原API/Worker及全部11个服务现均stopped。backup2于2026-11-10 06:58:24 UTC实际完成：manifest SHA256 `fd7dd63b37ba45d6503d02f1d5de01cf078a38182832f8aed1635f9bf60e9630`，24 files，187张SQL表/798条FGA tuple/68个MinIO对象版本；旧镜像归档8447341568 bytes，以同一旧inode硬链接保存。retained broker及其他SQL/FGA不变，仅已记录synthetic版本替换和其唯一新code；Root另在服务器独立核对summary固定字段，未取认证、配置或日志原文。该备份已用于隔离clone2完整还原，7项检查全true（187 SQL/798 FGA/68对象版本/4 ES/3 Milvus/22逻辑向量）；新中性DDL保180张原表旧列不变、8张新表空。clone根位于独立项目`restore-check/e2e-f118-20261110-prep2/.restore2`，非原测试项目。
 
-新DeleteJob中性DDL单head为f118_knowledge_delete_execution，隔离还原clone验证见上；正式数据转换、M4及恢复业务仍待完成。定点数字不相加为完整覆盖；范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
+clone2以实际材料盘点3租户并完成正式M2 frozen；同run `e2e-f118-20261110-prep2-restore` CLI apply得到ready `[1,2,3]`，同run replay仍ready，apply/replay JSON证据SHA256完全相同`5b9c51a2fea64f1c285b772e52c532dcb7de9293c1ba4bc24adbb3984542a76f`。这是隔离还原环境的实际迁移/重入证明；原项目全部11服务仍停且保旧schema，原环境升级及新版API/Worker/frontend部署未执行，API19只collect、UI21未执行、14卡仍pending。109:3005及范围排除项保持不动，不称原项目升级或恢复业务完成。
+
+两项oneoff工具问题仅收窄适配短/完整容器ID与只读rootfs缓存路径；`XDG_CACHE_HOME=/tmp/f118-cache`下真实broker只读检查通过，旧失败留证。这不是新增产品或SDK修复，不增加RTM。
+
+新DeleteJob中性DDL单head为f118_knowledge_delete_execution，clone2结构及同run迁移验证见上；原测试项目的数据转换、M4及恢复业务仍待完成。定点数字不相加为完整覆盖；范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
 
 ## 本次账本快照
 
