@@ -678,7 +678,8 @@ async def test_cross_space_moves_version_chain_clears_tags_sets_rebuilding(
     assert f100.knowledge_id == f101.knowledge_id == 2
     assert f100.status == f101.status == KnowledgeFileStatus.REBUILDING.value
     assert (await async_db_session.get(KnowledgeDocument, doc_id)).knowledge_id == 2
-    assert not (await async_db_session.execute(native.sa.select(TagLink))).scalars().all()
+    remaining_tags = (await async_db_session.execute(native.sa.select(TagLink))).scalars().all()
+    assert {row.resource_id for row in remaining_tags} == {"81"}  # outside the accepted closure is retained
     items = (await async_db_session.execute(native.sa.select(KnowledgeProcessingItem))).scalars().all()
     assert {row.file_id for row in items} == {100, 101}
     await async_db_session.rollback()
@@ -691,11 +692,21 @@ async def test_cross_space_moves_version_chain_clears_tags_sets_rebuilding(
     assert (await async_db_session.get(KnowledgeFile, 100)).status == KnowledgeFileStatus.SUCCESS.value
     assert (await async_db_session.get(KnowledgeFile, 101)).status == KnowledgeFileStatus.SUCCESS.value
     items = (await async_db_session.execute(native.sa.select(KnowledgeProcessingItem))).scalars().all()
-    assert all(row.state == "succeeded" and row.source_cleaned for row in items)
-    svc._dispatch_knowledge_chat_rehome.assert_called_once_with(
-        source_space_id=1,
-        source_flow_ids=["space_1_file_100", "space_1_file_101"],
-        reason="cross_space_move",
+    assert all(
+        row.state == "succeeded"
+        and row.step == "move_source_cleaned"
+        and row.checkpoint["step"] == "move_source_cleaned"
+        for row in items
+    )
+    assert svc._dispatch_knowledge_chat_rehome.call_count == 2  # original logical TX and a resumed attempt
+    assert all(
+        call.kwargs
+        == {
+            "source_space_id": 1,
+            "source_flow_ids": ["space_1_file_100", "space_1_file_101"],
+            "reason": "cross_space_move",
+        }
+        for call in svc._dispatch_knowledge_chat_rehome.call_args_list
     )
 
 

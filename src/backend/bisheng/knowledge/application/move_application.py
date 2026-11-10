@@ -102,6 +102,8 @@ class KnowledgeMoveApplication:
             reference,
         ):
             roots, invalid = await self._classify(batch, actual)
+            if roots:
+                self.repository.require_idle(batch.source, batch.destination)
             same = source == request.target_space_id
             impact = {
                 "cross_space": not same,
@@ -219,6 +221,8 @@ class KnowledgeMoveApplication:
             batch = await self._read(session, plan.space_id, request)
         async with admission.identity(plan.actor_reference, current=identity, entry_kind=entry_kind) as (actual, _):
             roots, invalid = await self._classify(batch, actual)
+            if roots:
+                self.repository.require_idle(batch.source, batch.destination)
         digest = _digest(
             {
                 "source": batch.source,

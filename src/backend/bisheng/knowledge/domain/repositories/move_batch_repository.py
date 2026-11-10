@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import or_, select, update
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, KnowledgeProcessingConflictError
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument as Document
@@ -44,6 +44,11 @@ class MoveBatchRepository(MoveRowRepository):
     def __init__(self, *, max_folder_level, clock=_now):
         self.max_folder_level, self.clock = max_folder_level, clock
 
+    @staticmethod
+    def require_idle(*roots):
+        if any(row["state"] in (2, 3) or row["model_transition"] for row in roots):
+            raise KnowledgeProcessingConflictError(reason="move_space_processing")
+
     async def aread(self, session, *, source_space_id, destination_space_id, roots, destination_folder_id, lock=False):
         tenant = get_current_tenant_id()
         if type(tenant) is not int or tenant <= 0 or not roots:
@@ -60,8 +65,10 @@ class MoveBatchRepository(MoveRowRepository):
             row["tenant_id"] != tenant or row["type"] != 3 for row in result
         ):
             conflict("space_missing")
-        if any(row["state"] in (2, 3) or row["model_transition"] for row in result):
-            conflict("space_processing")
+        # Initial facts support permission-aware classification. Authorized
+        # locking callers must still reject current processing conflicts.
+        if lock:
+            self.require_idle(*result)
         source, destination = spaces[source_space_id], spaces[destination_space_id]
         selected = {
             row["id"]: row for row in await self._by_ids(session, File, FILE_FIELDS, [root.id for root in roots])
@@ -390,6 +397,8 @@ class MoveBatchRepository(MoveRowRepository):
         with session.no_autoflush, strict_tenant_filter():
             query = select(*(getattr(Knowledge, name) for name in ROOT_FIELDS)).where(Knowledge.id == source["id"])
             row = (await session.execute(query.with_for_update() if lock else query)).mappings().one_or_none()
+        if lock and row is not None:
+            self.require_idle(row)
         if row is None or dict(row) != source or source["tenant_id"] != get_current_tenant_id():
             conflict("space_changed")
         batch = await self.aread(
