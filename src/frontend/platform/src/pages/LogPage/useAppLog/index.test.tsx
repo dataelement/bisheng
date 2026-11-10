@@ -6,9 +6,9 @@ import AppUseLog from './index'
 
 const mock = vi.hoisted(() => {
     const rows = [
-        { id: 1, flow_type: 5, flow_name: 'Assistant', flow_id: 'app-1', chat_id: 'chat-1', user_groups: [{ name: 'Group' }], create_time: '2026-10-20T10:00:00', sensitive_status: 1 },
-        { id: 2, flow_type: 15, chat_id: 'daily-1', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 2, operator_dept_id: 3, operator_dept_path: 'Root/Sales' },
-        { id: 3, flow_type: 20, flow_name: 'Space QA', chat_id: 'space-1', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 1, operator_dept_id: -1 },
+        { id: 1, flow_type: 5, flow_name: 'Assistant', flow_id: 'app-1', chat_id: 'chat-1', usage_type: 'assistant', user_groups: [{ name: 'Group' }], create_time: '2026-10-20T10:00:00', sensitive_status: 1 },
+        { id: 2, flow_type: 15, chat_id: 'daily-1', usage_type: 'daily', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 2, operator_dept_id: 3, operator_dept_path: 'Root/Sales' },
+        { id: 3, flow_type: 20, flow_name: 'Space QA', chat_id: 'space-1', usage_type: 'workflow', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 1, operator_dept_id: -1 },
     ]
     return { filter: vi.fn(), page: vi.fn(), exportApi: vi.fn(), csv: vi.fn(), message: vi.fn(), rows, initialRows: rows }
 })
@@ -72,11 +72,24 @@ it('shows the organisation column and applies usage type and organisation only o
     expect(screen.getByText('Root/Sales')).toBeVisible()
     expect(screen.getByText('log.org.notApplicable')).toBeVisible()
     expect(screen.getByText('Space QA')).toBeVisible()
-    fireEvent.keyDown(screen.getByRole('combobox', { name: 'log.usageType.label' }), { key: 'ArrowDown' })
+    expect(screen.getAllByText('log.usageType.label').length).toBeGreaterThan(0)
+    expect(screen.getByText('log.usageType.assistant')).toBeVisible()
+    expect(screen.getByText('log.usageType.daily')).toBeVisible()
+    expect(screen.getByText('log.usageType.workflow')).toBeVisible()
+    const usageType = screen.getByRole('combobox', { name: 'log.usageType.label' })
+    expect(usageType).not.toHaveTextContent('log.usageType.all')
+    const appPicker = screen.getByRole('button', { name: 'Pick app' })
+    expect(usageType.compareDocumentPosition(appPicker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.keyDown(usageType, { key: 'ArrowDown' })
+    expect(await screen.findByRole('option', { name: 'log.usageType.all' })).toBeVisible()
     fireEvent.click(await screen.findByRole('option', { name: 'log.usageType.task' }))
     expect(mock.filter).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
     expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ usageType: 'task', org: EMPTY_ORG_SELECTION }))
+    fireEvent.keyDown(usageType, { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'log.usageType.all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
+    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ usageType: 'all' }))
     fireEvent.click(screen.getByRole('button', { name: 'log.resetButton' }))
     expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ usageType: '', userId: null }))
 })

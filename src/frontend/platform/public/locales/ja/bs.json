@@ -1870,6 +1870,7 @@
     },
     "usageType": {
       "label": "利用タイプ",
+      "all": "すべて",
       "daily": "日常会話",
       "assistant": "アシスタント会話",
       "workflow": "ワークフロー会話",

@@ -1870,6 +1870,7 @@
     },
     "usageType": {
       "label": "使用类型",
+      "all": "全部",
       "daily": "日常对话",
       "assistant": "助手会话",
       "workflow": "工作流会话",

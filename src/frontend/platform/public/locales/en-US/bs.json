@@ -1925,6 +1925,7 @@
     },
     "usageType": {
       "label": "Usage type",
+      "all": "All",
       "daily": "Daily chat",
       "assistant": "Assistant session",
       "workflow": "Workflow session",
