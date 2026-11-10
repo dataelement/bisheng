@@ -13,7 +13,8 @@ DELETE_STEPS = ("fga", "minio", "es", "milvus")
 
 
 def deletion_now() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
+    # DATETIME(0) must not round a newly due job ahead of its first claim.
+    return datetime.now(UTC).replace(tzinfo=None, microsecond=0)
 
 
 class KnowledgeSpaceDeleteJob(SQLModelSerializable, table=True):
