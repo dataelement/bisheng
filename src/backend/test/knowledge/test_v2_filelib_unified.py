@@ -157,7 +157,13 @@ async def test_update_dispatch_space_preserves_is_released(monkeypatch):
 
     async def _fake_space_update(self, **kwargs):
         captured.update(kwargs)
-        return {"id": kwargs["space_id"]}
+        return {
+            "id": kwargs["space_id"],
+            "type": 3,
+            "name": kwargs["name"],
+            "description": kwargs["description"],
+            "is_released": kwargs["is_released"],
+        }
 
     monkeypatch.setattr(filelib.KnowledgeDao, "aquery_by_id", staticmethod(_fake_query))
     monkeypatch.setattr(KnowledgeSpaceService, "update_knowledge_space", _fake_space_update)
@@ -184,12 +190,15 @@ async def test_update_missing_resource(monkeypatch):
 # T06 — list dispatch
 # --------------------------------------------------------------------------- #
 async def test_list_dispatch_kb(monkeypatch):
-    """AC-01: type=0 → KnowledgeService.get_knowledge (cursor page)."""
+    """AC-01: old type=0 → the bounded legacy SPACE facade (cursor page)."""
+    from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
 
-    async def _fake_get(cls, request, login_user, ktype, **kwargs):
+    async def _fake_get(self, **kwargs):
+        assert kwargs["identity"].user_id == _FakeUser.user_id
+        assert kwargs["sort_by"] == "update_time" and kwargs["page_size"] == 10
         return {"data": [], "page_size": 10, "has_more": False, "next_cursor": None}
 
-    monkeypatch.setattr(KnowledgeService, "get_knowledge", classmethod(_fake_get))
+    monkeypatch.setattr(LegacyDocumentsApplication, "alist", _fake_get)
     # F049 dropped the per-request `user_id` delegation kwarg: identity delegation
     # is now supplied only via the `X-On-Behalf-Of` header, resolved centrally
     # into the principal the `_patch_identity` fixture fakes out above.
