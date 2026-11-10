@@ -281,7 +281,19 @@ class CasEnvironment(F118Environment):
             actions = await self.ok(
                 "GET", f"/permissions/resources/knowledge_space/{sid}/my-permissions", actor=self.writer
             )
-            assert set(actions["actions"]) == {"visible"}
+            # The unchanged F048 explanation reports model action_codes; a
+            # pure-visible model has none. Verify visibility independently.
+            assert actions["actions"] == [] and actions["projection_degraded"] is False
+            visible = await self.info(sid, actor=self.writer)
+            assert visible["id"] == sid and visible["tenant_id"] == self.tenant_id
+            for action, allowed in (("visible", True), ("edit", False), ("delete", False)):
+                decision = await self.ok(
+                    "POST",
+                    "/permissions/check",
+                    actor=self.writer,
+                    json={"resource_type": "knowledge_space", "resource_id": str(sid), "action": action},
+                )
+                assert decision["allowed"] is allowed
 
     async def clean_business_resources(self):
         if not self.owner:
