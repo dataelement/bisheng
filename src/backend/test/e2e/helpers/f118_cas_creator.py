@@ -24,8 +24,11 @@ class CasCreator:
 
     async def install(self):
         env = self.env
-        tenant = await env.ok("GET", f"/tenants/{env.tenant_id}", actor=env.owner)
-        department = await env.ok("GET", f"/departments/{tenant['root_dept_id']}", actor=env.owner)
+        # Tenant directory metadata is global-super-only; the infrastructure
+        # identity already provisioned this Child. All role/member writes below
+        # remain under the actual Child owner.
+        tenant = await env.ok("GET", f"/tenants/{env.tenant_id}", actor=env.root)
+        department = await env.ok("GET", f"/departments/{tenant['root_dept_id']}", actor=env.root)
         assert department["id"] == tenant["root_dept_id"]
         assert department["name"] == env.prefix + "tenant" and department["parent_id"] == env.parent_id
         self.department_id = department["id"]

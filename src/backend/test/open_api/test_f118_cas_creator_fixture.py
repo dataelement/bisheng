@@ -1,15 +1,38 @@
 """CAS creator HTTP contract with the native effective-menu oracle; not live E2E."""
 
 import json
+from inspect import signature
 from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi import HTTPException
 
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.tenant.api.endpoints.tenant_crud import get_tenant
 from bisheng.user.domain.services.auth import DepartmentDao, LoginUser, UserDao, _effective_web_menu_strip_orphans
 from test.e2e.helpers.f118_cas_creator import CREATOR_MENUS, CasCreator
 from test.e2e.helpers.f118_mysql_cas import CasEnvironment
+
+TENANT_METADATA_GATE = signature(get_tenant).parameters["login_user"].default.dependency
+
+
+@pytest.mark.parametrize("global_super", [False, True])
+async def test_native_tenant_metadata_gate_excludes_child_administrator(monkeypatch, global_super):
+    identity = UserPayload(
+        user_id=131, user_name="unit-owner", tenant_id=1 if global_super else 31, user_role=[1] if global_super else [2]
+    )
+
+    async def current_user(_auth):
+        return identity
+
+    monkeypatch.setattr(UserPayload, "get_login_user", current_user)
+    if global_super:
+        assert await TENANT_METADATA_GATE(None) is identity
+    else:
+        with pytest.raises(HTTPException) as refused:
+            await TENANT_METADATA_GATE(None)
+        assert refused.value.status_code == 403
 
 
 @pytest.mark.parametrize("existing", [None, "creator", "assigned", "orphan", "broad"])
@@ -25,9 +48,10 @@ async def test_creator_assignment_preserves_roles_and_cleans_only_own_role(monke
         state["roles"].add(7)
     env = None
     reader = SimpleNamespace(user_id=231, is_admin=lambda: False)
+    root = UserPayload(user_id=1, user_name="unit-root", user_role=[1], tenant_id=1)
 
     async def current_user(*_args, **_kwargs):
-        return reader
+        return root if _args and _args[0] == "unit-root" else reader
 
     async def admin_departments(*_args):
         return []
@@ -50,7 +74,16 @@ async def test_creator_assignment_preserves_roles_and_cleans_only_own_role(monke
         path = request.url.path.removeprefix("/api/v1")
         method = request.method
         state["calls"].append((method, path))
-        if path == "/user/info":
+        if path == "/tenants/31":
+            try:
+                await TENANT_METADATA_GATE(request.headers["Cookie"])
+            except HTTPException as exc:
+                return httpx.Response(200, json={"status_code": exc.status_code, "status_message": "refused"})
+            data = {"root_dept_id": 41}
+        elif path == "/departments/41":
+            assert request.headers["Cookie"] == "unit-root"
+            data = {"id": 41, "dept_id": "unit-dept", "name": env.prefix + "tenant", "parent_id": 1}
+        elif path == "/user/info":
             assert request.headers["Cookie"] == "access_token_cookie=unit-reader"
             effective = _effective_web_menu_strip_orphans(list(set().union(*(menus[r] for r in state["roles"]))))
             data = {
@@ -63,11 +96,7 @@ async def test_creator_assignment_preserves_roles_and_cleans_only_own_role(monke
         else:
             assert request.headers["Cookie"] == "unit-owner"
             assert request.headers["X-Management-Tenant"] == "31"
-            if path == "/tenants/31":
-                data = {"root_dept_id": 41}
-            elif path == "/departments/41":
-                data = {"id": 41, "dept_id": "unit-dept", "name": env.prefix + "tenant", "parent_id": 1}
-            elif path.endswith("/assignable-roles"):
+            if path.endswith("/assignable-roles"):
                 data = [{"id": rid, "role_name": "ordinary" if rid == 2 else "existing-creator"} for rid in menus]
             elif path.endswith("/menu"):
                 data = sorted(menus[int(path.split("/")[2])])
@@ -112,6 +141,7 @@ async def test_creator_assignment_preserves_roles_and_cleans_only_own_role(monke
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
         env = CasEnvironment(client, "unit", 1, "unit-password", {}, {})
         env.tenant_id, env.reader_id = 31, 231
+        env.root = {"Cookie": "unit-root", "X-Management-Tenant": "1"}
         env.owner = {"Cookie": "unit-owner", "X-Management-Tenant": "31"}
         fixture = CasCreator(env)
         # Exercise the unchanged native create dependency: ordinary login alone
