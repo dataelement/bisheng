@@ -23,6 +23,8 @@ First call `cloud_workbench` with `operation: "guide"`; the tool returns this en
 
 Hosted pages cannot access this host channel. Never obtain platform tokens, publishing keys, cookies or production database files. Preserve source and genuine failure receipts. Reconnect after session expiry or enterprise switching; do not publish a project into a different enterprise identity.
 
+When a release reaches failed, stop polling and report its stage, error code, platform hints and management link. Fix and self-test only the current application project when the platform diagnostic identifies an application-source problem, then request publication confirmation again. Platform, node and transport failures require an administrator. Do not investigate a failed release by scanning the computer, platform source, host process environments, Docker, service configuration or credentials.
+
 ## Enterprise SDK and runtime contract
 
 Create/checkout returns toolkit URLs for the currently configured enterprise, including any reverse-proxy prefix. Fetch versionsUrl and sdkGuideUrl first; platformWiringUrl returns a tar.gz skill bundle: download to a temporary directory, extract it, read SKILL.md and its realtime sample; do not treat the archive as plain text. Get bisheng-sdk from sdkIndexUrl using the version advertised by that server, including for local tests. Do not scan the computer or search public PyPI for the enterprise SDK. Keep its wheel and dependencies out of the uploaded source package; the hosted builder installs the declared dependencies. A missing or incompatible toolkit is a concrete deployment prerequisite, not permission to invent authentication or persistence protocols.
