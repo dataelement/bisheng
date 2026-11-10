@@ -12,7 +12,7 @@
 | design.md | ✅ 已评审、用户已确认 | 四项口径独立复查通过；本轮用户授权继续任务拆分 |
 | test-cases.md | 已生成，待 QA 执行 | 八列参考用例；不作为 tasks/Harness/实施门禁输入 |
 | tasks.md | 原213项拆分复审LGTM；追加卡已登记 | 依赖/Owner/覆盖与L1见[集成评审](./implementation-review.md)，原拆分见[记录](./tasks-review.md) |
-| 实现 | 功能并行收口中 | 先完成功能，再统一整体测试；2026-11-10按固定交付及定点证据关闭原71卡，原137队列当前115完成、22待办（含整体验收），不代表功能106项或AC通过率。最新已集成业务链见[W6记录](./wave6-implementation-review.md)，完整特性未验收 |
+| 实现 | 范围内功能开发已收齐，进入统一测试 | 2026-11-10最后8张开发卡已按依赖闭合，原137队列当前123完成、14待办；剩余为整体接口/数据库/升级/E2E/最终评审。开发完成不等于94条AC验收通过；固定代码730e226776与证据见[W6记录](./wave6-implementation-review.md)。 |
 
 ## 当前范围与已移出编号（2026-11-06）
 
@@ -52,7 +52,7 @@
 
 本轮继续关闭：T121/T122旧/新列表创建详情已接c633a9ec73并由9aa363c8e1遵C3自动隔离、保旧preferred输入；T129/T130、T222/T223以真实Root分类接旧workflow/workstation及RAG/KPS namespace，cd363a54保原OFF/全局融合且限定新长列表，主树同叶22定点通过；T198/T199 d36ea225沿原生成链修7处namespace/插值、同步本特性13错误码，三语实际引擎解析与产物一致性通过。实际浏览器语言切换与整体验收仍保T200/T201之后执行。
 
-剩余22卡见[当前待办](./pending-tasks.md)：8卡待旧协议覆盖/重试与最终装配整体闭合，14卡为整体测试/演练/评审。旧文件处理/列表/Chunk、callback及存量审批执行已合流；不能将尚未闭合的整卡提前勾选。已实现任务若在集成发现具体缺陷仍须原Owner修复，不能用勾选状态豁免。
+最后8张开发卡T125/T126、T131/T132、T133/T134、T196/T197已在730e226776按依赖完成L1复查，关闭后原137队列123完成、14待办。旧文件/Chunk/callback/审批、重复覆盖与高级原Plan分流、旧响应及真实装配均已合流；Root相关三路径61绿、最终接线四路径91绿分别留证，不相加为整体覆盖。实际文件映射及L1见[当前集成](./wave6-implementation-review.md#开发收齐与l1复查2026-11-10)。剩余14卡见[当前待办](./pending-tasks.md)，均为整体测试/演练/最终评审，不提前勾选。已实现任务若在集成发现具体缺陷仍须原Owner修复，不能用勾选状态豁免。
 
 ## 任务清单
 
@@ -1050,15 +1050,15 @@
   **配对测试**：T123\
   **验证 / 完成条件**：运行配对测试 T123；验证本卡预期，相关范围检查通过。
 
-- [ ] **T125 · 旧文档合同兼容适配：先写测试**
+- [x] **T125 · 旧文档合同兼容适配：先写测试**
   **类型 / Owner**：测试 / KN\
-  **写入文件**：`src/backend/test/knowledge_unification/test_kn_api_legacy.py`（拟新增）\
+  **写入文件**：`src/backend/test/knowledge_unification/test_legacy_document_contract.py`；`src/backend/test/knowledge_unification/test_legacy_document_listing.py`；`src/backend/test/knowledge_unification/test_legacy_space_files.py`；`src/backend/test/knowledge_unification/test_legacy_space_chunks.py`；`src/backend/test/knowledge_unification/test_legacy_space_retry.py`\
   **逻辑 / 测试上下文**：旧消费者请求快照与返回结构对照，新旧ID同实体/授权；删除不能绕过引用/force/状态，QA行为保留。\
   **依赖**：T124\
   **覆盖 AC**: AC-10, AC-55, AC-65, AC-66, AC-67, AC-68, AC-69\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T126 · 旧文档合同兼容适配**
+- [x] **T126 · 旧文档合同兼容适配**
   **类型 / Owner**：后端 API / KN\
   **写入文件**：`src/backend/bisheng/knowledge/api/endpoints/knowledge.py`；`src/backend/bisheng/knowledge/api/endpoints/knowledge_version.py`\
   **逻辑 / 测试上下文**：type0请求实建SPACE，旧列表/详情/创建/上传/复制/删除按旧返回type/envelope/分页，内部同授权删除和任务；QA1保留，type2不复活。新API type3，3.x不提前退出。\
@@ -1098,15 +1098,15 @@
   **配对测试**：T129\
   **验证 / 完成条件**：运行配对测试 T129；验证本卡预期，相关范围检查通过。
 
-- [ ] **T131 · 开放 v2 filelib/knowledge API 合同：先写测试**
+- [x] **T131 · 开放 v2 filelib/knowledge API 合同：先写测试**
   **类型 / Owner**：测试 / EDGE\
-  **写入文件**：`src/backend/test/knowledge_unification/test_edge_rpc.py`（拟新增）\
+  **写入文件**：`src/backend/test/knowledge_unification/test_legacy_upload_overrides.py`；`src/backend/test/knowledge/test_v2_filelib_unified.py`；`src/backend/test/open_mcp/test_api_freeze_contract.py`\
   **逻辑 / 测试上下文**：SAK/PAT/OBO有效/缺scope/跨tenant矩阵；旧filelib数据形状、QA独立和错误映射，引用保护两端一致。\
   **依赖**：T126, T130\
   **覆盖 AC**: AC-35, AC-66, AC-67, AC-68, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T132 · 开放 v2 filelib/knowledge API 合同**
+- [x] **T132 · 开放 v2 filelib/knowledge API 合同**
   **类型 / Owner**：后端 API / EDGE\
   **写入文件**：`src/backend/bisheng/open_endpoints/api/endpoints/filelib.py`；`src/backend/bisheng/open_endpoints/api/endpoints/knowledge.py`\
   **逻辑 / 测试上下文**：开放接口保原请求/返回及身份范围，经统一业务服务；不要求后台菜单，不旁路删除保护/文件动作；旧type解释兼容。\
@@ -1114,16 +1114,16 @@
   **配对测试**：T131\
   **验证 / 完成条件**：运行配对测试 T131；验证本卡预期，相关范围检查通过。
 
-- [ ] **T133 · SDK/MCP 协议端回归：先写测试**
+- [x] **T133 · SDK/MCP 协议端回归：先写测试**
   **类型 / Owner**：测试 / EDGE\
-  **写入文件**：`src/backend/test/knowledge_unification/test_edge_sdk.py`（拟新增）\
+  **写入文件**：`src/backend/test/open_mcp/test_sdk_contract.py`；`src/backend/test/open_mcp/test_knowledge_tools.py`；`src/backend/test/knowledge_unification/test_legacy_document_contract.py`\
   **逻辑 / 测试上下文**：真实协议入口旧ID/type/pagination/schema兼容；凭证白名单、子项权限和失效错误不被适配吞掉；整个3.x不下线。\
   **范围限制**：只核对本次旧知识 type/ID、use 字段、错误与身份范围；复用既有入口，不升级 SDK/MCP 协议或建设通用兼容层。\
   **依赖**：T132\
   **覆盖 AC**: AC-35, AC-66, AC-68, AC-69, AC-79, AC-82, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T134 · SDK/MCP 协议端回归**
+- [x] **T134 · SDK/MCP 协议端回归**
   **类型 / Owner**：后端 Domain / EDGE\
   **写入文件**：`src/backend/bisheng/dev_toolkit/sdk_compat.py`；`src/backend/bisheng/open_mcp/compatibility.py`\
   **逻辑 / 测试上下文**：适配 SDK/MCP 旧 type/ID/固定 use 字段为统一空间/可见性语义，保持原请求响应与错误，旧发布不重写；调用统一业务服务，保身份白名单。T001清单逐入口核对，剩余叶子先拆补充任务，未闭合不能完成。\
@@ -1605,15 +1605,15 @@
   **依赖**：T194\
   **验证 / 完成条件**：合法pure-visible可选、任意空模型拒绝；现行use字段无返回/保存，旧协议兼容测试；关联规格：AC-78, AC-81, AC-83。
 
-- [ ] **T196 · 模块路由与导出装配：先写测试**
+- [x] **T196 · 模块路由与导出装配：先写测试**
   **类型 / Owner**：测试 / INT\
-  **写入文件**：`src/backend/test/knowledge_unification/test_wire_router.py`（拟新增）\
+  **写入文件**：`src/backend/test/knowledge_unification/test_wire_router.py`\
   **逻辑 / 测试上下文**：用真实FastAPI路由表与OpenAPI断言所有合同端点唯一；普通admin隔离、旧请求稳定、新任务accepted正确。\
   **依赖**：T126, T152, T140, T154, T156, T138, T136, T172, T174, T218, T219, T221, T223, T225, T227, T230, T232, T234, T238, T242, T246, T248, T250, T252, T255, T258, T259, T264, T266, T268, T270, T271, T272, T273\
   **覆盖 AC**: AC-02, AC-04, AC-05, AC-35, AC-49, AC-65, AC-66, AC-83\
   **验证 / 完成条件**：以本卡样例构造 fixture，记录红阶段；不得在测试任务修改实现。
 
-- [ ] **T197 · 模块路由与导出装配**
+- [x] **T197 · 模块路由与导出装配**
   **类型 / Owner**：后端 API / INT\
   **写入文件**：`src/backend/bisheng/knowledge/api/router.py`；`src/backend/bisheng/api/router.py`\
   **逻辑 / 测试上下文**：顺序接线冻结候选接口并消除动态路径遮蔽；新模块自动发现、租户登记与job worker路由逐项核对，额外叶子接线先拆补充卡；不在Endpoint直接ORM/跨模块API互导。\

@@ -270,3 +270,9 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 2026-11-09公共检索补正：SPACE3以真实File→唯一Version→Document主指针正向证明成功主版本，未登记、错归属或坏指针不回退旧索引；原子项visible、原IN/NOTIN/none结果层防线及历史delivery不变，NORMAL0/QA1保持原规则。固定0fdda0e87c与精确旧fixture补正c9ad73cb6e的14调用方142项本地通过；401/10001候选各3/51 SELECT、max208参数，无版本表全扫。此非数据转换或环境E2E证据。
 
 整链实施合同补充（2026-11-09）：原M3权限发布按W6§125通过原Run走完整Store对账、资源SQL、固定pin差集及最后CURRENT切换；移动按§126接原EXECUTE_TASK与新明确确认/查询链，P1长批次以原compact lease续租，禁止每项全Scope。模型删除按§127使用原KnowledgeOperationPlan新增3个可NULL执行字段及provider围栏索引（先中性DDL），内部provider分享/prepare reservation与删除消费同表原子handoff，FGA期间SQL关闭；原确认hash不变，PUT恢复重交原DTO且hash一致，绝不保存credentials。代码实现及环境验收仍进行中，不能将合同冻结计为业务完成。
+
+## 2026-11-10功能收齐后的统一演练
+
+范围内功能已合入730e226776，进入整体测试和升级恢复演练；最后8张开发卡闭合，余14张验收卡见pending-tasks。此状态不是迁移或升级已通过。演练继续使用109的独立标准mock环境与独立数据，禁止使用中粮3005；DM8实测按用户决定免除，C2规范保留。
+
+旧重复文件覆盖/重试保原File/Doc/Version和目录，原处理版本是来源快照，更新空间默认不重算旧文件；正式升级后需用原ID及存量快照核对这一兼容路径。整批WAITING提交与原worker派发均需实测，未知ACK不作为成功证据。仍按停服/排空/一致备份→中性DDL→停服后正式盘点冻结→同run转换/权限发布→六来源回填/对账/Coverage→校验后恢复的原顺序，不由迁移脚本判断停服。

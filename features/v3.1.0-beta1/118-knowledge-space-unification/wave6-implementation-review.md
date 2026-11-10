@@ -4,7 +4,7 @@
 
 ## 当前功能集成（2026-11-10）
 
-先完成全部范围内功能，再统一整体回归、升级/恢复和E2E；只保必要定点开发验证。下述历史数字及待接描述均为对应提交当时快照，最新集成以本节为准，不再新增helper任务编号。原137队列本次按固定交付关闭71张原卡，当前115完成、22待办；含整体测试卡，不作为功能或AC百分比。旧44/93仍只是历史快照。
+先完成全部范围内功能，再统一整体回归、升级/恢复和E2E；只保必要定点开发验证。下述历史数字及待接描述均为对应提交当时快照，最新集成以本节为准，不再新增helper任务编号。原137队列在此前115卡基础上闭合最后8张开发卡，当前123完成、14待办；含整体测试卡，不作为功能或AC百分比。旧44/93仍只是历史快照。
 
 | 实际集成链 | 固定实现 / 集成点 | 当前证据边界 |
 | --- | --- | --- |
@@ -23,7 +23,20 @@
 
 旧文件处理/列表/Chunk及callback已由2fdb72b71b合入02b0ae12dc：按实际SPACE接原上传Owner，保逐文件旧规则、Doc/Version及原worker回调；同步/文本路径实际重读持久文件，避免瞬态ORM重复插入。存量审批执行2829c7de65及45ec5357b5保真实执行人校验、申请人署名/配额和原租户，原目录类型及C3隔离已修正。Root在合流树执行上述旧文件/Chunk与存量审批三个相关路径，36项通过；这是开发定点证据，不是整体回归。退役type2通用创建/列表由bb72fdedf2在DB/模型访问前拒绝，保旧0/QA1/新3。
 
-**当前仍在开发的实际入口**：重复文件覆盖/重试及最终路由/旧响应装配。旧CRUD/公共权限别名c633a9ec73、真实检索cd363a54、目录/web 3b791157、频道HTTP/worker de20b10ef9及三语d36ea225已正常合流。Root 9aa363c8e1去新手写tenant谓词、补真实C3事件及保原preferred_ids输入；原外租户/个人scope控制仍通过。剩余22卡中14为整体接口/数据库/升级/E2E及最终评审；其余8卡覆盖上述旧协议、最终装配。它们均沿原任务卡，不能因helper或测试存在而报完成；整体测试尚未开始。
+**范围内功能开发已收齐**：重复覆盖/重试0f4d8eedfe、旧响应及cold装配124190b97f、真实工作区接线测试bc30d463fc均正常合入730e226776。旧CRUD/公共权限别名、历史检索、目录/web、频道上传及三语已合流。原137队列剩14卡全部为两端真实接口、MySQL事务/升级恢复、完整E2E及最终评审，现进入统一测试；无新增helper或产品范围。开发完成不等于全量AC通过。
+
+### 开发收齐与L1复查（2026-11-10）
+
+Root读取实际实现并按task-review检查分层、命名、序列化、数据库、信息边界及设计同步，按配对/依赖顺序闭合原8卡。新重试App/Repo遵现有分层，读取走原C3自动隔离，DML保真实归属和状态CAS；没有新Model/DDL。保resp_200、原DTO/分页/QA及空值行为，不建设另一套SDK协议。既有knowledge端点RULE-3 warning来自原WebMenuResource导入，未新增该依赖；本轮无新增VIOLATION。设计§15.11及合同§139同步实际调用。
+
+| 原卡 | 实际实现/配对证据 | L1 |
+| --- | --- | --- |
+| T125/T126 | knowledge旧端点/Service及legacy_documents、legacy_files、deletion_compatibility、legacy_retry；test_legacy_document_*、test_legacy_space_*、退役个人路径；Root retry/files/approval三路径61通过 | PASS |
+| T131/T132 | open_endpoints的filelib/knowledge及真实依赖，保原认证/scope/QA；逐文件旧规则、callback和真实索引writer；原v2filelib完整路径已纳入Root最终定点 | PASS |
+| T133/T134 | 原open_mcp/application、tools/knowledge与file及显式compatibility mapper；SDK旧retrieve path/body/双凭据保留，SDK_MIN_COMPATIBLE仍0.1.0，不为本需求更新协议或包 | PASS |
+| T196/T197 | 原knowledge/api/router、全局router、web/v2/MCP factories、公共权限别名、四kind/move/copy、原Celery队列与两Beat；真实fresh main/OpenAPI唯一方法、首匹配和依赖均核 | PASS |
+
+Root最终四路径`test_wire_router`、`test_legacy_document_contract`、`test_legacy_document_listing`及完整`test/knowledge/test_v2_filelib_unified.py`：**91 passed**，11.31秒，无排除项，日志`/private/tmp/f118-root-final-wire-fixed.log`/同名前缀JUnit。此前三个失败中两项为旧facade/DTO夹具，另一个是绝对工作区名称触发warning全文子串误判；bc30改为真实operationId在全OpenAPI唯一并精确归属warning，未改DSH/runtime或删除断言。独立只读集成复查确认retry普通/advanced分流、完整Doc/Version/目录、快照来源版本及最终≤200响应转换，无新增行动项。61和91有重叠，不相加为完整覆盖；整体/环境验收另报。
 
 新DeleteJob中性DDL单head为f118_knowledge_delete_execution；原行和两新列NULL已做必要定点验证，最新真实MySQL升级尚未执行。定点用例数量不相加为完整特性覆盖。范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
 
