@@ -229,7 +229,12 @@ async def test_original_openapi_write_scope_cannot_be_replaced_by_audit_web_payl
         assert not (await session.exec(select(KnowledgeProcessingJob))).all()
 
 
-async def test_qa_original_metadata_update_and_background_contract_are_preserved(legacy):
+async def test_qa_original_metadata_update_and_background_contract_are_preserved(legacy, monkeypatch):
+    from bisheng.knowledge.domain.repositories import knowledge_compatibility_repository
+
+    # QA still uses the original writer; its actual-type authorization lookup
+    # must read this fixture's persisted QA row rather than a deployment DB.
+    monkeypatch.setattr(knowledge_compatibility_repository, "get_async_db_session", legacy.flow.context.sessions)
     async with legacy.flow.context.sessions() as session:
         root = await session.get(Knowledge, 40)
         root.type = 1

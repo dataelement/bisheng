@@ -6,6 +6,7 @@ DTO field-list assertion alone does not protect that serialization path.
 """
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from sqlmodel import Session, SQLModel, create_engine, select
 
@@ -22,7 +23,9 @@ PRIVATE_VALUES = {
 
 
 async def test_actual_legacy_create_response_omits_internal_fields(monkeypatch):
+    from bisheng.common.dependencies.user_deps import UserPayload
     from bisheng.knowledge.api.endpoints import knowledge as endpoint
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
     row = Knowledge(id=7, tenant_id=101, user_id=11, name="legacy", type=3, **PRIVATE_VALUES)
 
@@ -33,14 +36,16 @@ async def test_actual_legacy_create_response_omits_internal_fields(monkeypatch):
         return row
 
     monkeypatch.setattr(endpoint.KnowledgeCreationPolicy, "prepare", prepare)
-    monkeypatch.setattr(endpoint.KnowledgeService, "acreate_knowledge", create)
+    monkeypatch.setattr(KnowledgeSpaceService, "create_knowledge_space", create)
+    monkeypatch.setattr(endpoint.KnowledgeService, "aconvert_knowledge_read", AsyncMock(return_value=[row]))
     response = await endpoint.create_knowledge(
         request=SimpleNamespace(),
-        login_user=SimpleNamespace(user_id=11),
-        knowledge=SimpleNamespace(expected_tenant_id=101),
+        login_user=UserPayload(user_id=11, tenant_id=101, user_role=[]),
+        knowledge=endpoint.KnowledgeWebCreate(name="legacy", type=0, expected_tenant_id=101),
     )
     data = response.model_dump(mode="json")["data"]
     assert data["id"] == 7 and data["name"] == "legacy"
+    assert data["type"] == 0 and row.type == 3
     assert not PRIVATE_VALUES.keys() & data.keys()
 
 
