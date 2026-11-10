@@ -2747,9 +2747,9 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
 
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode
-    # title helper with the daily chat model (data.model) rather than the
-    # linsight default model — task-mode title generation must not depend on the
-    # linsight model being configured.
+    # title helper: it names with the configured title model when one is set,
+    # else with the daily chat model (data.model) built below — never the
+    # linsight default model, so naming does not depend on that being configured.
     logger.info(
         f"[TASK_TITLE] entry chat_id={session_version.session_id} model={data.model!r} "
         f"question={(data.text or '')[:40]!r}"

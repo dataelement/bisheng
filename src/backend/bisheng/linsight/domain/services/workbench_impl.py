@@ -19,6 +19,7 @@ from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.utils.title_generator import ainvoke_without_thinking
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.linsight import (
     LinsightFileTooLargeError,
@@ -1655,7 +1656,7 @@ class LinsightWorkbenchImpl:
             prompt = await cls._generate_title_prompt(question)
 
             # Generate task title
-            task_title = await llm.ainvoke(prompt)
+            task_title = await ainvoke_without_thinking(llm, prompt)
 
             # Clean reasoning-model <think> noise + clamp; falls back to the
             # question when the model returns nothing usable (see _normalize_title).
