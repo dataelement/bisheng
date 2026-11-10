@@ -139,10 +139,15 @@ class PinnedMigrationPermissionReader:
                     self._tuple_scope(client)
                     if (
                         type(key) is not dict
-                        or set(key) != {"user", "relation", "object"}
+                        or set(key)
+                        not in (
+                            {"user", "relation", "object"},
+                            {"user", "relation", "object", "condition"},
+                        )
+                        or key.get("condition") is not None
                         or any(
                             not isinstance(value, str) or not value.strip() or len(value) > 4096 or "\x00" in value
-                            for value in key.values()
+                            for value in (key["user"], key["relation"], key["object"])
                         )
                     ):
                         raise _blocked("original_tuple_key_invalid")
