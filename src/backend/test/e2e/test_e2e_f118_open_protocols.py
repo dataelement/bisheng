@@ -89,8 +89,11 @@ async def test_ac35_ac65_ac67_v2_old_zero_upload_retrieve_and_scope_tenant_refus
     await p.refused("POST", "/filelib/retrieve", 26321, 404, key=p.keys["foreign"], json=body)
     foreign_page = await p.v2("GET", "/filelib/", params={"type": 0, "name": foreign["name"]})
     assert not foreign_page["data"]
-    # The same real scoped key deletes only after explicit resource authorization.
-    await p.grant_delete(sid)
+    await p.refused("DELETE", f"/filelib/{sid}", 26003, 403, key=p.keys["read"])
+    await p.refused("DELETE", f"/filelib/{sid}", 404, 404, key=p.keys["foreign"])
+    await p.assert_native(created, "legacy")
+    # The same creating SA uses the original manager CREATOR_GRANT exception.
+    await p.assert_creator_delete_source(sid)
     await p.v2("DELETE", f"/filelib/{sid}")
     await p.wait_absent(sid)
     page = await p.v2("GET", "/filelib/", params={"type": 0, "name": created["name"]})
@@ -163,7 +166,14 @@ async def test_ac35_ac66_mcp_initialized_catalog_upload_retrieve_and_delete(prot
         await call_error(
             session, "bisheng_knowledge_retrieve", {**body, "knowledge_base_ids": [foreign["id"]]}, expected_code=26321
         )
-        await p.grant_delete(sid)
+        async with open_mcp_session(p.mcp_url, p.keys["read"].plaintext) as reader:
+            await call_error(
+                reader, "bisheng_knowledge_delete", {"knowledge_id": sid}, expected_code="PERMISSION_DENIED"
+            )
+        async with open_mcp_session(p.mcp_url, p.keys["foreign"].plaintext) as outsider:
+            await call_error(outsider, "bisheng_knowledge_delete", {"knowledge_id": sid}, expected_code="NOT_FOUND")
+        await p.assert_native(created, "native")
+        await p.assert_creator_delete_source(sid)
         deleted = await call_success(session, "bisheng_knowledge_delete", {"knowledge_id": sid})
         assert deleted["success"] is True
         await p.wait_absent(sid)

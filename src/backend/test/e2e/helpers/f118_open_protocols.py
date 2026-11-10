@@ -170,33 +170,18 @@ class F118OpenProtocols:
         assert chunks["total"] > 0 and chunks["data"]
         return chain
 
-    async def grant_delete(self, sid):
-        """Creator back-grant is manager, not delete; use the real grant API."""
+    async def assert_creator_delete_source(self, sid):
+        """Check the original manager CREATOR_GRANT, without adding a grant.
+
+        Runtime.check_action/_creator_delete_batch allow this exact same-tenant
+        creating SA to delete even though manager's Catalog actions omit delete.
+        The following real v2/MCP delete exercises that compatibility decision.
+        """
         env = self.target
         base = f"/permissions/resources/knowledge_space/{sid}"
-        context = await env.ok("GET", base + "/context")
-        grantable = await env.ok("GET", base + "/grantable-models")
         catalog = await env.ok("GET", "/permissions/catalog")
-        allowed = {row["key"] for row in grantable if row["active"]}
-        models = [row for row in catalog["models"] if row["key"] in allowed and "delete" in row["action_codes"]]
-        assert models, "No actually grantable deletion model for this dedicated resource"
-        model = min(models, key=lambda row: (len(row["action_codes"]), row["key"]))
-        await env.ok(
-            "POST",
-            base + "/grants:mutate",
-            json={
-                "idempotency_key": env.prefix + f"delete-{sid}",
-                "expected_resource_version": context["resource_version"],
-                "expected_catalog_release_id": context["catalog_release_id"],
-                "changes": [
-                    {
-                        "op": "ADD",
-                        "model_key": model["key"],
-                        "subject": {"type": "service_account", "id": str(self.keys["full"].account_id)},
-                    }
-                ],
-            },
-        )
+        manager = next(row for row in catalog["models"] if row["key"] == "manager")
+        assert manager["active"] and "delete" not in manager["action_codes"]
         roster = await env.ok("GET", base + "/grants")
         assert any(
             row["subject"]["type"] == "user"
@@ -205,13 +190,18 @@ class F118OpenProtocols:
             and row["protected"]
             for row in roster["data"]
         )
-        assert any(
-            row["subject"]["type"] == "service_account"
-            and row["subject"]["id"] == str(self.keys["full"].account_id)
-            and row["model"]["key"] == model["key"]
-            and row["source"]["type"] == "DIRECT"
+        sources = [
+            row
             for row in roster["data"]
-        )
+            if row["subject"]["type"] == "service_account" and row["subject"]["id"] == str(self.keys["full"].account_id)
+        ]
+        assert len(sources) == 1
+        assert sources[0]["model"]["key"] == "manager" and sources[0]["model"]["active"]
+        assert sources[0]["source"]["type"] == "CREATOR_GRANT" and not sources[0]["protected"]
+        facts = await env.info(sid)
+        page = await self.v2("GET", "/filelib/", params={"type": 0, "name": facts["name"], "page_size": 200})
+        rows = [row for row in page["data"] if row["id"] == sid]
+        assert len(rows) == 1 and "delete" in rows[0]["actions"]
 
     async def wait_absent(self, sid):
         env = self.target
