@@ -30,6 +30,7 @@ import {
 import { useAdminScope } from "@/hooks/useAdminScope";
 import { ArrowLeft, Plus } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import i18next from "i18next";
 import { useTranslation } from "react-i18next";
 import { CustomForm } from "./CustomForm";
 import { ModelDiscovery } from "./ModelDiscovery";
@@ -270,7 +271,17 @@ export default function ModelConfig({
       }
       refetchConfig();
     } catch (error) {
-      showApiError(error);
+      const generic = String(i18next.t("api_errors:fallback"));
+      const reported =
+        error && typeof error === "object"
+          ? (error as { message?: unknown }).message
+          : undefined;
+      const specific =
+        typeof reported === "string" && reported.trim() && reported !== generic;
+      toast.show({
+        type: "error",
+        message: specific ? reported : t("model.saveFailed"),
+      });
     } finally {
       setIsLoading(false);
     }

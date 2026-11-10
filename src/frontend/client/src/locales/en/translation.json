@@ -1301,6 +1301,7 @@
     "center_title": "App Center",
     "empty_go_explore": "No apps used yet. Head to the app marketplace",
     "explore_more": "Explore more apps",
+    "explore_plaza": "Visit the App Marketplace to <cta>explore more apps<arrow /></cta>",
     "recent_apps_hint": "Your recently used apps are all here～",
     "service_maintenance_title": "Oops, we hit a small hiccup",
     "service_maintenance": "Hang tight for a moment — we'll be back to normal shortly.",

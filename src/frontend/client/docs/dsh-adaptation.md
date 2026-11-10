@@ -11,6 +11,7 @@
 | 容器、设备、系统 | [clientEnvironment](../src/utils/clientEnvironment/index.ts)、[useClientEnvironment](../src/hooks/useClientEnvironment.ts) | 容器看 `channel`；布局看 `layout`；交互看 `input`；确有系统差异时才看 `os` |
 | SPA 路由同步 | [ClientEnvironmentSync](../src/routes/ClientEnvironmentSync.tsx) | 路由变化时在绘制前重新采样环境，同步根节点标记与订阅者 |
 | 导航与展示桥接 | [DesktopShellBridge](../src/layouts/DesktopShellBridge.tsx)、[presentation](../src/utils/clientEnvironment/presentation.ts) | 复用 `window.dshChatPresentation` 的包装，不另建桥接 |
+| 会话进行中状态与重命名同步 | [desktopConversationBridge](../src/components/Chat/desktopConversationBridge.ts) | `useAiChat` 合并流式回答与任务模式运行中的会话，经 `reportRunning` 上报宿主侧栏；路由变化后补发。宿主改名后经 `onConversationRenamed` 通知，网页重新读取会话名。两个方法均可缺省 |
 | 桌面主题 | [desktopTheme](../src/components/Chat/desktopTheme.ts)、[useDesktopAppearance](../src/components/Chat/useDesktopAppearance.ts) | 复用 `dshTheme`、`dsh:appearance`、根节点主题标记和 tab 内状态 |
 | 桌面语言 | [desktopLocale](../src/locales/desktopLocale.ts)、[useDesktopLocale](../src/layouts/useDesktopLocale.ts) | 复用 `dshLocale`、`dsh:locale`；该路径要求实际桌面桥接，不改网页用户的持久语言偏好 |
 | 全窗口弹窗与背景尺寸 | [desktopViewport](../src/layouts/desktopViewport.module.css)、[MainLayout](../src/layouts/MainLayout.tsx)、[useMediaQuery](../src/hooks/useMediaQuery.tsx) | 公共布局常驻加载宿主预留尺寸，不能放在聊天页的按需样式中；背景按内容区域排版，body Portal 仍使用整个原生窗口 |
