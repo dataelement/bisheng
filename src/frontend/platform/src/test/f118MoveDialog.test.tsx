@@ -82,6 +82,7 @@ const plan = {
     removed_fields: ["confidentiality"],
     retained_fields: ["date"],
   },
+  requires_skip_confirmation: true,
 };
 function setup() {
   const client = new QueryClient({
@@ -127,6 +128,7 @@ it("reviews full mixed selection and field losses, then retries the same immutab
     .mockRejectedValueOnce(new Error("unknown ACK"))
     .mockResolvedValueOnce({
       job_id: "move-job",
+      accepted: true,
       state: "accepted",
       reused: true,
     });
