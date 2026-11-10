@@ -7,6 +7,7 @@ import { useUnactivate } from "react-activation";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState } from "recoil";
 import AiChatInput from "~/components/Chat/AiChatInput";
+import { WorkbenchModelsNotice } from "~/components/Chat/WorkbenchModelsNotice";
 import { preserveTaskModeChoice, resolveTaskModeOnNavigation } from "~/components/Chat/resolveTaskMode";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { PinnedTaskPanel } from "~/components/Linsight/Execution/PinnedTaskPanel";
@@ -84,7 +85,10 @@ const ChatView = ({
   // which the re-activated ChatView reads immediately.
   const [taskMode, setTaskMode] = useRecoilState(taskModeState);
 
-  const { data: bsConfig } = useGetBsConfig();
+  const { data: bsConfig, isLoading: isBsConfigLoading } = useGetBsConfig();
+  // No workbench model means the composer is disabled (nothing to send to).
+  // Announce that instead of leaving a dead input — see WorkbenchModelsNotice.
+  const workbenchModelsMissing = !isBsConfigLoading && !!bsConfig && !bsConfig.models?.length;
   const { user } = useAuthContext();
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
@@ -805,6 +809,7 @@ const ChatView = ({
                         ) : (
                           <div className="dsh-chat-composer-seat">
                             {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
+                            {workbenchModelsMissing && <WorkbenchModelsNotice />}
                             <AiChatInput
                               allowConfiguration={false}
                               disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}
@@ -1012,6 +1017,7 @@ const ChatView = ({
                       {/* Input area for landing page */}
                       {!shareToken && (
                         <div className="w-full">
+                          {workbenchModelsMissing && <WorkbenchModelsNotice />}
                           <AiChatInput
                             elevated
                             disabled={Boolean(historyError) || isLoading || isClearing || !bsConfig?.models?.length || !!shareToken}
