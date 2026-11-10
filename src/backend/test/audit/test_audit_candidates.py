@@ -16,15 +16,22 @@ from bisheng.database.models.session import MessageSession
 from bisheng.user.domain.models.user import User
 from test.fixtures.table_definitions import TABLE_DEFINITIONS
 
-# (id, name, parent_id, path, status, tenant_id, is_tenant_root, external_id)
+# (id, name, parent_id, path, status, tenant_id, is_tenant_root, external_id, mounted_tenant_id)
+# MountCo keeps the parent tree's tenant_id; the child tenant is mounted_tenant_id.
 _DEPTS = [
-    (1, "Root", None, "/1/", "active", 1, 1, None),
-    (2, "Sales", 1, "/1/2/", "active", 1, 0, None),
-    (3, "East", 2, "/1/2/3/", "active", 1, 0, "E-110"),
-    (4, "OldTeam", 2, "/1/2/4/", "archived", 1, 0, None),
-    (20, "R&D", 1, "/1/20/", "active", 1, 0, None),
-    (50, "ChildCo", 1, "/1/50/", "active", 5, 1, None),
-    (51, "ChildOps", 50, "/1/50/51/", "active", 5, 0, None),
+    (1, "Root", None, "/1/", "active", 1, 1, None, None),
+    (2, "Sales", 1, "/1/2/", "active", 1, 0, None, None),
+    (3, "East", 2, "/1/2/3/", "active", 1, 0, "E-110", None),
+    (4, "OldTeam", 2, "/1/2/4/", "archived", 1, 0, None, None),
+    (20, "R&D", 1, "/1/20/", "active", 1, 0, None, None),
+    (50, "ChildCo", 1, "/1/50/", "active", 5, 1, None, None),
+    (51, "ChildOps", 50, "/1/50/51/", "active", 5, 0, None, None),
+    (70, "MountCo", 1, "/1/70/", "active", 1, 1, None, 9),
+    (71, "MountOps", 70, "/1/70/71/", "active", 1, 0, None, None),
+    # Stored on the parent tree, with no mount flag. The child tenant points
+    # at 80 through tenant.root_dept_id.
+    (80, "LocalRoot", 1, "/1/80/", "active", 1, 0, None, None),
+    (81, "LocalTeam", 80, "/1/80/81/", "active", 1, 0, None, None),
 ]
 
 
@@ -32,14 +39,22 @@ _DEPTS = [
 async def db(monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
     async with engine.begin() as conn:
+        await conn.execute(text(TABLE_DEFINITIONS["tenant"]))
         await conn.execute(text(TABLE_DEFINITIONS["department"]))
+        await conn.execute(
+            text(
+                "INSERT INTO tenant (id, tenant_code, tenant_name, root_dept_id, status) "
+                "VALUES (11, 'local-11', 'LocalTenant', 80, 'active')"
+            )
+        )
         await conn.run_sync(lambda sync: MessageSession.__table__.create(sync))
         await conn.run_sync(lambda sync: User.__table__.create(sync))
-        for dept_id, name, parent_id, path, status, tenant_id, is_root, external_id in _DEPTS:
+        for dept_id, name, parent_id, path, status, tenant_id, is_root, external_id, mounted_tenant_id in _DEPTS:
             await conn.execute(
                 text(
                     "INSERT INTO department (id, dept_id, name, parent_id, path, status, tenant_id, "
-                    "is_tenant_root, external_id) VALUES (:i, :c, :n, :p, :path, :s, :t, :r, :e)"
+                    "is_tenant_root, external_id, mounted_tenant_id) "
+                    "VALUES (:i, :c, :n, :p, :path, :s, :t, :r, :e, :m)"
                 ),
                 {
                     "i": dept_id,
@@ -51,6 +66,7 @@ async def db(monkeypatch):
                     "t": tenant_id,
                     "r": is_root,
                     "e": external_id,
+                    "m": mounted_tenant_id,
                 },
             )
         for user_id, name, dept_id in [(31, "alice", 2), (32, "bob", 3), (34, "carol", 20)]:
@@ -117,7 +133,48 @@ class TestTopLevel:
 
     async def test_global_super_gets_every_tenant_root(self, db):
         data = await _departments(_user(admin=True, global_super=True))
-        assert [(node["id"], node["tenant_id"]) for node in data["active"]] == [(1, 1), (50, 5)]
+        assert [(node["id"], node["tenant_id"]) for node in data["active"]] == [(1, 1), (70, 1), (50, 5)]
+
+    async def test_rbac_super_tenant_admin_hides_unrecorded(self, db, monkeypatch):
+        async def _tenant_admin(user_id, tenant_id):
+            return tenant_id == 9
+
+        monkeypatch.setattr("bisheng.common.permission_identity.check_tenant_admin", _tenant_admin)
+        data = await _departments(_user(admin=True, global_super=True), tenant=9, admin_scope=9)
+        assert _ids(data["active"]) == [70]
+        assert (data["show_none"], data["show_unrecorded"]) == (False, False)
+
+    async def test_tenant_admin_sees_root_dept_subtree_without_mount_flag(self, db, monkeypatch):
+        async def _tenant_admin(user_id, tenant_id):
+            return tenant_id == 11
+
+        monkeypatch.setattr("bisheng.common.permission_identity.check_tenant_admin", _tenant_admin)
+        data = await _departments(_user(admin=True, global_super=True), tenant=11, admin_scope=11)
+        assert _ids(data["active"]) == [80]
+        assert data["active"][0]["has_children"] is True
+        assert (data["show_none"], data["show_unrecorded"]) == (False, False)
+        children = await _departments(_user(admin=True, global_super=True), tenant=11, admin_scope=11, parent_id=80)
+        assert _ids(children["active"]) == [81]
+
+    async def test_child_tenant_admin_sees_the_mounted_department(self, db, monkeypatch):
+        async def _tenant_admin(user_id, tenant_id):
+            return tenant_id == 9
+
+        monkeypatch.setattr("bisheng.common.permission_identity.check_tenant_admin", _tenant_admin)
+        data = await _departments(_user(), tenant=9)
+        assert _ids(data["active"]) == [70]
+        assert (data["show_none"], data["show_unrecorded"]) == (False, False)
+        children = await _departments(_user(), tenant=9, parent_id=70)
+        assert _ids(children["active"]) == [71]
+
+    async def test_rbac_admin_sees_the_mounted_department(self, db):
+        data = await _departments(_user(admin=True), tenant=9)
+        assert _ids(data["active"]) == [70]
+        assert data["active"][0]["has_children"] is True
+        children = await _departments(_user(admin=True), tenant=9, parent_id=70)
+        assert _ids(children["active"]) == [71]
+        found = await _departments(_user(admin=True), tenant=9, keyword="MountOps")
+        assert _ids(found["active"]) == [71]
 
     async def test_global_super_narrowed_by_tenant_id(self, db):
         data = await _departments(_user(admin=True, global_super=True), tenant_id=5)
@@ -156,7 +213,7 @@ class TestLazyAndSearch:
 
     async def test_lifted_tenant_root_is_not_repeated_as_child(self, db):
         data = await _departments(_user(admin=True, global_super=True), parent_id=1)
-        assert _ids(data["active"]) == [2, 20]
+        assert _ids(data["active"]) == [2, 20, 80]
 
     @pytest.mark.parametrize("keyword,expected", [("ast", [3]), ("BS@3", [3]), ("E-110", [3])])
     async def test_search_matches_name_dept_id_external_id(self, db, keyword, expected):

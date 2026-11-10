@@ -15,6 +15,7 @@ from bisheng.utils import get_request_ip
 
 # Paths exempt from tenant context checks (login, env, health, docs, static)
 TENANT_CHECK_EXEMPT_PATHS = (
+    "/api/v1/internal/app-proxy/desktop-session",
     "/api/v1/user/login",
     "/api/v1/user/regist",
     "/api/v1/user/sso",

@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -29,6 +30,7 @@ from bisheng.open_mcp.server import OpenMcpDispatchMiddleware, create_open_mcp_r
 from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
 from bisheng.public_endpoints.api.router import router_public
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
+from bisheng.utils.mask_data import redact_validation_errors
 from bisheng.utils.threadpool import thread_pool
 
 
@@ -55,11 +57,12 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
     # Pydantic validator context can contain ValueError instances.
+    errors = redact_validation_errors(exc.errors())
     msg = jsonable_encoder(
-        {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": exc.errors()},
+        {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": errors},
         custom_encoder={ValueError: str},
     )
-    logger.error(f"{req.method} {req.url} {str(exc.errors())[:100]}")
+    logger.error(f"{req.method} {req.url} {str(errors)[:100]}")
     return JSONResponse(content=msg)
 
 
@@ -149,6 +152,23 @@ async def lifespan(app: FastAPI):
                 await backfill_linsight_default_model()
             except Exception:
                 logger.exception("linsight default-model backfill failed; continuing startup")
+            # Pre-3.0 workbench configs: daily-mode default = the last listed model
+            # (what the old client picked), and the listed models stay visible to
+            # every member once DSH visibility drives the picker.
+            try:
+                from bisheng.llm.domain.services.chat_default_model_backfill import backfill_chat_default_model
+
+                await backfill_chat_default_model()
+            except Exception:
+                logger.exception("chat default-model backfill failed; continuing startup")
+            try:
+                from bisheng.dsh.domain.services.workbench_visibility_backfill import (
+                    backfill_workbench_model_visibility,
+                )
+
+                await asyncio.to_thread(backfill_workbench_model_visibility)
+            except Exception:
+                logger.exception("workbench model visibility backfill failed; continuing startup")
             # Skill bundles moved from node-local disk to object storage. Publish what
             # this host still holds so an upgraded deployment heals itself; anything it
             # cannot resolve is logged by name for the operator to run the migration

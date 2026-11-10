@@ -83,6 +83,31 @@ class EventType(Enum):
     SET_PRIMARY_VERSION = "set_primary_version"
     DELETE_FILE_VERSION = "delete_file_version"
     DISMISS_SIMILAR_FILE = "dismiss_similar_file"
+    DOWNLOAD_FILE = "download_file"
+
+    EXPORT_QA = "export_qa"
+    CREATE_QA = "create_qa"
+    UPDATE_QA = "update_qa"
+    DELETE_QA = "delete_qa"
+    ENABLE_QA = "enable_qa"
+    DISABLE_QA = "disable_qa"
+
+    CREATE_LOCAL_USER = "create_local_user"
+    RESET_USER_PASSWORD = "reset_user_password"
+    CHANGE_OWN_PASSWORD = "change_own_password"
+    UPDATE_DEPT_ADMIN = "update_dept_admin"
+    UPDATE_DEPT_DEFAULT_ROLE = "update_dept_default_role"
+    UPDATE_SENSITIVE_POLICY = "update_sensitive_policy"
+    MOVE_DEPARTMENT = "move_department"
+    CHANGE_MEMBER_DEPT = "change_member_dept"
+    GRANT_RESOURCE = "grant_resource"
+    REVOKE_RESOURCE = "revoke_resource"
+    UPDATE_RESOURCE_MODE = "update_resource_mode"
+
+    PERSONAL_SKILL_CREATE = "personal_skill_create"
+    PERSONAL_SKILL_STATUS = "personal_skill_status"
+    PERSONAL_SKILL_DELETE = "personal_skill_delete"
+    PERSONAL_SKILL_OVERWRITE = "personal_skill_overwrite"
 
 
 # Action object type enumeration
@@ -100,6 +125,7 @@ class ObjectType(Enum):
     DASHBOARD = "dashboard"  # KANBAN
     CHANNEL = "channel"  # Subscription Channel
     KNOWLEDGE_SPACE = "knowledge_space"  # Knowledge Space
+    DEPARTMENT = "department"
 
 
 class AuditLogBase(SQLModelSerializable):
@@ -317,6 +343,14 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "app.secret.set",
     "app.secret.delete",
     "app.secret.rebuild",
+    "open_api.pat.create",
+    "open_api.pat.regenerate",
+    "open_api.pat.revoke",
+    "open_api.pat.delete",
+    "open_api.pat.revoke_holder",
+    "open_api.pat.tenant_migrate",
+    "open_api.pat.settings.update",
+    "llm.system_config.update",
 )
 
 # Synthetic system_id namespace → action prefix. The frontend `getModulesApi`
@@ -324,7 +358,7 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
 # `chat`, `build`, ... still match the literal `system_id` column).
 _V2_NAMESPACE_TO_ACTION_PREFIX: dict[str, str] = {
     "tenant": "tenant.",
-    "llm": "llm.server.",
+    "llm": "llm.",
     "approval": "approval.",
     "open_api": "open_api.",
     "app": "app.",
@@ -393,6 +427,7 @@ class AuditLogDao(AuditLogBase):
         target_app_id: str | None = None,
         group_member_ids: list[int] | None = None,
         dept_predicate=None,
+        note: str | None = None,
     ) -> (list[AuditLog], int):
         """
         Filter logs by user group.
@@ -412,6 +447,10 @@ class AuditLogDao(AuditLogBase):
         ``dept_predicate`` (F003): ``org_snapshot.build_dept_predicate`` on
         ``operator_dept_id`` — the caller's department scope intersected with
         the organisation filter; ``None`` adds nothing.
+
+        ``note``: substring of the stored remark. Blank means no filter.
+        ``%`` and ``_`` are matched literally. Empty and NULL remarks do not
+        match a keyword; the page's 「无」 is a display fallback, not a stored value.
 
         ``group_member_ids`` (F056 design pit 15): legacy rows snapshot the
         operator's groups into ``group_ids``; structured v2 rows
@@ -489,6 +528,12 @@ class AuditLogDao(AuditLogBase):
         if dept_predicate is not None:
             statement = statement.where(dept_predicate)
             count_statement = count_statement.where(dept_predicate)
+        note_keyword = (note or "").strip()
+        if note_keyword:
+            escaped = note_keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            note_predicate = AuditLog.note.like(f"%{escaped}%", escape="\\")
+            statement = statement.where(note_predicate)
+            count_statement = count_statement.where(note_predicate)
         # ``create_time`` is second-precision; the id tiebreaker keeps OFFSET
         # pages disjoint and the export deterministic (backend AGENTS.md).
         statement = statement.order_by(AuditLog.create_time.desc(), AuditLog.id.desc())
@@ -526,8 +571,17 @@ class AuditLogDao(AuditLogBase):
         ``get_audit_logs``: the DAO owns tenant scoping; the auto-listener
         would otherwise pin results to ``current_tenant_id`` and hide
         cross-tenant operators from a global super.
+
+        Rows are ``(operator_id, operator_name)``, one pair per distinct name,
+        ordered by how many visible rows use that name (then the name itself).
+        A renamed account keeps every historical name; the first pair for an
+        id is the name on the most rows, which is the label the dropdown shows.
         """
-        statement = select(AuditLog.operator_id, AuditLog.operator_name).distinct()
+        statement = select(
+            AuditLog.operator_id,
+            AuditLog.operator_name,
+            func.count().label("name_count"),
+        )
         # Mirror the list endpoint's UI whitelist so the operator dropdown
         # does not advertise users who only ever produced hidden v2 rows.
         statement = statement.where(cls._ui_visible_predicate())
@@ -540,9 +594,15 @@ class AuditLogDao(AuditLogBase):
             statement = statement.where(cls._visible_for_tenant(tenant_scope))
         if dept_predicate is not None:
             statement = statement.where(dept_predicate)
+        counted = statement.group_by(AuditLog.operator_id, AuditLog.operator_name).subquery()
+        # Most-used name first. The service keeps that one label per operator.
+        ordered = select(counted.c.operator_id, counted.c.operator_name).order_by(
+            counted.c.name_count.desc(),
+            counted.c.operator_name.asc(),
+        )
 
         with bypass_tenant_filter(), get_sync_db_session() as session:
-            return session.exec(statement).all()
+            return session.exec(ordered).all()
 
     # -----------------------------------------------------------------------
     # v2.5.1 F011: structured audit_log API.
@@ -565,6 +625,7 @@ class AuditLogDao(AuditLogBase):
         ip_address: str | None = None,
         operator_name: str | None = None,
         object_name: str | None = None,
+        note: str | None = None,
     ) -> AuditLog:
         """Structured audit_log insert (v2.5.1 schema).
 
@@ -573,6 +634,9 @@ class AuditLogDao(AuditLogBase):
           - global super (no F019 scope)   → ROOT_TENANT_ID (=1)
           - global super (F019 scope=X)    → X (current management view)
           - system trigger (operator_id=0) → ROOT_TENANT_ID
+
+        ``note`` is the remark shown in the audit page's 备注 column. Approval
+        writers put the scenario display name there. Other callers leave it empty.
 
         ``operator_name`` is auto-resolved when not supplied: ``'system'``
         for ``operator_id == 0`` (system trigger), otherwise looked up via
@@ -616,6 +680,7 @@ class AuditLogDao(AuditLogBase):
             audit_metadata=metadata,
             ip_address=ip_address,
             object_name=object_name,
+            note=note,
         )
         await astamp_audit_logs([entry])
         with bypass_tenant_filter():

@@ -188,6 +188,7 @@ class ApprovalGate:
                     "payload_snapshot": req.payload_snapshot,
                 },
                 object_name=business_name,
+                note=scenario.scenario_name,
                 ip_address=req.ip_address,
             )
             return ApprovalGateResult(decision=ApprovalGateDecision.PASS, instance_id=instance.id)
@@ -292,6 +293,7 @@ class ApprovalGate:
             },
             operator_name=req.applicant_user_name,
             object_name=business_name,
+            note=scenario.scenario_name,
             ip_address=req.ip_address,
         )
         return ApprovalGateResult(
@@ -386,6 +388,7 @@ class ApprovalGate:
             },
             operator_name=req.applicant_user_name,
             object_name=business_name,
+            note=scenario_name,
             ip_address=req.ip_address,
         )
         # Notify tenant admins so they can handle the exception

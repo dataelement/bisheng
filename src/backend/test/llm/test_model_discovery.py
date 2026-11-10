@@ -31,6 +31,10 @@ path = Path(__file__).parents[2] / "bisheng/llm/domain/services/model_discovery.
         ({"id": "qwen3.7-plus"}, "llm", "registry"),
         ({"id": "gpt-4o-mini-tts"}, "tts", "registry"),
         ({"id": "gpt-image-1"}, None, "unsupported"),
+        ({"id": "hy-asr-3.0-preview"}, None, "unknown"),
+        ({"id": "hy3"}, "llm", "registry"),
+        ({"id": "wan2.1-t2v-plus"}, None, "unsupported"),
+        ({"id": "invoice-ocr"}, None, "unsupported"),
         ({"id": "private-gpt", "task": "image_generation"}, None, "unsupported"),
         ({"id": "deployment-abc"}, None, "unknown"),
         ({"id": "deepseek-v4-flash-260425"}, "llm", "registry"),
@@ -57,9 +61,12 @@ def test_speech_marker_follows_the_provider_client_not_the_model_name():
     catalog.assign_speech_type(both, "qwen")
     assert both == {"model_type": None, "type_source": "speech"}
 
-    realtime_only = {"model_type": "asr", "type_source": "metadata"}
+    realtime_only = {"model_name": "16k_zh", "model_type": "asr", "type_source": "metadata"}
     catalog.assign_speech_type(realtime_only, "tencent")
-    assert realtime_only == {"model_type": "asr_rt", "type_source": "metadata"}
+    assert realtime_only["model_type"] == "asr_rt"
+    tokenhub_speech = {"model_name": "hy-asr-3.0-preview", "model_type": "asr", "type_source": "metadata"}
+    catalog.assign_speech_type(tokenhub_speech, "tencent")
+    assert tokenhub_speech == {"model_name": "hy-asr-3.0-preview", "model_type": None, "type_source": "unsupported"}
 
     unsupported = {"model_type": "asr", "type_source": "metadata"}
     catalog.assign_speech_type(unsupported, "zhipu")
@@ -106,7 +113,8 @@ def test_qwen_id_only_rows_follow_transport_words_in_the_model_id():
     assert by_name["fun-asr-flash-2026-06-15"]["model_type"] == "asr"
     assert by_name["qwen-audio-3.0-asr-flash"]["model_type"] == "asr"
     assert by_name["qwen3-asr-flash-realtime"]["model_type"] == "asr_rt"
-    assert by_name["qwen-audio-3.0-asr-flash-streaming"]["model_type"] == "asr_rt"
+    assert by_name["qwen-audio-3.0-asr-flash-streaming"]["model_type"] is None
+    assert by_name["qwen-audio-3.0-asr-flash-streaming"]["type_source"] == "unsupported"
     assert by_name["qwen-plus"]["model_type"] == "llm"
 
 

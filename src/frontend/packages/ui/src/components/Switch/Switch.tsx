@@ -61,6 +61,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
     return (
       <SwitchPrimitive.Root
         ref={ref}
+        data-slot="switch"
         disabled={disabled || loading}
         // §4 — the 40% opacity is invisible to a screen reader (落地 §4).
         aria-disabled={disabled || loading || undefined}
@@ -91,6 +92,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
             transform track a text-widened track without hardcoding a distance.
             0.2s per 落地 §3. Fixed white: the track carries the color. */}
         <SwitchPrimitive.Thumb
+          data-slot="switch-thumb"
           className={cn(
             'absolute left-0.5 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-full bg-white transition-all duration-200 data-[state=checked]:left-[calc(100%-2px)] data-[state=checked]:-translate-x-full',
             THUMB_SIZE[size],

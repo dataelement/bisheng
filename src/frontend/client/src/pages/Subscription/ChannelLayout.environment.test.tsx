@@ -119,3 +119,22 @@ it("releases drag cursor and selection when capacity is lost", async () => {
   expect(document.body.style.userSelect).toBe("");
   view.unmount();
 });
+
+it.each([
+  ["desktop", "488px"],
+  ["web", "648px"],
+])("keeps %s browse-card width when opening the reading pane", async (channel, expectedWidth) => {
+  mockChannel = channel;
+  mockWidth = 1280;
+  const previousViewportWidth = window.innerWidth;
+  window.innerWidth = 1280;
+  try {
+    const view = render(<ChannelLayout channel={{ id: "channel" } as never} />);
+    await act(async () => fireEvent.click(screen.getByText("Read article")));
+    expect(screen.getByText("Read article").parentElement).toHaveStyle({ width: expectedWidth });
+    expect(screen.getByText("split")).toBeInTheDocument();
+    view.unmount();
+  } finally {
+    window.innerWidth = previousViewportWidth;
+  }
+});

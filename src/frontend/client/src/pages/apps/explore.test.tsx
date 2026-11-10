@@ -1,8 +1,5 @@
 /**
- * F056 AC-08 — an app carrying no home tag lives only under the "uncategorised"
- * tab, which is never the plaza's default once home tags are configured. These
- * tests pin the two properties that make such an app findable anyway:
- * a keyword search spans every category, and a first-page request is never
+ * All and keyword search span every category. A first-page request is never
  * dropped because an earlier one is still in flight.
  *
  * Both list endpoints are F027 cursor waterfalls: the first page asks with a
@@ -11,18 +8,24 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const mockGetChatOnlineApi = jest.fn();
+const mockGetHomeLabelApi = jest.fn();
 const mockGetUncategorized = jest.fn();
 const mockRecordUsedAppApi = jest.fn();
 
 jest.mock('~/api/apps', () => ({
   getChatOnlineApi: (...args: unknown[]) => mockGetChatOnlineApi(...args),
+  getHomeLabelApi: () => mockGetHomeLabelApi(),
   getUncategorized: (...args: unknown[]) => mockGetUncategorized(...args),
   recordUsedAppApi: (...args: unknown[]) => mockRecordUsedAppApi(...args),
 }));
 
-jest.mock('react-router-dom', () => ({ useNavigate: () => jest.fn() }));
+jest.mock('react-router-dom', () => ({
+  useLocation: () => ({ pathname: '/square' }),
+  useNavigate: () => jest.fn(),
+}));
 jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
 jest.mock('~/hooks', () => ({
+  useAuthContext: () => ({ user: { role: 'user' } }),
   useLocalize: () => (key: string) => key,
   useMediaQuery: () => false,
 }));
@@ -41,25 +44,7 @@ jest.mock('./components/AgentCard', () => ({
   AgentCard: ({ agent }: { agent: { name: string } }) => <div data-testid="agent">{agent.name}</div>,
 }));
 
-jest.mock('./components/AgentNavigation', () => ({
-  AgentNavigation: ({
-    onCategoryChange,
-    searchActive,
-  }: {
-    onCategoryChange: (id: number | string) => void;
-    searchActive?: boolean;
-  }) => (
-    <div>
-      <button data-testid="tab-tagged" onClick={() => onCategoryChange(7)}>
-        tagged
-      </button>
-      <button data-testid="tab-uncategorized" onClick={() => onCategoryChange('uncategorized')}>
-        uncategorized
-      </button>
-      <span data-testid="search-active">{String(!!searchActive)}</span>
-    </div>
-  ),
-}));
+jest.mock('./components/MarkLabel', () => ({ __esModule: true, default: () => null }));
 
 jest.mock('./components/AppSearchBar', () => ({
   AppSearchBar: ({ query, onSearch }: { query: string; onSearch: (value: string) => void }) => (
@@ -75,9 +60,8 @@ import ExplorePlaza from './explore';
 
 const PAGE_SIZE = 20;
 
-/** The navigation reports the default tab once its tags land; stubbed as a click. */
 async function selectTaggedTab() {
-  fireEvent.click(screen.getByTestId('tab-tagged'));
+  fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Finance' }));
   await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, '', 7, PAGE_SIZE));
 }
 
@@ -99,10 +83,36 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockGetChatOnlineApi.mockResolvedValue({ list: [], hasMore: false, nextCursor: null });
+  mockGetHomeLabelApi.mockResolvedValue({ data: [{ id: 7, name: 'Finance' }] });
   mockGetUncategorized.mockResolvedValue({ list: [], hasMore: false, nextCursor: null });
 });
 
 describe('ExplorePlaza search scope', () => {
+  it('defaults to All and can return to it from a category', async () => {
+    mockGetChatOnlineApi.mockImplementation(async (_cursor, _query, tagId) => ({
+      list: tagId === -1
+        ? [{ id: '1', name: 'Categorized app' }, { id: '2', name: 'Untagged app' }]
+        : [{ id: '1', name: 'Categorized app' }],
+      hasMore: false,
+      nextCursor: null,
+    }));
+    render(<ExplorePlaza />);
+
+    await screen.findByText('Untagged app');
+    expect(mockGetChatOnlineApi).toHaveBeenNthCalledWith(1, null, '', -1, PAGE_SIZE);
+    const allTab = screen.getByRole('tab', { name: 'com_app.all', selected: true });
+    expect(screen.getAllByRole('tab')[0]).toBe(allTab);
+
+    await selectTaggedTab();
+    await waitFor(() => expect(screen.queryByText('Untagged app')).not.toBeInTheDocument());
+
+    fireEvent.keyDown(allTab, { key: 'Enter' });
+    await screen.findByText('Untagged app');
+    expect(screen.getByText('Categorized app')).toBeInTheDocument();
+    expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(null, '', -1, PAGE_SIZE);
+    expect(mockGetUncategorized).not.toHaveBeenCalled();
+  });
+
   it('loads the selected tab through the tag-filtered endpoint', async () => {
     render(<ExplorePlaza />);
 
@@ -120,13 +130,13 @@ describe('ExplorePlaza search scope', () => {
       expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, 'expense', -1, PAGE_SIZE),
     );
     expect(mockGetUncategorized).not.toHaveBeenCalled();
-    expect(screen.getByTestId('search-active')).toHaveTextContent('true');
+    expect(screen.queryByRole('tab', { selected: true })).not.toBeInTheDocument();
   });
 
   it('searches across tabs from the uncategorized tab too', async () => {
     render(<ExplorePlaza />);
 
-    fireEvent.click(screen.getByTestId('tab-uncategorized'));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_app_uncategorized' }));
     await waitFor(() => expect(mockGetUncategorized).toHaveBeenCalledWith(null, PAGE_SIZE));
 
     fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'expense' } });
@@ -145,15 +155,16 @@ describe('ExplorePlaza search scope', () => {
       expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, 'expense', -1, PAGE_SIZE),
     );
 
-    fireEvent.click(screen.getByTestId('tab-uncategorized'));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_app_uncategorized' }));
 
     await waitFor(() => expect(mockGetUncategorized).toHaveBeenCalledWith(null, PAGE_SIZE));
     expect(screen.getByTestId('search-input')).toHaveValue('');
-    expect(screen.getByTestId('search-active')).toHaveTextContent('false');
+    expect(screen.getByRole('tab', { name: 'com_app_uncategorized', selected: true })).toBeInTheDocument();
   });
 
   it('keeps the search result when the previous request resolves late', async () => {
     render(<ExplorePlaza />);
+    const financeTab = await screen.findByRole('tab', { name: 'Finance' });
 
     let resolveFirstPage: (value: { list: unknown[]; hasMore: boolean; nextCursor: string | null }) => void =
       () => undefined;
@@ -169,7 +180,7 @@ describe('ExplorePlaza search scope', () => {
       nextCursor: null,
     });
 
-    fireEvent.click(screen.getByTestId('tab-tagged'));
+    fireEvent.mouseDown(financeTab);
     await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, '', 7, PAGE_SIZE));
 
     // Keyword typed while the tab's own page is still in flight.

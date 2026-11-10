@@ -1,11 +1,12 @@
 """Keep workflow file ownership independently of deletable question messages."""
 
+import asyncio
 import hashlib
 import json
 from collections.abc import Callable
 from urllib.parse import parse_qsl, unquote, urlsplit, urlunsplit
 
-from sqlmodel import select, update
+from sqlmodel import select
 
 from bisheng.chat_session.domain.models.workflow_file_manifest import WorkflowFileManifest
 from bisheng.core.database import get_async_db_session, get_sync_db_session
@@ -141,19 +142,11 @@ class WorkflowFileRepository:
             session.commit()
 
     @staticmethod
-    async def soft_delete_owned_session(chat_id: str, *, user_id: int, tenant_id: int) -> None:
-        async with get_async_db_session() as session:
-            await session.exec(
-                update(MessageSession)
-                .where(
-                    MessageSession.chat_id == chat_id,
-                    MessageSession.user_id == user_id,
-                    MessageSession.tenant_id == tenant_id,
-                    MessageSession.api_subject_type.is_(None),
-                )
-                .values(is_delete=True)
-            )
-            await session.commit()
+    async def soft_delete_owned_session(chat_id: str, *, user_id: int, tenant_id: int) -> str | None:
+        from bisheng.chat_session.domain.repositories.project_session_repository import ProjectSessionRepository
+        from bisheng.chat_session.domain.schemas.projects import ProjectActor
+
+        return await asyncio.to_thread(ProjectSessionRepository.soft_delete, ProjectActor(tenant_id, user_id), chat_id)
 
     @staticmethod
     async def attachment_messages(chat_id: str) -> list[ChatMessage | WorkflowFileManifest]:

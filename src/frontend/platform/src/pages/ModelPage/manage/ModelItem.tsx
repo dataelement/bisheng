@@ -347,6 +347,11 @@ export function ModelItem({
                             {t("model.insertParamsExample")}
                           </Button>
                         </div>
+                        {model.model_type === "llm" && type !== "ollama" && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {t("model.contextWindowParamTip")}
+                          </p>
+                        )}
                         <Textarea
                           value={inputAdvancedParams}
                           onChange={(event) => {

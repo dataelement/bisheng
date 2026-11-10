@@ -15,6 +15,28 @@ from runtime_manager.docker_backend import get_docker_backend
 logger = logging.getLogger(__name__)
 
 
+def working_set_bytes(memory_stats: dict) -> int:
+    """Docker CLI memory usage, retaining a conservative value for bad cache data."""
+    if not isinstance(memory_stats, dict):
+        raise ValueError("Invalid container memory usage")
+    usage = memory_stats.get("usage")
+    if type(usage) is not int or usage < 0:
+        raise ValueError("Invalid container memory usage")
+
+    stats = memory_stats.get("stats") or {}
+    if not isinstance(stats, dict):
+        return usage
+    for key in ("total_inactive_file", "inactive_file", "cache"):
+        if key not in stats:
+            continue
+        cache = stats[key]
+        if type(cache) is int and 0 <= cache < usage:
+            return usage - cache
+        # Do not try a different accounting field after an invalid primary one.
+        return usage
+    return usage
+
+
 class DockerExecutor:
     def __init__(self, config, platform, docker=None, *, clock=time, checkpoint=None, report=None):
         self.config, self.platform = config, platform
@@ -150,11 +172,9 @@ class DockerExecutor:
             details = self.docker.inspect_container(item["Id"])
             limits = details.get("HostConfig", {})
             committed = int(limits.get("Memory", 0))
-            if not committed:
+            if committed <= 0:
                 memory_stats = self.docker.container_stats(item["Id"]).get("memory_stats", {})
-                committed = max(
-                    0, int(memory_stats.get("usage", 0)) - int(memory_stats.get("stats", {}).get("cache", 0))
-                )
+                committed = working_set_bytes(memory_stats)
             return committed, int(limits.get("NanoCpus", 0)) // 1000000
 
         external = [

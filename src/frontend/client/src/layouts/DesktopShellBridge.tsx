@@ -2,9 +2,10 @@ import { useEffect } from "react";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
 import { workbenchBranding } from "~/components/Chat/workbenchBranding";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useClientEnvironment } from "~/hooks/useClientEnvironment";
 import { readDesktopPresentation } from "~/utils/clientEnvironment";
+import { resendConversationActivity } from "~/components/Chat/desktopConversationBridge";
 import { useDesktopNavigation } from "~/components/Chat/useDesktopNavigation";
 import { useDesktopAppearance } from "~/components/Chat/useDesktopAppearance";
 import { useWorkbenchNavLinks } from "./useWorkbenchNavLinks";
@@ -14,9 +15,22 @@ import {
 } from "./WorkbenchSidebar/useSidebarEntries";
 import { usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
 import { useDesktopLocale } from "./useDesktopLocale";
+import { useChatProjectSync } from "~/hooks/useChatProjects";
+import { useProjectMigration } from "~/hooks/useProjectMigration";
 
 /** The web app owns grants, labels and ordering; the host owns desktop navigation chrome. */
 export function DesktopShellBridge() {
+  useChatProjectSync();
+  useProjectMigration();
+  const navigate = useNavigate();
+  useEffect(() => {
+    const recover = (event: Event) => {
+      const value: unknown = (event as CustomEvent<{ chatId?: unknown }>).detail?.chatId;
+      if (typeof value === 'string' && /^[A-Za-z0-9_-]{1,255}$/.test(value)) navigate(`/c/${value}`);
+    };
+    window.addEventListener('bisheng:project-conversation-recovered', recover);
+    return () => window.removeEventListener('bisheng:project-conversation-recovered', recover);
+  }, [navigate]);
   useDesktopNavigation();
   useDesktopAppearance();
   useDesktopLocale();
@@ -51,5 +65,9 @@ export function DesktopShellBridge() {
     if (channel === "desktop")
       readDesktopPresentation().reportNavigation?.(JSON.parse(payload));
   }, [payload, channel, hasNativePresentation]);
+  // The host drops activity reported under a stale path, e.g. while /c/new becomes /c/<id>.
+  useEffect(() => {
+    resendConversationActivity();
+  }, [pathname]);
   return null;
 }

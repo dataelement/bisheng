@@ -13,6 +13,8 @@ from uuid import uuid4
 from fastapi import HTTPException
 from loguru import logger
 
+from bisheng.common.dependencies.user_deps import record_business_activity
+
 MAX_BUNDLE_BYTES = 16 * 1024 * 1024
 MAX_BUNDLE_FILES = 512
 
@@ -104,6 +106,7 @@ class WorkCapabilitiesService:
         import jsonschema
 
         jsonschema.validate(arguments, self._schema(executor))
+        await record_business_activity(self.user)
         operation_id = str(uuid4())
         await self.publications.audit(
             self.user, "call", "tool", tool_id, {"operation_id": operation_id, "status": "STARTED"}

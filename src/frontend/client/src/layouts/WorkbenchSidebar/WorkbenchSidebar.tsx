@@ -2,7 +2,7 @@ import { Dropdown, DropdownItem } from "@bisheng/ui";
 import { Tooltip } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import type { MouseEvent, MutableRefObject, ReactElement, ReactNode } from 'react';
-import { cloneElement, useMemo, useRef, useState } from 'react';
+import { cloneElement, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useStartNewChat } from '~/components/Nav/NewChat';
 import { useAuthContext, useLocalize } from '~/hooks';
@@ -88,10 +88,6 @@ export function WorkbenchSidebar({ hidden = false, mobile = false, open = false,
   const conversationsQuery = useConversationsInfiniteQuery(
     { pageNumber: '1', isArchived: false },
     { enabled: isAuthenticated && homeGranted },
-  );
-  const conversations = useMemo(
-    () => conversationsQuery.data?.pages.flatMap((page) => page.conversations).filter((item) => item != null) ?? [],
-    [conversationsQuery.data],
   );
   const handleNavigate = () => {
     if (!mobile) return;
@@ -193,7 +189,7 @@ export function WorkbenchSidebar({ hidden = false, mobile = false, open = false,
           query={conversationsQuery}
           scrollPosition={scrollPosition}
           onNavigate={handleNavigate}
-          leading={<SidebarProjects conversations={conversations} openIds={openProjectIds}
+          leading={<SidebarProjects openIds={openProjectIds}
             onOpenIdsChange={setOpenProjectIds} onNavigate={handleNavigate} onStartChat={startNewChat} />}
         />
       ) : (

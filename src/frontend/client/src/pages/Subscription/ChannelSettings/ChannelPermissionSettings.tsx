@@ -1,4 +1,5 @@
 import type { SubjectType } from "~/api/permission";
+import settingsLayout from "~/components/ModuleHome/ModuleSettingsLayout.module.css";
 import { PermissionDraftPanel } from "~/components/permission/PermissionDraftPanel";
 import type { PermissionDraftEditorCapabilities } from "~/components/permission/PermissionDraftEditor";
 import {
@@ -37,7 +38,7 @@ export function ChannelPermissionSettings({
         kind="permission"
         title={settings.localize("com_unified_permission.access_and_share")}
       />
-      <div className="space-y-4 px-6 max-[768px]:px-0">
+      <div className={`${settingsLayout.fields} space-y-4 px-6 max-[768px]:px-0`}>
         <div className="space-y-2">
           <Label className="text-body font-medium text-text-1">
             <span className="mr-1 text-danger">*</span>

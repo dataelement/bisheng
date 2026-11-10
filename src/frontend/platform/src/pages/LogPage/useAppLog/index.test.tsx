@@ -4,7 +4,14 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { EMPTY_ORG_SELECTION } from '@/controllers/API/log'
 import AppUseLog from './index'
 
-const mock = vi.hoisted(() => ({ filter: vi.fn(), page: vi.fn(), exportApi: vi.fn(), csv: vi.fn(), message: vi.fn() }))
+const mock = vi.hoisted(() => {
+    const rows = [
+        { id: 1, flow_type: 5, flow_name: 'Assistant', flow_id: 'app-1', chat_id: 'chat-1', usage_type: 'assistant', user_groups: [{ name: 'Group' }], create_time: '2026-10-20T10:00:00', sensitive_status: 1 },
+        { id: 2, flow_type: 15, chat_id: 'daily-1', usage_type: 'daily', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 2, operator_dept_id: 3, operator_dept_path: 'Root/Sales' },
+        { id: 3, flow_type: 20, flow_name: 'Space QA', chat_id: 'space-1', usage_type: 'workflow', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 1, operator_dept_id: -1 },
+    ]
+    return { filter: vi.fn(), page: vi.fn(), exportApi: vi.fn(), csv: vi.fn(), message: vi.fn(), rows, initialRows: rows }
+})
 vi.mock('@/contexts/locationContext', async () => ({ locationContext: (await import('react')).createContext({ appConfig: { isPro: true } }) }))
 vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: { user_name: 'Admin' } }) }))
 vi.mock('@/controllers/API/log', async (importOriginal) => ({
@@ -22,15 +29,12 @@ vi.mock('@/util/utils', async importOriginal => ({ ...(await importOriginal<type
 vi.mock('@/components/bs-comp/filterTableDataComponent/FilterByApp', () => ({ default: ({ onChange }: { onChange: (value: string[]) => void }) => <button onClick={() => onChange(['app-1'])}>Pick app</button> }))
 vi.mock('@/components/bs-comp/filterTableDataComponent/FilterByUsergroup', () => ({ default: () => null }))
 vi.mock('@/components/bs-comp/filterTableDataComponent/FilterByDate', () => ({ default: () => null }))
-vi.mock('@/util/hook', () => ({ useTable: () => ({ page: 2, pageSize: 20, total: 2, loading: false, setPage: mock.page, filterData: mock.filter, data: [
-    { id: 1, flow_type: 5, flow_name: 'Assistant', flow_id: 'app-1', chat_id: 'chat-1', user_groups: [{ name: 'Group' }], create_time: '2026-10-20T10:00:00', sensitive_status: 1 },
-    { id: 2, flow_type: 15, chat_id: 'daily-1', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 2, operator_dept_id: 3, operator_dept_path: 'Root/Sales' },
-    { id: 3, flow_type: 20, flow_name: 'Space QA', chat_id: 'space-1', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 1, operator_dept_id: -1 },
-] }) }))
-afterEach(() => { cleanup(); vi.clearAllMocks() })
+vi.mock('@/util/hook', () => ({ useTable: () => ({ page: 2, pageSize: 20, total: mock.rows.length, loading: false, loaded: true, setPage: mock.page, filterData: mock.filter, data: mock.rows }) }))
+afterEach(() => { cleanup(); vi.clearAllMocks(); mock.rows = mock.initialRows })
 beforeEach(() => { mock.exportApi.mockResolvedValue({ data: [{ chat_id: 'chat-1', flow_name: 'Assistant', create_time: '2026-10-20T10:00:00', user_groups: [], messages: [{ message: '=formula', category: 'question', create_time: '2026-10-20T10:00:00', liked: 1, copied: true, sensitive_status: 1 }] }] }) })
 it('preserves assistant/daily detail links, applied filters and reset', () => {
     render(<MemoryRouter><AppUseLog /></MemoryRouter>)
+    expect(screen.getAllByRole('button')[0]).toHaveAccessibleName('log.org.placeholder')
     expect(screen.getAllByRole('link', { name: 'lib.details' }).map(link => link.getAttribute('href'))).toEqual(['/log/chatlog/app-1/chat-1/5', '/log/chatlog/daily-1', '/log/chatlog/space-1'])
     expect(screen.getAllByText('log.sensitivePass')[0]).toBeVisible()
     expect(screen.getByText('log.sensitiveViolation')).toBeVisible()
@@ -56,16 +60,36 @@ it('keeps the export loading state, default 60-day request and CSV formula prote
     expect(line[9]).toBe("'=formula")
     await waitFor(() => expect(button).toBeEnabled())
 })
+it('shows an empty state when the query returns no rows', () => {
+    mock.rows = []
+    render(<MemoryRouter><AppUseLog /></MemoryRouter>)
+    expect(screen.getByRole('status')).toHaveTextContent('log.emptyTitle')
+    expect(screen.getByText('log.emptyHint')).toBeVisible()
+    expect(screen.getByText('log.appName')).toBeVisible()
+})
 it('shows the organisation column and applies usage type and organisation only on query', async () => {
     render(<MemoryRouter><AppUseLog /></MemoryRouter>)
     expect(screen.getByText('Root/Sales')).toBeVisible()
     expect(screen.getByText('log.org.notApplicable')).toBeVisible()
     expect(screen.getByText('Space QA')).toBeVisible()
-    fireEvent.keyDown(screen.getByRole('combobox', { name: 'log.usageType.label' }), { key: 'ArrowDown' })
+    expect(screen.getAllByText('log.usageType.label').length).toBeGreaterThan(0)
+    expect(screen.getByText('log.usageType.assistant')).toBeVisible()
+    expect(screen.getByText('log.usageType.daily')).toBeVisible()
+    expect(screen.getByText('log.usageType.workflow')).toBeVisible()
+    const usageType = screen.getByRole('combobox', { name: 'log.usageType.label' })
+    expect(usageType).not.toHaveTextContent('log.usageType.all')
+    const appPicker = screen.getByRole('button', { name: 'Pick app' })
+    expect(usageType.compareDocumentPosition(appPicker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.keyDown(usageType, { key: 'ArrowDown' })
+    expect(await screen.findByRole('option', { name: 'log.usageType.all' })).toBeVisible()
     fireEvent.click(await screen.findByRole('option', { name: 'log.usageType.task' }))
     expect(mock.filter).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
     expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ usageType: 'task', org: EMPTY_ORG_SELECTION }))
+    fireEvent.keyDown(usageType, { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'log.usageType.all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
+    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ usageType: 'all' }))
     fireEvent.click(screen.getByRole('button', { name: 'log.resetButton' }))
     expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ usageType: '', userId: null }))
 })

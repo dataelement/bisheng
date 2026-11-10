@@ -48,6 +48,7 @@ def _patch_blocked_init(monkeypatch):
         return row
 
     monkeypatch.setattr(chat_service.ChatMessageDao, "ainsert_one", AsyncMock(side_effect=_record))
+    monkeypatch.setattr(chat_service, "mark_session_content_violation", MagicMock())
     return inserted
 
 
@@ -82,6 +83,7 @@ async def test_task_mode_hit_skips_submit_and_handoff(monkeypatch):
     assert len(rows) == 1
     assert json.loads(rows[0].message)["msg"] == AUTO_REPLY
     assert json.loads(rows[0].message)["events"] == [{"type": "text", "content": AUTO_REPLY}]
+    chat_service.mark_session_content_violation.assert_called_with("chat-1")
 
 
 async def test_task_mode_miss_still_submits(monkeypatch):
@@ -135,6 +137,27 @@ async def test_legacy_submit_hit_does_not_create_session(monkeypatch):
     assert "content_safety_blocked" in blob
     assert AUTO_REPLY in blob
     submit.assert_not_awaited()
+
+
+async def test_legacy_submit_hit_marks_existing_session(monkeypatch):
+    monkeypatch.setattr(
+        linsight_ep.SensitiveWordPolicyService,
+        "evaluate_workbench_user_text",
+        staticmethod(lambda *_a, **_k: HIT),
+    )
+    marked = MagicMock()
+    monkeypatch.setattr(linsight_ep.MessageSessionDao, "update_sensitive_status", marked)
+    login = MagicMock()
+    login.user_id = 1
+    login.tenant_id = 1
+    resp = await linsight_ep.submit_linsight_workbench(
+        MagicMock(),
+        LinsightQuestionSubmitSchema(question="禁词", session_id="chat-9"),
+        login,
+    )
+    await _drain(resp)
+    marked.assert_called_once()
+    assert marked.call_args.args[0] == "chat-9"
 
 
 async def test_legacy_submit_miss_still_submits(monkeypatch):

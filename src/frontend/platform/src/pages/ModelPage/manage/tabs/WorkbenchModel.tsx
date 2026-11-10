@@ -135,7 +135,7 @@ export default function WorkbenchModel({ data, onBack }) {
         chat_default_model_id: chatDefaultModelId ? String(chatDefaultModelId) : null,
         asr_model: asrModelId ? { id: String(asrModelId) } : null, // Accept an empty value.
         tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // Accept an empty value.
-        // Model used to generate app conversation titles.
+        // Model that names new conversations (workbench, knowledge spaces, apps).
         chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // Accept an empty value.
         image_read_model: imageReadModelId ? { id: String(imageReadModelId) } : null,
       };
@@ -344,6 +344,7 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.sessionTitleGenerationModel")}
+            tooltipText={t("model.sessionTitleGenerationModelTooltip")}
             value={form.chatTitleLlmId}
             options={llmOptions}
             onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}

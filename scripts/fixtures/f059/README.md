@@ -7,7 +7,7 @@
 ## 1. 前置环境与保护
 
 - 使用全新迁移、单独配置的 backend/Celery/MySQL/Redis/MinIO/OpenFGA 测试实例。先启用多租户、OpenFGA、`open_platform` 和应用托管功能，并确认发布审批 worker 正常消费。
-- backend 初始化通过 `settings.admin` 自动创建的 user 1 必须使用 `e2e-f059-` 用户名，密码从安全环境变量传入，不使用猜测的默认密码。
+- 全新实例通过正常注册创建 user 1，并由首次注册流程授予超管；专用验收账号须使用 `e2e-f059-` 用户名，密码从安全环境变量传入。配置文件不再自动创建管理员。
 - `--env-file` 接受已有 **0600** 平台环境文件，只继承 `E2E_ADMIN_USERNAME`、`E2E_ADMIN_PASSWORD`，不会覆盖它们。输出须是另一个文件；不能用输出参数覆盖平台环境文件。
 - API 地址只接受私网/回环字面 IP，拒绝 URL 中的用户名、密码、查询参数。套件目录名须包含 `e2e-f059`，生成的 marker 固定 API 地址和随机实例 ID。重复执行会校验 marker、保留密码、复用已创建的专用身份。
 - API bootstrap 要求登录者是同名 user 1 且是全局超管；遇到非 `e2e-f059-` 用户、非 Root 的非测试租户或非测试应用会停止。它不是生产实例的数据准备工具。
@@ -147,7 +147,7 @@ python scripts/bootstrap_f059_acceptance.py \
 
 `bootstrap-state.json` 保存 API 准备阶段的非秘密 ID 和结果，不保存密码、JWT 或 API key。部分失败可修复原因后重复执行；不会自动删除业务数据或绕过审批。
 
-只有未启用 `settings.admin` 自动初始化、确认数据库里确实没有任何用户的独立实例才使用 `--register-first-admin`。该显式选项经真实 `/user/regist` 注册首个用户，不做 SQL bootstrap；默认关闭，不应在已有管理员的 189 实例上使用。
+只有确认数据库里确实没有任何用户的独立实例才使用 `--register-first-admin`。该显式选项经真实 `/user/regist` 注册首个用户，不做 SQL bootstrap；默认关闭，不应在已有管理员的 189 实例上使用。
 
 ## 4. 应用场景和真实检查
 

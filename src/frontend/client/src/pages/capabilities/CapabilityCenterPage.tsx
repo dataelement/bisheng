@@ -8,7 +8,7 @@ import { getCapabilities, setCapabilityAvailability, type Capability } from '~/a
 import { getSkillScope } from '~/api/skillCenter';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { QueryKeys } from '~/types/chat';
-import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
+import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_SEARCH, MODULE_HOME_TOOLBAR, ModuleHomeHeader } from '~/components/ModuleHome';
 import { SkillCenterPane } from '~/pages/skills/SkillCenterPane';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
 import { SkillListSkeleton } from '~/pages/skills/SkillList';
@@ -42,6 +42,17 @@ export function CapabilityCenterPage() {
       ]);
     },
   });
+  // Tool ids whose availability is being saved. Only those switches are busy; a single
+  // mutation's `isLoading` / `variables` cannot tell rows apart.
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<number>>(() => new Set());
+  const [availabilityFailed, setAvailabilityFailed] = useState(false);
+  const toggleAvailability = (id: number, enabled: boolean) => {
+    setAvailabilityFailed(false);
+    setPendingIds(prev => new Set(prev).add(id));
+    availability.mutateAsync({ id, enabled })
+      .catch(() => setAvailabilityFailed(true))
+      .finally(() => setPendingIds(prev => { const next = new Set(prev); next.delete(id); return next; }));
+  };
   const items = (catalog.data ?? []).map(item => localizeCapability(item, localize));
   const counts = capabilityCounts(items);
   counts.skill = (skillCenter.platform.data?.length ?? 0) + (skillCenter.personal.data?.length ?? 0);
@@ -50,23 +61,23 @@ export function CapabilityCenterPage() {
   const selected = items.find(item => item.id === params.get('capability'));
   const handleSelect = (id?: string) => {
     const next = new URLSearchParams(params);
-    availability.reset();
+    setAvailabilityFailed(false);
     if (id) next.set('capability', id); else next.delete('capability');
     setParams(next, { replace: true });
   };
   return <div className={MODULE_HOME_FRAME}>
     <ModuleHomeHeader title={t('title')} mobileTitleInShell>
-      <SearchInput className="w-full min-w-0 min-[768px]:w-64" value={search} onChange={event => setSearch(event.target.value)} onClear={() => setSearch('')} placeholder={t('search')} aria-label={t('search')} />
+      <SearchInput className={`${MODULE_HOME_SEARCH} w-full min-w-0 min-[768px]:w-64`} value={search} onChange={event => setSearch(event.target.value)} onClear={() => setSearch('')} placeholder={t('search')} aria-label={t('search')} />
     </ModuleHomeHeader>
-    <div className={`${MODULE_HOME_COLUMN} mt-4 flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-3`}>
-      <Tabs className="min-w-0 flex-1 max-[575px]:basis-full" size="large" variant="neutral" activeKey={active} items={CAPABILITY_TABS.map(tab => ({ key: tab, label: t(tab), badge: counts[tab] }))}
+    <div className={`${MODULE_HOME_COLUMN} ${MODULE_HOME_TOOLBAR} mt-4 flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-3`}>
+      <Tabs className="dsh-home-tabs min-w-0 flex-1 max-[575px]:basis-full" size="large" variant="neutral" activeKey={active} items={CAPABILITY_TABS.map(tab => ({ key: tab, label: t(tab), badge: counts[tab] }))}
         onChange={key => { const next = new URLSearchParams(); next.set('type', key); setParams(next, { replace: true }); }} />
       {active !== 'tool' && <Button className="max-[575px]:w-full" disabled={!identity.data} onClick={() => setUploadOpen(true)}><Outlined.Plus />{localize('com_skill_center_upload')}</Button>}
     </div>
-    <main className="scroll-on-scroll flex min-h-0 min-w-0 w-full flex-1 flex-col items-center overflow-y-auto">
+    <main className={`${MODULE_HOME_BODY} scroll-on-scroll flex min-h-0 min-w-0 w-full flex-1 flex-col items-center overflow-y-auto`}>
       <div className={`${MODULE_HOME_COLUMN} flex min-w-0 flex-1 flex-col pb-3 pt-4`}>
-        {active !== 'tool' && <SkillCenterPane onSearchClear={() => setSearch('')} search={search} uploadOpen={uploadOpen} onUploadOpenChange={setUploadOpen} />}
-        {availability.isError && <p role="alert" className="text-body-sm text-danger">{t('availability_failed')}</p>}
+        {active !== 'tool' && <SkillCenterPane onSearchClear={() => setSearch('')} search={search} uploadOpen={uploadOpen} onUploadOpenChange={setUploadOpen} extraProvidedCount={active === 'all' ? counts.tool : 0} />}
+        {availabilityFailed && <p role="alert" className="text-body-sm text-danger">{t('availability_failed')}</p>}
         {active !== 'skill' && ((identity.isError || catalog.isError) ? <StateView title={t('failed')} description={t('retry_hint')} action={<Button color="default" variant="outlined" onClick={() => { void identity.refetch(); void catalog.refetch(); }}>{t('retry')}</Button>} />
         : (identity.isLoading || catalog.isLoading) ? <SkillListSkeleton />
         : filtered.length ? <ul className="flex min-w-0 w-full flex-col">
@@ -79,10 +90,10 @@ export function CapabilityCenterPage() {
               <p className="mt-0.5 truncate text-caption text-text-3">{item.provider}<span aria-hidden className="mx-1.5">·</span>{item.description}</p>
             </div>
             <Switch size="small" className="relative z-[1] shrink-0" checked={item.availability_enabled === true}
-              loading={availability.isLoading && availability.variables?.id === item.resource_id}
-              disabled={availability.isLoading}
+              loading={pendingIds.has(item.resource_id)}
+              disabled={pendingIds.has(item.resource_id)}
               aria-label={`${t('tool_enabled_setting')}: ${item.name}`}
-              onCheckedChange={enabled => availability.mutate({ id: item.resource_id, enabled })} />
+              onCheckedChange={enabled => toggleAvailability(item.resource_id, enabled)} />
           </li>)}
         </ul> : <StateView title={t('empty')} />)}
       </div>
@@ -90,8 +101,8 @@ export function CapabilityCenterPage() {
     {selected && <CapabilityDetail key={selected.id} item={selected} onClose={() => handleSelect()}
       availability={typeof selected.availability_enabled === 'boolean' ? {
         checked: selected.availability_enabled,
-        busy: availability.isLoading,
-        onChange: enabled => availability.mutate({ id: selected.resource_id, enabled }),
-      } : undefined} availabilityError={availability.isError ? t('availability_failed') : undefined} />}
+        busy: pendingIds.has(selected.resource_id),
+        onChange: enabled => toggleAvailability(selected.resource_id, enabled),
+      } : undefined} availabilityError={availabilityFailed ? t('availability_failed') : undefined} />}
   </div>;
 }

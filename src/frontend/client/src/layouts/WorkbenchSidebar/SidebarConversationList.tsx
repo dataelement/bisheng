@@ -7,7 +7,7 @@ import { useLocalize, useNavScrolling, useScrollRevealRef } from '~/hooks';
 import type { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
 import type { ConversationListResponse } from '~/types/chat';
 import { cn } from '~/utils';
-import { useMockProjectChats } from './projectsStore';
+import { useProjectMemberships } from './projectsStore';
 import { SidebarSectionLabel } from './SidebarSectionLabel';
 
 interface SidebarConversationListProps {
@@ -44,9 +44,7 @@ export function SidebarConversationList({ leading, query, scrollPosition, onNavi
     if (node) node.scrollTop = scrollPosition.current;
   }, [containerRef, scrollRevealRef, scrollPosition]);
 
-  // MOCK: a conversation moved into a project leaves the flat list and shows up
-  // under its folder above (see projectsStore).
-  const projectChats = useMockProjectChats();
+  const projectChats = useProjectMemberships();
   const conversations = useMemo(
     () =>
       (data?.pages.flatMap((page) => page.conversations).filter((convo) => convo != null) ?? []).filter(

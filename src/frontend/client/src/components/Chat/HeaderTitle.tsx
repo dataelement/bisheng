@@ -33,6 +33,7 @@ export default function HeaderTitle({
   const { pathname } = useLocation();
   const {
     channel,
+    capabilities,
     layout: { isNarrowViewport },
   } = useClientEnvironment();
   const isAppChatRoute = pathname.includes("/app/");
@@ -41,8 +42,9 @@ export default function HeaderTitle({
     conversation?.title != null && String(conversation.title).trim() !== ""
       ? String(conversation.title).trim()
       : localize("com_ui_new_chat");
-  // Merge title and share into MobileNav on mobile and compact app-chat layouts.
+  // A mobile App owns its header; other compact layouts merge into MobileNav.
   if (
+    capabilities?.hasHostChatHeader ||
     (isNarrowViewport && channel === "web") ||
     (isAppChatRoute && isAppChatCompact)
   ) {

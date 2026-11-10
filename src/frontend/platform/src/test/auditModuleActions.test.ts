@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { getActionsApi, getActionsByModuleApi } from "@/controllers/API/log";
+import auditCopy from "./fixtures/auditCopy.json";
 
 const ADDED = [
   "update_sandbox_conf",
@@ -32,13 +33,24 @@ describe("audit module → action map", () => {
     expect(knowledge.some((v) => v.includes("knowledge_space"))).toBe(false);
   });
 
-  it("keeps knowledge-space actions in their own module", async () => {
-    expect(await values("knowledge_space")).toEqual(["create_knowledge_space", "delete_knowledge_space"]);
+  it("keeps knowledge-space actions in their own module and shares file actions", async () => {
+    expect([...(await values("knowledge_space"))].sort()).toEqual([
+      "create_knowledge_space",
+      "delete_file",
+      "delete_knowledge_space",
+      "download_file",
+      "upload_file",
+    ]);
   });
 
   it("files the 17 sensitive v2 actions by prefix", async () => {
     expect(await values("tenant")).toEqual(["tenant.mount", "tenant.unmount", "tenant.disable"]);
-    expect(await values("llm")).toEqual(["llm.server.create", "llm.server.update", "llm.server.delete"]);
+    expect(await values("llm")).toEqual([
+      "llm.server.create",
+      "llm.server.update",
+      "llm.server.delete",
+      "llm.system_config.update",
+    ]);
     expect(await values("approval")).toEqual(expect.arrayContaining(["approval.task.approve", "approval.task.reject"]));
     expect(await values("open_api")).toEqual(expect.arrayContaining(["open_api.api_key.issue", "open_api.api_key.revoke"]));
     expect(await values("app")).toEqual(
@@ -48,7 +60,7 @@ describe("audit module → action map", () => {
 
   it("gives every legacy action exactly one module", async () => {
     const modules = ["chat", "build", "knowledge", "system", "dashboard", "subscription", "knowledge_space"];
-    const filed = (await Promise.all(modules.map(values))).flat();
+    const filed = [...new Set((await Promise.all(modules.map(values))).flat())];
     const legacy = (await getActionsApi()).map((a) => a.value).filter((v) => !v.includes("."));
     expect([...filed].sort()).toEqual([...legacy].sort());
   });
@@ -72,6 +84,29 @@ describe("the five added actions", () => {
         expect(caption, `${locale} ${action}`).toBeTruthy();
         expect(caption).not.toBe(action);
       }
+    }
+  });
+});
+
+// The 17 sensitive actions and the organisation column use the wording from
+// 审计功能优化. The fourth usage type is shown as 深度研究: the requirements
+// document says 任务模式, and the audit page was later confirmed to use the
+// product name instead. The stored filter value stays `task`.
+const SENSITIVE_CAPTIONS: Record<string, Record<string, string>> = auditCopy.sensitiveCaptions;
+
+const ORG_COLUMN: Record<string, string> = auditCopy.orgColumn;
+
+const USAGE_TASK: Record<string, string> = auditCopy.usageTask;
+
+describe("sensitive-action and organisation copy", () => {
+  it("pins the 17 action captions, the organisation column and the usage-type label", () => {
+    for (const [locale, captions] of Object.entries(SENSITIVE_CAPTIONS)) {
+      const bs = JSON.parse(readFileSync(resolve(__dirname, `../../public/locales/${locale}/bs.json`), "utf-8"));
+      expect(bs.log.eventTypeEnum).toEqual(expect.objectContaining(captions));
+      expect(bs.log.org.column).toBe(ORG_COLUMN[locale]);
+      expect(bs.log.csvHeaders.org).toBe(ORG_COLUMN[locale]);
+      expect(bs.log.runtime.fields.operator_dept_path).toBe(ORG_COLUMN[locale]);
+      expect(bs.log.usageType.task).toBe(USAGE_TASK[locale]);
     }
   });
 });

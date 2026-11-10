@@ -1,0 +1,83 @@
+/* The two module-home filters follow DSH TaskManagerPage's filterTab style.
+ * Maintenance notes and source map: ../docs/dsh-adaptation.md.
+ * Keep the shared Tabs owner for selection, keyboard focus and overflow.
+ */
+:root[data-bisheng-surface='desktop'] .dsh-home-tabs {
+  --dsh-tab-fill: var(--dsw-alias-interactive-bg-hover, rgb(38 49 72 / 6%));
+  --dsh-tab-text: var(--dsw-alias-label-tertiary, rgb(var(--text-3)));
+  --dsh-tab-selected-text: var(--dsw-alias-label-primary, rgb(var(--text-1)));
+}
+
+:root[data-bisheng-surface='desktop']:is(.dark, [data-dsh-host-theme='dark']) .dsh-home-tabs {
+  --dsh-tab-fill: var(--dsw-alias-interactive-bg-hover, rgb(255 255 255 / 8%));
+}
+
+/* The shared list's immediate wrapper owns its content-width divider. */
+:root[data-bisheng-surface='desktop'] .dsh-home-tabs > div > div {
+  border-bottom: 0;
+}
+
+:root[data-bisheng-surface='desktop'] .dsh-home-tabs [role='tablist'] {
+  height: 28px;
+  margin-bottom: 0;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* Only the direct decorative span is the shared sliding indicator. */
+:root[data-bisheng-surface='desktop'] .dsh-home-tabs [role='tablist'] > [aria-hidden] {
+  display: none;
+}
+
+:root[data-bisheng-surface='desktop'] .dsh-home-tabs [role='tab'] {
+  padding-inline: 10px;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--dsh-tab-text);
+  font-weight: 400;
+  gap: 8px;
+}
+
+/* DSH ui-theme applies this non-inherited curve globally. Scope it to the
+ * adapted triggers here; count badges keep their existing circular shape.
+ */
+@supports (corner-shape: superellipse(1.5)) {
+  :root[data-bisheng-surface='desktop'] .dsh-home-tabs [role='tab'] {
+    corner-shape: var(--dsw-corner-shape, superellipse(1.5));
+  }
+}
+
+:root[data-bisheng-surface='desktop'] .dsh-home-tabs [role='tab'][aria-selected='true'] {
+  background: var(--dsh-tab-fill);
+  color: var(--dsh-tab-selected-text);
+}
+
+:root[data-bisheng-surface='desktop'] .dsh-home-tabs [role='tab'] svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Retain counts without reintroducing a brand accent into neutral filters. */
+:root[data-bisheng-surface='desktop'] .dsh-home-tabs [role='tab'] > .tabular-nums {
+  background: var(--dsh-tab-fill);
+  color: inherit;
+}
+
+:root[data-bisheng-surface='desktop'] .dsh-home-tabs [role='tab']:disabled {
+  color: rgb(var(--btn-disabled-text));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root[data-bisheng-surface='desktop'] .dsh-home-tabs [role='tab']:not(:disabled):hover {
+    background: var(--dsh-tab-fill);
+    color: var(--dsh-tab-selected-text);
+  }
+}
+
+@media not ((hover: hover) and (pointer: fine)) {
+  :root[data-bisheng-surface='desktop'] .dsh-home-tabs [role='tab']:not(:disabled):active {
+    background: var(--dsh-tab-fill);
+    color: var(--dsh-tab-selected-text);
+  }
+}

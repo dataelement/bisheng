@@ -27,3 +27,8 @@ spec 与 design 依据用户已确认技术方案及本轮实施指令整理。�
 详细结果见 [validation.md](./validation.md)，任务和特性自审见 [review.md](./review.md)。本次未进行生产操作。
 
 2026-10-20 main 基线修正已实施并在 109 复验：旧库完整归档保留，新库通过标准 main 初始化后升级；实际结构对比、重复升级和客户端登录/调用/额度/审计均通过。见 [恢复记录](./main-baseline-109-recovery-20261020.md)。T005 继续保留其余未完成检查。
+
+
+## 2026-11-06 服务端闲置会话增量
+
+基于用户明确指定的 feat/bisheng-work-130 实施，范围与验收记录见 [idle-sessions/tasks.md](./idle-sessions/tasks.md)。客户端未修改，推送和部署未执行。

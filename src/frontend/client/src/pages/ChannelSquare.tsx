@@ -25,6 +25,7 @@ import {
 } from "~/api/channels";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useLocalize, useMediaQuery } from "~/hooks";
+import { SquareBanner } from "~/pages/square/SquareBanner";
 import { cn } from "~/utils";
 
 type SquareStatus = "join" | "joined" | "pending" | "private";
@@ -436,33 +437,7 @@ function ChannelSquare({
           </div>
         </div>
       ) : null}
-      {/* Header */}
-      <div className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]">
-        {/* Decorative scattered icons — kept from the original banner art, recolored
-            via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-blue-200"
-          style={{
-            WebkitMaskImage: `url(${__APP_ENV__.BASE_URL}/assets/channel/bgchannel-icons.svg)`,
-            maskImage: `url(${__APP_ENV__.BASE_URL}/assets/channel/bgchannel-icons.svg)`,
-            WebkitMaskSize: "cover",
-            maskSize: "cover",
-            WebkitMaskPosition: "center",
-            maskPosition: "center",
-            WebkitMaskRepeat: "no-repeat",
-            maskRepeat: "no-repeat",
-          }}
-        />
-
-      {/* Main content */}
-        <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
-          <h1 className="mb-1 text-[26px] font-semibold text-blue-500">
-            {tTitle}
-          </h1>
-          <p className="text-[13px] text-text-3">{tSubtitle}</p>
-        </div>
-      </div>
+      <SquareBanner title={tTitle} description={tSubtitle} artwork="channel" />
 
         {/* Channel list */}
       <div

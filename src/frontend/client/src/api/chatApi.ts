@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { dailyFailureMetadata, type FailureInfo } from '~/utils/failureInfo';
 import { getCitationAccessScope } from './citationScope';
 import { hydrateStreamChatCitations } from './hydrateStreamChatCitations';
 /**
@@ -65,6 +66,7 @@ export interface AgentToolCall {
     args?: Record<string, any>;
     results?: any;
     error?: string | null;
+    failure_info?: FailureInfo;
     /** True while the backend is still running this tool (no `end` event seen yet). */
     inflight?: boolean;
     /** Epoch ms when the start event arrived; lets the UI compute a live duration. */
@@ -118,6 +120,7 @@ export interface ChatMessage {
     /** raw upstream text (provider message, parser error, offending filename) kept
         behind the card's "view details" disclosure. */
     errorDetail?: string;
+    failureInfo?: FailureInfo;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
     createdAt?: string;
@@ -265,6 +268,16 @@ function mapAgentResponseItem(row: any): ChatMessage {
         liked: row.liked,
     };
 
+    let failureExtra = row.extra;
+    if (typeof failureExtra === 'string') {
+        try { failureExtra = JSON.parse(failureExtra); } catch { failureExtra = undefined; }
+    }
+    if (failureExtra?.error) {
+        base.error = true;
+        base.errorCode = failureExtra.error_code;
+        base.errorText = failureExtra.error_msg;
+        Object.assign(base, dailyFailureMetadata(failureExtra));
+    }
     if (category === "question" && raw && typeof raw === "object") {
         base.text = raw.query ?? "";
         if (!base.files?.length && Array.isArray(raw.files)) {

@@ -3450,7 +3450,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
             load_permission_records=self._load_resource_permission_records,
         ).delete(resource=resource, applicant_user_id=self.login_user.user_id)
 
-    async def delete_folder(self, space_id: int, folder_id: int):
+    def _audit_space(self, event_type: str, object_id: str, object_name: str, note: str) -> None:
+        from bisheng.api.services.audit_log import AuditLogService
+        from bisheng.utils import get_request_ip
+
+        ip_address = ""
+        if self.request is not None:
+            ip_address = get_request_ip(self.request)
+        AuditLogService.record(
+            operator_id=self.login_user.user_id,
+            operator_name=self.login_user.user_name,
+            system_id="knowledge_space",
+            event_type=event_type,
+            object_type="knowledge_space",
+            object_id=object_id,
+            object_name=object_name,
+            ip_address=ip_address,
+            note=note,
+        )
+
+    async def delete_folder(self, space_id: int, folder_id: int, *, audit: bool = True):
         folder = await self._get_folder_for_action(space_id, folder_id)
         await self._require_action("folder", folder_id, "delete")
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -3482,6 +3501,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await self.update_folder_update_time(folder.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
+        if audit:
+            self._audit_space(
+                "delete_file",
+                str(space_id),
+                folder.file_name,
+                "来源=知识空间；类型=文件夹；结果=成功",
+            )
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> list[dict]:
         file_record = await self._require_file_or_folder_action(
@@ -3852,6 +3878,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_source: FileSource = None,
         skip_approval: bool = False,
         skip_dedup: bool = False,
+        audit: bool = True,
     ) -> list[KnowledgeSpaceFileResponse]:
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
@@ -4023,6 +4050,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
+        if audit and process_files:
+            self._audit_space(
+                "upload_file",
+                str(knowledge_id),
+                db_knowledge.name,
+                f"来源=知识空间；类型=文件；数量={len(process_files)}；结果=成功",
+            )
         return failed_files + process_files
 
     MAX_FOLDER_UPLOAD_FILES = 1000
@@ -4160,8 +4194,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             groups.setdefault(dir_parts, []).append(file_path)
         results: list[KnowledgeSpaceFileResponse] = []
         for dir_parts, file_paths in groups.items():
-            results.extend(await self.add_file(knowledge_id, file_paths, parent_id=node_info[dir_parts][0]))
+            results.extend(
+                await self.add_file(knowledge_id, file_paths, parent_id=node_info[dir_parts][0], audit=False)
+            )
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
+        if created_folders or results:
+            self._audit_space(
+                "upload_file",
+                str(knowledge_id),
+                "",
+                f"来源=知识空间；类型=文件夹；目录={len(created_folders)}；文件={len(results)}；结果=成功",
+            )
         return results
 
     async def rename_file(self, file_id: int, new_name: str) -> KnowledgeFile:
@@ -4630,6 +4673,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
+        self._audit_space(
+            "delete_file",
+            str(file_record.knowledge_id),
+            file_record.file_name,
+            "来源=知识空间；类型=文件；结果=成功",
+        )
 
     async def get_file_preview(self, file_id: int, *, space_id: int | None = None) -> dict:
         """Authorize current file visibility before issuing content URLs."""
@@ -4655,7 +4704,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def get_file_download(self, file_id: int, *, space_id: int | None = None) -> dict:
-        await self._get_file_for_action(file_id, space_id=space_id)
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
         if self.f048_file_delivery is not None:
             from bisheng.permission.domain.services.permission_action_service import (
                 PermissionActor,
@@ -4678,6 +4727,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
+        self._audit_space(
+            "download_file",
+            str(file_record.knowledge_id),
+            file_record.file_name,
+            "来源=知识空间；类型=文件；结果=成功",
+        )
 
         return {
             "original_url": original_url,
@@ -4857,7 +4912,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         for folder_id in folder_ids:
-            await self.delete_folder(knowledge.id, folder_id)
+            await self.delete_folder(knowledge.id, folder_id, audit=False)
 
         if file_ids:
             direct_files = []
@@ -4900,6 +4955,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if file_ids:
             await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)
+        if file_ids or folder_ids:
+            self._audit_space(
+                "delete_file",
+                str(knowledge.id),
+                knowledge.name,
+                f"来源=知识空间；类型=批量；文件={len(file_ids)}；文件夹={len(folder_ids)}；结果=成功",
+            )
 
     async def batch_download(self, space_id: int, file_ids: list[int], folder_ids: list[int]) -> str:
         """
@@ -5068,6 +5130,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 expire_days=7,
             )
 
+        self._audit_space(
+            "download_file",
+            str(space.id),
+            space.name,
+            f"来源=知识空间；类型=批量；文件={len(file_ids)}；文件夹={len(folder_ids)}；结果=成功",
+        )
         return share_url
 
     # ──────────────────────────── Subscribe ───────────────────────────────────

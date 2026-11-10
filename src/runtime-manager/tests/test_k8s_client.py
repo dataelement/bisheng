@@ -1,6 +1,7 @@
 """F059 coverage: AC-03, AC-04, AC-13, AC-14, AC-48, AC-49, AC-52."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import certifi
@@ -330,6 +331,27 @@ def test_trusted_phase_results_use_only_a_named_bounded_container_log(client_fac
     assert len(calls) == 1
 
 
+def test_image_check_logs_retain_path_window_and_size_bounds(client_factory):
+    calls = []
+    client = client_factory(lambda request: calls.append(request) or httpx.Response(200, text="x" * (2 * 1048576)))
+    result = client.logs("task-a", container="image-check", tail=1000, previous=True, since_seconds=30)
+    assert len(result) == 1048576
+    assert calls[0].url.path == f"/api/v1/namespaces/{NAMESPACE}/pods/task-a/log"
+    assert dict(calls[0].url.params) == {
+        "container": "image-check",
+        "tailLines": "1000",
+        "previous": "true",
+        "limitBytes": "1048576",
+        "sinceSeconds": "30",
+    }
+    for kwargs in ({"tail": 1001}, {"since_seconds": 86401}):
+        with pytest.raises(ValueError):
+            client.logs("task-a", container="image-check", **kwargs)
+    with pytest.raises(ValueError):
+        client.logs("../foreign", container="image-check")
+    assert len(calls) == 1
+
+
 def test_platform_ca_and_material_issuer_are_independent_file_settings(monkeypatch, tmp_path):
     ca = tmp_path / "platform-ca.crt"
     issuer = tmp_path / "material-issuer.key"
@@ -366,6 +388,7 @@ def test_absolute_log_window_uses_since_time_without_changing_its_meaning(client
         "storage-guard",
         "schema-init",
         "assembler",
+        "image-check",
     ],
 )
 def test_every_fixed_managed_container_has_bounded_scoped_logs(client_factory, container):
@@ -387,7 +410,16 @@ def test_every_fixed_managed_container_has_bounded_scoped_logs(client_factory, c
 
 @pytest.mark.parametrize(
     "container",
-    ["custom", "storage-guard-extra", "schema-init-extra", "ASSEMBLER", "", "../foreign", "app?container=foreign"],
+    [
+        "custom",
+        "storage-guard-extra",
+        "schema-init-extra",
+        "image-check-extra",
+        "ASSEMBLER",
+        "",
+        "../foreign",
+        "app?container=foreign",
+    ],
 )
 def test_unregistered_log_container_is_rejected_without_request(client_factory, container):
     """覆盖 AC: AC-03、AC-48、AC-52."""
@@ -426,8 +458,18 @@ def test_log_contract_covers_only_real_fixed_template_names(client_factory):
             material_secret="material-a",
             schema_plan=({"op": "create_table", "table": "items", "columns": []},),
         )
+        if purpose == "image-check":
+            plan = replace(
+                plan,
+                image=plan.helper_image,
+                mode="image",
+                command=("python", "-I", "-m", "runtime_manager.image_check"),
+                material_secret="",
+                schema_plan=(),
+                temporary_mb=256,
+            )
         spec = pod_template(plan)["spec"]
-        names.update(c["name"] for c in spec["initContainers"] + spec["containers"])
+        names.update(c["name"] for c in spec.get("initContainers", []) + spec["containers"])
     assert names == {
         "app",
         "transfer",
@@ -440,6 +482,7 @@ def test_log_contract_covers_only_real_fixed_template_names(client_factory):
         "storage-guard",
         "schema-init",
         "assembler",
+        "image-check",
     }
     calls = []
     client = client_factory(lambda request: calls.append(request) or httpx.Response(200, text="fixed log"))

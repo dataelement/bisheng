@@ -113,6 +113,26 @@ describe("model discovery interaction", () => {
       screen.getByRole("button", { name: "model.refreshModels" }),
     ).toBeEnabled();
   });
+  it.each([
+    [{ code: "ERR_NETWORK" }, "model.discoveryError_connection"],
+    [{ kind: "network" }, "model.discoveryError_connection"],
+    [{ code: "ECONNABORTED" }, "model.discoveryError_timeout"],
+    [{ kind: "timeout" }, "model.discoveryError_timeout"],
+    [{ message: "Network Error" }, "model.discoveryError_connection"],
+    [{ message: "timeout of 60000ms exceeded" }, "model.discoveryError_timeout"],
+    [{ httpStatus: 0 }, "model.discoveryError_connection"],
+    [{ response: { status: 504 } }, "model.discoveryError_timeout"],
+    [{ data: { reason: "failure" }, kind: "timeout" }, "model.discoveryError_timeout"],
+    [{ cause: { code: "ERR_NETWORK" } }, "model.discoveryError_connection"],
+  ] as const)("maps a browser transport failure %j to %s", async (failure, message) => {
+    vi.mocked(discoverModels).mockRejectedValue(failure);
+    render(<ModelDiscovery {...props()} />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(message);
+  });
   it("shows the rate-limit error inside the picker", async () => {
     vi.mocked(discoverModels).mockRejectedValue({ data: { reason: "rate_limit" } });
     render(<ModelDiscovery {...props()} />);
@@ -408,6 +428,38 @@ describe("progressive model discovery", () => {
       expect.objectContaining({ options: { workspace_id: "workspace-test" } }),
     );
     expect(screen.queryByLabelText("model.discoveryWorkspace")).toBeNull();
+  });
+
+  it("shows an adapter badge and the manual speech note", async () => {
+    vi.mocked(discoverModels).mockResolvedValue({
+      models: [
+        {
+          model_name: "image-model",
+          display_name: "Image",
+          model_type: null,
+          type_source: "unsupported",
+        },
+      ],
+    });
+    render(<ModelDiscovery {...props()} provider="qianfan" />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await screen.findByText("model.discoveryAdapterBadge");
+    expect(screen.getByText("model.discoverySpeechManual")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "image-model" })).toBeDisabled();
+    expect(screen.queryByText("model.unknownModelType")).toBeNull();
+  });
+
+  it("keeps Tencent catalog secrets out of the model dialog", async () => {
+    vi.mocked(discoverModels).mockRejectedValueOnce({
+      response: { data: { data: { reason: "credentials" } } },
+    });
+    render(<ModelDiscovery {...props()} provider="tencent" />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "model.discoveryError_credentials",
+    );
+    expect(screen.queryByLabelText("model.discoverySecretId")).toBeNull();
+    expect(screen.queryByLabelText("model.discoverySecretKey")).toBeNull();
   });
 
   it("shows required management credentials after an unsupported list route", async () => {

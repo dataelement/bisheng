@@ -13,9 +13,10 @@ from bisheng.dsh.domain.services.tool_results import normalize_result
 class ToolInvocationService:
     """Admission and result bounds; the caller owns the overall deadline."""
 
-    def __init__(self, tools, leases, limits=None):
+    def __init__(self, tools, leases, limits=None, *, activity_recorder=None):
         self.tools, self.leases = tools, leases
         self.limits = limits if limits is not None else ToolLimits()
+        self.activity_recorder = activity_recorder
 
     async def invoke(self, principal, tool_key, arguments):
         tenant_id = int(principal.tenant_id)
@@ -26,6 +27,8 @@ class ToolInvocationService:
                     tenant_id, int(principal.user_id), tool_key, arguments, self.limits
                 )
                 owner = await self.leases.acquire(tenant_id, tool_key, self.limits.max_concurrency)
+                if self.activity_recorder is not None:
+                    await self.activity_recorder(principal)
                 raw = await self.tools.execute(executor, arguments)
                 return {"tool": tool_key, "result": normalize_result(raw, self.limits.max_output_bytes)}
         finally:

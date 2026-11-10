@@ -371,6 +371,57 @@ def test_empty_env_default_does_not_ignore_other_empty_lists(template, plan, loc
     assert not allowed(policy(lambda _: plan), request(obj))
 
 
+@pytest.mark.parametrize("frozen_empty,submitted_empty", [(True, False), (False, True), (False, False)])
+def test_image_check_empty_init_containers_match_only_core_v1_omitempty(plan, frozen_empty, submitted_empty):
+    from runtime_manager.k8s_admission import template_projection
+    from runtime_manager.k8s_templates import PodPlan, pod_template
+
+    obj = pod_template(
+        PodPlan(
+            namespace=NAMESPACE,
+            app_id="app-a",
+            operation_id="operation-a",
+            resource_ref="resource-a",
+            node_id="node-a",
+            generation=1,
+            owner_epoch=1,
+            purpose="image-check",
+            platform="linux/amd64",
+            status_policy_revision="v1",
+            image="example/helper@sha256:" + "b" * 64,
+            helper_image="example/helper@sha256:" + "b" * 64,
+            command=("python", "-I", "-m", "runtime_manager.image_check"),
+            mode="image",
+            memory_mb=128,
+            cpu_millicores=100,
+            deadline_seconds=60,
+        )
+    )
+    frozen = copy.deepcopy(obj)
+    if frozen_empty:
+        frozen["spec"]["initContainers"] = []
+    plan.update(name=obj["metadata"]["name"], template=template_projection(frozen))
+    if submitted_empty:
+        obj["spec"]["initContainers"] = []
+    assert allowed(policy(lambda _: plan), request(obj))
+
+
+@pytest.mark.parametrize("change", ["removed", "empty", "null", "mapping", "mutated"])
+def test_empty_init_compatibility_never_waives_nonempty_or_malformed_init_containers(template, plan, change):
+    obj = copy.deepcopy(template)
+    if change == "removed":
+        obj["spec"].pop("initContainers")
+    elif change == "empty":
+        obj["spec"]["initContainers"] = []
+    elif change == "null":
+        obj["spec"]["initContainers"] = None
+    elif change == "mapping":
+        obj["spec"]["initContainers"] = {}
+    else:
+        obj["spec"]["initContainers"][0]["command"] = ["sh", "-c", "unapproved"]
+    assert not allowed(policy(lambda _: plan), request(obj))
+
+
 def terminal(template):
     obj = copy.deepcopy(template)
     obj["metadata"].update(uid=UID, resourceVersion="17", deletionTimestamp="2026-10-21T00:00:00Z")

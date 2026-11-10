@@ -3,10 +3,13 @@ import HeaderTitle from "./HeaderTitle";
 
 let mockChannel = "web";
 let mockPathname = "/c/123";
+let mockHostChatHeader = false;
+let mockNarrowViewport = true;
 jest.mock("~/hooks/useClientEnvironment", () => ({
   useClientEnvironment: () => ({
     channel: mockChannel,
-    layout: { isNarrowViewport: true },
+    capabilities: { hasHostChatHeader: mockHostChatHeader },
+    layout: { isNarrowViewport: mockNarrowViewport },
   }),
 }));
 jest.mock("~/hooks", () => ({
@@ -24,6 +27,13 @@ jest.mock("../Share/ShareChat", () => ({
   default: () => <button>Share</button>,
 }));
 
+beforeEach(() => {
+  mockChannel = "web";
+  mockPathname = "/c/123";
+  mockHostChatHeader = false;
+  mockNarrowViewport = true;
+});
+
 it("keeps title/share in narrow desktop chat where the web global top bar is absent", () => {
   mockChannel = "desktop";
   render(<HeaderTitle conversation={{ title: "Current chat" }} />);
@@ -38,4 +48,13 @@ it("lets the visible web or app compact top bar own the title/share", () => {
   mockPathname = "/app/123/456/5";
   view.rerender(<HeaderTitle conversation={{ title: "Current chat" }} />);
   expect(screen.queryByText("Current chat")).toBeNull();
+});
+
+it("does not bring back a fallback title bar when the mobile App rotates into a wide viewport", () => {
+  mockNarrowViewport = false;
+  const view = render(<HeaderTitle conversation={{ title: "Current chat" }} />);
+  expect(screen.getByText("Current chat")).toBeVisible();
+  mockHostChatHeader = true;
+  view.rerender(<HeaderTitle conversation={{ title: "Current chat" }} />);
+  expect(view.container).toBeEmptyDOMElement();
 });

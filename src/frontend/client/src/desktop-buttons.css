@@ -1,0 +1,74 @@
+/* Desktop-only mapping to the generic DSH ui-primitives/Button.
+ * Maintenance notes and source map: ../docs/dsh-adaptation.md.
+ * Prefer host aliases when available; fallbacks match DSH's light/dark palette.
+ * The existing primary marker also covers legacy actions and portalled dialogs.
+ */
+:root[data-bisheng-surface='desktop'] {
+  --dsh-primary-fill: var(--dsw-alias-button-primary-fill, rgb(15 17 21));
+  --dsh-primary-foreground: var(--dsw-alias-label-primary-foreground, rgb(255 255 255));
+  --dsh-primary-hover: var(--dsw-alias-button-primary-hover, rgb(67 69 74));
+}
+
+:root[data-bisheng-surface='desktop']:is(.dark, [data-dsh-host-theme='dark']) {
+  --dsh-primary-fill: var(--dsw-alias-button-primary-fill, rgb(249 250 251));
+  --dsh-primary-foreground: var(--dsw-alias-label-primary-foreground, rgb(15 17 21));
+  --dsh-primary-hover: var(--dsw-alias-button-primary-hover, rgb(235 238 242));
+}
+
+/* State specificity intentionally beats the existing green-theme !important rules.
+ * Native disabled buttons keep their primary palette and fade as a whole.
+ */
+:root[data-bisheng-surface='desktop'] .btn-brand-primary:not(:disabled),
+:root[data-bisheng-surface='desktop'] .btn-brand-primary:disabled {
+  background-color: var(--dsh-primary-fill) !important;
+  border-color: var(--dsh-primary-fill) !important;
+  color: var(--dsh-primary-foreground) !important;
+  --tw-ring-color: var(--dsh-primary-fill);
+}
+
+:root[data-bisheng-surface='desktop'] .btn-brand-primary:not(.rounded-full) {
+  border-radius: var(--dsw-radius-md, 12px);
+}
+
+/* Compact controls use DSH's small corner token. Keep the existing control
+ * dimensions and typography so adjacent Bisheng controls remain aligned.
+ * Page-specific DSH toolbar capsules are not part of the generic Button.
+ */
+:root[data-bisheng-surface='desktop'] .btn-brand-primary.h-6:not(.rounded-full) {
+  border-radius: var(--dsw-radius-sm, 8px);
+}
+
+/* DSH's theme changes the corner curve as well as its radius. The property
+ * does not inherit; retain ordinary circular corners for explicit circles.
+ */
+@supports (corner-shape: superellipse(1.5)) {
+  :root[data-bisheng-surface='desktop'] .btn-brand-primary:not(.rounded-full) {
+    corner-shape: var(--dsw-corner-shape, superellipse(1.5));
+  }
+}
+
+:root[data-bisheng-surface='desktop'] .btn-brand-primary:not(:disabled) svg,
+:root[data-bisheng-surface='desktop'] .btn-brand-primary:disabled svg {
+  color: inherit !important;
+}
+
+:root[data-bisheng-surface='desktop'] .btn-brand-primary:disabled,
+:root[data-bisheng-surface='desktop'] .btn-brand-primary[aria-disabled='true'] {
+  opacity: 0.4;
+}
+
+:root[data-bisheng-surface='desktop'] .btn-brand-primary[data-menu-open]:not(:disabled):not([aria-disabled='true']) {
+  background-color: var(--dsh-primary-hover) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root[data-bisheng-surface='desktop'] .btn-brand-primary:not(:disabled):not([aria-disabled='true']):hover {
+    background-color: var(--dsh-primary-hover) !important;
+  }
+}
+
+@media not ((hover: hover) and (pointer: fine)) {
+  :root[data-bisheng-surface='desktop'] .btn-brand-primary:not(:disabled):not([aria-disabled='true']):active {
+    background-color: var(--dsh-primary-hover) !important;
+  }
+}

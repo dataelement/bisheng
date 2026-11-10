@@ -2775,7 +2775,9 @@ class KnowledgeService(KnowledgeUtils):
             object_name = file.object_name
             if not object_name:
                 raise NotFoundError(msg="file has no stored object")
-            return minio_client.get_share_link_sync(object_name)
+            share_url = minio_client.get_share_link_sync(object_name)
+            cls._audit_download(login_user, knowledge, len(db_files))
+            return share_url
 
         # ── 4. Multi-file: pack into ZIP, upload to tmp bucket, return URL ───────
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
@@ -2815,7 +2817,23 @@ class KnowledgeService(KnowledgeUtils):
                 expire_days=7,
             )
 
+        cls._audit_download(login_user, knowledge, len(db_files))
         return share_url
+
+    @staticmethod
+    def _audit_download(login_user, knowledge, count: int) -> None:
+        from bisheng.api.services.audit_log import AuditLogService
+
+        AuditLogService.record(
+            operator_id=login_user.user_id,
+            operator_name=login_user.user_name,
+            system_id="knowledge",
+            event_type="download_file",
+            object_type="knowledge",
+            object_id=str(knowledge.id),
+            object_name=knowledge.name,
+            note=f"来源=文档库；文件={count}；结果=成功",
+        )
 
     # ──────────────────────────── Tags ───────────────────────────────────
     @classmethod

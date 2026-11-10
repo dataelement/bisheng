@@ -1,4 +1,5 @@
 // src/state/linsightState.ts
+import type { FailureInfo } from '~/utils/failureInfo';
 import { atom, atomFamily, selectorFamily } from 'recoil';
 import { ExtendedFile } from '~/common';
 
@@ -90,6 +91,7 @@ export type LinsightInfo = {
         error_code?: number;
         error_type?: string;
         detail?: string;
+        failure_info?: FailureInfo;
     };
     summary: string;
     file_list: any[];
@@ -137,6 +139,7 @@ export type LinsightRoundSnapshot = {
         error_code?: number;
         error_type?: string;
         detail?: string;
+        failure_info?: FailureInfo;
     };
 };
 
@@ -191,6 +194,20 @@ export function isLinsightParked(info: { sessionSteps?: any[]; tasks?: any[] }):
 }
 
 /**
+ * Whether one linsight session still drives the running spinner: startup through
+ * execution, except a park waiting on the user's answer (see conversationTaskRunningState).
+ */
+export function isLinsightTaskRunning(info: LinsightInfo): boolean {
+    const s = info.status;
+    const running =
+        s === SopStatus.NotStarted ||
+        s === SopStatus.SopGenerating ||
+        s === SopStatus.SopGenerated ||
+        s === SopStatus.Running;
+    return running && !isLinsightParked(info);
+}
+
+/**
  * Whether a conversation (chat_id) currently owns a task-mode session that is
  * still executing — drives the per-conversation running spinner in the sidebar
  * list. A linsight session stores its owning chat_id in `session_id` (see
@@ -220,16 +237,7 @@ export const conversationTaskRunningState = selectorFamily<boolean, string>({
             if (!conversationId) return false;
             const map = get(linsightMapState);
             for (const info of map.values()) {
-                if (info.session_id !== conversationId) continue;
-                const s = info.status;
-                const running =
-                    s === SopStatus.NotStarted ||
-                    s === SopStatus.SopGenerating ||
-                    s === SopStatus.SopGenerated ||
-                    s === SopStatus.Running;
-                if (running && !isLinsightParked(info)) {
-                    return true;
-                }
+                if (info.session_id === conversationId && isLinsightTaskRunning(info)) return true;
             }
             return false;
         },

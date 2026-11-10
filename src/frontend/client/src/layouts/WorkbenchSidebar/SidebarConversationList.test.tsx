@@ -15,7 +15,7 @@ jest.mock('~/hooks', () => ({
 jest.mock('~/hooks/queries/data-provider', () => ({
   useConversationsInfiniteQuery: () => ({ data: mockData, fetchNextPage: mockFetchNextPage, hasNextPage: true, isFetchingNextPage: false }),
 }));
-jest.mock('./projectsStore', () => ({ useMockProjectChats: () => mockProjects }));
+jest.mock('./projectsStore', () => ({ useProjectMemberships: () => mockProjects }));
 jest.mock('~/components/Conversations/Convo', () => ({ __esModule: true, default: () => <div>First chat</div> }));
 jest.mock('~/components/svg', () => ({ Spinner: () => <span>Loading</span> }));
 jest.mock('~/utils', () => ({ cn: (...values: string[]) => values.filter(Boolean).join(' ') }));

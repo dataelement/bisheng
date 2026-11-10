@@ -37,9 +37,11 @@ bisheng-milvus-standalone
   └── depends_on: minio
 ```
 
-### 附加 Compose 文件
+### 可选服务
 
-除主编排文件外，项目还提供三个可选编排文件，按需独立启动：
+模型微调 `bisheng-ft` 已恢复为主编排文件的 `ft` profile（默认关闭），通过 `bash docker/install.sh --ft` 启用。沿用 `ft_server` 服务名、NVIDIA GPU 预留和旧版模型/训练输出挂载路径；配置及平台服务登记见 [部署说明](../../docker/README.md#模型微调-bisheng-ft可选)。
+
+附加 Compose 文件：
 
 | 文件 | 容器名 | 镜像 | 端口 | 用途 |
 |------|--------|------|------|------|
@@ -393,6 +395,21 @@ real-account acceptance are recorded separately.
 - **步骤 4 说明**：需要完整 app context（写技能 bundle）。**不调用 LLM**——技能描述取 SOP 原描述，缺失时用 SOP 名称兜底（技能描述为必填，不会留空）。产出 JSON 迁移摘要（成功/跳过/失败，**运维产物，无管理页报告界面**），失败 / 超大 SOP 项需人工处理（拆分后经管理页重建）。`linsight_sop` 原表保留归档、不删。
 - **幂等**：四步均可安全重跑。步骤 2/3 重复启动是 no-op；步骤 4 借 `metadata.sop-id` 识别已迁移项并覆盖自身 bundle，不会重复产生带后缀的技能。
 - 步骤 4 单租户灰度可加 `--tenant-id <id>`。
+
+### v3.0 · 工作台模型配置升级为「用户可选模型」
+
+从 < v3.0 升级时，旧工作台配置（`linsight_llm`）有两项要带进 3.0 的系统模型设置。两步都在服务启动时自动执行（`main.lifespan`，幂等，失败只记日志、不阻塞启动）；`scripts/backfill_workbench_upgrade.py` 仅用于 dry-run 核对或手动补跑（`--apply` 写入）。
+
+| # | 步骤 | 触发方式 | 不执行的后果 |
+|---|------|---------|-------------|
+| 1 | **日常模式默认模型**：`chat_default_model_id` 缺失或为 null 的配置行，设为模型列表的最后一个（2.x 客户端未选模型时用它，3.0 客户端没有默认值时也回退到它） | ✅ 启动自动 | 后台默认模型显示为空；开启 DSH 时默认模型变成可选列表的第一个，与升级前不一致 |
+| 2 | **用户可选模型可见范围**：每个活跃租户的工作台模型设为「所有成员可见」；每租户只执行一次（审计 `migration:workbench-visibility-v1`），之后管理员的修改不会被覆盖 | ✅ 启动自动 | 开启 DSH 后这些模型对所有人不可见，日常模式和任务模式的模型下拉为空 |
+
+要点：
+
+- 已有任何 `dsh_model_visibility` 记录的租户，启动时跳过步骤 2：这说明管理员已在用 DSH 可见范围，未配置的模型可能是有意关闭的。如果这类租户确实是升级后漏配，运行 `backfill_workbench_upgrade.py --apply --tenant-id <id> --include-configured-tenants`，只补没有记录的模型，已配置的保持原样。
+- 继承 Root 配置的子租户，按继承到的模型列表各自写入本租户的可见范围。
+- 存有旧版 DSH 授权（`dsh_user_policy` / `dsh_subject_policy`）且尚未导入统一积分的租户，步骤 2 会跳过：先运行 `scripts/dsh/migrate_unified_credits.py --apply` 导入旧授权，再运行 `backfill_workbench_upgrade.py --apply` 补齐。
 
 ### v3.0 · 灵思技能 bundle 迁至对象存储
 

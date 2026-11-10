@@ -62,15 +62,18 @@ export function OrgFilter({ value, onChange, tenantId, className }: OrgFilterPro
           type="button"
           aria-label={t('log.org.placeholder')}
           className={cn(
-            'flex h-9 w-[200px] items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm',
-            'hover:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary',
+            'input-touch-hit relative flex h-8 w-[200px] min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-md border border-border-base bg-bg-page px-[11px] text-left text-[length:var(--font-size-3)] font-normal leading-[var(--line-height-3)] text-text-1 outline-none transition-colors',
+            'hover:border-border-deep focus-visible:border-border-deep focus-visible:shadow-focus data-[state=open]:border-border-deep data-[state=open]:shadow-focus',
             className,
           )}
         >
-          <span className={cn('truncate', !count && 'text-muted-foreground')}>
+          <span className={cn('min-w-0 flex-1 truncate', !count && 'text-text-3')}>
             {count ? t('log.org.selected', { count }) : t('log.org.placeholder')}
           </span>
-          <Outlined.Down size={14} aria-hidden className="shrink-0 text-muted-foreground" />
+          <Outlined.Down
+            aria-hidden
+            className={cn('size-4 shrink-0 text-text-3 transition-transform', open && 'rotate-180')}
+          />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="flex w-[360px] flex-col gap-3 p-3">

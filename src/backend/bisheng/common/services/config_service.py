@@ -100,7 +100,7 @@ def read_from_conf(file_path: str) -> str:
     return content
 
 
-def parse_key(keys: list[str], setting_str: str = None, include_key: bool = False) -> str:
+def parse_key(keys: list[str], setting_str: str | None = None, include_key: bool = False) -> str:
     # Setujukey  Back  yamlConfigure invalueAll strings, including comments
     if not setting_str:
         setting_str = read_from_conf(config_file)
@@ -173,6 +173,11 @@ class ConfigService(Settings):
 
         with open(file_path, encoding="utf-8") as f:
             settings_dict = yaml.safe_load(f)
+
+        if "admin" in settings_dict:
+            # Old deployment files must remain loadable, but cannot create users.
+            settings_dict.pop("admin")
+            logger.warning("Ignoring retired admin bootstrap setting; the first registered user becomes administrator")
 
         known_settings = {}
         for key, value in settings_dict.items():

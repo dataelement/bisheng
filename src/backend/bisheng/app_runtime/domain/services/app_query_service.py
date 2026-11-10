@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from bisheng.app_publish.domain.models.app_deployment import AppDeploymentDao
 from bisheng.app_runtime.domain.constants import AppState
 from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
 from bisheng.app_runtime.domain.services.orchestrator_client import orchestrator_client
@@ -105,6 +106,7 @@ class AppQueryService:
         app = await cls._load_visible(app_id, actor)
         async with get_async_db_session() as session:
             rows = await AppVersionDao.alist_by_app(session, app.id)
+            outcomes = await AppDeploymentDao.astatuses_by_version(session, app.id, [row.id for row in rows])
         from bisheng.app_publish.application.version_review import version_approval_states
 
         approval_states = await version_approval_states(app.id, app.tenant_id, [row.id for row in rows])
@@ -116,6 +118,7 @@ class AppQueryService:
                 "kind": row.kind,
                 "terminal_state": row.terminal_state,
                 "approval_status": approval_states.get(row.id),
+                "deployment_status": outcomes.get(row.id),
                 "submitted_at": row.submitted_at,
                 "is_current": row.id == app.current_version_id,
                 "is_pending": row.id == app.pending_version_id,

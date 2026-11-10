@@ -17,6 +17,8 @@ import { ArticleList } from "./ArticleList/ArticleList";
 import { ArticleDetail } from "./Article/ArticleDetail";
 import { useResizablePanel } from "./hooks/useResizablePanel";
 import { cn } from "~/utils";
+import { MODULE_PAGE_DESKTOP_FRAME } from "~/components/ModuleHome";
+import desktopLayout from "./ChannelLayout.module.css";
 
 interface ChannelLayoutProps {
   channel: Channel;
@@ -34,7 +36,7 @@ const MIN_RIGHT_WIDTH = 480;
 // Geometry of ArticleList's two-column browse grid. The default split width is
 // derived from these so the left column's article width stays identical whether
 // the detail panel is open or closed. Keep in sync with ArticleList: the grid
-// wrapper uses px-6 gutters, the row grid uses gap-x-4 with a 1px divider column.
+// wrapper uses px-6 gutters in the browser; desktop reading has a 24px end gutter.
 const LIST_GUTTER = 24; // px-6 horizontal padding on each side of the list
 const GRID_GAP = 16; // gap-x-4 between grid columns
 const GRID_DIVIDER = 1; // 1px vertical divider column between the two cards
@@ -43,14 +45,18 @@ const GRID_DIVIDER = 1; // 1px vertical divider column between the two cards
  * Width the left list should take so its single column matches the FIRST column
  * of the two-column browse grid.
  *
- * Two-column card width = (containerWidth − 2·gutter − 2·gap − divider) / 2.
- * In split mode the list keeps the same px-6 gutters, so the panel width is
- * that card width plus both gutters back.
+ * Card width = (browse content width − 2·gap − divider) / 2. The browser's
+ * content uses 24px gutters; desktop browsing uses the shared 960px column.
+ * The measured container already excludes desktop page gutters. Reading adds
+ * back the browser's two gutters, or the desktop list's one divider-side gutter.
  */
-const getDefaultLeftWidth = (containerWidth: number) => {
-  const columnWidth =
-    (containerWidth - LIST_GUTTER * 2 - GRID_GAP * 2 - GRID_DIVIDER) / 2;
-  return columnWidth + LIST_GUTTER * 2;
+const getDefaultLeftWidth = (containerWidth: number, desktop = false) => {
+  // Only the shared CSS frame owns outer gutters; do not subtract them twice.
+  const browseContentWidth = desktop
+    ? Math.min(960, containerWidth)
+    : containerWidth - LIST_GUTTER * 2;
+  const columnWidth = (browseContentWidth - GRID_GAP * 2 - GRID_DIVIDER) / 2;
+  return columnWidth + LIST_GUTTER * (desktop ? 1 : 2);
 };
 
 export function ChannelLayout({
@@ -97,7 +103,7 @@ export function ChannelLayout({
     minRightWidth: MIN_RIGHT_WIDTH,
     containerRef,
     enabled: Boolean(selectedArticle),
-    defaultLeftWidth: getDefaultLeftWidth,
+    defaultLeftWidth: (width) => getDefaultLeftWidth(width, runtimeChannel === "desktop"),
   });
 
   const handleArticleSelect = useCallback(
@@ -177,103 +183,113 @@ export function ChannelLayout({
 
   return (
     <div
-      ref={containerRef}
-      className="relative flex h-full min-h-0 min-w-0 w-full flex-1 overflow-hidden bg-white"
+      className={cn(
+        MODULE_PAGE_DESKTOP_FRAME,
+        desktopLayout.frame,
+        selectedArticle && desktopLayout.expanded,
+        "relative flex h-full min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden bg-white",
+      )}
     >
-      {/* Transparent overlay during drag — prevents children from stealing mouse events */}
-      {isResizing && splitDetail && (
-        <div className="fixed inset-0 z-50 cursor-col-resize" />
-      )}
-      {/* The list uses full width until both columns can fit. */}
       <div
-        key="article-list"
-        hidden={!canSplit && Boolean(selectedArticle)}
-        style={
-          splitDetail
-            ? { width: `${leftWidth}px` }
-            : !canSplit && selectedArticle
-              ? { display: "none" }
-              : undefined
-        }
-        className={cn(
-          "flex min-h-0 h-full min-w-0 flex-col overflow-hidden",
-          splitDetail ? "shrink-0" : "w-full flex-1",
-        )}
+        ref={containerRef}
+        className="relative flex h-full min-h-0 min-w-0 w-full flex-1 overflow-hidden bg-white"
       >
-        <ArticleList
-          channel={channel}
-          onArticleSelect={handleArticleSelect}
-          selectedArticleId={selectedArticle?.id}
-          onChannelSelect={onChannelSelect}
-          onChannelSettings={onChannelSettings}
-          onGoChannelSquare={onGoChannelSquare}
-          onCreateChannel={onCreateChannel}
-        />
-      </div>
-
-      {/* Splitter only when the selected detail fits beside the list. */}
-      {splitDetail && (
-        <div className="relative w-px min-w-[1px] max-w-[1px] shrink-0">
-          <div
-            onMouseDown={startResizing}
-            className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
-          >
-            <div className="pointer-events-none w-px self-stretch bg-fill-3 transition-[width,background-color] duration-150 group-hover:w-[2px] group-hover:bg-[#999999] group-active:w-[2px] group-active:bg-[#999999]" />
-          </div>
-        </div>
-      )}
-
-      {selectedArticle && (
+        {/* Transparent overlay during drag — prevents children from stealing mouse events */}
+        {isResizing && splitDetail && (
+          <div className="fixed inset-0 z-50 cursor-col-resize" />
+        )}
+        {/* The list uses full width until both columns can fit. */}
         <div
-          key="article-detail"
+          key="article-list"
+          hidden={!canSplit && Boolean(selectedArticle)}
+          style={
+            splitDetail
+              ? { width: `${leftWidth}px` }
+              : !canSplit && selectedArticle
+                ? { display: "none" }
+                : undefined
+          }
           className={cn(
-            "relative h-full min-w-0 flex-1 bg-white",
-            !canSplit && "absolute inset-0 z-[35] flex flex-col",
+            "flex min-h-0 h-full min-w-0 flex-col overflow-hidden",
+            splitDetail ? "shrink-0" : "w-full flex-1",
           )}
         >
-          {canSplit && (
-            <NavToggle
-              navVisible={true}
-              onToggle={() => setSelectedArticle(null)}
-              isHovering={isToggleHovering}
-              setIsHovering={setIsToggleHovering}
-              side="right"
-              className="absolute top-1/2 z-[10]"
-            />
-          )}
-          <ArticleDetail
-            article={selectedArticle}
-            loading={detailLoading}
-            compactMode={!canSplit}
-            preserveAiDraft
-            onBack={!canSplit ? () => setSelectedArticle(null) : undefined}
-            onFullScreen={() => onFullScreen?.(selectedArticle, false)}
-            onAiAssistant={() =>
-              canSplit
-                ? onFullScreen?.(selectedArticle, true)
-                : setH5AiAssistantOpen(true)
-            }
+          <ArticleList
+            channel={channel}
+            onArticleSelect={handleArticleSelect}
+            selectedArticleId={selectedArticle?.id}
+            onChannelSelect={onChannelSelect}
+            onChannelSettings={onChannelSettings}
+            onGoChannelSquare={onGoChannelSquare}
+            onCreateChannel={onCreateChannel}
           />
-          {h5AiAssistantOpen && (
-            <div
-              className="absolute inset-0 z-[40] flex flex-col bg-white"
-              role="dialog"
-              aria-modal="true"
-              aria-label={localize("com_subscription.ai_assistant")}
-            >
-              <AiAssistantPanel
-                features={{
-                  tools: false,
-                  knowledgeBase: false,
-                  fileUpload: false,
-                }}
-                articleDocId={selectedArticle.id}
-                onClose={() => setH5AiAssistantOpen(false)}
-              />
-            </div>
-          )}
         </div>
-      )}
+
+        {/* Splitter only when the selected detail fits beside the list. */}
+        {splitDetail && (
+          <div className="relative w-px min-w-[1px] max-w-[1px] shrink-0">
+            <div
+              onMouseDown={startResizing}
+              className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
+            >
+              <div className="pointer-events-none w-px self-stretch bg-fill-3 transition-[width,background-color] duration-150 group-hover:w-[2px] group-hover:bg-[#999999] group-active:w-[2px] group-active:bg-[#999999]" />
+            </div>
+          </div>
+        )}
+
+        {selectedArticle && (
+          <div
+            key="article-detail"
+            className={cn(
+              splitDetail && desktopLayout.detailPane,
+              "relative h-full min-w-0 flex-1 bg-white",
+              !canSplit && "absolute inset-0 z-[35] flex flex-col",
+            )}
+          >
+            {canSplit && (
+              <NavToggle
+                navVisible={true}
+                onToggle={() => setSelectedArticle(null)}
+                isHovering={isToggleHovering}
+                setIsHovering={setIsToggleHovering}
+                side="right"
+                className="absolute top-1/2 z-[10]"
+              />
+            )}
+            <ArticleDetail
+              article={selectedArticle}
+              loading={detailLoading}
+              compactMode={!canSplit}
+              preserveAiDraft
+              onBack={!canSplit ? () => setSelectedArticle(null) : undefined}
+              onFullScreen={() => onFullScreen?.(selectedArticle, false)}
+              onAiAssistant={() =>
+                canSplit
+                  ? onFullScreen?.(selectedArticle, true)
+                  : setH5AiAssistantOpen(true)
+              }
+            />
+            {h5AiAssistantOpen && (
+              <div
+                className="absolute inset-0 z-[40] flex flex-col bg-white"
+                role="dialog"
+                aria-modal="true"
+                aria-label={localize("com_subscription.ai_assistant")}
+              >
+                <AiAssistantPanel
+                  features={{
+                    tools: false,
+                    knowledgeBase: false,
+                    fileUpload: false,
+                  }}
+                  articleDocId={selectedArticle.id}
+                  onClose={() => setH5AiAssistantOpen(false)}
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

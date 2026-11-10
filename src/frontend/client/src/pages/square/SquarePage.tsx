@@ -5,6 +5,7 @@ import { MODULE_HOME_COLUMN, MODULE_HOME_PILL } from '~/components/ModuleHome';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
+import bannerStyles from './SquareBanner.module.css';
 import { useSquareTypes } from './useSquareTypes';
 import type { SquareType } from './squarePaths';
 
@@ -19,8 +20,7 @@ const PANES: Record<SquareType, ReturnType<typeof lazy>> = {
 /**
  * The discover side of every workbench module behind one sidebar entry, so the
  * module homes are only ever "mine". The tabs are the modules this account may open;
- * each tab hosts that module's existing square unchanged (its own banner, search, cards
- * and preview drawer).
+ * each tab hosts that module's search, cards and preview drawer below a shared banner layout.
  */
 export function SquarePage() {
   const localize = useLocalize();
@@ -69,7 +69,7 @@ export function SquarePage() {
           </div>
         </div>
       )}
-      <div className="min-h-0 w-full flex-1 overflow-hidden">
+      <div className={cn('min-h-0 w-full flex-1 overflow-hidden', types.length > 1 && bannerStyles.scatterArtwork)}>
         <Suspense
           fallback={
             <div className="flex h-full w-full items-center justify-center">

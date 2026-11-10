@@ -43,7 +43,7 @@ metadata:
 | 禁止 | `pip install`、`npm install`、任何联网假设（生产多为离线内网） |
 | 工作目录 | 执行器 cwd = 工作区根，**一律用相对路径** |
 | `output/` | 唯一交付区 |
-| `scratch/` | 中间产物区，**不会交付**，需自己 `os.makedirs` |
+| `scratch/` | 中间产物区，**不会交付**，需自己 `os.makedirs`。试验表宽、试排版之类的调试文件也存这里，`output/` 里的每个文件用户都会看到 |
 | `uploads/` | 用户上传的原件在这里 |
 | `skills/bisheng-docx/` | 本技能包，脚本和参考资料在这里，只读 |
 | 绝对禁止 | 写 `/output/xxx.docx` 这种带前导斜杠的路径 —— 文件被静默丢弃，用户拿不到 |
@@ -265,7 +265,7 @@ P11 一级标题、P12 正文、P20 结束语、P22 附件。说明性文字（�
 ```python
 import sys, os
 sys.path.insert(0, "skills/bisheng-docx/scripts")
-from docx_helpers import clone_paragraph, copy_table, delete_paragraph
+from docx_helpers import clone_paragraph, copy_table, delete_paragraph, fill_label_value
 from docx import Document
 
 os.makedirs("output", exist_ok=True)
@@ -273,7 +273,9 @@ doc = Document("uploads/模板.docx")             # ★ 底稿是参照文档：
 src = Document("uploads/源文档.docx")
 P = doc.paragraphs                               # 段落号和 inspect 的 P 号一致
 proto = {"title": P[9], "h1": P[11], "body": P[12]}
-template_paras = list(P)                         # 先记下模板原有段落，最后删掉
+keep = {3, 4, 5, 6}                              # 信息栏 P3–P6 留在原位
+template_paras = [p for i, p in enumerate(P) if i not in keep]   # 其余模板段落最后删掉
+fill_label_value(P[3], "科技部")                  # 原位填值：只换冒号后的文字，行首空格不动
 
 cur = P[-1]                                      # 新内容接在模板末尾
 cur = clone_paragraph(proto["title"], "智能单据审核场景交流", after=cur)
@@ -281,7 +283,7 @@ cur = clone_paragraph(proto["h1"], "一、交流及测试内容", after=cur)
 cur = clone_paragraph(proto["body"], "本次选取……", after=cur)
 cur = copy_table(src.tables[0], after=cur, font="仿宋", size_pt=16)   # 表格从源文档搬，字体按模板正文
 
-for p in template_paras:                          # 要保留的模板段落（如信息栏）别放进这个列表
+for p in template_paras:
     delete_paragraph(p)
 doc.save("output/xxx.docx")
 print("saved")
@@ -289,6 +291,10 @@ print("saved")
 
 - `clone_paragraph(proto, text, after=)` 复制原型段落的段落格式和首个有字 run 的字体，换上新文字，
   并补回原型的行首空格。**一级标题、正文、结束语各用各的原型**，不要全用正文段去套。
+- 保留在原位的模板「标签：值」行（主办部门、撰稿人、核稿人、完成日期这类信息栏）用
+  `fill_label_value(P[3], "信息技术部")` 填值：它只换冒号后面的文字，冒号前连同行首空格原样保留。
+  ❌ 不要写 `run.text = "核 稿 人：…"`，也不要清空 run 再 `add_run`。模板靠行首空格把信息栏排到右侧，
+  这些空格常和标签在同一个 run 里，整体覆盖会把空格删掉，这一行就退回左边。
 - `copy_table(table, after=, font=, size_pt=)` 跨文档复制表格；`font` / `size_pt` 填参照文档正文的值。
 - ❌ 这条路线里**不要调** `apply_chinese_defaults`、`setup_page`、`add_body`、`add_heading_cn`、
   `add_gongwen_title`、`add_table`：它们都按版式档写字体和页边距，会把模板的版式冲掉。
@@ -302,7 +308,8 @@ r = subprocess.run([sys.executable, "skills/bisheng-docx/scripts/inspect_docx.py
 ```
 
 带 `--reference` 时体检不套版式档，只报「页边距不一致」「某段的字体/字号/加粗/行距组合在参照文档里
-找不到」这类差异。逐条对照参照文档的同类段落改掉。
+找不到」「信息栏的行首空格或对齐和参照文档不一致」这类差异。逐条对照参照文档的同类段落改掉。
+表格宽度以参照文档里最宽的表为上限：不超过它的表不报 ERROR，模板自带的表不用改宽度。
 
 ## 6. 交付前体检（必做）
 

@@ -670,6 +670,20 @@ def get_file_bbox(
     return resp_200(data=res)
 
 
+def _audit_qa(login_user: UserPayload, event_type: str, knowledge_id: int, note: str) -> None:
+    from bisheng.api.services.audit_log import AuditLogService
+
+    AuditLogService.record(
+        operator_id=login_user.user_id,
+        operator_name=login_user.user_name,
+        system_id="knowledge",
+        event_type=event_type,
+        object_type="knowledge",
+        object_id=str(knowledge_id),
+        note=note,
+    )
+
+
 @router.post("/qa/add", status_code=200)
 def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Add knowledge base information."""
@@ -681,7 +695,13 @@ def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(Use
     if (db_q and not QACreate.id) or (db_q and QACreate.id and db_q.id != QACreate.id):
         raise KnowledgeQAError.http_exception()
 
-    add_qa(db_knowledge=db_knowledge, data=QACreate)
+    saved = add_qa(db_knowledge=db_knowledge, data=QACreate)
+    _audit_qa(
+        login_user,
+        "update_qa" if QACreate.id else "create_qa",
+        db_knowledge.id,
+        f"库={db_knowledge.id}；条目={getattr(saved, 'id', QACreate.id)}；来源=页面；结果=成功",
+    )
     return resp_200()
 
 
@@ -696,6 +716,7 @@ def qa_status_switch(
     qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     if qa_db.status == status:
         return resp_200()
+    previous_status = qa_db.status
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_db.knowledge_id)
 
     new_qa_db = knowledge_imp.qa_status_change(qa_db, status, db_knowledge)
@@ -704,6 +725,12 @@ def qa_status_switch(
     if new_qa_db.status != status:
         # Description state switch failed
         return resp_500(message=new_qa_db.remark)
+    _audit_qa(
+        login_user,
+        "enable_qa" if status == QAStatus.ENABLED.value else "disable_qa",
+        qa_db.knowledge_id,
+        f"库={qa_db.knowledge_id}；条目={id}；原状态={previous_status}；目标状态={status}；结果=成功",
+    )
     return resp_200()
 
 
@@ -735,6 +762,12 @@ def qa_append(
     for qa in qa_list:
         qa.questions.append(question)
         knowledge_imp.add_qa(knowledge, qa)
+    _audit_qa(
+        login_user,
+        "update_qa",
+        knowledge.id,
+        f"库={knowledge.id}；数量={len(qa_list)}；来源=相似问；字段=问题；结果=成功",
+    )
     return resp_200()
 
 
@@ -747,6 +780,7 @@ def qa_delete(*, ids: list[int] = Body(embed=True), login_user: UserPayload = De
 
     knowledge_imp.delete_vector_data(knowledge, ids)
     QAKnoweldgeDao.delete_batch(ids)
+    _audit_qa(login_user, "delete_qa", knowledge.id, f"库={knowledge.id}；数量={len(ids)}；来源=页面；结果=成功")
     telemetry_service.log_event_sync(
         user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE, trace_id=trace_id_var.get()
     )
@@ -797,6 +831,7 @@ async def get_export_url(
 
     if keyword:
         question = keyword
+    has_filter = any(value is not None and value != "" for value in (question, answer, status))
 
     page_num = 1
     total_num = 0
@@ -840,6 +875,13 @@ async def get_export_url(
         if len(qa_list) < page_size or total_num >= total_count:
             break
 
+    filtered = "有" if has_filter else "无"
+    _audit_qa(
+        login_user,
+        "export_qa",
+        qa_knowledge_id,
+        f"库={qa_knowledge_id}；数量={total_num}；筛选={filtered}；结果=成功",
+    )
     return resp_200({"file_list": file_list})
 
 
@@ -903,6 +945,7 @@ def post_import_file(
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
     insert_result = []
+    imported_count = 0
     error_result = []
     have_question = []
     for file_url in file_list:
@@ -942,6 +985,7 @@ def post_import_file(
                 insert_data.append(QACreate)
                 all_questions = all_questions | tmp_questions
         result = QAKnoweldgeDao.batch_insert_qa(insert_data)
+        imported_count += len(result)
 
         telemetry_service.log_event_sync(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE, trace_id=trace_id_var.get()
@@ -953,6 +997,12 @@ def post_import_file(
 
         error_result.append(have_data)
 
+    _audit_qa(
+        login_user,
+        "create_qa",
+        qa_knowledge_id,
+        f"库={qa_knowledge_id}；数量={imported_count}；来源=导入；结果=成功",
+    )
     return resp_200({"errors": error_result})
 
 

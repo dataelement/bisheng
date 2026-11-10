@@ -694,6 +694,7 @@ function AssistantBubble({
                         // notice + Retry (re-sends the last user message via regenerate),
                         // never the red error bubble.
                         <ServiceBusyNotice
+                            failureInfo={message.failureInfo}
                             desc={
                                 hasAnswerBody
                                     ? errorNotice
@@ -707,7 +708,7 @@ function AssistantBubble({
                         // is what matters; the specific reason would be noise, and
                         // the static attention mark (not the load gauge) says this
                         // one won't clear by waiting.
-                        <ServiceBusyNotice desc={errorNotice} icon="attention" />
+                        <ServiceBusyNotice failureInfo={message.failureInfo} desc={errorNotice} icon="attention" />
                     ) : (
                         // Terminal failure with no answer: the same classified card
                         // task mode uses (title + explanation per error_type, raw
@@ -715,6 +716,8 @@ function AssistantBubble({
                         // block. With only a plain backend line to show, the card is
                         // just the title plus that line.
                         <ChatErrorCard
+                            errorCode={message.errorCode}
+                            failureInfo={message.failureInfo}
                             errorType={resolvedErrorType}
                             detail={message.errorDetail}
                             fallbackMessage={isPlainFailure ? undefined : message.errorText || regularContent}

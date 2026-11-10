@@ -14,6 +14,7 @@ from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.services.llm_error_classifier import ErrorType, classify_for_event, unwrap
 from bisheng.core.cache.utils import CACHE_DIR, create_cache_folder_async, resolve_inside
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
@@ -528,7 +529,7 @@ class LinsightWorkflowTask:
         # again covers it while a worker is genuinely driving it).
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
-        self.llm = await self._get_llm(session_model)
+        self.llm = await self._get_round_llm(session_model)
         # The previous round deleted file_dir. Put this session's output/ back
         # before the code interpreter copies the directory into the sandbox.
         await self._sync_workspace_originals(session_model)
@@ -659,7 +660,7 @@ class LinsightWorkflowTask:
         # frontend leaves the "done" state and re-opens the WS event stream.
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
-        self.llm = await self._get_llm(session_model)
+        self.llm = await self._get_round_llm(session_model)
         # Same session workspace, new local dir: output/ from the previous round
         # is still in MinIO and must be back in file_dir before copy-in.
         await self._sync_workspace_originals(session_model)
@@ -745,7 +746,7 @@ class LinsightWorkflowTask:
         await self._provision_session_skills(session_model)
 
         # Initialization Execution Component
-        self.llm = await self._get_llm(session_model)
+        self.llm = await self._get_round_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
             # Build Tool List. The knowledge tool is gated by the user's
@@ -809,6 +810,20 @@ class LinsightWorkflowTask:
 
     # ==================== Component Initialization ====================
 
+    async def _get_round_llm(self, session_model: LinsightSessionVersion) -> BaseChatModel:
+        """Resolve the round's LLM and check the DSH monthly allowance once.
+
+        With ``dsh.enabled`` every model call is still settled in the credit
+        ledger, but only this round-start check compares usage with the limit,
+        so a round that has started runs to completion. Outside the
+        ``_get_llm`` try so a credit error keeps its own type and error_type.
+        """
+        from bisheng.dsh.domain.services.chat_credits import admit_round
+
+        llm = await self._get_llm(session_model)
+        await admit_round(llm)
+        return llm
+
     async def _get_llm(self, session_model: LinsightSessionVersion) -> BaseChatModel:
         """Resolve the per-task execution LLM (tool init / helper calls).
 
@@ -848,6 +863,7 @@ class LinsightWorkflowTask:
         total: int,
         file_name: str = "",
         output: str = "",
+        failure_info: dict | None = None,
     ) -> None:
         """Publish one attachment-ingest progress frame on the session pseudo task.
 
@@ -871,7 +887,10 @@ class LinsightWorkflowTask:
                 step_type="tool",
                 status="end" if phase in _INGEST_TERMINAL_PHASES else "start",
                 output=output,
-                extra_info={"ingest_progress": {"phase": phase, "done": done, "total": total, "file_name": file_name}},
+                extra_info={
+                    "ingest_progress": {"phase": phase, "done": done, "total": total, "file_name": file_name},
+                    **({"failure_info": failure_info} if failure_info else {}),
+                },
             )
             await self._state_manager.add_execution_task_step(svid, step=step)
             await self._state_manager.push_message(
@@ -937,9 +956,16 @@ class LinsightWorkflowTask:
             await self._state_manager.set_session_version_info(session_model)
         except Exception as e:
             logger.exception(f"Pending attachment ingest failed: session_version_id={svid}: {e}")
-            # The raw exception text rides in `output` (a diagnostic detail the row
-            # shows verbatim), never in the label.
-            await self._push_ingest_step(svid, call_id, phase="failed", done=0, total=total, output=str(e)[:500])
+            # Keep provider diagnostics in logs and expose safe provenance only.
+            await self._push_ingest_step(
+                svid,
+                call_id,
+                phase="failed",
+                done=0,
+                total=total,
+                output=FailureContextAdapter.safe_detail(e),
+                failure_info=FailureContextAdapter.from_error(e),
+            )
             raise TaskExecutionError(f"Failed to ingest uploaded attachments: {e}") from e
 
         # The chips on the question row were persisted before anything was known
@@ -954,7 +980,15 @@ class LinsightWorkflowTask:
         done = len(session_model.files or [])
         phase = "aborted" if self._is_terminated else "done"
         logger.info(f"Deferred attachment ingest {phase} {done}/{total}: session_version_id={svid}")
-        await self._push_ingest_step(svid, call_id, phase=phase, done=done, total=total)
+        failure_info = next(
+            (
+                info
+                for item in (session_model.files or [])
+                if (info := FailureContextAdapter.validate(item.get("failure_info")))
+            ),
+            None,
+        )
+        await self._push_ingest_step(svid, call_id, phase=phase, done=done, total=total, failure_info=failure_info)
 
     @create_cache_folder_async
     async def _init_file_directory(self, session_model: LinsightSessionVersion) -> str:
@@ -2546,12 +2580,16 @@ class LinsightWorkflowTask:
                 getattr(unwrap(exc), "reported_input_tokens", None) if exc is not None else None,
             )
         session_model.status = SessionVersionStatusEnum.FAILED
-        session_model.output_result = {
-            "error_message": error_msg,
-            "error_code": classified.error_code,
-            "error_type": classified.error_type,
-            "detail": classified.detail,
-        }
+        public_error = FailureContextAdapter.safe_detail(exc) if exc is not None else "Task execution failed."
+        session_model.output_result = FailureContextAdapter.public_payload(
+            {
+                **(session_model.output_result or {}),
+                "error_message": public_error,
+                "error_code": classified.error_code,
+                "error_type": classified.error_type,
+            },
+            exc=exc,
+        )
         await self._state_manager.set_session_version_info(session_model)
         # F035 Track J: still land a (failed) task turn in the unified stream so the
         # conversation isn't left with a dangling question; extra points to the SV
@@ -2566,12 +2604,14 @@ class LinsightWorkflowTask:
         await self._state_manager.push_message(
             MessageData(
                 event_type=MessageEventType.ERROR_MESSAGE,
-                data={
-                    "error": error_msg,
-                    "error_code": classified.error_code,
-                    "error_type": classified.error_type,
-                    "detail": classified.detail,
-                },
+                data=FailureContextAdapter.public_payload(
+                    {
+                        "error": public_error,
+                        "error_code": classified.error_code,
+                        "error_type": classified.error_type,
+                    },
+                    exc=exc,
+                ),
             )
         )
         system_config = await settings.aget_all_config()

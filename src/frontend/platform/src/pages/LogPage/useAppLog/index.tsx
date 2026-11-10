@@ -16,6 +16,7 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { AuditUsageType, EMPTY_ORG_SELECTION, exportCsvDataApi, getAuditAppListApi, getAuditSessionUsersApi } from "@/controllers/API/log";
 import type { OrgSelection } from "@/types/api/audit";
+import { AuditEmptyState } from "../components/AuditEmptyState";
 import { OrgFilter } from "../components/OrgFilter";
 import { orgLabel } from "../components/OrgFilter/orgLabel";
 import { useTable } from "@/util/hook";
@@ -38,7 +39,7 @@ type FilterState = {
     feedback: string;
     sensitive_status: string;
     org: OrgSelection;
-    usageType: AuditUsageType | '';
+    usageType: AuditUsageType | 'all' | '';
 };
 
 const INITIAL_FILTERS: FilterState = {
@@ -56,6 +57,7 @@ const INITIAL_FILTERS: FilterState = {
 // detail; their task-mode rows too (F003 AC-36).
 const DAILY_FLOW_TYPES = [15, 20, 25, 30];
 const USAGE_TYPES: AuditUsageType[] = ['daily', 'assistant', 'workflow', 'task'];
+const usageTypeParam = (value?: string) => (value && value !== 'all' ? value as AuditUsageType : undefined);
 
 const appNameOf = (row, t) => (row.flow_type === 15 ? t('log.workbench_daily') : row.flow_name);
 const usageTypeOf = (row, t) => (row.usage_type ? t(`log.usageType.${row.usage_type}`) : '');
@@ -93,7 +95,7 @@ export default function AppUseLog() {
     const { appConfig } = useContext(locationContext)
 
     // 20 items per page
-    const { page, pageSize, data: datalist, total, loading, setPage, filterData } = useTable({}, (param) => {
+    const { page, pageSize, data: datalist, total, loading, loaded, setPage, filterData } = useTable({}, (param) => {
         const [start_date, end_date] = getStrTime(param.dateRange || [])
         return getAuditAppListApi({
             page: page,
@@ -106,7 +108,7 @@ export default function AppUseLog() {
             feedback: param.feedback || undefined,
             sensitive_status: param.sensitive_status || undefined,
             org: param.org,
-            usage_type: param.usageType || undefined,
+            usage_type: usageTypeParam(param.usageType),
         })
     });
     const sessionUsers = useSessionUsers();
@@ -212,7 +214,7 @@ export default function AppUseLog() {
             feedback: filters.feedback || undefined,
             sensitive_status: filters.sensitive_status || undefined,
             org: filters.org,
-            usage_type: filters.usageType || undefined,
+            usage_type: usageTypeParam(filters.usageType),
         }).then(async res => {
             const data = [
                 [
@@ -287,8 +289,22 @@ export default function AppUseLog() {
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
         </div>}
-        <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto px-2 py-4 pb-20">
-            <div className="flex flex-wrap gap-4">
+        <div className="flex h-[calc(100vh-128px-var(--license-banner-h,0px))] flex-col overflow-y-auto px-2 py-4 pb-20">
+            <div className="flex shrink-0 flex-wrap gap-4">
+                <OrgFilter value={filters.org} onChange={(org) => dispatch({ type: 'SET_FILTER', payload: { org } })} />
+                <Select
+                    {...selectLabels}
+                    allowClear
+                    className="w-[160px]"
+                    aria-label={t('log.usageType.label')}
+                    placeholder={t('log.usageType.label')}
+                    value={filters.usageType || null}
+                    onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { usageType: value == null ? '' : value as AuditUsageType | 'all' } })}
+                    options={[
+                        { value: 'all', label: t('log.usageType.all') },
+                        ...USAGE_TYPES.map(value => ({ value, label: t(`log.usageType.${value}`) })),
+                    ]}
+                />
                 <FilterByApp value={filters.appName} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['appName']: value } })} />
                 <Select
                     {...selectLabels}
@@ -305,17 +321,6 @@ export default function AppUseLog() {
                 />
                 <FilterByUsergroup value={filters.userGroup} placeholder={t('log.userGroup')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userGroup']: value } })} />
                 <FilterByDate value={filters.dateRange} placeholders={[`${t('log.startDate')}`, `${t('log.endDate')}`]} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['dateRange']: value } })} />
-                <OrgFilter value={filters.org} onChange={(org) => dispatch({ type: 'SET_FILTER', payload: { org } })} />
-                <Select
-                    {...selectLabels}
-                    allowClear
-                    className="w-[160px]"
-                    aria-label={t('log.usageType.label')}
-                    placeholder={t('log.usageType.label')}
-                    value={filters.usageType || null}
-                    onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { usageType: value == null ? '' : value as AuditUsageType } })}
-                    options={USAGE_TYPES.map(value => ({ value, label: t(`log.usageType.${value}`) }))}
-                />
                 <Select
                     {...selectLabels}
                     allowClear
@@ -365,6 +370,7 @@ export default function AppUseLog() {
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.appName')}</TableHead>
+                        <TableHead>{t('log.usageType.label')}</TableHead>
                         <TableHead>{t('log.userName')}</TableHead>
                         <TableHead>{t('log.org.column')}</TableHead>
                         <TableHead>{t('log.userGroup')}</TableHead>
@@ -384,6 +390,7 @@ export default function AppUseLog() {
                                     {appNameOf(el, t)}
                                 </div>
                             </TableCell>
+                            <TableCell>{usageTypeOf(el, t)}</TableCell>
                             <TableCell>{el.user_name}</TableCell>
                             <TableCell className="max-w-[200px]">
                                 <div className="truncate-multiline break-all">{orgLabel(el.operator_dept_id, el.operator_dept_path, t)}</div>
@@ -435,6 +442,7 @@ export default function AppUseLog() {
                     )}
                 </TableBody>
             </Table>
+            {loaded && !loading && processedData.length === 0 && <AuditEmptyState />}
         </div>
         <div className="bisheng-table-footer px-6 bg-background-login">
             <p className="desc"></p>
