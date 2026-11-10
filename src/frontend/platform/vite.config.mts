@@ -201,6 +201,11 @@ export default defineConfig(({ command, mode }) => {
   const gatewayProxyConfig = createFrontendProxy(gatewayTarget, { rewrite, verbose: proxyLog });
   const fileServiceProxyConfig = createFrontendProxy(fileServiceTarget, { rewrite, verbose: proxyLog, minioEnvName: 'VITE_MINIO_PROXY_TARGET' });
   const proxyTargets: Record<string, ReturnType<typeof createFrontendProxy>> = {};
+  // MCP validates the public Host against the configured enterprise URL.
+  proxyTargets[`${app_env.BASE_URL}/api/v1/dsh/work/mcp`] = {
+    ...apiProxyConfig,
+    changeOrigin: false,
+  };
   // More specific than `/api/` and must be registered first, otherwise Vite's
   // prefix match sends `/api/license/status` to FastAPI (404 in open-source).
   proxyTargets[`${app_env.BASE_URL}/api/license`] = gatewayProxyConfig;
