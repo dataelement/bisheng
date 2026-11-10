@@ -296,7 +296,7 @@ class F118Environment:
         )
 
     async def file(self, space_id, file_id):
-        # Legacy file-list is the supported exact physical-file reader, including non-primary versions.
+        # This reader follows the legacy primary-file list; history uses the version API.
         page = await self.ok(
             "GET", f"/knowledge/file_list/{space_id}", params={"file_ids": [file_id], "page_size": 200}
         )

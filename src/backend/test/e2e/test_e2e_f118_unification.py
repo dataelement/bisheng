@@ -281,7 +281,13 @@ async def test_ac09_duplicate_overwrite_preserves_actual_file_document_and_versi
     assert (await target.file(sid, first["id"]))["md5"] == first["md5"]
     await target.ok("POST", "/knowledge/retry", json={"knowledge_id": sid, "file_objs": [duplicate]})
     overwritten = await target.wait_file(sid, first["id"])
-    assert overwritten["md5"] != first["md5"]
+    assert overwritten["id"] == first["id"]
+    chunks = await target.ok(
+        "GET", "/knowledge/chunk", params={"knowledge_id": sid, "file_ids": [first["id"]], "limit": 200}
+    )
+    assert chunks["total"] > 0
+    indexed_content = json.dumps(chunks["data"], ensure_ascii=False)
+    assert "overwritten content" in indexed_content and "original version" not in indexed_content
     after = await target.ok("GET", f"/knowledge/space/file/{first['id']}/versions")
     assert after["document_id"] == chain["document_id"]
     assert [row["version_id"] for row in after["versions"]] == [row["version_id"] for row in chain["versions"]]
