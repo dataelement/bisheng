@@ -50,13 +50,13 @@ async def test_cas_setup_separates_visibility_from_empty_explained_actions(monke
             roles.update(json.loads(request.content)["primary_role_ids"])
             data = None
         elif path == "/user/info":
-            assert actor == "access_token_cookie=unit-child-reader"
+            assert actor in {"unit-child-reader", "access_token_cookie=unit-child-reader"}
             data = {
                 "role": "user",
                 "is_child_admin": False,
                 "leaf_tenant_id": 31,
                 "user_name": "e2e-f118-unit-mysql-cas-reader",
-                "web_menu": ["admin", "build", "create_app"],
+                "web_menu": ["admin", "build", "create_app"] if 7 in roles else ["workstation", "home"],
             }
         elif path == "/knowledge/space" and request.method == "POST":
             assert actor == "unit-child-owner"

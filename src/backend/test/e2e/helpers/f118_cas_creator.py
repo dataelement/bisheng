@@ -1,4 +1,4 @@
-"""CAS-only application-creator prerequisite through public Child APIs."""
+"""F118 CAS/force application-creator prerequisites through public Child APIs."""
 
 from dataclasses import dataclass, field
 
@@ -10,11 +10,28 @@ CREATOR_MENUS = {"admin", "build", "create_app"}
 @dataclass(repr=False)
 class CasCreator:
     env: object = field(repr=False)
+    member: str = "reader"
     role_id: int | None = None
     member_path: str = ""
     department_id: int = 0
     remove_membership: bool = False
     owned_role: bool = False
+
+    @property
+    def actor(self):
+        return {**getattr(self.env, self.member), "X-Management-Tenant": str(self.env.tenant_id)}
+
+    async def identity(self):
+        identity = await self.env.ok("GET", "/user/info", actor=self.actor)
+        assert identity["user_name"] == self.env.prefix + self.member
+        assert identity["leaf_tenant_id"] == self.env.tenant_id and identity["role"] != "admin"
+        assert bool(identity["is_child_admin"]) == (self.member == "owner")
+        return identity
+
+    @staticmethod
+    def can_create(identity):
+        menus = set(identity["web_menu"])
+        return "create_app" in menus and bool(menus & {"admin", "backend"})
 
     async def form(self):
         form = await self.env.ok("GET", self.member_path + "/edit-form", actor=self.env.owner)
@@ -24,6 +41,11 @@ class CasCreator:
 
     async def install(self):
         env = self.env
+        assert self.member in {"reader", "owner"}
+        # Preserve every pre-existing grant source; no role reads or writes are
+        # necessary when the actual identity already has effective eligibility.
+        if self.can_create(await self.identity()):
+            return
         # Tenant directory metadata is global-super-only; the infrastructure
         # identity already provisioned this Child. All role/member writes below
         # remain under the actual Child owner.
@@ -32,7 +54,7 @@ class CasCreator:
         assert department["id"] == tenant["root_dept_id"]
         assert department["name"] == env.prefix + "tenant" and department["parent_id"] == env.parent_id
         self.department_id = department["id"]
-        self.member_path = f"/departments/{department['dept_id']}/members/{env.reader_id}"
+        self.member_path = f"/departments/{department['dept_id']}/members/{getattr(env, self.member + '_id')}"
         before = await self.form()
         roles = await env.ok("GET", f"/departments/{department['dept_id']}/assignable-roles", actor=env.owner)
         choices = []
@@ -75,13 +97,11 @@ class CasCreator:
                 json={"primary_role_ids": sorted(before | {self.role_id})},
             )
         assert await self.form() == before | {self.role_id}
-        token = await get_user_token(env.client, env.prefix + "reader", env.member_password)
-        env.reader = auth_headers(token)
-        identity = await env.ok("GET", "/user/info", actor=env.writer)
-        assert identity["user_name"] == env.prefix + "reader" and identity["leaf_tenant_id"] == env.tenant_id
-        assert identity["role"] != "admin" and not identity["is_child_admin"]
-        assert "create_app" in identity["web_menu"], "CAS writer must have effective application creation eligibility"
-        assert set(identity["web_menu"]) & {"admin", "backend"}, "application creation requires its effective parent"
+        token = await get_user_token(env.client, env.prefix + self.member, env.member_password)
+        setattr(env, self.member, {**auth_headers(token), "X-Management-Tenant": str(env.tenant_id)})
+        assert self.can_create(await self.identity()), (
+            "F118 source writer needs effective application creation eligibility"
+        )
 
     async def cleanup(self):
         if self.role_id is None:
