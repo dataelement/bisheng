@@ -185,6 +185,14 @@ class F118Environment:
         assert self.tenant_id > 1 and tenant["tenant_code"] == code
         people = {}
         public_key = await get_public_key(self.client)
+        assignable_roles = await self.ok(
+            "GET", f"/departments/{department['dept_id']}/assignable-roles", actor=self.root
+        )
+        # This endpoint excludes the built-in administrator and applies the
+        # actual department/tenant scope. An empty role list cannot log in.
+        ordinary_roles = [row for row in assignable_roles if row["role_name"] == "普通用户"]
+        assert len(ordinary_roles) == 1, "The dedicated department needs one assignable ordinary user role"
+        ordinary_role_id = ordinary_roles[0]["id"]
         for role in ("owner", "reader", "outsider"):
             account = self.prefix + role
             page = await self.ok(
@@ -206,11 +214,25 @@ class F118Environment:
                         "user_name": account,
                         "person_id": account,
                         "password": encrypt_password(self.member_password, public_key),
-                        "role_ids": [],
+                        "role_ids": [ordinary_role_id],
                     },
                 )
             )
             people[role] = int(person["user_id"])
+            member_path = f"/departments/{department['dept_id']}/members/{people[role]}"
+            form = await self.ok("GET", member_path + "/edit-form", actor=self.root)
+            assert form["edit_mode"] == "local_primary"
+            assert form["primary_department"]["id"] == department["id"] and not form["affiliate_rows"]
+            current_role_ids = form["primary_department"]["role_ids"]
+            if ordinary_role_id not in current_role_ids:
+                await self.ok(
+                    "POST",
+                    member_path + "/apply-edit",
+                    actor=self.root,
+                    json={"primary_role_ids": sorted({*current_role_ids, ordinary_role_id})},
+                )
+                form = await self.ok("GET", member_path + "/edit-form", actor=self.root)
+            assert ordinary_role_id in form["primary_department"]["role_ids"]
         await self.ok("POST", f"/tenants/{self.tenant_id}/admins", actor=self.root, json={"user_id": people["owner"]})
         for role in people:
             token = await get_user_token(self.client, self.prefix + role, self.member_password)
