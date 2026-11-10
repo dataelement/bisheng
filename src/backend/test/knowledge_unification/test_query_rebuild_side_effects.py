@@ -9,7 +9,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from bisheng.common.errcode.knowledge import KnowledgeRebuildingError
 from bisheng.knowledge.api.endpoints import knowledge as endpoint
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
@@ -32,15 +31,15 @@ async def test_visible_space_info_reports_pending_state_without_dispatching(info
 
 
 @pytest.mark.parametrize("state", [KnowledgeState.REBUILDING.value, KnowledgeState.FAILED.value])
-def test_status_keeps_existing_pending_error_without_starting_rebuild(monkeypatch, state):
+def test_status_does_not_query_retired_personal_space_or_start_rebuild(monkeypatch, state):
     knowledge = Knowledge(id=9, tenant_id=1, user_id=7, name="personal", type=2, model="11", state=state)
     query = Mock(return_value=[knowledge])
     monkeypatch.setattr(endpoint.KnowledgeDao, "get_user_knowledge", query)
     dispatch = Mock()
     monkeypatch.setattr(rebuild_knowledge_celery, "delay", dispatch)
     user = Mock(user_id=7)
-    with pytest.raises(KnowledgeRebuildingError):
-        endpoint.get_knowledge_status(login_user=user)
+    result = endpoint.get_knowledge_status(login_user=user)
+    assert result.data == {"status": "success"}
     assert knowledge.state == state and knowledge.model == "11" and knowledge.model_transition is None
     dispatch.assert_not_called()
-    query.assert_called_once_with(7, None, endpoint.KnowledgeTypeEnum.PRIVATE)
+    query.assert_not_called()

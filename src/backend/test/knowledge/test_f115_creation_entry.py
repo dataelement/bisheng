@@ -9,24 +9,27 @@ import pytest
 async def test_web_entry_fixes_scope_to_identity_and_passes_context(monkeypatch):
     from bisheng.core.context.tenant import get_current_tenant_id
     from bisheng.knowledge.api.endpoints import knowledge as api
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
     from bisheng.knowledge.domain.schemas.knowledge_create_schema import KnowledgeWebCreate
     from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
     context = SimpleNamespace(user_id=9, tenant_id=60)
     monkeypatch.setattr(KnowledgeCreationPolicy, "prepare", AsyncMock(return_value=context))
 
-    async def create(request, user, data, *, web_creation_context=None):
+    async def create(self, *, web_creation_context=None, **kwargs):
         assert get_current_tenant_id() == 60
         assert web_creation_context is context
-        return {"id": 1, "tenant_id": 60, "user_id": user.user_id}
+        return Knowledge(id=1, name=kwargs["name"], type=3, tenant_id=60, user_id=self.login_user.user_id)
 
-    monkeypatch.setattr(api.KnowledgeService, "acreate_knowledge", create)
+    monkeypatch.setattr(KnowledgeSpaceService, "create_knowledge_space", create)
+    monkeypatch.setattr(api.KnowledgeService, "aconvert_knowledge_read", AsyncMock(side_effect=lambda user, rows: rows))
     result = await api.create_knowledge(
         request=object(),
         login_user=SimpleNamespace(user_id=9, tenant_id=60),
         knowledge=KnowledgeWebCreate(name="New library", model="1", type=0, expected_tenant_id=60),
     )
-    assert result.data["tenant_id"] == 60
+    assert result.data.tenant_id == 60
 
 
 async def test_revocation_during_model_lookup_prevents_all_creation_writes(monkeypatch):
