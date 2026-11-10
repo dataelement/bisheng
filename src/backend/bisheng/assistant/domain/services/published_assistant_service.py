@@ -24,6 +24,9 @@ from bisheng.utils import generate_uuid
 class AssistantCompletion:
     payload: dict | None
     stream: AsyncIterator[str] | None
+    # OpenAI-shaped empty delta sent while a tool call produces no tokens.
+    # None means the adapter falls back to an SSE comment.
+    heartbeat_event: str | None = None
 
 
 class PublishedAssistantService:
@@ -135,7 +138,14 @@ class PublishedAssistantService:
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
                 yield "data: [DONE]\n\n"
 
-            return AssistantCompletion(payload=None, stream=pseudo_stream()), assistant_info
+            return (
+                AssistantCompletion(
+                    payload=None,
+                    stream=pseudo_stream(),
+                    heartbeat_event=_openai_heartbeat(response_id, model),
+                ),
+                assistant_info,
+            )
 
         async def streaming_events() -> AsyncIterator[str]:
             # Errors propagate to the transport adapter, which owns the error
@@ -173,7 +183,31 @@ class PublishedAssistantService:
             yield f"data: {json.dumps(end_chunk, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
-        return AssistantCompletion(payload=None, stream=streaming_events()), assistant_info
+        return (
+            AssistantCompletion(
+                payload=None,
+                stream=streaming_events(),
+                heartbeat_event=_openai_heartbeat(response_id, model),
+            ),
+            assistant_info,
+        )
+
+
+def _openai_heartbeat(response_id: str, model: str) -> str:
+    chunk = {
+        "id": response_id,
+        "object": "chat.completion.chunk",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"content": "", "reasoning_content": ""},
+                "finish_reason": None,
+            }
+        ],
+    }
+    return f"data: {json.dumps(chunk, ensure_ascii=False, separators=(',', ':'))}\n\n"
 
 
 __all__ = ["AssistantCompletion", "PublishedAssistantService"]

@@ -37,6 +37,7 @@ from bisheng.open_api.domain.http_status import openai_stream_error
 from bisheng.open_api.domain.scopes import OpenApiScopeMarker, open_api_scope
 from bisheng.open_api.domain.services.credential_watcher import watch_websocket_credential
 from bisheng.open_api.domain.services.session_subject_service import session_subject_from_principal
+from bisheng.open_endpoints.domain.streaming import STREAM_RESPONSE_HEADERS, stream_with_heartbeat
 from bisheng.open_endpoints.domain.utils import get_open_api_operator
 from bisheng.utils import get_request_ip
 
@@ -62,17 +63,20 @@ def _assistant_id_from_model(model: str) -> str:
 
 async def _stream_with_error_event(
     stream: AsyncIterator[str],
+    request: Request,
+    heartbeat_event: str,
     renew_task=None,
     lease=None,
 ) -> AsyncIterator[str]:
     """Follow the OpenAI streaming error convention when the stream fails midway:
     send one `data: {"error": {...}}` event, then `data: [DONE]`.
 
-    Also releases the department execution lease when the stream really ends —
-    the endpoint has long returned by then.
+    Idle gaps emit ``heartbeat_event`` so a reverse proxy does not treat the
+    stream as a dead connection. The department execution lease is released
+    when the stream really ends — the endpoint has long returned by then.
     """
     try:
-        async for item in stream:
+        async for item in stream_with_heartbeat(request, stream, heartbeat_event=heartbeat_event):
             yield item
     except Exception as exc:
         logger.opt(exception=True).error("assistant streaming failed")
@@ -118,8 +122,15 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
         if completion.stream is not None:
             # Released inside the generator, when the stream really ends.
             return StreamingResponse(
-                _stream_with_error_event(completion.stream, flow_renew_task, flow_lease),
+                _stream_with_error_event(
+                    completion.stream,
+                    request,
+                    completion.heartbeat_event or ": ping\n\n",
+                    flow_renew_task,
+                    flow_lease,
+                ),
                 media_type="text/event-stream",
+                headers=STREAM_RESPONSE_HEADERS,
             )
         # Non-streaming: ``complete`` already produced the whole answer.
         await DepartmentFlowService.stop_renewal(flow_renew_task, flow_lease)
