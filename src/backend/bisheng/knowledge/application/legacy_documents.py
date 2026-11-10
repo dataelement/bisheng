@@ -32,6 +32,7 @@ class LegacyDocumentsApplication:
         return result
 
     async def acreate(self, *, request, identity, command, entry_kind="web", web_creation_context=None):
+        from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
         model_id = None
@@ -60,7 +61,10 @@ class LegacyDocumentsApplication:
             if command.type != 0:
                 raise
             raise KnowledgeNoEmbeddingError() from exc
-        return self.view(created, legacy=command.type == 0)
+        # Enrich while the target still has its actual business type. The
+        # legacy type is only a projection of the completed public response.
+        converted = await KnowledgeService.aconvert_knowledge_read(identity, [created])
+        return self.view(converted[0], legacy=command.type == 0)
 
     async def alist(
         self,
@@ -107,9 +111,15 @@ class LegacyDocumentsApplication:
             raise KnowledgeInvalidCursorError(exception=exc) from exc
         result, consumed = [], 0
 
-        def page(more):
+        async def page(more):
+            from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+
+            converted = await KnowledgeService.aconvert_knowledge_read(identity, [row for row, _ in result])
             return PageInfiniteCursorData[KnowledgeRead](
-                data=result,
+                data=[
+                    self.view(row, legacy=legacy_view).model_copy(update={"has_abnormal_files": abnormal})
+                    for row, (_actual, abnormal) in zip(converted, result, strict=True)
+                ],
                 page_size=page_size,
                 has_more=more,
                 next_cursor=encode_cursor([offset] if is_name else after, context=context) if more else None,
@@ -130,7 +140,7 @@ class LegacyDocumentsApplication:
             actions = await KnowledgePermissionService.get_knowledge_action_map_async(identity, ids, ["visible"])
             for row, abnormal in rows:
                 if len(result) == page_size:
-                    return page(True)
+                    return await page(True)
                 offset += 1
                 if not is_name:
                     timestamp = row.create_time if sort_by == "create_time" else row.update_time
@@ -139,13 +149,9 @@ class LegacyDocumentsApplication:
                         after = (0 if row.id in preferred else 1, *after)
                 consumed += 1
                 if "visible" in actions.get(row.id, set()):
-                    result.append(
-                        self.view(row, actions={"visible"}, legacy=legacy_view).model_copy(
-                            update={"has_abnormal_files": abnormal}
-                        )
-                    )
+                    result.append((row, abnormal))
             if len(rows) < limit:
-                return page(False)
+                return await page(False)
             if len(result) == page_size:
                 break
         pending = await self.repository.alist_space_candidates(
@@ -157,7 +163,7 @@ class LegacyDocumentsApplication:
             preferred_ids=preferred,
             has_abnormal=has_abnormal,
         )
-        return page(bool(pending))
+        return await page(bool(pending))
 
     async def anormalize_permission_resource(self, resource_type: str, resource_id: str) -> str:
         if resource_type.strip().lower() != "knowledge_library":

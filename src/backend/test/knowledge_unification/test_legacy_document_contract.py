@@ -18,8 +18,25 @@ from test.knowledge_unification.test_kn_model_bindings import state
 store = creation.store
 tenant = creation.tenant
 business = creation.business
-consumer = creation.consumer
+consumer_base = creation.consumer
 advanced = creation.advanced
+
+
+@pytest.fixture
+async def consumer(consumer_base, monkeypatch):
+    from unittest.mock import Mock
+
+    from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+    from bisheng.user.domain.models.user import UserDao
+
+    # This fixture exercises creation/R2 with the original projection transport
+    # isolated. Return no action grants at the new response enrichment seam;
+    # real typed permission decisions are covered by the listing native tests.
+    monkeypatch.setattr(
+        KnowledgeService.permission_service, "get_knowledge_action_map_async", AsyncMock(return_value={})
+    )
+    monkeypatch.setattr(UserDao, "get_user_by_ids", Mock(return_value=[]))
+    return consumer_base
 
 
 async def test_old_create_persists_space_creator_and_real_model_source_with_old_dto_only(consumer):

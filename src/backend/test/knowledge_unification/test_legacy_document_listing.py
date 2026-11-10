@@ -18,6 +18,15 @@ from test.knowledge_unification.test_legacy_document_permissions import real_tar
 async def pages(real_targets, monkeypatch):
     # The native fixture patches the same repository session port.
     sessions = compatibility.get_async_db_session
+    from types import SimpleNamespace
+
+    from bisheng.user.domain.models.user import UserDao
+
+    # Creator directory transport is independent of the real native targets,
+    # Catalog and F048 decisions exercised by this fixture.
+    monkeypatch.setattr(
+        UserDao, "get_user_by_ids", lambda ids: [SimpleNamespace(user_id=ident, user_name=str(ident)) for ident in ids]
+    )
     async with sessions() as session:
         await session.connection()
         # Async SQLAlchemy uses the native SQLite connection for table creation.
@@ -71,9 +80,10 @@ async def test_old_list_reads_space_not_normal_and_filters_before_dto_pagination
 
 async def test_legacy_list_enriches_creator_and_actual_actions_only_after_visibility(pages, monkeypatch):
     from types import SimpleNamespace
+    from unittest.mock import Mock
+
     from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
     from bisheng.user.domain.models.user import UserDao
-    from unittest.mock import Mock
 
     names = Mock(return_value=[SimpleNamespace(user_id=7, user_name="actual creator")])
     monkeypatch.setattr(UserDao, "get_user_by_ids", names)
@@ -90,18 +100,19 @@ async def test_legacy_list_enriches_creator_and_actual_actions_only_after_visibi
 async def test_legacy_create_uses_actual_space_type_for_original_converter(pages, monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, Mock
+
     from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate
     from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceCreateResp
     from bisheng.user.domain.models.user import UserDao
 
     async with compatibility.get_async_db_session() as session:
         actual = await session.get(Knowledge, 13)
-    service = SimpleNamespace(create_knowledge_space=AsyncMock(
-        return_value=KnowledgeSpaceCreateResp.model_validate(actual)
-    ))
-    monkeypatch.setattr(UserDao, "get_user_by_ids", Mock(
-        return_value=[SimpleNamespace(user_id=7, user_name="actual creator")]
-    ))
+    service = SimpleNamespace(
+        create_knowledge_space=AsyncMock(return_value=KnowledgeSpaceCreateResp.model_validate(actual))
+    )
+    monkeypatch.setattr(
+        UserDao, "get_user_by_ids", Mock(return_value=[SimpleNamespace(user_id=7, user_name="actual creator")])
+    )
     result = await LegacyDocumentsApplication(space_service=service).acreate(
         request=None, identity=pages.user, command=KnowledgeCreate(name="created")
     )
