@@ -24,6 +24,7 @@ from pymysql.cursors import DictCursor
 
 from bisheng.resource_reference.application.contracts import reference_set_digest
 from bisheng.workflow.domain.services.reference_extractor import extract_workflow_version_references
+from test.e2e.helpers.f118_cas_creator import CasCreator
 from test.e2e.helpers.f118_unification import F118Environment, required
 
 FLOW_NAMES = ("wf-same", "wf-versions")
@@ -243,6 +244,8 @@ class CasEnvironment(F118Environment):
 
     async def prepare_cas(self):
         await self.prepare()
+        self.creator_fixture = CasCreator(self)
+        await self.creator_fixture.install()
         identity = await self.ok("GET", "/user/info", actor=self.writer)
         assert (
             identity["role"] != "admin"
@@ -294,6 +297,13 @@ class CasEnvironment(F118Environment):
                     json={"resource_type": "knowledge_space", "resource_id": str(sid), "action": action},
                 )
                 assert decision["allowed"] is allowed
+
+    async def cleanup(self):
+        # Keep creation eligibility while deleting the exact WF sources first.
+        # A failed business cleanup retains the role for operator investigation.
+        await super().cleanup()
+        if creator := getattr(self, "creator_fixture", None):
+            await creator.cleanup()
 
     async def clean_business_resources(self):
         if not self.owner:
