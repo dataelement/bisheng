@@ -1,6 +1,6 @@
 # 升级说明：知识空间统一与全平台 use 动作退役
 
-**状态（2026-11-10）**：功能开发已收齐，backup1、隔离完整还原和clone中性DDL通过；本次synthetic样本已按原vendor声明精确重建，backup2完成；restore2/stage2/新中性DDL/正式M2/deploy仍未执行，未freeze/convert。当前仍为演练说明，不据此开放生产升级；SDK无本次代码改动，全托管SDK场景单列未执行。最新入口见§3.1，后文日期章节保留历史证据边界。\
+**状态（2026-11-10）**：功能开发已收齐，修正样本后的backup2及clone2完整还原/中性DDL通过；隔离clone2已正式M2冻结并同run apply/replay ready。原测试项目仍停旧schema、尚未升级或部署，API/UI未执行。当前仍为演练说明，不据此开放生产升级；SDK无本次代码改动，全托管SDK场景单列未执行。最新入口见§3.1，后文日期章节保留历史证据边界。\
 **日期**：2026-11-03\
 **关联**：[spec.md](./spec.md)（AC-63、AC-85、AC-89、AC-91、AC-92、AC-93、AC-94） · [design.md](./design.md) §7。
 
@@ -31,7 +31,7 @@
 
 ### 3.1 已实现的执行入口（2026-11-10）
 
-从本版本的 `src/backend/` 运行，使用API/Worker同一配置、已安装依赖和环境凭据。先保持业务停止，执行 `python -m alembic upgrade head`；当前单一head为 `f118_knowledge_delete_execution`，仅准备结构，不进行正式业务盘点或回填。该DDL已在隔离完整还原clone验证，正式M2尚未冻结，不把clone结构通过当作完整升级/恢复业务验收。
+从本版本的 `src/backend/` 运行，使用API/Worker同一配置、已安装依赖和环境凭据。先保持业务停止，执行 `python -m alembic upgrade head`；当前单一head为 `f118_knowledge_delete_execution`，仅准备结构，不进行正式业务盘点或回填。该DDL已在隔离完整还原clone验证；clone2进一步完成正式M2冻结及同run apply/replay ready，但原测试项目尚未升级，不把隔离演练当作原项目部署或恢复业务验收。
 
 正式入口为 `scripts/unify_knowledge_spaces.py`。下面所有环境名、run、操作人及描述符必须替换为实际值；`object_key/sha256`必须指向同一维护窗口中已持久保存并验证的真实备份、结构证据，不是随意生成的占位hash。
 
@@ -281,6 +281,6 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 
 backup1完成（manifest SHA256 `2e8bb87fae241b3e777b0c9aba5dbb03acc8609aa8a8bbf5873f0dee04169552`，旧镜像8.447GB保存），隔离full restore的7检查全true，含187表/798 tuple/67对象版本/4 ES/3 Milvus及22逻辑向量、原schema head；clone中性DDL通过，180张原business表原列不变、8张新表为空。这不等于正式M2已冻结或升级通过。CLI收尾、原FGA null格式及内置user0哨兵窄修仅为定点证据，未重跑8208整轮，详见W6。
 
-M2此前正确拒绝本次synthetic AppVersion的display/vendor名称混淆（26511）：旧/新resolver均要求`f118-chat`，fixture误写`e2e-f118-chat`。Root已用旧镜像a1b通过fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；保留旧code，其他SQL/FGA/模型默认/文件/WF核对不变，不UPDATE真实历史版本、不走Runtime删除、不添加fallback或伪invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目`prep/revision2/fixture-reset.json`私密原文留服务器；保backup1/failed clone。backup2于2026-11-10 06:58:24 UTC完成，manifest SHA256 `fd7dd63b37ba45d6503d02f1d5de01cf078a38182832f8aed1635f9bf60e9630`：24 files、187张SQL表/798条FGA/68个MinIO对象版本，旧镜像归档8447341568 bytes以同旧inode硬链接保存。retained broker及其他SQL/FGA不变，仅上述synthetic版本及唯一新code改变；Root独立核summary固定字段，未取私密原文。原API/Worker及全部11个服务现均stopped；restore2/stage2/新中性DDL/正式M2/deploy/API19仍未执行。Milvus原生1800秒超时exit1无OOM/外部kill单列保留。正式freeze/convert/deploy均未发生，3005保持不动。
+M2此前正确拒绝本次synthetic AppVersion的display/vendor名称混淆（26511）：旧/新resolver均要求`f118-chat`，fixture误写`e2e-f118-chat`。Root已用旧镜像a1b通过fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；保留旧code，其他SQL/FGA/模型默认/文件/WF核对不变，不UPDATE真实历史版本、不走Runtime删除、不添加fallback或伪invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目`prep/revision2/fixture-reset.json`私密原文留服务器；保backup1/failed clone。backup2于2026-11-10 06:58:24 UTC完成，manifest SHA256 `fd7dd63b37ba45d6503d02f1d5de01cf078a38182832f8aed1635f9bf60e9630`：24 files、187张SQL表/798条FGA/68个MinIO对象版本，旧镜像归档8447341568 bytes以同旧inode硬链接保存。retained broker及其他SQL/FGA不变，仅上述synthetic版本及唯一新code改变；Root独立核summary固定字段，未取私密原文。原API/Worker及全部11个服务仍stopped、旧schema保持。隔离clone2位于独立项目`restore-check/e2e-f118-20261110-prep2/.restore2`：backup2完整还原7项全true（187 SQL/798 FGA/68对象版本/4 ES/3 Milvus/22逻辑向量），新中性DDL保180张原表旧列不变、8张新表空。其实际材料覆盖3租户，正式M2 frozen后，同run `e2e-f118-20261110-prep2-restore` CLI apply和replay均ready `[1,2,3]`，两次JSON证据SHA256均为`5b9c51a2fea64f1c285b772e52c532dcb7de9293c1ba4bc24adbb3984542a76f`。该证据仅属隔离还原环境迁移；原环境升级、新API/Worker/frontend部署及API19/UI21均未执行，14张验收卡仍pending。oneoff短/完整容器ID及只读rootfs缓存路径已窄适配，`XDG_CACHE_HOME=/tmp/f118-cache`下真实broker只读检查通过、旧失败留证，不是产品/SDK新增修复，不扩RTM。Milvus原生1800秒超时exit1无OOM/外部kill单列保留，3005保持不动。
 
 旧重复文件覆盖/重试保原File/Doc/Version和目录，原处理版本是来源快照，更新空间默认不重算旧文件；正式升级后需用原ID及存量快照核对这一兼容路径。整批WAITING提交与原worker派发均需实测，未知ACK不作为成功证据。仍按停服/排空/一致备份→中性DDL→停服后正式盘点冻结→同run转换/权限发布→六来源回填/对账/Coverage→校验后恢复的原顺序，不由迁移脚本判断停服。
