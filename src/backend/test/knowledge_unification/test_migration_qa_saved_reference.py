@@ -11,6 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.models.space_channel_member import SpaceChannelMember
 from bisheng.database.models.flow_version import FlowVersion
 from bisheng.knowledge.application.unification_preflight import source_decision
+from bisheng.knowledge.application.unification_reference_state import OriginalReferenceState
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
 from bisheng.knowledge.domain.repositories.unification_target_repository import KnowledgeMigrationTargetRepository
 from bisheng.resource_reference.application.contracts import SourceKey
@@ -41,8 +42,26 @@ async def test_real_saved_qa_extractor_and_native_target_are_retained_without_ne
             0
         ]
         assert fact.exists and fact.space_exists and fact.knowledge_type == 1
+        state = OriginalReferenceState()
+        index_snapshot = await state.repository.aload_raw_snapshot(session, source_key=source)
+        _, states = await state.acapture(
+            session,
+            source_key=source,
+            references=refs,
+            physical={ref.target: fact},
+            tombstone_cache={},
+            snapshot=index_snapshot,
+        )
         decision = source_decision(
-            ReferenceInventoryRecord(source, ref.slot_key, ref.target, "explicit_id", fact), tenant_id=101
+            ReferenceInventoryRecord(
+                source,
+                ref.slot_key,
+                ref.target,
+                "explicit_id",
+                fact,
+                states[(ref.slot_key, ref.target.target_type.value, ref.target.target_id)],
+            ),
+            tenant_id=101,
         )
         assert decision.data["disposition"] == "existing_saved_slot"
         assert decision.data["target_id"] == ref.target.target_id

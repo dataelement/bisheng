@@ -112,7 +112,10 @@ async def test_real_scope_owner_stream_and_complete_receipt_validation_have_sepa
     status = [(sql, params) for sql, params in ctx.db.statements if "test-coverage" in sql]
     groups, references = ceil(count / 200), len(selected) * 3
     owner_budget = 2 * groups + 1 + ceil((count + 1) / 200)
-    assert len(owner_sql) == owner_budget
+    # One clear/delete guard page for the single SPACE, independent of files.
+    clear_guard = [sql for sql, _ in owner_sql if "FROM knowledge_space_delete_job" in sql]
+    assert len(clear_guard) == 1
+    assert len(owner_sql) - len(clear_guard) == owner_budget
     assert len(stream) <= groups + references // 200
     assert len(status) == 14 and validation == [count, count, count]
     assert len(result.references) == references and len(result.sources) == 1
