@@ -41,6 +41,7 @@ from bisheng.database.models.role_access import WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_file_service, get_knowledge_service
 from bisheng.knowledge.application.knowledge_batch import get_batch_application
 from bisheng.knowledge.application.knowledge_processing_commands import KnowledgeProcessingCommands
+from bisheng.knowledge.application.legacy_retry import get_legacy_retry_application
 from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeDao,
     KnowledgeState,
@@ -301,7 +302,9 @@ async def create_knowledge(
             from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
 
             db_knowledge = await LegacyDocumentsApplication().acreate(
-                request=request, identity=login_user, command=knowledge,
+                request=request,
+                identity=login_user,
+                command=knowledge,
                 web_creation_context=context,
             )
         else:
@@ -466,8 +469,13 @@ async def get_knowledge(
         from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
 
         result = await LegacyDocumentsApplication().alist(
-            identity=login_user, name=name, sort_by=sort_by, cursor=cursor,
-            page_size=page_size, preferred_ids=pinned, has_abnormal=has_abnormal,
+            identity=login_user,
+            name=name,
+            sort_by=sort_by,
+            cursor=cursor,
+            page_size=page_size,
+            preferred_ids=pinned,
+            has_abnormal=has_abnormal,
             legacy_view=knowledge_type is KnowledgeTypeEnum.NORMAL,
         )
         return resp_200(data=result)
@@ -605,10 +613,18 @@ async def get_QA_list(
 
 
 @router.post("/retry", status_code=200)
-async def retry(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: dict):
+async def retry(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    req_data: dict,
+    retry_application=Depends(get_legacy_retry_application),
+):
     """Failed Retry"""
-    await KnowledgeService.retry_files(request, login_user, req_data)
-    return resp_200()
+    from bisheng.knowledge.domain.schemas.processing_job import JobAccepted
+
+    result = await KnowledgeService.retry_files(request, login_user, req_data, retry_application=retry_application)
+    return resp_200(result) if isinstance(result, JobAccepted) else resp_200()
 
 
 @router.delete("/file/{file_id}", status_code=200)

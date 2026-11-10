@@ -1282,7 +1282,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if entry_kind not in {"web", "open_api"}:
             raise PermissionDeniedError()
-        advanced = embedding_model_id is not None or processing_defaults is not None or initial_metadata_fields is not None
+        advanced = (
+            embedding_model_id is not None or processing_defaults is not None or initial_metadata_fields is not None
+        )
         if entry_kind == "open_api":
             from bisheng.open_api.domain.context import get_current_open_api_principal
 
@@ -1312,7 +1314,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if initial_metadata_fields is not None:
             from bisheng.knowledge.domain.schemas.knowledge_schema import MetadataField
 
-            initial_metadata_fields = [MetadataField.model_validate(value).model_dump(mode="json") for value in initial_metadata_fields]
+            initial_metadata_fields = [
+                MetadataField.model_validate(value).model_dump(mode="json") for value in initial_metadata_fields
+            ]
         existing = await self._existing_creation(creation_request_id, None)
         selected_model_id = embedding_model_id
         if existing is None:
@@ -1348,7 +1352,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             processing_defaults=defaults,
         )
         if initial_metadata_fields is not None:
-            schema_input = json.dumps(initial_metadata_fields, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+            schema_input = json.dumps(
+                initial_metadata_fields, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+            )
             payload_hash = sha256(f"{payload_hash}|initial_metadata|{schema_input}".encode()).hexdigest()
         if existing is not None:
             if existing.creation_payload_hash != payload_hash:
@@ -4199,7 +4205,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 else:
                     failed_file = KnowledgeSpaceFileResponse(**db_file.model_dump())
                     failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
-                    failed_file.file_level_path = file_level_path
+                    # Overwrite retains the actual existing document's parent;
+                    # the duplicate dialog is not a move confirmation.
+                    failed_file.file_level_path = db_file.file_level_path
                     failed_files.append(failed_file)
         except BaseException:
             if deferred is None:
@@ -4766,41 +4774,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_id, "tag", [{"id": ident, "type": "file"} for ident in file_ids], tag_ids=tag_ids
         )
 
-    async def retry_space_files(self, space_id: int, req_data: dict) -> list:
-        """
-        Retry logic for multiple files in a knowledge space with potentially new split rules.
-        Similar to KnowledgeService.retry_files but scoped to a space.
-        """
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-        await self._require_read_permission(space_id)
-        self._ensure_space_async_task_tenant_consistency(space, "retry_space_files")
-
-        db_file_retry = req_data.get("file_objs")
-        if not db_file_retry:
+    async def retry_space_files(self, space_id: int, req_data: dict):
+        factory = getattr(self, "legacy_retry_factory", None)
+        if not callable(factory):
+            raise RuntimeError("SPACE legacy retry application is not configured")
+        result = await factory().aretry(
+            request=self.request,
+            identity=self.login_user,
+            req_data=req_data,
+            space_id=space_id,
+        )
+        if not isinstance(result, tuple):
+            return result
+        _space, _files, file_level_path = result
+        if not _files:
             return []
-
-        id2input = {file.get("id"): file for file in db_file_retry}
-        file_ids = list(id2input.keys())
-        db_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
-        if not db_files:
-            return []
-
-        for db_file in db_files:
-            if db_file.knowledge_id != space_id:
-                raise SpaceFileNotFoundError()
-            await self._require_resource_action(
-                "rename",
-                "knowledge_file",
-                db_file.id,
-            )
-
-        _tmp, file_level_path = await self.process_retry_files(db_files, id2input, self.login_user)
-
-        for folder_path in file_level_path:
-            await self.update_folder_update_time(folder_path)
-
+        for path in file_level_path:
+            await self.update_folder_update_time(path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
         return []
 
