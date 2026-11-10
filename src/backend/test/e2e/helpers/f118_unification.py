@@ -48,6 +48,11 @@ RESOURCE_NAMES = (
     "delete-files",
     "clear",
     "delete-space",
+    "move-source",
+    "move-target",
+    "copy-source",
+    "copy-result",
+    "stale-plan",
 )
 
 

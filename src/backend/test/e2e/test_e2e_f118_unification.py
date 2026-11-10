@@ -9,15 +9,18 @@ Partial API coverage: AC-02/06/07/09/10/28-31/36/38-45/48-50/65/67/70-73/78/79/9
 The four native kinds are embedding_rebuild, file_reprocess, file_resplit and
 metadata_schema_change; each must finish its real worker path and GET checks.
 This is not the whole 140-case acceptance report. UI, migration/restore and
-old application replay, move/copy, hidden/force references, failure injection,
+old application replay, hidden/force references, move/copy failure matrices,
+failure injection,
 large chunk sets, all resource-type consumers and scope/foreign-tenant matrices
 remain separate. No DM8, share-link issuance or general worker-I/O race work.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import time
 from copy import deepcopy
 
 import httpx
@@ -355,3 +358,169 @@ async def test_ac70_model_removal_prechecks_real_bindings_and_deletes_only_an_un
         json={"server_id": idle["id"]},
     )
     await target.remove_exact_server(facts)
+
+
+async def _linked_history(target, space_id):
+    first = await target.upload(space_id, "history-one.txt", b"e2e-f118 immutable history one\n")
+    original = await target.ok("GET", f"/knowledge/space/file/{first['id']}/versions")
+    second = await target.upload(space_id, "history-two.txt", b"e2e-f118 immutable history two\n")
+    await target.ok(
+        "POST",
+        "/knowledge/space/document/link",
+        json={
+            "knowledge_file_id": second["id"],
+            "target_document_id": original["document_id"],
+        },
+    )
+    chain = await target.ok("GET", f"/knowledge/space/file/{first['id']}/versions")
+    assert len(chain["versions"]) == 2
+
+    return first, second, chain
+
+
+async def _wait_native_job(target, space_id, accepted, kind):
+    assert accepted["accepted"] is True and accepted["job_id"]
+    deadline = time.monotonic() + target.timeout
+    while time.monotonic() < deadline:
+        path = f"/knowledge/space/{space_id}/processing-jobs/{accepted['job_id']}"
+        job = await target.ok("GET", path, params={"kind": kind})
+        assert job["space_id"] == space_id and job["kind"] == kind
+        if job["state"] in {"succeeded", "partial_failed", "failed", "obsolete"}:
+            assert job["state"] == "succeeded", f"{kind} ended {job['state']} code={job.get('error_code')}"
+            assert job["total_count"] > 0 and job["succeeded_count"] == job["total_count"]
+            assert job["failed_count"] == job["pending_count"] == 0
+            items = await target.ok("GET", path + "/items", params={"kind": kind, "page_size": 200})
+            assert items["data"] and all(row["state"] == "succeeded" for row in items["data"])
+            return job
+        await asyncio.sleep(1)
+    raise AssertionError(f"{kind} did not reach a real worker terminal state")
+
+
+async def test_ac17_move_preserves_whole_history_and_same_confirmation(target):
+    """AC-17/18/19/20/21/24: cross-space move preserves IDs, all versions and real destination chunks."""
+    source = (await target.space("move-source"))["id"]
+    destination = (await target.space("move-target", embedding_model_id=target.embedding(1)["id"]))["id"]
+    first, second, before = await _linked_history(target, source)
+    base = f"/knowledge/space/{source}/files/move"
+    change = {
+        "items": [{"id": first["id"], "type": "file"}],
+        "target_space_id": destination,
+        "target_folder_id": None,
+        "skip_invalid": False,
+    }
+    review = await target.ok("POST", base + "/precheck", json=change)
+    assert review["can_execute"] and review["check_complete"] and not review["invalid_items"]
+    command = target.confirmation(review)
+    accepted = await target.ok("POST", base + "/confirm", json=command)
+    await _wait_native_job(target, destination, accepted, "move_index")
+    replay = await target.ok("POST", base + "/confirm", json=command)
+    assert replay["job_id"] == accepted["job_id"] and replay["reused"] is True
+    assert not (await target.files(source))["data"]
+    after = await target.ok("GET", f"/knowledge/space/file/{first['id']}/versions")
+    assert after["document_id"] == before["document_id"] and after["knowledge_id"] == destination
+    assert {row["version_id"] for row in after["versions"]} == {row["version_id"] for row in before["versions"]}
+    assert {row["knowledge_file_id"] for row in after["versions"]} == {first["id"], second["id"]}
+    actual = await target.file(destination, second["id"])
+    assert actual["knowledge_id"] == destination and actual["tenant_id"] == target.tenant_id
+    old = await target.ok(
+        "GET",
+        "/knowledge/chunk",
+        params={"knowledge_id": source, "limit": 200},
+    )
+    new = await target.ok(
+        "GET",
+        "/knowledge/chunk",
+        params={"knowledge_id": destination, "file_ids": [first["id"], second["id"]], "limit": 200},
+    )
+    assert old["total"] == 0 and new["total"] > 0
+
+
+async def test_ac25_copy_is_creator_only_and_survives_ordinary_source_delete(target):
+    """AC-25/26/27/28: copy creates independent IDs/content and cannot borrow a noncreator's editor Grant."""
+    source = (await target.space("copy-source"))["id"]
+    first, second, before = await _linked_history(target, source)
+    context = await target.ok("GET", f"/permissions/resources/knowledge_space/{source}/context")
+    await target.ok(
+        "POST",
+        f"/permissions/resources/knowledge_space/{source}/grants:mutate",
+        json={
+            "idempotency_key": target.prefix + "copy-editor",
+            "expected_resource_version": context["resource_version"],
+            "expected_catalog_release_id": context["catalog_release_id"],
+            "changes": [{"op": "ADD", "model_key": "editor", "subject": {"type": "user", "id": str(target.reader_id)}}],
+        },
+    )
+    response = await target.request("GET", f"/knowledge/space/{source}/info", actor=target.reader)
+    assert response.status_code == 200 and response.json()["status_code"] == 200
+    pin = response.headers["x-management-tenant"]
+    assert int(pin) == target.tenant_id
+    reader = {**target.reader, "X-Management-Tenant": pin}
+    change = {"name": target.name("copy-result")}
+    await target.error("POST", f"/knowledge/space/{source}/copy/precheck", 19000, actor=reader, json=change)
+    review = await target.ok("POST", f"/knowledge/space/{source}/copy/precheck", json=change)
+    assert review["can_execute"] and review["check_complete"]
+    command = target.confirmation(review)
+    accepted = await target.ok("POST", f"/knowledge/space/{source}/copy/confirm", json=command)
+    copied = accepted["knowledge"]["id"]
+    assert copied != source and accepted["completed"] is False
+    await _wait_native_job(target, copied, accepted["processing_job"], "space_copy")
+    replay = await target.ok("POST", f"/knowledge/space/{source}/copy/confirm", json=command)
+    assert (
+        replay["knowledge"]["id"] == copied
+        and replay["processing_job"]["job_id"] == accepted["processing_job"]["job_id"]
+    )
+    rows = (await target.files(copied))["data"]
+    assert rows and all(row["id"] not in {first["id"], second["id"]} for row in rows)
+    chain = await target.ok("GET", f"/knowledge/space/file/{rows[0]['id']}/versions")
+    assert chain["document_id"] != before["document_id"] and len(chain["versions"]) == 2
+    assert not {row["version_id"] for row in chain["versions"]}.intersection(
+        row["version_id"] for row in before["versions"]
+    )
+    assert (await target.info(copied))["is_released"] is False
+    await target.error("GET", f"/knowledge/space/{copied}/info", 18040, actor=target.reader)
+    # No force: a real unexpected dependency must block this test/cleanup.
+    await target.delete(source)
+    await target.error("GET", f"/knowledge/space/{source}/info", 18000)
+    chunks = await target.ok(
+        "GET",
+        "/knowledge/chunk",
+        params={
+            "knowledge_id": copied,
+            "file_ids": [row["knowledge_file_id"] for row in chain["versions"]],
+            "limit": 200,
+        },
+    )
+    assert chunks["total"] > 0 and "immutable history" in json.dumps(chunks["data"])
+
+
+async def test_ac43_unconsumed_processing_plan_cannot_apply_after_defaults_change(target):
+    """AC-43/44/48/54: cancellation is read-only; a stale rules confirmation fails with exact 18087."""
+    sid = (await target.space("stale-plan"))["id"]
+    file = await target.upload(sid, "stale.txt", b"e2e-f118 unchanged accepted snapshot\n" * 40)
+    base = f"/knowledge/space/{sid}"
+    anchor = await target.ok("GET", f"{base}/files/{file['id']}/processing-target")
+    jobs = await target.ok("GET", base + "/processing-jobs")
+    review = await target.ok(
+        "POST",
+        base + "/processing-jobs/precheck",
+        json={
+            "kind": "file_resplit",
+            "targets": [anchor],
+            "parameters": {"overrides": {"document": {"chunk_size": 256, "chunk_overlap": 16}}},
+        },
+    )
+    assert review["can_execute"] and review["check_complete"]
+    assert (await target.file(sid, file["id"]))["split_rule"] == file["split_rule"]
+    assert (await target.ok("GET", base + "/processing-jobs")) == jobs
+    settings = await target.ok("GET", base + "/processing-settings")
+    defaults = deepcopy(settings["effective_defaults"])
+    defaults["document"]["chunk_size"] += 1
+    await target.ok(
+        "PUT",
+        base + "/processing-settings",
+        json={"expected_config_version": settings["config_version"], "defaults": defaults},
+    )
+    await target.error("POST", base + "/processing-jobs", 18087, json=target.confirmation(review))
+    current = await target.file(sid, file["id"])
+    assert current["split_rule"] == file["split_rule"] and current["md5"] == file["md5"] and current["status"] == 2
+    assert (await target.ok("GET", base + "/processing-jobs")) == jobs
