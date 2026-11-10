@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -132,9 +133,25 @@ def test_feature_methods_are_unique_and_no_static_endpoint_is_shadowed(wire):
     # OpenAPI must not silently discard another operation at the same path.
     for method, path in counts:
         assert method.lower() in wire["schema"]["paths"][path]
-    assert not any(
-        "Duplicate Operation ID" in value and ("knowledge" in value or "llm" in value) for value in wire["warnings"]
+    feature_ids = {operation(wire, path, method)["operationId"] for method, path in counts}
+    all_ids = Counter(
+        value["operationId"]
+        for path in wire["schema"]["paths"].values()
+        for value in path.values()
+        if isinstance(value, dict) and "operationId" in value
     )
+    assert all(all_ids[value] == 1 for value in feature_ids), {
+        value: all_ids[value] for value in feature_ids if all_ids[value] != 1
+    }
+    # Warning messages include absolute source paths. A checkout named
+    # "knowledge-space-unification" must not turn an unrelated multi-method
+    # route's warning into a knowledge-route collision.
+    duplicate_ids = {
+        matched.group(1)
+        for warning in wire["warnings"]
+        if (matched := re.search(r"Duplicate Operation ID (\S+)", warning))
+    }
+    assert not feature_ids & duplicate_ids, feature_ids & duplicate_ids
 
 
 @pytest.mark.parametrize(
