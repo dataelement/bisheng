@@ -199,3 +199,15 @@ def test_boundary_exception_is_stated_in_both_twins():
     assert "SKILL.md 中明确写有连接方式的外部业务数据库" in zh
     assert "no connecting to the platform's database" in EXECUTION_BOUNDARY_RULES
     assert "connection details are written in a skill's SKILL.md" in EXECUTION_BOUNDARY_RULES
+
+
+# ---------------------------------------------------------------- E2E finding (114, C7): no credential copying
+
+
+def test_prompts_forbid_copying_credentials_into_visible_text():
+    main = agent_factory._build_linsight_system_prompt(
+        False, skills_present=True, has_code_interpreter=True, has_data_analyst=True
+    )
+    sub = agent_factory._build_data_analyst_subagent([_code_interpreter])["system_prompt"]
+    assert "不要把口令、密钥等凭据抄进 description" in main
+    assert "凭据只在代码里使用" in sub
