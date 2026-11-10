@@ -1,7 +1,10 @@
 {
   "title": "組織同期",
   "loading": "読み込み中...",
-  "emptyHint": "ゲートウェイ同期のログはまだありません。同期 API 呼び出し後に表示されます。",
+  "emptyHint": "同期の実行記録はまだありません。実行後にここへ表示されます。",
+  "runNowHint": "現在の同期設定：{{name}}",
+  "noActiveConfig": "有効な WeCom 同期設定がないため、手動同期は実行できません。",
+  "runningHint": "同期を実行中です。しばらくお待ちください…",
   "providers": {
     "wecom": "WeChat Work",
     "feishu": "Feishu",
@@ -19,7 +22,10 @@
     "running": "実行中"
   },
   "triggerType": {
-    "manual": "手動"
+    "manual": "手動",
+    "sso_realtime": "ゲートウェイ連携",
+    "event": "イベント",
+    "scheduled": "定期同期"
   },
   "columns": {
     "time": "終了時刻",
@@ -29,7 +35,8 @@
     "hasErrors": "詳細あり",
     "yes": "はい",
     "no": "いいえ",
-    "actions": "操作"
+    "actions": "操作",
+    "trigger": "実行契機"
   },
   "actions": {
     "create": "新規作成",
@@ -89,7 +96,7 @@
     "empty": "同期ログはまだありません"
   },
   "gatewayDetail": {
-    "title": "ゲートウェイ同期レコード",
+    "title": "同期記録の詳細",
     "status": "結果",
     "configId": "設定 ID",
     "startTime": "開始時刻",
@@ -107,5 +114,6 @@
     "pageOf": "{{page}} / {{maxPage}} ページ",
     "prev": "前へ",
     "next": "次へ"
-  }
+  },
+  "configLoadFailed": "同期設定の読み込みに失敗しました。再読み込みしてください。"
 }

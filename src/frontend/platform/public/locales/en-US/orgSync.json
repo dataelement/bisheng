@@ -1,7 +1,10 @@
 {
   "title": "Org Sync",
   "loading": "Loading...",
-  "emptyHint": "No gateway sync rows yet. Rows appear after the gateway calls sync APIs and the server flushes a log.",
+  "emptyHint": "No sync runs yet. Results appear here after a sync runs.",
+  "runNowHint": "Current sync config: {{name}}",
+  "noActiveConfig": "No active WeCom sync config found; manual sync is unavailable.",
+  "runningHint": "Sync is running, please wait…",
   "providers": {
     "wecom": "WeChat Work",
     "feishu": "Feishu",
@@ -19,7 +22,10 @@
     "running": "Running"
   },
   "triggerType": {
-    "manual": "Manual"
+    "manual": "Manual",
+    "sso_realtime": "Gateway push",
+    "event": "Event",
+    "scheduled": "Scheduled"
   },
   "columns": {
     "time": "End time",
@@ -29,7 +35,8 @@
     "hasErrors": "Has details",
     "yes": "Yes",
     "no": "No",
-    "actions": "Actions"
+    "actions": "Actions",
+    "trigger": "Trigger"
   },
   "actions": {
     "create": "New Config",
@@ -89,7 +96,7 @@
     "empty": "No sync history yet"
   },
   "gatewayDetail": {
-    "title": "Gateway sync record",
+    "title": "Sync record",
     "status": "Result",
     "configId": "Config ID",
     "startTime": "Start",
@@ -107,5 +114,6 @@
     "pageOf": "Page {{page}} / {{maxPage}}",
     "prev": "Previous",
     "next": "Next"
-  }
+  },
+  "configLoadFailed": "Failed to load the sync config. Refresh to retry."
 }

@@ -29,6 +29,11 @@ from bisheng.core.database import get_async_db_session
 # ---------------------------------------------------------------------------
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
+#: ``trigger_type`` values the 组织同步 page lists: Gateway push, the no-Gateway
+#: cron script and the admin console's manual run. F015 ``event``/``reconcile``
+#: rows are diagnostics and stay out of that view.
+LISTED_TRIGGER_TYPES = ("sso_realtime", "scheduled", "manual")
+
 
 def encrypt_auth_config(config_dict: dict) -> str:
     """Encrypt auth_config dict to a Fernet-encrypted string for DB storage."""
@@ -457,14 +462,17 @@ class OrgSyncLogDao:
         page: int = 1,
         limit: int = 20,
     ) -> tuple[list[OrgSyncLog], int]:
-        """Paginated gateway push logs (F014 HMAC ``sso_realtime``), newest first.
+        """Paginated org sync run logs, newest first.
 
-        One row per gateway round-trip (``flush_log``). Excludes F015
-        ``trigger_type='event'`` reconcile / audit rows.
+        Covers every run the 组织同步 page shows: Gateway pushes
+        (``sso_realtime``), the no-Gateway cron script (``scheduled``) and the
+        admin console's "run now" task (``manual``). One row per run
+        (``flush_log``). Excludes F015 ``trigger_type='event'`` reconcile /
+        audit rows.
         """
         async with get_async_db_session() as session:
             base = select(OrgSyncLog).where(
-                OrgSyncLog.trigger_type == "sso_realtime",
+                OrgSyncLog.trigger_type.in_(LISTED_TRIGGER_TYPES),
             )
             count_stmt = select(func.count()).select_from(base.subquery())
             total = await session.scalar(count_stmt) or 0

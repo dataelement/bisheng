@@ -40,6 +40,7 @@ from bisheng.worker.linsight.personal_skill_sweep import (
     sweep_personal_skill_orphans,
 )
 from bisheng.worker.main import bisheng_celery
+from bisheng.worker.org_sync.tasks import execute_org_sync
 from bisheng.worker.permission.retry_failed_tuples import (
     cleanup_succeeded_failed_tuples,
     retry_failed_tuples,
@@ -67,6 +68,7 @@ __all__ = [
     "dispatch_information_subscription_reconcile",
     "dispatch_personal_skill_orphan_sweep",
     "execute_approval_outbox",
+    "execute_org_sync",
     "execute_workflow",
     "file_copy_celery",
     "insert_qa_celery",

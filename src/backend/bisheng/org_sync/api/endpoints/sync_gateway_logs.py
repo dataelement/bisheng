@@ -1,4 +1,4 @@
-"""Read-only listing of gateway org sync log rows (F014 ``sso_realtime``)."""
+"""Read-only listing of org sync run logs (gateway pushes + manual runs)."""
 
 from fastapi import APIRouter, Depends, Query
 
@@ -17,7 +17,8 @@ async def list_gateway_sync_logs(
     limit: int = Query(default=20, ge=1, le=100),
     _: UserPayload = Depends(UserPayload.get_admin_user),
 ):
-    """List ``org_sync_log`` rows produced by HMAC gateway sync (``sso_realtime``)."""
+    """List ``org_sync_log`` rows for every sync run: gateway pushes
+    (``sso_realtime``) and the admin console's manual "run now" (``manual``)."""
     try:
         logs, total = await OrgSyncLogDao.aget_gateway_sso_logs(page, limit)
         log_reads = [

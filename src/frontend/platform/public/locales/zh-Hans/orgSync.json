@@ -1,7 +1,10 @@
 {
   "title": "组织同步",
   "loading": "加载中...",
-  "emptyHint": "暂无网关同步记录。网关调用部门/成员等同步接口并成功落库后，将在此显示。",
+  "emptyHint": "暂无同步记录。执行同步后，结果会显示在这里。",
+  "runNowHint": "当前同步配置：{{name}}",
+  "noActiveConfig": "未找到已启用的企业微信同步配置，无法手动同步。",
+  "runningHint": "同步进行中，请稍候…",
   "providers": {
     "wecom": "企业微信",
     "feishu": "飞书",
@@ -19,7 +22,10 @@
     "running": "运行中"
   },
   "triggerType": {
-    "manual": "手动"
+    "manual": "手动",
+    "sso_realtime": "网关推送",
+    "event": "事件",
+    "scheduled": "定时同步"
   },
   "columns": {
     "time": "结束时间",
@@ -29,7 +35,8 @@
     "hasErrors": "含错误明细",
     "yes": "是",
     "no": "否",
-    "actions": "操作"
+    "actions": "操作",
+    "trigger": "触发方式"
   },
   "actions": {
     "create": "新建配置",
@@ -89,7 +96,7 @@
     "empty": "暂无同步记录"
   },
   "gatewayDetail": {
-    "title": "网关同步记录",
+    "title": "同步记录详情",
     "status": "结果",
     "configId": "配置 ID",
     "startTime": "开始时间",
@@ -107,5 +114,6 @@
     "pageOf": "第 {{page}} / {{maxPage}} 页",
     "prev": "上一页",
     "next": "下一页"
-  }
+  },
+  "configLoadFailed": "同步配置加载失败，请刷新重试。"
 }

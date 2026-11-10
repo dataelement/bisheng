@@ -50,8 +50,10 @@ export async function testOrgSyncConnectionApi(
 
 export async function executeOrgSyncApi(
   configId: number
-): Promise<{ config_id: number; message: string }> {
-  return await axios.post(`/api/v1/org-sync/configs/${configId}/execute`)
+): Promise<{ config_id: number; task_id: string }> {
+  // Route path deliberately avoids `config`: customer WAFs block URLs
+  // containing it, so the id travels in the body.
+  return await axios.post(`/api/v1/org-sync/execute`, { config_id: configId })
 }
 
 export async function getOrgSyncLogsApi(
