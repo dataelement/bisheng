@@ -50,6 +50,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeTagExistError,
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
+    KnowledgeTypeNotSupportedError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
 from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
@@ -496,6 +497,8 @@ class KnowledgeService(KnowledgeUtils):
             ``[page_num]``. ``has_more`` is detected by fetching
             ``page_size + 1`` rows; the ``total`` field is no longer computed.
         """
+        if knowledge_type == KnowledgeTypeEnum.PRIVATE:
+            raise KnowledgeTypeNotSupportedError()
         # Retain the old HTTP action as an alias, never as a business action.
         action = "visible" if action == "use" else action
         total_start = perf_counter()
@@ -838,6 +841,8 @@ class KnowledgeService(KnowledgeUtils):
         knowledge_type = (
             knowledge.type if isinstance(knowledge.type, KnowledgeTypeEnum) else KnowledgeTypeEnum(knowledge.type)
         )
+        if knowledge_type == KnowledgeTypeEnum.PRIVATE:
+            raise KnowledgeTypeNotSupportedError()
         repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
             knowledge.name,
             login_user.user_id,
@@ -880,6 +885,8 @@ class KnowledgeService(KnowledgeUtils):
         knowledge_type = (
             knowledge.type if isinstance(knowledge.type, KnowledgeTypeEnum) else KnowledgeTypeEnum(knowledge.type)
         )
+        if knowledge_type == KnowledgeTypeEnum.PRIVATE:
+            raise KnowledgeTypeNotSupportedError()
         repeat_knowledge = await KnowledgeDao.aget_knowledge_by_name(
             knowledge.name,
             login_user.user_id,

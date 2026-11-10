@@ -30,6 +30,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNotQAError,
     KnowledgePreviewError,
     KnowledgeQAError,
+    KnowledgeTypeNotSupportedError,
 )
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200, resp_500
 from bisheng.common.services import telemetry_service
@@ -295,13 +296,17 @@ async def create_knowledge(
     *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), knowledge: KnowledgeWebCreate
 ):
     """Create Knowledge Base."""
+    if knowledge.type == KnowledgeTypeEnum.PRIVATE.value:
+        raise KnowledgeTypeNotSupportedError()
     context = await KnowledgeCreationPolicy.prepare(login_user, expected_tenant_id=knowledge.expected_tenant_id)
     with tenant_execution_scope(context.tenant_id), strict_tenant_filter():
         if knowledge.type in {KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.SPACE.value}:
             from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
 
             db_knowledge = await LegacyDocumentsApplication().acreate(
-                request=request, identity=login_user, command=knowledge,
+                request=request,
+                identity=login_user,
+                command=knowledge,
                 web_creation_context=context,
             )
         else:
@@ -466,8 +471,13 @@ async def get_knowledge(
         from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
 
         result = await LegacyDocumentsApplication().alist(
-            identity=login_user, name=name, sort_by=sort_by, cursor=cursor,
-            page_size=page_size, preferred_ids=pinned, has_abnormal=has_abnormal,
+            identity=login_user,
+            name=name,
+            sort_by=sort_by,
+            cursor=cursor,
+            page_size=page_size,
+            preferred_ids=pinned,
+            has_abnormal=has_abnormal,
             legacy_view=knowledge_type is KnowledgeTypeEnum.NORMAL,
         )
         return resp_200(data=result)
