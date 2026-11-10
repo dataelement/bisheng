@@ -53,6 +53,9 @@ RESOURCE_NAMES = (
     "copy-source",
     "copy-result",
     "stale-plan",
+    "force-source",
+    "force-repaired",
+    "model-repair",
 )
 
 
