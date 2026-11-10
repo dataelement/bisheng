@@ -11,18 +11,27 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+import sqlalchemy as sa
 from fastapi import HTTPException
-from sqlmodel import Session
+from sqlmodel import Session, select
+from starlette.concurrency import run_in_threadpool
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.v1.schemas import FileProcessBase, KnowledgeFileProcess, KnowledgeFileReProcess
-from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationConfirmationRequiredError,
+    KnowledgeProcessingConflictError,
+)
 from bisheng.knowledge.application.file_processing_adapter import system_processing_defaults
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication as Models
 from bisheng.knowledge.domain.models import knowledge as knowledge_model
 from bisheng.knowledge.domain.models import knowledge_file as file_model
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
+from bisheng.knowledge.domain.schemas.processing_job import ProcessingPrecheckRequest
 from bisheng.knowledge.rag import knowledge_file_pipeline
 from bisheng.worker.knowledge import file_worker
 from test.knowledge_unification import test_file_worker as fixtures
@@ -82,14 +91,84 @@ async def legacy(files, monkeypatch, tmp_path):
     return SimpleNamespace(cls=cls, files=files, auth=auth, storage=storage, publish=publish, defaults=defaults)
 
 
+@pytest.fixture
+async def native_upload(legacy, monkeypatch):
+    # This fixture is requested only by this leaf's save cases. The exported
+    # legacy fixture is also used by test_kn_upload, which owns its own setup.
+    from bisheng.knowledge.application import legacy_files, space_upload
+    from bisheng.knowledge.domain.services import knowledge_space_service as module
+    from bisheng.knowledge.domain.services.knowledge_permission_service import F048KnowledgeFilePermissionAdapter
+
+    context = legacy.files.context
+
+    def begin(connection):
+        connection.exec_driver_sql("BEGIN")
+
+    sa.event.listen(context.engine.sync_engine, "begin", begin)
+    monkeypatch.setattr(module, "KnowledgeService", legacy.cls)
+    monkeypatch.setattr(module, "get_async_db_session", context.sessions)
+    monkeypatch.setattr(module, "get_minio_storage_sync", lambda: legacy.storage)
+    service = module.KnowledgeSpaceService(None, context.user)
+    service._require_action = AsyncMock()
+    service.update_folder_update_time = AsyncMock()
+    monkeypatch.setattr(space_upload, "KnowledgeService", legacy.cls)
+    monkeypatch.setattr(space_upload, "KnowledgeUtils", knowledge_file_pipeline.KnowledgeUtils)
+    monkeypatch.setattr(space_upload, "get_minio_storage_sync", lambda: legacy.storage)
+    projection = F048KnowledgeFilePermissionAdapter(
+        loader=None,
+        permission=SimpleNamespace(authorize_created=AsyncMock(), rollback_created=AsyncMock()),
+    )
+    monkeypatch.setattr(space_upload, "get_f048_resource_adapter", AsyncMock(return_value=projection))
+    service.upload_application_factory = lambda: space_upload.SpaceUploadApplication(
+        login_user=context.user,
+        session_factory=context.sessions,
+        admit_upload=service._require_action,
+        make_permission_record=service._new_file_permission_record,
+        actor_provider=service._permission_actor,
+    )
+    monkeypatch.setattr(legacy_files, "make_legacy_space_service", lambda _request, _identity: service)
+    monkeypatch.setattr(module.SpaceFileDao, "get_user_total_file_size", AsyncMock(return_value=0))
+    monkeypatch.setattr(module.QuotaService, "get_knowledge_space_upload_limit_bytes", AsyncMock(return_value=None))
+    monkeypatch.setattr(module.QuotaService, "get_tenant_storage_remaining_bytes", AsyncMock(return_value=None))
+    monkeypatch.setattr(module.KnowledgeDao, "async_update_knowledge_update_time_by_id", AsyncMock())
+    from bisheng.worker.knowledge import scheduler
+
+    dispatch = Mock()
+    monkeypatch.setattr(scheduler, "enqueue_or_dispatch", dispatch)
+    try:
+        yield service
+        dispatch.assert_not_called()
+    finally:
+        sa.event.remove(context.engine.sync_engine, "begin", begin)
+
+
+@pytest.fixture
+def commands(application):
+    from bisheng.knowledge.application.knowledge_processing_commands import KnowledgeProcessingCommands
+    from bisheng.knowledge.domain.services.processing_job_service import ProcessingJobService
+
+    return KnowledgeProcessingCommands(
+        session_factory=application.context.sessions,
+        service=ProcessingJobService(owner=application.owner, available_kinds={"file_reprocess"}),
+    )
+
+
+def rebuild_precheck():
+    return ProcessingPrecheckRequest(
+        kind="file_reprocess",
+        targets=[{"file_id": 81, "document_id": 80, "version_id": 181}],
+        parameters={"overrides": {"document": {"chunk_size": 222}}},
+    )
+
+
 async def save(legacy, request, asynchronous):
     if asynchronous:
         return await legacy.cls.asave_knowledge_file(legacy.files.context.user, request)
-    return legacy.cls.save_knowledge_file(legacy.files.context.user, request)
+    return await run_in_threadpool(legacy.cls.save_knowledge_file, legacy.files.context.user, request)
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
-async def test_real_save_inherits_space_only_when_old_client_did_not_supply_value(legacy, asynchronous):
+async def test_real_save_inherits_space_only_when_old_client_did_not_supply_value(legacy, native_upload, asynchronous):
     request = KnowledgeFileProcess.model_validate(
         {"knowledge_id": 40, "chunk_size": None, "force_ocr": None, "file_list": [{"file_path": "opaque-document"}]}
     )
@@ -105,11 +184,21 @@ async def test_real_save_inherits_space_only_when_old_client_did_not_supply_valu
         root = await session.get(Knowledge, 40)
         assert root.processing_defaults == legacy.defaults and root.model_config_revision == 0
         assert (await session.get(KnowledgeFile, accepted[0].id)).object_name.endswith(".txt")
+        version = (
+            await session.exec(
+                select(KnowledgeDocumentVersion).where(KnowledgeDocumentVersion.knowledge_file_id == accepted[0].id)
+            )
+        ).one()
+        document = await session.get(KnowledgeDocument, version.document_id)
+        assert version.version_no == 1 and version.is_primary and document.primary_version_id == version.id
+        assert document.knowledge_id == 40
     legacy.publish.assert_not_called()
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
-async def test_real_download_name_selects_table_and_per_file_fields_do_not_erase_batch(legacy, asynchronous):
+async def test_real_download_name_selects_table_and_per_file_fields_do_not_erase_batch(
+    legacy, native_upload, asynchronous
+):
     request = KnowledgeFileProcess.model_validate(
         {
             "knowledge_id": 40,
@@ -126,7 +215,7 @@ async def test_real_download_name_selects_table_and_per_file_fields_do_not_erase
 
 
 @pytest.mark.parametrize("length", [0, -3])
-async def test_old_explicit_unbounded_table_request_reaches_real_saved_rule(legacy, length):
+async def test_old_explicit_unbounded_table_request_reaches_real_saved_rule(legacy, native_upload, length):
     request = KnowledgeFileProcess(
         knowledge_id=40, file_list=[{"file_path": "opaque-table", "excel_rule": {"slice_length": length}}]
     )
@@ -172,22 +261,22 @@ async def test_old_rebuild_cannot_modify_file_from_different_authorized_request_
 
 
 @pytest.mark.parametrize("status", [1, 4, 5])
-async def test_old_rebuild_rejects_actual_inflight_file_before_rule_status_or_queue(legacy, status):
+async def test_old_rebuild_rejects_actual_inflight_file_before_rule_status_or_queue(legacy, commands, status):
     async with legacy.files.context.sessions() as session:
         row = await session.get(KnowledgeFile, 81)
         row.status = status
         await session.commit()
         before = row.model_dump(mode="json")
-    with pytest.raises(KnowledgeProcessingConflictError):
-        await legacy.cls.rebuild_knowledge_file(
-            None, legacy.files.context.user, KnowledgeFileReProcess(knowledge_id=40, kb_file_id=81, chunk_size=222)
-        )
+    with pytest.raises(KnowledgeProcessingConflictError) as error:
+        await commands.aprecheck(40, rebuild_precheck(), identity=legacy.files.context.user)
+    assert error.value.kwargs["reason"] == "processing_file_state_not_ready"
     legacy.publish.assert_not_called()
     async with legacy.files.context.sessions() as session:
         assert (await session.get(KnowledgeFile, 81)).model_dump(mode="json") == before
+        assert not (await session.exec(select(KnowledgeOperationPlan))).all()
 
 
-async def test_old_rebuild_rejects_actual_model_rebuilding_operation_before_file_mutation(legacy):
+async def test_old_rebuild_rejects_actual_model_rebuilding_operation_before_file_mutation(legacy, commands):
     async with legacy.files.context.sessions() as session:
         plan = await Models.aprepare_model_change(
             session, 40, 12, login_user=legacy.files.context.user, operation_id="other-model-operation"
@@ -195,10 +284,25 @@ async def test_old_rebuild_rejects_actual_model_rebuilding_operation_before_file
         await Models.aapply_model_change(session, plan)
         before = (await session.get(KnowledgeFile, 81)).model_dump(mode="json")
         await session.commit()
-    with pytest.raises(KnowledgeProcessingConflictError):
+    with pytest.raises(KnowledgeProcessingConflictError) as error:
+        await commands.aprecheck(40, rebuild_precheck(), identity=legacy.files.context.user)
+    assert error.value.kwargs["reason"] == "processing_space_not_ready"
+    legacy.publish.assert_not_called()
+    async with legacy.files.context.sessions() as session:
+        assert (await session.get(KnowledgeFile, 81)).model_dump(mode="json") == before
+        assert not (await session.exec(select(KnowledgeOperationPlan))).all()
+
+
+async def test_public_space_rebuild_requires_confirmation_before_any_file_or_root_change(legacy):
+    async with legacy.files.context.sessions() as session:
+        before = (await session.get(KnowledgeFile, 81)).model_dump(mode="json")
+        root_before = (await session.get(Knowledge, 40)).model_dump(mode="json")
+    with pytest.raises(KnowledgeOperationConfirmationRequiredError):
         await legacy.cls.rebuild_knowledge_file(
             None, legacy.files.context.user, KnowledgeFileReProcess(knowledge_id=40, kb_file_id=81, chunk_size=222)
         )
     legacy.publish.assert_not_called()
     async with legacy.files.context.sessions() as session:
         assert (await session.get(KnowledgeFile, 81)).model_dump(mode="json") == before
+        assert (await session.get(Knowledge, 40)).model_dump(mode="json") == root_before
+        assert not (await session.exec(select(KnowledgeOperationPlan))).all()
