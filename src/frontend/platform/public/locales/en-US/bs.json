@@ -855,7 +855,7 @@
     "tts": "Text-to-Speech (TTS)",
     "updateSuccess": "Update Success",
     "voiceType": "Voice Type",
-    "voiceTypeRequired": "Voice type is a required field",
+    "voiceTypeRequired": "Voice type cannot be empty",
     "voiceTypeTooltip": "Select the voice type for text-to-speech synthesis",
     "webSearch": "Built-in model web search",
     "visitOfficialWebsiteToViewAvailableModels": "Visit the official website to view available models",
