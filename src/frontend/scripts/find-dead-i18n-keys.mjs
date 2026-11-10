@@ -31,6 +31,10 @@ const SCOPES = [
   {
     id: 'platform',
     srcDirs: ['platform/src'],
+    // Dashboard names and schema fields arrive from backend metadata via t(variable).
+    referenceSources: {
+      'dashboard.json': ['../backend/bisheng/telemetry_search/domain/init_dataset.py'],
+    },
     langs: ['zh-Hans', 'en-US', 'ja'],
     // Generated artifacts are excluded: api_errors is reconciled against the
     // backend registry by check-i18n; shared.json is consumed from packages/*
@@ -108,6 +112,10 @@ function scanScope(scope) {
   const result = {};
   for (const file of scope.files()) {
     const ns = scope.nsOf(file);
+    // A missing metadata source must fail the scan before any --delete operation.
+    const referenceSource = [source, ...(scope.referenceSources?.[file] || []).map((f) =>
+      fs.readFileSync(path.resolve(WS, f), 'utf8'),
+    )].join('\n');
     const keys = flatten(JSON.parse(fs.readFileSync(scope.path(scope.langs[0], file), 'utf8')));
     const groups = { referenced: 0, dynamic: [], safe: [], needsReview: [] };
     for (const key of keys) {
@@ -115,11 +123,11 @@ function scanScope(scope) {
       const addrs = ns ? [key, `${ns}:${key}`] : [key];
       if (addrs.some(isDynamic)) {
         groups.dynamic.push(key);
-      } else if (addrs.some((a) => source.includes(a) || nestedRefs.has(a))) {
+      } else if (addrs.some((a) => referenceSource.includes(a) || nestedRefs.has(a))) {
         groups.referenced++;
       } else {
         const leaf = key.split('.').pop();
-        (leaf.length >= 3 && source.includes(leaf) ? groups.needsReview : groups.safe).push(key);
+        (leaf.length >= 3 && referenceSource.includes(leaf) ? groups.needsReview : groups.safe).push(key);
       }
     }
     result[file] = { total: keys.length, ...groups };

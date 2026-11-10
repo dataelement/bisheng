@@ -213,7 +213,8 @@ async def test_without_roster_permission_only_actor_sources_are_returned() -> No
 
 
 @pytest.mark.asyncio
-async def test_inactive_model_or_grant_never_appears_in_explanation() -> None:
+@pytest.mark.parametrize("inherited", [False, True])
+async def test_inactive_model_keeps_existing_explanation(inherited) -> None:
     sources = _sources()
     source = sources.canonicalize_source(
         source_id=1,
@@ -229,8 +230,28 @@ async def test_inactive_model_or_grant_never_appears_in_explanation() -> None:
         grant,
         model=replace(grant.model, active=False),
     )
-    inactive_grant = replace(grant, active=False)
-    for candidate in (inactive_model, inactive_grant):
+    explanation = await PermissionExplainService().explain(
+        PermissionExplainContext(
+            tenant_id=7,
+            resource_type="folder",
+            resource_id="42",
+            resource_version=3,
+            mode="INHERIT" if inherited else "CUSTOM",
+            parent_type="knowledge_space",
+            parent_id="10",
+            local_grants=() if inherited else (inactive_model,),
+            inherited=InheritedGrantSet("knowledge_space", "10", (inactive_model,)) if inherited else None,
+            actor_projected_subjects=frozenset({"user:100"}),
+            can_manage_roster=True,
+        )
+    )
+    assert [row.source_id for row in explanation.sources] == [1]
+    assert explanation.action_codes == ("edit",)
+    assert explanation.sources[0].editable is not inherited
+    for candidate in (
+        replace(inactive_model, active=False),
+        replace(inactive_model, sources=(replace(source, active=False),)),
+    ):
         explanation = await PermissionExplainService().explain(
             PermissionExplainContext(
                 tenant_id=7,

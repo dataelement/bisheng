@@ -1,10 +1,10 @@
-"use client"
+import { Outlined } from "bisheng-icons";
 
-import { MetricDataResponse } from '@/pages/Dashboard/types/chartData'
-import { ArrowDown, ArrowUp, GripHorizontalIcon, Minus } from 'lucide-react'
-import { useMemo } from 'react'
-import { ComponentStyleConfig, DataConfig } from '../../types/dataConfig'
-import { cn } from '@/utils'
+import { MetricDataResponse } from '@/pages/Dashboard/types/chartData';
+import { cn } from '@/utils';
+import { GripHorizontalIcon,Minus } from "lucide-react";
+import { useMemo } from 'react';
+import { ComponentStyleConfig,DataConfig } from '../../types/dataConfig';
 
 interface MetricCardProps {
   data: MetricDataResponse,
@@ -88,9 +88,9 @@ export function MetricCard({ title: indicatorName, data, isPreviewMode, dataConf
     const iconClass = "h-4 w-4"
     switch (data.trend.direction) {
       case 'up':
-        return <ArrowUp className={`${iconClass} text-green-500`} />
+        return <Outlined.ArrowUp className={`${iconClass} text-green-500`} />
       case 'down':
-        return <ArrowDown className={`${iconClass} text-red-500`} />
+        return <Outlined.ArrowDown className={`${iconClass} text-red-500`} />
       case 'flat':
         return <Minus className={`${iconClass} text-gray-500`} />
     }

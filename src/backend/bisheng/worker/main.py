@@ -77,6 +77,23 @@ def _register_worker_permission_contexts() -> None:
     register_department_projection_runtime_context()
 
 
+def _register_app_publish_composition() -> None:
+    """Subscribe F055 to F054's deletion event on this worker.
+
+    The twin of the call in ``main.py``. This is the copy that matters most:
+    the approval outbox and every task-triggered deletion run here, so an
+    API-only registration means "approved but never published" and "deleted but
+    the approval task is still in somebody's inbox" — both silent, both only
+    reproducible with a worker in the picture (F055 design D16).
+    """
+    try:
+        from bisheng.app_publish.composition import register as register_app_publish
+
+        register_app_publish()
+    except Exception:
+        logger.exception("app_publish composition root failed to register on worker; continuing startup")
+
+
 @celeryd_after_setup.connect
 def on_worker_init(*args, **kwargs):
     global _WORKER_START
@@ -86,6 +103,7 @@ def on_worker_init(*args, **kwargs):
     get_worker_loop()  # start the persistent loop thread before any task arrives
     run_async_task(lambda: initialize_app_context(settings, instance_role="celery"))
     _register_worker_permission_contexts()
+    _register_app_publish_composition()
     queues = bisheng_celery.amqp.queues
     all_queues = []
     for queue_name, _ in queues.items():

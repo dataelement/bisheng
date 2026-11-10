@@ -1,3 +1,5 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { refreshChannelState, useChannelStateRefresh } from "./Subscription/hooks/useChannelStateRefresh";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { Outlined } from "bisheng-icons";
@@ -75,6 +77,9 @@ function ChannelSquare({
   isH5 = false,
   onOpenMobileNav,
 }: ChannelSquareProps) {
+  const queryClient = useQueryClient();
+  const loadedPageRef = useRef(1);
+  const refreshInFlightRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
@@ -123,14 +128,6 @@ function ChannelSquare({
     (async () => {
       try {
         setJoiningId(channelId);
-        const nextStatus: SquareStatus =
-          target.visibility === "public" ? "joined" : "pending";
-
-        // 先乐观更新为目标状态
-        updateAllChannels((prev) =>
-          prev.map((c) => (c.id === channelId ? { ...c, status: nextStatus } : c))
-        );
-
         const res: any = subscribeApi
           ? await subscribeApi(channelId)
           : await subscribeManagerChannelApi({ channel_id: channelId });
@@ -144,7 +141,7 @@ function ChannelSquare({
             localize("com_knowledge.operation_failed_retry");
           throw new Error(msg);
         }
-        if (target.visibility === "public") {
+        if ((res?.data ?? res) === "subscribed") {
           showToast({
             message: localize("subscribe_success"),
             severity: NotificationSeverity.SUCCESS
@@ -156,7 +153,8 @@ function ChannelSquare({
           });
         }
         // 与服务端对齐订阅态（含需审核频道的 pending），避免仅乐观更新与接口不一致
-        load(1);
+        await refreshChannelState(queryClient);
+        await load(1, true);
       } catch {
         updateAllChannels((prev) =>
           prev.map((c) => (c.id === channelId ? { ...c, status: target.status } : c))
@@ -181,11 +179,12 @@ function ChannelSquare({
   };
 
   const load = useCallback(
-    async (nextPage: number) => {
+    async (nextPage: number, silent = false) => {
       const isFirstPage = nextPage === 1;
       const requestId = ++requestSeqRef.current;
 
-      if (isFirstPage) {
+      if (isFirstPage && !silent) {
+        loadedPageRef.current = 1;
         setInitialLoading(true);
         setLoadingMore(false);
         setInitialError(false);
@@ -198,13 +197,26 @@ function ChannelSquare({
       }
 
       try {
-        const res = fetchApi
-          ? await fetchApi({ keyword: searchQuery.trim() || undefined, page: nextPage, page_size: CHANNEL_PAGE_SIZE })
-          : await getChannelSquareApi({
-            keyword: searchQuery.trim() || undefined,
-            page: nextPage,
-            page_size: CHANNEL_PAGE_SIZE
-          });
+        const fetchPage = (pageNumber: number) => (fetchApi ?? getChannelSquareApi)({
+          keyword: searchQuery.trim() || undefined,
+          page: pageNumber,
+          page_size: CHANNEL_PAGE_SIZE,
+        });
+        const pagesToRefresh = silent ? loadedPageRef.current : 1;
+        const responses = await Promise.all(
+          Array.from({ length: pagesToRefresh }, (_, index) => fetchPage(silent ? index + 1 : nextPage)),
+        );
+        const first = responses[0];
+        const firstPayload = first.data ?? first;
+        const res = silent ? {
+          data: {
+            ...firstPayload,
+            data: responses.flatMap((response) => {
+              const payload = response.data ?? response;
+              return payload.data ?? payload.list ?? [];
+            }),
+          },
+        } : first;
         if (requestId !== requestSeqRef.current) return;
 
         const root: any = res;
@@ -262,12 +274,15 @@ function ChannelSquare({
           return;
         }
 
+        setInitialError(false);
+        setLoadMoreError(false);
         allChannelsRef.current = nextChannels;
         setAllChannels(nextChannels);
         setHasMorePage(hasExplicitTotal ? nextChannels.length < total : mapped.length >= CHANNEL_PAGE_SIZE);
-        setPage(nextPage);
+        loadedPageRef.current = silent ? pagesToRefresh : nextPage;
+        setPage(loadedPageRef.current);
       } catch {
-        if (requestId !== requestSeqRef.current) return;
+        if (requestId !== requestSeqRef.current || silent) return;
         if (isFirstPage) {
           allChannelsRef.current = [];
           setAllChannels([]);
@@ -287,6 +302,12 @@ function ChannelSquare({
   useEffect(() => {
     load(1);
   }, [searchQuery, load, refreshKey]);
+
+  useChannelStateRefresh(() => {
+    if (initialLoading || loadingMore || joiningId || refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    void load(1, true).finally(() => { refreshInFlightRef.current = false; });
+  });
 
   const visibleChannels = allChannels;
 

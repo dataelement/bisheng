@@ -2,15 +2,8 @@ import React, { useEffect, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { Permissions } from '~/types/chat';
 import type { TStartupConfig, AgentUpdateParams } from '~/types/chat';
-import {
-  Button,
-  Switch,
-  OGDialog,
-  OGDialogTitle,
-  OGDialogClose,
-  OGDialogContent,
-  OGDialogTrigger,
-} from '~/components/ui';
+import { Button, OGDialog, OGDialogTitle, OGDialogClose, OGDialogContent, OGDialogTrigger } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useUpdateAgentMutation, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { ShareOutlineIcon } from '~/components/icons';
 import { cn, removeFocusOutlines } from '~/utils';
@@ -85,7 +78,7 @@ export default function ShareAgent({
         message: `${localize('com_agents_update_error')}${
           error.message ? ` ${localize('com_ui_error')}: ${error.message}` : ''
         }`,
-        status: 'error',
+        status: 'warning',
       });
     },
   });
@@ -196,7 +189,7 @@ export default function ShareAgent({
               control={control}
               disabled={isFetching || updateAgent.isLoading || !instanceProjectId}
               render={({ field }) => (
-                <Switch
+                <Switch className="peer"
                   {...field}
                   checked={field.value}
                   onCheckedChange={field.onChange}
@@ -244,7 +237,7 @@ export default function ShareAgent({
                 isFetching || updateAgent.isLoading || !instanceProjectId || !sharedGlobalValue
               }
               render={({ field }) => (
-                <Switch
+                <Switch className="peer"
                   {...field}
                   checked={field.value}
                   onCheckedChange={field.onChange}

@@ -1,7 +1,8 @@
 import Cookies from 'js-cookie';
-import { Check, FileText, GanttChartIcon, Globe, LogOut } from 'lucide-react';
+import { FileText, GanttChartIcon, Globe, LogOut } from 'lucide-react';
 import { memo, useCallback, useState } from 'react';
 import { useRecoilState } from 'recoil';
+import { Dropdown, DropdownGroup, DropdownItem, DropdownSub } from '@bisheng/ui';
 import { GearIcon, UserIcon } from '~/components/svg';
 import { useGetStartupConfig, useGetUserBalance } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
@@ -11,7 +12,6 @@ import store from '~/store';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { canShowPlatformAdminEntry } from '~/utils/platformAccess';
 import MyKnowledgeView from '../Chat/Input/Files/MyKnowledgeView';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '../ui';
 import Settings from './Settings';
 
 function AccountSettings() {
@@ -61,84 +61,70 @@ function AccountSettings() {
         <div>{localize('com_nav_personal_knowledge')}</div>
       </div>
       <div className='h-[1px] bg-gray-200'></div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <div className='cursor-pointer mt-text-sm mt-2 flex h-auto w-full items-center gap-2 rounded-xl p-2 text-sm transition-all duration-200 ease-in-out hover:bg-[#EBEFF8]'>
-            <div className="-ml-0.9 -mt-0.8 h-8 w-8 flex-shrink-0">
-              <div className="relative flex">
-                {name.length === 0 ? (
-                  <div
-                    style={{
-                      backgroundColor: 'rgb(121, 137, 255)',
-                      width: '32px',
-                      height: '32px',
-                      boxShadow: 'rgba(240, 246, 252, 0.1) 0px 0px 0px 1px',
-                    }}
-                    className="relative flex items-center justify-center rounded-full p-1 text-text-primary"
-                    aria-hidden="true"
-                  >
-                    <UserIcon />
-                  </div>
-                ) : (
-                  <div className="w-8 h-8 min-w-6 text-white bg-primary rounded-full flex justify-center items-center text-xs">{(user?.name ?? user?.username ?? localize('com_nav_user')).substring(0, 2).toUpperCase()}</div>
-                  // <img
-                  //   className="rounded-full"
-                  //   src={(user?.avatar ?? '') || avatarSrc}
-                  //   alt={`${name}'s avatar`}
-                  // />
-                )}
-              </div>
-            </div>
-            <div
-              className="mt-2 grow overflow-hidden text-ellipsis whitespace-nowrap text-left text-text-primary"
-              style={{ marginTop: '0', marginLeft: '0' }}
-            >
-              {user?.name ?? user?.username ?? localize('com_nav_user')}
+      <Dropdown
+        menu={
+          <>
+            {showAdminEntry && (
+              <DropdownItem
+                icon={<GanttChartIcon />}
+                onSelect={() => window.open(getPlatformAdminPanelUrl(), '_blank', 'noreferrer')}
+              >
+                {localize('com_nav_admin_panel')}
+              </DropdownItem>
+            )}
+            <DropdownSub icon={<Globe />} label={localize('com_nav_language')}>
+              <DropdownGroup label={localize('com_nav_language_label')}>
+                <DropdownItem checked={langcode === 'zh-Hans'} onSelect={() => changeLang('zh-Hans')}>
+                  {localize('com_nav_lang_chinese')}
+                </DropdownItem>
+                <DropdownItem checked={langcode === 'en-US'} onSelect={() => changeLang('en-US')}>
+                  {localize('com_nav_lang_english')}
+                </DropdownItem>
+                <DropdownItem checked={langcode === 'ja'} onSelect={() => changeLang('ja')}>
+                  {localize('com_nav_lang_japanese')}
+                </DropdownItem>
+              </DropdownGroup>
+            </DropdownSub>
+            <DropdownItem icon={<LogOut />} onSelect={logout}>
+              {localize('com_nav_log_out')}
+            </DropdownItem>
+          </>
+        }
+      >
+        <div className='cursor-pointer mt-text-sm mt-2 flex h-auto w-full items-center gap-2 rounded-xl p-2 text-sm transition-all duration-200 ease-in-out hover:bg-[#EBEFF8]'>
+          <div className="-ml-0.9 -mt-0.8 h-8 w-8 flex-shrink-0">
+            <div className="relative flex">
+              {name.length === 0 ? (
+                <div
+                  style={{
+                    backgroundColor: 'rgb(121, 137, 255)',
+                    width: '32px',
+                    height: '32px',
+                    boxShadow: 'rgba(240, 246, 252, 0.1) 0px 0px 0px 1px',
+                  }}
+                  className="relative flex items-center justify-center rounded-full p-1 text-text-primary"
+                  aria-hidden="true"
+                >
+                  <UserIcon />
+                </div>
+              ) : (
+                <div className="w-8 h-8 min-w-6 text-white bg-primary rounded-full flex justify-center items-center text-xs">{(user?.name ?? user?.username ?? localize('com_nav_user')).substring(0, 2).toUpperCase()}</div>
+                // <img
+                //   className="rounded-full"
+                //   src={(user?.avatar ?? '') || avatarSrc}
+                //   alt={`${name}'s avatar`}
+                // />
+              )}
             </div>
           </div>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className='w-60 rounded-2xl'>
-          {showAdminEntry && <a href={getPlatformAdminPanelUrl()} target='_blank' rel="noreferrer">
-            <DropdownMenuItem className='select-item text-sm font-normal'>
-              <GanttChartIcon className="icon-md" />
-              {localize('com_nav_admin_panel')}
-            </DropdownMenuItem>
-          </a>}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className='select-item text-sm font-normal'>
-              <Globe className="icon-md" />
-              {localize('com_nav_language')}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className='w-40 rounded-2xl'>
-              <span className='text-xs text-gray-400 pl-2'>{localize('com_nav_language_label')}</span>
-              <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('zh-Hans')}>
-                {localize('com_nav_lang_chinese')}
-                {langcode === 'zh-Hans' && <Check size={16} />}
-              </DropdownMenuItem>
-              <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('en-US')}>
-                {localize('com_nav_lang_english')}
-                {langcode === 'en-US' && <Check size={16} />}
-              </DropdownMenuItem>
-              <DropdownMenuItem className='font-normal justify-between' onClick={() => changeLang('ja')}>
-                {localize('com_nav_lang_japanese')}
-                {langcode === 'ja' && <Check size={16} />}
-              </DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          {/* <DropdownMenuItem className='select-item text-sm font-normal'>
-            <div className='w-full flex gap-2 items-center' onClick={() => setShowSettings(true)} >
-              <GearIcon className="icon-md" aria-hidden="true" />
-              {localize('com_nav_settings')}
-            </div>
-          </DropdownMenuItem> */}
-          <DropdownMenuItem className='select-item text-sm font-normal'>
-            <div className='w-full flex gap-2 items-center' onClick={logout} >
-              <LogOut className="icon-md" />
-              {localize('com_nav_log_out')}
-            </div>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <div
+            className="mt-2 grow overflow-hidden text-ellipsis whitespace-nowrap text-left text-text-primary"
+            style={{ marginTop: '0', marginLeft: '0' }}
+          >
+            {user?.name ?? user?.username ?? localize('com_nav_user')}
+          </div>
+        </div>
+      </Dropdown>
       {/* {showFiles && <FilesView open={showFiles} onOpenChange={setShowFiles} />} */}
       {showKnowledge && <MyKnowledgeView open={showKnowledge} onOpenChange={setShowKnowledge} />}
       {showSettings && <Settings open={showSettings} onOpenChange={setShowSettings} />}

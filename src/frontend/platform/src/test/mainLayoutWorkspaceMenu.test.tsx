@@ -1,10 +1,9 @@
-import type { ReactNode } from "react";
-
 import MainLayout from "@/layout/MainLayout";
 import { darkContext } from "@/contexts/darkContext";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
-import { fireEvent, render, screen } from "@/test/test-utils";
+import { render, screen } from "@/test/test-utils";
+import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/layout/HeaderMenu", () => ({
@@ -41,34 +40,11 @@ vi.mock("@/components/bs-icons/menu/system", () => ({
   DashboardIcon: () => <span aria-hidden="true" />,
 }));
 
-vi.mock("@/components/bs-ui/select/hover", () => ({
-  SelectHover: ({ triagger, children }: { triagger: ReactNode; children: ReactNode }) => (
-    <div>
-      {triagger}
-      <div>{children}</div>
-    </div>
-  ),
-  SelectHoverItem: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) => (
-    <button type="button" onClick={onClick}>
-      {children}
-    </button>
-  ),
-}));
-
 vi.mock("@/components/bs-ui/separator", () => ({
   Separator: () => null,
 }));
 
-vi.mock("@/components/bs-ui/tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children, ...props }: { children: ReactNode } & Record<string, unknown>) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
-  ),
-}));
+
 
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: vi.fn(),
@@ -83,7 +59,8 @@ vi.mock("@/controllers/API/tenant", () => ({
   switchTenantApi: vi.fn(),
 }));
 
-vi.mock("@/controllers/request", () => ({
+vi.mock("@/controllers/request", async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => Promise.resolve(promise)),
 }));
 
@@ -94,9 +71,14 @@ vi.mock("@/hooks/useDshBrowserConfig", () => ({
   }),
 }));
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   toast: vi.fn(),
-}));
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+});
 
 beforeAll(() => {
   (globalThis as any).__APP_ENV__ = { BASE_URL: "" };
@@ -158,6 +140,14 @@ function renderLayout(webMenu: string[]) {
   );
 }
 
+// The account menu is a Radix DropdownMenu: its items only exist once it is open.
+async function openAccountMenu() {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "tester" }));
+  await screen.findByRole("menu");
+  return user;
+}
+
 describe("MainLayout workspace entry", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -171,31 +161,35 @@ describe("MainLayout workspace entry", () => {
     });
   });
 
-  it("shows the workspace entry for the canonical workstation menu key", () => {
+  it("shows the workspace entry for the canonical workstation menu key", async () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 
     renderLayout(["workstation"]);
+    const user = await openAccountMenu();
 
-    const workspaceEntry = screen.getByRole("button", { name: "menu.workspace" });
+    const workspaceEntry = screen.getByRole("menuitem", { name: "menu.workspace" });
     expect(workspaceEntry).toBeInTheDocument();
 
-    fireEvent.click(workspaceEntry);
+    await user.click(workspaceEntry);
     expect(openSpy).toHaveBeenCalledWith("/workspace/");
   });
 
-  it("keeps the workspace entry visible for legacy frontend menu data", () => {
+  it("keeps the workspace entry visible for legacy frontend menu data", async () => {
     renderLayout(["frontend"]);
+    await openAccountMenu();
 
     expect(
-      screen.getByRole("button", { name: "menu.workspace" }),
+      screen.getByRole("menuitem", { name: "menu.workspace" }),
     ).toBeInTheDocument();
   });
 
-  it("hides the workspace entry when the user lacks both menu keys", () => {
+  it("hides the workspace entry when the user lacks both menu keys", async () => {
     renderLayout(["knowledge"]);
+    await openAccountMenu();
 
+    expect(screen.getByRole("menuitem", { name: "menu.changePwd" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "menu.workspace" }),
+      screen.queryByRole("menuitem", { name: "menu.workspace" }),
     ).not.toBeInTheDocument();
   });
 });

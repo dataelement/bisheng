@@ -42,6 +42,75 @@ def test_unbound_direct_tuple_uses_standard_model_fallback():
     assert grant.assignees[0].source_type == "DIRECT"
 
 
+@pytest.mark.parametrize("relation", ("manager", "can_manage"))
+@pytest.mark.parametrize("with_binding", (False, True))
+def test_legacy_user_group_admin_manager_is_retired_without_member_fallback(relation, with_binding):
+    source = _tuple(user="user_group:8#admin", relation=relation)
+    bindings = (
+        (
+            LegacyGrantBinding(
+                binding_key="legacy-group-admin",
+                tenant_id=7,
+                resource_type="workflow",
+                resource_id="wf-1",
+                relation=relation,
+                model_source_key="legacy-manager",
+                subject_type="user_group",
+                subject_id="8",
+                userset_relation="admin",
+            ),
+        )
+        if with_binding
+        else ()
+    )
+
+    result = map_legacy_tuples(
+        (source,),
+        bindings,
+        model_key_by_source={"legacy-manager": "manager"},
+    )
+
+    assert result.blockers == ()
+    assert result.grants == ()
+    assert result.preserved_tuples == ()
+    assert result.retired_tuple_keys == (source.key,)
+    assert [(row.difference_type, row.severity) for row in result.differences] == [
+        ("LEGACY_USER_GROUP_ADMIN_MANAGER_RETIRED", "INFO"),
+    ]
+
+
+def test_retiring_group_admin_manager_preserves_member_grant_and_protected_creator():
+    resource = PermissionMigrationResourceDTO(
+        tenant_id=7,
+        resource_type="workflow",
+        resource_id="wf-1",
+        status="ONLINE",
+        owner_user_id=11,
+        ownership_kind="USER",
+        source_locator="workflow:wf-1",
+    )
+    result = map_legacy_tuples(
+        (
+            _tuple(user="user_group:8#admin", relation="manager"),
+            _tuple(user="user_group:8#member", relation="manager"),
+        ),
+        (),
+        model_key_by_source={},
+        resources=(resource,),
+    )
+
+    assert result.blockers == ()
+    sources = {
+        (grant.model_key, row.subject_type, row.subject_id, row.userset_relation, row.protected)
+        for grant in result.grants
+        for row in grant.assignees
+    }
+    assert sources == {
+        ("manager", "user_group", "8", "member", False),
+        ("owner", "user", "11", None, True),
+    }
+
+
 def test_unique_binding_wins_and_preserves_provenance_and_protection():
     binding = LegacyGrantBinding(
         binding_key="binding-1",

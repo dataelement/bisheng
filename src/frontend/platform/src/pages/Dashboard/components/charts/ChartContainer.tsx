@@ -6,7 +6,7 @@ import { ChartDataResponse, MetricDataResponse } from '@/pages/Dashboard/types/c
 import { ChartType, DashboardComponent } from '@/pages/Dashboard/types/dataConfig'
 import { useEditorDashboardStore } from '@/store/dashboardStore'
 import { useEffect } from 'react'
-import { useQuery } from 'react-query'
+import { useQuery } from '@tanstack/react-query'
 import { BaseChart } from './BaseChart'
 import { MetricCard } from './MetricCard'
 import { useTranslation } from 'react-i18next'
@@ -27,7 +27,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   const queryParams = refreshInfo?.queryParams || []
 
   // Query chart data
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isInitialLoading: isLoading, error, refetch } = useQuery({
     queryKey: ['chartData', component.id, refreshTrigger],
     queryFn: () => queryChartData({
       useId: isPreviewMode,
@@ -90,7 +90,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
         </h3>}
         <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/ept-${component.type}.png`} className="max-w-60 max-h-full" />
         <div className='flex size-full absolute justify-center items-center'>
-          <span className="text-sm bg-gray-50/80 px-2 py-1 text-primary truncate">{t('noDataInChart')}</span>
+          <span className="text-sm bg-gray-50/80 px-2 py-1 text-primary truncate">{t(error ? 'operationFailed' : 'noDataInChart')}</span>
         </div>
       </div>
     );

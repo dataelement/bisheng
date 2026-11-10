@@ -2,8 +2,8 @@
 """Audit or repair missing F048 projections for canonical system resources.
 
 The default is dry-run. Apply creates missing preset-tool projections through
-the online F048 facade so the durable ledger, SQL mirrors, and OpenFGA tuples
-stay consistent. Preset dashboards are user-owned examples and are deliberately
+the F048 facade. Existing CURRENT resources retain their grants, including
+revoked all-member access. Preset dashboards are user-owned examples and are deliberately
 outside this system-resource reconciler.
 
 Run from ``src/backend`` with the live config:

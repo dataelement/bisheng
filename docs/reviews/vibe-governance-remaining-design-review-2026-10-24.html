@@ -1,0 +1,556 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vibe 剩余设计复审</title><style>body{max-width:1120px;margin:32px auto;padding:0 22px;color:#203047;font:16px/1.7 system-ui}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}@media print{body{margin:0;max-width:none}pre{font-size:11px}}</style><h1>Vibe 剩余设计修订复审</h1><p>离线评审稿，包含两份正式设计全文。F055 已进入实施；本页的 F054/F056 等待设计确认。</p><pre># Vibe 剩余设计修订复审（2026-10-24）
+
+## 结论
+
+F054-B1、F056-S1 已在正式 design.md 修订。按 sdd-review 24 项接手检查，未发现新的 high/medium 设计问题，结果 LGTM。**设计结论不代表代码已经实现；两份剩余设计仍需用户单独确认。** F055 简化设计已获确认且主功能已编码，不重复申请。
+
+## 本次修订
+
+| 问题 | 最小修订 | 核对点 |
+|---|---|---|
+| F054-B1 存量实例隔离丢失无消费者 | 宿主 unit 修复自有规则并配对验证，失败隔离/停止本模块实例 | 只允许宿主执行；无宽泛 root 授权；未知 writer 不释放/PVC 不清理 |
+| F056-S1 binding 撤销未记凭据审计 | 凭据 Owner 提供同 session revoke_runtime_binding，真实转移与审计原子落库 | 切换/失败候选/停止覆盖；可信 app 关联；重放不重复 |
+
+## 审查范围与门禁
+
+读取正式 spec/design/tasks、release-contract、constitution 及实际 runtime projection/credential/host egress 调用点；本次只修改设计，不将新目标写成已有行为。§1–§8 与既有 D 编号保持，无章节改号。
+
+### 054-app-domain-runtime
+
+批准目标 SHA-256：`1762a7e504f032dcc218e554a7fb2748c5234d14d8575a60f98225321d8713dc`。
+
+| 检查 | 结果 |
+|---|---|
+| 1 | PASS |
+| 2 | PASS |
+| 3 | PASS |
+| 4 | PASS |
+| 5 | PASS |
+| 6 | PASS |
+| 7 | PASS |
+| 8 | PASS |
+| 9 | PASS |
+| 10 | PASS |
+| 11 | PASS |
+| 12 | PASS |
+| 13 | PASS |
+| 14 | PASS |
+| 15 | PASS |
+| 16 | PASS |
+| 17 | PASS |
+| 18 | PASS |
+| 19 | PASS |
+| 20 | PASS |
+| 21 | PASS |
+| 22 | PASS |
+| 23 | PASS |
+| 24 | PASS |
+
+# Design: 托管应用运行时与安全收尾
+
+&gt; **2026-10-23 设计评审稿，待用户单独确认。** 规格已确认，本文新增设计尚未实现。
+&gt; 现状基线：`5f2541f4bc483c24624fede9031c88c4ec6f58f4`；增量规格确认提交：`dda16a6502908ba8d58cff61dc350c0213b86c19`。旧版 D1–D15 编号保留，内容按当前代码刷新；历史任务的行号、坑编号和 MVP 后置说法不作为当前实现状态。
+&gt;
+&gt; What：[spec.md](./spec.md)（73 条 AC）；流水账：[tasks.md](./tasks.md)；不变量：[release-contract.md](../release-contract.md)。本轮只补 AC-66、AC-67、AC-68、AC-69、AC-70、AC-71、AC-72、AC-73，对应历史 T098 / T099，不重开 F059 / F086 验收。
+
+## 1. 目标与非目标
+
+保持统一应用入口、平台身份注入、持久化数据和独立编排边界，补齐 Docker 应用访问宿主服务的隔离，以及 OBO 配置不完整时的入口拒绝。为 F055 用户确认的配置重建提供现有部署执行与受限运行环境只读协议。
+
+非目标：商业授权、重写 manager、重新实现 F059 Kubernetes、扩大第三方 egress 白名单、密钥管理页面或运行记录查询（分别归 F055 / F056）；不在 backend 中运行防火墙命令或容器 SDK。
+
+## 2. 关键约束
+
+- 领域真相由 backend 数据库持有；manager 经内部认证下载代码/上传快照，不直连 MinIO。附件已迁 backend。源码、依赖、启动参数由已冻结交付描述决定；本轮不改镜像构建路线。
+- Docker Engine 仅由 manager 经 socket proxy 访问；K8s 由独立 manager 使用受限 ServiceAccount 操作。没有挂 socket 不意味着编排 API 权限很小。
+- Docker 隔离规则必须在 **Docker 宿主网络命名空间**生效。manager 容器中执行 iptables 或检查容器自己的 INPUT，不能证明宿主已隔离。
+- 原生 nftables 与 iptables 是两种支持路径；本轮 Docker 托管网络只声明支持 IPv4。发现 IPv6、未识别网络后端、无法证明实际隔离时，拒绝新部署，不假装支持。
+- 宿主规则变更只操作自有链/表，不能清空 INPUT/FORWARD/DOCKER-USER，也不能修改其他网络的全局默认策略。
+- Constitution Check：遵守 [constitution.md](../../../docs/constitution.md) C1–C8。新增隔离报告由 Repository 落库（C1/C8）；租户对象、权限入口沿用 C3/C4；新字段/迁移用通用类型（C2），错误码沿用 161 段（C5）；HMAC 与 OBO 分开配置（C6）。本轮无铁律例外。
+
+## 3. 方案对比与选定
+
+### D1：独立 manager + backend 持久意图
+
+保留独立进程；选用 F086 的持久 RuntimeOperation、执行事实与路由投影，而非 backend 直接控制 Docker。证据是 `runtime_operation_service.py`、`runtime_delivery_repository.py` 的租约/代次/操作围栏；仅 HTTP 一次性命令无法恢复响应丢失。若执行协议整体升级再评估，不增加并列状态机。
+
+### D2：Docker 经 socket proxy，K8s 经受限 API
+
+当前 Docker 配置已经是 socket proxy，不再采用旧设计的“先直挂 docker.sock”。通用代理限制 API 面但不是业务授权器；manager 仍持有高权限编排面。拒绝把三种代理与 backend 合并来省进程。只有权限模型改变且验证隔离等价时重议。
+
+### D3：交付模式服从 F086 / F059
+
+当前有 bundle、完整 image、source-image，支持 Python 3.11 / Node 20 / static，不再是首发 Python 模板单一路线。选用已冻结 delivery/profile/digest；拒绝运行中重新选择可变默认镜像。依赖缓存、离线交付和 K8s 组装的详细契约分别见 [F086 design](../086-vibe-runtime-delivery/design.md)、[F059 design](../059-k8s-runtime-backend/design.md)。新增运行时时再评估。
+
+### D4：自愈与切流复用现有围栏
+
+探活成功才提交路由；旧写入者确认停止才允许新的 SQLite 写入者；恢复沿用原操作、deadline、资源 UID，不以重启为理由无限延长。禁止只用容器名判定安全。底座证据见 F059 既有验收；本轮用户确认重建只复用这些机制。引入多实例数据模型时重议。
+
+### D5：app-proxy 保持独立入口
+
+nginx → app-proxy → backend 授权与路由投影 → 应用，支持 HTTP/WebSocket；不改为代理向 manager 查路由。proxy 持有 entry 只读角色，不持编排或数据库凭据。若统一入口基础设施替换再评估。
+
+### D6：OBO 配置失效时 fail closed（本轮变更）
+
+选用现有 `unavailable` 决策并新增 `reason=identity_config_incomplete`，不增加可放行的“匿名降级”。`entry_authz_service` 提供同一 `obo_configuration_status()` 校验器：值缺失、全空白、与 JWT secret 相同均无效；**校验不 trim 后再签名**，实际有效值原样用于签名与验证。正式入口完成登录、应用存在、租户、可见范围、下线/维护判定后，在 `_identity_material` 前检查；预览完成会话、预览归属与应用/租户核验后同样检查。任一无效返回拒绝，不生成身份头、OBO、allow 访问记录。
+
+app-proxy 的 `BackendAuthzClient` / preview 授权客户端不再缓存含身份材料的 allow 决策：每个新的 HTTP 请求和 WebSocket 握手到 backend 重新判定，避免 backend 配置失效后旧 allow 缓存继续放行。路由缓存与拒绝缓存维持独立；已经建立的 WebSocket 不承诺逐帧重鉴权。此取舍增加授权 RPC，定向验证请求数与延迟，不把“保留有效配置行为”理解为继续缓存旧身份。若未来有可信配置 epoch 推送协议，再评估恢复 allow 缓存。
+
+签发器自身再防御性校验并返回显式失败，调用者不可把失败当缺省可选值；验证器亦拒绝无效配置。请求期间以同一配置快照完成检查/签发，避免动态刷新间隙。应用运行时开启时，FastAPI lifespan 输出一次脱敏 ERROR（字段名和失败原因，不含值），**不终止整个平台进程**，入口保持拒绝；开关关闭不产生“已启用”或误报。选择此方案而非整站启动失败，因为 spec 要求关闭运行时/其他平台能力不被连带停用。若未来 OBO 采用非对称签名，再重新审查发行/验证契约。
+
+### D7：拒绝页面沿用既有契约
+
+app-proxy 对 `unavailable` 保留既有不可用页与状态码；当 backend 已完成原登录、对象存在、租户、访问权限和运行层开关判定后，消费可信 `reason=identity_config_incomplete`，正式/预览均显示 **“本环境配置不完整，请联系平台管理员”**（三语同义）。该提示不显示配置值、字段值、内部 URL 或真实应用环境；无权者仍得到原来的登录/不存在/无权限等决策，不靠浏览器参数切换到此提示。无需新视觉模式；沿用不可用页模板只增加此原因对应文案。新增状态码需先检查 nginx error_page 合同。
+
+### D8：领域与列表投影保持兼容
+
+App / AppVersion / AppInstance 继续分别表达业务状态、冻结版本、运行观察；构建/广场列表通过既有 UNION 第三支表达 `flow_type=35`、`app_state`，不为新安全项改列表含义。若新增状态，需同时审查两个 SPA 的白名单。
+
+### D9：权限走已验证业务目标
+
+应用身份、owner、租户与资源状态先由业务服务核实，业务动作走 F048 统一入口；manager 与代理不自行查 OpenFGA。管理员的通用 shortcut 不能扩大 F055 的 natural owner-only 密钥写权限。新增管理动作时重审 Catalog，而非手写 role_access。
+
+### D10：SQLite 与平台存储解耦
+
+Docker 绑定本地持久目录，K8s 用已验收独占 PVC；manager 执行本地 backup/迁移，经 backend 存取快照。应用附件走 backend 存储接口；manager 不读平台 MinIO 配置，也不需要独立 MinIO 实例/新桶。升级代码不等于恢复数据库；恢复必须显式选快照。存储拓扑变化时重议单写入者证明。
+
+### D11：容量与资源档位
+
+沿用平台档位与持久 reservation；释放依赖停止证据，不以超时自动当作已停。用户确认的配置重建依然需要执行资源预算，不绕过准入。并发拓扑改变时重审预算。
+
+### D12：宿主 INPUT + FORWARD 的同源隔离（本轮变更）
+
+**否决**仅补 DOCKER-USER（不覆盖 INPUT）、只看 `--internal`（不证明宿主入口关闭）、在 manager 容器里加 NET_ADMIN（作用域错误且扩大权限）、允许整个 backend 端口给附件（附件也应经 egress）。选定：保留 egress 唯一出口，安装侧 root 工具维护宿主自有规则，backend 持有短时有效的独立隔离证明，新部署消费证明。
+
+现有 `runtime_manager.egress` 已有规则渲染和 CLI，扩展同一规则模型，不另写两套白名单。具体安装、报告和准入合同见 §4.4。已建立连接也不能用宽泛 `ESTABLISHED` 一律放过，必须区分应用响应与应用主动发起。真实宿主配对探测是依据，命令存在不等于隔离成立。若后续采用经过验证的 eBPF/专用网络插件，可替换证明生产方，不能取消拒绝边界。
+
+### D13：详情页扩展点
+
+保留发布 / 版本 / 数据 / 日志页壳与命名 slot。F055 密钥管理放既有 settingsSlot，不为安全项新增管理菜单。壳变更时需检查三个 Feature 消费者。
+
+### D14：运行日志与访问记录分开
+
+stdout/stderr 是调试日志；backend 入口 allow 产生合并窗口访问记录；F056 的读接口不创造新访问事件。保留既有合并窗口实现/配置，本轮不改频率。安全拒绝不计成功访问；日志包含配置原因但不含身份材料。若审计语义变更，应先改规格。
+
+### D15：收尾边界与交付声明
+
+旧 MVP “后置”不再表示未实现：F086、F059 已有实现/证据，本轮只修改与安全/密钥刷新直接相关的接口。历史未完成验收不自动勾选，ARM、完整离线安装和正式镜像发行不冒充本轮完成。只在本轮 AC 定向证据成立后更新相应任务。
+
+## 4. 系统现状（接手必读）
+
+### 4.1 数据流与实现状态
+
+**已实现**：backend 保存应用/版本/操作/路由/存储绑定；Celery 调发布管线；manager 拉取持久计划、编排 Docker/K8s、上报事实；app-proxy/egress 只读投影。`RuntimeDeliveryCoordinator.inject_environment` 使用加密 sealed_env 保存可恢复执行环境；K8s 已用操作专属 Secret + `secretKeyRef`，并非把平台 token 放 ConfigMap。
+
+**尚未实现的本轮安全增量**：INPUT 规则与可信证明、OBO 无效时拒绝。F055 用户确认重建与运行快照公共适配已在 `a5c7722b9` 编码并完成定向本地检查，尚未真实部署验收。现有 `egress.firewall_rules` 仅渲染 FORWARD/DOCKER-USER 规则；`_firewall_check` 主要检测后端存在。现有 `_issue_obo_token` 返回空时两个入口仍允许，是 T099 真缺口。
+
+```mermaid
+flowchart LR
+  Browser --&gt; Nginx --&gt; Proxy[app-proxy]
+  Proxy --&gt; Auth[backend entry authorization]
+  Auth --&gt; Gate{identity configuration valid}
+  Gate --&gt;|no| Deny[unavailable; no identity or access record]
+  Gate --&gt;|yes| Route[backend route projection]
+  Route --&gt; App[application]
+  App --&gt; Egress[egress-proxy] --&gt; Platform[platform APIs]
+  Installer[host root installer / verifier] --&gt; Firewall[owned INPUT and FORWARD rules]
+  Installer --&gt; Report[backend host isolation report]
+  Report --&gt; Admission[new Docker deployment admission]
+```
+
+### 4.2 既有公共合同（保留原编号语义）
+
+**① runtime-manager 意图 RPC**：旧 `POST /v1/intents/{build,deploy,stop}` 兼容通道与当前持久 v2 通道不可混淆。当前 backend `RuntimeDeliveryCoordinator` 创建 RuntimeOperation、wake manager；manager 以 node/role HMAC 从 `/api/v1/internal/app-runtime/v2/nodes/plan`、`operations/{id}` 拉取并 claim、上报 facts。冻结字段见 F086/F059，public caller 不可注入 sealed_env/runtime_env。旧 code_object_key 直读 MinIO 的设计不再使用。
+
+**② backend 状态动作 / 读口**：`AppStateService.{publish,manual_publish,stop,resume,delete,stage_version}` 仍是 F055 的领域入口；`GET /api/v1/apps`、`/{id}`、`/{id}/instance`、`/{id}/versions`、`/{id}/logs`，PATCH 元信息与 actions 路由保持。版本列表只读，不提供绕过审批的直接切版本；`AppMetaService.update_meta` 为管线与页面共用。runtime-status 只供有权管理员；owner/租户范围由读服务决定，不拿 UI can 标志当后端权限。
+
+**③ app-proxy 注入头**：`X-BiSheng-User-Id/User-Name/Tenant-Id/Dept-Id/Dept-Name/Dept-Path/Subject-Kind/App-Id/Access-Token/Request-Id`；姓名/部门等非 ASCII 值用现有 percent-encoding；入站 header lower + 下划线→连字符归一后剥离整个 x-bisheng 等价类。X-Forwarded-Prefix/Proto/Host 由 proxy 覆盖，不信客户端。OBO 现已有消费者，不能继续引用旧“可无 token 放行”例外。
+
+**④ manifest 消费**：形态归 F055；runtime/port/tier/database/egress/delivery/startup 由当前 schema 冻结后进入执行，见 F055 design §4.2③。新增业务 secret 名仅消费可信 formal 环境，不允许任何运行形态覆盖保留名。
+
+**⑤ 环境变量**：`BISHENG_APP_DB_URL`、应用 base path、平台/模型/storage endpoint 与 operation-bound 凭据仍按 F086/F059 注入；本轮不改已有公开 SDK 变量名。正式、preview、probe 的身份/数据空间不可混用，构建进程不取得正式环境。
+
+**⑥ SQLite / 日志**：DB URL 指向运行实例的 `/data/app.db`；Docker bind 与 K8s 独占 PVC 的宿主/集群映射由执行层持有。日志 `tail/since/keyword`、状态和数据动作先验 owner/租户；backend 只传意图，manager 执行备份/数据维护，经 backend 传快照。
+
+### 4.3 关键模块职责
+
+| 模块 / 落点 | 做什么 | 不做什么 |
+|---|---|---|
+| `app_runtime/domain/services/entry_authz_service.py` | 统一 OBO 配置检查与正式/预览判定 | 不接触容器、不匿名降级 |
+| `bisheng/main.py:lifespan` | 运行时开启时输出脱敏启动诊断 | 不因此阻塞整个平台 |
+| `runtime_manager/egress.py` + 新 host verifier CLI / unit | 同源渲染、宿主安装、只读验证、配对 canary 报告 | 不持有应用真实密钥，不清全局防火墙 |
+| `app_runtime` 新 host isolation Repository/Service/Endpoint | 验证独立角色、保存证明、节点准入读取 | 不执行宿主命令、不访问 Engine |
+| `RuntimeOperationService` / `RuntimeDeliveryCoordinator` | 部署、恢复、用户确认重建准入和原有围栏 | 不拥有 F055 密钥配置资产 |
+| app-proxy / egress-proxy | 入口/出口数据面、受限投影；入口 allow 不缓存身份 | 不签 OBO、不自行上线 |
+| `app_storage_service` / backend 对象存储适配 | 源码/附件/快照传输授权 | 不替 manager 执行 SQLite 迁移 |
+
+### 4.4 本轮增量字段与接口合同（拟实现）
+
+**① 入口**：正式 `/apps/{slug}`、预览 `/apps/_preview/{session}/...` 保留现有 app-proxy → backend 内部 HMAC 协议；拒绝体仅 `decision=unavailable, reason=identity_config_incomplete` 与已允许返回的最小上下文；不得带 `inject_headers`、`obo_token`、`obo_expires_at` 或 target。登录/不存在/跨租户/无权限/停用仍先返回对应旧决策，不因配置错误暴露对象存在。
+
+**② 操作与身份**：RuntimeOperation 的 `scope_key/idempotency_key/generation/owner_epoch/deadline` 继续约束生命周期；K8s 额外 controller epoch、UID 与数据 writer 围栏。内部 HMAC 角色按 manager / entry / egress 隔离，传输受 TLS/受控网络保护；HMAC 只认证请求，不提供加密。F055 手动重建语义见其设计 §4.4③：保存不创建操作；rebuild_current 复用既有 deploy，running_environment_snapshot 只向受限内部调用提供当前正式环境 DTO；不写 F055 配置或 applied 状态。
+
+**③ 宿主规则合同（拟新增）**：
+
+| 路径 | 规则与验证 |
+|---|---|
+| iptables | 自有 `BISHENG_APP_INPUT` / `BISHENG_APP_FORWARD` 链。宿主 INPUT 在其他宽泛 accept 之前跳转；FORWARD 由 DOCKER-USER 首部跳转。跳转匹配实际 app bridge 与源子网；自有链内只允许固定 egress IP/3128 的 ORIGINAL，以及源 app、`ctdir REPLY`、ESTABLISHED 的合法入口/探活响应，其余 DROP。`RELATED` 不宽泛放行 |
+| nftables | 自有 `inet bisheng_egress`，同时具有 input / forward hook，优先级先于普通 filter 接受；匹配 bridge/源子网，允许条件与 iptables 同源生成。nft accept 仍需通过后续链，不能承诺绕过已有宿主拒绝策略 |
+| 更新 | root 安装工具获取独占锁，先构建新规则并 dry-run 校验，再以 iptables-restore `--noflush` 或 nft 单事务切换；初始化跳转失败保持/恢复拒绝态，不先删全部规则再逐条添加。重跑不重复，卸载只移除有标识的跳转/自有链表 |
+| 动态地址 | installer 通过 Engine 网络检查冻结 network ID / bridge / 子网 / egress IP、端口、宿主网关/发布地址。代理 IP 变化立即使旧配置证明不匹配，重新安装校验；不在 L3 中放行 hostname 或不受限端口 |
+| 不支持 | IPv6/未知 family、Docker rootless/不可确认 bridge、不可识别防火墙后端先报告缺能力；不静默省略一部分网络。K8s 使用 F059 的 CNI 证明，不套用宿主 Docker 规则 |
+
+**④ 隔离证明与持续收敛（拟新增）**：安装工具与 systemd oneshot/timer 位于宿主，30 秒刷新，60 秒过期；首次安装、宿主重启、dockerd 重启后先验证再放行新部署。定时 unit 不仅验证：发现自有规则漂移后，在同一宿主独占锁下重建自有规则、读回并执行允许/拒绝 canary 配对；仅完全通过才重新签发 pass。恢复失败时由宿主工具针对该 node/network 的受管应用执行网络隔离；不能确认隔离时，通过受控 Engine API 停止这些应用执行体并读回状态，报告失败及资源 ID。禁止扩大到无本模块标签的业务容器，禁止因停止请求已发出就记录停止证明。backend 消费失败证明阻止新执行/路由，manager 沿原生命周期协议确认已停止或隔离的旧实例；未知 writer 不释放容量或删除 PVC/数据。manager 不获得 root/NET_ADMIN，宿主修复不运行在 backend。工具复用现有 Python Engine HTTP 客户端；需要宿主 root、相应 iptables/nft 二进制与受控 Engine API，不要求 docker CLI。
+
+新增 `RuntimeHostIsolationReport`（F054 所有，平台级节点表）：`id,node_id,engine_id,network_id,config_digest,rule_digest,revision,checked_at,valid_until,status,checks`，通用 JsonType；checks 仅结构与探测结果，不能含环境/用户流量。`POST /api/v1/internal/app-runtime/host-isolation-reports` 只接受独立、限定 node 的 `host-isolation` 服务角色；manager/entry/egress 无上报权。服务端分配接收时间、限制 TTL、递增 revision/nonce、验证节点与 engine/config 绑定，不信客户端自报无限有效期；重放/倒退拒绝。独立报告表避免 manager heartbeat 覆盖证明；不改 F059 现有摘要算法。
+
+生产方为 root 安装脚本，信任边界是客户宿主管理员；不声称防住 root 伪造。报告只在**规则读回匹配 + 实际 canary 允许/拒绝配对**均成功后标 pass：无业务凭据/PVC 的受限 canary 在 app 网络，测试直连宿主网关、宿主服务地址、published address 被拒绝，同时入口 HTTP/WS/探活响应与经 egress 的平台 API 可达。所有探测端点由管理员固定，拒绝把请求参数当任意扫描目标；canary 有 UID/ID、期限和自有标签，未知资源不强删。
+
+backend 在新 prepare/probe/preview/deploy/restore（含恢复和 F055 用户确认重建）的 create/claim/提交服务路由前验证新鲜证明及冻结配置一致性；失败给缺能力原因。stop/destroy/清理仍允许，既有应用不强制删除；其持续隔离由上述宿主 unit 恢复/隔离闭环负责，不能仅拒绝新部署却让存量实例继续直连宿主。证明过期时在途操作不发布新路由，可恢复地等待至原 deadline；不能绕过旧 writer 停止确认。安装报告通过不代替实际业务 API 的权限检查。
+
+
+## 5. 已知坑 / 反直觉事实
+
+| 坑 | 后果 | 处理位置 |
+|---|---|---|
+| DOCKER-USER 不覆盖宿主 INPUT；internal 网络仍需实际验证 | 应用绕过代理直连数据库或管理端口 | `egress.py` INPUT+FORWARD 与 host verifier |
+| 容器内 iptables 成功不等于宿主规则生效 | 假阳性准入 | 宿主 CLI / 独立报告角色 |
+| 应用发出的入口响应源地址仍是应用子网 | 无 REPLY 例外会把正常 HTTP/WS/探活阻断 | 同源规则模型和真实配对测试 |
+| 宽泛 ESTABLISHED 也包含以前建立的恶意 ORIGINAL | 新规则看似生效、既有绕过仍通 | ctdir 与连接方向断言 |
+| `_issue_obo_token` 当前返回空仍 allow；现在已有 OBO 消费者 | 登录身份失效但请求被放行 | 正式/预览统一检查和签发器兜底 |
+| 身份材料先生成后才拒绝 | 即使未转发也可能留下不应产生的头/日志 | 在 `_identity_material` 前检查 |
+| manager API 编排权限仍高于普通服务 | 合并进程扩大入侵面 | socket proxy / RBAC / 角色隔离 |
+| 版本回滚不等于 SQLite 回滚 | 旧代码运行新 schema 或误覆盖数据 | F055/F059 显式快照恢复 |
+| 旧任务完成与真实环境验收不同 | 把静态/模拟误当上线证据 | 任务证据类型与固定 SHA/digest |
+
+旧坑编号的历史引用按 `dda16a6` 的本文件读取；不把其中过期的“尚无 OBO 消费者/manager 直连 MinIO”继续当现状。
+
+## 6. 对外契约与依赖
+
+### 6.1 我提供给别人的（Outgoing）
+
+| 提供 | 消费者 | 破坏风险 |
+|---|---|---|
+| 现有 App 状态动作、内部路由/entry 协议 | F055/F056、app-proxy | 改状态/错误决策会破坏显示和转发 |
+| OBO 合法配置才签发；TTL/aud/app/tenant 绑定维持现有值 | F051 模型面、F055 能力总线、SDK | 放宽空 token 或共享 JWT secret 会破坏身份边界 |
+| 持久操作围栏 + F055 用户确认重建/受限运行快照 | F055、Docker/K8s manager | generation/operation payload 缺失时应显式拒绝，不能旧版静默忽略 |
+| 独立宿主隔离报告与节点能力原因 | 部署/运维/状态查询 | 把 manager heartbeat 当隔离证明会扩大信任面 |
+
+### 6.2 我依赖别人的（Incoming）
+
+| 依赖 | 形式 | 风险 |
+|---|---|---|
+| F086 持久操作 / F059 controller 与 writer 围栏 | HTTP、DB 与执行事实 | 旧 manager 不支持确认重建/敏感输出协议时拒绝 |
+| Docker Engine / socket proxy；宿主 iptables-restore 或 nft；systemd timer | 宿主安装条件 | 无法证明 INPUT 或 family 时阻止新部署 |
+| Redis nonce；平台 DB；部署密钥与 OBO 独立配置 | 基础服务 | 不可达或配置失效不能新发身份/伪造 pass |
+| F048 PermissionService 统一授权入口 | Python application protocol | 不绕过 verified target 或复刻 OpenFGA |
+| F055 密钥版本/注入契约；F056 审计读侧 | 领域协议 | 本模块只消费，不复制密钥表/查询规则 |
+
+## 7. 测试与可观测
+
+- 单元/模拟只覆盖变化：INPUT/FORWARD 双后端渲染、方向、幂等、失败恢复、未知 family；证明角色/过期/重放/配置改变与部署拒绝配对；正式/预览三种坏配置与有效配置的决策、无身份/无成功访问副作用；proxy 曾获 allow 后 backend 改坏配置的下一次请求/WS 握手拒绝，route 缓存不干扰此 Gate。
+- 集成只验证新表/租户无关节点范围、迁移单 head、manager 用户确认重建复用围栏。DM8 仅类型/约束/迁移静态审查，不写成 DM8 真测。
+- 真实 E2E：在授权专用 Docker 环境先保存自有规则前后差异，执行 canary 直连宿主拒绝 + HTTP/WebSocket/探活 + 经 egress SDK/模型/附件允许；重跑、重启、精确卸载对其他网络无影响。OBO 使用已授权自然人 owner/可见非 owner/不可见/跨租户配对，正式与审批预览都验证。不得把失败的 TCP 连接当“防火墙拒绝”而不先证明目标监听可达。
+- 定向命令（编码后按实际文件名执行）：`cd src/runtime-manager &amp;&amp; uv run pytest tests/test_egress.py`；`cd src/backend &amp;&amp; uv run pytest test/app_runtime/test_entry_authz.py`（补充测试以最终任务命名为准）。手动入口 `/apps/{slug}` 与 `/apps/_preview/{session}/`，运维 `python -m runtime_manager.egress firewall --print` 先看差异，再由 root 在专用宿主安装；未确认设计前不执行变更。
+- 可观测：`identity_config_incomplete`、`host_isolation_missing/stale/mismatch/failed`、node/operation/canary ID、规则 revision；不记录密钥、token、会话或完整环境。失效不刷屏，状态面保留当前失败原因。
+
+## 8. 后续改进 / 不打算做的事
+
+本轮不支持 Docker IPv6/rootless 网络；检测即拒绝，不默认为安全。不新增通用宿主防火墙产品；验证工具只覆盖托管子网。K8s CNI/跨节点/ARM 扩展留在原 Feature 的待验清单，不借安全收尾宣称全部通过。完整设计确认后拆增量任务，保留 T098/T099 原证据与关联。
+
+## 修订历史
+
+| 日期 | 变化 | 依据 |
+|---|---|---|
+| 2026-10-23（二次修订） | 按 AC-70 修正 OBO 配置不完整提示；保持原授权顺序和正式/预览同源 | 用户要求修订后复审，尚待设计确认 |
+| 2026-10-23（简化协议同步） | F055保存不重启；消费用户确认重建与当前运行快照协议，不增加F055结果双写 | 用户已确认F055修订规格；F054自身设计未确认，B1仍待修 |
+| 2026-10-23 | 刷新 F086/F059 后的当前快照；补 INPUT 隔离证明、OBO 拒绝设计；保持 D1–D15 与 §1–§8 编号 | 用户确认增量规格；静态核对基线代码，尚未实现/部署 |
+| 2026-08-17～18 | 初版与早期 MVP 修订 | 历史正文见 `dda16a6`；历史测试不充当本轮证据 |
+
+### 2026-10-24 剩余设计问题复审
+
+F054-B1 修订：宿主 unit 为规则漂移的实际消费者，先修复并配对验证，失败则仅隔离/停止受管执行体并上报；backend 不承担宿主 root 行为，也不把网络隔离冒充 SQLite writer 停止证明。长尾的多防火墙外部重载竞态、不可识别防火墙后端和非支持网络形态列入提测限制，不能标 pass 或静默放行。F055 用户确认重建与运行快照已编码，当前尚未进行真实部署验证；本设计的宿主隔离/OBO 安全增量仍待单独确认。
+
+### 056-app-square-governance
+
+批准目标 SHA-256：`7136417b9ccd2d354903670e784f6a86acea213bd970e3393cb41ae4cd072c6c`。
+
+| 检查 | 结果 |
+|---|---|
+| 1 | PASS |
+| 2 | PASS |
+| 3 | PASS |
+| 4 | PASS |
+| 5 | PASS |
+| 6 | PASS |
+| 7 | PASS |
+| 8 | PASS |
+| 9 | PASS |
+| 10 | PASS |
+| 11 | PASS |
+| 12 | PASS |
+| 13 | PASS |
+| 14 | PASS |
+| 15 | PASS |
+| 16 | PASS |
+| 17 | PASS |
+| 18 | PASS |
+| 19 | PASS |
+| 20 | PASS |
+| 21 | PASS |
+| 22 | PASS |
+| 23 | PASS |
+| 24 | PASS |
+
+# Design: 应用广场、治理与运行记录查询
+
+&gt; **2026-10-23 增量设计评审稿，待用户确认，未编码。** 现状基线 `5f2541f4bc483c24624fede9031c88c4ec6f58f4`；规格确认提交 `dda16a6502908ba8d58cff61dc350c0213b86c19`。保留 D1–D11 与 §1–§8 编号，新增 D12–D15；历史 MVP“查询全后置”已不适用于现有操作审计。
+&gt;
+&gt; [spec.md](./spec.md)（61 条 AC）· [tasks.md](./tasks.md) · [release-contract.md](../release-contract.md)。本次新增 AC-46 至 AC-61，修订 AC-26、AC-34；不接管模型/能力/访问记录的业务写入者。
+
+## 1. 目标与非目标
+
+保留应用广场和统一授权交互，在现有“审计日志”页增加“应用运行”页签，查询/导出模型调用、能力调用和应用访问三类既有数据；让现有操作审计能够按应用找到密钥变更与凭据签发/撤销事件。
+
+非目标：计费结算、全链路 tracing 产品、日志全文搜索、把 runtime stdout 当审计、重算历史身份/Token、为每次页面查询生成业务访问事件、给 owner 或开放 API 凭据授予管理员日志读取能力。
+
+## 2. 关键约束
+
+- 管理员级运行记录只接受自然人平台会话：租户管理员只查有效当前租户；全局超管无 admin-scope 时可明确选全局/目标租户，有 scope 时锁定该租户。部门管理员/只有 log 菜单的角色/应用 owner 不能因此取得此新读面。
+- 现有系统操作审计拥有更宽的菜单/管理范围规则，**不直接复用其 `_resolve_audit_groups` 当新接口权限**；保留旧接口行为。
+- 三类记录并不等于三类成功操作：无 app_id 的服务账号模型调用仍应显示；访问记录是入口 allow 合并窗口，不能展示为每个 HTTP 请求；缺历史字段用 ID/未知，不回填当前无关名称/用户。
+- 列表默认最近 7 天，可选择任意合法自定义区间或全部已留存时间；UTC ISO8601 带时区传输/规范化，start≤end；limit 1–100。**不设 90 天查询或 10,000 行导出总量上限**，导出覆盖所选条件下全部受授权记录。内部每批例如 500 行、worker 并发/租约和按字节输出分块仅控制资源，不变成用户可导出总量限制。
+- Constitution Check：遵守 [constitution.md](../../../docs/constitution.md) C1–C8。新读侧 Model/Repository/Service/Endpoint 分层；租户自动上下文不手拼通用 tenant 条件；全局超管进入显式审计 scope；通用索引/类型无 JSON_EXTRACT；模块错误码 163 段登记后使用；导出在受限对象存储不放 API 本地盘；无铁律例外。
+
+## 3. 方案对比与选定
+
+### D1：广场继续现有 UNION 与批量权限
+
+不新建平行应用列表后在前端拼接。托管应用 `flow_type=35`、slug/app_state 已随列表下发，批量可见性继续走 F048；单卡补拉权限造成 N+1 且越过通用策略。新资源类型/统一列表协议改变时再议。
+
+### D2：卡片整页访问稳定入口
+
+保留跳转 `/apps/{slug}`，不嵌 iframe、不拼 client `/workspace` base；统一登录/WS/身份均在入口。切换域名模型时再评审链接生成。
+
+### D3：广场动作与可见范围仍由通用权限驱动
+
+`app` 适用动作集与广场 use 筛选保留，不把“能看到卡片”作为运行记录管理员权限。二者属于不同业务目标。动作 Catalog 改变时审查消费者。
+
+### D4：管理权限仍复用 PermissionDialog
+
+构建卡片与发布页 VisibilityScopeSection 用同一交互/API；不为了审计页再建授权入口。当前 request 拒绝错误已需 catch，异步失败不能留 loading。组件契约变更时复核两个入口。
+
+### D5：仅 owner 可见继续按 protected grant 区分
+
+非 protected 授权行为空才表示无额外放行；默认 owner 行不应算外部授权。不从空列表误推断“无人有权限”。权限返回 schema 改变时重审。
+
+### D6：可见范围变更由真实写路径审计
+
+仍在统一授权 mutation 后按资源回调写 `app.visibility_change`，不从前端补写。查询/导出仅消费事实。新增授权写入口时必须核对回调是否覆盖。
+
+### D7：访问记录写 F054、读 F056
+
+`entry_authz_service` 已写合并窗口访问事实，不再“写读一起顺延”。保留既有合并窗口及其测试，本轮只补稳定读/导出适配，不按请求量补记历史访问。日后产品需要 PV/会话分析另立语义。
+
+### D8：runtime 关闭明确隐藏与拒绝
+
+新页签和新列表/候选/导出接口都读取实际 `app_runtime_enabled`；关闭时后端给部署开关错误，不把空列表当安全机制。旧系统操作审计照常可用。开关语义变更时再议。
+
+### D9：下线应用仍可进广场
+
+广场对托管应用白名单保持 online/stopped，不带草稿/待上线/删除；历史日志则不能以这组存活状态过滤，否则删除后记录消失。是否显示已删除资源是两个读面的不同合同。
+
+### D10：广场名称搜索与日志候选分开
+
+不拿可见应用广场列表当审计候选；它缺已删除资源、范围也不同。日志名称搜索基于受限审计记录/可信历史映射，只在当前管理员 scope 生效。若统一搜索服务支持历史治理数据再替换。
+
+### D11：当前查询交付范围
+
+现有 `api/v1/audit.py` 与 `api/services/audit_log.py` 已有系统操作审计、target_app_id 与导出；LogPage 仍只有“应用使用/系统操作”两页签。本轮加第三页签与三子视图，不重做旧审计或重写广场。真正已落地必须以实际调用点而非 tasks 计数判断。
+
+### D12：三专表适配成管理员读服务（新增）
+
+否决运行期高频记录塞普通 AuditLog、查日志文本推导、另造统一大表/回写历史。选定 F056 的 `RuntimeAuditQueryService` 调三个 Repository 适配器：现有 ModelCallRecordRepository（F051 写）、AppCapabilityCallRecord（F055 写）、AppAccessLog（F054 写）。现有模型读库有 bypass+手动 tenant 模式，新入口改用明确 `AuthorizedRuntimeAuditScope`，旧调用兼容由 owner 控制，不向客户端暴露 `tenant_id=None` 作为全局授权。
+
+共享过滤/分页/导出规格，但不同视图字段保留语义；服务账号模型调用不强制 inner join App。证据是现有三种表字段不一致，只有模型表已有 cursor/export，能力表只有 insert，访问表已有旧 page DAO。新建读 Repository，不加新 DAO 入口或让 Service 写 SQL。未来跨类型关联检索成为真实需求才考虑物化统一索引。
+
+### D13：稳定列表与一次导出的固定读取视图（修订）
+
+否决仅按秒级时间排序、offset 翻页、开放式追随新日志的无限导出，以及把 10,000 行/90 天预算当产品限制。列表采用 `(event_time DESC,id DESC)` keyset，首次查询固定 filter/scope 摘要、upper_time 与当前可见最大 id 的 watermark，cursor 绑定该选择条件；未知时间单独排序并以 id 决胜，不能在 NULL 比较上丢页；all 保留未知时间行，recent7d/custom 不能判入区间的未知时间行不伪造时间，筛选语义明确说明。新请求严格校验 cursor，不把解码失败当第一页。
+
+列表只保存短时 `RuntimeAuditQuerySnapshot` **条件元数据**并返回第一页；不为了列表先收集所有 ID，不依赖 MinIO 才能看数据。刷新/改变条件重新选择范围。列表与随后导出共享冻结的条件、watermark 和权限；并发写入下不额外承诺两个不同读取时点的数据库成员集合完全相等。导出会展示其实际选取时点及最终行数，不把导出完成数冒充此前列表的即时统计。
+
+**完整导出在后台的一次受权读取视图中完成**：任务受理时冻结 QuerySnapshot 的过滤/范围，source-owner Repository 在 worker 开始扫描时打开一条、范围有界的 ORM SELECT 只读一致游标，按稳定顺序流式输出全部匹配记录。该语句的读视图固定、watermark 固定；后续新增/回填提交不能把本次扫描变成无限流。每批最多 500 行处理/输出，但一直扫描至该读取视图 EOF，不能达到某行数后拒绝或截断。无资格/跨租户条件在源 SELECT 构造/执行时仍走自动租户过滤或显式授权的全局 Repository，而不是把多租户约束留给 CSV 写入端。
+
+source Repository 提供 `stream_export(scope, frozen_filter, watermark, batch_size)`，持有只读 source session/游标至本 attempt 扫描结束；任务进度写入用另一短事务 session，不在源读取事务中写状态。底层必须采用真正流式/受限 fetchmany，不用 `all()/fetchall()` 把整表搬进内存；MySQL/DM8 由各 source-owner 适配其固定读视图游标/事务，定向检查驱动的实际缓冲和语句范围，不能仅设置 yield_per 就宣称有界。占用一个后台读连接/读视图至扫描结束是此方案的显式成本，以导出 worker 并发、可观测持续时间及运维取消控制，不在 HTTP 请求保持长事务，也不转成 90 天/行数硬门槛。
+
+worker 崩溃后无法恢复数据库游标读视图，因此未 ready 的 attempt **整次只读重建**，不拿旧游标偏移接新视图造成漏/重；同一冻结条件与 watermark 下重新开启读视图，显示新的 selection_started_at。旧 attempt 从未交付字节，只保留待清理私有分块；只有一次完整扫描的 manifest 才能原子发布为 ready。ready 后的文件成员与字节固定，重复下载不会重新查事实表。若历史清理/读取故障导致不能完整输出，显式失败，不标空文件或部分文件成功。
+
+### D14：受权异步导出与不可变分块产物（修订）
+
+否决公开 presigned URL、前端只导当前页、提交时授权永久放行。选用后台固定读取视图 → 标准 CSV → MinIO 私有不可变分块 + 有序 manifest；backend 认证下载按 manifest 依次流式拼接为一个 CSV，不暴露对象 URL。CSV 标题/BOM 只在首块，每个分块在完整行边界收束。任务状态为 pending/running/ready/failed/expired；总记录数不设产品上限。
+
+任务通过 DB 租约/epoch 取得单一输出权；对象 key 绑定 job/attempt/epoch/part_no，上传确认后短事务登记分块及累计行数。ready 的 CAS 必须同时校验当前 lease/epoch、同一 source read-view attempt 已 EOF、全部分块已确认且 manifest 有序/完整。旧 worker 只能遗留未引用的私有对象，不能覆盖新 attempt 或把任务标 ready；响应丢失重查持久 ready/manifest，不能追加重复 CSV 行。失败或重启按 D13 从头读取新 attempt，不拼接不同读视图的分块。
+
+受理、worker 开始/每批和 ready 发布、状态读取、下载开始/受限块之间都核验当前自然人管理员资格与保存的 scope。失权或无法确认即取消交付/停止任务，不使用提交时缓存永久授权；已交付字节无法收回。条件快照未被任务引用时 10 分钟过期；任务受理后其冻结条件由任务持有，不因排队/扫描超过 10 分钟被清理。**下载保留期从 ready_at 开始计算 10 分钟**，未完成 attempt 由租约/取消和终态 GC 管理，不能用该保留期限制记录总量或扫描时长。
+
+CSV 仅白名单字段；危险公式文本前置单引号后按标准 CSV 转义，测试空白/控制字符绕过、逗号、引号、换行与 Unicode；数值按数值，null 不替成其他主体。对象/worker/source 不可用时明确失败，GC 只删没有活跃 lease/ready manifest 引用的本任务对象；就绪产物到期/取消清理有 durable 状态，不依赖本地盘。未来确需更高吞吐再独立调度，不改变完整导出的规格。
+
+### D15：可信应用关联的操作审计（新增）
+
+F055 负责写 app.secret.*；凭据 owner 在签发/撤销时从持久 `ApiCredential.subject_kind/subject_id` 与可信 hosted-app 归属映射计算 target_app_id，不取查看者传的 app_id；SAK/PAT 的资源 owner 不等于 app 归属，不能把该人的所有 key 自动关联给某应用。
+
+现有 CredentialService._audit 只写 credential_id/subject/scopes/key_mask，需要补可信关联。补充实际生产者：正式切换和候选终结当前在 RuntimeProjectionService 中将 binding 从 staged/active 改为 revoked，并不经过 _audit。改由凭据 Owner 的公开 `revoke_runtime_binding(session, binding, operation, reason)` 协议，在调用者原事务中锁定 binding、只在真实状态改变时撤销并追加 `open_api.api_key.revoke` 审计。应用关联从绑定的 app/credential 与 hosted-app 主体映射交叉核验获得，不接受查询者提供的归属；审计带 app_id、credential_id、operation_id、reason，事件不带业务环境变量值。以同一 binding 的状态转移作为去重围栏，重复切换/终结不重复记事件；失败回滚状态与审计，不新增审计补偿服务或独立数据库提交。切换撤旧、停止/删除、失败候选清理都调用该协议；签发使用已新增的显式 session 入口，签发审计也带可信 app 关联。
+
+历史记录只能在原始可信字段足以确定时通过只读关联查询；不补写历史“现在属于”。不增加第三方业务密钥末位/长度，API key 原有前缀/末位 mask 继续保留。若普通凭据没有可信 app 绑定，明确不相关，不硬凑。后续新 credential owner 需提供同一审计关联协议。
+
+## 4. 系统现状（接手必读）
+
+### 4.1 数据流与实现状态
+
+**已实现**：广场第三类型、两处权限 UI、可见范围审计、系统操作日志查询与应用筛选；模型表/能力表/访问表真实写入路径。**本轮未实现**：管理员 RuntimeAuditQueryService、新 endpoint/候选/稳定导出、新第三页签、可信凭据关联补齐、访问 app 名称快照。
+
+```mermaid
+flowchart LR
+  UI[LogPage / Application runtime] --&gt; API[F056 session API]
+  API --&gt; Scope[server verified admin scope]
+  Scope --&gt; Query[query service / typed filters]
+  Query --&gt; M[ModelCallRecord repository]
+  Query --&gt; C[Capability record repository]
+  Query --&gt; A[Access record repository]
+  Query --&gt; Snapshot[frozen filters and watermark]
+  Snapshot --&gt; Job[authorized worker: stream one fixed read view]
+  Job --&gt; M
+  Job --&gt; C
+  Job --&gt; A
+  Job --&gt; Store[immutable CSV chunks and manifest]
+  Store --&gt; Download[backend authenticated download]
+  Download --&gt; Check[current role and scope check]
+```
+
+### 4.2 既有公共合同（保留原广场/审计语义）
+
+| 字段 / 入口 | 当前约定 |
+|---|---|
+| 广场列表 `flow_type/slug/app_state/can_share/user_name` | 托管类型 35；slug 为稳定 `/apps/{slug}` 入口；应用态仅 online/stopped；can_share=false；owner 显示沿用既有列表投影 |
+| GET `/api/v1/chat/online` | 现有 page/keyword/tag/type 等筛选；服务端收窄 app 状态和 use 动作，不信客户端 action 扩权 |
+| PermissionDialog | resourceType=app，resourceId=内部 app.id；两入口共用，protected owner grant 不算额外放行 |
+| app.visibility_change | 变更人在真实授权 mutation 后回调记录；app/slug/added/removed 元数据；不由查询写入 |
+| 事件登记 | 后端可见 action/namespace、领域 action、前端 log.ts、三语事件名保持 lockstep |
+| 现有系统操作审计 | `/api/v1/audit` 和 `/audit/export/data` 已支持 target_app_id/tenant 筛选；不因新增 runtime 读面改变旧菜单/管理范围语义 |
+
+### 4.3 关键模块职责
+
+| 模块 / 新增落点 | 做什么 | 不做什么 |
+|---|---|---|
+| `app_governance` F056 读侧（按既有领域目录落点核对后实施）Endpoint/Service/Repository | 受权过滤、分页、候选、snapshot/export | 不重新写模型/能力/访问事件，不查 OpenFGA 原始 client |
+| 三个 source-owner Repository 读适配协议 | 返回白名单列表页与固定读视图流式 export；持有源只读 session，保持事件语义 | 不从通用 Service 跨层 ORM 查询，不 fetchall，不在源事务写任务状态 |
+| `open_api/.../credential_service.py:_audit` 与其可信 app resolver | 签发/撤销时写 app 关联 | 不由 viewer 参数、owner 人员关系猜 app |
+| `app_runtime/.../app_access_log_service.py` | 新事件可选 app 名称快照，合并窗口不变 | 不回填历史事实、不记录拒绝为成功 |
+| `pages/LogPage/runtime/`、API/hook（新增） | 三视图、filters/table/export、错误和过期状态 | 不含秘密列，不读凭据明文接口 |
+| `AuditLogService` 与现有 systemLog | 查 app.secret 与可信凭据事件 | 不把 runtime 高频事件塞操作审计 |
+
+实施前确认 F056 现有代码归属：当前主要在 `api/services/audit_log.py` 与通用列表模块，新增读服务**拟建立** `bisheng/app_governance/{api,domain}`，仅管理本 Feature 读侧，不迁移旧广场/权限代码，不重构通用审计。名称不代表新 feature/domain owner；release-contract 仍由 F056 认领。
+
+### 4.4 本轮增量字段与接口合同（拟实现）
+
+**① 拟新增会话 API**：挂 F056 路由 `/api/v1/app-runtime-audit`；读取者必须通过平台 session dependency，不能走 `/api/v2`。
+
+| 接口 | 参数 / 响应 | 校验 |
+|---|---|---|
+| GET `/records/{kind}` | kind=model/capability/access；time_range=recent7d/custom/all（默认 recent7d）；custom 提供 start_time/end_time；app_id/visitor_id，model 额外 credential_id；tenant_id 只缩小 scope；cursor/limit；响应 `{items,next_cursor,snapshot_id,matched_count}` | custom 范围无 90 天上限；all 对已留存时间不加下界；非法/不适用筛选明确拒绝。统计仅在受权范围，尚未计算可为 null，不用 10001 冒充总量；无因记录数而不可导出的标志 |
+| GET `/candidates/{kind}` | app/visitor/credential，按当前 kind/time/scope 的历史事实给 `{id,label,deleted_or_revoked}` 候选，分页/搜索有界 | 同查询管理员门禁；credential 只给 mask，无私密 name/value；跨租户对象请求拒绝 |
+| POST `/exports` | `{snapshot_id,request_id}` → `{export_id,status}` | 条件快照属于同一调用者/当前合法 scope、未过期，复制条件到任务；不因行数/历史跨度拒绝；幂等 request_id |
+| GET `/exports/{id}` | status + safe_reason、attempt、selection_started_at、processed_rows、ready_at/expires_at、ready 后 final_count | 重验资格与 scope；processed_rows 是当前 attempt 进度而非精确总量，重试从 0 开始，不报告部分成功 |
+| GET `/exports/{id}/download` | 认证后返回 CSV 流；Cache-Control: no-store | 不返回公开 object key/URL，失权/跨 scope 拒绝；下载开始与每个受限 chunk 之间重验，取消后停止继续交付 |
+
+列表/候选只读，下载一次不新增访问事实；业务错误遵循现有 envelope，前端使用包裹 request 的 rejected Promise 处理。新增错误码从 163 段核对占用后分配并同步三语，不重用历史退休编号。
+
+**② 三视图字段**：event_time 为查询统一排序别名，原始字段语义不变。
+
+| kind / 来源 | 响应白名单 | 历史缺项 |
+|---|---|---|
+| model / `ModelCallRecord` | id、create_time、app_id、actor_kind/id/name、subject_kind/id、credential_id/mask、model_id/name、prompt/completion/total_tokens、result/error_code/http_status、latency/ttft、request_id | app_id 可空（服务账号调用）；subject 未知不冒充 owner；Token 空不填 0；无当时 app 名只显示 ID |
+| capability / `AppCapabilityCallRecord` | id、create_time、app_id/app_name、credential_id、subject_kind/subject_user_id、capability、result/error_code、chunk_count、latency_ms、version_id | credential mask 仅经受限凭据投影能找到时补；无 actor 快照只表达 app 这个 actor，不虚构用户 |
+| access / `AppAccessLog` | id、entry_time、app_id、app_name_snapshot（新增可空）、user_id/user_name、request_id | 老行 app_name_snapshot 空显示 ID；访问为 allow 合并事件，不显示为 HTTP 成功率/逐请求响应 |
+
+不输出 model prompt/completion、检索 chunks/正文/targets 原始 payload、secret/env/cookies/OBO/token/任意 metadata。仅为新 access 记录新增 app_name_snapshot（128 字符 nullable）与写入参数，不重写合并窗口；历史不从当前名称回填。模型表已有 actor_name/model_name 快照，能力表已有 app_name；不为方便前端用 mandatory live join 丢掉已删除/撤销记录。
+
+**③ QuerySnapshot / RuntimeAuditExport（拟新增）**：仍为两个申请者私有实体，不新增永久审计大表或全量 ID 选集副本。`RuntimeAuditQuerySnapshot` 保存 UUID、tenant_id（默认 None/NOT NULL/索引）、creator_user_id、scope_mode/scope_tenant_id、kind、normalized_filter JsonType、filter_digest、watermark、created_at/expires_at；只含条件，不含事实正文或完整 ID 集。tenant_id 取服务端确认的申请者有效工作租户，global 是经超管核验的过滤范围，不以 NULL tenant 绕过自动过滤。
+
+`RuntimeAuditExport` 保存同样的申请者/租户/scope、复制的冻结条件和 watermark、snapshot_id、request_id、status、attempt/selection_started_at、lease_holder/epoch/until、processed_rows、final_count、manifest_object_key/digest、ready_at/download_expires_at、safe_failure；唯一 `(creator_user_id,request_id)`。分块对象包含 part_no/行数/字节数/hash，由最终不可变 manifest 收束；任务进度是可重建状态，不需要另建一张事实记录表。对象 key 全部服务端生成，客户端不能指定。
+
+worker 按持久任务 tenant_execution_scope 初始化租户过滤，只有源数据读取在已授权的 global source Repository 中 bypass；后台每批重验申请者当前资格，不能只信任务里旧角色。源只读扫描与任务短写事务分开；领取/重试/ready/GC 以数据库 CAS 和租约处理多进程。未引用条件快照 10 分钟清理，受理后由 job 保留冻结条件，下载到期从 ready 算起；失败/取消且无活跃 lease 的孤儿块可回收，活跃扫描不删。
+
+**④ Scope / Cursor 安全**：
+
+- `AuthorizedRuntimeAuditScope` 仅由服务端权限适配生成；自然人角色来自可信登录态与权限 application 协议当前核验，不信请求角色/租户。旧审计允许 log-menu 的逻辑不复用到此处。
+- 普通租户 Repo 在 tenant_execution_scope 下自动过滤；全局超管 Repo 仅在明确授权 scope 下 bypass；客户端 tenant_id 只允许进一步收窄。跨租户 app/visitor/credential ID（含历史 tombstone）在限权解析器中验证，拒绝与未知 ID 对外同样不泄漏详情，不把 foreign ID 默默当“查无”。候选从事实表/可信删除保留信息产生，不能凭当前用户/应用列表扩范围。
+- cursor 是服务端签名/摘要校验的 `{version,kind,scope_digest,filter_digest,snapshot_id,last_event_time,last_id,expires_at}`，不包含明文凭据。切租户/视图/筛选不能重用；解码/签名/过期错明确拒绝而非回第一页。
+- 每次 list/candidates/export/status/download 都重验角色/范围；后台任务实际执行时再验提交者资格。无法确认权限 fail closed；不是仅靠 JWT 缓存角色永久允许。已交付字节不可收回，失权后不开始新下载或继续交付后续 chunk；不承诺撤回浏览器已收到的文件。
+
+
+## 5. 已知坑 / 反直觉事实
+
+| 坑 | 后果 | 处理位置 |
+|---|---|---|
+| 旧 AuditLogService 允许 log 菜单/部门管理者 | 直接复用会放大新 runtime 数据权限 | 新 Scope resolver |
+| ModelCallRecordRepository tenant_id=None 是全局 bypass | 漏传租户变成全局数据泄漏 | typed scope + 专用普通/全局 Repo 适配 |
+| 同秒 create_time 常相同，旧 cursor 错误会被忽略 | 翻页重复/漏行/跳回首页 | 严格签名 cursor + time,id 全序 |
+| 写入有 write-behind，event_time 不等于提交时间 | 列表与随后导出不同读时点不一定同成员；恢复旧游标会混读视图 | 固定条件/watermark，导出单一读视图，崩溃 attempt 从头只读重建，ready 才发布 |
+| live app/credential 内连接会丢删除/撤销行 | 历史审计证据消失 | 以事实为主，可选显示投影/未知 |
+| SAK 资源 owner 是人，不代表那人的某个 app | app 筛选错误归因其他 key 的行为 | credential owner 可信 subject_ref 解析 |
+| 下载公开 MinIO URL 可绕过后来失权 | 撤权后继续新下载 | 认证代理下载/按块重验 |
+| CSV 双引号不是公式防护 | 表格软件执行攻击字段 | 类型白名单 + 首有效危险字符处理 |
+| HTTP 失败不是空结果 | 用户误以为无人访问/导出成功 | 独立 error/loading/empty 状态 |
+| 应用 allow 访问按窗口合并 | 错读为 PV/逐次网络请求 | UI 字段提示与 F054 同语义 |
+
+历史坑编号见 `dda16a6` 本文件；旧 300/1800 秒勘误不覆盖当前代码配置，本轮不改窗口。
+
+## 6. 对外契约与依赖
+
+### 6.1 我提供给别人的（Outgoing）
+
+| 契约 | 消费者 | 风险 |
+|---|---|---|
+| 现有广场/授权交互与操作审计 | client/platform、管理员 | 不改变卡片状态与既有日志范围 |
+| 三运行视图列表/候选/snapshot/export 会话 API | LogPage 新第三页签 | runtime 关闭/失权返回拒绝，不假空 |
+| 按 app 查 secret 变更/可信凭据事件 | 系统操作日志页 | 审计登记四处 lockstep 与三语必须齐 |
+| 白名单响应与 CSV schema version=1 | UI/管理员导出工具 | 字段语义与缺失值约定不可悄改 |
+
+### 6.2 我依赖别人的（Incoming）
+
+| 依赖 | 形式 | 风险 |
+|---|---|---|
+| F051 ModelCallRecord、F055 capability record、F054 access log | Repository/Python 数据契约 | 写方列名/追加策略/删除留存改变会破坏快照 |
+| F048 可信身份/权限 application，F019 admin-scope | 当前会话+Python | 原始请求 tenant/admin 标志不可当授权 |
+| 平台 DB、私有 MinIO、Celery/既有周期清理 | 后台任务/对象 | 不能只存在 writer 本地盘；过期必须回收自有对象 |
+| F055 secret 审计与 credential owner 的可信关联 | 元数据 | 不读/存密钥明文；关联不足就未知 |
+| 现有 LogPage/Tabs 与共享 UI/包裹 request/locales | TS | 不新增库/样式，Select 未 done 时跟随现存筛选实现 |
+
+## 7. 测试与可观测
+
+- 数据/权限定向：三表正常与空 app_id、null Token/subject；同秒/跨页/晚到写入/删除快照失效；租户 admin/超管 scoped 与 unscoped 允许，owner/log 菜单/部门 admin/审批人/SAK/PAT/foreign filter 拒绝；候选、导出、下载同样配对，角色变化后失败。
+- 导出定向：超过 10,000 行、超过 90 天和全部已留存时间都完整导出；同一成功读取视图的结果和文件完全一致，后台新增/回填不把扫描变无限流；进度批次/内存有界；重复 request_id 不创建重复任务。源扫描中崩溃从头新 attempt、不拼接混合读视图；ready 提交丢响应不重复追加；旧 epoch 不发布，GC 不删活跃对象。权限在提交/执行/下载/分块间撤销；MinIO/source 失败不交付部分文件；下载 TTL 从 ready 起；CSV 注入/Unicode/引号/换行负向验证。
+- 前端：保留两个旧页签，新第三页签里三子视图；选择器无空 ID；filter/kind/tenant 改变 reset cursor，query key 含 scope/type/filter，AbortController/请求序号丢弃旧结果；新错误态与空态分离；导出绑定当前 snapshot 并清楚显示范围/行数，失败结束等待、不显示“已下载”。
+- UI 取当前共享 docs 的 Input/Button/Tabs 等 status=done 组件，表格/筛选沿用当前 `LogPage/systemLog` 及其选择器模式。filter 在窄屏换行、表格横向滚动，不引入新视觉模式/库；多端、字体/色彩按当前规范，三语同交付，不手改生成的 api_errors。
+- E2E 走新会话 API + 实际 LogPage 人工清单：授权测试租户 A/B、tenant admin、global super、ordinary owner；产生模型/能力/allow 记录，按同一受权条件查/导，明确显示实际导出时点/最终数；大于 10,000 行和 90 天范围不被硬拒绝；删除测试 app/撤销 key 后仍查历史；验证 secret 审计没值、无 app 的 SA 模型记录不消失。runtime 关闭新面拒绝，旧系统操作仍可查。
+- 编码后定向命令：`cd src/backend &amp;&amp; uv run pytest test/app_governance/test_runtime_audit_query.py test/app_governance/test_runtime_audit_export.py`（拟新增）；只跑 `LogPage/runtime` 对应 Jest 文件。复用旧 audit 测试中修改路径的最小集合，不全量重跑；必要 Ruff/arch-guard/迁移 head 单独验证。DM8 仅静态。
+- 指标/日志：query kind、规范筛选摘要、scope、actor、行数、导出状态/过期/失败码；不记原始秘密/URL token/body。查询不伪造模型/能力/访问业务事实。
+
+## 8. 后续改进 / 不打算做的事
+
+不补造历史 app 名/subject/凭据关联；不建立日志仓库或计费模型；只实现当前审计条件下的完整异步导出，以批次/并发/租约控制资源，不设置 90 天或 10,000 行产品门槛。长导出的一致读视图占用和驱动缓冲必须在定向检查中量化，不以本地临时文件绕过多节点。原 ARM/跨节点/正式镜像发行验收仍保留，不宣称新列表测试证明这些能力。
+
+## 修订历史
+
+| 日期 | 变化 | 依据 |
+|---|---|---|
+| 2026-10-23（二次修订） | 去除导出总量/时间硬限制；条件元数据与后台单一读取视图分离；私有分块 ready 原子发布、重启从头只读重建 | 用户要求修订并复审；规格 AC 未变，尚未编码 |
+| 2026-10-23 | 刷新已实现广场/操作审计；新增 D12–D15、三视图/稳定导出/权限合同 | 用户确认规格，静态代码核查；未实现/部署 |
+| 2026-08-17 起 | 早期广场与治理设计 | 旧正文见 `dda16a6`；历史任务证据不改写 |
+
+### 2026-10-24 剩余设计问题复审
+
+F056-S1 修订：运行绑定的真实撤销生产者由凭据 Owner 公共协议消费，同 session 状态转移与审计，以状态 CAS/行锁去重；查询层不能补造历史事实。保留列表/异步导出的主链路，低概率的外部存储瞬断与 worker 任意指令点崩溃组合列为后续故障验收；权限失效、跨租户拒绝、CSV 安全和完整导出仍属于主功能，不因缩减测试而放宽。实现尚未开始，仍待单独确认本修订设计。
+</pre></html>

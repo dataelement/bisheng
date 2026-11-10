@@ -16,10 +16,12 @@ from bisheng.approval.domain.repositories.approval_query_repository import Appro
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.approval.domain.services.approval_runtime_handler_factory import read_current_scenario_detail
 from bisheng.approval.domain.services.menu_access_handler import MenuAccessApprovalHandler
 from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 from bisheng.common.errcode.approval import (
     ApprovalGrantNotRevokableError,
+    ApprovalInstanceNotPendingError,
     ApprovalRequestAlreadyProcessedError,
     ApprovalRequestNotFoundError,
     ApprovalRequestPermissionDeniedError,
@@ -163,6 +165,7 @@ class ApprovalCenterService:
         return {
             "task_id": task.id,
             "instance_id": task.instance_id,
+            **(await read_current_scenario_detail(instance, login_user)),
             "scenario_code": instance.scenario_code,
             "scenario_name": instance.scenario_name,
             "business_name": instance.business_name,
@@ -319,14 +322,27 @@ class ApprovalCenterService:
         return {"data": data, "total": len(data)}
 
     @classmethod
-    async def get_instance_detail(cls, *, instance_id: int, login_user):
+    async def get_instance_detail(cls, *, instance_id: int, login_user, management: bool = False):
         instance = await ApprovalInstanceRepository.get_instance(instance_id)
         if instance is None:
             raise ApprovalRequestNotFoundError()
-        if instance.tenant_id != login_user.tenant_id:
+        from bisheng.core.context.tenant import get_admin_scope_tenant_id, is_management_all_tenants
+        from bisheng.permission.application import is_tenant_admin
+
+        global_admin = bool(getattr(login_user, "is_global_super", False))
+        selected = (
+            (get_admin_scope_tenant_id() or login_user.tenant_id)
+            if management and global_admin
+            else login_user.tenant_id
+        )
+        all_tenants = management and global_admin and is_management_all_tenants()
+        if not all_tenants and instance.tenant_id != selected:
             raise ApprovalRequestPermissionDeniedError()
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
-        if not login_user.is_admin():
+        management_reader = management and (
+            global_admin or await is_tenant_admin(login_user.user_id, instance.tenant_id)
+        )
+        if not management_reader and not login_user.is_admin():
             visible_task_owner = any(task.approver_user_id == login_user.user_id for task in tasks)
             if instance.applicant_user_id != login_user.user_id and not visible_task_owner:
                 raise ApprovalRequestPermissionDeniedError()
@@ -377,6 +393,7 @@ class ApprovalCenterService:
 
         return {
             "instance_id": instance.id,
+            **(await read_current_scenario_detail(instance, login_user, management=management)),
             "scenario_code": instance.scenario_code,
             "scenario_name": instance.scenario_name,
             "business_name": instance.business_name,
@@ -434,11 +451,30 @@ class ApprovalCenterService:
             raise ValueError(f"instance not found: {instance_id}")
         if instance.applicant_user_id != operator_user_id:
             raise PermissionError("only applicant can withdraw")
+        # Only an in-flight request can be withdrawn. Without this the applicant
+        # could re-withdraw an already approved / rejected / cancelled instance
+        # by replaying the API call, and every replay re-fires ``on_withdrawn``:
+        # for the publish scenario (F055) that means a shipped version having its
+        # ``terminal_state`` rewritten to "withdrawn" long after it went online.
+        # Placed after the applicant check and before any write, so a refusal
+        # leaves the instance, its tasks and its action log untouched.
+        if instance.status != ApprovalInstanceStatus.PENDING:
+            raise ApprovalInstanceNotPendingError()
+        if instance.scenario_code == "app_publish_request":
+            from bisheng.admin.application.tenant_scope import resolve_management_scope
+            from bisheng.app_runtime.application.authorization import authorize_app
+            from bisheng.common.dependencies.user_deps import UserPayload
+
+            own = await resolve_management_scope(operator_user_id, is_super=False)
+            actor = await UserPayload.init_login_user(
+                user_id=operator_user_id, user_name=operator_user_name or "", tenant_id=own.tenant_id
+            )
+            await authorize_app(actor, instance.business_resource_id, "withdraw")
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
         for task in tasks:
             if task.status == ApprovalTaskStatus.PENDING:
                 task.status = ApprovalTaskStatus.CANCELLED
-                task.acted_at = datetime.utcnow()
+                task.acted_at = datetime.now()
                 await ApprovalInstanceRepository.update_task(task)
         instance.status = ApprovalInstanceStatus.WITHDRAWN
         await ApprovalInstanceRepository.update_instance(instance)
@@ -452,6 +488,49 @@ class ApprovalCenterService:
                 detail={"reason": reason},
             )
         )
+        return await cls._after_withdrawal(
+            instance,
+            tasks,
+            operator_user_id=operator_user_id,
+            operator_user_name=operator_user_name,
+            reason=reason,
+            ip_address=ip_address,
+        )
+
+    @classmethod
+    async def withdraw_app_publish(cls, expected, *, operator_user_id, operator_user_name, reason, actor_metadata):
+        from bisheng.approval.domain.repositories.app_publish_withdrawal_repository import (
+            AppPublishWithdrawalRepository,
+        )
+
+        instance, tasks = await AppPublishWithdrawalRepository().withdraw(
+            expected,
+            operator_user_id=operator_user_id,
+            operator_user_name=operator_user_name,
+            reason=reason,
+            actor_metadata=actor_metadata,
+        )
+        return await cls._after_withdrawal(
+            instance,
+            tasks,
+            operator_user_id=operator_user_id,
+            operator_user_name=operator_user_name,
+            reason=reason,
+            return_detail=False,
+        )
+
+    @classmethod
+    async def _after_withdrawal(
+        cls,
+        instance,
+        tasks,
+        *,
+        operator_user_id,
+        operator_user_name=None,
+        reason=None,
+        ip_address=None,
+        return_detail=True,
+    ):
         await cls._write_audit_log(
             tenant_id=instance.tenant_id,
             operator_user_id=operator_user_id,
@@ -491,10 +570,131 @@ class ApprovalCenterService:
             logging.getLogger(__name__).exception(
                 "withdraw_instance: on_withdrawn hook failed for instance %s", instance.id
             )
+        if not return_detail:
+            return {"instance_id": instance.id, "status": "withdrawn"}
         return await cls.get_instance_detail(
             instance_id=instance.id,
             login_user=_SystemLoginUser(operator_user_id, tenant_id=instance.tenant_id),
         )
+
+    @classmethod
+    async def cancel_instance_by_business(
+        cls,
+        *,
+        instance_id: int | None = None,
+        scenario_code: str | None = None,
+        business_resource_type: str | None = None,
+        business_resource_id: str | None = None,
+        tenant_id: int | None = None,
+        reason: str | None = None,
+        operator_user_id: int = 0,
+        operator_user_name: str | None = None,
+    ):
+        """Cancel an in-flight request because the thing it is about no longer exists.
+
+        Reachable two ways: by instance id, or by the business object it hangs
+        off — the second is what a deletion hook has, since the object being
+        deleted knows its own id and nothing about approvals.
+
+        **Why this is not** ``cancel_exception_api``: that one starts from an
+        *exception* record (so it cannot touch a healthy pending request) and it
+        notifies the **applicant**. Here the applicant is the person who just
+        pressed delete — they know. The people who need telling are the
+        approvers, who otherwise keep a task in their inbox pointing at an
+        application that is gone (F055 design 坑 6 / AC-35).
+
+        Returns the cancelled instance, or ``None`` when there was nothing open
+        — a no-op rather than an error, because "delete an app that never had a
+        release under approval" is the ordinary case.
+        """
+        instance = None
+        if instance_id is not None:
+            instance = await ApprovalInstanceRepository.get_instance(instance_id)
+        elif scenario_code and business_resource_id:
+            instance = await ApprovalInstanceRepository.find_active_instance_by_resource(
+                tenant_id=int(tenant_id or 0),
+                scenario_code=scenario_code,
+                business_resource_type=business_resource_type or "",
+                business_resource_id=str(business_resource_id),
+            )
+        if instance is None:
+            return None
+        if instance.status in (
+            ApprovalInstanceStatus.CANCELLED,
+            ApprovalInstanceStatus.REJECTED,
+            ApprovalInstanceStatus.WITHDRAWN,
+            ApprovalInstanceStatus.EXECUTED,
+        ):
+            # Already finished. Re-cancelling would fire ``on_cancelled`` a
+            # second time, and a business handler has no way to tell a repeat
+            # from the first call.
+            return instance
+
+        tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
+        for task in tasks:
+            if task.status == ApprovalTaskStatus.PENDING:
+                task.status = ApprovalTaskStatus.CANCELLED
+                task.acted_at = datetime.now()
+                await ApprovalInstanceRepository.update_task(task)
+
+        instance.status = ApprovalInstanceStatus.CANCELLED
+        instance.current_node_name = None
+        await ApprovalInstanceRepository.update_instance(instance)
+        await ApprovalInstanceRepository.create_action_log(
+            ApprovalActionLog(
+                tenant_id=instance.tenant_id,
+                instance_id=instance.id,
+                action="cancelled",
+                operator_user_id=operator_user_id,
+                operator_user_name=operator_user_name,
+                detail={"reason": reason},
+            )
+        )
+        await cls._write_audit_log(
+            tenant_id=instance.tenant_id,
+            operator_user_id=operator_user_id,
+            operator_tenant_id=instance.tenant_id,
+            action="approval.request.cancel",
+            target_id=str(instance.id),
+            reason=reason,
+            metadata={
+                "instance_id": instance.id,
+                "scenario_code": instance.scenario_code,
+                "handler": instance.handler_key or instance.scenario_code,
+                "business_resource_type": instance.business_resource_type,
+                "business_resource_id": instance.business_resource_id,
+            },
+            operator_name=operator_user_name,
+            object_name=instance.business_name,
+        )
+
+        approver_ids = list({one.approver_user_id for one in tasks if one.approver_user_id != operator_user_id})
+        if approver_ids:
+            await cls._send_approval_notify(
+                sender=operator_user_id,
+                receiver_user_ids=approver_ids,
+                action_code="approval_instance_cancelled",
+                business_name=instance.business_name,
+                instance_id=instance.id,
+                scenario_code=instance.scenario_code,
+                reason=reason,
+            )
+
+        try:
+            from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+
+            handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+            await handler.on_cancelled(instance.id, instance.payload_snapshot or {}, reason)
+        except Exception:
+            # Swallowed for the same reason ``withdraw_instance`` swallows its
+            # own hook: the approval side is already consistent, and a handler
+            # failure must not leave the instance half-cancelled.
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "cancel_instance_by_business: on_cancelled hook failed for instance %s", instance.id
+            )
+        return instance
 
     @classmethod
     async def _send_menu_access_approval_messages(
@@ -687,16 +887,25 @@ class ApprovalCenterService:
 
         sibling_tasks = await self.instance_repository.list_tasks(instance.id)
         same_node_tasks = [one for one in sibling_tasks if one.node_code == task.node_code]
+        if action == "approve" and instance.scenario_code == "app_publish_request":
+            from bisheng.approval.domain.services.approval_runtime_handler_factory import eligible_scenario_candidates
+
+            candidates = [one.approver_user_id for one in same_node_tasks if one.status == ApprovalTaskStatus.PENDING]
+            if operator_is_admin:
+                candidates.append(operator_user_id)
+            allowed = await eligible_scenario_candidates(instance, candidates)
+            if operator_user_id not in allowed:
+                raise ApprovalRequestPermissionDeniedError()
 
         if action == "reject":
             task.status = ApprovalTaskStatus.REJECTED
             task.comment = comment
-            task.acted_at = datetime.utcnow()
+            task.acted_at = datetime.now()
             await self.instance_repository.update_task(task)
             for sibling in same_node_tasks:
                 if sibling.id != task.id and sibling.status == ApprovalTaskStatus.PENDING:
                     sibling.status = ApprovalTaskStatus.CANCELLED
-                    sibling.acted_at = datetime.utcnow()
+                    sibling.acted_at = datetime.now()
                     await self.instance_repository.update_task(sibling)
             instance.status = ApprovalInstanceStatus.REJECTED
             await self.instance_repository.update_instance(instance)
@@ -752,7 +961,7 @@ class ApprovalCenterService:
 
         task.status = ApprovalTaskStatus.APPROVED
         task.comment = comment
-        task.acted_at = datetime.utcnow()
+        task.acted_at = datetime.now()
         await self.instance_repository.update_task(task)
         await self.instance_repository.create_action_log(
             ApprovalActionLog(
@@ -787,7 +996,7 @@ class ApprovalCenterService:
             for sibling in same_node_tasks:
                 if sibling.id != task.id and sibling.status == ApprovalTaskStatus.PENDING:
                     sibling.status = ApprovalTaskStatus.SKIPPED
-                    sibling.acted_at = datetime.utcnow()
+                    sibling.acted_at = datetime.now()
                     await self.instance_repository.update_task(sibling)
             await self._advance_after_node_approved(
                 instance=instance, current_node_order=task.node_order, operator_user_id=operator_user_id

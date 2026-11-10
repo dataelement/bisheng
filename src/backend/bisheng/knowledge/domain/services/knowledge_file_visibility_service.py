@@ -18,11 +18,18 @@ from sqlmodel import select
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.common.errcode.permission import InvalidCatalogActionError
 from bisheng.core.config.settings import KnowledgeQAFilterConf
 from bisheng.core.database import get_async_db_session
+from bisheng.permission.application.access import get_f048_resource_adapter
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
+    batch_check_verified_business_visible,
 )
+from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
+
+_FILE_PERMISSION_BATCH_SIZE = 100
 
 
 @dataclass
@@ -143,13 +150,7 @@ class KnowledgeFileVisibilityService:
         if has_business_scope:
             candidates &= {int(x) for x in candidate_file_ids}
 
-        action_map = await batch_check_business_actions(
-            self.login_user,
-            resource_type="knowledge_file",
-            resource_ids=sorted(candidates),
-            actions=("visible",),
-        )
-        scoped = {file_id for file_id in candidates if "visible" in action_map.get(str(file_id), frozenset())}
+        scoped = await self._batch_visible_file_ids(space_id, candidates)
 
         if not scoped:
             return IndexFilter(strategy="empty", accessible_size=0)
@@ -212,27 +213,71 @@ class KnowledgeFileVisibilityService:
         """Return the subset of ``file_ids`` allowing F048 ``visible``.
 
         Empty input short-circuits before building the permission context.
-        Business rows are loaded first, then the exact F048 ``visible`` action
-        is BatchChecked. OpenFGA identity relations handle super administrators;
-        this service has no creator/admin fallback.
+        Business rows and permission snapshots are loaded in bounded batches.
+        Ordinary and data-scope-narrowed actors reach the exact F048 ``visible``
+        decision; full-scope super administrators retain the facade shortcut.
         """
-        file_id_set: set[int] = {int(x) for x in file_ids}
-        if not file_id_set:
+        return await self._batch_visible_file_ids(space_id, file_ids)
+
+    async def _batch_visible_file_ids(
+        self,
+        space_id: int,
+        file_ids: Iterable[int],
+    ) -> set[int]:
+        """Load bounded business batches and permission snapshots for both filters."""
+
+        normalized_ids = sorted({int(value) for value in file_ids})
+        if not normalized_ids:
             return set()
 
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+        from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileDao
 
-        items = await KnowledgeFileDao.aget_file_by_ids(list(file_id_set))
-        candidate_ids = {int(item.id) for item in items if item.knowledge_id == space_id}
-        if not candidate_ids:
-            return set()
-        action_map = await batch_check_business_actions(
-            self.login_user,
-            resource_type="knowledge_file",
-            resource_ids=sorted(candidate_ids),
-            actions=("visible",),
-        )
-        return {file_id for file_id in candidate_ids if "visible" in action_map.get(str(file_id), frozenset())}
+        actor = await resolve_permission_actor(self.login_user)
+        unrestricted_super_admin = actor.super_admin and actor.data_scope == DATA_SCOPE_ALL
+        knowledge = None
+        adapter = None
+        if not unrestricted_super_admin:
+            knowledge = await KnowledgeDao.aquery_by_id(space_id)
+            if knowledge is None:
+                return set()
+            adapter = await get_f048_resource_adapter("knowledge_file")
+
+        visible_ids: set[int] = set()
+        for offset in range(0, len(normalized_ids), _FILE_PERMISSION_BATCH_SIZE):
+            batch_ids = normalized_ids[offset : offset + _FILE_PERMISSION_BATCH_SIZE]
+            items = await KnowledgeFileDao.aget_file_by_ids(batch_ids)
+            items = [item for item in items if item.knowledge_id == space_id and item.file_type != FileType.DIR.value]
+            if not items:
+                continue
+            if unrestricted_super_admin:
+                # Preserve the full-scope shortcut; narrowed tokens must still
+                # reach the runtime's data-scope checks on verified targets.
+                action_map = await batch_check_business_actions(
+                    self.login_user,
+                    resource_type="knowledge_file",
+                    resource_ids=(item.id for item in items),
+                    actions=("visible",),
+                )
+                visible_ids.update(
+                    int(item.id) for item in items if "visible" in action_map.get(str(item.id), frozenset())
+                )
+                continue
+            targets = await adapter.resolve_permission_targets_from_rows(
+                rows=items,
+                knowledge=knowledge,
+                actor=actor,
+                action="visible",
+            )
+            try:
+                visible_map = await batch_check_verified_business_visible(actor=actor, targets=targets)
+            except InvalidCatalogActionError:
+                # Match the action-list facade: a disabled action adds no access.
+                break
+            visible_ids.update(
+                int(item.id) for item in items if visible_map.get(("knowledge_file", str(item.id)), False)
+            )
+        return visible_ids
 
     async def post_filter_retrievable_files(
         self,

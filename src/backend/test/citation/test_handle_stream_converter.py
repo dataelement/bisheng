@@ -1,4 +1,4 @@
-"""F072 — streaming conversion of ``[Sn]`` handles in the daily chat.
+"""F075 — streaming conversion of ``[Sn]`` handles in the daily chat.
 
 The daily chat shows badges while the answer streams, so handles have to be
 turned into private-use markers before each delta is sent. The converter holds

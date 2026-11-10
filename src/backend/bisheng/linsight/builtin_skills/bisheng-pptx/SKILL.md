@@ -1,11 +1,11 @@
 ---
 name: bisheng-pptx
 description: >-
-  制作 PowerPoint 演示文稿（.pptx）时使用：从零创建企业介绍、工作汇报、项目方案、产品发布、培训课件等幻灯片；
+  制作 PowerPoint 演示文稿（.pptx）时使用：企业介绍、工作汇报、项目方案、经营分析、产品发布、培训课件等幻灯片；
   按用户提供的模板（.pptx/.potx）套版生成；读取或改写已有 PPT。当用户说到「PPT」「幻灯片」「演示文稿」「汇报材料」
   「宣讲材料」「课件」「deck」「slides」「pptx」，或提出「做一个介绍 X 的 PPT」「按这个模板做一版」
-  「把这份材料做成 PPT」时触发。本技能给出当前代码执行器里可行的 python-pptx 生成路径，
-  以及中文排版规范、模板套用方法、交付前自检脚本。
+  「把这份材料做成 PPT」时触发。本技能内置五套场景模板（央国企汇报、项目方案、经营分析、科技发布、培训课件），
+  按模板版式填写内容生成可编辑的 .pptx，并附交付前自检脚本。
   如果用户明确要的是网页翻页式 HTML 演示而不是 .pptx 文件，不要用本技能。
 metadata:
   display-name: PPT 制作
@@ -13,82 +13,130 @@ metadata:
 
 # 制作 PPTX
 
+一份好 PPT 的质量，七成来自内容组织，三成来自版式。本技能的做法是：
+**你负责想清楚每页说什么，版式交给内置模板**。模板的配色、字号、留白和对齐都已调好，
+你只按插槽名把内容填进去，不要自己画坐标、加装饰。
+
 ## 0. 开工纪律
 
 **这一轮只读文档，不要在同一轮里并行调用别的工具。** 读完本文件（必要时再读 references）之后，
-下一轮才开始动手。曾经发生过模型把「读 SKILL.md」和「产出交付物」放进同一轮并行调用，
-结果技能等于没读、产出完全跑偏。
+下一轮才开始动手。
 
-**本技能要求已勾选代码执行器（`bisheng_code_interpreter`）。** 没有它就无法生成 .pptx —— 这种情况下
-直接告诉用户「请在工具里勾选代码执行器后重试」，不要用 export_docx / export_pdf 拿 Word 或 PDF 顶替。
+**本技能要求已勾选代码执行器（`bisheng_code_interpreter`）。** 没有它就无法生成 .pptx ——
+直接告诉用户「请在工具里勾选代码执行器后重试」，不要用 Word 或 PDF 顶替。
 
-## 1. 环境事实（照做，不要试探）
-
-| 项 | 事实 |
-|---|---|
-| **生成方式** | **只有 `python-pptx`**。它是后端 `pyproject.toml` 的正式依赖（main / 2.6 / 3.0 各线都有），`import pptx` 直接可用 |
-| 不存在的东西 | Node / npm / `pptxgenjs`、`markitdown`、`defusedxml`、`pdfplumber`/`pdfminer`/`PyPDF2`、`pdftoppm`、`zip`/`unzip` |
-| 存在但本技能不用 | `pandoc`（发布镜像装了 3.6.4 在 `/usr/bin`）。它能 `-o out.pptx`，但只会产出「标题＋项目符号」的裸版式：配色、版式、图表、图片位置全不可控，做出来必是"一眼 AI"的默认样式。要做能交付的 PPT 一律走 `python-pptx` |
-| **前提** | 本技能依赖包内脚本（`skills/bisheng-pptx/scripts/*.py`），只在默认的**本地执行器**下成立。若部署切到 **E2B 沙箱**：`skills/` 不进沙箱、单次上限降到 300 秒 —— 此时脚本调用会 `FileNotFoundError`。**改走纯 python-pptx 内联写法**（cookbook 的片段全部可用，只是不能 `import pptx_helpers`，把需要的函数抄进构建脚本），跳过自检脚本改为自己肉眼核对，并告知用户"当前环境无法运行技能自带的自检脚本" |
-| 其它可用库 | Pillow（图片）、PyMuPDF(`fitz`)（读 PDF/渲染）、matplotlib（图表图片）、pandas/numpy、openpyxl、python-docx、lxml |
-| 禁止 | `pip install`、`npm install`、任何联网假设（生产多为离线内网） |
-| 工作目录 | 执行器 cwd = 工作区根，**一律用相对路径** |
-| `output/` | 唯一交付区，已自动创建 |
-| `scratch/` | 中间产物区，**不会交付**，需自己 `os.makedirs` |
-| `uploads/` | 用户上传的原件（模板、素材、资料）在这里 |
-| `skills/bisheng-pptx/` | 本技能包，脚本和参考资料在这里，只读 |
-| 绝对禁止 | 写 `/output/xxx.pptx` 这种带前导斜杠的路径 —— 文件会被静默丢弃，用户拿不到 |
-| 单次执行上限 | 600 秒。构建 + 自检分多次调用，不要挤在一次里 |
-| 日志规则 | **成功时只回传 stdout，stderr 被丢弃** → 一切诊断信息用 `print()`，不要只靠 warning |
-| 可见性 | 执行器写完会把产物同步到工作区，之后 `ls`/`read_file` 一般能看到。但判成功看**执行结果**：`exitcode 0` + 日志确认写成功即视为已产出，**不要反复找文件、更不要重做一遍** |
-| 轮次 | 最后两轮代码执行器会被摘除 → PPT 必须尽早产出，不要拖到收尾 |
-
-### 1.1 先探一次环境（第一次执行代码时顺手做，只花一轮）
+**第一次执行代码时先探一次环境**（只花一轮）：
 
 ```python
 import os, shutil
 try:
-    import pptx
-    print("python-pptx OK", getattr(pptx, "__version__", ""))
+    import pptx; print("python-pptx OK", getattr(pptx, "__version__", ""))
 except ImportError:
     print("python-pptx MISSING")
-print("skills 可见:", os.path.isdir("skills/bisheng-pptx/scripts"))
-print("soffice:", shutil.which("soffice") or shutil.which("libreoffice") or "无（只影响预览渲染，不影响生成）")
+print("skills 可见:", os.path.isdir("skills/bisheng-pptx/templates"))
+print("soffice:", shutil.which("soffice") or shutil.which("libreoffice") or "无")
 ```
 
-- `python-pptx MISSING`：正常部署不会出现（它是后端的正式依赖，已在 116 / 180 等环境实测存在）。
-  真遇到就是这套环境被裁剪过 —— **不要 `pip install`**（共享的离线环境，装了会污染所有租户）。
-  直接告诉用户「当前环境缺少 python-pptx，无法生成 .pptx，需要运维在后端环境补装」，
-  并问他是否接受改为其它形式的交付物。不要假装做出来了。
-- `skills 可见: False`：说明跑在 E2B 沙箱里（见 §1 的「前提」行）。本包的三个脚本一律调不动，
-  **不要反复重试路径** —— 直接改走纯 python-pptx 内联写法，自检改为自己核对，并把这个限制告诉用户。
-- `soffice` 没有、或后面渲染时报「无法加载源文件」：说明这台机器的 LibreOffice 没装 Impress 组件。
-  **只影响 §5 的可选预览渲染，不影响 .pptx 的生成与交付** —— 跳过看图那一步，以体检结果为准即可。
+- `python-pptx MISSING`：告诉用户「当前环境缺少 python-pptx，需要运维补装」，不要 `pip install`，不要假装做出来了。
+- `skills 可见: False`：当前执行环境看不到技能目录，**内置模板和自检脚本都用不了**。
+  如实告诉用户这一点，然后按 `references/freeform.md` 用纯 python-pptx 从零生成，不要反复重试路径。
 
-## 2. 选路线
+环境的其余细节（路径、目录、单次时长上限、日志规则）见 `references/environment.md`，遇到问题再查。
+
+## 1. 选路线
 
 | 情况 | 做法 |
 |---|---|
-| 用户没给模板，要一份新 PPT | §3 从零创建 |
-| 用户上传了 .pptx/.potx 模板，或说「按这个样式/模板做」 | §4 套用模板（**优先级最高，别自己另起炉灶**） |
-| 用户上传了已有 PPT 要改内容 | 先 §5 的 `inspect_deck.py` 把内容读出来，再按 §4 的方式打开原文件改写 |
-| 用户要的是网页翻页 HTML 演示 | 不属于本技能，按常规交付方式做 |
+| 用户上传了 .pptx/.potx 模板，或说「按这个模板/样式做」 | §5 套用户模板（**优先级最高**，不要换成内置模板） |
+| 用户上传了已有 PPT 要改内容 | 先用 §6 的 `inspect_deck.py` 读出内容，再按 §5 的方式打开原文件改写 |
+| 其余情况（最常见） | **§2–§4：内置模板**（默认路线） |
+| 用户明确要求自由设计，或五套模板都明显不贴合主题 | `references/freeform.md` 从零创建，§6 自检照做 |
 
-## 3. 从零创建
+## 2. 先写大纲（内容先行）
 
-**第 1 步 · 定结构**。先把大纲写到 `scratch/outline.md`（**不要写进 `output/`**，否则它会取代 PPT 成为
-用户看到的头条交付物）。10–15 页是常见规模：封面 / 目录 / 若干内容页 / 结尾页。
+动手做页面之前，先把逐页大纲写到 `scratch/outline.md`（**不要写进 `output/`**），每页一行：
 
-**第 2 步 · 定视觉**。选一套与主题相称的配色和版式节奏，细节读
-`/skills/bisheng-pptx/references/design-zh.md`。中文商务、党政国企、科技产品各有惯用调性，不要一律深蓝。
+```
+页码 | layout_id | 首读结论（就是这页的标题） | 支撑证据（数字带单位、期间、来源）
+1 | cover | 2026 年度工作汇报：稳中求进，目标全面完成 | —
+2 | kpi-4 | 四项核心指标全部超额完成 | 营收 128.6 亿元（+12.4%）、利润 10.8 亿元……（来源：财务快报）
+3 | chart-insight | 营收连续四年增长，年均 13.8% | 2022–2026 营收序列（来源：历年年报）
+```
 
-**第 3 步 · 写构建脚本**。用 `write_file` 把完整脚本写到 `scratch/build_deck.py`，
-**不要把整段代码塞进代码执行器的参数里** —— 参数过长会被截断，导致反复重试却总是差一截。
-写文件工具产生的文件对执行器是可见的。python-pptx 的具体写法读
-`/skills/bisheng-pptx/references/pptx-cookbook.md`（画布尺寸、文本框、项目符号、表格、原生图表、图片、
-中文字体设置，都有可直接抄的片段）。
+写大纲时守住这几条（细则见 `references/design-zh.md`「零、内容组织」）：
 
-**第 4 步 · 执行**：
+- **标题写结论，不写话题**：「营收连续四年增长」而不是「营收情况」。听众只看标题也能带走要点。
+- **一页一个结论**。两个结论就拆两页。
+- **先排论证顺序，再定页数**：开场（问题与核心判断）→ 展开（按比较、流程、时间、层级选结构）→ 证据（图表、表格）→ 收尾（行动、责任人、待决事项）。
+- **按内容关系选版式**：并列用卡片、先后用流程、时间用时间轴、取舍用对比、数据用 KPI 或图表、清单用表格。
+  **不要连续三页用同一个版式**，也不要通篇都是卡片。
+- 数字只用材料里有的；没有就写定性判断，**不要编数字**。示例数据要明确标注。
+
+## 3. 选模板
+
+```python
+import subprocess, sys
+r = subprocess.run([sys.executable, "skills/bisheng-pptx/scripts/list_templates.py"], capture_output=True, text=True)
+print(r.stdout); print(r.stderr[-2000:] if r.stderr else "")
+```
+
+| 主题 / 场景 | 模板 id |
+|---|---|
+| 央国企、党政机关的工作汇报、宣传、党建 | `gov-red`（红韵） |
+| 项目方案、技术方案、可研、工程建设 | `blueprint`（蓝图） |
+| 经营分析、数据汇报、金融投资 | `operating`（经营） |
+| 产品发布、数字化/AI 方案、科技公司介绍 | `tech-dark`（深空） |
+| 培训课件、制度宣贯、入职培训、工作坊 | `classroom`（课堂） |
+
+用户点名了风格或行业就照办；拿不准时按上表选最贴近的一套。选定后看它的版式和插槽：
+
+```python
+r = subprocess.run([sys.executable, "skills/bisheng-pptx/scripts/list_templates.py", "gov-red"],
+                   capture_output=True, text=True)
+print(r.stdout); print(r.stderr[-2000:] if r.stderr else "")
+```
+
+输出里 `title≤27` 表示 title 插槽建议不超过 27 字（汉字算 1，字母数字算 0.5），`·分条` 表示传 list 逐条写。
+把大纲里的 layout_id 对照这张表核一遍，再开始构建。
+
+## 4. 用 Deck 构建
+
+用 `write_file` 把完整脚本写到 `scratch/build_deck.py`（**不要把整段代码塞进代码执行器的参数里**，会被截断）：
+
+```python
+import sys
+sys.path.insert(0, "skills/bisheng-pptx/scripts")
+from deck_template import Deck
+
+deck = Deck.open("gov-red", footer="某某集团 · 2026 年度工作汇报")   # footer=None 则不要页脚
+
+s = deck.add("cover")
+deck.fill(s, "title", "2026 年度工作汇报")
+deck.fill(s, "subtitle", "稳中求进，全年目标全面完成")
+deck.fill(s, "kicker", "集团年度工作会")
+deck.fill(s, "org", "某某集团有限公司")
+deck.fill(s, "date", "2026 年 12 月")
+
+s = deck.add("kpi-4")
+deck.fill(s, "kicker", "01 · 经营成果")
+deck.fill(s, "title", "四项核心指标全部超额完成")
+deck.fill(s, "kpi1.number", "128.6"); deck.fill(s, "kpi1.unit", "单位：亿元")
+deck.fill(s, "kpi1.label", "营业收入"); deck.fill(s, "kpi1.note", "同比增长 12.4%")
+# …kpi2–kpi4 同理；只有三个指标就 deck.drop(s, "kpi4")
+
+s = deck.add("chart-insight")
+deck.fill(s, "kicker", "01 · 经营成果")
+deck.fill(s, "title", "营收连续四年增长，年均增速 13.8%")
+deck.chart(s, "chart", "column", ["2022", "2023", "2024", "2025", "2026"],
+           [("营业收入（亿元）", [76.6, 88.2, 101.5, 114.4, 128.6])], number_format="0.0")
+deck.fill(s, "insight.title", "读图要点")
+deck.fill(s, "insight.body", ["2024 年起新能源贡献过半", "2026 年增速略有回落"])
+deck.fill(s, "source", "来源：集团历年年报")
+
+deck.save("output/2026年度工作汇报.pptx")
+```
+
+执行：
 
 ```python
 import subprocess, sys
@@ -97,13 +145,27 @@ print(r.stdout or "(no stdout)")
 print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 ```
 
-> 为什么不直接写 `python scratch/build_deck.py`：`python` 在 PATH 里未必是后端那个解释器，
-> 用 `sys.executable` 才能保证跑在装了 python-pptx 的环境里。**下面所有脚本调用都用这个写法。**
+| 方法 | 用途 |
+|---|---|
+| `Deck.open(id, footer=...)` | 打开模板；footer 写进每页页脚 |
+| `deck.add(layout_id)` | 追加一页（复制该版式的原型页），返回 slide |
+| `deck.fill(slide, 插槽, 文本或 list)` | 写文字，保留模板的字体字号颜色；list 逐条成段 |
+| `deck.drop(slide, 插槽或分组)` | 删掉用不到的插槽，`drop(s, "card3")` 删整张卡片 |
+| `deck.chart(slide, "chart", kind, 类别, [(系列名, 数值)], number_format=)` | 原生图表；kind 取 column / bar / line / stacked / pie / doughnut / waterfall（瀑布图：第一个和最后一个是总量，中间是增减） |
+| `deck.table(slide, "table", 表头, 行, highlight_rows=(2,))` | 原生表格；highlight_rows 标出需要关注的行（从 0 数） |
+| `deck.image(slide, "image", 图片路径)` | 把 `uploads/` 里的图片或你生成的图放进图片区，自动裁切填满 |
+| `deck.notes(slide, 文本)` | 演讲者备注 |
+| `deck.save("output/名称.pptx")` | 删除原型页并保存，同时写 `scratch/名称.manifest.json` 供自检使用 |
 
-**第 5 步 · 自检并返修**（§5）。返修时用 `edit_file` 定点改 `scratch/build_deck.py` 再重跑，
-不要每次重写整份脚本。
+填写规则：
 
-## 4. 套用用户模板
+- **超过插槽容量就精简文案或拆页**，不要缩字号、不要改框尺寸。`fill` 超容量时会打印 `[超容量]`。
+- **用不到的插槽一律 `drop`**，不要留空字符串，更不要留模板示例文字（带「示例」字样的都是示例）。
+- **不要改坐标、不要自己加线条和色块**。确实需要额外元素（比如在图片区旁加一个标注），保持在内容区内，并在自检里复核。
+- 图表数据必须来自材料；源数据缺失时换成定性的卡片或观点页，不要编。
+- 返修时用 `edit_file` 定点改 `scratch/build_deck.py` 再重跑，不要每次重写整份脚本。
+
+## 5. 套用用户模板
 
 **第 1 步 · 探版式**：
 
@@ -120,18 +182,16 @@ print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 **第 2 步 · 以模板为基底生成**：
 
 - `prs = Presentation("uploads/模板.pptx")` —— **打开模板本身**，不要 `Presentation()` 空开再仿色。
-  这样母版、主题色、字体、页眉页脚全部自动继承。
 - `slide = prs.slides.add_slide(prs.slide_layouts[i])`，`i` 用第 1 步打印的索引。
-- 填占位符：用本技能包的 **`fill_text(shape, "文字")`**（`pptx_helpers`，见 cookbook §7），
-  它保留模板给这个占位符设定的字号、字色和项目符号。
-  **不要用 `text_frame.text = "..."`** —— 那会把整段塌成一个无格式 run，模板的样式全丢。
-- **模板自带的示例页要删掉**（cookbook 有删除页的片段）。删页放在所有内容写完之前做，避免误删刚写的页。
-- 模板里的占位图形若用不到就整组删除，不要只清空文字 —— 会留下孤零零的空框。
-- 保存到 `output/`，扩展名保持 `.pptx`。
+- 填占位符用 `pptx_helpers.fill_text(shape, "文字")`（见 `references/pptx-cookbook.md` §7），
+  **不要用 `text_frame.text = "..."`**，那会丢掉模板样式。
+- 模板自带的示例页要删掉（cookbook 有删页片段），删页放在写内容之前。
+- 用不到的占位图形整组删除，不要只清空文字。
+- 保存到 `output/`，扩展名保持 `.pptx`。§2 的大纲要求同样适用。
 
-**注意**：模板文件是二进制，**不要用 `read_file` 去读它**（会被拦截），只能由代码执行器打开。
+**注意**：模板文件是二进制，**不要用 `read_file` 去读它**，只能由代码执行器打开。
 
-## 5. 交付前自检（必做）
+## 6. 交付前自检（必做）
 
 ```python
 import subprocess, sys
@@ -141,64 +201,30 @@ print(r.stdout or "(no stdout)")
 print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 ```
 
-输出分两段：
+输出分「内容」和「体检」两段：
 
-- **内容**：逐页文本 + 备注。用它核对错字、顺序、缺漏 —— 这是 `markitdown` 在本环境的替代品。
-- **体检**：ERROR 必须修完再交付；WARN 逐条复核；INFO 是设计建议。检查覆盖文字溢出、
-  自动撑高的框会压到谁、关闭自动换行导致的截断（ERROR）、超出画布、文字区域重叠、
-  文字压在装饰线/小图形上（WARN）、字号过小、贴边、残留占位符（XXX/待填/"单击此处"）、
-  空占位符（WARN）、整页无视觉元素。
+- **内容**：逐页文本加备注，用来核对错字、顺序、缺漏。
+- **体检**：每条问题带页码和元素名。**ERROR 必须修完再交付；WARN 逐条复核**，能改就改。
+  用 Deck 生成的文稿会自动读取 `scratch/` 下的清单，额外检查：文字超出该位置的容量、残留模板示例、
+  连续三页用同一版式、封面缺少首读焦点、图表区没放图表。模板自带的结构元素不会被报出来。
 
-**体检阈值比 §7 排版底线松一档**，只在明显违规时出声（例如字号 ERROR 在 8pt 才触发，
-而规范要求正文 14–18pt）。**没报 ERROR ≠ 符合规范** —— 排版仍按 §7 和 design-zh 自己把关。
+改完重新生成、再跑一次，直到「结论: 通过」。**没报 ERROR ≠ 完全合规**，版式仍以 `references/design-zh.md` 为准。
 
-改完重新生成，再跑一次，直到「结论: 通过」。
+渲染成图片逐页查看是可选步骤，只在确知当前模型支持读图时才做，做法见 `references/environment.md`。
 
-**可选 · 看渲染图**：
+## 7. 交付纪律
 
-> ⚠️ 仅在你确知当前模型支持读图时才做。渲染出的 PNG 会被编成真正的 base64 图片块发给模型厂商，
-> 而平台默认的 Qwen/dashscope 通道**已知不接收 base64 图片** —— 读图很可能直接失败，
-> 甚至中断本次请求。拿不准就跳过，以体检结果为准。
-
-```python
-import subprocess, sys
-r = subprocess.run([sys.executable, "skills/bisheng-pptx/scripts/render_deck.py", "output/xxx.pptx"],
-                   capture_output=True, text=True)
-print(r.stdout or "(no stdout)")
-print(r.stderr[-2000:] if r.stderr else "(no stderr)")
-```
-
-它把每页渲染成 `scratch/preview/<名字>/slide-N.png`，再用 `read_file` 逐张查看。
-**渲染用的中文字体只有文泉驿正黑**，和用户 PowerPoint 里的实际字体宽度不同 ——
-预览里的文字松紧只作参考，容器留约 10% 余量即可，不要为了预览效果反复微调字号。
-如果环境里没有 LibreOffice，脚本会直说，跳过这一步、以体检结果为准即可。
-
-## 6. 交付纪律
-
-- `output/` 里**只放最终的 `.pptx`**。大纲、构建脚本、预览图、中间版本一律放 `scratch/`。
-  （同时放一个 `.md` 会让它顶掉 PPT 成为用户看到的头条文件。）
-- 文件名用有意义的中文名，如 `output/思源电气企业介绍.pptx`。
-- 收尾时如实说明做了什么、多少页、用了什么风格。**不要声称生成了实际不存在的文件** ——
-  .pptx 不在系统的幻影交付物检测清单里，写错了没人兜底。
-- 用户拿到的是可下载的 .pptx 文件（当前前端不支持在线预览 PPT），收尾话术不要说「点击预览」。
-
-## 7. 排版底线（细则见 references/design-zh.md）
-
-- 标题 32–44pt 加粗，小标题 20–24pt，正文 14–18pt，注释 10–12pt；正文不要小于 12pt。
-- 每页留 ≥0.5 英寸边距；内容块之间 0.3–0.5 英寸，全篇统一。
-- 除封面外，每页都该有一个视觉元素（图表 / 图形 / 图标 / 表格），不要通篇「标题 + 三行要点」。
-- 正文左对齐，只有标题居中。
-- 字体写「微软雅黑」「黑体」「等线」这类用户端一定有的中文字体（渲染由用户的 PowerPoint 完成）。
-- **一条装饰性线条都不要**：标题上下的横线、章节编号旁的竖线、页面底部的横贯细线、
-  页眉页脚色带、侧边色条、卡片单边描边，全部不要。这是最常被违反的一条，
-  既是"一眼 AI"的签名，也是自检里「文字压在装饰线上」的主要来源。用留白和字号层级做分隔。
-- 文字绝不允许溢出容器；放不下就精简文案或换版式，不要一味缩字号。
+- `output/` 里**只放最终的 `.pptx`**。大纲、构建脚本、清单、预览图一律放 `scratch/`
+  （同时放一个 `.md` 会顶掉 PPT 成为用户看到的头条文件）。
+- 文件名用有意义的中文名，如 `output/某某集团2026年度工作汇报.pptx`。
+- 收尾时如实说明：多少页、用了哪套模板、自检结论（几条 WARN 未处理及原因）。
+  **不要声称做过没做的检查**，也不要声称生成了实际不存在的文件。
 
 ## 8. 绝不要做的事
 
-- ❌ 写 `require('pptxgenjs')` 或任何 Node 脚本 —— 装不上，`npm install` 也会失败。
-- ❌ 跑 `markitdown` / `soffice` 命令行做内容 QA —— 用 §5 的两个脚本。
-- ❌ `pip install` 任何东西。
-- ❌ 用绝对路径 `/output/...`。
+- ❌ 写 Node / `pptxgenjs` 脚本、`pip install` / `npm install` 任何东西。
+- ❌ 用绝对路径 `/output/...`（文件会被静默丢弃）。
 - ❌ 把 PPT 降级成 Word/PDF/Markdown 交付。用户要的是 .pptx。
-- ❌ 因为 `ls` 看不到刚生成的文件就重做一遍。
+- ❌ 把整页截图或图片当成文字、表格、图表的替代品。
+- ❌ 为了塞下文字把字号缩到模板之下。
+- ❌ 因为 `ls` 看不到刚生成的文件就重做一遍 —— 以执行结果为准。

@@ -1,7 +1,9 @@
+import { ApiRequestFailure } from '~/components/ApiRequestFailure';
+import { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardPortal } from '~/components/ui/HoverCard';
 import { X } from 'lucide-react';
 import { useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
@@ -28,6 +30,9 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
   const isGuest = mode === 'guest';
 
   const {
+    listError,
+    retryConversations,
+    loading,
     groups,
     activeChatId,
     switchConversation,
@@ -67,10 +72,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
       {/* App card：仅保留右侧大块 Tooltip；勿再套描述行的小 Tooltip（会与外层叠两层） */}
       <div className="shrink-0 pt-1">
         {flowData?.name || flowData?.description ? (
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div
+          <HoverCard openDelay={300} closeDelay={100} ><HoverCardTrigger asChild><div tabIndex={0}
                   className="border-border-base border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px] cursor-default"
                   style={{ backgroundImage: 'linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)' }}
                 >
@@ -104,20 +106,11 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                       {localize('com_knowledge_start_new_chat')}
                     </button>
                   </div>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent
-                side="right"
-                align="start"
-                noArrow={isGuest}
-                sideOffset={isGuest ? 8 : 0}
-                className={cn(
+                </div></HoverCardTrigger><HoverCardPortal><HoverCardContent side="right" align="start" sideOffset={isGuest ? 8 : 0} className={cn(
                   isGuest
                     ? 'max-w-[min(100vw-2rem,320px)] !rounded-[20px] !border !border-border-base !bg-white !p-5 !text-sm !font-normal !leading-normal !text-text-1 !shadow-[0_8px_32px_rgba(0,0,0,0.12)]'
                     : 'max-w-[320px] p-3',
-                )}
-              >
-                {isGuest ? (
+                )}>{isGuest ? (
                   <div className="flex flex-col gap-4 text-left text-text-1">
                     {flowData?.name ? (
                       <div>
@@ -160,10 +153,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                       </p>
                     )}
                   </div>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                )}</HoverCardContent></HoverCardPortal></HoverCard>
         ) : (
           <div
             className="border-border-base border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px] cursor-default"
@@ -205,13 +195,14 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
 
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0 px-2">
-        {groups.length === 0 ? (
+        {listError ? <ApiRequestFailure error={listError} onRetry={retryConversations} /> : null}
+        {groups.length === 0 ? (!listError && !loading && (
           <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
             <p className="text-center text-[14px] leading-[19.5px] text-text-3">
               {localize('com_app_chat_sidebar_empty')}
             </p>
           </div>
-        ) : (
+        )) : (
           groups.map((group, groupIdx) => (
             <div key={groupIdx} className="flex flex-col">
               <div className="text-black opacity-60 pt-4 text-[12px] mb-1">
@@ -240,9 +231,10 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                       conv={conv}
                       isActive={isActive}
                       onClick={() => switchConversation(conv)}
-                      onRenameSuccess={() => fetchConversations()}
+                      onRenameSuccess={() => { void fetchConversations().catch(() => { /* The list keeps its retry state. */ }); }}
                       onDeleteSuccess={async () => {
-                        const list = await fetchConversations();
+                        const list = await fetchConversations().catch(() => null);
+                        if (!list) return;
                         if (!isActive) return;
                         if (list.length > 0) {
                           switchConversation(list[0]);

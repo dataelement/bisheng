@@ -27,7 +27,7 @@ class DshModelCall(SQLModelSerializable, table=True):
             name="ck_dsh_call_usage",
         ),
         CheckConstraint(
-            "grant_version >= 1 AND event_version >= 1 AND quota_epoch >= 1 AND policy_version >= 1",
+            "(grant_version IS NULL OR grant_version >= 1) AND event_version >= 1 AND quota_epoch >= 1 AND policy_version >= 1",
             name="ck_dsh_call_versions",
         ),
     )
@@ -43,10 +43,11 @@ class DshModelCall(SQLModelSerializable, table=True):
             DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT, onupdate=text("CURRENT_TIMESTAMP")
         ),
     )
-    seat_id: str = Field(sa_column=Column(String(36), nullable=False))
+    seat_id: str | None = Field(default=None, sa_column=Column(String(36), nullable=True))
     session_id: str = Field(sa_column=Column(String(36), nullable=False))
-    grant_version: int = Field(sa_column=Column(BigInteger, nullable=False))
+    grant_version: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     model_id: int = Field(sa_column=Column(BigInteger, nullable=False))
+    credit_rate: int = Field(default=100, sa_column=Column(BigInteger, nullable=False, server_default=text("100")))
     usage_month: str = Field(sa_column=Column(String(7), nullable=False))
     policy_version: int = Field(sa_column=Column(BigInteger, nullable=False))
     event_version: int = Field(sa_column=Column(BigInteger, nullable=False))
@@ -54,6 +55,7 @@ class DshModelCall(SQLModelSerializable, table=True):
     input_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     output_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     total_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
+    billed_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     cache_read_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     cache_creation_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     status: str = Field(

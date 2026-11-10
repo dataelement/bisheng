@@ -1,0 +1,40 @@
+{
+  "observed_date": "2026-10-26",
+  "source_revision": "d9e6c4d4fe43588763b889cd4c55fcb24f397e54",
+  "backend_base_source": "f5db95ecab6934c590fa32486cb15a5ff3dc2737",
+  "backend_hotfix_commit": "f8fbe894812f6cfc348c27d54430d3e5776156e2",
+  "backend_image": "192.168.106.189:5443/vibe-release/bisheng-backend@sha256:fb69ce59a1f5925c322b85064a07801bc04eca63cf131aae630711eb2a083b6d",
+  "entry_image": "192.168.106.189:5443/vibe-release/bisheng-app-proxy@sha256:4a037405875987d483842aa45d92923d6f0a3c3d64e9e926a5a62f56d54b2e39",
+  "entry_base": "https://192.168.106.189:30143",
+  "application_id": "c63121a2f58441df953762501fdc62d3",
+  "deployment_id": "4f599876e25e4bcdaee8e1a213f183b0",
+  "version_id": "24fcb79a0b394e6d9634e952375f8091",
+  "pod_name": "app-e38bf26369d3bffed06c1ec2c0691914e52d1b27",
+  "pod_uid": "49151023-0085-4c31-ae97-c4fbd5f1cc1e",
+  "pod_phase": "Running",
+  "containers_ready": [
+    true,
+    true
+  ],
+  "restarts": [
+    0,
+    0
+  ],
+  "tier": "light",
+  "app_cpu_limit": "500m",
+  "app_memory_limit": "1Gi",
+  "helper_cpu_limit": "25m",
+  "helper_memory_limit": "128Mi",
+  "production_pv": "vibe-release-production-3",
+  "http_status": 200,
+  "scope": "one static bundle application, normal authenticated HTTP; not a full regression",
+  "docker116_business_acceptance": "deferred by user until resources available",
+  "ci": {
+    "number": 5635,
+    "source_revision": "d9e6c4d4fe43588763b889cd4c55fcb24f397e54",
+    "status": "running",
+    "backend": "success",
+    "frontend": "running",
+    "automatic_deploy": "pending"
+  }
+}

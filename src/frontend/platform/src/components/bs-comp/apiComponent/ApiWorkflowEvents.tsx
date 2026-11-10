@@ -1,5 +1,5 @@
-import { Badge } from '@/components/bs-ui/badge';
-import { Button } from '@/components/bs-ui/button';
+import { Button } from '@bisheng/ui';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/bs-ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table';
@@ -78,19 +78,19 @@ export function ApiWorkflowEvents() {
                     <Button className="fixed top-20 right-10 z-10 size-11 rounded-full">{t("api.workflowDoc.navigation")}</Button>
                 </PopoverTrigger>
                 <PopoverContent className="p-4 shadow-lg flex flex-col gap-2">
-                    <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-[#000] mr-2'></span><a href="#guide-t1">{t("api.workflowDoc.basic_info")}</a></Badge>
-                    <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-[#000] mr-2'></span><a href="#guide-t2">{t("api.workflowDoc.call_sequence")}</a></Badge>
-                    <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-[#000] mr-2'></span><a href="#guide-t3">{t("api.workflowDoc.event_reference")}</a></Badge>
+                    <Button variant="text" size="small" asChild color="default"><a href="#guide-t1"><span className='size-2 rounded-full bg-[#000] mr-2'></span>{t("api.workflowDoc.basic_info")}</a></Button>
+                    <Button variant="text" size="small" asChild color="default"><a href="#guide-t2"><span className='size-2 rounded-full bg-[#000] mr-2'></span>{t("api.workflowDoc.call_sequence")}</a></Button>
+                    <Button variant="text" size="small" asChild color="default"><a href="#guide-t3"><span className='size-2 rounded-full bg-[#000] mr-2'></span>{t("api.workflowDoc.event_reference")}</a></Button>
                     <div className='pl-4 flex flex-col gap-2'>
-                        <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-[#FFD89A] mr-2'></span><a href="#guide-2">{t("api.workflowDoc.guide_question_event")}</a></Badge>
-                        <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-primary mr-2'></span><a href="#guide-3">{t("api.workflowDoc.dialog_input_event")}</a></Badge>
-                        <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-primary mr-2'></span><a href="#guide-5">{t("api.workflowDoc.form_input_event")}</a></Badge>
-                        <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-[#BBDBFF] mr-2'></span><a href="#guide-6">{t("api.workflowDoc.output_event")}</a></Badge>
-                        <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-[#BBDBFF] mr-2'></span><a href="#guide-7">{t("api.workflowDoc.inline_input_event")}</a></Badge>
-                        <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-[#BBDBFF] mr-2'></span><a href="#guide-8">{t("api.workflowDoc.choice_event")}</a></Badge>
-                        <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-[#FFD89A] mr-2'></span><a href="#guide-9">{t("api.workflowDoc.stream_chunk_event")}</a></Badge>
-                        <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-[#FFD89A] mr-2'></span><a href="#guide-10">{t("api.workflowDoc.stream_end_event")}</a></Badge>
-                        <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-red-400 mr-2'></span><a href="#guide-11">{t("api.workflowDoc.close_event")}</a></Badge>
+                        <Button variant="text" size="small" asChild color="default"><a href="#guide-2"><span className='size-2 rounded-full bg-[#FFD89A] mr-2'></span>{t("api.workflowDoc.guide_question_event")}</a></Button>
+                        <Button variant="text" size="small" asChild color="default"><a href="#guide-3"><span className='size-2 rounded-full bg-primary mr-2'></span>{t("api.workflowDoc.dialog_input_event")}</a></Button>
+                        <Button variant="text" size="small" asChild color="default"><a href="#guide-5"><span className='size-2 rounded-full bg-primary mr-2'></span>{t("api.workflowDoc.form_input_event")}</a></Button>
+                        <Button variant="text" size="small" asChild color="default"><a href="#guide-6"><span className='size-2 rounded-full bg-[#BBDBFF] mr-2'></span>{t("api.workflowDoc.output_event")}</a></Button>
+                        <Button variant="text" size="small" asChild color="default"><a href="#guide-7"><span className='size-2 rounded-full bg-[#BBDBFF] mr-2'></span>{t("api.workflowDoc.inline_input_event")}</a></Button>
+                        <Button variant="text" size="small" asChild color="default"><a href="#guide-8"><span className='size-2 rounded-full bg-[#BBDBFF] mr-2'></span>{t("api.workflowDoc.choice_event")}</a></Button>
+                        <Button variant="text" size="small" asChild color="default"><a href="#guide-9"><span className='size-2 rounded-full bg-[#FFD89A] mr-2'></span>{t("api.workflowDoc.stream_chunk_event")}</a></Button>
+                        <Button variant="text" size="small" asChild color="default"><a href="#guide-10"><span className='size-2 rounded-full bg-[#FFD89A] mr-2'></span>{t("api.workflowDoc.stream_end_event")}</a></Button>
+                        <Button variant="text" size="small" asChild color="default"><a href="#guide-11"><span className='size-2 rounded-full bg-red-400 mr-2'></span>{t("api.workflowDoc.close_event")}</a></Button>
                     </div>
                 </PopoverContent>
             </Popover>
@@ -220,7 +220,7 @@ def upload_file(local_path: str):
     res = requests.post(url, headers=headers, files=files)
     file_path = res.json()['data'].get('file_path', '')
     return file_path
-    
+
  financeA = upload_file("caibao.pdf")
  financeB = upload_file("caibao2.pdf")`}
             </SyntaxHighlighter>
@@ -292,7 +292,7 @@ def upload_file(local_path: str):
     res = requests.post(url, headers=headers, files=files)
     file_path = res.json()['data'].get('file_path', '')
     return file_path
-    
+
  financeA = upload_file("caibao.pdf")
  financeB = upload_file("caibao2.pdf")`}
             </SyntaxHighlighter>

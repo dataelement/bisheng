@@ -19,6 +19,25 @@
     }
   </script>
   <script>
+    // Paint the native host theme before loading bundles or checking enterprise identity.
+    (function () {
+      var params = new URLSearchParams(location.search);
+      if (params.get('embed') !== 'dsh') return;
+      var theme = params.get('dshTheme');
+      document.documentElement.dataset.dshHostTheme = theme === 'dark' || theme === 'light'
+        ? theme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    })();
+  </script>
+  <style>
+    html[data-dsh-host-theme=dark] { --dsh-startup-background: #141416; --dsh-startup-text: #e7e7ea; }
+    html[data-dsh-host-theme=light] { --dsh-startup-background: #ffffff; --dsh-startup-text: #202123; }
+    html[data-dsh-host-theme], html[data-dsh-host-theme] body,
+    html[data-dsh-host-theme] #root, .dsh-chat-startup {
+      background-color: var(--dsh-startup-background, #ffffff);
+      color: var(--dsh-startup-text, #202123);
+    }
+  </style>
+  <script>
     var brandBaseUrl = '<%- baseUrl %>';
     document.write('<script src="' + brandBaseUrl + '/assets/bisheng/config.js?v=<%= Date.now() %>"><\/script>');
     document.write('<script src="' + brandBaseUrl + '/assets/bisheng/brand-runtime.js?v=<%= Date.now() %>"><\/script>');
@@ -57,7 +76,7 @@
       /* Static white backdrop for the 34px strip. The app UI is always light,
          so white matches it seamlessly — no theme-following needed. (The strip
          only ever showed the native WebView background before this.) */
-      background-color: #ffffff;
+      background-color: var(--dsh-startup-background, #ffffff);
     }
 
     body {
@@ -66,7 +85,7 @@
       height: 100dvh !important;
       overflow: hidden;
       overscroll-behavior: none;
-      background-color: #ffffff;
+      background-color: var(--dsh-startup-background, #ffffff);
     }
   </style>
   <script>

@@ -1,0 +1,443 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>F115 开发与定向验证记录</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f6f7fa;color:#202737;font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1260px;margin:auto;padding:32px}article{background:white;border:1px solid #e1e6ef;border-radius:12px;padding:32px}h1{font-size:29px;line-height:1.4}h2{margin-top:40px;border-bottom:1px solid #e2e6ee;padding-bottom:8px}h3{margin-top:28px}a{color:#2458d6;text-decoration:none}a:hover{text-decoration:underline}nav{padding:16px 24px;background:#f2f5fc;border-radius:8px;margin:24px 0}nav ul{padding-left:22px;margin:4px 0}table{border-collapse:collapse;width:100%;font-size:14px;margin:18px 0}th,td{border:1px solid #dce2eb;padding:10px 12px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#f2f5fc}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9em;background:#f1f3f7;padding:2px 4px;border-radius:3px;overflow-wrap:anywhere}blockquote{margin:18px 0;border-left:4px solid #9badd5;padding:8px 16px;background:#f7f9fd}li{margin:8px 0}li[id^="ac-"]{scroll-margin-top:20px}li[id^="ac-"]:target{background:#fff4ca;border-radius:4px;outline:6px solid #fff4ca}.state{display:inline-block;padding:4px 12px;border-radius:5px;background:#fff2cf;color:#775300}.meta{font-size:13px;color:#667184}.facts{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}.fact{background:#edf4fd;border:1px solid #dae6fa;padding:8px 14px;border-radius:6px;font-size:14px}.review-break{margin:48px 0;border:0;border-top:3px solid #dbe3f0}@media(max-width:720px){main{padding:12px}article{padding:18px}h1{font-size:23px}table{display:block;overflow-x:auto;min-width:100%}th,td{min-width:150px;padding:8px}nav{padding:12px 16px}}@media print{body{background:white;font-size:10pt}main,article{max-width:none;margin:0;padding:0;border:0}nav{display:none}h2,h3{break-after:avoid}tr,li{break-inside:avoid}a{color:inherit}table{font-size:9pt}code{white-space:normal}.facts{display:none}}</style></head><body><main><article><span class="state">按用户指令先交付发版线 · 真实部署验收待执行</span><p class="meta">2026-11-02 · 基线 497256d28 · 规格与设计已确认 · 开发及验收状态见正文</p><nav aria-label="目录"><div class="toc">
+<ul>
+<li><a href="#git">本次 Git 交付安排</a></li>
+<li><a href="#_1">本地结果</a></li>
+<li><a href="#_2">可复现命令</a></li>
+<li><a href="#task-reviewl1">task-review（L1）</a></li>
+<li><a href="#ac">AC追溯</a></li>
+<li><a href="#_3">判定</a><ul>
+<li><a href="#2026-11-02">用户后续交付指令（2026-11-02）</a></li>
+</ul>
+</li>
+<li><a href="#_4">审查中修正的事项</a></li>
+<li><a href="#_5">交付范围</a></li>
+</ul>
+</div>
+</nav><h1 id="f115">F115 开发与定向验证记录</h1>
+<p>日期：2026-11-02。分支 <code>codex/vibe-runtime-review-20261102</code>；源码基线 <code>497256d289793ce016df07cf8ab38f32988faca4</code>。规格52条及设计均获用户分别确认。本轮未部署；不运行全量测试。</p>
+<h2 id="git">本次 Git 交付安排</h2>
+<p>用户在本地开发与验收缺口已披露后，明确要求“提交推送 feat/3.0.0 分支”。按该指令先提交本功能、合入最新远端发版线并推送，保留目标分支后续增强。真实部署 E2E 及既有类型门禁问题仍按下表记录，不将 Git 交付视为部署验收完成。本次不更新环境或存量资源。</p>
+<h2 id="_1">本地结果</h2>
+<table>
+<thead>
+<tr>
+<th>范围</th>
+<th>实际结果</th>
+<th>证据/限制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>后端新增链路与直接相关知识库回归</td>
+<td>63 passed；5个真实E2E用例默认skipped</td>
+<td>pytest实际组合运行；非空业务断言、拒绝先于名单、原子创建补偿及开放API兼容</td>
+</tr>
+<tr>
+<td>manager Docker/K8s只读观察</td>
+<td>71 passed</td>
+<td>test_f115_observation.py + test_k8s_observe.py；fake外部平台/执行器，非真实部署</td>
+</tr>
+<tr>
+<td>Platform组件和直接审计回归</td>
+<td>19 passed / 4 files</td>
+<td>运行状态、候选失败/空/切范围、知识库两种入口与旧表单、审批重查</td>
+</tr>
+<tr>
+<td>Client审批组件/父层相关断言</td>
+<td>22 passed / 3 files</td>
+<td>现有Jest受未构建canvas与ESM p-limit启动问题阻断；临时Vitest兼容副本仅替换测试全局名称/模块定位和JSX运行配置，执行真实产品组件及同一断言。没有修改仓库runner或依赖安装</td>
+</tr>
+<tr>
+<td>前端 lint</td>
+<td>PASS</td>
+<td>按根脚本检查两个SPA与共享包</td>
+</tr>
+<tr>
+<td>i18n与错误码产物</td>
+<td>PASS</td>
+<td>check-i18n；locales build/check，三语源和6个生成文件</td>
+</tr>
+<tr>
+<td>前端类型门禁</td>
+<td>未全绿；无新增诊断</td>
+<td>同一基线/同一依赖对照：Platform23条、Client134条；依赖缺失、旧图标/API等既有报错。本轮曾新增一处测试fixture类型错误，已修正并重新验证</td>
+</tr>
+<tr>
+<td>Ruff</td>
+<td>无新增问题</td>
+<td>修改文件与git HEAD同配置对照；旧文件剩余问题按基线登记，新文件通过。所有修改Python执行format及未定义名检查</td>
+</tr>
+<tr>
+<td>架构守卫</td>
+<td>无VIOLATION</td>
+<td>knowledge endpoint旧database/models导入仅RULE-3既有WARNING</td>
+</tr>
+<tr>
+<td>真实部署 E2E</td>
+<td>未执行</td>
+<td>5个用例只作离线收集/默认skip；未访问或写入116/189。必须依e2e-test及design §7.2在明确授权和部署后执行</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_2">可复现命令</h2>
+<p>工作目录分别为worktree的 <code>src/backend</code>、<code>src/runtime-manager</code>、<code>src/frontend/platform</code>。Python复用主工作区现有venv；config只指定既有本地文件路径，不复制或输出凭据。pytest使用 <code>-q -p no:cacheprovider --tb=short --disable-warnings</code>。</p>
+<pre><code class="language-text">pytest test/app_runtime/test_f115_instance_observation.py test/user/test_f115_current_identity.py test/tenant/test_f115_visibility_subjects.py test/permission/test_f115_action_sources.py test/app_publish/test_f115_current_visibility.py test/approval/test_f115_current_detail.py test/knowledge/test_f115_creation_policy.py test/knowledge/test_f115_creation_entry.py test/knowledge/test_f115_e2e_cleanup.py test/knowledge/test_knowledge_create_atomicity.py test/knowledge/test_v2_filelib_unified.py test/e2e/test_e2e_f115_runtime_review.py
+pytest tests/test_f115_observation.py tests/test_k8s_observe.py
+vitest run src/test/f115RuntimeReview.test.tsx src/test/f115KnowledgeCreation.test.tsx src/test/f115ApprovalVisibility.test.tsx src/test/runtimeAudit.test.tsx
+pnpm lint
+pnpm typecheck
+pnpm check-i18n
+node packages/locales/scripts/build.mjs --check
+</code></pre>
+<p>临时日志位于 <code>/private/tmp/f115-*.log</code>；兼容运行及基线只存在临时目录，没有提交对依赖或测试环境的改写。</p>
+<h2 id="task-reviewl1">task-review（L1）</h2>
+<p>44个原子任务逐项检查命名/分层、响应序列化、SQL归属与严格租户、权限应用端口、两SPA/i18n、敏感信息、设计同步。实现任务配对用例及修改文件与tasks对应；基础设施和测试任务按skill的差异化清单检查。代码项PASS；前端旧类型/Ruff基线与真实E2E门禁为显式备注，不能记作远端已验收。</p>
+<ul>
+<li>T001–T003：10993未冲突、Web专用DTO不扩展共享创建目标、三语产物一致。</li>
+<li>T004–T008：真实当前绑定/UID、HTTP事实、nullable/0及UTC归一；旧观察404不回退历史AppInstance。</li>
+<li>T009–T016、T041：实时人员资格、批量目录、CURRENT及完整分页/版本复核；真实owner资格与阅读者分离，普通审批人不获得manage_permission。</li>
+<li>T017–T019：三类详情均在原守卫后追加；非app场景无动态查询，两个snapshot不写回。</li>
+<li>T020–T023：准备和写前重验，严格所属租户；copy/开放API不增加菜单门禁，原创建补偿保留。</li>
+<li>T024–T033、T043：前端状态与真实字段一致，表单固定leaf、不以当前管理视角写入；管理异常页重查与序号拒绝旧响应。</li>
+<li>T034–T038、T042：Client当前范围只读、typed userset、失败/删除/owner-only与冻结区域分开，父层真实API刷新。</li>
+<li>T039、T044：专用E2E准备、显式启用和精确清理护栏；非测试名称与跨租户清理用例拒绝。</li>
+<li>T040：记录本页和L2结论，完整实现52条目标的本地接线，不声称52条均在真实环境验收。</li>
+</ul>
+<h2 id="ac">AC追溯</h2>
+<p>下表中的“本地”指单元/组件/相关回归与代码路径核对；所有真实部署项均待验，具体步骤见 <a href="file:///Users/zhangguoqing/.codex/worktrees/vibe-runtime-review-20261102/bisheng/features/v3.0.0/115-vibe-runtime-review-fixes/e2e-checklist.md">e2e-checklist.md</a>。不把测试任务写过覆盖编号当成真实验收证据。</p>
+<table>
+<thead>
+<tr>
+<th>AC</th>
+<th>本地证据入口</th>
+<th>真实环境</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AC-01</td>
+<td>manager test_f115_observation/test_k8s_observe；backend instance；Platform f115RuntimeReview</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-02</td>
+<td>manager test_f115_observation/test_k8s_observe；backend instance；Platform f115RuntimeReview</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-03</td>
+<td>manager test_f115_observation/test_k8s_observe；backend instance；Platform f115RuntimeReview</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-04</td>
+<td>manager test_f115_observation/test_k8s_observe；backend instance；Platform f115RuntimeReview</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-05</td>
+<td>manager test_f115_observation/test_k8s_observe；backend instance；Platform f115RuntimeReview</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-06</td>
+<td>manager test_f115_observation/test_k8s_observe；backend instance；Platform f115RuntimeReview</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-07</td>
+<td>manager test_f115_observation/test_k8s_observe；backend instance；Platform f115RuntimeReview</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-08</td>
+<td>manager test_f115_observation/test_k8s_observe；backend instance；Platform f115RuntimeReview</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-09</td>
+<td>manager test_f115_observation/test_k8s_observe；backend instance；Platform f115RuntimeReview</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-10</td>
+<td>manager test_f115_observation/test_k8s_observe；backend instance；Platform f115RuntimeReview</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-11</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-12</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-13</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-14</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-15</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-16</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-17</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-18</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-19</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-20</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-21</td>
+<td>既有审计repository可信身份过滤核对；runtimeAudit及f115RuntimeReview组件</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-22</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-23</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-24</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-25</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-26</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-27</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-28</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-29</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-30</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-31</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-32</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-33</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-34</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-35</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-36</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-37</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-38</td>
+<td>action_sources/current_identity/visibility_subjects/current_visibility/current_detail；两端CurrentAppVisibility</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-39</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-40</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-41</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-42</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-43</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-44</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-45</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-46</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-47</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-48</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-49</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-50</td>
+<td>creation_policy/creation_entry；knowledge_create_atomicity/v2_filelib；Platform f115KnowledgeCreation</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-51</td>
+<td>三语/架构守卫/拒绝场景与对应路径</td>
+<td>待部署验收</td>
+</tr>
+<tr>
+<td>AC-52</td>
+<td>三语/架构守卫/拒绝场景与对应路径</td>
+<td>待部署验收</td>
+</tr>
+</tbody>
+</table>
+<hr class="review-break">
+
+<h1 id="f115-l2">F115 特性代码审查（L2）</h1>
+<p>日期：2026-11-02。对照已确认spec52条、design和tasks；固定基线497256d289793ce016df07cf8ab38f32988faca4，含本地新增/未提交文件。方式：同一代理按sdd-code-review七维清单审查，非独立代理复审。</p>
+<h2 id="_3">判定</h2>
+<p><strong>代码静态审查：通过。SDD合入判定：NEEDS_FIX（真实验收门禁未完成）</strong>。</p>
+<p>当前未发现未修复的本功能代码阻断项。真实部署E2E未授权/未执行，按AGENTS.md §6、SDD-Guide及已确认design §7.2不能标为验收完成。前端类型门禁亦受同一基线已有23/134条诊断限制，须在交付环境解决或依据用户明确的交付安排处理。没有因此擅自部署、推送或跳过门禁。</p>
+<h3 id="2026-11-02">用户后续交付指令（2026-11-02）</h3>
+<p>用户获知上述结果后明确要求“提交推送 feat/3.0.0 分支”，因此按用户指令先完成提交、合入和推送。上方 NEEDS_FIX 保留为真实验收未完成的原审查结论；本次 Git 交付不将其改为 E2E 通过，不新增环境更新授权。</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>静态/本地检查</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>边界条件</td>
+<td>0/null、无效日期、无绑定/缺失/替换、分页不推进/预算、CURRENT/Catalog变化、人员歧义及目录失败均有拒绝或显式状态</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>权限认证</td>
+<td>原任务/个人/管理阅读先行；摘要app/tenant绑定；真实owner actor；仅可信F048服务端端口读取，通用授权管理仍manage_permission；新建真实会话/资格写前复核</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>并发安全</td>
+<td>观察绑定前后核对；来源前后stamp和身份解析后再读；旧前端响应序号丢弃；表单预期租户固定；新建复用原失败补偿</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>信息泄漏</td>
+<td>无凭据落库/输出；摘要失败只给固定reason且不返回部分名单；跨租户在目录前拒绝；专用E2E清理精确限制</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>测试覆盖</td>
+<td>本地后端/manager/两端组件及直接相关回归；真实5例仅收集，手动清单未执行；Jest启动限制已说明</td>
+<td>NEEDS_FIX：真实E2E待验</td>
+</tr>
+<tr>
+<td>风格与分层</td>
+<td>SQL只在Repository；业务权限走application；不引入Docker/K8s SDK到backend；两SPA无状态混用；三语和生成产物、lint、无新增Ruff问题</td>
+<td>PASS_WITH_NOTES：旧基线类型检查未全绿</td>
+</tr>
+<tr>
+<td>文档同步</td>
+<td>设计已记录真实接线、userset字段、来源双读、父层路径与错误码；release-contract/审批skill/tasks及验收记录同步；无AC倒改</td>
+<td>PASS</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_4">审查中修正的事项</h2>
+<ul>
+<li>平台resource及K8s辅助资源404不能当作执行体丢失；观察归属变化拒绝，不回退历史实例。</li>
+<li>应用删除态必须在app/tenant匹配后判断，避免通过删除态绕过绑定。</li>
+<li>已停止执行体不能保留失败探活的unhealthy相位。</li>
+<li>两端DTO统一为后端实际 <code>userset_relation</code>，包含subtree_member；提示明确授权即时生效、不影响审批。</li>
+<li>新增测试fixture类型错误已修正，新增导入与未使用变量均修正；现存类型诊断与基线逐项对照。</li>
+</ul>
+<h2 id="_5">交付范围</h2>
+<p>未新增表、外部服务、权限动作或数据迁移。未修改其它审批场景resolver/outbox，未扩大复制及源码/预览资格。下一阶段只按 <a href="file:///Users/zhangguoqing/.codex/worktrees/vibe-runtime-review-20261102/bisheng/features/v3.0.0/115-vibe-runtime-review-fixes/e2e-checklist.md">e2e-checklist.md</a> 对专用对象作必要验收；无需全量回归。</p></article></main></body></html>

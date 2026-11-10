@@ -7,12 +7,17 @@ from uuid import uuid4
 from celery.signals import worker_shutting_down
 
 from bisheng.dsh.domain.services.profile import profile_scope
+from bisheng.worker.dsh.content_safety import register_content_safety_tasks
+from bisheng.worker.dsh.model_audit import register_model_audit_tasks
+from bisheng.worker.dsh.model_audit_tree import register_audit_tree_tasks
 from bisheng.worker.dsh.operations import register_operation_tasks
-from bisheng.worker.dsh.profiles import register_profile_tasks
 from bisheng.worker.dsh.usage import register_usage_tasks
 
 
 def register_dsh_tasks(app):
+    register_model_audit_tasks(app)
+    register_audit_tree_tasks(app)
+    register_content_safety_tasks(app)
     from bisheng.dsh.operations_runtime import (
         active_tenant_ids,
         administration_worker_runtime,
@@ -21,7 +26,6 @@ def register_dsh_tasks(app):
     )
     from bisheng.worker._asyncio_utils import run_async_task
 
-    register_profile_tasks(app, administration_worker_runtime)
     project = register_usage_tasks(app, projection_worker_runtime)
     register_operation_tasks(
         app, administration_worker_runtime, active_tenant_ids, lambda: datetime.now(UTC).replace(tzinfo=None)

@@ -420,6 +420,40 @@ def test_generated_summary_change_resumes_original_chunk_snapshot():
     assert es.add_documents.call_args.args[0][0].metadata["abstract"] == "old"
 
 
+def test_citation_page_origin_tag_keeps_vector_done_checkpoint():
+    """An output-protocol label must not turn an ES-only retry into a vector rewrite."""
+    state = State()
+    vector, es = stores()
+    es.add_documents.side_effect = [RuntimeError("ES unavailable"), ["es-1"]]
+    old_bbox = json.dumps({"chunk_bboxes": [{"page": 1, "bbox": [0, 0, 60, 20]}]})
+    old = Document(page_content="正文", metadata={"document_id": 12, "page": 1, "bbox": old_bbox})
+    with pytest.raises(RuntimeError, match="ES unavailable"):
+        Ingest(state).run([old], [vector, es])
+    labelled_bbox = json.loads(old_bbox)
+    labelled_bbox["page_base"] = 1
+    upgraded = Document(page_content="正文", metadata={**old.metadata, "bbox": json.dumps(labelled_bbox)})
+    Ingest(state).run([upgraded], [vector, es])
+    assert vector.add_documents.call_count == 1
+    assert es.add_documents.call_args.args[0][0].metadata["bbox"] == old_bbox
+
+
+def test_changed_coordinates_still_invalidate_ingest_checkpoint():
+    state = State()
+    vector, es = stores()
+    old_bbox = json.dumps({"chunk_bboxes": [{"page": 1, "bbox": [0, 0, 60, 20]}]})
+    old = Document(page_content="正文", metadata={"document_id": 12, "page": 1, "bbox": old_bbox})
+    Ingest(state).run([old], [vector, es])
+    upgraded = Document(
+        page_content="正文",
+        metadata={
+            **old.metadata,
+            "bbox": json.dumps({"chunk_bboxes": [{"page": 2, "bbox": [0, 0, 60, 20]}], "page_base": 1}),
+        },
+    )
+    Ingest(state).run([upgraded], [vector, es])
+    assert vector.add_documents.call_count == 2
+
+
 def test_es_cleanup_partial_failure_stops_before_vector_write():
     state = State()
     vector, es = stores()

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -69,6 +71,9 @@ def _runtime(context: GrantMutationContext):
     runtime = object.__new__(F048PermissionRuntime)
     mutation = _GrantMutation()
     runtime._grants = mutation
+    runtime._state = SimpleNamespace(
+        resolve_business_source_version=AsyncMock(side_effect=lambda **kwargs: kwargs["source"]),
+    )
 
     async def build_grant_context(*, actor, target):
         del actor, target

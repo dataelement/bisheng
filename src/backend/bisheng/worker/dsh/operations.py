@@ -20,9 +20,6 @@ async def dispatch_operation(headers: dict, tenant_id: int, operation_id: str, r
             action = operation.action
         service_name = {
             "UPDATE_POLICY": "policy",
-            "REVOKE": "admin",
-            "REASSIGN": "admin",
-            "SYNC_PROFILE": "profiles",
         }.get(action)
         if service_name is None:
             raise DshOperationConflictError()
@@ -51,7 +48,7 @@ def register_operation_tasks(app, runtime_factory, tenant_ids, now):
                     with profile_scope(tenant_id):
                         from bisheng.dsh.admin_runtime import recover_subject_grants
 
-                        await recover_subject_grants(runtime.gateway, tenant_id)
+                        await recover_subject_grants(tenant_id)
                         with runtime.repository_scope() as repository:
                             ids = [row.operation_id for row in repository.due(now=now(), limit=100)]
                         for operation_id in ids:

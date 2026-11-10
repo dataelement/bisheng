@@ -1,15 +1,17 @@
-"use client"
+import { Button, Input, Textarea } from '@bisheng/ui';
+import { Tooltip as SharedTooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 
-import { Badge } from "@/components/bs-ui/badge"
-import { Button } from "@/components/bs-ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
-import { Input, Textarea } from "@/components/bs-ui/input"
-import { Label } from "@/components/bs-ui/label"
-import { QuestionTooltip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip"
-import { generateUUID } from "@/components/bs-ui/utils"
-import { MinusCircle, PencilLine, Plus } from "lucide-react"
-import { useEffect, useState } from "react"
-import { useTranslation } from "react-i18next"
+
+import { Dialog,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+
+import { Label } from "@/components/bs-ui/label";
+import { generateUUID } from "@/components/bs-ui/utils";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
+import { Tag } from "@bisheng/ui";
+import { MinusCircle } from "lucide-react";
+import { useEffect,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Variable {
     key: string // UUID generated
@@ -126,8 +128,8 @@ export default function GlobalVarItem({ data, onChange, i18nPrefix }) {
                     {data.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
                 </Label>
                 {/* Add Variable Button */}
-                <Button onClick={() => handleOpenDialog()} variant='outline' className="border-primary text-primary mt-2">
-                    <Plus className="size-4 mr-1" />
+                <Button onClick={() => handleOpenDialog()} variant="outlined" className="border-primary text-primary mt-2" color="default">
+                    <Outlined.Plus className="size-4 mr-1" />
                     {t('addVariable')}
                 </Button>
 
@@ -148,44 +150,21 @@ export default function GlobalVarItem({ data, onChange, i18nPrefix }) {
                                 onMouseEnter={() => setHoveredRow(variable.key)}
                                 onMouseLeave={() => setHoveredRow(null)}
                             >
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <div className="col-span-2">
-                                                <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0] truncate max-w-full block">{variable.label}</Badge>
-                                            </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent align="start" className="max-w-xs">
-                                            <p className="break-all">{variable.label}</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
+                                <><SharedTooltip  align="start" content={<><p className="break-all">{variable.label}</p></>}><div className="col-span-2">
+                                                <Tag size="small" color="brand" className="truncate max-w-full block">{variable.label}</Tag>
+                                            </div></SharedTooltip></>
 
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <div className={`text-sm text-foreground cursor-default truncate overflow-hidden ${hoveredRow === variable.key ? 'col-span-3' : 'col-span-4'}`}>
+                                <><SharedTooltip  align="start" content={<><p className="break-all whitespace-pre-wrap">{variable.value}</p></>}><div className={`text-sm text-foreground cursor-default truncate overflow-hidden ${hoveredRow === variable.key ? 'col-span-3' : 'col-span-4'}`}>
                                                 {variable.value}
-                                            </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent align="start" className="max-w-xs">
-                                            <p className="break-all whitespace-pre-wrap">{variable.value}</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
+                                            </div></SharedTooltip></>
 
                                 {/* Action Buttons */}
                                 {hoveredRow === variable.key && (
                                     <div className="absolute -right-1 -top-1 flex">
-                                        <Button variant="ghost" size="icon" className="size-7" onClick={() => handleOpenDialog(variable)}>
-                                            <PencilLine className="size-3.5" />
+                                        <Button variant="text" size="medium" className="size-7" onClick={() => handleOpenDialog(variable)} color="default" iconOnly>
+                                            <Outlined.Edit className="size-3.5" />
                                         </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="size-7 hover:text-destructive"
-                                            onClick={() => handleDelete(variable.key)}
-                                        >
+                                        <Button variant="text" size="medium" className="size-7 hover:text-destructive" onClick={() => handleDelete(variable.key)} color="default" iconOnly>
                                             <MinusCircle className="size-3.5" />
                                         </Button>
                                     </div>
@@ -212,18 +191,12 @@ export default function GlobalVarItem({ data, onChange, i18nPrefix }) {
                                     <QuestionTooltip content={t('variableNameRuleTip')} />
                                 </Label>
                             </div>
-                            <Input
-                                id="variable-label"
-                                placeholder={t('enterVariableName')}
-                                value={formData.label}
-                                onChange={(e) => {
+                            <Input id="variable-label" placeholder={t('enterVariableName')} value={formData.label} onChange={(e) => {
                                     setFormData({ ...formData, label: e.target.value })
                                     if (errors.label) {
                                         setErrors({ ...errors, label: undefined })
                                     }
-                                }}
-                                className={errors.label ? "border-destructive" : ""}
-                            />
+                                }} className={errors.label ? "border-destructive" : ""} />
                             {errors.label && <p className="text-xs text-destructive">{errors.label}</p>}
                         </div>
 
@@ -235,24 +208,18 @@ export default function GlobalVarItem({ data, onChange, i18nPrefix }) {
                                     <QuestionTooltip content={t('variableValueRuleTip')} />
                                 </Label>
                             </div>
-                            <Textarea
-                                id="variable-value"
-                                placeholder={t('enterVariableValue')}
-                                value={formData.value}
-                                onChange={(e) => {
+                            <Textarea id="variable-value" placeholder={t('enterVariableValue')} value={formData.value} onChange={(e) => {
                                     setFormData({ ...formData, value: e.target.value })
                                     if (errors.value) {
                                         setErrors({ ...errors, value: undefined })
                                     }
-                                }}
-                                className={`min-h-20 max-h-40 resize-none ${errors.value ? "border-destructive" : ""}`}
-                            />
+                                }} textareaClassName={`min-h-20 max-h-40 resize-none ${errors.value ? "border-destructive" : ""}`} />
                             {errors.value && <p className="text-xs text-destructive">{errors.value}</p>}
                         </div>
                     </div>
 
                     <DialogFooter className="gap-2 sm:gap-0">
-                        <Button variant="outline" onClick={handleCloseDialog}>
+                        <Button variant="outlined" onClick={handleCloseDialog} color="default">
                             {t('cancel')}
                         </Button>
                         <Button onClick={handleSave}>{t('confirm')}</Button>

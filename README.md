@@ -33,28 +33,53 @@ BISHENG is an open LLM application devops platform, focusing on enterprise scena
 "Bi Sheng" was the inventor of movable type printing, which played a vital role in promoting the transmission of human knowledge. We hope that BISHENG can also provide strong support for the widespread implementation of intelligent applications. Everyone is welcome to participate.
 
 
-## Features 
-1. **Lingsight, a general-purpose agent with expert-level taste**: Through the [AGL](https://github.com/dataelement/AgentGuidanceLanguage)(Agent Guidance Language) framework, we embed domain experts’ preferences, experience, and business logic into the AI, enabling the agent to exhibit “expert-level understanding” when handling tasks.  
-<p align="center"><img src="https://dataelem.com/bs/Linsight.png" alt="sence1"></p>   
+## Features
+1. **🚀 Task Mode: a general-purpose agent for complex, multi-step work**
+   You give it a goal and, if needed, attach files, knowledge bases, tools and skills. The agent breaks the goal into tasks, runs them step by step, and delivers a report, PPT, Excel or Word file.
 
-2. **Unique [BISHENG Workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
-   - 🧩 **Independent and comprehensive application orchestration framework**: Enables the execution of various tasks within a single framework (while similar products rely on bot invocation or separate chatflow and workflow modules for different tasks).
-   - 🔄 **Human in the loop**: Allows users to intervene and provide feedback during the execution of workflows (including multi-turn conversations), whereas similar products can only execute workflows from start to finish without intervention.
-   - 💥 **Powerful**: Supports loops, parallelism, batch processing, conditional logic, and free combination of all logic components. It also handles complex scenarios such as multi-type input/output, report generation, content review, and more.
-   - 🖐️ **User-friendly and intuitive**: Operations like loops, parallelism, and batch processing, which require specialized components in similar products, can be easily visualized in BISHENG as a "flowchart" (drawing a loop forms a loop, aligning elements creates parallelism, and selecting multiple items enables batch processing).
-   <p align="center"><img src="https://dataelem.com/bs/bisheng_workflow.png" alt="sence0"></p>
+   - 🧠 **Task planning + parallel sub-agents**: The main agent builds a task checklist, tracks progress, and gives independent research tasks to sub-agents that run in parallel.
+   - 🙋 **Human in the loop**: When the agent needs information that only you have, the task pauses until you answer.
+   - 🧰 **Plug-and-play skills**: Three built-in skill packs (PPT, Excel, Word) work out of the box. You can also import your team's own skills from a local file or from GitHub.
+   - 📎 **Traceable conclusions**: Reports carry citation markers. Click a marker to open the source and go to the cited passage.
+   <p align="center"><img src="docs/images/readme/task-mode.png" alt="task-mode"></p>
 
-3. <b>Designed for Enterprise Applications</b>: Document review, fixed-layout report generation, multi-agent collaboration, policy update comparison, support ticket assistance, customer service assistance, meeting minutes generation, resume screening, call record analysis, unstructured data governance, knowledge mining, data analysis, and more.   
-The platform supports the construction of <b>highly complex enterprise application scenarios</b> and offers <b>deep optimization</b> 	with hundreds of components and thousands of parameters.
-<p align="center"><img src="https://dataelem.com/bs/chat.png" alt="sence1"></p>
+2. **📚 Knowledge Space: an enterprise knowledge base for teams**
 
-4. <b>Enterprise-grade</b> features are the fundamental guarantee for application implementation: security review, RBAC, user group management, traffic control by group, SSO/LDAP, vulnerability scanning and patching, high availability deployment solutions, monitoring, statistics, and more.
-<p align="center"><img src="https://dataelem.com/bs/pro.png" alt="sence2"></p>
+   - 🗂️ **Organized content**: Multi-level folders, tags, card and list views, and search by keyword and tag together.
+   - 👥 **Built by the team**: Invite members with a permission template (Owner / Manager / Editor / Viewer), or publish the space to the Knowledge Square so that others can join. A super admin can create a Department Space for a department in one step.
+   - 🔐 **Permissions down to a single file**: Spaces, folders and files use the same set of permission templates. You can grant access to a person, a department (including its sub-departments) or a user group in one step. Folders and files inherit permissions from their parent by default, and you can also set them separately.
+   - 💬 **AI Q&A**: Ask questions about one document or about the whole space. Answers show their sources; click a source to open the original text at the cited location.
+   <p align="center"><img src="docs/images/readme/knowledge-space.png" alt="knowledge-space"></p>
 
-5. <b>High-Precision Document Parsing</b>: Our high-precision document parsing model is trained on a vast amount of high-quality data accumulated over past 5 years. It includes high-precision printed text, handwritten text, and rare character recognition models, table recognition models, layout analysis models, and seal models., table recognition models, layout analysis models, and seal models. You can deploy it privately for free.
-<p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="sence3"></p>
+3. **📡 Channels: external news delivered every day, and saved as knowledge in one click**
 
-6. A community for sharing best practices across various enterprise scenarios: An open repository of application cases and best practices.
+   - 📰 **Topic channels**: Combine WeChat official accounts and websites into topic channels that update every day. A channel can have sub-channels.
+   - 🎯 **Precise filtering**: Custom rules filter titles and body text, so only relevant articles stay.
+   <p align="center"><img src="docs/images/readme/channel.png" alt="channel"></p>
+
+4. **🧩 Unique [BISHENG Workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
+
+   - **Independent and complete orchestration framework**: There is no split between chatflow and workflow. Multi-turn conversation and automated processing can be in the same flow.
+   - **Human in the loop**: A running flow can stop and wait for a person to give input, confirm, or make changes.
+   - **Loops, parallel branches and batch runs in any combination**: Draw a circle to make a loop (most similar products do not support loops), place nodes side by side to run them in parallel, and select multiple items to run a batch. This fits complex scenarios such as document review and fixed-layout report generation.
+   <p align="center"><img src="https://dataelem.com/bs/bisheng_workflow.png" alt="workflow"></p>
+
+5. **🏢 Enterprise-grade features: the controls that enterprise AI needs**
+
+   - **Department and user management**: Manage the organization structure and users. Roles control which feature menus are available and set quotas.
+   - **RBAC + ReBAC permission model**: Roles control which features a user can use. ReBAC controls which resources a user can access, down to a single file.
+   - **Approvals**: Joining a knowledge space, subscribing to a channel, requesting menu permissions and other actions can require approval. You can customize approval flows and nodes.
+   - **Audit**: Records conversation content and system operation logs, searchable by user, time and module.
+   - **Dashboards** (commercial edition): Preset dashboards for user activity, application usage, token usage, knowledge base usage and more.
+   - **Open API**: Call applications, knowledge bases and other APIs with service accounts and API keys, or call them on behalf of an employee with that employee's own permissions.
+   - **DSH Desktop enterprise access** (commercial edition): Employees sign in to the desktop client with their platform account and use the models configured in BISHENG. Admins can allocate model quotas per user per month.
+   - **Xinchuang (domestic IT stack) support**: Supports both MySQL and Dameng DM8.
+   - Also: SSO/LDAP, high-availability deployment, content security review, traffic control, monitoring and statistics, and vulnerability scanning and fixes.
+   <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>
+
+6. **🔍 High-precision document parsing**: Our document parsing models are trained on a large amount of high-quality data collected over 5 years, and you can deploy them privately for free. They include high-precision models for printed text, handwriting and rare characters, table recognition, layout analysis, and seals.
+   <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>
+
 ## Quick start 
 
 Please ensure the following conditions are met before installing BISHENG:

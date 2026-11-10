@@ -85,6 +85,7 @@ class DepartmentLocalMemberCreateWithDeptId(DepartmentLocalMemberCreate):
 class DepartmentTreeNode(BaseModel):
     id: int
     dept_id: str
+    external_id: str | None = None
     name: str
     parent_id: int | None = None
     path: str

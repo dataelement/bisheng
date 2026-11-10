@@ -186,6 +186,10 @@ class LLMDao:
             for model in models:
                 model.server_id = server.id
             session.add_all(models)
+            if models and settings.dsh.enabled:
+                from bisheng.dsh.domain.repositories.new_model_visibility import initialize_new_model_visibility
+
+                await initialize_new_model_visibility(session, models, server.user_id)
             await session.commit()
             await session.refresh(server)
 
@@ -259,8 +263,16 @@ class LLMDao:
                     col(LLMModel.server_id) == server.id, col(LLMModel.id).not_in([model.id for model in update_models])
                 )
             )
-            # Add New Model
+            # New models inherit their provider's owning tenant.
+            for model in add_models:
+                model.tenant_id = server.tenant_id
             session.add_all(add_models)
+            if add_models and settings.dsh.enabled:
+                from bisheng.dsh.domain.repositories.new_model_visibility import initialize_new_model_visibility
+
+                await initialize_new_model_visibility(
+                    session, add_models, operator.user_id if operator else server.user_id
+                )
             # Update data for existing models
             for one in update_models:
                 await session.exec(
@@ -489,10 +501,18 @@ class LLMDao:
             await session.commit()
 
     @classmethod
-    async def aget_shared_server_ids_for_leaf(cls, leaf_id: int) -> list[int]:
+    async def aget_shared_server_ids_for_leaf(cls, leaf_id: int, *, raise_on_error: bool = False) -> list[int]:
         """Return Root LLM server IDs shared to the given leaf.
 
-        Returns [] for Root callers or when permissions are unavailable.
+        Returns [] for Root callers, and — by default — also when permissions
+        are unavailable: for the management list that only means a Child sees
+        fewer Root-shared providers for a moment.
+
+        ``raise_on_error=True`` is for callers where swallowing the failure is a
+        silent narrowing that then reads as a configuration error to whoever hit
+        it. The model protocol face passes it so an FGA blip answers "cannot
+        determine the callable range" (503) instead of "that model does not
+        exist" (404).
         """
         from bisheng.permission.application import PermissionSubject, get_permission_relation_api
 
@@ -507,6 +527,8 @@ class LLMDao:
             )
         except Exception:
             _LOG.exception("Permission resource lookup for leaf=%s failed", leaf_id)
+            if raise_on_error:
+                raise
             return []
 
         result: list[int] = []

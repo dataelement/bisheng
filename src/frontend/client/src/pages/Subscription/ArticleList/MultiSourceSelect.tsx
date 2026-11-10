@@ -4,7 +4,7 @@ import { NotificationSeverity } from "~/common";
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Checkbox } from "@/components/ui/Checkbox";
+import { Checkbox } from '@bisheng/ui';
 import {
     Popover,
     PopoverContent,
@@ -146,7 +146,7 @@ export function MultiSourceSelect({
                     >
                         <Checkbox
                             id="source-all"
-                            className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+                            className="peer border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                             checked={selectAllState}
                             onCheckedChange={handleSelectAll}
                             onClick={(e) => e.stopPropagation()}
@@ -168,7 +168,7 @@ export function MultiSourceSelect({
                             >
                                 <Checkbox
                                     id={`source-${option.id}`}
-                                    className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+                                    className="peer border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                                     checked={value.includes(option.id)}
                                     onCheckedChange={() => handleToggleItem(option.id)}
                                     onClick={(e) => e.stopPropagation()}

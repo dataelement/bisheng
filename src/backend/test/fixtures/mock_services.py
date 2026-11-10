@@ -136,6 +136,7 @@ PREMOCK_MODULES: list[str] = [
     # config_service and telemetry — deepest offenders
     "bisheng.common.services",
     "bisheng.common.services.base",
+    "bisheng.common.services.metric_log",
     "bisheng.common.services.config_service",
     "bisheng.common.services.telemetry",
     "bisheng.common.services.telemetry.telemetry_service",

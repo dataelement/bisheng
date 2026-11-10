@@ -6,9 +6,10 @@ import {
   getMyResourcePermissionsApi,
   getResourcePermissionContextApi,
   getResourcePermissionGrantsApi,
+  mutateResourceGrantsApi,
 } from "@/controllers/API/permission"
 import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/controllers/API/permission", () => ({
   applyResourcePermissionModeDraftApi: vi.fn(),
@@ -47,7 +48,10 @@ const protectedAssignee = {
   editable: false,
 }
 
+const browserCrypto = globalThis.crypto
+
 describe("F048 PermissionDialog", () => {
+  afterEach(() => vi.unstubAllGlobals())
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getResourcePermissionContextApi).mockResolvedValue(customContext)
@@ -78,6 +82,33 @@ describe("F048 PermissionDialog", () => {
       mode: "INHERIT",
       resource_version: 8,
     })
+  })
+
+  it("changes skill all-member access on HTTP and reloads the saved permission context", async () => {
+    vi.stubGlobal("crypto", { getRandomValues: browserCrypto.getRandomValues.bind(browserCrypto) })
+    const skillContext = {
+      ...customContext, parent_type: null, parent_id: null, tenant_id: "7",
+      all_members_model_key: "viewer",
+      all_members_sources: [{ assignee_id: "9007199254740999", assignee_version: 2 }],
+    }
+    vi.mocked(getResourcePermissionContextApi)
+      .mockResolvedValueOnce(skillContext)
+      .mockResolvedValue({ ...skillContext, resource_version: 8, all_members_sources: [] })
+    vi.mocked(mutateResourceGrantsApi).mockResolvedValue({ resource_version: 8, items: [] })
+    render(<PermissionDialog open onOpenChange={vi.fn()} resourceType="linsight_skill"
+      resourceId="2" resourceName="Synthetic skill" allowAllMembers />)
+    const toggle = await screen.findByRole("switch", { name: "allMembers.title" })
+    expect(toggle).toBeChecked()
+    fireEvent.click(toggle)
+    await waitFor(() => expect(getResourcePermissionContextApi).toHaveBeenCalledTimes(2))
+    expect(mutateResourceGrantsApi).toHaveBeenCalledWith("linsight_skill", "2", {
+      idempotency_key: expect.stringMatching(/^[0-9a-f]{32}$/),
+      expected_resource_version: 7,
+      expected_catalog_release_id: 12,
+      changes: [{ op: "REMOVE", assignee_id: "9007199254740999", expected_assignee_version: 2 }],
+    })
+    await waitFor(() => expect(screen.getByRole("switch", { name: "allMembers.title" })).not.toBeChecked())
+    expect(screen.getByRole("switch", { name: "allMembers.title" })).toBeEnabled()
   })
 
   it("keeps the legacy subject tabs, search, add action, and roster layout", async () => {

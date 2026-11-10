@@ -1,7 +1,11 @@
 // @ts-strict-ignore
+import type { WorkflowFileFieldProps } from '@bisheng/chat';
+import type { ReactNode } from 'react';
+import { Button, notification } from '@bisheng/ui';
 import { locationContext } from "@/contexts/locationContext";
 import { MAX_MEDIA_FILES, isMediaFileName } from "@/util/fileAcceptUtils";
 import { uploadArchive } from "@/controllers/API/archiveUpload";
+import { showApiError } from "@/controllers/request";
 import { FileSearch2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,8 +15,8 @@ import { uploadFile } from "../../controllers/API";
 import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
 import { FileComponentType } from "../../types/components";
 import { LoadIcon } from "../bs-icons/loading";
-import { Button } from "../bs-ui/button";
-import { useToast } from "../bs-ui/toast/use-toast";
+
+
 
 export default function InputFileComponent({
   value,
@@ -25,12 +29,13 @@ export default function InputFileComponent({
   onUploadStateChange,
   editNode = false,
   isSSO = false,
-  multiple = false
-}: FileComponentType) {
+  multiple = false,
+  renderControl,
+}: FileComponentType & { renderControl?: (props: WorkflowFileFieldProps) => ReactNode }) {
   const { t } = useTranslation();
   const [myValue, setMyValue] = useState(value);
   const [loading, setLoading] = useState(false);
-    const setBusy = (busy: boolean) => { setLoading(busy); onUploadStateChange?.(busy); };
+  const setBusy = (busy: boolean) => { setLoading(busy); onUploadStateChange?.(busy); };
   // Callers pass either a suffix array (node params) or an `.a,.b` accept string (form input).
   const suffixList = Array.isArray(suffixes)
     ? suffixes
@@ -59,7 +64,7 @@ export default function InputFileComponent({
   }, [value]);
 
   const { appConfig } = useContext(locationContext)
-  const { toast } = useToast()
+
   const checkFileSize = (file) => {
     const maxSize = (appConfig.uploadFileMaxSize || 50) * 1024 * 1024;
     if (file.size > maxSize) {
@@ -90,28 +95,21 @@ export default function InputFileComponent({
           setMyValue(children.map(child => child.display_name).join(', '));
           onChange(children.map(child => child.display_name));
           onFileChange(children.map(child => child.file_path));
-        }).catch(error => { onFileChange([]); toast({variant:'error',description:String(error.message || error)}); })
+        }).catch(error => { onFileChange([]); showApiError(error); })
           .finally(() => setBusy(false));
         return;
       }
 
       const errorMsg = checkFileSize(file)
       if (errorMsg) {
-        toast({
-          variant: 'error',
-          description: errorMsg
-        })
+        notification.open({ type: 'error', description: String(errorMsg ?? '') })
         return setBusy(false);
       }
       // Check if the file type is correct
       // if (file && checkFileType(file.name)) {
       // Upload the file
-      isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
-        setBusy(false);
-        if (typeof res === 'string') return toast({
-          variant: 'error',
-          description: res
-        })
+      const upload = isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
+        if (typeof res === 'string') return notification.open({ type: 'error', description: String(res ?? '') })
         const { file_path } = res;
         setMyValue(file.name);
         onChange(file.name);
@@ -129,12 +127,8 @@ export default function InputFileComponent({
           onChange(file.name);
           // sets the value that goes to the backend
           onFileChange(file_path);
-          setBusy(false);
-        })
-        .catch(() => {
-          console.error("Error occurred while uploading file");
-          setBusy(false);
         });
+      void upload.catch(showApiError).finally(() => setBusy(false));
       // } else {
       //   // Show an error if the file type is not allowed
       //   setErrorData({
@@ -176,10 +170,7 @@ export default function InputFileComponent({
         }
 
         if (errorMsgs.length) {
-          toast({
-            variant: 'error',
-            description: errorMsgs
-          })
+          notification.open({ type: 'error', description: errorMsgs.filter(Boolean).join('\n') })
           // 文件都不符合要求 结束上传
           if (errorMsgs.length === _files.length) {
             return setBusy(false);
@@ -190,10 +181,7 @@ export default function InputFileComponent({
         // slot for the whole run. Same cap the end-user chat enforces, applied to
         // the picked batch — a form field replaces its value rather than appending.
         if (files.filter((file) => isMediaFileName(file.name)).length > MAX_MEDIA_FILES) {
-          toast({
-            variant: 'error',
-            description: t('chat.mediaFileTooMany')
-          })
+          notification.open({ type: 'error', description: String(t('chat.mediaFileTooMany') ?? '') })
           return setBusy(false);
         }
 
@@ -209,10 +197,7 @@ export default function InputFileComponent({
               .then(res => {
                 if (typeof res === 'string') {
                   setErrorData({ title: "Error", list: [res] });
-                  toast({
-                    variant: 'error',
-                    description: res
-                  })
+                  notification.open({ type: 'error', description: String(res ?? '') })
                   setBusy(false);
                   throw new Error(res); // Exit the upload if error occurs
                 }
@@ -234,15 +219,10 @@ export default function InputFileComponent({
 
             setBusy(false); // Hide loading state
           })
-          .catch((error) => {
-            console.error("Error occurred while uploading files", error);
-            setBusy(false); // Hide loading state if an error occurs
-          });
+          .catch(showApiError)
+          .finally(() => setBusy(false));
       } else {
-        toast({
-          variant: 'error',
-          description: t('chat.noFileSelected')
-        })
+        notification.open({ type: 'error', description: String(t('chat.noFileSelected') ?? '') })
         setBusy(false); // Hide loading state if no files were selected
       }
     };
@@ -252,6 +232,9 @@ export default function InputFileComponent({
   };
 
 
+
+  if (renderControl) return renderControl({ value: myValue, placeholder, disabled, loading,
+    onClick: () => { if (!disabled && !loading) handleButtonClick(); } });
 
   return (
     <div className={disabled ? "input-component-div" : "w-full"}>
@@ -268,7 +251,7 @@ export default function InputFileComponent({
         >
           {myValue !== "" ? myValue : placeholder}
         </span>
-        <Button size="icon" variant="ghost" onClick={handleButtonClick}>
+        <Button size="medium" variant="text" onClick={handleButtonClick} color="default" iconOnly>
           {!editNode && !loading && (
             <FileSearch2
               strokeWidth={1.5}

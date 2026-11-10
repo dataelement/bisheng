@@ -785,7 +785,7 @@ class WorkStationService(BaseService):
         return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
 
     @classmethod
-    async def get_daily_chat_config(cls) -> WorkstationConfig | None:
+    async def get_daily_chat_config(cls, *, for_picker: bool = False) -> WorkstationConfig | None:
         """Get the default workstation configuration for daily chat."""
         value, inherited, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
@@ -796,7 +796,10 @@ class WorkStationService(BaseService):
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
-        return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
+        workbench_config = await (
+            LLMService.get_workbench_llm_for_picker() if for_picker else LLMService.get_workbench_llm()
+        )
+        return cls._apply_workbench_models(ret, workbench_config)
 
     @classmethod
     async def get_open_api_daily_config(cls, login_user: UserPayload) -> dict[str, list]:
@@ -1063,7 +1066,9 @@ class WorkStationService(BaseService):
             system_types = tuple(child_type_by_name.values())
         if not settings.openfga.enabled:
             return result
-        invalid_types = tuple(row for row in system_types if row.id is None or row.user_id is not None)
+        invalid_types = tuple(
+            row for row in system_types if row.id is None or row.is_preset != ToolPresetType.PRESET.value
+        )
         if invalid_types:
             raise RuntimeError("copied preset tool category does not satisfy the system-owned predicate")
         specs = tuple(
@@ -1370,10 +1375,27 @@ class WorkStationService(BaseService):
                     continue
 
                 try:
+                    milvus_kwargs = {"k": 100, "param": {"ef": 110}}
+                    es_kwargs = {"k": 100}
+                    selected_tag_id = use_knowledge_param.knowledge_space_tag_filters.get(int(kb_id))
+                    if selected_tag_id is not None:
+                        from bisheng.knowledge.domain.services.knowledge_space_tag_filter_service import (
+                            KnowledgeSpaceTagFilterService,
+                        )
+
+                        scope_filter = await KnowledgeSpaceTagFilterService().build_index_prefilter(
+                            int(kb_id), selected_tag_id, login_user
+                        )
+                        if scope_filter.is_empty:
+                            continue
+                        if scope_filter.milvus_expr:
+                            milvus_kwargs["expr"] = scope_filter.milvus_expr
+                        if scope_filter.es_filter:
+                            es_kwargs["filter"] = scope_filter.es_filter
                     per_kb_milvus = (
                         MultiRetriever(
                             vectors=[milvus_vectorstore],
-                            search_kwargs=[{"k": 100, "param": {"ef": 110}}],
+                            search_kwargs=[milvus_kwargs],
                             finally_k=100,
                         )
                         if milvus_vectorstore is not None
@@ -1382,7 +1404,7 @@ class WorkStationService(BaseService):
                     per_kb_es = (
                         MultiRetriever(
                             vectors=[es_vectorstore],
-                            search_kwargs=[{"k": 100}],
+                            search_kwargs=[es_kwargs],
                             finally_k=100,
                         )
                         if es_vectorstore is not None
@@ -1498,7 +1520,7 @@ class WorkStationService(BaseService):
         token-cap stage is skipped — keep this for callers that only want
         row-count trimming or that manage budgeting themselves.
 
-        ``citation_key_to_handle`` (F072): when given, citation markers in past
+        ``citation_key_to_handle`` (F075): when given, citation markers in past
         answers are shown to the model as ``[Sn]`` handles, and markers whose
         key has no handle are dropped — the model never sees the verbatim-id
         format it is no longer taught.

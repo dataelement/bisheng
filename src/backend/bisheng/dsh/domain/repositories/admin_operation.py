@@ -172,6 +172,7 @@ class DshOperationRepository:
             select(DshAdminOperation)
             .where(
                 DshAdminOperation.status.in_(["PENDING", "PROCESSING"]),
+                DshAdminOperation.action == "UPDATE_POLICY",
                 or_(DshAdminOperation.lease_until.is_(None), DshAdminOperation.lease_until <= now),
                 or_(DshAdminOperation.next_retry_at.is_(None), DshAdminOperation.next_retry_at <= now),
             )

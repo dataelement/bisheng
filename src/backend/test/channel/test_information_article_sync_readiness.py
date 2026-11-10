@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
-from bisheng.channel.domain.models.information_article_sync_state import InformationArticleSyncState
+from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
 from bisheng.channel.domain.services.information_article_sync_service import InformationArticleSyncService
 from bisheng.core.config.settings import IntelligenceCenterConf
 from bisheng.core.external.bisheng_information_client.response_schema import InformationSubscriptionItem
@@ -31,6 +31,15 @@ def _service(state):
     return service, client, repo
 
 
+def _state(**values):
+    return ChannelInfoSource(
+        id="source-A",
+        source_name="A",
+        source_type="website",
+        **values,
+    )
+
+
 async def test_remote_not_ready_does_not_request_articles_or_advance_state():
     yesterday = int((datetime.now(UTC) - timedelta(days=1)).timestamp())
     service, client, repo = _service(None)
@@ -48,8 +57,7 @@ async def test_remote_not_ready_does_not_request_articles_or_advance_state():
 
 async def test_equal_watermarks_skip_article_request():
     now = int(datetime.now(UTC).timestamp())
-    state = InformationArticleSyncState(
-        source_id="source-A",
+    state = _state(
         article_cursor_create_time=100,
         processed_remote_sync_at=now,
         processed_article_list_updated_at=now,
@@ -69,8 +77,7 @@ async def test_equal_watermarks_skip_article_request():
 
 async def test_only_remote_sync_watermark_change_commits_without_article_request():
     now = int(datetime.now(UTC).timestamp())
-    state = InformationArticleSyncState(
-        source_id="source-A",
+    state = _state(
         article_cursor_create_time=100,
         processed_remote_sync_at=now - 60,
         processed_article_list_updated_at=now,
@@ -91,8 +98,7 @@ async def test_only_remote_sync_watermark_change_commits_without_article_request
 
 async def test_null_article_watermark_is_unknown_and_still_requests_articles():
     now = int(datetime.now(UTC).timestamp())
-    state = InformationArticleSyncState(
-        source_id="source-A",
+    state = _state(
         article_cursor_create_time=100,
         processed_remote_sync_at=now - 60,
         processed_article_list_updated_at=None,
@@ -102,6 +108,7 @@ async def test_null_article_watermark_is_unknown_and_still_requests_articles():
         articles=[],
         total=0,
         current_page=1,
+        snapshot_max_create_time=100,
     )
     client.list_all_subscriptions.return_value = [
         _subscription(last_sync_at=now, article_updated_at=None),

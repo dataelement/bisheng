@@ -1,10 +1,6 @@
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import React, { useLayoutEffect, useRef, useState, ReactNode } from 'react';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '~/components/ui/Tooltip2';
+
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -131,8 +127,7 @@ const TagGroup = ({ tags, actionButton, variant = 'pill', highlightedTagIds }: T
     const hiddenTags = tags.slice(visibleCount);
 
     return (
-        <TooltipProvider delayDuration={200}>
-            <div
+        <SharedTooltipProvider delayDuration={200}><div
                 ref={containerRef}
                 className={cn(
                     "relative flex min-w-0 flex-1 flex-nowrap items-center overflow-hidden",
@@ -183,22 +178,15 @@ const TagGroup = ({ tags, actionButton, variant = 'pill', highlightedTagIds }: T
                             </DropdownMenuContent>
                         </DropdownMenu>
                     ) : (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className={styles.moreBadge}>
-                                    +{hiddenTags.length}
-                                </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" noArrow className="bg-white p-2 border border-gray-100 shadow-md">
-                                <div className="flex flex-wrap gap-1 max-w-[200px]">
+                        <SharedTooltip  content={<><div className="flex flex-wrap gap-1 max-w-[200px]">
                                     {hiddenTags.map((tag) => (
                                         <span key={tag.id} className={cn(tagClass(tag), "whitespace-nowrap")}>
                                             {renderTagText(tag)}
                                         </span>
                                     ))}
-                                </div>
-                            </TooltipContent>
-                        </Tooltip>
+                                </div></>} side="top" ><div className={styles.moreBadge}>
+                                    +{hiddenTags.length}
+                                </div></SharedTooltip>
                     )
                 )}
 
@@ -217,8 +205,7 @@ const TagGroup = ({ tags, actionButton, variant = 'pill', highlightedTagIds }: T
                         </div>
                     ))}
                 </div>
-            </div>
-        </TooltipProvider>
+            </div></SharedTooltipProvider>
     );
 };
 

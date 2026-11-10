@@ -151,7 +151,7 @@ class FlowGptsOnlineList(BaseModel):
     logo: str = None
     create_time: datetime = None
     update_time: datetime = None
-    flow_type: str = None  # flow: Skill assistant：gptsassistant
+    flow_type: str = None  # flow: Skill assistant: gptsassistant
     count: int = 0
 
 
@@ -266,7 +266,8 @@ class CustomComponentCode(BaseModel):
 
 class AssistantCreateReq(BaseModel):
     name: str = Field(max_length=50, description="The assistant name.")
-    prompt: str = Field(min_length=20, max_length=1000, description="Helper Prompt")
+    # Optional: an empty prompt is written later in the config page, without auto-generation
+    prompt: str = Field("", max_length=1000, description="Helper Prompt")
     logo: str = Field(description="logoRelative address of the file")
 
 
@@ -275,7 +276,7 @@ class AssistantUpdateReq(BaseModel):
     name: str | None = Field("", description="The assistant name. Leave empty to not update")
     desc: str | None = Field("", description="Assistant description Leave empty to not update")
     logo: str | None = Field("", description="logoRelative address of the file, empty to not update")
-    prompt: str | None = Field("", description="Visible to Userprompt， Leave empty to not update")
+    prompt: str | None = Field("", description="Visible to Userprompt, Leave empty to not update")
     guide_word: str | None = Field("", description="Ice Breaker  Leave empty to not update")
     guide_question: list | None = Field([], description="Guided Question List, Leave empty to not update")
     model_name: str | None = Field("", description="Selected model name, Leave empty to not update")
@@ -408,10 +409,13 @@ class Icon(BaseModel):
 
 
 class WSModel(BaseModel):
+    realtime: bool = False
     key: str | None = None
     id: str
     name: str | None = None
     displayName: str | None = None
+    provider_id: str | None = None
+    provider_name: str | None = None
     # Optional one-line intro shown under the model name in the workspace
     # model picker; hidden when empty. Length capped to keep the dropdown tidy.
     description: str | None = Field(default=None, max_length=50)

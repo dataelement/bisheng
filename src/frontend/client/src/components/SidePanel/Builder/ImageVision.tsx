@@ -1,7 +1,8 @@
 import { useFormContext, Controller } from 'react-hook-form';
 import { Capabilities } from '~/types/chat';
 import type { AssistantForm } from '~/common';
-import { Checkbox, QuestionMark } from '~/components/ui';
+import { QuestionMark } from '~/components/ui';
+import { Checkbox } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 
 export default function ImageVision() {
@@ -19,7 +20,7 @@ export default function ImageVision() {
             {...field}
             checked={field.value}
             onCheckedChange={field.onChange}
-            className="relative float-left  mr-2 inline-flex h-4 w-4 cursor-pointer"
+            className="peer relative float-left  mr-2 inline-flex h-4 w-4 cursor-pointer"
             value={field.value.toString()}
           />
         )}

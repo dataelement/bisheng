@@ -113,6 +113,12 @@ export interface ExecStepEventData {
     extra_info?: Record<string, any> | null;
     /** Second-level int timestamp stamped on every ExecStep (BaseEvent.timestamp). */
     timestamp?: number;
+    /**
+     * Client-only: first frame's timestamp, kept by appendStepFrame (stepFold.ts)
+     * when later frames of the same call are folded into this entry. Absent on
+     * backend-sent frames; mergeStepFrames prefers it over `timestamp` for startedAt.
+     */
+    client_started_at?: number;
     /** Locally stamped by the clarify flow (legacy contract kept for Sop view). */
     is_completed?: boolean;
     user_input?: string;

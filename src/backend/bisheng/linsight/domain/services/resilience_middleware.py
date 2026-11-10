@@ -35,6 +35,7 @@ from collections.abc import Awaitable, Callable
 
 from langchain.agents.middleware._retry import calculate_delay
 from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, ModelResponse
+from langchain_core.exceptions import ContextOverflowError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from loguru import logger
 
@@ -74,6 +75,42 @@ _TRUNCATION_NUDGE = (
 # finish/stop reasons that mean "output was cut off by the max-token limit",
 # across OpenAI-compatible ("length") and Anthropic ("max_tokens") vendors.
 _TRUNCATION_FINISH_REASONS = frozenset({"length", "max_tokens", "max_output_tokens"})
+
+
+# ---------------------------------------------------------------------------
+# Truncated-turn guard
+#
+# The counterpart of the L2 guard for a cut-off turn that carries NO tool call.
+# deepagents reads a tool-call-less AIMessage as "the agent is done", so a model
+# that spends its whole output budget on reasoning ends the graph as if it had
+# finished: the task then closes COMPLETED through the direct-answer fallback,
+# with whatever narration an EARLIER turn emitted as its answer.
+#
+# Measured on a community beta6 run (2026-10-30, PDF→docx): one main-graph call
+# reasoned for 32000 tokens and hit the limit with ``content_len=0`` and no tool
+# call; the task completed "successfully" with the answer "Let me read the rest of
+# the helpers…" (an earlier turn's text) and a fallback ``报告.md`` instead of a
+# docx. Re-send once with a nudge to reason less; if it truncates again, fail the
+# main graph honestly / degrade the subagent. Partial TEXT is not exempt: a final
+# answer cut mid-sentence is just as unfinished.
+# ---------------------------------------------------------------------------
+
+_TRUNCATED_TURN_NUDGE = (
+    "⚠️ 你上一次的输出因过长被截断（finish_reason=length），没有给出任何工具调用或完整答复。"
+    "请大幅缩短思考过程，直接调用下一步需要的工具；如果任务已经完成，请简短给出最终答复。"
+)
+
+# One retry only: every attempt re-sends the whole request (79k input tokens in the
+# measured case) and may burn the full output budget again.
+_TRUNCATED_TURN_RETRY_LIMIT = 1
+
+
+class ModelOutputTruncatedError(RuntimeError):
+    """The model hit its output-token limit without producing a tool call or answer.
+
+    ``llm_error_classifier`` matches this by class name (``common`` must not import
+    ``linsight``) to label it ``output_truncated``.
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +295,27 @@ def _is_truncated_tool_call(response: object) -> bool:
     if finish not in _TRUNCATION_FINISH_REASONS:
         return False
     return bool(getattr(ai, "tool_calls", None)) or bool(getattr(ai, "invalid_tool_calls", None))
+
+
+def _is_truncated_turn(response: object) -> bool:
+    """True when the model was cut off by the token limit WITHOUT any tool call.
+
+    The disjoint twin of ``_is_truncated_tool_call`` — see the truncated-turn block
+    above for why such a turn must not be read as a finished one.
+    """
+    ai = _response_ai_message(response)
+    if ai is None:
+        return False
+    meta = getattr(ai, "response_metadata", None) or {}
+    finish = meta.get("finish_reason") or meta.get("stop_reason")
+    if finish not in _TRUNCATION_FINISH_REASONS:
+        return False
+    return not (getattr(ai, "tool_calls", None) or getattr(ai, "invalid_tool_calls", None))
+
+
+def _with_truncated_turn_nudge(request: ModelRequest) -> ModelRequest:
+    """A new request with the reason-less nudge appended (ephemeral — retry only)."""
+    return request.override(messages=[*request.messages, HumanMessage(content=_TRUNCATED_TURN_NUDGE)])
 
 
 def _is_incomplete_stream_response(response: object) -> bool:
@@ -607,6 +665,18 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         # loop mid-reasoning; re-raise for a clean, classified task-level failure.
         if not self.is_subagent:
             raise exc
+        self.take_degrade_slot(exc)
+        return AIMessage(content=_DEGRADE_MESSAGE)
+
+    def take_degrade_slot(self, exc: Exception) -> None:
+        """Count one skipped subagent step; re-raise ``exc`` once over ``max_degrade``.
+
+        Also used by ``SubagentContextOverflowMiddleware`` on the main graph, so a
+        subagent that stays over the context window after compression draws from
+        the same per-task allowance (F087 spec AC-16). That relies on this counter
+        being shared by every ``task`` call of the task — see the KNOWN GAP note
+        in ``__init__``; bucketing it per call would silently change AC-16.
+        """
         self._degrade_count += 1
         if self._degrade_count > self.max_degrade:
             logger.warning(
@@ -619,7 +689,6 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             "[linsight-resilience] subagent model call degraded "
             f"({self._degrade_count}/{self.max_degrade}): {type(exc).__name__}: {exc}"
         )
-        return AIMessage(content=_DEGRADE_MESSAGE)
 
     async def awrap_model_call(
         self,
@@ -633,6 +702,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         current, budget_key = self._apply_turn_budget(request)
         exc_attempts = 0
         trunc_attempts = 0
+        truncated_turn_attempts = 0
         incomplete_attempts = 0
         while True:
             try:
@@ -666,6 +736,23 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 )
                 current = _with_truncation_nudge(current)
                 continue
+            # Truncated-turn guard: cut off with no tool call → the graph would END as
+            # if finished. Nudge + retry once, then fail (main) / degrade (subagent).
+            if _is_truncated_turn(response):
+                if truncated_turn_attempts < _TRUNCATED_TURN_RETRY_LIMIT:
+                    truncated_turn_attempts += 1
+                    logger.warning(
+                        "[linsight-resilience] truncated turn without tool call (finish_reason=length); "
+                        f"nudging to reason less (retry {truncated_turn_attempts}/{_TRUNCATED_TURN_RETRY_LIMIT})"
+                    )
+                    current = _with_truncated_turn_nudge(current)
+                    continue
+                return self._degrade_or_raise(
+                    ModelOutputTruncatedError(
+                        "model output hit the token limit without a tool call or answer "
+                        f"({_TRUNCATED_TURN_RETRY_LIMIT + 1} attempts)"
+                    )
+                )
             # Incomplete-stream guard: a stream closed mid-turn yields a tool-call-less
             # AIMessage that the graph reads as a clean finish. Re-send the call; only
             # when it keeps coming back incomplete do we fail (main graph) / degrade
@@ -711,6 +798,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         current, budget_key = self._apply_turn_budget(request)
         exc_attempts = 0
         trunc_attempts = 0
+        truncated_turn_attempts = 0
         incomplete_attempts = 0
         while True:
             try:
@@ -731,6 +819,18 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 trunc_attempts += 1
                 current = _with_truncation_nudge(current)
                 continue
+            # Truncated-turn guard — see the async twin above.
+            if _is_truncated_turn(response):
+                if truncated_turn_attempts < _TRUNCATED_TURN_RETRY_LIMIT:
+                    truncated_turn_attempts += 1
+                    current = _with_truncated_turn_nudge(current)
+                    continue
+                return self._degrade_or_raise(
+                    ModelOutputTruncatedError(
+                        "model output hit the token limit without a tool call or answer "
+                        f"({_TRUNCATED_TURN_RETRY_LIMIT + 1} attempts)"
+                    )
+                )
             # Incomplete-stream guard — see the async twin above.
             if _is_incomplete_stream_response(response):
                 if incomplete_attempts < _INCOMPLETE_STREAM_RETRY_LIMIT:
@@ -775,3 +875,74 @@ def build_resilience_middleware(
         soft_landing_turns=getattr(linsight_conf, "soft_landing_turns", 8),
         budget_sink=budget_sink,
     )
+
+
+# F087: what the main planner reads when a delegated step stayed over the model's
+# context window even after the subagent compressed its own history. Unlike
+# _DEGRADE_MESSAGE it asks for a SMALLER re-delegation: repeating the same `task`
+# call would overflow again.
+_SUBAGENT_OVERFLOW_MESSAGE = (
+    "⚠️ 这一步交给子任务执行时，内容超出了模型一次能处理的长度，没有完成。"
+    "请把这一步拆成范围更小的几步再分别委派，或基于已获得的信息继续；不要原样重复同一个委派。"
+    "在最终交付物中用用户的语言简要说明此处缺失，不要原样输出本提示。\n"
+    "[System note] This delegated step exceeded the model's context window even after "
+    "compression and was not completed. Split it into smaller delegations or continue "
+    "with what you already have; do not repeat the same delegation. Briefly acknowledge "
+    "the gap in the final deliverable using the user's language, and do not echo this "
+    "notice verbatim."
+)
+
+_TASK_TOOL_NAME = "task"
+
+
+class SubagentContextOverflowMiddleware(AgentMiddleware):
+    """Main graph: turn a subagent's unrecoverable context overflow into a tool result.
+
+    The subagent's own resilience middleware sits INSIDE the framework's
+    summarization middleware, so it re-raises a context overflow to let that
+    middleware compress and retry. Only once the error has left the subagent graph
+    is it certain the retry failed too; it then surfaces here through the `task`
+    tool (deepagents' ``task`` awaits the subgraph without catching, and the tool
+    node re-raises non-validation errors). F087 design decision 9, spec AC-16.
+
+    The result uses the default (success) status on purpose: an ``error`` status
+    would also count towards the tool-loop breaker's failure streak.
+    """
+
+    def __init__(self, budget: LinsightModelResilienceMiddleware, context_window: dict | None = None):
+        super().__init__()
+        self._budget = budget
+        self._context_window = context_window if context_window is not None else {}
+
+    def _overflow_result(self, request, exc: Exception) -> ToolMessage:
+        # Over the shared allowance → re-raised, the task fails as context_overflow.
+        self._budget.take_degrade_slot(exc)
+        logger.warning(
+            "[linsight-context-window] subagent overflow window={} source={} reported_input_tokens={}: {}",
+            self._context_window.get("window"),
+            self._context_window.get("source"),
+            getattr(exc, "reported_input_tokens", None) or "unknown",
+            exc,
+        )
+        tool_call = request.tool_call or {}
+        return ToolMessage(
+            content=_SUBAGENT_OVERFLOW_MESSAGE,
+            tool_call_id=tool_call.get("id") or "",
+            name=tool_call.get("name") or _TASK_TOOL_NAME,
+        )
+
+    async def awrap_tool_call(self, request, handler):
+        if (request.tool_call or {}).get("name") != _TASK_TOOL_NAME:
+            return await handler(request)
+        try:
+            return await handler(request)
+        except ContextOverflowError as exc:
+            return self._overflow_result(request, exc)
+
+    def wrap_tool_call(self, request, handler):
+        if (request.tool_call or {}).get("name") != _TASK_TOOL_NAME:
+            return handler(request)
+        try:
+            return handler(request)
+        except ContextOverflowError as exc:
+            return self._overflow_result(request, exc)

@@ -79,7 +79,6 @@ class DshAdminService:
         validate_models: Callable[[int, int, list[int]], Awaitable[bool]],
         now: Callable[[], datetime],
         lease_seconds: int = 30,
-        allocate=None,
     ):
         self.repository_scope = repository_scope
         self.quota = quota
@@ -87,7 +86,6 @@ class DshAdminService:
         self.validate_models = validate_models
         self.now = now
         self.lease_seconds = lease_seconds
-        self.allocate = allocate
 
     async def update_policy(
         self,
@@ -96,7 +94,6 @@ class DshAdminService:
         actor_user_id: int,
         model_id: int,
         request: DshUserPolicyInput,
-        seat_limit: int | None = None,
     ) -> dict:
         if not await self.authorize(actor_user_id, user_id):
             raise DshOperationConflictError()
@@ -109,7 +106,6 @@ class DshAdminService:
                 model_id=model_id,
                 monthly_token_limit=request.monthly_token_limit,
                 enabled=request.enabled,
-                seat_limit=seat_limit,
             )
             result = operation.model_dump()
         if result["status"] in {"SUCCEEDED", "FAILED"}:
@@ -184,21 +180,6 @@ class DshAdminService:
                             now=self.now(),
                         )
                     return self._read(operation_id)
-                if current["payload"]["enabled"] and current["payload"]["monthly_token_limit"] > 0:
-                    from bisheng.common.errcode.base import BaseErrorCode
-                    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError
-
-                    if self.allocate is None:
-                        raise DshAuthorizationUnavailableError()
-                    try:
-                        await self.allocate(current)
-                    except DshAuthorizationUnavailableError:
-                        raise
-                    except BaseErrorCode as error:
-                        await self.quota.finish_policy(*subject, **ownership, expected_policy_version=expected)
-                        with self.repository_scope() as repository:
-                            repository.fail_uncommitted(operation_id, generation, code=error.ClientCode, now=self.now())
-                        return self._read(operation_id)
                 with self.repository_scope() as repository:
                     operation = repository.commit_update(operation_id, generation, now=self.now())
                     current = operation.model_dump()

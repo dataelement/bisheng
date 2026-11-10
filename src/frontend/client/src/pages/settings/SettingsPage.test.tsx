@@ -1,3 +1,5 @@
+jest.mock('~/hooks/useVersionManagementEnabled', () => ({ usePersonalTokenEnabled: () => false }));
+jest.mock('~/hooks/useDshDesktop', () => ({ useDshDesktop: () => ({ enabled: false }) }));
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import SettingsPage from "./SettingsPage";
@@ -37,6 +39,15 @@ jest.mock("~/components/Settings/sections/GeneralSection", () => ({
 jest.mock("./sections/AccountPane", () => ({
   AccountPane: () => <div>account-pane</div>,
 }));
+jest.mock("./sections/DesktopSettingsPane", () => ({
+  DesktopSettingsPane: ({ section }: { section: string }) => <main data-testid="desktop-content">{section}</main>,
+}));
+
+afterEach(() => {
+  delete window.dshChatPresentation;
+  window.sessionStorage.clear();
+  window.history.replaceState({}, '', '/');
+});
 
 function LocationProbe() {
   const location = useLocation();
@@ -44,6 +55,21 @@ function LocationProbe() {
 }
 
 describe("SettingsPage history", () => {
+  it.each([false, true])('uses content-only settings only with the native bridge (native=%s)', native => {
+    window.history.replaceState({}, '', '/workspace/settings/account?embed=dsh&dshSettings=1');
+    if (native) window.dshChatPresentation = { reportLanding: jest.fn() };
+    render(<MemoryRouter initialEntries={['/settings/account?embed=dsh&dshSettings=1']}>
+      <Routes><Route path="settings/:section?" element={<SettingsPage />} /></Routes>
+    </MemoryRouter>);
+    if (native) {
+      expect(screen.getByTestId('desktop-content').textContent).toBe('account');
+      expect(screen.queryByRole('navigation')).toBeNull();
+    } else {
+      expect(screen.getByRole('navigation')).toBeTruthy();
+      expect(screen.getByText('account-pane')).toBeTruthy();
+      expect(screen.queryByTestId('desktop-content')).toBeNull();
+    }
+  });
   it("returns to the entry page after settings sidebar navigation", () => {
     render(
       <MemoryRouter

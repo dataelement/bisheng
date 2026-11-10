@@ -1,7 +1,7 @@
 # Frontend Rules — Client (End-user Chat UI)
 
 Auto-loaded when editing files in `src/frontend/client/`. Base path: `/workspace`.
-Cross-app boundary + hard rules common to both apps: root `AGENTS.md §4` (single source — not repeated here). The store-must-not-call-HTTP law: `docs/constitution.md` C7 (arch-guard RULE-6).
+Cross-app boundary + hard rules common to both apps: `src/frontend/AGENTS.md` (single source — not repeated here). The store-must-not-call-HTTP law: `docs/constitution.md` C7 (arch-guard RULE-6).
 
 ## Commands (cwd: `src/frontend/client/`)
 
@@ -10,14 +10,16 @@ pnpm install   # run at src/frontend/ (pnpm workspace root; npm is disabled)
 pnpm dev       # dev server on :4001 (or `pnpm dev:client` from the workspace root)
 ```
 
+Both apps extend `../config/` for TypeScript, ESLint, PostCSS and Vite proxy helpers. Shared dependency versions are managed by the workspace catalog. See `../config/README.md`.
+
 ## Tech Stack
 Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (shadcn/ui) + **Recoil** + **react-query v4 (@tanstack)** + react-i18next + react-router-dom v6 + **lucide-react** + axios (wrapped in `~/api/request.ts`)
 
 ## Mandatory Rules (client-specific — common hard rules in root §4)
 - **Path Aliases**: `~/` (or `@/`) → `src/`.
 - **HTTP Requests**: wrapper is `~/api/request.ts`.
-- **State Management**: **Recoil is FROZEN** (archived by Meta; ledger #5) — no new atoms/selectors/`recoil` imports (lint-enforced via `no-restricted-imports`; existing usage is suppressed). Server state → react-query v4; local state → `useState`/props. If a feature genuinely needs new cross-page client state, raise it with shanghang (Jotai migration decision pending) — do not work around with Context or new libraries.
-- **UI Components**: shared library `@bisheng/ui` (`src/frontend/packages/ui/`) first — components migrated there (Button, …) keep re-export shims at `~/components/ui/<Name>` so both import paths work; everything else still lives in `~/components/ui/` (shadcn / Radix-based).
+- **State Management**: **Recoil is FROZEN** (archived by Meta; ledger #5) — no new atoms/selectors/`recoil` imports (lint-enforced via `no-restricted-imports`; existing usage is suppressed). Keep existing Recoil state in place; no blanket migration. Server state → react-query v4; local state → `useState`/props. New cross-page client state may use **Zustand**, preferred to align with platform. This permits incremental Zustand adoption, not migration of existing Recoil state. Keep each state under one owner; do not mirror it between Recoil and Zustand or bypass these boundaries with Context or another state library.
+- **UI Components**: shared library `@bisheng/ui` (`src/frontend/packages/ui/`) first — selection controls, Textarea, Tag/Badge, Tooltip and Tabs import directly from the shared library, without legacy implementations or compatibility exports. Older Button/Input entry points still delegate to the shared library. Rich hover information uses the existing HoverCard; other families remain in `~/components/ui/` (shadcn / Radix-based).
 - **Icons**: prefer `bisheng-icons` — `import { Outlined } from 'bisheng-icons'` → `<Outlined.Delete />` (variants `Outlined` / `Filled` / `Colored`). Use `lucide-react` ONLY as a fallback when `bisheng-icons` has no matching-semantic icon.
   - **⚠️ After upgrading `bisheng-icons`**, clear the Vite pre-bundle cache or new icons crash the page (`Element type is invalid`): `pnpm dev -- --force` (or `rm -rf node_modules/.vite && pnpm dev`). Its git-source `exports` field defeats Vite's dep-change detection, so the stale pre-bundled snapshot is served unless forced.
 - **File preview**: reuse what exists, never hand-roll a viewer. `~/pages/knowledge/FilePreview/` is the full set (`viewers/` covers pdf / docx / xlsx·csv / md / html / image / text, with the PDF worker already wired) and takes a `compactMode` prop for embedding in a panel; the Excel and image internals are further shared with platform via `@bisheng/file-viewers`. A new preview surface should pass file name / type / url into the existing component.
@@ -37,6 +39,8 @@ Vite 6 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (shadcn/ui) + **Recoil
   - Typography (new code): semantic classes `text-caption/body-sm/body/h4…h1` (auto-remap ≤768px) — not raw `text-sm/base` (基础-字体规范.md).
   - Neutral colors (new code): semantic tokens `text-text-1…4` / `bg-fill-1…4` / `border-border-base|-deep` / `success|warning|danger` — never `text-gray-*` or hex (基础-色彩规范.md).
   - Hover/touch: plain `hover:` classes ONLY (`hoverOnlyWhenSupported` disables them on touch app-wide) — **never invent hover variant prefixes**; touch press via `coarse-pointer:active:`; hover/active shade stays within the base color's own ramp (no cross-palette graying).
+
+- **Frosted glass exception switch**: the root §4 ban stands; the one sanctioned exception (a full-screen overlay, at most one at a time) goes through `~/utils/frostedGlass` — `cn(FROSTED_GLASS_ENABLED && FROSTED_GLASS_CLASS)`. `backdrop-filter` is written ONLY in `style.css` under `.bs-frosted-glass`; never add it to a component. `VITE_FROSTED_GLASS=false` turns every instance off for 信创 deployments. Currently used by: knowledge-space drag-upload overlay (`pages/knowledge/index.tsx`), chat drag-drop overlay (`components/Chat/Input/Files/DragDropOverlay.tsx`).
 
 ## Known Pitfalls
 - **The MinIO dev-proxy target host must match the backend's `object_storage.minio.sharepoint` verbatim.** Presigned URLs sign `host` (`X-Amz-SignedHeaders=host`), so `localhost:9000` and `127.0.0.1:9000` are different signatures and the mismatch returns `403 SignatureDoesNotMatch`, not a connection error. Set `VITE_DEV_MINIO_TARGET` to whatever the backend actually advertises; `client/vite.config.ts` already warns on a detected mismatch. The MinIO proxy and the API proxy are separate targets on separate ports — pointing the MinIO one at the backend port is a regression that whole-file reformatting commits have introduced before.

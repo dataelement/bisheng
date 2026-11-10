@@ -1,5 +1,6 @@
 import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import i18next from "i18next";
+import { resolveKnowledgePreviewUrl } from "./FilePreview/previewUrlUtils";
 
 /**
  * Which semantic color a file's status tag speaks in (组件-Tag标签.md §3.1),
@@ -270,14 +271,11 @@ export function getFileTypeFromName(name: string): FileType {
 /**
  * Trigger browser download from a URL.
  * Supports both absolute URLs (http/https) and relative paths from the backend.
- * For relative paths: Full URL = window.location.origin + BASE_URL + relativeUrl
+ * Uses the same object-storage routing as file previews.
  */
 export function triggerUrlDownload(url: string, filename?: string) {
-    const fullUrl = /^https?:\/\//.test(url)
-        ? url
-        : `${window.location.origin}${__APP_ENV__.BASE_URL}${url}`;
     const a = document.createElement("a");
-    a.href = fullUrl;
+    a.href = resolveKnowledgePreviewUrl(url);
     if (filename) a.download = filename;
     a.target = "_blank";
     document.body.appendChild(a);
@@ -451,4 +449,23 @@ export function canOpenSharedSpace(info: {
     // otherwise lock the owner out of their own share link.
     if (info?.role === "creator") return true;
     return Array.isArray(info?.actions) && info.actions.includes("visible");
+}
+
+/** Router state key the knowledge page hands to the settings page on entry. */
+export const SETTINGS_RETURN_STATE_KEY = "returnTo";
+
+/**
+ * Where the space settings page goes back to on save / cancel / back.
+ *
+ * Entering settings from the knowledge page records the location the user was
+ * browsing (space + folder), so leaving settings resumes there — even when the
+ * settings belonged to another space opened from the sidebar. A settings URL
+ * opened directly carries no such state and falls back to `fallback`.
+ * Only in-app knowledge paths are honored, never an arbitrary URL.
+ */
+export function resolveSettingsReturnPath(state: unknown, fallback: string): string {
+    const returnTo = (state as Record<string, unknown> | null | undefined)?.[SETTINGS_RETURN_STATE_KEY];
+    if (typeof returnTo !== "string") return fallback;
+    if (!/^\/knowledge(?:[/?]|$)/.test(returnTo)) return fallback;
+    return returnTo;
 }

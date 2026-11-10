@@ -1,6 +1,7 @@
+import { KnowledgeSpaceAccessMode } from "./KnowledgeSpaceAccessMode";
 import { Outlined } from "bisheng-icons";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { VisibilityType } from "~/api/knowledge";
 import {
   getCreationDepartmentChildren,
@@ -16,7 +17,6 @@ import {
   type PermissionDraftSearchApi,
 } from "~/components/permission/PermissionDraftPickerDialog";
 import {
-  AccessModeSelector,
   SettingsFooter,
   SettingsSectionHeader,
   SettingsSwitchRow,
@@ -24,19 +24,14 @@ import {
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
 import { Input } from "~/components/ui/Input";
 import { Label } from "~/components/ui/Label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/Select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
+import { Select, Tabs } from "@bisheng/ui";
 import { Textarea } from "@bisheng/ui";
 import { useAuthContext, useLocalize } from "~/hooks";
-import { useConfirm, useToastContext } from "~/Providers";
+import useSelectCopy from "~/hooks/useSelectCopy";
+import { useToastContext } from "~/Providers";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
-import { extractApiStatusCode } from "~/pages/Subscription/errorUtils";
+import { showApiError } from "~/api/request";
+import { resolveSettingsReturnPath } from "../knowledgeUtils";
 import { CreatedPermissionFailureState } from "./CreatedPermissionFailureState";
 import {
   parseKnowledgeSpaceCustomTags,
@@ -48,15 +43,21 @@ const MAX_DESCRIPTION_LENGTH = 200;
 
 export function KnowledgeSpaceSettingsPage() {
   const localize = useLocalize();
+  const selectCopy = useSelectCopy();
   const navigate = useNavigate();
-  const confirm = useConfirm();
+  const location = useLocation();
   const { user } = useAuthContext();
   const { showToast } = useToastContext();
   const { spaceId } = useParams<{ spaceId?: string }>();
   const settings = useKnowledgeSpaceSettingsForm(spaceId);
+  // Save / cancel / back resume where the user entered from; a direct link
+  // falls back to the space root (or the list when creating).
+  const returnPath = resolveSettingsReturnPath(
+    location.state,
+    spaceId ? `/knowledge/space/${spaceId}` : "/knowledge",
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [activeSubjectType, setActiveSubjectType] =
-    useState<SubjectType>("user");
+  const [activeSubjectType, setActiveSubjectType] = useState<SubjectType>("user");
   const customTagsInputRef = useRef<HTMLInputElement | null>(null);
   const nameComposingRef = useRef(false);
   const descriptionComposingRef = useRef(false);
@@ -84,35 +85,37 @@ export function KnowledgeSpaceSettingsPage() {
       modelKey: ownerModel?.id ?? "owner",
       modelName: ownerModel?.name ?? localize("com_permission.level_owner"),
       modelLevel: ownerModel?.level ?? 4,
+      // Same source the backend reports for this row once the space exists, so
+      // the roster shows the creator tag in create mode too. Display-only: this
+      // row never enters the draft diff.
+      sourceType: "creator",
       protected: true,
       editable: false,
     };
   }, [localize, relationModels, settings.mode, user]);
   const displayedPermissionRows = useMemo(
-    () =>
-      creatorRow
-        ? [creatorRow, ...settings.permissionRows]
-        : settings.permissionRows,
+    () => (creatorRow ? [creatorRow, ...settings.permissionRows] : settings.permissionRows),
     [creatorRow, settings.permissionRows],
   );
   const permissionSearchApi = useMemo<PermissionDraftSearchApi | undefined>(
-    () => settings.mode === "create" ? {
-      usersApi: (_type, _id, name, params, config) =>
-        searchCreationUsers("knowledge_space", name, params, config),
-      departmentChildrenApi: (_type, _id, parentId, config) =>
-        getCreationDepartmentChildren("knowledge_space", parentId, config),
-      departmentSearchApi: (_type, _id, keyword, limit, config) =>
-        searchCreationDepartments("knowledge_space", keyword, limit, config),
-      userGroupsApi: (_type, _id, config) =>
-        getCreationUserGroups("knowledge_space", config),
-    } : undefined,
+    () =>
+      settings.mode === "create"
+        ? {
+            usersApi: (_type, _id, name, params, config) =>
+              searchCreationUsers("knowledge_space", name, params, config),
+            departmentChildrenApi: (_type, _id, parentId, config) =>
+              getCreationDepartmentChildren("knowledge_space", parentId, config),
+            departmentSearchApi: (_type, _id, keyword, limit, config) =>
+              searchCreationDepartments("knowledge_space", keyword, limit, config),
+            userGroupsApi: (_type, _id, config, params) =>
+              getCreationUserGroups("knowledge_space", config, params),
+          }
+        : undefined,
     [settings.mode],
   );
   const disabledIds = useMemo<Record<SubjectType, number[]>>(
     () => ({
-      user: displayedPermissionRows
-        .filter((row) => row.subjectType === "user")
-        .map((row) => row.subjectId),
+      user: displayedPermissionRows.filter((row) => row.subjectType === "user").map((row) => row.subjectId),
       department: displayedPermissionRows
         .filter((row) => row.subjectType === "department")
         .map((row) => row.subjectId),
@@ -122,24 +125,13 @@ export function KnowledgeSpaceSettingsPage() {
     }),
     [displayedPermissionRows],
   );
-
-  const handleVisibilityModeChange = async (value: "private" | "shared") => {
-    if (value === "private") {
-      if (settings.mode === "edit" && !isPrivate) {
-        const accepted = await confirm({
-          description: localize(
-            "com_subscription.confirm_knowledge_change_to_private",
-          ),
-          confirmText: localize("com_subscription.change_to_private"),
-          cancelText: localize("com_unified_permission.cancel"),
-        });
-        if (!accepted) return;
-      }
-      settings.updateForm("visibility", VisibilityType.PRIVATE);
-      return;
-    }
-    if (isPrivate) settings.updateForm("visibility", VisibilityType.APPROVAL);
-  };
+  const disabledDepartmentSubtreeRootIds = useMemo(
+    () =>
+      displayedPermissionRows
+        .filter((row) => row.subjectType === "department" && row.includeChildren)
+        .map((row) => row.subjectId),
+    [displayedPermissionRows],
+  );
 
   const handleCustomTagsUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -148,20 +140,14 @@ export function KnowledgeSpaceSettingsPage() {
     const reader = new FileReader();
     reader.onload = () => {
       const text = typeof reader.result === "string" ? reader.result : "";
-      settings.updateForm(
-        "autoTagCustomText",
-        parseKnowledgeSpaceCustomTags(text).join("\n"),
-      );
+      settings.updateForm("autoTagCustomText", parseKnowledgeSpaceCustomTags(text).join("\n"));
     };
     reader.readAsText(file);
   };
 
   const handleSubmit = async () => {
     if (settings.autoTagFeatureVisible && settings.form.autoTagEnabled) {
-      if (
-        settings.form.autoTagMode === "library" &&
-        !settings.form.autoTagLibraryId
-      ) {
+      if (settings.form.autoTagMode === "library" && !settings.form.autoTagLibraryId) {
         showToast({
           message: localize("com_knowledge.auto_tag_library_required"),
           severity: NotificationSeverity.WARNING,
@@ -169,9 +155,7 @@ export function KnowledgeSpaceSettingsPage() {
         return;
       }
       if (settings.form.autoTagMode === "custom") {
-        const customTags = parseKnowledgeSpaceCustomTags(
-          settings.form.autoTagCustomText,
-        );
+        const customTags = parseKnowledgeSpaceCustomTags(settings.form.autoTagCustomText);
         if (customTags.length === 0 || customTags.length > 200) {
           showToast({
             message: localize(
@@ -188,8 +172,7 @@ export function KnowledgeSpaceSettingsPage() {
     try {
       const result = await settings.submit();
       if (settings.mode === "create") {
-        if (!result || result.initialPermissionResult?.status === "failed")
-          return;
+        if (!result || result.initialPermissionResult?.status === "failed") return;
         showToast({
           message: localize("com_knowledge.space_create_success"),
           severity: NotificationSeverity.SUCCESS,
@@ -201,14 +184,9 @@ export function KnowledgeSpaceSettingsPage() {
         message: localize("com_knowledge.space_updated"),
         severity: NotificationSeverity.SUCCESS,
       });
-      navigate(spaceId ? `/knowledge/space/${spaceId}` : "/knowledge");
+      navigate(returnPath);
     } catch (error) {
-      if (!extractApiStatusCode(error)) {
-        showToast({
-          message: localize("com_knowledge.operation_failed_retry"),
-          severity: NotificationSeverity.ERROR,
-        });
-      }
+      showApiError(error);
     }
   };
 
@@ -221,10 +199,7 @@ export function KnowledgeSpaceSettingsPage() {
   }
   if (settings.loadError) {
     return (
-      <div
-        role="alert"
-        className="flex h-full items-center justify-center text-body text-danger"
-      >
+      <div role="alert" className="flex h-full items-center justify-center text-body text-danger">
         {settings.loadError.message}
       </div>
     );
@@ -234,16 +209,13 @@ export function KnowledgeSpaceSettingsPage() {
       <CreatedPermissionFailureState
         retryStatus={settings.permissionRetryStatus}
         onRetry={settings.retryInitialPermissions}
-        onEnter={() =>
-          navigate(`/knowledge/space/${settings.createdSpace?.id}`)
-        }
+        onEnter={() => navigate(`/knowledge/space/${settings.createdSpace?.id}`)}
       />
     );
   }
 
   const disabled = !settings.canEdit;
-  const cancel = () =>
-    navigate(spaceId ? `/knowledge/space/${spaceId}` : "/knowledge");
+  const cancel = () => navigate(returnPath);
   const permissionCapabilities = {
     canChangeRelation: true,
     canRemove: true,
@@ -251,10 +223,7 @@ export function KnowledgeSpaceSettingsPage() {
   };
 
   return (
-    <main
-      className="flex h-full min-h-0 bg-white"
-      data-testid="knowledge-space-settings-page"
-    >
+    <main className="flex h-full min-h-0 bg-white" data-testid="knowledge-space-settings-page">
       <div className="flex min-h-0 w-full flex-1 flex-col rounded-xl bg-white px-4 pt-4">
         <header className="flex h-8 shrink-0 items-center gap-3">
           <button
@@ -278,10 +247,7 @@ export function KnowledgeSpaceSettingsPage() {
         <div className="min-h-0 flex-1 overflow-y-auto py-4">
           <div className="mx-auto w-full max-w-[648px] space-y-6">
             <section className="space-y-6">
-              <SettingsSectionHeader
-                kind="basic"
-                title={localize("com_unified_permission.basic_settings")}
-              />
+              <SettingsSectionHeader kind="basic" title={localize("com_unified_permission.basic_settings")} />
               <div className="space-y-4 px-6 max-[768px]:px-0">
                 <div className="space-y-2">
                   <Label className="text-body font-medium text-text-1">
@@ -299,10 +265,7 @@ export function KnowledgeSpaceSettingsPage() {
                         nameComposingRef.current = false;
                         settings.updateForm(
                           "name",
-                          truncateByFullWidth(
-                            event.currentTarget.value,
-                            MAX_NAME_LENGTH,
-                          ),
+                          truncateByFullWidth(event.currentTarget.value, MAX_NAME_LENGTH),
                         );
                       }}
                       onChange={(event) =>
@@ -310,20 +273,14 @@ export function KnowledgeSpaceSettingsPage() {
                           "name",
                           nameComposingRef.current
                             ? event.target.value
-                            : truncateByFullWidth(
-                                event.target.value,
-                                MAX_NAME_LENGTH,
-                              ),
+                            : truncateByFullWidth(event.target.value, MAX_NAME_LENGTH),
                         )
                       }
-                      placeholder={localize(
-                        "com_subscription.enter_knowledge_space_name",
-                      )}
+                      placeholder={localize("com_subscription.enter_knowledge_space_name")}
                       className="h-8 rounded-md bg-white pr-14 placeholder:text-text-3"
                     />
                     <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-text-3">
-                      {Math.ceil(getFullWidthLength(settings.form.name))}/
-                      {MAX_NAME_LENGTH}
+                      {Math.ceil(getFullWidthLength(settings.form.name))}/{MAX_NAME_LENGTH}
                     </span>
                   </div>
                 </div>
@@ -341,10 +298,7 @@ export function KnowledgeSpaceSettingsPage() {
                       descriptionComposingRef.current = false;
                       settings.updateForm(
                         "description",
-                        truncateByFullWidth(
-                          event.currentTarget.value,
-                          MAX_DESCRIPTION_LENGTH,
-                        ),
+                        truncateByFullWidth(event.currentTarget.value, MAX_DESCRIPTION_LENGTH),
                       );
                     }}
                     onChange={(event) =>
@@ -352,15 +306,10 @@ export function KnowledgeSpaceSettingsPage() {
                         "description",
                         descriptionComposingRef.current
                           ? event.target.value
-                          : truncateByFullWidth(
-                              event.target.value,
-                              MAX_DESCRIPTION_LENGTH,
-                            ),
+                          : truncateByFullWidth(event.target.value, MAX_DESCRIPTION_LENGTH),
                       )
                     }
-                    placeholder={localize(
-                      "com_subscription.enter_knowledge_space_description",
-                    )}
+                    placeholder={localize("com_subscription.enter_knowledge_space_description")}
                   />
                 </div>
               </div>
@@ -376,114 +325,82 @@ export function KnowledgeSpaceSettingsPage() {
                   <SettingsSwitchRow
                     label={localize("com_knowledge.auto_tag_generation")}
                     checked={settings.form.autoTagEnabled}
-                    onCheckedChange={(checked) =>
-                      settings.updateForm("autoTagEnabled", checked)
-                    }
+                    onCheckedChange={(checked) => settings.updateForm("autoTagEnabled", checked)}
                   />
                   {settings.form.autoTagEnabled && (
                     <Tabs
-                      value={settings.form.autoTagMode}
-                      onValueChange={(value) =>
-                        settings.updateForm(
-                          "autoTagMode",
-                          value as "library" | "custom",
-                        )
-                      }
-                    >
-                      <TabsList>
-                        <TabsTrigger value="library">
-                          {localize("com_knowledge.auto_tag_mode_library")}
-                        </TabsTrigger>
-                        <TabsTrigger value="custom">
-                          {localize("com_knowledge.auto_tag_mode_custom")}
-                        </TabsTrigger>
-                      </TabsList>
-                      <TabsContent value="library" className="mt-3 space-y-2">
-                        <Select
-                          value={
-                            settings.form.autoTagLibraryId
-                              ? String(settings.form.autoTagLibraryId)
-                              : undefined
-                          }
-                          onValueChange={(value) =>
-                            settings.updateForm(
-                              "autoTagLibraryId",
-                              Number(value),
-                            )
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue
-                              placeholder={localize(
-                                "com_knowledge.select_auto_tag_library",
+                      activeKey={settings.form.autoTagMode}
+                      onChange={(value) => settings.updateForm("autoTagMode", value as "library" | "custom")}
+                      items={[
+                        {
+                          key: "library",
+                          label: <>{localize("com_knowledge.auto_tag_mode_library")}</>,
+                          children: (
+                            <div className="mt-3 space-y-2">
+                              <Select
+                                {...selectCopy}
+                                options={settings.tagLibraries.map((library) => ({
+                                  value: library.id,
+                                  label: library.name,
+                                }))}
+                                value={settings.form.autoTagLibraryId || null}
+                                onChange={(value) =>
+                                  value != null && settings.updateForm("autoTagLibraryId", Number(value))
+                                }
+                                placeholder={localize("com_knowledge.select_auto_tag_library")}
+                                aria-label={localize("com_knowledge.select_auto_tag_library")}
+                              />
+                              {settings.autoTagPreview.length > 0 && (
+                                <div className="flex flex-wrap gap-2 text-body-sm text-text-3">
+                                  {settings.autoTagPreview.slice(0, 20).map((tag) => (
+                                    <span key={tag} className="rounded-full bg-fill-2 px-2 py-1">
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
                               )}
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {settings.tagLibraries.map((library) => (
-                              <SelectItem
-                                key={library.id}
-                                value={String(library.id)}
-                              >
-                                {library.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {settings.autoTagPreview.length > 0 && (
-                          <div className="flex flex-wrap gap-2 text-body-sm text-text-3">
-                            {settings.autoTagPreview.slice(0, 20).map((tag) => (
-                              <span
-                                key={tag}
-                                className="rounded-full bg-fill-2 px-2 py-1"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </TabsContent>
-                      <TabsContent value="custom" className="mt-3 space-y-2">
-                        <div className="flex items-center justify-between text-body-sm text-text-3">
-                          <span>
-                            {
-                              parseKnowledgeSpaceCustomTags(
-                                settings.form.autoTagCustomText,
-                              ).length
-                            }
-                            /200
-                          </span>
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-1 text-blue-500 hover:underline"
-                            onClick={() => customTagsInputRef.current?.click()}
-                          >
-                            <Outlined.Upload className="size-4" />
-                            {localize("com_knowledge.upload_txt")}
-                          </button>
-                          <input
-                            ref={customTagsInputRef}
-                            type="file"
-                            accept=".txt"
-                            className="hidden"
-                            onChange={handleCustomTagsUpload}
-                          />
-                        </div>
-                        <Textarea
-                          value={settings.form.autoTagCustomText}
-                          onChange={(event) =>
-                            settings.updateForm(
-                              "autoTagCustomText",
-                              event.target.value,
-                            )
-                          }
-                          placeholder={localize(
-                            "com_knowledge.auto_tag_custom_tags_placeholder",
-                          )}
-                          rows={5}
-                        />
-                      </TabsContent>
-                    </Tabs>
+                            </div>
+                          ),
+                        },
+                        {
+                          key: "custom",
+                          label: <>{localize("com_knowledge.auto_tag_mode_custom")}</>,
+                          children: (
+                            <div className="mt-3 space-y-2">
+                              <div className="flex items-center justify-between text-body-sm text-text-3">
+                                <span>
+                                  {parseKnowledgeSpaceCustomTags(settings.form.autoTagCustomText).length}
+                                  /200
+                                </span>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1 text-blue-500 hover:underline"
+                                  onClick={() => customTagsInputRef.current?.click()}
+                                >
+                                  <Outlined.Upload className="size-4" />
+                                  {localize("com_knowledge.upload_txt")}
+                                </button>
+                                <input
+                                  ref={customTagsInputRef}
+                                  type="file"
+                                  accept=".txt"
+                                  className="hidden"
+                                  onChange={handleCustomTagsUpload}
+                                />
+                              </div>
+                              <Textarea
+                                value={settings.form.autoTagCustomText}
+                                onChange={(event) =>
+                                  settings.updateForm("autoTagCustomText", event.target.value)
+                                }
+                                placeholder={localize("com_knowledge.auto_tag_custom_tags_placeholder")}
+                                rows={5}
+                              />
+                            </div>
+                          ),
+                        },
+                      ]}
+                    />
                   )}
                 </div>
               </section>
@@ -496,69 +413,22 @@ export function KnowledgeSpaceSettingsPage() {
                   title={localize("com_unified_permission.access_and_share")}
                 />
                 <div className="space-y-4 px-6 max-[768px]:px-0">
-                  <div className="space-y-2">
-                    <Label className="text-body font-medium text-text-1">
-                      <span className="mr-1 text-danger">*</span>
-                      {localize("com_unified_permission.access_and_share")}
-                    </Label>
-                    <AccessModeSelector
-                      value={isPrivate ? "private" : "shared"}
-                      onValueChange={(value) =>
-                        void handleVisibilityModeChange(value)
-                      }
-                      disabled={!settings.canEdit}
-                      privateLabel={localize("com_unified_permission.private")}
-                      privateDescription={localize(
-                        "com_unified_permission.private_hint",
-                      )}
-                      sharedLabel={localize("com_unified_permission.shared")}
-                      sharedDescription={localize(
-                        "com_unified_permission.shared_hint",
-                      )}
-                    />
-                  </div>
+                  <KnowledgeSpaceAccessMode
+                    visibility={settings.form.visibility}
+                    mode={settings.mode}
+                    isDepartmentSpace={settings.isDepartmentSpace}
+                    disabled={!settings.canEdit}
+                    isReleased={settings.form.isReleased}
+                    onVisibilityChange={(value) => settings.updateForm("visibility", value)}
+                    onReleasedChange={(value) => settings.updateForm("isReleased", value)}
+                  />
                   {!isPrivate && (
                     <>
-                      <SettingsSwitchRow
-                        required
-                        label={localize("com_unified_permission.review_join")}
-                        description={localize(
-                          "com_unified_permission.review_join_hint",
-                        )}
-                        checked={
-                          settings.form.visibility === VisibilityType.APPROVAL
-                        }
-                        disabled={!settings.canEdit}
-                        onCheckedChange={(checked) =>
-                          settings.updateForm(
-                            "visibility",
-                            checked
-                              ? VisibilityType.APPROVAL
-                              : VisibilityType.PUBLIC,
-                          )
-                        }
-                      />
-                      <SettingsSwitchRow
-                        required
-                        label={localize(
-                          "com_unified_permission.publish_to_square",
-                        )}
-                        description={localize(
-                          "com_unified_permission.publish_space_hint",
-                        )}
-                        checked={settings.form.isReleased}
-                        disabled={!settings.canEdit}
-                        onCheckedChange={(checked) =>
-                          settings.updateForm("isReleased", checked)
-                        }
-                      />
                       <PermissionDraftPanel
                         value={displayedPermissionRows}
                         onChange={(rows) =>
                           settings.replacePermissionRows(
-                            settings.mode === "create"
-                              ? rows.filter((row) => !row.protected)
-                              : rows,
+                            settings.mode === "create" ? rows.filter((row) => !row.protected) : rows,
                           )
                         }
                         capabilities={permissionCapabilities}
@@ -586,10 +456,7 @@ export function KnowledgeSpaceSettingsPage() {
           onCancel={cancel}
           onSubmit={() => void handleSubmit()}
           submitting={settings.submitting}
-          disabled={
-            !settings.form.name.trim() ||
-            (!settings.canEdit && !settings.canManagePermissions)
-          }
+          disabled={!settings.form.name.trim() || (!settings.canEdit && !settings.canManagePermissions)}
         />
       </div>
 
@@ -600,6 +467,7 @@ export function KnowledgeSpaceSettingsPage() {
         resourceType="knowledge_space"
         resourceId={spaceId}
         disabledIds={disabledIds}
+        disabledDepartmentSubtreeRootIds={disabledDepartmentSubtreeRootIds}
         relationModels={relationModels}
         canAddNonUserSubjects={settings.canAddNonUserSubjects}
         onConfirm={settings.addPermissionRows}

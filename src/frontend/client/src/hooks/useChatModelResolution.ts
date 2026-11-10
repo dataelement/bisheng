@@ -226,8 +226,8 @@ export interface UseChatModelResolutionResult {
 /**
  * Resolves once per (conversation, mode) and applies the answer through
  * `onResolved`. Later renders don't re-apply it, so a user's pick is never
- * clobbered by a re-run — the one exception is a late `serverModelId`, which
- * upgrades a result that came from a layer below it.
+ * clobbered by a re-run. A late server model may upgrade lower-priority answers;
+ * a late admin default may replace only the positional fallback.
  */
 export function useChatModelResolution({
     userId,
@@ -255,9 +255,11 @@ export function useChatModelResolution({
 
         const applied =
             appliedRef.current?.key === appliedKey ? appliedRef.current.source : undefined;
-        // This conversation is already settled and nothing better is available.
-        // A late server value still gets to upgrade a lower-priority answer.
-        if (applied && (applied === 'conv' || applied === 'server' || !serverModelId)) return;
+        // Model options and admin defaults load independently. A positional
+        // fallback must yield when the admin default arrives, but explicit
+        // user/conversation selections must stay pinned.
+        const hasLateUpgrade = !!serverModelId || (applied === 'fallback' && !!adminDefaultId);
+        if (applied && (applied === 'conv' || applied === 'server' || !hasLateUpgrade)) return;
 
         const { target, source, staleSources } = resolveChatModel({
             models,

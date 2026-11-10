@@ -9,6 +9,7 @@ runtime (the apps' i18n runtimes are untouched):
 
 | Domain | platform artifact | client artifact |
 |---|---|---|
+| `tool` | `platform/public/locales/<lng>/tool.json` (`tool:<key>`) | `client/src/locales/<lng>/tool.gen.json` (`tool:<key>`) |
 | `api_errors` | `platform/public/locales/<lng>/api_errors.json` (lazy i18next namespace, addressed as `api_errors:<code>`) | `client/src/locales/<lng>/api_errors.gen.json` (merged into the bundled resources, addressed as `api_errors.<code>`) |
 
 Rules:

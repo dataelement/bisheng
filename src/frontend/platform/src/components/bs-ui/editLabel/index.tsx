@@ -2,14 +2,18 @@
 import { PenLine } from "lucide-react";
 import { useContext, useRef, useState } from "react";
 import { alertContext } from "../../../contexts/alertContext";
+import { showApiError } from "@/controllers/request";
 
 export default function EditLabel({ str, rule, children, onChange }) {
     const [edit, setEdit] = useState(false)
     const inputRef = useRef(null)
+    const pendingRef = useRef(false)
+    const [saving, setSaving] = useState(false)
 
     const { setErrorData } = useContext(alertContext);
 
-    const handleChange = () => {
+    const handleChange = async () => {
+        if (pendingRef.current) return
         const value = inputRef.current.value
         if (rule.length) {
             const errors = []
@@ -31,8 +35,17 @@ export default function EditLabel({ str, rule, children, onChange }) {
                 list: errors,
             });
         }
-        setEdit(false)
-        onChange(value)
+        pendingRef.current = true
+        setSaving(true)
+        try {
+            await onChange(value)
+            setEdit(false)
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            pendingRef.current = false
+            setSaving(false)
+        }
     }
 
     if (edit) return <div className="">
@@ -40,6 +53,7 @@ export default function EditLabel({ str, rule, children, onChange }) {
             type="text"
             ref={inputRef}
             defaultValue={str}
+            disabled={saving}
             onKeyDown={(e) => {
                 e.key === 'Enter' && handleChange();
                 e.code === 'Space' && e.preventDefault();

@@ -2,6 +2,9 @@ import tempfile
 from abc import abstractmethod
 from functools import cached_property
 
+from loguru import logger
+from sqlalchemy.exc import SQLAlchemyError
+
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.services.config_service import settings
@@ -14,6 +17,8 @@ from bisheng.knowledge.rag.pipeline.loader.hierarchical import HierarchicalMarkd
 from bisheng.knowledge.rag.pipeline.loader.html import BishengHtmlLoader
 from bisheng.knowledge.rag.pipeline.loader.media import BishengMediaLoader
 from bisheng.knowledge.rag.pipeline.loader.mineru import MineruLoader
+from bisheng.knowledge.rag.pipeline.loader.mineru_v4 import MineruV4Loader
+from bisheng.knowledge.rag.pipeline.loader.mineru_v4_client import MineruV4Error
 from bisheng.knowledge.rag.pipeline.loader.ofd import OfdLoader
 from bisheng.knowledge.rag.pipeline.loader.paddle_ocr import PaddleOcrLoader
 from bisheng.knowledge.rag.pipeline.loader.pdf import LocalPdfLoader
@@ -21,7 +26,8 @@ from bisheng.knowledge.rag.pipeline.loader.ppt import BishengPptLoader
 from bisheng.knowledge.rag.pipeline.loader.txt import BishengTextLoader
 from bisheng.knowledge.rag.pipeline.loader.word import BishengWordLoader
 from bisheng.knowledge.rag.pipeline.loader.x_create import XinChuangFormatterLoader
-from bisheng.knowledge.rag.pipeline.types import PipelineConfig, PipelineResult
+from bisheng.knowledge.rag.pipeline.types import ImageStorageContext, PipelineConfig, PipelineResult
+from bisheng.user.domain.models.user import UserDao
 
 FileExtensionMap = {
     "xlsx": {"loader": "_init_excel_loader", "transformers": "_init_excel_transformers"},
@@ -62,11 +68,21 @@ class BaseFilePipeline(BasePipeline):
     hierarchical_file_exts = {"md", "doc", "docx"}
     ppt_page_split_exts = {"ppt", "pptx"}
 
-    def __init__(self, invoke_user_id: int, file_name: str, file_rule: FileProcessBase, **kwargs):
+    def __init__(
+        self,
+        invoke_user_id: int,
+        file_name: str,
+        file_rule: FileProcessBase,
+        split_for_retrieval: bool = True,
+        image_storage: ImageStorageContext | None = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.invoke_user_id = invoke_user_id
         self.file_name = file_name
         self.file_split_rule = file_rule
+        self.split_for_retrieval = split_for_retrieval
+        self.image_storage = image_storage
 
         self.local_file_path: str | None = getattr(self, "local_file_path", None)
         self.tmp_dir: str | None = getattr(self, "tmp_dir", None)
@@ -126,6 +142,20 @@ class BaseFilePipeline(BasePipeline):
     def file_metadata(self) -> dict:
         pass
 
+    @staticmethod
+    def _get_display_user_name(user_id: int) -> str | None:
+        """Best-effort user name lookup for display-only chunk metadata."""
+        try:
+            user = UserDao.get_user(user_id)
+        except SQLAlchemyError:
+            # uploader/updater are display-only for temp/preview chunks; a DB hiccup
+            # (e.g. 1040 Too many connections) must not fail the whole file parse.
+            logger.opt(exception=True).warning(
+                "uploader name lookup failed, parsing continues without it: user_id={}", user_id
+            )
+            return None
+        return user.user_name if user else None
+
     def prepare_local_file(self):
         """Override to download file if not already present."""
         pass
@@ -156,6 +186,8 @@ class BaseFilePipeline(BasePipeline):
             "file_extension": file_extension or self.file_extension,
             "tmp_dir": self.tmp_dir,
             "image_object_dir": self._get_image_object_dir(),
+            "image_url_builder": self.image_storage.url_builder if self.image_storage else None,
+            "split_for_retrieval": self.split_for_retrieval,
         }
 
     def _get_image_object_dir(self) -> str | None:
@@ -165,7 +197,7 @@ class BaseFilePipeline(BasePipeline):
         bbox-aligned upload path — appropriate for transient pipelines that have no
         durable document_id (e.g., temp parsing).
         """
-        return None
+        return self.image_storage.object_dir if self.image_storage else None
 
     def _excel_header_row_indices(self) -> list[int]:
         """Turn the rule's 1-based header rows (the UI says "第 1 行 到 第 1 行") into the
@@ -274,6 +306,18 @@ class BaseFilePipeline(BasePipeline):
                 **common_params,
                 filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
                 **knowledge_conf.mineru.model_dump(),
+            )
+        elif knowledge_conf.loader_provider == ParseType.MINERU_V4.value:
+            if not knowledge_conf.mineru_v4.api_url:
+                raise MineruV4Error("MinerU V4 API root URL is missing")
+            if hasattr(self, "db_file") and self.db_file:
+                self.db_file.parse_type = ParseType.MINERU_V4.value
+            return MineruV4Loader(
+                **common_params,
+                filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
+                force_ocr=self.file_split_rule.force_ocr == 1,
+                retain_images=self.file_split_rule.retain_images == 1,
+                **knowledge_conf.mineru_v4.model_dump(),
             )
         elif knowledge_conf.loader_provider == ParseType.PADDLE_OCR.value and knowledge_conf.paddle_ocr.url:
             if hasattr(self, "db_file") and self.db_file:

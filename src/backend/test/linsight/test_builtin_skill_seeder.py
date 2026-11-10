@@ -14,6 +14,7 @@ non-obvious contracts:
 from __future__ import annotations
 
 import shutil
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -68,6 +69,9 @@ class _FakeDao:
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     """A fake builtin dir + a real on-disk SkillStore + a fake DAO."""
+    monkeypatch.setattr(
+        "bisheng.linsight.domain.services.skill_permission.ensure_builtin_skill_permission", AsyncMock()
+    )
     builtin = tmp_path / "builtin_skills"
     builtin.mkdir()
     monkeypatch.setattr(seeder, "BUILTIN_SKILLS_DIR", builtin)
@@ -160,6 +164,41 @@ async def test_first_seed_creates_the_row_and_writes_the_bundle(env):
     assert row.display_name == "演示技能"
     assert row.enabled is True
     assert _is_stored(store, dao, 7, "demo-skill")
+
+
+async def test_default_checked_comes_from_metadata_on_first_install(env):
+    builtin, store, dao = env
+    bundle = _write_bundle(builtin)
+    (bundle / "SKILL.md").write_text(
+        SKILL_MD_TEMPLATE.format(name="demo-skill", description="d", display="演示技能").replace(
+            "  display-name: 演示技能\n", "  display-name: 演示技能\n  default-checked: true\n"
+        ),
+        encoding="utf-8",
+    )
+    _write_bundle(builtin, name="plain-skill")
+
+    await seeder.seed_builtin_skills([7], store=store)
+
+    assert dao.rows[(7, "demo-skill")].default_checked is True
+    assert dao.rows[(7, "plain-skill")].default_checked is False
+
+
+async def test_an_upgrade_keeps_the_administrators_default_checked_choice(env):
+    """The flag seeds the first install only; the admin owns it from then on."""
+    builtin, store, dao = env
+    bundle = _write_bundle(builtin)
+    md = SKILL_MD_TEMPLATE.format(name="demo-skill", description="d", display="演示技能").replace(
+        "  display-name: 演示技能\n", "  display-name: 演示技能\n  default-checked: true\n"
+    )
+    (bundle / "SKILL.md").write_text(md, encoding="utf-8")
+    await seeder.seed_builtin_skills([7], store=store)
+
+    dao.rows[(7, "demo-skill")].default_checked = False  # admin unticks it
+    (bundle / "SKILL.md").write_text(md.replace("d\n", "新描述\n", 1), encoding="utf-8")
+    stats = await seeder.seed_builtin_skills([7], store=store)
+
+    assert stats == {"updated": 1}
+    assert dao.rows[(7, "demo-skill")].default_checked is False
 
 
 async def test_second_run_is_a_noop_when_content_is_unchanged(env):
@@ -295,7 +334,7 @@ async def test_tenant_context_is_restored_after_seeding(env):
     """Seeding runs inside per-tenant context; it must not leak into the caller's."""
     from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 
-    builtin, store, dao = env
+    builtin, store, _dao = env
     _write_bundle(builtin)
 
     token = set_current_tenant_id(99)
@@ -312,7 +351,7 @@ async def test_tenant_context_is_restored_after_seeding(env):
 
 # Deliberately a membership list, not a count: adding a fourth bundle later must
 # not turn this guard red.
-SHIPPED_BUNDLES = ("bisheng-pptx", "bisheng-xlsx", "bisheng-docx")
+SHIPPED_BUNDLES = ("bisheng-pptx", "bisheng-xlsx", "bisheng-docx", "html-report")
 
 
 @pytest.mark.parametrize("name", SHIPPED_BUNDLES)
@@ -342,6 +381,23 @@ def test_the_shipped_bundle_is_valid(name):
     assert any(p.startswith("scripts/") for p in files)
 
 
+# Customer-readable surface of a pack (builtin_skills/AGENTS.md, Packaging): an OEM
+# deployment ships these as its own. html-report goes further than the older packs
+# by user decision: no brand in the slug or the tool names it mentions either.
+_BRAND_WORDS = ("bisheng", "毕昇", "灵思", "linsight")
+
+
+def test_html_report_shows_no_platform_brand():
+    meta, files = seeder.discover_builtin_bundles()["html-report"]
+    for rel, data in files.items():
+        if rel == "LICENSE.txt" or not rel.endswith((".md", ".html", ".py")):
+            continue
+        text = data.decode("utf-8").lower()
+        for word in _BRAND_WORDS:
+            assert word not in text, f"{rel} mentions {word!r}"
+    assert meta["metadata"]["default-checked"] is True
+
+
 def test_no_shipped_bundle_is_silently_dropped():
     """A bundle dir that fails validation disappears from the mapping instead of
     raising, so compare directories on disk against what discovery returned."""
@@ -350,3 +406,34 @@ def test_no_shipped_bundle_is_silently_dropped():
     assert on_disk == set(seeder.discover_builtin_bundles()), (
         "a bundle directory exists but discover_builtin_bundles() rejected it"
     )
+
+
+def test_pptx_templates_ship_byte_for_byte():
+    """F111 AC-13: the built-in PPT templates reach the bundle unchanged, binary included."""
+    _, files = seeder.discover_builtin_bundles()["bisheng-pptx"]
+    template_dir = seeder.BUILTIN_SKILLS_DIR / "bisheng-pptx" / "templates"
+    shipped = {p.relative_to(template_dir.parent).as_posix(): p for p in template_dir.rglob("*") if p.is_file()}
+    assert "templates/catalog.json" in shipped
+    pptx_files = [rel for rel in shipped if rel.endswith("/template.pptx")]
+    assert len(pptx_files) == 5
+    for rel, path in shipped.items():
+        assert files.get(rel) == path.read_bytes(), f"{rel} differs from the file on disk"
+
+
+def test_pptx_templates_show_no_platform_brand():
+    """Template slide text and manifests are customer-readable (builtin_skills/AGENTS.md, Packaging)."""
+    from pptx import Presentation
+
+    _, files = seeder.discover_builtin_bundles()["bisheng-pptx"]
+    for rel, data in files.items():
+        if not rel.startswith("templates/"):
+            continue
+        if rel.endswith(".json"):
+            text = data.decode("utf-8").lower()
+        else:
+            prs = Presentation(str(seeder.BUILTIN_SKILLS_DIR / "bisheng-pptx" / rel))
+            text = "\n".join(
+                s.text_frame.text for slide in prs.slides for s in slide.shapes if s.has_text_frame
+            ).lower()
+        for word in _BRAND_WORDS:
+            assert word not in text, f"{rel} mentions {word!r}"

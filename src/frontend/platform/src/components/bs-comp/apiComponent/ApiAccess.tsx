@@ -1,4 +1,4 @@
-import { Badge } from '@/components/bs-ui/badge';
+import { Tag } from '@bisheng/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table';
 import type { ReactNode } from 'react';
@@ -25,7 +25,7 @@ export function JsonItem({ name, type, desc, required = false, example = '', rem
     return <div className='pl-6 mb-4'>
         <div className='relative flex justify-between mb-2'>
             <div className='flex gap-x-4 gap-y-1 flex-wrap'>
-                <Badge variant='outline' className='bg-primary/15 text-primary'>{name}</Badge>
+                <Tag size="small" color="brand">{name}</Tag>
                 <div>{type}</div>
                 <div className='text-gray-500'>{desc}</div>
             </div>

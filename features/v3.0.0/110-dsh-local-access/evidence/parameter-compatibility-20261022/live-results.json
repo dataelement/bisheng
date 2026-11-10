@@ -1,0 +1,124 @@
+{
+  "base_commit": "7e573b3a63225fe215341a6f677333b9533dd43c",
+  "patched_capabilities_sha256": "517498619433a0e316e0e0e128ba75ae51986000be28108c3ec52e4fc4caa3de",
+  "running_capabilities_sha256": "aa9c25543d9e6616bef28c175752ac7c9fe0d4606bdaafdc2d27df4d874f50f7",
+  "final_probe": {
+    "mode": "isolated ASGI process using production authentication, quota and audit services",
+    "baseline": {
+      "http_status": 400,
+      "code": "unsupported_parameter",
+      "upstream_requests": 0
+    },
+    "calls": [
+      {
+        "model": "bisheng:2",
+        "stream": false,
+        "limit": 8192,
+        "http_status": 200,
+        "request_id": "195bcc7e-3ddb-4e8f-b898-578e15c68b54",
+        "seconds": 0.981,
+        "answer": "QWEN_COMPAT_OK",
+        "usage": {
+          "prompt_tokens": 21,
+          "completion_tokens": 5,
+          "total_tokens": 26,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_creation_tokens": null
+          }
+        },
+        "finish_reason": "stop",
+        "wire": {
+          "model": "qwen-max",
+          "stream": false,
+          "max_tokens": 8192
+        }
+      },
+      {
+        "model": "bisheng:2",
+        "stream": true,
+        "limit": 8192,
+        "http_status": 200,
+        "request_id": "1712a4ea-72c5-42ae-ac3c-5346a2e7cd24",
+        "seconds": 0.529,
+        "answer": "QWEN_COMPAT_OK",
+        "usage": {
+          "prompt_tokens": 21,
+          "completion_tokens": 5,
+          "total_tokens": 26,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_creation_tokens": null
+          }
+        },
+        "finish_reason": "stop",
+        "wire": {
+          "model": "qwen-max",
+          "stream": true,
+          "max_tokens": 8192
+        }
+      },
+      {
+        "model": "bisheng:3",
+        "stream": false,
+        "limit": 6500,
+        "http_status": 429,
+        "request_id": "96536b08-0977-4549-8f0b-c2e14d0c7d7f",
+        "seconds": 0.088,
+        "upstream_error": null,
+        "wire": null,
+        "upstream_requests": 0,
+        "platform_error": {
+          "message": "Monthly token limit reached",
+          "type": "quota_error",
+          "code": "monthly_token_limit_exceeded"
+        }
+      }
+    ],
+    "session_cleanup_http": 204
+  },
+  "earlier_verified_calls": [
+    {
+      "request_id": "36ded2db-f861-4c55-bbc5-fb1fcf70c30c",
+      "model": "bisheng:2",
+      "stream": false,
+      "max_completion_tokens": 6500,
+      "upstream_max_tokens": 6500,
+      "http_status": 200,
+      "answer": "QWEN_COMPAT_OK",
+      "total_tokens": 26
+    },
+    {
+      "request_id": "337f4fca-ce7a-4a78-b5f6-de23e11b104a",
+      "model": "bisheng:2",
+      "stream": true,
+      "max_completion_tokens": 6500,
+      "upstream_max_tokens": 6500,
+      "http_status": 200,
+      "answer": "QWEN_COMPAT_OK",
+      "total_tokens": 26
+    }
+  ],
+  "upstream_limit_probe": {
+    "model": "qwen-max",
+    "max_completion_tokens": 9000,
+    "upstream_max_tokens": 9000,
+    "upstream_http_status": 400,
+    "upstream_code": "invalid_parameter_error",
+    "upstream_message": "<400> InternalError.Algo.InvalidParameter: Range of max_tokens should be [1, 8192]",
+    "nonstream_request_id": "6a35c733-9440-4750-8b38-9ecd122f5d31",
+    "nonstream_http_status": 502,
+    "stream_request_id": "20d590a6-0ad0-43c8-9c9d-afa727feb4fd",
+    "stream_http_status": 200,
+    "stream_error_frame": true
+  },
+  "local_regression": {
+    "passed": 172,
+    "skipped": 2,
+    "new_tests_passed": 48
+  },
+  "cleanup": {
+    "native_sessions_revoked": 3,
+    "service_restarts": 0
+  }
+}

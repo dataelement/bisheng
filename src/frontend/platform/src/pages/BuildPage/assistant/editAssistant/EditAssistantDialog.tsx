@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { Button, Input, Textarea, notification } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
-import { Button } from "@/components/bs-ui/button";
+
 import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
+
 import Avator from "@/components/bs-ui/input/avator";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -64,17 +65,15 @@ export default function EditAssistantDialog({ logo, viewLogo, name, desc, onSave
         return isValid;
     };
 
-    const { message, toast } = useToast()
+
     // Handle form submission
     const handleSubmit = (e) => {
+        if ((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) return;
+
         e.preventDefault();
         const isValid = validateForm();
         // console.log('Form data:', errors);
-        if (!isValid) return toast({
-            title: t('prompt'),
-            variant: 'error',
-            description: Object.keys(errors).map(key => errors[key]),
-        })
+        if (!isValid) return notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: (Object.keys(errors).map(key => errors[key])).filter(Boolean).join('\n') })
 
         onSave(formData)
     };
@@ -108,37 +107,20 @@ export default function EditAssistantDialog({ logo, viewLogo, name, desc, onSave
             </div>
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantName')}<span className="bisheng-tip">*</span></label>
-                <Input
-                    id="name"
-                    name="name"
-                    placeholder={t('build.enterName')}
-                    maxLength={50}
-                    showCount
-                    className="mt-2"
-                    value={formData.name}
-                    onChange={handleChange}
-                />
+                <Input id="name" name="name" placeholder={t('build.enterName')} maxLength={50} showCount value={formData.name} onChange={handleChange} className={"mt-2"} />
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
             </div>
             <div className="">
                 <label htmlFor="desc" className="bisheng-label">{t('build.assistantDesc')}</label>
-                <Textarea
-                    id="desc"
-                    name="desc"
-                    placeholder={t('build.enterDesc')}
-                    maxLength={1000}
-                    className="mt-2"
-                    value={formData.desc}
-                    onChange={handleChange}
-                />
+                <Textarea id="desc" name="desc" placeholder={t('build.enterDesc')} maxLength={1000} value={formData.desc} onChange={handleChange} textareaClassName={"mt-2"} showCount />
                 {errors.desc && <p className="bisheng-tip mt-1">{errors.desc}</p>}
             </div>
         </div>
         <DialogFooter>
             <DialogClose>
-                <Button variant="outline" className="px-11" type="button">{t('build.cancel')}</Button>
+                <Button variant="outlined" type="button" color="default">{t('build.cancel')}</Button>
             </DialogClose>
-            <Button type="submit" className="px-11" onClick={handleSubmit}>{t('build.confirm')}</Button>
+            <Button type="submit" onClick={handleSubmit} disabled={(String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)}>{t('build.confirm')}</Button>
         </DialogFooter>
     </DialogContent>
 };

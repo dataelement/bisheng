@@ -1,6 +1,6 @@
 import { Info } from "lucide-react";
 import useLocalize from "~/hooks/useLocalize";
-import { Badge } from "~/components/ui/Badge";
+import { Button } from '@bisheng/ui';
 
 const enum SourceType {
     /** 无溯源 */
@@ -26,7 +26,7 @@ export default function MessageSource({ extra, end, source, className = '', onSo
         {(() => {
             switch (source) {
                 case SourceType.FILE:
-                    return <Badge className="cursor-pointer" onClick={onSource}>{t('com_msg_source_reference')}</Badge>;
+                    return <Button size="small" variant="link" onClick={onSource}>{t('com_msg_source_reference')}</Button>;
                 case SourceType.NO_PERMISSION:
                     return <p className="flex text-xs text-gray-400 gap-1 items-center"><Info className="text-red-300" />{t('com_msg_source_no_permission')}</p>;
                 case SourceType.LINK:

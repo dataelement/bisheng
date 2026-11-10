@@ -13,6 +13,21 @@ from sqlalchemy.sql.schema import Computed
 from sqlalchemy.sql.sqltypes import Boolean as _Boolean
 from sqlalchemy.types import TypeDecorator
 
+
+class PreciseDateTime(TypeDecorator):
+    """Microsecond ordering on MySQL; retain the native temporal type on DM8."""
+
+    impl = sa.DateTime
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "mysql":
+            from sqlalchemy.dialects.mysql import DATETIME
+
+            return dialect.type_descriptor(DATETIME(fsp=6))
+        return dialect.type_descriptor(sa.DateTime())
+
+
 # ---------------------------------------------------------------------------
 # Boolean DDL override for DaMeng
 # ---------------------------------------------------------------------------
@@ -265,6 +280,23 @@ def json_array_contains(column, value: str, dialect_name: str):
         text_col.like(f"%, {v}]"),
         text_col.like(f"%, {v}, %"),
     )
+
+
+def json_object_field_equals(column, key: str, value: str, dialect_name: str):
+    """Return expression: does the top-level string field ``key`` of a JSON
+    object column equal ``value``?
+
+    MySQL: ``JSON_UNQUOTE(JSON_EXTRACT(col, '$.key')) = value``.
+    DaMeng/others: LIKE against the text serialised by ``JsonType`` —
+    ``json.dumps`` writes ``"key": "value"`` with the default ``": "``
+    separator, so the quoted pair is unambiguous inside the document.
+
+    ``key`` must be a plain identifier (no quotes / path syntax); ``value`` is
+    matched as a JSON string, so numeric fields must be stored as strings.
+    """
+    if dialect_name == "mysql":
+        return sa.func.json_unquote(sa.func.json_extract(column, f"$.{key}")) == value
+    return sa.cast(column, Text()).like(f'%"{key}": "{value}"%')
 
 
 def json_search_exists(column, value: str, dialect_name: str):

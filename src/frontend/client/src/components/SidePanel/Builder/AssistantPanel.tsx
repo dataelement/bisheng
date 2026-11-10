@@ -106,7 +106,7 @@ export default function AssistantPanel({
         message: `${localize('com_assistants_update_error')}${
           error.message ? ` ${localize('com_ui_error')}: ${error.message}` : ''
         }`,
-        status: 'error',
+        status: 'warning',
       });
     },
   });
@@ -126,7 +126,7 @@ export default function AssistantPanel({
         message: `${localize('com_assistants_create_error')}${
           error.message ? ` ${localize('com_ui_error')}: ${error.message}` : ''
         }`,
-        status: 'error',
+        status: 'warning',
       });
     },
   });

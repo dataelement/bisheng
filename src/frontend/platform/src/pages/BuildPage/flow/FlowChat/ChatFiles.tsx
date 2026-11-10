@@ -1,14 +1,17 @@
 // @ts-strict-ignore
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { notification } from '@bisheng/ui';
+
 import { generateUUID } from "@/components/bs-ui/utils";
 import Loading from "@/components/ui/loading";
 import { locationContext } from "@/contexts/locationContext";
 import { uploadArchive } from "@/controllers/API/archiveUpload";
 import { uploadChatFile } from "@/controllers/API/flow";
-import { MAX_MEDIA_FILES, isMediaFileName } from "@/util/fileAcceptUtils";
+import { showApiError } from '@/controllers/request';
+import { MAX_MEDIA_FILES,isMediaFileName } from "@/util/fileAcceptUtils";
 import { getFileExtension } from "@/util/utils";
-import { FileIcon, PaperclipIcon, X } from "lucide-react";
-import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
+import { Outlined } from "bisheng-icons";
+
+import { forwardRef,useContext,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const checkFileType = (file, accepts) => {
@@ -26,8 +29,19 @@ const checkFileType = (file, accepts) => {
 };
 
 
+export interface ChatFilesHandle {
+    openPicker: () => void;
+    upload: (files: FileList | File[]) => void;
+}
+interface ChatFilesProps {
+    v: string;
+    accepts?: string;
+    disabled?: boolean;
+    onChange: (files: { path: string; name: string }[] | null) => void;
+}
+
 // @accepts '.png,.jpg'
-export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange }, ref) {
+export default forwardRef<ChatFilesHandle, ChatFilesProps>(function ChatFiles({ v, accepts, disabled, onChange }, ref) {
 
     const { t } = useTranslation();
     const [files, setFiles] = useState([]);
@@ -38,7 +52,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
         ? null : filesRef.current.filter(f => f.filePath).map(f => ({path:f.filePath,name:f.name})));
     const { appConfig } = useContext(locationContext);
     // const fileAccepts = useMemo(() => appConfig.libAccepts.map((ext) => `.${ext}`), [appConfig.libAccepts]);
-    const { toast } = useToast();
+
 
     const fileInputRef = useRef(null);
     const fileSizeLimit = appConfig.uploadFileMaxSize * 1024 * 1024; // File size limit in bytes
@@ -70,10 +84,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
             }
 
             if (invalidTypeFiles.length > 0) {
-                return toast({
-                    variant: 'error',
-                    description: t('com_ui_upload_file_type_error')
-                }); // 请确保你有对应多语言key或直接写死中文测试
+                return notification.open({ type: 'error', description: String(t('com_ui_upload_file_type_error') ?? '') }); // 请确保你有对应多语言key或直接写死中文测试
             }
             // 2. 再校验文件大小
             if (file.size > fileSizeLimit) {
@@ -91,24 +102,17 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
         const existingMediaCount = filesRef.current.filter((f) => isMediaFileName(f.name)).length;
         const incomingMediaCount = validFiles.filter(({ file }) => isMediaFileName(file.name)).length;
         if (existingMediaCount + incomingMediaCount > MAX_MEDIA_FILES) {
-            return toast({
-                variant: 'error',
-                description: t('chat.mediaFileTooMany'),
-            });
+            return notification.open({ type: 'error', description: String(t('chat.mediaFileTooMany') ?? '') });
         }
 
         // 显示无效文件提示（区分类型/大小错误）
         if (invalidTips.length > 0) {
-            toast({
-                variant: 'info',
-                description: invalidTips.join('；'),
-            });
+            notification.open({ type: 'info', description: String(invalidTips.join('\n') ?? '') });
         }
 
         // 只要有有效文件就继续上传流程
         if (!validFiles.length) return;
 
-        // 以下逻辑完全保留，无需修改
         onChange(null);
         const filesWithProgress = validFiles.map(({ file, id }) => {
             return {
@@ -122,13 +126,10 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
             };
         });
 
-        setFiles(prevFiles => {
-            const res = [...prevFiles, ...filesWithProgress];
-            filesRef.current = res;
-            return res;
-        });
+        filesRef.current = [...filesRef.current, ...filesWithProgress];
+        setFiles(filesRef.current);
 
-        remainingUploadsRef.current = validFiles.length;
+        remainingUploadsRef.current += validFiles.length;
 
         const uploadFactories = validFiles.map(({ file, id }) => () => {
             if (!filesRef.current.some(f => f.id === id)) return Promise.resolve();
@@ -157,11 +158,13 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                         size: child.size, archiveId: child.archive_id, isUploading: false, progress: 100,
                     }));
                     if (others.length + children.length > 20 || [...others,...children].reduce((sum,f) => sum+(f.size||0),0)>100*1024*1024) {
-                        throw new Error(t('chat.archiveBatchLimit'));
+                        notification.open({ type: 'error', description: t('chat.archiveBatchLimit') });
+                        handleFileRemove(id);
+                        return;
                     }
                     filesRef.current = [...others, ...children];
                     setFiles(filesRef.current);
-                    remainingUploadsRef.current -= 1;
+                    remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);
                     publishFiles();
                     return;
                 }
@@ -174,45 +177,38 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                 });
                 setFiles(filesRef.current);
 
-                remainingUploadsRef.current -= 1;
+                remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);
                 if (remainingUploadsRef.current === 0) {
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
                     publishFiles();
                 }
             }).catch((error) => {
-                toast({
-                    variant: 'error',
-                    description: error?.message || t('chat.fileUploadFailed', { name: file.name }),
-                });
+                if (!filesRef.current.some(file => file.id === id)) return;
+                showApiError(error);
                 handleFileRemove(id);
-                remainingUploadsRef.current -= 1;
-                if (remainingUploadsRef.current === 0) {
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-                    publishFiles();
-                }
+            }).finally(() => {
+                controllers.current.delete(id);
             });
         });
 
-        uploadFactories.reduce((chain, upload) => chain.then(upload), Promise.resolve()).then(() => {
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-            publishFiles();
-        });
+        void uploadFactories.reduce((chain, upload) => chain.then(upload), Promise.resolve()).catch(showApiError);
     };
 
     const handleFileRemove = (fileId) => {
+        const removed = filesRef.current.filter(file => file.id === fileId);
+        if (!removed.length) return;
+        const pendingRemoved = removed.filter(file => file.isUploading).length;
         controllers.current.get(fileId)?.abort();
         controllers.current.delete(fileId);
         const res = filesRef.current.filter(file => file.id !== fileId);
         filesRef.current = res
         setFiles(res);
 
-        // If we manually remove a file during upload, we decrease the remaining upload counter
-        remainingUploadsRef.current = Math.max(remainingUploadsRef.current - 1, 0);
+        // Count each pending attachment exactly once, including manual removal.
+        remainingUploadsRef.current = Math.max(remainingUploadsRef.current - pendingRemoved, 0);
 
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-            publishFiles(); // Trigger onChange with uploaded file IDs
+            publishFiles();
         }
     };
 
@@ -230,6 +226,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
     };
 
     useImperativeHandle(ref, () => ({
+        openPicker: () => { if (!disabled) fileInputRef.current?.click(); },
         upload: (fileList) => {
             if (disabled) return;
             handleFileChange(Array.from(fileList));
@@ -247,12 +244,12 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                             onClick={() => handleFileRemove(file.id)}
                             className="hidden group-hover:block absolute -right-1 -top-1 bg-gray-50 border-2 border-gray-300 text-gray-600 rounded-full cursor-pointer"
                         >
-                            <X size={14} />
+                            <Outlined.Close size={14} />
                         </span>
 
                         {/* File Icon */}
                         <div className="w-8 h-8 bg-gray-200 rounded-md flex items-center justify-center">
-                            {file.isUploading ? <Loading className="size-4" /> : <FileIcon className="w-6 h-6 text-gray-600" />}
+                            {file.isUploading ? <Loading className="size-4" /> : <Outlined.File className="w-6 h-6 text-gray-600" />}
                         </div>
 
                         {/* File details */}
@@ -268,14 +265,6 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                     </div>
                 ))}
             </div>}
-
-            {/* File Upload Button */}
-            <div
-                className={`absolute right-10 top-5 cursor-pointer ${disabled ? 'text-gray-400 cursor-not-allowed' : ''}`}
-                onClick={() => !disabled && fileInputRef.current.click()}
-            >
-                <PaperclipIcon size={18} />
-            </div>
 
             {/* File Input */}
             <input

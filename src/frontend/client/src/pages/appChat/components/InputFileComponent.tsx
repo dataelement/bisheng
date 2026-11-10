@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import type { WorkflowFileFieldProps } from '@bisheng/chat';
+import type { ReactNode } from 'react';
 
 import { uploadArchive } from "~/api/archiveUpload";
 import { FileSearch2, Loader2 } from "lucide-react";
@@ -11,6 +13,21 @@ import { uploadFile, uploadFileWithProgress } from "~/api/apps";
 import useLocalize from "~/hooks/useLocalize";
 import { normalizeSuffixList } from "../fileAcceptUtils";
 
+interface InputFileComponentProps {
+    renderControl?: (props: WorkflowFileFieldProps) => ReactNode;
+    value?: string;
+    onChange: (name: string) => void;
+    disabled?: boolean;
+    suffixes?: string | readonly string[];
+    fileTypes?: unknown;
+    placeholder?: string;
+    onFileChange: (value: unknown) => void;
+    onUploadStateChange?: (busy: boolean) => void;
+    editNode?: boolean;
+    isSSO?: boolean;
+    multiple?: boolean;
+    flow?: unknown;
+}
 export default function InputFileComponent({
     value,
     onChange,
@@ -19,12 +36,13 @@ export default function InputFileComponent({
     fileTypes,
     placeholder = 'The current file is empty',
     onFileChange,
-  onUploadStateChange,
+    onUploadStateChange,
     editNode = false,
     isSSO = false,
     multiple = false,
-    flow
-}) {
+    flow,
+    renderControl,
+}: InputFileComponentProps) {
     const t = useLocalize()
     const [myValue, setMyValue] = useState(value);
     const [loading, setLoading] = useState(false);
@@ -47,7 +65,7 @@ export default function InputFileComponent({
     const acceptAttr = suffixList.join(",");
 
     function checkFileType(fileName: string): boolean {
-        return suffixList.some((suffix) => fileName.endsWith(suffix));
+        return suffixList.length === 0 || suffixList.some((suffix) => fileName.toLowerCase().endsWith(suffix.trim().toLowerCase()));
     }
 
     useEffect(() => {
@@ -87,7 +105,7 @@ export default function InputFileComponent({
 
             uploadArchive(file, acceptAttr).then(result => {
                 setMyValue(result.files.map(f => f.display_name).join(', '));
-                onChange(result.files.map(f => f.display_name));
+                onChange(result.files.map(f => f.display_name).join(', '));
                 onFileChange(result.files.map(f => f.file_path));
             }).catch(error => { onFileChange([]); showToast({message: String(error.message || error), status:'error'}); })
                 .finally(() => setBusy(false));
@@ -97,17 +115,15 @@ export default function InputFileComponent({
         {
             const errorMsg = checkFileSize(file)
             if (errorMsg) {
-                showToast({ message: errorMsg, status: 'error' });
+                showToast({ message: errorMsg, status: 'warning' });
 
                 return setBusy(false);
             }
-            // Check if the file type is correct
-            // if (file && checkFileType(file.name)) {
-            // Upload the file
-            isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
+            // Types are validated by the picker handler before an upload starts.
+            (isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
                 setBusy(false);
                 
-                if (typeof res === 'string') return showToast({ message: res, status: 'error' });
+                if (typeof res === 'string') return showToast({ message: res, status: 'warning' });
                 const { file_path } = res;
                 setMyValue(file.name);
                 onChange(file.name);
@@ -126,24 +142,17 @@ export default function InputFileComponent({
                     // sets the value that goes to the backend
                     onFileChange(file_path);
                     setBusy(false);
-                })
+                }))
                 .catch(() => {
                     console.error("Error occurred while uploading file");
+                })
+                .finally(() => {
                     setBusy(false);
                 });
-            // } else {
-            //   // Show an error if the file type is not allowed
-            //   setErrorData({
-            //     title:
-            //       "请选择有效文件。只允许使用这些文件类型：",
-            //     list: fileTypes,
-            //   });
-            //   setBusy(false);
-            // }
         }
     };
 
-    const batchUpload = (_files: FileList | null) => {
+    const batchUpload = (_files: readonly File[] | null) => {
         {
             setBusy(true);
 
@@ -159,10 +168,10 @@ export default function InputFileComponent({
                 }
 
                 if (errorMsgs.length) {
-                    showToast({ message: errorMsgs.join('\n'), status: 'error' });
+                    showToast({ message: errorMsgs.join('\n'), status: 'warning' });
 
 
-                    // 文件都不符合要求 结束上传
+                    // Stop when every selected file exceeds the size limit.
                     if (errorMsgs.length === _files.length) {
                         return setBusy(false);
                     }
@@ -180,7 +189,7 @@ export default function InputFileComponent({
                             .then(res => {
                                 if (typeof res === 'string') {
                                     // setErrorData({ title: "Error", list: [res] });
-                                    showToast({ message: res, status: 'error' });
+                                    showToast({ message: res, status: 'warning' });
 
                                     setBusy(false);
                                     throw new Error(res); // Exit the upload if error occurs
@@ -198,7 +207,7 @@ export default function InputFileComponent({
                     .then((filePaths) => {
                         // After all files are uploaded successfully, update the state
                         setMyValue(fileNames.join(",")); // Join file names with commas
-                        onChange(fileNames); // Pass an array of file names
+                        onChange(fileNames.join(", ")); // Preserve the shared form's display-name contract.
                         onFileChange(filePaths.flat()); // Pass an array of file paths
 
                         setBusy(false); // Hide loading state
@@ -208,7 +217,7 @@ export default function InputFileComponent({
                         setBusy(false); // Hide loading state if an error occurs
                     });
             } else {
-                showToast({ message: t('com_inputfile_no_file_selected'), status: 'error' });
+                showToast({ message: t('com_inputfile_no_file_selected'), status: 'warning' });
 
                 setBusy(false); // Hide loading state if no files were selected
             }
@@ -216,16 +225,27 @@ export default function InputFileComponent({
     };
 
     const handleFilesPicked = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const picked = event.target.files;
-        if (multiple) {
-            batchUpload(picked);
-        } else {
-            singleUpload(picked?.[0]);
-        }
-        // A persistent input keeps its value, and re-picking the same file would
-        // then fire no change event at all. Clear it so a second attempt works.
+        const picked = Array.from(event.target.files ?? []);
+        // Snapshot the files before resetting the picker, including rejected selections.
         event.target.value = "";
+        if (disabled || loading || !picked.length) return;
+        const allowed = picked.filter(file => checkFileType(file.name));
+        if (allowed.length !== picked.length) {
+            showToast({ message: t('com_ui_upload_file_type_error'), status: 'warning' });
+        }
+        if (!allowed.length) return;
+        if (multiple) {
+            batchUpload(allowed);
+        } else {
+            singleUpload(allowed[0]);
+        }
     };
+
+    if (renderControl) return <>
+        <input ref={inputRef} type="file" className="hidden" accept={acceptAttr} multiple={multiple}
+            disabled={disabled || loading} onChange={handleFilesPicked} />
+        {renderControl({ value: myValue, placeholder, disabled, loading, onClick: handleButtonClick })}
+    </>;
 
     return (
         <div className={disabled ? "input-component-div" : "w-full"}>

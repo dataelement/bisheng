@@ -1,0 +1,4 @@
+name: 表单问卷小应用
+runtime: python3.11
+port: 8080
+description: Wave 1 packaging sample

@@ -27,12 +27,12 @@ export const createAssistantsApi = async (
     name: string,
     prompt: string,
     url: string,
-) => {
+): Promise<{ id: string; model_name?: string }> => {
     if (url) {
         // logo保存相对路径
         url = url.replace('/bisheng', '')
     }
-    return await axios.post(`/api/v1/assistant`, { name, prompt, logo: url })
+    return await axios.post<unknown, { id: string; model_name?: string }>(`/api/v1/assistant`, { name, prompt, logo: url })
 };
 
 // 获取助手详情
@@ -52,7 +52,7 @@ export const changeAssistantStatusApi = async (id, status) => {
 
 // 保存助手
 export const saveAssistanttApi = async (
-    data: Omit<AssistantDetail, 'flow_list' | 'tool_list' | 'knowledge_list'> & { flow_list: string[], tool_list: number[], knowledge_list: number[] }
+    data: Partial<Omit<AssistantDetail, 'id' | 'flow_list' | 'tool_list' | 'knowledge_list'>> & { id: string | number, flow_list: string[], tool_list: number[], knowledge_list: number[] }
 ): Promise<any> => {
     return await axios.put(`/api/v1/assistant`, data)
 };
@@ -91,7 +91,7 @@ export const getChatOnlineApi = async (
 // };
 
 // 刷新mcp服务
-export const refreshMcpApi = async (): Promise<any> => {
+export const refreshMcpApi = async (): Promise<Array<string | { name: string; code: number }>> => {
     return await axios.post(`/api/v1/tool/mcp/refresh`)
 }
 

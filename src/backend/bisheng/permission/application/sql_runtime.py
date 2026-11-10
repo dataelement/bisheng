@@ -365,6 +365,38 @@ class RedisConsistencyMarker:
                 return HIGHER_CONSISTENCY
         return None
 
+    async def consistency_for_batch(self, targets: tuple[VerifiedPermissionTarget, ...]) -> str | None:
+        """Any recent marker upgrades the entire batch, matching BatchCheck.
+
+        RedisClient.amget omits missing values. We intentionally test only
+        whether a marker exists; no returned value is mapped back by position.
+        """
+        if not targets:
+            return None
+        redis = await get_redis_client()
+        if await redis.aget(RECENT_MARKER_SENTINEL) != "ready":
+            await self._ensure_recovery_started(redis=redis)
+            return HIGHER_CONSISTENCY
+        keys = [RECENT_CATALOG_MARKER]
+        for target in targets:
+            keys.extend(
+                (
+                    self._tenant_key(target.tenant_id),
+                    self._resource_key(
+                        tenant_id=target.tenant_id, resource_type=target.resource_type, resource_id=None
+                    ),
+                    self._resource_key(
+                        tenant_id=target.tenant_id,
+                        resource_type=target.resource_type,
+                        resource_id=target.resource_id,
+                    ),
+                )
+            )
+        values = await redis.amget(list(dict.fromkeys(keys)))
+        if values is None:
+            raise RuntimeError("Consistency marker batch returned no result")
+        return HIGHER_CONSISTENCY if any(value is not None for value in values) else None
+
     @staticmethod
     def _tenant_key(tenant_id: int) -> str:
         return f"{RECENT_MARKER_PREFIX}:{tenant_id}:*"

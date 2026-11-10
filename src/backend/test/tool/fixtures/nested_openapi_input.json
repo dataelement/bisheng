@@ -1,0 +1,104 @@
+{
+  "parameters": [
+    {
+      "description": "搜索请求标识，建议每次生成一个 UUID",
+      "in": "body",
+      "name": "id",
+      "required": true,
+      "schema": {
+        "properties": {},
+        "title": "id",
+        "type": "string"
+      }
+    },
+    {
+      "description": "Sub2API 中实际可用的 Codex 模型 ID",
+      "in": "body",
+      "name": "model",
+      "required": false,
+      "schema": {
+        "properties": {},
+        "title": "model",
+        "type": "string"
+      }
+    },
+    {
+      "description": "",
+      "in": "body",
+      "name": "commands",
+      "required": true,
+      "schema": {
+        "properties": {
+          "search_query": {
+            "items": {
+              "properties": {
+                "q": {
+                  "description": "搜索关键词",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "title": "commands",
+        "type": "object"
+      }
+    }
+  ],
+  "requestBody": {
+    "content": {
+      "application/json": {
+        "schema": {
+          "additionalProperties": false,
+          "properties": {
+            "commands": {
+              "properties": {
+                "search_query": {
+                  "items": {
+                    "properties": {
+                      "q": {
+                        "description": "搜索关键词",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "q"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "search_query"
+              ],
+              "type": "object"
+            },
+            "id": {
+              "description": "搜索请求标识，建议每次生成一个 UUID",
+              "type": "string"
+            },
+            "model": {
+              "default": "gpt-6.1-sol",
+              "description": "Sub2API 中实际可用的 Codex 模型 ID",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "commands"
+          ],
+          "type": "object"
+        }
+      }
+    },
+    "required": true
+  }
+}

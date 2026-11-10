@@ -1,5 +1,5 @@
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { Switch } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -28,7 +28,7 @@ export default function AutoTranscribeAudioSwitch({
         id="AutoTranscribeAudio"
         checked={autoTranscribeAudio}
         onCheckedChange={handleCheckedChange}
-        className="ml-4"
+        className="peer ml-4"
         data-testid="AutoTranscribeAudio"
         disabled={!speechToText}
       />

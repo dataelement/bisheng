@@ -1,4 +1,4 @@
-"""DSH-only JWT validation and online seat checks with explicit tenant scope."""
+"""DSH-only JWT validation and local session checks with explicit tenant scope."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -7,8 +7,6 @@ import jwt
 from pydantic import Field, ValidationError
 
 from bisheng.common.errcode.dsh import (
-    ERROR_BY_CLIENT_CODE,
-    DshAuthorizationUnavailableError,
     DshInvalidAccessTokenError,
     DshUserDisabledError,
 )
@@ -19,9 +17,10 @@ from bisheng.dsh.domain.schemas.contracts import DshContract, SubjectId
 class DshPrincipal(DshContract):
     tenant_id: SubjectId
     user_id: SubjectId
-    seat_id: str = Field(min_length=1)
+    seat_id: str | None = None
     session_id: str = Field(min_length=1)
-    grant_version: int = Field(strict=True, ge=1)
+    grant_version: int | None = Field(default=None, strict=True, ge=1)
+    session_version: int = Field(default=1, strict=True, ge=1)
 
 
 @contextmanager
@@ -45,13 +44,13 @@ def principal_scope(principal: DshPrincipal) -> Iterator[None]:
 
 
 class DshAccessService:
-    def __init__(self, issuer: str, keys, identities, gateway):
+    def __init__(self, issuer: str, keys, identities, sessions):
         self.issuer = issuer
         self.keys = keys
         self.identities = identities
-        self.gateway = gateway
+        self.sessions = sessions
 
-    async def authenticate(self, authorization: str) -> DshPrincipal:
+    async def decode(self, authorization: str) -> DshPrincipal:
         if not authorization.startswith("Bearer ") or len(authorization) > 16384:
             raise DshInvalidAccessTokenError()
         token = authorization[7:]
@@ -79,9 +78,8 @@ class DshAccessService:
                         "aud",
                         "sub",
                         "tenant_id",
-                        "seat_id",
                         "session_id",
-                        "grant_version",
+                        "session_version",
                         "iat",
                         "exp",
                         "jti",
@@ -90,7 +88,7 @@ class DshAccessService:
                 },
             )
             if (
-                len(claims) != 10
+                len(claims) != 9
                 or type(claims["iat"]) is not int
                 or type(claims["exp"]) is not int
                 or claims["exp"] <= claims["iat"]
@@ -102,31 +100,22 @@ class DshAccessService:
             principal = DshPrincipal(
                 tenant_id=claims["tenant_id"],
                 user_id=claims["sub"],
-                seat_id=claims["seat_id"],
                 session_id=claims["session_id"],
-                grant_version=claims["grant_version"],
+                session_version=claims["session_version"],
             )
             if int(principal.tenant_id) < 1 or int(principal.user_id) < 1:
                 raise DshInvalidAccessTokenError()
         except (jwt.PyJWTError, ValidationError, ValueError, TypeError):
             raise DshInvalidAccessTokenError() from None
+        return principal
+
+    async def authenticate(self, authorization: str) -> DshPrincipal:
+        principal = await self.decode(authorization)
         with principal_scope(principal):
             identity = await self.identities.check(principal.tenant_id, principal.user_id)
             if not identity.active:
                 raise DshUserDisabledError()
-            if (identity.tenant_id, identity.user_id) != (
-                principal.tenant_id,
-                principal.user_id,
-            ):
+            if (identity.tenant_id, identity.user_id) != (principal.tenant_id, principal.user_id):
                 raise DshInvalidAccessTokenError()
-            seat = await self.gateway.introspect(token)
-            if not seat.active:
-                error = ERROR_BY_CLIENT_CODE.get(seat.reason, DshAuthorizationUnavailableError)
-                raise error()
-            if (seat.seat_id, seat.session_id, seat.grant_version) != (
-                principal.seat_id,
-                principal.session_id,
-                principal.grant_version,
-            ):
-                raise DshInvalidAccessTokenError()
+            await self.sessions.validate(principal)
         return principal

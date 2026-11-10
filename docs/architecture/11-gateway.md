@@ -2,6 +2,8 @@
 
 bisheng-gateway 是 BiSheng 的**商业拓展套件**，作为 Java 网关层部署在前端与后端之间，提供 SSO/OAuth 统一认证、内容安全审查（敏感词过滤）、流量控制（限流/在线计数）和 API 反向代理能力。它是一个独立的 Java 项目（私有仓库 `dataelement/bisheng-gateway`），拥有独立的数据库表和配置，通过 HTTP 与 bisheng 后端通信。
 
+> DSH 原生接入已在 `feat/bisheng-work-110` 中解除本章所述 Java Gateway 依赖。DSH 登录、换证、设备会话和模型鉴权由 Python 提供，商业席位入口移除；其余 Gateway 商业能力仍按本章适用范围维护。新部署及切换说明见 [DSH 无 Gateway 发布](../../features/v3.0.0/110-dsh-local-access/deployment.md)。
+
 ## 1. 系统架构
 
 ### 1.1 请求流转路径
@@ -497,11 +499,14 @@ npm start
 # 远程服务器路径
 # /opt/bisheng-gateway/ on 192.168.106.114
 
-# 同步脚本（项目根目录 gateway-sync.sh）
+# 同步脚本（bisheng-gateway 仓根目录的 gateway-sync.sh，不在 bisheng 仓）
 ./gateway-sync.sh up      # 本地 → 远程
 ./gateway-sync.sh down    # 远程 → 本地
 ./gateway-sync.sh watch   # 监听变化，自动推送
 ```
+
+> 2026-10-27 核实：114 上只保留了 `/opt/bisheng-gateway/` 目录，Gateway 没有在运行（8180 无监听），
+> bisheng 后端以 `BISHENG_PRO=false` 启动。要在 114 联调商业版，先启动 Gateway，再把后端各 unit 的 `BISHENG_PRO` 改回 `true`。
 
 ### 11.3 数据库
 

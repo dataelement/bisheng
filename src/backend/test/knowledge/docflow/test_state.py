@@ -85,11 +85,11 @@ def test_real_sql_state_is_tenant_scoped_and_capacity_is_account_scoped(monkeypa
 def test_provider_configuration_does_not_advertise_partial_credentials():
     source = Path(__file__).parents[3] / "bisheng/core/config/settings.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
-    names = {"Etl4lmConf", "MineruConf", "PaddleOcrConf", "VersionManagementConf", "DocFlowConf", "KnowledgeConf"}
+    names = {"Etl4lmConf", "MineruConf", "MineruV4Conf", "PaddleOcrConf", "VersionManagementConf", "DocFlowConf", "KnowledgeConf"}
     definitions = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name in names]
     import os
 
-    namespace = {"BaseModel": BaseModel, "Field": Field, "field_validator": field_validator, "os": os}
+    namespace = {"BaseModel": BaseModel, "Field": Field, "field_validator": field_validator, "os": os, "json": json}
     exec(compile(ast.Module(body=definitions, type_ignores=[]), str(source), "exec"), namespace)
     knowledge = namespace["KnowledgeConf"](loader_provider="docflow", docflow={"url": "http://mk.test"})
     assert knowledge.image_parser_enabled is False

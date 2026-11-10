@@ -11,7 +11,6 @@ import { ChatMessageType } from "../../../types/chat";
 import { classNames } from "../../../utils";
 import FileCard from "../fileComponent";
 import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
-import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 export default function ChatMessage({
   chat,
   lockChat,
@@ -24,7 +23,6 @@ export default function ChatMessage({
 }) {
   const convert = new Convert({ newline: true });
   const [hidden, setHidden] = useState(true);
-  const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
   const template = chat.template;
   const [promptOpen, setPromptOpen] = useState(false);

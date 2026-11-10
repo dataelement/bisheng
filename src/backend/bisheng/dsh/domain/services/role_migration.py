@@ -19,7 +19,8 @@ def role_migration_plan(users):
                 {
                     "user_id": user["user_id"],
                     "before_limit": personal,
-                    "target_limit": max(personal, role_limit),
+                    "configured": user["direct_enabled"],
+                    "target_limit": personal if user["direct_enabled"] else user["monthly_token_limit"],
                     "effective_limit": user["monthly_token_limit"],
                     "version": user["direct_version"],
                     "pending": user["direct_pending_operation_id"],
@@ -52,7 +53,7 @@ async def migrate_role_policies(service, *, actor_id, tenant_id, model_id, apply
     if not apply or not roles:
         return report
     for item in plan:
-        if item["before_limit"] >= item["target_limit"] and not item["pending"]:
+        if item["configured"] and item["before_limit"] == item["target_limit"] and not item["pending"]:
             continue
         if item["pending"]:
             result = await service.operation(actor_id, item["pending"], tenant_id=tenant_id)
@@ -90,7 +91,7 @@ async def migrate_role_policies(service, *, actor_id, tenant_id, model_id, apply
             not saved
             or saved["direct_pending_operation_id"]
             or not saved["direct_enabled"]
-            or saved["direct_monthly_token_limit"] < item["target_limit"]
+            or saved["direct_monthly_token_limit"] != item["target_limit"]
         ):
             raise RuntimeError(f"Personal quota verification failed for user {item['user_id']}")
     # Recheck role membership before retiring its future authorization source.

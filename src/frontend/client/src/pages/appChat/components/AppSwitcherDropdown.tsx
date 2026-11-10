@@ -1,8 +1,9 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { ArrowLeftRight, Loader2, Search, Pin } from 'lucide-react';
 import type { AppItem } from '~/@types/app';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/Popover';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+
 import { cn } from '~/utils';
 import AppAvator from '~/components/Avator';
 import { useAppSwitcher } from '~/pages/appChat/hooks/useAppSwitcher';
@@ -39,12 +40,7 @@ export function AppSwitcherDropdown() {
   // When disabled, just show tooltip with no popover
   if (disabled) {
     return (
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-          <TooltipContent>{localize('com_app_switcher_no_apps_tooltip')}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <SharedTooltipProvider delayDuration={200}><SharedTooltip  content={localize('com_app_switcher_no_apps_tooltip')} ><span className="inline-flex" tabIndex={0}>{trigger}</span></SharedTooltip></SharedTooltipProvider>
     );
   }
 

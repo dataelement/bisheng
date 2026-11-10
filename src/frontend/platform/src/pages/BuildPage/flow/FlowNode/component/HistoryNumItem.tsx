@@ -1,6 +1,8 @@
-import { Badge } from "@/components/bs-ui/badge";
-import { Input } from "@/components/bs-ui/input";
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Input } from '@bisheng/ui';
+
 import { Label } from "@/components/bs-ui/label";
+import { Tag } from "@bisheng/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next"; // 引入国际化
 
@@ -11,27 +13,17 @@ export default function HistoryNumItem({ data, onChange, i18nPrefix }) {
     return (
         <div className="flex items-center mb-4 nodrag -nopan">
             <Label className="bisheng-label">{t('recent')}</Label> {/* 最近 */}
-            <Input
-                type="number"
-                min={0}
-                boxClassName="w-20 mx-1"
-                className="h-5"
-                value={value}
-                onKeyDown={(e) => {
+            <Input type="number" min={0} value={value} onKeyDown={(e) => {
                     ['-', 'e', '+'].includes(e.key) && e.preventDefault();
-                }}
-                onChange={(e) => {
-                    const num = Number(e.target.value);
-                    if (num >= 0) {
+                }} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0 })) return; const num = Number(e.target.value);
+if (num >= 0) {
                         onChange(num);
                         setValue(num);
-                    }
-                }}
-            />
+                    } }} className={["w-20 mx-1", "h-5"].filter(Boolean).join(" ")} />
             <Label className="bisheng-label">{t('chatRecords')}</Label> {/* 条聊天记录 */}
-            <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0] ml-auto">
+            <Tag size="small" color="brand" className="ml-auto">
                 {data.key}
-            </Badge>
+            </Tag>
         </div>
     );
 }

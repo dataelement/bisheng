@@ -30,30 +30,52 @@ BISHENG毕昇 是一款 <b>开源</b> LLM应用开发平台，主攻<b>企业场
 “毕昇”是活字印刷术的发明人，活字印刷术为人类知识的传递起到了巨大的推动作用。我们希望“BISHENG毕昇”同样能够为智能应用的广泛落地提供有力支撑。欢迎大家一道参与。
 
 
-## 特点 
-1. **具备专家级品味的通用Agent灵思**：通过 [AGL](https://github.com/dataelement/AgentGuidanceLanguage)（Agent Guidance Language）框架，将领域专家的偏好、经验与业务逻辑融入 AI 之中，让 Agent 在处理任务时能具备 「专家级理解」。
-<p align="center"><img src="https://dataelem.com/bs/Linsight.png" alt="sence1"></p>  
+## 特点
+1. **🚀 任务模式：面向多步骤复杂工作的通用 Agent**
+   你给出目标，按需附上文件、知识库、工具和技能，它会拆解任务、逐步执行，最后交付报告、PPT、Excel 或 Word。
 
-2. **独具特色的[BISHENG workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
-   
-   - 🧩 **独立、完备的应用编排框架**：可在一个框架下实现各类任务（同类产品需要被 bot 调用，或划分成 chatflow 与 workflow 来完成不同类型的任务）。
-   - 🔄 **Human in the loop**：支持用户在Workflow执行的中间过程进行干预和反馈（包括多轮对话），而同类产品只能从头执行到尾。
-   - 💥 **强大**：支持成环、并行、跑批、判断逻辑以及所有逻辑的任意自由组合；支持多类型输入输出、撰写报告、内容审核等复杂场景。
-   - 🖐️ **易用、符合直觉**：如成环、并行、批量运行操作，在同类产品中用户需借助专门组件实现，在BISHENG中只需完全按照直觉连接成“流程图”即可（画圈成环、并列即并行、多选即批量）。
-   <p align="center"><img src="https://dataelem.com/bs/bisheng_workflow.png" alt="sence0"></p>
+   - 🧠 **任务规划 + 子 Agent 并行**：主 Agent 动态生成任务清单、跟踪进度，把独立调研交给子 Agent 并行完成。
+   - 🙋 **人机交互（Human in the loop）**：遇到只有你知道的关键信息，任务暂停等你回答。
+   - 🧰 **技能（Skill）即插即用**：内置 PPT、Excel、Word 三个技能包，开箱即用；也可以从本地或 GitHub 导入团队自己的技能。
+   - 📎 **结论可溯源**：报告带引用角标，点击后打开原文，并定位到被引用的段落。
+   <p align="center"><img src="docs/images/readme/task-mode.png" alt="task-mode"></p>
 
-3. **专为企业应用而生**：文档审核、固定版式报告生成、多智能体协作、规范制度更新差异比对、工单问答、客服辅助、会议纪要生成、简历筛选、通话记录分析、非结构化数据治理、知识挖掘、数据分析...平台支持高复杂度企业应用场景构建，支持数百个组件与数千个参数的深度调优。
-<p align="center"><img src="https://dataelem.com/bs/chat.png" alt="sence1"></p>
+2. **📚 知识空间：企业版团队知识库**
 
-4. **企业级特性是应用落地的基本保障**：安全审查、基于角色的细颗粒度权限管理、用户组管理、分组流量控制、SSO/LDAP、漏洞扫描修复、高可用部署方案、监控、统计...
-<p align="center"><img src="https://dataelem.com/bs/pro.png" alt="sence2"></p>
+   - 🗂️ **有序组织**：支持多级文件夹、标签、卡片与列表视图，支持关键词和标签联合检索。
+   - 👥 **团队共建**：可以按权限模板（所有者/管理者/编辑者/查看者）邀请成员，也可以发布到知识广场供他人加入。超级管理员可以为部门一键开通「部门知识空间」。
+   - 🔐 **权限细到单个文件**：空间、文件夹、文件三级共用一套权限模板，可以一次授权给个人、部门（含子部门）或用户组。文件夹和文件默认继承上级权限，也可以单独设置。
+   - 💬 **AI 问答**：可以针对单篇文档提问，也可以基于整个空间提问；回答标注引用来源，点开即可查看原文及溯源定位。
+   <p align="center"><img src="docs/images/readme/knowledge-space.png" alt="knowledge-space"></p>
 
-5. **高精度文档解析**：5年海量数据沉淀，高精度文档解析模型支持免费私有化部署使用，包括高精度印刷体、手写体与生僻字识别模型、表格识别模型、版式分析模型、印章模型...
-<p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="sence3"></p>
+3. **📡 频道订阅：外部资讯每天自动送达，有价值的一键存成知识**
 
-6. **大量企业场景落地最佳实践分享社区**：开放的应用案例与最佳实践库。
-<p align="center"><img src="https://dataelem.com/bs/sence.png" alt="sence4"></p>
+   - 📰 **主题频道**：把公众号和网站聚合成主题频道，每天自动更新，可以再分子频道。
+   - 🎯 **精准过滤**：自定义规则过滤标题和正文，只留下相关资讯。
+   <p align="center"><img src="docs/images/readme/channel.png" alt="channel"></p>
 
+4. **🧩 独具特色的 [BISHENG workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)**
+
+   - **独立、完备的应用编排框架**：不区分 chatflow 和 workflow，多轮对话和自动化处理可以混在同一个流程里。
+   - **Human in the loop**：流程执行到中途可以等人输入、确认或修改。
+   - **成环、并行、批量运行自由组合**：画圈即成环（大多数同类产品不支持成环），并列即并行，多选即批量，适合文档审核、固定版式报告生成等复杂场景。
+   <p align="center"><img src="https://dataelem.com/bs/bisheng_workflow.png" alt="workflow"></p>
+
+5. **🏢 企业级特性：企业 AI 落地需要的管控能力**
+
+   - **部门和用户管理**：组织架构管理和人员设置，支持按角色开放功能菜单和设置配额。
+   - **RBAC + ReBAC 双权限模型**：角色控制能用哪些功能，ReBAC 控制能访问哪份资源（精确到单个文件）。
+   - **操作审批**：知识空间加入、频道订阅、菜单权限申请等操作可以走审批，审批流程和节点可自定义。
+   - **审计**：记录会话内容和系统操作日志，可按人、时间、模块追溯。
+   - **统计看板**（商业版）：预置用户活跃度、应用使用、token 用量、知识库使用等数据看板。
+   - **API 开放能力**：通过服务账号和 API 密钥调用应用、知识库等接口，也可以按员工本人权限代表用户调用。
+   - **DSH Desktop 桌面客户端企业接入**（商业版）：员工用平台账号登录客户端，直接使用 BISHENG 平台配置的模型；支持管理员按人按月分配模型额度。
+   - **信创适配**：同时支持 MySQL 和达梦 DM8。
+   - 以及 SSO/LDAP、高可用部署方案、安全审查、流量控制、监控统计、漏洞扫描修复。
+   <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="enterprise"></p>
+
+6. **🔍 高精度文档解析**：5年海量数据沉淀，高精度文档解析模型支持免费私有化部署使用，包括高精度印刷体、手写体与生僻字识别模型、表格识别模型、版式分析模型、印章模型...
+   <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>
 
 ## 快速安装 
 

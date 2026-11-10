@@ -1,3 +1,4 @@
+import { resolveErrorMessageTemplate } from '@bisheng/api-client';
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 
 const ASR_ERROR_CODES = new Set([10014, 10015, 10016, 10017, 10018, 10019]);
@@ -57,7 +58,7 @@ function resolve10954Message(
   if (statusMessage.includes("asr request failed")) {
     return t("mediaAsrRequestFailed", { ns: "knowledge" });
   }
-  return t("api_errors:10954", errorData);
+  return translatedParseError(10954, errorData, t) ?? t("parseFailed");
 }
 
 /** Resolve knowledge file parse failure messages, including knowledge-base ASR errors. */
@@ -72,7 +73,7 @@ export function resolveKnowledgeParseFailure(input: unknown, t: TranslateFn): st
 
   const statusCode = Number(parsed.status_code ?? parsed.code);
   if (!Number.isFinite(statusCode)) {
-    return typeof parsed.message === "string" ? parsed.message : undefined;
+    return undefined;
   }
 
   const errorData = getErrorData(parsed);
@@ -87,19 +88,14 @@ export function resolveKnowledgeParseFailure(input: unknown, t: TranslateFn): st
   }
 
   if (ASR_ERROR_CODES.has(statusCode)) {
-    return t(`api_errors:${statusCode}`, errorData);
+    return translatedParseError(statusCode, errorData, t);
   }
 
   if (statusCode === 10954) {
     return resolve10954Message(parsed, errorData, t);
   }
 
-  const translated = t(`api_errors:${statusCode}`, errorData);
-  if (translated && translated !== `api_errors:${statusCode}`) {
-    return translated;
-  }
-
-  return undefined;
+  return translatedParseError(statusCode, errorData, t);
 }
 
 function resolveKnownExceptionMessage(message: string, t: TranslateFn): string | undefined {
@@ -122,4 +118,11 @@ function resolveKnownExceptionMessage(message: string, t: TranslateFn): string |
     return t("mediaNoRecognizableAudio", { ns: "knowledge" });
   }
   return undefined;
+}
+
+function translatedParseError(code: number, data: Record<string, unknown>, t: TranslateFn): string | undefined {
+  const key = `api_errors:${code}`;
+  const message = t(key, { defaultValue: "" });
+  if (!message || message === key || message === String(code)) return undefined;
+  return resolveErrorMessageTemplate(message, data, t('parseFailed'));
 }

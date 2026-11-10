@@ -81,9 +81,20 @@ def _validate_dependencies(files: dict[str, bytes], root: str):
 def validate_bundle(data: bytes) -> dict:
     _require(len(data) <= MAX_UPLOAD_BYTES, "Upload exceeds 512 MiB")
     try:
+        from .community_bundle import validate_community_bundle
+
+        if not data.startswith(b"PK"):
+            return validate_community_bundle(data)
         archive = zipfile.ZipFile(io.BytesIO(data))
         with archive:
             infos = archive.infolist()
+            community = any(
+                item.filename == "package.json"
+                or (item.filename.count("/") == 1 and item.filename.endswith("/package.json"))
+                for item in infos
+            )
+            if community or not any(item.filename == "manifest.json" for item in infos):
+                return validate_community_bundle(data)
             _require(len(infos) <= MAX_FILES, "Too many entries")
             _require(sum(i.file_size for i in infos) <= MAX_EXPANDED_BYTES, "Expanded bundle exceeds 1 GiB")
             files = {}

@@ -1,3 +1,5 @@
+import { isApiError } from '@bisheng/api-client';
+import { showApiError } from '~/api/request';
 /**
  * F035: shared file-preview body — resolves the artifact source (text / image)
  * and renders it (markdown / plain text / image / "download to view" fallback).
@@ -18,6 +20,8 @@ import '~/markdown.css';
 import { useToastContext } from '~/Providers';
 import {
     type ArtifactFile,
+    type PreviewKind,
+    artifactVersionId,
     downloadArtifactFile,
     getArtifactPreviewKind,
     getFileExtension,
@@ -28,6 +32,7 @@ import {
     stripEmptyHtmlPlaceholders,
 } from './artifactUtils';
 import { MarkdownOutline } from './MarkdownOutline';
+import { useSlidesPreview } from './useSlidesPreview';
 
 // Placeholder icons (bisheng-icons) for the "can't preview" fallback, by extension.
 // Prefer the Colored variant; types without one (pdf / image / unknown) fall back
@@ -59,7 +64,10 @@ const OUTLINED_FILE_ICONS: Record<string, React.ComponentType<{ className?: stri
 // time. Artifacts are immutable per version, so versionId+url is a safe key — a hit
 // lets the new instance render instantly with no spinner and no network round-trip.
 const previewCache = new Map<string, { text?: string; imageUrl?: string; resolvedUrl?: string }>();
-const previewCacheKey = (file: ArtifactFile, versionId: string) => `${versionId}::${file.file_url}`;
+const previewCacheKey = (file: ArtifactFile, versionId: string) => `${artifactVersionId(file, versionId)}::${file.file_url}`;
+// Kinds this hook does not load: nothing to fetch ('unsupported'), or loaded by a
+// dedicated hook ('slides' → useSlidesPreview, which polls the pptx→pdf conversion).
+const SELF_LOADING_KINDS: PreviewKind[] = ['unsupported', 'slides'];
 
 /** Resolve + load the preview source (text content or same-origin image url). */
 export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
@@ -67,7 +75,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
     // Seed from cache so the first paint already shows content; only show the spinner
     // when there's a renderable file we haven't fetched yet.
     const [loading, setLoading] = useState(
-        !!file && !cached && getArtifactPreviewKind(file) !== 'unsupported',
+        !!file && !cached && !SELF_LOADING_KINDS.includes(getArtifactPreviewKind(file)),
     );
     const [error, setError] = useState(false);
     const [text, setText] = useState(cached?.text ?? '');
@@ -86,7 +94,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
             return undefined;
         }
         const kind = getArtifactPreviewKind(file);
-        if (kind === 'unsupported') {
+        if (SELF_LOADING_KINDS.includes(kind)) {
             setText('');
             setImageUrl('');
             setResolvedUrl('');
@@ -112,7 +120,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
         setLoading(true);
         (async () => {
             try {
-                const url = await resolveArtifactUrl(file.file_url, versionId);
+                const url = file.directUrl || await resolveArtifactUrl(file.file_url, artifactVersionId(file, versionId));
                 if (cancelled) return;
                 if (kind === 'image') {
                     previewCache.set(key, { imageUrl: url });
@@ -145,6 +153,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
 }
 
 interface PreviewBodyProps {
+    showSource?: boolean;
     file: ArtifactFile;
     versionId: string;
     /**
@@ -159,16 +168,18 @@ interface PreviewBodyProps {
     onArtifactPreview?: (file: ArtifactFile) => void;
     /** Sources actually cited in the report — same payload as output_result.citations */
     citations?: ChatCitation[] | null;
-    /** F071: open a cited document beside the report instead of in a floating drawer. */
+    /** F074: open a cited document beside the report instead of in a floating drawer. */
     onOpenSource?: (preview: CitationDocumentPreviewState) => void;
     messageId?: string;
 }
 
-export function PreviewBody({ file, versionId, fileList, onArtifactPreview, citations, messageId, onOpenSource }: PreviewBodyProps) {
+export function PreviewBody({ file, versionId, fileList, onArtifactPreview, citations, messageId, onOpenSource, showSource = false }: PreviewBodyProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const { loading, error, text, imageUrl, resolvedUrl } = usePreviewSource(file, versionId);
     const kind = getArtifactPreviewKind(file);
+    const slides = useSlidesPreview(file, versionId);
+    const failed = error || (kind === 'slides' && slides.state === 'failed');
     // The rendered markdown container — MarkdownOutline reads its headings back
     // out of the DOM (rehype-slug has already stamped the anchor ids).
     const markdownRef = useRef<HTMLDivElement>(null);
@@ -194,7 +205,7 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
         const entry = matchArtifactByRelPath(fileListRef.current, src);
         if (!entry) return null;
         try {
-            const url = await resolveArtifactUrl(entry.file_url, vid);
+            const url = await resolveArtifactUrl(entry.file_url, artifactVersionId(entry, vid));
             imageUrlCacheRef.current.set(key, url);
             return url;
         } catch (e) {
@@ -226,11 +237,12 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
             await downloadArtifactFile(file, versionId);
         } catch (e) {
             console.error('artifact download failed:', e);
-            showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.ERROR });
+            if (isApiError(e)) showApiError(e);
+            else showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.WARNING });
         }
     };
 
-    if (kind === 'unsupported' || error) {
+    if (kind === 'unsupported' || failed) {
         // not inline-renderable (docx / pdf / xlsx …) or load failure → download hint
         const ext = (getFileExtension(file.file_name) || '').toLowerCase();
         const ColoredIcon = COLORED_FILE_ICONS[ext];
@@ -248,11 +260,32 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
                 )}
                 <div className="max-w-[80%] truncate text-base font-medium text-gray-900">{file.file_name}</div>
                 <div className="mb-2 text-sm text-gray-500">
-                    {error ? localize('com_linsight_preview_load_failed') : localize('com_linsight_preview_unsupported')}
+                    {failed ? localize('com_linsight_preview_load_failed') : localize('com_linsight_preview_unsupported')}
                 </div>
                 <Button variant="outline" size="sm" onClick={handleDownloadToView} className="h-8 rounded-md px-4">
                     {localize('com_linsight_download_to_view')}
                 </Button>
+            </div>
+        );
+    }
+    if (kind === 'slides') {
+        if (slides.state !== 'ready') {
+            return (
+                <div className="flex h-full flex-1 flex-col items-center justify-center gap-3">
+                    <LoadingIcon className="size-20 text-primary" />
+                    <div className="text-sm text-gray-500">{localize('com_linsight_preview_slides_generating')}</div>
+                </div>
+            );
+        }
+        // The backend hands back a PDF of the deck; FilePreview routes pptx to its PDF viewer.
+        return (
+            <div className="flex h-full flex-col">
+                <div className="shrink-0 border-b border-gray-100 px-4 py-2 text-xs text-gray-500">
+                    {localize('com_linsight_preview_slides_notice')}
+                </div>
+                <div className="min-h-0 flex-1">
+                    <FilePreview fileName={file.file_name} fileType="pptx" fileUrl={slides.url} compactMode />
+                </div>
             </div>
         );
     }
@@ -263,6 +296,9 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
             </div>
         );
     }
+    if (showSource && (kind === 'markdown' || kind === 'text')) {
+        return <pre className="whitespace-pre-wrap break-words p-6 font-mono text-body-sm text-text-1">{text}</pre>;
+    }
     if (kind === 'image') {
         return (
             <div className="flex h-full items-center justify-center p-4">
@@ -272,14 +308,15 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
     }
     if (kind === 'document') {
         // docx / pdf / xls / xlsx / csv → reuse the shared knowledge-space viewer.
-        // compactMode = viewer only (no top bar / sidebar / zoom): Linsight's own
-        // toolbar (back / download / fullscreen / close) provides the chrome.
+        // The host owns document identity and download; retain viewer zoom and pagination.
         return (
             <FilePreview
                 fileName={file.file_name}
                 fileType={getFileExtension(file.file_name)}
                 fileUrl={resolvedUrl}
-                compactMode
+                hideSidebar
+                hideHeaderDownload
+                manageDocumentTitle={false}
             />
         );
     }

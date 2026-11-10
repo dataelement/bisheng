@@ -1,10 +1,12 @@
-import { Input } from "@/components/bs-ui/input";
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Input } from '@bisheng/ui';
+
 import { Label } from "@/components/bs-ui/label";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { useEffect, useState } from "react";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function InputItem({ type = 'text', char = false, linefeed = false, data, onChange, i18nPrefix, label }) {
+export default function InputItem({ type = 'text', char = false, linefeed = false, data, onChange, i18nPrefix = '', label }) {
     const [value, setValue] = useState(data.value ? String(data.value) : '');
     const { t } = useTranslation('flow');
 
@@ -18,6 +20,7 @@ export default function InputItem({ type = 'text', char = false, linefeed = fals
 
     // 处理输入变化（限制为整数）
     const handleChange = (inputValue) => {
+        if (type === "number" && !isNumberDraftWithinBounds(inputValue, { min: data.min ?? 0, max: data.max })) return;
         // 1. 过滤掉小数点和非数字字符（保留空值）
         const filteredValue = inputValue.replace(/[^\d]/g, '');
         // 2. 转换为整数（避免空字符串导致NaN）
@@ -37,14 +40,7 @@ export default function InputItem({ type = 'text', char = false, linefeed = fals
                 {data.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
             </Label>
             <div className={`nodrag ${char ? 'w-32 flex items-center gap-3' : ''} ${linefeed ? 'mt-2' : ''}`}>
-                <Input
-                    className="min-w-24"
-                    value={value}
-                    type={type}
-                    min={data.min}
-                    max={data.max}
-                    onChange={(e) => handleChange(e.target.value)}
-                />
+                <Input value={value} type={type} min={data.min} max={data.max} onChange={(e) => handleChange(e.target.value)} className={"min-w-24"} />
                 <Label className="bisheng-label">{t('character')}</Label>
             </div>
         </div>
@@ -56,14 +52,7 @@ export default function InputItem({ type = 'text', char = false, linefeed = fals
                 {data.label && t(`${i18nPrefix}label`)}
                 {data.help && <QuestionTooltip content={t(`${i18nPrefix}help`)} />}
             </Label>
-            <Input
-                className="mt-2 nodrag"
-                value={value}
-                type={type}
-                min={data.min}
-                max={data.max}
-                onChange={(e) => handleChange(e.target.value)}
-            />
+            <Input value={value} type={type} min={data.min} max={data.max} onChange={(e) => handleChange(e.target.value)} className={"mt-2 nodrag"} />
         </div>
     );
 };

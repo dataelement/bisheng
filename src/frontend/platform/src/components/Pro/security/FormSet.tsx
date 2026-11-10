@@ -1,18 +1,21 @@
 // @ts-strict-ignore
+import { Button, Textarea } from '@bisheng/ui';
 
-import { Button } from "@/components/bs-ui/button";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Textarea } from "@/components/bs-ui/input";
+
+import { Checkbox } from "@bisheng/ui";
+
 import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
+import { RadioGroup, Radio as RadioGroupItem } from "@bisheng/ui";
 import { t } from "i18next";
-import { Upload } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
+import { showApiError } from "@/controllers/request";
 
 export default function FormSet({ data, onChange, onSave, onCancel }) {
     const showReviewType = false;
 
-    const [form, setForm] = useState<any>({})
+    const [form, setForm] = useState(data)
+    const [saving, setSaving] = useState(false)
     useEffect(() => {
         setForm(data)
     }, [data])
@@ -40,12 +43,19 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
             reader.readAsText(file)
         }
     }
-    const handleSave = () => {
-        onChange(form).then(res => {
-            !res && onSave()
-        })
+    const handleSave = async () => {
+        if (saving || String(form.autoReply ?? '').length > 500) return;
+        setSaving(true)
+        try {
+            const blocked = await onChange(form)
+            if (!blocked) onSave()
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            setSaving(false)
+        }
     }
-    return <>
+    return <fieldset disabled={saving} className="m-0 min-w-0 border-0 p-0">
         <div className="px-4 mt-6">
             {showReviewType && (
                 <>
@@ -88,28 +98,23 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
                     </div>
                 </div>
                 <div className="flex justify-center relative">
-                    <Textarea className="h-[100px] resize-none" value={form.words}
-                        onChange={(e) => setForm({ ...form, words: e.target.value })}
-                        placeholder={t('build.useNewlineToSeparate')}></Textarea>
+                    <Textarea value={form.words} onChange={(e) => setForm({ ...form, words: e.target.value })} placeholder={t('build.useNewlineToSeparate')} textareaClassName={"h-[100px] resize-none"}></Textarea>
                     <input type="file" accept=".txt" id="fileUpload" className="hidden" onChange={handleUploadFile} />
                     {/* @ts-ignore */}
                     <div className="flex items-center absolute right-1 top-1 cursor-pointer" onClick={() => document.querySelector('#fileUpload').click()}>
-                        <Upload id="ul" color="blue" className="w-3 h-3" />
+                        <Outlined.Upload id="ul" color="blue" className="w-3 h-3" />
                         <Label htmlFor="ul"><span className="text-xs text-primary cursor-pointer">{t('build.txtFile')}</span></Label>
                     </div>
                 </div>
             </div>
             <span className="bisheng-label">{t('build.autoReplyContent')}</span>
             <div className="flex justify-center mt-4">
-                <Textarea className="h-[100px] resize-none" value={form.autoReply}
-                    onChange={(e) => setForm({ ...form, autoReply: e.target.value })}
-                    maxLength={500}
-                    placeholder={t('build.defaultAutoReply')}></Textarea>
+                <Textarea value={form.autoReply} onChange={(e) => setForm({ ...form, autoReply: e.target.value })} maxLength={500} placeholder={t('build.defaultAutoReply')} textareaClassName={"h-[100px] resize-none"} showCount></Textarea>
             </div>
         </div>
         <div className="absolute bottom-10 right-4 sapce-x-10 flex space-x-8">
-            <Button onClick={onCancel} variant="outline">{t('cancel')}</Button>
-            <Button onClick={handleSave}>{t('save')}</Button>
+            <Button onClick={onCancel} disabled={saving} variant="outlined" color="default">{t('cancel')}</Button>
+            <Button onClick={handleSave} disabled={saving || (String((form.autoReply) ?? '').length > 500)}>{t('save')}</Button>
         </div>
-    </>
+    </fieldset>
 };

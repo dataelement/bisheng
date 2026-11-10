@@ -1,12 +1,13 @@
 // @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { getKnowledgeDetailApi, readFileLibDatabase } from "@/controllers/API";
+import { getKnowledgeDetailApi,readFileLibDatabase } from "@/controllers/API";
 import { getSelectableKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
+import { showApiError } from "@/controllers/request";
 import { isVarInFlow } from "@/util/flowUtils";
-import { memo, useEffect, useRef, useState } from "react";
+import { Tabs,Tooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { memo,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 
@@ -15,21 +16,13 @@ const TabsHead = memo(({ tab, onChange }) => {
     const { t } = useTranslation('flow');
 
     return (
-        <Tabs defaultValue={tab} className="mb-2" onValueChange={onChange}>
-            <TabsList className="grid w-full grid-cols-3 py-1 max-w-80">
-                <TabsTrigger value="knowledge" className="text-xs">
-                    {t('documentKnowledgeBase')}
-                </TabsTrigger>
-                {/* F041: knowledge space tab (independent source, mutually exclusive with knowledge/tmp) */}
-                <TabsTrigger value="space" className="text-xs">
-                    {t('knowledgeSpace')}
-                </TabsTrigger>
-                <TabsTrigger value="tmp" className="text-xs">
-                    {t('temporarySessionFiles')}
-                    <QuestionTooltip content={t('storeFilesSentInCurrentSession')} />
-                </TabsTrigger>
-            </TabsList>
-        </Tabs>
+        <Tabs defaultActiveKey={tab} className="mb-2" onChange={onChange} items={[
+            { key: 'knowledge', label: t('documentKnowledgeBase') },
+            { key: 'space', label: t('knowledgeSpace') },
+            { key: 'tmp', label: <Tooltip content={t('storeFilesSentInCurrentSession')}>
+                <span className="inline-flex items-center gap-1">{t('temporarySessionFiles')}<Outlined.Question size={14} className="text-text-3" /></span>
+            </Tooltip> },
+        ]} />
     );
 });
 
@@ -85,7 +78,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))
             setOptions(_ops => cursor ? mergeOptionsByValue(_ops, opts) : opts)
-        })
+        }).catch(showApiError)
     }
     // input文件变量s
     const loadFiles = () => {
@@ -116,7 +109,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         getSelectableKnowledgeSpacesApi().then(spaces => {
             allSpacesRef.current = spaces.map(s => ({ label: s.name, value: s.id }))
             setSpaceOptions(allSpacesRef.current)
-        })
+        }).catch(showApiError)
     }
     const filterSpaces = (name: string) => {
         const kw = (name || '').toLowerCase()

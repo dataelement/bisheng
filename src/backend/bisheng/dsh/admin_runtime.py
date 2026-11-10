@@ -83,7 +83,6 @@ async def authorize_admin(actor_id: int, tenant_id: int | None, user_id: int | N
 class AdminRuntime:
     admin: DshManagementService
     policy: DshAdminService
-    profiles: object
     repository_scope: object = operation_repository_scope
 
 
@@ -93,7 +92,6 @@ async def get_admin_runtime(runtime, *, quota=None, usage=None):
     from bisheng.dsh.runtime import get_model_runtime, read_policy
     from bisheng.llm.domain.services.llm import LLMService
     from bisheng.user.domain.services.dsh_display import read_dsh_display_profiles
-    from bisheng.worker.dsh.profiles import ProfileOutboxWorker
 
     model_runtime = None
     if quota is None:
@@ -140,56 +138,12 @@ async def get_admin_runtime(runtime, *, quota=None, usage=None):
         last_call_reader=read_last_call,
     )
 
-    class ActivatedQuota:
-        def __getattr__(self, name):
-            async def invoke(*args, **kwargs):
-                if model_runtime is not None:
-                    await model_runtime.activate()
-                return await getattr(quota, name)(*args, **kwargs)
-
-            return invoke
-
-    async def allocate_person(current):
-        from uuid import UUID, uuid5
-
-        from bisheng.dsh.domain.services.seat_allocation import allocate_seats
-
-        actor, tenant = await authorize_admin(current["actor_user_id"], current["tenant_id"], current["user_id"])
-        await allocate_seats(
-            runtime.gateway,
-            str(uuid5(UUID(current["operation_id"]), "seat-allocation")),
-            actor,
-            tenant,
-            [current["user_id"]],
-        )
-
-    policy = DshAdminService(
-        repository_scope=policy_repository_scope,
-        quota=ActivatedQuota(),
-        allocate=allocate_person,
-        authorize=validate_target,
-        validate_models=validate_models,
-        now=now,
-    )
-
-    async def grant_subject(*, actor, tenant, actor_id, model_id, subject_type, subject_id, request):
-        return await write_subject_grant(
-            runtime.gateway,
-            actor=actor,
-            tenant=tenant,
-            actor_id=actor_id,
-            model_id=model_id,
-            subject_type=subject_type,
-            subject_id=subject_id,
-            request=request,
-        )
-
     admin = DshManagementService(
         repository_scope=operation_repository_scope,
-        gateway=runtime.gateway,
+        sessions=getattr(runtime, "sessions", None),
         authorize=authorize_admin,
         profiles=read_dsh_display_profiles,
-        policy=policy,
+        policy=None,
         policy_view=policy_view,
         now=now,
         model_users_view=read_model_users,
@@ -198,14 +152,10 @@ async def get_admin_runtime(runtime, *, quota=None, usage=None):
         usage_summary_view=read_usage_time_summary,
         usage_overview_view=read_usage_overview,
         subject_policy_view=read_subject_policies,
-        subject_grant=grant_subject,
+
         audit_view=read_audit_records,
     )
-    result = AdminRuntime(
-        admin,
-        policy,
-        ProfileOutboxWorker(repository_scope=operation_repository_scope, gateway=runtime.gateway, now=now),
-    )
+    result = AdminRuntime(admin, None)
     runtime.administration = result
     return result
 
@@ -416,6 +366,7 @@ async def read_model_user_permissions(
     department_id=None,
     membership="EFFECTIVE",
     unassigned_only=False,
+    include_retired_roles=False,
 ):
     import asyncio
 
@@ -449,7 +400,7 @@ async def read_model_user_permissions(
 
     def read():
         with get_sync_db_session() as session:
-            return DshSubjectPolicyRepository(session).user_permissions(
+            return DshSubjectPolicyRepository(session, include_retired_roles=include_retired_roles).user_permissions(
                 rows,
                 model_id=model_id,
                 limit=limit,
@@ -568,14 +519,12 @@ async def read_subject_policies(model_id):
     return await asyncio.to_thread(read)
 
 
-async def write_subject_grant(gateway, *, actor, tenant, actor_id, model_id, subject_type, subject_id, request):
+async def write_subject_grant(*, actor, tenant, actor_id, model_id, subject_type, subject_id, request):
     import asyncio
 
-    from bisheng.common.errcode.base import BaseErrorCode
-    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError, DshModelNotAllowedError
+    from bisheng.common.errcode.dsh import DshModelNotAllowedError
     from bisheng.core.database import get_sync_db_session
     from bisheng.dsh.domain.repositories.subject_grant import DshSubjectGrantRepository
-    from bisheng.dsh.domain.services.seat_allocation import allocate_seats
     from bisheng.llm.domain.services.llm import LLMService
 
     if not await read_available_models([model_id], LLMService.get_dsh_model_snapshot):
@@ -594,19 +543,11 @@ async def write_subject_grant(gateway, *, actor, tenant, actor_id, model_id, sub
     intent = await asyncio.to_thread(prepare)
     if intent["status"] == "SUCCEEDED":
         return intent["result"]
-    try:
-        await allocate_seats(gateway, intent["operation_id"], actor, tenant, intent["payload"]["user_ids"])
-    except DshAuthorizationUnavailableError:
-        # Preserve the immutable member snapshot for retry after an uncertain outcome.
-        raise
-    except BaseErrorCode as error:
-        await asyncio.to_thread(finish, intent["operation_id"], error.ClientCode)
-        raise
     result = await asyncio.to_thread(finish, intent["operation_id"])
     return result["result"]
 
 
-async def recover_subject_grants(gateway, tenant):
+async def recover_subject_grants(tenant):
     import asyncio
     from types import SimpleNamespace
 
@@ -632,7 +573,6 @@ async def recover_subject_grants(gateway, tenant):
         try:
             actor, target = await authorize_admin(row["actor_user_id"], tenant)
             await write_subject_grant(
-                gateway,
                 actor=actor,
                 tenant=target,
                 actor_id=row["actor_user_id"],

@@ -1,5 +1,5 @@
 import { useRecoilState } from 'recoil';
-import { Switch } from '~/components/ui';
+import { Switch } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import store from '~/store';
@@ -23,7 +23,7 @@ export default function AlwaysMakeProd({
 
   return (
     <div className={cn('flex select-none items-center justify-end gap-2 text-xs', className)}>
-      <Switch
+      <Switch className="peer"
         id="alwaysMakeProd"
         checked={alwaysMakeProd}
         onCheckedChange={handleCheckedChange}

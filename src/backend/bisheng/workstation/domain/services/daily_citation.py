@@ -1,4 +1,4 @@
-"""Daily chat citation glue for the short-handle contract (F072).
+"""Daily chat citation glue for the short-handle contract (F075).
 
 Kept out of ``chat_service.py`` so the turn loop only gains call sites:
 

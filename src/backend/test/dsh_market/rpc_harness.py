@@ -44,7 +44,7 @@ service = MarketService(MarketRepository(sessions), ObjectStore())
 app = FastAPI()
 app.include_router(router, prefix="/api/v1")
 app.dependency_overrides[get_market_service] = lambda: service
-app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20)
+app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20, desktop=True)
 app.dependency_overrides[market_admin] = lambda: MarketActor(2, 20)
 
 
@@ -61,7 +61,7 @@ with TestClient(app) as client:
             if "artifact" in command:
                 kwargs = {"files": {"file": ("plugin.zip", base64.b64decode(command["artifact"]), "application/zip")}}
             response = client.request(command["method"], command["path"], **kwargs)
-            if response.headers.get("content-type", "").startswith("application/zip"):
+            if response.headers.get("content-type", "").startswith(("application/zip", "application/gzip")):
                 result = {"artifact": base64.b64encode(response.content).decode()}
             else:
                 result = response.json()

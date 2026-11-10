@@ -12,3 +12,4 @@ PROMPT_SEARCH = (
 
 VISUAL_MODEL_FILE_TYPES = ['png', 'jpg', 'jpeg', 'webp', 'gif']
 USED_APP_PIN_TYPE = 'used_app_pin'
+USED_APP_RECENT_TYPE = 'used_app_recent'

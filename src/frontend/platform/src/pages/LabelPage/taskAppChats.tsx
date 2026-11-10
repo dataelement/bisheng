@@ -1,15 +1,18 @@
 // @ts-strict-ignore
+import { asRecord, displayText, captureQaOperation, isCurrentQaOperation, type QaOperation } from '@bisheng/chat/core';
+import { showApiError } from '@/controllers/request';
+import type { AnnotationFormHandle } from './annotationTypes';
+import { Button } from '@bisheng/ui';
+import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { getDeleteFlowApi } from "@/controllers/API/flow";
 import MessagePanne from "@/components/bs-comp/chatComponent/MessagePanne";
-import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { Button } from "@/components/bs-ui/button";
-import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
-import ShadTooltip from "@/components/ShadTooltipComponent";
+import { MessageStoreProvider as AssistantMessageStoreProvider, useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+
+import { RadioGroup, Radio, Tooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { getMarkPermissionApi, getMarkStatusApi, getNextMarkChatApi, updateMarkStatusApi } from "@/controllers/API/log";
-import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
-import { useAssistantStore } from "@/store/assistantStore";
+import { MessageStoreProvider as WorkflowMessageStoreProvider, useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { AppNumType } from "@/types/app";
-import { ArrowLeft } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -43,18 +46,8 @@ const PageChange = () => {
     }
 
     return <div className="flex gap-2">
-        <Button
-            variant="outline"
-            disabled={!hasPrev}
-            className="border-primary text-primary text-xs h-8"
-            onClick={() => jumpToNext(-1)}
-        >{t('label.previousChat')}</Button>
-        <Button
-            variant="outline"
-            disabled={!hasNext}
-            className="border-primary text-primary text-xs h-8"
-            onClick={() => jumpToNext(1)}
-        >{t('label.nextChat')}</Button>
+        <Button variant="outlined" disabled={!hasPrev} className="border-primary text-primary text-xs h-8" onClick={() => jumpToNext(-1)} color="default">{t('label.previousChat')}</Button>
+        <Button variant="outlined" disabled={!hasNext} className="border-primary text-primary text-xs h-8" onClick={() => jumpToNext(1)} color="default">{t('label.nextChat')}</Button>
     </div>
 }
 
@@ -65,7 +58,7 @@ const enum LabelStatus {
     Unnecessary = '3'
 }
 
-export default function index() {
+function TaskAppChatsContent() {
     const { id, fid, cid, type: typeStr } = useParams()
     const type = Number(typeStr)
     // console.log('fid, cid :>> ', fid, cid);
@@ -73,21 +66,37 @@ export default function index() {
     const navigator = useNavigate()
 
     const mark = useAuth()
+    const [appInfo, setAppInfo] = useState({ chatId: '', name: '', logo: '' })
+    const app = appInfo.chatId === cid ? appInfo : { name: '', logo: '' }
+    const logo = <AppAvator id={app.name || fid} flowType={type} url={app.logo} className="size-6 min-w-6" />
 
     const [status, setStatus] = React.useState(LabelStatus.Unlabeled)
     const [isSelf, setIsSelf] = useState(false)
     const loading = false;
-    const { destroy } = useAssistantStore()
     const { loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
     const { loadHistoryMsg: loadFlowHistoryMsg,
         loadMoreHistoryMsg: loadMoreFlowHistoryMsg,
         changeChatId: changeFlowChatId,
         clearMsgs: clearFlowMsgs
     } = useFlowMessageStore()
-    const qaFormRef = useRef(null)
-    const similarFormRef = useRef(null)
+    const qaFormRef = useRef<AnnotationFormHandle>(null)
+    const similarFormRef = useRef<AnnotationFormHandle>(null)
+    const sessionRef = useRef({ taskId: id, conversationId: cid, generation: 0 })
+    if (sessionRef.current.taskId !== id || sessionRef.current.conversationId !== cid) {
+        sessionRef.current = { taskId: id, conversationId: cid, generation: sessionRef.current.generation + 1 }
+    }
+    const actionSequence = useRef(0)
+    const pendingMarks = useRef(new Map<string, { operation: Readonly<QaOperation>; unlabeled: boolean }>())
     useEffect(() => {
-        // type === 'assistant' && loadAssistantState(fid, 'v1') 禁用助手详情,涉及权限403问题
+        const session = sessionRef.current
+        qaFormRef.current?.close()
+        similarFormRef.current?.close()
+        // Session metadata is available without requiring application edit access.
+        void getDeleteFlowApi(cid).then(detail => {
+            if (sessionRef.current !== session) return
+            const info = asRecord(detail)
+            setAppInfo({ chatId: cid, name: displayText(info.flow_name), logo: displayText(info.flow_logo) })
+        }).catch(showApiError)
         type === AppNumType.FLOW ? loadFlowHistoryMsg(fid, cid, {
             appendHistory: true,
             lastMsg: ""
@@ -100,70 +109,72 @@ export default function index() {
 
         // get status
         getMarkStatusApi({ task_id: Number(id), chat_id: cid }).then((res: any) => {
+            if (sessionRef.current !== session) return
             setStatus(String(res.status || 1))
             setIsSelf(res.is_self === undefined ? true : res.is_self)
         })
 
         return () => {
+            sessionRef.current = { ...sessionRef.current, generation: sessionRef.current.generation + 1 }
             clearMsgs()
             clearFlowMsgs()
-            type === AppNumType.ASSISTANT && destroy()
         }
     }, [cid])
 
-    const handleMarkClick = (type: 'question' | 'answer', msgId: string, qa) => {
-        if (type === 'question') {
-            similarFormRef.current.open(msgId, qa)
-        } else if (type === 'answer') {
-            qaFormRef.current.open(msgId, qa)
-        }
+    const handleMarkClick = (kind: 'question' | 'answer', msgId: string, qa) => {
+        if (!mark || !msgId || !id || !cid) return
+        const operation = captureQaOperation({ taskId: id, conversationId: cid,
+            sourceMessageId: String(msgId), actionId: `${++actionSequence.current}`,
+            sessionGeneration: sessionRef.current.generation })
+        pendingMarks.current.set(operation.actionId, { operation, unlabeled: status === LabelStatus.Unlabeled })
+        if (kind === 'question') similarFormRef.current?.open(msgId, qa, operation)
+        else qaFormRef.current?.open(msgId, qa, operation)
     }
 
-    // 完成标注
-    const handleMarkAfter = () => {
-        if (status === LabelStatus.Unlabeled) {
-            changeMarkStatus(LabelStatus.Labeled)
-        }
+    const isCurrentSession = (operation: Readonly<QaOperation>) => isCurrentQaOperation(operation, {
+        ...operation, taskId: sessionRef.current.taskId ?? '', conversationId: sessionRef.current.conversationId ?? '',
+        sessionGeneration: sessionRef.current.generation
+    })
+    const handleMarkAfter = async (operation?: Readonly<QaOperation>) => {
+        if (!operation) return
+        const pending = pendingMarks.current.get(operation.actionId)
+        if (!pending || !isCurrentQaOperation(operation, pending.operation)) return
+        pendingMarks.current.delete(operation.actionId)
+        if (!pending.unlabeled) return
+        await updateMarkStatusApi({ session_id: operation.conversationId,
+            task_id: Number(operation.taskId), status: Number(LabelStatus.Labeled) })
+        if (isCurrentSession(operation)) setStatus(LabelStatus.Labeled)
     }
-    const changeMarkStatus = (status: LabelStatus) => {
-        updateMarkStatusApi({ session_id: cid, task_id: Number(id), status: Number(status) })
-        setStatus(status)
+    const changeMarkStatus = (nextStatus: LabelStatus) => {
+        const session = sessionRef.current
+        void updateMarkStatusApi({ session_id: cid, task_id: Number(id), status: Number(nextStatus) })
+            .then(() => { if (sessionRef.current === session) setStatus(nextStatus) }).catch(showApiError)
     }
 
-    return <div>
+    return <div className="flex h-full min-h-0 flex-col">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <span className="loading loading-infinity loading-lg"></span>
         </div>}
-        <div className="bg-background-login px-4">
-            <div className="flex justify-between items-center py-4">
+        <div className="bg-background-login px-4 flex min-h-0 flex-1 flex-col">
+            <div className="flex shrink-0 flex-wrap gap-3 justify-between items-center py-4">
                 <div className="flex items-center">
-                    <ShadTooltip content={t('back')} side="top">
-                        <Button
-                            className="w-[36px] px-2 rounded-full"
-                            variant="outline"
-                            onClick={() => navigator('/label/' + id)}
-                        ><ArrowLeft className="side-bar-button-size" /></Button>
-                    </ShadTooltip>
+                    <Tooltip content={t('back')} side="top">
+                        <Button size="medium" aria-label={t('back')} variant="outlined" onClick={() => navigator('/label/' + id)} color="default" iconOnly><Outlined.ArrowLeft size={16} /></Button>
+                    </Tooltip>
                     <span className=" text-gray-700 text-sm font-black pl-4">{t('label.returnToList')}</span>
                 </div>
-                <RadioGroup className="flex space-x-2 h-[20px] items-center" value={status}
+                <RadioGroup value={status}
                     onValueChange={(value: LabelStatus) => changeMarkStatus(value)} disabled={!isSelf && status !== LabelStatus.Unlabeled}>
-                    <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unlabeled} />{t('label.unlabeled')}
-                    </Label>
-                    <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Labeled} />{t('label.labeled')}
-                    </Label>
-                    <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unnecessary} />{t('label.unnecessary')}
-                    </Label>
+                    <Radio disabled={!mark} value={LabelStatus.Unlabeled}>{t('label.unlabeled')}</Radio>
+                    <Radio disabled={!mark} value={LabelStatus.Labeled}>{t('label.labeled')}</Radio>
+                    <Radio disabled={!mark} value={LabelStatus.Unnecessary}>{t('label.unnecessary')}</Radio>
                 </RadioGroup>
                 <PageChange />
             </div>
-            <div className="h-[calc(100vh-132px-var(--license-banner-h,0px))]">
+            <div className="min-h-0 flex-1">
                 {type === AppNumType.FLOW
-                    ? <ChatMessages mark={mark} logo='' useName='' guideWord='' loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={handleMarkClick}></ChatMessages>
-                    : <MessagePanne mark={mark} logo='' useName='' guideWord=''
+                    ? <ChatMessages mark={mark} title={app.name} logo={logo} useName='' guideWord='' loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={handleMarkClick}></ChatMessages>
+                    : <MessagePanne mark={mark} chat={app} logo={logo} useName='' guideWord=''
                         loadMore={() => loadMoreHistoryMsg(fid, true)}
                         onMarkClick={handleMarkClick}
                     ></MessagePanne>
@@ -185,4 +196,9 @@ const useAuth = () => {
     }, [])
 
     return mark
+}
+
+export default function TaskAppChats() {
+    const { id, cid } = useParams();
+    return <AssistantMessageStoreProvider key={`${id}:${cid}`}><WorkflowMessageStoreProvider><TaskAppChatsContent /></WorkflowMessageStoreProvider></AssistantMessageStoreProvider>;
 }

@@ -1,11 +1,5 @@
 import { Outlined } from "bisheng-icons";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "~/components/ui/DropdownMenu";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
+import { Dropdown, DropdownGroup, DropdownItem } from "@bisheng/ui";
 
 interface SortOption {
     value: string;
@@ -87,7 +81,9 @@ export function SectionHeader({
                • Inner px-4 (16px) aligns the title text with the items' left gutter. */
             className={
                 mobile
-                    ? "group sticky top-0 left-0 z-[2] flex w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-5 py-2"
+                    // bg-white, not transparent: the header is sticky, so it still has to mask the
+                    // cards scrolling under it — it just matches the page instead of tinting a band.
+                    ? "group sticky top-0 left-0 z-[2] flex w-[100cqi] cursor-pointer items-center justify-between bg-white px-5 py-2"
                     : compact
                         ? "group sticky top-0 left-0 z-[2] mb-2 flex h-[38px] w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-4"
                         : "group sticky top-0 left-0 z-[2] mb-2 flex h-7 w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-4 transition-colors hover:bg-[#F4F4F4]"
@@ -140,42 +136,38 @@ export function SectionHeader({
                     </button>
                 )}
                 {/* Sort field dropdown — opens a menu of sort options with the
-                    currently-selected one marked, mirroring the right-side panel. */}
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                    currently-selected one checked. The menu is portaled, but React events
+                    still bubble to the row's onClick/onKeyDown toggle — stop both here. */}
+                <span
+                    className="contents"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                >
+                    <Dropdown
+                        align="end"
+                        menu={
+                            <DropdownGroup label={sortFieldLabel}>
+                                {sortOptions.map((opt) => (
+                                    <DropdownItem
+                                        key={opt.value}
+                                        checked={opt.value === sortValue}
+                                        onSelect={() => onSortChange(opt.value)}
+                                    >
+                                        {opt.label}
+                                    </DropdownItem>
+                                ))}
+                            </DropdownGroup>
+                        }
+                    >
                         <button
-                            onClick={(e) => e.stopPropagation()}
                             title={sortFieldLabel}
                             aria-label={sortFieldLabel}
                             className={`${rightIconBtn} data-[state=open]:bg-fill-2`}
                         >
                             <Outlined.Sort className="size-4" />
                         </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        align="end"
-                        className={`${knowledgeSpaceDropdownSurfaceClassName} z-[100]`}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="px-2 py-1.5 text-xs font-medium text-text-3">{sortFieldLabel}</div>
-                        {sortOptions.map((opt) => {
-                            const active = opt.value === sortValue;
-                            return (
-                                <DropdownMenuItem
-                                    key={opt.value}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onSortChange(opt.value);
-                                    }}
-                                    className="flex items-center justify-between gap-6"
-                                >
-                                    <span>{opt.label}</span>
-                                    {active && <Outlined.Check className="size-4 shrink-0" />}
-                                </DropdownMenuItem>
-                            );
-                        })}
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                    </Dropdown>
+                </span>
             </div>
         </div>
     );

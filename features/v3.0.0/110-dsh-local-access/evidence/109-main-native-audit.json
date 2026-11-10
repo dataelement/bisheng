@@ -1,0 +1,23 @@
+{
+  "request_id": "a5595c70-2bc3-4963-bc60-e6a1ca12e7c5",
+  "user_id": 1,
+  "model_id": 2,
+  "session_id": "9d130b60-1aa3-42d5-99c9-3aa2d2c85be8",
+  "audit_status": "NORMAL",
+  "content_status": "COMPLETE",
+  "usage_settlement": "SETTLED",
+  "usage": {
+    "status": "SUCCEEDED",
+    "input_tokens": 8825,
+    "output_tokens": 9,
+    "total_tokens": 8834,
+    "settled_at": "2026-10-20T11:04:26Z",
+    "cache_read_tokens": 0,
+    "cache_creation_tokens": null,
+    "latency_ms": 3085
+  },
+  "message_sources_status": null,
+  "session_origin": "main",
+  "request_kind": "chat",
+  "body_contains_expected_reply": true
+}

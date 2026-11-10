@@ -69,7 +69,7 @@ class DocFlowLoader(BaseBishengLoader):
                         if width <= 0 or height <= 0:
                             raise DocFlowError("DocFlow PDF page dimensions are missing")
                         transforms[number] = (source.rect.width / width, source.rect.height / height)
-        metadata = {**self.file_metadata, "indexes": [], "bboxes": [], "pages": [], "types": []}
+        metadata = {**self.file_metadata, "page_base": 1, "indexes": [], "bboxes": [], "pages": [], "types": []}
         self.bbox_list = []
         for number, span in enumerate(converted.spans):
             bbox = list(span["bbox"])

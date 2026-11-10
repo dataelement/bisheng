@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useState } from 'react';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import type { NavLink, NavProps } from '~/common';
 import { Accordion, AccordionItem, AccordionContent } from '~/components/ui/Accordion';
-import { TooltipAnchor, Button } from '~/components';
+import { Button } from '~/components';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
@@ -30,12 +31,7 @@ export default function Nav({ links, isCollapsed, resize, defaultActive }: NavPr
                 {links.map((link, index) => {
                   const variant = getVariant(link);
                   return isCollapsed ? (
-                    <TooltipAnchor
-                      description={localize(link.title)}
-                      side="left"
-                      key={`nav-link-${index}`}
-                      render={
-                        <Button
+                    <SharedTooltip key={`nav-link-${index}`} content={localize(link.title)} side="left"  ><Button
                           variant="ghost"
                           size="icon"
                           onClick={(e) => {
@@ -50,9 +46,7 @@ export default function Nav({ links, isCollapsed, resize, defaultActive }: NavPr
                         >
                           <link.icon className="h-4 w-4 text-text-secondary" />
                           <span className="sr-only">{localize(link.title)}</span>
-                        </Button>
-                      }
-                    />
+                        </Button></SharedTooltip>
                   ) : (
                     <Accordion
                       key={index}

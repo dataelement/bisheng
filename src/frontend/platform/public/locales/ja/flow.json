@@ -8,6 +8,9 @@
   "chooseTemplateOrCreateBlank": "テンプレートを選んで開始するか、空のアプリをカスタマイズして作成できます",
   "workflow": "ワークフロー",
   "assistant": "アシスタント",
+  "hostedApp": "ホステッドアプリ",
+  "hostedAppDesc": "自分でコードを書いてデプロイ",
+  "viewTutorial": "デプロイガイドを見る",
   "skill": "スキル",
   "search": "検索",
   "confirmDeleteTemplate": "この{{type}}テンプレートを削除しますか？",
@@ -21,7 +24,6 @@
   "templateManagementDescription": "アプリテンプレート管理。テンプレートはすべてのユーザーに表示され、ドラッグアンドドロップで並べ替えや削除が可能",
   "maxNameLengthAssistant": "名前は最大50文字まで",
   "maxNameLengthWorkflow": "ワークフロー名は最大50文字まで",
-  "minDescLengthAssistant": "アシスタントの効果を最大化するため、説明は20文字以上にしてください",
   "edit": "編集",
   "create": "作成",
   "name": "ワークフロー名",
@@ -156,6 +158,7 @@
   "cannotBeEmpty": "{{label}}は空にできません",
   "editReportTemplate": "レポートテンプレートを編集",
   "nodeErrorMessage": "{{nodeName}}ノードエラー：{{varNameCn}}は無効です",
+  "nodeLogError": "失敗の原因",
   "required": "必須",
   "isRequired": "必須入力項目",
   "documentKnowledgeBase": "ドキュメント知識ベース",
@@ -600,5 +603,9 @@
         "label": "出力変数"
       }
     }
-  }
+  },
+  "rerunWorkflow": "再実行",
+  "type": "タイプ",
+  "valueType": "値のタイプ",
+  "selectDbType": "データベースの種類を選択"
 }

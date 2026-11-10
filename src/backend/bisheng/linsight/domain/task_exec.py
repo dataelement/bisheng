@@ -14,8 +14,8 @@ from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.common.services.config_service import settings
-from bisheng.common.services.llm_error_classifier import classify_for_event
-from bisheng.core.cache.utils import CACHE_DIR, create_cache_folder_async
+from bisheng.common.services.llm_error_classifier import ErrorType, classify_for_event, unwrap
+from bisheng.core.cache.utils import CACHE_DIR, create_cache_folder_async, resolve_inside
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.logger import trace_id_var
@@ -43,8 +43,13 @@ from bisheng.linsight.domain.services.state_message_manager import (
 from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
 from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
-from bisheng.linsight.domain.services.workspace_backend import UPLOADS_DIR
+from bisheng.linsight.domain.services.workspace_backend import (
+    LARGE_TOOL_RESULTS_DIR,
+    OUTPUT_DIR,
+    UPLOADS_DIR,
+)
 from bisheng.tool.domain.services.tool import ToolServices
+from bisheng_langchain.gpts.tools.code_interpreter.local_run_registry import release_local_run
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import BaseEvent, ExecStep, GenerateSubTask, NeedUserInput, TaskEnd, TaskStart
 
@@ -226,6 +231,9 @@ class LinsightWorkflowTask:
         # The result then carries a one-line note so the user knows the content
         # was closed out on the materials already gathered.
         self._turn_budget: dict = {}
+        # F087: the context window this run uses, filled by create_linsight_agent;
+        # logged when the task fails on a context overflow (spec AC-15).
+        self._context_window: dict = {}
         self.file_dir: str | None = None
         # Path → md5 of files present in ``file_dir`` before the agent ran
         # (set by _init_file_directory). The deliverable scan diffs against it
@@ -330,6 +338,15 @@ class LinsightWorkflowTask:
 
     async def _cleanup_resources(self):
         """Clean up resources"""
+        # First and in its own try: a failure further down must not skip it, and it
+        # must run even when file_dir is already gone (the run dir lives elsewhere).
+        try:
+            if self.file_dir:
+                # Shielded: a second cancel during cleanup must not abandon a half-done
+                # release (it kills the task's leftover processes and frees the uid).
+                await asyncio.shield(asyncio.to_thread(release_local_run, self.file_dir))
+        except Exception as e:
+            logger.error(f"Local code run release failed: {e}")
         try:
             # Stop Terminating Monitoring
             await self._stop_termination_monitor()
@@ -511,7 +528,12 @@ class LinsightWorkflowTask:
         # again covers it while a worker is genuinely driving it).
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
-        self.llm = await self._get_llm(session_model)
+        self.llm = await self._get_round_llm(session_model)
+        # The previous round deleted file_dir. Put this session's output/ back
+        # before the code interpreter copies the directory into the sandbox.
+        await self._sync_workspace_originals(session_model)
+        # Before the code interpreter snapshots file_dir into the E2B file_list.
+        await self._provision_session_skills(session_model)
         tools = await self._generate_tools(session_model)
         try:
             # Rebuild the SAME tool set the parked graph had — INCLUDING the C4
@@ -637,7 +659,12 @@ class LinsightWorkflowTask:
         # frontend leaves the "done" state and re-opens the WS event stream.
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
-        self.llm = await self._get_llm(session_model)
+        self.llm = await self._get_round_llm(session_model)
+        # Same session workspace, new local dir: output/ from the previous round
+        # is still in MinIO and must be back in file_dir before copy-in.
+        await self._sync_workspace_originals(session_model)
+        # Before the code interpreter snapshots file_dir into the E2B file_list.
+        await self._provision_session_skills(session_model)
         tools = await self._generate_tools(session_model)
         try:
             allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
@@ -712,9 +739,13 @@ class LinsightWorkflowTask:
         # Must run between the seed and tool construction: the code interpreter's
         # file list is snapshotted from file_dir when the tool is built.
         await self._sync_workspace_originals(session_model)
+        # Skill bundles land in that same directory before the snapshot, so the
+        # E2B file_list includes /skills/. _create_agent provisions again and
+        # skips any directory this call already recorded.
+        await self._provision_session_skills(session_model)
 
         # Initialization Execution Component
-        self.llm = await self._get_llm(session_model)
+        self.llm = await self._get_round_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
             # Build Tool List. The knowledge tool is gated by the user's
@@ -777,6 +808,20 @@ class LinsightWorkflowTask:
         await self._state_manager.set_session_version_info(session_model)
 
     # ==================== Component Initialization ====================
+
+    async def _get_round_llm(self, session_model: LinsightSessionVersion) -> BaseChatModel:
+        """Resolve the round's LLM and check the DSH monthly allowance once.
+
+        With ``dsh.enabled`` every model call is still settled in the credit
+        ledger, but only this round-start check compares usage with the limit,
+        so a round that has started runs to completion. Outside the
+        ``_get_llm`` try so a credit error keeps its own type and error_type.
+        """
+        from bisheng.dsh.domain.services.chat_credits import admit_round
+
+        llm = await self._get_llm(session_model)
+        await admit_round(llm)
+        return llm
 
     async def _get_llm(self, session_model: LinsightSessionVersion) -> BaseChatModel:
         """Resolve the per-task execution LLM (tool init / helper calls).
@@ -943,13 +988,15 @@ class LinsightWorkflowTask:
             if skipped:
                 logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
 
-            # A passthrough file has no separate markdown view — its seed object and
-            # its original are the same bytes. It is fetched by the raw track below,
+            # A passthrough file (text, or an Excel original) has no separate
+            # markdown view — its seed object and its original are the same bytes. It is fetched by the raw track below,
             # which lands it under ``uploads/`` where the pointer block says it is;
             # letting it through here as well would ALSO drop a flat copy at the task
             # root, and the code interpreter's file list (``os.walk``) would show the
             # same file twice under two different paths.
-            downloadable = [f for f in entries if f.get("ingest_mode") != "passthrough"]
+            downloadable = [
+                f for f in entries if f.get("ingest_mode") not in LinsightWorkbenchImpl._ORIGINAL_ONLY_MODES
+            ]
 
             # Concurrent downloads
             download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
@@ -993,10 +1040,13 @@ class LinsightWorkflowTask:
         if not object_name:
             raise ValueError("file entry missing markdown_file_path")
         file_name = file_info.get("markdown_filename", os.path.basename(object_name))
-        file_path = os.path.join(target_dir, file_name)
         # ``markdown_filename`` carries the folder-upload sub-path (``年报/2024/Q1.md``)
         # for files that came in as part of a directory, so the parent dirs have to
-        # exist before the write. os.makedirs on the flat case is a no-op.
+        # exist before the write -- which is exactly what would turn a traversing
+        # name into a write anywhere on disk. Producers sanitize the name today;
+        # this refuses one that escaped anyway, instead of trusting every future
+        # producer to remember.
+        file_path = str(resolve_inside(target_dir, file_name))
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         minio_client = await get_minio_storage()
         try:
@@ -1030,7 +1080,7 @@ class LinsightWorkflowTask:
         the workspace, so it needs no local path parity.
         """
         object_name = file_info["original_file_path"]
-        file_path = os.path.join(target_dir, UPLOADS_DIR, file_info["raw_filename"])
+        file_path = str(resolve_inside(target_dir, UPLOADS_DIR, file_info["raw_filename"]))
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         minio_client = await get_minio_storage()
         file_url = await minio_client.get_share_link(object_name, clear_host=False)
@@ -1045,13 +1095,43 @@ class LinsightWorkflowTask:
         return file_path
 
     async def _generate_tools(self, session_model: LinsightSessionVersion) -> list:
-        """Build Tool List"""
-        if not session_model.tools:
-            return []
+        """Resolve authorized task infrastructure and the selected optional tools."""
+        await self._sync_workspace_originals(session_model)
 
         return await LinsightWorkbenchImpl.init_linsight_config_tools(
             session_version=session_model, llm=self.llm, need_upload=True, file_dir=self.file_dir
         )
+
+    async def _provision_session_skills(self, session_model: LinsightSessionVersion):
+        """Copy task-candidate bundles, then record which row owns each directory.
+
+        Fresh, resume, continue and agent rebuild all call
+        ``materialize_session_skills``. The first call in a workflow runs before
+        the code interpreter walks ``file_dir``. A later call in the same run
+        sees ``skill_snapshot`` and does not write another skill into those
+        directories.
+        """
+        from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
+        from bisheng.linsight.domain.services.unattended_run import is_unattended_run
+        from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
+
+        minio = await get_minio_storage()
+        backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
+        result = await materialize_session_skills(
+            backend,
+            session_model.tenant_id,
+            getattr(session_model, "skills", None),
+            user_id=getattr(session_model, "user_id", None),
+            skill_snapshot=getattr(session_model, "skill_snapshot", None),
+            strict=is_unattended_run(session_model),
+        )
+        if getattr(session_model, "user_id", None) is not None:
+            session_model.skill_snapshot = list(result.snapshot or [])
+            if result.selected_names is not None:
+                session_model.skills = result.selected_names
+            if getattr(self, "_state_manager", None) is not None:
+                await self._state_manager.set_session_version_info(session_model)
+        return result
 
     async def _create_agent(self, session_model: LinsightSessionVersion, tools: list, checkpointer=None):
         """Create the deepagents-backed agent (F035 §2.1).
@@ -1066,12 +1146,10 @@ class LinsightWorkflowTask:
         resume path passes a Redis-backed ``checkpointer`` so the parked
         interrupt checkpoint (thread_id = session_version_id) is located.
         """
-        from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
-        from bisheng.linsight.domain.services.unattended_run import is_unattended_run
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
         # Whether the code interpreter is actually bound this run (it is injected
-        # only when the user selected it). Everything that points the model at it —
+        # through the current user permission policy). Everything that points the model at it —
         # the uploaded-files pointer block and the binary read guard — must stay in
         # lockstep with this flag, or we recreate the "told to call a tool that
         # isn't there" failure mode.
@@ -1101,17 +1179,12 @@ class LinsightWorkflowTask:
         backend = WorkspaceBackend(
             svid=session_model.id, minio=minio, file_dir=self.file_dir, citation_scope=citation_scope
         )
-        # F035 Fork X: copy this run's allowed skill bundles into the workspace
-        # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
-        # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
-        # fresh agent each time. skills_present gates attaching the skills middleware.
-        # F073: an Open API run fails naming the skill instead of running without it.
-        skills = await materialize_session_skills(
-            backend,
-            session_model.tenant_id,
-            getattr(session_model, "skills", None),
-            strict=is_unattended_run(session_model),
-        )
+        # Directories already recorded by the pre-tool provision are left as they
+        # are. skills_present stays true when that earlier copy filled the snapshot.
+        skills = await self._provision_session_skills(session_model)
+        # The backend was built before this provision. Reads look up the row by
+        # the snapshot id, so the copy has to be the one just written.
+        backend.skill_snapshot = list(getattr(session_model, "skill_snapshot", None) or [])
         if skills.failed:
             await self._push_skill_load_failure(session_model.id, skills.failed)
         return await create_linsight_agent(
@@ -1124,6 +1197,7 @@ class LinsightWorkflowTask:
             backend=backend,
             skills_present=bool(skills.copied),
             turn_budget_sink=self._turn_budget,
+            context_window_sink=self._context_window,
             citation_scope=citation_scope,
         )
 
@@ -1192,38 +1266,48 @@ class LinsightWorkflowTask:
     async def _sync_workspace_originals(self, session_model: LinsightSessionVersion) -> None:
         """Make workspace originals reachable by the code interpreter this turn.
 
-        ``_init_file_directory`` prefetches originals from THIS turn's ``files``,
-        which is empty on a follow-up ("总结一下刚才那个表") — the originals only
-        exist in the workspace, copied there by the seed. The code interpreter's
-        file list is built from the local ``file_dir``, so without this step the
-        model sees ``uploads/x.xlsx`` in ``ls``, is told by the pointer block that
-        it can compute on it, and then finds nothing in the sandbox.
+        ``_init_file_directory`` prefetches originals from THIS turn's ``files``.
+        A later round of the same session (``/workbench/continue`` or ask_user
+        resume) deletes that local directory and creates an empty one. The
+        workspace in MinIO still holds ``output/``, ``uploads/`` and
+        ``large_tool_results/``. ``ls`` reads MinIO, so those paths look present,
+        but the code interpreter only copy-ins ``file_dir``. Without this step
+        ``open('output/金额表.xlsx')`` raises FileNotFoundError.
 
-        Runs after the seed and before tools are built. Idempotent: on a fresh turn
-        the prefetch already wrote these files and ``_materialize`` serves them from
-        cache. Best-effort — losing the precise-data track must never fail the turn.
+        Called on the first start (after the cross-version seed) and again at the
+        start of continue and resume, before tools are built. Idempotent: a file
+        already in ``file_dir`` is left untouched and is not added to the baseline.
+        Best-effort — a sync failure must never fail the turn.
         """
         try:
             from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
             minio = await get_minio_storage()
             backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
-            ls_res = await backend.als(UPLOADS_DIR)
-            if getattr(ls_res, "error", None):
-                return
-
+            # output/: deliverables from an earlier round of this same workspace.
+            # uploads/: raw xlsx/docx the code interpreter computes on. Markdown
+            # views stay on read_file. large_tool_results/: offloaded tool dumps.
             synced: list[str] = []
-            for entry in ls_res.entries or []:
-                rel = str(entry.get("path") or "").lstrip("/")
-                # Markdown views are already local (or are read through read_file,
-                # which goes to MinIO anyway); only the originals need a local copy.
-                if not rel.startswith(f"{UPLOADS_DIR}/") or rel.endswith(".md"):
+            for zone, skip_md in (
+                (OUTPUT_DIR, False),
+                (UPLOADS_DIR, True),
+                (LARGE_TOOL_RESULTS_DIR, False),
+            ):
+                ls_res = await backend.als(zone)
+                if getattr(ls_res, "error", None):
                     continue
-                local_path = os.path.join(self.file_dir, rel)
-                if os.path.exists(local_path):
-                    continue
-                if await asyncio.to_thread(backend.ensure_local, rel):
-                    synced.append(local_path)
+                for entry in ls_res.entries or []:
+                    rel = str(entry.get("path") or "").lstrip("/")
+                    if not rel.startswith(f"{zone}/"):
+                        continue
+                    # Markdown views of uploads are read through read_file (MinIO).
+                    if skip_md and rel.endswith(".md"):
+                        continue
+                    local_path = os.path.join(self.file_dir, rel)
+                    if os.path.exists(local_path):
+                        continue
+                    if await asyncio.to_thread(backend.ensure_local, rel):
+                        synced.append(local_path)
 
             if synced:
                 # These arrived AFTER _init_file_directory took the baseline, so
@@ -2465,6 +2549,16 @@ class LinsightWorkflowTask:
         "view details" disclosure. Vendor-agnostic — see ``llm_error_classifier``.
         """
         classified = classify_for_event(exc if exc is not None else error_msg)
+        if classified.error_type == ErrorType.CONTEXT_OVERFLOW.value:
+            logger.warning(
+                "[linsight-context-window] task failed on context overflow svid={} window={} source={} "
+                "usable_input={} reported_input_tokens={}",
+                session_model.id,
+                self._context_window.get("window"),
+                self._context_window.get("source"),
+                self._context_window.get("usable_input"),
+                getattr(unwrap(exc), "reported_input_tokens", None) if exc is not None else None,
+            )
         session_model.status = SessionVersionStatusEnum.FAILED
         session_model.output_result = {
             "error_message": error_msg,

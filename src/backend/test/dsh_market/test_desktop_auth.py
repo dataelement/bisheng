@@ -10,18 +10,30 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.dsh import DshSessionRevokedError
 from bisheng.core.context import tenant as context
+from bisheng.dsh.domain.services.access import DshAccessService
 from bisheng.dsh_market.api.auth import MarketActor, market_actor, market_admin
 from bisheng.utils.http_middleware import CustomMiddleware, owns_dsh_credential
-from test.dsh.test_access import Seats, service, token
+from test.dsh.test_access import Identities, Keys, token
+
+
+class Sessions:
+    active = True
+
+    async def validate(self, principal):
+        assert principal.seat_id is None and principal.grant_version is None
+        if not self.active:
+            raise DshSessionRevokedError()
 
 
 @pytest.fixture
 def market_app(monkeypatch):
     import bisheng.dsh.access_runtime as runtime
 
-    seats = Seats()
-    monkeypatch.setattr(runtime, "get_runtime", AsyncMock(return_value=SimpleNamespace(access=service(seats))))
+    sessions = Sessions()
+    access = DshAccessService("test-issuer", Keys(), Identities(), sessions)
+    monkeypatch.setattr(runtime, "get_runtime", AsyncMock(return_value=SimpleNamespace(access=access)))
     app = FastAPI()
     app.add_middleware(CustomMiddleware)
 
@@ -41,7 +53,7 @@ def market_app(monkeypatch):
             "bypass": context.is_tenant_filter_bypassed(),
         }
 
-    return app, seats
+    return app, sessions
 
 
 async def test_verified_desktop_identity_selects_its_tenant(market_app):
@@ -66,13 +78,13 @@ async def test_verified_desktop_identity_selects_its_tenant(market_app):
             }
 
 
-async def test_revoked_seat_and_invalid_signature_are_rejected(market_app):
-    app, seats = market_app
+async def test_revoked_session_and_invalid_token_signature_are_rejected(market_app):
+    app, sessions = market_app
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://example.test") as client:
-        seats.active = False
+        sessions.active = False
         result = await client.get("/api/v1/dsh/market/catalog", headers={"Authorization": "Bearer " + token()})
-        assert result.status_code == 403
-        seats.active = True
+        assert result.status_code == 401
+        sessions.active = True
         claims = jwt.decode(token(), options={"verify_signature": False})
         forged = jwt.encode(
             claims,
@@ -113,3 +125,23 @@ async def test_desktop_credential_cannot_manage_market(market_app):
 )
 def test_market_route_credential_ownership(method, path, owned):
     assert owns_dsh_credential(method, path) is owned
+
+
+def test_market_error_code_survives_platform_exception_envelope():
+    import json
+
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    from bisheng.main import handle_http_exception
+
+    request = Request({"type": "http", "method": "GET", "path": "/api/v1/dsh/market/catalog", "headers": []})
+    response = handle_http_exception(
+        request, HTTPException(401, {"error": "Session revoked", "code": "session_revoked"})
+    )
+    assert response.status_code == 200
+    assert json.loads(response.body) == {
+        "status_code": 401,
+        "status_message": "Session revoked",
+        "data": {"code": "session_revoked"},
+    }

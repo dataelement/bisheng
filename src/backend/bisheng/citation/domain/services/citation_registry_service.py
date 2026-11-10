@@ -22,6 +22,7 @@ from bisheng.citation.domain.schemas.citation_schema import (
     WebCitationItemSchema,
     WebCitationPayloadSchema,
 )
+from bisheng.citation.domain.services.citation_coordinates import normalize_citation_coordinates
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
 
@@ -178,6 +179,9 @@ class CitationRegistryService:
     def _build_rag_chunk_item(cls, document: Document) -> RagCitationItemSchema:
         """Build a grouped chunk payload item from a retrieved document."""
         metadata = cls._parse_metadata(document)
+        bbox, page = normalize_citation_coordinates(
+            cls._extract_rag_bbox(metadata), cls._parse_optional_int(metadata.get("page"))
+        )
         chunk_id = cls._extract_rag_chunk_id(metadata)
         chunk_index = cls._parse_optional_int(metadata.get("chunk_index"))
         if chunk_index is not None:
@@ -191,8 +195,8 @@ class CitationRegistryService:
             chunkId=chunk_id,
             chunkIndex=chunk_index,
             content=document.page_content or None,
-            bbox=cls._extract_rag_bbox(metadata),
-            page=cls._parse_optional_int(metadata.get("page")),
+            bbox=bbox,
+            page=page,
         )
 
     @classmethod
@@ -562,6 +566,9 @@ class CitationRegistryService:
     def _build_temp_chunk_item(cls, document: Document) -> TempCitationItemSchema:
         """Build a chunk payload item from a temporary-knowledge-base document."""
         metadata = cls._parse_metadata(document)
+        bbox, page = normalize_citation_coordinates(
+            cls._extract_rag_bbox(metadata), cls._parse_optional_int(metadata.get("page"))
+        )
         chunk_id = cls._extract_rag_chunk_id(metadata)
         chunk_index = cls._parse_optional_int(metadata.get("chunk_index"))
         if chunk_index is not None:
@@ -575,8 +582,8 @@ class CitationRegistryService:
             chunkId=chunk_id,
             chunkIndex=chunk_index,
             content=document.page_content or None,
-            bbox=cls._extract_rag_bbox(metadata),
-            page=cls._parse_optional_int(metadata.get("page")),
+            bbox=bbox,
+            page=page,
         )
 
     @classmethod

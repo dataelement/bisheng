@@ -34,6 +34,12 @@ from bisheng.core.ai import (
     ChatZhipuAI,
 )
 from bisheng.core.ai.llm.custom_chat_deepseek import CustomChatDeepSeek
+from bisheng.dsh.domain.services.chat_credits import (
+    account_async,
+    account_async_stream,
+    account_sync,
+    account_sync_stream,
+)
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMModel, LLMServer
 
@@ -46,13 +52,49 @@ from ..utils import (
     wrapper_bisheng_model_limit_check_async,
 )
 from .base import BishengBase
+from .context_overflow import as_context_overflow
 
 
 def _get_user_kwargs(model_config: dict) -> dict:
     user_kwargs = model_config.get("user_kwargs", {})
     if isinstance(user_kwargs, str) and user_kwargs:
-        return json.loads(user_kwargs)
-    return dict(user_kwargs) if user_kwargs else {}
+        user_kwargs = json.loads(user_kwargs)
+    result = dict(user_kwargs) if user_kwargs else {}
+    # A capability declaration is not an SDK constructor parameter.
+    result.pop("reasoning_efforts", None)
+    return result
+
+
+def _assert_ascii_http_header_values(params: dict) -> None:
+    """httpx encodes request headers as ASCII. A non-ASCII api_key becomes
+    ``Authorization: Bearer <key>`` and crashes at request time with
+    UnicodeEncodeError at position 7-N (``Bearer `` is 7 characters).
+    Fail at client init so the agent does not surface a raw codec error.
+    """
+    suspects: list[tuple[str, Any]] = [
+        ("api_key", params.get("api_key") or params.get("openai_api_key")),
+        ("organization", params.get("organization") or params.get("openai_organization")),
+    ]
+    for header_key in ("default_headers", "extra_headers"):
+        headers = params.get(header_key)
+        if isinstance(headers, dict):
+            for name, value in headers.items():
+                suspects.append((f"{header_key}.{name}", value))
+
+    for field, value in suspects:
+        if value is None:
+            continue
+        text = value if isinstance(value, str) else str(value)
+        if not text:
+            continue
+        try:
+            text.encode("ascii")
+        except UnicodeEncodeError as exc:
+            raise ValueError(
+                f"LLM HTTP header field {field} contains non-ASCII characters "
+                "(httpx requires ASCII; Authorization is 'Bearer ' + api_key). "
+                "Fix the model provider API key or default_headers in model management."
+            ) from exc
 
 
 # Attention needs to be paid to the priority of the initialization parameters. Instantiation Incoming Highest -> The following configurations of the front-end interface -> Advanced parameters of the front-end interface have the lowest priority
@@ -136,6 +178,8 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params = _get_openai_params(params, server_config, model_config)
     params["base_url"] = params.get("base_url") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    # Copy: the popped dict can be the stored model config itself, and writing
+    # the derived flags into it would mutate the ORM row (DSH fix).
     extra_body = dict(params.pop("extra_body", {}) or params.pop("model_kwargs", {}))
 
     extra_body["enable_search"] = model_config.get("enable_web_search", False)
@@ -227,7 +271,24 @@ _llm_node_type: dict = {
     LLMServerType.VOLCENGINE.value: {"client": ChatVoiceEngine, "params_handler": _get_openai_params},
     LLMServerType.SILICON.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
     LLMServerType.MIND_IE.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
+    # Generic OpenAI-protocol servers: send max_tokens, which older third-party servers still require
+    LLMServerType.OPENAI_COMPATIBLE.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
 }
+
+
+def _raise_as_context_overflow(exc: Exception) -> None:
+    """Re-raise a provider's context-window rejection as ``ContextOverflowError``.
+
+    Runs inside the decorated call so the status wrapper sees the converted type
+    and leaves the model's health alone (design.md decisions 5 and 6). Returns
+    normally for any other error; the caller then re-raises it unchanged.
+    """
+    overflow = as_context_overflow(exc)
+    if overflow is None:
+        return
+    if overflow is exc:
+        raise exc
+    raise overflow from exc
 
 
 class BishengLLM(BishengBase, BaseChatModel):
@@ -237,6 +298,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     streaming: bool | None = Field(default=None, description="Whether to use streaming output", alias="stream")
     temperature: float | None = Field(default=None, description="Model Generated Temperature")
+    # DSH: overrides retries for this client only, never the stored provider config.
     max_retries: int | None = Field(default=None, ge=0, description="Per-instance client retry override")
 
     llm: BaseChatModel | None = Field(default=None)
@@ -279,6 +341,9 @@ class BishengLLM(BishengBase, BaseChatModel):
 
         class_object = self._get_llm_class(server_info.type)
         params = self._get_llm_params(server_info, model_info)
+        if server_info.type in {LLMServerType.OPENAI.value, LLMServerType.AZURE_OPENAI.value}:
+            # BishengLLM exposes chat calls; native Responses uses its own request path.
+            params["use_responses_api"] = False
         if self.max_retries is not None:
             # Override only this client's parameters; never update the ORM config.
             params["max_retries"] = self.max_retries
@@ -302,6 +367,17 @@ class BishengLLM(BishengBase, BaseChatModel):
 
         params_handler = _llm_node_type[server_info.type]["params_handler"]
         params = params_handler(default_params, server_config, model_config)
+        try:
+            _assert_ascii_http_header_values(params)
+        except ValueError as exc:
+            raise ValueError(
+                f"{exc} provider={server_info.name!r} type={server_info.type} "
+                f"model_id={model_info.id} model={model_info.model_name}"
+            ) from exc
+        # F087: task mode reads ``context_window`` from the advanced config; the
+        # handlers merge the advanced config into the client kwargs, so drop it
+        # here or it would be sent to the provider as an unknown parameter.
+        params.pop("context_window", None)
         return params
 
     def _get_default_params(self, server_config: dict, model_config: dict) -> dict:
@@ -331,6 +407,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         return self.llm._llm_type
 
     @wrapper_bisheng_model_limit_check
+    @account_sync
     def _generate(
         self,
         messages: list[BaseMessage],
@@ -339,18 +416,23 @@ class BishengLLM(BishengBase, BaseChatModel):
         stream: bool | None = None,
         **kwargs: Any,
     ) -> ChatResult:
-        if getattr(self.llm, "streaming", False):
-            # langchain-openai 1.x no longer aggregates a streaming response inside
-            # `_generate` (it returns a raw `Stream` and relies on `_generate_with_cache`
-            # to dispatch streaming models to `_stream`). Because we delegate to the inner
-            # model directly, aggregate the stream here — this also keeps `on_llm_new_token`
-            # callbacks firing so workflow / chat UI streaming keeps working.
-            ret = generate_from_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
-        else:
-            ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+        try:
+            if getattr(self.llm, "streaming", False):
+                # langchain-openai 1.x no longer aggregates a streaming response inside
+                # `_generate` (it returns a raw `Stream` and relies on `_generate_with_cache`
+                # to dispatch streaming models to `_stream`). Because we delegate to the inner
+                # model directly, aggregate the stream here — this also keeps `on_llm_new_token`
+                # callbacks firing so workflow / chat UI streaming keeps working.
+                ret = generate_from_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
+            else:
+                ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+        except Exception as exc:
+            _raise_as_context_overflow(exc)
+            raise
         return normalize_reasoning_content(ret)
 
     @wrapper_bisheng_model_limit_check_async
+    @account_async
     async def _agenerate(
         self,
         messages: list[BaseMessage],
@@ -359,12 +441,18 @@ class BishengLLM(BishengBase, BaseChatModel):
         stream: bool | None = None,
         **kwargs: Any,
     ) -> ChatResult:
-        if getattr(self.llm, "streaming", False):
-            # See `_generate`: aggregate the inner stream so `on_llm_new_token` callbacks
-            # keep firing (workflow / chat UI streaming) instead of returning a raw Stream.
-            ret = await agenerate_from_stream(self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs))
-        else:
-            ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+        try:
+            if getattr(self.llm, "streaming", False):
+                # See `_generate`: aggregate the inner stream so `on_llm_new_token` callbacks
+                # keep firing (workflow / chat UI streaming) instead of returning a raw Stream.
+                ret = await agenerate_from_stream(
+                    self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs)
+                )
+            else:
+                ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+        except Exception as exc:
+            _raise_as_context_overflow(exc)
+            raise
         return normalize_reasoning_content(ret)
 
     def _get_ls_params(self, stop: list[str] | None = None, **kwargs: Any) -> LangSmithParams:
@@ -385,6 +473,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         return super().bind(tools=formatted_tools, **kwargs)
 
     @wrapper_bisheng_model_generator
+    @account_sync_stream
     def _stream(
         self,
         messages: list[BaseMessage],
@@ -392,10 +481,15 @@ class BishengLLM(BishengBase, BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
-            yield normalize_reasoning_content(one)
+        try:
+            for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
+                yield normalize_reasoning_content(one)
+        except Exception as exc:
+            _raise_as_context_overflow(exc)
+            raise
 
     @wrapper_bisheng_model_generator_async
+    @account_async_stream
     async def _astream(
         self,
         messages: list[BaseMessage],
@@ -403,5 +497,9 @@ class BishengLLM(BishengBase, BaseChatModel):
         run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
-            yield normalize_reasoning_content(one)
+        try:
+            async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+                yield normalize_reasoning_content(one)
+        except Exception as exc:
+            _raise_as_context_overflow(exc)
+            raise

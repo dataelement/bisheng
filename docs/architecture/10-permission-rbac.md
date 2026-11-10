@@ -1,7 +1,7 @@
 # 用户、菜单与资源权限架构
 
 > 现状版本：v3.0.0-beta1 / F048
-> 最后更新：2026-08-13
+> 最后更新：2026-10-28
 > 规范来源：`features/v3.0.0-beta1/048-rebac-permission-model-grants/`
 
 BiSheng 的权限体系分为三个互不替代的层面：
@@ -505,6 +505,29 @@ draft 绑定 base release、impact checksum、过期时间和 idempotency key。
 roster 使用 opaque cursor，page size 1～100。mutation 支持 ADD / MOVE /
 REMOVE，必须携带 resource、Catalog 和 assignee 乐观版本。
 
+#### 8.2.1 部门授权候选范围
+
+`/resources/{type}/{id}/grant-subjects/departments/children`、`search` 和
+`{dept_id}/path-tree` 检查资源的 `manage_permission`，不要求调用者拥有
+部门管理身份。候选范围由已验证资源的租户确定；部门知识空间再与绑定
+部门子树取交集。创建知识空间、频道时的部门授权候选复用同一范围逻辑。
+
+租户根以 `tenant.root_dept_id` 为准。挂载子租户不会改写部门原来的
+`parent_id`、`tenant_id`，因此不能用 `parent_id IS NULL` 或部门存储租户
+等于资源租户来识别其根节点。`GrantDepartmentRepository` 验证根指针、
+挂载双向关系及活动状态后，按根部门的存储租户和物化路径限定查询；
+首层返回该范围根，展开只接受范围内的父部门，搜索和定位截断根之上的
+祖先。`has_children` 同样在此范围内计算，祖先和子节点存在性查询按
+100 个 ID 分批读取。
+
+保存部门授权时也复用该租户范围校验，再进入原有 F048 Grant mutation
+和投影流水。失效根指针、归档根、异常路径或不一致挂载关系返回空候选，
+对应非法部门授权被拒绝，不回退为无边界查询。
+
+回归入口：`test/tenant/test_grant_department_scope.py`。其 SQLite SQL、
+ASGI 接口及 mutation 调用链测试覆盖挂载根、独立根、部门空间限制、
+普通用户权限入口和跨租户拒绝；真实 OpenFGA、MySQL/DM8 验证仍按 §14。
+
 ### 8.3 决策
 
 `POST /check` 接收 `resource_type`、`resource_id`、具体 action。endpoint
@@ -577,6 +600,62 @@ src/backend/scripts/migrate_f048_permission_data.py
 没有 preview、dry-run、rollback、cleanup、Store switch、中间 F048 model、
 model A/B 或第二次迁移。迁移失败时保持应用迁移门禁和 F048 runtime 不就绪，
 只允许携带同一 `run-id`、固定 Store/source model 的前向恢复。
+
+---
+
+## 10.1 存量环境新增业务资源类型（F054 `app`）
+
+「给 F048 加一种业务资源类型」在**全新安装**上不需要任何操作——模型由代码常量在首启时构建。
+但在**已经跑过 §10 迁移的存量环境**上，只改代码会让全站权限直接不可用，原因有两条且互相独立：
+
+1. **授权模型 checksum 变了**。每个进程把代码构建出的模型与 SQL 控制面 pin 的那个比对，
+   不一致就不发 ready 心跳、所有权限判定一律 503 —— 不只是新类型，是**全部**。
+2. **运行期没有任何代码路径写 `permission_action_resource_scope`**。该表只在首次迁移与
+   Catalog 草稿发布两处写入，而 `CatalogChangeType` 的 7 个取值**没有一个能改
+   `resource_types`**。不补这批行，`is_action_effective(<新类型>, …)` 的 SQL join 永远为假，
+   任何 `check_business_action` 都抛 `InvalidCatalogActionError`。
+
+因此存量生效是一个**四步**过程，入口只有一个脚本：
+
+```text
+src/backend/scripts/upgrade_f048_authorization_model.py   （包装器 .sh，默认 dry-run）
+```
+
+1. **（控制面 HTTP，事务外）** 在同一 Store 内按 canonical checksum 查重后发布新模型 M2；
+   已存在同 checksum 的模型则直接沿用（这也是重跑幂等的根据）。
+2. `authorization_model_release` 插入新 ACTIVE 行（`model_version=f048-v2`、
+   `predecessor_model_id=M1`、重算 `required_relations_checksum`），M1 行置 RETIRED。
+3. CURRENT `permission_catalog_release.required_authorization_model_release_id` 指向新行。
+4. 对目标 action 补 `permission_action_resource_scope(action_id, <新类型>)` 并重算 release checksum。
+
+**步骤 2–4 在同一个 SQL 事务**，中途异常整体回滚；步骤 1 是一次 HTTP 写、进不了 SQL 事务。
+这条边界不是洁癖：只要「指针已改、scope 行没补」这个中间态落了地，所有进程都会加载一份
+「新类型下没有任何 action 生效」的 Catalog，而且这个状态在任何日志里都读起来像"升级成功"。
+
+```bash
+cd src/backend/
+export config=config.yaml     # 必须与线上服务同一个值
+
+bash scripts/upgrade_f048_authorization_model.sh              # plan：只读，什么都不写
+bash scripts/upgrade_f048_authorization_model.sh apply
+bash scripts/upgrade_f048_authorization_model.sh verify
+```
+
+**三件必须写死的事**：
+
+- **跑完必须重启全部进程**（API / celery×3 / beat / linsight worker）。心跳 15s 复核、TTL 45s，
+  没重启的旧进程不是"还能用"，而是会自行 fail-closed。
+- **先发代码、后往 `config.yaml` 加新键**。`load_settings_from_yaml` 遇未知顶层键直接 `KeyError`
+  拒绝启动，顺序反了的现象是后端起不来，而不是功能不可用。
+- **存量环境先 `plan` 再 `apply`**。
+
+**回滚语义**（别被"事务"两字误导）：`rollback` 子命令把 ACTIVE 指针指回 M1 行、撤掉新类型的
+scope 行，然后同样要重启全部进程。**步骤 1 写进 Store 的 M2 回滚不掉**——OpenFGA 的授权模型
+不可变、不可删，M2 会变成一个没人 pin 的孤儿。这无害，恰恰是因为步骤 1 按 checksum 查重：
+下一次 `apply` 会认领这个孤儿，而不是再发一个。
+
+**不要用 `force_write_model`**：它只写 OpenFGA 不写 SQL、不查重（每次重启多一个重复 model）、
+且生产环境禁用——三条各自都足以让它当不了升级手段。
 
 ---
 

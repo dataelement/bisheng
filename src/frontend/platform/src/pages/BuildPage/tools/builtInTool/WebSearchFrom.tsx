@@ -1,13 +1,15 @@
 // @ts-strict-ignore
-import { LoadingIcon } from '@/components/bs-icons/loading';
-import { Button } from '@/components/bs-ui/button';
-import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
+import { Button, notification } from '@bisheng/ui';
+import { LoadingIcon } from "@/components/bs-icons/loading";
+
+
+import { DialogClose,DialogFooter } from "@/components/bs-ui/dialog";
 import { Label } from '@/components/bs-ui/label';
-import { toast } from '@/components/bs-ui/toast/use-toast';
-import { getToolsApi, updateToolApi } from '@/controllers/API/tools';
-import { useEffect, useRef, useState } from 'react';
+
+import { getToolsApi,updateToolApi } from '@/controllers/API/tools';
+import { useEffect,useRef,useState } from 'react';
 import { useTranslation } from "react-i18next";
-import { InputField, SelectField } from "./InputField";
+import { InputField,SelectField } from "./InputField";
 
 const defaultToolParams = {
     bing: {
@@ -38,6 +40,10 @@ const defaultToolParams = {
     },
     searXNG: {
         server_url: ''
+    },
+    deepseek: {
+        api_key: '',
+        base_url: ''
     },
 };
 
@@ -84,11 +90,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                     }
                 }
             } catch (error: any) {
-                toast({
-                    title: t('failed'),
-                    description: error?.message || '',
-                    variant: 'error',
-                });
+                notification.open({ type: 'error', title: String(t('failed') ?? ''), description: String(error?.message || '') });
             } finally {
                 setLoading(false);
             }
@@ -131,11 +133,14 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
         },
         cloudsway: {
-            api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required'),
-            endpoint: (value) => !value && 'endpoint ' + t('chatConfig.errors.required')
+            api_key: (value) => !value && 'AccessKey ' + t('chatConfig.errors.required'),
+            endpoint: (value) => !value && 'Endpoint ' + t('chatConfig.errors.required')
         },
         searXNG: {
             server_url: (value) => !value && 'The server address cannot be empty'
+        },
+        deepseek: {
+            api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
         }
     };
 
@@ -185,6 +190,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             tavily: (allToolsConfig as any).tavily || defaultToolParams.tavily,
             cloudsway: (allToolsConfig as any).cloudsway || defaultToolParams.cloudsway,
             searXNG: (allToolsConfig as any).searXNG || defaultToolParams.searXNG,
+            deepseek: allToolsConfig.deepseek || defaultToolParams.deepseek,
         };
 
         const newConfig = {
@@ -198,22 +204,14 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                 if (toolIdRef.current) {
                     await updateToolApi(toolIdRef.current, newConfig);
                 }
-                toast({
-                    title: t('skills.saveSuccessful'),
-                    description: '',
-                    variant: 'success',
-                });
+                notification.open({ type: 'success', title: String(t('skills.saveSuccessful') ?? ''), description: String('') });
                 // Close the pop-up window after successful submission.
                 closeRef.current?.click();
             } else {
                 onSubmit?.(newConfig);
             }
         } catch (error: any) {
-            toast({
-                title: t('failed'),
-                description: error?.message || '',
-                variant: 'error',
-            });
+            notification.open({ type: 'error', title: String(t('failed') ?? ''), description: String(error?.message || '') });
         }
     };
 
@@ -336,6 +334,34 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             case 'cloudsway':
                 return (
                     <>
+                        {/* Cloudsway issues an AccessKey and an Endpoint id; the console names are used as labels */}
+                        <InputField
+                            required
+                            label="AccessKey"
+                            type="password"
+                            name="api_key"
+                            value={currentToolMap['api_key'] || ''}
+                            onChange={handleParamChange}
+                            error={(formErrors as any).api_key}
+                            id="cloudsway-api-key"
+                            tooltip={t('chatConfig.webSearch.cloudswayAccessKeyTip')}
+                        />
+                        <InputField
+                            required
+                            label="Endpoint"
+                            name="endpoint"
+                            value={currentToolMap['endpoint'] || ''}
+                            onChange={handleParamChange}
+                            error={(formErrors as any).endpoint}
+                            id="cloudsway-endpoint"
+                            tooltip={t('chatConfig.webSearch.cloudswayEndpointTip')}
+                        />
+                        {baseUrlField}
+                    </>
+                );
+            case 'deepseek':
+                return (
+                    <>
                         <InputField
                             required
                             label="API Key"
@@ -343,19 +369,19 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                             name="api_key"
                             value={currentToolMap['api_key'] || ''}
                             onChange={handleParamChange}
-                            error={(formErrors as any).api_key}
-                            id="cloudsway-api-key"
+                            error={(formErrors as Record<string, string>).api_key}
+                            id="deepseek-api-key"
                         />
+                        {/* Empty base_url falls back to this endpoint on the backend */}
                         <InputField
-                            required
-                            label="endpoint"
-                            name="endpoint"
-                            value={currentToolMap['endpoint'] || ''}
+                            label="Base URL"
+                            name="base_url"
+                            value={currentToolMap['base_url'] || ''}
                             onChange={handleParamChange}
-                            error={(formErrors as any).endpoint}
-                            id="cloudsway-endpoint"
+                            error={(formErrors as Record<string, string>).base_url}
+                            id="deepseek-base-url"
+                            placeholder="https://api.deepseek.com/v1/tools/search"
                         />
-                        {baseUrlField}
                     </>
                 );
             case 'searXNG':
@@ -403,6 +429,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                         { value: 'tavily', label: t('chatConfig.webSearch.tavily') },
                         { value: 'searXNG', label: t('chatConfig.webSearch.searXNG') },
                         { value: 'cloudsway', label: t('chatConfig.webSearch.cloudsway') },
+                        { value: 'deepseek', label: t('chatConfig.webSearch.deepseek') },
                     ]}
                     id="search-tool-selector"
                     name="search_tool"
@@ -415,11 +442,11 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
 
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outline" className="px-11" type="button">
+                        <Button variant="outlined" type="button" color="default">
                             {t('build.cancel')}
                         </Button>
                     </DialogClose>
-                    <Button className="px-11" type="submit" disabled={isApi && loading}>
+                    <Button type="submit" disabled={isApi && loading}>
                         {t('build.confirm')}
                     </Button>
                 </DialogFooter>

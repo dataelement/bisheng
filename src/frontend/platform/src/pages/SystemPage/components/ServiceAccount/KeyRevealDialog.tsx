@@ -1,18 +1,21 @@
-import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Button, notification } from '@bisheng/ui';
+
+import { Checkbox } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog"
-import { toast } from "@/components/bs-ui/toast/use-toast"
-import type { ApiKeyIssued } from "@/types/api/openApi"
-import { copyText } from "@/utils"
-import { ChevronRight, Copy } from "lucide-react"
-import { useEffect, useState } from "react"
-import { useTranslation } from "react-i18next"
+Dialog,
+DialogContent,
+DialogFooter,
+DialogHeader,
+DialogTitle,
+} from "@/components/bs-ui/dialog";
+
+import type { ApiKeyIssued } from "@/types/api/openApi";
+import { copyText } from "@/utils";
+
+import { useEffect,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface KeyRevealDialogProps {
   issuedKey: ApiKeyIssued | null
@@ -57,11 +60,7 @@ export function KeyRevealDialog({ issuedKey, onClose }: KeyRevealDialogProps) {
 
   const handleCopy = (value: string) => {
     copyText(value)
-    toast({
-      title: t("openApiManagement.keys.revealTitle"),
-      description: t("openApiManagement.feedback.copied"),
-      variant: "success",
-    })
+    notification.open({ type: "success", title: String(t("openApiManagement.keys.revealTitle") ?? ''), description: String(t("openApiManagement.feedback.copied") ?? '') })
   }
 
   const handleClose = () => {
@@ -86,29 +85,19 @@ export function KeyRevealDialog({ issuedKey, onClose }: KeyRevealDialogProps) {
             <code className="min-w-0 flex-1 break-all font-mono text-sm">
               {plaintext}
             </code>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleCopy(plaintext)}
-            >
-              <Copy aria-hidden="true" className="mr-1 size-3.5" />
+            <Button type="button" variant="outlined" size="small" onClick={() => handleCopy(plaintext)} color="default">
+              <Outlined.Copy aria-hidden="true" className="mr-1 size-3.5" />
               {t("openApiManagement.actions.copy")}
             </Button>
           </div>
           <div>
-            <button
-              type="button"
-              aria-expanded={verifyOpen}
-              className="flex items-center gap-1 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => setVerifyOpen((current) => !current)}
-            >
-              <ChevronRight
+            <Button variant="text" size="small" type="button" aria-expanded={verifyOpen} className="flex items-center gap-1 rounded-sm text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setVerifyOpen((current) => !current)} color="default">
+              <Outlined.Right
                 aria-hidden="true"
                 className={`size-4 transition-transform ${verifyOpen ? "rotate-90" : ""}`}
               />
               {t("openApiManagement.keys.verifyTitle")}
-            </button>
+            </Button>
             {verifyOpen ? (
               <div className="mt-2 space-y-2 pl-5">
                 <p className="text-xs text-muted-foreground">
@@ -123,15 +112,8 @@ export function KeyRevealDialog({ issuedKey, onClose }: KeyRevealDialogProps) {
                   <pre className="whitespace-pre-wrap break-all p-3 pr-12 font-mono text-xs leading-5">
                     {verifyCommand}
                   </pre>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1.5 top-1.5 size-7"
-                    aria-label={t("openApiManagement.actions.copy")}
-                    onClick={() => handleCopy(verifyCommand)}
-                  >
-                    <Copy aria-hidden="true" className="size-3.5" />
+                  <Button type="button" variant="text" size="medium" className="absolute right-1.5 top-1.5 size-7" aria-label={t("openApiManagement.actions.copy")} onClick={() => handleCopy(verifyCommand)} color="default" iconOnly>
+                    <Outlined.Copy aria-hidden="true" className="size-3.5" />
                   </Button>
                 </div>
               </div>

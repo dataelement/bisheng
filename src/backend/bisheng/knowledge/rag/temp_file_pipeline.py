@@ -1,6 +1,5 @@
 import time
 from functools import cached_property
-from typing import Dict, List
 
 from langchain_core.documents import BaseDocumentTransformer
 
@@ -9,23 +8,20 @@ from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
 from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
+from bisheng.knowledge.rag.pipeline.transformer.image_upload import ImageUploadTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
-from bisheng.user.domain.models.user import UserDao
 
 
 class TempFilePipeline(BaseFilePipeline):
     def __init__(
         self, invoke_user_id: int, local_file_path: str, file_name: str, file_rule: FileProcessBase = None, **kwargs
     ):
-        super(TempFilePipeline, self).__init__(
-            invoke_user_id, file_name, file_rule or FileProcessBase(knowledge_id=0), **kwargs
-        )
+        super().__init__(invoke_user_id, file_name, file_rule or FileProcessBase(knowledge_id=0), **kwargs)
         self.local_file_path = local_file_path
 
     @cached_property
-    def file_metadata(self) -> Dict:
-        uploader = UserDao.get_user(self.invoke_user_id)
-        uploader_name = uploader.user_name if uploader else None
+    def file_metadata(self) -> dict:
+        uploader_name = self._get_display_user_name(self.invoke_user_id)
 
         now = int(time.time())
         return Metadata(
@@ -39,11 +35,23 @@ class TempFilePipeline(BaseFilePipeline):
             user_metadata={},
         ).model_dump(exclude_none=True)
 
-    def _init_abstract_transformers(self) -> List[BaseDocumentTransformer]:
-        return []
+    def _init_abstract_transformers(self) -> list[BaseDocumentTransformer]:
+        if not self.image_storage:
+            return []
+        return [
+            ImageUploadTransformer(
+                loader=self.loader,
+                document_id=self.image_storage.object_dir,
+                knowledge_id=0,
+                retain_images=self.file_split_rule.retain_images == 1,
+                storage=self.image_storage,
+            )
+        ]
 
-    def _init_common_transformers(self) -> List[BaseDocumentTransformer]:
+    def _init_common_transformers(self) -> list[BaseDocumentTransformer]:
         transformers = self._init_abstract_transformers()
+        if not self.split_for_retrieval:
+            return transformers
         if self.should_use_ppt_page_split():
             transformers.append(DirectChunkTransformer())
         elif self.docflow_structure_splitter() is not None:
@@ -64,6 +72,6 @@ class TempFilePipeline(BaseFilePipeline):
             transformers.append(SplitterTransformer(**self.get_splitter_kwargs()))
         return transformers
 
-    def _init_excel_transformers(self) -> List[BaseDocumentTransformer]:
+    def _init_excel_transformers(self) -> list[BaseDocumentTransformer]:
         transformers = self._init_abstract_transformers()
         return transformers

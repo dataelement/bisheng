@@ -38,7 +38,19 @@ def embedding_profile(delegate):
 
 
 def chunk_identity(document):
-    metadata = document.metadata
+    metadata = dict(document.metadata)
+    # The citation-origin label does not alter stored one-based coordinates.
+    # Match the pre-label SplitterTransformer JSON exactly so upgrades can
+    # resume a confirmed vector_done checkpoint by writing Elasticsearch only.
+    bbox = metadata.get("bbox")
+    if isinstance(bbox, str):
+        try:
+            parsed_bbox = json.loads(bbox)
+        except (TypeError, ValueError):
+            parsed_bbox = None
+        if isinstance(parsed_bbox, dict) and parsed_bbox.get("page_base") == 1:
+            parsed_bbox.pop("page_base")
+            metadata["bbox"] = json.dumps(parsed_bbox)
     text = document.page_content
     abstract = metadata.get("abstract")
     if abstract and text.startswith("{<file_title>"):

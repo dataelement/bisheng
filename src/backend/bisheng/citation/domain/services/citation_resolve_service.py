@@ -16,6 +16,7 @@ from bisheng.citation.domain.schemas.citation_schema import (
     UnresolvedCitationSchema,
     WebCitationPayloadSchema,
 )
+from bisheng.citation.domain.services.citation_coordinates import normalize_citation_coordinates
 from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.citation.domain.services.citation_runtime_cache_service import CitationRuntimeCacheService
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -184,7 +185,9 @@ class CitationResolveService:
         and bbox (AC-21).
         """
         del login_user  # filter step already enforced view_file for per_user
-        payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
+        # Enrichment also handles cached/persisted legacy coordinates. Work on
+        # a copy so later resolves cannot mutate or double-shift the source.
+        payload = RagCitationPayloadSchema.model_validate(item.sourcePayload).model_copy(deep=True)
         file_id = payload.documentId
 
         if file_id is not None:
@@ -217,6 +220,10 @@ class CitationResolveService:
                             first_item = payload.items[0]
                             resolved_bbox = await self._resolve_bbox(file_info.id, first_item.bbox)
                             payload.items[0] = first_item.model_copy(update={"bbox": resolved_bbox})
+                    base = 1 if getattr(file_info, "parse_type", None) == "docflow" else None
+                    for index, chunk in enumerate(payload.items):
+                        bbox, page = normalize_citation_coordinates(chunk.bbox, chunk.page, default_base=base)
+                        payload.items[index] = chunk.model_copy(update={"bbox": bbox, "page": page})
 
         return item.model_copy(update={"sourcePayload": payload})
 

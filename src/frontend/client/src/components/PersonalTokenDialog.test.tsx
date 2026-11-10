@@ -81,7 +81,7 @@ it.each(["en", "zh-Hans", "ja"])("copies the visible prompt in %s with the curre
   render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
   await waitFor(() => expect(screen.getByRole("button", { name: mockI18n.t("com_ai_access.get_key") })).toBeEnabled());
   const prompt = mockI18n.t("com_ai_access.install_prompt", {
-    skillPackUrl: "http://localhost:3080/api/v1/open-api/skill-packs/knowledge-search",
+    skillPackUrl: "http://localhost:3080/workspace/api/v1/open-api/skill-packs/knowledge-search",
     tokenPageUrl: "http://localhost:3080/workspace/settings/ai-access?connect=1",
   });
   expect(screen.getByText(prompt, { normalizer: (value) => value })).toBeInTheDocument();
@@ -242,6 +242,6 @@ it("reports copy failures without a success message", async () => {
   jest.mocked(copyText).mockRejectedValueOnce(new Error("clipboard unavailable"));
   render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: en.com_ai_access.copy_all })); });
-  expect(mockToast).toHaveBeenCalledWith({ message: en.com_ai_access.copy_failed, status: "error" });
+  expect(mockToast).toHaveBeenCalledWith({ message: en.com_ai_access.copy_failed, status: "warning" });
   expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({ status: "success" }));
 });

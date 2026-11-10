@@ -245,9 +245,9 @@ def test_unknown_handles_stay_literal_and_are_reported():
 
 
 def test_definition_lines_are_counted_not_converted():
-    result = convert_handles_to_markers("[S3]: 定义\n[S7]：另一条定义\n", H)
+    result = convert_handles_to_markers("[S3]: 定义\n[S7]：另一条定义\n", H)  # noqa: RUF001
 
-    assert result.text == "[S3]: 定义\n[S7]：另一条定义\n"
+    assert result.text == "[S3]: 定义\n[S7]：另一条定义\n"  # noqa: RUF001
     assert result.skipped_definitions == 2
     assert result.converted == 0
 
@@ -457,6 +457,28 @@ def test_export_pdf_page_is_zero_based_like_its_bboxes():
     assert "1. 《方案.pdf》 · 第 1 页" in r.text
     assert "2. 《方案.pdf》 · 第 20 页" in r.text
     assert "段" not in r.text.split("## 参考资料")[1]
+
+
+@pytest.mark.parametrize(
+    "page,origin,label",
+    [(0, 0, "第 1 页"), (1, 0, "第 2 页"), (1, "0", "第 1 页"), (1, False, "第 1 页"), (1, 1, "第 1 页")],
+)
+def test_page_origin_without_boxes_labels_source_and_export(page, origin, label):
+    item = CitationRegistryItemSchema(
+        citationId="knowledgesearch_pageorigin",
+        itemId="0",
+        type=CitationType.RAG,
+        sourcePayload=RagCitationPayloadSchema(
+            documentId=13,
+            documentName="方案.pdf",
+            items=[
+                RagCitationItemSchema(itemId="0", page=page, chunkIndex=7, bbox=json.dumps({"page_base": origin})),
+            ],
+        ),
+    )
+    assert svc.build_entry(item, "S1")["loc"] == label
+    rendered = render_citations_for_export(f"结论{_m('knowledgesearch_pageorigin:0')}", [item])
+    assert f"1. 《方案.pdf》 · {label}" in rendered.text
 
 
 WEB_KEY = "websearch_bbbb2222:1"

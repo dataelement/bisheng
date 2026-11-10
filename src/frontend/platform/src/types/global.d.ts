@@ -5,6 +5,8 @@ declare global {
         SearchSkillsPage: any;
         errorAlerts: (errorList: string[]) => void
         _flow: any
+        /** Set right after an assistant is created; its config page then starts auto-optimization and description generation. */
+        assistantCreate?: boolean
         /** Branding fields injected at runtime by brand-runtime.js (from /api/v1/brand/runtime-config, cached in localStorage). */
         BRAND_CONFIG?: {
             brandName?: { zh?: string; en?: string };
@@ -66,5 +68,8 @@ declare module "*.svg" {
 declare module "axios" {
   export interface AxiosRequestConfig {
     silent?: boolean
+    showError?: boolean
+    /** @deprecated Errors always retain transport evidence. */
+    preserveError?: boolean
   }
 }

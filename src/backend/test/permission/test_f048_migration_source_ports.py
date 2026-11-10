@@ -188,7 +188,6 @@ async def test_tool_is_system_owned_but_dashboards_are_user_owned():
                 status="ACTIVE",
                 owner_user_id=None,
                 preset=True,
-                system_allowlisted=True,
             ),
         )
     )
@@ -226,16 +225,15 @@ async def test_tool_is_system_owned_but_dashboards_are_user_owned():
     assert dashboard_page.items[1].owner_user_id == 11
 
 
-async def test_invalid_system_predicate_is_exported_as_user_fact_for_inventory_blocking():
+async def test_preset_tool_creator_does_not_change_system_ownership():
     repository = FakeRepository(
         (
             ToolMigrationRow(
                 tenant_id=7,
                 resource_id="9",
                 status="ACTIVE",
-                owner_user_id=None,
+                owner_user_id=11,
                 preset=True,
-                system_allowlisted=False,
             ),
         )
     )
@@ -245,5 +243,6 @@ async def test_invalid_system_predicate_is_exported_as_user_fact_for_inventory_b
         limit=50,
     )
 
-    assert page.items[0].ownership_kind == "USER"
-    assert page.items[0].owner_user_id is None
+    assert page.items[0].ownership_kind == "SYSTEM"
+    assert page.items[0].system_allowlisted is True
+    assert page.items[0].owner_user_id == 11

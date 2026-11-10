@@ -297,6 +297,21 @@ class TestSkillStore:
         with pytest.raises(FileNotFoundError):
             store.read_text(1, "demo-skill", "0" * 64)
 
+    def test_storage_no_such_key_is_a_missing_bundle(self, store):
+        """MinIO raises NoSuchKey; readers must see FileNotFoundError, not a 500."""
+
+        class _NoSuchKey(Exception):
+            code = "NoSuchKey"
+
+        def _missing(**_kwargs):
+            raise _NoSuchKey("The specified key does not exist.")
+
+        store.minio.get_object_sync = _missing
+        content_hash = "0" * 64
+        with pytest.raises(FileNotFoundError):
+            store.read_text(1, "demo-skill", content_hash)
+        assert store.list_files(1, "demo-skill", content_hash) == []
+
     @pytest.mark.parametrize("evil", ["../evil.md", "/abs.md", "a/../../evil.md"])
     def test_traversal_rejected_on_write(self, store, evil):
         with pytest.raises(ValueError, match="illegal bundle path"):

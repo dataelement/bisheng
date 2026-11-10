@@ -147,7 +147,7 @@ class AutomaticQuotaRecovery:
             for event in inventory.values():
                 totals = months.setdefault(event.usage_month, {})
                 key = str(event.model_id)
-                totals[key] = totals.get(key, 0) + (event.total_tokens or 0)
+                totals[key] = totals.get(key, 0) + (event.billed_tokens or 0)
             # Keep intact counters even if their individual Redis request has already been removed.
             cursor = 0
             while True:

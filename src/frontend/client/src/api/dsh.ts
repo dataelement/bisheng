@@ -47,3 +47,9 @@ export type DshUsageTimeSummary = {
 export async function getDshUsageSummary(signal?: AbortSignal): Promise<DshUsageTimeSummary> {
   return unwrap(await request.get<Envelope<DshUsageTimeSummary>>('/api/v1/dsh/me/usage-summary', { signal }));
 }
+
+
+export type DshCredits = { remaining: string | null; limit: string; used: string | null; reset_at: string };
+export async function getDshCredits(signal?: AbortSignal): Promise<DshCredits> {
+  return unwrap(await request.get<Envelope<DshCredits>>('/api/v1/dsh/me/credits', { signal }));
+}

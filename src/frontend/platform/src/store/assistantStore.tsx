@@ -2,7 +2,7 @@ import { AssistantDetail } from '@/types/assistant'
 import { create } from 'zustand'
 
 /**
- * 助手编辑管理
+ * Assistant editing state
  */
 
 type State = {
@@ -14,6 +14,8 @@ type Actions = {
   dispatchAssistant: (action: Action, assistantState: Partial<AssistantDetail>) => void,
   // C7: callers fetch via getAssistantDetailApi and hand the payload in here.
   setAssistantDetail: (data: AssistantDetail) => void
+  // The backend stores the generated description itself, so this does not mark the page as changed
+  setGeneratedDesc: (desc: string) => void
   saveAfter: () => void
   destroy: () => void
 }
@@ -64,6 +66,9 @@ export const useAssistantStore = create<State & Actions>((set) => ({
         guide_question: data.guide_question ? [...data.guide_question, ''] : ['']
       }
     })
+  },
+  setGeneratedDesc: (desc) => {
+    set((state) => ({ assistantState: { ...state.assistantState, desc } }))
   },
   saveAfter() {
     set({ changed: false })

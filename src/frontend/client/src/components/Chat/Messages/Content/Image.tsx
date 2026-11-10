@@ -80,7 +80,7 @@ const Image = ({
           </Dialog.Trigger>
         </div>
       </div>
-      {isLoaded && <DialogImage src={imagePath} height={height} width={width} />}
+      {isLoaded && <DialogImage src={imagePath} />}
     </Dialog.Root>
   );
 };

@@ -1,31 +1,27 @@
 // @ts-strict-ignore
-import { HelpCircle } from "lucide-react";
+import { Button, Input, Select } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
 import { useContext, useEffect, useRef, useState } from "react";
-import { Button } from "../../../components/bs-ui/button";
-import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectTrigger,
-    SelectValue
-} from "../../../components/bs-ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/bs-ui/tooltip";
+
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { Tooltip } from "@bisheng/ui";
 
 import { useTranslation } from "react-i18next";
-import { Input } from "../../../components/bs-ui/input";
+
 import { Label } from "../../../components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "../../../components/bs-ui/radio-group";
+import { RadioGroup, Radio as RadioGroupItem } from "@bisheng/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
 import { getFTServicesApi, getServicesApi } from "../../../controllers/API";
 import { createTaskApi } from "../../../controllers/API/finetune";
-import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
+import { showApiError } from "../../../controllers/request";
 import Combobox from "./Combobox";
 import CreateTaskList from "./CreateTaskList";
 
 export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
     const { t } = useTranslation('model')
+    const selectLabels = useSelectLabels()
     const defaultTable = [
         { name: 'gpus', value: '', desc: t('finetune.gpuDesc') },
         { name: 'val_ratio', value: '0.1', desc: t('finetune.valRatioDesc') },
@@ -66,52 +62,48 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
         if (!resultRef.current.server) errors.push(t('finetune.selectRTService'))
         if (!resultRef.current.base_model) errors.push(t('finetune.selectBaseModel'))
         if (!/^(?=.*[a-zA-Z])(?=.*\d)?[a-zA-Z\d_-]+$/.test(resultRef.current.model_name)) errors.push(t('finetune.enterModelName'))
+        if (String(resultRef.current.model_name ?? '').length > 50) errors.push(t('finetune.enterModelName'));
         if (errors.length) return setErrorData({ title: '', list: errors });
         // 合并数据
         console.log('object :>> ', resultRef.current);
         setLoading(true)
         // api
-        const res = await captureAndAlertRequestErrorHoc(createTaskApi(resultRef.current))
-        setLoading(false)
-        if (!res) return
-
+        try {
+        const res = await createTaskApi(resultRef.current)
         onCreate(res.id)
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            setLoading(false)
+        }
     }
 
     return <div className="pt-2 h-[calc(100vh-162px-var(--license-banner-h,0px))] px-2 overflow-y-auto">
         <div className="border-b pb-2 flex justify-between items-center">
             <h1 className="">{t('finetune.createTrainingTask')}</h1>
             {/* <Button variant="black" onClick={rtClick}>FT服务管理</Button> */}
-            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+            <Button onClick={rtClick} variant="solid" color="default">{t('finetune.rtServiceManagement')}</Button>
         </div>
         {/* base */}
         <div className="border-b pb-4">
             <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500 flex gap-2 items-center">
                     <span>{t('finetune.rtService')}</span>
-                    {/* <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger><HelpCircle size={18} /></TooltipTrigger>
-                            <TooltipContent>
-                                <p>{t('finetune.rtServiceTooltip')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider> */}
+                    {/* <Tooltip content={<><p>{t('finetune.rtServiceTooltip')}</p></>}>
+                        <Button type="button" variant="ghost" size="icon" aria-label={t('finetune.rtServiceTooltip')}><Outlined.Question size={18} className="text-text-3" /></Button>
+                    </Tooltip> */}
                 </small>
                 <div className="flex gap-4 items-center">
-                    <Select onValueChange={handleRtChange}>
-                        <SelectTrigger className="w-[280px]">
-                            <SelectValue placeholder="" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {
-                                    services.map(service => <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>)
-                                }
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                    <Button size="sm" onClick={gpuClick}>{t('finetune.gpuResourceUsage')}</Button>
+                    <Select
+                        {...selectLabels}
+                        className="w-[280px]"
+                        aria-label={t('finetune.rtService')}
+                        options={services
+                            .filter(service => service.id != null && service.id !== '')
+                            .map(service => ({ value: service.id, label: String(service.name ?? '') }))}
+                        onChange={(val) => { if (val != null) handleRtChange(val) }}
+                    />
+                    <Button size="small" onClick={gpuClick}>{t('finetune.gpuResourceUsage')}</Button>
                 </div>
             </div>
             {/* datas */}
@@ -126,7 +118,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             </div>
             <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.finetuneModelName')}</small>
-                <Input maxLength={50} showCount className="max-w-[400px]" onChange={(e) => resultRef.current['model_name'] = e.target.value}></Input>
+                <Input maxLength={50} showCount onChange={(e) => resultRef.current['model_name'] = e.target.value} className={"max-w-[400px]"}></Input>
             </div>
         </div>
         {/* datas */}
@@ -161,14 +153,9 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500 flex gap-2 items-center">
                     <span>{t('finetune.parameterConfiguration')}</span>
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger><HelpCircle size={16} /></TooltipTrigger>
-                            <TooltipContent>
-                                <p>{t('finetune.parameterConfigurationTooltip')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    <Tooltip content={<><p>{t('finetune.parameterConfigurationTooltip')}</p></>}>
+                        <Button type="button" variant="text" size="medium" aria-label={t('finetune.parameterConfigurationTooltip')} color="default" iconOnly><Outlined.Question size={16} className="text-text-3" /></Button>
+                    </Tooltip>
                 </small>
                 <div>
                     <Table>
@@ -185,7 +172,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
                                     <TableRow key={index}>
                                         <TableCell className="font-medium">{item.name}</TableCell>
                                         <TableCell>
-                                            <Input className="text-sm w-[180px]" defaultValue={item.value} onChange={(e) => resultRef.current['extra_params'][item.name] = e.target.value}></Input>
+                                            <Input defaultValue={item.value} onChange={(e) => resultRef.current['extra_params'][item.name] = e.target.value} className={"text-sm w-[180px]"}></Input>
                                         </TableCell>
                                         <TableCell>{item.desc}</TableCell>
                                     </TableRow>
@@ -197,8 +184,8 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             </div>
         </div>
         <div className="mt-6 flex gap-6">
-            <Button disabled={loading} className="h-10 px-12" onClick={handleCreate}>{t('bs:create')}</Button>
-            <Button disabled={loading} className="h-10 px-12" variant="outline" onClick={onCancel}>{t('bs:cancel')}</Button>
+            <Button disabled={loading} onClick={handleCreate}>{t('bs:create')}</Button>
+            <Button disabled={loading} variant="outlined" onClick={onCancel} color="default">{t('bs:cancel')}</Button>
         </div>
     </div>
 };

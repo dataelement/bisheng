@@ -27,7 +27,7 @@ export default function ShareAppRedirect() {
     // flowType is the last segment after the last underscore
     const lastUnderscoreIdx = appSlug.lastIndexOf('_');
     if (lastUnderscoreIdx === -1) {
-      showToast?.({ message: '无效的分享链接', severity: NotificationSeverity.ERROR });
+      showToast?.({ message: '无效的分享链接', severity: NotificationSeverity.WARNING });
       navigate('/apps', { replace: true });
       return;
     }
@@ -36,7 +36,7 @@ export default function ShareAppRedirect() {
     const flowType = appSlug.substring(lastUnderscoreIdx + 1);
 
     if (!applicationId || !flowType) {
-      showToast?.({ message: '无效的分享链接', severity: NotificationSeverity.ERROR });
+      showToast?.({ message: '无效的分享链接', severity: NotificationSeverity.WARNING });
       navigate('/apps', { replace: true });
       return;
     }

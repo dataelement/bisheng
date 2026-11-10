@@ -1,7 +1,7 @@
 """Primary-version hard boundary for knowledge-space RAG retrieval."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
     KnowledgeFileVisibilityService,
@@ -24,12 +24,9 @@ async def _build_filter(
     service = _service(threshold=threshold)
     service._non_primary_ids = AsyncMock(return_value=non_primary_ids)
     service._list_primary_file_ids_in_space = AsyncMock(return_value=primary_ids)
-    action_map = {str(file_id): frozenset({"visible"}) for file_id in visible_ids}
-    with patch(
-        "bisheng.knowledge.domain.services.knowledge_file_visibility_service.batch_check_business_actions",
-        AsyncMock(return_value=action_map),
-    ):
-        result = await service.build_index_prefilter(10, None)
+    service._batch_visible_file_ids = AsyncMock(return_value=visible_ids)
+    result = await service.build_index_prefilter(10, None)
+    service._batch_visible_file_ids.assert_awaited_once_with(10, primary_ids)
     service._list_primary_file_ids_in_space.assert_awaited_once_with(
         10,
         non_primary_ids=non_primary_ids,

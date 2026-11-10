@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from elasticsearch import exceptions as es_exceptions
 from loguru import logger
@@ -16,6 +16,7 @@ from bisheng.telemetry_search.domain.schemas.query_builder import (
 
 class Constants:
     """Constants for Elasticsearch query building"""
+
     DEFAULT_SIZE = 10000
     MAX_SIZE = 65535
     DEFAULT_TERMS_SIZE = 65535
@@ -38,13 +39,7 @@ class Constants:
 class AggregationLevel:
     """Represents a single aggregation level in the hierarchy"""
 
-    def __init__(
-            self,
-            key: str,
-            config: AggregationExpression,
-            agg_type: str = "normal",
-            original_index: int = 0
-    ):
+    def __init__(self, key: str, config: AggregationExpression, agg_type: str = "normal", original_index: int = 0):
         self.key = key
         self.config = config
         self.type = agg_type
@@ -52,7 +47,7 @@ class AggregationLevel:
         self.nested_path = self._extract_nested_path(config.field)
 
     @staticmethod
-    def _extract_nested_path(field: Optional[str]) -> Optional[str]:
+    def _extract_nested_path(field: str | None) -> str | None:
         """Extract nested path from field (e.g., 'users.name' -> 'users')"""
         if field and "." in field:
             return field.split(".")[0]
@@ -71,25 +66,18 @@ class AggregationLevel:
 class SearchParameters(BaseModel):
     """Search parameters for Elasticsearch aggregation queries"""
 
-    index_name: Optional[str] = Field(description="Elasticsearch index name")
-    metrics: List[AggregationExpression] = Field(description="Metric aggregations")
-    dimensions: List[AggregationExpression] = Field(description="Dimension aggregations")
-    stack_dimension: Optional[AggregationExpression] = Field(
-        default=None,
-        description="Stack dimension for chart stacking"
+    index_name: str | None = Field(description="Elasticsearch index name")
+    metrics: list[AggregationExpression] = Field(description="Metric aggregations")
+    dimensions: list[AggregationExpression] = Field(description="Dimension aggregations")
+    stack_dimension: AggregationExpression | None = Field(
+        default=None, description="Stack dimension for chart stacking"
     )
-    filters: Optional[List[FilterExpression]] = Field(
-        default=None,
-        description="Query filters"
-    )
-    size: Optional[int] = Field(
-        default=Constants.DEFAULT_SIZE,
-        ge=Constants.MIN_SIZE,
-        le=Constants.MAX_SIZE,
-        description="Result size limit"
+    filters: list[FilterExpression] | None = Field(default=None, description="Query filters")
+    size: int | None = Field(
+        default=Constants.DEFAULT_SIZE, ge=Constants.MIN_SIZE, le=Constants.MAX_SIZE, description="Result size limit"
     )
 
-    @field_validator('metrics')
+    @field_validator("metrics")
     @classmethod
     def validate_metrics(cls, v):
         if not v:
@@ -97,7 +85,7 @@ class SearchParameters(BaseModel):
         return v
 
     @staticmethod
-    def _collect_metric_names(metrics: List[AggregationExpression]) -> Set[str]:
+    def _collect_metric_names(metrics: list[AggregationExpression]) -> set[str]:
         """Recursively collect all metric names including nested ones"""
         names = set()
         for metric in metrics:
@@ -107,7 +95,7 @@ class SearchParameters(BaseModel):
                 names.update(SearchParameters._collect_metric_names(metric.aggs))
         return names
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_pipeline_references(self):
         """Ensure pipeline aggregations reference valid metrics"""
         metric_names = self._collect_metric_names(self.metrics)
@@ -117,23 +105,20 @@ class SearchParameters(BaseModel):
                 continue
 
             if not metric.field:
-                raise ValueError(
-                    f"Pipeline aggregation '{metric.name}' missing field reference"
-                )
+                raise ValueError(f"Pipeline aggregation '{metric.name}' missing field reference")
 
             self._validate_metric_path(metric.field, metric_names, metric.name)
 
         return self
 
     @staticmethod
-    def _validate_metric_path(path: str, available_names: Set[str], metric_name: str):
+    def _validate_metric_path(path: str, available_names: set[str], metric_name: str):
         """Validate that all parts of a metric path exist"""
         parts = path.split(Constants.PATH_SEPARATOR)
         for part in parts:
             if part not in available_names:
                 raise ValueError(
-                    f"Pipeline aggregation '{metric_name}' references "
-                    f"non-existent metric '{part}' in path '{path}'"
+                    f"Pipeline aggregation '{metric_name}' references non-existent metric '{part}' in path '{path}'"
                 )
 
 
@@ -147,20 +132,14 @@ class NestedPathManager:
         """Create a nested aggregation wrapper"""
         self._counter += 1
         key = f"{Constants.NESTED_WRAPPER_PREFIX}{self._counter}_{path}"
-        config = {
-            "nested": {"path": path},
-            "aggs": {}
-        }
+        config = {"nested": {"path": path}, "aggs": {}}
         return key, config
 
     def create_reverse_nested_wrapper(self) -> tuple[str, dict]:
         """Create a reverse_nested aggregation wrapper"""
         self._counter += 1
         key = f"{Constants.REVERSE_NESTED_PREFIX}{self._counter}"
-        config = {
-            "reverse_nested": {},
-            "aggs": {}
-        }
+        config = {"reverse_nested": {}, "aggs": {}}
         return key, config
 
 
@@ -174,12 +153,12 @@ class ResultParser:
         self.num_metrics = len(parameters.metrics)
 
     @property
-    def stack_dim_index(self) -> Optional[int]:
+    def stack_dim_index(self) -> int | None:
         if not self.has_stack:
             return None
         return len(self.parameters.dimensions)
 
-    def parse_to_2d_array(self, es_response: dict) -> List[List[Any]]:
+    def parse_to_2d_array(self, es_response: dict) -> list[list[Any]]:
         """Parse ES response to 2D array format"""
         aggregations = self._extract_aggregations(es_response)
         if not aggregations:
@@ -207,59 +186,38 @@ class ResultParser:
         return {}
 
     def _traverse_buckets(
-            self,
-            current_aggs: dict,
-            current_row_dict: Dict[int, Any],
-            rows: List[List[Any]],
-            metric_keys: List[str]
+        self, current_aggs: dict, current_row_dict: dict[int, Any], rows: list[list[Any]], metric_keys: list[str]
     ) -> None:
         """Recursively traverse aggregation buckets"""
 
         # Check for nested/reverse_nested wrapper
         wrapper_key = self._find_wrapper_key(current_aggs)
         if wrapper_key:
-            self._traverse_buckets(
-                current_aggs[wrapper_key],
-                current_row_dict,
-                rows,
-                metric_keys
-            )
+            self._traverse_buckets(current_aggs[wrapper_key], current_row_dict, rows, metric_keys)
             return
 
         # Process dimension level
         dimension_key = self._find_dimension_key(current_aggs)
         if dimension_key:
-            self._process_dimension_level(
-                dimension_key,
-                current_aggs,
-                current_row_dict,
-                rows,
-                metric_keys
-            )
+            self._process_dimension_level(dimension_key, current_aggs, current_row_dict, rows, metric_keys)
             return
 
         # Process stack dimension
         if Constants.STACK_DIM_KEY in current_aggs:
-            self._process_stack_dimension(
-                current_aggs,
-                current_row_dict,
-                rows,
-                metric_keys
-            )
+            self._process_stack_dimension(current_aggs, current_row_dict, rows, metric_keys)
             return
 
         # Reached metric level, build result row
         self._build_result_row(current_aggs, current_row_dict, rows, metric_keys)
 
-    def _find_wrapper_key(self, aggs: dict) -> Optional[str]:
+    def _find_wrapper_key(self, aggs: dict) -> str | None:
         """Find nested/reverse_nested wrapper key if present"""
         for key in aggs:
-            if (key.startswith(Constants.NESTED_WRAPPER_PREFIX) or
-                    key.startswith(Constants.REVERSE_NESTED_PREFIX)):
+            if key.startswith(Constants.NESTED_WRAPPER_PREFIX) or key.startswith(Constants.REVERSE_NESTED_PREFIX):
                 return key
         return None
 
-    def _find_dimension_key(self, aggs: dict) -> Optional[str]:
+    def _find_dimension_key(self, aggs: dict) -> str | None:
         """Find dimension key in current aggregation level"""
         for key in aggs:
             if key.startswith(Constants.DIMENSION_PREFIX):
@@ -267,12 +225,12 @@ class ResultParser:
         return None
 
     def _process_dimension_level(
-            self,
-            dimension_key: str,
-            current_aggs: dict,
-            current_row_dict: Dict[int, Any],
-            rows: List[List[Any]],
-            metric_keys: List[str]
+        self,
+        dimension_key: str,
+        current_aggs: dict,
+        current_row_dict: dict[int, Any],
+        rows: list[list[Any]],
+        metric_keys: list[str],
     ) -> None:
         """Process a dimension level and recurse into buckets"""
         try:
@@ -290,11 +248,7 @@ class ResultParser:
             self._traverse_buckets(bucket, new_row_dict, rows, metric_keys)
 
     def _process_stack_dimension(
-            self,
-            current_aggs: dict,
-            current_row_dict: Dict[int, Any],
-            rows: List[List[Any]],
-            metric_keys: List[str]
+        self, current_aggs: dict, current_row_dict: dict[int, Any], rows: list[list[Any]], metric_keys: list[str]
     ) -> None:
         """Process stack dimension level"""
         buckets = current_aggs[Constants.STACK_DIM_KEY].get(Constants.BUCKETS_KEY, [])
@@ -304,11 +258,7 @@ class ResultParser:
             self._traverse_buckets(bucket, new_row_dict, rows, metric_keys)
 
     def _build_result_row(
-            self,
-            current_aggs: dict,
-            current_row_dict: Dict[int, Any],
-            rows: List[List[Any]],
-            metric_keys: List[str]
+        self, current_aggs: dict, current_row_dict: dict[int, Any], rows: list[list[Any]], metric_keys: list[str]
     ) -> None:
         """Build a result row from dimension values and metrics"""
         row = [None] * self.num_dims
@@ -338,28 +288,21 @@ class QueryBuilder:
 
     def __init__(self, parameters: SearchParameters):
         self.parameters = parameters
-        self._metric_name_to_key: Dict[str, str] = {}
+        self._metric_name_to_key: dict[str, str] = {}
         self._nested_manager = NestedPathManager()
 
     def build_query_dsl(self) -> dict:
         """Build complete query DSL"""
         try:
-            return {
-                "size": 0,
-                "query": self._build_bool_query(),
-                "aggs": self._build_aggregations()
-            }
+            return {"size": 0, "query": self._build_bool_query(), "aggs": self._build_aggregations()}
         except Exception as e:
             raise ValueError(f"Failed to build search query: {e!s}") from e
 
     def _build_bool_query(self) -> dict:
         """Build bool query from filters"""
-        if not self.parameters.filters:
-            return {"match_all": {}}
+        bool_query: dict[str, list] = {}
 
-        bool_query: Dict[str, List] = {}
-
-        for filter_expr in self.parameters.filters:
+        for filter_expr in self.parameters.filters or []:
             try:
                 expr_dsl = filter_expr.to_dsl()
                 for operator, conditions in expr_dsl.items():
@@ -368,6 +311,39 @@ class QueryBuilder:
                     bool_query[operator].extend(conditions)
             except Exception:
                 continue
+
+        # These metrics describe a whole invocation. Minute-expanded rows are
+        # needed for concurrency only; counting all of them weights long calls
+        # multiple times. Apply this at query time so existing dataset settings
+        # and historical documents need no migration.
+        event_fields = {"total_token", "first_token_cost_time"}
+        if self.parameters.index_name == "mid_model_call_dtl" and all(
+            metric.field in event_fields and not metric.aggs and not metric.is_pipeline_aggregation()
+            for metric in self.parameters.metrics
+        ):
+            bool_query.setdefault("filter", []).append(
+                {
+                    "script": {
+                        "script": {
+                            "lang": "painless",
+                            "source": """
+                                if (!doc.containsKey('minute_ts') || doc['minute_ts'].size() == 0) {
+                                    return true;
+                                }
+                                if (!doc.containsKey('end_time') || doc['end_time'].size() == 0) {
+                                    return false;
+                                }
+                                long minute = doc['minute_ts'].value.toInstant().toEpochMilli();
+                                long end = doc['end_time'].value.toInstant().toEpochMilli();
+                                // Legacy mappings parse numeric epoch seconds as milliseconds;
+                                // correctly mapped dates already expose epoch milliseconds.
+                                return minute == end - end % 60000L
+                                    || minute == end * 1000L - end * 1000L % 60000L;
+                            """,
+                        }
+                    }
+                }
+            )
 
         return {"bool": bool_query} if bool_query else {"match_all": {}}
 
@@ -385,7 +361,7 @@ class QueryBuilder:
 
         return aggs
 
-    def _prepare_aggregation_levels(self) -> List[AggregationLevel]:
+    def _prepare_aggregation_levels(self) -> list[AggregationLevel]:
         """Prepare aggregation levels with original indices"""
         levels = []
 
@@ -396,19 +372,13 @@ class QueryBuilder:
         if self.parameters.stack_dimension:
             levels.append(
                 AggregationLevel(
-                    Constants.STACK_DIM_KEY,
-                    self.parameters.stack_dimension,
-                    "stack",
-                    len(self.parameters.dimensions)
+                    Constants.STACK_DIM_KEY, self.parameters.stack_dimension, "stack", len(self.parameters.dimensions)
                 )
             )
 
         return levels
 
-    def _reorder_for_nested(
-            self,
-            levels: List[AggregationLevel]
-    ) -> List[AggregationLevel]:
+    def _reorder_for_nested(self, levels: list[AggregationLevel]) -> list[AggregationLevel]:
         """Group dimensions by nested path to minimize context switches"""
         if not levels:
             return []
@@ -428,17 +398,13 @@ class QueryBuilder:
                 for j in range(i + 1, len(levels)):
                     if j not in processed:
                         candidate = levels[j]
-                        if (candidate.is_nested() and
-                                candidate.nested_path == target_path):
+                        if candidate.is_nested() and candidate.nested_path == target_path:
                             reordered.append(candidate)
                             processed.add(j)
 
         return reordered
 
-    def _reorder_for_pipeline(
-            self,
-            levels: List[AggregationLevel]
-    ) -> List[AggregationLevel]:
+    def _reorder_for_pipeline(self, levels: list[AggregationLevel]) -> list[AggregationLevel]:
         """Move date histogram to innermost level for pipeline aggregations"""
         if not self._has_histogram_dependent_pipeline():
             return levels
@@ -454,7 +420,7 @@ class QueryBuilder:
     def _has_histogram_dependent_pipeline(self) -> bool:
         """Check if any metric requires histogram parent"""
 
-        def check_metrics(metrics: List[AggregationExpression]) -> bool:
+        def check_metrics(metrics: list[AggregationExpression]) -> bool:
             for metric in metrics:
                 if metric.requires_histogram_parent():
                     return True
@@ -465,10 +431,7 @@ class QueryBuilder:
         return check_metrics(self.parameters.metrics)
 
     def _build_nested_dimensions(
-            self,
-            current_root: dict,
-            levels: List[AggregationLevel],
-            current_path: Optional[str]
+        self, current_root: dict, levels: list[AggregationLevel], current_path: str | None
     ) -> dict:
         """Recursively build dimension chain with automatic nested wrapping"""
 
@@ -487,53 +450,30 @@ class QueryBuilder:
         # Current level matches target nested path
         if target_path == current_path:
             agg_config = self._build_dimension_config(head.config)
-            current_root[head.key] = {
-                head.config.type.value: agg_config,
-                "aggs": {}
-            }
+            current_root[head.key] = {head.config.type.value: agg_config, "aggs": {}}
 
-            return self._build_nested_dimensions(
-                current_root[head.key]["aggs"],
-                levels[1:],
-                current_path
-            )
+            return self._build_nested_dimensions(current_root[head.key]["aggs"], levels[1:], current_path)
 
         # Need to switch nested context
         if target_path is not None and current_path is None:
-            wrapper_key, wrapper_config = self._nested_manager.create_nested_wrapper(
-                target_path
-            )
+            wrapper_key, wrapper_config = self._nested_manager.create_nested_wrapper(target_path)
             current_root[wrapper_key] = wrapper_config
 
-            return self._build_nested_dimensions(
-                current_root[wrapper_key]["aggs"],
-                levels,
-                target_path
-            )
+            return self._build_nested_dimensions(current_root[wrapper_key]["aggs"], levels, target_path)
 
         # Switching from one nested path to another
         if target_path is None and current_path is not None:
             wrapper_key, wrapper_config = self._nested_manager.create_reverse_nested_wrapper()
             current_root[wrapper_key] = wrapper_config
 
-            return self._build_nested_dimensions(
-                current_root[wrapper_key]["aggs"],
-                levels,
-                None
-            )
+            return self._build_nested_dimensions(current_root[wrapper_key]["aggs"], levels, None)
 
         # Switching between different nested paths
-        if (target_path is not None and
-                current_path is not None and
-                target_path != current_path):
+        if target_path is not None and current_path is not None and target_path != current_path:
             wrapper_key, wrapper_config = self._nested_manager.create_reverse_nested_wrapper()
             current_root[wrapper_key] = wrapper_config
 
-            return self._build_nested_dimensions(
-                current_root[wrapper_key]["aggs"],
-                levels,
-                None
-            )
+            return self._build_nested_dimensions(current_root[wrapper_key]["aggs"], levels, None)
 
         return current_root
 
@@ -550,9 +490,7 @@ class QueryBuilder:
         return config
 
     def _build_metric_name_mapping(
-            self,
-            metrics: Optional[List[AggregationExpression]] = None,
-            parent_key: str = ""
+        self, metrics: list[AggregationExpression] | None = None, parent_key: str = ""
     ) -> None:
         """Recursively build metric name to key mapping for pipeline refs"""
         if metrics is None:
@@ -569,28 +507,18 @@ class QueryBuilder:
                 self._build_metric_name_mapping(metric.aggs, key)
 
     def _add_metric_aggregations(
-            self,
-            current_level: dict,
-            metrics: List[AggregationExpression],
-            parent_key: str = ""
+        self, current_level: dict, metrics: list[AggregationExpression], parent_key: str = ""
     ) -> None:
         """Recursively add metric aggregations"""
         for idx, metric in enumerate(metrics):
-            agg_key = (f"{parent_key}_{idx}" if parent_key
-                       else f"{Constants.METRIC_PREFIX}{idx}")
+            agg_key = f"{parent_key}_{idx}" if parent_key else f"{Constants.METRIC_PREFIX}{idx}"
 
             agg_config = self._build_metric_config(metric)
-            current_level[agg_key] = {
-                metric.type.value: agg_config
-            }
+            current_level[agg_key] = {metric.type.value: agg_config}
 
             if metric.aggs:
                 current_level[agg_key]["aggs"] = {}
-                self._add_metric_aggregations(
-                    current_level[agg_key]["aggs"],
-                    metric.aggs,
-                    agg_key
-                )
+                self._add_metric_aggregations(current_level[agg_key]["aggs"], metric.aggs, agg_key)
 
     def _build_metric_config(self, metric: AggregationExpression) -> dict:
         """Build metric aggregation configuration"""
@@ -629,7 +557,7 @@ class SearchEngineService:
         self.query_builder = QueryBuilder(parameters)
         self.result_parser = ResultParser(parameters)
 
-    async def search(self) -> List[List[Any]]:
+    async def search(self) -> list[list[Any]]:
         """Execute search and return parsed results"""
         try:
             query_dsl = self.query_builder.build_query_dsl()
@@ -637,17 +565,14 @@ class SearchEngineService:
 
             es_client = await get_es_connection()
             response = await es_client.search(
-                index=self.parameters.index_name,
-                body=query_dsl,
-                filter_path=Constants.AGGREGATION_KEY
+                index=self.parameters.index_name, body=query_dsl, filter_path=Constants.AGGREGATION_KEY
             )
 
             return self.result_parser.parse_to_2d_array(response)
 
         except es_exceptions.NotFoundError as e:
             if self._is_index_not_found(e):
-                logger.info("Telemetry index {} does not exist yet; returning empty result",
-                            self.parameters.index_name)
+                logger.info("Telemetry index {} does not exist yet; returning empty result", self.parameters.index_name)
                 return self.result_parser.empty_result()
             raise RuntimeError(f"Search execution failed: {e!s}") from e
         except Exception as e:
@@ -689,29 +614,14 @@ async def run_example():
         index_name="mid_knowledge_increment",
         metrics=[
             AggregationExpression(
-                name="document_knowledge_base_count",
-                type=AggsTypeEnum.CARDINALITY,
-                field="knowledge_id"
+                name="document_knowledge_base_count", type=AggsTypeEnum.CARDINALITY, field="knowledge_id"
             ),
         ],
         dimensions=[
-            AggregationExpression(
-                name="用户组",
-                type=AggsTypeEnum.TERMS,
-                field="user_group_infos.user_group_name"
-            ),
-            AggregationExpression(
-                name="用户组id",
-                type=AggsTypeEnum.TERMS,
-                field="user_group_infos.user_group_id"
-            )
+            AggregationExpression(name="用户组", type=AggsTypeEnum.TERMS, field="user_group_infos.user_group_name"),
+            AggregationExpression(name="用户组id", type=AggsTypeEnum.TERMS, field="user_group_infos.user_group_id"),
         ],
-        filters=[
-            FilterExpression(
-                bool_operator="must",
-                filters=[TermOp(field="knowledge_type", value=0)]
-            )
-        ],
+        filters=[FilterExpression(bool_operator="must", filters=[TermOp(field="knowledge_type", value=0)])],
     )
 
     service = SearchEngineService(parameters)
@@ -719,7 +629,7 @@ async def run_example():
     print(rows)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import asyncio
 
     asyncio.run(run_example())

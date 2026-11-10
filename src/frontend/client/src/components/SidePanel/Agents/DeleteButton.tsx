@@ -61,7 +61,7 @@ export default function DeleteButton({
       console.error(error);
       showToast({
         message: localize('com_ui_agent_delete_error'),
-        status: 'error',
+        status: 'warning',
       });
     },
   });

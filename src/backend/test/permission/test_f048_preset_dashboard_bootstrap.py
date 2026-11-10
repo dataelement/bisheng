@@ -101,3 +101,36 @@ async def test_only_first_user_creation_triggers_sample_projection(monkeypatch) 
     await UserService.areconcile_first_user_dashboard_permissions(1)
 
     reconcile.assert_awaited_once_with()
+
+
+async def test_first_admin_dashboard_projection_has_a_tenant_without_request_context(monkeypatch):
+    from bisheng.core.context import tenant
+
+    dashboards = (_dashboard(10),)
+    current_modes = {"10": SimpleNamespace(resource_id="10", projection_state="CURRENT")}
+    monkeypatch.setattr(
+        bootstrap,
+        "_load_preset_dashboards_and_modes",
+        AsyncMock(side_effect=[(dashboards, {}), (dashboards, current_modes)]),
+    )
+    monkeypatch.setattr(bootstrap, "_owner_is_ready", AsyncMock(return_value=True))
+    marker = SimpleNamespace(wait_until_ready=AsyncMock())
+    facade = SimpleNamespace(authorize_created=AsyncMock())
+
+    async def project(**kwargs):
+        assert tenant.get_current_tenant_id() == kwargs["target"].tenant_id == 1
+        assert tenant.get_visible_tenant_ids() == frozenset({1})
+        assert not tenant.is_tenant_filter_bypassed()
+
+    facade.authorize_created.side_effect = project
+    monkeypatch.setattr(
+        bootstrap,
+        "get_f048_process_runtime",
+        AsyncMock(return_value=SimpleNamespace(components=SimpleNamespace(marker=marker, facade=facade))),
+    )
+    token = tenant.current_tenant_id.set(None)
+    try:
+        assert (await bootstrap.reconcile_preset_dashboard_permissions()).current_count == 1
+        assert tenant.current_tenant_id.get() is None
+    finally:
+        tenant.current_tenant_id.reset(token)

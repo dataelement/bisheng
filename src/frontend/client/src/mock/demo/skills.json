@@ -1,0 +1,106 @@
+{
+  "platform": [
+    {
+      "name": "demo-contract-risk-review",
+      "display_name": "合同风险审查",
+      "description": "审查采购、销售、租赁等合同文本时使用：逐条识别付款、违约、争议解决等高风险条款，对照公司合同模板给出修改建议和风险等级。"
+    },
+    {
+      "name": "demo-market-daily-brief",
+      "display_name": "粮油行情日报",
+      "description": "汇总当日大豆、玉米、小麦、棕榈油等品种的期现货价格、基差与持仓变化，按固定版式生成可直接发送的行情日报。"
+    },
+    {
+      "name": "demo-meeting-minutes",
+      "display_name": "会议纪要整理",
+      "description": "把会议录音转写稿或速记整理成结构化纪要：议题、结论、待办事项、责任人与时限，并标出需要复核的模糊表述。"
+    },
+    {
+      "name": "demo-policy-qa",
+      "display_name": "制度问答",
+      "description": "回答员工关于差旅、报销、考勤、采购审批等制度的问题时使用：引用制度原文条款作答，并提示适用范围与生效日期。"
+    },
+    {
+      "name": "demo-bid-compare",
+      "display_name": "招投标文件比对",
+      "description": "比对多份投标文件与招标要求的符合性：资质、报价、交付周期、售后条款逐项对齐，输出偏差表和澄清问题清单。"
+    },
+    {
+      "name": "demo-food-standard-search",
+      "display_name": "食品标准检索",
+      "description": "检索 GB、行业标准与企业标准中关于原料、添加剂、标签标识的限量和检验方法，给出标准号、条款号和现行有效状态。"
+    },
+    {
+      "name": "demo-data-analysis-report",
+      "display_name": "数据分析报告",
+      "description": "对上传的销售、库存、成本表格做清洗与分析：同环比、结构占比、异常波动定位，输出带图表说明的分析报告。"
+    },
+    {
+      "name": "demo-english-business-email",
+      "display_name": "英文商务邮件",
+      "description": "撰写或润色对外英文邮件：询盘、报价、催款、投诉回复等场景，保持正式商务语气并给出中文对照。"
+    },
+    {
+      "name": "demo-public-opinion-digest",
+      "display_name": "舆情摘要",
+      "description": "汇总指定时间段内与公司、品牌或品类相关的新闻与社媒内容，按正负面分类，提炼关键事件、传播趋势和建议应对口径。"
+    }
+  ],
+  "personal": [
+    {
+      "name": "demo-weekly-report",
+      "display_name": "周报助手",
+      "description": "按项目汇总本周进展、风险与下周计划，生成部门周报。",
+      "instructions": "阅读本周的会议纪要、任务看板导出和聊天记录摘要，按项目分组整理：\n\n1. 本周进展：只写已完成或有明确里程碑的事项，附数据。\n2. 风险与问题：说明影响范围、当前应对和需要的支持。\n3. 下周计划：与本周进展对应，写清责任人。\n\n输出为 Markdown，标题使用「部门周报（YYYY-MM-DD ~ YYYY-MM-DD）」。",
+      "files": ["SKILL.md"],
+      "file_name": "SKILL.md",
+      "size": 1268,
+      "enabled": true,
+      "updated_at": "2026-09-15T09:30:00+08:00"
+    },
+    {
+      "name": "demo-procurement-summary",
+      "display_name": "采购台账汇总",
+      "description": "把各基地上报的采购明细合并成月度台账，核对单价与合同价差异。",
+      "instructions": "输入为多份采购明细 xlsx。合并时以「合同编号 + 批次」去重，单价与合同价偏差超过 3% 的行标红并单独列出。输出月度台账 xlsx 和一段差异说明。",
+      "files": ["procurement-summary/SKILL.md", "procurement-summary/scripts/merge.py", "procurement-summary/references/columns.md"],
+      "file_name": "procurement-summary.skill",
+      "size": 48213,
+      "enabled": true,
+      "updated_at": "2026-09-12T16:05:00+08:00"
+    },
+    {
+      "name": "demo-ppt-outline",
+      "display_name": "汇报 PPT 大纲",
+      "description": "根据一段文字材料生成汇报 PPT 的页级大纲和每页要点。",
+      "instructions": "先归纳材料的核心结论，再按「背景 → 现状 → 问题 → 方案 → 计划」排布页面，每页不超过 4 个要点，给出建议的图表类型。",
+      "files": ["ppt-outline/SKILL.md", "ppt-outline/references/layouts.md"],
+      "file_name": "ppt-outline.zip",
+      "size": 9320,
+      "enabled": true,
+      "updated_at": "2026-09-08T11:20:00+08:00"
+    },
+    {
+      "name": "demo-translation-glossary",
+      "display_name": "术语一致翻译",
+      "description": "中英互译时套用团队术语表，保证品种、部门和职务译名一致。",
+      "instructions": "翻译前先加载 references/glossary.csv，命中的术语必须使用表内译法；未命中的专有名词在译文后用括号保留原文，并在末尾列出建议新增的术语。",
+      "files": ["translation-glossary/SKILL.md", "translation-glossary/references/glossary.csv"],
+      "file_name": "translation-glossary.skill",
+      "size": 22780,
+      "enabled": false,
+      "updated_at": "2026-08-29T14:45:00+08:00"
+    },
+    {
+      "name": "demo-inspection-checklist",
+      "display_name": "仓储巡检清单",
+      "description": "根据仓库类型和季节生成巡检清单，并整理巡检记录中的异常项。",
+      "instructions": "按仓库类型（筒仓 / 平房仓 / 冷库）和当前季节选取检查项，输出可打印的清单；收到巡检记录后，把「异常」「待整改」条目汇总成整改跟踪表。",
+      "files": ["SKILL.md"],
+      "file_name": "SKILL.md",
+      "size": 2044,
+      "enabled": true,
+      "updated_at": "2026-08-20T10:00:00+08:00"
+    }
+  ]
+}

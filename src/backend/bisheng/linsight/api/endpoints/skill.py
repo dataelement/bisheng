@@ -7,7 +7,10 @@ here — unknown names answer 11053 without leaking existence (design §7.5).
 
 from __future__ import annotations
 
+import hashlib
+
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import Response
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.linsight import SkillFileTooLargeError, SkillValidationError
@@ -15,6 +18,7 @@ from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.linsight.domain.schemas.skill_schema import (
     SkillCreateForm,
+    SkillDefaultCheckedUpdate,
     SkillGitHubImportRequest,
     SkillStatusUpdate,
 )
@@ -34,8 +38,9 @@ def _current_tenant_id() -> int:
 
 async def _read_upload(file: UploadFile) -> bytes:
     data = await file.read()
-    if len(data) > await resolve_skill_upload_limit():
-        raise SkillFileTooLargeError()
+    limit = await resolve_skill_upload_limit()
+    if len(data) > limit:
+        raise SkillFileTooLargeError(limit_mb=limit // (1024 * 1024))
     return data
 
 
@@ -73,7 +78,31 @@ async def list_skills(
 async def selectable_skills(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
-    return resp_200(await SkillService().get_selectable())
+    return resp_200(await SkillService().get_selectable(login_user.user_id))
+
+
+@router.get("/runtime/catalog", summary="Skills available to the current user's runtime")
+async def runtime_skill_catalog(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
+    return resp_200(await SkillService().get_runtime_catalog(login_user.user_id))
+
+
+@router.get("/runtime/{skill_id}/bundle", summary="Authorized versioned skill bundle")
+async def runtime_skill_bundle(
+    skill_id: int,
+    version: str = Query(..., pattern=r"^[a-f0-9]{64}$"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Response:
+    bundle = await SkillService().get_runtime_bundle(_current_tenant_id(), skill_id, version, login_user.user_id)
+    return Response(
+        bundle,
+        media_type="application/zip",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Skill-Archive-Sha256": hashlib.sha256(bundle).hexdigest(),
+        },
+    )
 
 
 @router.get("/slugify", summary="Suggest a skill ID from a display name (pypinyin)")
@@ -173,6 +202,16 @@ async def set_skill_status(
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
 ) -> UnifiedResponseModel:
     await SkillService().set_status(name, payload.enabled)
+    return resp_200({"ok": True})
+
+
+@router.patch("/{name}/default-checked", summary="Preselect / un-preselect skill in the end-user picker")
+async def set_skill_default_checked(
+    name: str,
+    payload: SkillDefaultCheckedUpdate,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
+    await SkillService().set_default_checked(name, payload.default_checked)
     return resp_200({"ok": True})
 
 

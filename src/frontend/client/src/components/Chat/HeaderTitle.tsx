@@ -30,7 +30,7 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false,
     conversation?.title != null && String(conversation.title).trim() !== ''
       ? String(conversation.title).trim()
       : localize('com_ui_new_chat');
-  // Title + share are merged into MobileNav on H5；应用内对话在 768–1023 同样走合并顶栏，避免与 AppRoot 悬浮钮重复一行。
+  // Merge title and share into MobileNav on mobile and compact app-chat layouts.
   if (isNarrowViewport || (isAppChatRoute && isAppChatCompact)) {
     return null;
   }
@@ -38,51 +38,53 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false,
   return (
     <div
       className={cn(
-        'sticky top-0 z-10 flex h-[56px] w-full items-center justify-between bg-white pl-4 pr-4 text-text-1',
+        'dsh-chat-header sticky top-0 z-10 flex h-[56px] w-full items-center justify-between bg-page pl-4 pr-4 text-text-1',
       )}
     >
-      {/* Left placeholder to balance the center layout */}
-      <div className="flex-1"></div>
+      <div className="dsh-chat-header-row flex w-full min-w-0 items-center justify-between">
+        {/* Left placeholder to balance the center layout */}
+        <div className="dsh-chat-header-spacer flex-1"></div>
 
-      {/* Center Title */}
-      <div className="flex-[2] flex justify-center text-[14px] font-medium leading-[22px]">
-        <div id="app-title" className="truncate max-w-full text-center">
-          {normalizedTitle}
+        {/* Center Title */}
+        <div className="dsh-chat-title flex-[2] flex justify-center text-[14px] font-medium leading-[22px]">
+          <div id="app-title" className="truncate max-w-full text-center">
+            {normalizedTitle}
+          </div>
         </div>
-      </div>
 
-      {/* Right actions */}
-      <div className="flex-1 flex justify-end items-center gap-1">
-        {!readOnly && !hideShare && (
-          <ShareChat
-            type={types[conversation?.flowType as keyof typeof types] ?? 'workbench_chat'}
-            flowId={conversation?.flowId}
-            chatId={conversation?.conversationId || ''}
-          />
-        )}
-        {/* F035: task-mode workspace entry — opens the drawer of uploaded sources +
-            generated deliverables for the latest task turn (ChatView owns the drawer).
-            Kept mounted and faded by `workspaceOpen` (not mount/unmounted) so it
-            tracks the panel's open/close animation. On open it fades out instantly
-            (the panel covers it); on close it waits `delay-150` so it reappears only
-            after the panel has mostly collapsed — avoids the button flashing in
-            mid-animation. */}
-        {hasWorkspaceFiles && onOpenWorkspace && (
-          <button
-            type="button"
-            onClick={onOpenWorkspace}
-            title={localize('com_linsight_workspace')}
-            aria-label="workspace"
-            className={cn(
-              'flex h-7 shrink-0 items-center justify-center overflow-hidden rounded-lg text-gray-600 transition-[width,opacity] duration-200 hover:bg-gray-100',
-              // Collapse width to 0 (not just opacity) when open so it reserves no
-              // slot in the header's right cell; expand back with a short delay on close.
-              workspaceOpen ? 'pointer-events-none w-0 opacity-0' : 'w-7 opacity-100 delay-150',
-            )}
-          >
-            <Outlined.RightSidebar size={16} className="shrink-0" />
-          </button>
-        )}
+        {/* Right actions */}
+        <div className="flex-1 flex justify-end items-center gap-1">
+          {!readOnly && !hideShare && (
+            <ShareChat
+              type={types[conversation?.flowType as keyof typeof types] ?? 'workbench_chat'}
+              flowId={conversation?.flowId}
+              chatId={conversation?.conversationId || ''}
+            />
+          )}
+          {/* F035: task-mode workspace entry — opens the drawer of uploaded sources +
+              generated deliverables for the latest task turn (ChatView owns the drawer).
+              Kept mounted and faded by `workspaceOpen` (not mount/unmounted) so it
+              tracks the panel's open/close animation. On open it fades out instantly
+              (the panel covers it); on close it waits `delay-150` so it reappears only
+              after the panel has mostly collapsed — avoids the button flashing in
+              mid-animation. */}
+          {hasWorkspaceFiles && onOpenWorkspace && (
+            <button
+              type="button"
+              onClick={onOpenWorkspace}
+              title={localize('com_linsight_workspace')}
+              aria-label="workspace"
+              className={cn(
+                'flex h-7 shrink-0 items-center justify-center overflow-hidden rounded-lg text-gray-600 transition-[width,opacity] duration-200 hover:bg-gray-100',
+                // Collapse width to 0 (not just opacity) when open so it reserves no
+                // slot in the header's right cell; expand back with a short delay on close.
+                workspaceOpen ? 'pointer-events-none w-0 opacity-0' : 'w-7 opacity-100 delay-150',
+              )}
+            >
+              <Outlined.RightSidebar size={16} className="shrink-0" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -298,7 +298,6 @@ async def test_first_policy_and_mid_update_redis_loss_resume_same_intent(
     service = DshAdminService(
         repository_scope=scope,
         quota=quota,
-        allocate=AsyncMock(),
         authorize=permitted,
         validate_models=permitted,
         now=lambda: now,
@@ -345,7 +344,6 @@ async def test_recovery_recounts_stream_entries_when_request_hash_was_lost(quota
 async def test_http_model_call_recovers_then_projects_actual_usage(quota, recovery_db, monkeypatch, stream):
     """AC-22/23/34: HTTP -> real quota -> model adapter -> Redis -> SQL, with a fake provider."""
     from types import SimpleNamespace
-    from unittest.mock import AsyncMock
 
     import httpx
     from fastapi import FastAPI

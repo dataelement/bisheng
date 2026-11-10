@@ -6,6 +6,13 @@ export interface ApprovalScenarioPreset {
   handler_key?: string;
   condition_fields?: string[];
   approver_source_types?: string[];
+  /**
+   * The scenario admits no exemption — every request goes to a person, so the
+   * branch editor must not offer the auto-approval type. The backend refuses
+   * such a route anyway (18119); hiding it keeps the promise visible rather
+   * than letting an administrator find out by hitting an error.
+   */
+  mandatory_approval?: boolean;
 }
 
 export interface ApprovalScenarioItem {
@@ -55,7 +62,17 @@ export interface ApprovalExceptionItem {
   applicant_user_name?: string | null;
 }
 
+export interface AppCurrentVisibility {
+  state: 'available' | 'unavailable' | 'deleted';
+  checked_at?: string;
+  owner_only?: boolean | null;
+  admin_implicit_access?: boolean;
+  subjects: { type: 'user' | 'department' | 'user_group'; id: string; name: string; userset_relation?: 'member' | 'admin' | 'subtree_member'; include_children?: boolean }[];
+}
+
 export interface ApprovalInstanceDetail {
+  scenario_code?: string;
+  current_visibility?: AppCurrentVisibility;
   instance_id?: number;
   status?: string;
   flow_nodes?: {
@@ -242,5 +259,5 @@ export async function applyMenuAccessApi(data: {
 }
 
 export async function getApprovalInstanceDetailForAdminApi(instanceId: number): Promise<ApprovalInstanceDetail> {
-  return await axios.get(`/api/v1/approval/instances/${instanceId}`);
+  return await axios.get(`/api/v1/approval/admin/instances/${instanceId}`);
 }

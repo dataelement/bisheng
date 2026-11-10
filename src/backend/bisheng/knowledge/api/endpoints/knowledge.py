@@ -9,7 +9,6 @@ import pandas as pd
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
-from starlette.concurrency import run_in_threadpool
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import add_qa
@@ -40,6 +39,7 @@ from bisheng.common.schemas.api import UnifiedResponseModel, resp_200, resp_500
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_file_service, get_knowledge_service
@@ -57,6 +57,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnowledgeUpsert,
     QAStatus,
 )
+from bisheng.knowledge.domain.schemas.knowledge_create_schema import KnowledgeWebCreate
 from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
     BatchAddFileTagsReq,
@@ -64,6 +65,7 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
     UpdateFileTagsReq,
     UpdateKnowledgeMetadataFieldsReq,
 )
+from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.llm.domain import LLMService
@@ -318,16 +320,14 @@ async def rebuild_knowledge_file(
 
 @router.post("/create")
 async def create_knowledge(
-    *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), knowledge: KnowledgeCreate
+    *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), knowledge: KnowledgeWebCreate
 ):
     """Create Knowledge Base."""
-    await UserPayload.assert_effective_web_menu_contains(login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
-    db_knowledge = await run_in_threadpool(
-        KnowledgeService.create_knowledge,
-        request,
-        login_user,
-        knowledge,
-    )
+    context = await KnowledgeCreationPolicy.prepare(login_user, expected_tenant_id=knowledge.expected_tenant_id)
+    with tenant_execution_scope(context.tenant_id), strict_tenant_filter():
+        db_knowledge = await KnowledgeService.acreate_knowledge(
+            request, login_user, knowledge, web_creation_context=context
+        )
     return resp_200(db_knowledge)
 
 

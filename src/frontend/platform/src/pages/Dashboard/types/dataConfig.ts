@@ -219,15 +219,17 @@ export const enum TimeRangeMode {
 }
 
 export interface TimeFilter {
+  shortcutKey?: number
   type: TimeRangeType           // 时间范围类型
   mode?: TimeRangeMode          // 时间范围模式（type 为 recent_days 时有效）
   recentDays?: number           // 最近n天（如 7, 30, 70, 90）
-  startDate?: number            // 自定义开始日期
-  endDate?: number              // 自定义结束日期
+  startDate?: number | ""            // 自定义开始日期
+  endDate?: number | ""              // 自定义结束日期
 }
 
 // 数据配置（图表组件和指标组件使用）
 export interface DataConfig {
+  filtersLogic?: 'and' | 'or'
   dimensions: DimensionField[]  // 维度字段列表（对应 echarts xAxis）
   stackDimension?: DimensionField // 堆叠维度字段（某些图表类型才有，如堆叠柱状图）
   metrics: MetricField[]        // 指标字段列表（对应 echarts yAxis）

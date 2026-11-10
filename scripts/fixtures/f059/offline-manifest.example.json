@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "profile_id": "REPLACE_WITH_PLATFORM_RESOLVED_PROFILE_ID",
+  "profile_digest": "REPLACE_WITH_PLATFORM_RESOLVED_PROFILE_DIGEST",
+  "platform": "linux/amd64",
+  "abi": "REPLACE_WITH_PLATFORM_RESOLVED_ABI",
+  "files": {
+    "wheels/REPLACE_WITH_REAL_COMPATIBLE_WHEEL.whl": {
+      "size": "REPLACE_WITH_ACTUAL_FILE_BYTES",
+      "sha256": "REPLACE_WITH_ACTUAL_FILE_SHA256"
+    }
+  }
+}

@@ -6,11 +6,10 @@ import time
 import jwt
 import pytest
 
-from bisheng.common.errcode.dsh import DshInvalidAccessTokenError, DshSeatRevokedError
+from bisheng.common.errcode.dsh import DshInvalidAccessTokenError, DshSessionRevokedError
 from bisheng.core.context import tenant as context
 from bisheng.dsh.domain.schemas.contracts import DshIdentitySnapshot, DshTenantDisplay, DshUserDisplay
 from bisheng.dsh.domain.services.access import DshAccessService, principal_scope
-from bisheng.dsh.infrastructure.gateway_client import SeatIntrospection
 
 
 class Keys:
@@ -38,14 +37,9 @@ class Identities:
 class Seats:
     active = True
 
-    async def introspect(self, _):
-        return SeatIntrospection(
-            active=self.active,
-            seat_id="42",
-            session_id="session-test",
-            grant_version=1,
-            reason=None if self.active else "seat_revoked",
-        )
+    async def validate(self, principal):
+        if not self.active:
+            raise DshSessionRevokedError()
 
 
 def token(**overrides):
@@ -55,9 +49,8 @@ def token(**overrides):
         "aud": "bisheng-dsh-model",
         "sub": "1001",
         "tenant_id": "2",
-        "seat_id": "42",
         "session_id": "session-test",
-        "grant_version": 1,
+        "session_version": 1,
         "iat": now,
         "exp": now + 300,
         "jti": "test-jti",
@@ -77,10 +70,10 @@ def service(seats=None):
         {"aud": "bisheng-web"},
         {"exp": 1},
         {"installation_id": "other"},
-        {"grant_version": True},
+        {"session_version": True},
         {"tenant_id": 2},
         {"sub": "sak:1"},
-        {"grant_version": 0},
+        {"session_version": 0},
     ],
 )
 async def test_rejects_wrong_credential_scope_and_claim_types(changes):
@@ -110,7 +103,7 @@ async def test_online_seat_check_and_parallel_scopes_are_restored():
 
         assert await asyncio.gather(read(2), read(3)) == [(2, frozenset({1, 2})), (3, frozenset({1, 3}))]
         seats.active = False
-        with pytest.raises(DshSeatRevokedError):
+        with pytest.raises(DshSessionRevokedError):
             await access.authenticate("Bearer " + token())
         with pytest.raises(asyncio.CancelledError), principal_scope(principal):
             assert context.get_current_tenant_id() == 2

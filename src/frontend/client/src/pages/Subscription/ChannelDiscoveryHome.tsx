@@ -1,3 +1,4 @@
+import { refreshChannelState } from "./hooks/useChannelStateRefresh";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TransitionEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -65,7 +66,7 @@ const mapRecommendItem = (item: any): DiscoverChannel | null => {
     return {
         id: String(rawId),
         title: String(item.name ?? item.title ?? ""),
-        description: String(item.description ?? item.desc ?? "") || "暂无简介",
+        description: String(item.description ?? item.desc ?? ""),
         creator: String(item.creator ?? item.creator_name ?? ""),
         creatorAvatars: avatars,
         articleCount: Number(item.article_count ?? 0),
@@ -91,9 +92,6 @@ export function ChannelDiscoveryHome({
     const queryClient = useQueryClient();
     const [paused, setPaused] = useState(false);
     const [joiningId, setJoiningId] = useState<string | null>(null);
-    // Optimistic subscribe status overrides, keyed by channel id (the list itself is
-    // derived from the query so a cached remount paints the carousel immediately).
-    const [statusOverrides, setStatusOverrides] = useState<Record<string, DiscoverStatus>>({});
     // Infinite loop carousel. The track renders the ranked list three times; `pos`
     // is the track index of the centered card and only ever increases. It starts in
     // the MIDDLE copy so the left/right neighbours are always populated (initial
@@ -123,9 +121,8 @@ export function ChannelDiscoveryHome({
         const list: any[] = (payload?.data || payload?.list || []) as any[];
         return list
             .map(mapRecommendItem)
-            .filter((c): c is DiscoverChannel => c !== null)
-            .map((c) => (statusOverrides[c.id] ? { ...c, status: statusOverrides[c.id] } : c));
-    }, [data, statusOverrides]);
+            .filter((c): c is DiscoverChannel => c !== null);
+    }, [data]);
 
     // Carousel only on PC with enough public channels (otherwise the empty illustration).
     const count = channels.length;
@@ -192,8 +189,6 @@ export function ChannelDiscoveryHome({
             (async () => {
                 try {
                     setJoiningId(channelId);
-                    const nextStatus: DiscoverStatus = target.visibility === "public" ? "joined" : "pending";
-                    setStatusOverrides((prev) => ({ ...prev, [channelId]: nextStatus }));
                     const res: any = await subscribeManagerChannelApi({ channel_id: channelId });
                     const statusCode = res?.status_code ?? res?.code;
                     if (statusCode && statusCode !== 200) {
@@ -201,22 +196,17 @@ export function ChannelDiscoveryHome({
                     }
                     showToast({
                         message:
-                            target.visibility === "public"
-                                ? localize("subscribe_success") || "订阅成功"
-                                : localize("com_subscription.apply_sent") || "申请已发送",
+                            (res?.data ?? res) === "subscribed"
+                                ? localize("subscribe_success")
+                                : localize("com_subscription.apply_sent"),
                         severity: NotificationSeverity.SUCCESS,
                     });
                     // Refresh background channel lists so the page auto-selects the new channel
                     // and leaves this empty state.
-                    queryClient.invalidateQueries({ queryKey: ["channels", "subscribed"] });
-                    queryClient.invalidateQueries({ queryKey: ["channels"] });
+                    await refreshChannelState(queryClient);
                 } catch {
-                    // Roll back on failure (interceptor surfaces the toast).
-                    setStatusOverrides((prev) => {
-                        const next = { ...prev };
-                        delete next[channelId];
-                        return next;
-                    });
+                    // Re-read the server after a failed operation; the request interceptor reports the error.
+                    await refreshChannelState(queryClient);
                 } finally {
                     setJoiningId(null);
                 }

@@ -1,8 +1,12 @@
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import { ExternalLink } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { MarkdownViewer as SharedMarkdownViewer } from '@bisheng/file-viewers/markdown';
+import { MediaTranscriptTabs as SharedMediaTranscriptTabs } from '@bisheng/file-viewers/transcript';
+import { usePreviewLocale } from '@bisheng/file-viewers/locale';
+import { PlatformMediaPlayer } from '@/components/bs-comp/preview/DocumentPreview';
+import { Outlined } from "bisheng-icons";
+
+
 import { useTranslation } from "react-i18next";
-import { MarkdownView } from "./PreviewParagraph";
 import TxtFileViewer from "./TxtFileViewer";
 
 declare const __APP_ENV__: any;
@@ -18,7 +22,6 @@ type PreviewData = {
   html_preview_url?: string;
 };
 
-type MediaTab = "recognized" | "entry";
 type WebTab = "html" | "text";
 
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg"]);
@@ -98,96 +101,15 @@ function isVideoPreview(previewData?: PreviewData) {
   return previewData.file_source === "video_transcript" || previewData.media_kind === "video" || VIDEO_EXTENSIONS.has(ext);
 }
 
-function extractMarkdownSection(markdown: string, heading: string) {
-  const pattern = new RegExp(`^##\\s+${heading}\\s*$`, "m");
-  const match = markdown.match(pattern);
-  if (!match || match.index === undefined) return "";
-  const start = match.index + match[0].length;
-  const rest = markdown.slice(start);
-  const nextHeading = rest.search(/^##\s+/m);
-  return (nextHeading >= 0 ? rest.slice(0, nextHeading) : rest).trim();
+function TextFromUrl({ fileUrl }: { fileUrl: string }) {
+  const locale = usePreviewLocale();
+  const url = normalizeUrl(fileUrl);
+  return <SharedMarkdownViewer resource={{ originalUrl: url, previewUrl: url }} locale={locale} />;
 }
-
-function TextFromUrl({ fileUrl, section }: { fileUrl: string; section?: string }) {
-  const [content, setContent] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError("");
-    fetch(normalizeUrl(fileUrl))
-      .then((response) => {
-        if (!response.ok) throw new Error(`Failed to fetch file: ${response.status}`);
-        return response.text();
-      })
-      .then((text) => {
-        if (!cancelled) setContent(text);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [fileUrl]);
-
-  if (loading) {
-    return <div className="flex h-full items-center justify-center text-gray-400"><LoadingIcon /></div>;
-  }
-  if (error) {
-    return <div className="flex h-full items-center justify-center text-sm text-red-500">{error}</div>;
-  }
-
-  const sectionText = section ? extractMarkdownSection(content, section) : "";
-  const text = sectionText || content;
-  return (
-    <div className="h-full overflow-y-auto bg-gray-50 p-4">
-      <MarkdownView noHead data={{ text }} />
-    </div>
-  );
-}
-
-/** Section headings the media parser writes into the transcript markdown.
- *  These match backend output, so they are data rather than UI copy. */
-const RECOGNIZED_SECTION = "识别文本";
-const ENTRY_SECTION = "入库文本";
-
-/** Transcript pane of a media preview: recognized / stored text tabs over the
- *  parsed markdown. Exported so citation previews render the same pane. */
 export function MediaTranscriptTabs({ fileUrl, className }: { fileUrl: string; className?: string }) {
-  const { t } = useTranslation();
-  const [mediaTab, setMediaTab] = useState<MediaTab>("recognized");
-
-  return (
-    <div className={className || "flex min-h-[320px] flex-col overflow-hidden rounded-md border bg-white shadow-sm"}>
-      <div className="flex shrink-0 gap-2 border-b px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setMediaTab("recognized")}
-          className={`h-8 rounded-md px-3 text-sm ${mediaTab === "recognized" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
-        >
-          {t("mediaPreview.recognizedText")}
-        </button>
-        <button
-          type="button"
-          onClick={() => setMediaTab("entry")}
-          className={`h-8 rounded-md px-3 text-sm ${mediaTab === "entry" ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
-        >
-          {t("mediaPreview.entryText")}
-        </button>
-      </div>
-      {fileUrl ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <TextFromUrl fileUrl={fileUrl} section={mediaTab === "recognized" ? RECOGNIZED_SECTION : ENTRY_SECTION} />
-        </div>
-      ) : null}
-    </div>
-  );
+  const locale = usePreviewLocale();
+  const url = normalizeUrl(fileUrl);
+  return <SharedMediaTranscriptTabs key={url} resource={{ originalUrl: '', previewUrl: url }} locale={locale} className={className} />;
 }
 
 export default function RichPreviewFile({ file, previewData }: { file: any; previewData: PreviewData }) {
@@ -210,10 +132,10 @@ export default function RichPreviewFile({ file, previewData }: { file: any; prev
           <section className="overflow-visible rounded-md border bg-white p-3 shadow-sm">
             <div className="mb-2 text-sm font-medium text-gray-800">{title}</div>
             {isVideo ? (
-              <video className="max-h-[280px] w-full rounded bg-black" src={mediaUrl} controls />
+              <PlatformMediaPlayer kind="video" src={mediaUrl} />
             ) : (
               <div className="flex min-h-[160px] flex-col justify-end overflow-visible py-1">
-                <audio className="w-full" src={mediaUrl} controls />
+                <PlatformMediaPlayer kind="audio" src={mediaUrl} />
               </div>
             )}
           </section>
@@ -246,7 +168,7 @@ export default function RichPreviewFile({ file, previewData }: { file: any; prev
         </div>
         {sourceUrl ? (
           <a className="flex items-center gap-1 text-sm text-primary" href={sourceUrl} target="_blank" rel="noreferrer">
-            <ExternalLink className="size-4" />
+            <Outlined.ViewOnNewTab className="size-4" />
             {t("mediaPreview.openSourcePage")}
           </a>
         ) : null}

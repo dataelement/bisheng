@@ -80,3 +80,62 @@ class MarketDevice(SQLModel, table=True):
     device_id: str = Field(max_length=64)
     plugins: list = Field(sa_column=Column(JsonType, nullable=False))
     synced_at: datetime = Field(default_factory=now)
+
+
+class MarketInstallPolicy(SQLModel, table=True):
+    __tablename__ = "dsh_market_install_policy"
+    tenant_id: int = Field(primary_key=True)
+    allow_third_party_plugins: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=false())
+    )
+    allow_third_party_workbenches: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=false())
+    )
+
+
+class MarketWorkbench(SQLModel, table=True):
+    __tablename__ = "dsh_market_workbench"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "identity_key", name="uq_dsh_workbench_identity"),
+        UniqueConstraint("tenant_id", "package_name", name="uq_dsh_workbench_package"),
+    )
+    id: str = Field(default_factory=lambda: uuid4().hex, primary_key=True, max_length=32)
+    tenant_id: int = Field(index=True)
+    identity_key: str = Field(max_length=160)
+    identity_kind: str = Field(max_length=16)
+    workbench_key: str | None = Field(default=None, max_length=140)
+    legacy_id: str | None = Field(default=None, max_length=128)
+    package_name: str = Field(max_length=214)
+    display_name: str = Field(max_length=128)
+    description: str = Field(max_length=2000)
+    current_version_id: str | None = Field(default=None, max_length=32)
+    revision: int = 1
+    updated_at: datetime = Field(default_factory=now)
+
+
+class MarketWorkbenchVersion(SQLModel, table=True):
+    __tablename__ = "dsh_market_workbench_version"
+    __table_args__ = (UniqueConstraint("tenant_id", "workbench_id", "version", name="uq_dsh_workbench_version"),)
+    id: str = Field(default_factory=lambda: uuid4().hex, primary_key=True, max_length=32)
+    tenant_id: int = Field(index=True)
+    workbench_id: str = Field(index=True, max_length=32)
+    version: str = Field(max_length=64)
+    digest: str = Field(max_length=64)
+    size: int
+    manifest: dict = Field(sa_column=Column(JsonType, nullable=False))
+    created_at: datetime = Field(default_factory=now)
+
+
+class MarketWorkbenchImport(SQLModel, table=True):
+    __tablename__ = "dsh_market_workbench_import"
+    __table_args__ = (UniqueConstraint("tenant_id", "digest", name="uq_dsh_workbench_import_digest"),)
+    id: str = Field(default_factory=lambda: uuid4().hex, primary_key=True, max_length=32)
+    tenant_id: int = Field(index=True)
+    actor_id: int
+    digest: str = Field(max_length=64)
+    display_name: str | None = Field(default=None, max_length=128)
+    status: str = Field(default="validating", max_length=16)
+    error_code: str = Field(default="", max_length=32)
+    error: str = Field(default="", max_length=512)
+    version_id: str | None = Field(default=None, max_length=32)
+    created_at: datetime = Field(default_factory=now)

@@ -13,6 +13,9 @@
 | DSH SeatAssignment / Session | F062-dsh-desktop-model-access | Gateway DSH 模块持有固定席位、授权代次、登录会话与刷新凭证真相；BiSheng 只引用 |
 | DSH UserPolicy | F062-dsh-desktop-model-access | BiSheng 一条用户策略保存强类型逐模型配置，每个用户/模型独立月 token 上限，不拥有或复制既有模型供应商配置 |
 | DSH MonthlyUsage / ModelCall / AdminOperation | F062-dsh-desktop-model-access | BiSheng 持有已累计用量准入与实际用量入账、调用记录、策略变更不可变审计、可靠用量补记和跨服务管理操作进度；月汇总按用户、模型、月份分行，明细保留 model_id，Redis 实时执行当前用户与所选模型的独立月额度，SQL 为批量投影 |
+| DSH ModelAuditSetting / SettingChange / Request / Evidence / Manifest / Content / Occurrence / BodyAccess | F062 审计扩展（开发登记，非 beta2 已发布能力） | 开发基线见 audit-guardrails-proposal；仅持有模型审计模式、请求事实、加密原件及查看记录，不接管 ModelCall/MonthlyUsage 写入、不改席位/身份/配额真相。实际发布版本另行登记 |
+| DSH ModelAuditConversation / AuditTreeState / AuditTreeNode / AuditTreePath | F062 审计扩展的可重建查询投影（非发布声明） | 仅组织历史租户/用户范围内的会话目录及客户端声明的父子浏览关系；原请求归属、正文作用域和用量不合并，不持有客户端真实任务树或新身份/授权真相 |
+| DSH ModelAuditConversationTitle | F062审计扩展 | 客户端声明短文本标题，与认证租户/用户/既有审计绑定，独立于可重建目录。设计0.14/契约0.5；用户恢复开发交付，具体结果见标题验证记录，不接管真实会话或权限真相 |
 
 User、Tenant、LLMServer、LLMModel、PermissionActor 和 F053 ApiCredential 继续由原模块持有；F062 通过原模块业务入口读取、鉴权或调用。User 拟增 dsh_profile_version，由原用户/主部门业务事务递增并在同事务通过 DSH 服务登记 SYNC_PROFILE；不迁移用户领域所有权，不改变 F012/F048 权限及回滚语义。
 
@@ -52,6 +55,10 @@ User、Tenant、LLMServer、LLMModel、PermissionActor 和 F053 ApiCredential �
 
 | 日期 | 内容 | 影响范围 |
 |------|------|----------|
+| 2026-10-19 | 标题同步规格0.24获用户确认；登记独立标题事实及设计0.14/契约0.5候选，待确认后实施 | 根协议0.5.0和模型五字段不变；同步Desktop、服务端及Platform；Gateway无需新增分类，实际代理链另验收，不改变模型业务或额度语义 |
+| 2026-10-16 | 审计规格 0.20 / 设计 0.10 / 客户端契约 0.4 已确认；两端五字段、来源标注及直接父会话已实现，本机 HTTP 链路通过，真实三存储和正式客户端操作仍待验收 | 领域所有权与根协议 0.5.0 不变；本地代码非已发布/部署声明 |
+| 2026-10-14 | 审计异步 SQL/MinIO、管理 API/页面及客户端代码联调完成；本机独立存储最终复跑通过。DM8、正式身份/Electron、并发故障量化及全面门禁仍待验收，见 audit-guardrails-proposal/validation-results.md | 审计开发完成核心链路，非 beta2 发布声明；既有 0.5.0 线协议不变 |
+| 2026-10-14 | 登记模型请求审计扩展的领域所有权与两字段客户端开发契约；服务端分支 feat/3.0.0-dsh-audit，真实双端联调待实现后完成，既有 0.5.0 线协议不变 | 仅审计开发，非 beta2 发布声明 |
 | 2026-09-09 | 修复 SDD 审计、共享、双授权、身份 DTO 和 UNKNOWN 恢复问题；客户端 0.1.0 保持冻结 | F062 |
 | 2026-09-09 | 冻结客户端 0.1.0 契约并要求后续同步客户端；Gateway 开发分支 feat/dsh-access 基于 main，新增旧 License 兼容约束 | F062 |
 | 2026-09-09 | 确认官方 DSH 链路商业控制边界及单 Nginx 入口，补充客户端开发与联调契约 | F062 |

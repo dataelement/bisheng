@@ -1,13 +1,10 @@
-import { Button } from "@/components/bs-ui/button";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/bs-ui/dropdownMenu";
-import Tip from "@/components/bs-ui/tooltip/tip";
+import { Button, Dropdown, DropdownChevron, DropdownItem } from '@bisheng/ui';
+
+import { Outlined } from "bisheng-icons";
+import { KnowledgeTooltip } from "./KnowledgeTooltip";
+
 import { cn } from "@/utils";
-import { ChevronDown, CircleHelp, Link2, Upload } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 
@@ -29,41 +26,36 @@ export default function AddKnowledgeFileMenu({
     const { t } = useTranslation("knowledge");
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild disabled={disabled}>
-                <Button className={cn("h-9 gap-2 px-4 md:px-6", buttonClassName)}>
-                    {t("add", { defaultValue: "新增" })}
-                    <ChevronDown className="size-4" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[140px] bg-white p-1">
-                <DropdownMenuItem
-                    className="h-9 cursor-pointer gap-2 px-3"
-                    onSelect={onUploadFile}
-                >
-                    <Upload className="size-4" />
-                    <span>{t("uploadFile")}</span>
-                    {supportedFormatsLabel ? (
-                        <Tip content={supportedFormatsLabel} side="left">
-                            <span
-                                className="ml-auto inline-flex size-4 items-center justify-center text-[#8a94a6]"
-                                onClick={(event) => event.stopPropagation()}
-                            >
-                                <CircleHelp className="size-3.5" />
-                            </span>
-                        </Tip>
-                    ) : null}
-                </DropdownMenuItem>
-                {knowledgeUploadCapabilities.webLink && (
-                    <DropdownMenuItem
-                        className="h-9 cursor-pointer gap-2 px-3"
-                        onSelect={onWebLink}
-                    >
-                        <Link2 className="size-4" />
-                        <span>{t("webLink", { defaultValue: "网页链接" })}</span>
-                    </DropdownMenuItem>
-                )}
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <Dropdown
+            align="end"
+            disabled={disabled}
+            menu={
+                <>
+                    <DropdownItem icon={<Outlined.Upload />} onSelect={onUploadFile}>
+                        {t("uploadFile")}
+                        {supportedFormatsLabel ? (
+                            <KnowledgeTooltip content={supportedFormatsLabel} side="left">
+                                <span
+                                    className="ml-1 inline-flex size-4 items-center justify-center align-middle text-text-3"
+                                    onClick={(event) => event.stopPropagation()}
+                                >
+                                    <Outlined.Question className="size-3.5" />
+                                </span>
+                            </KnowledgeTooltip>
+                        ) : null}
+                    </DropdownItem>
+                    {knowledgeUploadCapabilities.webLink && (
+                        <DropdownItem icon={<Link2 />} onSelect={onWebLink}>
+                            {t("webLink")}
+                        </DropdownItem>
+                    )}
+                </>
+            }
+        >
+            <Button className={cn("h-9 gap-2 px-4 md:px-6", buttonClassName)}>
+                {t("add")}
+                <DropdownChevron className="size-4" />
+            </Button>
+        </Dropdown>
     );
 }

@@ -1,4 +1,3 @@
-import { isDshSeatLimitReached } from '@/controllers/API/dsh'
 
 const errorCodeByReason: Record<string, number> = {
     invalid_request: 26101,
@@ -14,12 +13,11 @@ const errorCodeByReason: Record<string, number> = {
 }
 
 function managementErrorKey(code: number): string {
-    return code === 26113 ? 'dsh.seatRevokedGrantHelp' : `api_errors:${code}`
+    return `api_errors:${code}`
 }
 
 /** Resolve known service failures through the shared error-code locale catalog. */
 export function getDshRequestErrorKey(error: unknown): string | undefined {
-    if (isDshSeatLimitReached(error)) return 'dsh.seatLimitGrantHelp'
     if (!error || typeof error !== 'object') return
     const response = 'response' in error ? error.response : undefined
     const data = response && typeof response === 'object' && 'data' in response
