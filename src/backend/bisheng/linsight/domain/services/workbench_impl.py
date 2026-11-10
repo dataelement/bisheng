@@ -19,7 +19,6 @@ from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.utils.title_generator import ainvoke_without_thinking
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.linsight import (
     LinsightFileTooLargeError,
@@ -31,7 +30,9 @@ from bisheng.common.errcode.sandbox import SandboxConfigurationError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.utils.think_tags import strip_think_block
+from bisheng.common.utils.title_generator import ainvoke_without_thinking
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_file_to_folder
 from bisheng.core.logger import trace_id_var
@@ -447,7 +448,7 @@ class LinsightWorkbenchImpl:
             raise
         except Exception as e:
             logger.error(f"Failed to submit user question: {e!s}")
-            raise cls.LinsightError(f"Failed to submit user question: {e!s}")
+            raise cls.LinsightError("Failed to submit user question") from e
 
     @classmethod
     async def terminate(cls, session_version_model: LinsightSessionVersion) -> None:
@@ -718,7 +719,8 @@ class LinsightWorkbenchImpl:
                     "relative_path": submit_file.relative_path,
                     "parsing_status": "failed",
                     "valid": False,
-                    "error_message": str(e),
+                    "error_message": FailureContextAdapter.safe_detail(e),
+                    **({"failure_info": info} if (info := FailureContextAdapter.from_error(e)) else {}),
                 }
             processed_files.append(entry)
             if on_progress is not None:
@@ -769,7 +771,8 @@ class LinsightWorkbenchImpl:
                 "relative_path": submit_file.relative_path,
                 "parsing_status": "failed",
                 "valid": False,
-                "error_message": f"file download failed: {e}",
+                "error_message": FailureContextAdapter.safe_detail(e),
+                **({"failure_info": info} if (info := FailureContextAdapter.from_error(e)) else {}),
             }
 
         file_name = submit_file.file_name or dl_name
@@ -891,6 +894,7 @@ class LinsightWorkbenchImpl:
             entry = await cls._keep_original_in_workspace(
                 submit_file, file_name, chat_id, minio_client, local_path, e, used_names
             )
+            entry = FailureContextAdapter.public_payload(entry, exc=e)
             if is_media:
                 cls._log_media_ingest(
                     "DEGRADED",
@@ -2138,6 +2142,17 @@ class LinsightWorkbenchImpl:
 
         # 4. Returns the root node list of the task tree
         result = [node.to_dict() for node in task_tree]
+
+        def project_nodes(nodes):
+            for node in nodes:
+                for step in node.get("history") or []:
+                    if isinstance(step, dict) and "extra_info" in step:
+                        step["extra_info"] = FailureContextAdapter.public_step_metadata(step["extra_info"])
+                    if isinstance(step, dict) and step.get("step_type") in ("tool", "knowledge", "tool_call"):
+                        step["output"] = FailureContextAdapter.public_tool_result(step.get("output"))
+                project_nodes(node.get("children") or [])
+
+        project_nodes(result)
 
         return result
 

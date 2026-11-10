@@ -10,6 +10,8 @@
  *   - "web"         → 「已联网搜索 (N 个结果)」, site-style chips (title + source)
  *   - "tool" (any)  → 「已调用 {display_name} 工具」, brief chips / result preview
  */
+import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { parseFailureInfo } from '~/utils/failureInfo';
 import { Outlined } from "bisheng-icons";
 import { AlertCircle } from "lucide-react";
 import { memo, useEffect, useState, type FC } from "react";
@@ -350,7 +352,8 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                     style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
                 >
                     <div className="overflow-hidden min-h-0 text-xs text-text-secondary">
-                        {toolCall.error && (
+                        {parseFailureInfo(toolCall.failure_info) && <ChatErrorCard failureInfo={toolCall.failure_info} />}
+                        {toolCall.error && !toolCall.failure_info && (
                             <div className="leading-[22px]">{toolCall.error}</div>
                         )}
 

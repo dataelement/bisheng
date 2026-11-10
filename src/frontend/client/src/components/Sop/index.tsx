@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActivate } from 'react-activation';
@@ -28,7 +29,7 @@ export default function SopPage({ id = '', vid = '', shareToken = '' }) {
     const presence = useSessionPresence(conversationId === 'new' ? '' : conversationId, {
         disabled: Boolean(shareToken || vid),
     });
-    const [isLoading, error] = useLinsightSubmit(versionId, setVersionId, setVersions, presence.ensureLeaseId)
+    const [isLoading, error, pendingSubmitFailure] = useLinsightSubmit(versionId, setVersionId, setVersions, presence.ensureLeaseId)
     const { getLinsight } = useLinsightManager()
     const artifactsPanel = useArtifactsPanel(versionId);
 
@@ -59,6 +60,7 @@ export default function SopPage({ id = '', vid = '', shareToken = '' }) {
                             <Landing isNew />
                         </div>
                         <div className='w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 py-3'>
+                            {pendingSubmitFailure && <ChatErrorCard failureInfo={pendingSubmitFailure.failureInfo} errorCode={pendingSubmitFailure.errorCode} description={pendingSubmitFailure.message} hideHint />}
                             <TaskModeChatInput conversationId={conversationId || 'new'} />
                         </div>
                     </div>
@@ -67,6 +69,7 @@ export default function SopPage({ id = '', vid = '', shareToken = '' }) {
                 /* F035 Track H (P3): new conversational execution view — replaced
                    the legacy SOPEditor/TaskFlow split panes (removed in P5). */
                 <div className='w-full h-[calc(100vh-68px)]'>
+                    {pendingSubmitFailure && <ChatErrorCard failureInfo={pendingSubmitFailure.failureInfo} errorCode={pendingSubmitFailure.errorCode} description={pendingSubmitFailure.message} hideHint />}
                     <ExecutionFlow
                         versionId={versionId}
                         conversationId={conversationId}

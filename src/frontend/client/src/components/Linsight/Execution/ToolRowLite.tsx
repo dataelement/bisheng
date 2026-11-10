@@ -10,6 +10,8 @@
  * the existing input/output sections (no MergedStep→AgentToolCall adapter, so a
  * bare-string output never degrades into a single result chip).
  */
+import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { parseFailureInfo } from '~/utils/failureInfo';
 import { Outlined } from 'bisheng-icons';
 import { memo, useState, type FC } from 'react';
 import { useLocalize } from '~/hooks';
@@ -74,7 +76,7 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
     const [open, setOpen] = useState<boolean>(false);
 
     const paramsText = formatStepParams(step.params);
-    const hasDetails = !!(step.callReason || paramsText || step.output);
+    const hasDetails = !!(parseFailureInfo(step.extraInfo?.failure_info) || step.callReason || paramsText || step.output);
 
     const title = resolveTitle(step, localize);
     // Unified icon system (§1.3): running → Accent Loading spinner; done →
@@ -95,6 +97,7 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
             open={hasDetails && open}
             onToggle={(next) => hasDetails && setOpen(next)}
         >
+            {parseFailureInfo(step.extraInfo?.failure_info) && <ChatErrorCard failureInfo={step.extraInfo?.failure_info} />}
             {step.callReason && <p className={DETAIL_TEXT} style={{ color: BODY }}>{step.callReason}</p>}
             {paramsText && (
                 <div className="mt-1">

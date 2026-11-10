@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 // src/hooks/useLinsightManager.ts
+import { resolveLinsightSubmitFailure, type PendingSubmitFailure } from './linsightSubmitFailure';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -271,6 +272,8 @@ export const useLinsightSessionManager = (versionId: string) => {
  * sessionId规则说明: 新建会话 [new]
  */
 export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFlowLeaseId?) => {
+    const [pendingSubmitFailure, setPendingSubmitFailure] = useState<PendingSubmitFailure>();
+    const failureOwnerPath = useRef('');
     const [loading, setLoading] = useState(false); // 多会话共用
     // F035: a new round always submits under the 'new' key (the next version has
     // no id yet). Watch 'new' fixed — NOT `versionId` — otherwise follow-up rounds
@@ -359,6 +362,8 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFl
                     },
                 });
 
+                failureOwnerPath.current = window.location.pathname;
+                setPendingSubmitFailure(undefined);
                 let versionId = ''
                 sse.addEventListener('linsight_workbench_submit', (e: MessageEvent) => {
                     const data = JSON.parse(e.data);
@@ -375,6 +380,7 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFl
 
                     // replaceUrl
                     window.history.replaceState({}, '', `${__APP_ENV__.BASE_URL}/linsight/${linsight_session_version.session_id}`);
+                    failureOwnerPath.current = window.location.pathname;
 
                     createLinsight(versionId, {
                         status: SopStatus.SopGenerating, //linsight_session_version.status,
@@ -441,7 +447,7 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFl
                     }).catch((err) => {
                         console.error('start-execute failed :>> ', err);
                         if (versionId === activeVersionIdRef.current) {
-                            showToast({ message: '任务启动失败，请联系管理员检查灵思任务执行模型状态', status: 'warning' });
+                            showToast({ message: localize('api_errors.11130'), status: 'warning' });
                             setError(true)
                             setLoading(false)
                         }
@@ -454,32 +460,18 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFl
                 });
 
                 sse.addEventListener('error', async (e: MessageEvent) => {
-                    console.error('object :>> ', e);
-                    // The fixed "SOP generation failed" copy also swallowed the
-                    // department-limit refusal (12045). Parse the envelope when it
-                    // is JSON; a connection-level error has no JSON body and keeps
-                    // the generic copy.
-                    let limitHit = false
-                    try {
-                        const parsed = JSON.parse(e.data)
-                        limitHit = Number(parsed?.status_code) === 12045
-                    } catch {
-                        // keep the generic copy
+                    let payload: unknown;
+                    try { payload = JSON.parse(e.data); } catch { payload = e; }
+                    const { failure, metadata } = resolveLinsightSubmitFailure(payload, localize, 'api_errors.11040');
+                    setPendingSubmitFailure(failure);
+                    if (!versionId || versionId === activeVersionIdRef.current) {
+                        showToast({ message: failure.message, status: 'warning' });
+                        setError(true);
+                        setLoading(false);
                     }
-                    if (versionId === activeVersionIdRef.current) { // 只有当前活跃会话才展示错误
-                        showToast({
-                            message: limitHit
-                                ? localize('api_errors.12045')
-                                : 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
-                            status: 'warning',
-                        });
-                        setError(true)
-                        setLoading(false)
-                    }
-                    updateLinsight(versionId, {
-                        sopError: e.data,
-                        status: SopStatus.SopGenerated,
-                    })
+                    if (versionId) updateLinsight(versionId, {
+                        taskError: failure.message, taskErrorInfo: metadata, status: SopStatus.Stoped,
+                    });
                 })
                 sse.stream();
         }
@@ -487,7 +479,7 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFl
         void run()
     }, [linsightSubmission, ensureFlowLeaseId])
 
-    return [loading, error]
+    return [loading, error, failureOwnerPath.current === window.location.pathname ? pendingSubmitFailure : undefined] as const
 }
 
 

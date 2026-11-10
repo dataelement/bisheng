@@ -29,6 +29,7 @@ F004 扩展既有工作流的删除语义；F005/F006 扩展幻灯片检查与�
 | F005-taskmode-slide-overflow | 发版线既有 check_html（Playwright Chromium，精简镜像退化为静态检查）、深度研究主图提示词 | 只影响深度研究主图；子代理不绑定 check_html |
 | F006-html-report-slides | F005 逐页测量（含单页 data-slide）、内置技能 html-report 与 bisheng-pptx 的模板目录、代码执行器 | 无代码执行器时退回手写模板 |
 | F007-chat-project-sync | 发版线企业身份、租户隔离、chat_session、项目界面及 F002-project-new-chat | 三端共享账号私有项目与对话归属，不扩大为团队共享项目或 Work 上云；规格和设计已确认，源码及本地验收完成，目标环境联合验收继续记录 |
+| F008-chat-failure-feedback | 发版线日常/任务模式及既有错误分类 | 安全来源透传与五类提示；保留主线额度/上下文和项目/桌面同步，不新增错误码或数据库列 |
 
 ## 已分配模块编码（MMMEE）
 
@@ -47,3 +48,5 @@ F007 使用既有 chat 130 段的 13011–13018：项目不可用、输入无效
 | 2026-11-06 | 用户确认 13 项正式验收标准，进入设计；尚未实施或部署 | F007-chat-project-sync |
 | 2026-11-06 | 三端技术设计经用户确认后实施；后续状态见 F007 verification.md | F007-chat-project-sync |
 | 2026-11-06 | 三端同步实现完成，用户将旧数据迁移改为自动执行；本地回归与真实环境初步同步见 F007 验证记录 | F007-chat-project-sync |
+
+| 2026-11-10 | 迁移日常/任务已实现错误分类及安全反馈，部署和前端镜像验收待完成 | F008-chat-failure-feedback |
