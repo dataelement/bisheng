@@ -83,6 +83,31 @@ class EventType(Enum):
     SET_PRIMARY_VERSION = "set_primary_version"
     DELETE_FILE_VERSION = "delete_file_version"
     DISMISS_SIMILAR_FILE = "dismiss_similar_file"
+    DOWNLOAD_FILE = "download_file"
+
+    EXPORT_QA = "export_qa"
+    CREATE_QA = "create_qa"
+    UPDATE_QA = "update_qa"
+    DELETE_QA = "delete_qa"
+    ENABLE_QA = "enable_qa"
+    DISABLE_QA = "disable_qa"
+
+    CREATE_LOCAL_USER = "create_local_user"
+    RESET_USER_PASSWORD = "reset_user_password"
+    CHANGE_OWN_PASSWORD = "change_own_password"
+    UPDATE_DEPT_ADMIN = "update_dept_admin"
+    UPDATE_DEPT_DEFAULT_ROLE = "update_dept_default_role"
+    UPDATE_SENSITIVE_POLICY = "update_sensitive_policy"
+    MOVE_DEPARTMENT = "move_department"
+    CHANGE_MEMBER_DEPT = "change_member_dept"
+    GRANT_RESOURCE = "grant_resource"
+    REVOKE_RESOURCE = "revoke_resource"
+    UPDATE_RESOURCE_MODE = "update_resource_mode"
+
+    PERSONAL_SKILL_CREATE = "personal_skill_create"
+    PERSONAL_SKILL_STATUS = "personal_skill_status"
+    PERSONAL_SKILL_DELETE = "personal_skill_delete"
+    PERSONAL_SKILL_OVERWRITE = "personal_skill_overwrite"
 
 
 # Action object type enumeration
@@ -100,6 +125,7 @@ class ObjectType(Enum):
     DASHBOARD = "dashboard"  # KANBAN
     CHANNEL = "channel"  # Subscription Channel
     KNOWLEDGE_SPACE = "knowledge_space"  # Knowledge Space
+    DEPARTMENT = "department"
 
 
 class AuditLogBase(SQLModelSerializable):
@@ -317,6 +343,14 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "app.secret.set",
     "app.secret.delete",
     "app.secret.rebuild",
+    "open_api.pat.create",
+    "open_api.pat.regenerate",
+    "open_api.pat.revoke",
+    "open_api.pat.delete",
+    "open_api.pat.revoke_holder",
+    "open_api.pat.tenant_migrate",
+    "open_api.pat.settings.update",
+    "llm.system_config.update",
 )
 
 # Synthetic system_id namespace → action prefix. The frontend `getModulesApi`
@@ -324,7 +358,7 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
 # `chat`, `build`, ... still match the literal `system_id` column).
 _V2_NAMESPACE_TO_ACTION_PREFIX: dict[str, str] = {
     "tenant": "tenant.",
-    "llm": "llm.server.",
+    "llm": "llm.",
     "approval": "approval.",
     "open_api": "open_api.",
     "app": "app.",

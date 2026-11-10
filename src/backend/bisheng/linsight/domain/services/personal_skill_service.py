@@ -216,6 +216,7 @@ class PersonalSkillService:
         skill = await self._load_own_skill(user_id, skill_id)
         if bool(skill.enabled) == bool(enabled):
             return skill
+        old_enabled = bool(skill.enabled)
         await LinsightSkillDao.set_owner_enabled(skill_id, owner_user_id=user_id, enabled=enabled)
         saved = await self._load_own_skill(user_id, skill_id)
         await self._audit(
@@ -224,6 +225,7 @@ class PersonalSkillService:
             saved.tenant_id,
             event_type="personal_skill_status",
             action="linsight.personal_skill.status",
+            note=f"原状态={'启用' if old_enabled else '停用'}；新状态={'启用' if enabled else '停用'}；结果=成功",
         )
         return saved
 
@@ -477,19 +479,22 @@ class PersonalSkillService:
         *,
         event_type: str = "personal_skill_create",
         action: str = "linsight.personal_skill.create",
+        note: str = "",
     ) -> None:
         try:
             entry = AuditLog(
                 operator_id=user_id,
                 operator_tenant_id=tenant_id,
                 tenant_id=tenant_id,
-                system_id="linsight",
+                system_id="system",
                 event_type=event_type,
                 action=action,
                 target_type=SKILL_OBJECT_TYPE,
                 target_id=str(skill.id),
                 object_type=SKILL_OBJECT_TYPE,
                 object_id=str(skill.id),
+                object_name=skill.name,
+                note=note,
                 audit_metadata={
                     "source": skill.source,
                     "content_hash": skill.content_hash,

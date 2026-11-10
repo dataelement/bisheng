@@ -775,6 +775,8 @@ class AuditLogService:
         object_name: str,
         resource_type: ResourceTypeEnum,
         resource_id: str,
+        note: str = "",
+        system_id: SystemId | None = None,
     ):
         """
         Logs of Knowledge Base Modules
@@ -788,12 +790,13 @@ class AuditLogService:
             operator_id=user.user_id,
             operator_name=user.user_name,
             group_ids=group_ids,
-            system_id=SystemId.KNOWLEDGE.value,
+            system_id=(system_id or SystemId.KNOWLEDGE).value,
             event_type=event_type.value,
             object_type=object_type.value,
             object_id=object_id,
             object_name=object_name,
             ip_address=ip_address,
+            note=note,
         )
         AuditLogDao.insert_audit_logs([audit_log])
 
@@ -882,7 +885,16 @@ class AuditLogService:
         await AuditLogDao.ainsert_audit_logs([audit_log])
 
     @classmethod
-    def upload_knowledge_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, file_name: str):
+    def upload_knowledge_file(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        knowledge_id: int,
+        file_name: str,
+        *,
+        note: str = "",
+        system_id: SystemId | None = None,
+    ):
         """
         Audit Logs for Knowledge Base Upload Files
         """
@@ -898,10 +910,21 @@ class AuditLogService:
             file_name,
             ResourceTypeEnum.KNOWLEDGE,
             str(knowledge_id),
+            note=note,
+            system_id=system_id,
         )
 
     @classmethod
-    def delete_knowledge_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, file_name: str):
+    def delete_knowledge_file(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        knowledge_id: int,
+        file_name: str,
+        *,
+        note: str = "",
+        system_id: SystemId | None = None,
+    ):
         """
         Audit Logs for Knowledge Base Deletion Files
         """
@@ -917,6 +940,8 @@ class AuditLogService:
             file_name,
             ResourceTypeEnum.KNOWLEDGE,
             str(knowledge_id),
+            note=note,
+            system_id=system_id,
         )
 
     @classmethod
@@ -1037,7 +1062,7 @@ class AuditLogService:
         )
 
     @classmethod
-    def forbid_user(cls, user: UserPayload, ip_address: str, user_info: User):
+    def forbid_user(cls, user: UserPayload, ip_address: str, user_info: User, note: str = "触发=人工；结果=成功"):
         """
         user: Action User
         user_info: Operated by user
@@ -1054,6 +1079,7 @@ class AuditLogService:
             ObjectType.USER_CONF,
             str(user_info.user_id),
             user_info.user_name,
+            note,
         )
 
     @classmethod
@@ -1086,7 +1112,7 @@ class AuditLogService:
         )
 
     @classmethod
-    def update_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
+    def update_user_group(cls, user: UserPayload, ip_address: str, group_info: Group, note: str = ""):
         logger.info(f"act=update_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
         # Get user group information
         cls._system_log(
@@ -1097,6 +1123,7 @@ class AuditLogService:
             ObjectType.USER_GROUP_CONF,
             str(group_info.id),
             group_info.group_name,
+            note,
         )
 
     @classmethod
@@ -1189,7 +1216,43 @@ class AuditLogService:
         with bypass_tenant_filter():
             user_group = UserGroupDao.get_user_group(user.user_id)
         user_group = [one.group_id for one in user_group]
-        cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN, ObjectType.NONE, "", "")
+        cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN, ObjectType.NONE, "", "", "结果=成功")
+
+    @classmethod
+    def record(
+        cls,
+        *,
+        operator_id: int,
+        operator_name: str,
+        system_id: str,
+        event_type: str,
+        object_type: str,
+        object_id: str = "",
+        object_name: str = "",
+        ip_address: str = "",
+        note: str = "",
+        group_ids: list | None = None,
+    ) -> None:
+        """Write one legacy audit row. A failure here never fails the business action."""
+        try:
+            AuditLogDao.insert_audit_logs(
+                [
+                    AuditLog(
+                        operator_id=operator_id,
+                        operator_name=operator_name or ("system" if operator_id == 0 else ""),
+                        group_ids=group_ids or [],
+                        system_id=system_id,
+                        event_type=event_type,
+                        object_type=object_type,
+                        object_id=object_id,
+                        object_name=object_name,
+                        ip_address=ip_address or "",
+                        note=note,
+                    )
+                ]
+            )
+        except Exception:
+            logger.exception("audit record failed event={} operator={}", event_type, operator_id)
 
     @classmethod
     async def _dashboard_log(
