@@ -17,10 +17,8 @@ remain separate. No DM8, share-link issuance or general worker-I/O race work.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
-import time
 from copy import deepcopy
 
 import httpx
@@ -360,50 +358,14 @@ async def test_ac70_model_removal_prechecks_real_bindings_and_deletes_only_an_un
     await target.remove_exact_server(facts)
 
 
-async def _linked_history(target, space_id):
-    first = await target.upload(space_id, "history-one.txt", b"e2e-f118 immutable history one\n")
-    original = await target.ok("GET", f"/knowledge/space/file/{first['id']}/versions")
-    second = await target.upload(space_id, "history-two.txt", b"e2e-f118 immutable history two\n")
-    await target.ok(
-        "POST",
-        "/knowledge/space/document/link",
-        json={
-            "knowledge_file_id": second["id"],
-            "target_document_id": original["document_id"],
-        },
-    )
-    chain = await target.ok("GET", f"/knowledge/space/file/{first['id']}/versions")
-    assert len(chain["versions"]) == 2
-
-    return first, second, chain
-
-
-async def _wait_native_job(target, space_id, accepted, kind):
-    assert accepted["accepted"] is True and accepted["job_id"]
-    deadline = time.monotonic() + target.timeout
-    while time.monotonic() < deadline:
-        path = f"/knowledge/space/{space_id}/processing-jobs/{accepted['job_id']}"
-        job = await target.ok("GET", path, params={"kind": kind})
-        assert job["space_id"] == space_id and job["kind"] == kind
-        if job["state"] in {"succeeded", "partial_failed", "failed", "obsolete"}:
-            assert job["state"] == "succeeded", f"{kind} ended {job['state']} code={job.get('error_code')}"
-            assert job["total_count"] > 0 and job["succeeded_count"] == job["total_count"]
-            assert job["failed_count"] == job["pending_count"] == 0
-            items = await target.ok("GET", path + "/items", params={"kind": kind, "page_size": 200})
-            assert items["data"] and all(row["state"] == "succeeded" for row in items["data"])
-            return job
-        await asyncio.sleep(1)
-    raise AssertionError(f"{kind} did not reach a real worker terminal state")
-
-
 async def test_ac17_move_preserves_whole_history_and_same_confirmation(target):
     """AC-17/18/19/20/21/24: cross-space move preserves IDs, all versions and real destination chunks."""
     source = (await target.space("move-source"))["id"]
     destination = (await target.space("move-target", embedding_model_id=target.embedding(1)["id"]))["id"]
-    first, second, before = await _linked_history(target, source)
+    first, second, before = await target.linked_history(source)
     base = f"/knowledge/space/{source}/files/move"
     change = {
-        "items": [{"id": first["id"], "type": "file"}],
+        "items": [{"id": second["id"], "type": "file"}],
         "target_space_id": destination,
         "target_folder_id": None,
         "skip_invalid": False,
@@ -412,7 +374,7 @@ async def test_ac17_move_preserves_whole_history_and_same_confirmation(target):
     assert review["can_execute"] and review["check_complete"] and not review["invalid_items"]
     command = target.confirmation(review)
     accepted = await target.ok("POST", base + "/confirm", json=command)
-    await _wait_native_job(target, destination, accepted, "move_index")
+    await target.wait_native_job(destination, accepted, "move_index")
     replay = await target.ok("POST", base + "/confirm", json=command)
     assert replay["job_id"] == accepted["job_id"] and replay["reused"] is True
     assert not (await target.files(source))["data"]
@@ -438,7 +400,7 @@ async def test_ac17_move_preserves_whole_history_and_same_confirmation(target):
 async def test_ac25_copy_is_creator_only_and_survives_ordinary_source_delete(target):
     """AC-25/26/27/28: copy creates independent IDs/content and cannot borrow a noncreator's editor Grant."""
     source = (await target.space("copy-source"))["id"]
-    first, second, before = await _linked_history(target, source)
+    first, second, before = await target.linked_history(source)
     context = await target.ok("GET", f"/permissions/resources/knowledge_space/{source}/context")
     await target.ok(
         "POST",
@@ -463,7 +425,7 @@ async def test_ac25_copy_is_creator_only_and_survives_ordinary_source_delete(tar
     accepted = await target.ok("POST", f"/knowledge/space/{source}/copy/confirm", json=command)
     copied = accepted["knowledge"]["id"]
     assert copied != source and accepted["completed"] is False
-    await _wait_native_job(target, copied, accepted["processing_job"], "space_copy")
+    await target.wait_native_job(copied, accepted["processing_job"], "space_copy")
     replay = await target.ok("POST", f"/knowledge/space/{source}/copy/confirm", json=command)
     assert (
         replay["knowledge"]["id"] == copied
@@ -473,6 +435,7 @@ async def test_ac25_copy_is_creator_only_and_survives_ordinary_source_delete(tar
     assert rows and all(row["id"] not in {first["id"], second["id"]} for row in rows)
     chain = await target.ok("GET", f"/knowledge/space/file/{rows[0]['id']}/versions")
     assert chain["document_id"] != before["document_id"] and len(chain["versions"]) == 2
+    assert {row["knowledge_file_id"] for row in chain["versions"]}.isdisjoint({first["id"], second["id"]})
     assert not {row["version_id"] for row in chain["versions"]}.intersection(
         row["version_id"] for row in before["versions"]
     )
