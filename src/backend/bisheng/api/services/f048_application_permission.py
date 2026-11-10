@@ -17,7 +17,7 @@ from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
 
-SYSTEM_APPLICATION_ACTIONS = frozenset({"visible", "use"})
+SYSTEM_APPLICATION_ACTIONS = frozenset({"visible"})
 
 
 @dataclass(frozen=True, slots=True)

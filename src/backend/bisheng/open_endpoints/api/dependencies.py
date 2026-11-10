@@ -2,6 +2,8 @@ from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.core_deps import get_db_session
+from bisheng.knowledge.application.knowledge_index_edit import get_knowledge_index_editor
+from bisheng.knowledge.application.metadata_legacy import build_legacy_metadata_service
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
     KnowledgeFileRepositoryImpl,
 )
@@ -33,7 +35,11 @@ async def get_knowledge_service(
 ) -> "KnowledgeService":
     """Dapatkan KnowledgeServiceInstance Dependencies"""
     return KnowledgeService(
-        knowledge_repository=knowledge_repository, knowledge_file_repository=knowledge_file_repository
+        knowledge_repository=knowledge_repository,
+        knowledge_file_repository=knowledge_file_repository,
+        metadata_service=build_legacy_metadata_service(
+            knowledge_repository=knowledge_repository, knowledge_file_repository=knowledge_file_repository
+        ),
     )
 
 
@@ -45,4 +51,5 @@ async def get_knowledge_file_service(
     return KnowledgeFileService(
         knowledge_repository=knowledge_repository,
         knowledge_file_repository=knowledge_file_repository,
+        metadata_value_writer=get_knowledge_index_editor(),
     )

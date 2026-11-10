@@ -50,7 +50,7 @@ const initialValue = {
   setExtraNavigation: () => { },
   extraComponent: <></>,
   setExtraComponent: () => { },
-  appConfig: { libAccepts: [] },
+  appConfig: { libAccepts: [], versionManagementEnabled: false },
   reloadConfig: () => { }
 };
 
@@ -67,6 +67,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [appConfig, setAppConfig] = useState<any>({
     libAccepts: [],
     noFace: true,
+    versionManagementEnabled: false,
   })
 
   const loadConfig = () => {
@@ -105,7 +106,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           openApiManagementEnabled: !!res.open_api_management_enabled,
           // Off unless an operator turned it on: the builder marks the node as
           // disabled rather than letting the author discover it at run time.
-          codeNodeEnabled: !!res.workflow?.code_node_enabled
+          codeNodeEnabled: !!res.workflow?.code_node_enabled,
+          versionManagementEnabled: res.knowledges?.version_management?.enabled === true,
         }));
 
         // backend version

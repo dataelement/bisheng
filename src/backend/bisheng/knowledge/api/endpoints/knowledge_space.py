@@ -4,15 +4,20 @@ from fastapi import APIRouter, Body, Depends, Query, Request
 from loguru import logger
 from starlette.responses import StreamingResponse
 
+from bisheng.admin.application.tenant_scope import require_expected_management_tenant, resolve_management_scope
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.admin_scope import AdminScopeChangedError
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import SSEResponse, resp_200
+from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_document_version_repository,
     get_knowledge_space_chat_service,
     get_knowledge_space_service,
 )
+from bisheng.knowledge.application.creation_settings import get_space_creation_settings
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileOrderField, SpaceFileOrderSort
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
     KnowledgeDocumentVersionRepository,
@@ -40,6 +45,7 @@ from bisheng.knowledge.domain.schemas.work_retrieval import WorkRetrievalRequest
 from bisheng.knowledge.domain.services.department_knowledge_space_service import (
     DepartmentKnowledgeSpaceService,
 )
+from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
     KnowledgeSpaceChatService,
 )
@@ -72,6 +78,12 @@ async def retrieve_workspace_context(
 # ──────────────────────────── Space CRUD ──────────────────────────────────────
 
 
+@router.get("/creation-settings")
+async def get_creation_settings(login_user: UserPayload = Depends(UserPayload.get_login_user)) -> Any:
+    async with get_async_db_session() as session:
+        return resp_200(await get_space_creation_settings(login_user, session=session))
+
+
 # No `@require_quota` here, unlike assistant / workflow / tool. Those have no
 # domain-level quota check, so the decorator is their only gate. Knowledge spaces
 # gate inside `KnowledgeSpaceService._assert_space_creation_quota`, which also
@@ -83,9 +95,21 @@ async def retrieve_workspace_context(
 @router.post("")
 async def create_space(
     req: KnowledgeSpaceCreateReq,
+    request: Request,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
+    advanced = {}
+    if req.embedding_model_id is not None or req.processing_defaults is not None:
+        scope = await resolve_management_scope(login_user.user_id, is_super=login_user.is_global_super, for_write=True)
+        require_expected_management_tenant(request.headers.get("X-Management-Tenant"), scope)
+        if scope.tenant_id != get_current_tenant_id():
+            raise AdminScopeChangedError(scope_tenant_id=scope.tenant_id)
+        advanced = {
+            "embedding_model_id": req.embedding_model_id,
+            "processing_defaults": req.processing_defaults,
+            "web_creation_context": await KnowledgeCreationPolicy.prepare(login_user),
+        }
     space = await svc.create_knowledge_space(
         name=req.name,
         description=req.description,
@@ -97,8 +121,35 @@ async def create_space(
         auto_tag_custom_tags=req.auto_tag_custom_tags,
         creation_request_id=req.creation_request_id,
         initial_permissions=req.initial_permissions,
+        **advanced,
     )
     return resp_200(space)
+
+
+@router.get("/list")
+async def list_visible_spaces(
+    keyword: str | None = None,
+    page_size: int = Query(default=20, ge=1, le=200),
+    cursor: str | None = None,
+    has_abnormal: bool | None = None,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(
+        await svc.list_visible_spaces(keyword=keyword, page_size=page_size, cursor=cursor, has_abnormal=has_abnormal)
+    )
+
+
+@router.get("/admin/list")
+async def list_admin_spaces(
+    keyword: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
+    has_abnormal: bool | None = None,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(
+        await svc.list_admin_spaces(keyword=keyword, page=page, page_size=page_size, has_abnormal=has_abnormal)
+    )
 
 
 @router.get("/auto-tag-visibility")
@@ -475,6 +526,7 @@ async def upload_folder(
         knowledge_id=space_id,
         items=req.items,
         parent_id=req.parent_id,
+        **({"processing_overrides": req.overrides} if req.overrides is not None else {}),
     )
     return resp_200(files)
 
@@ -523,6 +575,7 @@ async def add_file(
         knowledge_id=space_id,
         file_path=req.file_path,
         parent_id=req.parent_id,
+        **({"processing_overrides": req.overrides} if req.overrides is not None else {}),
     )
     return resp_200(file_record)
 
@@ -571,7 +624,7 @@ async def delete_file(
     file_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    await svc.delete_file(file_id)
+    await svc.delete_file(file_id, space_id=space_id)
     return resp_200()
 
 
@@ -581,16 +634,16 @@ async def move_file_folder(
     req: FileMoveReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    """F034: move files/folders within or across spaces (same-space when
-    target_space_id == space_id). Returns {moved, invalid}; see design §4.2."""
-    result = await svc.move_items(
-        space_id,
-        [item.model_dump() for item in req.items],
-        target_space_id=req.target_space_id,
-        target_folder_id=req.target_folder_id,
-        skip_invalid=req.skip_invalid,
+    """Legacy same-space synchronous entry; cross-space uses explicit confirmation."""
+    return resp_200(
+        await svc.move_items(
+            space_id,
+            [item.model_dump() for item in req.items],
+            target_space_id=req.target_space_id,
+            target_folder_id=req.target_folder_id,
+            skip_invalid=req.skip_invalid,
+        )
     )
-    return resp_200(result)
 
 
 @router.get("/{space_id}/files/{file_id}/preview")

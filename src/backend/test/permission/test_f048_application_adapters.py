@@ -85,7 +85,7 @@ def _actor(tenant_id: int = 5) -> PermissionActor:
         ("workflow", "delete"),
         ("workflow", "share"),
         ("workflow", "publish"),
-        ("assistant", "use"),
+        ("assistant", "visible"),
         ("assistant", "edit"),
     ),
 )
@@ -191,7 +191,7 @@ async def test_builtin_requires_business_predicate_and_action_allowlist() -> Non
         resource_type="workflow",
         resource_id="wf-1",
         actor=_actor(),
-        action="use",
+        action="visible",
     )
     with pytest.raises(InvalidCatalogActionError):
         await adapter.check_action(

@@ -1,92 +1,52 @@
-from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+"""A real child-space upload keeps upload_file admission and creates no old approval."""
 
-import pytest
+from unittest.mock import AsyncMock, Mock
 
-from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
-from test.knowledge.test_knowledge_space_service import (
-    _load_service_class,
-    _make_file,
-    _make_login_user,
-    _make_space,
+from sqlmodel import select
+
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, Knowledge
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+from test.knowledge_unification import test_kn_upload as native
+
+store, tenant, business, admission = native.store, native.tenant, native.business, native.admission
+processing, application, files, legacy, upload = (
+    native.processing,
+    native.application,
+    native.files,
+    native.legacy,
+    native.upload,
 )
 
 
-@asynccontextmanager
-async def _noop_db_session():
-    """No-op async DB session for tests that don't verify doc/version rows."""
-    session = MagicMock()
-    session.add = MagicMock()
-    session.flush = AsyncMock()
-    session.commit = AsyncMock()
-    yield session
+async def test_department_space_upload_does_not_create_approval_request(upload, monkeypatch):
+    from bisheng.approval.domain.services.approval_service import ApprovalService
 
-
-@pytest.fixture
-def service():
-    return _load_service_class()(None, _make_login_user())
-
-
-@pytest.mark.asyncio
-async def test_department_space_upload_does_not_create_approval_request(service):
-    space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
-    added_file = _make_file(file_id=101, knowledge_id=1, file_name="doc.txt")
-    added_file.file_size = 1
-
-    with (
-        patch.object(
-            service,
-            "_require_action",
-            new_callable=AsyncMock,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
-            new_callable=AsyncMock,
-            return_value=space,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_user_total_file_size",
-            new_callable=AsyncMock,
-            return_value=0,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_knowledge_space_upload_limit_bytes",
-            new_callable=AsyncMock,
-            return_value=None,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_tenant_storage_remaining_bytes",
-            new_callable=AsyncMock,
-            return_value=None,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file",
-            return_value=added_file,
-        ) as mock_process_one_file,
-        patch.object(
-            service,
-            "_initialize_child_resource_permissions",
-            new_callable=AsyncMock,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.update",
-            side_effect=lambda row: row,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
-            new_callable=AsyncMock,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
-            new=_noop_db_session,
-        ),
-        patch(
-            "bisheng.approval.domain.services.approval_service.ApprovalService.create_department_space_upload_request",
-            new_callable=AsyncMock,
-        ) as mock_create_request,
-    ):
-        result = await service.add_file(1, ["/tmp/doc.txt"])
-
-    assert result[0].id == 101
-    mock_process_one_file.assert_called_once()
-    mock_create_request.assert_not_called()
+    assert upload.context.user.tenant_id == 101
+    async with upload.context.sessions() as session:
+        root = await session.get(Knowledge, 40)
+        root.auth_type = AuthTypeEnum.PUBLIC
+        await session.commit()
+    create = AsyncMock()
+    monkeypatch.setattr(ApprovalService, "create_department_space_upload_request", create)
+    prepare = Mock(wraps=upload.legacy.cls.prepare_one_file)
+    monkeypatch.setattr(upload.legacy.cls, "prepare_one_file", prepare)
+    result = await upload.service.add_file(40, ["opaque-document"])
+    assert len(result) == 1 and result[0].tenant_id == 101 and result[0].knowledge_id == 40
+    prepare.assert_called_once()
+    create.assert_not_called()
+    upload.service._require_action.assert_awaited()
+    assert all(
+        call.args == ("knowledge_space", 40, "upload_file") for call in upload.service._require_action.await_args_list
+    )
+    async with upload.context.sessions() as session:
+        version = (
+            await session.exec(
+                select(KnowledgeDocumentVersion).where(KnowledgeDocumentVersion.knowledge_file_id == result[0].id)
+            )
+        ).one()
+        document = await session.get(KnowledgeDocument, version.document_id)
+        assert version.version_no == 1 and version.is_primary and document.primary_version_id == version.id
+        assert document.knowledge_id == 40
+    upload.projection._permission.authorize_created.assert_awaited_once()
+    upload.publish.assert_called_once()

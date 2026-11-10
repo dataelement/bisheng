@@ -119,7 +119,7 @@ class ToolExecutor(BaseTool):
     @classmethod
     async def _ensure_use_permission_async(cls, tool_type: GptsToolsType, user_id: int) -> None:
         if not tool_type.id or not tool_type.tenant_id:
-            raise PermissionError("Permission denied: use")
+            raise PermissionError("Permission denied: visible")
         login_user = await cls._build_permission_user(
             user_id,
             int(tool_type.tenant_id),
@@ -128,10 +128,10 @@ class ToolExecutor(BaseTool):
             login_user,
             resource_type="tool",
             resource_id=tool_type.id,
-            action="use",
+            action="visible",
         )
         if not allowed:
-            raise PermissionError("Permission denied: use")
+            raise PermissionError("Permission denied: visible")
 
     @classmethod
     def _ensure_use_permission_sync(cls, tool_type: GptsToolsType, user_id: int) -> None:

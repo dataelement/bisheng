@@ -207,7 +207,7 @@
     "skills": "构  建",
     "createApp": "创建应用",
     "createKnowledge": "新建知识库",
-    "knowledge": "知  识",
+    "knowledge": "知识空间",
     "evaluation": "评  测",
     "board": "看  板",
     "workbenchHome": "首页",
@@ -4435,5 +4435,14 @@
       "admin": "管理员",
       "children": "包含下级部门"
     }
+  },
+  "references": {
+    "saved": "已保存的引用",
+    "unavailable": "当前不可选",
+    "unconfirmed": "部分已保存 ID 不在当前候选中，此处无法确认其状态，原 ID 会保留。",
+    "partialRepair": "可保存部分修复；所有引用有效后才能运行或发布。",
+    "invalid_deleted": "已删除",
+    "invalid_legacy": "历史引用已失效",
+    "deleting": "正在删除"
   }
 }

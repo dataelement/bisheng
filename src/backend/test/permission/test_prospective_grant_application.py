@@ -52,7 +52,8 @@ class _Runtime:
             ),
         )
 
-    async def prospective_owner_grantable_models(self):
+    async def prospective_owner_grantable_models(self, *, resource_type=None):
+        assert resource_type in {None, "knowledge_space"}
         self.calls.append("prospective_owner_grantable_models")
         return self.catalog, self.catalog.models[:2]
 
@@ -117,8 +118,8 @@ async def test_context_uses_owner_policy_without_a_resource_target(prospective) 
         "catalog_release_id": 42,
         "can_configure_initial_permissions": True,
         "grantable_models": [
-            {"key": "viewer", "name": "Viewer", "level": 1, "active": True},
-            {"key": "editor", "name": "Editor", "level": 2, "active": True},
+            {"key": "viewer", "name": "Viewer", "level": 1, "active": True, "visibility_only": False},
+            {"key": "editor", "name": "Editor", "level": 2, "active": True, "visibility_only": False},
         ],
     }
     assert runtime.calls == ["prospective_owner_grantable_models"]
