@@ -1,4 +1,4 @@
-> 中国のものづくりの精神から。[Deepseek] や [黒神話：悟空] のチームのように、世界により多くの素晴らしいものを届けたいと願っています。
+> 中国のものづくりの精神から。DeepSeek や黒神話：悟空のチームのように、世界により多くの素晴らしいものを届けたいと願っています。
 
 <img src="docs/images/readme/bisheng-banner-en.png" alt="Bisheng banner">
 
@@ -6,7 +6,7 @@
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
     <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
     <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
-    <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
+    <a href="https://github.com/dataelement/bisheng/commits"><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
     <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
 </p>
 <p align="center">
@@ -21,14 +21,6 @@
 <p align="center">
   <a href="https://trendshift.io/repositories/717" target="_blank"><img src="https://trendshift.io/api/badge/repositories/717" alt="dataelement%2Fbisheng | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
-<div class="column" align="middle">
-  <!-- <a href="https://bisheng.slack.com/join/shared_invite/"> -->
-    <!-- <img src="https://img.shields.io/badge/Join-Slack-orange" alt="join-slack"/> -->
-  </a>
-  <!-- <img src="https://img.shields.io/github/license/bisheng-io/bisheng" alt="license"/> -->
-  <!-- <img src="https://img.shields.io/docker/pulls/bisheng-io/bisheng" alt="docker-pull-count" /> -->
-</div>
-
 
 BISHENG は、**オープンソースの企業向けオールインワン Agent プラットフォーム**です。オフィス業務の効率化と企業での AI アプリケーションの活用に注力し、さまざまな業界の大手組織や Fortune 500 企業に利用されています。
 
@@ -53,24 +45,26 @@ BISHENG デスクトップクライアントは DeepSeek Harness（DSH）を基�
 1. **🖥️ BISHENG クライアント：ローカル作業と企業のクラウドを接続**
 
    - **Chat と Work の 2 つの作業方法**：Chat はナレッジ Q&A とクラウド上の複数ステップのタスクに対応します。Work は許可されたローカルディレクトリで資料を整理し、編集可能な Word、Excel、PPT を作成して、フィードバックに応じた修正を続けられます。
-   - **アカウントの権限に従って企業リソースを利用**：企業アカウントで許可されたモデル、API/MCP ツール、スキル、ナレッジスペースを利用し、アプリセンターで公開済みのアシスタントやワークフローを開けます。ナレッジ検索では、スペースとファイルの権限が引き続き確認されます。
-   - **モデルとクレジットを一元管理**：管理者はモデルの利用権限、月間クレジット、呼び出し履歴を管理します。Chat と Work での企業モデルの呼び出しは、現在のユーザーの同じクレジット台帳に記録され、残高と利用量を確認できます。
-   - **企業向け拡張機能を一括配布**：管理者がプラグインとワークベンチをまとめてインポートし、従業員は企業の設定と権限に従って利用します。
+   - **アカウントの権限に従って企業リソースを利用**：企業アカウントで許可されたモデル、API/MCP ツール、スキル、ナレッジスペースを利用し、アプリセンターで公開済みのアプリを開けます。ナレッジ検索は、その従業員がアクセス権を持つスペースとファイルの内容だけを返します。
+   - **クレジットと利用量を確認可能**：Chat と Work での企業モデルの呼び出しは、現在のユーザーの同じクレジット台帳に記録されます。ユーザーはいつでも残高と利用量を確認できます。
+   - **企業向け拡張機能を権限に従って利用**：従業員は企業の設定と権限に従って、管理者が配布したプラグインとワークベンチを利用できます。
 
-2. **🛠️ アプリ工房：Vibe App をチームに公開**
+2. **🛠️ ホスティングアプリ：チームで開発したアプリを同僚に公開**
 
-   - **業務上のニーズをアプリに**：申し込みフォーム、プロジェクト台帳、部門ダッシュボードなどの専用ページを作成し、同僚がアプリセンターから開いて利用できます。
-   - **ローカル開発からチームでの利用へ**：ローカルで、または Coding Agent の支援で開発したアプリを提出できます。事前チェック、シークレットスキャン、ビルド、公開承認を経て、利用範囲を設定し、アプリセンターで公開します。
-   - **プラットフォームの機能を再利用**：アプリはプラットフォームのログインとアクセスユーザーの ID を再利用し、必要に応じてモデルやナレッジリソースに接続でき、重複した基盤構築を減らせます。具体的な機能と設定要件は、各バージョンの説明をご確認ください。
+   - **業務上のニーズをアプリに**：申し込みフォーム、プロジェクト台帳、部門ダッシュボードなどの専用ページを作成します。アプリの公開後、権限を持つ従業員はアプリセンターで「アプリに入る」をクリックすると、新しいタブでそのまま利用できます。再ログインは不要です。
+   - **ローカルで開発してプラットフォームに提出**：開発者は bisheng コマンドラインツールをインストールし、サービスアカウントのキーでログインして、ローカルでアプリを開発・デバッグします。Coding Agent の支援を受けることもできます。開発者はアプリマニフェストにランタイム、リソースプラン、利用するプラットフォームのモデルとナレッジベースを宣言し、アプリをプラットフォームに提出します。プラットフォームは提出されたアプリに対して事前チェック、シークレットスキャン、ビルドを行います。
+   - **承認後に公開**：承認者は承認センターでアプリのソースファイルツリーを確認し、アプリをプレビューしてから、承認または却下を決めます。
+   - **オーナーによる一元管理**：アプリのオーナーは「構築 → アプリ」で、リソースプランの確認、公開範囲の設定、サードパーティのシークレットの登録、アプリデータのオンライン閲覧・編集、公開・非公開・削除を行えます。
+   - **プラットフォームの機能を再利用**：プラットフォームが現在のアクセスユーザーの ID をアプリに渡すため、アプリは独自のログインを作る必要がありません。アプリはプラットフォームのモデルを呼び出し、アクセスユーザーの権限に従ってナレッジベースを検索できます。
 
-   ![BISHENG アプリ工房の Vibe App 公開管理画面](docs/images/readme/bisheng-vibe-app.png)
+   ![BISHENG ホスティングアプリの公開管理画面](docs/images/readme/bisheng-vibe-app.png)
 
 3. **🚀 タスクモード：複数ステップの複雑な作業に対応する汎用エージェント**
-   目標を伝え、必要に応じてファイル、ナレッジベース、ツール、スキルを添付すると、エージェントがタスクを分解して順に実行し、最後にレポート、PPT、Excel、Word を納品します。
+   目標を伝え、必要に応じてファイル、ナレッジベース、ツール、スキルを添付すると、エージェントがタスクを分解して順に実行し、最後に HTML レポート、PPT、Excel、Word のファイルを納品します。
 
    - 🧠 **タスク計画 + サブエージェントの並列実行**：メインエージェントがタスクリストを動的に作成して進捗を管理し、独立した調査はサブエージェントに任せて並列に進めます。
    - 🙋 **Human in the loop**：あなたしか知らない重要な情報が必要になると、タスクを一時停止して回答を待ちます。
-   - 🧰 **スキル（Skill）をそのまま追加**：PPT、Excel、Word の 3 つのスキルパックを内蔵し、すぐに使えます。チーム独自のスキルをローカルや GitHub からインポートすることもできます。
+   - 🧰 **スキル（Skill）をそのまま追加**：Word、Excel、PPT、HTML レポートの 4 つのスキルパックを内蔵し、すぐに使えます。チーム独自のスキルをローカルや GitHub からインポートすることもできます。
    - 📎 **結論の出典を追跡可能**：レポートには引用マークが付き、クリックすると原文を開いて引用箇所を表示します。
    <p align="center"><img src="docs/images/readme/task-mode.png" alt="task-mode"></p>
 
@@ -97,7 +91,7 @@ BISHENG デスクトップクライアントは DeepSeek Harness（DSH）を基�
 
 7. **🏢 エンタープライズ機能：企業で AI を導入するために必要な管理機能**
 
-   - **クライアントの一元管理**：管理者はクライアントで利用できるモデル、スキル、API/MCP ツール、ナレッジスペースをまとめて設定し、企業の設定とリソース権限に従って従業員に提供します。企業向けプラグインマーケットでプラグインやワークベンチを配布し、月間クレジット、呼び出し利用量、監査記録も一元管理します。
+   - **クライアントの一元管理**：管理者は BISHENG クライアントで利用できるモデル、スキル、API/MCP ツール、ナレッジスペースをまとめて設定し、企業向けプラグインマーケットでプラグインやワークベンチを配布し、モデルの利用権限、月間クレジット、呼び出し履歴を一元管理します。
    - **部門とユーザーの管理**：組織構造、ユーザー、クォータを管理します。
    - **機能とリソースの権限を分けて管理**：RBAC のロールで機能メニューと操作を制御します。ReBAC はナレッジスペース、フォルダ、個別ファイルへのアクセスを制御し、個人、部門（下位部門を含む）、ユーザーグループに権限を付与できます。フォルダとファイルは既定で上位の権限を継承し、個別に設定することもできます。
    - **承認フロー**：ナレッジスペースへの参加、チャンネル購読、メニュー権限の申請などに承認を設定でき、承認フローとノードはカスタマイズできます。
@@ -162,12 +156,12 @@ docker compose logs -f backend backend_worker
 
 サービスの準備ができたら、ブラウザで `http://サーバーIP:3001` にアクセスしてユーザー登録を行います。最初に登録したユーザーがシステム管理者になります。その後、モデルを設定してください。
 
-Gateway はデフォルトでは無効です。VibeApp の実行環境には追加設定が必要です。Gateway、VibeApp、OnlyOffice、ARM イメージ、デプロイ設定の詳細は [Docker デプロイガイド](docker/README.md) を参照してください。
+Gateway はデフォルトでは無効です。ホスティングアプリの実行環境には追加設定が必要です。Gateway、ホスティングアプリ、OnlyOffice、ARM イメージ、デプロイ設定の詳細は [Docker デプロイガイド](docker/README.md) を参照してください。
 
 すべての機能（BISHENG クライアント、ホスティングアプリ、ファインチューニングなど）を有効にするには、ドキュメントをご参照ください：[プライベート環境へのデプロイ](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 ## 謝辞
-このリポジトリは [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) および [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) の恩恵を受けています。素晴らしい作品に感謝します。
+このリポジトリは [langchain](https://github.com/langchain-ai/langchain)、[unstructured](https://github.com/Unstructured-IO/unstructured) および [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) の恩恵を受けています。素晴らしい作品に感謝します。
 
 **貢献者に感謝します：**
 

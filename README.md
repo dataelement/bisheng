@@ -1,4 +1,4 @@
-> 源自中国匠心，希望我们能像 [Deepseek]、[黑神话：悟空] 团队一样，给世界带来更多美好。
+> 源自中国匠心，希望我们能像 DeepSeek、黑神话：悟空团队一样，给世界带来更多美好。
 
 <img src="docs/images/readme/bisheng-banner-zh.png" alt="Bisheng banner">
 
@@ -6,7 +6,7 @@
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
     <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
     <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
-    <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
+    <a href="https://github.com/dataelement/bisheng/commits"><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
     <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
 </p>
 <p align="center">
@@ -21,14 +21,6 @@
 <p align="center">
   <a href="https://trendshift.io/repositories/717" target="_blank"><img src="https://trendshift.io/api/badge/repositories/717" alt="dataelement%2Fbisheng | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
-<div class="column" align="middle">
-  <!-- <a href="https://bisheng.slack.com/join/shared_invite/"> -->
-    <!-- <img src="https://img.shields.io/badge/Join-Slack-orange" alt="join-slack"/> -->
-  </a>
-  <!-- <img src="https://img.shields.io/github/license/bisheng-io/bisheng" alt="license"/> -->
-  <!-- <img src="https://img.shields.io/docker/pulls/bisheng-io/bisheng" alt="docker-pull-count" /> -->
-</div>
-
 
 BISHENG是一款 <b>开源的企业级一站式 Agent 平台</b>，专注办公效率与企业 AI 应用落地，已有大量行业头部组织及世界 500 强企业在使用。
 
@@ -53,24 +45,26 @@ BISHENG 桌面端基于 DeepSeek Harness（DSH）开发，与 BISHENG 平台协�
 1. **🖥️ BISHENG 客户端：连接本地工作与企业云端**
 
    - **Chat 与 Work 两种工作方式**：Chat 支持知识问答与云端多步任务；Work 在获准的本地目录中整理材料，生成可编辑的 Word、Excel、PPT，并根据反馈持续修改。
-   - **企业资源按身份开放**：使用企业账号调用获准的模型、API/MCP 工具、技能与知识空间，也可从应用中心打开已发布的助手和工作流；知识检索继续检查空间与文件权限。
-   - **模型与积分集中管理**：管理员统一配置模型授权、月度积分和调用记录；Chat 与 Work 的企业模型调用共用当前用户的积分账本，用户可查看余额与用量。
-   - **企业扩展统一分发**：管理员集中导入插件和工作台，员工按企业配置与授权获取使用。
+   - **企业资源按身份开放**：员工使用企业账号调用获准的模型、API/MCP 工具、技能与知识空间，也可从应用中心打开已发布的应用；知识检索只返回该员工有权限访问的空间和文件内容。
+   - **积分与用量透明**：Chat 与 Work 调用企业模型时共用当前用户的积分账本，用户可以随时查看余额与用量。
+   - **企业扩展按授权获取**：员工按企业配置与授权，直接获取管理员分发的插件和工作台。
 
-2. **🛠️ 应用工场：把 Vibe App 发布给团队**
+2. **🛠️ 托管应用：把团队自己开发的应用发布给同事使用**
 
-   - **把业务需求做成应用**：将报名表、项目台账、部门看板等需求做成专门的页面，让同事从应用中心打开使用。
-   - **从本地开发到团队使用**：提交本地或由 Coding Agent 辅助开发的应用，经预检、密钥扫描、构建和发布审批后，再设置使用范围，发布到应用中心。
-   - **复用平台能力**：应用可按需复用平台登录与访问者身份，接入模型和知识资源，减少重复建设；具体能力与配置要求以对应版本说明为准。
+   - **把业务需求做成应用**：把报名表、项目台账、部门看板等需求做成专门的页面。应用上线后，有权限的员工在应用中心点击「进入应用」，即可在新标签页使用，无需再次登录。
+   - **本地开发后提交到平台**：开发者安装 bisheng 命令行工具，用服务账号密钥登录，在本地开发和调试应用，也可以让 Coding Agent 辅助开发。开发者在应用清单中声明运行时、资源档位、要用的平台模型和知识库，再把应用提交到平台。平台对提交的应用做预检、密钥扫描和构建。
+   - **审批后上线**：审批人在审批中心查看应用的源码文件树并预览应用，再决定批准或驳回。
+   - **负责人统一管理**：应用负责人在「构建 → 应用」中查看资源档位、设置可见范围、录入第三方密钥、在线查看和编辑应用数据，并执行上线、下线和删除。
+   - **复用平台能力**：平台向应用注入当前访问者的身份，应用不需要自建登录。应用可以调用平台模型，并按访问者的权限检索知识库。
 
-   ![BISHENG 应用工场的 Vibe App 发布管理界面](docs/images/readme/bisheng-vibe-app.png)
+   ![BISHENG 托管应用的发布管理界面](docs/images/readme/bisheng-vibe-app.png)
 
 3. **🚀 任务模式：面向多步骤复杂工作的通用 Agent**
-   你给出目标，按需附上文件、知识库、工具和技能，它会拆解任务、逐步执行，最后交付报告、PPT、Excel 或 Word。
+   你给出目标，按需附上文件、知识库、工具和技能，它会拆解任务、逐步执行，最后交付 HTML 报告、PPT、Excel 或 Word 文件。
 
    - 🧠 **任务规划 + 子 Agent 并行**：主 Agent 动态生成任务清单、跟踪进度，把独立调研交给子 Agent 并行完成。
    - 🙋 **人机交互（Human in the loop）**：遇到只有你知道的关键信息，任务暂停等你回答。
-   - 🧰 **技能（Skill）即插即用**：内置 PPT、Excel、Word 三个技能包，开箱即用；也可以从本地或 GitHub 导入团队自己的技能。
+   - 🧰 **技能（Skill）即插即用**：内置 Word、Excel、PPT 和 HTML 报告四个技能包，开箱即用；也可以从本地或 GitHub 导入团队自己的技能。
    - 📎 **结论可溯源**：报告带引用角标，点击后打开原文，并定位到被引用的段落。
    <p align="center"><img src="docs/images/readme/task-mode.png" alt="task-mode"></p>
 
@@ -97,7 +91,7 @@ BISHENG 桌面端基于 DeepSeek Harness（DSH）开发，与 BISHENG 平台协�
 
 7. **🏢 企业级特性：企业 AI 落地需要的管控能力**
 
-   - **客户端统一管理**：管理员集中配置客户端可用的模型、技能、API/MCP 工具与知识空间，按企业配置和资源权限开放给员工；通过企业插件市场分发插件和工作台，并统一管理月度积分、调用用量与审计记录。
+   - **客户端统一管理**：管理员集中配置 BISHENG 客户端可用的模型、技能、API/MCP 工具与知识空间，通过企业插件市场分发插件和工作台，并统一管理模型授权、月度积分和调用记录。
    - **部门和用户管理**：维护组织架构、用户和配额。
    - **功能与资源权限分开管理**：RBAC 通过角色控制功能菜单与操作；ReBAC 控制知识空间、文件夹和单个文件的访问，可按个人、部门（含下级部门）或用户组授权。文件夹和文件默认继承上级权限，也可独立设置。
    - **操作审批**：知识空间加入、频道订阅、菜单权限申请等操作可以走审批，审批流程和节点可自定义。
@@ -113,7 +107,7 @@ BISHENG 桌面端基于 DeepSeek Harness（DSH）开发，与 BISHENG 平台协�
 
    ![BISHENG 企业管理后台的客户端积分与用量页面](docs/images/readme/bisheng-enterprise-management.png)
 
-8. **🔍 高精度文档解析**：5年海量数据沉淀，高精度文档解析模型支持免费私有化部署使用，包括高精度印刷体、手写体与生僻字识别模型、表格识别模型、版式分析模型、印章模型...
+8. **🔍 高精度文档解析**：5年海量数据沉淀，高精度文档解析模型支持免费私有化部署使用，包括高精度印刷体、手写体与生僻字识别模型、表格识别模型、版式分析模型、印章模型等。
    <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>
 
 ## 快速安装
@@ -159,13 +153,13 @@ docker compose ps
 docker compose logs -f backend backend_worker
 ```
 
-服务就绪后，在浏览器中访问 `http://服务器IP:3001` 并注册用户，默认第一个注册的用户会成为系统 admin。随后需配置模型。
+服务就绪后，在浏览器中访问 `http://服务器IP:3001` 并注册用户，默认第一个注册的用户会成为系统 admin。然后在系统中配置模型。
 
-默认不启用 Gateway；VibeApp 运行环境需要额外配置。Gateway、VibeApp、OnlyOffice、ARM 镜像及自定义部署配置见 [Docker 部署说明](docker/README.md)。
+默认不启用 Gateway；托管应用的运行环境需要额外配置。Gateway、托管应用、OnlyOffice、ARM 镜像及自定义部署配置见 [Docker 部署说明](docker/README.md)。
 
-打开全量功能（BISHENG客户端、托管应用、微调等）参见文档：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
+如需启用全部功能（BISHENG 客户端、托管应用、微调等），请参见文档：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
-## 感谢 
+## 感谢
 
 感谢我们的贡献者：
 
@@ -175,15 +169,14 @@ docker compose logs -f backend backend_worker
 
 
 <br>
-Bisheng 采用了以下依赖库:
+BISHENG 采用了以下依赖库：
 
 - 感谢开源LLM应用开发库 [langchain](https://github.com/langchain-ai/langchain)。
-- 感谢开源langchain可视化工具 [langflow](https://github.com/logspace-ai/langflow)。
 - 感谢开源非结构化数据解析引擎 [unstructured](https://github.com/Unstructured-IO/unstructured)。
-- 感谢开源LLM微调框架 [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) 。
+- 感谢开源LLM微调框架 [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory)。
 
 
-## 社区与支持 
+## 社区与支持
 欢迎加入我们的交流群
 
 <img src="https://www.dataelem.com/nstatic/qrcode.png" alt="Wechat QR Code">

@@ -1,4 +1,4 @@
-> Creado en China. Al igual que los equipos detrás de [Deepseek] y [Black Myth: Wukong], esperamos aportar más belleza al mundo.
+> Creado en China. Al igual que los equipos detrás de DeepSeek y Black Myth: Wukong, esperamos aportar más belleza al mundo.
 
 <img src="docs/images/readme/bisheng-banner-en.png" alt="Bisheng banner">
 
@@ -6,7 +6,7 @@
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
     <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
     <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
-    <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
+    <a href="https://github.com/dataelement/bisheng/commits"><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
     <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a>
 </p>
 <p align="center">
@@ -21,14 +21,6 @@
 <p align="center">
   <a href="https://trendshift.io/repositories/717" target="_blank"><img src="https://trendshift.io/api/badge/repositories/717" alt="dataelement%2Fbisheng | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
-<div class="column" align="middle">
-  <!-- <a href="https://bisheng.slack.com/join/shared_invite/"> -->
-    <!-- <img src="https://img.shields.io/badge/Join-Slack-orange" alt="join-slack"/> -->
-  </a>
-  <!-- <img src="https://img.shields.io/github/license/bisheng-io/bisheng" alt="license"/> -->
-  <!-- <img src="https://img.shields.io/docker/pulls/bisheng-io/bisheng" alt="docker-pull-count" /> -->
-</div>
-
 
 BISHENG es una **plataforma empresarial de agentes de código abierto y todo en uno**, centrada en la productividad de oficina y en llevar las aplicaciones de IA empresarial a la práctica. La utilizan organizaciones líderes de distintos sectores y empresas de Fortune 500.
 
@@ -53,24 +45,26 @@ Para personalizar el cliente (por ejemplo, sustituir el logotipo), puede modific
 1. **🖥️ BISHENG Desktop: conecte el trabajo local con la nube de su empresa**
 
    - **Dos formas de trabajar: Chat y Work**: Chat permite realizar consultas sobre el conocimiento y tareas en la nube de varios pasos. Work organiza los materiales en directorios locales autorizados, genera archivos editables de Word, Excel y PowerPoint y sigue perfeccionándolos a partir de sus comentarios.
-   - **Recursos empresariales autorizados según la identidad**: Utilice su cuenta empresarial para acceder a modelos, herramientas API/MCP, habilidades y espacios de conocimiento aprobados, o abra asistentes y flujos de trabajo publicados en el Centro de aplicaciones. La recuperación de conocimiento sigue aplicando los permisos de los espacios y los archivos.
-   - **Gestión centralizada de modelos y créditos**: Los administradores gestionan el acceso a los modelos, los créditos mensuales y los registros de llamadas. Las llamadas a modelos empresariales en Chat y Work comparten el registro de créditos del usuario actual; los usuarios pueden consultar su saldo y consumo.
-   - **Distribución centralizada de extensiones empresariales**: Los administradores importan complementos y entornos de trabajo de forma centralizada. Los empleados los reciben según la configuración y las autorizaciones de la empresa.
+   - **Recursos empresariales autorizados según la identidad**: Utilice su cuenta empresarial para acceder a modelos, herramientas API/MCP, habilidades y espacios de conocimiento aprobados, o abra aplicaciones publicadas en el Centro de aplicaciones. La recuperación de conocimiento solo devuelve los espacios y el contenido de archivos a los que el empleado tiene permiso de acceso.
+   - **Créditos y consumo transparentes**: Las llamadas a modelos empresariales en Chat y Work comparten el registro de créditos del usuario actual. Los usuarios pueden consultar su saldo y consumo en cualquier momento.
+   - **Extensiones empresariales según autorización**: Los empleados obtienen los complementos y entornos de trabajo que distribuyen los administradores, según la configuración y las autorizaciones de la empresa.
 
-2. **🛠️ Taller de aplicaciones: publique Vibe Apps para su equipo**
+2. **🛠️ Aplicaciones alojadas: publique para sus compañeros las aplicaciones que desarrolla su equipo**
 
-   - **Convierta las necesidades de negocio en aplicaciones**: Cree páginas específicas para formularios de inscripción, registros de proyectos o paneles departamentales, y permita que sus compañeros las abran desde el Centro de aplicaciones.
-   - **Del desarrollo local al uso en equipo**: Envíe una aplicación desarrollada localmente o con un Coding Agent. Tras las comprobaciones previas, el análisis de secretos, la compilación y la aprobación de la publicación, configure su ámbito de acceso y publíquela en el Centro de aplicaciones.
-   - **Reutilice las capacidades de la plataforma**: Las aplicaciones pueden reutilizar el inicio de sesión de la plataforma y la identidad del visitante, y acceder a los modelos y recursos de conocimiento según sea necesario, reduciendo la duplicación de infraestructura. Las capacidades y los requisitos de configuración dependen de la documentación de la versión correspondiente.
+   - **Convierta las necesidades de negocio en aplicaciones**: Cree páginas específicas para formularios de inscripción, registros de proyectos o paneles departamentales. Cuando la aplicación está en línea, los empleados con acceso hacen clic en «Entrar en la aplicación» en el Centro de aplicaciones y la usan en una pestaña nueva, sin volver a iniciar sesión.
+   - **Desarrollo local y envío a la plataforma**: Los desarrolladores instalan la herramienta de línea de comandos bisheng, inician sesión con la clave de una cuenta de servicio y desarrollan y depuran la aplicación en local, opcionalmente con ayuda de un Coding Agent. En el manifiesto de la aplicación, el desarrollador declara el entorno de ejecución, el nivel de recursos y los modelos y bases de conocimiento de la plataforma que usa, y después envía la aplicación a la plataforma. La plataforma ejecuta las comprobaciones previas, el análisis de secretos y la compilación.
+   - **Publicación tras la aprobación**: Los aprobadores revisan en el Centro de aprobaciones el árbol de archivos de código fuente, previsualizan la aplicación y deciden si la aprueban o la rechazan.
+   - **Gestión centralizada por el responsable**: En Construir → Aplicaciones, el responsable de la aplicación consulta el nivel de recursos, define el ámbito de visibilidad, introduce secretos de terceros, consulta y edita los datos de la aplicación en línea, y la pone en línea, la desactiva o la elimina.
+   - **Reutilice las capacidades de la plataforma**: La plataforma inyecta en la aplicación la identidad del visitante actual, por lo que la aplicación no necesita su propio inicio de sesión. La aplicación puede llamar a los modelos de la plataforma y buscar en las bases de conocimiento con los permisos del visitante.
 
-   ![Gestión de publicaciones de Vibe Apps en el Taller de aplicaciones de BISHENG](docs/images/readme/bisheng-vibe-app.png)
+   ![Gestión de publicaciones de una aplicación alojada de BISHENG](docs/images/readme/bisheng-vibe-app.png)
 
 3. **🚀 Modo de tareas: un agente de propósito general para trabajos complejos de varios pasos**
-   Usted le indica un objetivo y, si es necesario, adjunta archivos, bases de conocimiento, herramientas y habilidades. El agente divide el objetivo en tareas, las ejecuta paso a paso y entrega un informe o un archivo de PPT, Excel o Word.
+   Usted le indica un objetivo y, si es necesario, adjunta archivos, bases de conocimiento, herramientas y habilidades. El agente divide el objetivo en tareas, las ejecuta paso a paso y entrega un informe HTML o un archivo de PPT, Excel o Word.
 
    - 🧠 **Planificación de tareas + subagentes en paralelo**: El agente principal crea una lista de tareas, sigue el progreso y asigna investigaciones independientes a subagentes que se ejecutan en paralelo.
    - 🙋 **Intervención humana**: Cuando el agente necesita información que solo usted conoce, la tarea se pausa hasta que responda.
-   - 🧰 **Habilidades listas para usar**: Tres paquetes de habilidades integrados (PPT, Excel y Word) funcionan desde el primer momento. También puede importar las habilidades de su equipo desde un archivo local o desde GitHub.
+   - 🧰 **Habilidades listas para usar**: Cuatro paquetes de habilidades integrados (Word, Excel, PPT e informe HTML) funcionan desde el primer momento. También puede importar las habilidades de su equipo desde un archivo local o desde GitHub.
    - 📎 **Conclusiones trazables**: Los informes incluyen marcadores de cita. Haga clic en un marcador para abrir la fuente e ir al pasaje citado.
    <p align="center"><img src="docs/images/readme/task-mode.png" alt="task-mode"></p>
 
@@ -97,7 +91,7 @@ Para personalizar el cliente (por ejemplo, sustituir el logotipo), puede modific
 
 7. **🏢 Funcionalidades de nivel empresarial: los controles que necesita la IA empresarial**
 
-   - **Gestión centralizada del cliente de escritorio**: Los administradores configuran de forma centralizada los modelos, las habilidades, las herramientas API/MCP y los espacios de conocimiento disponibles en el cliente, y conceden acceso a los empleados según la configuración empresarial y los permisos de los recursos. El mercado empresarial de complementos distribuye complementos y entornos de trabajo, mientras que los créditos mensuales, el consumo de llamadas y los registros de auditoría se gestionan de forma centralizada.
+   - **Gestión centralizada del cliente de escritorio**: Los administradores configuran de forma centralizada los modelos, las habilidades, las herramientas API/MCP y los espacios de conocimiento disponibles en BISHENG Desktop, distribuyen complementos y entornos de trabajo a través del mercado empresarial de complementos y gestionan el acceso a los modelos, los créditos mensuales y los registros de llamadas.
    - **Gestión de departamentos y usuarios**: Mantenga la estructura organizativa, los usuarios y las cuotas.
    - **Permisos de funciones y recursos separados**: Los roles RBAC controlan los menús de funciones y las acciones. ReBAC controla el acceso a los espacios de conocimiento, las carpetas y los archivos individuales, mediante concesiones a personas, departamentos (incluidos sus subdepartamentos) o grupos de usuarios. Las carpetas y los archivos heredan por defecto los permisos de su elemento superior y también pueden configurarse de forma independiente.
    - **Aprobaciones**: Unirse a un espacio de conocimiento, suscribirse a un canal, solicitar permisos de menú y otras acciones pueden requerir aprobación. Puede personalizar los flujos y los nodos de aprobación.
@@ -162,12 +156,12 @@ docker compose logs -f backend backend_worker
 
 Cuando los servicios estén listos, abra `http://IP_DEL_SERVIDOR:3001` en el navegador y registre un usuario. El primer usuario registrado será el administrador del sistema. Después, configure los modelos.
 
-Gateway está desactivado de forma predeterminada y el entorno de ejecución de VibeApp requiere configuración adicional. Para Gateway, VibeApp, OnlyOffice, imágenes ARM y ajustes personalizados, consulte la [guía de implementación con Docker](docker/README.md).
+Gateway está desactivado de forma predeterminada y el entorno de ejecución de las aplicaciones alojadas requiere configuración adicional. Para Gateway, aplicaciones alojadas, OnlyOffice, imágenes ARM y ajustes personalizados, consulte la [guía de implementación con Docker](docker/README.md).
 
 Para habilitar todas las funcionalidades (BISHENG Desktop, aplicaciones alojadas, ajuste fino y más), consulte la documentación: [Alojamiento propio](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 ## Agradecimientos
-Este repositorio se beneficia de [langchain](https://github.com/langchain-ai/langchain), [langflow](https://github.com/logspace-ai/langflow), [unstructured](https://github.com/Unstructured-IO/unstructured) y [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory). Gracias por su excelente trabajo.
+Este repositorio se beneficia de [langchain](https://github.com/langchain-ai/langchain), [unstructured](https://github.com/Unstructured-IO/unstructured) y [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory). Gracias por su excelente trabajo.
 
 <b>Gracias a nuestros colaboradores:</b>
 
