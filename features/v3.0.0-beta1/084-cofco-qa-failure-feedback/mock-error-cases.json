@@ -1,0 +1,810 @@
+{
+  "title": "F084 日常/任务模式 PRD 24项错误模拟清单",
+  "generated_on": "2026-11-06",
+  "basis": [
+    "features/v3.0.0-beta1/084-cofco-qa-failure-feedback/spec.md",
+    "features/v3.0.0-beta1/084-cofco-qa-failure-feedback/coverage.md",
+    "src/backend/bisheng/common/services/llm_error_classifier.py",
+    "src/backend/bisheng/common/services/failure_context.py",
+    "src/frontend/client/src/components/ChatErrorCard.tsx",
+    "src/frontend/client/src/components/ServiceBusyNotice.tsx"
+  ],
+  "verification_status": "已核对代码及JSON清单结构；未运行模拟服务或环境验收。",
+  "fixed_prompts": {
+    "database": "【数据库】数据服务访问异常，请联系对应的数据服务维护人员排查。",
+    "network": "【网络】网络连接异常，请检查网络连接；持续异常时，请联系网络维护人员排查。",
+    "model_service": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+    "sso": "【单点登录】登录认证异常，请重新登录；持续异常时，请联系单点登录维护人员排查。",
+    "object_storage": "【对象存储】文件存储服务访问异常，请联系对象存储维护人员排查。"
+  },
+  "usage": [
+    "本文件是测试清单，不是毕昇响应协议；模型模拟器返回variant.body，不是整个用例对象。",
+    "http_status是实际HTTP状态；error.code是供应方代码，不能代替HTTP状态。Python None须转JSON null。",
+    "模型例子适用于OpenAI-compatible供应方；其他供应方遵守自身协议。请求stream=true时也可直接返回非2xx application/json错误。",
+    "示例code/type/message是测试样本，不声称厂商统一使用；前端不应原样展示这些原始错误文本。",
+    "先让专用模型正常完成一次任务，再切故障；模型列表与配置探测按需保持可用，避免失败提前发生在配置校验。",
+    "持续失败用例对每次重试都返回相同故障；恢复用例先失败再返回合法完整答复，流式需有合法终止信号。",
+    "expected_task_behavior_bucket是任务中间件策略；不包含SDK独立重试。fail_fast不代表网络层必定只发一次。",
+    "degradable表示主任务通常失败、子任务可在预算内跳过继续；retryable重试耗尽也可能在子任务降级。",
+    "expected_legacy_error_type是旧细分标签，不是本期页面主提示。F084在可靠failure_info已传递时按五类显示；限流recovering/normal使用既有恢复状态文案。",
+    "不要让模型服务伪造failure_info或数据库/SSO分类；分类来自毕昇真实依赖边界。",
+    "其他服务可用相同的故障模拟思路，但必须针对各自协议及实际调用位置；不能都返回OpenAI错误JSON。"
+  ],
+  "cases": [
+    {
+      "prd_id": "E01",
+      "scenario": "设备离线",
+      "model_endpoint_can_test": false,
+      "injection_target": "浏览器到毕昇入口",
+      "simulation": "加载页面后将测试浏览器设为 Offline，分别测试日常请求和任务连接。",
+      "expected": "【网络】网络连接异常，请检查网络连接；持续异常时，请联系网络维护人员排查。",
+      "notes": "没有HTTP错误响应体；worker可能继续执行，恢复后查询已有任务，不重复提交。"
+    },
+    {
+      "prd_id": "E02",
+      "scenario": "页面连接中断",
+      "model_endpoint_can_test": false,
+      "injection_target": "毕昇入口 SSE/任务 WebSocket",
+      "simulation": "测试代理在非正常结束时截断 SSE/WS；另测主动停止与明确服务错误。",
+      "expected": "【网络】网络连接异常，请检查网络连接；持续异常时，请联系网络维护人员排查。",
+      "notes": "同一故障只提示一次；模型供应方断流属于模型故障，不能代替本项。"
+    },
+    {
+      "prd_id": "E03",
+      "scenario": "响应数据异常",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "raw_body": "{not-json",
+          "purpose": "非流式非法JSON"
+        },
+        {
+          "http_status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "id": "mock-invalid",
+            "object": "chat.completion",
+            "choices": "invalid"
+          },
+          "purpose": "非流式错误结构"
+        }
+      ],
+      "notes": "需令当前供应方SDK/适配器实际抛错，流式请求另测非法SSE；200+error对象不保证抛异常。平台自身协议错误不强归模型服务。"
+    },
+    {
+      "prd_id": "E04",
+      "scenario": "模型连接失败",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "transport_action": "connection_refused",
+          "instruction": "仅把专用测试模型地址指向未监听的测试端口。",
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "network_timeout"
+        },
+        {
+          "transport_action": "connection_reset",
+          "instruction": "模型端点接受连接后直接断开TCP。",
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "network_timeout"
+        }
+      ],
+      "notes": "无JSON响应体；仍归模型服务，不归设备网络。"
+    },
+    {
+      "prd_id": "E05",
+      "scenario": "模型响应超时",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "transport_action": "delay_past_client_timeout",
+          "instruction": "接受模型请求后不发响应头/数据，持续超过当前客户端读取超时。",
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "network_timeout"
+        }
+      ],
+      "notes": "HTTP504是服务端错误，不能代替真实客户端读取超时；不假定固定秒数。"
+    },
+    {
+      "prd_id": "E06",
+      "scenario": "模型服务异常",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 500,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock internal server error",
+              "type": "server_error",
+              "param": null,
+              "code": "internal_error"
+            }
+          },
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "service_unavailable"
+        },
+        {
+          "http_status": 502,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock bad gateway",
+              "type": "server_error",
+              "param": null,
+              "code": "bad_gateway"
+            }
+          },
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "service_unavailable"
+        },
+        {
+          "http_status": 503,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock service unavailable",
+              "type": "server_error",
+              "param": null,
+              "code": "service_unavailable"
+            }
+          },
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "service_unavailable"
+        },
+        {
+          "http_status": 504,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock gateway timeout",
+              "type": "server_error",
+              "param": null,
+              "code": "gateway_timeout"
+            }
+          },
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "service_unavailable"
+        },
+        {
+          "http_status": 500,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock provider internal Redis database connection failed",
+              "type": "server_error",
+              "param": null,
+              "code": "internal_error"
+            }
+          },
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "service_unavailable"
+        }
+      ],
+      "notes": "供应方内部Redis/数据库错误仍归模型服务，不能显示毕昇数据库故障。"
+    },
+    {
+      "prd_id": "E07",
+      "scenario": "模型限流",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 429,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock too many requests",
+              "type": "rate_limit_error",
+              "param": null,
+              "code": "rate_limit_exceeded"
+            }
+          },
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "rate_limit"
+        },
+        {
+          "http_status": 429,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock allocated quota exceeded",
+              "type": "rate_limit_error",
+              "param": null,
+              "code": "Throttling.AllocationQuota"
+            }
+          },
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "rate_limit"
+        }
+      ],
+      "notes": "分别测试持续失败及一次失败后正常返回；恢复中/已恢复沿用既有状态文案。"
+    },
+    {
+      "prd_id": "E08",
+      "scenario": "模型认证失败",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 401,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock 401",
+              "type": "authentication_error",
+              "param": null,
+              "code": "401"
+            }
+          },
+          "expected_task_behavior_bucket": "fail_fast",
+          "expected_legacy_error_type": "auth_error"
+        },
+        {
+          "http_status": 401,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock invalid API key",
+              "type": "authentication_error",
+              "param": null,
+              "code": "invalid_api_key"
+            }
+          },
+          "expected_task_behavior_bucket": "fail_fast",
+          "expected_legacy_error_type": "auth_error"
+        }
+      ],
+      "notes": "这是模型凭据错误，不能代替单点登录失效。"
+    },
+    {
+      "prd_id": "E09",
+      "scenario": "模型调用权限不足",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 403,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock model access denied",
+              "type": "permission_error",
+              "param": null,
+              "code": "access_denied"
+            }
+          },
+          "expected_task_behavior_bucket": "fail_fast",
+          "expected_legacy_error_type": "auth_error"
+        }
+      ],
+      "notes": "供应方权限错误归模型服务；毕昇自身模型授权拒绝另用无权用户走真实权限校验，保留业务提示。"
+    },
+    {
+      "prd_id": "E10",
+      "scenario": "模型已停用或不存在",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 404,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock model does not exist",
+              "type": "invalid_request_error",
+              "param": null,
+              "code": "model_not_found"
+            }
+          },
+          "expected_task_behavior_bucket": "degradable",
+          "expected_legacy_error_type": "unknown"
+        }
+      ],
+      "notes": "验证供应方模型不存在；毕昇配置停用/删除需另在测试配置实际操作。"
+    },
+    {
+      "prd_id": "E11",
+      "scenario": "模型服务余额不足",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 402,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock insufficient balance: account arrearage",
+              "type": "billing_error",
+              "param": null,
+              "code": "insufficient_balance"
+            }
+          },
+          "expected_task_behavior_bucket": "fail_fast",
+          "expected_legacy_error_type": "quota_exhausted"
+        },
+        {
+          "http_status": 403,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock insufficient balance: account arrearage",
+              "type": "billing_error",
+              "param": null,
+              "code": "insufficient_balance"
+            }
+          },
+          "expected_task_behavior_bucket": "fail_fast",
+          "expected_legacy_error_type": "quota_exhausted"
+        },
+        {
+          "http_status": 429,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock insufficient balance: account arrearage",
+              "type": "billing_error",
+              "param": null,
+              "code": "insufficient_balance"
+            }
+          },
+          "expected_task_behavior_bucket": "fail_fast",
+          "expected_legacy_error_type": "quota_exhausted"
+        },
+        {
+          "http_status": 403,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock token quota is not enough, token remain quota: 0, need quota: 1",
+              "type": "billing_error",
+              "param": null,
+              "code": "pre_consume_token_quota_failed"
+            }
+          },
+          "expected_task_behavior_bucket": "fail_fast",
+          "expected_legacy_error_type": "quota_exhausted"
+        },
+        {
+          "http_status": 429,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock 余额不足，账户欠费",
+              "type": "billing_error",
+              "param": null,
+              "code": "Arrearage"
+            }
+          },
+          "expected_task_behavior_bucket": "fail_fast",
+          "expected_legacy_error_type": "quota_exhausted"
+        }
+      ],
+      "notes": "明确欠费关键词优先于认证/限流状态码；只返回402或只写billing_error不足以验证余额识别。"
+    },
+    {
+      "prd_id": "E12",
+      "scenario": "平台使用额度耗尽",
+      "model_endpoint_can_test": false,
+      "injection_target": "毕昇平台用量/额度守卫",
+      "simulation": "在专用测试租户/用户上将额度设为耗尽，发送任务；确认模型调用尚未发出。",
+      "expected": "保留平台已有额度业务提示，不强归五类。",
+      "notes": "模型返回429不能覆盖；不编造平台业务响应体。"
+    },
+    {
+      "prd_id": "E13",
+      "scenario": "模型调用额度受限",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 429,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock exceeded your current quota",
+              "type": "rate_limit_error",
+              "param": null,
+              "code": "insufficient_quota"
+            }
+          },
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "rate_limit"
+        },
+        {
+          "http_status": 429,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock 配额不足",
+              "type": "rate_limit_error",
+              "param": null,
+              "code": "quota_used_up"
+            }
+          },
+          "expected_task_behavior_bucket": "retryable",
+          "expected_legacy_error_type": "rate_limit"
+        }
+      ],
+      "notes": "当前产品规则将无欠费信号的quota文案归限流；平台额度分支同E12；401/403认证权限优先，不因quota文案改走重试。"
+    },
+    {
+      "prd_id": "E14",
+      "scenario": "上下文超限",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 400,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock maximum context length exceeded",
+              "type": "invalid_request_error",
+              "param": null,
+              "code": "context_length_exceeded"
+            }
+          },
+          "expected_task_behavior_bucket": "degradable",
+          "expected_legacy_error_type": "unknown"
+        }
+      ],
+      "notes": "供应方拒绝归模型服务；平台主动输入长度校验仍为业务提示。内部细分原因不等于页面独立主提示。"
+    },
+    {
+      "prd_id": "E15",
+      "scenario": "模型能力不匹配",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 400,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock tools are not supported by this model",
+              "type": "invalid_request_error",
+              "param": null,
+              "code": "unsupported_parameter"
+            }
+          },
+          "expected_task_behavior_bucket": "degradable",
+          "expected_legacy_error_type": "unknown"
+        },
+        {
+          "http_status": 400,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock response format is not supported",
+              "type": "invalid_request_error",
+              "param": null,
+              "code": "unsupported_response_format"
+            }
+          },
+          "expected_task_behavior_bucket": "degradable",
+          "expected_legacy_error_type": "unknown"
+        },
+        {
+          "http_status": 400,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock image input is not supported",
+              "type": "invalid_request_error",
+              "param": null,
+              "code": "unsupported_parameter"
+            }
+          },
+          "expected_task_behavior_bucket": "degradable",
+          "expected_legacy_error_type": "unknown"
+        }
+      ],
+      "notes": "平台调用前能力校验需另走真实配置流程。"
+    },
+    {
+      "prd_id": "E16",
+      "scenario": "内容安全限制",
+      "model_endpoint_can_test": true,
+      "injection_target": "专用模拟模型服务 /chat/completions（前缀按实际模型配置）",
+      "expected_category": "model_service",
+      "expected_prompt": "【模型服务】模型调用异常，请联系模型服务维护人员排查。",
+      "variants": [
+        {
+          "http_status": 400,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock content rejected by safety policy",
+              "type": "invalid_request_error",
+              "param": null,
+              "code": "content_filter"
+            }
+          },
+          "expected_task_behavior_bucket": "degradable",
+          "expected_legacy_error_type": "content_filter"
+        },
+        {
+          "http_status": 400,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "error": {
+              "message": "Mock inappropriate content",
+              "type": "invalid_request_error",
+              "param": null,
+              "code": "data_inspection_failed"
+            }
+          },
+          "expected_task_behavior_bucket": "degradable",
+          "expected_legacy_error_type": "content_filter"
+        }
+      ],
+      "notes": "主任务失败与子任务降级分别验证；被跳过的子任务不等于整轮失败。"
+    },
+    {
+      "prd_id": "E17",
+      "scenario": "知识检索失败",
+      "model_endpoint_can_test": false,
+      "injection_target": "实际检索的数据库/ES/Milvus/Redis、Embedding/Rerank、MinIO",
+      "simulation": "Embedding/Rerank可在各自模型端点按兼容协议返回500/429；数据和存储注入方式见additional_dependency_cases。",
+      "expected": "按真实依赖显示数据库/模型服务/对象存储/网络提示；保留其他知识库成功结果、引用及答案。",
+      "notes": "只对聊天模型返回错误不能覆盖检索依赖；无命中应保持正常无结果。"
+    },
+    {
+      "prd_id": "E18",
+      "scenario": "文件解析服务繁忙",
+      "model_endpoint_can_test": false,
+      "injection_target": "实际OCR/VL或独立ETL解析服务",
+      "simulation": "实际模型解析端点按自身协议返回429；独立ETL按实际繁忙协议或测试替身触发原繁忙异常。",
+      "expected": "确认模型依赖失败归模型服务；独立ETL无可靠五类来源时保留原解析繁忙提示。",
+      "notes": "聊天模型429不能代替解析繁忙。"
+    },
+    {
+      "prd_id": "E19",
+      "scenario": "文件解析失败",
+      "model_endpoint_can_test": false,
+      "injection_target": "实际附件解析及存储/模型依赖",
+      "simulation": "分别上传损坏/不支持格式文件、让实际OCR/VL模型返回错误、在测试存储读取处注入S3错误。",
+      "expected": "损坏/格式保留业务提示；模型/存储按真实依赖归类；保留正常附件。",
+      "notes": "单附件软失败与整轮失败分别验证。"
+    },
+    {
+      "prd_id": "E20",
+      "scenario": "登录失效",
+      "model_endpoint_can_test": false,
+      "injection_target": "企业SSO/会话认证链路",
+      "simulation": "在对接测试环境使企业会话实际过期，或由认证测试替身产生可靠的登录失效信号。",
+      "expected": "【单点登录】登录认证异常，请重新登录；持续异常时，请联系单点登录维护人员排查。",
+      "notes": "当前覆盖台账记录：本次仓库内无可直接验证的独立SSO故障接线，需场内联调；模型401或任意平台401都不是SSO的充分证据。"
+    },
+    {
+      "prd_id": "E21",
+      "scenario": "资料访问权限不足",
+      "model_endpoint_can_test": false,
+      "injection_target": "毕昇资料权限校验",
+      "simulation": "使用无权访问资料的测试用户，从实际业务入口请求目标资料。",
+      "expected": "保留原业务权限提示，不强归五类。",
+      "notes": "模型403只能测供应方权限，不能测资料权限。"
+    },
+    {
+      "prd_id": "E22",
+      "scenario": "引用资料失效",
+      "model_endpoint_can_test": false,
+      "injection_target": "真实引用资料和对象查找",
+      "simulation": "在测试资料制造已删除/失效引用；存储替身触发真实NoSuchKey/NoSuchObject异常。",
+      "expected": "保留资料缺失/引用失效业务提示，不显示对象存储服务异常。",
+      "notes": "正常对象缺失是反例；不能把404与存储故障直接画等号。"
+    },
+    {
+      "prd_id": "E23",
+      "scenario": "工具执行失败",
+      "model_endpoint_can_test": false,
+      "injection_target": "工具实际调用的依赖",
+      "simulation": "工具依赖处抛数据库、存储或模型SDK异常，保留原因链；另测普通工具RuntimeError。",
+      "expected": "已知依赖按真实来源归五类；工具自身未知错误保留通用反馈；保持软失败策略。",
+      "notes": "模型返回tool_calls只是发起工具调用，不是工具执行失败。"
+    },
+    {
+      "prd_id": "E24",
+      "scenario": "原因未知",
+      "model_endpoint_can_test": false,
+      "injection_target": "平台/工具未知内部异常",
+      "simulation": "独立测试替身抛未附依赖来源的RuntimeError(\"Mock unknown failure\")。",
+      "expected": "通用失败反馈，不猜测五类。",
+      "notes": "模型返回未知500仍有模型来源，不能覆盖本项。"
+    }
+  ],
+  "additional_dependency_cases": [
+    {
+      "id": "DB01",
+      "service": "mysql/dm8",
+      "injection": "实际SQL/驱动调用的测试替身抛OperationalError或连接超时。",
+      "expected_category": "database",
+      "openai_json_usable": false
+    },
+    {
+      "id": "DB02",
+      "service": "redis",
+      "injection": "实际Redis调用测试替身抛redis.exceptions.ConnectionError或TimeoutError。",
+      "expected_category": "database",
+      "openai_json_usable": false
+    },
+    {
+      "id": "DB03",
+      "service": "elasticsearch",
+      "injection": "ES兼容代理返回503及ES协议错误；或SDK测试替身抛TransportError/ConnectionTimeout。",
+      "example_http_status": 503,
+      "example_body": {
+        "error": {
+          "type": "unavailable_shards_exception",
+          "reason": "Mock Elasticsearch unavailable"
+        },
+        "status": 503
+      },
+      "expected_category": "database",
+      "openai_json_usable": false
+    },
+    {
+      "id": "DB04",
+      "service": "milvus",
+      "injection": "实际Milvus SDK/gRPC测试替身抛连接/服务异常。",
+      "expected_category": "database",
+      "openai_json_usable": false
+    },
+    {
+      "id": "ST01",
+      "service": "minio",
+      "injection": "实际S3读写调用测试替身抛S3Error(AccessDenied)，或兼容S3服务返回XML错误。",
+      "example_http_status": 403,
+      "example_content_type": "application/xml",
+      "example_raw_body": "<Error><Code>AccessDenied</Code><Message>Mock S3 access denied</Message><Resource>/mock-bucket/mock-object</Resource><RequestId>mock-request</RequestId></Error>",
+      "expected_category": "object_storage",
+      "openai_json_usable": false,
+      "notes": "存储签名/权限故障不归SSO，正常对象缺失另见E22。"
+    },
+    {
+      "id": "ST02",
+      "service": "minio",
+      "injection": "实际S3调用测试替身抛连接/读取超时，或返回兼容S3的InternalError。",
+      "example_http_status": 500,
+      "example_content_type": "application/xml",
+      "example_raw_body": "<Error><Code>InternalError</Code><Message>Mock storage unavailable</Message><Resource>/mock-bucket/mock-object</Resource><RequestId>mock-request</RequestId></Error>",
+      "expected_category": "object_storage",
+      "openai_json_usable": false
+    },
+    {
+      "id": "NEG01",
+      "service": "llm",
+      "injection": {
+        "http_status": 403,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": {
+            "message": "Mock insufficient_quota",
+            "type": "permission_error",
+            "param": null,
+            "code": "insufficient_quota"
+          }
+        },
+        "expected_task_behavior_bucket": "fail_fast",
+        "expected_legacy_error_type": "auth_error"
+      },
+      "expected_category": "model_service",
+      "notes": "反例：无欠费信号的403先按权限失败；不要将此用作限流重试用例。"
+    },
+    {
+      "id": "NEG02",
+      "service": "llm",
+      "injection": {
+        "http_status": 402,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "error": {
+            "message": "Mock payment required",
+            "type": "billing_error",
+            "param": null,
+            "code": "402"
+          }
+        },
+        "expected_task_behavior_bucket": "fail_fast",
+        "expected_legacy_error_type": "unknown"
+      },
+      "expected_category": "model_service",
+      "notes": "反例：仅402会立即失败，但旧细分标签不会自动成为余额不足；余额测试应带E11关键词。"
+    }
+  ],
+  "acceptance_checks": [
+    "日常/任务分别测；任务主图与子任务失败分别测，不把子任务降级当整轮失败。",
+    "核对固定提示、可见组件/模型名、时间、故障编号；有追踪编号时一起核对。",
+    "同一故障实时、重连、刷新历史的分类/时间/编号一致。",
+    "保留部分答案、成功附件和引用；局部故障不伪装成所有资料无命中。",
+    "公开提示不泄露凭据、内部地址、原始堆栈；已有重试/换模/恢复入口可用。",
+    "任务启动响应丢失先查询已有版本，不重复提交；主动停止不误报网络。"
+  ]
+}

@@ -3,12 +3,12 @@ from .base import BaseErrorCode
 
 class BishengInformationUnAuthorizedError(BaseErrorCode):
     Code: int = 19001
-    Msg: str = "Unauthorized access to Bisheng Information Service"
+    Msg: str = "Unauthorized access to the information service"
 
 
 class BishengInformationServiceError(BaseErrorCode):
     Code: int = 19002
-    Msg: str = "Error occurred while accessing Bisheng Information Service"
+    Msg: str = "An error occurred while accessing the information service"
 
 
 # Parsing failed, please try again or submit a manual request

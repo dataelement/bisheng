@@ -95,7 +95,7 @@
     "startTime": "开始时间",
     "endTime": "结束时间",
     "counterHint": "「~」= 本批成员 login-sync 成功人数；「+」新建、「🚫」禁用、「↻」恢复 等字段在网关整批推送中多为 0。",
-    "batchSummaryTitle": "批次摘要（网关 → bisheng）",
+    "batchSummaryTitle": "批次摘要（网关 → 本系统）",
     "batchSummaryLine": "成员成功 {{ok}} / 失败 {{fail}}；payload 中含部门负责人列表的成员 {{leaders}} 人；部门 upsert {{deptUpsert}}、remove {{deptRemove}}。",
     "errorsTitle": "错误与告警明细",
     "colType": "类型",

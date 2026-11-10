@@ -95,7 +95,7 @@
     "startTime": "開始時刻",
     "endTime": "終了時刻",
     "counterHint": "「~」= 本バッチで login-sync が成功したメンバー数。「+」「🚫」「↻」はゲートウェイ一括プッシュでは多く 0。",
-    "batchSummaryTitle": "バッチ要約（ゲートウェイ → bisheng）",
+    "batchSummaryTitle": "バッチ要約（ゲートウェイ → 本システム）",
     "batchSummaryLine": "メンバー成功 {{ok}} / 失敗 {{fail}}；payload に部門責任者リストあり {{leaders}} 名；部門 upsert {{deptUpsert}}、remove {{deptRemove}}。",
     "errorsTitle": "エラー・警告の詳細",
     "colType": "種類",

@@ -1548,6 +1548,14 @@
     "addLabel": "タグを追加"
   },
   "api": {
+    "skillExamples": {
+      "componentParams": "{\"openai_api_key\": \"sk-xxx\"} または {}",
+      "financeQuestion": "金融とは何ですか？",
+      "reportAnswer": "この文書は、電力分野の重要情報インフラのサイバーセキュリティ保護に関する基準の草案です。管理・保護要件に基づき、ナレッジベースの内容を参照してテンプレートに沿って作成します。",
+      "reportResult": "この文書は、電力分野の重要情報インフラのサイバーセキュリティ保護に関する基準の草案です。管理・保護要件に基づき、ナレッジベースの内容を参照してテンプレートに沿って作成します。500文字以上とし、Markdownを使用せず、各行の先頭を2文字分字下げします。",
+      "reportTitle": "重要情報インフラのサイバーセキュリティ保護ガイド.docx",
+      "summarizeQuery": "文書の内容を要約してください"
+    },
     "assistantOrchestration": "アシスタントオーケストレーション",
     "externalPublishing": "外部公開",
     "apiAccess": "API アクセス",
@@ -1702,7 +1710,7 @@
       "invoke_again": "。その後、/workflow/invoke を再度呼び出します",
       "without_files": "チャット欄でファイルがアップロードされていない場合のリクエスト例：",
       "with_files": "チャット欄でファイルがアップロードされた場合",
-      "upload_intro": "ファイル入力がある場合は、以下のように BiSheng のアップロード API を呼び出し、ファイル URL を取得します。",
+      "upload_intro": "ファイル入力がある場合は、以下のようにファイルアップロード API を呼び出し、ファイル URL を取得します。",
       "combine_input_files": "ユーザー入力とアップロードしたファイルの URL を取得したら、次の形式でリクエストを組み立てます。",
       "show_form": " を返した場合は、ユーザーが入力するフォームを表示します。",
       "required_fields": " API リクエストには、",

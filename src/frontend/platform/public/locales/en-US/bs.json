@@ -1603,6 +1603,14 @@
     "addLabel": "Add label"
   },
   "api": {
+    "skillExamples": {
+      "componentParams": "{\"openai_api_key\": \"sk-xxx\"} or {}",
+      "financeQuestion": "What is finance?",
+      "reportAnswer": "The document drafts standards for protecting critical information infrastructure in the power sector. It follows management and protection requirements, uses knowledge base references, and follows the template.",
+      "reportResult": "The document drafts standards for protecting critical information infrastructure in the power sector. It follows management and protection requirements, uses knowledge base references, and follows the template. The document must contain at least 500 words, use no Markdown, and indent each line by two spaces.",
+      "reportTitle": "Critical Infrastructure Cybersecurity Guidelines.docx",
+      "summarizeQuery": "Summarize the document"
+    },
     "assistantOrchestration": "Assistant Orchestration",
     "externalPublishing": "External Publishing",
     "apiAccess": "API Access",
@@ -1757,7 +1765,7 @@
       "invoke_again": " and call /workflow/invoke again",
       "without_files": "If no files were uploaded in the chat box, send a request like this:",
       "with_files": "If the user uploaded files in the chat box",
-      "upload_intro": "For file inputs, call the BiSheng upload API to obtain a file URL, as shown below:",
+      "upload_intro": "For file inputs, call the file upload API to obtain a file URL, as shown below:",
       "combine_input_files": "After collecting the input and uploaded file URLs, build the request in this format:",
       "show_form": ", render a form for the user to complete.",
       "required_fields": " must include ",

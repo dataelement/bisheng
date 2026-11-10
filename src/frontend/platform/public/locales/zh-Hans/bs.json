@@ -1548,6 +1548,14 @@
     "addLabel": "添加标签"
   },
   "api": {
+    "skillExamples": {
+      "componentParams": "{\"openai_api_key\": \"sk-xxx\"} 或者 {}",
+      "financeQuestion": "什么是金融",
+      "reportAnswer": "文档内容是关于电力集团关键信息基础设施网络安全保护的标准起草。文档以“基于管理防护要求”为主题，参考知识库内容，根据模版撰写相应内容。",
+      "reportResult": "文档内容是关于电力集团关键信息基础设施网络安全保护的标准起草。文档以“基于管理防护要求”为主题，参考知识库内容，根据模版撰写相应内容。这份文档的撰写要求是不少于500字，不允许使用markdown格式，每行需要缩进两格。",
+      "reportTitle": "关基网络安全保护工作指南.docx",
+      "summarizeQuery": "总结下文档内容"
+    },
     "assistantOrchestration": "助手编排",
     "externalPublishing": "对外发布",
     "apiAccess": "API 访问",
@@ -1702,7 +1710,7 @@
       "invoke_again": "再次请求 /workflow/invoke",
       "without_files": "如果用户没有在对话框内上传文件，请求示例如下",
       "with_files": "如果用户在对话框内上传了文件",
-      "upload_intro": "如果有文件类型，调用毕昇文件上传接口获取到文件url，示例如下：",
+      "upload_intro": "如果有文件类型，调用文件上传接口获取到文件 URL，示例如下：",
       "combine_input_files": "成功获取用户的输入和上传文件的url后，拼接为如下格式的接口入参",
       "show_form": "时，后端希望前端渲染一个表单，让用户填写内容。",
       "required_fields": "接口必带的字段是",

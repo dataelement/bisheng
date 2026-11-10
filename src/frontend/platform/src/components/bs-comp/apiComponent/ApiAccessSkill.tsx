@@ -107,12 +107,12 @@ const ApiAccessSkill = ({ }) => {
                             <TableRow>
                                 <TableCell className='align-top'>
                                     <JsonItem name="flow_id" required type="UUID" desc={t('api.skillId')} remark={t('api.urlParam')}></JsonItem>
-                                    <JsonItem name="inputs" required type="Json" desc={t('api.skillInput')} example='{"query":"什么是金融"}' remark={t('api.singleInput')} ></JsonItem>
+                                    <JsonItem name="inputs" required type="Json" desc={t('api.skillInput')} example={JSON.stringify({ query: t('api.skillExamples.financeQuestion') })} remark={t('api.singleInput')} ></JsonItem>
                                     <JsonItem name="history_count" type="int" desc={t('api.historyCount')}></JsonItem>
                                     <JsonItem name="clear_cache" type="boolean" desc={t('api.clearCache')}></JsonItem>
                                     <JsonItem name="session_id" type="str" desc={t('api.sessionId')} remark={t('api.sessionRemark')}></JsonItem>
                                     <JsonItem name="tweaks" required type="Json" desc={t('api.tweaks')} remark={t('api.tweaksRemark')}>
-                                        <JsonItem line name="ChatOpenAI-MzIaC" type="Json" desc={t('api.exampleComponent')} example='{"openai_api_key": "sk-xxx"} 或者 {}' remark={t('api.defaultConfig')} ></JsonItem>
+                                        <JsonItem line name="ChatOpenAI-MzIaC" type="Json" desc={t('api.exampleComponent')} example={t('api.skillExamples.componentParams')} remark={t('api.defaultConfig')} ></JsonItem>
                                         <JsonItem line name="..." type="Json" desc={t('api.componentParams')}></JsonItem>
                                     </JsonItem>
                                 </TableCell>
@@ -124,15 +124,14 @@ const ApiAccessSkill = ({ }) => {
                                     >
                                         {`{
   "inputs": {
-    "query": "总结下文档内容"
+    "query": ${JSON.stringify(t('api.skillExamples.summarizeQuery'))}
   },
   "tweaks": {
     "Milvus-f74d8": {
       "collection_id": "10"
     },
     "ChatOpenAI-7f49c": {},
-    "ElasticKeywordsSearch-0d2c8": {},
-    "BishengRetrievalQA-7e0ae": {}
+    "ElasticKeywordsSearch-0d2c8": {}
   },
   "history_count": 10,
   "clear_cache": false
@@ -181,16 +180,16 @@ const ApiAccessSkill = ({ }) => {
   "status_message": "SUCCESS",
   "data": {
     "result": {
-      "result": "文档内容是关于电力集团关键信息基础设施网络安全保护的标准起草。文档以“基于管理防护要求”为主题，参考知识库内容，根据模版撰写相应内容。这份文档的撰写要求是不少于500字，不允许使用markdown格式，每行需要缩进两格。",
+      "result": ${JSON.stringify(t('api.skillExamples.reportResult'))},
       "doc": [
         {
-          "title": "关基网络安全保护工作指南.docx",
+          "title": ${JSON.stringify(t('api.skillExamples.reportTitle'))},
           "url": "www.baidu.com"
         }
       ],
       "source": 3,
       "message_id": 1322,
-      "answer": "文档内容是关于电力集团关键信息基础设施网络安全保护的标准起草。文档以“基于管理防护要求”为主题，参考知识库内容，根据模版撰写相应内容。"
+      "answer": ${JSON.stringify(t('api.skillExamples.reportAnswer'))}
     },
     "session_id": "AUU629:059865218b3e895f103dbcad4d1b60ee40157191800f3aa8adaa12488f2cf82b",
     "backend": "anyio"
@@ -232,7 +231,7 @@ def run_flow(inputs: dict, flow_id: str, tweaks: Optional[dict] = None) -> dict:
         payload["tweaks"] = tweaks
     response = requests.post(api_url, json=payload)
     return response.json()
-inputs = {"input":"什么是金融"}
+inputs = {"input":${JSON.stringify(t('api.skillExamples.financeQuestion'))}}
 print(run_flow(inputs, flow_id=FLOW_ID, tweaks=TWEAKS))`}
                     </SyntaxHighlighter>
 

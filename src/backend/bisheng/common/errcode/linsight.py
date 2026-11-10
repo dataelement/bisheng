@@ -56,10 +56,10 @@ class LinsightToolInitError(BaseErrorCode):
     Msg: str = "Failed to initialize the Inspiration Workbench tool"
 
 
-# InspirationBisheng LLMRelated Errors
+# Model invocation error
 class LinsightBishengLLMError(BaseErrorCode):
     Code: int = 11090
-    Msg: str = "InspirationBisheng LLMRelated Errors"
+    Msg: str = "Model invocation error"
 
 
 # The Inspiration session version has been completed or is being executed and cannot be executed again

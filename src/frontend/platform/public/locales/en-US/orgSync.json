@@ -95,7 +95,7 @@
     "startTime": "Start",
     "endTime": "End",
     "counterHint": "“~” = members with successful login-sync in this batch; “+” created / “🚫” disabled / “↻” reactivated are usually 0 for a single gateway push.",
-    "batchSummaryTitle": "Batch summary (gateway → bisheng)",
+    "batchSummaryTitle": "Batch summary (gateway → this system)",
     "batchSummaryLine": "Members OK {{ok}} / failed {{fail}}; members whose payload listed leader departments {{leaders}}; departments upsert {{deptUpsert}}, remove {{deptRemove}}.",
     "errorsTitle": "Errors & warnings",
     "colType": "Type",
