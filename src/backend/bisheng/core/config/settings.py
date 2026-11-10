@@ -1037,7 +1037,6 @@ class Settings(BaseModel):
     vector_stores: VectorStores = VectorStores()
     object_storage: ObjectStore = ObjectStore()
     sandbox_conf: SandboxConf = Field(default_factory=SandboxConf)
-    workflow_conf: WorkflowConf = WorkflowConf()
     celery_task: CeleryConf = CeleryConf()
     knowledge_file_worker: KnowledgeFileWorkerConf = KnowledgeFileWorkerConf()
     knowledge_qa_filter: KnowledgeQAFilterConf = KnowledgeQAFilterConf()
