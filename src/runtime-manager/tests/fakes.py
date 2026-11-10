@@ -30,6 +30,19 @@ from typing import Any
 _ID_SEQ = itertools.count(1)
 
 
+def stage_permit(operation, phase, *, controller=None):
+    """Successful control-plane permit for non-authorization-focused executor tests."""
+    return {
+        **{
+            key: operation.get(key)
+            for key in ("operation_id", "tenant_id", "app_id", "version_id", "node_id", "generation", "owner_epoch")
+        },
+        "phase": phase,
+        "stage": operation["stage"],
+        "valid_until": operation["deadline"],
+    }
+
+
 class FakeDockerError(RuntimeError):
     """Stand-in for ``docker.errors.APIError``."""
 

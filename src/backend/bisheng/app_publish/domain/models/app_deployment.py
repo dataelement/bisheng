@@ -244,6 +244,22 @@ class AppDeploymentDao:
         return list(result.all())
 
     @classmethod
+    async def astatuses_by_version(cls, session: AsyncSession, app_id: str, version_ids: list[str]) -> dict[str, str]:
+        """Read the latest attempt outcome without changing immutable versions."""
+        if not version_ids:
+            return {}
+        statement = (
+            select(AppDeployment.version_id, AppDeployment.status)
+            .where(AppDeployment.app_id == app_id, col(AppDeployment.version_id).in_(version_ids))
+            .order_by(col(AppDeployment.create_time).desc(), col(AppDeployment.id).desc())
+        )
+        result = await session.exec(statement)
+        statuses: dict[str, str] = {}
+        for version_id, status in result.all():
+            statuses.setdefault(str(version_id), status)
+        return statuses
+
+    @classmethod
     async def aadvance_stage(
         cls,
         session: AsyncSession,

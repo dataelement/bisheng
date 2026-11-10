@@ -24,7 +24,7 @@ not violate K1 — there is no orchestration in a string.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -70,7 +70,20 @@ class AuthorizeRequest(BaseModel):
     response_model=UnifiedResponseModel[dict],
     summary="Entry verdict + identity material for app-proxy (HMAC-signed)",
 )
-async def authorize(payload: AuthorizeRequest, _: None = Depends(verify_proxy_hmac)):
+async def authorize(payload: AuthorizeRequest, request: Request, _: None = Depends(verify_proxy_hmac)):
+    if payload.access_token and payload.access_token.startswith("bs-view-"):
+        from bisheng.app_runtime.domain.services.desktop_entry_service import authorize_desktop_entry
+        from bisheng.dsh.access_runtime import get_runtime, get_settings
+
+        runtime = await get_runtime(request, get_settings())
+        verdict = await authorize_desktop_entry(
+            slug=payload.slug,
+            access_token=payload.access_token,
+            runtime=runtime,
+            request_id=payload.request_id,
+            client_ip=payload.client_ip,
+        )
+        return resp_200(data=verdict)
     with bypass_tenant_filter():
         verdict = await authorize_entry(
             slug=payload.slug,
@@ -118,3 +131,17 @@ async def authorize_preview(payload: AuthorizePreviewRequest, _: None = Depends(
 @router.get("/apps/_unavailable", response_class=HTMLResponse, summary="Fallback page for nginx error_page")
 async def unavailable_page() -> HTMLResponse:
     return HTMLResponse(content=_UNAVAILABLE_PAGE, status_code=200)
+
+
+class DesktopRedeemRequest(BaseModel):
+    slug: str
+    ticket: str
+
+
+@router.post("/internal/app-proxy/desktop-session")
+async def desktop_session(payload: DesktopRedeemRequest, request: Request, _: None = Depends(verify_proxy_hmac)):
+    from bisheng.app_runtime.domain.services.desktop_entry_service import redeem_desktop_ticket
+    from bisheng.dsh.access_runtime import get_runtime, get_settings
+
+    runtime = await get_runtime(request, get_settings())
+    return resp_200(data=await redeem_desktop_ticket(payload.ticket, payload.slug, runtime))

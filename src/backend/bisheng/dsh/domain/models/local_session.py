@@ -7,6 +7,9 @@ from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
 
+ABSOLUTE_SESSION_POLICY = "ABSOLUTE_V1"
+SLIDING_SESSION_POLICY = "SLIDING_IDLE_V1"
+
 
 class DshSession(SQLModelSerializable, table=True):
     __tablename__ = "dsh_session"
@@ -26,6 +29,12 @@ class DshSession(SQLModelSerializable, table=True):
     client_version: str | None = Field(default=None, sa_column=Column(String(64)))
     created_at: datetime = Field(sa_column=Column(DateTime, nullable=False))
     expires_at: datetime = Field(sa_column=Column(DateTime, nullable=False))
+    expiry_policy: str = Field(
+        default=ABSOLUTE_SESSION_POLICY,
+        sa_column=Column(String(32), nullable=False, server_default=ABSOLUTE_SESSION_POLICY),
+    )
+    last_activity_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
+    idle_ttl_seconds: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
 
 
 class DshRefreshToken(SQLModelSerializable, table=True):
@@ -33,6 +42,7 @@ class DshRefreshToken(SQLModelSerializable, table=True):
     __table_args__ = (
         UniqueConstraint("session_id", "generation", name="uq_dsh_local_refresh_generation"),
         Index("ix_dsh_local_refresh_session", "tenant_id", "session_id"),
+        Index("ix_dsh_refresh_active", "tenant_id", "session_id", "state"),
         CheckConstraint("state IN ('ACTIVE','USED','REVOKED')", name="ck_dsh_local_refresh_state"),
         CheckConstraint("generation >= 1", name="ck_dsh_local_refresh_generation"),
     )
@@ -41,4 +51,7 @@ class DshRefreshToken(SQLModelSerializable, table=True):
     session_id: str = Field(sa_column=Column(String(36), nullable=False))
     generation: int = Field(sa_column=Column(BigInteger, nullable=False))
     state: str = Field(default="ACTIVE", sa_column=Column(String(16), nullable=False))
+    # Set once, when an active token is first consumed. Null means a historical
+    # row that predates the lost-response grace and keeps the strict replay rule.
+    used_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
     expires_at: datetime = Field(sa_column=Column(DateTime, nullable=False))

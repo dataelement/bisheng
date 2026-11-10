@@ -3431,6 +3431,26 @@
       "group_order": "按会话首次收录时间排序",
       "group_last": "最近请求",
       "group_count": "已存 {{count}} 个请求",
+      "group_like": "赞",
+      "group_dislike": "踩",
+      "group_likes": "赞 {{count}}",
+      "group_dislikes": "踩 {{count}}",
+      "feedback_heading": "消息反馈",
+      "feedback": {
+        "rating": {
+          "positive": "赞",
+          "negative": "踩"
+        },
+        "category": {
+          "task-result": "任务结果",
+          "instruction-following": "指令遵循",
+          "product-interaction": "产品交互",
+          "service-stability": "服务稳定性",
+          "resource-cost": "资源与成本",
+          "security-privacy-permission": "安全、隐私与权限",
+          "other": "其他"
+        }
+      },
       "group_abnormal": "异常 {{count}}",
       "group_scope": "当前仅显示筛选命中的请求；会话数量与状态汇总涵盖全部已索引请求，可能存在更新延迟。",
       "group_all": "查看全部已存请求",

@@ -156,5 +156,16 @@
       "source_untitled": "Untitled"
     },
     "com_msg_source_reference": "Reference"
+  },
+  "cloudWorkbenches": {
+    "title": "Cloud workbenches",
+    "description": "Use hosted enterprise apps and share live data with your team. Workbenches use the same identity, permissions and release process as enterprise apps.",
+    "refresh": "Refresh",
+    "back": "Back to apps",
+    "failed": "Cloud workbenches could not be loaded. Retry or ask your administrator to check server support.",
+    "open": "Open workbench",
+    "empty": "No cloud workbenches available. Start with “Build my workbench” in BiSheng Desktop, or ask the app owner for access.",
+    "more": "Load more",
+    "guide": "Online development guide"
   }
 }
