@@ -38,6 +38,29 @@ Root读取实际实现并按task-review检查分层、命名、序列化、数�
 
 Root最终四路径`test_wire_router`、`test_legacy_document_contract`、`test_legacy_document_listing`及完整`test/knowledge/test_v2_filelib_unified.py`：**91 passed**，11.31秒，无排除项，日志`/private/tmp/f118-root-final-wire-fixed.log`/同名前缀JUnit。此前三个失败中两项为旧facade/DTO夹具，另一个是绝对工作区名称触发warning全文子串误判；bc30改为真实operationId在全OpenAPI唯一并精确归属warning，未改DSH/runtime或删除断言。独立只读集成复查确认retry普通/advanced分流、完整Doc/Version/目录、快照来源版本及最终≤200响应转换，无新增行动项。61和91有重叠，不相加为完整覆盖；整体/环境验收另报。
 
+
+### 统一测试进行中（2026-11-10）
+
+当前14张验收卡继续待办，不以开发闭合或定点通过计整体验收。后端首个完整单轮代码c5218a0c99，`test/knowledge_unification + test/knowledge + test/open_mcp`实际收集8249项：7853 passed、304 failed、69 errors、23 skipped，另8 subtests passed，1929.90秒。日志/报告`/private/tmp/f118-full-backend-20261110.log`及`.xml`；没有-k/maxfail或新增skip。23 skip来自原Redis可达性条件，尚非Redis实测结论。
+
+| 当前复核范围 | 实际结果与边界 |
+| --- | --- |
+| 新删除guard依赖的native结构 | 原219个节点均因SQLite夹具漏建KnowledgeSpaceDeleteJob；仅6个共用fixture补真实表与租户登记2d431f0606，原断言/SQL预算不改。精确219节点重验219通过（257.34秒）；另原move runner/http两路径20通过，旧间接KeyError同源。不与首轮数字累加。 |
+| mock上游本地监听 | 首轮38 setup error为sandbox禁止127.0.0.1绑定，允许本地监听后同原路径39通过（含原控制项）；未改产品、服务或skip。 |
+| 万级迁移规模 | 原单轮permission_publication_scale的10001 Root和10001 Source用例最终均通过，tracemalloc开启时各506.174/144.451秒；SQL上限公式、派生次数、全Store扫描3次、IN/bulk≤200及FGA write≤90断言均通过。不伪造未保存的精确计数，也不当MySQL或环境升级性能证明。 |
+| 旧文件真实调用方 | 80f5cbee08仅补当前native上传Owner/Doc/V1夹具和AnyIO同步桥；忙态经真实Commands预检，公开缺确认零修改控制新增。原14项及必要四路径62项通过，生产0改。 |
+| 平台端相关全组 | 原98文件在实际特性workspace包、校验锁定图标、Node WebStorage兼容环境执行：94套件通过/4失败，727断言通过/3失败；另1收集失败为未安装dnd。剩余4路径在共同祖先9eef0016de同配置全部复现（3失败/17通过及同dnd错误）；本次QA上下文及两DTO测试字段已修，保原行为断言。 |
+| 客户端相关全组 | 原83文件真实源码/锁定图标及Babel/Node编码器环境：79套件通过/4失败，504断言通过/13失败，0skip/0启动失败。13节点在共同祖先同环境精确复现；仅本次Home/Content/删除Owner的3个旧fixture修正74a6fea280，生产0改。 |
+| 静态与三语 | 前端工作区全量pnpm lint及check-i18n通过。native typecheck平台仍22诊断、client145，存在本机依赖/图标版本等环境缺口；本次6条新增测试DTO诊断已消除，不能宣称全量typecheck通过。 |
+
+旧MCP apps15项及两端既有失败归入[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)，不是本次新缺陷豁免。其他后端失败仍在逐组复核，尚无完整修后回归结论；不得把上述小组绿相加成最终全量通过。
+
+109独立旧标准环境已补：1个未发布的hosted App/初始Version（原Service写且真MinIO代码对象，明确synthetic fixture），1个真实旧API workflow/version206引用已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置摘要保持；证据`/opt/server/f118-e2e/prep/additional-source-manifest.json`及`evidence/preparation-additional-sources.json`，权限600，均formal_baseline=false。尚未停服/DDL/正式freeze/apply/restore。
+
+固定候选归档550561c443，SHA256 `3bdbcfdbd070fb1c262b2f8c7a3f2066440b8f991284c48cb01dd0424a35766b`；API/Worker镜像已构建`sha256:b8032abed8ea976f760e91a397c216a809cebea48afcb1197813557e440ef34c`，未启动。与旧源码pyproject/uv.lock一致，独立构建复用原已安装依赖并完整替换镜像应用源；生产业务代码仍730e226776。两端前端在构建，公共镜像源403后仅在项目候选Dockerfile改用本机现有Node20.20.2/Nginx基础镜像，原锁文件和产品Dockerfile未改。不得将候选build当部署或E2E。
+
+真实HTTP E2E脚本12506a5500已准备并合流，Root改以实际新Chunk内容验证覆盖，不附加原合同未承诺的MD5变化。8条仅collect/静态通过，未向旧runtime写E2E；部分AC语义、UI、跨租户、引用强删、移动/复制及恢复仍待真实执行。
+
 新DeleteJob中性DDL单head为f118_knowledge_delete_execution；原行和两新列NULL已做必要定点验证，最新真实MySQL升级尚未执行。定点用例数量不相加为完整特性覆盖。范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
 
 ## 本次账本快照
