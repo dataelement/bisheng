@@ -16,7 +16,11 @@ import pytest_asyncio
 
 from test.e2e.helpers.f118_mysql_cas import CasEnvironment, MysqlFixture, assert_snapshot, graph, race
 
-pytestmark = [pytest.mark.e2e, pytest.mark.asyncio(loop_scope="module")]
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.asyncio(loop_scope="module"),
+    pytest.mark.skipif(os.environ.get("F118_E2E") != "1", reason="requires upgraded isolated F118 and explicit opt-in"),
+]
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
