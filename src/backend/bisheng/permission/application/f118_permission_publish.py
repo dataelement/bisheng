@@ -192,7 +192,15 @@ class F118PermissionPublisher:
         async with aclosing(self.source.iter_tuples(consistency="HIGHER_CONSISTENCY")) as stream:
             async for row in stream:
                 self.check()
-                if type(row) is not dict or set(row) != {"user", "relation", "object"}:
+                if (
+                    type(row) is not dict
+                    or set(row)
+                    not in (
+                        {"user", "relation", "object"},
+                        {"user", "relation", "object", "condition"},
+                    )
+                    or row.get("condition") is not None
+                ):
                     blocked("live_tuple_shape")
                 key = row["user"], row["relation"], row["object"]
                 if any(type(value) is not str or not value or len(value) > 4096 or "\x00" in value for value in key):
