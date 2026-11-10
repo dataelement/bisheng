@@ -571,8 +571,17 @@ class AuditLogDao(AuditLogBase):
         ``get_audit_logs``: the DAO owns tenant scoping; the auto-listener
         would otherwise pin results to ``current_tenant_id`` and hide
         cross-tenant operators from a global super.
+
+        Rows are ``(operator_id, operator_name)``, one pair per distinct name,
+        ordered by how many visible rows use that name (then the name itself).
+        A renamed account keeps every historical name; the first pair for an
+        id is the name on the most rows, which is the label the dropdown shows.
         """
-        statement = select(AuditLog.operator_id, AuditLog.operator_name).distinct()
+        statement = select(
+            AuditLog.operator_id,
+            AuditLog.operator_name,
+            func.count().label("name_count"),
+        )
         # Mirror the list endpoint's UI whitelist so the operator dropdown
         # does not advertise users who only ever produced hidden v2 rows.
         statement = statement.where(cls._ui_visible_predicate())
@@ -585,9 +594,15 @@ class AuditLogDao(AuditLogBase):
             statement = statement.where(cls._visible_for_tenant(tenant_scope))
         if dept_predicate is not None:
             statement = statement.where(dept_predicate)
+        counted = statement.group_by(AuditLog.operator_id, AuditLog.operator_name).subquery()
+        # Most-used name first. The service keeps that one label per operator.
+        ordered = select(counted.c.operator_id, counted.c.operator_name).order_by(
+            counted.c.name_count.desc(),
+            counted.c.operator_name.asc(),
+        )
 
         with bypass_tenant_filter(), get_sync_db_session() as session:
-            return session.exec(statement).all()
+            return session.exec(ordered).all()
 
     # -----------------------------------------------------------------------
     # v2.5.1 F011: structured audit_log API.
