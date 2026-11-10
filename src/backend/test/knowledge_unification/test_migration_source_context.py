@@ -189,7 +189,11 @@ async def test_prepared_context_reads_directories_once_and_stream_does_not_repea
             3 if count else 1
         )
         assert sum("inventory_assistant_parent" in query for query in queries) == 1
-        assert len(queries) - prepared_count < 35  # two real streams, not repeated directory scans or N slots SQL
+        stream_queries = queries[prepared_count:]
+        # Each stream also closes the durable R2 index, including orphan keys.
+        index_scans = [query for query in stream_queries if "AS migration_index_roots" in query]
+        assert len(index_scans) == 2
+        assert len(stream_queries) - len(index_scans) < 35  # original stream budget, not per-slot SQL
         assert not writes and pending in session.new and pending.tenant_id is None
         print(
             {

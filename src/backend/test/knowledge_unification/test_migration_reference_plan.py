@@ -379,7 +379,10 @@ async def test_real_frozen_source_closure_rejects_semantic_corruption(module, pr
     changed = await rewrite_sources(produced, lambda records: change_source(records, case))
     with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
         await prepare(module, changed)
-    assert caught.value.kwargs["reason"].startswith("migration_reference_plan_")
+    if case == "retired_root":
+        assert caught.value.kwargs["reason"] == "migration_reference_state_retired_index_required_new_run"
+    else:
+        assert caught.value.kwargs["reason"].startswith("migration_reference_plan_")
 
 
 @pytest.mark.parametrize(
