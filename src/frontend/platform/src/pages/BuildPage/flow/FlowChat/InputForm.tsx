@@ -28,7 +28,8 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
 
     const handleChange = (item, value) => {
         if (item.type === FormItemType.File) {
-            formDataRef.current[item.key].value = Array.isArray(value) ? value : [value]
+            
+            formDataRef.current[item.key].value = value === null ? [] : Array.isArray(value) ? value : [value]
         } else {
             formDataRef.current[item.key].value = value
         }
@@ -47,6 +48,7 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
         Object.keys(formDataRef.current).forEach((key: string) => {
             const fieldData = formDataRef.current[key]
             const required = data.value.find(item => item.key === key).required
+            if (fieldData.uploading) errors.push(t('chat.archiveWaitUpload'));
             if (required && !fieldData.value) {
                 errors.push(t('report.requiredField', { label: fieldData.label }));
             }
@@ -142,7 +144,8 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
                                                             mediaEnabled: !!appConfig.enableMediaUpload,
                                                         }),
                                                     )}
-                                                    onFileChange={(val) => handleChange(item, val)}
+                                                    onUploadStateChange={(busy) => { formDataRef.current[item.key].uploading = busy; }}
+                                                onFileChange={(val) => handleChange(item, val)}
                                                 />
                                             )
                                         default:

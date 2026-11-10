@@ -574,7 +574,10 @@
       "toolDeleted": "工具已被删除，无法获取工具名",
       "knowledgeDeleted": "知识库已被删除，无法获取知识库名",
       "interrupted": "工具调用未返回结果（会话已结束）"
-    }
+    },
+    "archiveBatchLimit": "含ZIP的附件批次最多20个文件、合计100 MiB。",
+    "archiveWaitUpload": "请等待文件上传完成后再执行。",
+    "archiveRemoveGroup": "移除此压缩包的全部文件"
   },
   "model": {
     "addSuccess": "添加成功",

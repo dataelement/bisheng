@@ -12,6 +12,7 @@ from loguru import logger
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.errcode.flow import WorkflowMediaFileCountLimitError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.core.cache.utils import file_download
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -169,8 +170,7 @@ class InputNode(BaseNode):
                 continue
             url_obj = urlparse(one_file_url)
             file_name = unquote(url_obj.path.split("/")[-1])
-            file_name = KnowledgeService.get_upload_file_original_name(file_name)
-            if is_media_filename(file_name):
+            if is_media_filename(file_name) or is_media_filename(KnowledgeService.get_upload_file_original_name(file_name)):
                 count += 1
         return count
 
@@ -392,6 +392,19 @@ class InputNode(BaseNode):
                 key_info["image_file"]: image_files_path,
             }
 
+        from bisheng.knowledge.domain.services.archive_upload_service import ArchiveUploadService
+
+        archive_sources = ArchiveUploadService.validate_references([v for v in value if v], self.user_id)
+        if archive_sources:
+            from bisheng.common.errcode.knowledge import KnowledgeArchiveUploadError
+
+            kinds = key_info.get("file_type")
+            if isinstance(kinds, str):
+                kinds = ["file", "image"] if kinds == "all" else [kinds]
+            for source in archive_sources.values():
+                kind = "image" if source["file_name"].rsplit(".", 1)[-1].lower() in self._image_ext else "file"
+                if kinds is not None and kind not in kinds:
+                    raise KnowledgeArchiveUploadError(reason="ZIP child type is not allowed by this input node")
         file_parse_mode = key_info.get("file_parse_mode")
         file_content_max_size = int(key_info.get("file_content_size", 15000))
 
@@ -408,6 +421,8 @@ class InputNode(BaseNode):
             file_name = unquote(url_obj.path.split("/")[-1])
             # get file original name
             file_name = KnowledgeService.get_upload_file_original_name(file_name)
+            if one_file_url in archive_sources:
+                file_name = archive_sources[one_file_url]["display_name"]
             identity = self.temp_file_identity_metadata(file_name, self.workflow_id)
             file_id = identity["document_id"]
             all_metadata.append(identity)
@@ -441,6 +456,9 @@ class InputNode(BaseNode):
                 all_file_content += (
                     f"[file name]: {file_name}\n[file content begin]\n{file_content}\n[file content end]\n"
                 )
+            if not texts and one_file_url in archive_sources:
+                from bisheng.common.errcode.knowledge import KnowledgeArchiveUploadError
+                raise KnowledgeArchiveUploadError(reason=f"No text extracted from {file_name}")
             if not texts:
                 logger.debug(f"{self.id}.{key} extract file text is empty")
                 continue
@@ -471,6 +489,8 @@ class InputNode(BaseNode):
             graph_meta = dict(new_metadata[0])
             graph_meta["source_url"] = one_file_url
             all_metadata[-1] = graph_meta
+        if archive_sources and file_content_length >= file_content_max_size:
+            all_file_content += "\n[Attachment text limit reached; some content may be omitted. Use temporary knowledge retrieval for complete source access.]\n"
         # Documentation metadata, other nodes according to metadataData to retrieve corresponding files
         return {
             key_info["key"]: all_metadata,

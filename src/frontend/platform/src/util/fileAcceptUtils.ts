@@ -72,6 +72,7 @@ export function fileAcceptToInputAccept(kinds: UploadFileKind[]): string {
     if (kinds.includes('file')) parts.push(...FILE_SUFFIXES);
     if (kinds.includes('image')) parts.push(...IMAGE_SUFFIXES);
     if (kinds.includes('media')) parts.push(...MEDIA_SUFFIXES);
+    if (parts.length) parts.push('.zip');
     return parts.join(',');
 }
 

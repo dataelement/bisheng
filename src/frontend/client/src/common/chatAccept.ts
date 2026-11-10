@@ -67,5 +67,5 @@ export function buildChatAccept(opts: BuildChatAcceptOptions): string {
     if (opts.taskMode) {
         base = `${base},${TASK_MODE_DATA_ACCEPT}`;
     }
-    return base;
+    return `${base},.zip`;
 }

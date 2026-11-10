@@ -2431,5 +2431,8 @@
       "hundredMillion": "100M",
       "tenThousand": "10K"
     }
-  }
+  },
+  "com_archive_batch_limit": "An attachment batch containing ZIP files is limited to 20 files and 100 MiB.",
+  "com_archive_wait_upload": "Wait for file uploads to finish before running.",
+  "com_archive_remove_group": "Remove all files from this ZIP"
 }

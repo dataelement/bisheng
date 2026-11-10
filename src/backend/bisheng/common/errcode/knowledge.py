@@ -229,3 +229,8 @@ class KnowledgeInvalidCursorError(BaseErrorCode):
 class KnowledgeSpaceListNotSupportedError(BaseErrorCode):
     Code: int = 10992
     Msg: str = "This endpoint does not list knowledge spaces; use the knowledge-space endpoints instead"
+
+
+class KnowledgeArchiveUploadError(BaseErrorCode):
+    Code: int = 10993
+    Msg: str = "ZIP processing failed: {reason}"

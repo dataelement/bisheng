@@ -569,7 +569,10 @@
       "toolDeleted": "ツールが削除されているため、ツール名を取得できません",
       "knowledgeDeleted": "ナレッジベースが削除されているため、名称を取得できません",
       "interrupted": "ツール呼び出しは結果を返しませんでした（セッション終了）"
-    }
+    },
+    "archiveBatchLimit": "ZIPを含む添付は合計20ファイル、100 MiBまでです。",
+    "archiveWaitUpload": "アップロードの完了後に実行してください。",
+    "archiveRemoveGroup": "このZIPの全ファイルを削除"
   },
   "model": {
     "addSuccess": "追加に成功しました",

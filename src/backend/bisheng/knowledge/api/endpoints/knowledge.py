@@ -6,7 +6,7 @@ from io import BytesIO
 from typing import Any, Literal
 
 import pandas as pd
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 from starlette.concurrency import run_in_threadpool
@@ -79,6 +79,31 @@ router = APIRouter(prefix="/knowledge", tags=["Knowledge"])
 
 FILE_PREVIEW_PERMISSION_ACTION = None
 FILE_DOWNLOAD_PERMISSION_ACTION = "download"
+
+
+@router.post("/upload-archive")
+async def upload_archive(
+    request: Request,
+    file: UploadFile = File(...),
+    accepts: str = Form(...),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    from bisheng.knowledge.domain.services.archive_upload_service import ArchiveUploadService
+
+    upload_task = asyncio.create_task(ArchiveUploadService.upload(file, login_user.user_id, accepts))
+    try:
+        while not upload_task.done():
+            await asyncio.wait({upload_task}, timeout=0.5)
+            if not upload_task.done() and await request.is_disconnected():
+                upload_task.cancel()
+                await asyncio.gather(upload_task, return_exceptions=True)
+                raise HTTPException(status_code=499, detail="Upload cancelled")
+        return resp_200(await upload_task)
+    finally:
+        if not upload_task.done():
+            upload_task.cancel()
+            await asyncio.gather(upload_task, return_exceptions=True)
+        await file.close()
 
 
 @router.post("/upload")

@@ -579,7 +579,10 @@
       "toolDeleted": "The tool has been deleted, its name is unavailable",
       "knowledgeDeleted": "The knowledge base has been deleted, its name is unavailable",
       "interrupted": "The tool call returned no result (the session ended)"
-    }
+    },
+    "archiveBatchLimit": "An attachment batch containing ZIP files is limited to 20 files and 100 MiB.",
+    "archiveWaitUpload": "Wait for file uploads to finish before running.",
+    "archiveRemoveGroup": "Remove all files from this ZIP"
   },
   "importLinsight": {
     "title": "Import Guidebook from Run Records",

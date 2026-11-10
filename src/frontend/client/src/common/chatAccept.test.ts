@@ -8,7 +8,7 @@ describe("buildChatAccept", () => {
         // parser, so an unparseable type fails the whole turn rather than being
         // ignored. This string is a regression pin, not a preference.
         expect(buildChatAccept(DAILY)).toBe(
-            ".pdf,.txt,.docx,.doc,.ppt,.pptx,.md,.html,.xls,.xlsx,.wps,.dps,.et,.ofd",
+            ".pdf,.txt,.docx,.doc,.ppt,.pptx,.md,.html,.xls,.xlsx,.wps,.dps,.et,.ofd,.zip",
         );
     });
 
@@ -49,7 +49,7 @@ describe("isFileNameAccepted", () => {
 
     it("rejects what the list does not name", () => {
         expect(isFileNameAccepted("setup.exe", accept)).toBe(false);
-        expect(isFileNameAccepted("bundle.zip", accept)).toBe(false);
+        expect(isFileNameAccepted("bundle.zip", accept)).toBe(true);
         expect(isFileNameAccepted("", accept)).toBe(false);
     });
 

@@ -117,7 +117,7 @@ NO_SPEECH_PLACEHOLDER = "(No recognizable speech was detected in this audio/vide
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
-async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int):
+async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int, display_name: str | None = None):
     """Extract uploaded file content for prompt building."""
     from bisheng.api.v1.schemas import FileProcessBase
     from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
@@ -155,7 +155,7 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
         KnowledgeMediaTranscriptionError,
     ):
         raise
-    return knowledge_imp.KnowledgeUtils.chunk2promt("".join(raw_texts), {"source": file_name})
+    return knowledge_imp.KnowledgeUtils.chunk2promt("".join(raw_texts), {"source": display_name or file_name})
 
 
 async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
@@ -1374,7 +1374,7 @@ _TRUNCATION_NOTICE = (
 )
 
 
-async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -> str:
+async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int, display_name: str | None = None) -> str:
     """Extract one attachment's text, turning a parser failure into a domain error.
 
     Without this the raw ``EtlException`` reached the generic handler and the user
@@ -1387,6 +1387,7 @@ async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -
             filepath_local=filepath,
             file_name=filename,
             invoke_user_id=invoke_user_id,
+            **({"display_name": display_name} if display_name else {}),
         )
     except Exception as exc:
         logger.exception(f"[process_agent_files] parse failed for {filename}")
@@ -1413,16 +1414,27 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
     if not valid_files:
         logger.info(f"[process_agent_files] no files with filepath (received={len(data.files)})")
         return "", [], data.files
-    download_tasks = [async_file_download(f.get("filepath")) for f in valid_files]
+    from bisheng.knowledge.domain.services.archive_upload_service import ArchiveUploadService
+
+    archive_sources = await asyncio.to_thread(ArchiveUploadService.validate_references, [f["filepath"] for f in valid_files], login_user.user_id)
+    download_slots = asyncio.Semaphore(4)
+    async def bounded_download(reference):
+        async with download_slots:
+            return await async_file_download(reference)
+    download_tasks = [bounded_download(f.get("filepath")) for f in valid_files]
     downloaded_files = await asyncio.gather(*download_tasks)
 
     visual_tasks, doc_tasks = [], []
-    for filepath, filename in downloaded_files:
+    for source, (filepath, filename) in zip(valid_files, downloaded_files):
         ext = filename.split(".")[-1].lower()
         if model_info.visual and ext in VISUAL_MODEL_FILE_TYPES:
             visual_tasks.append(read_image_as_data_url(filepath=filepath, filename=filename))
         else:
-            doc_tasks.append(_extract_doc_text(filepath, filename, login_user.user_id))
+            display_name = archive_sources.get(source["filepath"], {}).get("display_name")
+            async def bounded_extract(path=filepath, name=filename, display=display_name):
+                async with download_slots:
+                    return await _extract_doc_text(path, name, login_user.user_id, **({"display_name": display} if display else {}))
+            doc_tasks.append(bounded_extract())
     visual_results, doc_results = await asyncio.gather(
         asyncio.gather(*visual_tasks),
         asyncio.gather(*doc_tasks),

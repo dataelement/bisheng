@@ -2360,5 +2360,8 @@
       "hundredMillion": "亿",
       "tenThousand": "万"
     }
-  }
+  },
+  "com_archive_batch_limit": "含ZIP的附件批次最多20个文件、合计100 MiB。",
+  "com_archive_wait_upload": "请等待文件上传完成后再执行。",
+  "com_archive_remove_group": "移除此压缩包的全部文件"
 }

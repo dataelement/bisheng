@@ -3,6 +3,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateUUID } from "@/components/bs-ui/utils";
 import Loading from "@/components/ui/loading";
 import { locationContext } from "@/contexts/locationContext";
+import { uploadArchive } from "@/controllers/API/archiveUpload";
 import { uploadChatFile } from "@/controllers/API/flow";
 import { MAX_MEDIA_FILES, isMediaFileName } from "@/util/fileAcceptUtils";
 import { getFileExtension } from "@/util/utils";
@@ -32,6 +33,9 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
     const remainingUploadsRef = useRef(0);
+    const controllers = useRef(new Map<string, AbortController>());
+    const publishFiles = () => onChange(filesRef.current.some(f => f.isUploading)
+        ? null : filesRef.current.filter(f => f.filePath).map(f => ({path:f.filePath,name:f.name})));
     const { appConfig } = useContext(locationContext);
     // const fileAccepts = useMemo(() => appConfig.libAccepts.map((ext) => `.${ext}`), [appConfig.libAccepts]);
     const { toast } = useToast();
@@ -126,8 +130,13 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
 
         remainingUploadsRef.current = validFiles.length;
 
-        const uploadPromises = validFiles.map(({ file, id }) => {
-            return uploadChatFile(v, file, (progress) => {
+        const uploadFactories = validFiles.map(({ file, id }) => () => {
+            if (!filesRef.current.some(f => f.id === id)) return Promise.resolve();
+            const controller = new AbortController();
+            controllers.current.set(id, controller);
+            const uploadTask = file.name.toLowerCase().endsWith('.zip')
+                ? uploadArchive(file, accepts, controller.signal).then(children => ({ archive_files: children }))
+                : uploadChatFile(v, file, (progress) => {
                 setFiles((prevFiles) => {
                     const updatedFiles = prevFiles.map(f => {
                         if (f.id === id) {
@@ -138,7 +147,24 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                     filesRef.current = updatedFiles;
                     return updatedFiles;
                 });
-            }).then(response => {
+            });
+            return uploadTask.then(response => {
+                if (!filesRef.current.some(f => f.id === id)) return;
+                if (Array.isArray(response.archive_files)) {
+                    const others = filesRef.current.filter(f => f.id !== id);
+                    const children = response.archive_files.map(child => ({
+                        id: child.file_id, name: child.display_name, filePath: child.file_path,
+                        size: child.size, archiveId: child.archive_id, isUploading: false, progress: 100,
+                    }));
+                    if (others.length + children.length > 20 || [...others,...children].reduce((sum,f) => sum+(f.size||0),0)>100*1024*1024) {
+                        throw new Error(t('chat.archiveBatchLimit'));
+                    }
+                    filesRef.current = [...others, ...children];
+                    setFiles(filesRef.current);
+                    remainingUploadsRef.current -= 1;
+                    publishFiles();
+                    return;
+                }
                 const filePath = response.file_path;
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
@@ -151,30 +177,32 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                 remainingUploadsRef.current -= 1;
                 if (remainingUploadsRef.current === 0) {
                     const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-                    onChange(uploadedFileIds);
+                    publishFiles();
                 }
-            }).catch(() => {
+            }).catch((error) => {
                 toast({
                     variant: 'error',
-                    description: t('chat.fileUploadFailed', { name: file.name }),
+                    description: error?.message || t('chat.fileUploadFailed', { name: file.name }),
                 });
-                handleFileRemove(file.name);
+                handleFileRemove(id);
                 remainingUploadsRef.current -= 1;
                 if (remainingUploadsRef.current === 0) {
                     const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-                    onChange(uploadedFileIds);
+                    publishFiles();
                 }
             });
         });
 
-        Promise.all(uploadPromises).then(() => {
+        uploadFactories.reduce((chain, upload) => chain.then(upload), Promise.resolve()).then(() => {
             const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-            onChange(uploadedFileIds);
+            publishFiles();
         });
     };
 
-    const handleFileRemove = (fileName) => {
-        const res = filesRef.current.filter(file => file.name !== fileName);
+    const handleFileRemove = (fileId) => {
+        controllers.current.get(fileId)?.abort();
+        controllers.current.delete(fileId);
+        const res = filesRef.current.filter(file => file.id !== fileId);
         filesRef.current = res
         setFiles(res);
 
@@ -184,7 +212,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
             const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-            onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
+            publishFiles(); // Trigger onChange with uploaded file IDs
         }
     };
 
@@ -216,7 +244,7 @@ export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange },
                     <div key={index} className="group relative flex items-center space-x-3 bg-gray-100 p-2 rounded-xl cursor-default">
                         {/* Remove button */}
                         <span
-                            onClick={() => handleFileRemove(file.name)}
+                            onClick={() => handleFileRemove(file.id)}
                             className="hidden group-hover:block absolute -right-1 -top-1 bg-gray-50 border-2 border-gray-300 text-gray-600 rounded-full cursor-pointer"
                         >
                             <X size={14} />

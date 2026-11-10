@@ -123,6 +123,7 @@ export type FileComponentType = {
   onChange: (value: string[] | string) => void;
   value: string;
   fileTypes?: Array<string>;
+  onUploadStateChange?: (busy: boolean) => void;
   onFileChange: (value: string | string[]) => void;
   editNode?: boolean;
   /** Suffix array, or an `.a,.b` accept string as built by fileAcceptToInputAccept. */

@@ -55,7 +55,8 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
 
     const handleChange = (item, value) => {
         if (item.type === FormItemType.File) {
-            formDataRef.current[item.key].value = Array.isArray(value) ? value : [value]
+            
+            formDataRef.current[item.key].value = value === null ? [] : Array.isArray(value) ? value : [value]
         } else {
             formDataRef.current[item.key].value = value
         }
@@ -74,6 +75,7 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
         Object.keys(formDataRef.current).forEach((key: string) => {
             const fieldData = formDataRef.current[key]
             const required = data.value.find(item => item.key === key).required
+            if (fieldData.uploading) errors.push(localize('com_archive_wait_upload'));
             if (required && !fieldData.value) {
                 errors.push(localize('com_ui_required_field', { field: fieldData.label }));
             }
@@ -165,6 +167,7 @@ const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any })
                                                         mediaEnabled: !!bishengConfig?.enable_media_upload,
                                                     }),
                                                 )}
+                                                onUploadStateChange={(busy) => { formDataRef.current[item.key].uploading = busy; }}
                                                 onFileChange={(val) => handleChange(item, val)}
                                             />
                                         )

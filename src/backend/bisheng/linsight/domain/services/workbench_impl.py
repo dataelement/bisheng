@@ -603,6 +603,16 @@ class LinsightWorkbenchImpl:
         if not files:
             return None
 
+        from bisheng.knowledge.domain.services.archive_upload_service import ArchiveUploadService
+
+        archive_sources = await asyncio.to_thread(ArchiveUploadService.validate_references,
+            [f.file_url for f in files if f.file_url], user_id)
+        for item in files:
+            source = archive_sources.get(item.file_url)
+            if source:
+                item.relative_path = source["relative_path"]
+                item.file_name = source["file_name"]
+                item.size = source["size"]
         cls.validate_submitted_files(files)
 
         # Daily-bucket files (unified-resource) are parsed on-the-fly; only the

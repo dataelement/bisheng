@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { uploadArchive } from "~/api/archiveUpload";
 import { uploadChatFile } from "~/api/apps";
 import { checkFileParseStatus } from "~/api/linsight";
 import { isFileNameAccepted } from "~/common/chatAccept";
@@ -140,6 +141,10 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
     // endpoint and only becomes a task at submit time. The caller knows whether
     // task mode is on; this component does not.
     const supportsFolderUpload = !!allowFolderUpload;
+    const publishFiles = () => {
+        if (filesRef.current.some(file => file.isUploading)) onChange(null);
+        else notifyUploadedFiles(getUploadedFileIds, onChange);
+    };
     const getUploadedFileIds = () => filesRef.current
         .filter((f) => f.id && !f.isUploading && f.filePath)
         .map((f) => ({
@@ -336,7 +341,9 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             let lastLoggedProgress = -1;
             const controller = new AbortController();
             uploadControllersRef.current.set(id, controller);
-            return uploadChatFile(v, uploadPayload, (progress) => {
+            const requestTask = file.name.toLowerCase().endsWith('.zip')
+                ? uploadArchive(file, accepts, controller.signal).then(data => ({ status_code: 200, data: { archive_files: data.files } }))
+                : uploadChatFile(v, uploadPayload, (progress) => {
                 if (progress >= 100 && lastLoggedProgress < 100) {
                     logUploadStage(file.name, 'xhr_upload_complete', uploadStartedAt, { progress });
                     lastLoggedProgress = 100;
@@ -358,7 +365,8 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 filesRef.current = updatedFiles;
                 setFiles(updatedFiles);
                 onFilesStateChange?.(updatedFiles);
-            }, uploadMode, file.name, controller.signal).then(response => {
+            }, uploadMode, file.name, controller.signal);
+            return requestTask.then(response => {
                 if (removedIdsRef.current.has(id)) {
                     // Removed mid-flight: the upload landed, but the attachment is
                     // gone from the user's list and must not come back.
@@ -374,6 +382,24 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 const responseData = unwrapUploadPayload(response);
                 // Upload API returns `filepath` (no underscore). Keep `file_path` fallback
                 // for any caller/endpoint that still uses the snake-case form.
+                if (Array.isArray(responseData.archive_files)) {
+                    const others = filesRef.current.filter(f => f.id !== id);
+                    const children = responseData.archive_files.map(child => ({
+                        id: child.file_id, fileId: child.file_id, name: child.display_name,
+                        relativePath: child.relative_path, filePath: child.file_path, size: child.size,
+                        archiveId: child.archive_id, type: '', isUploading: false,
+                        parsingStatus: 'completed', progress: 100,
+                    }));
+                    if (others.length + children.length > 20 || [...others, ...children].reduce((sum,f) => sum + (f.size || 0),0) > 100*1024*1024) {
+                        throw new Error(t('com_archive_batch_limit'));
+                    }
+                    filesRef.current = [...others, ...children];
+                    setFiles(filesRef.current);
+                    onFilesStateChange?.(filesRef.current);
+                    remainingUploadsRef.current -= 1;
+                    publishFiles();
+                    return;
+                }
                 const filePath = responseData.filepath ?? responseData.file_path;
                 if (!filePath) {
                     throw new Error('upload response missing filepath');
@@ -411,7 +437,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 // selection handler above.
 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
-                notifyUploadedFiles(getUploadedFileIds, onChange);
+                publishFiles();
                 logUploadStage(file.name, 'state_committed', uploadStartedAt);
             }).catch((e) => {
                 if (removedIdsRef.current.has(id)) {
@@ -424,10 +450,10 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 }
                 logUploadStage(file.name, 'failed', uploadStartedAt, { error: String(e) });
                 console.log('e :>> ', e);
-                showToast({ message: t('com_inputfiles_upload_failed', { 0: file.name }), status: 'error' })
+                showToast({ message: e instanceof Error ? e.message : t('com_inputfiles_upload_failed', { 0: file.name }), status: 'error' })
                 handleFileRemove(id);
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
-                notifyUploadedFiles(getUploadedFileIds, onChange);
+                publishFiles();
             }).finally(() => {
                 uploadControllersRef.current.delete(id);
                 removedIdsRef.current.delete(id);
@@ -435,7 +461,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         };
 
         // Video uploads are serialized so the XHR body is not starved by parallel work.
-        const hasVideo = validFiles.some(({ file }) => getMediaKind(file.name) === 'video');
+        const hasVideo = validFiles.some(({ file }) => getMediaKind(file.name) === 'video' || file.name.toLowerCase().endsWith('.zip'));
         const uploadTask = hasVideo
             ? validFiles.reduce(
                 (chain, item) => chain.then(() => uploadOne(item)),
@@ -444,7 +470,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             : Promise.all(validFiles.map((item) => uploadOne(item)));
 
         uploadTask.then(() => {
-            notifyUploadedFiles(getUploadedFileIds, onChange);
+            publishFiles();
         });
     };
 
@@ -596,7 +622,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         filesRef.current = nextFiles;
         setFiles(nextFiles);
         onFilesStateChange?.(nextFiles);
-        notifyUploadedFiles(getUploadedFileIds, onChange);
+        publishFiles();
     }, [onChange, onFilesStateChange]);
 
     // Poll linsight upload parse status (ASR, etc.) until completed.

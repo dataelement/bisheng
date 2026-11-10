@@ -2354,5 +2354,8 @@
       "hundredMillion": "億",
       "tenThousand": "万"
     }
-  }
+  },
+  "com_archive_batch_limit": "ZIPを含む添付は合計20ファイル、100 MiBまでです。",
+  "com_archive_wait_upload": "アップロードの完了後に実行してください。",
+  "com_archive_remove_group": "このZIPの全ファイルを削除"
 }
