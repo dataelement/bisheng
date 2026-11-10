@@ -1419,3 +1419,21 @@ establish those guarantees.
 ## 工具与技能全员授权升级（f048-v6）
 
 `migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。
+
+## 企业微信组织同步（无网关）
+
+`wecom_org_sync.py` 在没有商业版 Java 网关的环境里同步企微通讯录：用后端内置的 `WeComProvider` 拉部门与成员，签名后推送到与网关相同的 HMAC 接口 `/api/v1/internal/sso/gateway-wecom-org-sync`。默认 dry-run，`--apply` 才写入；全量快照会归档缺席部门、禁用缺席用户（`--incremental` 可只做 upsert）。企业微信的部门负责人（`is_leader_in_dept`）会作为 `department_admin_external_ids` 同步，后端只对账 `grant_source='sso'` 的授权，管理端手工授权不受影响。脚本推送在 `org_sync_log` 里记为 `trigger_type='scheduled'`（网关推送是 `sso_realtime`、管理台「立即同步」是 `manual`）。
+
+在 `src/backend` 下执行（容器内工作目录为 `/app`）：
+
+```bash
+export config=config.yaml
+python scripts/wecom_org_sync.py --dry-run
+python scripts/wecom_org_sync.py --apply
+# 凭据直接给（否则读 org_sync_config 中 provider='wecom' 的 active 行）
+WECOM_CORP_ID=... WECOM_CORP_SECRET=... WECOM_AGENT_ID=... python scripts/wecom_org_sync.py --apply
+# 容器部署
+docker compose exec -T backend python scripts/wecom_org_sync.py --dry-run
+```
+
+HMAC 密钥取 `--secret` / `BISHENG_GATEWAY_HMAC_SECRET` / `config.yaml` 的 `sso_sync.gateway_hmac_secret`；后端侧留空会对推送返回 19301（fail-closed）。退出码：`0` 成功、`1` 部分成员失败、`3` 缺凭据或密钥、`4` 传输/接口失败。部署与定时任务说明见仓库根目录 `sso_sync.md`。

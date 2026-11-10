@@ -50,7 +50,7 @@ def mocked_services(monkeypatch):
     only test the HTTP / dependency plumbing."""
     import bisheng.sso_sync.api.endpoints.login_sync as login_ep
     import bisheng.sso_sync.api.endpoints.departments_sync as depts_ep
-    import bisheng.sso_sync.api.endpoints.gateway_wecom_org_sync as wecom_ep
+    import bisheng.sso_sync.domain.services.wecom_org_sync_service as wecom_svc
 
     login_result = SimpleNamespace(
         user_id=7, leaf_tenant_id=15, token='jwt-token',
@@ -77,16 +77,16 @@ def mocked_services(monkeypatch):
         depts_ep.DepartmentsSyncService, 'execute', depts_service,
     )
     monkeypatch.setattr(
-        wecom_ep.DepartmentsSyncService, 'execute', depts_service,
+        wecom_svc.DepartmentsSyncService, 'execute', depts_service,
     )
     monkeypatch.setattr(
-        wecom_ep.LoginSyncService, 'execute', login_service,
+        wecom_svc.LoginSyncService, 'execute', login_service,
     )
     monkeypatch.setattr(
-        wecom_ep, 'disable_wecom_users_absent_from_import',
+        wecom_svc, 'disable_wecom_users_absent_from_import',
         AsyncMock(return_value=0),
     )
-    monkeypatch.setattr(wecom_ep, 'flush_log', flush)
+    monkeypatch.setattr(wecom_svc, 'flush_log', flush)
     monkeypatch.setattr(depts_ep, 'flush_log', flush)
 
     return SimpleNamespace(
@@ -274,7 +274,7 @@ class TestGatewayWecomOrgSyncRoute:
         """Batched Gateway push: an incremental envelope (``full_snapshot``
         omitted / false) must NOT trigger user absent reconcile. Otherwise
         each chunk would disable every wecom user outside the chunk."""
-        import bisheng.sso_sync.api.endpoints.gateway_wecom_org_sync as wecom_ep
+        import bisheng.sso_sync.domain.services.wecom_org_sync_service as wecom_svc
 
         app = _mount_app()
         body = (
@@ -295,7 +295,7 @@ class TestGatewayWecomOrgSyncRoute:
             )
 
         assert resp.status_code == 200
-        wecom_ep.disable_wecom_users_absent_from_import.assert_not_awaited()
+        wecom_svc.disable_wecom_users_absent_from_import.assert_not_awaited()
         # Department absent reconcile is gated inside DepartmentsSyncService
         # by the same flag; verify the service received the caller's value
         # (false) rather than a forced True.
@@ -309,7 +309,7 @@ class TestGatewayWecomOrgSyncRoute:
         invoke ``disable_wecom_users_absent_from_import`` with the union of
         external ids present in the batch, and forward full_snapshot to the
         departments service for archival of absent dept rows."""
-        import bisheng.sso_sync.api.endpoints.gateway_wecom_org_sync as wecom_ep
+        import bisheng.sso_sync.domain.services.wecom_org_sync_service as wecom_svc
 
         app = _mount_app()
         body = (
@@ -332,8 +332,8 @@ class TestGatewayWecomOrgSyncRoute:
             )
 
         assert resp.status_code == 200
-        wecom_ep.disable_wecom_users_absent_from_import.assert_awaited_once()
-        seen = wecom_ep.disable_wecom_users_absent_from_import.await_args.args[0]
+        wecom_svc.disable_wecom_users_absent_from_import.assert_awaited_once()
+        seen = wecom_svc.disable_wecom_users_absent_from_import.await_args.args[0]
         assert seen == {'u1'}
         dept_payload = mocked_services.depts.await_args.args[0]
         assert dept_payload.full_snapshot is True
