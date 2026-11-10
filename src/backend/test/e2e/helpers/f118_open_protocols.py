@@ -17,7 +17,6 @@ import httpx
 
 from test.e2e.helpers.api import API_BASE, assert_resp_200, assert_resp_error
 from test.e2e.helpers.f118_unification import F118Environment
-from test.e2e.helpers.service_accounts import select_service_account_tenant
 
 
 @dataclass(repr=False)
@@ -72,8 +71,12 @@ class F118OpenProtocols:
         __tracebackhide__ = True
         for env in (self.target, self.foreign):
             await env.prepare()
-            token = env.owner["Cookie"].partition("=")[2]
-            self.managers[env.tenant_id] = await select_service_account_tenant(self.client, token, env.tenant_id)
+            # Child admins manage their own tenant; selecting another management
+            # scope is the global-super-only API, not a Child setup step.
+            self.managers[env.tenant_id] = {
+                **env.owner,
+                "X-Service-Account-Tenant": str(env.tenant_id),
+            }
             await self.clean_accounts(env)
         for label, env, scopes in (
             ("full", self.target, ("knowledge:read", "knowledge:write")),
