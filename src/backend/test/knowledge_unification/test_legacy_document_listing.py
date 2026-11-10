@@ -18,6 +18,15 @@ from test.knowledge_unification.test_legacy_document_permissions import real_tar
 async def pages(real_targets, monkeypatch):
     # The native fixture patches the same repository session port.
     sessions = compatibility.get_async_db_session
+    from types import SimpleNamespace
+
+    from bisheng.user.domain.models.user import UserDao
+
+    # Creator directory transport is independent of the real native targets,
+    # Catalog and F048 decisions exercised by this fixture.
+    monkeypatch.setattr(
+        UserDao, "get_user_by_ids", lambda ids: [SimpleNamespace(user_id=ident, user_name=str(ident)) for ident in ids]
+    )
     async with sessions() as session:
         await session.connection()
         # Async SQLAlchemy uses the native SQLite connection for table creation.
@@ -67,6 +76,51 @@ async def test_old_list_reads_space_not_normal_and_filters_before_dto_pagination
     assert first.has_more is False
     current = await app.alist(identity=pages.user, legacy_view=False)
     assert [(row.id, row.type) for row in current.data] == [(13, 3)]
+
+
+async def test_legacy_list_enriches_creator_and_actual_actions_only_after_visibility(pages, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+    from bisheng.user.domain.models.user import UserDao
+
+    names = Mock(return_value=[SimpleNamespace(user_id=7, user_name="actual creator")])
+    monkeypatch.setattr(UserDao, "get_user_by_ids", names)
+    result = await LegacyDocumentsApplication().alist(identity=pages.user, sort_by="name", page_size=1)
+    assert len(result.data) == 1
+    row = result.data[0]
+    assert row.user_name == "actual creator"
+    assert "edit" in row.actions and row.copiable is True
+    names.assert_called_once_with([7])
+    assert row.type == 0 and row.has_abnormal_files is True
+    assert KnowledgeService.permission_service is not None
+
+
+async def test_legacy_create_uses_actual_space_type_for_original_converter(pages, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate
+    from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceCreateResp
+    from bisheng.user.domain.models.user import UserDao
+
+    async with compatibility.get_async_db_session() as session:
+        actual = await session.get(Knowledge, 13)
+    service = SimpleNamespace(
+        create_knowledge_space=AsyncMock(return_value=KnowledgeSpaceCreateResp.model_validate(actual))
+    )
+    monkeypatch.setattr(
+        UserDao, "get_user_by_ids", Mock(return_value=[SimpleNamespace(user_id=7, user_name="actual creator")])
+    )
+    result = await LegacyDocumentsApplication(space_service=service).acreate(
+        request=None, identity=pages.user, command=KnowledgeCreate(name="created")
+    )
+    assert result.type == 0 and result.user_name == "actual creator"
+    assert "edit" in result.actions and result.copiable is True
+    assert actual.type == 3
+    checks = [item for kind, rows in pages.fga.calls if kind == "batch" for item in rows]
+    assert checks and all(item["object"] == "knowledge_space:13" for item in checks)
 
 
 async def test_candidate_continuation_is_stable_and_tenant_visible_exact(pages):

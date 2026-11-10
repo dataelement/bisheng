@@ -26,7 +26,7 @@ from fastapi.routing import APIRoute
 from starlette.routing import Match
 
 def feature(route):
-    return route.path.startswith(("/api/v1/knowledge", "/api/v1/llm", "/api/v2/knowledge", "/api/v2/filelib"))
+    return route.path.startswith(("/api/v1/knowledge", "/api/v1/llm", "/api/v2/knowledge", "/api/v2/filelib", "/api/v1/permissions")) or ("/service-accounts/" in route.path and "/resource-grants" in route.path)
 def calls(dependant):
     result=[]
     for child in dependant.dependencies:
@@ -46,7 +46,42 @@ for route in app.routes:
             shadows.append({"method":method,"path":route.path,"first":getattr(first,"path",None)})
 with warnings.catch_warnings(record=True) as recorded:
     schema=app.openapi()
-result={"routes":routes,"shadows":shadows,"schema":schema,"warnings":[str(value.message) for value in recorded],"v1":router.prefix,"v2":router_rpc.prefix,"space":knowledge_space_router.prefix}
+
+# Inspect actual cold-process constructors/registries without starting workers,
+# opening SQL connections or initializing external permission transports.
+import asyncio
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.open_endpoints.api.endpoints.filelib import _build_space_service
+from bisheng.open_mcp.application import _space_service
+from bisheng.open_mcp.registry import TOOL_DEFINITIONS
+from bisheng.open_mcp.tools import TOOL_HANDLERS
+from bisheng.permission.api.dependencies import get_permission_resource_normalizer
+from bisheng.knowledge.application.legacy_files import make_legacy_space_service
+from bisheng.open_endpoints.api import dependencies as open_dependencies
+from bisheng.knowledge.api import dependencies as web_dependencies
+from bisheng.worker.main import bisheng_celery
+from bisheng.worker import config as worker_config
+from bisheng.worker.knowledge import processing_jobs, metadata_jobs, move_jobs, space_copy_jobs, space_delete
+
+def qualified(value):
+    return value.__class__.__module__+"."+value.__class__.__qualname__
+user=UserPayload(user_id=7,tenant_id=101,user_role=[])
+factories={}
+for name,builder in (("v2",lambda:_build_space_service(None,user,object(),object())),("mcp",lambda:_space_service(None,user,object(),object())),("legacy",lambda:make_legacy_space_service(None,user))):
+    service=builder()
+    first,second=service.upload_application_factory(),service.upload_application_factory()
+    factories[name]={"type":qualified(first),"fresh":first is not second,"identity":first.user is user,"deletion":callable(getattr(service,"deletion_application_factory",None))}
+async def bridges():
+    repo,files=object(),object()
+    metadata=await web_dependencies.get_knowledge_metadata_service(repo,files)
+    web_file=await web_dependencies.get_knowledge_file_service(repo,files)
+    open_file=await open_dependencies.get_knowledge_file_service(repo,files)
+    opened=await open_dependencies.get_knowledge_service(repo,files)
+    return {"web_schema":qualified(metadata.space_writer),"v2_schema":qualified(opened.metadata_service.space_writer),"web_values":qualified(web_file.metadata_value_writer),"v2_values":qualified(open_file.metadata_value_writer),"normalizer":qualified(await get_permission_resource_normalizer())}
+task_names=(processing_jobs.EXECUTE_TASK,processing_jobs.SCAN_TASK,space_delete.PURGE_TASK,space_delete.SCAN_TASK)
+tasks={name:{"registered":name in bisheng_celery.tasks,"queue":bisheng_celery.amqp.router.route({},name).get("queue").name} for name in task_names}
+mcp=[{"name":tool.name,"route":tool.source_route,"method":tool.source_method,"handler":TOOL_HANDLERS[tool.name].__module__+"."+TOOL_HANDLERS[tool.name].__qualname__} for tool in TOOL_DEFINITIONS if tool.name.startswith("bisheng_knowledge")]
+result={"routes":routes,"shadows":shadows,"schema":schema,"warnings":[str(value.message) for value in recorded],"v1":router.prefix,"v2":router_rpc.prefix,"space":knowledge_space_router.prefix,"factories":factories,"bridges":asyncio.run(bridges()),"tasks":tasks,"beat":{key:worker_config.beat_schedule[key] for key in ("knowledge-space-delete-recovery","knowledge-processing-recovery")},"mcp":mcp,"worker_handlers":{"metadata":callable(metadata_jobs.execute_metadata_job),"move":callable(move_jobs.execute_move_job),"copy":callable(space_copy_jobs.execute_copy_job),"ordinary":sorted(processing_jobs.PROCESSING_HANDLERS)}}
 with open(sys.argv[1],"w") as output:json.dump(result,output)
 """
 
@@ -224,3 +259,47 @@ def test_original_v2_faces_keep_the_registered_authenticator_and_scope_markers(w
         ("DELETE", "/api/v2/filelib/{knowledge_id}"),
     ):
         assert operation(wire, path, method)
+
+
+def test_actual_open_and_legacy_factories_install_native_upload_owner(wire):
+    for name, factory in wire["factories"].items():
+        assert factory["type"] == "bisheng.knowledge.application.space_upload.SpaceUploadApplication"
+        assert factory["fresh"] and factory["identity"]
+        if name in {"v2", "mcp"}:
+            assert factory["deletion"]
+    assert wire["bridges"] == {
+        "web_schema": "bisheng.knowledge.application.metadata_legacy.LegacyMetadataWriter",
+        "v2_schema": "bisheng.knowledge.application.metadata_legacy.LegacyMetadataWriter",
+        "web_values": "bisheng.knowledge.application.knowledge_index_edit.KnowledgeIndexEditApplication",
+        "v2_values": "bisheng.knowledge.application.knowledge_index_edit.KnowledgeIndexEditApplication",
+        "normalizer": "bisheng.knowledge.application.legacy_documents.LegacyDocumentsApplication",
+    }
+
+
+def test_actual_mcp_knowledge_allowlist_has_real_handlers_and_original_http_faces(wire):
+    assert wire["mcp"]
+    for tool in wire["mcp"]:
+        assert tool["handler"].startswith("bisheng.open_mcp.tools.")
+        assert operation(wire, tool["route"], tool["method"])
+    assert len({tool["name"] for tool in wire["mcp"]}) == len(wire["mcp"])
+
+
+def test_existing_celery_tasks_beat_and_all_native_handlers_are_registered(wire):
+    assert len(wire["tasks"]) == 4
+    assert all(task == {"registered": True, "queue": "knowledge_celery"} for task in wire["tasks"].values())
+    for key in ("knowledge-space-delete-recovery", "knowledge-processing-recovery"):
+        assert wire["beat"][key]["task"] in wire["tasks"]
+    assert wire["worker_handlers"] == {
+        "metadata": True,
+        "move": True,
+        "copy": True,
+        "ordinary": ["embedding_rebuild", "file_reprocess", "file_resplit"],
+    }
+
+
+def test_public_legacy_permission_alias_is_injected_at_actual_http_boundary(wire):
+    for route in wire["routes"]:
+        if route["endpoint"].startswith(
+            ("bisheng.permission.api.endpoints.decision.", "bisheng.permission.api.endpoints.grant.")
+        ):
+            assert "get_permission_resource_normalizer" in route["dependencies"], route
