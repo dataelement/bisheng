@@ -44,7 +44,9 @@ export default function RunLog({ node, children }) {
 
                 return data.map(item => {
                     let label = ''
-                    if (['file', 'variable'].includes(item.type)) {
+                    if (['platform_agent', 'platform_knowledge_retriever'].includes(node.type)) {
+                        label = t(`node.${node.type}.${item.key.split(".").at(-1)}.label`)
+                    } else if (['file', 'variable'].includes(item.type)) {
                         const key = item.key.split('.')
                         label = key[key.length - 1]
                         //  t(`node.${node.type}.${key[key.length - 1]}.label`)

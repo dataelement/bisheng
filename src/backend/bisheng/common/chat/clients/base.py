@@ -82,9 +82,13 @@ class BaseClient(ABC):
     async def handle_message(self, message: dict[any, any], *, execution_context=None):
         """Handling messages from clients, Submit to Thread Pool for Execution"""
         trace_id = trace_id_var.get()
-        logger.info(f"client_id={self.client_key} trace_id={trace_id} message={message}")
+        action = message.get("action")
+        if action == "agent_interaction_submit":
+            logger.info("client_id={} trace_id={} action=agent_interaction_submit", self.client_key, trace_id)
+        else:
+            logger.info(f"client_id={self.client_key} trace_id={trace_id} message={message}")
 
-        if message.get("action") == "stop":
+        if action in ("stop", "agent_interaction_submit"):
             await self._invoke_message(message, execution_context)
             return
         thread_pool.submit(

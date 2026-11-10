@@ -1,4 +1,6 @@
 import { isApiError } from "@bisheng/api-client";
+import { WorkflowForm } from "@bisheng/chat";
+import { normalizeFormFields } from "@bisheng/chat/core";
 import { useCallback, useMemo, useState } from "react";
 import { useUnactivate } from "react-activation";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -29,7 +31,7 @@ import { copyAppChatOrigin, copyAppChatReturnTo } from "~/pages/appChat/appChatO
 import { appConversationsState } from "./store/appSidebarAtoms";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import useChatHelpers from "./useChatHelpers";
-import { useWebSocket } from "./useWebsocket";
+import { useWebSocket, type AgentLongTaskStatus } from "./useWebsocket";
 import { generateUUID } from "~/utils";
 
 // Same selectable-category set as ChatMessages.tsx. Duplicated here because
@@ -40,9 +42,27 @@ const _SELECTABLE_CATEGORIES = new Set(["question", "answer", "agent_answer", "o
 export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }) {
   const { user } = useAuthContext();
   const help = useChatHelpers();
-  useWebSocket(help, { canExecute: !readOnly });
+  const [longTask, setLongTask] = useState<{ chatId: string; status: AgentLongTaskStatus | null }>();
+  const { interaction, interactionFormKey, submitInteraction } = useWebSocket(help, {
+    canExecute: !readOnly,
+    onLongTaskStatus: (chatId, status) => setLongTask({ chatId, status }),
+  });
 
   const localize = useLocalize();
+  const taskStatus = longTask && longTask.chatId === cid ? longTask.status : null;
+  const taskState = taskStatus?.reason === "SUBMIT_UNKNOWN" && taskStatus.local_state === "TIMED_OUT"
+    ? "SUBMIT_UNCONFIRMED" : taskStatus?.reason &&
+    ["START_TIMEOUT", "START_UNKNOWN", "RESULT_UNAVAILABLE", "UNSUPPORTED_INPUT", "INPUT_TIMEOUT",
+      "SUBMIT_TIMEOUT", "SUBMIT_UNKNOWN", "SUBMIT_REJECTED", "RUN_TIMEOUT"].includes(taskStatus.reason)
+    ? taskStatus.reason : interaction && interaction.phase !== "TERMINAL" ? interaction.phase : taskStatus?.local_state;
+  let cancelState: string | undefined;
+  if (taskStatus && ["CONFIRMED", "REJECTED", "UNCONFIRMED", "INTENT", "SENT", "ACCEPTED"].includes(taskStatus.cancel_state)) {
+    cancelState = taskStatus.cancel_state;
+  } else if (taskStatus?.cancel_state === "NO_ACTION" &&
+      ["STOPPED", "TIMED_OUT"].includes(taskStatus.local_state) && taskState !== "RESULT_UNAVAILABLE" &&
+      ["SUCCEEDED", "FAILED", "CANCELLED"].includes(taskStatus.remote_state)) {
+    cancelState = `REMOTE_${taskStatus.remote_state}`;
+  }
   const navigate = useNavigate();
   const location = useLocation();
   const { fid: flowId, type: flowType } = useParams();
@@ -154,6 +174,8 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
     conversations.length === 0 &&
     messages.length === 0 &&
     !data?.guide_word &&
+    taskStatus?.status_version === undefined &&
+    !interaction &&
     !running?.inputForm &&
     !running?.guideWord?.length;
 
@@ -191,6 +213,14 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                   flowType: data.flow_type,
                 }}
               />
+              {taskState && (
+                <p className="px-4 py-1 text-sm text-muted-foreground" role="status">
+                  {localize(`appChat.agentLongTask.${taskState}`)}
+                  {taskStatus?.local_state === "WAITING_RESULT" && typeof taskStatus.progress === "number"
+                    ? ` ${taskStatus.progress}%` : ""}
+                  {cancelState && ` · ${localize(`appChat.agentLongTask.${cancelState}`)}`}
+                </p>
+              )}
               <div className="flex min-h-0 flex-1 overflow-hidden">
                 <div className="relative mx-auto h-full min-h-0 w-full max-w-[800px] flex-1">
                   <ChatMessages
@@ -206,6 +236,22 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                   />
                 </div>
               </div>
+              {!readOnly && interaction?.form && (
+                <div className="mx-auto w-full max-w-[800px] shrink-0 px-4 py-2">
+                  <p className="mb-2 text-caption text-text-3">
+                    {localize("appChat.agentInteraction.deadline", { time: new Date(interaction.expires_at).toLocaleTimeString() })}
+                  </p>
+                  <WorkflowForm key={interactionFormKey} canExecute
+                    fields={normalizeFormFields([{ key: "answer", label: interaction.form.label, type: "text", required: true }])}
+                    submitLabel={localize("appChat.agentInteraction.submit")}
+                    requiredMessage={field => localize("com_ui_required_field", { field })}
+                    onInvalid={errors => showToast?.({ message: errors.join("\n"), severity: NotificationSeverity.WARNING })}
+                    onError={() => showToast?.({ message: localize("appChat.agentInteraction.submitUnavailable"), severity: NotificationSeverity.WARNING })}
+                    onSubmit={values => {
+                      if (typeof values.answer === "string") submitInteraction(values.answer);
+                    }} />
+                </div>
+              )}
               {!readOnly &&
                 (cid && selectionState.active && selectionState.chatId === cid ? (
                   /* F028: input is replaced by the selection toolbar at 100% width */
@@ -218,7 +264,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                     />
                   </div>
                 ) : (
-                  <ChatInput v={v} readOnly={readOnly} />
+                  <ChatInput v={v} readOnly={readOnly} agentInteractionActive={!!interaction && interaction.phase !== "TERMINAL"} />
                 ))}
             </div>
 

@@ -53,7 +53,9 @@ async def get_chat_message(
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ):
     with bypass_tenant_filter_if(share_link is not None):
-        history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
+        history = await ChatSessionService.get_chat_history(
+            chat_id, flow_id, id, page_size, login_user=login_user if share_link is None else None
+        )
 
     if history and login_user.user_id != history[0].user_id:
         if not share_link or share_link.resource_id != chat_id:

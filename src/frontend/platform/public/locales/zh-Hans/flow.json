@@ -602,10 +602,123 @@
       "output": {
         "label": "输出变量"
       }
+    },
+  "platform_knowledge_retriever": {
+      "name": "昆联知识库检索",
+      "description": "从昆联知识库检索资料",
+      "user_question": {
+        "label": "用户问题",
+        "placeholder": "用户问题"
+      },
+      "knowledge": {
+        "label": "检索范围"
+      },
+      "top_k": {
+        "label": "返回条数"
+      },
+      "retrieved_result": {
+        "label": "检索结果"
+      },
+      "retrieved_text": {
+        "label": "检索文本"
+      },
+      "citations": {
+        "label": "来源"
+      },
+      "hit_count": {
+        "label": "命中数量"
+      },
+      "provider_mode": {
+        "label": "数据来源"
+      },
+      "resource_id": {
+        "label": "知识库"
+      },
+      "execution_id": {
+        "label": "运行标识"
+      },
+      "call_id": {
+        "label": "调用标识"
+      }
+    },
+    "platform_agent": {
+      "name": "平台 Agent",
+      "description": "调用平台上固定版本的 Agent",
+      "agent_ref": {
+        "label": "平台 Agent"
+      },
+      "input_bindings": {
+        "label": "输入来源"
+      },
+      "result": {
+        "label": "运行结果"
+      },
+      "provider_mode": {
+        "label": "数据来源"
+      },
+      "execution_id": {
+        "label": "流程运行标识"
+      },
+      "agent_run_id": {
+        "label": "Agent 运行标识"
+      }
     }
   },
   "rerunWorkflow": "重新运行",
   "type": "类型",
   "valueType": "值类型",
-  "selectDbType": "请选择数据库类型"
+  "selectDbType": "请选择数据库类型",
+  "platformAgent": {
+    "executionMode": "执行方式",
+    "syncMode": "同步",
+    "asyncMode": "异步",
+    "allowInteraction": "允许 Agent 请求人工输入",
+    "interactionHint": "在隔离模拟环境中，异步运行且固定版本支持交互时可启用。",
+    "interactionUnsupported": "当前环境、执行方式或固定版本不支持人工输入。请调整配置或关闭人工输入。",
+    "mock": "模拟数据",
+    "agent": "平台 Agent",
+    "version": "固定版本",
+    "source": "输入来源",
+    "constant": "常量",
+    "variable": "变量",
+    "chooseAgent": "选择 Agent",
+    "chooseVersion": "选择版本",
+    "loadMore": "加载更多",
+    "empty": "暂无可用 Agent",
+    "versionChanged": "版本已更换，请检查输入和下游引用。",
+    "outputSchema": "输出结构",
+    "invalidConfiguration": "请检查版本和输入配置",
+    "invalidJson": "请输入有效的 JSON 值",
+    "variableHint": "node_id.result#field",
+    "textHint": "输入文本",
+    "jsonHint": "JSON 值，例如 0、false、null、[] 或 {}",
+    "chooseVariable": "选择上游变量",
+    "queryFailed": "资源查询失败，请重试。",
+    "removeBinding": "移除映射",
+    "obsoleteInput": "当前版本不再接受此输入，请移除映射。",
+    "identityNotReady": "当前用户的租户信息未就绪，请刷新页面或重新登录。"
+  },
+  "toolNames": {
+    "time": "时间",
+    "calculator": "计算器",
+    "code": "代码执行器"
+  },
+  "kunlianRegistration": {
+    "localOnline": "毕昇已发布",
+    "localOffline": "毕昇已下线",
+    "PENDING": "昆联登记待同步",
+    "REGISTERED": "昆联登记已同步",
+    "FAILED": "昆联登记失败，待补偿",
+    "REMOVED": "昆联已移除",
+    "INCOMPLETE": "昆联登记资料待补充"
+  },
+  "platformKnowledge": {
+    "questionSource": "问题来源",
+    "variable": "引用变量",
+    "constant": "固定文本",
+    "invalidQuestion": "请输入有效的问题",
+    "invalidKnowledge": "请选择可用的知识库",
+    "choose": "选择知识库",
+    "empty": "暂无可用知识库"
+  }
 }

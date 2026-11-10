@@ -602,10 +602,123 @@
       "output": {
         "label": "Output Variable"
       }
+    },
+  "platform_knowledge_retriever": {
+      "name": "Kunlian knowledge search",
+      "description": "Find information in a Kunlian knowledge base",
+      "user_question": {
+        "label": "Question",
+        "placeholder": "Question"
+      },
+      "knowledge": {
+        "label": "Knowledge base"
+      },
+      "top_k": {
+        "label": "Result limit"
+      },
+      "retrieved_result": {
+        "label": "Search results"
+      },
+      "retrieved_text": {
+        "label": "Result text"
+      },
+      "citations": {
+        "label": "Sources"
+      },
+      "hit_count": {
+        "label": "Result count"
+      },
+      "provider_mode": {
+        "label": "Data source"
+      },
+      "resource_id": {
+        "label": "Knowledge base"
+      },
+      "execution_id": {
+        "label": "Execution ID"
+      },
+      "call_id": {
+        "label": "Request ID"
+      }
+    },
+    "platform_agent": {
+      "name": "Platform Agent",
+      "description": "Call a fixed version of a platform Agent",
+      "agent_ref": {
+        "label": "Platform Agent"
+      },
+      "input_bindings": {
+        "label": "Input source"
+      },
+      "result": {
+        "label": "Result"
+      },
+      "provider_mode": {
+        "label": "Data source"
+      },
+      "execution_id": {
+        "label": "Workflow run ID"
+      },
+      "agent_run_id": {
+        "label": "Agent run ID"
+      }
     }
   },
   "rerunWorkflow": "Run again",
   "type": "Type",
   "valueType": "Value type",
-  "selectDbType": "Select a database type"
+  "selectDbType": "Select a database type",
+  "platformAgent": {
+    "executionMode": "Execution mode",
+    "syncMode": "Synchronous",
+    "asyncMode": "Asynchronous",
+    "allowInteraction": "Allow Agent to request input",
+    "interactionHint": "Available in the isolated mock environment for asynchronous runs with a version that supports interaction.",
+    "interactionUnsupported": "The environment, execution mode, or pinned version does not support input. Update the settings or turn input off.",
+    "mock": "Simulated data",
+    "agent": "Platform Agent",
+    "version": "Fixed version",
+    "source": "Input source",
+    "constant": "Constant",
+    "variable": "Variable",
+    "chooseAgent": "Select an Agent",
+    "chooseVersion": "Select a version",
+    "loadMore": "Load more",
+    "empty": "No available Agents",
+    "versionChanged": "Version changed. Check inputs and downstream references.",
+    "outputSchema": "Output structure",
+    "invalidConfiguration": "Check the version and input configuration",
+    "invalidJson": "Enter a valid JSON value",
+    "variableHint": "node_id.result#field",
+    "textHint": "Enter text",
+    "jsonHint": "JSON value, e.g. 0, false, null, [] or {}",
+    "chooseVariable": "Choose an upstream variable",
+    "queryFailed": "Resource query failed. Try again.",
+    "removeBinding": "Remove mapping",
+    "obsoleteInput": "This version no longer accepts this input. Remove its mapping.",
+    "identityNotReady": "Your tenant information is not ready. Refresh the page or sign in again."
+  },
+  "toolNames": {
+    "time": "Time",
+    "calculator": "Calculator",
+    "code": "Code execution"
+  },
+  "kunlianRegistration": {
+    "localOnline": "Published in Bisheng",
+    "localOffline": "Offline in Bisheng",
+    "PENDING": "Kunlian sync pending",
+    "REGISTERED": "Registered in Kunlian",
+    "FAILED": "Kunlian registration failed. Retry pending.",
+    "REMOVED": "Removed from Kunlian",
+    "INCOMPLETE": "Kunlian registration details required"
+  },
+  "platformKnowledge": {
+    "questionSource": "Question source",
+    "variable": "Variable",
+    "constant": "Fixed text",
+    "invalidQuestion": "Enter a valid question",
+    "invalidKnowledge": "Select an available knowledge base",
+    "choose": "Select a knowledge base",
+    "empty": "No knowledge bases available"
+  }
 }

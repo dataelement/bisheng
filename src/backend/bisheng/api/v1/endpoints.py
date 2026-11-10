@@ -110,13 +110,31 @@ def get_env():
         # Lets the builder mark a Code node as disabled up front, instead of the
         # author finding out when the workflow fails at run time.
         workflow_code_node_enabled = workflow_conf.code_node_enabled
+        platform_agent_mode = workflow_conf.platform_agent.mode
+        platform_agent_revision = workflow_conf.platform_agent.policy_revision
+        knowledge = workflow_conf.platform_knowledge
+        knowledge_mode, knowledge_revision, knowledge_connection = (
+            knowledge.mode,
+            knowledge.policy_revision,
+            knowledge.connection_id,
+        )
     except Exception as exc:
         logger.warning(f"Failed to load workflow config, using disabled: {exc}")
         workflow_auto_rerun_on_open = False
         workflow_code_node_enabled = False
+        platform_agent_mode = "disabled"
+        platform_agent_revision = ""
+        knowledge_mode, knowledge_revision, knowledge_connection = "disabled", "", ""
     env["workflow"] = {
         "auto_rerun_on_open": workflow_auto_rerun_on_open,
         "code_node_enabled": workflow_code_node_enabled,
+        "platform_knowledge_enabled": knowledge_mode == "mock",
+        "platform_knowledge_mode": knowledge_mode,
+        "platform_knowledge_policy_revision": knowledge_revision,
+        "platform_knowledge_connection_id": knowledge_connection,
+        "platform_agent_enabled": platform_agent_mode == "mock",
+        "platform_agent_mode": platform_agent_mode,
+        "platform_agent_policy_revision": platform_agent_revision,
     }
 
     # Expose knowledge-space version management flag so the client can toggle UI affordances.
@@ -133,10 +151,10 @@ def get_env():
 
 @router.get("/all")
 def get_all_langchain_types_legacy():
-    """兼容旧版平台：启动时请求 GET /api/v1/all（LangChain 节点类型注册表）。
+    """兼容旧版平台。启动时请求 GET /api/v1/all 获取 LangChain 节点类型注册表。
 
-    v2.5+ 后端不再在单体中动态构建该字典；返回空对象以避免 SPA 404。
-    若画布/组件列表异常，请使用与当前后端版本一致的前端构建，或在此补全数据。
+    v2.5+ 后端不再在单体中动态构建该字典。返回空对象以避免 SPA 404。
+    若画布/组件列表异常。请使用与当前后端版本一致的前端构建或在此补全数据。
     """
     return resp_200({})
 
@@ -199,7 +217,7 @@ async def update_web_config(
 
 
 async def _upload_file(
-    file: UploadFile, object_name_prefix: str, file_supports: list[str] = None, bucket_name: str = None
+    file: UploadFile, object_name_prefix: str, file_supports: list[str] | None = None, bucket_name: str | None = None
 ) -> UploadFileResponse:
     if file.size == 0:
         raise UploadFileEmptyError()

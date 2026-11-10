@@ -36,8 +36,21 @@ async def delete_flow(
     db_flow = FlowDao.get_flow_by_id(flow_id)
     if not db_flow:
         raise NotFoundError()
+    from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
+
+    if scope := workflow_scope(db_flow.tenant_id, flow_id, user=login_user):
+        from bisheng.common.errcode.flow import WorkflowRegistrationConflict
+        from bisheng.database.models.flow import FlowStatus
+
+        if db_flow.status == FlowStatus.ONLINE.value:
+            raise WorkflowRegistrationConflict()
     await FlowService.project_flow_delete(login_user, db_flow)
-    FlowDao.delete_flow(db_flow)
+    if scope:
+        from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+        RegistrationRepository().delete_offline(scope, flow_id)
+    else:
+        FlowDao.delete_flow(db_flow)
     telemetry_service.log_event_sync(
         user_id=login_user.user_id,
         event_type=BaseTelemetryTypeEnum.DELETE_APPLICATION,

@@ -30,8 +30,8 @@ type ModalRef = {
     edit: (type: string, appId: string) => void;
 };
 
-const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
-    ({ onSave, loca }, ref) => {
+const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any; kunlianEntry?: boolean }>(
+    ({ onSave, loca, kunlianEntry }, ref) => {
         const [open, setOpen] = useState(false);
         const [formData, setFormData] = useState({
             url: '',
@@ -45,6 +45,15 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
         const generation = useRef(0);
         const assistantDraft = useRef<AssistantTemplateDraft>({});
         const submitting = useRef(false);
+        const registrationRequest = useRef<{ fingerprint: string; key: string } | null>(null);
+        const registrationKey = () => {
+            if (!kunlianEntry) return undefined;
+            const fingerprint = JSON.stringify(formData);
+            if (registrationRequest.current?.fingerprint !== fingerprint) {
+                registrationRequest.current = { fingerprint, key: crypto.randomUUID() };
+            }
+            return registrationRequest.current.key;
+        };
         const { t } = useTranslation('flow');
         const { appConfig } = useContext(locationContext);
         const securityRef = useRef<any>(null);
@@ -241,7 +250,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                     }
                 } else {
                     if (appId) return navigate('/flow/' + appId);
-                    const workflow = await createWorkflowApi(formData.name, formData.desc, formData.url);
+                    const workflow = await createWorkflowApi(formData.name, formData.desc, formData.url, undefined, registrationKey());
                     if (workflow) {
                         const navigateToFlow = (id) => navigate(`/flow/${id}`);
                         if (!appConfig.isPro) return navigateToFlow(workflow.id);

@@ -2894,6 +2894,41 @@
     }
   },
   "appChat": {
-    "stopped": "Stopped"
+    "stopped": "Stopped",
+    "agentInteraction": {
+      "deadline": "Submit by {{time}}",
+      "submit": "Submit answer",
+      "submitUnavailable": "The answer could not be submitted. Check its length and your connection."
+    },
+    "agentLongTask": {
+      "WAITING_INPUT": "Waiting for additional input",
+      "SUBMIT_QUEUED": "BiSheng received the answer. Submission is queued.",
+      "SUBMIT_IN_FLIGHT": "Submitting the answer to Kunlian",
+      "SUBMIT_UNKNOWN": "Checking whether Kunlian received the answer",
+      "SUBMIT_UNCONFIRMED": "The confirmation deadline passed. Kunlian receipt remains unknown.",
+      "INPUT_TIMEOUT": "The input deadline passed",
+      "SUBMIT_TIMEOUT": "The answer expired in the submission queue",
+      "SUBMIT_REJECTED": "Kunlian rejected the answer",
+      "RUN_TIMEOUT": "The Agent result deadline passed",
+      "PREPARED": "Starting Agent",
+      "WAITING_RESULT": "Waiting for Agent result",
+      "SUCCEEDED": "Agent completed",
+      "STOPPED": "Workflow stopped",
+      "TIMED_OUT": "Workflow timed out",
+      "FAILED": "Agent run failed",
+      "INTENT": "Agent cancellation pending",
+      "SENT": "Agent cancellation requested, awaiting confirmation",
+      "ACCEPTED": "Agent accepted cancellation",
+      "CONFIRMED": "Agent cancellation confirmed",
+      "REJECTED": "Agent rejected cancellation",
+      "UNCONFIRMED": "Agent cancellation unconfirmed",
+      "START_TIMEOUT": "Agent startup timed out before sending",
+      "START_UNKNOWN": "Agent startup could not be confirmed",
+      "RESULT_UNAVAILABLE": "Agent completed, but its result was unavailable",
+      "UNSUPPORTED_INPUT": "This Agent is waiting for unsupported input",
+      "REMOTE_SUCCEEDED": "The remote Agent completed",
+      "REMOTE_FAILED": "The remote Agent failed",
+      "REMOTE_CANCELLED": "The remote Agent was cancelled"
+    }
   }
 }

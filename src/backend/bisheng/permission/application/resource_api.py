@@ -26,6 +26,7 @@ from bisheng.permission.domain.repositories.grant_repository import (
     GrantRepository,
     ResourcePermissionModeRepository,
 )
+from bisheng.permission.domain.repositories.projection_repository import ProjectionRepository
 from bisheng.permission.domain.schemas import (
     GrantMutationChange,
     GrantMutationOperation,
@@ -172,11 +173,15 @@ class F048ResourcePermissionApi:
         runtime: F048PermissionRuntime,
         subjects: PermissionSubjectDirectoryPort,
         grant_listeners: GrantChangeListenerRegistry | None = None,
+        projection_repository=None,
     ) -> None:
         self._resources = resources
         self._runtime = runtime
         self._subjects = subjects
         self._grant_listeners = grant_listeners or GrantChangeListenerRegistry()
+        self._projection_repository = (
+            projection_repository if projection_repository is not None else ProjectionRepository()
+        )
 
     async def get_grantable_models(
         self,
@@ -705,6 +710,70 @@ class F048ResourcePermissionApi:
             "resource_version": result.resource_version,
             "items": items,
         }
+
+    async def _workflow_grant_target(self, resource_id: str, actor: PermissionActor) -> VerifiedPermissionTarget:
+        target = await self._target("workflow", resource_id, actor, "manage_permission")
+        if actor.subject_type != "user" or (target.resource_type, target.resource_id, target.tenant_id) != (
+            "workflow",
+            resource_id,
+            actor.tenant_id,
+        ):
+            raise PermissionInvalidResourceError()
+        await self._runtime.require_manage_permission(actor, target)
+        return target
+
+    async def check_workflow_direct_user_grant(
+        self, *, resource_id: str, actor: PermissionActor, assignee_id: int, expected_assignee_version: int
+    ) -> None:
+        target = await self._workflow_grant_target(resource_id, actor)
+        context = await self._runtime.build_grant_context(actor=actor, target=target)
+        manageable = await self._runtime.manageable_model_keys(actor=actor, target=target)
+        matches = [
+            (grant.model.model_key, source)
+            for grant in context.grants
+            if grant.active
+            and (grant.tenant_id, grant.resource_type, grant.resource_id)
+            == (
+                target.tenant_id,
+                target.resource_type,
+                target.resource_id,
+            )
+            for source in grant.sources
+            if source.active and source.source_id == assignee_id
+        ]
+        if len(matches) != 1:
+            raise PermissionInvalidResourceError()
+        model_key, source = matches[0]
+        if (
+            source.protected
+            or source.subject_type != "user"
+            or source.source_type != "DIRECT"
+            or model_key not in manageable
+        ):
+            raise PermissionInvalidResourceError()
+        if source.version != expected_assignee_version:
+            raise PermissionVersionConflictError()
+
+    async def get_workflow_grant_outcome(self, *, resource_id: str, actor: PermissionActor, idempotency_key: str):
+        target = await self._workflow_grant_target(resource_id, actor)
+        operation = await self._projection_repository.aget_operation_by_idempotency(idempotency_key)
+        if operation is None or (
+            operation.tenant_id,
+            operation.scope_type,
+            operation.scope_key,
+            operation.operator_id,
+            operation.operation_type,
+            operation.idempotency_key,
+        ) != (
+            target.tenant_id,
+            "resource",
+            f"workflow:{target.resource_id}",
+            actor.user_id,
+            "GRANT_MUTATION",
+            idempotency_key,
+        ):
+            return None
+        return str(operation.status), operation.target_version if operation.status == "FINALIZED" else None
 
     async def _roster_snapshot(
         self,

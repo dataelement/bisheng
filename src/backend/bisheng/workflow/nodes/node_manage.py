@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from bisheng.workflow.common.node import NodeType
 from bisheng.workflow.nodes.agent.agent import AgentNode
 from bisheng.workflow.nodes.code.code import CodeNode
@@ -7,11 +9,19 @@ from bisheng.workflow.nodes.input.input import InputNode
 from bisheng.workflow.nodes.knowledge_retriever.knowledge_retriever import KnowledgeRetriever
 from bisheng.workflow.nodes.llm.llm import LLMNode
 from bisheng.workflow.nodes.output.output import OutputNode
+from bisheng.workflow.nodes.platform_agent.platform_agent import PlatformAgentNode
+from bisheng.workflow.nodes.platform_knowledge_retriever.platform_knowledge_retriever import (
+    PlatformKnowledgeRetrieverNode,
+)
 from bisheng.workflow.nodes.qa_retriever.qa_retriever import QARetrieverNode
 from bisheng.workflow.nodes.rag.rag import RagNode
 from bisheng.workflow.nodes.report.report import ReportNode
 from bisheng.workflow.nodes.start.start import StartNode
 from bisheng.workflow.nodes.tool.tool import ToolNode
+
+if TYPE_CHECKING:
+    from bisheng.workflow.nodes.base import BaseNode
+
 
 NODE_CLASS_MAP = {
     NodeType.START.value: StartNode,
@@ -24,6 +34,8 @@ NODE_CLASS_MAP = {
     NodeType.QA_RETRIEVER.value: QARetrieverNode,
     NodeType.CONDITION.value: ConditionNode,
     NodeType.AGENT.value: AgentNode,
+    NodeType.PLATFORM_AGENT.value: PlatformAgentNode,
+    NodeType.PLATFORM_KNOWLEDGE_RETRIEVER.value: PlatformKnowledgeRetrieverNode,
     NodeType.CODE.value: CodeNode,
     NodeType.LLM.value: LLMNode,
     NodeType.KNOWLEDGE_RETRIEVER.value: KnowledgeRetriever,
@@ -32,12 +44,12 @@ NODE_CLASS_MAP = {
 
 class NodeFactory:
     @classmethod
-    def get_node_class(cls, node_type: str) -> 'BaseNode':
+    def get_node_class(cls, node_type: str) -> "BaseNode":
         return NODE_CLASS_MAP.get(node_type)
 
     @classmethod
-    def instance_node(cls, node_type: str, **kwargs) -> 'BaseNode':
+    def instance_node(cls, node_type: str, **kwargs) -> "BaseNode":
         node_class = cls.get_node_class(node_type)
         if node_class is None:
-            raise Exception(f'Unknown node type:{node_type}')
+            raise Exception(f"Unknown node type:{node_type}")
         return node_class(**kwargs)

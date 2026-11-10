@@ -1,0 +1,209 @@
+{
+  "nodes": [
+    {
+      "id": "start_example",
+      "type": "flowNode",
+      "position": {
+        "x": 0,
+        "y": 100
+      },
+      "data": {
+        "id": "start_example",
+        "type": "start",
+        "name": "开始",
+        "description": "F125 人工输入（模拟）",
+        "v": 3,
+        "group_params": [
+          {
+            "name": "",
+            "params": [
+              {
+                "key": "guide_word",
+                "value": "",
+                "type": "textarea"
+              },
+              {
+                "key": "guide_question",
+                "value": [],
+                "type": "input_list"
+              },
+              {
+                "key": "preset_question",
+                "value": [],
+                "type": "input_list",
+                "global": "item:input_list"
+              },
+              {
+                "key": "chat_history",
+                "value": 10,
+                "type": "chat_history_num"
+              },
+              {
+                "key": "custom_variables",
+                "value": [],
+                "type": "global_var"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "platform_agent_example",
+      "type": "flowNode",
+      "position": {
+        "x": 300,
+        "y": 100
+      },
+      "data": {
+        "id": "platform_agent_example",
+        "type": "platform_agent",
+        "name": "平台 Agent（模拟数据）",
+        "description": "F125 人工输入（模拟）",
+        "v": 3,
+        "group_params": [
+          {
+            "name": "",
+            "params": [
+              {
+                "key": "agent_ref",
+                "value": {
+                  "agent_id": "mock:interaction",
+                  "version_id": "v1"
+                },
+                "type": "platform_agent",
+                "required": true
+              },
+              {
+                "key": "input_bindings",
+                "value": {
+                  "query": {
+                    "source": "constant",
+                    "value": "请提供处理本次请求所需的补充信息。"
+                  }
+                },
+                "type": "platform_agent_bindings",
+                "hidden": true
+              },
+              {
+                "key": "result",
+                "value": [
+                  {
+                    "key": "result",
+                    "type": "any"
+                  },
+                  {
+                    "key": "result#answer",
+                    "type": "string"
+                  }
+                ],
+                "type": "var",
+                "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
+                "hidden": true
+              },
+              {
+                "key": "execution_mode",
+                "value": "async",
+                "type": "internal",
+                "hidden": true
+              },
+              {
+                "key": "allow_interaction",
+                "value": true,
+                "type": "internal",
+                "hidden": true
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "output_example",
+      "type": "flowNode",
+      "position": {
+        "x": 600,
+        "y": 100
+      },
+      "data": {
+        "id": "output_example",
+        "type": "output",
+        "name": "输出",
+        "description": "F125 人工输入（模拟）",
+        "v": 2,
+        "group_params": [
+          {
+            "name": "",
+            "params": [
+              {
+                "key": "output_result",
+                "value": {
+                  "type": "",
+                  "value": ""
+                },
+                "type": "output_form",
+                "options": []
+              },
+              {
+                "key": "message",
+                "value": {
+                  "msg": "{{#platform_agent_example.result#answer#}}",
+                  "files": []
+                },
+                "type": "var_textarea_file",
+                "global": "key"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "end_example",
+      "type": "flowNode",
+      "position": {
+        "x": 900,
+        "y": 100
+      },
+      "data": {
+        "id": "end_example",
+        "type": "end",
+        "name": "结束",
+        "description": "F125 人工输入（模拟）",
+        "v": 3,
+        "group_params": []
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_0",
+      "source": "start_example",
+      "sourceHandle": "right_handle",
+      "target": "platform_agent_example",
+      "targetHandle": "left_handle",
+      "type": "customEdge"
+    },
+    {
+      "id": "edge_1",
+      "source": "platform_agent_example",
+      "sourceHandle": "right_handle",
+      "target": "output_example",
+      "targetHandle": "left_handle",
+      "type": "customEdge"
+    },
+    {
+      "id": "edge_2",
+      "source": "output_example",
+      "sourceHandle": "right_handle",
+      "target": "end_example",
+      "targetHandle": "left_handle",
+      "type": "customEdge"
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 0.8
+  }
+}

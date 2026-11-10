@@ -3,7 +3,7 @@ import json
 import os
 import re
 import ssl
-from typing import Union
+from typing import Literal, Union
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from celery.schedules import crontab
@@ -157,10 +157,48 @@ class ObjectStore(BaseModel):
     minio: MinioConf | None = Field(default_factory=MinioConf, description="minio Configure")
 
 
+class PlatformAgentConf(BaseModel):
+    """平台 Agent 默认提供 Mock。真实来源由服务端显式设置。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["disabled", "mock", "real"] = "mock"
+    connection_id: str = Field(default="kunlian", min_length=1, max_length=128)
+    policy_revision: str = Field(default="mock-v1", min_length=1, max_length=128)
+    mock_subjects: dict[str, Literal["A", "B", "C"]] = Field(default_factory=dict)
+    invoke_timeout_seconds: float = Field(default=5, gt=0, le=300)
+    max_payload_bytes: int = Field(default=1048576, strict=True, ge=1024, le=16777216)
+    base_url: str | None = None
+
+
+class PlatformKnowledgeConf(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["disabled", "mock", "real"] = "mock"
+    connection_id: str = Field(default="kunlian", min_length=1, max_length=128)
+    policy_revision: str = Field(default="mock-v1", min_length=1, max_length=128)
+    mock_subjects: dict[str, Literal["A", "B", "C"]] = Field(default_factory=dict)
+    # TODO [F120][EXT-03] 联调确认真实检索的时间和响应大小预算。
+    retrieve_timeout_seconds: float = Field(default=5, gt=0, le=300)
+    max_payload_bytes: int = Field(default=1048576, strict=True, ge=1024, le=16777216)
+
+
+class WorkflowRegistrationConf(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["disabled", "mock", "real"] = "disabled"
+    connection_id: str = Field(default="kunlian", min_length=1, max_length=128)
+    scope_generation: int = Field(default=1, ge=1, strict=True)
+    tenant_ids: set[int] = Field(default_factory=set)
+    workflow_ids: set[str] = Field(default_factory=set)
+
+
 class WorkflowConf(BaseModel):
     """Workflow Configuration"""
 
     max_steps: int = Field(default=50, description="Maximum number of steps a node can run")
+    platform_agent: PlatformAgentConf = Field(default_factory=PlatformAgentConf)
+    platform_knowledge: PlatformKnowledgeConf = Field(default_factory=PlatformKnowledgeConf)
     timeout: int = Field(default=720, description="Node timeout (min)")
     auto_rerun_on_open: bool = Field(
         default=False,
@@ -955,6 +993,7 @@ class Settings(BaseModel):
     """Application Settings"""
 
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra="ignore")
+    kunlian_workflow_registration: WorkflowRegistrationConf = Field(default_factory=WorkflowRegistrationConf)
 
     chains: dict = {}
     agents: dict = {}

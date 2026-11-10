@@ -1,0 +1,46 @@
+# 毕昇后端联调配置片段，合入测试环境现有的 sso_sync 节点。
+# 替换所有尖括号占位符。实际秘密由部署环境注入。
+sso_sync:
+  kunlian:
+    directory_enabled: false
+    login_enabled: false
+    connection_id: "<毕昇填写_连接标识>"
+    # 1 是模型默认值。实际登记或变更时，根据 SQL 当前策略版本分配。
+    policy_revision: 1
+    issuer: "http://ai-idp.comlansh.com:30001"
+    client_id: "<昆联提供_正式客户端ID>"
+    allowed_tenant_id: "ce767a2d-e46a-4e11-bd1d-50c8ea4ef4b7"
+    allowed_workspace_ids:
+      - "<昆联确认_允许的workspace_id>"
+    state_semantics_revision: "<双方确认_状态语义版本>"
+    # 双方约定后填入正整数秒数。300 秒同步周期是调度参数。
+    max_directory_age_seconds: null
+
+    public_origin: "https://<毕昇填写_测试站点主机>"
+    redirect_uri: "https://<毕昇填写_测试站点主机>/api/kunlian/callback"
+    logout_redirect_uri: "https://<毕昇填写_测试站点主机>/api/kunlian/logout/callback"
+    approved_test_origins:
+      - "http://ai-idp.comlansh.com:30001"
+    endpoint_allowlist:
+      - "http://ai-idp.comlansh.com:30001/.well-known/openid-configuration"
+      - "http://ai-idp.comlansh.com:30001/oidc/jwks"
+      - "http://ai-idp.comlansh.com:30001/oidc/introspect"
+      - "http://ai-idp.comlansh.com:30001/api/v1/integrations/user-sync/users"
+      - "http://ai-idp.comlansh.com:30001/api/v1/integrations/user-sync/tenants/{tenant_id}/users/{id}"
+
+    # 昆联分别交付 client_secret 和全租户只读 X-API-Key。
+    client_secret_reference: "env:KUNLIAN_CLIENT_SECRET"
+    sync_key_reference: "env:KUNLIAN_SYNC_API_KEY"
+    internal_key_id: "<毕昇填写_内部签名KeyID>"
+    internal_secret_reference: "env:KUNLIAN_INTERNAL_SECRET"
+    trusted_gateway_networks:
+      - "<毕昇填写_后端实际看到的网关源地址CIDR>"
+    csrf_secret_reference: "env:KUNLIAN_BACKEND_CSRF_SECRET"
+    # 毕昇生成 Fernet 密钥，各 API／Worker 实例使用同一密钥。
+    encryption_secret_reference: "env:KUNLIAN_BACKEND_FERNET_KEY"
+
+    sync_interval_seconds: 300
+    page_size: 20
+
+# 登录就绪要求专属测试环境的 multi_tenant.enabled 已为 true。
+# 复用该环境现有 SQL、Redis、Worker／Beat 和 OpenFGA 配置。

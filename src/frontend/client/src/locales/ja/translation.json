@@ -2817,6 +2817,41 @@
     }
   },
   "appChat": {
-    "stopped": "停止済み"
+    "stopped": "停止済み",
+    "agentInteraction": {
+      "deadline": "{{time}} までに送信してください",
+      "submit": "回答を送信",
+      "submitUnavailable": "回答を送信できませんでした。文字数と接続を確認してください。"
+    },
+    "agentLongTask": {
+      "WAITING_INPUT": "追加情報の入力待ち",
+      "SUBMIT_QUEUED": "BiSheng が回答を受け取りました。送信待ちです。",
+      "SUBMIT_IN_FLIGHT": "昆聯へ回答を送信中",
+      "SUBMIT_UNKNOWN": "昆聯が回答を受け取ったか確認中",
+      "SUBMIT_UNCONFIRMED": "確認期限が切れました。昆聯が回答を受け取ったかは未確認です。",
+      "INPUT_TIMEOUT": "入力期限が切れました",
+      "SUBMIT_TIMEOUT": "回答の送信待ちがタイムアウトしました",
+      "SUBMIT_REJECTED": "昆聯が回答を拒否しました",
+      "RUN_TIMEOUT": "Agent の結果待ちがタイムアウトしました",
+      "PREPARED": "Agent を起動中",
+      "WAITING_RESULT": "Agent の結果を待機中",
+      "SUCCEEDED": "Agent が完了しました",
+      "STOPPED": "ワークフローを停止しました",
+      "TIMED_OUT": "ワークフローがタイムアウトしました",
+      "FAILED": "Agent の実行に失敗しました",
+      "INTENT": "Agent のキャンセル要求を準備中",
+      "SENT": "Agent のキャンセルを要求し、確認を待っています",
+      "ACCEPTED": "Agent がキャンセルを受け付けました",
+      "CONFIRMED": "Agent のキャンセルが確定しました",
+      "REJECTED": "Agent がキャンセルを拒否しました",
+      "UNCONFIRMED": "Agent のキャンセルは未確認です",
+      "START_TIMEOUT": "Agent の起動要求を送信する前にタイムアウトしました",
+      "START_UNKNOWN": "Agent の起動を確認できませんでした",
+      "RESULT_UNAVAILABLE": "Agent は完了しましたが結果を取得できませんでした",
+      "UNSUPPORTED_INPUT": "Agent の入力待ちには対応していません",
+      "REMOTE_SUCCEEDED": "連携先の Agent が完了しました",
+      "REMOTE_FAILED": "連携先の Agent が失敗しました",
+      "REMOTE_CANCELLED": "連携先の Agent がキャンセルされました"
+    }
   }
 }

@@ -602,10 +602,123 @@
       "output": {
         "label": "出力変数"
       }
+    },
+  "platform_knowledge_retriever": {
+      "name": "昆聯ナレッジ検索",
+      "description": "昆聯のナレッジベースから情報を検索します",
+      "user_question": {
+        "label": "質問",
+        "placeholder": "質問"
+      },
+      "knowledge": {
+        "label": "検索範囲"
+      },
+      "top_k": {
+        "label": "取得件数"
+      },
+      "retrieved_result": {
+        "label": "検索結果"
+      },
+      "retrieved_text": {
+        "label": "結果テキスト"
+      },
+      "citations": {
+        "label": "出典"
+      },
+      "hit_count": {
+        "label": "結果件数"
+      },
+      "provider_mode": {
+        "label": "データソース"
+      },
+      "resource_id": {
+        "label": "ナレッジベース"
+      },
+      "execution_id": {
+        "label": "実行 ID"
+      },
+      "call_id": {
+        "label": "リクエスト ID"
+      }
+    },
+    "platform_agent": {
+      "name": "プラットフォーム Agent",
+      "description": "固定バージョンの Agent を呼び出す",
+      "agent_ref": {
+        "label": "プラットフォーム Agent"
+      },
+      "input_bindings": {
+        "label": "入力元"
+      },
+      "result": {
+        "label": "実行結果"
+      },
+      "provider_mode": {
+        "label": "データソース"
+      },
+      "execution_id": {
+        "label": "フロー実行 ID"
+      },
+      "agent_run_id": {
+        "label": "Agent 実行 ID"
+      }
     }
   },
   "rerunWorkflow": "再実行",
   "type": "タイプ",
   "valueType": "値のタイプ",
-  "selectDbType": "データベースの種類を選択"
+  "selectDbType": "データベースの種類を選択",
+  "platformAgent": {
+    "executionMode": "実行方式",
+    "syncMode": "同期",
+    "asyncMode": "非同期",
+    "allowInteraction": "Agent からの入力要求を許可",
+    "interactionHint": "隔離されたモック環境で、対話対応バージョンを非同期実行する場合に有効にできます。",
+    "interactionUnsupported": "現在の環境、実行方式、または固定バージョンは入力に対応していません。設定を変更するか入力を無効にしてください。",
+    "mock": "模擬データ",
+    "agent": "プラットフォーム Agent",
+    "version": "固定バージョン",
+    "source": "入力元",
+    "constant": "定数",
+    "variable": "変数",
+    "chooseAgent": "Agent を選択",
+    "chooseVersion": "バージョンを選択",
+    "loadMore": "さらに読み込む",
+    "empty": "利用可能な Agent がありません",
+    "versionChanged": "バージョンを変更しました。入力と後続の参照を確認してください。",
+    "outputSchema": "出力構造",
+    "invalidConfiguration": "バージョンと入力設定を確認してください",
+    "invalidJson": "有効な JSON 値を入力してください",
+    "variableHint": "node_id.result#field",
+    "textHint": "テキストを入力",
+    "jsonHint": "JSON 値。例: 0、false、null、[]、{}",
+    "chooseVariable": "前のノードの変数を選択",
+    "queryFailed": "リソースの取得に失敗しました。再試行してください。",
+    "removeBinding": "マッピングを削除",
+    "obsoleteInput": "このバージョンでは使用できない入力です。マッピングを削除してください。",
+    "identityNotReady": "テナント情報を取得できていません。ページを更新するか再度ログインしてください。"
+  },
+  "toolNames": {
+    "time": "時間",
+    "calculator": "計算機",
+    "code": "コード実行"
+  },
+  "kunlianRegistration": {
+    "localOnline": "Bisheng で公開済み",
+    "localOffline": "Bisheng で公開停止",
+    "PENDING": "昆聯への同期を待機中",
+    "REGISTERED": "昆聯に登録済み",
+    "FAILED": "昆聯への登録に失敗しました。再試行を待機中です。",
+    "REMOVED": "昆聯から削除済み",
+    "INCOMPLETE": "昆聯への登録情報が不足しています"
+  },
+  "platformKnowledge": {
+    "questionSource": "質問の入力元",
+    "variable": "変数",
+    "constant": "固定テキスト",
+    "invalidQuestion": "有効な質問を入力してください",
+    "invalidKnowledge": "利用可能なナレッジベースを選択してください",
+    "choose": "ナレッジベースを選択",
+    "empty": "利用可能なナレッジベースがありません"
+  }
 }

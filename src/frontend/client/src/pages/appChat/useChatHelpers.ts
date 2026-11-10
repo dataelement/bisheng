@@ -230,6 +230,8 @@ export default function useChatHelpers() {
                         reasoning_log,
                         thought
                     } = data
+                    if (msg?.agent_long_task_execution_id && message_id &&
+                        messages.some(item => String(item.id) === String(message_id))) return messages
                     // 兼容后端问题
                     const _files = Array.isArray(files) ? files : []
 

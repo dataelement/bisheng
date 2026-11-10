@@ -8,6 +8,7 @@ from queue import Queue
 from typing import Any
 
 from fastapi import Request, WebSocket, WebSocketDisconnect, status
+from fastapi.websockets import WebSocketState
 from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
@@ -186,7 +187,9 @@ class ChatManager:
             try:
                 self.clear_client(client_key)
                 await chat_client.close()
-                await chat_client.websocket.close(code=code, reason=reason)
+                websocket = chat_client.websocket
+                if websocket.client_state is not WebSocketState.DISCONNECTED:
+                    await websocket.close(code=code, reason=reason)
             except RuntimeError as exc:
                 # This is to catch the following error:
                 #  Unexpected ASGI message 'websocket.close', after sending 'websocket.close'
@@ -249,6 +252,8 @@ class ChatManager:
         session_subject=None,
         execution_snapshot: dict | None = None,
         message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
+        platform_agent_runtime=None,
+        platform_knowledge_runtime=None,
     ):
         start_time = time.time()
         client_key = generate_uuid()
@@ -278,6 +283,8 @@ class ChatManager:
                 websocket,
                 session_subject=session_subject,
                 execution_snapshot=execution_snapshot,
+                platform_agent_runtime=platform_agent_runtime,
+                platform_knowledge_runtime=platform_knowledge_runtime,
             )
         await self.accept_client(client_key, chat_client, websocket)
         logger.debug(f"act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}")

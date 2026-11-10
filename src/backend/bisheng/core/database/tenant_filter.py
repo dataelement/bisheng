@@ -40,6 +40,8 @@ _EXCLUDED_TABLES: set[str] = {"user_tenant", "channel_info_source"}
 # exactly how knowledgefile / flowversion / roleaccess / userrole / ...
 # kept writing child-tenant resources to root in v2.5.
 _TENANT_AWARE_MODEL_MODULES = (
+    "bisheng.workflow.domain.models.platform_agent_execution",
+    "bisheng.workflow.domain.models.kunlian_registration",
     "bisheng.sso_sync.domain.models.kunlian",
     "bisheng.user.domain.models.user",
     "bisheng.user.domain.models.external_identity_projection",
@@ -141,6 +143,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.app_publish.domain.models",
     "bisheng.app_runtime.domain.models",
     "bisheng.app_governance.domain.models",
+    "bisheng.workflow.domain.models.kunlian_workflow_run",
     # `resource_tier` has NO tenant_id column: resource tiers are platform-level
     # and shared across tenants (AC-44). Listing it here only guarantees
     # SQLModel.metadata sees the table; _discover_tenant_aware_tables() skips it

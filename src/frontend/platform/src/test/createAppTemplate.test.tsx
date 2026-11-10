@@ -4,11 +4,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import CreateApp from '@/pages/BuildPage/CreateApp';
 import { AppType } from '@/types/app';
 
-const api = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), save: vi.fn(), navigate: vi.fn(), error: vi.fn() }));
+const api = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), createWorkflow: vi.fn(), save: vi.fn(), navigate: vi.fn(), error: vi.fn() }));
 vi.mock('@/contexts/locationContext', async () => ({ locationContext: (await import('react')).createContext({ appConfig: { isPro: false } }) }));
 vi.mock('@/controllers/API', () => ({ readTempsDatabase: api.list }));
 vi.mock('@/controllers/API/assistant', () => ({ createAssistantsApi: api.create, saveAssistanttApi: api.save }));
-vi.mock('@/controllers/API/workflow', () => ({ copyReportTemplate: vi.fn(), createWorkflowApi: vi.fn() }));
+vi.mock('@/controllers/API/workflow', () => ({ copyReportTemplate: vi.fn(), createWorkflowApi: api.createWorkflow }));
 vi.mock('@/controllers/API/finetune', () => ({ getAssistantModelConfig: vi.fn(), getLlmDefaultModel: vi.fn() }));
 vi.mock('@/controllers/request', () => ({ showApiError: api.error }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => api.navigate }));
@@ -60,4 +60,19 @@ it('discards an outstanding template detail response after switching tenants', a
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue('Old tenant-fixed')).not.toBeInTheDocument();
     expect(api.create).not.toHaveBeenCalled();
+});
+
+it('reuses the request key when the same Kunlian workflow creation is retried', async () => {
+    api.createWorkflow.mockRejectedValueOnce(new Error('pending')).mockResolvedValueOnce({ id: 'workflow' });
+    const ref = createRef<ComponentRef<typeof CreateApp>>();
+    render(<CreateApp ref={ref} kunlianEntry />);
+    act(() => { ref.current!.open(AppType.FLOW, 0); });
+    fireEvent.change(screen.getByPlaceholderText('giveWorkflowAName'), { target: { value: 'Fixture' } });
+    fireEvent.click(screen.getByRole('button', { name: 'create' }));
+    await waitFor(() => expect(api.error).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'create' }));
+    await waitFor(() => expect(api.navigate).toHaveBeenCalledWith('/flow/workflow'));
+    const key = api.createWorkflow.mock.calls[0][4];
+    expect(key).toEqual(expect.any(String));
+    expect(api.createWorkflow.mock.calls[1][4]).toBe(key);
 });

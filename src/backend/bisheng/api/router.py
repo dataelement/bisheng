@@ -74,6 +74,7 @@ from bisheng.sso_sync.api.router import router as sso_sync_router
 from bisheng.telemetry_search.api.router import router as telemetry_search_router
 from bisheng.tenant.api.router import router as tenant_router
 from bisheng.user_group.api.router import router as user_group_router
+from bisheng.workflow.api.router import router as platform_agent_router
 from bisheng.workstation.api.endpoints.conversation_export import router as conversation_export_router
 
 router = APIRouter(
@@ -100,6 +101,7 @@ router.include_router(evaluation_router)
 router.include_router(tag_router)
 router.include_router(llm_router)
 router.include_router(workflow_router)
+router.include_router(platform_agent_router)
 router.include_router(mark_router)
 router.include_router(workstation_router)
 router.include_router(conversation_export_router)

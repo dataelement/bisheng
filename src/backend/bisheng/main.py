@@ -13,6 +13,7 @@ from bisheng.app_runtime.api.endpoints.runtime_material import router as runtime
 from bisheng.app_runtime.api.exception_handlers import register_app_runtime_exception_handlers
 from bisheng.app_runtime.domain.services.app_access_log_service import flush_pending_access_records
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.flow import PlatformAgentError, PlatformKnowledgeError, WorkflowRegistrationError
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
 from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
@@ -43,6 +44,8 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
         if isinstance(detail, dict) and isinstance(detail.get("code"), str):
             msg["data"] = {"code": detail["code"]}
     elif isinstance(exc, BaseErrorCode):
+        if isinstance(exc, (PlatformAgentError, PlatformKnowledgeError, WorkflowRegistrationError)):
+            http_status = exc.http_status
         data = {"exception": str(exc), **exc.kwargs} if exc.kwargs else {"exception": str(exc)}
         msg = {"status_code": exc.code, "status_message": exc.message, "data": data}
     else:

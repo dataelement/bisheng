@@ -17,6 +17,8 @@ from bisheng.open_api.domain.context import OpenApiExecutionSnapshot
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, workflow_stateful_worker
 from bisheng.workflow.common.workflow import WorkflowStatus
+from bisheng.workflow.domain.schemas.platform_agent import uses_platform_agent
+from bisheng.workflow.domain.schemas.platform_knowledge import uses_platform_knowledge
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +61,15 @@ class PublishedWorkflowService:
         message_id: int | None,
     ) -> WorkflowInvocation:
         workflow_info = await cls.get_workflow(workflow_id)
+        has_knowledge = uses_platform_knowledge(workflow_info.data)
+        if has_knowledge:
+            from bisheng.workflow.application.platform_knowledge import actual_user_from_snapshot
+
+            actual_user_from_snapshot(execution_snapshot, operator_user_id)
+        elif uses_platform_agent(workflow_info.data):
+            from bisheng.workflow.application.platform_agent import actual_user_from_snapshot
+
+            actual_user_from_snapshot(execution_snapshot, operator_user_id)
         if not session_id:
             chat_id = uuid.uuid4().hex
             unique_id = f"{chat_id}_async_task_id"
@@ -82,28 +93,142 @@ class PublishedWorkflowService:
                 session_subject,
             )
 
-        callback = RedisCallback(unique_id, workflow_id, chat_id, operator_user_id, source="api")
+        callback = RedisCallback(
+            unique_id,
+            workflow_id,
+            chat_id,
+            operator_user_id,
+            source="api",
+            **({"tenant_id": execution_snapshot.tenant_id} if has_knowledge else {}),
+        )
         worker = await workflow_stateful_worker.find_task_node(chat_id)
         status_info = callback.get_workflow_status()
         snapshot_data = execution_snapshot.model_dump(mode="json")
         if not status_info:
-            callback.set_workflow_data(workflow_info.data, override=override)
+            reference = None
+            options = {}
+            if uses_platform_agent(workflow_info.data):
+                from bisheng.workflow.application.platform_agent import actual_user_from_snapshot, get_service
+
+                service = get_service()
+                login_user = actual_user_from_snapshot(execution_snapshot, operator_user_id)
+                # 在正式图上应用普通节点覆盖后冻结。平台节点和发布绑定不得覆盖。
+                execution, dispatch_id = await service.admit(
+                    login_user, workflow_id, unique_id, workflow_info.data, "PUBLISHED", override=override
+                )
+                reference = {"execution_id": execution["execution_id"], "dispatch_id": dispatch_id}
+                callback.set_platform_agent_reference(execution["execution_id"])
+                options = {
+                    "kwargs": {"platform_agent_execution": reference},
+                    "headers": {"tenant_id": login_user.tenant_id},
+                }
+            else:
+                getattr(callback, "clear_platform_agent_reference", lambda: None)()
+            knowledge_reference = None
+            if has_knowledge:
+                from bisheng.workflow.application.platform_knowledge import actual_user_from_snapshot, prepare_execution
+
+                login_user = actual_user_from_snapshot(execution_snapshot, operator_user_id)
+                try:
+                    frozen_graph, knowledge_reference = await prepare_execution(
+                        login_user,
+                        workflow_id,
+                        unique_id,
+                        workflow_info.data,
+                        published=True,
+                        override=override,
+                    )
+                except Exception:
+                    if reference:
+                        service.repository.request_stop(reference["execution_id"])
+                    raise
+                callback.bind_platform_knowledge_execution(knowledge_reference["execution_id"])
+                options.setdefault("kwargs", {})["platform_knowledge_execution"] = knowledge_reference
+                options["headers"] = {"tenant_id": login_user.tenant_id}
+                callback.set_workflow_data(frozen_graph)
+            else:
+                if isinstance(getattr(callback, "platform_knowledge_execution_id", None), str):
+                    callback.clear_platform_knowledge_reference()
+                callback.set_workflow_data(workflow_info.data, override=override)
             callback.set_workflow_status(WorkflowStatus.WAITING.value)
-            execute_workflow.apply_async(
-                [unique_id, workflow_id, chat_id, operator_user_id, "api", snapshot_data],
-                queue=worker,
-            )
+            try:
+                execute_workflow.apply_async(
+                    [unique_id, workflow_id, chat_id, operator_user_id, "api", snapshot_data], queue=worker, **options
+                )
+            except Exception:
+                if reference:
+                    service.repository.request_stop(reference["execution_id"])
+                if knowledge_reference:
+                    callback.knowledge_store.stop(knowledge_reference["execution_id"])
+                raise
         elif status_info["status"] == WorkflowStatus.INPUT.value:
             if not user_input:
                 raise WorkFlowInvalidUserInputError(msg="workflow waiting for user input, but user input not provided")
             if not message_id:
                 raise WorkFlowInvalidUserInputError(msg="message_id is required when providing user input")
-            await callback.async_set_user_input(user_input, message_id, verify_input=True)
-            await callback.async_set_workflow_status(WorkflowStatus.INPUT_OVER.value)
-            continue_workflow.apply_async(
-                [unique_id, workflow_id, chat_id, operator_user_id, "api", snapshot_data],
-                queue=worker,
-            )
+            options = {}
+            execution_id = callback.get_platform_agent_reference()
+            if execution_id:
+                from bisheng.workflow.application.platform_agent import actual_user_from_snapshot, get_service
+
+                service = get_service()
+                login_user = actual_user_from_snapshot(execution_snapshot, operator_user_id)
+                actor = await service.authorize(login_user, workflow_id, "use")
+                record = service.repository.get_execution(execution_id)
+                if (record["user_id"], record["tenant_id"]) != (actor.user_id, actor.tenant_id):
+                    from bisheng.common.errcode.flow import PlatformAgentExecutionError
+
+                    raise PlatformAgentExecutionError()
+            knowledge_id = getattr(callback, "platform_knowledge_execution_id", None)
+            has_knowledge_run = isinstance(knowledge_id, str)
+            agent_reference = None
+            knowledge_reference = None
+
+            def claim_agent_resume():
+                nonlocal agent_reference
+                dispatch_id = service.repository.prepare_resume(execution_id, actor)
+                agent_reference = {"execution_id": execution_id, "dispatch_id": dispatch_id}
+                options.setdefault("kwargs", {})["platform_agent_execution"] = agent_reference
+                options["headers"] = {"tenant_id": actor.tenant_id}
+
+            async def claim_protected_resume():
+                nonlocal knowledge_reference
+                from bisheng.workflow.application.platform_knowledge import (
+                    BrowserPlatformKnowledgeRuntime,
+                    actual_user_from_snapshot,
+                )
+
+                if execution_id:
+                    claim_agent_resume()
+                login_user = actual_user_from_snapshot(execution_snapshot, operator_user_id)
+                knowledge_reference = await BrowserPlatformKnowledgeRuntime().resume(
+                    login_user,
+                    workflow_id,
+                    unique_id,
+                    knowledge_id,
+                )
+                options.setdefault("kwargs", {})["platform_knowledge_execution"] = knowledge_reference
+                options["headers"] = {"tenant_id": login_user.tenant_id}
+
+            if not has_knowledge_run:
+                await callback.async_set_user_input(user_input, message_id, verify_input=True)
+                if execution_id:
+                    claim_agent_resume()
+            try:
+                if has_knowledge_run:
+                    await callback.async_set_user_input(
+                        user_input, message_id, verify_input=True, before_write=claim_protected_resume
+                    )
+                await callback.async_set_workflow_status(WorkflowStatus.INPUT_OVER.value)
+                continue_workflow.apply_async(
+                    [unique_id, workflow_id, chat_id, operator_user_id, "api", snapshot_data], queue=worker, **options
+                )
+            except Exception:
+                if agent_reference:
+                    service.repository.request_stop(execution_id)
+                if knowledge_reference:
+                    callback.knowledge_store.stop(knowledge_id)
+                raise
         return WorkflowInvocation(
             workflow=workflow_info,
             callback=callback,
@@ -140,6 +265,15 @@ class PublishedWorkflowService:
         if session.flow_id != workflow_id:
             raise NotFoundError.http_exception()
         callback = RedisCallback(session_id, workflow_id, chat_id, operator_user_id, source="api")
+        reference = getattr(callback, "get_platform_agent_reference", lambda: None)()
+        if isinstance(reference, str) and len(reference) == 32 and session_subject.subject_type == "user":
+            from bisheng.common.dependencies.user_deps import UserPayload
+            from bisheng.workflow.application.platform_agent import BrowserPlatformAgentRuntime
+
+            user = UserPayload(user_id=operator_user_id, tenant_id=session_subject.tenant_id, user_role=[])
+            if await BrowserPlatformAgentRuntime().stop_long(user, workflow_id, session_id, reference):
+                await callback.async_set_workflow_stop(long_committed=True)
+                return
         await callback.async_set_workflow_stop()
 
     @classmethod

@@ -14,6 +14,7 @@ import { Popover,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popove
 import { darkContext } from "@/contexts/darkContext";
 import { TabsContext } from "@/contexts/tabsContext";
 import { copyReportTemplate,createWorkFlowVersion,deleteVersion,getVersionDetails,getWorkFlowVersions,onlineWorkflow,onlineWorkflowApi,saveWorkflow,updateVersion } from "@/controllers/API/workflow";
+import { getFlowApi } from "@/controllers/API/flow";
 import { handleUiRequest, showApiError } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
@@ -83,15 +84,22 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             }))
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
         }
-        await saveWorkflow(version.id, {
-            ...flow,
-            name: version.name,
-            data: {
-                nodes: flow.nodes,
-                edges: flow.edges,
-                viewport: flow.viewport
-            }
-        })
+        if (version.registration_frozen && hasChanged) {
+            toast.show({ type: 'warning', message: t('currentVersionLaunched') });
+            return;
+        }
+        if (!version.registration_frozen) {
+            const saved = await saveWorkflow(version.id, {
+                ...flow,
+                name: version.name,
+                data: {
+                    nodes: flow.nodes,
+                    edges: flow.edges,
+                    viewport: flow.viewport
+                }
+            }, version.draft_revision)
+            applySavedRevision(version.id, saved)
+        }
         setFlow({ ...flow })
         // api请求
         const res = await onlineWorkflowApi({ flow_id: flow.id, version_id: version.id, status: 2 })
@@ -106,10 +114,14 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             toast.show({ type: 'success', message: String(`${version?.name} ${t('hasBeenOffline')}`) })
             flow.status = 1
             await refrenshVersions()
+            if (flow.kunlian_registration) {
+                const current = await getFlowApi(flow.id);
+                setFlow({ ...flow, kunlian_registration: current.kunlian_registration });
+            }
         }
     }
     const handleSaveClick = async () => {
-        if (isOnlineVersionFun()) {
+        if (isOnlineVersionFun() || version.registration_frozen) {
             toast.show({ type: 'warning', message: String(t('currentVersionLaunched') ?? '') })
             return !hasChanged
         }
@@ -123,7 +135,8 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 edges: flow.edges,
                 viewport: flow.viewport
             }
-        })
+        }, version.draft_revision)
+        applySavedRevision(version.id, res)
         res && toast.show({ type: 'success', message: String(t('changesSaved') ?? '') })
         return res
     }
@@ -176,7 +189,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     // versions
     const [loading, setLoading] = useState(false)
     const { flow: f, setFlow, setFitView } = useFlowStore()
-    const { versions, version, lastVersionIndexRef, isOnlineVersion, isOnlineVersionFun, changeName, deleteVersion, refrenshVersions, setCurrentVersion } = useVersion(flow)
+    const { versions, version, lastVersionIndexRef, isOnlineVersion, isOnlineVersionFun, changeName, deleteVersion, refrenshVersions, setCurrentVersion, applySavedRevision } = useVersion(flow)
     // 切换版本
     const handleChangeVersion = async (versionId) => {
         setLoading(true)
@@ -262,6 +275,12 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         </h1>
                         <p className="text-xs text-gray-500 mt-0.5">
                             <Tag size="small" color="default" icon={<ShieldCheck size={14} />} className="whitespace-nowrap bg-[#E8EBF2] dark:bg-gray-950">{t('currentVersion', { versionName: version?.name })}</Tag>
+                            {flow.kunlian_registration && <>
+                                <Tag size="small" color="default">{t(flow.status === 2 ? 'kunlianRegistration.localOnline' : 'kunlianRegistration.localOffline')}</Tag>
+                                <Tag size="small" color="default">
+                                    {t(`kunlianRegistration.${flow.kunlian_registration.availability === 'INCOMPLETE' ? 'INCOMPLETE' : flow.kunlian_registration.status}`)}
+                                </Tag>
+                            </>}
                         </p>
                     </div>
                 </div>
@@ -320,11 +339,16 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                                 <RadioGroup value={version.id + ''} onValueChange={handleUiRequest(async (vid) => {
                                     if (isOnlineVersionFun() && hasChanged) return setModelVersionId(vid)
                                     const { edges, nodes, viewport } = flow
-                                    await updateVersion(version.id, {
-                                        name: version.name, description: '', data: {
-                                            edges, nodes, viewport
-                                        }
-                                    })
+                                    if (!version.registration_frozen) {
+                                        const saved = await updateVersion(version.id, {
+                                            name: version.name, description: '', data: {
+                                                edges, nodes, viewport
+                                            }
+                                        }, version.draft_revision)
+                                        applySavedRevision(version.id, saved)
+                                    } else if (hasChanged) {
+                                        return setModelVersionId(vid)
+                                    }
                                     await handleChangeVersion(vid)
                                 })} className="gap-0">
                                     {versions.map((vers, index) => (
@@ -498,9 +522,15 @@ const useVersion = (flow) => {
         void refrenshVersions().catch(showApiError)
     }, [])
     // 修改名字
+    const applySavedRevision = (id, saved) => {
+        if (!saved?.draft_revision) return;
+        setVersions(previous => previous.map(item => item.id === id ? { ...item, draft_revision: saved.draft_revision } : item));
+        if (version?.id === id) setVersion({ ...version, draft_revision: saved.draft_revision });
+    };
     const handleChangName = (id, name) => {
-        return updateVersion(id, { name, description: '', data: null }).then(() => {
+        return updateVersion(id, { name, description: '', data: null }, versions.find(item => item.id === id)?.draft_revision).then(saved => {
             setVersions(versions.map(version => version.id === id ? { ...version, name } : version))
+            applySavedRevision(id, saved);
         })
     }
     const handleDeleteVersion = (version, index) => {
@@ -532,6 +562,7 @@ const useVersion = (flow) => {
         refrenshVersions,
         deleteVersion: handleDeleteVersion,
         changeName: handleChangName,
+        applySavedRevision,
     }
 }
 // 离开页面保存提示

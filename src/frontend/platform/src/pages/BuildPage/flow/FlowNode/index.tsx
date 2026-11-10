@@ -137,7 +137,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
 
         if (hasKnowledgeSearchEnabled) {
             baseClasses.push('rag');
-            baseClasses.push('knowledge_retriever');
+            baseClasses.push('knowledge_retriever', 'platform_knowledge_retriever');
         }
         return baseClasses.includes(node.type) ? 'w-auto min-w-80' : '';
     }, [node.type, hasKnowledgeSearchEnabled]);
@@ -160,7 +160,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 if (param.key === key) {
                     const prefix = key.split('_')[0]
                     const values = Array.isArray(value) ? value : [value];
-                    param.value = values.map(item => ({
+                    param.value = node.type === "platform_knowledge_retriever" ? values : values.map(item => ({
                         key: `${prefix}_${item.key}`,
                         label: `${prefix}_${item.label}`
                     }))

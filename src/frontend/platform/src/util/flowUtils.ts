@@ -179,6 +179,9 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
                     const questionId = varName.split('#')[1]
                     const quwstionStr = varNameCn?.split('/')[1] || ''
                     return param.value.some(item => item.key === questionId && item.label === quwstionStr)
+                } else if (node.data.type === 'platform_agent' && param.key === 'result') {
+                    return param.value.some(item => `${node.id}.${item.key}` === varName) ||
+                        (param.value[0]?.type === 'array' && varName.startsWith(`${node.id}.result#`) && /^\d+$/.test(varName.split('#')[1] || ''))
                 } else if (param.type === 'input_list' && varName.indexOf('preset_question') !== -1) {
                     const questionId = varName.split('#')[1]
                     const quwstionStr = varNameCn?.split('/')[1] || ''

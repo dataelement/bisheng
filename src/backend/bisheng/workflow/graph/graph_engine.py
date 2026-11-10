@@ -1,3 +1,4 @@
+import asyncio
 import operator
 from typing import Annotated, Any
 
@@ -12,6 +13,7 @@ from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import UserInputData
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.common.workflow import WorkflowStatus
+from bisheng.workflow.domain.schemas.platform_agent import node_configuration, platform_nodes
 from bisheng.workflow.edges.edges import EdgeManage
 from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.nodes.base import BaseNode
@@ -36,6 +38,10 @@ class GraphEngine:
         callback: BaseCallback = None,
         tenant_id: int = None,
         flow_user_id: int = None,
+        platform_agent_context: dict | None = None,
+        platform_knowledge_context=None,
+        redact_errors: bool = False,
+        node_entry_check=None,
     ):
         self.user_id = user_id
         self.workflow_id = workflow_id
@@ -52,6 +58,14 @@ class GraphEngine:
         # knowledge-space retrieval by the config author's view_file when the
         # permission toggle is OFF (see design decision 2/3).
         self.flow_user_id = flow_user_id
+        self.platform_agent_context = platform_agent_context
+        self.long_agent_graph = bool(
+            platform_agent_context
+            and any(node_configuration(node).execution_mode == "async" for node in platform_nodes(workflow_data or {}))
+        )
+        self.platform_knowledge_context = platform_knowledge_context
+        self.redact_errors = redact_errors
+        self.node_entry_check = node_entry_check
 
         # node_id: NodeInstance
         self.nodes_map = {}
@@ -97,10 +111,7 @@ class GraphEngine:
         # output Node followed by afake Nodes are used to handle interrupts
         if node_instance.type == NodeType.OUTPUT.value:
             fake_node = self.nodes_map[f"{node_instance.id}_fake"]
-            if self.async_mode:
-                self.graph_builder.add_node(fake_node.id, fake_node.arun)
-            else:
-                self.graph_builder.add_node(fake_node.id, fake_node.run)
+            self.graph_builder.add_node(fake_node.id, self._node_runner(fake_node))
             self.graph_builder.add_edge(node_instance.id, fake_node.id)
             self.graph_builder.add_conditional_edges(
                 fake_node.id, node_instance.route_node, {node_id: node_id for node_id in target_node_ids}
@@ -228,6 +239,8 @@ class GraphEngine:
                 workflow_name=self.workflow_name,
                 tenant_id=self.tenant_id,
                 flow_user_id=self.flow_user_id,
+                platform_agent_context=self.platform_agent_context,
+                platform_knowledge_context=self.platform_knowledge_context,
             )
             if node_instance.is_condition_node():
                 self.condition_nodes.append(node_instance.id)
@@ -237,10 +250,7 @@ class GraphEngine:
                 self.nodes_next_nodes[node_instance.id] = self.edges.get_next_nodes(node_instance.id)
 
             # add node into langgraph
-            if self.async_mode:
-                self.graph_builder.add_node(node_instance.id, node_instance.arun)
-            else:
-                self.graph_builder.add_node(node_instance.id, node_instance.run)
+            self.graph_builder.add_node(node_instance.id, self._node_runner(node_instance))
 
             # find special node
             if node_instance.type == NodeType.START.value:
@@ -250,6 +260,11 @@ class GraphEngine:
             elif node_instance.type == NodeType.INPUT.value:
                 # Node that needs to abort receiving user input
                 interrupt_nodes.append(node_instance.id)
+            elif (
+                node_instance.type == NodeType.PLATFORM_AGENT.value
+                and (self.platform_agent_context or {}).get("interaction_node") == node_instance.id
+            ):
+                interrupt_nodes.append(node_instance.id)
             elif node_instance.type == NodeType.OUTPUT.value:
                 # Node that needs to abort receiving user input
                 fake_node = OutputFakeNode(
@@ -258,6 +273,31 @@ class GraphEngine:
                 self.nodes_map[fake_node.id] = fake_node
                 interrupt_nodes.append(fake_node.id)
         return start_node, end_nodes, interrupt_nodes
+
+    def _node_runner(self, node):
+        if not self.long_agent_graph and self.node_entry_check is None:
+            return node.arun if self.async_mode else node.run
+
+        def assert_live():
+            if self.long_agent_graph:
+                context = self.platform_agent_context
+                context["service"].repository.assert_long_graph_live(context["dispatch"])
+            if self.node_entry_check is not None:
+                self.node_entry_check()
+
+        if self.async_mode:
+
+            async def run_async(state):
+                await asyncio.to_thread(assert_live)
+                return await node.arun(state)
+
+            return run_async
+
+        def run_sync(state):
+            assert_live()
+            return node.run(state)
+
+        return run_sync
 
     def build_nodes(self):
         nodes = self.workflow_data.get("nodes", [])
@@ -294,20 +334,26 @@ class GraphEngine:
         #           'wb') as f:
         #     f.write(self.graph.get_graph().draw_mermaid_png())
 
+    def _record_run_failure(self, error: Exception, *, async_run: bool = False):
+        self.status = WorkflowStatus.FAILED.value
+        if self.redact_errors:
+            self.reason = "EXECUTION_FAILED"
+            logger.warning("graph run failed, error_type={}", type(error).__name__)
+            return
+        if isinstance(error, IgnoreException):
+            logger.warning("graph ignore error: {}", error)
+        else:
+            logger.exception("graph arun error" if async_run else "graph run error")
+        self.reason = str(error)
+
     def _run(self, input_data: Any):
         try:
             self.status = WorkflowStatus.RUNNING.value
             for _ in self.graph.stream(input_data, config=self.graph_config):
                 pass
             self.judge_status()
-        except IgnoreException as e:
-            logger.warning(f"graph ignore error: {e}")
-            self.status = WorkflowStatus.FAILED.value
-            self.reason = str(e)
         except Exception as e:
-            logger.exception("graph run error")
-            self.status = WorkflowStatus.FAILED.value
-            self.reason = str(e)
+            self._record_run_failure(e)
 
     async def _arun(self, input_data: Any):
         try:
@@ -315,14 +361,8 @@ class GraphEngine:
             async for _ in self.graph.astream(input_data, config=self.graph_config):
                 pass
             self.judge_status()
-        except IgnoreException as e:
-            logger.warning(f"graph ignore error: {e}")
-            self.status = WorkflowStatus.FAILED.value
-            self.reason = str(e)
         except Exception as e:
-            logger.exception("graph arun error")
-            self.status = WorkflowStatus.FAILED.value
-            self.reason = str(e)
+            self._record_run_failure(e, async_run=True)
 
     def run(self):
         self._run({"flag": True})

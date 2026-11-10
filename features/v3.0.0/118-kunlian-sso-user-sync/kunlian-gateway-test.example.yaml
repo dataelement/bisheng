@@ -1,0 +1,35 @@
+# 商业网关联调配置片段，合入测试环境现有的 custom 节点。
+# 替换所有尖括号占位符。实际秘密由部署环境注入。
+custom:
+  kunlian:
+    enabled: false
+    connection-id: "<毕昇填写_连接标识>"
+    issuer: "http://ai-idp.comlansh.com:30001"
+    client-id: "<昆联提供_正式客户端ID>"
+    allowed-tenant-id: "ce767a2d-e46a-4e11-bd1d-50c8ea4ef4b7"
+    allowed-workspace-ids:
+      - "<昆联确认_允许的workspace_id>"
+
+    public-origin: "https://<毕昇填写_测试站点主机>"
+    redirect-uri: "https://<毕昇填写_测试站点主机>/api/kunlian/callback"
+    logout-redirect-uri: "https://<毕昇填写_测试站点主机>/api/kunlian/logout/callback"
+    backend-base-url: "<毕昇填写_后端直连Origin>"
+    # 后端直连使用 HTTP 时，将相同的完整 Origin 加入下列列表。
+    approved-service-origins: []
+    approved-test-origins:
+      - "http://ai-idp.comlansh.com:30001"
+    endpoint-allowlist:
+      - "http://ai-idp.comlansh.com:30001/.well-known/openid-configuration"
+      - "http://ai-idp.comlansh.com:30001/oidc/authorize"
+      - "http://ai-idp.comlansh.com:30001/oidc/token"
+      - "http://ai-idp.comlansh.com:30001/oidc/jwks"
+      - "http://ai-idp.comlansh.com:30001/oidc/logout"
+
+    # 昆联交付的 client_secret，通过环境变量注入。
+    client-secret-reference: "env:KUNLIAN_CLIENT_SECRET"
+    # 毕昇签发，Key ID 和秘密须与后端一致。
+    internal-key-id: "<毕昇填写_内部签名KeyID>"
+    internal-secret-reference: "env:KUNLIAN_INTERNAL_SECRET"
+    # 毕昇生成，32 字节随机值的标准 Base64，各网关实例使用同一密钥。
+    transaction-encryption-secret-reference: "env:KUNLIAN_GATEWAY_TRANSACTION_KEY"
+    # 网关实例使用测试环境已有的共享 Redis 保存登录事务。

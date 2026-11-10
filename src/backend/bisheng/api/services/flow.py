@@ -63,7 +63,18 @@ class FlowService(BaseService):
             resource_id=flow_id,
             action="visible",
         )
+        from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
+
+        flow = await FlowDao.aget_flow_by_id(flow_id)
+        if not flow:
+            return resp_200(data={"data": [], "total": 0})
+        scope = workflow_scope(flow.tenant_id, flow_id, user=user)
         data = FlowVersionDao.get_list_by_flow(flow_id)
+        if scope:
+            from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+            drafts = RegistrationRepository().draft_versions(scope, flow_id)
+            data = [{**version.model_dump(), **drafts[version.id]} for version in data if version.id in drafts]
         # Include Deleted Versions
         all_version_num = FlowVersionDao.count_list_by_flow(flow_id, include_delete=True)
         return resp_200(data={"data": data, "total": all_version_num})
@@ -86,6 +97,15 @@ class FlowService(BaseService):
             resource_id=data.flow_id,
             action="visible",
         )
+        from bisheng.workflow.application.kunlian_workflow_management import version_revision, workflow_scope
+
+        flow = await FlowDao.aget_flow_by_id(data.flow_id)
+        if not flow:
+            return NotFoundVersionError.return_resp()
+        if scope := workflow_scope(flow.tenant_id, flow.id, user=user):
+            if data.tenant_id != scope.tenant_id:
+                raise UnAuthorizedError()
+            return resp_200(data={**data.model_dump(), "draft_revision": version_revision(data)})
         return resp_200(data=data)
 
     @classmethod
@@ -118,7 +138,21 @@ class FlowService(BaseService):
         if version_info.is_current == 1:
             return CurVersionDelError.return_resp()
 
-        FlowVersionDao.delete_flow_version(version_id)
+        from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
+        from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+        if scope := workflow_scope(flow_info.tenant_id, flow_info.id, user=user):
+            RegistrationRepository().manage_offline_version(scope, flow_info.id, version_id, delete=True)
+            return resp_200()
+
+        from bisheng.workflow.application.platform_node_publication import uses_platform_nodes
+
+        if uses_platform_nodes(version_info.data) or uses_platform_nodes(flow_info.data):
+            from bisheng.workflow.application.platform_agent import get_service
+
+            get_service().repository.delete_version(version_id)
+        else:
+            FlowVersionDao.delete_flow_version(version_id)
         return resp_200()
 
     @classmethod
@@ -147,6 +181,10 @@ class FlowService(BaseService):
         )
         flow_info = await cls.judge_flow_write_permission(login_user, flow_id)
 
+        from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
+        from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+        scope = workflow_scope(flow_info.tenant_id, flow_id, user=login_user)
         if flow_info.status == FlowStatus.ONLINE.value:
             return WorkFlowOnlineEditError.return_resp()
 
@@ -157,8 +195,21 @@ class FlowService(BaseService):
         if version_info.is_current == 1:
             return resp_200()
 
+        if scope:
+            RegistrationRepository().manage_offline_version(scope, flow_id, version_id)
+            await cls.update_flow_hook(request, login_user, flow_info)
+            return resp_200()
+
         # Modify the version selected by the user for the current version
-        changed = await FlowVersionDao.change_current_version(flow_id, version_info)
+        from bisheng.workflow.application.platform_node_publication import uses_platform_nodes
+
+        if uses_platform_nodes(version_info.data) or uses_platform_nodes(flow_info.data):
+            from bisheng.workflow.application.platform_agent import get_service
+
+            get_service().repository.change_version(flow_id, version_id)
+            changed = True
+        else:
+            changed = await FlowVersionDao.change_current_version(flow_id, version_info)
         if not changed:
             return NotFoundVersionError.return_resp()
 
@@ -175,12 +226,20 @@ class FlowService(BaseService):
         await telemetry_service.log_event(
             user_id=user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
-        await cls.judge_flow_write_permission(user, flow_id)
+        flow = await cls.judge_flow_write_permission(user, flow_id)
+        from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
+
+        scope = workflow_scope(flow.tenant_id, flow_id, user=user)
 
         exist_version = FlowVersionDao.get_version_by_name(flow_id, flow_version.name)
         if exist_version:
             return VersionNameExistsError.return_resp()
 
+        from bisheng.workflow.application.platform_node_publication import uses_platform_nodes
+        from bisheng.workflow.domain.repositories.platform_node_publication import PlatformNodePublication
+
+        if uses_platform_nodes(flow_version.data):
+            flow_version.data = PlatformNodePublication.candidate_graph(flow_version.data)
         flow_version = FlowVersion(
             flow_id=flow_id,
             name=flow_version.name,
@@ -190,6 +249,8 @@ class FlowService(BaseService):
             original_version_id=flow_version.original_version_id,
             flow_type=flow_version.flow_type,
         )
+        if scope:
+            flow_version.tenant_id = scope.tenant_id
 
         # Create New Version
         flow_version = FlowVersionDao.create_version(flow_version)
@@ -212,8 +273,30 @@ class FlowService(BaseService):
             return NotFoundVersionError.return_resp()
         flow_info = await cls.judge_flow_write_permission(user, version_info.flow_id)
 
+        from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
+        from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+        if scope := workflow_scope(flow_info.tenant_id, flow_info.id, user=user):
+            updated = RegistrationRepository().save_draft(
+                scope, flow_info.id, version_id, request.headers.get("If-Match"),
+                data=flow_version.data, name=flow_version.name, description=flow_version.description,
+            )
+            await cls.update_flow_hook(request, user, flow_info)
+            return resp_200(data=updated)
+
         if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value and flow_version.data:
             return WorkFlowOnlineEditError.return_resp()
+
+        from bisheng.workflow.application.platform_node_publication import uses_platform_nodes
+
+        if any(uses_platform_nodes(graph) for graph in (version_info.data, flow_info.data, flow_version.data)):
+            from bisheng.workflow.application.platform_agent import get_service
+
+            updated = get_service().repository.save_version(
+                version_id, data=flow_version.data, name=flow_version.name, description=flow_version.description
+            )
+            await cls.update_flow_hook(request, user, flow_info)
+            return resp_200(data=updated)
 
         version_info.name = flow_version.name if flow_version.name else version_info.name
         version_info.description = flow_version.description if flow_version.description else version_info.description
@@ -252,9 +335,14 @@ class FlowService(BaseService):
         ):
             raise UnAuthorizedError()
 
-        flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)
+        from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
+        from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
 
+        scope = workflow_scope(flow_info.tenant_id, flow_info.id, user=login_user)
+        flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)
         payload = jsonable_encoder(flow_info)
+        if scope and not has_share_grant:
+            payload["kunlian_registration"] = RegistrationRepository().status(scope, flow_id)
         payload["can_share"] = await check_business_action(
             login_user,
             resource_type="workflow",

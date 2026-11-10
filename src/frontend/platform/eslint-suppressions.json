@@ -1530,11 +1530,8 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 7
     },
-    "no-restricted-syntax": {
-      "count": 3
-    },
     "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 1
     }
   },
   "src/pages/BuildPage/flow/flowStore.ts": {

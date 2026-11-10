@@ -30,7 +30,7 @@ from bisheng.permission.application.business_authorization import (
     check_business_action,
     require_business_action,
 )
-from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
+from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
@@ -388,6 +388,8 @@ async def workflow_ws(
 ):
     from bisheng.common.errcode.sso_sync import KunlianError
     from bisheng.sso_sync.application.browser import browser_entry_scope, websocket_message_admission
+    from bisheng.workflow.application.platform_agent import BrowserPlatformAgentRuntime
+    from bisheng.workflow.application.platform_knowledge import BrowserPlatformKnowledgeRuntime
 
     try:
         async with browser_entry_scope(login_user):
@@ -395,7 +397,15 @@ async def workflow_ws(
             admission = websocket_message_admission(websocket, login_user)
             options = {"message_admission": admission} if admission is not None else {}
             await chat_manager.dispatch_client(
-                websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket, **options
+                websocket,
+                workflow_id,
+                chat_id,
+                login_user,
+                WorkType.WORKFLOW,
+                websocket,
+                platform_agent_runtime=BrowserPlatformAgentRuntime(),
+                platform_knowledge_runtime=BrowserPlatformKnowledgeRuntime(),
+                **options,
             )
     except KunlianError as error:
         await websocket.close(code=1013 if error.http_status == 503 else 1008, reason=error.reason_code)
@@ -410,7 +420,6 @@ async def workflow_ws(
 
 
 @router.post("/create", status_code=201)
-@require_quota(QuotaResourceType.WORKFLOW)
 async def create_flow(
     *,
     request: Request,
@@ -418,6 +427,30 @@ async def create_flow(
     login_user: UserPayload = Depends(UserPayload.get_app_creator_user),
 ):
     """Create a new flow."""
+    from bisheng.workflow.application.kunlian_workflow_creation import create_registered_workflow
+    from bisheng.workflow.application.kunlian_workflow_management import mock_scope
+    from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+    async def check_quota():
+        await QuotaService.check_quota(
+            user_id=login_user.user_id, resource_type=QuotaResourceType.WORKFLOW,
+            tenant_id=login_user.tenant_id, login_user=login_user,
+        )
+
+    if key := request.headers.get("Idempotency-Key"):
+        if not mock_scope(login_user.tenant_id):
+            from bisheng.common.errcode.flow import WorkflowRegistrationUnavailable
+
+            raise WorkflowRegistrationUnavailable()
+        async def project_owner(workflow):
+            await FlowService.create_flow_hook(request, login_user, workflow)
+
+        workflow, version_id = await create_registered_workflow(
+            RegistrationRepository(), login_user, flow, key, check_quota, project_owner
+        )
+        return resp_200(data=FlowRead.model_validate(workflow).model_copy(update={"version_id": version_id}))
+
+    await check_quota()
     # Determine if the user repeats the skill name
     with get_sync_db_session() as session:
         if session.exec(
@@ -551,18 +584,28 @@ async def update_flow(
 
     flow_data = flow.model_dump(exclude_unset=True)
 
-    if db_flow.status == FlowStatus.ONLINE.value and (
-        "status" not in flow_data or flow_data["status"] != FlowStatus.OFFLINE.value
-    ):
-        raise WorkFlowOnlineEditError.http_exception()
+    from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
 
-    for key, value in flow_data.items():
-        if key in ["data", "create_time", "update_time"]:
-            continue
-        if key == "logo" and not value:
-            continue
-        setattr(db_flow, key, value)
-    db_flow = await FlowDao.aupdate_flow(db_flow)
+    if (scope := workflow_scope(db_flow.tenant_id, flow_id, user=login_user)) and "status" in flow_data:
+        from bisheng.common.errcode.flow import WorkflowRegistrationConflict
+        from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+        if flow_data["status"] != FlowStatus.OFFLINE.value:
+            raise WorkflowRegistrationConflict()
+        await require_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="unpublish")
+        RegistrationRepository().unpublish(scope, flow_id)
+        db_flow.status = FlowStatus.OFFLINE.value
+    else:
+        if db_flow.status == FlowStatus.ONLINE.value and flow_data.get("status") != FlowStatus.OFFLINE.value:
+            raise WorkFlowOnlineEditError.http_exception()
+
+        for key, value in flow_data.items():
+            if key in ["data", "create_time", "update_time"]:
+                continue
+            if key == "logo" and not value:
+                continue
+            setattr(db_flow, key, value)
+        db_flow = await FlowDao.aupdate_flow(db_flow)
     await telemetry_service.log_event(
         user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
     )

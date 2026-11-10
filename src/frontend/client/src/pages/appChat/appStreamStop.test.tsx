@@ -31,7 +31,7 @@ class TestSocket {
 }
 
 let sequence = 0;
-function openConversation(flowType: number, awaitingFirstToken = false) {
+function openConversation(flowType: number, awaitingFirstToken = false, onLongTaskStatus = jest.fn()) {
     const chatId = `stream-stop-${++sequence}`;
     const wrapper = ({ children }: { children: ReactNode }) => (
         <RecoilRoot initializeState={({ set }) => {
@@ -53,7 +53,7 @@ function openConversation(flowType: number, awaitingFirstToken = false) {
     );
     const hook = renderHook(() => {
         const helpers = useChatHelpers();
-        useWebSocket(helpers);
+        useWebSocket(helpers, { onLongTaskStatus });
         return { chat: useRecoilValue(currentChatState), running: useRecoilValue(currentRunningState),
             submit: useSetRecoilState(submitDataState) };
     }, { wrapper });
@@ -61,7 +61,54 @@ function openConversation(flowType: number, awaitingFirstToken = false) {
     return { ...hook, chatId, socket: TestSocket.latest };
 }
 
+test('long-task cancellation updates status after stop without reopening output', () => {
+    const receiveStatus = jest.fn();
+    const { result, socket, chatId, unmount } = openConversation(10, false, receiveStatus);
+    const summary = { execution_id: 'run-1', local_state: 'STOPPED', remote_state: 'CANCELLED', cancel_state: 'CONFIRMED' };
+    act(() => result.current.submit({ action: 'stop' }));
+    act(() => {
+        socket.receive({ category: 'processing', type: 'info', chat_id: chatId, message: { agent_long_task: summary } });
+        socket.receive({ category: 'processing', type: 'info', chat_id: chatId, message: { agent_long_task: { ...summary, execution_id: 'old-run' } } });
+        socket.receive({ category: 'processing', type: 'info', chat_id: chatId, message: { agent_long_task: { ...summary, remote_state: 'RUNNING', cancel_state: 'ACCEPTED' } } });
+    });
+    expect(receiveStatus).toHaveBeenCalledTimes(1);
+    expect(receiveStatus).toHaveBeenCalledWith(chatId, summary);
+    expect(result.current.chat?.messages[2]).toMatchObject({ message: 'partial answer', stopped: true });
+    unmount();
+    closeAppChatWebSocket(chatId);
+});
+
 beforeEach(() => { Object.defineProperty(window, 'WebSocket', { value: TestSocket, configurable: true }); });
+
+test('buffered frames cannot roll back the latest long-task cancellation or progress', () => {
+    const receiveStatus = jest.fn();
+    const { socket, chatId, unmount } = openConversation(10, false, receiveStatus);
+    const summary = { execution_id: 'run-1', local_state: 'TIMED_OUT', remote_state: 'RUNNING', cancel_state: 'ACCEPTED', progress: 70 };
+    act(() => {
+        for (const status of [summary, { ...summary, cancel_state: 'SENT' }, { ...summary, progress: 10 }]) {
+            socket.receive({ category: 'processing', type: 'info', chat_id: chatId, message: { agent_long_task: status } });
+        }
+    });
+    expect(receiveStatus).toHaveBeenCalledTimes(1);
+    expect(receiveStatus).toHaveBeenCalledWith(chatId, summary);
+    unmount();
+    closeAppChatWebSocket(chatId);
+});
+
+test('a later Agent node has its own status and ignores events from the earlier node', () => {
+    const receiveStatus = jest.fn();
+    const { socket, chatId, unmount } = openConversation(10, false, receiveStatus);
+    const first = { execution_id: 'run-1', call_sequence: 1, local_state: 'SUCCEEDED', remote_state: 'SUCCEEDED', cancel_state: 'NONE' };
+    const second = { ...first, call_sequence: 2, local_state: 'WAITING_RESULT', remote_state: 'RUNNING' };
+    act(() => {
+        for (const status of [first, second, first]) {
+            socket.receive({ category: 'processing', type: 'info', chat_id: chatId, message: { agent_long_task: status } });
+        }
+    });
+    expect(receiveStatus.mock.calls).toEqual([[chatId, first], [chatId, second]]);
+    unmount();
+    closeAppChatWebSocket(chatId);
+});
 
 test.each([5, 10])('flow type %s manual stop freezes partial output through late frames and terminal close', (flowType) => {
     const { result, socket, chatId, unmount } = openConversation(flowType);

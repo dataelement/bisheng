@@ -1,0 +1,137 @@
+{
+  "head": "b870baa3fd5d4d99d6512577e06066653f489d35",
+  "files": {
+    "src/backend/bisheng/api/router.py": "60c27517e5c2dedf9b90b6bca18c422ba387d6d8d62384734913d7ccfea90399",
+    "src/backend/bisheng/api/services/flow.py": "ba8ea404fc4edf3137596db1cf02bc0de7015b7448ee0084864252b4fd03c3e8",
+    "src/backend/bisheng/api/services/workflow.py": "cf8b1eabe985ba9f96536c1f297bf016c96a0d0261c95c70859662efe0c60784",
+    "src/backend/bisheng/api/v1/endpoints.py": "ca7011d04a0fce2656739a0ea2de59a6563ee18788a1be18c9cef2aba9afad55",
+    "src/backend/bisheng/api/v1/workflow.py": "6c83145bc96919f404cc9c1e3b2470ad5d491c04dafd7e2ea14a2f8fa6a9a9b7",
+    "src/backend/bisheng/common/chat/clients/workflow_client.py": "16964df0b41e63e8024bdd145bc2882ac993970d308c6ede5330cc9c2940cb50",
+    "src/backend/bisheng/common/chat/manager.py": "d13c5c32b99ca09a32621730d23f78358886d6a14fd97a77a18c3c54ac39c154",
+    "src/backend/bisheng/common/errcode/flow.py": "c55e66db0e6981e00b71461f477faaf95e1ac3b61dba78997311a66b2edc2172",
+    "src/backend/bisheng/core/config/settings.py": "f7a07203dcbb1b5b0fe5a2cb9d083e6ad86817bfab67d73b611648b0ce1787dd",
+    "src/backend/bisheng/core/database/tenant_filter.py": "e9a917996b6b09aeaab9fab521d2309956a55f46819fb817e8571c0a4d58daa6",
+    "src/backend/bisheng/main.py": "68b2f4b6750702e3963870cf0854d69570309b17e3323d452bb85fcfdd868082",
+    "src/backend/bisheng/public_endpoints/api/endpoints/workflow.py": "2a3329533a9fc70cff2660f784ddebd7a56b4c97979429940fad827a9d8557c1",
+    "src/backend/bisheng/worker/workflow/redis_callback.py": "0df9f093a693e488e3631de0b7be96c1386aaa6214406cd9975416c15cc438ff",
+    "src/backend/bisheng/worker/workflow/tasks.py": "28acefe242241cb914d355161a99b1ee79da70929aca48c74aa6dbd1e84d5529",
+    "src/backend/bisheng/workflow/api/endpoints/platform_agent.py": "bbf3f89075db5a13d658c7cd9227cfac2b7b9d6704733375e0635494c7f78201",
+    "src/backend/bisheng/workflow/api/router.py": "cb1cfb93cae5b386614eec954a263ccd2627d13a41721fcb39973d8e63c6ac95",
+    "src/backend/bisheng/workflow/application/platform_agent.py": "985cb5969172749bfec22eb898a70841dd84c0eb6ea750e3ccbb5a00d053aaca",
+    "src/backend/bisheng/workflow/common/node.py": "958ffea3ab5dbbf7fc2aa6f923a0592c0625a78ea62db9bf9e86333c770c208e",
+    "src/backend/bisheng/workflow/domain/clients/platform_agent.py": "c336c53639a5655d61e3970dd7d63f740a090f683e2c56ca769dbc14207471f1",
+    "src/backend/bisheng/workflow/domain/clients/platform_agent_mock.py": "eed6b4047c6abe54916d59a1ef4524972e025dbf5494c22cab2c6246b2abb4fa",
+    "src/backend/bisheng/workflow/domain/models/platform_agent_execution.py": "6501d203ca2aa07e35beb52fc264a643cfa22e2f8faf4df4f722bd2957c46efc",
+    "src/backend/bisheng/workflow/domain/repositories/platform_agent.py": "94ecbd1232e8e91ce4fba9f66ee607320ff80f1bdf281749441b6a710573fd8e",
+    "src/backend/bisheng/workflow/domain/schemas/platform_agent.py": "04d15bcd6579a2f64c897b8be69f0928a6e889c75a3505f42724d05ce89d4cb0",
+    "src/backend/bisheng/workflow/domain/services/platform_agent_service.py": "77bd9cb1dcfedd60db71894373b26174c7e4299662f67566a3c40108731cc85f",
+    "src/backend/bisheng/workflow/domain/services/published_workflow_service.py": "0e5c6270a43978cffe355d8c0fcf07e21512763852fc4f12b6b16ed68697f042",
+    "src/backend/bisheng/workflow/graph/graph_engine.py": "d65da2ba422111ad8c9aff543a1bea767a67f616434cb31550b6b39346b5664e",
+    "src/backend/bisheng/workflow/graph/workflow.py": "5c2face812ccc5e83c0e40174e473310ebdfac0290cdc9bcf5e60767c09be1c7",
+    "src/backend/bisheng/workflow/nodes/base.py": "35f73f6816a4bef3fbabde1bdbaa2b58d138ec0640a4269b0a45525ca0646f40",
+    "src/backend/bisheng/workflow/nodes/node_manage.py": "00a5779c6134b60d4adf224bf68948708f4aae4f32a8c2ad5779ec034539343e",
+    "src/backend/bisheng/workflow/nodes/platform_agent/__init__.py": "bd645a3f07250d959b2b4bacd7fccf7a310091c3b14c8fd73f23772d54c9ebe4",
+    "src/backend/bisheng/workflow/nodes/platform_agent/platform_agent.py": "a2ae3166b6f1996841a5999ac9771db7f68727291f3de579eef93a3428c33c92",
+    "src/backend/test/sso/test_kunlian_ws_admission.py": "be4218bb14637715b6aee22e2278200f7b50a7c0fcfbd7d41795a553cd138203",
+    "src/backend/test/workflow/conftest.py": "fc403d71defe6a5a16d0794378b3756cee06c4b271d17ee7203c352a4fc1c0ee",
+    "src/backend/test/workflow/test_platform_agent_api.py": "e6734c3131b7d85ec27c76d6306a9b8499ce48142d6da3da126f4016b5606b62",
+    "src/backend/test/workflow/test_platform_agent_contract.py": "183702954db663e57820e0b74face88575a8989274bf15f1388049654f2ed44c",
+    "src/backend/test/workflow/test_platform_agent_e2e.py": "ee4507743bb22a252c21054763c0761fd13b2d8d92bcbc5a7f9b81e289482b67",
+    "src/backend/test/workflow/test_platform_agent_entrypoints.py": "81e8ae8751b3a7d36b123c966f99e429d08a836f57daa2312ee7a54bf29f5cea",
+    "src/backend/test/workflow/test_platform_agent_imports.py": "157fb73fa56ebdd489f0b7d6753ba2806d760bb6180ffbff903fb4b102d9eb8a",
+    "src/backend/test/workflow/test_platform_agent_node.py": "acb49702f4981d7e5e276590fcfa80058f66465bcb98f9c0d4c33c55a81e36b5",
+    "src/backend/test/workflow/test_platform_agent_repository.py": "910d70e16a689e099e06e5a5d835e88167efcaa39bfa6df4b56ccdf81b31bd12",
+    "src/backend/test/workflow/test_platform_agent_workflow_bridge.py": "ecf342d39f82c109ea469dcc4fd297f57b71446add4c2c9f2c820a9ef69a32ec",
+    "src/frontend/client/src/locales/en/api_errors.gen.json": "409fecc0cca4b63d5ad2097359ddf4235558bb4f8d4d81f43c4035d96607ebce",
+    "src/frontend/client/src/locales/ja/api_errors.gen.json": "394761be67fbbb53213a2878d801b73cc679d07c27d93f0b6542cb0250a36976",
+    "src/frontend/client/src/locales/zh-Hans/api_errors.gen.json": "a90661adfb15aebce1b5e2329a1a91cae388b0e9e5d58952a502c8281fe7e87f",
+    "src/frontend/packages/locales/src/api_errors/en.json": "409fecc0cca4b63d5ad2097359ddf4235558bb4f8d4d81f43c4035d96607ebce",
+    "src/frontend/packages/locales/src/api_errors/ja.json": "394761be67fbbb53213a2878d801b73cc679d07c27d93f0b6542cb0250a36976",
+    "src/frontend/packages/locales/src/api_errors/zh-Hans.json": "a90661adfb15aebce1b5e2329a1a91cae388b0e9e5d58952a502c8281fe7e87f",
+    "src/frontend/platform/eslint-suppressions.json": "f89471f062730667e1630831f9fec8232adea958d710ce0caa3bd9a3056e24a4",
+    "src/frontend/platform/public/locales/en-US/api_errors.json": "409fecc0cca4b63d5ad2097359ddf4235558bb4f8d4d81f43c4035d96607ebce",
+    "src/frontend/platform/public/locales/en-US/flow.json": "e23e7aa4e0a2b585eaa6af4baf8f5dc7a315c6abc293935c71cac3cee142229f",
+    "src/frontend/platform/public/locales/ja/api_errors.json": "394761be67fbbb53213a2878d801b73cc679d07c27d93f0b6542cb0250a36976",
+    "src/frontend/platform/public/locales/ja/flow.json": "f99b0745b5d2d72862ae80cbecf192f1a161db5821f23d991d17785b56567862",
+    "src/frontend/platform/public/locales/zh-Hans/api_errors.json": "a90661adfb15aebce1b5e2329a1a91cae388b0e9e5d58952a502c8281fe7e87f",
+    "src/frontend/platform/public/locales/zh-Hans/flow.json": "f1d9891332a047a8df7a2ec288af59fc5d0867affd2badc96b4d9513c12f66f5",
+    "src/frontend/platform/src/controllers/API/workflow.test.ts": "cf6701d8d3aa1886158c9a9c7c3489f3f071dc15766f1ccc50425b9a7bc92963",
+    "src/frontend/platform/src/controllers/API/workflow.ts": "3bafecce44a2959d2f244b50d6229c3ee3dbc2fb5563412ed84d8420f89adbe3",
+    "src/frontend/platform/src/pages/BuildPage/flow/FlowNode/NodeLogo.tsx": "6436f5616d6ce583dc2b12bdab49b39e9b8a8a4850f7e381942ab627b4b5866f",
+    "src/frontend/platform/src/pages/BuildPage/flow/FlowNode/Parameter.tsx": "fb0b2850b8de9598690efd4615d5a772d135e4cc610d07ab70524cffee92f42a",
+    "src/frontend/platform/src/pages/BuildPage/flow/FlowNode/RunLog.tsx": "98532a3d2badc93e2aae2ab0d0df8a9522afe7ff863693261fdef6743164b6db",
+    "src/frontend/platform/src/pages/BuildPage/flow/FlowNode/RunTest.tsx": "e11d569d0b3c6c47a65d0ca150827d8faad6f0ecf302b7a1cb91422b62a027e7",
+    "src/frontend/platform/src/pages/BuildPage/flow/FlowNode/component/PlatformAgentItem.test.tsx": "6ca4d609cfb8e4b8bac4dfbcd1684780fc92df14b63ab77ad6700cac3604ba5b",
+    "src/frontend/platform/src/pages/BuildPage/flow/FlowNode/component/PlatformAgentItem.tsx": "cb7d1332d674495d6b697ebba4f32e49d95263f208e5f9f089730b73ce337c8c",
+    "src/frontend/platform/src/pages/BuildPage/flow/Sidebar.tsx": "de3f28a433e7a1586ef079b710d7278fa9237a12a24c1330187e7a02ae524e82",
+    "src/frontend/platform/src/types/flow/index.ts": "c60e51444da4ea7d6dfdeed4b375cfbb4b5abebc5c816e0a414e8c5d66d61302",
+    "src/frontend/platform/src/util/flowUtils.ts": "ff822bdeb502a150dfdea7710a16311d6ea922be3c36c8a5a5c6a0b419c8d83e"
+  },
+  "review": {
+    "date": "2026-11-05",
+    "initial_manifest_sha256": "d51f4beef1d74076c641100609e91df86c4efc88c6319f1e042eb92fd5717528",
+    "modified_files": [
+      "src/backend/bisheng/api/services/workflow.py",
+      "src/backend/bisheng/common/chat/clients/workflow_client.py",
+      "src/backend/bisheng/worker/workflow/tasks.py",
+      "src/backend/bisheng/workflow/application/platform_agent.py",
+      "src/backend/bisheng/workflow/domain/repositories/platform_agent.py",
+      "src/backend/bisheng/workflow/domain/services/platform_agent_service.py",
+      "src/backend/test/sso/test_kunlian_ws_admission.py",
+      "src/backend/test/workflow/test_platform_agent_entrypoints.py",
+      "src/frontend/platform/public/locales/en-US/flow.json",
+      "src/frontend/platform/public/locales/ja/flow.json",
+      "src/frontend/platform/public/locales/zh-Hans/flow.json",
+      "src/frontend/platform/src/pages/BuildPage/flow/FlowNode/component/PlatformAgentItem.test.tsx",
+      "src/frontend/platform/src/pages/BuildPage/flow/FlowNode/component/PlatformAgentItem.tsx"
+    ],
+    "added_files": [
+      "src/backend/bisheng/common/chat/manager.py",
+      "src/backend/bisheng/api/v1/workflow.py",
+      "src/backend/bisheng/public_endpoints/api/endpoints/workflow.py"
+    ]
+  },
+  "startup_fix": {
+    "date": "2026-11-05",
+    "initial_manifest_sha256": "9ecb7430c9a602b90a0877a6daddf6aa4c0a2479c73ea0768bcf3a78863d642f",
+    "modified_files": [
+      "src/backend/bisheng/workflow/nodes/platform_agent/platform_agent.py"
+    ],
+    "added_files": [
+      "src/backend/test/workflow/test_platform_agent_imports.py"
+    ],
+    "evidence": "E-018"
+  },
+  "default_mock": {
+    "date": "2026-11-05",
+    "initial_manifest_sha256": "42887e0187204d6a7596cef8bad400efd007ebf5993178ed914371198ee035b6",
+    "modified_files": [
+      "src/backend/bisheng/core/config/settings.py",
+      "src/backend/bisheng/workflow/domain/clients/platform_agent_mock.py",
+      "src/backend/test/workflow/test_platform_agent_contract.py",
+      "src/backend/test/workflow/test_platform_agent_node.py"
+    ],
+    "evidence": "E-019",
+    "default_mode": "mock",
+    "empty_subject_map": "generic B fixture"
+  },
+  "directory_fix": {
+    "date": "2026-11-05",
+    "initial_manifest_sha256": "45af99c52f7a34f27fc045c9fa43244a064164e1b97b41d8f28265f83b730d6d",
+    "modified_files": [
+      "src/backend/bisheng/workflow/domain/clients/platform_agent_mock.py",
+      "src/backend/test/workflow/test_platform_agent_contract.py",
+      "src/frontend/platform/public/locales/en-US/flow.json",
+      "src/frontend/platform/public/locales/ja/flow.json",
+      "src/frontend/platform/public/locales/zh-Hans/flow.json",
+      "src/frontend/platform/src/controllers/API/workflow.ts",
+      "src/frontend/platform/src/pages/BuildPage/flow/FlowNode/component/PlatformAgentItem.test.tsx",
+      "src/frontend/platform/src/pages/BuildPage/flow/FlowNode/component/PlatformAgentItem.tsx",
+      "src/frontend/platform/src/types/flow/index.ts"
+    ],
+    "added_files": [
+      "src/frontend/platform/src/controllers/API/workflow.test.ts"
+    ],
+    "evidence": "E-020"
+  }
+}

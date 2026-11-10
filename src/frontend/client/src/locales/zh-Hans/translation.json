@@ -2822,6 +2822,41 @@
     }
   },
   "appChat": {
-    "stopped": "已停止"
+    "stopped": "已停止",
+    "agentInteraction": {
+      "deadline": "请在 {{time}} 前提交",
+      "submit": "提交答案",
+      "submitUnavailable": "暂时无法提交，请检查答案长度和会话连接。"
+    },
+    "agentLongTask": {
+      "WAITING_INPUT": "等待补充信息",
+      "SUBMIT_QUEUED": "毕昇已收到答案，等待提交",
+      "SUBMIT_IN_FLIGHT": "正在向昆联提交答案",
+      "SUBMIT_UNKNOWN": "正在核对昆联是否收到答案",
+      "SUBMIT_UNCONFIRMED": "答案核对已超时，昆联是否收到仍未确认",
+      "INPUT_TIMEOUT": "人工输入已超时",
+      "SUBMIT_TIMEOUT": "答案排队超时",
+      "SUBMIT_REJECTED": "昆联拒绝了答案",
+      "RUN_TIMEOUT": "等待 Agent 结果超时",
+      "PREPARED": "正在启动 Agent",
+      "WAITING_RESULT": "等待 Agent 结果",
+      "SUCCEEDED": "Agent 已完成",
+      "STOPPED": "工作流已停止",
+      "TIMED_OUT": "工作流等待超时",
+      "FAILED": "Agent 调用失败",
+      "INTENT": "等待请求取消 Agent",
+      "SENT": "已发起取消请求，等待确认",
+      "ACCEPTED": "昆联已受理取消",
+      "CONFIRMED": "昆联已确认取消",
+      "REJECTED": "昆联拒绝取消",
+      "UNCONFIRMED": "昆联尚未确认取消",
+      "START_TIMEOUT": "Agent 启动请求发送前超时",
+      "START_UNKNOWN": "昆联是否已启动 Agent 尚未确认",
+      "RESULT_UNAVAILABLE": "Agent 已完成，但未取得结果",
+      "UNSUPPORTED_INPUT": "当前不支持 Agent 等待人工输入",
+      "REMOTE_SUCCEEDED": "昆联 Agent 已完成",
+      "REMOTE_FAILED": "昆联 Agent 已失败",
+      "REMOTE_CANCELLED": "昆联 Agent 已取消"
+    }
   }
 }

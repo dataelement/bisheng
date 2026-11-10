@@ -1,0 +1,260 @@
+{
+  "nodes": [
+    {
+      "id": "start_example",
+      "type": "flowNode",
+      "position": {
+        "x": 0,
+        "y": 100
+      },
+      "data": {
+        "id": "start_example",
+        "type": "start",
+        "name": "开始",
+        "description": "F120 Mock",
+        "v": 3,
+        "group_params": [
+          {
+            "name": "",
+            "params": [
+              {
+                "key": "guide_word",
+                "value": "",
+                "type": "textarea"
+              },
+              {
+                "key": "guide_question",
+                "value": [],
+                "type": "input_list"
+              },
+              {
+                "key": "preset_question",
+                "value": [],
+                "type": "input_list",
+                "global": "item:input_list"
+              },
+              {
+                "key": "chat_history",
+                "value": 10,
+                "type": "chat_history_num"
+              },
+              {
+                "key": "custom_variables",
+                "value": [],
+                "type": "global_var"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "input_example",
+      "type": "flowNode",
+      "data": {
+        "id": "input_example",
+        "name": "用户问题",
+        "description": "F120 Mock",
+        "type": "input",
+        "v": 3,
+        "tab": {
+          "value": "form_input"
+        },
+        "group_params": [
+          {
+            "name": "",
+            "params": [
+              {
+                "key": "form_input",
+                "type": "form",
+                "tab": "form_input",
+                "global": "item:form_input",
+                "value": [
+                  {
+                    "key": "question",
+                    "type": "text",
+                    "value": "用户问题",
+                    "label": "用户问题",
+                    "required": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "position": {
+        "x": 300,
+        "y": 100
+      }
+    },
+    {
+      "id": "platform_knowledge_example",
+      "type": "flowNode",
+      "position": {
+        "x": 600,
+        "y": 100
+      },
+      "data": {
+        "id": "platform_knowledge_example",
+        "type": "platform_knowledge_retriever",
+        "name": "昆联知识库检索（模拟数据）",
+        "description": "F120 Mock",
+        "v": 1,
+        "group_params": [
+          {
+            "name": "",
+            "params": [
+              {
+                "key": "user_question",
+                "type": "platform_knowledge_query",
+                "required": true,
+                "value": {
+                  "source": "variable",
+                  "variable": "input_example.question"
+                }
+              },
+              {
+                "key": "knowledge",
+                "type": "platform_knowledge_select",
+                "required": true,
+                "value": {
+                  "resource_id": "mock:maintenance"
+                }
+              },
+              {
+                "key": "top_k",
+                "type": "number",
+                "required": true,
+                "value": 5
+              }
+            ]
+          },
+          {
+            "name": "",
+            "params": [
+              {
+                "key": "retrieved_result",
+                "type": "var",
+                "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                "value": [
+                  {
+                    "key": "retrieved_result",
+                    "label": "检索结果"
+                  },
+                  {
+                    "key": "retrieved_text",
+                    "label": "检索文本"
+                  },
+                  {
+                    "key": "citations",
+                    "label": "来源"
+                  },
+                  {
+                    "key": "hit_count",
+                    "label": "命中数量"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "output_example",
+      "type": "flowNode",
+      "position": {
+        "x": 900,
+        "y": 100
+      },
+      "data": {
+        "id": "output_example",
+        "type": "output",
+        "name": "输出",
+        "description": "F120 Mock",
+        "v": 2,
+        "group_params": [
+          {
+            "name": "",
+            "params": [
+              {
+                "key": "output_result",
+                "value": {
+                  "type": "",
+                  "value": ""
+                },
+                "type": "output_form",
+                "options": []
+              },
+              {
+                "key": "message",
+                "value": {
+                  "msg": "{{#platform_knowledge_example.retrieved_text#}}",
+                  "files": []
+                },
+                "type": "var_textarea_file",
+                "global": "key"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "end_example",
+      "type": "flowNode",
+      "position": {
+        "x": 1200,
+        "y": 100
+      },
+      "data": {
+        "id": "end_example",
+        "type": "end",
+        "name": "结束",
+        "description": "F120 Mock",
+        "v": 3,
+        "group_params": []
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_0",
+      "source": "start_example",
+      "sourceHandle": "right_handle",
+      "target": "input_example",
+      "targetHandle": "left_handle",
+      "type": "customEdge"
+    },
+    {
+      "id": "edge_1",
+      "source": "input_example",
+      "sourceHandle": "right_handle",
+      "target": "platform_knowledge_example",
+      "targetHandle": "left_handle",
+      "type": "customEdge"
+    },
+    {
+      "id": "edge_2",
+      "source": "platform_knowledge_example",
+      "sourceHandle": "right_handle",
+      "target": "output_example",
+      "targetHandle": "left_handle",
+      "type": "customEdge"
+    },
+    {
+      "id": "edge_3",
+      "source": "output_example",
+      "sourceHandle": "right_handle",
+      "target": "end_example",
+      "targetHandle": "left_handle",
+      "type": "customEdge"
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 0.8
+  }
+}

@@ -188,7 +188,13 @@ async def test_long_socket_idle_does_not_authorize_and_denial_keeps_started_work
     client.workflow = started
     queued = []
     monkeypatch.setattr(base.thread_pool, "submit", lambda *args, **kwargs: queued.append(args))
-    monkeypatch.setattr(module, "WorkflowClient", lambda *args, **kwargs: client)
+    runtime = object()
+
+    def create_client(*args, **kwargs):
+        assert kwargs["platform_agent_runtime"] is runtime
+        return client
+
+    monkeypatch.setattr(module, "WorkflowClient", create_client)
     monkeypatch.setattr(
         module.WorkFlowService, "get_one_workflow_simple_info", AsyncMock(return_value=SimpleNamespace(name="fixture"))
     )
@@ -205,7 +211,14 @@ async def test_long_socket_idle_does_not_authorize_and_denial_keeps_started_work
         yield ChatMessageExecution(operator=operator, execution_snapshot=None)
 
     await manager.dispatch_client(
-        websocket, "fixture-flow", "", operator, WorkType.WORKFLOW, websocket, message_admission=admission
+        websocket,
+        "fixture-flow",
+        "",
+        operator,
+        WorkType.WORKFLOW,
+        websocket,
+        message_admission=admission,
+        platform_agent_runtime=runtime,
     )
     assert len(attempts) == 3 and len(queued) == 2 and manager._has_use_action.await_count == 2
     started.async_set_workflow_stop.assert_not_awaited()
@@ -233,6 +246,8 @@ async def test_real_workflow_send_continue_and_stop_preserve_current_identity_an
         async_set_workflow_stop=AsyncMock(),
     )
     create_callback = Mock(return_value=callback)
+    # F119 正式入口从服务端读取发布图。身份测试保留普通空图。
+    monkeypatch.setattr(module.FlowDao, "get_flow_by_id", lambda _: SimpleNamespace(data={}))
     execute, resume = Mock(), Mock()
     monkeypatch.setattr(module, "RedisCallback", create_callback)
     monkeypatch.setattr(module, "execute_workflow", SimpleNamespace(apply_async=execute))
@@ -371,6 +386,10 @@ async def test_actual_websocket_router_admits_handshake_and_each_message(browser
     seen = []
 
     async def dispatch(*args, **kwargs):
+        if entry == "workflow":
+            from bisheng.workflow.application.platform_agent import BrowserPlatformAgentRuntime
+
+            assert isinstance(kwargs["platform_agent_runtime"], BrowserPlatformAgentRuntime)
         websocket = args[0]
         await websocket.accept()
         for _ in range(2):

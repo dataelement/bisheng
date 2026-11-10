@@ -146,6 +146,8 @@ grep -rhoE "Code(:\s*int)?\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.
 
 - **F113 allocations (2026-10-28)**: 26071 owner/account tenant mismatch (403), 26072 owner current tenant unresolved (403), 26073 service-account management scope changed (409), in `common/errcode/open_api.py`. These continue the occupied 26070 management band; they do not allocate a new module.
 
+F119 使用既有 Workflow 105 模块的 10551—10562，定义见 `common/errcode/flow.py`，对应配置、版本、发布冲突、真实未就绪、外部拒绝、上游失败、远端结果未知、输出不符、非终态、执行冲突、来源变化和禁用。身份及本地资源权限沿用原 Owner 错误，不新增模块或权限动作。
+
 ## C6. No Hardcoded Secrets (RULE-7)
 
 No `password` / `secret_key` / `api_key` / `access_token` literals in code. Use config + Fernet encryption (passwords in `config.yaml` are Fernet-encrypted; never write plaintext).

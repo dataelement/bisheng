@@ -22,7 +22,7 @@ from bisheng.common.chat.utils import SourceType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import WorkFlowInitError
-from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
@@ -579,6 +579,13 @@ class WorkFlowService(BaseService):
                     (perf_counter() - permission_map_start) * 1000,
                 )
 
+            from bisheng.workflow.application.kunlian_workflow_management import mock_scope
+
+            if kept and (scope := mock_scope(getattr(user, "tenant_id", None))):
+                from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+                pending = RegistrationRepository().pending_ids(scope.tenant_id, [str(row["id"]) for row in kept])
+                kept = [row for row in kept if str(row["id"]) not in pending]
             for item in kept:
                 visible.append(item)
                 if len(visible) > page_size:
@@ -1154,6 +1161,44 @@ class WorkFlowService(BaseService):
         )
 
         node_data = BaseNodeData(**node_data.get("data", {}))
+        platform_context = None
+        if node_data.type == NodeType.PLATFORM_AGENT.value:
+            from bisheng.workflow.application.platform_agent import get_service
+
+            service = get_service()
+            execution, dispatch_id = await service.admit(
+                login_user,
+                workflow_id,
+                generate_uuid(),
+                {"nodes": [{"data": node_data.model_dump()}], "edges": []},
+                "DEBUG",
+                trial_inputs=set(node_input),
+            )
+            dispatch = service.repository.claim_dispatch(execution["execution_id"], dispatch_id)
+            platform_context = {"service": service, "login_user": login_user, "dispatch": dispatch}
+
+        knowledge_run = None
+        if node_data.type == NodeType.PLATFORM_KNOWLEDGE_RETRIEVER.value:
+            from bisheng.common.errcode.flow import PlatformKnowledgeConfigurationError, PlatformKnowledgeExecutionError
+            from bisheng.workflow.application.platform_knowledge import claim_execution, prepare_execution
+            from bisheng.workflow.domain.schemas.platform_knowledge import VariableQuestion, node_configuration
+
+            question = node_configuration(node_data.model_dump()).user_question
+            expected = {question.variable} if isinstance(question, VariableQuestion) else set()
+            if set(node_input or {}) != expected:
+                raise PlatformKnowledgeConfigurationError()
+            trial_session = generate_uuid()
+            _, reference = await prepare_execution(
+                login_user,
+                workflow_id,
+                trial_session,
+                {"nodes": [{"data": node_data.model_dump()}], "edges": []},
+                published=False,
+                trial_inputs=expected,
+            )
+            knowledge_run = claim_execution(login_user, workflow_id, trial_session, reference)
+            if knowledge_run is None:
+                raise PlatformKnowledgeExecutionError()
 
         def _run_node():
             # Nodes are sync and some reach async services through run_async_safe
@@ -1172,6 +1217,9 @@ class WorkFlowService(BaseService):
                 target_edges=None,
                 max_steps=233,
                 callback=base_callback,
+                platform_agent_context=platform_context,
+                platform_knowledge_context=knowledge_run,
+                tenant_id=getattr(workflow_info, "tenant_id", None),
             )
             if node_data.type == NodeType.CODE.value:
                 node.handle_input(
@@ -1183,14 +1231,32 @@ class WorkFlowService(BaseService):
                     user_input[k] = v
                 node.handle_input(user_input)
             else:
-                for key, val in node_input.items():
+                for key, val in (node_input or {}).items():
                     graph_state.set_variable_by_str(key, val)
 
             exec_id = generate_uuid()
-            result = node._run(exec_id)
+            if knowledge_run:
+                node.run({})
+                result = graph_state.variables_pool.get(node.id, {})
+            elif platform_context:
+                node.run({})
+                result = {"result": graph_state.get_variable(node.id, "result")}
+            else:
+                result = node._run(exec_id)
             return node.parse_log(exec_id, result)
 
-        log_data = await run_in_threadpool(_run_node)
+        try:
+            log_data = await run_in_threadpool(_run_node)
+        except Exception:
+            if knowledge_run:
+                knowledge_run.store.status(knowledge_run.execution_id, knowledge_run.owner, "FAILED")
+            if platform_context:
+                platform_context["service"].repository.finish_execution(platform_context["dispatch"], "FAILED")
+            raise
+        if knowledge_run and not knowledge_run.store.status(knowledge_run.execution_id, knowledge_run.owner, "SUCCESS"):
+            raise PlatformKnowledgeExecutionError()
+        if platform_context:
+            platform_context["service"].repository.finish_execution(platform_context["dispatch"], "SUCCEEDED")
         res = []
         for one_batch in log_data:
             ret = []
@@ -1234,16 +1300,71 @@ class WorkFlowService(BaseService):
         version_info = await FlowVersionDao.aget_version_by_id(version_id)
         if not version_info or version_info.flow_id != flow_id:
             raise NotFoundError()
+        from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
+
+        registration_scope = workflow_scope(getattr(db_flow, "tenant_id", None), flow_id, user=login_user)
         if status == FlowStatus.ONLINE.value:
-            # workflowInitialization check for
-            try:
-                _ = Workflow(flow_id, db_flow.name, login_user.user_id, version_info.data, False, 10, 10, None)
-            except Exception as e:
-                raise WorkFlowInitError(msg=str(e))
+            def validate(name, graph):
+                try:
+                    Workflow(flow_id, name, login_user.user_id, graph, False, 10, 10, None)
+                except Exception as e:
+                    if registration_scope:
+                        from bisheng.common.errcode.flow import WorkflowRegistrationConflict
+
+                        raise WorkflowRegistrationConflict() from None
+                    raise WorkFlowInitError(msg=str(e))
+
+            if registration_scope:
+                from bisheng.workflow.application.kunlian_registration import publish_registered
+                from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+                await publish_registered(
+                    RegistrationRepository(), login_user, registration_scope, flow_id, version_id, validate,
+                )
+                await telemetry_service.log_event(
+                    user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, source=flow_id,
+                )
+                return
+
+            validate(db_flow.name, version_info.data)
+
+            from bisheng.workflow.domain.schemas.platform_agent import uses_platform_agent
+
+            from bisheng.workflow.domain.schemas.platform_knowledge import uses_platform_knowledge
+
+            if uses_platform_knowledge(version_info.data) or uses_platform_knowledge(db_flow.data):
+                from bisheng.workflow.application.platform_node_publication import publish
+
+                await publish(login_user, flow_id, version_id)
+                await telemetry_service.log_event(
+                    user_id=login_user.user_id,
+                    event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                    trace_id=trace_id_var.get(),
+                )
+                return
+
+            if uses_platform_agent(version_info.data) or uses_platform_agent(db_flow.data):
+                from bisheng.workflow.application.platform_agent import get_service
+
+                await get_service().publish(login_user, flow_id, version_id)
+                await telemetry_service.log_event(
+                    user_id=login_user.user_id,
+                    event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
+                    trace_id=trace_id_var.get(),
+                )
+                return
 
             await FlowVersionDao.change_current_version(flow_id, version_info)
-        db_flow.status = status
-        await FlowDao.aupdate_flow(db_flow)
+        if registration_scope:
+            from bisheng.common.errcode.flow import WorkflowRegistrationConflict
+            from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+            if status != FlowStatus.OFFLINE.value:
+                raise WorkflowRegistrationConflict()
+            RegistrationRepository().unpublish(registration_scope, flow_id, version_id)
+        else:
+            db_flow.status = status
+            await FlowDao.aupdate_flow(db_flow)
         await telemetry_service.log_event(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )

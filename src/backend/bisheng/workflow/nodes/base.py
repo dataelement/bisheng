@@ -2,6 +2,7 @@ import base64
 import copy
 import uuid
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
 from typing import Any
 
 from langchain_core.messages import HumanMessage
@@ -29,6 +30,7 @@ class BaseNode(ABC):
         callback: BaseCallback,
         **kwargs: Any,
     ):
+        self.platform_knowledge_context = kwargs.get("platform_knowledge_context")
         self.id = node_data.id
         self.type = node_data.type
         self.name = node_data.name
@@ -210,6 +212,8 @@ class BaseNode(ABC):
         Run node entry
         :return:
         """
+        if self.platform_knowledge_context:
+            self.platform_knowledge_context.assert_live()
         if self.stop_flag:
             raise IgnoreException("stop by user")
         if self.current_step >= self.max_steps:
@@ -225,12 +229,16 @@ class BaseNode(ABC):
             result = self._run(exec_id)
             log_data = self.parse_log(exec_id, result)
             # Store node output in global variables
-            if result:
-                for key, value in result.items():
-                    self.graph_state.set_variable(self.id, key, value)
+            with self.output_commit_scope():
+                if result:
+                    for key, value in result.items():
+                        self.graph_state.set_variable(self.id, key, value)
             self.current_step += 1
         except Exception as e:
             reason = str(e)
+            if self.type in (NodeType.PLATFORM_AGENT.value, NodeType.PLATFORM_KNOWLEDGE_RETRIEVER.value):
+                log_data = None
+                log_data = self.failure_log()
             raise e
         finally:
             # The end log of the output node is created byfakeNode Output, Because it is necessary to wait for the user to complete the input before the log can be displayed correctly
@@ -246,6 +254,12 @@ class BaseNode(ABC):
                     )
                 )
         return state
+
+    def output_commit_scope(self):
+        return nullcontext()
+
+    def failure_log(self):
+        return None
 
     async def arun(self, state: dict) -> Any:
         return self.run(state)

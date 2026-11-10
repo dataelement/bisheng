@@ -1,13 +1,41 @@
 // @ts-strict-ignore
 import { WorkFlow } from "@/types/flow";
+import type { PlatformAgentPage, PlatformAgentVersion, PlatformAgentCapabilities, PlatformAgentValidation } from "@/types/flow";
 import axios from "../request";
+import { platformKnowledgeTemplate } from "./platformKnowledge";
+
+export async function getPlatformAgentCapabilities(): Promise<PlatformAgentCapabilities> {
+    const env = await axios.get('/api/v1/env');
+    return { ...env.workflow, multi_tenant_enabled: env.multi_tenant_enabled };
+}
+
+export async function getPlatformAgents(workflowId: string, cursor?: string): Promise<PlatformAgentPage> {
+    return await axios.get('/api/v1/workflow/platform-agents', { params: { workflow_id: workflowId, cursor } });
+}
+
+export async function getPlatformAgentVersion(workflowId: string, agentId: string, versionId: string): Promise<PlatformAgentVersion> {
+    return await axios.get(`/api/v1/workflow/platform-agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}`, { params: { workflow_id: workflowId } });
+}
+
+export async function validatePlatformAgents(workflowId: string, graph: unknown, nodeId?: string): Promise<PlatformAgentValidation> {
+    return await axios.post('/api/v1/workflow/platform-agents/validate', { workflow_id: workflowId, graph, node_id: nodeId });
+}
+
+const platformAgentTemplate = {
+    id: 'platform_agent_xxx', type: 'platform_agent', name: '', description: '', v: 1,
+    group_params: [{ name: '', params: [
+        { key: 'agent_ref', type: 'platform_agent', value: null, required: true },
+        { key: 'input_bindings', type: 'platform_agent_bindings', value: {}, hidden: true },
+        { key: 'result', type: 'var', value: [{ key: 'result', type: 'any' }], global: "code:value.map(el => ({ label: el.key, value: el.key }))", hidden: true },
+    ] }],
+};
 
 /**
  * 获取工作流节点模板s
  */
 export const getWorkflowNodeTemplate = async (): Promise<any[]> => {
     return new Promise(res => setTimeout(() => {
-        res(workflowTemplate)
+        res([...workflowTemplate, platformAgentTemplate, platformKnowledgeTemplate])
     }, 100));
 }
 
@@ -21,7 +49,7 @@ export const getWorkflowReportTemplate = async (key: string, flowId: string): Pr
 /**
  * 创建工作流
  */
-export const createWorkflowApi = async (name, desc, url, flow): Promise<any> => {
+export const createWorkflowApi = async (name, desc, url, flow?, registrationKey?: string): Promise<any> => {
     if (url) {
         // logo保存相对路径
         url = url.replace('/bisheng', '')
@@ -32,18 +60,19 @@ export const createWorkflowApi = async (name, desc, url, flow): Promise<any> => 
         name,
         description: desc,
         logo: url
-    });
+    }, registrationKey ? { headers: { 'Idempotency-Key': registrationKey } } : undefined);
 }
 
 /**
  * 保存工作流
  */
-export const saveWorkflow = async (versionId: number, data: WorkFlow): Promise<any> => {
+export const saveWorkflow = async (versionId: number, data: WorkFlow, revision?: string): Promise<any> => {
     if (data.logo) {
         // logo保存相对路径
         data.logo = data.logo.replace(/^\/\w+/, '')
     }
-    return await axios.put(`/api/v1/workflow/versions/${versionId}`, data);
+    return await axios.put(`/api/v1/workflow/versions/${versionId}`, data,
+        revision ? { headers: { 'If-Match': revision } } : undefined);
 }
 
 
@@ -89,8 +118,9 @@ export async function getVersionDetails(versionId: string) {
  * @returns {Promise<any>}.
  * @throws .
  */
-export async function updateVersion(versionId: string, versionData: { name: string, description: string, data: any }) {
-    return await axios.put(`/api/v1/workflow/versions/${versionId}`, versionData);
+export async function updateVersion(versionId: string, versionData: { name: string, description: string, data: any }, revision?: string) {
+    return await axios.put(`/api/v1/workflow/versions/${versionId}`, versionData,
+        revision ? { headers: { 'If-Match': revision } } : undefined);
 }
 
 /**

@@ -25,6 +25,12 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 from bisheng.core.database.retry import retry_on_transient_db_conflict
 
+WORKFLOW_RESUME_OUTPUT_KEY = "workflow_long_task_resume"
+
+
+def has_workflow_resume_output(extra):
+    return f'"{WORKFLOW_RESUME_OUTPUT_KEY}"' in (extra or "")
+
 
 class LikedType(Enum):
     UNRATED = 0  # Not assessed
@@ -90,6 +96,10 @@ class MessageBase(SQLModelSerializable):
 class ChatMessage(MessageBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     receiver: dict | None = Field(default=None, sa_column=Column(JsonType))
+
+    @property
+    def is_workflow_resume_output(self):
+        return has_workflow_resume_output(self.extra)
 
     # Key: Set table level character set to utf8mb4
     __table_args__ = {"mysql_charset": "utf8mb4", "mysql_collate": "utf8mb4_unicode_ci"}
@@ -182,11 +192,16 @@ class MessageDao(MessageBase):
 
 
 class ChatMessageDao(MessageBase):
+    @staticmethod
+    def _without_resume_output(rows):
+        # 通用读取没有 Workflow 和 Agent 的授权上下文。受保护结果只走会话端口。
+        return [row for row in rows if not row.is_workflow_resume_output]
+
     @classmethod
     def get_latest_message_by_chatid(cls, chat_id: str):
         statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(ChatMessage.id.desc()).limit(1)
         with get_sync_db_session() as session:
-            res = session.exec(statement).all()
+            res = cls._without_resume_output(session.exec(statement).all())
             if res:
                 return res[0]
             else:
@@ -197,14 +212,14 @@ class ChatMessageDao(MessageBase):
         statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(ChatMessage.id.desc()).limit(1)
         async with get_async_db_session() as session:
             res = await session.exec(statement)
-            res = res.all()
+            res = cls._without_resume_output(res.all())
             if res:
                 return res[0]
             else:
                 return None
 
     @classmethod
-    def get_latest_message_by_chat_ids(cls, chat_ids: list[str], category: str = None, exclude_category: str = None):
+    def get_latest_message_by_chat_ids(cls, chat_ids: list[str], category: str | None = None, exclude_category: str | None = None):
         """
         Get the most recent message content for each session
         """
@@ -220,20 +235,20 @@ class ChatMessageDao(MessageBase):
             ids = [one[1] for one in res]
             # Get the details of your message
             statement = select(ChatMessage).where(ChatMessage.id.in_(ids))
-            return session.exec(statement).all()
+            return cls._without_resume_output(session.exec(statement).all())
 
     @classmethod
-    def get_messages_by_chat_id(cls, chat_id: str, category_list: list = None, limit: int = 10) -> list[ChatMessage]:
+    def get_messages_by_chat_id(cls, chat_id: str, category_list: list | None = None, limit: int = 10) -> list[ChatMessage]:
         with get_sync_db_session() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
             statement = statement.limit(limit).order_by(ChatMessage.create_time.desc())
-            return session.exec(statement).all()
+            return cls._without_resume_output(session.exec(statement).all())
 
     @classmethod
     async def aget_messages_by_chat_id(
-        cls, chat_id: str, category_list: list = None, limit: int = 10
+        cls, chat_id: str, category_list: list | None = None, limit: int = 10, *, include_resume_output=False
     ) -> list[ChatMessage]:
         """Return the MOST RECENT `limit` messages for a chat, in chronological
         order (oldest → newest).
@@ -259,7 +274,7 @@ class ChatMessageDao(MessageBase):
             result = await session.exec(statement)
             rows = list(result.all())
             rows.reverse()
-            return rows
+            return rows if include_resume_output else cls._without_resume_output(rows)
 
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: list[str], chat_id: list[str]):
@@ -276,7 +291,7 @@ class ChatMessageDao(MessageBase):
     def get_msg_by_chat_id(cls, chat_id: str):
         with get_sync_db_session() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
-            return session.exec(statement).all()
+            return cls._without_resume_output(session.exec(statement).all())
 
     @classmethod
     def get_msg_by_flow(cls, flow_id: str):
@@ -365,13 +380,15 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_message_by_id(cls, message_id: int) -> ChatMessage | None:
         with get_sync_db_session() as session:
-            return session.exec(select(ChatMessage).where(ChatMessage.id == message_id)).first()
+            row = session.exec(select(ChatMessage).where(ChatMessage.id == message_id)).first()
+            return row if row is not None and not row.is_workflow_resume_output else None
 
     @classmethod
     async def aget_message_by_id(cls, message_id: int) -> ChatMessage | None:
         async with get_async_db_session() as session:
             result = await session.exec(select(ChatMessage).where(ChatMessage.id == message_id))
-            return result.first()
+            row = result.first()
+            return row if row is not None and not row.is_workflow_resume_output else None
 
     @classmethod
     async def aget_messages_by_ids(
@@ -403,7 +420,7 @@ class ChatMessageDao(MessageBase):
         )
         async with get_async_db_session() as session:
             result = await session.exec(statement)
-            return list(result.all())
+            return cls._without_resume_output(result.all())
 
     @classmethod
     def update_message(cls, message_id: int, user_id: int, message: str):
@@ -452,11 +469,11 @@ class ChatMessageDao(MessageBase):
         statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)).order_by(ChatMessage.create_time.asc())
         async with get_async_db_session() as session:
             result = await session.exec(statement)
-            return result.all()
+            return cls._without_resume_output(result.all())
 
     @classmethod
     async def afilter_message_by_chat_id(
-        cls, chat_id: str, flow_id: str, message_id: int = None, page_size: int = 20
+        cls, chat_id: str, flow_id: str, message_id: int | None = None, page_size: int = 20, *, include_resume_output=False
     ) -> list[ChatMessage]:
         statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).where(ChatMessage.flow_id == flow_id)
         if message_id:
@@ -464,4 +481,5 @@ class ChatMessageDao(MessageBase):
         statement = statement.order_by(col(ChatMessage.id).desc()).limit(page_size)
         async with get_async_db_session() as session:
             result = await session.exec(statement)
-            return result.all()
+            rows = result.all()
+            return rows if include_resume_output else cls._without_resume_output(rows)

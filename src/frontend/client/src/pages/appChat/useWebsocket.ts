@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { NotificationSeverity } from "~/common";
 import { useLocalize, useToast } from "~/hooks";
@@ -9,6 +9,7 @@ import { chatApiVersionState, submitDataState } from "./store/atoms";
 import { appConversationsState } from "./store/appSidebarAtoms";
 import { genTitle } from "~/api/chat/data-service";
 import logger from "~/utils/logger";
+import { generateUUID } from "~/utils";
 import { useOptionalStandaloneChatContext } from "~/pages/standaloneChat/StandaloneChatContext";
 import {
   buildWorkflowInitMessage,
@@ -68,7 +69,47 @@ export const enum ActionType {
   SKILL_FORM_SUBMIT = "skill_form_submit",
 }
 
-export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: boolean } = {}) => {
+export type AgentLongTaskStatus = {
+  execution_id: string;
+  local_state: string;
+  remote_state: string;
+  cancel_state: string;
+  call_sequence?: number;
+  progress?: number;
+  reason?: string;
+  interaction_pending?: boolean;
+  interaction_status_version?: number;
+  status_version?: number;
+  deadline?: number;
+};
+
+export type AgentInteractionStatus = {
+  execution_id: string;
+  interaction_id: string;
+  revision: string | null;
+  phase: "WAITING_INPUT" | "SUBMIT_QUEUED" | "SUBMIT_IN_FLIGHT" | "SUBMIT_UNKNOWN" | "WAITING_RESULT" | "TERMINAL";
+  status_version: number;
+  expires_at: string;
+  form?: { type: "text"; label: string; required: true; max_length: number };
+};
+
+type AgentAnswer = {
+  execution_id: string;
+  interaction_id: string;
+  revision: string;
+  submission_id: string;
+  answer: string;
+};
+
+const CANCEL_ORDER: Record<string, number> = {
+  NONE: 0, INTENT: 1, SENT: 2, ACCEPTED: 3,
+  CONFIRMED: 4, REJECTED: 4, UNCONFIRMED: 4, NO_ACTION: 4,
+};
+
+export const useWebSocket = (helpers, { canExecute = true, onLongTaskStatus }: {
+  canExecute?: boolean;
+  onLongTaskStatus?: (chatId: string, status: AgentLongTaskStatus | null) => void;
+} = {}) => {
   const { showToast } = useToast();
   const [submitData, setSubmitData] = useRecoilState(submitDataState);
   const [, setAppConversations] = useRecoilState(appConversationsState);
@@ -79,6 +120,15 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
   activationRef.current = syncWorkflowActivation(activationRef.current, helpers.chatId);
 
   const stoppedRef = useRef<Record<string, boolean>>({});
+  const longTaskRef = useRef<Record<string, AgentLongTaskStatus>>({});
+  const interactionRef = useRef<Record<string, AgentInteractionStatus>>({});
+  const pendingAnswer = useRef<Record<string, { value: AgentAnswer; socket: WebSocket }>>({});
+  const pendingStop = useRef<Record<string, { executionId: string; socket?: WebSocket }>>({});
+  const blockedInteraction = useRef<Record<string, boolean>>({});
+  const formAttempt = useRef<Record<string, number>>({});
+  const refreshInteraction = useRef<() => void>(() => {});
+  const [interactionView, setInteractionView] = useState<{ chatId: string; status?: AgentInteractionStatus }>();
+  const interaction = interactionView?.chatId === helpers.chatId ? interactionView?.status : undefined;
   const unavailableRef = useRef<Record<string, string>>({});
   const isUnavailable = () =>
     unavailableCodes.has(String(helpers.appLost)) || !!unavailableRef.current[helpers.chatId];
@@ -110,34 +160,55 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
       });
   };
 
-  const sendWorkflowStatusCheck = (ws: WebSocket) => {
+  const sendWorkflowStatusCheck = (ws: WebSocket, refresh = false) => {
     const activation = activationRef.current;
-    if (!claimWorkflowHandshake(activation, helpers.chatId)) return;
+    if (!refresh && !claimWorkflowHandshake(activation, helpers.chatId)) return;
+    const executionId = interactionRef.current[helpers.chatId]?.execution_id ?? longTaskRef.current[helpers.chatId]?.execution_id;
 
     ws.send(
       JSON.stringify({
         action: ActionType.CHECK_STATUS,
         chat_id: helpers.chatId,
         flow_id: helpers.flow.id,
+        ...(executionId ? { execution_id: executionId } : {}),
       }),
     );
   };
 
+  const sendInteractionStop = (ws: WebSocket, chatId: string) => {
+    const stop = pendingStop.current[chatId];
+    if (stop && stop.socket !== ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ action: "stop", execution_id: stop.executionId }));
+      stop.socket = ws;
+    }
+  };
+
+  const blockInteraction = (chatId: string) => {
+    delete pendingAnswer.current[chatId];
+    delete pendingStop.current[chatId];
+    const current = interactionRef.current[chatId];
+    if (current) interactionRef.current[chatId] = { ...current, form: undefined };
+    blockedInteraction.current[chatId] = true;
+    setInteractionView({ chatId });
+    helpers.stopShow(false);
+  };
+
   // 连接WebSocket
   const connect = (callBack) => {
-    if (!canExecute || isUnavailable()) return;
-    const replacingExistingSocket = !!websocket;
-    if (websocket) {
+    if (!canExecute || isUnavailable() || blockedInteraction.current[helpers.chatId]) return;
+    const existingSocket = wsMap.get(helpers.chatId);
+    const replacingExistingSocket = !!existingSocket;
+    if (existingSocket) {
       if (!callBack) {
-        if (websocket.readyState === WebSocket.OPEN) {
+        if (existingSocket.readyState === WebSocket.OPEN) {
           if (helpers.flow.flow_type === 10) {
-            sendWorkflowStatusCheck(websocket);
+            sendWorkflowStatusCheck(existingSocket);
           }
           return;
         }
-        if (websocket.readyState === WebSocket.CONNECTING) return;
+        if (existingSocket.readyState === WebSocket.CONNECTING) return;
         wsMap.delete(helpers.chatId);
-      } else if (websocket.readyState === WebSocket.OPEN) {
+      } else if (existingSocket.readyState === WebSocket.OPEN) {
         return;
       }
     }
@@ -149,6 +220,7 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
     wsMap.set(helpers.chatId, ws);
 
     ws.onopen = () => {
+      if (wsMap.get(helpers.chatId) !== ws) return;
       console.log("WebSocket connection established!");
       helpers.clearError();
       if (helpers.flow.flow_type === 10) {
@@ -156,12 +228,14 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
         // console.log('helpers.flow :>> ', helpers.flow);
         const shouldCheckStatus = replacingExistingSocket || !helpers.flow.isNew;
         if (shouldCheckStatus) {
-          sendWorkflowStatusCheck(ws);
+          sendInteractionStop(ws, helpers.chatId);
+          sendWorkflowStatusCheck(ws, replacingExistingSocket);
           return;
         }
         const { data, ...flow } = helpers.flow;
         const msg = {
           action: ActionType.INIT_DATA,
+          initial_open: true,
           chat_id: helpers.chatId,
           flow_id: helpers.flow.id,
           data: { ...flow, ...data },
@@ -197,9 +271,9 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
     };
 
     ws.onmessage = (event) => {
+      if (wsMap.get(helpers.chatId) !== ws) return;
       try {
         const data = JSON.parse(event.data);
-        console.log("data :>> ", data);
         handleMessages(data, ws);
 
         if (data.type === "close" && callBack) {
@@ -212,6 +286,11 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
     };
 
     ws.onclose = (event) => {
+      if (wsMap.get(helpers.chatId) !== ws) return;
+      const chatId = helpers.chatId;
+      if (event?.code === 1008 && (interactionRef.current[chatId] || longTaskRef.current[chatId]?.interaction_pending)) {
+        blockInteraction(chatId);
+      }
       console.log("close chatId:>> ", helpers.chatId);
       console.error("ws close :>> ", event);
       helpers.handleMsgError({ code: "", data: null }, true);
@@ -219,6 +298,7 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
     };
 
     ws.onerror = (error) => {
+      if (wsMap.get(helpers.chatId) !== ws) return;
       console.error("WebSocket error", helpers.chatId, error);
       helpers.handleMsgError({
         code: isUnavailable() ? unavailableRef.current[helpers.chatId] || String(helpers.appLost) : "",
@@ -226,13 +306,95 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
       });
     };
   };
+
+  const sendAgentAnswer = (ws: WebSocket, answer: AgentAnswer) => {
+    ws.send(JSON.stringify({ action: "agent_interaction_submit", chat_id: helpers.chatId, ...answer }));
+    pendingAnswer.current[helpers.chatId] = { value: answer, socket: ws };
+  };
+
+  const receiveInteraction = (chatId: string, status: AgentInteractionStatus, ws: WebSocket) => {
+    const previous = interactionRef.current[chatId];
+    const long = longTaskRef.current[chatId];
+    if (!status.execution_id || !status.interaction_id || !Number.isInteger(status.status_version) ||
+        (long && long.execution_id !== status.execution_id) ||
+        (previous && (previous.execution_id !== status.execution_id || previous.interaction_id !== status.interaction_id ||
+          previous.status_version > status.status_version))) return;
+    if (status.phase === "WAITING_INPUT" && stoppedRef.current[chatId]) return;
+    const validForm = status.phase === "WAITING_INPUT" && Date.parse(status.expires_at) > Date.now() && status.form?.type === "text";
+    const view = validForm ? status : { ...status, form: undefined };
+    interactionRef.current[chatId] = view;
+    setInteractionView({ chatId, status: view });
+    if (status.phase === "TERMINAL") delete pendingStop.current[chatId];
+    if (status.phase !== "TERMINAL" && !stoppedRef.current[chatId]) helpers.stopShow(true);
+    const pending = pendingAnswer.current[chatId];
+    if (!validForm) {
+      delete pendingAnswer.current[chatId];
+    } else if (pending && pending.socket !== ws && pending.value.revision === status.revision) {
+      sendAgentAnswer(ws, pending.value);
+    }
+  };
+
   const handleMessages = (data, _ws) => {
     // Keep terminal availability errors stable across queued close/input frames.
     if (isUnavailable()) return;
+    if (blockedInteraction.current[helpers.chatId] && data.category !== "error") return;
+    if (data.category === "processing" && data.type === "info" && data.message?.agent_interaction) {
+      const chatId = helpers.chatId;
+      if (wsMap.get(chatId) !== _ws || data.chat_id !== chatId) return;
+      receiveInteraction(chatId, data.message.agent_interaction, _ws);
+      if (!data.message.agent_long_task) return;
+    }
+    if (data.category === "processing" && data.type === "info" && data.message?.agent_long_task) {
+      const status: AgentLongTaskStatus = data.message.agent_long_task;
+      const chatId = helpers.chatId;
+      if (wsMap.get(chatId) !== _ws || data.chat_id !== chatId || typeof status.execution_id !== "string") return;
+      const previous = longTaskRef.current[chatId];
+      if (previous && previous.execution_id !== status.execution_id) return;
+      if (previous?.status_version !== undefined &&
+          (status.status_version === undefined || status.status_version < previous.status_version)) return;
+      if (status.interaction_status_version !== undefined &&
+          status.interaction_status_version < (interactionRef.current[chatId]?.status_version ?? 0)) return;
+      const sequence = status.call_sequence ?? 0;
+      const previousSequence = previous?.call_sequence ?? 0;
+      if (sequence < previousSequence) return;
+      const sameCall = sequence === previousSequence ? previous : undefined;
+      const localClosed = sameCall && ["STOPPED", "TIMED_OUT", "FAILED", "SUCCEEDED"].includes(sameCall.local_state);
+      const remoteClosed = sameCall && ["SUCCEEDED", "FAILED", "CANCELLED"].includes(sameCall.remote_state);
+      const previousCancel = sameCall ? CANCEL_ORDER[sameCall.cancel_state] : 0;
+      const cancelCurrent = previousCancel === 4
+        ? sameCall?.cancel_state === status.cancel_state
+        : CANCEL_ORDER[status.cancel_state] >= previousCancel;
+      const progressCurrent = typeof sameCall?.progress !== "number" ||
+        typeof status.progress !== "number" || status.progress >= sameCall.progress;
+      const wasRunning = sameCall?.remote_state === "RUNNING" || sameCall?.remote_state === "WAITING_INPUT";
+      if ((!localClosed || sameCall.local_state === status.local_state) &&
+          (!remoteClosed || sameCall.remote_state === status.remote_state) &&
+          (!wasRunning || !["NOT_SENT", "START_IN_FLIGHT", "START_UNKNOWN", "QUEUED"].includes(status.remote_state)) &&
+          cancelCurrent && progressCurrent) {
+        longTaskRef.current[chatId] = status;
+        onLongTaskStatus?.(chatId, status);
+        if (status.status_version !== undefined) {
+          const finished = ["STOPPED", "TIMED_OUT", "FAILED", "SUCCEEDED"].includes(status.local_state);
+          if (finished) delete pendingStop.current[chatId];
+          if (status.local_state === "SUCCEEDED") stoppedRef.current[chatId] = false;
+          helpers.stopShow(!finished && !stoppedRef.current[chatId]);
+        }
+        if (interactionRef.current[chatId] && ["STOPPED", "TIMED_OUT", "FAILED"].includes(status.local_state)) {
+          helpers.stopShow(false);
+        }
+        if (status.interaction_pending && !data.message.agent_interaction &&
+            !interactionRef.current[chatId] && !stoppedRef.current[chatId]) sendWorkflowStatusCheck(_ws, true);
+      }
+      return;
+    }
     // 过滤无效数据
     if (data.category === "end_cover" && data.type !== "end_cover") {
       return;
     }
+
+    const resumedExecution = data.message?.agent_long_task_execution_id;
+    if (resumedExecution && (data.chat_id !== helpers.chatId ||
+        resumedExecution !== longTaskRef.current[helpers.chatId]?.execution_id)) return;
 
     // Freeze partial output after a manual stop; only terminal IDs and errors may follow.
     const stopped = stoppedRef.current[helpers.chatId] === true;
@@ -273,6 +435,29 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
 
     // messages
     if (data.category === "error" || data.type === "error") {
+      if (data.message?.agent_interaction_error) {
+        const chatId = helpers.chatId;
+        const current = interactionRef.current[chatId];
+        const long = longTaskRef.current[chatId];
+        const executionId = current?.execution_id ?? long?.execution_id;
+        if (data.chat_id !== chatId ||
+            (data.message.execution_id && executionId && data.message.execution_id !== executionId)) return;
+        if (data.message.agent_interaction_error === "retry" && stoppedRef.current[chatId]) return;
+        if (data.message.agent_interaction_error === "retry" && current) {
+          delete pendingAnswer.current[chatId];
+          formAttempt.current[chatId] = (formAttempt.current[chatId] ?? 0) + 1;
+          const status = { ...current, form: undefined };
+          interactionRef.current[chatId] = status;
+          setInteractionView({ chatId, status });
+          sendWorkflowStatusCheck(_ws, true);
+        } else {
+          blockInteraction(chatId);
+          if (long?.status_version !== undefined) {
+            delete longTaskRef.current[chatId];
+            onLongTaskStatus?.(chatId, null);
+          }
+        }
+      }
       let code = 0,
         message = "";
       if (typeof data.message === "string") {
@@ -392,6 +577,16 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
 
   const sendWsMsg = async (msg) => {
     if (!canExecute) return;
+    if (msg.action === ActionType.INIT_DATA) {
+      delete longTaskRef.current[helpers.chatId];
+      delete interactionRef.current[helpers.chatId];
+      delete pendingAnswer.current[helpers.chatId];
+      delete pendingStop.current[helpers.chatId];
+      delete blockedInteraction.current[helpers.chatId];
+      delete formAttempt.current[helpers.chatId];
+      setInteractionView({ chatId: helpers.chatId });
+      onLongTaskStatus?.(helpers.chatId, null);
+    }
     try {
       if (websocket && websocket.readyState === WebSocket.OPEN) {
         websocket.send(JSON.stringify(msg));
@@ -408,6 +603,50 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
     }
   };
 
+  const longStatus = longTaskRef.current[helpers.chatId];
+  const cancelPending = ["INTENT", "SENT", "ACCEPTED"].includes(longStatus?.cancel_state ?? "");
+  const pollingAgent = (!!interaction && (interaction.phase !== "TERMINAL" || cancelPending ||
+    !!pendingStop.current[helpers.chatId])) ||
+    (longStatus?.status_version !== undefined && (longStatus.local_state === "WAITING_RESULT" || cancelPending));
+  refreshInteraction.current = () => {
+    const chatId = helpers.chatId;
+    if (blockedInteraction.current[chatId]) return;
+    const latest = interactionRef.current[chatId];
+    if (latest?.form && Date.parse(latest.expires_at) <= Date.now()) {
+      const status = { ...latest, form: undefined };
+      interactionRef.current[chatId] = status;
+      delete pendingAnswer.current[chatId];
+      setInteractionView({ chatId, status });
+    }
+    const socket = wsMap.get(chatId);
+    if (socket?.readyState === WebSocket.OPEN) {
+      sendInteractionStop(socket, chatId);
+      sendWorkflowStatusCheck(socket, true);
+    }
+    else connect();
+  };
+  useEffect(() => {
+    if (!canExecute || !pollingAgent) return;
+    const timer = window.setInterval(() => refreshInteraction.current(), 1000);
+    return () => window.clearInterval(timer);
+  }, [canExecute, helpers.chatId, pollingAgent]);
+
+  const submitInteraction = (answer: string) => {
+    const chatId = helpers.chatId;
+    const current = interactionRef.current[chatId];
+    const ws = wsMap.get(chatId);
+    if (!canExecute || blockedInteraction.current[chatId] || stoppedRef.current[chatId] || !current?.form || !current.revision ||
+        Date.parse(current.expires_at) <= Date.now() || !answer.trim() ||
+        Array.from(answer).length > current.form.max_length || ws?.readyState !== WebSocket.OPEN) {
+      throw new Error("agent interaction is not available");
+    }
+    const previous = pendingAnswer.current[chatId]?.value;
+    const submissionId = previous?.revision === current.revision && previous.answer === answer
+      ? previous.submission_id : generateUUID(32);
+    sendAgentAnswer(ws, { execution_id: current.execution_id, interaction_id: current.interaction_id,
+      revision: current.revision, submission_id: submissionId, answer });
+  };
+
   // 监听submitData变化，发送消息（必须在当前会话调用）
   useEffect(() => {
     if (submitData && isUnavailable()) {
@@ -415,6 +654,25 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
         code: unavailableRef.current[helpers.chatId] || String(helpers.appLost),
         data: null,
       });
+      setSubmitData(null);
+      return;
+    }
+    const chatId = helpers.chatId;
+    const current = interactionRef.current[chatId];
+    const long = longTaskRef.current[chatId];
+    const executionId = current?.execution_id ?? (long?.status_version !== undefined ? long.execution_id : undefined);
+    if (canExecute && submitData?.action === ActionType.STOP && executionId && !blockedInteraction.current[chatId]) {
+      stoppedRef.current[chatId] = true;
+      helpers.message.stopMsg(chatId);
+      if (current) {
+        const status = { ...current, form: undefined };
+        interactionRef.current[chatId] = status;
+        delete pendingAnswer.current[chatId];
+        setInteractionView({ chatId, status });
+      }
+      pendingStop.current[chatId] = { executionId };
+      const socket = wsMap.get(chatId);
+      if (socket) sendInteractionStop(socket, chatId);
       setSubmitData(null);
       return;
     }
@@ -561,6 +819,11 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
       setSubmitData(null);
     }
   }, [submitData]);
+  return {
+    interaction,
+    interactionFormKey: interaction && `${interaction.interaction_id}:${formAttempt.current[helpers.chatId] ?? 0}`,
+    submitInteraction,
+  };
 };
 
 const useCurrentChatId = (chatId) => {

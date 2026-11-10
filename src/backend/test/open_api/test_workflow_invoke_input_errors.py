@@ -40,8 +40,9 @@ class _Callback:
 
     def __call__(self, unique_id, workflow_id, chat_id, user_id, source):
         real = RedisCallback.__new__(RedisCallback)
+        real.unique_id = unique_id
         real.chat_id = chat_id
-        real.redis_client = SimpleNamespace(aset=AsyncMock())
+        real.redis_client = SimpleNamespace(get=MagicMock(return_value=None), aset=AsyncMock())
         real.workflow_input_key = "input"
         real.workflow_expire_time = 60
         real.save_chat_message = MagicMock()

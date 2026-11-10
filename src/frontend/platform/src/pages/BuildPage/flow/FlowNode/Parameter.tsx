@@ -1,5 +1,11 @@
 // @ts-strict-ignore
 import { WorkflowNode,WorkflowNodeParam } from "@/types/flow";
+import { useParams } from 'react-router-dom';
+import { useReducer } from 'react';
+import { PlatformKnowledgeQueryItem } from "./component/PlatformKnowledgeQueryItem";
+import { PlatformKnowledgeSelectItem } from "./component/PlatformKnowledgeSelectItem";
+import { PlatformAgentItem } from './component/PlatformAgentItem';
+import useFlowStore from '../flowStore';
 import CodeInputItem from "./component/CodeInputItem";
 import CodeOutputItem from "./component/CodeOutputItem";
 import CodePythonItem from "./component/CodePythonItem";
@@ -48,6 +54,9 @@ export default function Parameter({
     onAddSysPrompt: (type: 'knowledge' | 'sql') => void;
     onFouceUpdate: () => void;
 }) {
+    const { id: workflowId } = useParams();
+    const [, refreshPlatformAgent] = useReducer(value => value + 1, 0);
+    const workflowGraph = useFlowStore(state => state.flow);
 
     const handleOnNewValue = (newValue: any, validate?: any) => {
         item.value = newValue;
@@ -75,6 +84,37 @@ export default function Parameter({
     const InputFormItem = node.v == 3 ? InputFormItemNew : InputFormItemOld;
 
     switch (item.type) {
+        case 'platform_knowledge_query':
+            return <PlatformKnowledgeQueryItem nodeId={nodeId} data={item} onChange={handleOnNewValue}
+                onValidate={bindValidate} onVarEvent={bindVarValidate} onOutputChange={onOutPutChange} />;
+        case 'platform_knowledge_select':
+            return <PlatformKnowledgeSelectItem workflowId={workflowId || ''} reference={item.value}
+                onChange={handleOnNewValue} onValidate={bindValidate} />;
+        case 'platform_agent':
+            return <PlatformAgentItem workflowId={workflowId || ''} nodeId={nodeId} reference={item.value}
+                workflowGraph={workflowGraph}
+                bindings={node.group_params.flatMap(group => group.params).find(param => param.key === 'input_bindings')?.value || {}}
+                executionMode={node.group_params.flatMap(group => group.params).find(param => param.key === 'execution_mode')?.value}
+                allowInteraction={node.group_params.some(group => group.params.some(param => param.key === 'allow_interaction' && param.value === true))}
+                onOptionsChange={(mode, allowed) => {
+                    const group = node.group_params.find(group => group.params.includes(item));
+                    if (!group) return;
+                    node.group_params.forEach(entry => {
+                        entry.params = entry.params.filter(param => !['execution_mode', 'allow_interaction'].includes(param.key));
+                    });
+                    if (mode === 'async') group.params.push({ key: 'execution_mode', type: 'internal', value: mode, hidden: true });
+                    if (allowed) group.params.push({ key: 'allow_interaction', type: 'internal', value: true, hidden: true });
+                    refreshPlatformAgent();
+                }}
+                onValidate={bindValidate} onChange={(reference, bindings, outputSchema) => {
+                    item.value = reference;
+                    const params = node.group_params.flatMap(group => group.params);
+                    const input = params.find(param => param.key === 'input_bindings');
+                    if (input) input.value = bindings;
+                    const output = params.find(param => param.key === 'result');
+                    if (output && outputSchema) output.value = [{ key: 'result', type: outputSchema.type || 'any' }, ...Object.keys(outputSchema.properties || {}).map(key => ({ key: `result#${key}`, type: 'any' }))];
+                    refreshPlatformAgent();
+                }} />;
         case 'textarea':
             return <TextAreaItem data={item} onChange={handleOnNewValue} i18nPrefix={i18nPrefix} />;
         case 'input':

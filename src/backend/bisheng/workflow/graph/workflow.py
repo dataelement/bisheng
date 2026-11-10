@@ -19,6 +19,10 @@ class Workflow:
         callback: BaseCallback = None,
         tenant_id: int = None,
         flow_user_id: int = None,
+        platform_agent_context: dict | None = None,
+        platform_knowledge_context=None,
+        redact_errors: bool = False,
+        node_entry_check=None,
     ):
 
         # Unique identifier of the run, unique saved to the databaseID
@@ -49,7 +53,22 @@ class Workflow:
             callback=callback,
             tenant_id=tenant_id,
             flow_user_id=flow_user_id,
+            platform_agent_context=platform_agent_context,
+            platform_knowledge_context=platform_knowledge_context,
+            redact_errors=redact_errors,
+            node_entry_check=node_entry_check,
         )
+
+    def set_platform_agent_context(self, context):
+        self.graph_engine.platform_agent_context = context
+        for node in self.graph_engine.nodes_map.values():
+            if hasattr(node, "platform_agent_context"):
+                node.platform_agent_context = context
+
+    def set_platform_knowledge_context(self, context):
+        self.graph_engine.platform_knowledge_context = context
+        for node in self.graph_engine.nodes_map.values():
+            node.platform_knowledge_context = context
 
     def save_user_input_history(self, input_data: dict | None):
         if not input_data:

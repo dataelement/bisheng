@@ -3,7 +3,7 @@ import json
 import os
 import time
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 
 from langchain_core.documents import Document
 from loguru import logger
@@ -21,6 +21,8 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
 from bisheng.common.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.errcode.flow import (
+    PlatformAgentExecutionError,
+    PlatformKnowledgeExecutionError,
     WorkFlowInvalidUserInputError,
     WorkFlowNodeRunMaxTimesError,
     WorkFlowNodeUpdateError,
@@ -34,6 +36,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.common.utils.title_generator import generate_conversation_title_sync
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.chat_attachment import promote_chat_attachments_sync
 from bisheng.database.models.flow import FlowDao, FlowType
@@ -55,6 +58,7 @@ from bisheng.workflow.callback.event import (
     UserInputData,
 )
 from bisheng.workflow.common.workflow import WorkflowStatus
+from bisheng.workflow.domain.repositories.platform_knowledge_run import KnowledgeRunRepository
 
 
 class RedisCallback(BaseCallback):
@@ -82,14 +86,131 @@ class RedisCallback(BaseCallback):
         self.workflow_event_key = f"workflow:{unique_id}:event"
         self.workflow_input_key = f"workflow:{unique_id}:input"
         self.workflow_stop_key = f"workflow:{unique_id}:stop"
+        self.platform_agent_key = f"workflow:{unique_id}:platform-agent"
+        self.platform_agent_execution_id = None
         self.workflow_expire_time = settings.get_workflow_conf().timeout * 60 + 60
+        reference = self.get_platform_agent_reference()
+        if reference:
+            self.bind_platform_agent_execution(reference)
+        self.platform_knowledge_execution_id = None
+        self.platform_knowledge_owner = ""
+        tenant = self.tenant_id or get_current_tenant_id()
+        self.knowledge_store = KnowledgeRunRepository(workflow_id, unique_id, tenant, user_id, client=self.redis_client)
+        knowledge_reference = self.get_platform_knowledge_reference()
+        if knowledge_reference:
+            self.bind_platform_knowledge_execution(knowledge_reference)
 
-    def set_workflow_data(self, data: dict, override: dict = None):
+    def get_platform_knowledge_reference(self):
+        store = getattr(self, "knowledge_store", None)
+        record = store.current() if store else None
+        return record["execution_id"] if record else None
+
+    def bind_platform_knowledge_execution(self, execution_id, owner=""):
+        self.platform_knowledge_execution_id = execution_id
+        self.platform_knowledge_owner = owner
+        self.workflow_status_key, self.workflow_event_key = self.knowledge_store.output_keys(execution_id)
+        prefix = f"{self.knowledge_store.key}:{execution_id}"
+        self.workflow_data_key = f"{prefix}:data"
+        self.workflow_input_key = f"{prefix}:input"
+        self.workflow_stop_key = f"{prefix}:stop"
+
+    def clear_platform_knowledge_reference(self):
+        execution_id = getattr(self, "platform_knowledge_execution_id", None)
+        if not execution_id:
+            return
+        self.knowledge_store.clear(execution_id)
+        self.platform_knowledge_execution_id = None
+        agent = self.get_platform_agent_reference()
+        if agent:
+            self.bind_platform_agent_execution(agent)
+        else:
+            prefix = f"workflow:{self.unique_id}"
+            self.workflow_data_key = f"{prefix}:data"
+            self.workflow_status_key = f"{prefix}:status"
+            self.workflow_event_key = f"{prefix}:event"
+            self.workflow_input_key = f"{prefix}:input"
+            self.workflow_stop_key = f"{prefix}:stop"
+
+    def set_workflow_data(self, data: dict, override: dict | None = None):
         data = self.override_nodes_params(data, override)
         self.redis_client.set(self.workflow_data_key, data, expiration=self.workflow_expire_time)
 
+    def set_platform_agent_reference(self, execution_id):
+        if self.get_platform_agent_reference() != execution_id:
+            from bisheng.workflow.application.platform_agent import get_service
+
+            with get_service().repository.admission_scope(execution_id):
+                self.redis_client.set(self.platform_agent_key, execution_id, expiration=3600 * 24 * 7)
+        self.bind_platform_agent_execution(execution_id)
+
+    def bind_platform_agent_execution(self, execution_id):
+        self.platform_agent_execution_id = execution_id
+        prefix = f"workflow:{self.unique_id}:platform-agent:{execution_id}"
+        self.workflow_data_key = f"{prefix}:data"
+        self.workflow_status_key = f"{prefix}:status"
+        self.workflow_event_key = f"{prefix}:event"
+        self.workflow_input_key = f"{prefix}:input"
+        self.workflow_stop_key = f"{prefix}:stop"
+        knowledge_id = getattr(self, "platform_knowledge_execution_id", None)
+        if knowledge_id:
+            self.bind_platform_knowledge_execution(knowledge_id, self.platform_knowledge_owner)
+
+    def restore_platform_agent_reference(self, execution_id):
+        from bisheng.workflow.application.platform_agent import get_service
+
+        with get_service().repository.interaction_reference_scope(execution_id) as active:
+            if not active:
+                return False
+            if not self.get_platform_agent_reference():
+                self.redis_client.setNx(self.platform_agent_key, execution_id, expiration=3600 * 24 * 7)
+            if self.get_platform_agent_reference() != execution_id:
+                return False
+        self.bind_platform_agent_execution(execution_id)
+        return True
+
+    def get_platform_agent_reference(self):
+        key = getattr(self, "platform_agent_key", f"workflow:{self.unique_id}:platform-agent")
+        reference = self.redis_client.get(key)
+        return reference if isinstance(reference, str) and len(reference) == 32 else None
+
+    def clear_platform_agent_reference(self):
+        self._stop_platform_agent()
+        self.redis_client.delete(self.platform_agent_key)
+        self.platform_agent_execution_id = None
+        prefix = f"workflow:{self.unique_id}"
+        self.workflow_data_key = f"{prefix}:data"
+        self.workflow_status_key = f"{prefix}:status"
+        self.workflow_event_key = f"{prefix}:event"
+        self.workflow_input_key = f"{prefix}:input"
+        self.workflow_stop_key = f"{prefix}:stop"
+
+    def _stop_platform_agent(self):
+        reference = getattr(self, "platform_agent_execution_id", None) or self.get_platform_agent_reference()
+        if reference:
+            from bisheng.workflow.application.platform_agent import get_service
+
+            get_service().repository.request_stop(reference)
+
+    def _platform_status_allowed(self, status):
+        reference = getattr(self, "platform_agent_execution_id", None)
+        if not reference:
+            return True
+        if self.get_platform_agent_reference() != reference:
+            return False
+        from bisheng.workflow.application.platform_agent import get_service
+
+        row = get_service().repository.get_execution(reference)
+        if status == WorkflowStatus.SUCCESS.value:
+            return row["state"] == "SUCCEEDED"
+        if row["state"] == "SUCCEEDED":
+            return False
+        if status == WorkflowStatus.FAILED.value:
+            self._stop_platform_agent()
+            return True
+        return row["state"] in {"READY", "RUNNING", "WAITING"} and not row["stop_requested"]
+
     @staticmethod
-    def override_nodes_params(data: dict, override: dict = None) -> dict:
+    def override_nodes_params(data: dict, override: dict | None = None) -> dict:
         if not override:
             return data
 
@@ -117,7 +238,15 @@ class RedisCallback(BaseCallback):
     def get_workflow_data(self) -> dict:
         return self.redis_client.get(self.workflow_data_key)
 
-    def set_workflow_status(self, status: str, reason: str = None):
+    def set_workflow_status(self, status: str, reason: str | None = None):
+        if not self._platform_status_allowed(status):
+            return
+        knowledge_id = getattr(self, "platform_knowledge_execution_id", None)
+        if knowledge_id:
+            self.knowledge_store.status(knowledge_id, self.platform_knowledge_owner, status, reason)
+            return
+        if status == WorkflowStatus.FAILED.value:
+            self._stop_platform_agent()
         self.redis_client.set(
             self.workflow_status_key,
             {"status": status, "reason": reason, "time": time.time()},
@@ -128,7 +257,15 @@ class RedisCallback(BaseCallback):
             self.redis_client.delete(self.workflow_data_key)
             self.redis_client.delete(self.workflow_input_key)
 
-    async def async_set_workflow_status(self, status: str, reason: str = None):
+    async def async_set_workflow_status(self, status: str, reason: str | None = None):
+        if not self._platform_status_allowed(status):
+            return
+        knowledge_id = getattr(self, "platform_knowledge_execution_id", None)
+        if knowledge_id:
+            self.knowledge_store.status(knowledge_id, self.platform_knowledge_owner, status, reason)
+            return
+        if status == WorkflowStatus.FAILED.value:
+            self._stop_platform_agent()
         await self.redis_client.aset(
             self.workflow_status_key,
             {"status": status, "reason": reason, "time": time.time()},
@@ -140,10 +277,16 @@ class RedisCallback(BaseCallback):
             await self.redis_client.adelete(self.workflow_input_key)
 
     def get_workflow_status(self) -> dict | None:
+        bound = getattr(self, "platform_knowledge_execution_id", None)
+        if bound and self.get_platform_knowledge_reference() != bound:
+            return {"status": WorkflowStatus.FAILED.value, "reason": "workflow execution replaced", "time": time.time()}
         workflow_status = self.redis_client.get(self.workflow_status_key)
         return workflow_status
 
     async def async_get_workflow_status(self) -> dict | None:
+        bound = getattr(self, "platform_knowledge_execution_id", None)
+        if bound and await asyncio.to_thread(self.get_platform_knowledge_reference) != bound:
+            return {"status": WorkflowStatus.FAILED.value, "reason": "workflow execution replaced", "time": time.time()}
         workflow_status = await self.redis_client.aget(self.workflow_status_key)
         return workflow_status
 
@@ -158,24 +301,60 @@ class RedisCallback(BaseCallback):
         await self.redis_client.adelete(self.workflow_data_key)
 
     def insert_workflow_response(self, event: dict):
+        reference = getattr(self, "platform_agent_execution_id", None)
+        if reference:
+            if self.get_platform_agent_reference() != reference:
+                return
+            event = {**event, "_platform_agent_execution_id": reference}
+        knowledge_id = getattr(self, "platform_knowledge_execution_id", None)
+        if knowledge_id:
+            self.knowledge_store.event(knowledge_id, self.platform_knowledge_owner, event)
+            return
         self.redis_client.rpush(self.workflow_event_key, json.dumps(event), expiration=self.workflow_expire_time)
 
     def get_workflow_response(self) -> ChatResponse | None:
+        knowledge_id = getattr(self, "platform_knowledge_execution_id", None)
+        if knowledge_id:
+            while response := self.knowledge_store.pop(knowledge_id):
+                payload = json.loads(response)
+                reference = payload.pop("_platform_agent_execution_id", None)
+                if not reference or reference == self.get_platform_agent_reference():
+                    return ChatResponse(**payload)
+            return None
         response = self.redis_client.lpop(self.workflow_event_key)
+        while response:
+            payload = json.loads(response)
+            reference = payload.pop("_platform_agent_execution_id", None)
+            if reference and reference != self.get_platform_agent_reference():
+                response = self.redis_client.lpop(self.workflow_event_key)
+                continue
+            response = payload
+            break
         if self.get_workflow_stop():
             self.redis_client.delete(self.workflow_event_key)
             return None
         if response:
-            response = ChatResponse(**json.loads(response))
+            response = ChatResponse(**response)
         return response
 
     async def async_get_workflow_response(self) -> ChatResponse | None:
+        knowledge_id = getattr(self, "platform_knowledge_execution_id", None)
+        if knowledge_id:
+            return await asyncio.to_thread(self.get_workflow_response)
         response = await self.redis_client.alpop(self.workflow_event_key)
+        while response:
+            payload = json.loads(response)
+            reference = payload.pop("_platform_agent_execution_id", None)
+            if reference and reference != self.get_platform_agent_reference():
+                response = await self.redis_client.alpop(self.workflow_event_key)
+                continue
+            response = payload
+            break
         if await self.async_get_workflow_stop():
             await self.redis_client.adelete(self.workflow_event_key)
             return None
         if response:
-            response = ChatResponse(**json.loads(response))
+            response = ChatResponse(**response)
         return response
 
     def build_chat_response(self, category, category_type, message, extra=None, files=None):
@@ -191,6 +370,26 @@ class RedisCallback(BaseCallback):
         )
 
     def parse_workflow_failed(self, status_info: dict) -> ChatResponse | None:
+        if getattr(self, "platform_knowledge_execution_id", None):
+            from bisheng.common.errcode.flow import knowledge_error_from_reason
+
+            return self.build_chat_response(
+                WorkflowEventType.Error.value,
+                "over",
+                message=knowledge_error_from_reason(status_info.get("reason")).to_dict(),
+            )
+        if self.get_platform_agent_reference():
+            from bisheng.common.errcode import flow as flow_errors
+
+            for error_type in vars(flow_errors).values():
+                if (
+                    isinstance(error_type, type)
+                    and issubclass(error_type, flow_errors.PlatformAgentError)
+                    and getattr(error_type, "Msg", None) == status_info["reason"]
+                ):
+                    return self.build_chat_response(
+                        WorkflowEventType.Error.value, "over", message=error_type().to_dict()
+                    )
         if status_info["reason"].find("-- has run more than the maximum number of times") != -1:
             return self.build_chat_response(
                 WorkflowEventType.Error.value,
@@ -336,7 +535,7 @@ class RedisCallback(BaseCallback):
                 yield chat_response
 
     def set_user_input(
-        self, data: dict, message_id: int = None, message_content: str = None, verify_input: bool = False
+        self, data: dict, message_id: int | None = None, message_content: str | None = None, verify_input: bool = False
     ):
         if self.chat_id and message_id:
             message_db = self._own_message(ChatMessageDao.get_message_by_id(message_id), verify_input)
@@ -348,14 +547,25 @@ class RedisCallback(BaseCallback):
     async def async_set_user_input(
         self,
         data: dict,
-        message_id: int = None,
-        message_content: str = None,
+        message_id: int | None = None,
+        message_content: str | None = None,
         verify_input: bool = False,
         files: list | None = None,
+        *,
+        before_write: Callable[[], Awaitable[None]] | None = None,
     ):
+        chat_response, message = None, None
         if self.chat_id and message_id:
             message_db = self._own_message(await ChatMessageDao.aget_message_by_id(message_id), verify_input)
-            await self.async_update_old_message(data, message_db, message_content, verify_input, files)
+            changes = self._update_old_message(data, message_db, message_content, verify_input, files)
+            if changes:
+                chat_response, message = changes
+        if before_write is not None:
+            await before_write()
+        if chat_response:
+            self.save_chat_message(chat_response)
+        elif message:
+            await ChatMessageDao.aupdate_message_model(message)
         # Notify Asynchronous Task User Input
         await self.redis_client.aset(self.workflow_input_key, data, expiration=self.workflow_expire_time)
         return
@@ -478,21 +688,6 @@ class RedisCallback(BaseCallback):
         if message:
             ChatMessageDao.update_message_model(message)
 
-    async def async_update_old_message(
-        self,
-        user_input: dict,
-        message_db: ChatMessage,
-        message_content: str,
-        verify_input: bool = False,
-        files: list | None = None,
-    ):
-        chat_response, message = self._update_old_message(user_input, message_db, message_content, verify_input, files)
-        if chat_response:
-            self.save_chat_message(chat_response)
-            return
-        if message:
-            await ChatMessageDao.aupdate_message_model(message)
-
     def get_user_input(self) -> dict | None:
         ret = self.redis_client.get(self.workflow_input_key)
         if ret:
@@ -502,14 +697,63 @@ class RedisCallback(BaseCallback):
     def set_workflow_stop(self):
         from bisheng.worker.workflow.tasks import stop_workflow
 
-        self.redis_client.set(self.workflow_stop_key, 1, expiration=3600 * 24)
-        stop_workflow.delay(self.unique_id, self.workflow_id, self.chat_id, self.user_id)
+        knowledge_id = getattr(self, "platform_knowledge_execution_id", None)
+        if knowledge_id and not self.knowledge_store.stop(knowledge_id):
+            return
 
-    async def async_set_workflow_stop(self):
+        reference = getattr(self, "platform_agent_execution_id", None)
+        if reference and reference != self.get_platform_agent_reference():
+            return
+        self._stop_platform_agent()
+        self.redis_client.set(self.workflow_stop_key, 1, expiration=3600 * 24)
+        self._dispatch_stop_task(stop_workflow)
+
+    async def async_set_workflow_stop(self, *, long_committed=False):
         from bisheng.worker.workflow.tasks import stop_workflow
 
-        await self.redis_client.aset(self.workflow_stop_key, 1, expiration=3600 * 24)
-        stop_workflow.delay(self.unique_id, self.workflow_id, self.chat_id, self.user_id)
+        knowledge_id = getattr(self, "platform_knowledge_execution_id", None)
+        if knowledge_id and not self.knowledge_store.stop(knowledge_id):
+            return
+
+        reference = getattr(self, "platform_agent_execution_id", None)
+        if reference and reference != self.get_platform_agent_reference():
+            return
+        if not long_committed:
+            self._stop_platform_agent()
+            await self.redis_client.aset(self.workflow_stop_key, 1, expiration=3600 * 24)
+            self._dispatch_stop_task(stop_workflow)
+            return
+        try:
+            await self.redis_client.aset(self.workflow_stop_key, 1, expiration=3600 * 24)
+            await self.async_set_workflow_status(WorkflowStatus.FAILED.value, "workflow stop by user")
+            self._dispatch_stop_task(stop_workflow)
+        except Exception as exc:
+            # 停止意图已经提交。通知失败由执行行门禁及补偿处理。
+            logger.warning("平台 Agent 停止通知待补偿, error_type={}", type(exc).__name__)
+
+    def on_agent_long_task(self, summary):
+        self.insert_workflow_response(
+            self.build_chat_response("processing", "info", message={"agent_long_task": summary}).model_dump()
+        )
+
+    def _dispatch_stop_task(self, task):
+        reference = getattr(self, "platform_agent_execution_id", None) or self.get_platform_agent_reference()
+        knowledge_id = getattr(self, "platform_knowledge_execution_id", None)
+        if knowledge_id:
+            task.apply_async(
+                [self.unique_id, self.workflow_id, self.chat_id, self.user_id],
+                kwargs={"platform_agent_execution_id": reference, "platform_knowledge_execution_id": knowledge_id},
+                headers={"tenant_id": self.tenant_id or get_current_tenant_id()},
+            )
+            return
+        if reference:
+            task.apply_async(
+                [self.unique_id, self.workflow_id, self.chat_id, self.user_id],
+                kwargs={"platform_agent_execution_id": reference},
+                headers={"tenant_id": self.tenant_id or get_current_tenant_id()},
+            )
+        else:
+            task.delay(self.unique_id, self.workflow_id, self.chat_id, self.user_id)
 
     def get_workflow_stop(self) -> bool | None:
         """In order to stop in timeworkflow, Do not cache memory"""
@@ -538,6 +782,12 @@ class RedisCallback(BaseCallback):
         """save chat message to database
         return message id
         """
+        owner = getattr(self, "platform_knowledge_owner", "")
+        if owner:
+            reference = getattr(self, "platform_agent_execution_id", None)
+            if reference and reference != self.get_platform_agent_reference():
+                raise PlatformKnowledgeExecutionError()
+            self.knowledge_store.check(self.platform_knowledge_execution_id, owner)
         if not self.chat_id:
             items = self._finalize_citation_items(
                 chat_response,
@@ -873,6 +1123,13 @@ class RedisCallback(BaseCallback):
             chat_response.message_id = msg_id
         self.send_chat_response(chat_response)
 
+    def publish_long_task_resume_output(self, message_id, message):
+        self.send_chat_response(ChatResponse(
+            message={**message, "agent_long_task_execution_id": self.platform_agent_execution_id},
+            message_id=message_id, category=WorkflowEventType.OutputMsg.value,
+            type="over", flow_id=self.workflow_id, chat_id=self.chat_id, extra="",
+        ))
+
     def on_stream_msg(self, data: StreamMsgData):
         logger.debug(f"stream msg: {data}")
         self.send_chat_response(
@@ -953,3 +1210,16 @@ class RedisCallback(BaseCallback):
         if msg_id:
             chat_response.message_id = msg_id
         self.send_chat_response(chat_response)
+
+
+class LongTaskResumeOutput(BaseCallback):
+    """只暂存 4D 的纯文本。节点事件和输出在事务前不进入会话流。"""
+
+    def __init__(self):
+        super().__init__()
+        self.message = None
+
+    def on_output_msg(self, data: OutputMsgData):
+        if self.message is not None or data.files or data.source_documents or data.citation_registry_items:
+            raise PlatformAgentExecutionError()
+        self.message = data.model_dump(exclude={"source_documents", "citation_registry_items"})

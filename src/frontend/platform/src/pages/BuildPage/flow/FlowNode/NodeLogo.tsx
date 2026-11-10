@@ -10,10 +10,12 @@ export const Icons = {
     'rag': Outlined.BookOpenText,
     'qa_retriever': Outlined.FileSearch,
     'agent': Bot,
+    'platform_agent': Bot,
     'end': FlagTriangleRight,
     'condition': Split,
     'report': Outlined.Download,
-    'knowledge_retriever':BookOpenCheck
+    'knowledge_retriever':BookOpenCheck,
+    'platform_knowledge_retriever':BookOpenCheck,
 }
 export const Colors = {
     'start': 'bg-[#FFD89A]',
@@ -24,10 +26,12 @@ export const Colors = {
     'rag': 'bg-[#BBDBFF]',
     'qa_retriever': 'bg-[#B8EEDF]',
     'agent': 'bg-[#FFD89A]',
+    'platform_agent': 'bg-[#FFD89A]',
     'end': 'bg-red-400',
     'condition': 'bg-[#EDC9E9]',
     'report': 'bg-[#9CE4F4]',
-    'knowledge_retriever':'bg-[#B8EEDF]'
+    'knowledge_retriever':'bg-[#B8EEDF]',
+    'platform_knowledge_retriever':'bg-[#B8EEDF]',
 
 }
 

@@ -15,6 +15,8 @@ from bisheng.common.errcode.public_endpoints import PublicAccessError
 from bisheng.core.logger import trace_id_var
 from bisheng.public_endpoints.api.exception_handlers import deny_public_websocket
 from bisheng.public_endpoints.domain.services.guest_policy import public_execution
+from bisheng.workflow.application.platform_agent import BrowserPlatformAgentRuntime
+from bisheng.workflow.application.platform_knowledge import BrowserPlatformKnowledgeRuntime
 from bisheng.workflow.domain.services.published_workflow_service import PublishedWorkflowService
 
 router = APIRouter(prefix="/workflow", tags=["PublicAPI", "Workflow"])
@@ -45,6 +47,8 @@ async def workflow_ws(
                 websocket,
                 session_subject=execution.session_subject,
                 execution_snapshot=snapshot.model_dump(mode="json"),
+                platform_agent_runtime=BrowserPlatformAgentRuntime(),
+                platform_knowledge_runtime=BrowserPlatformKnowledgeRuntime(),
             )
     except PublicAccessError as exc:
         await deny_public_websocket(websocket, exc)

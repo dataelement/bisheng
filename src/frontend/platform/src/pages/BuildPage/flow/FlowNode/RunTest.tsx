@@ -8,12 +8,13 @@ import { Label } from "@/components/bs-ui/label";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { Sheet,SheetClose,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 
-import { runWorkflowNodeApi } from "@/controllers/API/workflow";
+import { validatePlatformKnowledge } from "@/controllers/API/platformKnowledge";
+import { runWorkflowNodeApi, validatePlatformAgents } from "@/controllers/API/workflow";
 import { showApiError } from "@/controllers/request";
 import { WorkflowNode } from "@/types/flow";
 import { copyText } from "@/utils";
 
-import { forwardRef,useEffect,useImperativeHandle,useState } from "react";
+import { forwardRef,useEffect,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import useFlowStore from "../flowStore";
@@ -61,6 +62,7 @@ export const ResultText = ({ title, value }: { title: string, value: any }) => {
 export const RunTest = forwardRef((props, ref) => {
     const [open, setOpen] = useState(false)
     const [inputs, setInputs] = useState<Input[]>([])
+    const trialGeneration = useRef(0)
     const [loading, setLoading] = useState(false)
     const [node, setNode] = useState<WorkflowNode>(null)
 
@@ -71,6 +73,7 @@ export const RunTest = forwardRef((props, ref) => {
 
     useEffect(() => {
         if (!open) {
+            trialGeneration.current += 1
             setInputs([])
             setResults([])
         }
@@ -83,6 +86,10 @@ export const RunTest = forwardRef((props, ref) => {
         run: (node: WorkflowNode) => {
             setOpen(true)
             setNode(node)
+            trialGeneration.current += 1
+            setLoading(false)
+            setInputs([])
+            setResults([])
 
             // 自动填充
             const appendAutoFillin = (param) => {
@@ -101,6 +108,15 @@ export const RunTest = forwardRef((props, ref) => {
              */
             node.group_params.forEach((group) => {
                 group.params.forEach((param) => {
+                    if (param.type === 'platform_knowledge_query' && param.value.source === 'variable' && param.value.variable) {
+                        const key = param.value.variable;
+                        setInputs(prev => [...prev, { key, required: false, label: key, value: '', autoFill: false }]);
+                    }
+                    if (node.type === 'platform_agent' && param.key === 'input_bindings') {
+                        Object.values(param.value || {}).forEach((binding: { source: string; variable?: string }) => {
+                            if (binding.source === 'variable' && binding.variable) setInputs(prev => [...prev, { key: binding.variable, required: true, label: binding.variable, value: '', autoFill: false }]);
+                        });
+                    }
                     if (param.test === 'input') { // 遍历value[] ,每一项作为一个test输入
                         if (node.type === "tool") {
                             return setInputs((prev) => {
@@ -147,6 +163,52 @@ export const RunTest = forwardRef((props, ref) => {
 
     const [results, setResults] = useState<any[]>([])
     const handleRunClick = async () => {
+        if (node.type === 'platform_knowledge_retriever') {
+            const generation = ++trialGeneration.current;
+            setLoading(true);
+            setResults([]);
+            try {
+                const flow = useFlowStore.getState().flow;
+                const graph = { ...flow, nodes: flow.nodes.map(item => item.id === node.id ? { ...item, data: node } : item) };
+                const validation = await validatePlatformKnowledge(workflow_id, graph, node.id);
+                if (generation !== trialGeneration.current) return;
+                if (!validation.valid) {
+                    toast.show({ type: 'warning', message: t('platformKnowledge.invalidQuestion') });
+                    return;
+                }
+                const nodeInput = Object.fromEntries(inputs.map(input => [input.key, input.value]));
+                const result = await runWorkflowNodeApi({ node_input: nodeInput, data: node, workflow_id });
+                if (generation !== trialGeneration.current) return;
+                setCurrentIndex(0);
+                setResults(result.map(batch => TranslationName(batch)));
+            } catch (error) {
+                if (generation === trialGeneration.current) showApiError(error);
+            } finally {
+                if (generation === trialGeneration.current) setLoading(false);
+            }
+            return;
+        }
+        if (node.type === 'platform_agent') {
+            setLoading(true);
+            setResults([]);
+            try {
+                const flow = useFlowStore.getState().flow;
+                const graph = { ...flow, nodes: flow.nodes.map(item => item.id === node.id ? { ...item, data: node } : item) };
+                const validation = await validatePlatformAgents(workflow_id, graph, node.id);
+                if (!validation.valid) {
+                    toast.show({ type: 'warning', message: t('platformAgent.invalidConfiguration') });
+                    return;
+                }
+                const nodeInput = Object.fromEntries(inputs.map(input => [input.key, JSON.parse(input.value)]));
+                const result = await runWorkflowNodeApi({ node_input: nodeInput, data: node, workflow_id });
+                setCurrentIndex(0);
+                setResults(result.map(batch => TranslationName(batch)));
+            } catch (error) {
+                if (error instanceof SyntaxError) toast.show({ type: 'warning', message: t('platformAgent.invalidJson') });
+                else showApiError(error);
+            } finally { setLoading(false); }
+            return;
+        }
         inputs.some(input => {
             if (input.required && !input.value) {
                 toast.show({ type: "warning", message: String(`${input.label} ${t('required')}`) })
@@ -244,7 +306,7 @@ export const RunTest = forwardRef((props, ref) => {
                         input.autoFill ? null : <div className="mb-2" key={input.key}>
                             <Label className="flex items-center bisheng-label mb-2">
                                 {input.required && <span className="text-red-500">*</span>}
-                                {input.label}
+                                {input.label} {node?.type === 'platform_agent' && t('platformAgent.jsonHint')}
                             </Label>
                             <Textarea defaultValue={input.value} onChange={(e) => {
                                     setInputs((prev) =>

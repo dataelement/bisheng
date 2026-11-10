@@ -168,23 +168,24 @@ class FlowUpdate(SQLModelSerializable):
 
 
 class FlowDao(FlowBase):
-    @classmethod
-    def create_flow(cls, flow_info: Flow, flow_type: int | None) -> Flow:
+    @staticmethod
+    def add_with_initial_version(session, flow_info: Flow, flow_type: int | None):
         from bisheng.database.models.flow_version import FlowVersion
 
+        session.add(flow_info)
+        version = FlowVersion(
+            name="v0", is_current=1, data=flow_info.data, flow_id=flow_info.id,
+            create_time=datetime.now(), user_id=flow_info.user_id, flow_type=flow_type,
+            tenant_id=flow_info.tenant_id,
+        )
+        session.add(version)
+        session.flush()
+        return version
+
+    @classmethod
+    def create_flow(cls, flow_info: Flow, flow_type: int | None) -> Flow:
         with get_sync_db_session() as session:
-            session.add(flow_info)
-            # Create a default version
-            flow_version = FlowVersion(
-                name="v0",
-                is_current=1,
-                data=flow_info.data,
-                flow_id=flow_info.id,
-                create_time=datetime.now(),
-                user_id=flow_info.user_id,
-                flow_type=flow_type,
-            )
-            session.add(flow_version)
+            cls.add_with_initial_version(session, flow_info, flow_type)
             session.commit()
             session.refresh(flow_info)
 

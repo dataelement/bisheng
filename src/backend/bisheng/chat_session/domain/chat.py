@@ -42,7 +42,8 @@ class ChatSessionService:
 
     @staticmethod
     async def get_chat_history(
-        chat_id: str, flow_id: str, message_id: str | None = None, page_size: int | None = 20
+        chat_id: str, flow_id: str, message_id: str | None = None, page_size: int | None = 20,
+        *, login_user: UserPayload | None = None,
     ) -> list["ChatMessageHistoryResponse"]:
         """Retrieve chat history for a user."""
         from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
@@ -53,13 +54,25 @@ class ChatSessionService:
         if not session_info or session_info.is_delete or session_info.flow_id != flow_id:
             return []
 
+        options = {"include_resume_output": True} if login_user is not None else {}
         history = await ChatMessageDao.afilter_message_by_chat_id(
-            chat_id=chat_id, flow_id=flow_id, message_id=message_id, page_size=page_size
+            chat_id=chat_id, flow_id=flow_id, message_id=message_id, page_size=page_size, **options
         )
+        if options:
+            from bisheng.chat_session.application.workflow_output import visible_history
+
+            history = await visible_history(history, login_user)
         if history:
             user_info = await UserDao.aget_user(user_id=session_info.user_id)
             history = ChatMessageHistoryResponse.from_chat_message_objs(history, user_info, session_info)
         return history
+
+    @staticmethod
+    async def get_conversation_messages(chat_id: str, login_user: UserPayload):
+        from bisheng.chat_session.application.workflow_output import visible_history
+
+        rows = await ChatMessageDao.aget_messages_by_chat_id(chat_id=chat_id, limit=1000, include_resume_output=True)
+        return await visible_history(rows, login_user)
 
     @staticmethod
     async def get_session_info(

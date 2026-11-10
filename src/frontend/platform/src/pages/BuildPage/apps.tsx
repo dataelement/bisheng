@@ -34,7 +34,7 @@ import { generateUUID } from "@/utils";
 import { Select, Tag } from "@bisheng/ui";
 import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import CardSelectVersion from "./CardSelectVersion";
 import CreateApp from "./CreateApp";
 import CreateTemp from "./CreateTemp";
@@ -380,6 +380,15 @@ export default function Apps() {
     }
 
     const createAppModalRef = useRef(null)
+    const { search: entrySearch } = useLocation();
+    const kunlianEntry = new URLSearchParams(entrySearch).get('kunlian_workflow') === 'new';
+    const openedKunlianCreate = useRef(false);
+    useEffect(() => {
+        if (canCreateApp && !openedKunlianCreate.current && kunlianEntry) {
+            openedKunlianCreate.current = true;
+            createAppModalRef.current?.open(AppType.FLOW, 0);
+        }
+    }, [canCreateApp, kunlianEntry]);
     const handleCreateApp = async (type, tempId = 0, item?: any) => {
         createAppModalRef.current.open(type, tempId);
     }
@@ -536,7 +545,7 @@ export default function Apps() {
                 holds the "manage your applications" caption. */}
         </div>
         {/* create flow&assistant */}
-        <CreateApp ref={createAppModalRef} />
+        <CreateApp ref={createAppModalRef} kunlianEntry={kunlianEntry} />
         {/* Permission management dialog */}
         {permTarget && (
             <PermissionDialog

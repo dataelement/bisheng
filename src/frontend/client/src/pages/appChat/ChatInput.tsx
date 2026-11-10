@@ -12,9 +12,11 @@ import { useAreaText } from "./useAreaText";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
 import { useFileDropAndPaste } from "./useFileDropAndPaste";
 
-export default function ChatInput({ readOnly, v }) {
+export default function ChatInput({ readOnly, v, agentInteractionActive = false }) {
     const [bishengConfig] = useRecoilState(bishengConfState);
-    const { inputDisabled, error: inputMsg, showUpload, showStop, showReRun } = useRecoilValue(currentRunningState);
+    const { inputDisabled: nativeDisabled, error: inputMsg, showUpload: nativeUpload, showStop, showReRun } = useRecoilValue(currentRunningState);
+    const inputDisabled = nativeDisabled || agentInteractionActive;
+    const showUpload = nativeUpload && !agentInteractionActive;
     // useAreaText
     const { accepts, inputRef, setChatFiles, handleRestart, handleSendClick, handleStopClick } = useAreaText();
 

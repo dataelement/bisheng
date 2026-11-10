@@ -6,11 +6,14 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class NodeType(Enum):
-    """ Node type """
+    """Node type"""
+
     START = "start"
     END = "end"
     INPUT = "input"
     AGENT = "agent"
+    PLATFORM_AGENT = "platform_agent"
+    PLATFORM_KNOWLEDGE_RETRIEVER = "platform_knowledge_retriever"
     CODE = "code"
     CONDITION = "condition"
     LLM = "llm"
@@ -22,7 +25,7 @@ class NodeType(Enum):
     TOOL = "tool"
     KNOWLEDGE_RETRIEVER = "knowledge_retriever"
 
-    NOTE = 'note'  # Notes node Knowledge is used to display annotations, not actual execution nodes
+    NOTE = "note"  # Notes node Knowledge is used to display annotations, not actual execution nodes
 
 
 class NodeParams(BaseModel):
@@ -55,7 +58,7 @@ class BaseNodeData(BaseModel):
     tool_key: Optional[str] = Field("", description="unique tool id, only for tool node")
     v: Optional[int] = Field(default=0, description="node version")
 
-    @field_validator('v', mode='before')
+    @field_validator("v", mode="before")
     @classmethod
     def convert_v_to_int(cls, v: str | int | None) -> int:
         if isinstance(v, str):
