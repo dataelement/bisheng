@@ -94,9 +94,23 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
                     member_group_ids=[user.default_groupid] if user.default_groupid else None,
                 )
         if 1 == user_exist.delete:
+            UserService._audit_login_failure(
+                request,
+                account=user_exist.user_name,
+                reason="账号已停用",
+                user_id=user_exist.user_id,
+                source="单点登录",
+            )
             raise UserForbiddenError.http_exception()
         guard = await UserService._reject_login_if_user_has_no_usable_access(user_exist)
         if guard is not None:
+            UserService._audit_login_failure(
+                request,
+                account=user_exist.user_name,
+                reason="没有可用权限",
+                user_id=user_exist.user_id,
+                source="单点登录",
+            )
             return guard
         # Resolve the user's active leaf tenant so the JWT carries the right
         # tenant_id. Without this, ``create_access_token`` falls back to
@@ -1059,6 +1073,18 @@ async def reset_password(
     UserDao.update_user(user_info)
 
     clear_error_password_key(user_info.user_id)
+    from bisheng.api.services.audit_log import AuditLogService
+
+    AuditLogService.record(
+        operator_id=login_user.user_id,
+        operator_name=login_user.user_name,
+        system_id="system",
+        event_type="reset_user_password",
+        object_type="user_conf",
+        object_id=str(user_info.user_id),
+        object_name=user_info.user_name,
+        note="来源=管理员重置；结果=成功",
+    )
     return resp_200()
 
 
@@ -1087,6 +1113,18 @@ async def change_password(
     UserDao.update_user(user_info)
 
     clear_error_password_key(user_info.user_id)
+    from bisheng.api.services.audit_log import AuditLogService
+
+    AuditLogService.record(
+        operator_id=login_user.user_id,
+        operator_name=login_user.user_name,
+        system_id="system",
+        event_type="change_own_password",
+        object_type="user_conf",
+        object_id=str(user_info.user_id),
+        object_name=user_info.user_name,
+        note="来源=已登录修改；结果=成功",
+    )
     return resp_200()
 
 
@@ -1110,6 +1148,18 @@ async def change_password_public(
     UserDao.update_user(user_info)
 
     clear_error_password_key(user_info.user_id)
+    from bisheng.api.services.audit_log import AuditLogService
+
+    AuditLogService.record(
+        operator_id=user_info.user_id,
+        operator_name=user_info.user_name,
+        system_id="system",
+        event_type="change_own_password",
+        object_type="user_conf",
+        object_id=str(user_info.user_id),
+        object_name=user_info.user_name,
+        note="来源=公共修改密码；结果=成功",
+    )
     return resp_200()
 
 

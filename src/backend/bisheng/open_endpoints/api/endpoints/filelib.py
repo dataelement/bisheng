@@ -626,6 +626,20 @@ def download_statistic_file(
     return FileResponse(file_path, filename=file_name)
 
 
+def _audit_open_qa(login_user, event_type: str, knowledge_id: int, note: str) -> None:
+    from bisheng.api.services.audit_log import AuditLogService
+
+    AuditLogService.record(
+        operator_id=login_user.user_id,
+        operator_name=login_user.user_name,
+        system_id="knowledge",
+        event_type=event_type,
+        object_type="knowledge",
+        object_id=str(knowledge_id),
+        note=note,
+    )
+
+
 @router.post("/add_qa")
 @open_api_scope("knowledge:write")
 def add_qa(*, knowledge_id: int = Body(embed=True), data: list[APIAddQAParam] = Body(embed=True)):
@@ -647,6 +661,9 @@ def add_qa(*, knowledge_id: int = Body(embed=True), data: list[APIAddQAParam] = 
 
         res.append(knowledge_imp.add_qa(knowledge, qa_insert))
 
+    _audit_open_qa(
+        login_user, "create_qa", knowledge_id, f"库={knowledge_id}；数量={len(res)}；来源=开放接口；结果=成功"
+    )
     return resp_200(res)
 
 
@@ -665,7 +682,14 @@ def append_qa(*, knowledge_id: int = Body(embed=True), data: APIAppendQAParam = 
     qa_insert = QAKnowledgeUpsert.validate(t)
     qa_insert.questions.extend(data.relative_questions)
 
-    return resp_200(knowledge_imp.add_qa(knowledge, qa_insert))
+    saved = knowledge_imp.add_qa(knowledge, qa_insert)
+    _audit_open_qa(
+        login_user,
+        "update_qa",
+        knowledge_id,
+        f"库={knowledge_id}；条目={data.id}；来源=开放接口；字段=相似问题；结果=成功",
+    )
+    return resp_200(saved)
 
 
 @router.delete("/qa/{qa_id}", status_code=200)
@@ -695,6 +719,12 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
     knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])
     if keep_pair:
         knowledge_imp.QA_save_knowledge(knowledge, qa)
+    _audit_open_qa(
+        login_user,
+        "update_qa" if keep_pair else "delete_qa",
+        knowledge.id,
+        f"库={knowledge.id}；条目={qa_id}；来源=开放接口；结果=成功",
+    )
     return resp_200()
 
 
@@ -727,6 +757,17 @@ def update_qa(
     if question or answer:
         knowledge_imp.delete_vector_data(knowledge, file_ids=[id])
         knowledge_imp.QA_save_knowledge(knowledge, qa)
+    changed = []
+    if question is not None or original_question:
+        changed.append("问题")
+    if answer:
+        changed.append("答案")
+    _audit_open_qa(
+        login_user,
+        "update_qa",
+        knowledge.id,
+        f"库={knowledge.id}；条目={id}；来源=开放接口；字段={','.join(changed) or '无'}；结果=成功",
+    )
     return resp_200()
 
 
