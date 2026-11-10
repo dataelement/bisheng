@@ -59,7 +59,7 @@ Root最终四路径`test_wire_router`、`test_legacy_document_contract`、`test_
 
 剩余34个基线旧失败及两端既有测试问题按既有归因处理，不豁免本次新缺陷。原8张开发卡保持关闭；14张验收卡仍待真实接口、升级/恢复、E2E与最终评审，不因本地回归或构建结果改勾。
 
-旧环境补齐的未发布hosted AppVersion是本次synthetic fixture，不是runtime；另一workflow/version206用于已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置证据保留。当前M2发现synthetic版本将模型display名`e2e-f118-chat`误作capability声明；旧/新resolver均要求vendor名`f118-chat`，26511为正确阻断。Root拟严格撤销本次未发布synthetic版本并以新UUID完整重建正确版本，不UPDATE真实历史版本、不走Runtime删除、不加名称fallback或伪造invalid_legacy。backup1、failed clone及旧code证据保留；限定prep2/reset/backup2脚本尚未执行，修样本后须重新备份、还原及正式run，当前未freeze/convert/deploy。
+旧环境补齐的未发布hosted AppVersion是本次synthetic fixture，不是runtime；另一workflow/version206用于已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置证据保留。M2此前发现synthetic版本将模型display名`e2e-f118-chat`误作capability声明；旧/新resolver均要求vendor名`f118-chat`，26511为正确阻断。Root已用旧镜像a1b完成fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；旧code保留，其他SQL/FGA/模型默认/文件/WF核对不变。不UPDATE真实历史版本、不走Runtime删除、不加名称fallback或伪造invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目安全路径`prep/revision2/fixture-reset.json`（私密原文留服务器）。backup1及failed clone证据保留；backup2/restore2/正式M2/deploy均未执行，尚未freeze/convert。
 
 新前端候选22f5261181已完成真实锁依赖类型检查及两端Vite构建，镜像`sha256:e0b7b3479099b6add0fd81070f634135bc90881f66afea10e2978f8df3505b78`，归档SHA256 `c95fa28d20f477ac7e79fd2df11166084258fce4fee66f2051b501dbc17b30f3`。当前`src/frontend`树为`339831ed64e7c19da3af69c3b326565a2fff3458`，已与旧550561候选的ca37581树不同，不能继续声称旧镜像与当前源码等价。原锁和产品Dockerfile未改。
 
@@ -73,7 +73,7 @@ backup1已完成，manifest SHA256 `2e8bb87fae241b3e777b0c9aba5dbb03acc8609aa8a8
 
 正式M2前的窄修已合：CLI owned lazy manager收尾d46944ba42（Root10绿）、原FGA `condition:null`格式5c5497dc6b（相关77绿）、F038内置公共tag库user0精确哨兵01eff15ba2（相关114绿）。保原常规creator、未知条件字段拒绝及权限边界；这些定点不是8208整轮重跑，也不表示旧77f镜像已更新。
 
-窗口1的原API/Worker/mock/Milvus/ES/etcd持续停止；Milvus原生1800秒超时exit1（无OOM/外部kill）证据保留。Root仅启动MySQL/Redis/MinIO/FGA四存储准备prep2，尚未执行reset/backup2；新服务镜像未部署。109:3005及范围排除项保持不动，不称正式升级或恢复业务完成。
+窗口1的原API/Worker/mock/Milvus/ES/etcd持续停止；Milvus原生1800秒超时exit1（无OOM/外部kill）证据保留。Root仅启动MySQL/Redis/MinIO/FGA四存储完成限定fixture reset；backup2/restore2/正式M2仍未执行，新服务镜像未部署。109:3005及范围排除项保持不动，不称正式升级或恢复业务完成。
 
 新DeleteJob中性DDL单head为f118_knowledge_delete_execution，隔离还原clone验证见上；正式数据转换、M4及恢复业务仍待完成。定点数字不相加为完整覆盖；范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
 
