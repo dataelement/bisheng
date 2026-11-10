@@ -1,6 +1,6 @@
 # 升级说明：知识空间统一与全平台 use 动作退役
 
-**状态（2026-11-10）**：功能开发已收齐，backup1、隔离完整还原和clone中性DDL通过；本次synthetic样本已按原vendor声明精确重建，backup2/restore2/正式M2尚未执行，未freeze/convert/deploy。当前仍为演练说明，不据此开放生产升级；SDK无本次代码改动，全托管SDK场景单列未执行。最新入口见§3.1，后文日期章节保留历史证据边界。\
+**状态（2026-11-10）**：功能开发已收齐，backup1、隔离完整还原和clone中性DDL通过；本次synthetic样本已按原vendor声明精确重建，backup2完成；restore2/stage2/新中性DDL/正式M2/deploy仍未执行，未freeze/convert。当前仍为演练说明，不据此开放生产升级；SDK无本次代码改动，全托管SDK场景单列未执行。最新入口见§3.1，后文日期章节保留历史证据边界。\
 **日期**：2026-11-03\
 **关联**：[spec.md](./spec.md)（AC-63、AC-85、AC-89、AC-91、AC-92、AC-93、AC-94） · [design.md](./design.md) §7。
 
@@ -277,10 +277,10 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 
 最终77f737fe3c后端完整单轮8208 passed、34 failed、23 skipped、0 errors，另8 subtests passed，27分35秒；34失败均与共同祖先旧红相等、未归因0，23均为相同Redis依赖跳过。此为本地回归，不是全绿或升级E2E。升级后Move仍须实测：预检及确认锁前先核原move/目标upload_file并分类，仅有效根检查源/目标idle；无权或缺失项分类不被忙态覆盖，锁后仍重验忙态，拒绝时Plan/File/Job/chat零副作用。2bb10ce9df不改变原动作范围。
 
-前端22f修复真实类型错误后，锁依赖类型及两端Vite构建通过，新树339831ed64e7c19da3af69c3b326565a2fff3458已取代旧ca37581树；已构建后端77f快照尚不含后续M2窄修。两端镜像均未部署，摘要见[W6记录](./wave6-implementation-review.md#统一测试进行中2026-11-10)。本地19条API E2E仅collect-only、21项UI未执行，T200–T213的14张验收卡仍待完成。本次未改SDK，不为测试新增SDK/扩托管运行时；既有SDK双凭据全托管场景缺真实运行材料单列未执行，v2/MCP协议验证不冒称SDK通过，也不新增runtime功能依赖。
+前端22f修复真实类型错误后，锁依赖类型及两端Vite构建通过，新树339831ed64e7c19da3af69c3b326565a2fff3458已取代旧ca37581树；已构建后端77f快照尚不含后续M2窄修。两端镜像均未部署，摘要见[W6记录](./wave6-implementation-review.md#统一测试进行中2026-11-10)。现有测试工具镜像内Chromium无网络/无凭据launch/data HTML/close验证通过，只证工具可用；镜像摘要见W6，不是UI验收。本地19条API E2E仅collect-only、21项UI未执行，T200–T213的14张验收卡仍待完成。本次未改SDK，不为测试新增SDK/扩托管运行时；既有SDK双凭据全托管场景缺真实运行材料单列未执行，v2/MCP协议验证不冒称SDK通过，也不新增runtime功能依赖。
 
 backup1完成（manifest SHA256 `2e8bb87fae241b3e777b0c9aba5dbb03acc8609aa8a8bbf5873f0dee04169552`，旧镜像8.447GB保存），隔离full restore的7检查全true，含187表/798 tuple/67对象版本/4 ES/3 Milvus及22逻辑向量、原schema head；clone中性DDL通过，180张原business表原列不变、8张新表为空。这不等于正式M2已冻结或升级通过。CLI收尾、原FGA null格式及内置user0哨兵窄修仅为定点证据，未重跑8208整轮，详见W6。
 
-M2此前正确拒绝本次synthetic AppVersion的display/vendor名称混淆（26511）：旧/新resolver均要求`f118-chat`，fixture误写`e2e-f118-chat`。Root已用旧镜像a1b通过fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；保留旧code，其他SQL/FGA/模型默认/文件/WF核对不变，不UPDATE真实历史版本、不走Runtime删除、不添加fallback或伪invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目`prep/revision2/fixture-reset.json`私密原文留服务器；保backup1/failed clone，backup2/restore2/正式M2/deploy均未执行。旧API/Worker/mock/Milvus/ES/etcd自窗口1持续停，仅Root开启MySQL/Redis/MinIO/FGA四存储作准备；Milvus原生1800秒超时exit1无OOM/外部kill单列保留。正式freeze/convert/deploy均未发生，3005保持不动。
+M2此前正确拒绝本次synthetic AppVersion的display/vendor名称混淆（26511）：旧/新resolver均要求`f118-chat`，fixture误写`e2e-f118-chat`。Root已用旧镜像a1b通过fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；保留旧code，其他SQL/FGA/模型默认/文件/WF核对不变，不UPDATE真实历史版本、不走Runtime删除、不添加fallback或伪invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目`prep/revision2/fixture-reset.json`私密原文留服务器；保backup1/failed clone。backup2于2026-11-10 06:58:24 UTC完成，manifest SHA256 `fd7dd63b37ba45d6503d02f1d5de01cf078a38182832f8aed1635f9bf60e9630`：24 files、187张SQL表/798条FGA/68个MinIO对象版本，旧镜像归档8447341568 bytes以同旧inode硬链接保存。retained broker及其他SQL/FGA不变，仅上述synthetic版本及唯一新code改变；Root独立核summary固定字段，未取私密原文。原API/Worker及全部11个服务现均stopped；restore2/stage2/新中性DDL/正式M2/deploy/API19仍未执行。Milvus原生1800秒超时exit1无OOM/外部kill单列保留。正式freeze/convert/deploy均未发生，3005保持不动。
 
 旧重复文件覆盖/重试保原File/Doc/Version和目录，原处理版本是来源快照，更新空间默认不重算旧文件；正式升级后需用原ID及存量快照核对这一兼容路径。整批WAITING提交与原worker派发均需实测，未知ACK不作为成功证据。仍按停服/排空/一致备份→中性DDL→停服后正式盘点冻结→同run转换/权限发布→六来源回填/对账/Coverage→校验后恢复的原顺序，不由迁移脚本判断停服。
