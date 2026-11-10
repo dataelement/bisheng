@@ -41,7 +41,7 @@ Only a validated successful mutation receipt may clear a pending operation or un
 
 ## Acceptance
 
-Verify ordinary-user allow/deny pairs, two distinct users synchronizing records, conflicts, retries, reconnect replay, revocation, code updates and process replacement with persistent data. Verify required jobs after Desktop closes. List unverified items honestly; builds do not prove deployment or installation.
+Verify ordinary-user allow/deny pairs, two distinct users synchronizing records, conflicts, retries, reconnect replay, revocation, code updates and process replacement with persistent data. Execute the shipped browser script through its real startup path: tests that instantiate a factory and call boot themselves do not prove that the production page starts. Verify required jobs after Desktop closes. List unverified items honestly; builds do not prove deployment or installation.
 
 
 Account and server binding: reuse the current desktop account, tenant and configured server. Do not introduce separate cloud connection or publishing-key settings. Discover applications automatically after sign-in; refresh discovery and clear stale publishing selections after an account or enterprise change. Sign-in uses the desktop account flow.
