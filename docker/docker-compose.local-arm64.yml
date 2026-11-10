@@ -1,0 +1,57 @@
+# Local Apple Silicon (arm64) overrides for the infra-only dev stack.
+# docker/.env points at the AMD64 CR tags; this file swaps in the arm64 builds
+# the CR registry publishes — except MinIO and Milvus, whose arm64 builds come
+# from Docker Hub (see docker/.env.local for the CR fallbacks). Use it AFTER the
+# main file:
+#   docker compose --env-file docker/.env --env-file docker/.env.local \
+#     -f docker/docker-compose.yml -f docker/docker-compose.local-arm64.yml \
+#     up -d mysql redis minio openfga
+#
+# The image tags come from the LOCAL_* variables in docker/.env.local (committed,
+# no secrets); credentials stay in docker/.env, which is gitignored.
+services:
+  mysql:
+    image: ${LOCAL_MYSQL_IMAGE:-cr.dataelem.com/bisheng-mysql:8.0.39-linuxarm64}
+
+  redis:
+    image: ${LOCAL_REDIS_IMAGE:-cr.dataelem.com/bisheng-redis:7.2.4-linuxarm64}
+
+  minio:
+    # CR has no arm64 MinIO tag (the RELEASE.*-linuxarm64 names do not resolve);
+    # its only pullable build is the amd64 RELEASE.2023-03-20T20-16-18Z, which
+    # runs emulated. Docker Hub's multi-arch `latest` is the native option.
+    image: ${LOCAL_MINIO_IMAGE:-minio/minio:latest}
+    environment:
+      # The legacy MINIO_ACCESS_KEY/SECRET_KEY aliases are gone from current releases.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in docker/.env (see .env.example)}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
+
+  openfga-migrate:
+    image: ${LOCAL_OPENFGA_IMAGE:-cr.dataelem.com/dataelement/openfga:v1.15.2-dm-arm64}
+
+  openfga:
+    image: ${LOCAL_OPENFGA_IMAGE:-cr.dataelem.com/dataelement/openfga:v1.15.2-dm-arm64}
+
+  # Not started by default (knowledge/RAG path only).
+  elasticsearch:
+    image: ${LOCAL_ES_IMAGE:-cr.dataelem.com/bisheng-elasticsearch:8.12.2-linuxarm64}
+    # The main file pins `user: root` for the Bitnami build, whose wrapper drops
+    # privileges itself. This CR image is the official Elasticsearch
+    # distribution: it refuses to boot as root and runs as uid 1000.
+    user: "1000:0"
+    environment:
+      discovery.type: single-node
+      # The Bitnami image ships security off; the official one does not, and
+      # the backend connects without credentials.
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      # Official layout; the Bitnami image stores under /bitnami/elasticsearch.
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/es:/usr/share/elasticsearch/data
+
+  etcd:
+    image: ${LOCAL_ETCD_IMAGE:-cr.dataelem.com/bisheng-etcd:v3.5.13-linuxarm64}
+
+  milvus:
+    # CR also ships v2.5.10-arm64; the local v2.6.11 arm64 build matches pymilvus>=2.6.
+    image: ${LOCAL_MILVUS_IMAGE:-milvusdb/milvus:v2.6.11}
