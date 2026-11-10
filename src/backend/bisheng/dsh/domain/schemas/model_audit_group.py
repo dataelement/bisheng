@@ -66,6 +66,8 @@ class AuditConversation(AuditDTO):
     updated_at: datetime
     request_count: int = Field(ge=0)
     abnormal_count: int = Field(ge=0)
+    like_count: int = Field(default=0, ge=0)
+    dislike_count: int = Field(default=0, ge=0)
     has_sensitive_hit: bool = False
     sensitive_hit_count: int = Field(default=0, ge=0)
     matching_sensitive_hit_count: int | None = Field(default=None, ge=0)

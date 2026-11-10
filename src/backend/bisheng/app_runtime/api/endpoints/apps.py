@@ -84,6 +84,20 @@ async def list_apps(user: UserPayload = Depends(UserPayload.get_login_user)):
     return resp_200(data=await AppQueryService.list_apps(actor=user))
 
 
+@router.get("/workbenches", response_model=UnifiedResponseModel[dict], summary="Usable cloud workbenches")
+async def list_workbenches(
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    cursor: str | None = Query(default=None, pattern=r"^[a-f0-9]{32}$"),
+):
+    from bisheng.app_runtime.domain.repositories.desktop_app_repository import DesktopAppRepository
+    from bisheng.app_runtime.domain.services.desktop_apps_service import workbench_page
+
+    page = await workbench_page(user, DesktopAppRepository(), after=cursor)
+    for item in page["items"]:
+        item["entry_url"] = AppQueryService.entry_url(item["slug"]).rstrip("/") + "/"
+    return resp_200(data=page)
+
+
 @router.get("/{app_id}", response_model=UnifiedResponseModel[dict], summary="Application detail")
 async def get_app(app_id: str, user: UserPayload = Depends(UserPayload.get_login_user)):
     """AC-25 — includes the configured full ``entry_url``; browser links use their current origin."""

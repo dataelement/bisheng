@@ -3,6 +3,7 @@ import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react';
 import { Trans } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import { Button } from '@bisheng/ui';
 import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_INTRO, ModuleHomeHeader } from '~/components/ModuleHome';
 import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
@@ -160,6 +161,7 @@ export default function AppCenter() {
         >
             {!isMobileLayout && (
                 <ModuleHomeHeader title={menuNames.apps}>
+                    <Button variant="link" asChild><Link to="/apps/cloud-workbenches">{localize('shared:cloudWorkbenches.title')}</Link></Button>
                     <div className="w-auto min-w-[120px] shrink-0">
                         <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
                     </div>
@@ -171,6 +173,7 @@ export default function AppCenter() {
                 isMobileLayout ? 'text-body-sm' : [MODULE_HOME_INTRO, 'my-4 text-body'],
             )}>
                 <span>{localize('com_app.recent_apps_hint')}</span>
+                {isMobileLayout && <Link to="/apps/cloud-workbenches" className="text-body-sm text-primary">{localize('shared:cloudWorkbenches.title')}</Link>}
                 <span>
                     <Trans
                         i18nKey="com_app.explore_plaza"

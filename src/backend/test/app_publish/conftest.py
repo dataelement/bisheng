@@ -130,6 +130,7 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.app_publish.domain.models.capability_call_record",
     "bisheng.app_publish.domain.models.hosted_app_subject",
     "bisheng.app_publish.domain.services.app_credential_service",
+    "bisheng.app_publish.domain.repositories.app_secret_repository",
     "bisheng.app_publish.domain.services.capability_audit",
     "bisheng.app_publish.domain.services.capability_bus_service",
     "bisheng.app_publish.domain.services.package_service",
@@ -140,6 +141,7 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.app_publish.domain.services.precheck_service",
     "bisheng.app_publish.domain.services.schema_evolution_service",
     "bisheng.app_publish.domain.services.publish_pipeline_service",
+    "bisheng.app_publish.domain.repositories.admission",
     "bisheng.app_publish.domain.services.publish_approval_service",
     "bisheng.app_publish.domain.services.publish_status_service",
     "bisheng.app_publish.domain.services.publish_notification_service",
@@ -197,6 +199,7 @@ _TABLES = (
     "api_credential_delegate_scope",
     "hosted_app_subject",
     "app_capability_call_record",
+    "app_secret_config",
     "knowledge",
 )
 

@@ -1,11 +1,14 @@
 """Saved-tool composition; Redis connection is owned by the app manager."""
 
+from fastapi import Depends
+
+from bisheng.dsh.access_runtime import DshRuntime, get_runtime
 from bisheng.dsh.domain.schemas.tool_invocation import ToolLimits
 from bisheng.dsh.domain.services.tools import ToolInvocationService
 from bisheng.dsh.infrastructure.tool_leases import ToolLeases
 
 
-async def get_tool_service():
+async def get_tool_service(runtime: DshRuntime = Depends(get_runtime)):
     # Deferred: the tool executor chain pulls in RAG/MCP/worker modules that the
     # DSH router must not load at import time.
     from bisheng.core.cache.redis_manager import get_redis_client
@@ -14,4 +17,9 @@ async def get_tool_service():
     limits = ToolLimits()
     redis = (await get_redis_client()).async_connection
     leases = ToolLeases(redis, lease_ms=(limits.timeout_seconds + 5) * 1000)
-    return ToolInvocationService(SavedToolService(), leases, limits)
+    return ToolInvocationService(
+        SavedToolService(),
+        leases,
+        limits,
+        activity_recorder=runtime.sessions.record_activity,
+    )
