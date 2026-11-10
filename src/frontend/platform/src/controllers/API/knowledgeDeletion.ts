@@ -1,8 +1,5 @@
 import request from "@/controllers/request";
 import type { OperationPrecheck } from "./knowledgeSpace";
-const post = <T,>(url: string, body?: unknown): Promise<T> => request.post<unknown, T>(url, body);
-const get = <T,>(url: string, params?: Record<string, string>): Promise<T> =>
-  request.get<unknown, T>(url, { params });
 export type DeleteItem = Readonly<{ id: number; type: "file" | "folder" }>;
 export type DeleteCommand = Readonly<{
   spaceId: number;
@@ -43,7 +40,9 @@ export type DeleteImpact = {
   source_page: ReferencePage;
   file_count: number;
 };
-export type DeletePrecheck = Omit<OperationPrecheck, "impact"> & { impact: DeleteImpact };
+export type DeletePrecheck = Omit<OperationPrecheck, "impact"> & {
+  impact: DeleteImpact;
+};
 export type DeleteConfirmation = Readonly<{
   idempotency_key: string;
   confirmation_id: string;
@@ -58,10 +57,14 @@ export type DeletionStatus = {
   completed_steps?: string[];
 };
 const path = (id: number) => `/api/v1/knowledge/space/${id}`;
-export function precheckDeletion(command: DeleteCommand, force = false): Promise<DeletePrecheck> {
-  if (force && command.kind !== "delete") return Promise.reject(new Error("invalid_force"));
+export function precheckDeletion(
+  command: DeleteCommand,
+  force = false,
+): Promise<DeletePrecheck> {
+  if (force && command.kind !== "delete")
+    return Promise.reject(new Error("invalid_force"));
   const suffix = command.kind === "files" ? "files/delete" : command.kind;
-  return post(
+  return request.post<unknown, DeletePrecheck>(
     `${path(command.spaceId)}/${suffix}/precheck`,
     command.kind === "files"
       ? { items: command.items }
@@ -74,18 +77,44 @@ export function confirmDeletion(
   spaceId: number,
   body: DeleteConfirmation,
 ): Promise<DeletionStatus> {
-  return post(`${path(spaceId)}/deletion/confirm`, body);
+  return request.post<unknown, DeletionStatus>(
+    `${path(spaceId)}/deletion/confirm`,
+    body,
+  );
 }
-export function getDeletionStatus(spaceId: number, jobId: string): Promise<DeletionStatus> {
-  return get(`${path(spaceId)}/deletion/${encodeURIComponent(jobId)}`);
+export function getDeletionStatus(
+  spaceId: number,
+  jobId: string,
+): Promise<DeletionStatus> {
+  return request.get<unknown, DeletionStatus>(
+    `${path(spaceId)}/deletion/${encodeURIComponent(jobId)}`,
+    { params: undefined },
+  );
 }
-export function inspectReferences(command: DeleteCommand): Promise<ReferenceInspection> {
+export function inspectReferences(
+  command: DeleteCommand,
+): Promise<ReferenceInspection> {
   return command.kind === "files"
-    ? post(`${path(command.spaceId)}/files/references`, { items: command.items })
-    : get(`${path(command.spaceId)}/references`);
+    ? request.post<unknown, ReferenceInspection>(
+        `${path(command.spaceId)}/files/references`,
+        { items: command.items },
+      )
+    : request.get<unknown, ReferenceInspection>(
+        `${path(command.spaceId)}/references`,
+        { params: undefined },
+      );
 }
-export function pageReferences(command: DeleteCommand, cursor: string): Promise<ReferencePage> {
+export function pageReferences(
+  command: DeleteCommand,
+  cursor: string,
+): Promise<ReferencePage> {
   return command.kind === "files"
-    ? post(`${path(command.spaceId)}/files/references`, { items: command.items, cursor })
-    : get(`${path(command.spaceId)}/references`, { cursor });
+    ? request.post<unknown, ReferencePage>(
+        `${path(command.spaceId)}/files/references`,
+        { items: command.items, cursor },
+      )
+    : request.get<unknown, ReferencePage>(
+        `${path(command.spaceId)}/references`,
+        { params: { cursor } },
+      );
 }
