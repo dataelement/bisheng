@@ -38,7 +38,7 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter_if, get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.database.models.session import MessageSessionDao
+from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
 from bisheng.department.domain.services.department_flow_service import (
     DepartmentFlowService,
     SlotOutcome,
@@ -71,8 +71,8 @@ from bisheng.linsight.domain.services.state_message_manager import (
 )
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
-from bisheng.share_link.domain.services.share_token_dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.share_link.domain.services.share_token_dependencies import header_share_token_parser
 from bisheng.utils import util
 
 router = APIRouter()
@@ -201,6 +201,10 @@ async def submit_linsight_workbench(
             tenant_id,
             submit_obj.session_id or "",
         )
+
+        session_id = submit_obj.session_id if isinstance(submit_obj.session_id, str) else ""
+        if session_id:
+            MessageSessionDao.update_sensitive_status(session_id, SensitiveStatus.VIOLATIONS)
 
         async def blocked_generator():
             auto_reply = blocked.auto_reply or ""
