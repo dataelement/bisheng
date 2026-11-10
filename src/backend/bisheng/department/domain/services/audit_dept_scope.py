@@ -44,12 +44,19 @@ class AuditDeptScopeService:
         a user-group admin without the audit menu included (decision 9).
         """
         tenant_id = tenant_scope if tenant_scope is not None else get_current_tenant_id()
-        if await cls.is_audit_admin(login_user, tenant_id):
-            return AuditDeptScope.unlimited()
+        # Ask the live tenant-admin relation before the RBAC short-circuit.
+        # Child-tenant administrators also carry AdminRole, so ``is_admin()``
+        # and the JWT ``is_global_super`` flag are both true for them
+        # (``_check_is_global_super`` falls back to that role, and the role
+        # sync writes ``super_admin``). Audit routes always install a
+        # management scope, which made the old short-circuit show every row
+        # in the tenant — including 「未记录」 and the system admin's sessions.
         if tenant_id is not None and await cls._is_tenant_admin(login_user.user_id, tenant_id):
             # The tenant's own department tree, including a child tenant mounted
             # on the parent tree. Operators from outside that tree stay hidden.
             return AuditDeptScope.restricted(admin_paths=await AuditDeptRepository.root_paths(tenant_id))
+        if await cls.is_audit_admin(login_user, tenant_id):
+            return AuditDeptScope.unlimited()
 
         admin_departments = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
         if not await cls._has_audit_menu(login_user, is_department_admin=bool(admin_departments)):
@@ -103,10 +110,10 @@ class AuditDeptScopeService:
 
     @classmethod
     async def is_audit_admin(cls, login_user: UserPayload, _tenant_id: int | None) -> bool:
-        """Global super or the system administrator role: no department limit.
+        """Platform super or the system administrator role: no department limit.
 
-        A tenant administrator is not in this set. ``resolve`` limits them to
-        the current tenant's department tree.
+        A tenant administrator also looks like this (AdminRole), so ``resolve``
+        must apply the tenant-admin crop before calling this.
         """
         return bool(login_user.is_global_super or login_user.is_admin())
 

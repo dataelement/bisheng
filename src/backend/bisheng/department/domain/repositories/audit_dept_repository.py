@@ -25,9 +25,13 @@ def _in_audit_tenant(dept, tenant_scope: int):
     """Departments the audit tenant may offer.
 
     A child tenant's departments stay on the parent tree: ``tenant_id`` is the
-    parent, and the mount point is ``mounted_tenant_id``. Matching only
-    ``tenant_id`` hides that whole subtree from the child tenant's administrator.
+    parent. The subtree is the tenant's ``root_dept_id``, and also a mount
+    flagged with ``mounted_tenant_id``. Matching only ``tenant_id`` hides that
+    whole subtree, which is why a tenant administrator's picker was empty
+    while a platform super still saw every organisation.
     """
+    from bisheng.database.models.tenant import Tenant
+
     mount = aliased(Department)
     under_mount = (
         select(mount.id)
@@ -40,7 +44,19 @@ def _in_audit_tenant(dept, tenant_scope: int):
         )
         .exists()
     )
-    return or_(dept.tenant_id == tenant_scope, under_mount)
+    root = aliased(Department)
+    under_root = (
+        select(root.id)
+        .join(Tenant, Tenant.root_dept_id == root.id)
+        .where(
+            Tenant.id == tenant_scope,
+            root.is_deleted == 0,
+            root.path != "",
+            dept.path.startswith(root.path),
+        )
+        .exists()
+    )
+    return or_(dept.tenant_id == tenant_scope, under_mount, under_root)
 
 
 def _closure(scope: AuditDeptScope, tenant_scope: int | None, dept=Department) -> list:
