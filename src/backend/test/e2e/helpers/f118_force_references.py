@@ -11,6 +11,7 @@ import time
 import httpx
 import pytest_asyncio
 
+from test.e2e.helpers.f118_cas_creator import CasCreator
 from test.e2e.helpers.f118_unification import F118Environment
 
 
@@ -18,6 +19,18 @@ class ForceEnvironment(F118Environment):
     @property
     def prefix(self):
         return super().prefix + "force-"
+
+    async def prepare(self):
+        await super().prepare()
+        self.creator_fixture = CasCreator(self, member="owner")
+        await self.creator_fixture.install()
+
+    async def cleanup(self):
+        # Remove real AS/WF sources, targets and models before their writer's
+        # added qualification. A failed business cleanup retains it for audit.
+        await super().cleanup()
+        if creator := getattr(self, "creator_fixture", None):
+            await creator.cleanup()
 
     async def clean_business_resources(self):
         if self.owner:
