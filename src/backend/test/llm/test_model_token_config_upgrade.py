@@ -66,6 +66,7 @@ def test_inactive_legacy_field_preserves_existing_advanced_value(limit):
         {"max_tokens": 0, "user_kwargs": '{"temperature":NaN}'},
         {"max_tokens": -1},
         {"max_tokens": True},
+        {"max_tokens": False},
         {"max_tokens": 2.5},
     ],
 )
@@ -138,6 +139,21 @@ async def test_dry_run_scope_backup_apply_rerun_and_restore(database, tmp_path):
     )
     assert restored["migrated"] == 1
     assert await snapshots(database) == (original_models, original_providers)
+
+
+async def test_boolean_false_legacy_limit_reports_the_model_and_writes_nothing(database, tmp_path):
+    async with database() as session:
+        model = await session.get(Model, 22)
+        model.config = {"max_tokens": False, "user_kwargs": '{"temperature":0.1}'}
+        session.add(model)
+        await session.commit()
+    before = await snapshots(database)
+    path = tmp_path / "false-limit.json"
+    report = await upgrade.migrate_model_token_configs(apply=True, backup_file=str(path))
+    assert report["migrated"] == 0
+    assert report["errors"] == [{"id": 22, "tenant_id": 2, "server_id": 2, "reason": "configuration_requires_review"}]
+    assert not path.exists()
+    assert await snapshots(database) == before
 
 
 async def test_invalid_row_blocks_whole_batch_and_leaves_no_backup(database, tmp_path):

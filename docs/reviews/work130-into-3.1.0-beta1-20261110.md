@@ -4,7 +4,7 @@
 
 ## 比较口径
 
-- 合并前目标：`918813fd25f79627e8fcb4322c3938adbccd95c1`。
+- 合并前目标：`24a3c493fd8b009261b13060f265e24ac27acc48`。初始取数为 `918813fd25`，推送前复核发现并纳入远端新增的 Token 参数迁移修复 `24a3c493fd`，保留其生产代码和测试。
 - 合并源：`83b98d2838dddbd997b61b5fdcc30b1bbf92b017`。
 - 共同祖先：`9fe40a4f21753f792a363ad1294eb79b405747ca`。
 - 源分支有 18 个目标分支尚未包含的提交，含功能、修复、合并和交付文档提交，不能解读为 18 项独立功能。
@@ -67,6 +67,7 @@
 | runtime-manager 受影响的 11 个测试文件 | 575 passed，4 skipped；Helm 3.19，使用本地假 API，不连接真实集群 |
 | client 目录与环境/根路由测试 | 4 个文件，30 passed |
 | platform 模型审计测试 | 7 passed |
+| 推送前纳入的远端 Token 参数迁移修复 | 按测试文件要求使用 `--confcutdir=test/llm`，22 passed |
 | 前端工作区 `pnpm typecheck` | 通过 |
 | `locales:check`、`check-i18n` | 通过 |
 | 本次修改的全部客户端/管理端 TS、TSX 文件 lint | 通过（client 7 个，platform 6 个） |
