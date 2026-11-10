@@ -74,6 +74,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
     NewMessageSessionEventData,
 )
 from bisheng.common.services import telemetry_service
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.services.llm_error_classifier import ErrorType, label_error, unwrap
 from bisheng.common.utils.message_content import extract_message_reasoning, extract_message_text
 from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
@@ -693,9 +694,17 @@ def _extract_tool_error(raw_output) -> str | None:
     tool-call block can be rendered as failed, while the model still receives
     the message as a normal observation.
     """
+    content = getattr(raw_output, "content", raw_output)
+    try:
+        payload = json.loads(content) if isinstance(content, str) else content
+    except (ValueError, TypeError):
+        payload = None
+    items = payload if isinstance(payload, list) else [payload]
+    for item in items:
+        if isinstance(item, dict) and (item.get("error") or item.get("状态") == "失败"):
+            return "Tool execution failed."
     if getattr(raw_output, "status", None) == "error":
-        content = getattr(raw_output, "content", None)
-        return str(content) if content is not None else "tool execution failed"
+        return "Tool execution failed."
     return None
 
 
@@ -712,7 +721,10 @@ def _handle_agent_tool_error(e: Exception) -> str:
     observation.
     """
     logger.warning(f"[agent_chat] tool execution error fed back to model: {e!r}")
-    return f"工具执行失败: {e}"
+    payload = {"error": "Tool execution failed."}
+    if info := FailureContextAdapter.from_error(e):
+        payload["failure_info"] = info
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _build_tool_meta(tool: BaseTool) -> dict:
@@ -775,6 +787,8 @@ async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tu
         # Typical symptom for fresh installs: admin hasn't picked a provider.
         if "requires some parameters" in err and "config" in err:
             err = '联网搜索未配置: 请在平台管理的"内置工具 → 联网搜索"设置服务商 (Bing/Tavily/…) 及 API Key'
+        else:
+            err = _handle_agent_tool_error(exc)
         logger.warning(f"Failed to initialise web_search tool: {err}")
         return None, err
 
@@ -1106,7 +1120,7 @@ async def _build_knowledge_search_tool(
             )
         except Exception as exc:
             logger.exception(f"[search_kb] queryChunksFromDB failed: {exc}")
-            return json.dumps([], ensure_ascii=False)
+            return _handle_agent_tool_error(exc)
 
         docs = list(finally_docs or [])
         if file_filter:
@@ -1155,6 +1169,8 @@ async def _build_knowledge_search_tool(
                 f"<retrieval_error>{err_text}</retrieval_error>"
                 "}"
             )
+            if info := FailureContextAdapter.validate(f.get("failure_info")):
+                results.append({"error": "Knowledge retrieval failed.", "failure_info": info})
 
         logger.info(
             f"[search_kb] returning {len(results)} chunks"
@@ -1321,7 +1337,7 @@ async def _prepare_tools(
                     user_id=login_user.user_id,
                 )
             except Exception as exc:
-                err = str(exc)
+                err = _handle_agent_tool_error(exc)
                 logger.warning(f"Failed to initialise tool id={tool_id} key={tool_key}: {err}")
 
         if t is not None:
@@ -1344,7 +1360,8 @@ async def _prepare_tools(
                     # display_name is resolved on the frontend via i18n — just
                     # advertise the raw tool_key so the client can map it.
                     "display_name": tool_key or "",
-                    "error": err,
+                    "error": "Tool initialization failed." if FailureContextAdapter.from_payload(err) else err,
+                    **({"failure_info": info} if (info := FailureContextAdapter.from_payload(err)) else {}),
                 }
             )
 
@@ -1760,9 +1777,9 @@ async def _agent_stream_chat_completion(
         )
         conversation_id = conversation.chat_id
     except (BaseErrorCode, ValueError) as exc:
-        error_response = exc if isinstance(exc, BaseErrorCode) else ServerError(message=str(exc))
+        error_response = exc if isinstance(exc, BaseErrorCode) else ServerError()
         return StreamingResponse(
-            iter([error_response.to_sse_event_instance_str()]),
+            iter([FailureContextAdapter.public_sse_text(error_response, cause=exc)]),
             media_type="text/event-stream",
         )
     except HTTPException:
@@ -1770,7 +1787,7 @@ async def _agent_stream_chat_completion(
     except Exception as exc:
         logger.exception(f"Error in agent chat completions setup: {exc}")
         return StreamingResponse(
-            iter([ServerError(exception=exc).to_sse_event_instance_str()]),
+            iter([FailureContextAdapter.public_sse_text(ServerError(), cause=exc)]),
             media_type="text/event-stream",
         )
     if blocked:
@@ -1804,6 +1821,7 @@ async def _agent_stream_chat_completion(
         inflight_tool_idx: dict[str, int] = {}
         error_flag = False
         error_msg = ""
+        error_metadata = {}
         citation_collector = CitationRegistryCollector()
         # F075: the model cites with [Sn] handles from the session table shared
         # with the task mode; answer text is converted before it is stored or sent.
@@ -1921,7 +1939,7 @@ async def _agent_stream_chat_completion(
                 message=json.dumps(db_content, ensure_ascii=False, default=str),
                 category="agent_answer",
                 sender=model_info.displayName,
-                extra=json.dumps({"error": True, "error_msg": error_msg}) if error_flag else "{}",
+                extra=json.dumps({"error": True, "error_msg": error_msg, **error_metadata}) if error_flag else "{}",
                 source=0,
             )
 
@@ -2056,6 +2074,7 @@ async def _agent_stream_chat_completion(
                     **start_payload,
                     "results": [],
                     "error": f["error"],
+                    **({"failure_info": f["failure_info"]} if f.get("failure_info") else {}),
                     "started_at": now_ms,
                     "ended_at": now_ms,
                     "duration_ms": 0,
@@ -2360,6 +2379,8 @@ async def _agent_stream_chat_completion(
                             results = _parse_tool_results(raw_output, tool_event.get("tool_name"))
                             tool_event["results"] = results
                             tool_event["error"] = _extract_tool_error(raw_output)
+                            if info := FailureContextAdapter.from_payload(results):
+                                tool_event["failure_info"] = info
                             tool_event["ended_at"] = ended_ms
                             if tool_event.get("started_at") is not None:
                                 tool_event["duration_ms"] = max(0, ended_ms - tool_event["started_at"])
@@ -2382,6 +2403,9 @@ async def _agent_stream_chat_completion(
                             }
                             events.append(tool_event)
                             payload = {k: v for k, v in tool_event.items() if k != "type"}
+                        if info := FailureContextAdapter.from_payload(results):
+                            tool_event["failure_info"] = info
+                            payload["failure_info"] = info
                         yield _sse_resp("agent_tool_call", "end", payload, conversation_id)
                     elif et == "on_tool_error":
                         tc_id = str(ev.get("run_id") or "")
@@ -2394,7 +2418,8 @@ async def _agent_stream_chat_completion(
                         visible_tool_run_ids.discard(tc_id)
                         ended_ms = int(time.time() * 1000)
                         err = (ev.get("data") or {}).get("error")
-                        err_msg = str(err) if err is not None else "tool execution failed"
+                        err_msg = "Tool execution failed."
+                        tool_failure = FailureContextAdapter.from_error(err)
                         if idx is not None:
                             tool_event = events[idx]
                             tool_event["results"] = []
@@ -2419,6 +2444,9 @@ async def _agent_stream_chat_completion(
                             }
                             events.append(tool_event)
                             payload = {k: v for k, v in tool_event.items() if k != "type"}
+                        if tool_failure:
+                            tool_event["failure_info"] = tool_failure
+                            payload["failure_info"] = tool_failure
                         yield _sse_resp("agent_tool_call", "end", payload, conversation_id)
                     # other events (on_chain_start/on_chain_end/etc.) ignored
             else:
@@ -2490,36 +2518,27 @@ async def _agent_stream_chat_completion(
                         return
         except BaseErrorCode as exc:
             error_flag = True
-            error_msg = str(exc)
+            error_msg = FailureContextAdapter.safe_detail(exc)
             logger.exception("Agent chat BaseErrorCode")
-            # Out of platform credits: tag the type so the bubble renders the
-            # credit card (who to ask, when it resets) rather than the bare line.
+            error_metadata = FailureContextAdapter.public_payload({**exc.kwargs, "error_code": exc.code}, exc=exc)
             if label_error(exc) == ErrorType.CREDIT_EXHAUSTED:
-                yield exc.to_sse_event_instance_str(
-                    data={"exception": str(exc), "error_type": ErrorType.CREDIT_EXHAUSTED.value, "detail": str(exc)}
-                )
-            else:
-                yield exc.to_sse_event_instance_str()
+                error_metadata["error_type"] = ErrorType.CREDIT_EXHAUSTED.value
+            yield FailureContextAdapter.public_sse_text(exc, data=error_metadata)
         except Exception as exc:
             error_flag = True
-            error_msg = str(exc)
+            error_msg = FailureContextAdapter.safe_detail(exc)
             logger.exception("Agent chat execution error")
-            # The classified type + the raw provider text ride along in `data`
-            # so the bubble can render the same title/explanation/"view details"
-            # card task mode uses, instead of a bare "服务器错误".
             error_type = label_error(unwrap(exc))
-            # `unknown` is deliberately renamed for this surface: the shared card's
-            # generic copy talks about a "task", which reads wrong on a chat turn.
-            classified = {
-                "error_type": "chat_unknown" if error_type == ErrorType.UNKNOWN else error_type.value,
-                "detail": str(exc),
-            }
-            # Upstream LLM throttling (RPM/TPM/burst) → friendly "service busy"
-            # copy instead of dumping the raw provider 500 on the user.
+            error_metadata = FailureContextAdapter.public_payload(
+                {
+                    "error_type": "chat_unknown" if error_type == ErrorType.UNKNOWN else error_type.value,
+                },
+                exc=exc,
+            )
             if error_type == ErrorType.RATE_LIMIT:
-                yield LLMRateLimitError(**classified).to_sse_event_instance_str()
+                yield FailureContextAdapter.public_sse_text(LLMRateLimitError(), data=error_metadata, cause=exc)
             else:
-                yield ServerError(exception=exc, **classified).to_sse_event_instance_str()
+                yield FailureContextAdapter.public_sse_text(ServerError(), data=error_metadata, cause=exc)
         except (asyncio.CancelledError, GeneratorExit):
             # The stream was torn down mid-flight — client navigated away, gateway
             # read timeout, worker restart. Neither is an `Exception`, so without
@@ -2574,13 +2593,21 @@ async def _agent_stream_chat_completion(
         db_content: dict = {"msg": final_msg, "events": events}
 
         persisted = True
-        resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))
-        await save_message_citations(
-            message_id=resp_msg.id,
-            items=citation_items,
-            chat_id=conversation_id,
-            flow_id="",
-        )
+        try:
+            resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))
+            await save_message_citations(
+                message_id=resp_msg.id,
+                items=citation_items,
+                chat_id=conversation_id,
+                flow_id="",
+            )
+
+        except Exception as exc:
+            logger.exception("Failed to persist daily answer")
+            yield FailureContextAdapter.public_sse_text(ServerError(), cause=exc)
+            yield _sse_resp("processing", "close", "", conversation_id)
+            yield f"data: {json.dumps({'final': True, 'conversation': {'conversationId': conversation_id}})}\n\n"
+            return
 
         yield _sse_resp(
             "agent_answer",
@@ -2717,9 +2744,9 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
                 data, login_user, skip_llm=True
             )
         except (BaseErrorCode, ValueError) as exc:
-            error_response = exc if isinstance(exc, BaseErrorCode) else ServerError(message=str(exc))
+            error_response = exc if isinstance(exc, BaseErrorCode) else ServerError()
             return StreamingResponse(
-                iter([error_response.to_sse_event_instance_str()]),
+                iter([FailureContextAdapter.public_sse_text(error_response, cause=exc)]),
                 media_type="text/event-stream",
             )
         except HTTPException:
@@ -2727,7 +2754,7 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
         except Exception as exc:
             logger.exception(f"Error in task-mode content-safety setup: {exc}")
             return StreamingResponse(
-                iter([ServerError(exception=exc).to_sse_event_instance_str()]),
+                iter([FailureContextAdapter.public_sse_text(ServerError(), cause=exc)]),
                 media_type="text/event-stream",
             )
         return _respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
@@ -2741,7 +2768,14 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
         _session, session_version = await submit_task_turn(data, login_user)
     except BaseErrorCode as exc:
         return StreamingResponse(
-            iter([exc.to_sse_event_instance_str()]),
+            iter([FailureContextAdapter.public_sse_text(exc)]),
+            media_type="text/event-stream",
+        )
+
+    except Exception as exc:
+        logger.exception("Task submission failed")
+        return StreamingResponse(
+            iter([FailureContextAdapter.public_sse_text(ServerError(), cause=exc)]),
             media_type="text/event-stream",
         )
 

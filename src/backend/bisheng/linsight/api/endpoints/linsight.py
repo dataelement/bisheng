@@ -33,6 +33,7 @@ from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimi
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter_if, get_current_tenant_id
 from bisheng.core.logger import trace_id_var
@@ -70,7 +71,7 @@ from bisheng.linsight.domain.services.state_message_manager import (
 )
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
-from bisheng.share_link.api.dependencies import header_share_token_parser
+from bisheng.share_link.domain.services.share_token_dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import util
 
@@ -254,10 +255,10 @@ async def submit_linsight_workbench(
         except BaseErrorCode as e:
             # Typed business errors (folder-upload limits, …) keep their own code so
             # the client can show the right copy instead of a generic submit failure.
-            yield e.to_sse_event_instance()
+            yield FailureContextAdapter.public_sse_event(e)
             return
         except Exception as e:
-            yield LinsightQuestionError(exception=e).to_sse_event_instance()
+            yield FailureContextAdapter.public_sse_event(LinsightQuestionError(), cause=e)
             return
         finally:
             # The lease covers the submit only — title generation below runs after
@@ -621,7 +622,9 @@ async def get_execute_task_detail(
     """
 
     with bypass_tenant_filter_if(share_link is not None):
-        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(session_version_id)
+        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(
+            session_version_id, login_user=login_user
+        )
 
         if not execute_task_models:
             return resp_200([])

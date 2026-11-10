@@ -1,4 +1,5 @@
 // src/state/linsightState.ts
+import type { FailureInfo } from '~/utils/failureInfo';
 import { atom, atomFamily, selectorFamily } from 'recoil';
 import { ExtendedFile } from '~/common';
 
@@ -90,6 +91,7 @@ export type LinsightInfo = {
         error_code?: number;
         error_type?: string;
         detail?: string;
+        failure_info?: FailureInfo;
     };
     summary: string;
     file_list: any[];
@@ -137,6 +139,7 @@ export type LinsightRoundSnapshot = {
         error_code?: number;
         error_type?: string;
         detail?: string;
+        failure_info?: FailureInfo;
     };
 };
 

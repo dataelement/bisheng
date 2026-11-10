@@ -54,6 +54,7 @@ import asyncio
 import base64
 import hashlib
 import html
+import json
 import os
 import re
 import time
@@ -62,6 +63,8 @@ from pathlib import Path
 
 from loguru import logger
 from minio.error import S3Error
+
+from bisheng.common.services.failure_context import FailureContextAdapter
 
 
 def _is_missing_key(exc: S3Error) -> bool:
@@ -953,7 +956,12 @@ class WorkspaceBackend(FilesystemBackend):
                 )
         except Exception as e:
             logger.exception("workspace ls failed for svid=%s prefix=%s", self.svid, path)
-            return LsResult(error=f"Error listing '{path}': {e}")
+            if type(e).__module__.startswith(("urllib3", "aiohttp", "httpx", "requests")):
+                FailureContextAdapter.capture(e, category="object_storage", service="minio", operation="read_file")
+            payload = {"error": "Workspace listing failed."}
+            if info := FailureContextAdapter.from_error(e):
+                payload["failure_info"] = info
+            return LsResult(error=json.dumps(payload))
         return LsResult(entries=entries)
 
     # -- edit (cache mutation + write-through) ------------------------------
