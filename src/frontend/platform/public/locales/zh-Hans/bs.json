@@ -695,7 +695,7 @@
     "tts": "语音合成(TTS)",
     "updateSuccess": "更新成功",
     "voiceType": "语音类型",
-    "voiceTypeRequired": "语音类型为必填项",
+    "voiceTypeRequired": "音色类型不可为空",
     "voiceTypeTooltip": "选择语音合成的声音类型",
     "webSearch": "模型内置联网搜索",
     "visitOfficialWebsiteToViewAvailableModels": "前往官网查看可用模型",

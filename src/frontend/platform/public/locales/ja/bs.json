@@ -690,7 +690,7 @@
     "tts": "音声合成(TTS)",
     "updateSuccess": "更新に成功しました",
     "voiceType": "音声タイプ",
-    "voiceTypeRequired": "音声タイプは必須項目です",
+    "voiceTypeRequired": "音色タイプは空にできません",
     "voiceTypeTooltip": "音声合成で使用する音声タイプを選択してください",
     "webSearch": "モデル内蔵のウェブ検索",
     "visitOfficialWebsiteToViewAvailableModels": "公式サイトで利用可能なモデルを確認してください",
