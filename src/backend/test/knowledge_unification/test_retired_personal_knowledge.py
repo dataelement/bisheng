@@ -14,7 +14,10 @@ from fastapi import BackgroundTasks, UploadFile
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.core.cache import utils as cache_utils
 from bisheng.knowledge.api.endpoints import knowledge as knowledge_api
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.schemas.knowledge_create_schema import KnowledgeWebCreate
+from bisheng.knowledge.domain.services import knowledge_service as knowledge_module
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.workstation.api.endpoints import knowledge as workstation_api
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
@@ -65,3 +68,55 @@ async def test_retired_upload_service_cannot_be_used_to_create_type_two(monkeypa
             None, SimpleNamespace(user_id=1), "legacy.txt", BackgroundTasks()
         )
     read.assert_not_awaited()
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_general_creation_service_also_rejects_retired_type_before_database_access(monkeypatch, asynchronous):
+    read = (
+        AsyncMock(side_effect=AssertionError("retired type must fail before DB or model lookup"))
+        if asynchronous
+        else Mock(side_effect=AssertionError("retired type must fail before DB or model lookup"))
+    )
+    monkeypatch.setattr(KnowledgeDao, "aget_knowledge_by_name" if asynchronous else "get_knowledge_by_name", read)
+    command = KnowledgeCreate(name="retired", type=2, model="11")
+    with pytest.raises(KnowledgeTypeNotSupportedError):
+        if asynchronous:
+            await KnowledgeService.acreate_knowledge(None, SimpleNamespace(user_id=1), command)
+        else:
+            KnowledgeService.create_knowledge(None, SimpleNamespace(user_id=1), command)
+    read.assert_not_called()
+
+
+async def test_general_v1_creation_cannot_revive_retired_personal_type(monkeypatch):
+    prepare = AsyncMock(side_effect=AssertionError("do not prepare creation of a retired type"))
+    monkeypatch.setattr(knowledge_api.KnowledgeCreationPolicy, "prepare", prepare)
+    with pytest.raises(KnowledgeTypeNotSupportedError):
+        await knowledge_api.create_knowledge(
+            request=None,
+            login_user=SimpleNamespace(user_id=1),
+            knowledge=KnowledgeWebCreate(name="retired", type=2, model="11"),
+        )
+    prepare.assert_not_awaited()
+
+
+@pytest.mark.parametrize("via_api", [False, True])
+async def test_general_listing_does_not_expose_retired_rows_through_admin_bypass(monkeypatch, via_api):
+    actor = AsyncMock(side_effect=AssertionError("retired type is not an active permission list"))
+    monkeypatch.setattr(knowledge_module, "resolve_permission_actor", actor)
+    with pytest.raises(KnowledgeTypeNotSupportedError):
+        if via_api:
+            await knowledge_api.get_knowledge(
+                request=None,
+                login_user=SimpleNamespace(user_id=1),
+                knowledge_type=2,
+                action="visible",
+                name=None,
+                sort_by="name",
+                preferred_ids=None,
+                page_size=10,
+                cursor=None,
+                has_abnormal=False,
+            )
+        else:
+            await KnowledgeService.get_knowledge(None, SimpleNamespace(user_id=1), KnowledgeTypeEnum.PRIVATE)
+    actor.assert_not_awaited()

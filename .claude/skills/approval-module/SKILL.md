@@ -45,7 +45,7 @@ description: >-
 
 执行前重读已批准的原 request、decided_by、实际 tenant/space/parent/files，并复核当前有效 operator、申请人归属及原 reviewer 成员资格，权限仍走 operator 的原 upload_file；不清除或替换 permission actor。完整 payload 初次冻结，后续 guard 读取标量当前性和精确人员/成员事实，最终锁定申请后再比较完整 payload。KSS 原 tenant_execution_scope 内捕获身份，退出恢复原 HTTP 上下文。
 
-审批专用 SpaceUploadApplication 私有 record 构造仅将 creator 署名保为申请人；updater、审计和权限 actor 是真实执行者。内部 `_upload_accounting_user` 只供原个人配额/已用容量查询，保原申请人口径，不参与权限/身份。prepare 下载前后、blob/FGA、dispatch 前后与最终状态写前均复核，失效不报 finalized；取消和未知派发保持原失败/不确定语义，不建新重试平台。原生覆盖见 `test/approval/test_legacy_upload_execution.py`。
+审批专用 SpaceUploadApplication 私有 record 构造仅将 creator 署名保为申请人；updater、审计和权限 actor 是真实执行者。内部 `_upload_accounting_user` 只供原个人配额/已用容量查询，保原申请人口径，不参与权限/身份。prepare 下载前后、blob/FGA、dispatch 前后与最终状态写前均复核，失效不报 finalized；取消和未知派发保持原失败/不确定语义，不建新重试平台。原生覆盖见 `test/approval/test_legacy_upload_execution.py`。目录目标按实际 `FileType.DIR` 校验；只读证据沿 `strict_tenant_filter` 自动隔离，最终状态 DML 仍保实际 tenant/审批者围栏。该测试真实 SQL 覆盖有效目录、非目录及外租户目录，未用硬编码数字替代目录枚举。
 
 ## 2. 架构与主流程
 

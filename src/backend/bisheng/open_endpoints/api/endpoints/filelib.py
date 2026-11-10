@@ -180,7 +180,10 @@ async def create(
         knowledge.auth_type = AuthTypeEnum.PUBLIC
         knowledge.is_released = False
         result = await LegacyDocumentsApplication().acreate(
-            request=request, identity=login_user, command=knowledge, entry_kind="open_api",
+            request=request,
+            identity=login_user,
+            command=knowledge,
+            entry_kind="open_api",
         )
         return resp_200(result)
     if knowledge.type in _KB_TYPES:
@@ -282,7 +285,11 @@ async def get_knowledge(
         from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
 
         page = await LegacyDocumentsApplication().alist(
-            identity=login_user, name=name, sort_by=sort_by, page_size=page_size, cursor=cursor,
+            identity=login_user,
+            name=name,
+            sort_by=sort_by,
+            page_size=page_size,
+            cursor=cursor,
         )
         return resp_200(page)
     if knowledge_type in _KB_TYPES:
@@ -618,6 +625,12 @@ async def post_chunks(
     )
 
     upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
+    knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+        from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+        res = await LegacyFilesApplication(request=request, identity=login_user).aprocess(req_data, inline=True)
+        return resp_200(data=res[0])
     res = await run_in_threadpool(
         KnowledgeService.sync_process_knowledge_file,
         request,
@@ -638,7 +651,7 @@ async def post_string_chunks(request: Request, document: ChunkInput):
         raise NotFoundError.http_exception()
     # The chunks use the document knowledge base schema; QA libraries and
     # knowledge spaces store files differently.
-    if db_knowledge.type != KnowledgeTypeEnum.NORMAL.value:
+    if db_knowledge.type not in (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.SPACE.value):
         raise KnowledgeTypeNotSupportedError.http_exception()
 
     # String saved to file
@@ -657,6 +670,13 @@ async def post_string_chunks(request: Request, document: ChunkInput):
     )
 
     upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
+    if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+        from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+        result = await LegacyFilesApplication(request=request, identity=login_user).aprocess(
+            req_data, inline=True, documents=document.documents
+        )
+        return resp_200(data=result[0])
     knowledge, failed_files, process_files, _ = await KnowledgeService.asave_knowledge_file(
         login_user,
         req_data,

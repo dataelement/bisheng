@@ -17,8 +17,10 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.models import space_channel_member as members
 from bisheng.common.models.space_channel_member import SpaceChannelMember, UserRoleEnum
 from bisheng.core import database
+from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.database import tenant_filter
 from bisheng.database.models.tenant import Tenant, UserTenant
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 from bisheng.knowledge.domain.services import knowledge_space_service as spaces
 from bisheng.user.domain.models import user_role
 from bisheng.user.domain.models.user import User
@@ -64,6 +66,11 @@ async def legacy_decision(upload, monkeypatch):
                 for c in model.__table__.columns
             ],
         )
+    monkeypatch.setattr(
+        tenant_filter,
+        "_tenant_aware_tables",
+        tenant_filter._tenant_aware_tables | {ApprovalRequest.__tablename__},
+    )
     async with context.engine.begin() as connection:
         await connection.run_sync(metadata.create_all)
     for module in (database, decisions, requests, members, runtime_identity, user_role):
@@ -137,6 +144,43 @@ async def test_live_legacy_decision_preserves_creator_and_quota_without_imperson
     assert projected["actor"].subject_id == 7 and not projected["actor"].super_admin
     assert projected["owner_user_id"] == 8
     value.upload.publish.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "folder_tenant,kind,allowed", [(101, FileType.DIR, True), (101, FileType.FILE, False), (202, FileType.DIR, False)]
+)
+async def test_approved_folder_uses_actual_directory_kind_and_tenant(legacy_decision, folder_tenant, kind, allowed):
+    value = legacy_decision
+    with bypass_tenant_filter():
+        async with value.upload.context.sessions() as session:
+            session.add(
+                KnowledgeFile(
+                    id=95,
+                    tenant_id=folder_tenant,
+                    knowledge_id=40,
+                    file_name="approved folder",
+                    file_type=kind,
+                    file_level_path="",
+                    level=0,
+                    user_id=7,
+                )
+            )
+            row = await session.get(ApprovalRequest, 31)
+            row.parent_folder_id = 95
+            row.payload_json = {**row.payload_json, "parent_folder_id": 95}
+            await session.commit()
+    response = await decide(value)
+    status = response.json()["data"]["status"]
+    assert status == ("finalized" if allowed else "finalize_failed"), response.json()["data"].get("safety_reason")
+    if allowed:
+        async with value.upload.context.sessions() as session:
+            request = await session.get(ApprovalRequest, 31)
+            created = await session.get(KnowledgeFile, request.payload_json["finalized_file_ids"][0])
+            assert created.file_level_path == "/95" and created.user_id == 8
+        value.upload.publish.assert_called_once()
+    else:
+        value.upload.publish.assert_not_called()
+        value.upload.legacy.storage.put_object_sync.assert_not_called()
 
 
 async def test_removed_reviewer_never_starts_legacy_upload(legacy_decision):

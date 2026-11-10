@@ -30,6 +30,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNotQAError,
     KnowledgePreviewError,
     KnowledgeQAError,
+    KnowledgeTypeNotSupportedError,
 )
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200, resp_500
 from bisheng.common.services import telemetry_service
@@ -296,6 +297,8 @@ async def create_knowledge(
     *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), knowledge: KnowledgeWebCreate
 ):
     """Create Knowledge Base."""
+    if knowledge.type == KnowledgeTypeEnum.PRIVATE.value:
+        raise KnowledgeTypeNotSupportedError()
     context = await KnowledgeCreationPolicy.prepare(login_user, expected_tenant_id=knowledge.expected_tenant_id)
     with tenant_execution_scope(context.tenant_id), strict_tenant_filter():
         if knowledge.type in {KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.SPACE.value}:
