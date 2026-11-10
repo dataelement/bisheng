@@ -15,6 +15,8 @@ from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
 from bisheng.knowledge.domain.schemas.processing_actor_subject import processing_actor_subject
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.open_api.application.knowledge_processing_identity import OPEN_API_SCOPE_CODES, is_scope_granted
+from bisheng.open_api.domain.context import OpenApiPrincipal
+from bisheng.open_endpoints.domain.utils import get_open_api_operator_async
 from bisheng.permission.application.business_authorization import batch_check_business_actions
 from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL, get_data_scope_resolver
 from bisheng.permission.application.identity import (
@@ -92,6 +94,17 @@ async def identity(original, *, current=None, continuation=None):
         actor = _narrow_actor(get_current_permission_actor(), original["actor"])
         token = set_current_permission_actor(actor)
         try:
+            if isinstance(actual, OpenApiPrincipal):
+                # Only audit/read DTO compatibility changes; the restored API
+                # principal and its narrowed typed actor stay authoritative.
+                principal = actual
+                actual = await get_open_api_operator_async()
+                if (
+                    get_current_open_api_principal() is not principal
+                    or get_current_permission_actor() is not actor
+                    or tenant() != principal.tenant_id
+                ):
+                    raise ResourceReferenceInvalidError(reason="knowledge_delete_actor_changed")
             yield actual, {**active, "actor": _actor_facts(actor)}
         finally:
             reset_current_permission_actor(token)
