@@ -18,7 +18,6 @@ from datetime import datetime
 from typing import List, Optional
 
 from loguru import logger
-from sqlalchemy import func
 
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import (
@@ -47,7 +46,10 @@ class OrgSyncLogBuffer:
     member_reactivated: int = 0
     errors: List[dict] = field(default_factory=list)
     warnings: List[dict] = field(default_factory=list)
-    start_time: datetime = field(default_factory=datetime.utcnow)
+    # Local naive time, matching how every other create_time in this schema is
+    # stored. ``utcnow`` here made start_time run 8h behind ``end_time``
+    # (DB NOW(), server timezone) on the same run.
+    start_time: datetime = field(default_factory=datetime.now)
 
     def warn(self, event_type: str, external_id: str, **kwargs) -> None:
         self.warnings.append({
@@ -105,7 +107,7 @@ async def flush_log(
         member_reactivated=buffer.member_reactivated,
         error_details=(buffer.errors + buffer.warnings) or None,
         start_time=buffer.start_time,
-        end_time=func.now(),
+        end_time=datetime.now(),
     )
     # The endpoint calls flush_log *after* the service returns, by which
     # point the bypass_tenant_filter + current_tenant_id context set up
