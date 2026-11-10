@@ -59,17 +59,23 @@ Root最终四路径`test_wire_router`、`test_legacy_document_contract`、`test_
 
 剩余34个基线旧失败及两端既有测试问题按既有归因处理，不豁免本次新缺陷。原8张开发卡保持关闭；14张验收卡仍待真实接口、升级/恢复、E2E与最终评审，不因本地回归或构建结果改勾。
 
-109独立旧标准环境已补：1个未发布的hosted App/初始Version（原Service写且真MinIO代码对象，明确synthetic fixture），1个真实旧API workflow/version206引用已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置摘要保持；证据`/opt/server/f118-e2e/prep/additional-source-manifest.json`及`evidence/preparation-additional-sources.json`，权限600，均formal_baseline=false，不能替代停服后的正式冻结基线。
+旧环境补齐的未发布hosted AppVersion是本次synthetic fixture，不是runtime；另一workflow/version206用于已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置证据保留。当前M2发现synthetic版本将模型display名`e2e-f118-chat`误作capability声明；旧/新resolver均要求vendor名`f118-chat`，26511为正确阻断。Root拟严格撤销本次未发布synthetic版本并以新UUID完整重建正确版本，不UPDATE真实历史版本、不走Runtime删除、不加名称fallback或伪造invalid_legacy。backup1、failed clone及旧code证据保留；限定prep2/reset/backup2脚本尚未执行，修样本后须重新备份、还原及正式run，当前未freeze/convert/deploy。
 
 新前端候选22f5261181已完成真实锁依赖类型检查及两端Vite构建，镜像`sha256:e0b7b3479099b6add0fd81070f634135bc90881f66afea10e2978f8df3505b78`，归档SHA256 `c95fa28d20f477ac7e79fd2df11166084258fce4fee66f2051b501dbc17b30f3`。当前`src/frontend`树为`339831ed64e7c19da3af69c3b326565a2fff3458`，已与旧550561候选的ca37581树不同，不能继续声称旧镜像与当前源码等价。原锁和产品Dockerfile未改。
 
-旧550561c443归档及其API/Worker镜像已由Move修复取代，不作为当前后端候选。Root已按最终77f737fe3c构建`f118-e2e-backend:candidate-77f737fe3c`，镜像`sha256:bef3f456f67c21c24d81bfcd0c840ad9db5a7658d602d886680640c66eb1621b`，归档SHA256 `1c560dacb4c24d3d2512214939283d9ae920598c0f7776246d836bd52002e575`。当前未部署新版、未执行正式升级/恢复或环境E2E，构建完成不能替代这些证据。
+旧550561c443归档及其API/Worker镜像已由Move修复取代。已构建77f737fe3c快照`f118-e2e-backend:candidate-77f737fe3c`，镜像`sha256:bef3f456f67c21c24d81bfcd0c840ad9db5a7658d602d886680640c66eb1621b`，归档SHA256 `1c560dacb4c24d3d2512214939283d9ae920598c0f7776246d836bd52002e575`，尚不含后续M2窄修。当前新版未部署、正式M2→M4及恢复业务未完成，环境E2E未执行；构建不能替代这些证据。
 
-真实HTTP E2E脚本本地 **13条collect-only**：原8条、移动/复制/过期3条、空间及模型强删后修复2条，尚非live结果。覆盖验证读取实际新Chunk内容，不附加MD5变化假设。[浏览器清单](./e2e-checklist.md)21场景全部未执行，API收集/单测/构建不算UI通过。
+API E2E本地 **19条仅collect-only**：原8条、移动/复制/过期3条、强删修复2条、处理恢复2条、MySQL CAS 2条及v2/MCP协议兼容2条，尚非live结果。[浏览器清单](./e2e-checklist.md)21场景全部未执行，14张验收卡不改勾。覆盖验证读取真实Chunk，不附加MD5变化假设；协议兼容测试不是完整SDK验收。
 
-Root独占独立维护操作：旧API/Worker及派发已停；Milvus按原生1800秒退出超时exit1，无OOM/外部kill，异常已单列且其余服务已核正常停止。冷备数据、双schema及私密配置已归档，旧镜像备份仍在进行。SQL/broker/MinIO/ES/向量逐行hash准备检查通过但非正式基线；真实还原及向量逐行hash复验通过后才允许DDL。目前restore、DDL、M2均未完成，新服务镜像未部署，不称维护或演练完成；109:3005未动。
+**本次没有SDK代码改动。** Git核对`src/bisheng-sdk`无需求diff；不为测试新增SDK或扩展托管运行时。现有公共SDK双凭据的全托管场景需真实运行材料，单列未执行，不将新增runtime列为F118功能依赖，也不因此暂停迁移和知识库验收。
 
-新DeleteJob中性DDL单head为f118_knowledge_delete_execution；原行和两新列NULL已做必要定点验证，最新真实MySQL升级尚未执行。定点用例数量不相加为完整特性覆盖。范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
+backup1已完成，manifest SHA256 `2e8bb87fae241b3e777b0c9aba5dbb03acc8609aa8a8bbf5873f0dee04169552`，旧镜像8.447GB已保存。独立full restore的7项检查全true：187张SQL表、798条FGA tuple、67个对象版本、4个ES索引、3个Milvus collection/22条逻辑向量，原schema head保持；安全证据`/opt/server/f118-e2e/restore-check/e2e-f118-20261110-maint/postrestore-evidence/restore-comparison.json`。还原clone的中性DDL通过，180张原business表原列未变、8张新表为空；该组件证据非正式M2基线或整体验收。
+
+正式M2前的窄修已合：CLI owned lazy manager收尾d46944ba42（Root10绿）、原FGA `condition:null`格式5c5497dc6b（相关77绿）、F038内置公共tag库user0精确哨兵01eff15ba2（相关114绿）。保原常规creator、未知条件字段拒绝及权限边界；这些定点不是8208整轮重跑，也不表示旧77f镜像已更新。
+
+窗口1的原API/Worker/mock/Milvus/ES/etcd持续停止；Milvus原生1800秒超时exit1（无OOM/外部kill）证据保留。Root仅启动MySQL/Redis/MinIO/FGA四存储准备prep2，尚未执行reset/backup2；新服务镜像未部署。109:3005及范围排除项保持不动，不称正式升级或恢复业务完成。
+
+新DeleteJob中性DDL单head为f118_knowledge_delete_execution，隔离还原clone验证见上；正式数据转换、M4及恢复业务仍待完成。定点数字不相加为完整覆盖；范围外项仅见[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)。
 
 ## 本次账本快照
 
