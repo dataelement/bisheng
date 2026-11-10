@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   knowledgeSpaceApi,
+  type OperationPrecheck,
   type ProcessingSettingsRead,
 } from "@/controllers/API/knowledgeSpace";
 import * as api from "@/controllers/API/knowledgeProcessing";
@@ -76,7 +77,7 @@ const settings: ProcessingSettingsRead = {
     },
   },
 };
-const plan = {
+const plan: OperationPrecheck = {
   confirmation_id: "original-plan",
   plan_digest: "a".repeat(64),
   expires_at: "2030-01-01",
@@ -85,6 +86,7 @@ const plan = {
   valid_items: [{ id: 40, type: "space" as const }],
   invalid_items: [],
   impact: {},
+  requires_skip_confirmation: false,
 };
 const scope = {
   identityKey: "user:7",
@@ -149,12 +151,16 @@ it("copy keeps the original confirmation/key after unknown ACK and polls the rea
     state: "running",
     revision: 1,
     accepted_at: "2030-01-01",
+    started_at: "2030-01-01",
+    finished_at: null,
     total_count: 2,
     succeeded_count: 0,
     failed_count: 0,
     pending_count: 2,
     hidden_item_count: 0,
     retryable: false,
+    obsolete_reason: null,
+    error_code: null,
   });
   setup("copy");
   fireEvent.change(screen.getByRole("textbox", { name: "f118.space_name" }), {
