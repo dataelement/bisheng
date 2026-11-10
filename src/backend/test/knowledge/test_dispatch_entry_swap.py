@@ -1,9 +1,13 @@
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 
 def test_process_knowledge_file_uses_enqueue_or_dispatch(monkeypatch):
     """Upload entrypoint must go through scheduler.enqueue_or_dispatch."""
     from bisheng.knowledge.domain.services import knowledge_service as svc
+
+    # Exercise the retained QA scheduler branch with a real actual-type fact.
+    monkeypatch.setattr(svc.KnowledgeDao, "query_by_id", lambda _ident: SimpleNamespace(type=1))
 
     monkeypatch.setattr(
         svc.KnowledgeService,
@@ -47,6 +51,8 @@ def test_process_knowledge_file_uses_enqueue_or_dispatch(monkeypatch):
 
 async def test_aprocess_knowledge_file_uses_enqueue_or_dispatch(monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_service as svc
+
+    monkeypatch.setattr(svc.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=SimpleNamespace(type=1)))
 
     async def fake_save(cls, *a, **kw):
         return (MagicMock(), [], [MagicMock(id=5, user_id=20, file_name="img.png")], ["pk"])

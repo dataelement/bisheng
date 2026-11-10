@@ -594,7 +594,10 @@ async def test_full_m2_keeps_original_default_sources_and_freezes_safe_after_com
     assert all(b"never export" not in content for content in transport.objects.values())
     # Each tenant: one original NameCatalog projection, one preflight own row
     # projection and one original source projection; none is repeated per slot.
-    assert sum("FROM tenant_system_model_config" in sql for sql, _ in complete.queries) == 9
+    defaults = [sql for sql, _ in complete.queries if "FROM tenant_system_model_config" in sql]
+    registered_tenant = [sql for sql in defaults if "reference_registered_tenant" in sql]
+    assert len(registered_tenant) == 1  # one global C3 integrity read, independent of source slots
+    assert len(defaults) - len(registered_tenant) == 9
     async with complete.engine.connect() as connection:
         assert (
             await connection.execute(

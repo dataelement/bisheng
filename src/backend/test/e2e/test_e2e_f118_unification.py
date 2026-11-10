@@ -97,18 +97,19 @@ async def test_ac30_visible_reads_do_not_grant_rename_download_or_delete(target)
     models = await target.ok("GET", f"/permissions/resources/knowledge_space/{sid}/grantable-models")
     catalog_models = {model["key"]: model for model in catalog["models"]}
     resource_types = {"knowledge_space", "folder", "knowledge_file"}
+    relevant_actions = {
+        action["code"] for action in catalog["actions"] if resource_types.intersection(action["resource_types"])
+    }
     candidates = [
         model
         for model in models
         if model["active"]
         and model["visibility_only"]
-        and resource_types.issubset(catalog_models[model["key"]]["visibility_only_resource_types"])
+        and "knowledge_space" in catalog_models[model["key"]]["visibility_only_resource_types"]
+        and not relevant_actions.intersection(catalog_models[model["key"]]["action_codes"])
     ]
     assert candidates, "The migrated real Catalog must supply a grantable pure-visible model"
     selected = catalog_models[candidates[0]["key"]]
-    relevant_actions = {
-        action["code"] for action in catalog["actions"] if resource_types.intersection(action["resource_types"])
-    }
     assert not relevant_actions.intersection(selected["action_codes"])
     context = await target.ok("GET", f"/permissions/resources/knowledge_space/{sid}/context")
     await target.ok(

@@ -12,19 +12,18 @@ These tests cover the three branches added to
   * every returned row carries only the already-proven ``visible`` marker;
   * empty visible set → an empty page is returned without hitting the DB.
 
-Plus a handler-level check that ``type=3`` (SPACE) is rejected with the new
-``KnowledgeSpaceListNotSupportedError``.
+Plus a handler-level check that explicit ``type=3`` uses the bounded SPACE facade
+and retains its actual public type.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from bisheng.common.errcode.knowledge import KnowledgeSpaceListNotSupportedError
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
     KnowledgeState,
@@ -288,26 +287,37 @@ async def test_admin_bypass_skips_permission_runtime_and_returns_visible_only(
 
 
 @pytest.mark.asyncio
-async def test_handler_rejects_knowledge_space_type() -> None:
-    """`/api/v1/knowledge` does not serve knowledge spaces regardless of role.
-
-    The handler raises ``KnowledgeSpaceListNotSupportedError`` before any
-    service work runs — a super admin previously received the full SPACE set
-    because the resource-type mismatch was only detected inside F048 target
-    resolution, which super_admin bypassed.
-    """
+async def test_handler_dispatches_explicit_space_to_typed_bounded_facade(monkeypatch) -> None:
     from bisheng.knowledge.api.endpoints import knowledge as endpoint
+    from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
 
-    with pytest.raises(Exception) as excinfo:
-        await endpoint.get_knowledge(
-            request=None,
-            login_user=MagicMock(),
-            action="visible",
-            name=None,
-            knowledge_type=KnowledgeTypeEnum.SPACE.value,
-            sort_by="update_time",
-            preferred_ids=None,
-            page_size=10,
-            cursor=None,
-        )
-    assert excinfo.value.status_code == KnowledgeSpaceListNotSupportedError.Code
+    page = {"data": [], "page_size": 10, "has_more": False, "next_cursor": None}
+    spaces = AsyncMock(return_value=page)
+    ordinary = AsyncMock(side_effect=AssertionError("SPACE must not enter the library namespace"))
+    monkeypatch.setattr(LegacyDocumentsApplication, "alist", spaces)
+    monkeypatch.setattr(KnowledgeService, "get_knowledge", ordinary)
+    user = _User()
+    result = await endpoint.get_knowledge(
+        request=None,
+        login_user=user,
+        action="visible",
+        name=None,
+        knowledge_type=KnowledgeTypeEnum.SPACE.value,
+        sort_by="update_time",
+        preferred_ids=None,
+        page_size=10,
+        cursor=None,
+        has_abnormal=False,
+    )
+    assert result.data == page
+    assert spaces.await_args.kwargs == {
+        "identity": user,
+        "name": None,
+        "sort_by": "update_time",
+        "cursor": None,
+        "page_size": 10,
+        "preferred_ids": None,
+        "has_abnormal": False,
+        "legacy_view": False,
+    }
+    ordinary.assert_not_awaited()
