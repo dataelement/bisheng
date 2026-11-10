@@ -310,6 +310,8 @@ worker领取另有 job/item `lease_token`、`lease_until`、`claim_generation`�
 
 现有move / batch-delete / batch-download / batch-tag / batch-retry路径保留、参数和返回envelope不重定义；新确认信息作为可选扩展接入。仅当业务要求二次确认或存在跳过项时，未带确认的旧请求返回既有envelope内的“需要确认”业务错误/附加data，零修改；已带旧skip_invalid=true本身不能代替被冻结的影响确认。没有二次确认要求且所有项都有效时，旧请求仍能直接走统一用例，不能为了新UI整体禁止旧API。所有入口最终执行前复核最新业务条件，不能用旧接口绕保护。跨空间move/删除已知历史内容提示/覆盖人工chunk等既定强制确认仍需执行此流程。
 
+Move预检及确认锁前重验先以真实身份完成选择项分类，保原file/folder.move与目标容器upload_file准入；仅有有效根时才检查源/目标空间idle。复制中、重建中或model_transition报KnowledgeProcessingConflictError，不能抢先覆盖无权/缺失项分类。锁后继续核当前忙态，确认分类变化仍重新确认；任何拒绝不得消费Plan、改File、创建Job或派发chat。此为2bb10ce9df修复的实际顺序，不新增edit/use动作，也不放松原锁及恢复规则。
+
 ## A1：可信管理员范围与授权动作
 
 新基线 `AdminScopeMiddleware` 已将 `/api/v1/knowledge` 作为管理路径，通过F019绑定 request.state.management_tenant_id / management_tenant_scope。GET admin/list 只能平台超管/相应租管，并要求有效具体tenant；super默认own且可按既有scope切换，租管仅own。拒绝空/全租户汇总，不从query body任意切换tenant；ordinary管理列表入口不能取得全量。

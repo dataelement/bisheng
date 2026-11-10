@@ -9,7 +9,7 @@
 | 实际集成链 | 固定实现 / 集成点 | 当前证据边界 |
 | --- | --- | --- |
 | 原Run全平台权限发布、六来源回填/对账、Coverage、新租户及CLI | 权限a576；回填dbf003、删除证据窄修d4070de444，均已正常合流 | 本地原生链和线性分页证明；尚非真实停服升级 |
-| 跨空间与同步移动、旧入口及源输入保护 | 3f358及575b0792ca | 实际应用/Worker/调用方已接；整体环境测试待统一执行 |
+| 跨空间与同步移动、旧入口及源输入保护 | 3f358、575b0792ca及2bb10ce9df | 实际应用/Worker/调用方已接；预检及确认锁前权限分类先于有效根idle检查，锁后重验保留；环境测试待执行 |
 | 知识引用/文件夹闭集删除/空间删除与清空、旧文档及Version | 575b0792ca、混合权限与DDL a1c4aa2ce2 | 原Plan→F048→SQL→持久清理已接，必要native闭环已验；不报整体通过 |
 | 模型删除/共享协调及两端知识删除页面 | afb4d255、1bbc16d0a9、494351123c；集成2e9fd102d5 | 原PUT差集与强删确认、未知ACK/受限来源按原合同；无签发加固 |
 | 保存引用选择器及纯可见授权 | c006b7ac64，集成332001b408 | 定点34项通过；平台整体typecheck仍有既有依赖/页面错误，不宣称全绿 |
@@ -49,15 +49,19 @@ Root最终四路径`test_wire_router`、`test_legacy_document_contract`、`test_
 | mock上游本地监听 | 首轮38 setup error为sandbox禁止127.0.0.1绑定，允许本地监听后同原路径39通过（含原控制项）；未改产品、服务或skip。 |
 | 万级迁移规模 | 原单轮permission_publication_scale的10001 Root和10001 Source用例最终均通过，tracemalloc开启时各506.174/144.451秒；SQL上限公式、派生次数、全Store扫描3次、IN/bulk≤200及FGA write≤90断言均通过。不伪造未保存的精确计数，也不当MySQL或环境升级性能证明。 |
 | 旧文件真实调用方 | 80f5cbee08仅补当前native上传Owner/Doc/V1夹具和AnyIO同步桥；忙态经真实Commands预检，公开缺确认零修改控制新增。原14项及必要四路径62项通过，生产0改。 |
+| 上传/补偿与历史版本native夹具 | 9740178ba0、9a3079c62d已正常整合至77f737fe3c，旧上传/版本测试接真实Owner、Session、Plan及持久清理，保原ID、失败补偿和动作断言；不改生产行为。原principal由F118实际业务链要求，4b3099878b已修调用方测试，不能列为范围外旧夹具。 |
+| Move权限与忙态顺序 | 2bb10ce9df修复真实产品顺序：预检及确认锁前先按原move/目标upload_file分类，仅有效根再核源/目标idle，锁后重验继续保留。无权/缺失不被忙态覆盖，拒绝时Plan、File、Job及chat零副作用；不扩大edit/use。 |
 | 平台端相关全组 | 原98文件在实际特性workspace包、校验锁定图标、Node WebStorage兼容环境执行：94套件通过/4失败，727断言通过/3失败；另1收集失败为未安装dnd。剩余4路径在共同祖先9eef0016de同配置全部复现（3失败/17通过及同dnd错误）；本次QA上下文及两DTO测试字段已修，保原行为断言。 |
 | 客户端相关全组 | 原83文件真实源码/锁定图标及Babel/Node编码器环境：79套件通过/4失败，504断言通过/13失败，0skip/0启动失败。13节点在共同祖先同环境精确复现；仅本次Home/Content/删除Owner的3个旧fixture修正74a6fea280，生产0改。 |
 | 静态与三语 | 前端工作区全量pnpm lint及check-i18n通过。native typecheck平台仍22诊断、client145，存在本机依赖/图标版本等环境缺口；本次6条新增测试DTO诊断已消除，不能宣称全量typecheck通过。 |
 
-旧MCP apps15项及两端既有失败归入[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)，不是本次新缺陷豁免。其他后端失败仍在逐组复核，尚无完整修后回归结论；不得把上述小组绿相加成最终全量通过。
+旧MCP apps15项及两端既有失败归入[后续排期](../../../docs/backlog/f118-deferred-optimizations.md)，不是本次新缺陷豁免。上传/版本native夹具整合后，Root在77f737fe3c执行最终后端完整单轮；当前仍在运行，尚无最终全绿结论，不得把上述分组数字相加。原8张开发卡保持关闭，14张验收卡仍待实际接口、升级/恢复、E2E与最终评审。
 
 109独立旧标准环境已补：1个未发布的hosted App/初始Version（原Service写且真MinIO代码对象，明确synthetic fixture），1个真实旧API workflow/version206引用已证明缺失的知识ID911800001。原205版本、5个成功文件及原模型/默认配置摘要保持；证据`/opt/server/f118-e2e/prep/additional-source-manifest.json`及`evidence/preparation-additional-sources.json`，权限600，均formal_baseline=false。尚未停服/DDL/正式freeze/apply/restore。
 
-固定候选归档550561c443，SHA256 `3bdbcfdbd070fb1c262b2f8c7a3f2066440b8f991284c48cb01dd0424a35766b`；API/Worker镜像已构建`sha256:b8032abed8ea976f760e91a397c216a809cebea48afcb1197813557e440ef34c`，未启动。与旧源码pyproject/uv.lock一致，独立构建复用原已安装依赖并完整替换镜像应用源；生产业务代码仍730e226776。两端前端在构建，公共镜像源403后仅在项目候选Dockerfile改用本机现有Node20.20.2/Nginx基础镜像，原锁文件和产品Dockerfile未改。不得将候选build当部署或E2E。
+前端候选550561c443已完成构建，镜像`sha256:b0b4baa3d609d8df793cc496ddbed0201f0a1fcce8dd1a73602c6a5cf2de8982`；本地Git逐项核验550561c443、82ae4ea98d和77f737fe3c的`src/frontend`树均为`ca37581a70c5ad3de15dbc0786cf97638203673c`。公共镜像源403后的替代基础镜像仅在项目候选Dockerfile，原锁和产品Dockerfile未改。
+
+旧550561c443归档及其API/Worker镜像已由Move修复取代，不作为当前后端候选。Root已按最终77f737fe3c构建`f118-e2e-backend:candidate-77f737fe3c`，镜像`sha256:bef3f456f67c21c24d81bfcd0c840ad9db5a7658d602d886680640c66eb1621b`，归档SHA256 `1c560dacb4c24d3d2512214939283d9ae920598c0f7776246d836bd52002e575`。当前未部署新版、未执行正式升级/恢复或环境E2E，构建完成不能替代这些证据。
 
 真实HTTP E2E脚本12506a5500已准备并合流，Root改以实际新Chunk内容验证覆盖，不附加原合同未承诺的MD5变化。8条仅collect/静态通过，未向旧runtime写E2E；部分AC语义、UI、跨租户、引用强删、移动/复制及恢复仍待真实执行。
 
