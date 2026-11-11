@@ -17,7 +17,7 @@ from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
 from bisheng.citation.domain.services.citation_prompt_helper import strip_citation_markers
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.linsight import (
@@ -35,6 +35,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter_if, get_current_tenant_id
 from bisheng.core.logger import trace_id_var
+from bisheng.core.session_activity import business_activity
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.linsight.domain import utils as linsight_execute_utils
@@ -172,6 +173,7 @@ async def linsight_file_preview(
 
 # Submit an Idea User Issue Request
 @router.post("/workbench/submit", summary="Submit an Idea User Issue Request")
+@business_activity()
 async def submit_linsight_workbench(
     submit_obj: LinsightQuestionSubmitSchema = Body(..., description="Idea User Issue Submitter"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -252,6 +254,7 @@ async def submit_linsight_workbench(
 
 # workbench to process
 @router.post("/workbench/start-execute", summary="Start Executing Reims", response_model=UnifiedResponseModel)
+@business_activity()
 async def start_execute(
     linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -325,6 +328,7 @@ async def start_execute(
 
 
 @router.post("/workbench/continue", summary="Continue a task-mode conversation with a new turn")
+@business_activity()
 async def continue_conversation(
     session_version_id: str = Body(..., description="Existing session version id to continue", embed=True),
     question: str = Body(..., description="Follow-up user message", embed=True),
@@ -357,8 +361,6 @@ async def continue_conversation(
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
-    await record_business_activity(login_user)
-
     # Flip back to IN_PROGRESS BEFORE enqueue so the worker's pre-flight
     # non-terminal guard accepts the continue item.
     await LinsightSessionVersionDao.batch_update_session_versions_status(
@@ -390,6 +392,7 @@ async def continue_conversation(
 
 # workbench User input
 @router.post("/workbench/user-input", summary="User input Ideas", response_model=UnifiedResponseModel)
+@business_activity()
 async def user_input(
     session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
     linsight_execute_task_id: str = Body(..., description="Inspiration Task ExecutionID"),
@@ -434,7 +437,6 @@ async def user_input(
     already_completed = existing_task is not None and existing_task.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
     if not already_completed:
-        await record_business_activity(login_user)
         # Legacy parked sessions created before the pseudo-task row existed have
         # no row for a session-level clarify; the resume reads the answer from the
         # queue item, so persistence is best-effort there (skip when no row).

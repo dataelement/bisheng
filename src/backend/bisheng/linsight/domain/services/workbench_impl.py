@@ -17,7 +17,7 @@ from loguru import logger
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.linsight import (
@@ -313,7 +313,6 @@ class LinsightWorkbenchImpl:
             # codes the frontend branches on, which a deferred ingest could only
             # report minutes later as a generic task failure.
             cls.validate_submitted_files(submit_obj.files)
-            await record_business_activity(login_user)
             # Continue an existing session when session_id is supplied, else
             # start a fresh one. Continuing reuses the MessageSession and only
             # appends a new version, so follow-up rounds stay in one 会话 (F035).
