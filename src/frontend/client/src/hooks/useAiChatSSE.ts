@@ -156,6 +156,12 @@ export function openChatStream(
     let expectedClose = false;
     let failureReported = false;
     let networkFailure: FailureInfo | undefined;
+    const handleOffline = () => {
+        if (endCalled || expectedClose) return;
+        reportNetworkFailure();
+        sse.close();
+        safeEnd();
+    };
     const reportNetworkFailure = () => {
         if (endCalled || expectedClose) return;
         expectedClose = true;
@@ -166,6 +172,7 @@ export function openChatStream(
     const safeEnd = () => {
         if (endCalled) return;
         endCalled = true;
+        if (typeof window !== 'undefined') window.removeEventListener('offline', handleOffline);
         onEnd();
     };
 
@@ -477,7 +484,14 @@ export function openChatStream(
         safeEnd();
     });
 
-    sse.stream();
+    // An open XHR can remain pending after connectivity disappears, without an
+    // error/close callback. The browser's offline signal must end that turn too.
+    if (typeof window !== 'undefined') window.addEventListener('offline', handleOffline);
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        handleOffline();
+    } else {
+        sse.stream();
+    }
 
     return {
         close: () => {

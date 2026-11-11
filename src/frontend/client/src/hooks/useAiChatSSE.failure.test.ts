@@ -98,3 +98,55 @@ it('leaves explicit unknown error text unclassified without transport evidence',
     stream.emit('error', {data:'Connection error'});
     expect(submission.onError).toHaveBeenCalledWith('workstation.chat.answer_failed', undefined);
 });
+
+describe('browser goes offline with a pending stream', () => {
+    const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    let browser: EventTarget;
+
+    beforeEach(() => {
+        browser = new EventTarget();
+        Object.defineProperty(globalThis, 'window', { configurable: true, value: browser });
+        Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+    });
+
+    afterEach(() => {
+        if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor);
+        else Reflect.deleteProperty(globalThis, 'window');
+        if (navigatorDescriptor) Object.defineProperty(globalThis, 'navigator', navigatorDescriptor);
+        else Reflect.deleteProperty(globalThis, 'navigator');
+    });
+
+    it('reports immediately without waiting for an XHR error or close', () => {
+        const { stream, submission } = open();
+        browser.dispatchEvent(new Event('offline'));
+        browser.dispatchEvent(new Event('offline'));
+        stream.emit('error', { data: '' });
+        expect(stream.readyState).toBe(2);
+        expect(submission.onError).toHaveBeenCalledTimes(1);
+        expect(submission.onError).toHaveBeenCalledWith('api_errors.failure_network', undefined, {
+            failureInfo: expect.objectContaining({ category: 'network' }),
+        });
+        expect(submission.onEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes the listener on normal completion and intentional stop', () => {
+        const remove = jest.spyOn(browser, 'removeEventListener');
+        const completed = open();
+        completed.stream.emit('message', { data: JSON.stringify({ final: true }) });
+        const stopped = open();
+        stopped.handle.close();
+        browser.dispatchEvent(new Event('offline'));
+        expect(completed.submission.onError).not.toHaveBeenCalled();
+        expect(stopped.submission.onError).not.toHaveBeenCalled();
+        expect(remove).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not start a stream when already offline', () => {
+        Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
+        const { submission } = open();
+        expect(submission.onStart).not.toHaveBeenCalled();
+        expect(submission.onError).toHaveBeenCalledTimes(1);
+        expect(submission.onEnd).toHaveBeenCalledTimes(1);
+    });
+});

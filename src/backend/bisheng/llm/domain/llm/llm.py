@@ -379,8 +379,14 @@ class BishengLLM(BishengBase, BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
+        received_chunk = False
         for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
+            received_chunk = True
             yield normalize_reasoning_content(one)
+        if not received_chunk:
+            # SDKs may silently consume a non-SSE HTTP 200 response. Raise inside
+            # the model boundary so LangChain's later aggregation cannot lose it.
+            raise ValueError("Model returned no stream chunks")
 
     @wrapper_bisheng_model_generator_async
     @failure_boundary("model_service", "llm", "invoke_model")
@@ -391,5 +397,9 @@ class BishengLLM(BishengBase, BaseChatModel):
         run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        received_chunk = False
         async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+            received_chunk = True
             yield normalize_reasoning_content(one)
+        if not received_chunk:
+            raise ValueError("Model returned no stream chunks")

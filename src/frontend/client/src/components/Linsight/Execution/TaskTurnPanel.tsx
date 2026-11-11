@@ -79,7 +79,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     const { continueConversation, getLinsight, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
     // WS pump — self-guards on status===Running, so mounting it for a completed
     // historical turn is a no-op (no connection opened).
-    const { sendInput, stop } = useLinsightWebSocket(versionId);
+    const { sendInput, stop, networkFailure } = useLinsightWebSocket(versionId);
 
     const linsight = getLinsight(versionId);
     const [loadFailed, setLoadFailed] = useState(false);
@@ -263,6 +263,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
             )}
 
             {/* error / terminated banners */}
+            {networkFailure && <ChatErrorCard failureInfo={networkFailure} />}
             {linsight.taskError && (
                 <ChatErrorCard
                     errorCode={linsight?.taskErrorInfo?.error_code ?? linsight?.output_result?.error_code}

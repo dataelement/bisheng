@@ -63,7 +63,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     const { showToast } = useToastContext();
     const { getLinsight, continueConversation, updateLinsight } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
-    const { stop, sendInput } = useLinsightWebSocket(versionId);
+    const { stop, sendInput, networkFailure } = useLinsightWebSocket(versionId);
 
     const linsight = getLinsight(versionId);
     const rateLimitInfo = linsight?.taskErrorInfo;
@@ -274,6 +274,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     )}
 
                     {/* error / terminated banners */}
+                    {networkFailure && <ChatErrorCard failureInfo={networkFailure} />}
                     {linsight?.taskError && (
                         <ChatErrorCard
                             errorCode={linsight?.taskErrorInfo?.error_code ?? linsight?.output_result?.error_code}

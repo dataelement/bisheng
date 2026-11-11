@@ -13,6 +13,7 @@ import { toast } from "@bisheng/ui";
 
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import { localizedBusinessFailure } from "~/utils/failureInfo";
 
 import {
     buildDirectMoveUndoEntries,
@@ -42,7 +43,7 @@ function reasonLabelKey(entry: InvalidEntry): string {
 function describeInvalid(invalid: InvalidEntry[], localize: Localize): string {
     const groups = new Map<string, string[]>();
     for (const entry of invalid) {
-        const label = entry.errorMessage || localize(reasonLabelKey(entry));
+        const label = localizedBusinessFailure(entry.errorCode, localize) ?? localize(reasonLabelKey(entry));
         const names = groups.get(label) ?? [];
         names.push(entry.name || String(entry.id));
         groups.set(label, names);
@@ -136,7 +137,7 @@ export function useKnowledgeMove({ spaceId, onMoved, folderDeletion }: UseKnowle
             if (code === 18040) return localize("com_knowledge.move_error_permission");
             if (code === 18041) return localize("com_knowledge.move_error_tenant");
             if (code === 18033) return localize("com_knowledge.move_error_target");
-            return localize("com_knowledge.move_failed");
+            return localizedBusinessFailure(code, localize) ?? localize("com_knowledge.move_failed");
         },
         [localize],
     );
@@ -252,9 +253,7 @@ export function useKnowledgeMove({ spaceId, onMoved, folderDeletion }: UseKnowle
 
             result.invalid.forEach((item) => {
                 showToast({
-                    message: item.errorMessage
-                        ? `${item.name || item.id}: ${item.errorMessage}`
-                        : describeInvalid([item], localize),
+                    message: describeInvalid([item], localize),
                     status: "error",
                 });
             });
