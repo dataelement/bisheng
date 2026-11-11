@@ -307,3 +307,23 @@ def test_gov_red_is_the_generator_output(tmp_path):
     }
     expected = {p.relative_to(committed).as_posix(): p.read_bytes() for p in committed.rglob("*") if p.is_file()}
     assert produced == expected, "regenerate with scripts/pptd_templates/gen_gov_red.py"
+
+
+def test_every_install_path_pins_the_same_runtime():
+    """Backend base image, sandbox image and install.sh must install the same Node and
+    lock file to the same place, or local / container executors drift apart (F014 AC-01)."""
+    repo = Path(__file__).resolve().parents[4]
+    base = (repo / "src/backend/base.Dockerfile").read_text(encoding="utf-8")
+    sandbox = (repo / "docker/bisheng-sandbox/Dockerfile").read_text(encoding="utf-8")
+    install = (repo / "src/backend/pptd_runtime/install.sh").read_text(encoding="utf-8")
+    versions = {
+        "base": re.search(r"PPTD_NODE_VERSION=([\d.]+)", base).group(1),
+        "sandbox": re.search(r"PPTD_NODE_VERSION=([\d.]+)", sandbox).group(1),
+        "install.sh": re.search(r"NODE_VERSION:-([\d.]+)", install).group(1),
+    }
+    assert len(set(versions.values())) == 1, versions
+    for name, text in (("base", base), ("sandbox", sandbox)):
+        assert "pptd_runtime/package-lock.json" in text and "npm ci" in text, name
+        assert "import('sharp')" in text, f"{name} must load sharp at build time (arm64 check)"
+    app = (repo / "src/backend/Dockerfile").read_text(encoding="utf-8")
+    assert "/opt/pptd-runtime/engine" in app and "/opt/pptd-runtime/engine" in sandbox

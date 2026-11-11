@@ -17,7 +17,7 @@
 
 遵循 `docs/constitution.md` C1–C7。本特性不改数据库，不新增接口。特有约束如下。
 
-- **执行环境**：技能脚本由代码执行器在 linsight worker 所在的后端镜像中运行。本地隔离模式下，子进程使用一次性的非特权 uid，`prlimit` 限制地址空间 2GB、进程数 256、文件数 1024、CPU 600 秒；环境变量只有白名单（`local_isolation.child_env`：PATH、LANG、HOME=工作区等），**不继承** `PPTD_RUNTIME` 一类自定义变量。
+- **执行环境**：代码执行器有 local / container / e2b 三种模式，由代码执行器工具配置的 `type` 决定，缺省 local。local 在 linsight worker 所在的后端镜像中运行；container 在 `bisheng-sandbox` 镜像的 code-runner 中运行（官方 docker-compose 自带 code-runner-1/2）；e2b 是外部服务，本特性不覆盖。本地隔离模式下，子进程使用一次性的非特权 uid，`prlimit` 限制地址空间 2GB、进程数 256、文件数 1024、CPU 600 秒；环境变量只有白名单（`local_isolation.child_env`：PATH、LANG、HOME=工作区等），**不继承** `PPTD_RUNTIME` 一类自定义变量。
 - **引擎运行时**：`dsh-ppt` 要求 Node `^22.19 || >=24`。它的导入链依赖 6 个公开 npm 包：pptxgenjs 4.0.1、sharp 0.35.5（带原生库，按架构区分）、js-yaml 4.3.2、fflate 0.8.3、jsdom 29.1.1、@aiden0z/pptx-renderer 1.2.4。运行时不联网。
 - **镜像形态**：应用镜像 `src/backend/Dockerfile` 基于 `dataelement/bisheng-backend:base.vN`。base 镜像由 `.github/workflows/base_ci.yml` 在推送 `base.v*` tag 时分别构建 arm64、amd64 并推到 Docker Hub。**推 tag 即公开发布**，需要用户确认后执行。
 - **种子程序**：`builtin_skill_seeder` 只在 API 进程启动时运行，按包内容哈希判断是否覆盖；来源不是 builtin 的行（租户改过）一律跳过；`enabled` 和 `default_checked` 只在新建行时写入，更新时不动。
@@ -48,6 +48,14 @@
 - **原因**：依赖很少变，放 base 层复用；库是纯 JS（约 1.7MB），跟随代码提交，避免两处版本不一致。目录布局与 114 验证时完全相同。Node ESM 从 `/opt/pptd-runtime/engine/lib/` 向上查找，正好命中 `/opt/pptd-runtime/node_modules`。
 - **代价**：本特性需要把 base 从 v10 升到 v11 并推 tag；推 tag 前，应用镜像构建不能切到 v11。
 - **何时该重新考虑**：依赖升级频率变高，或 base 镜像改由其他流程统一维护时。
+
+### 决策 2b：沙箱镜像同样内置引擎（2026-11-11 用户确认）
+
+- **背景**：design 初版只覆盖 local 模式。container 模式下脚本在 `bisheng-sandbox` 里运行，没有 Node，升级后「PPT 制作」会提示引擎不可用。
+- **选定**：`docker/bisheng-sandbox/Dockerfile` 增加 `pptd-runtime` 构建阶段（apt 镜像源同最终阶段、下载 Node、`npm ci`、加载 sharp、拷引擎），最终阶段 `COPY --from` 到 `/opt/pptd-runtime`。沙箱镜像随 `v*` 正式版构建发布，不另推 tag。
+- **被否方案**：在最终阶段直接安装。最终阶段装完 venv 后会卸载 curl 和编译器，单独阶段可以不留下 curl 和 npm 缓存。
+- **验证**：114 上以官方 `bisheng-sandbox:v3.0.0` 叠加该构建阶段，按 compose 的 code-runner 参数（root 运行器、只读根文件系统、cap_drop ALL、2GB 内存）启动，经 `ContainerExecutor` 执行 `pptd.py env/check/render`：会话 uid 10000，gov-red 12 页通过并导出，含拷入拷出 6.4 秒。
+- **防漂移**：`test_every_install_path_pins_the_same_runtime` 校验 base、沙箱、install.sh 三处 Node 版本与锁文件一致。
 
 ### 决策 3：引擎路径固定为 `/opt/pptd-runtime`
 
@@ -122,6 +130,7 @@
 |---|---|---|
 | `src/backend/base.Dockerfile` | 安装 Node（按 TARGETARCH 下载官方二进制）与 `pptd_runtime/package-lock.json` 锁定的依赖 | 不包含 dsh-ppt 库 |
 | `src/backend/Dockerfile` | 拷 dsh-ppt 库到 `/opt/pptd-runtime/engine` | 不执行 npm |
+| `docker/bisheng-sandbox/Dockerfile` | `pptd-runtime` 阶段装 Node、依赖、引擎，最终阶段拷入 | 不改运行器 |
 | `src/backend/pptd_runtime/` | 上游库副本、依赖清单、`install.sh`（源码部署用）、来源说明 | 不放技能内容 |
 | `builtin_skills/bisheng-pptx/` | SKILL.md、references、templates、`scripts/pptd.py` | 不自己生成 PPT（不使用 python-pptx） |
 | `builtin_skill_seeder.py` | 不改动 | — |
@@ -205,4 +214,5 @@
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-11-11 | 初版 | spec 确认（同名替换方案） |
+| 2026-11-11 | 增决策 2b：沙箱镜像内置引擎（container 模式） | 用户追问沙箱镜像时发现遗漏 |
 | 2026-11-11 | 引擎运行目录改名 `engine`；决策 6 改为生成脚本；§5 增坑 9–12 | 实现中发现 |

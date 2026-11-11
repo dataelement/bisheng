@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-11 用户确认（同名原地替换方案） |
 | design.md | ✅ 已评审 | 2026-11-11 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-11-11 |
-| 实现 | 🔄 进行中 | 8 / 9（T09 与应用镜像 FROM 切 base.v11 待 base 发布，须用户确认） |
+| 实现 | 🔄 进行中 | 9 / 10（T09 与应用镜像 FROM 切 base.v11：合入前一起推，用户 11-11 确认） |
 
 ---
 
@@ -61,6 +61,11 @@
   **逻辑**：部署分支、跑 `install.sh`、确认种子替换（AC-17）、重跑 4 题出三方对比。
   **覆盖 AC**：AC-02、AC-11、AC-14、AC-17、AC-19、AC-21
 
+- [x] **T10**：沙箱镜像内置引擎（依赖 T01）
+  **文件**：`docker/bisheng-sandbox/Dockerfile`、`test/linsight/test_pptx_pptd_skill.py`
+  **逻辑**：design 决策 2b；114 上以 code-runner 方式验证 container 模式。
+  **覆盖 AC**：AC-01
+
 - [ ] **T09**：arm64 验收（依赖 T08）
   **逻辑**：106.63.13.186 是中债测试环境（客户环境），不在上面安装。改为在 base.v11 的 arm64 原生构建（`base_ci.yml`，`ubuntu-22.04-arm`）中加载 sharp 原生库，加载失败即构建失败；发布 base.v11 前须用户确认。
   **覆盖 AC**：AC-22
@@ -70,5 +75,6 @@
 - T01：运行时引擎目录由 `dsh-ppt` 改为 `engine`（去品牌）→ design 决策 2/3。
 - T06：政企红模板改为生成脚本 → design 决策 6。
 - T08：114 上发现 PyYAML 缺失时字号检查被当成问题而阻断导出，改为跳过并提示（生产 venv 有 PyYAML，不受影响）；补测试。
+- T10（新增）：container 模式下脚本在沙箱镜像运行，原设计遗漏 → design 决策 2b。
 - T09：ARM 验收改为 base 镜像 arm64 构建期检查 → 见 T09。
 - T07：`test_builtin_skill_scripts.py` 删除旧 pptx 检查脚本用例；`test_pptx_templates.py` 删除；新增 `test_pptx_pptd_skill.py`（16 项，3 项需要引擎）。

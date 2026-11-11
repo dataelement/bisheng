@@ -9,7 +9,7 @@
 
 > **范围边界**
 > - **本次纳入**：
->   - 后端镜像内置 PPTD 引擎（dsh-desktop `packages/ppt-runtime/core` 的 CLI 与公开 npm 依赖、Node 运行时），amd64 与 arm64 都可用。
+>   - 后端镜像与沙箱镜像（`bisheng-sandbox`，代码执行器 container 模式使用）都内置 PPTD 引擎（dsh-desktop `packages/ppt-runtime/core` 的 CLI 与公开 npm 依赖、Node 运行时），amd64 与 arm64 都可用。
 >   - 原地替换内置技能 `bisheng-pptx` 的内容：技能名和显示名「PPT 制作」不变，正文、脚本、模板整体换成 PPTD 版本（逐页设计版面，经引擎检查后导出可编辑 .pptx）；包含 16 套参考模板和 1 套新做的政企红色模板。
 >   - 用 PPTD 转换能力改写已有 .pptx、参照用户上传的 .pptx 模板制作。
 >   - 源码部署（非镜像）环境的引擎安装脚本。
@@ -37,7 +37,7 @@
 
 ### 2.1 引擎运行环境
 
-- **AC-01** — THE SYSTEM SHALL 在后端镜像中提供 PPTD 引擎，amd64 与 arm64 两种架构的镜像都能完成 `check` 与 `render`，导出的 .pptx 只含原生对象（文本、形状、图表、表格），没有整页图片。
+- **AC-01** — THE SYSTEM SHALL 在后端镜像和沙箱镜像中提供 PPTD 引擎，使代码执行器在 local 与 container 两种模式下都能完成 `check` 与 `render`；amd64 与 arm64 两种架构都可用；导出的 .pptx 只含原生对象（文本、形状、图表、表格），没有整页图片。
 - **AC-02** — WHEN 代码执行器以本地隔离方式运行技能脚本（非特权 uid、2GB 地址空间上限、受限环境变量），THE SYSTEM SHALL 能完成一个 12 页工程的检查和导出，且各自耗时不超过 10 秒。
 - **AC-03** — THE SYSTEM SHALL 在运行时不访问网络、不在任务中安装任何依赖；引擎及其依赖的版本在仓库中固定，随仓库附带上游许可证与第三方声明。
 - **AC-04** — WHERE 部署环境不是官方镜像（源码部署），THE SYSTEM SHALL 提供一个安装脚本，在该机器上装好与镜像相同版本的引擎；IF 引擎没有安装, THEN 技能 SHALL 告诉用户「当前环境未安装 PPT 引擎，请联系管理员」并停止，不改用其他方式生成 PPT。
