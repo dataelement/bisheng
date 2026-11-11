@@ -48,13 +48,13 @@ export function SidebarProjects({ openIds, onOpenIdsChange, onNavigate, onStartC
     onOpenIdsChange((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const handleNameSubmit = async (name: string, requestId: string) => {
+  const handleNameSubmit = async (name: string, draftProjectId: string) => {
     if (nameDialog.mode === 'rename') {
-      await actions.mutateAsync({ operation: { operation: 'rename', project_id: nameDialog.id, name }, requestId });
+      await actions.mutateAsync({ operation: { operation: 'rename', project_id: nameDialog.id, name } });
       return;
     }
     // A new project opens at once, so the user sees where its conversations will go.
-    const result = await actions.mutateAsync({ operation: { operation: 'create', name }, requestId });
+    const result = await actions.mutateAsync({ operation: { operation: 'create', project_id: draftProjectId, name } });
     const id = result.outcome.project_id;
     if (id) onOpenIdsChange((prev) => [...prev, id]);
   };

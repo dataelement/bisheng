@@ -1,4 +1,3 @@
-import re
 from base64 import b64decode
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -10,9 +9,9 @@ from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.user import (
+    AmbiguousAccountError,
     CaptchaError,
     UserForbiddenError,
-    UserNameTooLongError,
     UserNoRoleForLoginError,
     UserNoWebMenuForLoginError,
     UserPasswordExpireError,
@@ -59,10 +58,6 @@ ALLOWED_AVATAR_TYPES = {
 MAX_AVATAR_SIZE = 10 * 1024 * 1024  # 10MB
 AVATAR_OBJECT_PREFIX = "avatar/"
 
-# Password strength rule, kept in sync with the frontend PWD_RULE:
-# at least 8 chars, with a lowercase, an uppercase, a digit and a symbol.
-PASSWORD_STRENGTH_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,128}$")
-
 
 class UserService:
     @classmethod
@@ -80,10 +75,10 @@ class UserService:
         return configuration.get("enabled") is True if isinstance(configuration, dict) else bool(configuration.enabled)
 
     @classmethod
-    def _persist_profile_in_session(cls, session, changed: User) -> User:
+    def _persist_profile_in_session(cls, session, changed: User, *, from_sync: bool = False) -> User:
         from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
 
-        user, profile_changed = UserDshProfileRepository.apply_detached_changes(session, changed)
+        user, profile_changed = UserDshProfileRepository.apply_detached_changes(session, changed, from_sync=from_sync)
         if cls._dsh_enabled() and profile_changed:
             cls._record_profile_in_session(session, user)
         return UserDshProfileRepository.detach(session, user)
@@ -96,17 +91,19 @@ class UserService:
         return snapshot
 
     @classmethod
-    def persist_profile_update(cls, changed: User, *, session_scope=None) -> User:
+    def persist_profile_update(cls, changed: User, *, session_scope=None, from_sync: bool = False) -> User:
         """Persist user changes and local profile version in the same transaction."""
         from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
 
         with (session_scope or UserDshProfileRepository.transaction)() as session:
-            return cls._persist_profile_in_session(session, changed)
+            return cls._persist_profile_in_session(session, changed, from_sync=from_sync)
 
     @classmethod
-    async def apersist_profile_update(cls, changed: User) -> User:
+    async def apersist_profile_update(cls, changed: User, *, from_sync: bool = False) -> User:
         async with get_async_db_session() as session:
-            user = await session.run_sync(lambda sync: cls._persist_profile_in_session(sync, changed))
+            user = await session.run_sync(
+                lambda sync: cls._persist_profile_in_session(sync, changed, from_sync=from_sync)
+            )
             await session.commit()
             return user
 
@@ -259,9 +256,9 @@ class UserService:
 
     @classmethod
     def password_meets_policy(cls, plain: str) -> bool:
-        """Same rule as the frontend: >=8 chars with lowercase, uppercase,
-        digit and symbol."""
-        return bool(PASSWORD_STRENGTH_PATTERN.match(plain or ""))
+        from bisheng.user.domain.rules.identity import password_meets_policy
+
+        return password_meets_policy(plain)
 
     @classmethod
     def validate_password_strength(cls, plain: str) -> None:
@@ -289,10 +286,7 @@ class UserService:
             user_name=req_data.user_name,
             password=cls.decrypt_md5_password_strict(req_data.password),
             source="local",
-            # Default external_id to user_name so password login (which queries
-            # external_id only since 94323e3ec) works out of the box. SSO-synced
-            # users set their own external_id via org_sync, not through here.
-            external_id=req_data.user_name,
+            external_id=req_data.external_id if req_data.external_id is not None else req_data.user_name,
         )
         group_ids = []
         role_ids = []
@@ -311,7 +305,9 @@ class UserService:
         # This legacy account form has no primary department: the authoritative initial home is Root.
         # Creating a child-tenant member uses the department-member endpoint instead.
         await validate_policy_role_ids(1, role_ids)
-        user = UserDao.add_user_with_groups_and_roles(user, group_ids, [])
+        from bisheng.user.domain.services.account_identity_service import AccountIdentityService
+
+        user = AccountIdentityService.create_local(user, group_ids=group_ids, role_ids=[])
         with tenant_execution_scope(1), strict_tenant_filter():
             home = await UserTenantSyncService.sync_user(user.user_id)
         await grant_policy_bindings(user.user_id, home.id, role_ids, operator_id=login_user.user_id)
@@ -414,18 +410,13 @@ class UserService:
             if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
                 raise CaptchaError()
 
-        db_user = User.model_validate(user)
-        person_id = (db_user.external_id or "").strip()
-        if not person_id:
-            raise UserValidateError(msg="Person ID is required")
-        existing_pid = await UserDao.aget_by_external_id(person_id)
-        if existing_pid:
-            raise UserValidateError(msg="Person ID already exists")
-        db_user.external_id = person_id
+        from bisheng.user.domain.rules.identity import validate_account, validate_nickname
+        from bisheng.user.domain.services.account_identity_service import AccountIdentityService
 
-        # Names may repeat; external_id and user_id identify the person.
-        if len(db_user.user_name) > 30:
-            raise UserNameTooLongError()
+        validate_account(user.external_id)
+        validate_nickname(user.user_name)
+        db_user = User.model_validate(user)
+        db_user.source, db_user.delete, db_user.disable_source = "local", 0, None
         db_user.password = cls.decrypt_md5_password_strict(user.password)
         # Under JudgmentadminDoes the user exist
         assigned_tenant_id = await cls._resolve_registration_tenant_id()
@@ -434,20 +425,11 @@ class UserService:
         if settings.multi_tenant.enabled:
             tenant_token = set_current_tenant_id(int(assigned_tenant_id))
         try:
-            admin = await UserDao.aget_user(1)
-            if admin:
-                db_user = await UserDao.add_user_and_default_role(db_user)
-                await LegacyRBACSyncService.sync_user_auth_created(
-                    db_user.user_id,
-                    [DefaultRole],
-                )
-            else:
-                db_user.user_id = 1
-                db_user = await UserDao.add_user_and_admin_role(db_user)
-                await LegacyRBACSyncService.sync_user_auth_created(
-                    db_user.user_id,
-                    [AdminRole],
-                )
+            db_user = await AccountIdentityService.acreate_local(db_user, bootstrap=True)
+            await LegacyRBACSyncService.sync_user_auth_created(
+                db_user.user_id,
+                [AdminRole if db_user.user_id == 1 else DefaultRole],
+            )
 
             await cls._ensure_user_default_tenant_association(
                 db_user.user_id,
@@ -602,43 +584,31 @@ class UserService:
                 cls._audit_login_failure(request, account=user.user_name, reason="验证码错误")
                 raise CaptchaError()
 
-        # Accept names or external_id; check each matching account when names repeat.
-        candidates = await UserDao.aget_login_candidates_by_account(user.user_name)
-        if not candidates:
-            # Disabled users are excluded from candidates; report the disabled account separately.
-            if await UserDao.aexists_disabled_login_account(user.user_name):
-                cls._audit_login_failure(request, account=user.user_name, reason="账号已停用")
-                return UserForbiddenError.return_resp()
+        from bisheng.user.domain.services.account_identity_service import AccountIdentityService
+
+        try:
+            db_user = await AccountIdentityService.aresolve_login(user.user_name)
+        except UserForbiddenError:
+            cls._audit_login_failure(request, account=user.user_name, reason="账号已停用")
+            return UserForbiddenError.return_resp()
+        except AmbiguousAccountError:
+            cls._audit_login_failure(request, account=user.user_name, reason="账号匹配多个用户")
+            raise
+        if db_user is None:
             cls._audit_login_failure(request, account=user.user_name, reason="账号不存在")
             return UserValidateError.return_resp()
-
         password = cls.decrypt_md5_password(user.password)
-        db_user = None
-        for c in candidates:
-            if c.delete == 1:
-                continue
-            try:
-                await cls.judge_user_password(c, password)
-                db_user = c
-                break
-            except UserPasswordExpireError:
-                cls._audit_login_failure(request, account=c.user_name, reason="密码已过期", user_id=c.user_id)
-                raise
-            except UserPasswordMaxTryError:
-                cls._audit_login_failure(request, account=c.user_name, reason="连续密码错误", user_id=c.user_id)
-                cls._audit_auto_forbid(request, c)
-                raise
-            except UserValidateError:
-                # Try the next account with the same name when the password does not match.
-                continue
-        if not db_user:
-            only = candidates[0] if len(candidates) == 1 else None
-            cls._audit_login_failure(
-                request,
-                account=only.user_name if only else user.user_name,
-                reason="密码错误",
-                user_id=only.user_id if only else 0,
-            )
+        try:
+            await cls.judge_user_password(db_user, password)
+        except UserPasswordExpireError:
+            cls._audit_login_failure(request, account=db_user.user_name, reason="密码已过期", user_id=db_user.user_id)
+            raise
+        except UserPasswordMaxTryError:
+            cls._audit_login_failure(request, account=db_user.user_name, reason="连续密码错误", user_id=db_user.user_id)
+            cls._audit_auto_forbid(request, db_user)
+            raise
+        except UserValidateError:
+            cls._audit_login_failure(request, account=db_user.user_name, reason="密码错误", user_id=db_user.user_id)
             return UserValidateError.return_resp()
 
         await cls.clear_error_password_key(db_user.user_id)

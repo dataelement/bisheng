@@ -6,7 +6,6 @@ this suite never contacts a deployed environment or reads production credentials
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -22,20 +21,15 @@ PREFIX = "e2e-project-"
 API = "/api/v1/chat/projects"
 
 
-async def mutate(client, operation, request_id=None):
-    return await client.post(f"{API}/actions", json={"request_id": request_id or str(uuid4()), **operation})
+async def mutate(client, operation):
+    if operation["operation"] == "create":
+        operation = {"project_id": str(uuid4()), **operation}
+    return await client.post(f"{API}/actions", json=operation)
 
 
 async def cleanup_projects(client):
     page = assert_resp_200(await client.get(f"{API}/snapshot"))
-    owned = []
-    while True:
-        for project in page["projects"]:
-            if project["name"].startswith(PREFIX):
-                owned.append(project["id"])
-        if not page["next_cursor"]:
-            break
-        page = assert_resp_200(await client.get(f"{API}/snapshot", params={"cursor": page["next_cursor"]}))
+    owned = [project["id"] for project in page["projects"] if project["name"].startswith(PREFIX)]
     for project_id in owned:
         assert_resp_200(await mutate(client, {"operation": "delete", "project_id": project_id}))
 
@@ -43,7 +37,6 @@ async def cleanup_projects(client):
 @pytest.fixture
 async def clients(repo, monkeypatch):
     from bisheng.chat_session.api.endpoints.projects import router
-    from bisheng.chat_session.domain.services import project_service
     from bisheng.common.dependencies.user_deps import UserPayload
     from bisheng.common.errcode.base import BaseErrorCode
 
@@ -58,7 +51,6 @@ async def clients(repo, monkeypatch):
         )
 
     app.dependency_overrides[UserPayload.get_login_user] = identity
-    monkeypatch.setattr(project_service, "publish_project_change", AsyncMock(return_value="live"))
 
     @app.exception_handler(BaseErrorCode)
     async def error(request, exception):
@@ -92,20 +84,17 @@ async def test_ac01_ac02_ac04_ac05_two_clients_share_actions_and_membership(clie
     assert final["projects"] == [] and final["memberships"] == []
 
 
-async def test_ac06_ac07_ac08_response_replay_does_not_restore_stale_name(clients):
-    """AC-06, AC-07, AC-08: retry the exact uncertain request after a later edit."""
+async def test_ac06_ac07_ac08_retried_create_does_not_restore_stale_name(clients):
+    """AC-06, AC-07, AC-08: retry the exact uncertain create after a later edit."""
     web, desktop = clients
-    request_id = str(uuid4())
-    operation = {"operation": "create", "name": PREFIX + "initial"}
-    first = assert_resp_200(await mutate(web, operation, request_id))
+    operation = {"operation": "create", "project_id": str(uuid4()), "name": PREFIX + "initial"}
+    first = assert_resp_200(await mutate(web, operation))
     project = first["outcome"]["project_id"]
     assert_resp_200(await mutate(desktop, {"operation": "rename", "project_id": project, "name": PREFIX + "current"}))
-    replay = assert_resp_200(await mutate(web, operation, request_id))
-    assert replay["replayed"] is True
-    assert replay["outcome"]["project_id"] == project
+    retry = assert_resp_200(await mutate(web, operation))
+    assert retry["outcome"]["project_id"] == project
     state = assert_resp_200(await web.get(f"{API}/snapshot"))
     assert [row["name"] for row in state["projects"]] == [PREFIX + "current"]
-    assert_resp_error(await mutate(web, {**operation, "name": "different"}, request_id), 13014)
 
 
 @pytest.mark.parametrize("actor", ["other", "tenant", "admin"])
@@ -123,11 +112,10 @@ async def test_ac09_ac10_foreign_identity_cannot_read_or_mutate_private_projects
 
 
 async def test_ac11_ac12_import_merges_once_and_preserves_later_cloud_changes(clients):
-    """AC-11, AC-12: confirmed import payload is a merge, not a snapshot overwrite."""
+    """AC-11, AC-12: import is a merge by conversation owner, not a snapshot overwrite."""
     web, desktop = clients
     payload = {
         "operation": "import",
-        "source_client_id": str(uuid4()),
         "projects": [{"legacy_id": "browser-old", "name": PREFIX + "legacy"}],
         "memberships": [
             {"chat_id": "chat-001", "legacy_project_id": "browser-old"},
@@ -145,27 +133,22 @@ async def test_ac11_ac12_import_merges_once_and_preserves_later_cloud_changes(cl
     assert assert_resp_200(await desktop.get(f"{API}/snapshot"))["projects"] == []
 
 
-async def test_ac04_ac06_snapshot_pagination_rejects_a_changed_revision(clients):
-    """AC-04, AC-06: snapshots span more than one default metadata page."""
+async def test_ac11_ac12_other_account_takes_only_its_own_legacy_project(clients):
+    """AC-11, AC-12: two accounts in one browser split the legacy record by conversation owner."""
     web, desktop = clients
-    source = str(uuid4())
-    for offset in range(0, 501, 100):
-        assert_resp_200(
-            await mutate(
-                web,
-                {
-                    "operation": "import",
-                    "source_client_id": source,
-                    "projects": [
-                        {"legacy_id": str(i), "name": PREFIX + str(i)} for i in range(offset, min(offset + 100, 501))
-                    ],
-                    "memberships": [],
-                },
-            )
-        )
-    first = assert_resp_200(await desktop.get(f"{API}/snapshot"))
-    second = assert_resp_200(await desktop.get(f"{API}/snapshot", params={"cursor": first["next_cursor"]}))
-    assert len(first["projects"]) == 500 and len(second["projects"]) == 1
-    project = first["projects"][0]["id"]
-    assert_resp_200(await mutate(web, {"operation": "rename", "project_id": project, "name": PREFIX + "changed"}))
-    assert_resp_error(await desktop.get(f"{API}/snapshot", params={"cursor": first["next_cursor"]}), 13013)
+    desktop.headers["X-Test-Actor"] = "other"
+    payload = {
+        "operation": "import",
+        "projects": [{"legacy_id": "a", "name": PREFIX + "owner"}, {"legacy_id": "b", "name": PREFIX + "other"}],
+        "memberships": [
+            {"chat_id": "chat-002", "legacy_project_id": "a"},
+            {"chat_id": "foreign", "legacy_project_id": "b"},
+        ],
+    }
+    assert_resp_200(await mutate(web, payload))
+    assert_resp_200(await mutate(desktop, payload))
+    assert [p["name"] for p in assert_resp_200(await web.get(f"{API}/snapshot"))["projects"]] == [PREFIX + "owner"]
+    other = assert_resp_200(await desktop.get(f"{API}/snapshot"))
+    assert [p["name"] for p in other["projects"]] == [PREFIX + "other"]
+    for project in other["projects"]:
+        assert_resp_200(await mutate(desktop, {"operation": "delete", "project_id": project["id"]}))

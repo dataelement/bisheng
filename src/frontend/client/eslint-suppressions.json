@@ -1909,9 +1909,6 @@
     },
     "no-console": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 3
     }
   },
   "src/hooks/useAutoScroll.ts": {
@@ -1955,9 +1952,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
@@ -2054,7 +2048,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 10
+      "count": 8
     }
   },
   "src/pages/MenuUnavailablePage.tsx": {

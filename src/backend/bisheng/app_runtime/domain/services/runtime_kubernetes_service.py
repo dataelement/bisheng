@@ -301,19 +301,37 @@ class RuntimeKubernetesService:
 
     @staticmethod
     def _validate_pod(template, op, node, purpose, resource_ref):
+        from bisheng.app_runtime.domain.services.runtime_deployment_policy import operation_policy
+
+        deployment = operation_policy(op)
         expected_name = ("app-" + _hash(op.app_id)) if purpose in _PRODUCTION else "task-" + _hash(resource_ref)
         if template["metadata"]["name"] != expected_name or template["metadata"].get("finalizers") != [_FINALIZER]:
             raise RuntimeConflict("resource_pod_location_refused")
         spec = template["spec"]
-        if spec.get("nodeName") or spec.get("nodeSelector") != {
+        expected_selector = {
             "kubernetes.io/os": "linux",
             "kubernetes.io/arch": node.platform.split("/")[-1],
-        }:
+        }
+        placement = (deployment or {}).get("placement", {})
+        expected_selector.update(placement.get("nodeSelector", {}))
+        if (
+            spec.get("nodeName")
+            or spec.get("nodeSelector") != expected_selector
+            or spec.get("affinity", {}) != placement.get("affinity", {})
+        ):
             raise RuntimeConflict("resource_pod_platform_refused")
+        if deployment is not None:
+            expected_tolerations = [
+                {"key": key, "operator": "Exists", "effect": "NoExecute", "tolerationSeconds": 300}
+                for key in ("node.kubernetes.io/not-ready", "node.kubernetes.io/unreachable")
+            ] + placement.get("tolerations", [])
+            if spec.get("tolerations") != expected_tolerations:
+                raise RuntimeConflict("resource_pod_tolerations_refused")
         delivery, profile = RuntimeKubernetesService._delivery_profile(op, purge=purpose == "purge")
         image = delivery.get("image_ref") or delivery.get("image") or profile.get("runtime_image")
-        helper = (node.capabilities or {}).get("helper_image")
-        assembler = (node.capabilities or {}).get("assembler_image") if purpose == "assemble" else None
+        images = deployment or node.capabilities or {}
+        helper = images.get("helper_image")
+        assembler = images.get("assembler_image") if purpose == "assemble" else None
         available = {
             value for value in (image, helper, assembler, profile.get("preparer_image")) if isinstance(value, str)
         }
@@ -353,12 +371,20 @@ class RuntimeKubernetesService:
                 raise RuntimeConflict("resource_image_not_frozen")
             if container.get("name") in trusted and ref != helper:
                 raise RuntimeConflict("resource_helper_image_refused")
+        if deployment:
+            from bisheng.app_runtime.domain.services.runtime_deployment_policy import validate_container_resources
+
+            validate_container_resources(spec, op, deployment, purpose)
 
     @staticmethod
     def _validate_image_check(spec, op, node, claims):
         import json
 
+        from bisheng.app_runtime.domain.services.runtime_deployment_policy import operation_policy
         from bisheng.app_runtime.domain.services.runtime_image_check_policy import check_document
+
+        deployment = operation_policy(op)
+        ceiling = (deployment or {}).get("timeouts", {}).get("image_check", 120)
 
         containers = spec.get("containers", [])
         if (
@@ -366,13 +392,13 @@ class RuntimeKubernetesService:
             or spec.get("initContainers")
             or len(containers) != 1
             or type(spec.get("activeDeadlineSeconds")) is not int
-            or not 1 <= spec.get("activeDeadlineSeconds", 0) <= 120
+            or not 1 <= spec.get("activeDeadlineSeconds", 0) <= ceiling
         ):
             raise RuntimeConflict("image_check_scope_refused")
         container = containers[0]
         if (
             container.get("name") != "image-check"
-            or container.get("image") != (node.capabilities or {}).get("helper_image")
+            or container.get("image") != (deployment or node.capabilities or {}).get("helper_image")
             or container.get("command") != ["python", "-I", "-m", "runtime_manager.image_check"]
             or container.get("args")
         ):
@@ -389,6 +415,11 @@ class RuntimeKubernetesService:
             raise RuntimeConflict("image_check_targets_refused")
         if hashes.get("DOCKER_CONFIG") != hashlib.sha256(b"/run/registry").hexdigest():
             raise RuntimeConflict("image_check_environment_refused")
+        registry_secret = (
+            (deployment.get("registry_secret") or deployment.get("pull_secret", ""))
+            if deployment
+            else (node.capabilities or {}).get("image_check_registry_secret")
+        )
         for volume in spec.get("volumes", []):
             if volume.get("name") == "tmp" and set(volume) == {"name", "emptyDir"}:
                 continue
@@ -396,10 +427,10 @@ class RuntimeKubernetesService:
             if (
                 volume.get("name") != "registry-auth"
                 or set(volume) != {"name", "secret"}
-                or not (node.capabilities or {}).get("image_check_registry_secret")
+                or not registry_secret
                 or secret
                 != {
-                    "secretName": node.capabilities["image_check_registry_secret"],
+                    "secretName": registry_secret,
                     "defaultMode": 288,
                     "items": [{"key": ".dockerconfigjson", "path": "config.json"}],
                 }

@@ -1,4 +1,4 @@
-import { Alert, Button, Input, Select, notification } from '@bisheng/ui';
+import { Alert, Button, Input, Select, notification } from "@bisheng/ui";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Checkbox, Tooltip as SharedTooltip } from "@bisheng/ui";
@@ -20,8 +20,12 @@ import { isGuestDepartmentDeptId } from "@/pages/DepartmentPage/constants/system
 import type { useDepartmentSettingsController } from "./DepartmentSettings";
 interface DepartmentSettingsViewProps {
   controller: ReturnType<typeof useDepartmentSettingsController>;
+  hideActions?: boolean;
 }
-export function DepartmentSettingsView({ controller }: DepartmentSettingsViewProps) {
+export function DepartmentSettingsView({
+  controller,
+  hideActions = false,
+}: DepartmentSettingsViewProps) {
   const {
     FORM_CONTROL_WIDTH,
     handleRestore,
@@ -55,7 +59,7 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
   } = controller;
   const selectLabels = useSelectLabels();
   return (
-    <div className="max-w-3xl pb-8">
+    <div className={hideActions ? "w-full pb-1" : "max-w-3xl pb-8"}>
       {isArchived && (
         <Alert
           type="warning"
@@ -64,22 +68,33 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
         />
       )}
 
-      {loading && <p className="mb-4 text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</p>}
-
+      {loading && (
+        <p className="mb-4 text-sm text-muted-foreground">
+          {t("loading", { ns: "bs" })}
+        </p>
+      )}
 
       <section className="space-y-4">
-        <div>
-          <h3 className="mb-2 text-base font-semibold tracking-tight text-foreground">
-            {t("bs:department.sectionBasic")}
-          </h3>
-          <Separator />
-        </div>
+        {!hideActions && (
+          <div>
+            <h3 className="mb-2 text-base font-semibold tracking-tight text-foreground">
+              {t("bs:department.sectionBasic")}
+            </h3>
+            <Separator />
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label>{t("bs:department.name")}</Label>
           {isSynced || isArchived ? (
             <Input value={name} disabled className={FORM_CONTROL_WIDTH} />
           ) : (
-            <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={50} className={FORM_CONTROL_WIDTH} showCount />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={50}
+              className={FORM_CONTROL_WIDTH}
+              showCount
+            />
           )}
         </div>
         {!isRootDept && (
@@ -96,21 +111,26 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
                 modal={false}
               />
             ) : (
-              <Input value={parentDisplayName} disabled className={FORM_CONTROL_WIDTH} />
+              <Input
+                value={parentDisplayName}
+                disabled
+                className={FORM_CONTROL_WIDTH}
+              />
             )}
           </div>
         )}
       </section>
 
-
       {!isArchived && (
         <section className="mt-6 space-y-4">
-          <div>
-            <h3 className="mb-2 text-base font-semibold tracking-tight text-foreground">
-              {t("bs:department.sectionPermissions")}
-            </h3>
-            <Separator />
-          </div>
+          {!hideActions && (
+            <div>
+              <h3 className="mb-2 text-base font-semibold tracking-tight text-foreground">
+                {t("bs:department.sectionPermissions")}
+              </h3>
+              <Separator />
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>{t("bs:department.admins")}</Label>
             <DepartmentUsersSelect
@@ -129,7 +149,11 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
               // ``admin tenant:X`` tuple, so we constrain the picker to the
               // dept's own subtree. Plain depts keep the full org tree.
               rootDeptId={dept.is_tenant_root ? dept.id : undefined}
-              emptyMessage={dept.is_tenant_root ? t("bs:tenant.initialAdminEmptySubtree") : undefined}
+              emptyMessage={
+                dept.is_tenant_root
+                  ? t("bs:tenant.initialAdminEmptySubtree")
+                  : undefined
+              }
             />
             {dept.is_tenant_root ? (
               <p className="mt-1 max-w-md text-xs leading-snug text-gray-500 dark:text-gray-400">
@@ -145,7 +169,9 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
               showSearch
               aria-label={t("bs:department.defaultRoles")}
               value={defaultRoleIds}
-              options={assignableRoles.filter((o) => o.value != null && o.value !== "")}
+              options={assignableRoles.filter(
+                (o) => o.value != null && o.value !== ""
+              )}
               placeholder={t("bs:department.selectRoles")}
               onChange={(vals) => setDefaultRoleIds(vals.map(String))}
               disabled={!canEditPermissions}
@@ -156,7 +182,9 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
                 className="mt-0.5"
                 checked={applyDefaultRolesToExisting}
                 disabled={!canEditPermissions}
-                onCheckedChange={(v) => setApplyDefaultRolesToExisting(Boolean(v))}
+                onCheckedChange={(v) =>
+                  setApplyDefaultRolesToExisting(Boolean(v))
+                }
               />
               <span className="flex flex-1 flex-wrap items-center gap-1.5 text-foreground">
                 {t("bs:department.applyDefaultRolesToExisting")}
@@ -165,8 +193,15 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
                   onClick={(e) => e.preventDefault()}
                   onPointerDown={(e) => e.stopPropagation()}
                 >
-                  <SharedTooltip content={t("bs:department.applyDefaultRolesToExistingTooltip")}>
-                    <span tabIndex={0} className="text-muted-foreground hover:text-foreground">
+                  <SharedTooltip
+                    content={t(
+                      "bs:department.applyDefaultRolesToExistingTooltip"
+                    )}
+                  >
+                    <span
+                      tabIndex={0}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
                       <Outlined.Question className="size-3.5 shrink-0" />
                     </span>
                   </SharedTooltip>
@@ -180,8 +215,7 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
         </section>
       )}
 
-
-      {isArchived && (
+      {!hideActions && isArchived && (
         <div className="mt-5 border-t pt-4">
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outlined" onClick={handleRestore} color="default">
@@ -196,26 +230,36 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
         </div>
       )}
 
-
-      {!isArchived && (
+      {!hideActions && !isArchived && (
         <div className="mt-5 border-t pt-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-wrap items-center gap-2">
               {canEditPermissions && (
-                <Button type="button" onClick={handleUiRequest(handleGlobalSave)} disabled={saving}>
+                <Button
+                  type="button"
+                  onClick={handleUiRequest(() => handleGlobalSave())}
+                  disabled={saving}
+                >
                   {t("save")}
                 </Button>
               )}
             </div>
             <div className="min-w-[1rem] flex-1" />
             {onMarkAsTenant && !isRootDept && !dept.is_tenant_root && (
-              <Button variant="outlined" onClick={() => onMarkAsTenant(dept.id, dept.name)} className="shrink-0" color="default">
+              <Button
+                variant="outlined"
+                onClick={() => onMarkAsTenant(dept.id, dept.name)}
+                className="shrink-0"
+                color="default"
+              >
                 <Outlined.City className="mr-1.5 h-4 w-4" />
                 {t("bs:tenant.markAsTenant")}
               </Button>
             )}
             {onMarkAsTenant && !isRootDept && dept.is_tenant_root && (
-              <Button variant="outlined" onClick={() => {
+              <Button
+                variant="outlined"
+                onClick={() => {
                   bsConfirm({
                     title: t("bs:tenant.unmountTitle"),
                     desc: t("bs:tenant.unmountConfirm"),
@@ -223,23 +267,37 @@ export function DepartmentSettingsView({ controller }: DepartmentSettingsViewPro
                     onOk(next) {
                       return unmountTenantApi(dept.id).then((res) => {
                         if (res) {
-                          notification.open({ type: "success", title: String(t("bs:tenant.unmountSuccess") ?? ''), description: "" });
+                          notification.open({
+                            type: "success",
+                            title: String(t("bs:tenant.unmountSuccess") ?? ""),
+                            description: "",
+                          });
                           onChanged();
                         }
                         next();
                       });
                     },
                   });
-                }} className="shrink-0" color="default">
+                }}
+                className="shrink-0"
+                color="default"
+              >
                 <Outlined.City className="mr-1.5 h-4 w-4" />
                 {t("bs:tenant.unmount")}
               </Button>
             )}
-            {!isSynced && dept.parent_id !== null && !isGuestDepartmentDeptId(dept.dept_id) && (
-              <Button variant="solid" onClick={handleDelete} className="shrink-0" color="danger">
-                {t("bs:department.delete")}
-              </Button>
-            )}
+            {!isSynced &&
+              dept.parent_id !== null &&
+              !isGuestDepartmentDeptId(dept.dept_id) && (
+                <Button
+                  variant="solid"
+                  onClick={handleDelete}
+                  className="shrink-0"
+                  color="danger"
+                >
+                  {t("bs:department.delete")}
+                </Button>
+              )}
           </div>
         </div>
       )}

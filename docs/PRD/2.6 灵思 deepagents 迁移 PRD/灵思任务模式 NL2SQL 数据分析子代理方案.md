@@ -14,6 +14,7 @@
 |---|---|---|
 | 2026-09 | v1（v2.6 定位） | 初版，已 approve，未实现 |
 | 2026-11-10 | v2（v3.1 定位） | 按 3.1 代码逐条重审，见下文"v1 → v2 变更" |
+| 2026-11-11 | v2.1（已实现） | F013 实现、114 E2E 与 code review 后的回写，见文末"附录 B：实现与验证回写" |
 
 **v1 → v2 变更**（只列改变结论的条目，逐条核对依据见附录 A）：
 
@@ -163,7 +164,9 @@
 
 **执行边界例外**：主 prompt（`agent_factory.py:494-501`）和执行器工具描述（`base_executor.py:104` 的 `EXECUTION_BOUNDARY_RULES`）现在都写着"不要连接平台的数据库、缓存、对象存储等内部服务"。模型可能因此拒绝连接业务库。两处必须同时加一句：技能中明确提供的外部业务数据库可以按技能说明连接；平台自身的数据库、缓存、对象存储仍不得连接。两处是同步孪生文本（`agent_factory.py:493` 注释），必须一起改。
 
-**只读账号是唯一护栏**。技能里的连接必须用只读账号。模型生成 DML 或凭据外泄时，影响范围限于只读。
+**凭据放进技能的 `secrets/` 目录（v2.1 新增，见附录 B）**。口令等凭据不写在 SKILL.md 正文，单独放在 `skills/<技能名>/secrets/` 下；文件工具读不到这个目录，只有代码执行器里的代码能读。
+
+**只读账号仍是数据库侧的唯一护栏**。技能里的连接必须用只读账号。模型生成 DML 或凭据外泄时，影响范围限于只读。
 
 **企业技能凭据全员可读（已知风险，2026-11-10 拍板接受）**：
 
@@ -264,7 +267,7 @@
 | 3 | uid 隔离下的连通性未复验 | 列为端到端前置检查 |
 | 4 | 去掉轮数上限后，模型可能问得过多打扰用户，或反复澄清 | prompt 写明「何时提问」原则和「不重复问」；用 AC-03 实测校准；若实测过度提问，再考虑加软上限 |
 | 5 | 大结果集撑爆上下文 | 结果写 CSV 只打印摘要；结果预算中间件兜底卸载 |
-| 6 | `SubagentContextOverflowMiddleware` 构造时传入的是 researcher 的 resilience 实例（`agent_factory.py:1503`） | 实现时确认 data-analyst 溢出时的计数归属是否合理 |
+| 6 | `SubagentContextOverflowMiddleware` 构造时传入的是 researcher 的 resilience 实例（`agent_factory.py:1503`） | **已关闭**：两个子代理共用同一个 resilience 实例（`subagent_resilience`），降级额度共享，与溢出兜底的计数一致 |
 
 ---
 
@@ -286,3 +289,30 @@
 | 未覆盖 | 执行边界规则禁止连平台数据库 | 新增例外 |
 | 未覆盖 | 无人值守没有 ask_user | 新增降级 |
 | 未覆盖 | 大结果卸载到 `/large_tool_results/` | 写入 prompt |
+
+---
+
+## 附录 B：实现与验证回写（2026-11-11）
+
+**实现**：分支 `feat/3.1.0-beta1-013-taskmode-data-analyst`，spec 见 `features/v3.1.0-beta1/013-taskmode-data-analyst/spec.md`，E2E 记录见同目录 `e2e-report.md`。
+
+**与本方案正文不同的实现决定**：
+
+| 正文写法 | 实际实现 | 原因 |
+|---|---|---|
+| §3.1 中间件栈抽公共函数 | `_subagent_middleware(...)`，researcher 与 data-analyst 共用；两者共用同一个 resilience 实例 | 降级额度与主图的子代理溢出兜底共用一个计数 |
+| §3.3 第 0 步写"执行中暴露的缺口（含 NEED_CLARIFICATION）可以提问" | 第 0 步只写"执行中才暴露的缺口"，NEED_CLARIFICATION 只出现在 data-analyst 的委派行里 | prompt 与工具同步：没装配 data-analyst 时不应提到它 |
+| §3.6 代码执行器规则"抽成常量" | `_CODE_INTERPRETER_RULES_ZH`，主图与子代理共用；执行边界例外写在其中，并与 `EXECUTION_BOUNDARY_RULES` 同步 | 避免两处漂移 |
+| §3.6 凭据写在 SKILL.md | 凭据放 `skills/<名>/secrets/`；`WorkspaceBackend.read/aread/grep` 拒绝该目录；两个提示词都禁止把凭据写进可见文字 | 见下方已知坑 1 |
+
+**已知坑**：
+
+1. **文件工具返回的内容会成为可见的步骤输出**。`read_file` / `grep` 的结果存进步骤历史，`execute-task-detail` 对分享链接跳过租户过滤。114 上 11 个会话凡读过 SKILL.md 的，口令都出现在步骤历史里。如果不知道这一点，把凭据写进 SKILL.md 就等于发给所有能看到分享链接的人。处理：`secrets/` 目录 + 后端拒读（`workspace_backend.py` 的 `_is_skill_secret_path`），契约记在 `linsight/AGENTS.md`。
+2. **主图倾向于在委派前自己定口径**。3 次刻意构造的歧义问题里，主图要么在第 0 步先问用户，要么在委派说明里指定主口径并让子代理并列计算，子代理从未返回 NEED_CLARIFICATION。AC-06 因此记为"未触发、不阻断"（用户 2026-11-11 决定）。
+3. **E2B 模式读不到 `skills/`**。E2B 沙箱在技能复制进工作区之前就快照了工作目录，所以 `secrets/` 在 E2B 下不可用；local（默认）模式已验证可用，container 模式未验证。
+4. **114 上 Open API 选不到代码执行器**。v2 按日常模式配置校验工具，114 的日常配置没有工具，所以 E2E 用"v1 提交 + 改该会话 `api_meta.channel`"模拟无人值守。这是环境配置问题，不是代码问题。
+
+**技能编写约定（数据库技能）**：
+
+- `SKILL.md`：写库表说明、指标口径、常用 SQL，以及"连接信息在 `secrets/<文件名>`，在代码里用 `open("skills/<技能名>/secrets/<文件名>")` 读取"。不写口令。
+- `secrets/<文件名>`（如 `conn.json`）：写主机、端口、库名、只读账号和口令。

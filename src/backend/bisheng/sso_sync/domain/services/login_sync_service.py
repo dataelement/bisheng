@@ -295,7 +295,7 @@ class LoginSyncService:
                     user = legacy
                 cls._apply_user_attrs(user, attrs)
                 cls._touch_user_sync_time(user)
-                user = await UserService.apersist_profile_update(user)
+                user = await UserService.apersist_profile_update(user, from_sync=True)
                 if write_migration_audit:
                     await AuditLogDao.ainsert_v2(
                         tenant_id=ROOT_TENANT_ID,
@@ -316,7 +316,7 @@ class LoginSyncService:
                 new_delete = 1 if payload.account_disabled is True else 0
                 ds = cls._disable_source_for_row(row_source, new_delete)
                 new_user = User(
-                    user_name=(attrs.name.strip() if attrs.name else "") or ext,
+                    user_name=attrs.name if attrs.name is not None else ext,
                     email=cls._normalize_contact_field(attrs.email),
                     phone_number=cls._normalize_contact_field(attrs.phone),
                     external_id=ext,
@@ -371,7 +371,7 @@ class LoginSyncService:
                     raise UserForbiddenError.http_exception()
             cls._apply_user_attrs(user, attrs)
             cls._touch_user_sync_time(user)
-            user = await UserService.apersist_profile_update(user)
+            user = await UserService.apersist_profile_update(user, from_sync=True)
 
         # Gateway org sync: optional explicit account enable/disable
         if payload.account_disabled is not None:
@@ -379,7 +379,7 @@ class LoginSyncService:
             if int(getattr(user, "delete", 0) or 0) != want:
                 user.delete = want
                 user.disable_source = cls._disable_source_for_row(row_source, want)
-                user = await UserService.apersist_profile_update(user)
+                user = await UserService.apersist_profile_update(user, from_sync=True)
 
         if int(getattr(user, "delete", 0) or 0) == 1 and payload.account_disabled is not True:
             raise UserForbiddenError.http_exception()
@@ -396,9 +396,9 @@ class LoginSyncService:
     @classmethod
     def _apply_user_attrs(cls, user: User, attrs) -> None:
         """Apply present HR attributes without clearing omitted fields."""
-        if attrs.name:
-            nm = attrs.name.strip()
-            if nm and user.user_name != nm:
+        if attrs.name is not None:
+            nm = attrs.name
+            if user.user_name != nm:
                 user.user_name = nm
         if attrs.email is not None:
             ne = cls._normalize_contact_field(attrs.email)

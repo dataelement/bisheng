@@ -1,130 +1,880 @@
-# Application chart only. MySQL / Redis / MinIO / ES / Milvus / OpenFGA are
-# expected to already exist (compose, operator, or another chart). Point the
-# hosts below at those Services.
-
+# Change public password examples and confirm a validated StorageClass before install.
+global:
+  imageRegistry: ''
+  imagePullSecrets: []
+  clusterDomain: cluster.local
+  credentials:
+    existingPlatformSecret: ''
+    existingRuntimeSecret: ''
+    existingIssuerSecret: ''
+    existingDataSecret: ''
+    existingTlsSecret: ''
+    existingAdmissionTlsSecret: ''
+    existingCaConfigMap: ''
+    caBundle: ''
+  internalPlatformPort: 8443
+  configRevision: ''
 timezone: Asia/Shanghai
-
+publicUrl: http://localhost:3001
+nameOverride: ''
+fullnameOverride: ''
 imagePullSecrets: []
-
-backend:
-  replicaCount: 1
-  image:
-    repository: dataelement/bisheng-backend
-    tag: v3.0.0
-    pullPolicy: IfNotPresent
-  service:
-    port: 7860
-  resources:
-    requests:
-      cpu: 500m
-      memory: 1Gi
-    limits:
-      memory: 4Gi
+config:
+  existingConfigMap: ''
+  settings: {}
   extraEnv: []
-
-worker:
-  replicaCount: 1
-  image:
-    repository: dataelement/bisheng-backend
-    tag: v3.0.0
-    pullPolicy: IfNotPresent
-  resources:
-    requests:
-      cpu: 500m
-      memory: 1Gi
-    limits:
-      memory: 4Gi
-  extraEnv: []
-
-# Task-mode / Linsight worker. The image `entrypoint.sh worker` path does not
-# keep this process as PID 1; run it as its own Deployment.
-linsight:
-  replicaCount: 1
-  image:
-    repository: dataelement/bisheng-backend
-    tag: v3.0.0
-    pullPolicy: IfNotPresent
-  resources:
-    requests:
-      cpu: 250m
-      memory: 1Gi
-    limits:
-      memory: 4Gi
-  extraEnv: []
-
-frontend:
-  replicaCount: 1
-  image:
-    repository: dataelement/bisheng-frontend
-    tag: v3.0.0
-    pullPolicy: IfNotPresent
-  service:
-    type: ClusterIP
-    port: 3001
-    # Client SPA (base /workspace). 0 disables the extra listen/Service port.
-    clientPort: 4001
-    clientNodePort: null
-    # Bind the node host to clientPort (single-node / no Ingress). Empty = off.
-    clientHostPort: null
+database:
+  engine: mysql
+  host: ''
+  port: 3306
+  name: bisheng
+  username: bisheng
+  auth:
+    existingSecret: ''
+    passwordKey: password
+    password: bisheng-change-me
+dsh:
+  enabled: false
+openPlatform:
+  enabled: false
+bootstrap:
+  timeoutSeconds: 600
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 86400
   resources:
     requests:
       cpu: 100m
-      memory: 128Mi
-  extraEnv: []
-
-# Isolation-environment access. Token must match the bisheng-sandbox chart.
-# List each replica URL. Do not point this at the ClusterIP Service.
-sandbox:
-  enabled: true
-  token: bisheng-sandbox-local
-  existingSecret: ""
-  existingSecretKey: token
-  endpoints:
-    - http://code-runner-0.code-runner.bisheng-sandbox.svc.cluster.local:8080
-    - http://code-runner-1.code-runner.bisheng-sandbox.svc.cluster.local:8080
-
-middleware:
-  milvus:
-    connectionArgs: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
-    isPartition: "true"
-    partitionSuffix: "1"
-  elasticsearch:
-    url: http://elasticsearch:9200
-    sslVerify: "{}"
-  minio:
-    schema: "false"
-    certCheck: "false"
-    endpoint: minio:9000
-    sharepoint: minio:9000
-    accessKey: minioadmin
-    secretKey: minioadmin
-
-secrets:
-  gatewayHmacSecret: bisheng-local-hmac-20260422
-
-# Mounted at /app/bisheng/config.yaml. Empty = chart files/config.yaml
-# (same as docker/bisheng/config/config.yaml). Hosts mysql / redis / openfga
-# must resolve in this namespace (or edit the YAML).
-config:
-  existingConfigMap: ""
-  yaml: ""
-
+      memory: 256Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
 ingress:
   enabled: false
   className: nginx
   annotations: {}
   hosts:
-    - host: bisheng.example.com
-      paths:
-        - path: /
-          pathType: Prefix
+  - host: bisheng.example.com
+    paths:
+    - path: /
+      pathType: Prefix
   tls: []
-
-persistence:
+backend:
+  replicaCount: 1
+  image:
+    repository: dataelement/bisheng-backend
+    tag: v3.1.0-beta1
+    digest: ''
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 3Gi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  extraEnv: []
+  cache:
+    sizeLimit: 1Gi
+    existingClaim: ''
+    enabled: false
+    size: 20Gi
+    storageClass: null
+    accessMode: ReadWriteOnce
+  startupProbe:
+    httpGet:
+      path: /health
+      port: http
+    periodSeconds: 5
+    failureThreshold: 60
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    periodSeconds: 30
+    timeoutSeconds: 5
+  workers: 2
+  service:
+    port: 7860
+worker:
+  replicaCount: 1
+  image:
+    repository: dataelement/bisheng-backend
+    tag: v3.1.0-beta1
+    digest: ''
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 4Gi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  extraEnv: []
+  cache:
+    sizeLimit: 1Gi
+    existingClaim: ''
+    enabled: false
+    size: 20Gi
+    storageClass: null
+    accessMode: ReadWriteOnce
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
+  concurrency: 20
+linsight:
+  replicaCount: 1
+  image:
+    repository: dataelement/bisheng-backend
+    tag: v3.1.0-beta1
+    digest: ''
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 2Gi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  extraEnv: []
+  cache:
+    sizeLimit: 1Gi
+    existingClaim: ''
+    enabled: false
+    size: 20Gi
+    storageClass: null
+    accessMode: ReadWriteOnce
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
+  workerCount: 1
+  maxConcurrency: 5
+beat:
+  replicaCount: 1
+  image:
+    repository: dataelement/bisheng-backend
+    tag: v3.1.0-beta1
+    digest: ''
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 512Mi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  extraEnv: []
+  cache:
+    sizeLimit: 1Gi
+    existingClaim: ''
+    enabled: false
+    size: 20Gi
+    storageClass: null
+    accessMode: ReadWriteOnce
+  startupProbe: {}
+  readinessProbe: {}
+  livenessProbe: {}
+frontend:
+  replicaCount: 1
+  image:
+    repository: dataelement/bisheng-frontend
+    tag: v3.1.0-beta1
+    digest: ''
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: '2'
+      memory: 512Mi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  extraEnv: []
+  cache:
+    sizeLimit: 1Gi
+    existingClaim: ''
+    enabled: false
+    size: 20Gi
+    storageClass: null
+    accessMode: ReadWriteOnce
+  startupProbe:
+    httpGet:
+      path: /
+      port: http
+    periodSeconds: 5
+    failureThreshold: 60
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+  livenessProbe:
+    httpGet:
+      path: /
+      port: http
+    periodSeconds: 30
+    timeoutSeconds: 5
+  service:
+    type: ClusterIP
+    port: 3001
+    clientPort: 4001
+    nodePort: 0
+    clientNodePort: 0
+  proxy:
+    readTimeoutSeconds: 300
+    maxBodySize: 1024m
+mysql:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 1Gi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  persistence:
+    enabled: true
+    existingClaim: ''
+    storageClass: null
+    accessMode: ReadWriteOnce
+    size: 20Gi
+  enabled: true
+  image:
+    repository: mysql
+    tag: 8.0.40
+    digest: ''
+    pullPolicy: IfNotPresent
+  external:
+    host: ''
+    port: 3306
+    scheme: http
+  auth:
+    existingSecret: ''
+    rootPasswordKey: root-password
+    rootPassword: mysql-root-change-me
+  startupProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 5
+    failureThreshold: 120
+  readinessProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 10
+    timeoutSeconds: 3
+  livenessProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  podSecurityContext: {}
+redis:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 1Gi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  persistence:
+    enabled: true
+    existingClaim: ''
+    storageClass: null
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  enabled: true
+  image:
+    repository: redis
+    tag: 7.2.6
+    digest: ''
+    pullPolicy: IfNotPresent
+  external:
+    host: ''
+    port: 6379
+    scheme: http
+  auth:
+    existingSecret: ''
+    passwordKey: password
+    password: redis-change-me
+  cacheDb: 1
+  celeryDb: 2
+  gatewayDb: 3
+  username: ''
+  tls: false
+  startupProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 5
+    failureThreshold: 120
+  readinessProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 10
+    timeoutSeconds: 3
+  livenessProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  podSecurityContext: {}
+minio:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 1Gi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  persistence:
+    enabled: true
+    existingClaim: ''
+    storageClass: null
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  enabled: true
+  image:
+    repository: minio/minio
+    tag: RELEASE.2023-03-20T20-16-18Z
+    digest: ''
+    pullPolicy: IfNotPresent
+  external:
+    host: ''
+    port: 9000
+    scheme: http
+    sharepoint: ''
+    secure: false
+  auth:
+    existingSecret: ''
+    accessKey: bisheng
+    accessKeyKey: access-key
+    secretKeyKey: secret-key
+    secretKey: minio-secret-change-me
+  buckets:
+    public: bisheng
+    temporary: tmp-dir
+    milvus: milvus
+  startupProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 5
+    failureThreshold: 120
+  readinessProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 10
+    timeoutSeconds: 3
+  livenessProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  podSecurityContext: {}
+elasticsearch:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 3Gi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  persistence:
+    enabled: true
+    existingClaim: ''
+    storageClass: null
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  enabled: true
+  image:
+    repository: bitnami/elasticsearch
+    tag: 8.12.0
+    digest: ''
+    pullPolicy: IfNotPresent
+  external:
+    host: ''
+    port: 9200
+    scheme: http
+  auth:
+    existingSecret: ''
+    enabled: false
+  javaOpts: -Xms1g -Xmx1g
+  startupProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 5
+    failureThreshold: 120
+  readinessProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 10
+    timeoutSeconds: 3
+  livenessProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  podSecurityContext:
+    fsGroup: 1001
+    fsGroupChangePolicy: OnRootMismatch
+  extraFlags: -Ediscovery.type=single-node -Enode.store.allow_mmap=false
+milvus:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 4Gi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  persistence:
+    enabled: true
+    existingClaim: ''
+    storageClass: null
+    accessMode: ReadWriteOnce
+    size: 40Gi
+  enabled: true
+  image:
+    repository: milvusdb/milvus
+    tag: v2.5.10
+    digest: ''
+    pullPolicy: IfNotPresent
+  external:
+    host: ''
+    port: 19530
+    scheme: http
+  auth:
+    existingSecret: ''
+    passwordKey: password
+    enabled: false
+  user: ''
+  secure: false
+  etcd:
+    image:
+      repository: quay.io/coreos/etcd
+      tag: v3.5.5
+      digest: ''
+      pullPolicy: IfNotPresent
+    persistence:
+      enabled: true
+      existingClaim: ''
+      storageClass: null
+      accessMode: ReadWriteOnce
+      size: 5Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: '1'
+        memory: 512Mi
+    startupProbe:
+      tcpSocket:
+        port: 2379
+      periodSeconds: 5
+      failureThreshold: 120
+    readinessProbe:
+      tcpSocket:
+        port: 2379
+      periodSeconds: 10
+      timeoutSeconds: 3
+    livenessProbe:
+      tcpSocket:
+        port: 2379
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 6
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []
+    externalEndpoint: ''
+    podSecurityContext: {}
+  startupProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 5
+    failureThreshold: 120
+  readinessProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 10
+    timeoutSeconds: 3
+  livenessProbe:
+    tcpSocket:
+      port: service
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  objectStorage:
+    existingSecret: ''
+    accessKeyKey: access-key
+    secretKeyKey: secret-key
+    bucket: ''
+  podSecurityContext: {}
+openfga:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 512Mi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  persistence:
+    enabled: true
+    existingClaim: ''
+    storageClass: null
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  enabled: true
+  image:
+    repository: openfga/openfga
+    tag: v1.8.0
+    digest: ''
+    pullPolicy: IfNotPresent
+  external:
+    host: ''
+    port: 8080
+    scheme: http
+  auth:
+    existingSecret: ''
+    passwordKey: password
+    password: openfga-change-me
+  storeName: bisheng
+  allowCreateExternalStore: false
+  database:
+    name: bisheng_openfga
+    username: bisheng_openfga
+    host: ''
+    port: 3306
+    auth:
+      existingSecret: ''
+      passwordKey: password
+      password: openfga-db-change-me
+  startupProbe:
+    tcpSocket:
+      port: http
+    periodSeconds: 5
+    failureThreshold: 120
+  readinessProbe:
+    tcpSocket:
+      port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+  livenessProbe:
+    tcpSocket:
+      port: http
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+gateway:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '2'
+      memory: 1Gi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  persistence:
+    enabled: true
+    existingClaim: ''
+    storageClass: null
+    accessMode: ReadWriteOnce
+    size: 10Gi
   enabled: false
-  size: 20Gi
-  storageClass: ""
-
-nodeSelector: {}
-tolerations: []
-affinity: {}
+  image:
+    repository: cr.dataelem.com/dataelement/gateway
+    tag: v1.8.0
+    digest: ''
+    pullPolicy: IfNotPresent
+  service:
+    port: 8080
+  license:
+    existingSecret: ''
+    key: license
+  contractVersion: 1.8.0
+  config:
+    existingConfigMap: ''
+  database:
+    name: bisheng_gateway
+    username: bisheng_gateway
+    host: ''
+    port: 3306
+    auth:
+      existingSecret: ''
+      passwordKey: password
+      password: gateway-db-change-me
+  startupProbe:
+    tcpSocket:
+      port: http
+    periodSeconds: 5
+    failureThreshold: 120
+  readinessProbe:
+    tcpSocket:
+      port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+  livenessProbe:
+    tcpSocket:
+      port: http
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+sandbox:
+  fullnameOverride: ''
+  nameOverride: code-runner
+  image:
+    repository: dataelement/bisheng-sandbox
+    tag: v3.1.0-beta1
+    pullPolicy: IfNotPresent
+    digest: ''
+  imagePullSecrets: []
+  replicaCount: 2
+  service:
+    port: 8080
+  token:
+    value: ''
+    existingSecret: ''
+    existingSecretKey: token
+  env:
+    SANDBOX_MAX_SESSIONS: '50'
+    SANDBOX_MAX_COPY_IN_TOTAL_BYTES: '536870912'
+    SANDBOX_ENABLE_UID_ISOLATION: 'true'
+    SANDBOX_LEASE_TTL_S: '900'
+    SANDBOX_LOG_LEVEL: INFO
+    TZ: Asia/Shanghai
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: '2'
+      memory: 2Gi
+  securityContext:
+    runAsUser: 0
+    runAsNonRoot: false
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+      add:
+      - SETUID
+      - SETGID
+      - CHOWN
+      - DAC_OVERRIDE
+      - KILL
+  podSecurityContext: {}
+  networkPolicy:
+    enabled: true
+    denyEgress: false
+    allowFrom: []
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 20
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 3
+    periodSeconds: 10
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  serviceAccount:
+    create: false
+    name: ''
+  enabled: true
+runtime:
+  platform:
+    origin: ''
+    backendBase: ''
+    caConfigMap: ''
+  services:
+    namespace: ''
+    credentialsSecret: ''
+    materialIssuerSecret: ''
+    admissionTlsSecret: ''
+    managerAccount: ''
+    pullSecret: ''
+    managerReplicas: 1
+    entryReplicas: 1
+    egressReplicas: 1
+    admissionReplicas: 2
+    managerType: ClusterIP
+    managerNodePort: 30091
+    entryType: ClusterIP
+    entryNodePort: 30080
+    egressClusterIP: ''
+    resources: {}
+    placement:
+      nodeSelector: {}
+      affinity: {}
+      tolerations: []
+    probes:
+      readiness:
+        periodSeconds: 10
+        timeoutSeconds: 2
+        failureThreshold: 6
+      liveness:
+        periodSeconds: 10
+        timeoutSeconds: 2
+        failureThreshold: 6
+  execution:
+    namespace: ''
+    clusterId: bisheng-k8s
+    nodeId: ''
+    installationId: ''
+    architecture: amd64
+    memoryBudgetMi: 4096
+    cpuBudgetMillicores: 4000
+    maxPods: 64
+    temporaryStorageMi: 4096
+    runtimeClass: ''
+    sandbox: default
+    runtimeClasses:
+      recommended: ''
+      hardened: ''
+    statusPolicyRevision: v1
+    cniUsername: ''
+    storageControllerUsernames:
+    - system:kube-controller-manager
+    - system:kube-scheduler
+    pullSecret: ''
+    dataKeyConfigMap: ''
+    dataPublicKeys: {}
+    probeReport: {}
+    canaryPlans: {}
+    canaryProfiles: []
+    helperResources:
+      image-check:
+        memory_mb: 256
+        cpu_millicores: 1000
+      prepare-download:
+        memory_mb: 128
+        cpu_millicores: 100
+      prepare-install:
+        memory_mb: 1024
+        cpu_millicores: 1000
+      prepare-upload:
+        memory_mb: 128
+        cpu_millicores: 100
+      assemble:
+        memory_mb: 1024
+        cpu_millicores: 1000
+      data:
+        memory_mb: 128
+        cpu_millicores: 100
+      sidecar:
+        memory_mb: 128
+        cpu_millicores: 25
+      init:
+        memory_mb: 128
+        cpu_millicores: 25
+    timeouts:
+      image_check: 120
+      init_phase: 90
+      health: 90
+    placement:
+      nodeSelector: {}
+      affinity: {}
+      tolerations: []
+    operationTimeoutSeconds: 1800
+  images:
+    manager: ''
+    entry: ''
+    egress: ''
+    admission: ''
+    helper: ''
+    assembler: ''
+  network:
+    podCidrs: []
+    serviceCidrs: []
+    controlAllowedCidrs: []
+    entryAllowedCidrs: []
+    kubernetesApiCidrs: []
+    dnsCidrs: []
+    backendCidrs: []
+    backendPorts:
+    - 443
+    - 7860
+    egressPorts:
+    - 80
+    - 443
+    apiServer: https://kubernetes.default.svc
+    platformPodPort: 8443
+  storage:
+    className: null
+    sizeMi: 1024
+    scratchSizeMi: 4096
+    filesystem: ext4
+    sqliteCompatible: false
+    nodeLocal: false
+    localRoot: /var/lib/bisheng-runtime
+    volumes: []
+  admission:
+    caBundle: ''
+    timeoutSeconds: 5
+    managedByParent: true
+  offline:
+    enabled: true
+    packageIndex: ''
+    extraPackageIndex: ''
+    npmRegistry: ''
+    packageEndpoints: []
+    imageRepository: ''
+    imageRegistryEndpoints: []
+    registrySecret: ''
+    insecureRegistry: false
+  namespaceManagement:
+    createControl: false
+    createExecution: true
+  diagnostics:
+    enabled: false
+  enabled: true

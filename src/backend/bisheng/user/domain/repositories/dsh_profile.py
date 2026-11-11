@@ -111,15 +111,33 @@ class UserDshProfileRepository:
         return user
 
     @classmethod
-    def apply_detached_changes(cls, session: Session, changed: User) -> tuple[User, bool]:
+    def apply_detached_changes(cls, session: Session, changed: User, *, from_sync: bool = False) -> tuple[User, bool]:
         state = inspect(changed)
         updates = {
             attribute.key: getattr(changed, attribute.key)
             for attribute in state.mapper.column_attrs
-            if attribute.key not in {"user_id", "dsh_profile_version", "token_version", "create_time"}
+            if attribute.key
+            not in {
+                "user_id",
+                "dsh_profile_version",
+                "token_version",
+                "create_time",
+                "account_rule_version",
+                "account_match_key",
+                "nickname_customized",
+                "legacy_sso_name",
+            }
             and state.attrs[attribute.key].history.has_changes()
         }
         user = cls.get_for_update(session, changed.user_id)
+        if "external_id" in updates and updates["external_id"] != user.external_id:
+            raise ValueError("Login account is immutable")
+        if from_sync and user.nickname_customized:
+            updates.pop("user_name", None)
+        if "user_name" in updates:
+            from bisheng.user.domain.rules.identity import validate_nickname_change
+
+            validate_nickname_change(user.user_name, updates["user_name"])
         profile_changed = any(
             key in cls.PROFILE_FIELDS and getattr(user, key) != value for key, value in updates.items()
         )

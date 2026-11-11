@@ -20,6 +20,7 @@ function record(value: unknown): Record<string, unknown> | undefined {
 }
 
 function validText(value: unknown, maxLength = 512): value is string {
+    // eslint-disable-next-line no-control-regex -- Rejecting ASCII controls in untrusted failure metadata is intentional.
     return typeof value === 'string' && value.trim().length > 0 && value.length <= maxLength && !/[\u0000-\u001f\u007f]/.test(value);
 }
 

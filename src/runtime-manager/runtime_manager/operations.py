@@ -629,7 +629,8 @@ class OperationExecutor:
         else:
             capabilities = self.runtime.capabilities()
             probe = self.runtime.probe_report()
-        probe["ready"] = probe.get("ready") is True and capabilities.get("orchestration_available") is True
+        if not capabilities.get("configuration"):
+            probe["ready"] = probe.get("ready") is True and capabilities.get("orchestration_available") is True
         self.platform.heartbeat(
             {
                 "engine_id": descriptor.cluster_id + "/" + descriptor.namespace,

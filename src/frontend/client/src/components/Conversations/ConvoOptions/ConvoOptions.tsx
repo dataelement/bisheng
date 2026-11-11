@@ -81,9 +81,9 @@ function ConvoOptions({
     setNewProjectDialogOpen(true);
   };
 
-  const handleProjectCreate = async (name: string, requestId: string) => {
+  const handleProjectCreate = async (name: string, draftProjectId: string) => {
     if (!conversationId) return;
-    await actions.mutateAsync({ operation: { operation: 'create', name, chat_id: conversationId }, requestId });
+    await actions.mutateAsync({ operation: { operation: 'create', project_id: draftProjectId, name, chat_id: conversationId } });
   };
 
   const handleDelete = () => {

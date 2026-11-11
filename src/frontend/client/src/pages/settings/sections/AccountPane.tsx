@@ -16,7 +16,7 @@ export function AccountPane() {
   const localize = useLocalize();
   const dsh = useDshDesktop();
   const { user, logout } = useAuthContext();
-  const displayName = user?.username || "admin";
+  const displayName = user?.username ?? '';
   const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -33,6 +33,7 @@ export function AccountPane() {
     <div className="flex flex-col gap-6">
       <AccountSection
         username={displayName}
+        account={user?.external_id}
         avatarUrl={avatarUrl || user?.avatar || ""}
         onAvatarUpdated={setAvatarUrl}
       />

@@ -40,7 +40,10 @@ class RuntimeProfile(RuntimeRecord, table=True):
     language: str = Field(max_length=32)
     contract_version: int = 1
     status: str = Field(default="active", max_length=24)
-    created_by: int
+    created_by: int | None = Field(default=None, nullable=True)
+    origin: str = Field(default="user", max_length=16, sa_column_kwargs={"server_default": "user"})
+    release_version: str | None = Field(default=None, max_length=64)
+    catalog_digest: str | None = Field(default=None, max_length=64)
     definition: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
     content_digest: str = Field(max_length=64)
 
