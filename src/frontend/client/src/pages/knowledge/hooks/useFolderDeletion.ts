@@ -80,6 +80,9 @@ export function useFolderDeletion(options: UseFolderDeletionOptions) {
     const notify = useCallback(() => {
         ui.current.showToast({ message: ui.current.localize("com_knowledge.folder_deleting_blocked"), severity: NotificationSeverity.WARNING });
     }, []);
+    const notifyStatusUnavailable = useCallback(() => {
+        ui.current.showToast({ message: ui.current.localize("com_knowledge.folder_status_unavailable"), severity: NotificationSeverity.WARNING });
+    }, []);
     const findEntry = useCallback((spaceId: string | number, id?: string | null): DeletingFolder | undefined => {
         const visited = new Set<string>();
         while (id && !visited.has(id)) {
@@ -269,9 +272,13 @@ export function useFolderDeletion(options: UseFolderDeletionOptions) {
     const guardLocation = useCallback(async (spaceIdValue: string | number, folderId?: string | null, isFile = false) => {
         if (!folderId) return false;
         const spaceId = String(spaceIdValue);
-        if (!isFile && isDeleting(spaceId, folderId)) { notify(); return true; }
+        if (!isFile && isDeleting(spaceId, folderId)) {
+            if (getDeletionState(spaceId, folderId) === "running") notify();
+            else notifyStatusUnavailable();
+            return true;
+        }
         const server = latestOptions.current.serverEnabled;
-        if (server === undefined) { notify(); return true; }
+        if (server === undefined) { notifyStatusUnavailable(); return true; }
         if (!server && ![...entries.current.values()].some(entry => entry.spaceId === spaceId)) return false;
         const epoch = authority.current.epoch;
         const location = window.location.pathname;
@@ -281,38 +288,46 @@ export function useFolderDeletion(options: UseFolderDeletionOptions) {
                 const items = await query(spaceId, [folderId], epoch);
                 if (authority.current.epoch !== epoch || window.location.pathname !== location) return true;
                 if (items?.length === 1 && ["idle", "failed", "approval_pending"].includes(items[0].state)) return false;
-                notify(); return true;
+                if (items?.some(item => item.state === "running")) notify();
+                else notifyStatusUnavailable();
+                return true;
             }
             const path = await getFolderParentPathApi(spaceId, folderId, { skipServiceMaintenance: true });
             if (authority.current.epoch !== epoch || window.location.pathname !== location) return true;
-            if (!path.some(item => item.id === folderId)) { notify(); return true; }
+            if (!path.some(item => item.id === folderId)) { notifyStatusUnavailable(); return true; }
             path.forEach((item, index) => parents.current.set(folderDeletionKey(spaceId, item.id), path[index - 1]?.id));
             if (!isDeleting(spaceId, folderId)) return false;
+            if (getDeletionState(spaceId, folderId) === "running") { notify(); return true; }
         } catch { /* A failed lookup cannot establish that this target is safe. */ }
-        notify(); return true;
-    }, [isDeleting, notify, query]);
+        notifyStatusUnavailable(); return true;
+    }, [getDeletionState, isDeleting, notify, notifyStatusUnavailable, query]);
     const guardFolder: FolderDeletionGuard = useCallback((spaceId, folderId) => guardLocation(spaceId, folderId), [guardLocation]);
     const guardMovedItem = useCallback((spaceId: string, id: string, type: "file" | "folder") => guardLocation(spaceId, id, type === "file"), [guardLocation]);
     const guardItems = useCallback(async (spaceId: string, files: KnowledgeFile[]) => {
         const server = latestOptions.current.serverEnabled;
-        if (server === undefined && files.length) { notify(); return true; }
+        if (server === undefined && files.length) { notifyStatusUnavailable(); return true; }
         if (server) {
             const ids = [...new Set(files.map(file => file.id))];
             if (!ids.length) return false;
-            if (ids.some(id => isDeleting(spaceId, id))) { notify(); return true; }
+            if (ids.some(id => isDeleting(spaceId, id))) {
+                if (ids.some(id => getDeletionState(spaceId, id) === "running")) notify();
+                else notifyStatusUnavailable();
+                return true;
+            }
             const epoch = authority.current.epoch;
             const location = window.location.pathname;
             try {
                 const items = await query(spaceId, ids, epoch);
                 if (authority.current.epoch !== epoch || window.location.pathname !== location) return true;
                 if (items?.length === ids.length && items.every(item => ["idle", "failed", "approval_pending"].includes(item.state))) return false;
+                if (items?.some(item => item.state === "running")) { notify(); return true; }
             } catch { /* All selected targets must have an authoritative safe result. */ }
-            notify(); return true;
+            notifyStatusUnavailable(); return true;
         }
         const folderIds = new Set(files.map(file => file.type === FileType.FOLDER ? file.id : file.parentId));
         for (const folderId of folderIds) if (await guardFolder(spaceId, folderId)) return true;
         return false;
-    }, [guardFolder, isDeleting, notify, query]);
+    }, [getDeletionState, guardFolder, isDeleting, notify, notifyStatusUnavailable, query]);
     const begin = useCallback((spaceId: string, files: KnowledgeFile[], viewFolderId?: string) => {
         const folders = files.filter(file => file.type === FileType.FOLDER);
         if (folders.some(file => isDeleting(spaceId, file.id))) { notify(); return false; }

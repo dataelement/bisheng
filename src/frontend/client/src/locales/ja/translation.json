@@ -1205,6 +1205,7 @@
     "folder_deletion_unknown": "状態確認待ち",
     "folder_deleting": "削除中",
     "folder_deleting_blocked": "フォルダーを削除中です。しばらくしてから操作してください。",
+    "folder_status_unavailable": "ファイルまたはフォルダーの状態を確認できません。再読み込みしてからもう一度お試しください。",
     "add_new": "新規追加",
     "web_link": "Webリンク",
     "web_link_import_title": "Webリンクをインポート",

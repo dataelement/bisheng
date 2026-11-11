@@ -23,6 +23,8 @@ from bisheng.knowledge.domain.repositories.knowledge_folder_deletion_repository 
     FolderLockBusy,
     KnowledgeFolderDeletionRepository,
 )
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
+from bisheng.permission.application.identity import resolve_permission_actor
 
 
 class FolderCommitUncertain(Exception):
@@ -226,6 +228,15 @@ class KnowledgeFolderDeletionService:
             item.state = "succeeded"
         return item
 
+    async def _visible_resources(self, owner, rows, space):
+        # Match the space listing's unrestricted super-admin view. A narrowed
+        # token must still pass the ordinary per-resource visibility checks.
+        if getattr(owner.login_user, "is_global_super", False):
+            actor = await resolve_permission_actor(owner.login_user)
+            if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
+                return rows
+        return await owner._filter_visible_child_items(rows, space_id=self.space_id, context={"verified_space": space})
+
     async def query(self, owner, folder_ids, known):
         space, _ = await owner._load_space_listing_scope(self.space_id, None)
         space_rights = (
@@ -240,12 +251,7 @@ class KnowledgeFolderDeletionService:
         # business read before calling it, including for inherited ancestors.
         async with self.sessions() as session:
             roots = await self.repository(session).requested_resources(folder_ids)
-        visible = {
-            row.id
-            for row in await owner._filter_visible_child_items(
-                list(roots.values()), space_id=self.space_id, context={"verified_space": space}
-            )
-        }
+        visible = {row.id for row in await self._visible_resources(owner, list(roots.values()), space)}
         visible_folders = {fid for fid in visible if roots[fid].file_type == 0}
         markers = [marker_for(roots[fid]) or {} for fid in visible_folders]
         approvals = [m["approval_request_id"] for m in markers if m.get("approval_request_id")]
@@ -318,9 +324,7 @@ class KnowledgeFolderDeletionService:
         visible_folders = set(visible_folders)
         if unverified and owner is not None:
             for start in range(0, len(unverified), 500):
-                granted = await owner._filter_visible_child_items(
-                    unverified[start : start + 500], space_id=self.space_id, context={"verified_space": space}
-                )
+                granted = await self._visible_resources(owner, unverified[start : start + 500], space)
                 visible_folders.update(row.id for row in granted)
         result = {}
         for resource_id, path in paths.items():

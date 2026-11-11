@@ -1280,6 +1280,7 @@
     "folder_deletion_unknown": "Status pending confirmation",
     "folder_deleting": "Deleting",
     "folder_deleting_blocked": "This folder is being deleted. Please try again later.",
+    "folder_status_unavailable": "Unable to confirm the file or folder status. Please refresh and try again.",
     "add_new": "Add",
     "web_link": "Web link",
     "web_link_import_title": "Import web link",
