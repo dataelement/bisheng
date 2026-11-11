@@ -1,8 +1,9 @@
 // @ts-strict-ignore
-import { Pagination, Button, Input, Select } from '@bisheng/ui';
+import { Pagination, Button, DatePicker, Input, Select } from '@bisheng/ui';
+import type { DatePickerError, DatePickerOpenRange } from '@bisheng/ui';
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
-import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
+import { useDatePickerLocale } from "@/hooks/useDatePickerLocale";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { notification } from "@bisheng/ui";
@@ -98,8 +99,7 @@ export { actionToI18nKey }
 type FilterKeys = {
     userIds: number[]
     groupId: string
-    start?: Date
-    end?: Date
+    dateRange: DatePickerOpenRange | null
     moduleId: string
     action: string
     targetAppId: string
@@ -111,8 +111,7 @@ type FilterKeys = {
 const init: FilterKeys = {
     userIds: [],
     groupId: '',
-    start: undefined,
-    end: undefined,
+    dateRange: null,
     moduleId: '',
     action: '',
     targetAppId: '',
@@ -126,8 +125,8 @@ const init: FilterKeys = {
 const toFilters = (keys: FilterKeys): AuditLogFilters => ({
     userIds: keys.userIds,
     groupId: keys.groupId,
-    start: keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss'),
-    end: keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss').replace('00:00:00', '23:59:59'),
+    start: keys.dateRange?.[0] ? `${keys.dateRange[0]} 00:00:00` : undefined,
+    end: keys.dateRange?.[1] ? `${keys.dateRange[1]} 23:59:59` : undefined,
     moduleId: keys.moduleId,
     action: keys.action,
     targetAppId: keys.targetAppId,
@@ -139,6 +138,7 @@ const toFilters = (keys: FilterKeys): AuditLogFilters => ({
 export default function SystemLog() {
     const { t } = useTranslation()
     const paginationLocale = usePaginationLocale();
+    const datePickerLocale = useDatePickerLocale();
     const { appConfig } = useContext(locationContext)
     const { user } = useContext(userContext)
     const multiTenantEnabled = !!appConfig.multiTenantEnabled
@@ -154,6 +154,8 @@ export default function SystemLog() {
 
     const [actions, setActions] = useState<any[]>([])
     const [keys, setKeys] = useState<FilterKeys>({ ...init })
+    const [dateError, setDateError] = useState<DatePickerError | null>(null)
+    const [datePickerVersion, setDatePickerVersion] = useState(0)
     // The filters the table currently shows — the export follows these, not
     // the controls, so a half-edited form cannot export something the user
     // has not looked at.
@@ -170,6 +172,8 @@ export default function SystemLog() {
     }
     const handleReset = () => {
         setKeys({ ...init })
+        setDateError(null)
+        setDatePickerVersion(version => version + 1)
         appliedRef.current = toFilters(init)
         filterData(toFilters(init))
     }
@@ -226,12 +230,18 @@ export default function SystemLog() {
                     onChange={(value) => setKeys({ ...keys, groupId: value == null ? '' : value })}
                     options={groups.filter(g => g.id != null && g.id !== '').map(g => ({ value: g.id, label: g.group_name }))}
                 />
-                <div className="w-[180px] relative">
-                    <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({ ...keys, start: t })} />
-                </div>
-                <div className="w-[180px] relative">
-                    <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({ ...keys, end: t })} />
-                </div>
+                <DatePicker
+                    key={datePickerVersion}
+                    aria-label={t('datePicker.dateRange')}
+                    className="w-[336px] max-w-full"
+                    mode="range"
+                    allowOpenRange
+                    allowClear
+                    value={keys.dateRange}
+                    onChange={(dateRange: DatePickerOpenRange | null) => setKeys(current => ({ ...current, dateRange }))}
+                    onValidationChange={setDateError}
+                    locale={datePickerLocale}
+                />
                 <Select
                     {...selectLabels}
                     allowClear
@@ -271,19 +281,16 @@ export default function SystemLog() {
                     value={keys.note}
                     onChange={(event) => setKeys({ ...keys, note: event.target.value.slice(0, 200) })}
                 />
-                <div className="flex items-center gap-2">
-                    <Button size="medium" onClick={handleSearch}>
+                <div className="ml-auto mr-4 flex shrink-0 items-center gap-4">
+                    <Button size="medium" onClick={handleSearch} disabled={Boolean(dateError)}>
                         {t('log.searchButton')}
                     </Button>
                     <Button size="medium" variant="outlined" onClick={handleReset} color="default">
                         {t('log.resetButton')}
                     </Button>
-                    <Button size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
-                        {t('log.exportButton')}
-                    </Button>
                 </div>
             </div>
-            <Table className="mb-[50px]">
+            <Table className="mb-[50px]" containerClassName="shrink-0">
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
@@ -333,9 +340,12 @@ export default function SystemLog() {
         </div>
         {/* Pagination */}
 
-        <div className="bisheng-table-footer px-6 bg-background-login">
+        <div className="bisheng-table-footer gap-4 px-6 bg-background-login">
+            <Button className="shrink-0" size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
+                {t('log.exportButton')}
+            </Button>
             <Pagination locale={paginationLocale}
-                className="float-right justify-end w-full mr-6"
+                className="min-w-0"
                 current={page}
                 pageSize={pageSize}
                 total={total}

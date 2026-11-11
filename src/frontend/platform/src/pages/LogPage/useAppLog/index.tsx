@@ -1,8 +1,9 @@
 // @ts-strict-ignore
-import { Pagination, Button, Select, toast } from '@bisheng/ui';
+import { Pagination, Button, DatePicker, Select, toast } from '@bisheng/ui';
+import type { DatePickerError, DatePickerOpenRange } from '@bisheng/ui';
+import { addDays, differenceInCalendarDays, parseISO } from 'date-fns';
 
 import FilterByApp from "@/components/bs-comp/filterTableDataComponent/FilterByApp";
-import FilterByDate from "@/components/bs-comp/filterTableDataComponent/FilterByDate";
 import FilterByUsergroup from "@/components/bs-comp/filterTableDataComponent/FilterByUsergroup";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -10,6 +11,7 @@ import { Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
+import { useDatePickerLocale } from "@/hooks/useDatePickerLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { locationContext } from "@/contexts/locationContext";
@@ -25,17 +27,16 @@ import { useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
-const getStrTime = (date) => {
-    const start_date = date[0] && (formatDate(date[0], 'yyyy-MM-dd') + ' 00:00:00')
-    const end_date = date[1] && (formatDate(date[1], 'yyyy-MM-dd') + ' 23:59:59')
-    return [start_date, end_date]
-}
+const getDateBounds = (range?: DatePickerOpenRange | null) => ({
+    start_date: range?.[0] ? `${range[0]} 00:00:00` : undefined,
+    end_date: range?.[1] ? `${range[1]} 23:59:59` : undefined,
+});
 
 type FilterState = {
     appName: any[];
     userId: number | null;
     userGroup: string;
-    dateRange: any[];
+    dateRange: DatePickerOpenRange | null;
     feedback: string;
     sensitive_status: string;
     org: OrgSelection;
@@ -46,11 +47,11 @@ const INITIAL_FILTERS: FilterState = {
     appName: [],
     userId: null,
     userGroup: '',
-    dateRange: [],
+    dateRange: null,
     feedback: '',
     sensitive_status: '',
     org: EMPTY_ORG_SELECTION,
-    usageType: '',
+    usageType: 'all',
 };
 
 // Daily chat, knowledge-space QA and channel-article QA all open the daily
@@ -58,6 +59,7 @@ const INITIAL_FILTERS: FilterState = {
 const DAILY_FLOW_TYPES = [15, 20, 25, 30];
 const USAGE_TYPES: AuditUsageType[] = ['daily', 'assistant', 'workflow', 'task'];
 const usageTypeParam = (value?: string) => (value && value !== 'all' ? value as AuditUsageType : undefined);
+const supportsAppFilter = (usageType: FilterState['usageType']) => usageType !== 'daily' && usageType !== 'task';
 
 const appNameOf = (row, t) => (row.flow_type === 15 ? t('log.workbench_daily') : row.flow_name);
 const usageTypeOf = (row, t) => (row.usage_type ? t(`log.usageType.${row.usage_type}`) : '');
@@ -79,8 +81,10 @@ type Action =
 
 const filterReducer = (state: FilterState, action: Action): FilterState => {
     switch (action.type) {
-        case 'SET_FILTER':
-            return { ...state, ...action.payload };
+        case 'SET_FILTER': {
+            const next = { ...state, ...action.payload };
+            return supportsAppFilter(next.usageType) ? next : { ...next, appName: [] };
+        }
         case 'RESET':
             return { ...INITIAL_FILTERS };
         default:
@@ -91,20 +95,19 @@ const filterReducer = (state: FilterState, action: Action): FilterState => {
 export default function AppUseLog() {
     const { t } = useTranslation()
     const paginationLocale = usePaginationLocale();
+    const datePickerLocale = useDatePickerLocale();
     const selectLabels = useSelectLabels()
     const { appConfig } = useContext(locationContext)
 
     // 20 items per page
     const { page, pageSize, data: datalist, total, loading, loaded, setPage, filterData } = useTable({}, (param) => {
-        const [start_date, end_date] = getStrTime(param.dateRange || [])
         return getAuditAppListApi({
             page: page,
             page_size: param.pageSize,
             flow_ids: param.appName?.length ? param.appName : undefined,
             user_ids: param.userId || undefined,
             group_ids: param.userGroup || undefined,
-            start_date,
-            end_date,
+            ...getDateBounds(param.dateRange),
             feedback: param.feedback || undefined,
             sensitive_status: param.sensitive_status || undefined,
             org: param.org,
@@ -121,9 +124,13 @@ export default function AppUseLog() {
     );
 
     const [filters, dispatch] = useReducer(filterReducer, { ...INITIAL_FILTERS });
+    const [dateError, setDateError] = useState<DatePickerError | null>(null);
+    const [datePickerVersion, setDatePickerVersion] = useState(0);
 
     const resetClick = () => {
         dispatch({ type: 'RESET' });
+        setDateError(null);
+        setDatePickerVersion(version => version + 1);
         filterData({ ...INITIAL_FILTERS })
     }
     // Cache page before entering detail page, temporary solution
@@ -153,57 +160,27 @@ export default function AppUseLog() {
             return `Export_${str}${userName}_${formatDate(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.csv`;
         };
 
+        const [startDay, endDay] = filters.dateRange ?? [null, null];
+        const selectedStart = startDay ? parseISO(startDay) : null;
+        const selectedEnd = endDay ? parseISO(endDay) : null;
+        if (selectedStart && selectedEnd && differenceInCalendarDays(selectedEnd, selectedStart) >= 60) {
+            toast.show({ type: 'error', message: t('log.exportDateRangeExceed') });
+            return;
+        }
+
+        const exportEnd = selectedEnd ?? (selectedStart ? addDays(selectedStart, 59) : new Date());
+        const exportStart = selectedStart ?? addDays(exportEnd, -59);
+        const formattedStart = formatDate(exportStart, 'yyyy-MM-dd');
+        const formattedEnd = formatDate(exportEnd, 'yyyy-MM-dd');
+        if (!selectedStart || !selectedEnd) {
+            const message = selectedStart || selectedEnd
+                ? t('log.exportCustomDateRange', { start: formattedStart, end: formattedEnd })
+                : t('log.exportNoDateRange');
+            toast.show({ type: 'warning', message });
+        }
+
+        const { start_date, end_date } = getDateBounds([formattedStart, formattedEnd]);
         setAuditing(true);
-
-        // Handle time range logic
-        const dateRange = filters.dateRange || [];
-        const originalStart = dateRange[0];
-        const originalEnd = dateRange[1];
-
-        let adjustedStart = originalStart;
-        let adjustedEnd = originalEnd;
-        let showToast = false;
-        let toastMessage = '';
-
-        // No time range selected
-        if (!originalStart && !originalEnd) {
-            adjustedEnd = new Date();
-            adjustedStart = new Date(adjustedEnd.getTime() - 59 * 24 * 60 * 60 * 1000); // Last 60 days
-            showToast = true;
-            toastMessage = t('log.exportNoDateRange');
-        }
-        // Partial time selection (only start or end selected)
-        else if (!originalStart || !originalEnd) {
-            if (originalStart) {
-                adjustedEnd = new Date(originalStart);
-                adjustedEnd.setDate(adjustedEnd.getDate() + 59);
-            } else {
-                adjustedStart = new Date(originalEnd);
-                adjustedStart.setDate(adjustedStart.getDate() - 59);
-            }
-            showToast = true;
-            const formattedStart = formatDate(adjustedStart, 'yyyy-MM-dd');
-            const formattedEnd = formatDate(adjustedEnd, 'yyyy-MM-dd');
-            toastMessage = t('log.exportCustomDateRange', { start: formattedStart, end: formattedEnd });
-        }
-        // Time range selected, check span
-        else {
-            const diffTime = adjustedEnd.getTime() - adjustedStart.getTime();
-            const diffDays = Math.floor(diffTime / (24 * 60 * 60 * 1000)) + 1; // Total days including start and end dates
-            if (diffDays > 60) {
-                toast.show({ type: 'error', message: String(t('log.exportDateRangeExceed') ?? '') })
-                setAuditing(false);
-                return;
-            }
-        }
-
-        // Display toast message
-        if (showToast) {
-            toast.show({ type: 'warning', message: String(toastMessage ?? '') })
-        }
-
-        // Generate request parameters
-        const [start_date, end_date] = getStrTime([adjustedStart, adjustedEnd])
 
         exportCsvDataApi({
             flow_ids: filters.appName?.length ? filters.appName : undefined,
@@ -305,7 +282,9 @@ export default function AppUseLog() {
                         ...USAGE_TYPES.map(value => ({ value, label: t(`log.usageType.${value}`) })),
                     ]}
                 />
-                <FilterByApp value={filters.appName} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['appName']: value } })} />
+                {supportsAppFilter(filters.usageType) && (
+                    <FilterByApp value={filters.appName} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { appName: value } })} />
+                )}
                 <Select
                     {...selectLabels}
                     allowClear
@@ -320,7 +299,18 @@ export default function AppUseLog() {
                     onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { userId: value == null ? null : Number(value) } })}
                 />
                 <FilterByUsergroup value={filters.userGroup} placeholder={t('log.userGroup')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userGroup']: value } })} />
-                <FilterByDate value={filters.dateRange} placeholders={[`${t('log.startDate')}`, `${t('log.endDate')}`]} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['dateRange']: value } })} />
+                <DatePicker
+                    key={datePickerVersion}
+                    aria-label={t('datePicker.dateRange')}
+                    className="w-[336px] max-w-full"
+                    mode="range"
+                    allowOpenRange
+                    allowClear
+                    value={filters.dateRange}
+                    onChange={(dateRange: DatePickerOpenRange | null) => dispatch({ type: 'SET_FILTER', payload: { dateRange } })}
+                    onValidationChange={setDateError}
+                    locale={datePickerLocale}
+                />
                 <Select
                     {...selectLabels}
                     allowClear
@@ -348,25 +338,12 @@ export default function AppUseLog() {
                         { value: '1', label: t('log.sensitivePass') },
                     ]}
                 />}
-                <Button onClick={() => {
-                    const dateRange = filters.dateRange || [];
-                    const originalStart = dateRange[0];
-                    const originalEnd = dateRange[1];
-                    let adjustedStart = originalStart;
-                    let adjustedEnd = originalEnd;
-                    if (originalStart && !originalEnd) {
-                        adjustedEnd = undefined;
-                    } else if (!originalStart && originalEnd) {
-                        adjustedStart = undefined;
-                    }
-
-                    filterData({ ...filters, dateRange: [adjustedStart, adjustedEnd] })
-                }}>{t('log.searchButton')}</Button>
-                <Button onClick={resetClick} variant="outlined" color="default">{t('log.resetButton')}</Button>
-                <Button onClick={handleExport} loading={auditing} disabled={Boolean(auditing)}>
-                    {t('log.exportButton')}</Button>
+                <div className="ml-auto mr-4 flex shrink-0 items-center gap-4">
+                    <Button onClick={() => filterData(filters)} disabled={Boolean(dateError)}>{t('log.searchButton')}</Button>
+                    <Button onClick={resetClick} variant="outlined" color="default">{t('log.resetButton')}</Button>
+                </div>
             </div>
-            <Table>
+            <Table containerClassName="shrink-0">
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.appName')}</TableHead>
@@ -444,17 +421,18 @@ export default function AppUseLog() {
             </Table>
             {loaded && !loading && processedData.length === 0 && <AuditEmptyState />}
         </div>
-        <div className="bisheng-table-footer px-6 bg-background-login">
-            <p className="desc"></p>
-            <div>
-                <Pagination locale={paginationLocale}
-                    current={page}
-                    pageSize={pageSize}
-                    total={total}
-                    showTotal={true}
-                    onChange={(newPage) => setPage(newPage)}
-                />
-            </div>
+        <div className="bisheng-table-footer gap-4 px-6 bg-background-login">
+            <Button className="shrink-0" onClick={handleExport} loading={auditing} disabled={auditing || Boolean(dateError)}>
+                {t('log.exportButton')}
+            </Button>
+            <Pagination locale={paginationLocale}
+                className="min-w-0"
+                current={page}
+                pageSize={pageSize}
+                total={total}
+                showTotal={true}
+                onChange={(newPage) => setPage(newPage)}
+            />
         </div>
     </div>
 };

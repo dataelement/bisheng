@@ -27,7 +27,6 @@ vi.mock('@/controllers/API/log', async (importOriginal) => ({
     }),
 }))
 vi.mock('@/controllers/API/user', () => ({ getUserGroupsApi: vi.fn().mockResolvedValue([{ id: '', group_name: 'Invalid group' }, { id: null, group_name: 'Null group' }, { id: 'g1', group_name: 'Group 1' }]) }))
-vi.mock('@/components/bs-ui/calendar/datePicker', () => ({ DatePicker: ({ placeholder, onChange }: { placeholder: string; onChange: (d: Date) => void }) => <button onClick={() => onChange(new Date('2026-10-20T00:00:00'))}>{placeholder}</button> }))
 vi.mock('@/util/hook', () => ({
     useTable: () => ({
         page: 1, pageSize: 20, total: mock.logs.length, loading: mock.loading, loaded: mock.loaded,
@@ -57,8 +56,15 @@ it('preserves structured audit fields, valid filter options, date bounds and res
     fireEvent.click(await screen.findByRole('option', { name: 'Tenant module' }))
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'log.actionBehavior' }), { key: 'ArrowDown' })
     fireEvent.click(await screen.findByRole('option', { name: 'Mount tenant' }))
-    fireEvent.click(screen.getByRole('button', { name: 'log.startDate' }))
-    fireEvent.click(screen.getByRole('button', { name: 'log.endDate' }))
+    const start = screen.getByRole('combobox', { name: 'datePicker.startDate' })
+    const end = screen.getByRole('combobox', { name: 'datePicker.endDate' })
+    fireEvent.change(end, { target: { value: '2026-10-20' } })
+    fireEvent.keyDown(end, { key: 'Enter' })
+    expect(start).toHaveAttribute('placeholder', 'datePicker.unlimited')
+    fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
+    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ start: undefined, end: '2026-10-20 23:59:59' }))
+    fireEvent.change(start, { target: { value: '2026-10-20' } })
+    fireEvent.keyDown(start, { key: 'Enter' })
     fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
     await waitFor(() => expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ groupId: 'g1', moduleId: 'tenant', action: 'tenant.mount', start: '2026-10-20 00:00:00', end: '2026-10-20 23:59:59' })))
     fireEvent.click(screen.getByRole('button', { name: 'log.resetButton' }))
