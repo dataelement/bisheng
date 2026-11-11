@@ -324,3 +324,15 @@ tenant1 在 `PhysicalInventoryReader._index → _physical_batch` 报 `migration_
 - 待核实清理候选逐条ID清单 `remaining-metadata-candidate-scope.json`：mode328、Grant653、assignee399、visible source401、tag170，共1951行，均已包括在原 `remaining-preflight/rows.json` 全量证据中。排除有效mode7592及空间3426的全部有效上下文；投影Operation/Tuple历史不在候选删除范围内。完整下游及FGA核验尚待执行，这不是无条件删除许可。
 
 本轮没有新增SQL/FGA业务数据写入或物理存储修改。仍为 Catalog198/Authorization7，正式run `116-f118-20261111` 无冻结行，无本轮M3/M4，无权限CURRENT发布，升级**未完成**。原空模型的user747/user745两项HIGHER_CONSISTENCY可见检查继续保留。剩余“历史结构失效保留”合同和已删除目标元数据清理已分别向用户发出补充确认，在取得答复前不实施依赖它们的变更。完整本轮材料以新版本包v4归档，不覆盖v1/v2/v3。
+
+## 第二轮授权、精确清理与结构兼容（2026-11-11）
+
+用户明确批准AC-100–102范围及备份核实后清理170标签/328已删除资源mode关联。旧v4 pending状态是确认前历史快照，不能据此忽略本轮授权。原142,855条FGA tuple重新完整只读扫描，原物理对象与全部SQL有效下游逐项核验；328目标均全局不存在，170标签均无TagLink，其中部分标签的父ID在其他租户存在，实际分类为“原租户无有效父容器”，而非全局都已删除。其他租户空间保留。原始父事实记录于approved-metadata-cleanup/tag-parent-facts.json。
+
+最新备份目录approved-metadata-cleanup包含精确1,951完整行、1,952原tuple及8处有效修复上下文，全体SHA256校验OK；原SQL全字段/DDL/恢复SQL仍在remaining-preflight，原rows hash不变。当前选集rows SHA256为d7915b00945359d241734d1354a1f24404a892b7df50afb4e6044dc9fff11922。清理只删除mode328、Grant653、assignee399、visible source401、tag170；历史ProjectionOperation/Tuple未删除。
+
+经原生ProjectionService.prepare→mark_projecting→execute→HIGHER_CONSISTENCY确认，新增336个审计操作2777–3112全部FINALIZED，删除1,952个已备份FGA键（包括8个已证实多余父边）；没有FGA WRITE。最后原生SQL事务重新锁定并比较原行/目录/有效下游，删除上述1,951行并仅修正8个file.level计数。原file_level_path及有效mode父关系均未移动，103失败文件和所有对象/ES/Milvus保留；有效8个mode只按原生投影协议推进版本/operation指针。结果时间15:49:24+08:00，日志logs/approved-metadata-cleanup-apply.log，完整operation IDs见approved-metadata-cleanup/apply-result.json。
+
+结构兼容新增封闭计划证据及全图闭合验证，首次/续跑于任何租户业务写入前原生重验。对103失败文件没有权限初始化，存在已保存直接引用时仍拒绝；保留原行，按通常迁移登记V1元数据不产生可见性。空间3426需要证明的原因是原模型在该类型上动作为空，但已有真实ACTIVE可见来源与等级2；新纯可见标记只能保留原效果。无ACTIVE原证据或等级变化仍阻断。
+
+本地新增27项（含M2/M3/M4及续跑）通过，另99项选集通过；扩展选集1,786 passed、1 failed，为已在修改前复现的频道配额/角色策略no-network基线失败。最后补充“其他来源借用失联创建者”和“直接引用失效文件”两项拒绝测试。正式现场升级/发布/服务恢复结果将继续追加；本段不声称已完成升级。

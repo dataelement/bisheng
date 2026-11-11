@@ -810,13 +810,23 @@ def _build_resource_retirement_plan(context, before, namespace_target=None):
         sources_by_grant = {key: tuple(sources) for key, sources in sources_by_grant.items()}
         old = _grants(before, context.before_models, context.before_scopes, sources_by_grant)
         after = _grants(after_resource, context.after_models, context.after_scopes, sources_by_grant)
-        if (
-            mapped
+        scope_retention = tuple(
+            (previous, current)
+            for previous, current in zip(old, after, strict=True)
+            if mapped
             and before.resource_type == "knowledge_space"
-            and any(
-                not previous.model.action_codes and not previous.model.visibility_only and current.model.visibility_only
-                for previous, current in zip(old, after, strict=True)
-            )
+            and not previous.model.action_codes
+            and not previous.model.visibility_only
+            and current.model.visibility_only
+        )
+        if any(
+            not previous.active
+            or not previous.model.active
+            or not any(source.active for source in previous.sources)
+            or (previous.model.model_key, previous.model.derived_level, previous.model.allow_same_level)
+            != (current.model.model_key, current.model.derived_level, current.model.allow_same_level)
+            or current.model.action_codes
+            for previous, current in scope_retention
         ):
             _blocked("existing_space_scope_hole")
         existing = tuple(row.source for row in before.visible_sources)

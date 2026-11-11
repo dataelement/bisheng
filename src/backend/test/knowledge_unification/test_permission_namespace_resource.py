@@ -212,7 +212,7 @@ def test_child_parent_namespace_changes_without_changing_its_own_identity_or_fil
 
 
 @pytest.mark.parametrize("inactive", [False, True])
-def test_existing_space_original_scope_hole_is_rejected_even_if_new_provenance_would_make_it_visible(inactive):
+def test_existing_space_requires_original_active_proof_before_accepting_visibility_provenance(inactive):
     before_catalog = legacy_catalog()
     # Old use covers Library but never SPACE. A legacy malformed active grant
     # with zero applicable old actions must not gain visibility from C4 metadata.
@@ -226,8 +226,16 @@ def test_existing_space_original_scope_hole_is_rejected_even_if_new_provenance_w
                 for row in before.visible_sources
             ),
         )
-    with pytest.raises(PermissionMigrationBlockedError):
-        compile_resource(mapped(before_catalog), before, before.mode)
+    if inactive:
+        with pytest.raises(PermissionMigrationBlockedError):
+            compile_resource(mapped(before_catalog), before, before.mode)
+    else:
+        plan = compile_resource(mapped(before_catalog), before, before.mode)
+        assert plan.after == before and not plan.visibility_deltas
+        assert plan.after_grants[0].model.action_codes == ()
+        assert plan.after_grants[0].model.derived_level == next(
+            m.derived_level for m in before_catalog.models if m.model_key == "pure-use"
+        )
 
 
 @pytest.mark.parametrize(

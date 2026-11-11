@@ -38,6 +38,12 @@ from bisheng.knowledge.application.unification_sources import (
     UnificationSourceInventory,
 )
 from bisheng.knowledge.application.unification_space_membership_inventory import MembershipInventoryVerifier
+from bisheng.knowledge.application.unification_structural_retention import (
+    CREATOR_RETENTION,
+    FILE_RETENTION,
+    RETENTIONS,
+    StructuralRetentionInventoryVerifier,
+)
 from bisheng.knowledge.domain.models.knowledge_unification_run import unification_now
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
 from bisheng.knowledge.domain.repositories.unification_run_repository import (
@@ -79,6 +85,8 @@ _SECTIONS = {
         "quota_usage",
         "space_membership_header",
         "space_member",
+        "existing_space_creator_retention",
+        "stranded_file_retention",
     },
     "permission": {"resource_mode", "grant", "assignee", "visible_source"},
     "permission_namespace": {
@@ -297,6 +305,7 @@ class UnificationInventoryApplication:
         memberships = MembershipInventoryVerifier()
         tenants = frozenset(result.tenant_ids)
         physical = PhysicalRetentionInventoryVerifier()
+        structural = StructuralRetentionInventoryVerifier()
         current = current if current is not None else lambda: None
         backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
         baseline, plan = _descriptor(result.baseline_ref), _descriptor(result.plan_ref)
@@ -359,6 +368,7 @@ class UnificationInventoryApplication:
 
                     for record in page.records:
                         validate_inventory_fact(record)
+                        structural.observe_source(record)
                 else:
                     page = decode_inventory_page(
                         content,
@@ -378,6 +388,7 @@ class UnificationInventoryApplication:
                             memberships.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
                             permissions.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
                             physical.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
+                            structural.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
                     key = (kind, section, scope, tenant_id)
                     if page_index != indices.get(key, 0):
                         _blocked("manifest_page_order")
@@ -433,6 +444,7 @@ class UnificationInventoryApplication:
         memberships.finish()
         permissions.finish()
         physical.finish()
+        structural.finish()
         await self._materials(
             run_id=result.run_id,
             writer_contract_version=result.writer_contract_version,
@@ -498,10 +510,21 @@ class UnificationInventoryApplication:
         resource_requests, object_requests = [], []
         spaces = {}
         memberships = MembershipInventoryVerifier()
+        retained_creators = {}
         async for section, record in self.preflight.aiter_tenant(
             session, permission_planner=permission_planner, planned_at=planned_at
         ):
-            kind = "plan" if section in {"conversion", "permission_namespace"} else "baseline"
+            kind = (
+                "plan"
+                if section in {"conversion", "permission_namespace"} or record.record_type in RETENTIONS
+                else "baseline"
+            )
+            if record.record_type == CREATOR_RETENTION:
+                retained_creators[record.data["space_id"]] = record.data["creator_user_id"]
+            elif record.record_type == FILE_RETENTION:
+                await source_inventory.sharing_reader.aassert_no_file_tuples(
+                    session, tenant, file_ids=(record.data["file_id"],)
+                )
             memberships.observe(kind=kind, section=section, tenant_id=tenant, record=record)
             await pages.add(section, tenant, record, kind=kind)
             if record.record_type == "resource":
@@ -528,6 +551,14 @@ class UnificationInventoryApplication:
                 _blocked("source_reference_set")
 
         async def consume(items):
+            def retained(row):
+                return (
+                    type(row) is RootInventoryRecord
+                    and row.root_key.source_type.value == "knowledge"
+                    and row.root_key.source_id.isdecimal()
+                    and retained_creators.get(int(row.root_key.source_id)) == row.creator_id
+                )
+
             wanted = tuple(
                 sorted(
                     {row.creator_id for row in items if type(row) is RootInventoryRecord and row.creator_id is not None}
@@ -538,11 +569,18 @@ class UnificationInventoryApplication:
                 for fact in await self.preflight.controls.ainspect_users(
                     session, user_ids=wanted[offset : offset + 200]
                 ):
-                    if not fact.exists:
+                    if not fact.exists and not all(
+                        retained(row)
+                        for row in items
+                        if type(row) is RootInventoryRecord and row.creator_id == fact.user_id
+                    ):
                         _blocked("source_creator_missing")
                     creators.add(fact.user_id)
                     await pages.add("control", tenant, record_from_row(fact))
+            missing_ids = set(retained_creators.values())
             for row in items:
+                if type(row) is RootInventoryRecord and row.creator_id in missing_ids and not retained(row):
+                    _blocked("source_creator_missing")
                 await pages.add("sources", tenant, row)
 
         async for row in source_inventory.aiter_tenant_source_records(session, **identity, context=context):

@@ -948,3 +948,13 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 用户明确确认：保留原配置、标记跨租户失效并继续升级。M2 仅接受已保存显式数字 ID，真实模型和服务商必须存在且同属实际外租户；冻结真实目标归属、配置摘要、原来源/版本/槽位以及完整原绑定/删除/legacy 证据。M3 回填原绑定、实际 target_tenant_id，legacy 字段保持 NULL；不得伪装 target_missing 或制造强删历史。覆盖证明新增 invalid_scope_count，单独计数参与闭合。验证器兼容未带该字段的原封闭证明，按 0 计算但不修改旧证书摘要；新计数仍须为非负整数。
 
 Owner 的同步和异步读取只在可信来源验证器读取的原绑定精确匹配来源、版本、目标和实际归属时读取该外租户模型/服务商的身份投影，输出 invalid_scope / is_valid=false，不加载或披露目标配置。运行和发布继续经过 require_source_valid 拒绝。修改端仅为该原绑定取得保留/移除收据，new_binding_allowed=false；新增槽位、复制/导入/新版本和 owner_query 不借用原证据。外租户服务商不参与 Root shared_with 查询，无法通过共享结果转为有效。真实归属漂移、模型/服务商父归属不一致和 legacy/删除证据冲突仍失败。SQL 模型和表约束不变，无新增 DDL 或授权写入口。
+
+### 2026-11-11 已确认增量：结构原值保留（AC-100–102）
+
+M2冻结两类封闭control计划记录：existing_space_creator_retention绑定原type3资源摘要、真实creator.exists=false事实与SQL零文件数；stranded_file_retention绑定原FAILED space_upload文件完整摘要、既有type3父空间、唯一缺失目录事实及SQL/FGA授权计数0。原CreatorFalse仍如实记录，不伪造用户；所有其他来源使用该缺失创建者均拒绝。原FAILED文件仍参与通常V1元数据登记，原文件行/路径不变；不初始化权限，不把缺失目录重建为根目录，也不将直接引用这种文件的配置认定可用。
+
+M2原生SQL检查和原pin定点HIGHER_CONSISTENCY读取发生在正式盘点事务内；完整冻结图对照所有原资源/文件、creator事实、权限记录、原Store完整tuple流及六类来源，逐项验证例外闭合。文件自身或作为userset主体出现任何原FGA边均拒绝；丢失证明、改摘要、重复/错scope、成功文件、父目录出现和新直接引用均拒绝。
+
+M3读取完整已验证冻结图后，在任何租户业务写入前重读例外的原资源/文件、用户存在性、零文件计数、缺失目录和SQL授权计数。FGA外部IO使用关闭SQLSession后的原pin读取，再开新原生事务重验SQL事实与Catalog/pin未变；续跑相同，不能在SQL事务中等待M3外部IO。对原type3资源不生成owner/成员初始化命令，只有正常type0沿原创建者规则转换。
+
+现有空间空动作到纯可见的闸门保留：先验证原ACTIVE来源的完整canonical证明、原等级及allow_same_level，再要求前后编译无来源补齐、无退休/可见差异、相同贡献和主体。只有实际已生效的原授权获得兼容；当前无证据/INACTIVE及等级改变仍拒绝。空间3426的原Grant14827/Source19883/可见投影9763和等级2按此核验，保留原效果，无自动新分配或提级。
