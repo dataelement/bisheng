@@ -421,3 +421,13 @@ SQL全部完成后，发布前完整Store重读与冻结before一致；尚未创
 tuple-endpoint-evidence-v2完整保存冻结描述符、原140,903条tuple、冲突键、模式及源schema。精确17条均为parent，涉及目标knowledge_space:4059/4062/4063/4094/4156；17/17同时满足目标键属于canonical after、逆namespace旧父边在原Store及canonical before。不是新主体或额外授权，而是原SQL父关系同时已有旧/新namespace重复键。
 
 将guard限定为封闭父边等价：原SQL文件/目录、精确同ID库→空间映射、实际旧父边与before计划、相同after父边及两schema合法均须满足。已有目标键保留且不额外写入，原计划删除旧父键；其他目标端点/赋权/错父/错子/无SQL继续阻断。未改变冻结文件、ResourceRetirementPlan、SQL命令或原主体/等级。正例先复现原失败；原生发布及续跑66项回归通过，含原P0目标端点拒绝。静态检查通过。后续先编译原冻结全计划确认，再沿同run resume执行。
+
+### 用户调整：特殊类别抽检，保留原权限图状态
+
+用户明确要求“先不逐项证明权限不扩大，抽检特殊情况的校验即可”。因此本次不再逐项修复历史SQL/FGA差异，按原状态保留，抽检空权限模型、旧名称助手、跨租户、重复父边与旧父关系；不能把抽检表述成完整业务ACL不变证明。正式迁移原有Store完整性、原子写入与续跑检查仍执行。
+
+完整冻结编译在重复父边修正后列出99条extra owned键和239条missing键：其中69条为原规则允许的工具user:*可见；剩余为5组停用Grant的link/model、18条普通主体关系及2条旧父关系。完整SQL、FGA、生命周期、操作审计已保存在projection-drift-evidence、tuple-plan-preflight-v3，不清除SQL历史或原业务记录。
+
+239个缺标记涉及198个对象（35个软删除、163个实体不存在）以及5个旧资源的服务账号标记。保持原缺失状态，不补permission_enabled或模式标记以免重新启用。原两条父边为folder:96177→knowledge_file:96211及knowledge_space:3209→knowledge_file:94710；SQL当前父分别为folder:96179、knowledge_space:3727。根据最新保留/抽检要求，两条FGA旧边原样保留，未在本次迁移额外清理，留待用户后续评估处理。
+
+Tuple builder限定保留未变namespace、双schema合法且typed身份不变的原键，原保留键零新增写入；不反向创建SQL授权，不采用原新destination上的未授权边，未知需要改写namespace的关系仍阻断。原缺失技术marker不由SQLMode自动补齐。68项发布及中断恢复回归通过，包括新destination拒绝、标记不补、旧父保留及零新增写入。原冻结计划保持不变，从同run resume继续。

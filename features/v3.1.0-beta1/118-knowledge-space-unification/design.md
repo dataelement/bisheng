@@ -995,3 +995,9 @@ Root全局RoleFact保持实际owner=1；只有此明确物理事实可编码到�
 ### 已冻结重复parent关系兼容
 
 F118PermissionTupleBuilder在目标端点guard前识别封闭重复父边：仅knowledge_space→folder/knowledge_file的parent，子对象属于原resources且不是destination；同IDknowledge_library→knowledge_space映射明确，原父边在实际before及expected_before中，目标边在expected_after且两schema均合法。该重复键从额外drift集合扣除，再由原after编译结果生成，因此既不新增已有目标键的写入，也不接受额外授权。其他unowned destination guard不变。此修正不改变ResourceRetirementPlan或baseline/plan字节、SQL命令、角色/主体/等级；同Run原SQL已提交前缀继续验证。
+
+### 现场保留策略与特殊类别抽检（用户已调整验证范围）
+
+Mode编译只迁移原before已存在的技术标记，permission_enabled/custom_mode/inherit_mode缺失不自动生成；显式禁用或历史缺标记的事实保持。对于owned但不在SQL canonical编译中的原关系，仅在subject/object都不是namespace移动源/目标、源及目标schema合法、typed身份不变时原样透传。该类键不新增写入、不从FGA反向注册SQL授权，也不据此允许新引用或新分配。
+
+原2条父关系和停用授权投影因此作为历史SQL/FGA偏差保留，另行记录给用户评估，不在升级中顺手纠偏；69条原工具公开可见关系按原既有规则保留。17条目的namespace重复父边仍按AC-112的双canonical证明处理。新目的节点上的未授权赋权、需变化namespace的未知关系仍拒绝。该策略变更只改变原FGA事实的保留/技术标记处理，不改冻结资源计划字节、SQL命令、索引绑定或对象文件。业务权限有效性验证按用户要求采用特殊情况抽检，原发布/ACK/续跑/Store完整性流程保持。

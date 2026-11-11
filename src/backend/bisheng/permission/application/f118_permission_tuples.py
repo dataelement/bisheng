@@ -83,7 +83,18 @@ class F118PermissionTupleBuilder:
             (new, self.target, self.expected_after),
         ):
             keys = [delta.key for delta in compile_existing_mode_tuples(actual.mode)]
-            self._add(output, (key for key in keys if permits(schema, key)))
+            self._add(
+                output,
+                (
+                    key
+                    for key in keys
+                    if permits(schema, key)
+                    and (
+                        key[1] not in {"permission_enabled", "custom_mode", "inherit_mode"}
+                        or (key[0], key[1], old_object) in self.before
+                    )
+                ),
+            )
         for actual, output in ((old, self.expected_before), (new, self.expected_after)):
             grants = []
             for grant in plan.after_grants:
@@ -189,18 +200,33 @@ class F118PermissionTupleBuilder:
             or (key[2] in self.grants and key[1] in {"model", "ordinary_assignee", "protected_assignee"})
         }
         extras = owned - self.expected_before - duplicate_parents
+        retained_extras = set()
         for key in extras:
-            if not self._extra(key) or not permits(self.source, key):
+            if self._extra(key) and permits(self.source, key):
+                continue
+            # Historical SQL/FGA differences on nodes whose identity does not
+            # change remain exact original facts. This is preservation, never
+            # a source for new assignments or destination-node adoption.
+            endpoints = {key[0].partition("#")[0], key[2]}
+            if (
+                not endpoints.intersection(self.moves)
+                and not endpoints.intersection(destinations)
+                and permits(self.source, key)
+                and permits(self.target, key)
+                and typed_relation(key) == key
+            ):
+                retained_extras.add(key)
+            else:
                 blocked("existing_graph_drift")
         if self.expected_before - owned:
             blocked("missing_existing_graph")
-        result = dict.fromkeys(key for key in self.before_order if key not in owned)
+        result = dict.fromkeys(key for key in self.before_order if key not in owned or key in retained_extras)
         for key in self.after_order:
             if not permits(self.target, key):
                 blocked("target_schema_mismatch")
             result[key] = None
         for key in self.before_order:
-            if key not in extras:
+            if key not in extras or key in retained_extras:
                 continue
             changed = (self.moves.get(key[0], key[0]), key[1], self.moves.get(key[2], key[2]))
             if typed_relation(changed) != changed or not permits(self.target, changed):
