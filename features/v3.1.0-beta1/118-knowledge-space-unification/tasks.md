@@ -8546,3 +8546,5 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [x] 完成扩展权限回归、架构检查及七维特性审查；原 67 failed / 5 errors 不在本次修复范围，未将全套标绿。
 - [ ] 对实际 116 原模型/Grant/Source 做只读兼容预检，按同一 run 继续迁移并保留报告。
 - [ ] 验证迁移后两处原可见资格、API/Worker 及整体 CURRENT pin 一致性。
+
+116 现场状态补记：只读空模型/旧来源兼容预检通过，原两处 visible=true。官方 apply 已完整读取 142,855 tuple，随后因 42 个旧 embedding 名称在 tenant1 阻塞，尚未 M2 freeze/M3；原配置已全字段备份，未清空，等待用户确认具体处置。服务恢复及最终验证未完成。
