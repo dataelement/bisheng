@@ -6,6 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlsplit, urlunsplit
+from uuid import UUID
 
 from kombu.utils.url import parse_url
 
@@ -405,6 +406,32 @@ def decode_broker_message(raw, *, required=True):
     return _decode_envelope(value, hashlib.sha256(raw).hexdigest(), required=required)
 
 
+def _pidbox_reply(headers, properties, body):
+    """Recognize Kombu's control reply protocol, without treating it as a task."""
+    delivery = properties.get("delivery_info")
+    if (
+        set(headers) != {"ticket", "clock"}
+        or type(headers["clock"]) is not int
+        or headers["clock"] < 0
+        or type(delivery) is not dict
+        or set(delivery) != {"exchange", "routing_key"}
+        or delivery["exchange"] != "reply.celery.pidbox"
+        or not body
+        or any(type(key) is not str or not key for key in body)
+        or {"task", "id", "args", "kwargs", "callbacks", "errbacks", "chord"} & body.keys()
+    ):
+        return False
+    for value in (headers["ticket"], delivery["routing_key"]):
+        if type(value) is not str:
+            return False
+        try:
+            if str(UUID(value)) != value:
+                return False
+        except ValueError:
+            return False
+    return True
+
+
 def _decode_envelope(value, raw_digest, *, required=True):
     envelope = {"body", "headers", "properties", "content-type", "content-encoding"}
     if (
@@ -434,6 +461,8 @@ def _decode_envelope(value, raw_digest, *, required=True):
             _blocked("message_size_or_type")
         body = _parse(body_bytes.decode("utf-8"))
         if type(body) is dict and name is None:
+            if _pidbox_reply(headers, properties, body):
+                return None
             name, ident, args, kwargs = body.get("task"), body.get("id"), body.get("args"), body.get("kwargs")
             canvas = [body.get(key) for key in ("callbacks", "errbacks", "chord")]
         elif type(body) is list and len(body) == 3:

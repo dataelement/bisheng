@@ -397,3 +397,9 @@ v9权限预检已推进Root permission_namespace至67,354/71,784行，发现work
 6. 真实分页及同creator多来源须回归。linked reader先发整页Root再发Source，不能把未到达证据误判缺失；普通来源不能借已兼容记录放行。
 
 这些建议来自本次实际阻塞与回归，不代表完整F118 QA、DM8实测或所有历史业务可用性验收。原失败文件、全失败无主版本链、跨租户引用和旧名称助手在升级后仍需业务方显式修复。
+
+### 18:17 正式M2队列盘点发现控制回复误判
+
+正式全Store扫描和30个租户原生盘点均完成，随后Redis broker盘点报migration_broker_unknown_task_identity。未产生全局freeze，尚未开始M3/M4。只读取证确认仅1条消息：旧Mac客户端的reply.celery.pidbox巡检回复，无Celery任务task/id；其原始字节、列表位置、协议头及SHA256保存在broker-evidence，原文SHA256为61cd70a92e9e3308c18b51408994fb7678618caa35169e3f5a1cbc4ff4cd4df7。无知识任务事实，Redis零写入。
+
+对照已安装Kombu pidbox.py的Mailbox._publish_reply/get_reply_queue实现，新增明确非知识控制回复分类；要求原JSON/base64、精确ticket/clock头、UUID和reply exchange，禁止借此跳过任务字段或未知知识任务。不清消息、不删队列。真实Mailbox协议与Redis读取/正式broker链83项回归通过；Ruff/架构guard和diff检查通过。正式M2须从原事实重新完整盘点，不用诊断结果替换冻结基线。

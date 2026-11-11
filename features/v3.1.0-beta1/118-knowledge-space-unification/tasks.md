@@ -8572,3 +8572,5 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [x] **116续办 · RETIRED审计与当前授权分离**：保留已删除/重建assignee的旧审计行；scope/身份/指纹闭合，同ID现存身份/版本不漂移，ACTIVE无依据继续拒绝。100项定向回归、Ruff、diff-check及变更文件arch-guard通过；真实116正式迁移另核验。
 
 - [x] **116续办 · 原生199记录分页证据闭合**：仅单版本旧助手缺创建者可等候其精确header；末尾不闭合及普通来源仍阻断。同creator各Root独立校验；真实199条分页M2/M3/M4与旧名称/结构保留40项通过。
+
+- [x] **116续办 · 识别原生Kombu pidbox回复**：修复全Redis列表扫描将客户端巡检回复当任务；严格JSON原生协议分类，普通未知/知识任务仍阻断。真实Mailbox发布协议、原Redis读取零写入及正式broker链83项通过；原始消息完整备份。

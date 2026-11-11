@@ -987,3 +987,7 @@ _namespace_visible对未匹配且RETIRED的原行，按AC-104核对原scope、�
 缺定义的Grant只生成不活跃、空动作的内部比较值，不创建PermissionModel或猜测原tier；原Grant/assignee/历史来源原行保留，有任何ACTIVE贡献则拒绝。已有空间INACTIVE空动作Grant不参与“原有效授权兼容”，由原/目标编译的零效果及原Store闭合保证不激活；原有效空间贡献仍须AC-102完整证据和同tier。
 
 Root全局RoleFact保持实际owner=1；只有此明确物理事实可编码到原关联所属子租户，普通Role行或其他子租户owner均不放宽。
+
+### Redis控制回复分类修复
+
+现场Redis存在已无binding的客户端pidbox回复列表。原生Kombu Mailbox._publish_reply使用ticket/clock头、reply.celery.pidbox exchange和UUID路由；它没有Celery任务身份。decoder在JSON/base64和体解析后，只对无task头且原生协议闭合的回复字典返回既有非知识分类None。任务保留字段出现、错误exchange/UUID/clock等仍拒绝；protocol1知识任务即使带控制类transport头仍完整盘点。队列读范围/Redis原文/任务校验与执行授权不变，无DDL或清队列。
