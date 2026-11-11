@@ -372,3 +372,11 @@ Root143缺当前模型定义的Grant全INACTIVE、唯一assignee也INACTIVE且�
 Root全局RoleFact在子租户快照中实际tenant_id=1，原编码器错把“物理事实owner”当作“关联分片owner”阻断；仅允许真实Root角色事实保留原owner，不改UserRole、角色或权限。修复助手详情invalid_scope枚举，防止已登记跨租户失效在DTO层变为500。
 
 扩展938 passed、3 failed/2 errors均在精确前置24b5f2153a复现同一5用例，为本地数据库/角色策略依赖，不是新增失败；日志bisheng116-assistant-regression-baseline.log。另117、41及91项定向验证通过。服务器v8已暂存加载10文件并核对全部原始hash，36个只读补丁挂载；Root全部5604来源/7424引用、tenant60来源链已通过只读检查。原完整预检仍停在惰性空间授权判定，未正式冻结/M3/M4，未恢复访问。
+
+### 17:51–17:56 退休审计关联已删除/重建
+
+v9权限预检已推进Root permission_namespace至67,354/71,784行，发现workflow ba60e71627284871828e96668c895647/mode10323的RETIRED投影21042仍引用已删assignee2801263026803081120；同一主体user867已用新assignee4240105698591104247重新授权，原历史操作1631和现操作1662均保留。这是历史生命周期，不应借迁移恢复旧来源或要求删除审计。
+
+修正AC-104：退休行仅按原scope、GRANT_ASSIGNEE正整数身份及自洽贡献/tuple指纹保留；同ID来源仍存在时检查身份和版本上界。ACTIVE来源的原canonical backing、前后编译/Store闭合、冻结原生重读不变。namespace确需转换时只改资源类型及tuple指纹。无SQL清理、无权限激活，原状态/ID/来源版本/操作记录保留。
+
+定向100项回归通过，含已删/重建来源、缺旧Grant及ACTIVE缺依据拒绝；Ruff、diff-check、变更文件arch-guard通过。正式冻结/迁移/访问恢复尚未完成。原始行另存retired-audit-evidence，后续现场结果追加，不据诊断预检宣称升级完成。

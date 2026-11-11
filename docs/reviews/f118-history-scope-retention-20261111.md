@@ -4,7 +4,7 @@
 
 | 维度 | 结论 | 证据 |
 | --- | --- | --- |
-| Boundary Conditions | PASS | 无主链限已有type3、非空、唯一编号、NULL指针/零主标志、全FAILED；普通转换/成功文件坏链仍拒绝。历史行要求原模型Grant及已移至不同Grant的同一assignee、严格历史版本上界、全canonical指纹闭合。 |
+| Boundary Conditions | PASS | 无主链限已有type3、非空、唯一编号、NULL指针/零主标志、全FAILED；普通转换/成功文件坏链仍拒绝。退休审计行允许原关联已删，要求scope、来源身份和自洽指纹；同ID现存来源不可漂移，ACTIVE仍需完整canonical backing。 |
 | Permission & Auth | PASS | RETIRED历史不加入ACTIVE编译；跨租户空间实际owner保留、invalid_scope/is_valid=false。新建、复制、预览、运行拒绝，Owner查询不放宽。跨租户文件仍拒绝。 |
 | Concurrency Safety | PASS | 绑定读取仅原来源/版本，明确ID+owner加锁，所有空间数值顺序后文件；源/目标事务与原版本围栏不变，续跑仍用冻结原基线。 |
 | Information Leakage | PASS | 读Owner只查id/tenant/type等标量事实，无凭据或外国业务配置输出，无新HTTP端点。 |
@@ -16,4 +16,4 @@
 
 Overall: PASS_WITH_WARNINGS。本增量不代表全F118端到端验收完成；真实116升级、访问恢复与物理绑定核验结果另记。
 
-退役历史补充：旧Grant可能仍被其他主体使用，当前assignee也可能在新Grant继续ACTIVE；这不使原RETIRED贡献复活。只核对同一来源确已改绑到不同Grant、历史版本严格更小、旧模型及全canonical身份指纹，原ACTIVE编译仍必须完全闭合。
+退役历史补充（17:51现场修订）：旧Grant/assignee可能已删除或重建。RETIRED行只作审计，校验原scope、GRANT_ASSIGNEE正整数身份及自洽贡献/tuple指纹；同ID来源仍存在时核对身份及版本上界。仅转换namespace和tuple指纹，原ID、状态、来源版本和操作记录保留；不重建或激活授权。ACTIVE来源仍必须有完整当前canonical backing，前后有效编译、完整Store和冻结后原生重读继续闭合。

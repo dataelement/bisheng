@@ -968,7 +968,7 @@ _namespace_visible对未匹配且RETIRED的原行，以保留的INACTIVE旧Grant
 
 跨租户知识空间使用原始明确ID的existing_invalid_scope分类，回填实际owner和parent空间ID，legacy字段全部NULL。Target Owner只对原来源/版本的原space绑定查询确切ID+owner，Root和普通目标按统一数值顺序加锁，再锁文件。读Owner只查标量事实，返回invalid_scope/is_valid=false；新增、复制、预览及执行保持拒绝，原槽位可保留/移除，owner_query不扩大范围。跨租户文件不纳入兼容。M4对目标的已签名0→3变化按实际目标owner查冻结命令，不按来源tenant猜测；其余物理事实变化仍拒绝。
 
-退役历史补充：旧Grant可能仍被其他主体使用，当前assignee也可能在新Grant继续ACTIVE；这不使原RETIRED贡献复活。只核对同一来源确已改绑到不同Grant、历史版本严格更小、旧模型及全canonical身份指纹，原ACTIVE编译仍必须完全闭合。
+退役历史补充（17:51现场修订）：旧Grant/assignee可能已删除或重建。RETIRED行只作审计，校验原scope、GRANT_ASSIGNEE正整数身份及自洽贡献/tuple指纹；同ID来源仍存在时核对身份及版本上界。仅转换namespace和tuple指纹，原ID、状态、来源版本和操作记录保留；不重建或激活授权。ACTIVE来源仍必须有完整当前canonical backing，前后有效编译、完整Store和冻结后原生重读继续闭合。
 
 
 ### 已确认续办：工作流历史和错误归属来源（AC-105–107）

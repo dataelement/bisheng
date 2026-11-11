@@ -94,7 +94,16 @@ def compile_resource(catalog, before, mode):
 
 
 @pytest.mark.parametrize(
-    "change", ["retain", "active_assignee_and_grant", "active", "fingerprint", "future_version", "missing_grant"]
+    "change",
+    [
+        "retain",
+        "active_assignee_and_grant",
+        "active",
+        "fingerprint",
+        "future_version",
+        "missing_grant",
+        "deleted_assignee",
+    ],
 )
 def test_retired_reassignment_history_keeps_old_model_identity_without_restoring_authority(change):
     catalog = legacy_catalog()
@@ -104,6 +113,10 @@ def test_retired_reassignment_history_keeps_old_model_identity_without_restoring
     if change == "active_assignee_and_grant":
         active = before.assignees[0]
         historical = replace(historical, state="ACTIVE")
+    elif change == "deleted_assignee":
+        # An old identity can be deleted while a new identity for the same
+        # subject remains live. The retired contribution must never revive it.
+        active = replace(before.assignees[0], id=999)
     old = plans._grants(
         replace(before, grants=(historical,)),
         {row.model_key: row for row in catalog.models},
@@ -124,7 +137,7 @@ def test_retired_reassignment_history_keeps_old_model_identity_without_restoring
         grants=(*before.grants, historical) if change != "missing_grant" else before.grants,
         visible_sources=(*before.visible_sources, plans.PermissionVisibleSourceBaseline(99, record)),
     )
-    if change not in {"retain", "active_assignee_and_grant"}:
+    if change not in {"retain", "active_assignee_and_grant", "missing_grant", "deleted_assignee"}:
         with pytest.raises(PermissionMigrationBlockedError):
             compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
         return
@@ -369,7 +382,7 @@ def test_parent_and_resource_reverse_or_owner_layer_changes_are_rejected(change)
         compile_resource(mapped(catalog), before, mode)
 
 
-@pytest.mark.parametrize("bad", ["tuple", "contribution", "missing-backing", "locator", "subject", "owner-key"])
+@pytest.mark.parametrize("bad", ["tuple", "contribution", "missing-active-backing", "locator", "subject", "owner-key"])
 async def test_active_and_retired_sources_require_exact_original_canonical_backing(original, bad):
     _, catalog, before = original
     retired = before.visible_sources[-1]
@@ -380,8 +393,8 @@ async def test_active_and_retired_sources_require_exact_original_canonical_backi
         "subject": {"projected_subject": "user:99"},
         "owner-key": {"source_owner_key": "grant_assignee:999"},
     }
-    if bad == "missing-backing":
-        before = replace(before, assignees=tuple(row for row in before.assignees if row.state != "INACTIVE"))
+    if bad == "missing-active-backing":
+        before = replace(before, assignees=tuple(row for row in before.assignees if row.id != 1))
     else:
         before = replace(
             before,
