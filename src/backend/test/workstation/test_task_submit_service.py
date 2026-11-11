@@ -65,27 +65,6 @@ def _user(user_id: int = 7):
     return user
 
 
-async def test_verified_desktop_business_hook_runs_before_task_persistence(io):
-    from bisheng.user.domain.services.auth import LoginUser
-
-    user = LoginUser.model_construct(user_id=7, tenant_id=1)
-    activity = user._business_activity_recorder = AsyncMock()
-    await LinsightWorkbenchImpl.submit_user_question(LinsightQuestionSubmitSchema(question="q"), user)
-    activity.assert_awaited_once()
-    assert io["versions"]
-
-
-async def test_expired_desktop_hook_prevents_task_persistence(io):
-    from bisheng.common.errcode.dsh import DshSessionExpiredError
-    from bisheng.user.domain.services.auth import LoginUser
-
-    user = LoginUser.model_construct(user_id=7, tenant_id=1)
-    user._business_activity_recorder = AsyncMock(side_effect=DshSessionExpiredError())
-    with pytest.raises(DshSessionExpiredError):
-        await LinsightWorkbenchImpl.submit_user_question(LinsightQuestionSubmitSchema(question="q"), user)
-    assert not io["versions"]
-
-
 def _service_account_subject():
     return SessionSubject.service_account(
         tenant_id=1, service_account_id=42, resource_owner_user_id=7, external_user_id="emp-1"

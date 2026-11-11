@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Request
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.context.tenant import bypass_tenant_filter_if
+from bisheng.core.session_activity import business_activity
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.workstation.domain.schemas import WorkstationMessage
@@ -95,6 +96,7 @@ async def get_agent_chat_history(
 
 
 @router.post("/chat/completions")
+@business_activity()
 async def chat_completions(
     request: Request,
     data: APIChatCompletion,
