@@ -3,7 +3,7 @@
 ``create_app`` in ``web_menu`` gated the button only; ``POST /workflow/create``
 and ``POST /assistant`` accepted any logged-in user, which is the first hop of
 the workflow code-node RCE chain. Both endpoints now depend on
-``UserPayload.get_app_creator_user``.
+创建门禁; F130 的 Workflow 专属门禁另兼容旧通用能力。
 """
 
 import ast
@@ -68,11 +68,11 @@ def _login_user_dependency(file: Path, func_name: str) -> str:
 
 
 @pytest.mark.parametrize(
-    "file, func_name",
+    "file, func_name, dependency",
     [
-        (_BACKEND_ROOT / "api" / "v1" / "workflow.py", "create_flow"),
-        (_BACKEND_ROOT / "api" / "v1" / "assistant.py", "create_assistant"),
+        (_BACKEND_ROOT / "api" / "v1" / "workflow.py", "create_flow", "get_workflow_creator_user"),
+        (_BACKEND_ROOT / "api" / "v1" / "assistant.py", "create_assistant", "get_app_creator_user"),
     ],
 )
-def test_create_endpoints_depend_on_app_creator_gate(file, func_name):
-    assert _login_user_dependency(file, func_name) == "Depends(UserPayload.get_app_creator_user)"
+def test_create_endpoints_depend_on_app_creator_gate(file, func_name, dependency):
+    assert _login_user_dependency(file, func_name) == f"Depends(UserPayload.{dependency})"

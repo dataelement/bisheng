@@ -425,12 +425,16 @@ async def create_flow(
     request: Request,
     flow: FlowCreate,
     scope: Literal["workflow_management"] | None = None,
-    login_user: UserPayload = Depends(UserPayload.get_app_creator_user),
+    login_user: UserPayload = Depends(UserPayload.get_workflow_creator_user),
 ):
     """Create a new flow."""
     from bisheng.workflow.application.kunlian_workflow_creation import create_registered_workflow
     from bisheng.workflow.application.kunlian_workflow_management import mock_scope
     from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+    if flow.flow_type not in (None, FlowType.WORKFLOW.value):
+        raise HTTPException(status_code=422, detail="Only Workflow creation is supported")
+    flow.flow_type = FlowType.WORKFLOW.value
 
     async def check_quota():
         await QuotaService.check_quota(

@@ -1,3 +1,4 @@
+// 覆盖 AC: AC-03, AC-04, AC-13
 import { describe, expect, it, vi } from "vitest"
 
 // routes/index.tsx reads __APP_ENV__.BASE_URL at module load — set the stub
@@ -9,6 +10,11 @@ vi.hoisted(() => {
 import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes"
 
 describe("resolveRoutePermissions", () => {
+  it("preserves explicit Workflow creation without inferring general creation", () => {
+    const permissions = resolveRoutePermissions({ web_menu: ["build", "create_workflow"] })
+    expect(permissions).toEqual(["build", "create_workflow"])
+    expect(permissions).not.toContain("create_app")
+  })
   it("returns the raw web_menu unchanged for plain users", () => {
     const perms = resolveRoutePermissions({
       web_menu: ["build", "knowledge"],

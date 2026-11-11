@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Button, SearchInput, Select, Tag, notification } from '@bisheng/ui';
 import CardComponent from "@/components/bs-comp/cardComponent";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
@@ -8,17 +8,11 @@ import { hasResourceAction,useResourceActions } from "@/components/bs-comp/permi
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Outlined } from "bisheng-icons";
-
-
 import LoadMore from "@/components/bs-comp/loadMore";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-
-
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
-
 import { userContext } from "@/contexts/userContext";
-import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/assistant";
-import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
+import { changeAssistantStatusApi, deleteAssistantApi, createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
 import { deleteFlowFromDatabase, getAppsApi, getFlowApi, getWorkflowManagementEditorFlow, getWorkflowManagementSummary } from "@/controllers/API/flow";
 import type { HostedAppActionResult } from "@/controllers/API/hostedApp";
 import { copyReportTemplate, createWorkflowApi, onlineWorkflow, onlineWorkflowApi } from "@/controllers/API/workflow";
@@ -31,7 +25,6 @@ import { HOSTED_APP_STATES, stateI18nKey } from "./hostedApp/types";
 import { FlowType } from "@/types/flow";
 import { useInfiniteCursorTable } from "@/util/hook";
 import { generateUUID } from "@/utils";
-import { Select, Tag } from "@bisheng/ui";
 import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -259,7 +252,9 @@ function AppList({ workflowOnly }: AppsProps) {
     const canCreateApp =
         user.role === 'admin' ||
         (user.web_menu || []).includes('create_app');
-    const canCopy = (id: string | number) => canCreateApp && (workflowOnly ? canEdit(id) : canRead(id));
+    const canCreateWorkflow = canCreateApp || (user.web_menu || []).includes('create_workflow');
+    const canCreateCurrent = workflowOnly ? canCreateWorkflow : canCreateApp;
+    const canCopy = (id: string | number) => canCreateCurrent && (workflowOnly ? canEdit(id) : canRead(id));
 
     const [copyingId, setCopyingId] = useState<string | number | null>(null);
 
@@ -298,7 +293,8 @@ function AppList({ workflowOnly }: AppsProps) {
                     }
                 }
                 delete (payload as any).id;
-                const res = await createWorkflowApi(payload.name, payload.description || '', payload.logo || '', payload);
+                const res = await createWorkflowApi(payload.name, payload.description || '', payload.logo || '', payload,
+                    workflowOnly ? generateUUID(32) : undefined, workflowOnly);
                 if (res?.id) {
                     reload();
                     navigate(workflowOnly ? workflowManagementEditorPath(res.id) : `/flow/${res.id}`);
@@ -411,12 +407,14 @@ function AppList({ workflowOnly }: AppsProps) {
     const kunlianEntry = new URLSearchParams(entrySearch).get('kunlian_workflow') === 'new';
     const openedKunlianCreate = useRef(false);
     useEffect(() => {
-        if (canCreateApp && !openedKunlianCreate.current && kunlianEntry) {
+        if (canCreateWorkflow && !openedKunlianCreate.current && kunlianEntry) {
             openedKunlianCreate.current = true;
             createAppModalRef.current?.open(AppType.FLOW, 0);
         }
-    }, [canCreateApp, kunlianEntry]);
+    }, [canCreateWorkflow, kunlianEntry]);
     const handleCreateApp = async (type, tempId = 0, item?: any) => {
+        if (workflowOnly && type !== AppType.FLOW) return;
+        if (!(type === AppType.FLOW ? canCreateWorkflow : canCreateApp)) return;
         createAppModalRef.current.open(type, tempId);
     }
 
@@ -465,7 +463,7 @@ function AppList({ workflowOnly }: AppsProps) {
                         <LoadingIcon />
                     </div>
                     : <div className="mt-6 flex gap-2 flex-wrap pb-20">
-                        {canCreateApp && (workflowOnly ? (
+                        {canCreateCurrent && (workflowOnly ? (
                             <CardComponent<FlowType>
                                 data={null}
                                 type={AppType.FLOW}
@@ -587,7 +585,7 @@ function AppList({ workflowOnly }: AppsProps) {
                 holds the "manage your applications" caption. */}
         </div>}
         {/* create flow&assistant */}
-        <CreateApp ref={createAppModalRef} kunlianEntry={kunlianEntry} workflowManagement={workflowOnly} />
+        <CreateApp ref={createAppModalRef} kunlianEntry={kunlianEntry} workflowManagement={workflowOnly || kunlianEntry} />
         {/* Permission management dialog */}
         {permTarget && (
             <PermissionDialog

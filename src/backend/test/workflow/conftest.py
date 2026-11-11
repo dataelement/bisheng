@@ -62,8 +62,11 @@ def _agent_store(monkeypatch, engine):
 
 @pytest.fixture
 def registration_store():
+    from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    with _registration_store(engine) as repository:
+    # 夹具中的业务主体属于租户 7, 不依赖过滤器尚未注册才能读取。
+    with tenant_execution_scope(7), strict_tenant_filter(), _registration_store(engine) as repository:
         yield repository
 
 

@@ -1,0 +1,42 @@
+# 本次已授权联调的目录初始化阶段配置参考。只合入对应节点。
+# 最终运行状态为 login_enabled=true、policy_revision=2，见本次联调部署记录。
+multi_tenant:
+  enabled: true
+sso_sync:
+  kunlian:
+    directory_enabled: true
+    login_enabled: false
+    connection_id: kunlian-workflow-test
+    # 开放登录时提升至 2；执行前重读实际 SQL 版本。
+    policy_revision: 1
+    issuer: http://ai-idp.comlansh.com:30001
+    client_id: bisheng-workflow-test
+    allowed_tenant_id: ce767a2d-e46a-4e11-bd1d-50c8ea4ef4b7
+    allowed_workspace_ids:
+      - 94b78176-c34d-4ef1-9b8f-1722210910f3
+    state_semantics_revision: kunlian-delivery-20261111
+    # 我方拟定的联调拒绝阈值，非昆联同步 SLA。
+    max_directory_age_seconds: 600
+    public_origin: http://110.16.193.170:50055
+    redirect_uri: http://110.16.193.170:50055/api/kunlian/callback
+    logout_redirect_uri: http://110.16.193.170:50055/api/kunlian/logout/callback
+    approved_test_origins:
+      - http://ai-idp.comlansh.com:30001
+      - http://110.16.193.170:50055
+    endpoint_allowlist:
+      - http://ai-idp.comlansh.com:30001/.well-known/openid-configuration
+      - http://ai-idp.comlansh.com:30001/oidc/jwks
+      - http://ai-idp.comlansh.com:30001/oidc/introspect
+      - http://ai-idp.comlansh.com:30001/api/v1/integrations/user-sync/users
+      - http://ai-idp.comlansh.com:30001/api/v1/integrations/user-sync/tenants/{tenant_id}/users/{id}
+    client_secret_reference: env:KUNLIAN_CLIENT_SECRET
+    sync_key_reference: env:KUNLIAN_SYNC_API_KEY
+    internal_key_id: kunlian-internal-20261111
+    internal_secret_reference: env:KUNLIAN_INTERNAL_SECRET
+    trusted_gateway_networks:
+      # 当前实际源地址；容器重建后须复核，不扩大成整个 Docker 网段。
+      - 172.19.0.12/32
+    csrf_secret_reference: env:KUNLIAN_BACKEND_CSRF_SECRET
+    encryption_secret_reference: env:KUNLIAN_BACKEND_FERNET_KEY
+    sync_interval_seconds: 300
+    page_size: 20

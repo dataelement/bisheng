@@ -64,6 +64,13 @@ class DirectoryRole(DirectoryContract):
     status: Literal["ACTIVE", "DISABLED"]
 
 
+class DirectoryDisplayReference(DirectoryContract):
+    """组织和岗位的展示摘要。不作为身份或权限事实投影。"""
+
+    id: str = Field(min_length=1, max_length=64)
+    name: str
+
+
 class DirectoryUser(DirectoryContract):
     id: str = Field(min_length=1, max_length=64)
     subject: str = Field(min_length=1, max_length=128)
@@ -81,6 +88,8 @@ class DirectoryUser(DirectoryContract):
     roles: list[DirectoryRole]
     extends: list = Field(max_length=0)
     tenant: DirectoryTenant
+    organizations: list[DirectoryDisplayReference] = Field(default_factory=list, exclude=True, repr=False)
+    positions: list[DirectoryDisplayReference] = Field(default_factory=list, exclude=True, repr=False)
 
     def staged_tenant(self) -> dict:
         return {

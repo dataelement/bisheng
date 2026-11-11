@@ -25,3 +25,11 @@ it('sends creation and draft revision headers through the existing endpoints', a
     await updateVersion('1', rename, 'new-revision');
     expect(axios.put).toHaveBeenCalledWith('/api/v1/workflow/versions/1', rename, { headers: { 'If-Match': 'new-revision' } });
 });
+
+it('keeps management creation scoped and typed without a general creation grant', async () => {
+    await createWorkflowApi('workflow', '', '', { flow_type: 35 }, 'workflow-only-request', true);
+    expect(axios.post).toHaveBeenLastCalledWith('/api/v1/workflow/create', expect.objectContaining({ flow_type: 10 }), {
+        headers: { 'Idempotency-Key': 'workflow-only-request' },
+        params: { scope: 'workflow_management' },
+    });
+});

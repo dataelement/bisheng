@@ -1,6 +1,6 @@
+// 覆盖 AC: AC-03, AC-04, AC-13
 /**
- * F056 T031 — GOV-07: the hosted-application feature adds no permission point
- * and no menu entry (AC-35, AC-36, AC-37, AC-38).
+ * F056：托管应用不新增权限点或菜单；F130 另行登记 Workflow 创建子能力。
  *
  * This is a verification task with nothing to build, which is exactly the kind
  * that gets "verified" by looking at a screenshot once. The claims are all
@@ -29,7 +29,7 @@ function source(relativePath: string): string {
   return readFileSync(resolve(__dirname, "..", relativePath), "utf-8")
 }
 
-describe("AC-37 — the role config screen's inventory is unchanged", () => {
+describe("AC-37 — existing menu inventory plus F130 Workflow creation", () => {
   it("still offers the same two parents and the same children", () => {
     // Frozen deliberately as literals rather than as a count: a swap (one entry
     // removed, one added) keeps a count honest and changes the screen.
@@ -49,13 +49,14 @@ describe("AC-37 — the role config screen's inventory is unchanged", () => {
       "create_knowledge",
       "build",
       "create_app",
+      "create_workflow",
       "evaluation",
       "dataset",
       "mark_task",
     ])
   })
 
-  it("counts 17 selectable entries, none of them about hosted applications", () => {
+  it("counts 18 entries with F130, none of them about hosted applications", () => {
     const all = [
       WORKBENCH_PARENT_ID,
       ADMIN_PARENT_ID,
@@ -63,15 +64,15 @@ describe("AC-37 — the role config screen's inventory is unchanged", () => {
       TASK_MODE_MENU_ID,
       ...ADMIN_CHILD_MENUS,
     ]
-    expect(all).toHaveLength(17)
-    expect(new Set(all).size).toBe(17)
+    expect(all).toHaveLength(18)
+    expect(new Set(all).size).toBe(18)
     expect(all.filter((id) => /app_runtime|hosted|deploy|publish|square/i.test(id))).toEqual([])
   })
 
   it("keeps the two nesting rules the editor cascades on", () => {
     expect(CHILD_DEPENDENTS).toEqual({
       home: [TASK_MODE_MENU_ID],
-      build: ["create_app"],
+      build: ["create_app", "create_workflow"],
       knowledge: ["create_knowledge"],
     })
   })
@@ -83,6 +84,7 @@ describe("AC-37 — the role config screen's inventory is unchanged", () => {
     // upgrade.
     expect([...DEFAULT_ENABLED_MENU_IDS]).toContain("build")
     expect([...DEFAULT_ENABLED_MENU_IDS]).not.toContain("create_app")
+    expect([...DEFAULT_ENABLED_MENU_IDS]).not.toContain("create_workflow")
     expect([...DEFAULT_ENABLED_MENU_IDS]).toEqual([
       "workstation",
       "home",

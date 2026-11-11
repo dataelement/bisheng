@@ -48,6 +48,7 @@ class WebMenuResource(Enum):
     # Level-2 menus — build / resources
     BUILD = "build"  # Application build
     CREATE_APP = "create_app"  # Entry for "新建应用"/"管理应用模板" (sub-toggle of BUILD)
+    CREATE_WORKFLOW = "create_workflow"  # 仅创建工作流, 不包含其他应用类型。
     KNOWLEDGE = "knowledge"  # Knowledge management
     CREATE_KNOWLEDGE = "create_knowledge"  # Admin KB list: "创建" (doc/QA lib); sub-toggle of KNOWLEDGE
     KNOWLEDGE_SPACE = "knowledge_space"  # Knowledge space

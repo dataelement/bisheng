@@ -1,0 +1,42 @@
+# Merge into docker/bisheng/config/config.yaml. Do not duplicate top-level keys.
+# Keep existing sso_sync.gateway_hmac_secret and signature_header.
+multi_tenant:
+  enabled: true
+sso_sync:
+  gateway_hmac_secret: !env ${BISHENG_GATEWAY_HMAC_SECRET}
+  signature_header: X-Signature
+  kunlian:
+    directory_enabled: true
+    login_enabled: false
+    connection_id: kunlian-workflow
+    policy_revision: 1
+    issuer: https://idp.example.com
+    client_id: REPLACE_CLIENT_ID
+    allowed_tenant_id: REPLACE_EXTERNAL_TENANT_ID
+    allowed_workspace_ids:
+      - REPLACE_WORKSPACE_ID
+    state_semantics_revision: REPLACE_CONFIRMED_STATE_REVISION
+    max_directory_age_seconds: 600
+    public_origin: https://workflow.example.com
+    redirect_uri: https://workflow.example.com/api/kunlian/callback
+    logout_redirect_uri: https://workflow.example.com/api/kunlian/logout/callback
+    approved_test_origins: []
+    endpoint_allowlist:
+      - https://idp.example.com/.well-known/openid-configuration
+      - https://idp.example.com/oidc/jwks
+      - https://idp.example.com/oidc/introspect
+      - https://idp.example.com/api/v1/integrations/user-sync/users
+      - https://idp.example.com/api/v1/integrations/user-sync/tenants/{tenant_id}/users/{id}
+    client_secret_reference: env:KUNLIAN_CLIENT_SECRET
+    sync_key_reference: env:KUNLIAN_SYNC_API_KEY
+    internal_key_id: kunlian-internal-v1
+    internal_secret_reference: env:KUNLIAN_INTERNAL_SECRET
+    # Replace after inspecting the actual gateway peer IP. Do not trust a whole subnet.
+    trusted_gateway_networks:
+      - 192.0.2.10/32
+    csrf_secret_reference: env:KUNLIAN_BACKEND_CSRF_SECRET
+    encryption_secret_reference: env:KUNLIAN_BACKEND_FERNET_KEY
+    sync_interval_seconds: 300
+    page_size: 20
+    session_max_seconds: 28800
+    introspection_timeout_seconds: 2

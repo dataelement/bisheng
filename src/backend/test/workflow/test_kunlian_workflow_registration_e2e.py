@@ -53,7 +53,7 @@ async def test_management_routes_keep_create_and_editor_permissions_separate(mon
     login_dependency = UserPayload.get_login_user
     monkeypatch.setattr(UserPayload, "get_login_user", AsyncMock(return_value=user))
     assert_create = AsyncMock(side_effect=UnAuthorizedError())
-    monkeypatch.setattr(UserPayload, "assert_effective_web_menu_contains", assert_create)
+    monkeypatch.setattr(UserPayload, "assert_effective_web_menu_any", assert_create)
     app = FastAPI()
     app.include_router(browser.router)
     app.dependency_overrides[AuthJwt] = lambda: None
@@ -75,7 +75,7 @@ async def test_management_routes_keep_create_and_editor_permissions_separate(mon
             json={"name": "denied"},
         )
         assert create.status_code == 403
-        assert_create.assert_awaited_once_with(user.user_id, "create_app")
+        assert_create.assert_awaited_once_with(user.user_id, ("create_workflow", "create_app"))
         visible.side_effect = UnAuthorizedError()
         assert (await client.get(url)).status_code == 403
 
@@ -232,7 +232,7 @@ async def test_mock_editor_to_catalog_with_replay_and_offline(registration_store
     app.include_router(browser.router, prefix="/api/v1")
     app.include_router(candidate.router, prefix="/api/v2")
     app.dependency_overrides[UserPayload.get_login_user] = lambda: a
-    app.dependency_overrides[UserPayload.get_app_creator_user] = lambda: a
+    app.dependency_overrides[UserPayload.get_workflow_creator_user] = lambda: a
     app.dependency_overrides[candidate.read_identity] = lambda: reader
     app.dependency_overrides[candidate.sync_reader] = lambda: sync
 

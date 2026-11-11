@@ -1,8 +1,15 @@
+// 覆盖 AC: AC-03, AC-04, AC-13
 import { describe, expect, it } from "vitest"
 
 import { normalizeRoleMenuSelection } from "@/pages/SystemPage/components/roleMenuSelection"
 
 describe("normalizeRoleMenuSelection", () => {
+  it("keeps Workflow creation distinct and removes it when build is disabled", () => {
+    expect(normalizeRoleMenuSelection(["admin", "build", "create_workflow"]))
+      .toEqual(["admin", "build", "create_workflow"])
+    expect(normalizeRoleMenuSelection(["admin", "create_workflow"]))
+      .toEqual(["admin"])
+  })
   it("maps legacy area aliases to the menu options shown by the editor", () => {
     expect(
       normalizeRoleMenuSelection([

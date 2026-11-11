@@ -90,6 +90,49 @@ async def test_exact_headers_pagination_and_member_id_detail(client_type):
     assert requests[1].url.params["page_token"] == "opaque cursor"
 
 
+@pytest.mark.parametrize("endpoint", ["list", "detail"])
+async def test_display_references_do_not_change_identity_or_staged_permissions(client_type, endpoint):
+    """兼容交付的组织和岗位展示字段。不把展示信息转成授权或身份。"""
+    member = item()
+    member["organizations"] = [{"id": "org-display", "name": "展示组织"}]
+    member["positions"] = [{"id": "position-display", "name": "展示岗位"}]
+    body = payload(items=[member]) if endpoint == "list" else {"code": "OK", "data": member}
+    async with client_type(
+        config(),
+        api_key=SecretStr("fixture-key"),
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=body)),
+    ) as client:
+        user = (
+            (await client.list_users()).items[0]
+            if endpoint == "list"
+            else await client.get_user("tenant-1", "member-1")
+        )
+    assert user.subject == "subject-1" and user.tenant_id == "tenant-1"
+    assert (
+        user.staged_member()
+        == import_module("bisheng.sso_sync.domain.clients.kunlian").DirectoryUser.model_validate(item()).staged_member()
+    )
+
+
+@pytest.mark.parametrize("endpoint", ["list", "detail"])
+async def test_unregistered_directory_fields_still_reject_response(client_type, endpoint):
+    member = item()
+    member["organizations"] = []
+    member["positions"] = []
+    member["untrusted_identity_override"] = "other-subject"
+    body = payload(items=[member]) if endpoint == "list" else {"code": "OK", "data": member}
+    async with client_type(
+        config(),
+        api_key=SecretStr("fixture-key"),
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=body)),
+    ) as client:
+        with pytest.raises(KunlianDirectorySyncError):
+            if endpoint == "list":
+                await client.list_users()
+            else:
+                await client.get_user("tenant-1", "member-1")
+
+
 async def test_oversized_directory_page_is_closed_before_full_buffering(client_type):
     """AC-16, AC-19:超预算页立即失败且不继续读取整个目录载荷。"""
 

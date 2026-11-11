@@ -1,9 +1,12 @@
 """SSO realtime sync configuration model (F014-sso-org-realtime-sync)."""
 
 from ipaddress import ip_network
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
+
+from bisheng.core.config.kunlian_scope import resolve_scope_pairs
 
 
 class KunlianConf(BaseModel):
@@ -16,6 +19,9 @@ class KunlianConf(BaseModel):
     issuer: str = ""
     client_id: str = ""
     allowed_tenant_id: str = ""
+    auto_onboarding_enabled: bool = Field(default=False, strict=True)
+    login_scope_mode: Literal["fixed", "tenant_workspace_map"] = "fixed"
+    tenant_workspace_allowlist: dict[str, list[str]] = Field(default_factory=dict)
     public_origin: str = ""
     redirect_uri: str = ""
     logout_redirect_uri: str = ""
@@ -51,6 +57,18 @@ class KunlianConf(BaseModel):
             reasons.append("MULTI_TENANT_REQUIRED")
         if self.max_directory_age_seconds is None:
             reasons.append("DIRECTORY_MAX_AGE_MISSING")
+        try:
+            resolve_scope_pairs(
+                self.login_scope_mode,
+                self.allowed_tenant_id,
+                self.allowed_workspace_ids,
+                self.tenant_workspace_allowlist,
+            )
+        except ValueError:
+            reasons.append("SCOPE_POLICY_INVALID")
+        if self.login_scope_mode != "fixed":
+            # 本批只声明新模式; T028/T030 完成双端令牌及会话检查前保持拒绝。
+            reasons.append("SCOPE_RUNTIME_NOT_READY")
         if not self.allowed_workspace_ids or any(not value.strip() for value in self.allowed_workspace_ids):
             reasons.append("WORKSPACE_POLICY_MISSING")
         if not self.state_semantics_revision.strip():

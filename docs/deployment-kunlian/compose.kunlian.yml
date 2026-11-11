@@ -1,0 +1,52 @@
+# Deployment example; review and copy to docker/compose.kunlian.yml.
+# Merge with docker-compose.yml; all relative paths resolve against docker/.
+services:
+  backend_worker:
+    env_file:
+      - ./secrets/kunlian-backend.env
+  gateway:
+    env_file:
+      - ./secrets/kunlian-gateway.env
+  mysql:
+    ports: !override
+      - "127.0.0.1:3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysql -u root -e 'CREATE DATABASE IF NOT EXISTS openfga;'"]
+  gateway-db-init:
+    environment:
+      MYSQL_PWD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}
+  openfga-migrate:
+    environment:
+      OPENFGA_DATASTORE_URI: ${OPENFGA_DATASTORE_URI:?set OPENFGA_DATASTORE_URI}
+  openfga:
+    ports: !override
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
+      - "127.0.0.1:2112:2112"
+    environment:
+      OPENFGA_DATASTORE_URI: ${OPENFGA_DATASTORE_URI:?set OPENFGA_DATASTORE_URI}
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+  redis:
+    ports: !override
+      - "127.0.0.1:6379:6379"
+  backend:
+    env_file:
+      - ./secrets/kunlian-backend.env
+    ports: !override
+      - "127.0.0.1:7860:7860"
+  elasticsearch:
+    ports: !override
+      - "127.0.0.1:9200:9200"
+      - "127.0.0.1:9300:9300"
+  minio:
+    ports: !override
+      - "127.0.0.1:9100:9000"
+  frontend:
+    volumes:
+      - ./nginx/kunlian-protocol-proxy.inc:/etc/nginx/kunlian-protocol-proxy.inc:ro
+  milvus:
+    ports: !override
+      - "127.0.0.1:19530:19530"
+      - "127.0.0.1:9091:9091"

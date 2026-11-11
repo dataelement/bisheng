@@ -10,6 +10,7 @@ export const ADMIN_CHILD_MENUS = [
   "create_knowledge",
   "build",
   "create_app",
+  "create_workflow",
   "evaluation",
   "dataset",
   "mark_task",
@@ -40,7 +41,7 @@ export const DEFAULT_ENABLED_MENU_IDS = [
 
 export const CHILD_DEPENDENTS: Record<string, readonly string[]> = {
   home: [TASK_MODE_MENU_ID],
-  build: ["create_app"],
+  build: ["create_app", "create_workflow"],
   knowledge: ["create_knowledge"],
 }
 

@@ -206,6 +206,7 @@
     "app": "Chat",
     "skills": "Build",
     "createApp": "Create app",
+    "createWorkflow": "Create workflow",
     "createKnowledge": "Create knowledge base",
     "knowledge": "Knowledge",
     "evaluation": "Evaluation",

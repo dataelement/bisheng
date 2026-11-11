@@ -56,6 +56,7 @@ _ROLE_UI_ADMIN_CHILDREN = frozenset(
         "create_knowledge",
         "build",
         "create_app",
+        "create_workflow",
         "evaluation",
         "dataset",
         "mark_task",
@@ -80,6 +81,7 @@ _WEB_MENU_ADMIN_ALL = frozenset(
         "backend",
         "build",
         "create_app",
+        "create_workflow",
         "knowledge",
         "create_knowledge",
         "model",
@@ -102,6 +104,9 @@ def _effective_web_menu_strip_orphans(web_menu: list[str]) -> list[str]:
         s -= _ROLE_UI_WORKBENCH_CHILDREN
     if not (s & _ADMIN_ENTRY_KEYS):
         s -= _ROLE_UI_ADMIN_CHILDREN
+    if "build" not in s:
+        # 新子能力要求构建入口有效, 不改变旧通用键的兼容语义。
+        s.discard("create_workflow")
     return list(s)
 
 
@@ -727,6 +732,17 @@ class LoginUser(BaseModel):
         return login_user
 
     @classmethod
+    async def get_workflow_creator_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
+        """仅工作流入口兼容通用创建权, 其他类型仍使用原门禁。"""
+        login_user = await cls.get_login_user(auth_jwt)
+        if not login_user.is_admin():
+            await cls.assert_effective_web_menu_any(
+                login_user.user_id,
+                (WebMenuResource.CREATE_WORKFLOW.value, WebMenuResource.CREATE_APP.value),
+            )
+        return login_user
+
+    @classmethod
     async def get_login_user_from_ws(
         cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str | None = None
     ) -> Self:
@@ -968,10 +984,15 @@ class LoginUser(BaseModel):
     @classmethod
     async def assert_effective_web_menu_contains(cls, user_id: int, menu_key: str) -> None:
         """Raise if user's effective web_menu (after dept-admin merge) does not include ``menu_key``."""
+        await cls.assert_effective_web_menu_any(user_id, (menu_key,))
+
+    @classmethod
+    async def assert_effective_web_menu_any(cls, user_id: int, menu_keys: Iterable[str]) -> None:
+        """按当前有效菜单一次读取判断, 不从请求或旧 JWT 推导新增权限。"""
         db_user = await UserDao.aget_user(user_id)
         if not db_user:
             raise UnAuthorizedError.http_exception()
         is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user_id))
         _, web_menu = await cls.get_roles_web_menu(db_user, is_department_admin=is_department_admin)
-        if menu_key not in set(web_menu):
+        if not set(menu_keys).intersection(web_menu):
             raise UnAuthorizedError.http_exception()

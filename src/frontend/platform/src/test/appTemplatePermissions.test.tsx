@@ -30,6 +30,7 @@ describe('template actions', () => {
   it.each([
     [{ is_global_super: true }, true], [{ is_child_admin: true }, true], [{ role: 'admin' }, true],
     [{ web_menu: ['create_app'], is_department_admin: true }, false], [{ role: 'editor' }, false],
+    [{ web_menu: ['create_workflow'] }, false],
   ])('uses admin identity instead of creation or department permissions (%j)', (user, expected) => {
     expect(canManageAppTemplates(user)).toBe(expected);
   });
@@ -64,8 +65,8 @@ function managementPage() {
   </Routes></MemoryRouter>);
 }
 
-it('refuses direct management page access for a create-app user before loading templates', async () => {
-  state.user = { role: 'editor', web_menu: ['create_app'] };
+it.each(['create_app', 'create_workflow'])('refuses direct template management for a %s user before loading data', async menu => {
+  state.user = { role: 'editor', web_menu: [menu] };
   state.list.mockResolvedValue([]);
   managementPage();
   await screen.findByText('Forbidden');

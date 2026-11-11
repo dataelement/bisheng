@@ -1,0 +1,145 @@
+{
+  "scope": "F130 T001-T012 local source and tests; no deployment",
+  "date": "2026-11-11",
+  "note": "运行后仅补充测试注释、无效会话及模板权限案例；追加案例有定向通过证据。历史联调源码不计入本批。",
+  "repositories": [
+    {
+      "name": "bisheng",
+      "branch": "feat/v3.0.0/118-kunlian-integration",
+      "head": "02b22c810d72601cba50bf7ca5a6968a565876af",
+      "files": [
+        {
+          "file": "src/backend/bisheng/api/v1/workflow.py",
+          "sha256": "80e2ae2c6a203f913afd6dd77385807182a4839b48ae111985a1f52de48320d2"
+        },
+        {
+          "file": "src/backend/bisheng/core/config/kunlian_scope.py",
+          "sha256": "67ebee7f1574e469a9bfbc31b94351aa80f0c7d691c7cdcb3cf64d5bbd788805"
+        },
+        {
+          "file": "src/backend/bisheng/core/config/sso_sync.py",
+          "sha256": "766479775e8d54847f0d4d00115ce44982a2bea80b326497cd16df9e3067dd3a"
+        },
+        {
+          "file": "src/backend/bisheng/core/database/tenant_filter.py",
+          "sha256": "e0f21d766b3180a574c7f4e304f513796fb51076d9129f3294f7098e212ce7b8"
+        },
+        {
+          "file": "src/backend/bisheng/database/models/role_access.py",
+          "sha256": "bf652cf1b597ce2daaae4f95a57c3ca5965657ef953623d423b635840f56ac04"
+        },
+        {
+          "file": "src/backend/bisheng/role/domain/models/external_basic_role.py",
+          "sha256": "c70a919cdb53c92024924b479818b8660633f47daf43a3c431d69baa88ea55b2"
+        },
+        {
+          "file": "src/backend/bisheng/tenant/domain/models/external_provision.py",
+          "sha256": "1605bcd0968aa8e7d62eeb0d6fe315ec7a58e5d08ba90d93e09427ca2cec0225"
+        },
+        {
+          "file": "src/backend/bisheng/user/domain/models/external_basic_access.py",
+          "sha256": "2f6ceb2c27da6dbb381af147dd1d013ea72445f95026cf7409a04cfb0de0aae2"
+        },
+        {
+          "file": "src/backend/bisheng/user/domain/services/auth.py",
+          "sha256": "2aebc227244deb321b326fda66d6987c2c30b0093a3bb0b90dee8e04e1e7bf45"
+        },
+        {
+          "file": "src/backend/test/api/test_create_app_permission_gate.py",
+          "sha256": "4d371c4e5bab0f980187d13b75d52de7ad8590d5504c95617a78123424c9e845"
+        },
+        {
+          "file": "src/backend/test/database/test_kunlian_onboarding_metadata.py",
+          "sha256": "f40785670adcb0868232232dd1f7fe56f58d48725a9a989ba2099664c8e604ba"
+        },
+        {
+          "file": "src/backend/test/sso/test_kunlian_scope_policy.py",
+          "sha256": "eb507a0e6b9534e25e3de01ec340b4df5e6b11b46f86cc9c01461f054b5caeb4"
+        },
+        {
+          "file": "src/backend/test/sso/test_kunlian_workflow_creation_access.py",
+          "sha256": "977ded1cb3e7d83acdc5c626cf5e52af6ecd192e17053463a82b1c2613b2fb69"
+        },
+        {
+          "file": "src/backend/test/workflow/conftest.py",
+          "sha256": "e92b1ae65add1a077fa90bc1b36b8a49ddc4fec0a47c6ff581402d7a2f2bef03"
+        },
+        {
+          "file": "src/backend/test/workflow/test_kunlian_workflow_registration_e2e.py",
+          "sha256": "a9d6bee4be9e8d34a878f89d5bd5eeeaf81b7523959e3cf728114488a8014aff"
+        },
+        {
+          "file": "src/frontend/platform/public/locales/en-US/bs.json",
+          "sha256": "12ce315c5000f30f44c680cb15508a183286af15db9465e93abfb3ac1a5e975d"
+        },
+        {
+          "file": "src/frontend/platform/public/locales/ja/bs.json",
+          "sha256": "468e729185b609933c58d043524a3ffe7771b05a755f22149ce8502f8af52f9d"
+        },
+        {
+          "file": "src/frontend/platform/public/locales/zh-Hans/bs.json",
+          "sha256": "ccc4ed99cbf919b64d6e1c04d5ea7335a90f69383748c390582b33ad394f0f44"
+        },
+        {
+          "file": "src/frontend/platform/src/controllers/API/workflow.test.ts",
+          "sha256": "f5748ead52b1efd3eb76fa4d8664426629c91ba09e158862d566c1acaa59ba44"
+        },
+        {
+          "file": "src/frontend/platform/src/controllers/API/workflow.ts",
+          "sha256": "cf0760b33926adbe0af1cea9f65e5aa7002f0341f6fcc784787d381be374dd95"
+        },
+        {
+          "file": "src/frontend/platform/src/pages/BuildPage/apps.tsx",
+          "sha256": "ef81f6d552785b334a9ffa19c5248f307745261cb056b08605b0e970933ffe3e"
+        },
+        {
+          "file": "src/frontend/platform/src/pages/SystemPage/components/Roles.tsx",
+          "sha256": "2cf1566c41edd7314a636d7bab9f851e4f5c5b72ccc900de4657cee0c034f2bc"
+        },
+        {
+          "file": "src/frontend/platform/src/pages/SystemPage/components/roleMenuSelection.ts",
+          "sha256": "f143ef7c481723ed6c551bf0c8409ab6932b7af0e72541099e467c55408797f1"
+        },
+        {
+          "file": "src/frontend/platform/src/test/appTemplatePermissions.test.tsx",
+          "sha256": "368d4fe067ec434a38c731ebc58b12fe7e9f35b1bfb4e7f9492283bb777a4233"
+        },
+        {
+          "file": "src/frontend/platform/src/test/gov07NoNewPermissionPoint.test.ts",
+          "sha256": "5bb4985dc9ed0625839f2c9f8e8efb9b56ef8df6c608e9dc31e31b288c81fc17"
+        },
+        {
+          "file": "src/frontend/platform/src/test/kunlianWorkflowCreationPermissions.test.tsx",
+          "sha256": "e976402a4089cd8100f434dcb663d1ea752d3d01b78f4a0402befdfa56903e2d"
+        },
+        {
+          "file": "src/frontend/platform/src/test/resolveRoutePermissions.test.ts",
+          "sha256": "f6ccce03aa5af2a75bf3fe874829cce23629cbc918e8508355e9c64a8b9a8bf2"
+        },
+        {
+          "file": "src/frontend/platform/src/test/roleMenuSelection.test.ts",
+          "sha256": "6bef554fc9d7dcf74136461c2bb0d6e840eefdbd7946c075f97b2d47f76f009e"
+        }
+      ]
+    },
+    {
+      "name": "bisheng-gateway",
+      "branch": "feat/kunlian-integration",
+      "head": "4e15750f922454ed87587d857c3b7bb6f4e17816",
+      "files": [
+        {
+          "file": "src/main/java/com/dataelem/gateway/config/KunlianSsoProperties.java",
+          "sha256": "22ed3b3bad94f66034a52344991ce00e29d6daf93c7992be6026fd8ab19578f3"
+        },
+        {
+          "file": "src/main/java/com/dataelem/gateway/sso/kunlian/KunlianScopePolicy.java",
+          "sha256": "79bb0ad46fb7e421b7cfbc1a08318b84162238c9f059b6bb17250c2fc495fab3"
+        },
+        {
+          "file": "src/test/java/com/dataelem/gateway/sso/kunlian/KunlianScopePolicyTest.java",
+          "sha256": "57836c4adea33fd276b4d4f9b378f3fe84bf42b441f4b61b04ab4552237dfe9d"
+        }
+      ]
+    }
+  ]
+}

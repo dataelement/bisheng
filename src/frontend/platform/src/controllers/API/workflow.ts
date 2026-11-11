@@ -58,6 +58,7 @@ export const createWorkflowApi = async (name, desc, url, flow?, registrationKey?
     const data = flow || {}
     return await axios.post("/api/v1/workflow/create", {
         ...data,
+        flow_type: 10,
         name,
         description: desc,
         logo: url

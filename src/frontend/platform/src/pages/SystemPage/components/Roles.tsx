@@ -85,6 +85,7 @@ export function useRolesController() {
       { id: "build", label: t("menu.skills") },
       // `create_app` 依赖 `build`：只有当构建开启时渲染，关闭构建时级联移除。
       { id: "create_app", label: t("menu.createApp"), parentMenuId: "build" as const },
+      { id: "create_workflow", label: t("menu.createWorkflow"), parentMenuId: "build" as const },
       { id: "evaluation", label: t("menu.evaluation") },
       { id: "dataset", label: t("menu.dataset") },
       { id: "mark_task", label: t("menu.annotation") },
