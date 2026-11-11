@@ -29,6 +29,7 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
     GrantSourceService,
+    is_untiered_empty_model,
     is_visibility_only_model,
     model_snapshot_for_target,
 )
@@ -344,7 +345,25 @@ def _validate_catalog(before):
         if set(effective) != set(model.effective_action_codes):
             _blocked("model_action_drift")
         if not effective and not model.visibility_only_resource_types:
-            _blocked("unexplained_empty_model")
+            # Retain a canonical old empty definition unchanged. Resource
+            # planning still requires every live Source's original visibility
+            # proof; this never creates visibility metadata or a guessed tier.
+            snapshot = GrantModelSnapshot(
+                model.model_key,
+                model.active,
+                model.effective_action_codes,
+                model.derived_level,
+                model.allow_same_level,
+                model.visibility_only_resource_types,
+                model.visibility_level,
+            )
+            if (
+                model.kind != "CUSTOM"
+                or model.selected_action_codes
+                or model.retired_use_level_floor is not None
+                or not is_untiered_empty_model(snapshot)
+            ):
+                _blocked("unexplained_empty_model")
 
 
 def _compile_catalog(before, *, namespace_type_mappings=()):
@@ -516,6 +535,40 @@ def build_catalog_retirement_plan(
     return replace(plan, checksum=_checksum(_catalog_payload(plan)))
 
 
+def _matches_f048_source(source, canonical):
+    """Validate the distinct source identity emitted by the first F048 writer.
+
+    Its fingerprint hashes the complete assignee payload, not the online
+    locator. Preserve that identity; active contributions are independently
+    checked against the original persisted visibility projection below.
+    """
+    record = replace(source.to_source_record(), active=True, version=1)
+    payload = {
+        name: getattr(source, name)
+        for name in (
+            "include_children",
+            "protected",
+            "source_ref",
+            "source_type",
+            "subject_id",
+            "subject_type",
+            "userset_relation",
+        )
+    }
+    return (
+        source.source_ref == source.source_ref.strip()
+        and source.source_locator == f"migration:{source.source_type}:{source.source_ref}"[:256]
+        and source.source_fingerprint == _checksum(payload)
+        and replace(
+            record,
+            source_ref=canonical.source_ref,
+            source_locator=canonical.source_locator,
+            source_fingerprint=canonical.source_fingerprint,
+        )
+        == canonical
+    )
+
+
 def _validate_resource(before):
     if (
         not isinstance(before, PermissionResourceBaseline)
@@ -570,7 +623,9 @@ def _validate_resource(before):
                 source_ref=source.source_ref,
                 protected=source.protected,
             )
-            if replace(source.to_source_record(), active=True, version=1) != canonical:
+            if replace(source.to_source_record(), active=True, version=1) != canonical and not _matches_f048_source(
+                source, canonical
+            ):
                 _blocked("noncanonical_source")
         except (TypeError, ValueError, AttributeError) as error:
             raise PermissionMigrationBlockedError(reason="f118_permission_invalid_source") from error

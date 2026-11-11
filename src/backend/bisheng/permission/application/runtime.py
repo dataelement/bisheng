@@ -57,6 +57,7 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSourceService,
     is_visibility_only_model,
     model_snapshot_for_target,
+    requires_existing_visibility_evidence,
 )
 from bisheng.permission.domain.services.mode_service import (
     ModeContext,
@@ -666,8 +667,9 @@ class F048PermissionRuntime:
         if str(operation.status) == "PREPARED" and not await repository.has_prepared_owner(target, int(operation.id)):
             # Crash between durable plan and owner SQL prepare: recreate the same deterministic
             # owner context. prepare() compares the complete checksum before any mirror write.
-            return await self.authorize_created(actor=actor, target=target, owner_user_id=owner_user_id,
-                                                mode="CUSTOM", idempotency_key=key)
+            return await self.authorize_created(
+                actor=actor, target=target, owner_user_id=owner_user_id, mode="CUSTOM", idempotency_key=key
+            )
         outcome = await self._projection.reconcile_operation(int(operation.id))
         await repository.finalize_creation(target, int(operation.id), owner_user_id)
         return outcome
@@ -1520,7 +1522,14 @@ class F048PermissionRuntime:
             model
             for model in models
             if action in model.action_codes
-            or (action == "visible" and (model.action_codes or is_visibility_only_model(model, target.resource_type)))
+            or (
+                action == "visible"
+                and (
+                    model.action_codes
+                    or is_visibility_only_model(model, target.resource_type)
+                    or requires_existing_visibility_evidence(model)
+                )
+            )
         )
         rows, after_id = [], 0
         while eligible:

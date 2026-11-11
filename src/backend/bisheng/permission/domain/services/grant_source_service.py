@@ -42,6 +42,23 @@ class GrantModelSnapshot:
     visibility_only: bool = False
 
 
+def is_untiered_empty_model(model: GrantModelSnapshot) -> bool:
+    """Recognize the old empty shape, without making it assignable or manageable.
+
+    This shape alone is not authority. Retaining its visibility additionally
+    requires the exact existing canonical contribution for every active source.
+    """
+    return (
+        isinstance(model.active, bool)
+        and model.action_codes == ()
+        and model.derived_level is None
+        and model.allow_same_level is False
+        and model.visibility_only_resource_types == ()
+        and model.visibility_level is None
+        and model.visibility_only is False
+    )
+
+
 def is_visibility_only_model(model: GrantModelSnapshot, resource_type: str | None = None) -> bool:
     """Recognize only a validated, target-scoped server-owned empty capability."""
 
@@ -55,6 +72,34 @@ def is_visibility_only_model(model: GrantModelSnapshot, resource_type: str | Non
         and model.visibility_level in {1, 2, 3, 4}
         and model.derived_level == model.visibility_level
         and (resource_type is None or resource_type in model.visibility_only_resource_types)
+    )
+
+
+def requires_existing_visibility_evidence(model: GrantModelSnapshot) -> bool:
+    """Recognize empty target capabilities that cannot mint visible sources.
+
+    A valid global tiered model can also have no action on a particular target
+    type. Its old visibility is retained only with the same source evidence;
+    this predicate does not authorize assigning that model to that target.
+    """
+    return is_untiered_empty_model(model) or (
+        isinstance(model.active, bool)
+        and isinstance(model.allow_same_level, bool)
+        and model.action_codes == ()
+        and type(model.derived_level) is int
+        and model.derived_level in {1, 2, 3, 4}
+        and model.visibility_only is False
+        and (
+            (model.visibility_only_resource_types == () and model.visibility_level is None)
+            or (
+                type(model.visibility_only_resource_types) is tuple
+                and bool(model.visibility_only_resource_types)
+                and len(set(model.visibility_only_resource_types)) == len(model.visibility_only_resource_types)
+                and set(model.visibility_only_resource_types) <= MIGRATED_RESOURCE_TYPES
+                and type(model.visibility_level) is int
+                and model.visibility_level in {1, 2, 3, 4}
+            )
+        )
     )
 
 
