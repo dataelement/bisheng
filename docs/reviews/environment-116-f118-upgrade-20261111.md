@@ -2,7 +2,7 @@
 
 记录日期：2026 年 11 月 11 日。时间均为 UTC+8。
 
-**状态：批准的数据清理和备份已完成；已按用户确认的保留方案修复历史空模型兼容，官方 F118 全量盘点完成后被 42 个历史模型名配置阻塞，尚未恢复业务。** 本记录保留 192.168.106.116 升级中遇到的真实阻塞、数据处置范围和备份边界，供判断应改进迁移脚本、历史业务清理逻辑还是现场数据。当前镜像已经包含 F118；本次需要执行知识空间统一与全平台 `use` 退役，单独发布 OpenFGA 模型不足以完成升级。
+**状态：批准的数据清理和备份已完成；已按用户确认的保留方案修复历史空模型兼容，42 个历史模型名配置已按补充授权清空；继续预检被 143 个资源引用的不兼容旧索引及其他数据一致性问题阻塞，尚未恢复业务。** 本记录保留 192.168.106.116 升级中遇到的真实阻塞、数据处置范围和备份边界，供判断应改进迁移脚本、历史业务清理逻辑还是现场数据。当前镜像已经包含 F118；本次需要执行知识空间统一与全平台 `use` 退役，单独发布 OpenFGA 模型不足以完成升级。
 
 ## 环境与最初报错
 
@@ -194,7 +194,7 @@ API、Worker 和 OCR Worker 仍停在维护状态，没有在不匹配的目录/
 只读规模核验：当前原 OpenFGA Store 共 142,855 条 tuple。全量盘点必须完整读取该 Store，不用两处授权抽样或短路代替正式 M2；日志按每 5,000 条记录进度。
 
 
-## 全量扫描后的新阻塞：旧 embedding 名称（待确认处置）
+## 全量扫描后的旧 embedding 名称阻塞（后续已获批清空）
 
 加载兼容补丁的官方 apply 已完整读取原 Store 的 **142,855** 条 tuple，随后进入 tenant 1。预检在 `ResourceConversionPlanBuilder.add_resources → KnowledgeReferenceSourceOwner._snapshot → extract_knowledge_model_references` 报 `10994 / knowledge_model_configuration_invalid`，原因是知识资源的 `model` 为旧名称而非正整数模型 ID。日志位于 `logs/official-upgrade-compatibility.log`。没有跳过该校验，也没有冻结或进入 M3。
 
@@ -241,7 +241,7 @@ API、Worker 和 OCR Worker 仍停在维护状态，没有在不匹配的目录/
 
 完整字段清单 `structural-diagnostics.json` SHA256：`db4acf9d9da5242b41dd3deb11030226824d168a289d845f6eb7ed922394f747`。详情日志 `logs/tenant-diagnostic-preflight-details.log` 保留实际来源 key、slot、目标物理事实和异常，所有原检查仍抛出，没有诊断异常转为正式 ready。
 
-**当前停点**：Catalog198、授权模型发布7、write_fenced=false；本次正式 run 仍为0行，没有 M2冻结/M3转换/M4签证。空模型兼容补丁已持久挂载、原两条授权只读预检通过；API、Worker、OCR Worker 继续停止。42条旧模型配置清空请求等待用户决定，其余新增问题未获执行性处置结论，均保留原状。
+**第二版归档时的停点（12:29）**：Catalog198、授权模型发布7、write_fenced=false；本次正式 run 仍为0行，没有 M2冻结/M3转换/M4签证。空模型兼容补丁已持久挂载、原两条授权只读预检通过；API、Worker、OCR Worker 继续停止。42条旧模型配置清空请求等待用户决定，其余新增问题未获执行性处置结论，均保留原状。
 
 
 ### 剩余阻塞的只读全字段备份
@@ -251,3 +251,44 @@ API、Worker 和 OCR Worker 仍停在维护状态，没有在不匹配的目录/
 备份包括完整原行 JSON、实际表结构、带明确碰撞拒绝的 INSERT 恢复文本及 manifest/checksums。rows.json SHA256 为 `6acb02d0873917f4554022c238e8a66b93ca037cf80bd7a617d55432b9272a78`；持久服务器副本的4个文件校验通过。未执行恢复、未运行额外 tuple 清理，也不把这份限定 SQL 证据称为完整 OpenFGA Store 或环境恢复点。
 
 新增归档命名 `f118-20261111-v2.tar.gz`，同时包含原3,241行失效关联备份、42条旧模型配置备份、本节剩余证据、实际镜像原源码/兼容补丁/提交补丁/测试结果摘要及完整操作日志。原兼容前 `f118-20261111.tar.gz` 保持不可变。
+
+
+## 42 条模型配置获批后的执行与续检（2026-11-11 13:30 后）
+
+用户明确确认“备份后清空失效 model 配置并继续”。运行已准备脚本的显式 apply，事务内逐字核对 42 条 live 完整记录与原 `legacy-embedding/rows.json`，确认文件仍为0、本次尚无 frozen run 后，只将 model 设为 NULL，保留 update_time 及其他字段。实际修改42行，42个知识资源全部保留，无文件、Grant、Source、索引或对象存储删除/修改，也未选择替代 embedding。提交后再次查询确认42行均存在且 model=NULL。
+
+执行日志 `logs/legacy-embedding-apply.log`；授权及结果补记 `legacy-embedding/apply-result.json`。原备份 manifest 中 mutation_authorized=false 表示备份当时状态，原文件不改写；此次补充授权与 apply 由新结果文件单独记录。
+
+继续执行原 `_tenant` 全租户只读预检，24个租户通过诊断子步骤，tenant1/13/18/20/25/60仍受阻。此次不是重新启动耗时的正式全 Store 扫描，而是先利用相同原子步骤将剩余问题确认完整；不创建基线、不写 artifact、不冒充 M2 成功。
+
+### 新的实际阻塞：旧 ES/Milvus 结构
+
+tenant1 在 `PhysicalInventoryReader._index → _physical_batch` 报 `migration_inventory_incompatible_physical_identifiers`。进一步只读检查全部 **2,404** 个 type0/3资源，发现 **143 个资源**引用了不兼容旧索引，均属tenant1、SQL knowledgefile数均为0。此错误并非名称格式不符合要求，而是原索引缺少新检索/过滤合同要求的标识字段或其类型不兼容。
+
+实际去重后，涉及 **74 个 Milvus 集合、26 个 ES 索引**；其中 **70 个 Milvus 集合和15个ES索引含数据**。143个资源中有139个引用非空Milvus集合，同一集合可被多个库引用，不能把143理解为143个独立集合。样例：knowledge5 的 `col_1690604122_5de852ba` 有555行，knowledge9的 `col_1690795313_f3a03667` 有145行；schema字段为 source/text/pk/vector，缺少 document_id 和 knowledge_id。
+
+当前检查要求 Milvus 的 document_id/knowledge_id 为 INT32/INT64、text为VARCHAR；ES要求相应 metadata 字段为整数。没有将旧 schema 的兼容标志伪造为true。SQL无文件不能证明物理索引无数据；本轮**没有删除、清空、重建或写入任何旧索引**。
+
+证据：`physical-index-diagnostics.json` 保存原资源索引名、原schema/mapping、计数及摘要，SHA256 `9aad80140310572b3eca2bdc1902a2c03f74d2b0d6c871794e1182543273c5fb`；它是结构证据，不是向量内容备份。日志 `logs/physical-index-diagnostics.log`。
+
+### 文件层级与权限父边的进一步分类
+
+原112条异常文件中，**103条没有对应的 resource_permission_mode**，不能凭父库默认值伪造原文件权限意图。其余9条业务路径与SQL CURRENT父链一致，仅level不符；原FGA读取保留 `condition:null`。最初诊断的字典全等比较将该空字段视作差异，已在原始tuple不变的前提下规范化比较并保留旧诊断版本。
+
+规范化后的准确结果：**8条有额外FGA父边**（89564、93027、94277、96154、96207、96287、96301、97252），各有1条额外边且包含SQL所指向的正确边；**1条97402只有唯一且正确的父边**。没有直接删除那8条额外边，因为它们可能影响当前有效授权集合，需结合原移动态账和来源处理。
+
+对97402，仅纠正层级计数 `1→0`：knowledge_id=3377、file_level_path为空、SQL mode10193 parent为knowledge_space3377、原FGA唯一父边相同。完整原行与 `remaining-preflight/rows.json` 精确比对通过，事务内锁定文件和mode，再以 HIGHER_CONSISTENCY 重读FGA父边。更新后逐字段确认只有level改变，update_time保持。真实父位置、文件内容、Grant/Source、FGA均未变。日志 `logs/verified-depth-counter-repair.log`；这是从三份一致事实恢复计数，不是重新放置文件或授予权限。
+
+`file-hierarchy-plan.json` 保存112条原诊断分类，规范化版SHA256 `7a464bb65c9bcc185d12d67db9f52791ec8a616974a5609b51869fac4cc16a34`；旧版本单独保留。当前原112条异常中还剩111条未修复（103缺模式、8有父边漂移）。tenant25的问题仍在这8条范围内，不能将97402的修复称为tenant25已通过。
+
+### 已准备但未执行：143 个无 SQL 文件库的索引绑定切换
+
+可回退方案：只修改这143个库的 `index_name/collection_name`，切到逐库独立的新标识 `f118_k{knowledge_id}_20261111`；不在维护脚本中创建索引，不调用embedding，也不修改原ES/Milvus集合或其中任何数据。新标识既未被任何knowledge绑定，也已用原原生客户端确认不存在物理索引。后续有合法模型并上传文件时使用新的索引，原索引继续按旧名称保留。
+
+**可观察影响**：这143个库会解除与旧索引的绑定，之后不再通过这些库读取旧索引；SQL中的文件记录本来均为0。原绑定可按映射恢复，旧物理数据仍在。该变化超出用户刚批准的“只清空42条model”范围，**尚未切换**，需要用户决定是否采用；若要求原绑定也不变，则需另行制定旧结构转换/隔离兼容方案，不能忽略格式检查继续发布。
+
+已生成 `legacy-index-plan/`：143条knowledge全字段原行、实际schema、逐库旧/新索引映射、带新值前提的绑定恢复SQL、manifest及SHA256SUMS；服务器持久副本6个文件校验通过。rows.json SHA256 `4402a50bca728868ee4ee6187f64795b3ba35f3c039cd2004efa017bcb0e85f8`，plan.json SHA256 `7542fe5021f2738d64aecc270c92657a21ba2cbcb8cdcf223cbd5a98e8d0874b`。
+
+`bisheng116_legacy_index_plan.py --prepare` 未执行任何SQL或物理索引修改；实际切换入口需要独立显式参数，并将再次精确核对原行、确认143个库仍无文件、尚无frozen run及新名称不存在。该步骤只解决旧索引绑定阻塞，其他已记录的文件/授权/跨租户来源/孤儿元数据问题仍需处理，不能承诺切换后整套升级立即成功。
+
+用户随后询问“索引标识是什么意思？”，这不是切换授权。已解释为 knowledge.index_name / collection_name 对应的 ES 索引名和 Milvus 集合名，改变它们会改变知识库查询的数据位置；旧索引实体及数据保留，143库的新绑定方案继续保持未执行。
