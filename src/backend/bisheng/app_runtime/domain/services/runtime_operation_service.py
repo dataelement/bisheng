@@ -58,6 +58,24 @@ class RuntimeOperationService:
         self.app_loader = app_loader or self.repo.get_application
         self.clock = clock
 
+    def _recovery_retry_metadata(self, op, phase, detail):
+        context = op.payload.get("authorization_context") or {}
+        attempt = int(op.payload.get("recovery_attempt", 0))
+        if (
+            context.get("origin_kind") != "system_recovery"
+            or phase not in {"failed", "timed_out"}
+            or not detail.get("cleanup_complete")
+        ):
+            return {}
+        common = {"recovery_attempt": attempt, "recovery_budget": 3}
+        if attempt >= 3:
+            return {**common, "recovery_retry_status": "exhausted"}
+        return {
+            **common,
+            "recovery_retry_status": "scheduled",
+            "recovery_retry_at": (self.clock() + timedelta(seconds=15 * (2 ** max(0, attempt - 1)))).isoformat(),
+        }
+
     async def create(self, request):
         if {
             "sealed_env",
@@ -609,11 +627,18 @@ class RuntimeOperationService:
         routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True)
         route = routes[0] if routes else None
         before = RuntimeAuthorizationService.route_snapshot(route)
-        if op.payload.get("purpose") == "config_restart":
+        context = op.payload.get("authorization_context") or {}
+        inherits_maintenance = (context.get("retry") or {}).get("maintenance_inherited") is True
+        if inherits_maintenance:
+            before = await RuntimeProjectionService(self.repo).preserve_recovery_maintenance(op)
+        elif op.payload.get("purpose") == "config_restart":
             await RuntimeProjectionService(self.repo).verify_config_restart_origin(op)
-        await RuntimeProjectionService(self.repo).block(op.app_id, "maintenance")
-        routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True)
-        after = RuntimeAuthorizationService.route_snapshot(routes[0] if routes else None)
+        if inherits_maintenance:
+            after = before
+        else:
+            await RuntimeProjectionService(self.repo).block(op.app_id, "maintenance")
+            routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True)
+            after = RuntimeAuthorizationService.route_snapshot(routes[0] if routes else None)
         op.payload = {
             **op.payload,
             "maintenance_transition": {
@@ -785,6 +810,7 @@ class RuntimeOperationService:
                     if body.phase != "completed"
                     else {}
                 )
+                op.failure = {**op.failure, **self._recovery_retry_metadata(op, body.phase, body.detail)}
                 await self.repo.save(op)
                 if body.detail.get("stopped"):
                     await self.repo.release(op.id, stopped=True)
@@ -823,6 +849,51 @@ class RuntimeOperationService:
             operations = await self.repo.node_operations(identity.node_id)
             assignments = await self.repo.find(RuntimeAssignment, node_id=identity.node_id, limit=10000)
             active = {x.active_operation_id for x in assignments}
+            retried = False
+            for op in operations:
+                retry_at = (op.failure or {}).get("recovery_retry_at")
+                if (
+                    op.id not in active
+                    or op.status not in {"failed", "timed_out"}
+                    or op.cleanup_status != "complete"
+                    or (op.failure or {}).get("recovery_retry_status") != "scheduled"
+                    or not retry_at
+                ):
+                    continue
+                try:
+                    due = datetime.fromisoformat(retry_at)
+                except (TypeError, ValueError):
+                    continue
+                if due > self.clock():
+                    continue
+                app = await self.app_loader(op.app_id)
+                routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}")
+                if app is None or not routes:
+                    continue
+                try:
+                    with tenant_execution_scope(op.tenant_id):
+                        from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import (
+                            RuntimeDeliveryCoordinator,
+                        )
+
+                        await RuntimeDeliveryCoordinator(self.repo).recover(
+                            app,
+                            routes[0],
+                            running=False,
+                            retry_from=op,
+                        )
+                except Exception:
+                    # Retry dispatch is best-effort inside the manager's read loop;
+                    # the durable scheduled marker makes the next poll try again.
+                    from loguru import logger
+
+                    logger.exception("runtime recovery retry dispatch failed for operation {}", op.id)
+                    continue
+                retried = True
+            if retried:
+                operations = await self.repo.node_operations(identity.node_id)
+                assignments = await self.repo.find(RuntimeAssignment, node_id=identity.node_id, limit=10000)
+                active = {x.active_operation_id for x in assignments}
             result = []
             for op in operations:
                 if op.payload.get("environment_required") and not op.payload.get("sealed_env"):
