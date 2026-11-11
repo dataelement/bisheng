@@ -34,6 +34,9 @@ async def member_db(policy_db, monkeypatch):
             await session.exec(delete(UserRole).where(UserRole.user_id == 77, UserRole.role_id == 1))
             session.add(Role(id=7, role_name="Root custom", role_type="tenant", tenant_id=1))
             await session.commit()
+    from bisheng.user.domain.services.nickname_service import NicknameService
+
+    monkeypatch.setattr(NicknameService, "arecord_failure", AsyncMock())
     return policy_db
 
 

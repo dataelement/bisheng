@@ -33,7 +33,7 @@ import { disableUserApi,getUsersApi } from "../../../controllers/API/user";
 import { showApiError } from "../../../controllers/request";
 import UserRoleModal from "./UserRoleModal";
 
-import CreateUser from "./CreateUser";
+import { CreateUser } from "./CreateUser";
 
 function UsersFilter({ options, onChecked, nameKey, placeholder, onFilter }) {
     const [open, setOpen] = useState(false)
@@ -293,7 +293,7 @@ export default function Users(params) {
             />
         </div>
 
-        <CreateUser open={openCreate} onClose={(bool) => { setOpenCreate(bool); reload() }} onSave={reload} />
+        <CreateUser open={openCreate} onClose={setOpenCreate} onSave={reload} />
         <UserRoleModal user={currentUser} onClose={() => setCurrentUser(null)} onChange={handleRoleChange}></UserRoleModal>
         <UserPwdModal ref={userPwdModalRef} />
     </div>

@@ -64,14 +64,14 @@ it("shows a specific save failure and reports a successful edit as saved", async
     id: 7, name: "provider", type: "qwen", limit_flag: false, limit: 7,
     config: {}, models: [model],
   });
-  vi.mocked(updateLLmServer).mockRejectedValueOnce({ message: "服务提供方名称重复，请修改" });
+  vi.mocked(updateLLmServer).mockRejectedValueOnce({ message: "Provider name already exists; choose another name." });
   const onAfterSave = vi.fn();
   render(<ModelConfig id={7} onGetName={vi.fn()} onBack={vi.fn()} onReload={vi.fn()}
     onBerforSave={vi.fn(() => false)} onAfterSave={onAfterSave} />);
   await screen.findByDisplayValue("provider");
   fireEvent.click(screen.getByRole("button", { name: "model.save" }));
   await waitFor(() => expect(toastShow).toHaveBeenCalledWith({
-    type: "error", message: "服务提供方名称重复，请修改",
+    type: "error", message: "Provider name already exists; choose another name.",
   }));
   vi.mocked(updateLLmServer).mockResolvedValueOnce({} as Awaited<ReturnType<typeof updateLLmServer>>);
   fireEvent.click(screen.getByRole("button", { name: "model.save" }));

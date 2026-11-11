@@ -667,7 +667,7 @@
   },
   "src/controllers/API/user.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
+      "count": 11
     }
   },
   "src/controllers/API/workflow.ts": {
@@ -1839,16 +1839,6 @@
       "count": 2
     }
   },
-  "src/pages/DepartmentPage/components/DepartmentSettings.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/DepartmentPage/components/DepartmentTrafficControl.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
   "src/pages/DepartmentPage/components/MountTenantDialog.tsx": {
     "no-restricted-syntax": {
       "count": 16
@@ -2167,7 +2157,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1

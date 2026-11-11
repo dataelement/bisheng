@@ -369,11 +369,7 @@ class LinsightWorkbenchImpl:
                     if session_subject is not None or api_meta is not None:
                         raise ProjectInputError()
                     message_session = await ChatSessionService.create_owned_project_session(
-                        message_session,
-                        login_user,
-                        project_intent["project_id"],
-                        project_intent["request_id"],
-                        project_intent["payload"],
+                        message_session, login_user, project_intent["project_id"]
                     )
                 else:
                     message_session = await MessageSessionDao.async_insert_one(message_session)
@@ -1687,9 +1683,7 @@ class LinsightWorkbenchImpl:
             # touch the event loop.
             logger.warning("Task title generation cancelled (client likely disconnected); writing fallback title")
             try:
-                from bisheng.chat_session.domain.chat import ChatSessionService
-
-                ChatSessionService.update_generated_session_name_sync(chat_id, cls._fallback_title(question))
+                MessageSessionDao.update_session_name_sync(chat_id, cls._fallback_title(question))
             except Exception:
                 logger.exception("Failed to write fallback task title after cancellation")
             # Cancellation must keep propagating: swallowing GeneratorExit makes
@@ -1733,9 +1727,7 @@ class LinsightWorkbenchImpl:
         """Update session title"""
         session = await MessageSessionDao.async_get_one(chat_id)
         if session:
-            from bisheng.chat_session.domain.chat import ChatSessionService
-
-            await ChatSessionService.update_generated_session_name(chat_id, title)
+            await MessageSessionDao.update_session_name(chat_id, title)
 
     @classmethod
     async def get_linsight_session_version_list(cls, session_id: str) -> list[LinsightSessionVersion]:

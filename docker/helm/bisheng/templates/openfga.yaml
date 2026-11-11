@@ -1,0 +1,82 @@
+{{- if .Values.openfga.enabled -}}
+{{- $database := .Values.openfga.database -}}
+{{- $host := $database.host -}}
+{{- if not $host }}{{ $host = include "bisheng.host" (list . "mysql") }}{{ end -}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: {{ include "bisheng.component" (list . "openfga") }}}
+spec:
+  selector:
+    {{- include "bisheng.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: openfga
+  ports: [{name: http, port: {{ .Values.openfga.external.port }}, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: {{ include "bisheng.component" (list . "openfga") }}}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      {{- include "bisheng.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: openfga
+  template:
+    metadata:
+      labels:
+        {{- include "bisheng.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: openfga
+    spec:
+      automountServiceAccountToken: false
+{{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+{{- end }}
+      initContainers:
+        - name: wait-database
+          image: {{ include "bisheng.image" (list . .Values.backend.image) | quote }}
+          command: [python, scripts/initialize_mysql.py]
+          args: [--host, {{ $host | quote }}, --port, {{ $database.port | quote }}, --username, {{ $database.username | quote }}, --password-file, /run/database/password, --database, {{ $database.name | quote }}, --timeout, {{ .Values.bootstrap.timeoutSeconds | quote }}]
+          resources: {{ toYaml .Values.bootstrap.resources | nindent 12 }}
+          volumeMounts: [{name: database, mountPath: /run/database, readOnly: true}]
+        - name: datastore-migration
+          image: {{ include "bisheng.image" (list . .Values.openfga.image) | quote }}
+          command: [/openfga, migrate]
+          env:
+            - {name: OPENFGA_DATASTORE_ENGINE, value: mysql}
+            - name: OPENFGA_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "bisheng.authSecret" (list . "db-openfga" $database.auth) }}, key: {{ $database.auth.passwordKey }}}
+            - {name: OPENFGA_DATASTORE_URI, value: {{ printf "%s:$(OPENFGA_DATABASE_PASSWORD)@tcp(%s:%d)/%s?parseTime=true" $database.username $host (int $database.port) $database.name | quote }}}
+          resources: {{ toYaml .Values.openfga.resources | nindent 12 }}
+      containers:
+        - name: openfga
+          image: {{ include "bisheng.image" (list . .Values.openfga.image) | quote }}
+          command: [/openfga, run]
+          env:
+            - {name: OPENFGA_DATASTORE_ENGINE, value: mysql}
+            - name: OPENFGA_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "bisheng.authSecret" (list . "db-openfga" $database.auth) }}, key: {{ $database.auth.passwordKey }}}
+            - {name: OPENFGA_DATASTORE_URI, value: {{ printf "%s:$(OPENFGA_DATABASE_PASSWORD)@tcp(%s:%d)/%s?parseTime=true" $database.username $host (int $database.port) $database.name | quote }}}
+            - {name: OPENFGA_PLAYGROUND_ENABLED, value: 'false'}
+          ports: [{name: http, containerPort: 8080}]
+          resources: {{ toYaml .Values.openfga.resources | nindent 12 }}
+          startupProbe: {{ toYaml .Values.openfga.startupProbe | nindent 12 }}
+          readinessProbe: {{ toYaml .Values.openfga.readinessProbe | nindent 12 }}
+          livenessProbe: {{ toYaml .Values.openfga.livenessProbe | nindent 12 }}
+      volumes:
+        - name: database
+          secret:
+            secretName: {{ include "bisheng.authSecret" (list . "db-openfga" $database.auth) }}
+            items: [{key: {{ $database.auth.passwordKey }}, path: password}]
+{{- with .Values.openfga.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.openfga.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.openfga.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- end }}

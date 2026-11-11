@@ -29,6 +29,7 @@ from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+from bisheng.user.api.endpoints.profile import router as profile_router
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_CURRENT_SESSION, USER_PASSWORD_ERROR
 
@@ -43,6 +44,7 @@ from ..domain.services.user import UserService
 
 # build router
 router = APIRouter(prefix="", tags=["User"])
+router.include_router(profile_router)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -63,13 +65,17 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
     sync, tenant mapping, and source-aware binding stay consistent.
     """
     if settings.get_system_login_method().bisheng_pro:  # Judgingsso Open or not
+        from bisheng.user.domain.services.account_identity_service import AccountIdentityService
+
         account_name = user.user_name
-        user_exist = UserDao.get_unique_user_by_name(account_name)
+        user_exist = await AccountIdentityService.aresolve_deprecated_sso(user.external_id, account_name)
         if not user_exist:
             # Determine if there is a user under the platform
             user_all = UserDao.get_all_users(page=1, limit=1)
             # Automatically create users
             user_exist = User.model_validate(user)
+            user_exist.external_id = user.external_id if user.external_id is not None else account_name
+            user_exist.legacy_sso_name = account_name
             logger.info("act=create_user account={}", account_name)
             default_admin = settings.get_system_login_method().admin_username
             # Insert as Super Admin if there is no user on the platform or if the username matches the configured admin username
