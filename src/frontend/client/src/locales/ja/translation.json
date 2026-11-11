@@ -37,11 +37,7 @@
     "copyFailed": "コピーできませんでした。アカウントを選択してコピーしてください。"
   },
   "project_sync": {
-    "reason": { "cloud_membership_kept": "クラウドの所属を保持", "project_unavailable": "プロジェクトが利用できません", "conversation_unavailable": "会話は削除済み、または別アカウントに所属", "invalid_date": "作成日が無効です", "invalid_local_data": "ローカル記録が無効です", "unknown": "取り込まれませんでした" },
-    "connecting": "プロジェクト同期に接続中…",
-    "degraded": "保存済みです。同期が遅れています。",
-    "offline": "未同期です。再接続しています…",
-    "auth_required": "同期するには再度ログインしてください。",
+    "reason": { "not_owned": "このアカウントの会話が含まれないため取り込みませんでした", "cloud_membership_kept": "クラウドの所属を保持", "conversation_unavailable": "会話は削除済み、または別アカウントに所属", "invalid_local_data": "ローカル記録が無効です", "unknown": "取り込まれませんでした" },
     "loading": "読み込み中…",
     "more": "さらに読み込む",
     "save_failed": "保存できませんでした。入力を保持しています。再試行してください。",

@@ -60,11 +60,7 @@ async def submit_task_turn(
             from bisheng.common.errcode.chat import ProjectInputError
 
             raise ProjectInputError()
-        project_intent = {
-            "project_id": data.project_id,
-            "request_id": data.project_request_id,
-            "payload": data.project_creation_payload(),
-        }
+        project_intent = {"project_id": data.project_id}
     consumed = await _consume_task_invite(login_user.user_id)
     submit_obj = _to_linsight_submit(data)
     # Pass the original daily-shape files (filepath/type/file_id) so the user

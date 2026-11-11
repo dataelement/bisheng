@@ -37,11 +37,7 @@
     "copyFailed": "Could not copy. Select and copy the account manually."
   },
   "project_sync": {
-    "reason": { "cloud_membership_kept": "Cloud assignment kept", "project_unavailable": "Project unavailable", "conversation_unavailable": "Conversation deleted or owned by another account", "invalid_date": "Invalid creation date", "invalid_local_data": "Invalid local record", "unknown": "Item not imported" },
-    "connecting": "Connecting project sync…",
-    "degraded": "Projects saved. Sync is delayed.",
-    "offline": "Projects are not synced. Reconnecting…",
-    "auth_required": "Sign in again to sync projects.",
+    "reason": { "not_owned": "No conversation in this legacy project belongs to this account", "cloud_membership_kept": "Cloud assignment kept", "conversation_unavailable": "Conversation deleted or owned by another account", "invalid_local_data": "Invalid local record", "unknown": "Item not imported" },
     "loading": "Loading…",
     "more": "Load more",
     "save_failed": "Could not save the project. Your input is kept. Try again.",

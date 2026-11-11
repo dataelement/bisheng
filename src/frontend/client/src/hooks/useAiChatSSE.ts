@@ -123,8 +123,7 @@ export function openChatStream(
     const projectDraft = submission.projectDraft === undefined
         ? captureProjectChatDraft(payload.conversationId, submission.sseUrl)
         : submission.projectDraft;
-    const projectIntent = bindProjectChatCreation(projectDraft ?? undefined, payload);
-    const draftPath = projectDraft?.href ?? window.location.href;
+    const projectIntent = bindProjectChatCreation(projectDraft ?? undefined);
 
     // ---- Agent-mode accumulators ---------------------------------------
     const events: AgentEvent[] = [];
@@ -465,12 +464,6 @@ export function openChatStream(
             // back to legacy plain-text shapes, then a generic message.
             const resolved = translateApiErrorMessage(data);
             const code = typeof data?.status_code === "number" ? data.status_code : undefined;
-            if (code === 13018 && typeof data?.data?.chat_id === 'string' && /^[A-Za-z0-9_-]{1,255}$/.test(data.data.chat_id)) {
-                const currentDraft = captureProjectChatDraft(null, submission.sseUrl);
-                if (projectDraft && window.location.href === draftPath && currentDraft?.entryKey === projectDraft.entryKey) window.dispatchEvent(new CustomEvent('bisheng:project-conversation-recovered', { detail: { chatId: data.data.chat_id } }));
-                safeEnd();
-                return;
-            }
             // `data.data` carries the backend's classification alongside the
             // localized copy: without it the bubble could only ever say
             // "服务器错误" and the upstream reason (which file, which service,

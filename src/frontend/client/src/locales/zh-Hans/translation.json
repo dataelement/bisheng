@@ -37,11 +37,7 @@
     "copyFailed": "复制失败，请手动选中账号复制。"
   },
   "project_sync": {
-    "reason": { "cloud_membership_kept": "已保留云端归属", "project_unavailable": "项目已不可用", "conversation_unavailable": "对话已删除或不属于当前账号", "invalid_date": "创建日期无效", "invalid_local_data": "本机记录损坏或格式无效", "unknown": "此项未导入" },
-    "connecting": "正在连接项目同步…",
-    "degraded": "项目已保存，同步暂有延迟",
-    "offline": "项目尚未同步，正在重新连接",
-    "auth_required": "请重新登录以同步项目",
+    "reason": { "not_owned": "当前账号在旧项目中没有对话，未导入", "cloud_membership_kept": "已保留云端归属", "conversation_unavailable": "对话已删除或不属于当前账号", "invalid_local_data": "本机记录损坏或格式无效", "unknown": "此项未导入" },
     "loading": "正在加载…",
     "more": "加载更多",
     "save_failed": "项目未能保存，请重试。输入已保留。",

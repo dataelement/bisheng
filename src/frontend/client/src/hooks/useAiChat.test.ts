@@ -175,7 +175,7 @@ describe('project draft through the real SSE serializer', () => {
     act(() => { sending = result.current.sendMessage('From the first project', undefined, { taskMode }); });
     window.history.replaceState({ key: 'another-project' }, '', `/workspace/c/new?projectId=${otherProject}`);
     await act(async () => { grant({ leaseId: 'lease-one', blocked: false }); await sending; });
-    expect(mockTransportPayloads[0]).toMatchObject({ project_id: firstProject, project_request_id: expect.any(String), task_mode: taskMode });
+    expect(mockTransportPayloads[0]).toMatchObject({ project_id: firstProject, task_mode: taskMode });
   });
 
   it('does not adopt a later project when an ordinary draft waits for its lease', async () => {
@@ -189,10 +189,9 @@ describe('project draft through the real SSE serializer', () => {
     window.history.replaceState({ key: 'later-project' }, '', `/workspace/c/new?projectId=${otherProject}`);
     await act(async () => { grant({ leaseId: 'lease-two', blocked: false }); await sending; });
     expect(mockTransportPayloads[0].project_id).toBeUndefined();
-    expect(mockTransportPayloads[0].project_request_id).toBeUndefined();
   });
 
-  it.each([false, true])('reuses the first-message request id on a same-draft retry despite new UI message IDs, task mode=%s', async taskMode => {
+  it.each([false, true])('keeps the project on a same-draft retry, task mode=%s', async taskMode => {
     mockUseRealProjectTransport = true;
     window.history.replaceState({ key: 'draft-retry', usr: { newChatKey: 'same-intent' } }, '', `/workspace/c/new?projectId=${firstProject}`);
     const { result } = renderHook(() => useAiChat('new'));
@@ -200,7 +199,7 @@ describe('project draft through the real SSE serializer', () => {
     act(() => { latestStream().submission.onError('response lost'); latestStream().submission.onEnd(); });
     await act(async () => { await result.current.sendMessage('Retry this question', undefined, { taskMode }); });
     expect(mockTransportPayloads[0].messageId).not.toBe(mockTransportPayloads[1].messageId);
-    expect(mockTransportPayloads[0].project_request_id).toBe(mockTransportPayloads[1].project_request_id);
+    expect(mockTransportPayloads[1].project_id).toBe(firstProject);
   });
 });
 
