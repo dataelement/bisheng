@@ -14,10 +14,11 @@ import {
 
 import { useGetOrgToolPages } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
-import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 
+import { useVisibleKnowledgeSpaces } from "~/hooks/useVisibleKnowledgeSpaces";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
 import { SkillMenuEntries, SkillUploadHost } from "~/components/Skills/SkillMenuEntries";
 import { SkillMenuPanel } from "~/components/Skills/SkillMenuPanel";
@@ -118,26 +119,14 @@ export const ChatKnowledge = ({
   const [orgKeyword, setOrgKeyword] = useState("");
   const debouncedOrgKeyword = useDebounce(orgKeyword, 500);
 
-  // --- Knowledge space data (load all groups at once, no pagination) ---
   const [spaceKeyword, setSpaceKeyword] = useState("");
   const debouncedSpaceKeyword = useDebounce(spaceKeyword, 300);
-
-  // Spaces are only shown inside the open picker, so load them lazily on first
-  // open instead of eagerly on mount. The eager mount-fetch fired
-  // knowledge/space/{mine,joined} every time the input box re-mounted (e.g. the
-  // send-triggered welcome→messages layout flip), causing duplicate requests on send.
   const [rootOpen, setRootOpen] = useState(false);
-
-  // Grouped as 部门知识空间 / 我创建的 / 我加入的, matching the 知识空间 page.
-  // Empty groups (including "no search hit in this group") are dropped by the hook.
-  const { groups: spaceGroups, isFetching: spaceFetching } = useCategorizedKnowledgeSpaces({
+  const { spaces, isFetching: spaceFetching, isError: spaceError, retry: retrySpaces,
+    hasMore: hasMoreSpaces, loadMore: loadMoreSpaces } = useVisibleKnowledgeSpaces({
     enabled: rootOpen && variant === "knowledge",
     keyword: debouncedSpaceKeyword,
   });
-  const spaceListGroups = useMemo(
-    () => spaceGroups.map((group) => ({ key: group.key, label: group.label, items: group.spaces })),
-    [spaceGroups],
-  );
 
   // Comma-separated ids of admin-configured org KBs. Passed to the backend so
   // those ids are floated to the top of the global sort — otherwise a
@@ -448,12 +437,14 @@ export const ChatKnowledge = ({
                   placeholder={localize("com_chat_knowledge_placeholder_search_space")}
                   keyword={spaceKeyword}
                   setKeyword={setSpaceKeyword}
-                  groups={spaceListGroups}
+                  items={spaces}
                   selectedItems={selectedKnowledgeSpaces}
                   onToggle={(item) => handleToggle(item, "space")}
                   isFetching={spaceFetching}
-                  hasMore={false}
-                  onLoadMore={() => {}}
+                  hasMore={hasMoreSpaces}
+                  onLoadMore={loadMoreSpaces}
+                  isError={spaceError}
+                  onRetry={() => { void retrySpaces(); }}
                   emptyText={localize("com_chat_knowledge_empty_no_spaces")}
                 />
               </div>

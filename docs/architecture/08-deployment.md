@@ -37,9 +37,11 @@ bisheng-milvus-standalone
   └── depends_on: minio
 ```
 
-### 附加 Compose 文件
+### 可选服务
 
-除主编排文件外，项目还提供三个可选编排文件，按需独立启动：
+模型微调 `bisheng-ft` 已恢复为主编排文件的 `ft` profile（默认关闭），通过 `bash docker/install.sh --ft` 启用。沿用 `ft_server` 服务名、NVIDIA GPU 预留和旧版模型/训练输出挂载路径；配置及平台服务登记见 [部署说明](../../docker/README.md#模型微调-bisheng-ft可选)。
+
+附加 Compose 文件：
 
 | 文件 | 容器名 | 镜像 | 端口 | 用途 |
 |------|--------|------|------|------|
@@ -152,7 +154,6 @@ workflow:
 | `vector_stores` | `VectorStores` | Milvus + Elasticsearch 配置 |
 | `object_storage` | `ObjectStore` | MinIO 对象存储配置 |
 | `celery_task` | `CeleryConf` | Celery 任务路由和定时任务 |
-| `workflow_conf` | `WorkflowConf` | 工作流执行参数（max_steps=50, timeout=720min） |
 | `linsight_conf` | `LinsightConf` | 灵思 Agent 参数（max_steps=200, retry_num=3） |
 | `logger_conf` | `LoggerConf` | 日志级别与处理器 |
 | `password_conf` | `PasswordConf` | 密码策略（有效期、错误锁定） |
@@ -162,6 +163,33 @@ workflow:
 | `mcp` | `McpConf` | MCP 协议配置 |
 | `information_conf` | `IntelligenceCenterConf` | 情报中心配置 |
 | `open_api` | `OpenApiConf` | 开放 API：个人密钥开关、`public_base_url`（对外地址，见下节） |
+
+### 工作流参数的配置入口
+
+工作流参数只读取后台「系统配置」中的 `workflow`，不读取服务器 `config.yaml`。
+例如，在后台系统配置中设置：
+
+```yaml
+workflow:
+  max_steps: 20
+  timeout: 30
+```
+
+`max_steps` 是节点最大运行步数，`timeout` 是等待用户输入的超时时间，单位为分钟。
+新安装和升级补齐缺项使用 `initdb_config.yaml`，随包值为 `max_steps: 50`、`timeout: 5`；
+已经保存的系统配置不会被这些值覆盖。运行时如仍缺少字段，`WorkflowConf` 的类默认值
+（50 步、720 分钟）仅用于本次读取，不会写回系统配置。
+
+旧的 `config.yaml` 中若留有 `workflow_conf`，可以删除；保留时会记录未知字段警告并忽略，
+不会再校验该配置块，也不会影响工作流实际配置或阻止启动。
+
+### 配置文件的未知字段
+
+加载 `config.yaml` 时，未知顶层字段会输出启动警告 `Ignoring unknown top-level config key`，
+随后忽略该字段并继续启动。请根据日志移除旧字段或修正拼写；忽略不代表新功能已启用。
+警告仅包含字段名和文件路径，不输出配置值。合法字段仍执行原有类型校验；YAML 语法错误、
+缺少必需的环境变量或合法字段类型错误仍会报错，不会被当作未知字段跳过。
+本行为只适用于包含此次修复的版本，旧镜像仍可能因未知顶层字段而拒绝启动。
 
 ### 反向代理与对外地址
 

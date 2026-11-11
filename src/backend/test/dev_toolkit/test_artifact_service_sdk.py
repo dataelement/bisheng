@@ -91,3 +91,17 @@ def test_read_sdk_guide_is_none_when_the_pack_is_absent(monkeypatch, tmp_path):
     monkeypatch.setattr(artifact_service, "SKILLS_DIR", tmp_path / "no-skills")
 
     assert artifact_service.read_sdk_guide() is None
+
+
+def test_f113_sdk_history_rejects_traversal_and_tolerates_missing_history(staged_artifacts):
+    manifest_file = staged_artifacts / "manifest.json"
+    manifest = json.loads(manifest_file.read_text())
+    manifest["sdk_history"] = [
+        {"version": "old", "filename": "../bisheng_sdk-old-py3-none-any.whl", "sha256": "a" * 64}
+    ]
+    manifest_file.write_text(json.dumps(manifest))
+    assert artifact_service.read_snapshot().sdk_history == ()
+    manifest["sdk_history"] = None
+    manifest_file.write_text(json.dumps(manifest))
+    assert artifact_service.read_snapshot().sdk is not None
+    assert artifact_service.read_snapshot().sdk_history == ()

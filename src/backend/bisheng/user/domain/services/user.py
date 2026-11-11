@@ -315,11 +315,60 @@ class UserService:
         with tenant_execution_scope(1), strict_tenant_filter():
             home = await UserTenantSyncService.sync_user(user.user_id)
         await grant_policy_bindings(user.user_id, home.id, role_ids, operator_id=login_user.user_id)
+        from bisheng.api.services.audit_log import AuditLogService
+        from bisheng.utils import get_request_ip
+
+        AuditLogService.record(
+            operator_id=login_user.user_id,
+            operator_name=login_user.user_name,
+            system_id="system",
+            event_type="create_local_user",
+            object_type="user_conf",
+            object_id=str(user.user_id),
+            object_name=user.user_name,
+            ip_address=get_request_ip(request),
+            note="来源=系统管理；结果=成功",
+        )
         return user
 
     @staticmethod
     def get_error_password_key(user_id: int) -> str:
         return USER_PASSWORD_ERROR.format(int(user_id))
+
+    @classmethod
+    def _audit_login_failure(
+        cls, request, *, account: str, reason: str, user_id: int = 0, source: str = "密码登录"
+    ) -> None:
+        from bisheng.api.services.audit_log import AuditLogService
+        from bisheng.utils import get_request_ip
+
+        AuditLogService.record(
+            operator_id=user_id,
+            operator_name=account if user_id else "system",
+            system_id="system",
+            event_type="user_login",
+            object_type="none",
+            object_name=account,
+            ip_address=get_request_ip(request),
+            note=f"结果=失败；原因={reason}；来源={source}",
+        )
+
+    @classmethod
+    def _audit_auto_forbid(cls, request, db_user) -> None:
+        from bisheng.api.services.audit_log import AuditLogService
+        from bisheng.utils import get_request_ip
+
+        AuditLogService.record(
+            operator_id=0,
+            operator_name="system",
+            system_id="system",
+            event_type="forbid_user",
+            object_type="user_conf",
+            object_id=str(db_user.user_id),
+            object_name=db_user.user_name,
+            ip_address=get_request_ip(request),
+            note="触发=系统；原因=连续密码错误；结果=成功",
+        )
 
     @classmethod
     async def clear_error_password_key(cls, user_id: int):
@@ -550,6 +599,7 @@ class UserService:
 
         if await settings.aget_from_db("use_captcha"):
             if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
+                cls._audit_login_failure(request, account=user.user_name, reason="验证码错误")
                 raise CaptchaError()
 
         # Accept names or external_id; check each matching account when names repeat.
@@ -557,7 +607,9 @@ class UserService:
         if not candidates:
             # Disabled users are excluded from candidates; report the disabled account separately.
             if await UserDao.aexists_disabled_login_account(user.user_name):
+                cls._audit_login_failure(request, account=user.user_name, reason="账号已停用")
                 return UserForbiddenError.return_resp()
+            cls._audit_login_failure(request, account=user.user_name, reason="账号不存在")
             return UserValidateError.return_resp()
 
         password = cls.decrypt_md5_password(user.password)
@@ -570,13 +622,23 @@ class UserService:
                 db_user = c
                 break
             except UserPasswordExpireError:
+                cls._audit_login_failure(request, account=c.user_name, reason="密码已过期", user_id=c.user_id)
                 raise
             except UserPasswordMaxTryError:
+                cls._audit_login_failure(request, account=c.user_name, reason="连续密码错误", user_id=c.user_id)
+                cls._audit_auto_forbid(request, c)
                 raise
             except UserValidateError:
                 # Try the next account with the same name when the password does not match.
                 continue
         if not db_user:
+            only = candidates[0] if len(candidates) == 1 else None
+            cls._audit_login_failure(
+                request,
+                account=only.user_name if only else user.user_name,
+                reason="密码错误",
+                user_id=only.user_id if only else 0,
+            )
             return UserValidateError.return_resp()
 
         await cls.clear_error_password_key(db_user.user_id)
@@ -616,6 +678,9 @@ class UserService:
                             mount_dept.mounted_tenant_id,
                         )
                         if mount_tenant is not None and mount_tenant.status == "disabled":
+                            cls._audit_login_failure(
+                                request, account=db_user.user_name, reason="租户已禁用", user_id=db_user.user_id
+                            )
                             raise TenantDisabledError()
 
             user_tenants = await UserTenantDao.aget_user_tenants_with_details(db_user.user_id)
@@ -637,6 +702,9 @@ class UserService:
                     user_tenants = await UserTenantDao.aget_user_tenants_with_details(db_user.user_id)
                     active_tenants = [t for t in user_tenants if t.get("status") == "active"]
                 if len(active_tenants) == 0:
+                    cls._audit_login_failure(
+                        request, account=db_user.user_name, reason="没有可用租户", user_id=db_user.user_id
+                    )
                     raise NoTenantsAvailableError()
             elif len(active_tenants) == 1:
                 tenant_id = active_tenants[0]["tenant_id"]
@@ -687,6 +755,7 @@ class UserService:
             db_user, role_ids=login_role_ids, is_department_admin=login_is_department_admin
         )
         if no_role_resp is not None:
+            cls._audit_login_failure(request, account=db_user.user_name, reason="没有可用权限", user_id=db_user.user_id)
             return no_role_resp
 
         # Block login when the resolved leaf tenant is disabled/archived.
@@ -701,12 +770,18 @@ class UserService:
             with bypass_tenant_filter():
                 tenant_obj = await TenantDao.aget_by_id(tenant_id)
             if not tenant_obj or tenant_obj.status != "active":
+                cls._audit_login_failure(
+                    request, account=db_user.user_name, reason="租户已禁用", user_id=db_user.user_id
+                )
                 raise TenantDisabledError()
             try:
                 from bisheng.tenant.domain.services.tenant_service import DISABLED_TENANT_KEY
 
                 redis_client = await get_redis_client()
                 if await redis_client.aget(DISABLED_TENANT_KEY.format(tenant_id)):
+                    cls._audit_login_failure(
+                        request, account=db_user.user_name, reason="租户已禁用", user_id=db_user.user_id
+                    )
                     raise TenantDisabledError()
             except TenantDisabledError:
                 raise

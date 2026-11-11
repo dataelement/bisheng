@@ -1,11 +1,11 @@
 # Feature: 管理租户一致性与策略角色生效
 
-**优先级**：P0  
-**所属版本**：v3.1.0-beta1 / F009  
-**状态**：正式规格已确认；2026-11-10 用户明确回复“确认规格，继续设计”。40条AC为后续设计和实现的验收依据。  
-**最新范围状态**：2026-11-10 用户确认“采用最小修复范围，继续开发”。[已确认范围调整](scope-revision.md)与[最小修复设计](design.md)共同限定本批；40条AC正文保留为原完整需求。本批为28条纳入、11条部分交付、AC-33延期，实施及验证状态见tasks/verification。  
-**关联需求**：[修复方案](../../../docs/reviews/managed-tenant-fix-plan-20261110.md)、[业务边界](../../../docs/reviews/managed-tenant-boundary-assessment-20261110.md)、[本轮评审](../../../docs/reviews/managed-tenant-plan-review-20261110.md)。  
-**依赖**：既有租户身份与管理视角、组织成员、策略角色和菜单、F048 资源权限、审批与 DSH 当前生效策略、资源创建/复制能力。  
+**优先级**：P0\
+**所属版本**：v3.1.0-beta1 / F009\
+**状态**：正式规格已确认；2026-11-10 用户明确回复“确认规格，继续设计”。40条AC为后续设计和实现的验收依据。\
+**最新范围状态**：2026-11-10 用户确认“采用最小修复范围，继续开发”。[已确认范围调整](scope-revision.md)与[最小修复设计](design.md)共同限定本批；40条AC正文保留为原完整需求。本批为28条纳入、11条部分交付、AC-33延期，实施及验证状态见tasks/verification。\
+**关联需求**：[修复方案](../../../docs/reviews/managed-tenant-fix-plan-20261110.md)、[业务边界](../../../docs/reviews/managed-tenant-boundary-assessment-20261110.md)、[本轮评审](../../../docs/reviews/managed-tenant-plan-review-20261110.md)。\
+**依赖**：既有租户身份与管理视角、组织成员、策略角色和菜单、F048 资源权限、审批与 DSH 当前生效策略、资源创建/复制能力。\
 **版本约束**：[release-contract.md](../release-contract.md)、[架构宪法](../../../docs/constitution.md)。
 
 ## 1. 目标与范围

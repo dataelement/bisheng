@@ -118,6 +118,12 @@ describe("model discovery interaction", () => {
     [{ kind: "network" }, "model.discoveryError_connection"],
     [{ code: "ECONNABORTED" }, "model.discoveryError_timeout"],
     [{ kind: "timeout" }, "model.discoveryError_timeout"],
+    [{ message: "Network Error" }, "model.discoveryError_connection"],
+    [{ message: "timeout of 60000ms exceeded" }, "model.discoveryError_timeout"],
+    [{ httpStatus: 0 }, "model.discoveryError_connection"],
+    [{ response: { status: 504 } }, "model.discoveryError_timeout"],
+    [{ data: { reason: "failure" }, kind: "timeout" }, "model.discoveryError_timeout"],
+    [{ cause: { code: "ERR_NETWORK" } }, "model.discoveryError_connection"],
   ] as const)("maps a browser transport failure %j to %s", async (failure, message) => {
     vi.mocked(discoverModels).mockRejectedValue(failure);
     render(<ModelDiscovery {...props()} />);

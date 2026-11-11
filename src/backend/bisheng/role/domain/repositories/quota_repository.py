@@ -26,7 +26,7 @@ def usage_statement(resource_type: str, tenant_id: int, user_id: int | None = No
     from bisheng.database.models.flow import Flow
     from bisheng.database.models.tenant import UserTenant
     from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
-    from bisheng.knowledge.domain.models.knowledge import Knowledge
+    from bisheng.knowledge.domain.models.knowledge import Knowledge, _personal_space_quota_count_predicate
     from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
     from bisheng.llm.domain.models.llm_token_log import LLMTokenLog
     from bisheng.tool.domain.models.gpts_tools import GptsTools
@@ -48,6 +48,7 @@ def usage_statement(resource_type: str, tenant_id: int, user_id: int | None = No
     elif resource_type == "knowledge_space":
         model, conditions = Knowledge, [Knowledge.type == 3]
         if user_id is not None:
+            conditions.append(_personal_space_quota_count_predicate())
             conditions.append(
                 ~select(DepartmentKnowledgeSpace.id).where(DepartmentKnowledgeSpace.space_id == Knowledge.id).exists()
             )

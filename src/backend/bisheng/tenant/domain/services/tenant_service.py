@@ -82,6 +82,14 @@ def _safe_tenant_dump(tenant: Tenant) -> dict:
 class TenantService:
     """Stateless service for tenant lifecycle management."""
 
+    _creation_factory = None
+
+    @classmethod
+    def configure_creation(cls, factory):
+        if not callable(factory):
+            raise TypeError("tenant creation application factory required")
+        cls._creation_factory = staticmethod(factory)
+
     # ── Tenant CRUD ────────────────────────────────────────────
 
     @classmethod
@@ -105,24 +113,9 @@ class TenantService:
                 quota_config=data.quota_config,
                 create_user=login_user.user_id,
             )
-            with bypass_tenant_filter():
-                tenant = await TenantDao.acreate_tenant(tenant)
-
-            # Step 2: Create root department
-            from bisheng.department.domain.services.department_service import DepartmentService
-
-            await DepartmentService.acreate_root_department(
-                tenant_id=tenant.id,
-                name=data.tenant_name,
-            )
-
-            # Step 3: Create UserTenant for each admin
-            for uid in data.admin_user_ids:
-                await UserTenantDao.aadd_user_to_tenant(
-                    user_id=uid,
-                    tenant_id=tenant.id,
-                    is_default=0,
-                )
+            if cls._creation_factory is None:
+                raise TenantCreationFailedError()
+            tenant = await cls._creation_factory(tenant=tenant, admin_user_ids=tuple(data.admin_user_ids))
 
             # Step 4: apply tenant permissions after DB commit.
             await cls._apply_tenant_permissions(
@@ -796,7 +789,7 @@ class TenantService:
 
         Sequential per-user permission checks (the pre-fix shape)
         hung the edit-tenant dialog on Root: each check went through the
-        full permission pipeline (~2.5–3s) and 100 UserTenant rows pushed
+        full permission pipeline (~2.5-3s) and 100 UserTenant rows pushed
         the response past the 120s frontend timeout. batch_check folds
         them into one permission round-trip while preserving the semantic — the
         authorization model still resolves super_admin → admin, so Root
@@ -809,7 +802,7 @@ class TenantService:
             [u["user_id"] for u in users],
             tenant_id,
         )
-        return [u for u, ok in zip(users, flags) if ok]
+        return [u for u, ok in zip(users, flags, strict=False) if ok]
 
     @classmethod
     async def _is_tenant_admin(cls, user_id: int, tenant_id: int) -> bool:

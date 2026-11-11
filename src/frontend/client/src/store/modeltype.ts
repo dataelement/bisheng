@@ -22,6 +22,8 @@ export type SelectedAgentTool = {
   name: string;
   description?: string;
   children: SelectedAgentToolChild[];
+  /** Preselected by the admin default; selected but kept out of the composer text. */
+  auto?: boolean;
 };
 
 const searchType = atom<string>({

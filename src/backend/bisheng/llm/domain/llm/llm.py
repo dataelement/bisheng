@@ -21,6 +21,7 @@ from bisheng.common.errcode.server import (
     LlmProviderDeletedError,
     NoLlmModelConfigError,
 )
+from bisheng.common.services.failure_context import failure_boundary
 from bisheng.core.ai import (
     AzureChatOpenAI,
     ChatAnthropic,
@@ -458,6 +459,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     @wrapper_bisheng_model_limit_check
     @account_sync
+    @failure_boundary("model_service", "llm", "invoke_model")
     def _generate(
         self,
         messages: list[BaseMessage],
@@ -483,6 +485,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     @wrapper_bisheng_model_limit_check_async
     @account_async
+    @failure_boundary("model_service", "llm", "invoke_model")
     async def _agenerate(
         self,
         messages: list[BaseMessage],
@@ -524,6 +527,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     @wrapper_bisheng_model_generator
     @account_sync_stream
+    @failure_boundary("model_service", "llm", "invoke_model")
     def _stream(
         self,
         messages: list[BaseMessage],
@@ -540,6 +544,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     @wrapper_bisheng_model_generator_async
     @account_async_stream
+    @failure_boundary("model_service", "llm", "invoke_model")
     async def _astream(
         self,
         messages: list[BaseMessage],

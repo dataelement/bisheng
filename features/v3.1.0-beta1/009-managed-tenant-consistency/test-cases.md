@@ -3,7 +3,7 @@
 ## 依据与范围
 
 - 原spec与2026-11-10已确认scope-revision共同定义预期；design同日获用户确认。
-- 目标v3.1.0-beta1 / codex/3.1.0-beta1/managed-tenant-bugfix，工作树实现已完成，尚无部署构建；源码核对基线24c02859e2582ed319281bb52285c99930daf81c。
+- 目标v3.1.0-beta1 / codex/3.1.0-beta1/managed-tenant-bugfix，已集成fetch后的发布线df927a7f6e，尚无部署构建；源码核对基线24c02859e2582ed319281bb52285c99930daf81c。
 - 覆盖本批28条纳入与11条部分结果；AC-33及各部分条目的全恢复保证不在本批验收。
 - 此文件是QA参考，不作为开发任务输入或自动测试执行结果。
 

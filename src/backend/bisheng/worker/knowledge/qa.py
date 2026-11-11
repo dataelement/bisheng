@@ -1,22 +1,24 @@
-from typing import List
-
 from loguru import logger
 from pymilvus import Collection
 
 from bisheng.api.services.knowledge_imp import QA_save_knowledge
-from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
+from bisheng.common.errcode.knowledge import KnowledgeFileFailedError, KnowledgeUnificationError
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnoweldgeDao,
     QAKnowledge,
     QAKnowledgeUpsert,
     QAStatus,
 )
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.llm.domain import LLMService
+from bisheng.worker.knowledge.rebuild_knowledge_worker import (
+    _delete_rebuild_vectors,
+    _finalize_rebuild,
+    _rebuild_rag_scope,
+    _require_current_rebuild,
+)
 from bisheng.worker.main import bisheng_celery
 
 
@@ -74,7 +76,7 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
             batch_size = 100
             for page in range((qa_count + batch_size - 1) // batch_size):
                 page += 1
-                qa_list: List[QAKnowledge] = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_id(
+                qa_list: list[QAKnowledge] = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_id(
                     knowledge_id=source_knowledge_id, page=page, page_size=batch_size
                 )
                 result = []
@@ -151,25 +153,30 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
 
 
 @bisheng_celery.task
-def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: int, invoke_user_id: int):
-    """
-     RebuildQAThe knowledge base upon,Vector Storage
-    :param knowledge_id:
-    :param embedding_model_id:
-    :param invoke_user_id:
-    :return:
-    """
+def rebuild_qa_knowledge_celery(
+    knowledge_id: int,
+    embedding_model_id: int | None,
+    invoke_user_id: int,
+    *,
+    operation_id: str | None = None,
+    expected_model_config_revision: int | None = None,
+    expected_index_generation: str | None = None,
+):
+    """Rebuild QA from the actual pending model and finalize SQL/R2 together."""
     trace_id_var.set(f"rebuild_qa_knowledge_{knowledge_id}")
-    knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
     try:
-        if not knowledge_info:
-            logger.error(f"Knowledge with id {knowledge_id} not found.")
-            return
+        command = {
+            "operation_id": operation_id,
+            "expected_model_config_revision": expected_model_config_revision,
+            "expected_index_generation": expected_index_generation,
+        }
+        knowledge_info, _ = _require_current_rebuild(knowledge_id, embedding_model_id, **command)
+        scope = _rebuild_rag_scope(**command)
 
         # DeletemilvusCorresponding data in
-        KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge_info, del_es=False)
+        _delete_rebuild_vectors(knowledge_info, invoke_user_id, **command)
 
-        es_db = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge_info)
+        es_db = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge_info, **scope)
 
         # InquiryesAll data in Delete
         es_result = es_db.client.search(
@@ -182,18 +189,12 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: int, invo
 
         if total <= 0:
             logger.info(f"No documents to delete in Elasticsearch for knowledge id {knowledge_id}.")
-            knowledge_info.state = KnowledgeState.PUBLISHED.value
+            _finalize_rebuild(knowledge_id, **command)
             return
 
-        embeddings = LLMService.get_bisheng_knowledge_embedding_sync(
-            model_id=embedding_model_id, invoke_user_id=invoke_user_id
-        )
-
         milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-            invoke_user_id=invoke_user_id, knowledge=knowledge_info, embeddings=embeddings
+            invoke_user_id=invoke_user_id, knowledge=knowledge_info, **scope
         )
-
-        knowledge_info.state = KnowledgeState.PUBLISHED.value
 
         # Batched RebuildQAThe knowledge base upon Start from the first page
         batch_size = 100
@@ -232,28 +233,19 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: int, invo
                 QAKnoweldgeDao.batch_update_status_by_ids(qa_ids=file_ids, status=QAStatus.ENABLED)
 
                 logger.info(f"Rebuilt batch {page} of QA knowledge into Milvus for knowledge id {knowledge_id}.")
+            except KnowledgeUnificationError:
+                raise
             except Exception as e:
-                logger.error(f"Error rebuilding batch {page} of QA knowledge: {e}")
+                logger.exception(f"Error rebuilding batch {page} of QA knowledge: {e}")
 
                 QAKnoweldgeDao.batch_update_status_by_ids(
                     qa_ids=file_ids, status=QAStatus.FAILED, remark=KnowledgeFileFailedError(exception=e).to_json_str()
                 )
 
-                knowledge_info.state = KnowledgeState.FAILED.value
-
+        _finalize_rebuild(knowledge_id, **command)
         logger.info(f"Finished rebuilding QA knowledge for knowledge id {knowledge_id}.")
     except Exception as e:
-        logger.error(f"Error rebuilding QA knowledge for knowledge id {knowledge_id}: {e}")
-        # DeletemilvusCorresponding data in
-        KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge_info, del_es=False)
-
-        knowledge_info.state = KnowledgeState.FAILED.value
-        QAKnoweldgeDao.update_status_by_knowledge_id(
-            knowledge_id=knowledge_id,
-            status=QAStatus.FAILED,
-            remark=KnowledgeFileFailedError(exception=e).to_json_str(),
-        )
-
-    finally:
-        if knowledge_info:
-            KnowledgeDao.update_one(knowledge_info)
+        logger.exception(f"Error rebuilding QA knowledge for knowledge id {knowledge_id}: {e}")
+        # Global/guard failures leave the business transition unfinished;
+        # only a successful finalization may publish and remove its old slot.
+        raise

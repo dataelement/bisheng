@@ -1,11 +1,11 @@
 # Design: 管理租户一致性与策略角色生效
 
-**关联**：[已确认 spec.md](spec.md) · [版本契约](../release-contract.md)  
-**版本**：v3.1.0-beta1 / F009  
-**基线**：`codex/3.1.0-beta1/managed-tenant-bugfix`，`24c02859e2582ed319281bb52285c99930daf81c`。  
-**状态**：技术设计已评审（SDD LGTM、独立架构复核PROCEED），待用户确认；本文件描述基线现状和拟实现目标，不表示已修改业务代码。  
-**规格确认**：2026-11-10 用户回复“确认规格，继续设计”。  
-**最后更新**：2026-11-10。  
+**关联**：[已确认 spec.md](spec.md) · [版本契约](../release-contract.md)\
+**版本**：v3.1.0-beta1 / F009\
+**基线**：`codex/3.1.0-beta1/managed-tenant-bugfix`，`24c02859e2582ed319281bb52285c99930daf81c`。\
+**状态**：技术设计已评审（SDD LGTM、独立架构复核PROCEED），待用户确认；本文件描述基线现状和拟实现目标，不表示已修改业务代码。\
+**规格确认**：2026-11-10 用户回复“确认规格，继续设计”。\
+**最后更新**：2026-11-10。\
 **评审**：[SDD结果](design-review.md) · [检查依据](design-review-evidence.md) · [独立首轮](design-architecture-critique.md) · [独立复核](design-architecture-critique-v2.md)。
 
 ## 1. 目标与非目标

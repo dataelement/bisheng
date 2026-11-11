@@ -215,9 +215,14 @@ async def test_api_runtime_injects_facade_into_business_loaders(
         "dashboard",
         "linsight_skill",
     ):
-        loader = initialized.adapters[resource_type]._loader
-        assert loader._versions is facade
-        assert loader._versions is not state
+        adapter = initialized.adapters[resource_type]
+        if resource_type == "linsight_skill":
+            assert adapter.runtime is facade
+            assert adapter.runtime is not state
+        else:
+            loader = adapter._loader
+            assert loader._versions is facade
+            assert loader._versions is not state
 
 
 def test_api_lifespan_does_not_run_f048_data_or_relation_backfill() -> None:

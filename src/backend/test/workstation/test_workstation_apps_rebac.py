@@ -159,7 +159,7 @@ async def test_used_apps_filter_with_visible_before_pagination():
     assert [item["id"] for item in result.data["list"]] == ["wf-1"]
 
 
-async def test_pin_used_app_requires_use_action():
+async def test_pin_used_app_requires_visible_action():
     login_user = _LoginUser()
     app_info = {"id": "wf-1", "flow_type": FlowType.WORKFLOW.value, "status": FlowStatus.ONLINE.value}
     check_action = AsyncMock(return_value=True)
@@ -191,7 +191,7 @@ async def test_pin_used_app_requires_use_action():
         login_user,
         resource_type="workflow",
         resource_id="wf-1",
-        action="use",
+        action="visible",
     )
     add_user_link.assert_called_once()
 

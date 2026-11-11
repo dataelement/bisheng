@@ -52,6 +52,19 @@ async def test_global_super_is_unrestricted(identity):
     assert await AuditDeptScopeService.resolve(_user(global_super=True), None) == AuditDeptScope.unlimited()
 
 
+async def test_rbac_super_tenant_admin_stays_on_the_department_tree(identity, monkeypatch):
+    """AdminRole stamps is_admin and is_global_super; the live relation still crops."""
+    identity.tenant_admin = True
+
+    async def _roots(tenant_scope):
+        assert tenant_scope == 1
+        return ["/1/"]
+
+    monkeypatch.setattr(module.AuditDeptRepository, "root_paths", _roots)
+    user = _user(admin=True, global_super=True)
+    assert await AuditDeptScopeService.resolve(user, 1) == AuditDeptScope.restricted(admin_paths=["/1/"])
+
+
 async def test_tenant_admin_is_limited_to_the_tenant_department_tree(identity, monkeypatch):
     identity.tenant_admin = True
     identity.admin_departments = [_dept(2, "/1/2/")]

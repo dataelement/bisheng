@@ -3,14 +3,28 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from bisheng.knowledge.domain.services import knowledge_file_visibility_service as module
 from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
     KnowledgeFileVisibilityService,
 )
 
 
+@pytest.fixture(autouse=True)
+def idle_root(monkeypatch):
+    monkeypatch.setattr(
+        module.KnowledgeDao,
+        "aquery_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=10, tenant_id=1, type=3, state=1, model_transition=None)),
+    )
+
+
 def _service(*, threshold: int) -> KnowledgeFileVisibilityService:
     service = KnowledgeFileVisibilityService(request=None, login_user=MagicMock())
     service._config = MagicMock(return_value=SimpleNamespace(index_filter_threshold=threshold))
+    # SQL status is a separate boundary; real status cases live in T657.
+    service._successful_file_ids = AsyncMock(side_effect=lambda _space_id, file_ids=None: set(file_ids or ()))
     return service
 
 

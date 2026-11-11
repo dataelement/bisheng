@@ -41,6 +41,14 @@ class SubscribeChannelRequest(BaseModel):
     channel_id: str = Field(..., description="Channel ID")
 
 
+class KnowledgeSyncReferenceState(BaseModel):
+    slot_key: str
+    target_type: str
+    target_id: str
+    state: str
+    is_valid: bool
+
+
 class KnowledgeSyncSpaceItem(BaseModel):
     """One knowledge-space / folder binding inside the sync config."""
 
@@ -48,6 +56,9 @@ class KnowledgeSyncSpaceItem(BaseModel):
     knowledge_space_name: str | None = Field(None, description="Knowledge Space display name")
     folder_id: str | None = Field(None, description="Target folder ID; NULL = space root")
     folder_path: str | None = Field(None, description="Full folder display path, parent/child/target")
+    reference_states: list[KnowledgeSyncReferenceState] | None = Field(
+        None, description="Read-only reference state; None means no inspection was performed"
+    )
 
 
 class KnowledgeSyncMainConfig(BaseModel):

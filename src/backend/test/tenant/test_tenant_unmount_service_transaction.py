@@ -21,6 +21,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def binding_cleanup_ports(monkeypatch):
+    from bisheng.user.application import policy_bindings
+
+    monkeypatch.setattr(policy_bindings, "affected_policy_users", AsyncMock(return_value=[]))
+    monkeypatch.setattr(policy_bindings, "retire_invalid_policy_bindings", AsyncMock())
+    monkeypatch.setattr(
+        "bisheng.tenant.domain.services.tenant_mount_service._safe_sync_subtree",
+        AsyncMock(return_value={"synced": [], "failed": []}),
+    )
+
+
 def _make_operator():
     op = MagicMock()
     op.is_global_super = True
@@ -34,15 +46,15 @@ def _make_dept(dept_id: int = 4, tenant_id: int = 21):
     dept.parent_id = 1
     dept.is_tenant_root = 1
     dept.mounted_tenant_id = tenant_id
-    dept.path = '/root/科技发展部'
+    dept.path = "/root/科技发展部"
     return dept
 
 
-def _make_tenant(tenant_id: int = 21, code: str = 'keji'):
+def _make_tenant(tenant_id: int = 21, code: str = "keji"):
     tenant = MagicMock()
     tenant.id = tenant_id
     tenant.tenant_code = code
-    tenant.tenant_name = '科技发展部'
+    tenant.tenant_name = "科技发展部"
     return tenant
 
 
@@ -60,8 +72,8 @@ def test_archived_tenant_code_appends_unix_timestamp():
         archived_tenant_code,
     )
 
-    out = archived_tenant_code('keji')
-    assert out.startswith(f'keji{ARCHIVED_CODE_SEPARATOR}')
+    out = archived_tenant_code("keji")
+    assert out.startswith(f"keji{ARCHIVED_CODE_SEPARATOR}")
     # tail is a positive int (unix ts)
     suffix = out.split(ARCHIVED_CODE_SEPARATOR, 1)[1]
     assert suffix.isdigit() and int(suffix) > 0
@@ -74,7 +86,7 @@ def test_archived_tenant_code_is_idempotent():
         archived_tenant_code,
     )
 
-    once = archived_tenant_code('keji')
+    once = archived_tenant_code("keji")
     twice = archived_tenant_code(once)
     assert once == twice
 
@@ -85,11 +97,11 @@ def test_display_tenant_code_strips_archive_suffix():
         display_tenant_code,
     )
 
-    assert display_tenant_code('keji') == 'keji'  # active, untouched
-    archived = archived_tenant_code('keji')
-    assert display_tenant_code(archived) == 'keji'
+    assert display_tenant_code("keji") == "keji"  # active, untouched
+    archived = archived_tenant_code("keji")
+    assert display_tenant_code(archived) == "keji"
     # Empty / None input must not crash
-    assert display_tenant_code('') == ''
+    assert display_tenant_code("") == ""
 
 
 # ── Service-layer transaction tests ────────────────────────────────
@@ -106,15 +118,16 @@ async def test_unmount_child_archives_code_and_single_commit():
     session.commit = AsyncMock()
 
     dept = _make_dept(dept_id=4, tenant_id=21)
-    tenant = _make_tenant(tenant_id=21, code='keji')
+    tenant = _make_tenant(tenant_id=21, code="keji")
 
-    with patch.object(svc_mod.DepartmentDao, 'aget_by_id', new=AsyncMock(return_value=dept)), \
-         patch.object(svc_mod.TenantDao, 'aget_by_id', new=AsyncMock(return_value=tenant)), \
-         patch.object(svc_mod.TenantMountService, '_migrate_child_resources_to_root', new=AsyncMock(return_value={})), \
-         patch.object(svc_mod, 'get_async_db_session', return_value=_yield_session(session)), \
-         patch.object(svc_mod.TenantMountService, '_on_child_unmounted', new=AsyncMock()), \
-         patch.object(svc_mod, '_safe_audit', new=AsyncMock()):
-
+    with (
+        patch.object(svc_mod.DepartmentDao, "aget_by_id", new=AsyncMock(return_value=dept)),
+        patch.object(svc_mod.TenantDao, "aget_by_id", new=AsyncMock(return_value=tenant)),
+        patch.object(svc_mod.TenantMountService, "_migrate_child_resources_to_root", new=AsyncMock(return_value={})),
+        patch.object(svc_mod, "get_async_db_session", return_value=_yield_session(session)),
+        patch.object(svc_mod.TenantMountService, "_on_child_unmounted", new=AsyncMock()),
+        patch.object(svc_mod, "_safe_audit", new=AsyncMock()),
+    ):
         await svc_mod.TenantMountService.unmount_child(
             dept_id=4,
             operator=_make_operator(),
@@ -124,8 +137,8 @@ async def test_unmount_child_archives_code_and_single_commit():
     assert session.execute.await_count == 2
     first_stmt = str(session.execute.await_args_list[0].args[0]).lower()
     second_stmt = str(session.execute.await_args_list[1].args[0]).lower()
-    assert 'tenant' in first_stmt and 'update' in first_stmt
-    assert 'department' in second_stmt and 'update' in second_stmt
+    assert "tenant" in first_stmt and "update" in first_stmt
+    assert "department" in second_stmt and "update" in second_stmt
 
     # ★ Single commit covers both writes.
     assert session.commit.await_count == 1
@@ -140,20 +153,21 @@ async def test_unmount_child_rolls_back_when_dept_unset_fails():
 
     session = MagicMock()
     # First UPDATE (tenant archive) succeeds; second (dept unset) blows up.
-    session.execute = AsyncMock(side_effect=[None, RuntimeError('dept unset boom')])
+    session.execute = AsyncMock(side_effect=[None, RuntimeError("dept unset boom")])
     session.commit = AsyncMock()
 
     dept = _make_dept(dept_id=4, tenant_id=21)
-    tenant = _make_tenant(tenant_id=21, code='keji')
+    tenant = _make_tenant(tenant_id=21, code="keji")
 
-    with patch.object(svc_mod.DepartmentDao, 'aget_by_id', new=AsyncMock(return_value=dept)), \
-         patch.object(svc_mod.TenantDao, 'aget_by_id', new=AsyncMock(return_value=tenant)), \
-         patch.object(svc_mod.TenantMountService, '_migrate_child_resources_to_root', new=AsyncMock(return_value={})), \
-         patch.object(svc_mod, 'get_async_db_session', return_value=_yield_session(session)), \
-         patch.object(svc_mod.TenantMountService, '_on_child_unmounted', new=AsyncMock()), \
-         patch.object(svc_mod, '_safe_audit', new=AsyncMock()):
-
-        with pytest.raises(RuntimeError, match='dept unset boom'):
+    with (
+        patch.object(svc_mod.DepartmentDao, "aget_by_id", new=AsyncMock(return_value=dept)),
+        patch.object(svc_mod.TenantDao, "aget_by_id", new=AsyncMock(return_value=tenant)),
+        patch.object(svc_mod.TenantMountService, "_migrate_child_resources_to_root", new=AsyncMock(return_value={})),
+        patch.object(svc_mod, "get_async_db_session", return_value=_yield_session(session)),
+        patch.object(svc_mod.TenantMountService, "_on_child_unmounted", new=AsyncMock()),
+        patch.object(svc_mod, "_safe_audit", new=AsyncMock()),
+    ):
+        with pytest.raises(RuntimeError, match="dept unset boom"):
             await svc_mod.TenantMountService.unmount_child(
                 dept_id=4,
                 operator=_make_operator(),

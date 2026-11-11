@@ -1,4 +1,4 @@
-"""Standalone recovery appearance, matching the existing BiSheng state page.
+"""Shared entry-page appearance, matching the existing BiSheng recovery page.
 
 The inline SVG is a snapshot of the shared SystemErrorIllustration artwork at
 src/frontend/packages/ui/src/components/Illustration/SystemErrorIllustration.tsx.
@@ -39,6 +39,7 @@ STYLE = """
   --illus-300: 106 161 255;
   --illus-500: 22 93 255;
   --illus-face: 255 255 255;
+  --brand-500: 22 93 255;
 }
 * { box-sizing: border-box; }
 body {
@@ -53,6 +54,14 @@ body {
 .mark svg { display: block; width: 100%; height: 100%; }
 h1 { margin: 0 0 4px; font-size: 16px; line-height: 24px; font-weight: 500; }
 p { margin: 0; color: rgb(var(--text-3)); overflow-wrap: anywhere; }
+.actions { margin-top: 16px; }
+a.button {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 32px; padding: 4px 16px; border-radius: 6px;
+  background: rgb(var(--brand-500)); color: #fff;
+  font-size: 14px; line-height: 22px; text-decoration: none;
+}
+a.button:focus-visible { outline: 2px solid rgb(var(--brand-500)); outline-offset: 2px; }
 .hint {
   margin-top: 32px; padding-top: 16px; border-top: 1px solid rgb(var(--border-base));
   font-size: 12px; line-height: 20px; overflow-wrap: anywhere;

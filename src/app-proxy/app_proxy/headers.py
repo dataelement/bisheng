@@ -106,7 +106,7 @@ def _filter_cookie(value: str, session_cookie_name: str) -> str:
         if not pair:
             continue
         name = pair.split("=", 1)[0].strip()
-        if name == session_cookie_name:
+        if name == session_cookie_name or name.startswith("bisheng_app_session_"):
             continue
         kept.append(pair)
     return "; ".join(kept)

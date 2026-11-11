@@ -238,6 +238,28 @@ const legacyActions = [
     { name: 'log.eventTypeEnum.set_primary_version', value: 'set_primary_version' },
     { name: 'log.eventTypeEnum.delete_file_version', value: 'delete_file_version' },
     { name: 'log.eventTypeEnum.dismiss_similar_file', value: 'dismiss_similar_file' },
+    { name: 'log.eventTypeEnum.download_file', value: 'download_file' },
+    { name: 'log.eventTypeEnum.export_qa', value: 'export_qa' },
+    { name: 'log.eventTypeEnum.create_qa', value: 'create_qa' },
+    { name: 'log.eventTypeEnum.update_qa', value: 'update_qa' },
+    { name: 'log.eventTypeEnum.delete_qa', value: 'delete_qa' },
+    { name: 'log.eventTypeEnum.enable_qa', value: 'enable_qa' },
+    { name: 'log.eventTypeEnum.disable_qa', value: 'disable_qa' },
+    { name: 'log.eventTypeEnum.create_local_user', value: 'create_local_user' },
+    { name: 'log.eventTypeEnum.reset_user_password', value: 'reset_user_password' },
+    { name: 'log.eventTypeEnum.change_own_password', value: 'change_own_password' },
+    { name: 'log.eventTypeEnum.update_dept_admin', value: 'update_dept_admin' },
+    { name: 'log.eventTypeEnum.update_dept_default_role', value: 'update_dept_default_role' },
+    { name: 'log.eventTypeEnum.update_sensitive_policy', value: 'update_sensitive_policy' },
+    { name: 'log.eventTypeEnum.move_department', value: 'move_department' },
+    { name: 'log.eventTypeEnum.change_member_dept', value: 'change_member_dept' },
+    { name: 'log.eventTypeEnum.grant_resource', value: 'grant_resource' },
+    { name: 'log.eventTypeEnum.revoke_resource', value: 'revoke_resource' },
+    { name: 'log.eventTypeEnum.update_resource_mode', value: 'update_resource_mode' },
+    { name: 'log.eventTypeEnum.personal_skill_create', value: 'personal_skill_create' },
+    { name: 'log.eventTypeEnum.personal_skill_status', value: 'personal_skill_status' },
+    { name: 'log.eventTypeEnum.personal_skill_delete', value: 'personal_skill_delete' },
+    { name: 'log.eventTypeEnum.personal_skill_overwrite', value: 'personal_skill_overwrite' },
 ];
 
 /**
@@ -250,24 +272,30 @@ const LEGACY_MODULE_ACTIONS: Record<string, string[]> = {
     chat: ['create_chat', 'delete_chat'],
     build: ['create_build', 'update_build', 'delete_build'],
     knowledge: [
-        'create_knowledge', 'delete_knowledge', 'upload_file', 'delete_file',
+        'create_knowledge', 'delete_knowledge', 'upload_file', 'delete_file', 'download_file',
         'link_file_version', 'set_primary_version', 'delete_file_version', 'dismiss_similar_file',
+        'export_qa', 'create_qa', 'update_qa', 'delete_qa', 'enable_qa', 'disable_qa',
     ],
     system: [
         'update_user', 'forbid_user', 'recover_user',
         'create_user_group', 'delete_user_group', 'update_user_group',
         'create_role', 'delete_role', 'update_role', 'user_login',
         'add_tool', 'update_tool', 'delete_tool', 'update_sandbox_conf',
+        'create_local_user', 'reset_user_password', 'change_own_password',
+        'update_dept_admin', 'update_dept_default_role', 'update_sensitive_policy',
+        'move_department', 'change_member_dept',
+        'grant_resource', 'revoke_resource', 'update_resource_mode',
+        'personal_skill_create', 'personal_skill_status', 'personal_skill_delete', 'personal_skill_overwrite',
     ],
     dashboard: ['create_dashboard', 'update_dashboard', 'delete_dashboard'],
     subscription: ['create_channel', 'delete_channel'],
-    knowledge_space: ['create_knowledge_space', 'delete_knowledge_space'],
+    knowledge_space: ['create_knowledge_space', 'delete_knowledge_space', 'upload_file', 'delete_file', 'download_file'],
 }
 
 // Synthetic v2 modules own every structured action under their prefix.
 const V2_MODULE_PREFIX: Record<string, string> = {
     tenant: 'tenant.',
-    llm: 'llm.server.',
+    llm: 'llm.',
     approval: 'approval.',
     open_api: 'open_api.',
     app: 'app.',
@@ -376,6 +404,14 @@ export const V2_ACTIONS: string[] = [
     'app.secret.set',
     'app.secret.delete',
     'app.secret.rebuild',
+    'open_api.pat.create',
+    'open_api.pat.regenerate',
+    'open_api.pat.revoke',
+    'open_api.pat.delete',
+    'open_api.pat.revoke_holder',
+    'open_api.pat.tenant_migrate',
+    'open_api.pat.settings.update',
+    'llm.system_config.update',
 ];
 
 const actions = [

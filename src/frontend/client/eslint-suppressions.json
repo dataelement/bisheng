@@ -232,9 +232,6 @@
     "no-restricted-imports": {
       "count": 1
     },
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -359,9 +356,6 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 6
     },
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -442,11 +436,6 @@
   "src/components/Chat/Menus/Presets/PresetItems.tsx": {
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/components/Chat/MessageSelection/ExportSelectionButton.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/components/Chat/Messages/Content/ActionIcon.tsx": {
@@ -645,9 +634,6 @@
   "src/components/Chat/Messages/ThinkingContent.tsx": {
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/components/Chat/Messages/ToolCallDisplay.tsx": {
@@ -789,11 +775,6 @@
       "count": 3
     }
   },
-  "src/components/InfiniteScroll.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "src/components/Input/ModelSelect/PluginsByIndex.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -924,7 +905,7 @@
   },
   "src/components/Linsight/Input/KnowledgeSpaceSelect.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 8
+      "count": 5
     }
   },
   "src/components/Linsight/Input/ModelSelector.tsx": {
@@ -1689,9 +1670,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/hooks/Input/useAutoSave.ts": {
@@ -1775,9 +1753,6 @@
       "count": 1
     },
     "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -2074,11 +2049,6 @@
       "count": 1
     }
   },
-  "src/pages/ChannelSquareCard.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "src/pages/DevLogin/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -2180,16 +2150,10 @@
   "src/pages/Subscription/CreateChannel/FilterConditionEditor.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/pages/Subscription/CreateChannel/SyncSpaceItem.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -2294,9 +2258,6 @@
   "src/pages/appChat/components/AppInfoCard.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
     }
   },
   "src/pages/appChat/components/AppSidebarConvoItem.tsx": {
@@ -2304,9 +2265,6 @@
       "count": 3
     },
     "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -2622,11 +2580,6 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/hooks/useFileDragDrop.ts": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "src/pages/knowledge/hooks/useFileManager.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
@@ -2668,16 +2621,6 @@
   },
   "src/pages/knowledge/selectionStore.ts": {
     "no-restricted-imports": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/sidebar/KnowledgeSpaceCardItem.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/sidebar/KnowledgeSpaceItem.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
       "count": 1
     }
   },
@@ -2757,11 +2700,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
-    }
-  },
-  "src/routes/ShareAppRedirect.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/routes/index.tsx": {

@@ -207,7 +207,7 @@
     "skills": "Build",
     "createApp": "Create app",
     "createKnowledge": "Create knowledge base",
-    "knowledge": "Knowledge",
+    "knowledge": "Knowledge spaces",
     "evaluation": "Evaluation",
     "board": "Dashboard",
     "workbenchHome": "Home",
@@ -855,7 +855,7 @@
     "tts": "Text-to-Speech (TTS)",
     "updateSuccess": "Update Success",
     "voiceType": "Voice Type",
-    "voiceTypeRequired": "Voice type is a required field",
+    "voiceTypeRequired": "Voice type cannot be empty",
     "voiceTypeTooltip": "Select the voice type for text-to-speech synthesis",
     "webSearch": "Built-in model web search",
     "visitOfficialWebsiteToViewAvailableModels": "Visit the official website to view available models",
@@ -1585,7 +1585,37 @@
       "link_file_version": "Link file version",
       "set_primary_version": "Set primary file version",
       "delete_file_version": "Delete file history version",
-      "dismiss_similar_file": "Dismiss similar file suggestion"
+      "dismiss_similar_file": "Dismiss similar file suggestion",
+      "download_file": "Request knowledge file download",
+      "export_qa": "Export QA entries",
+      "create_qa": "Add QA entry",
+      "update_qa": "Edit QA entry",
+      "delete_qa": "Delete QA entry",
+      "enable_qa": "Enable QA entry",
+      "disable_qa": "Disable QA entry",
+      "create_local_user": "Administrator creates a local account",
+      "reset_user_password": "Administrator resets a user password",
+      "change_own_password": "User changes own password",
+      "update_dept_admin": "Adjust department administrators",
+      "update_dept_default_role": "Change department default roles",
+      "update_sensitive_policy": "Change sensitive-word review policy",
+      "move_department": "Move department",
+      "change_member_dept": "Change member department",
+      "grant_resource": "Grant resource access",
+      "revoke_resource": "Revoke resource access",
+      "update_resource_mode": "Change resource permission mode",
+      "personal_skill_create": "Create or import a personal skill",
+      "personal_skill_status": "Enable or disable a personal skill",
+      "personal_skill_delete": "Delete a personal skill",
+      "personal_skill_overwrite": "Overwrite a personal skill",
+      "openApiPatCreate": "Create personal token",
+      "openApiPatRegenerate": "Regenerate personal token",
+      "openApiPatRevoke": "Revoke personal token by id",
+      "openApiPatDelete": "User deletes own personal token",
+      "openApiPatRevokeHolder": "Revoke personal tokens by holder",
+      "openApiPatTenantMigrate": "Revoke personal token when the account changes tenant",
+      "openApiPatSettingsUpdate": "Change personal-token tenant policy",
+      "llmSystemConfigUpdate": "Change default and system model configuration"
     },
     "objectTypeEnum": {
       "app": "Application",
@@ -1605,6 +1635,7 @@
       "workstation": "Workbench (Daily Mode)",
       "channel": "Channel",
       "knowledge_space": "Knowledge Space",
+      "department": "Department",
       "tenant": "Tenant",
       "llm_server": "Model Provider",
       "approval_instance": "Approval Instance",
@@ -1894,6 +1925,7 @@
     },
     "usageType": {
       "label": "Usage type",
+      "all": "All",
       "daily": "Daily chat",
       "assistant": "Assistant session",
       "workflow": "Workflow session",
@@ -3486,6 +3518,26 @@
       "group_order": "Ordered by first indexing time",
       "group_last": "Latest request",
       "group_count": "{{count}} saved requests",
+      "group_like": "Like",
+      "group_dislike": "Dislike",
+      "group_likes": "Likes {{count}}",
+      "group_dislikes": "Dislikes {{count}}",
+      "feedback_heading": "Message feedback",
+      "feedback": {
+        "rating": {
+          "positive": "Like",
+          "negative": "Dislike"
+        },
+        "category": {
+          "task-result": "Task result",
+          "instruction-following": "Instruction following",
+          "product-interaction": "Product interaction",
+          "service-stability": "Service stability",
+          "resource-cost": "Resource and cost",
+          "security-privacy-permission": "Security, privacy, and permission",
+          "other": "Other"
+        }
+      },
       "group_abnormal": "{{count}} abnormal",
       "group_scope": "Only matching requests are shown. Group totals and status cover all indexed requests and may lag.",
       "group_all": "View all saved requests",
@@ -4440,5 +4492,14 @@
       "admin": "Administrators",
       "children": "Includes subdepartments"
     }
+  },
+  "references": {
+    "saved": "Saved reference",
+    "unavailable": "Currently unavailable",
+    "unconfirmed": "Some saved IDs are not in the current choices. Their availability cannot be confirmed here; the saved IDs are retained.",
+    "partialRepair": "You can save partial repairs. All references must be valid before running or publishing.",
+    "invalid_deleted": "Deleted",
+    "invalid_legacy": "Missing historical reference",
+    "deleting": "Deletion in progress"
   }
 }

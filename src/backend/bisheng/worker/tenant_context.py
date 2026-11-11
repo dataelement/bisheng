@@ -9,8 +9,14 @@ This module is imported by ``worker/main.py`` to trigger signal registration.
 
 from contextvars import ContextVar
 
+from celery import current_task
 from celery.signals import before_task_publish, task_postrun, task_prerun
 
+from bisheng.core.context.background_execution import (
+    bind_background_task,
+    clear_background_task,
+    reset_background_task,
+)
 from bisheng.core.context.tenant import (
     DEFAULT_TENANT_ID,
     current_tenant_id,
@@ -103,6 +109,30 @@ def restore_tenant_context(sender=None, **kwargs):
         _parse_tenant_id(tenant_id) if _is_copy_task(sender) else None
     )
     request._bisheng_tenant_context_token = token
+    task_id = getattr(request, "id", None)
+
+    # Celery's task stack is thread-local, while async work uses the existing
+    # persistent loop. Validate the actual executor at issuance, then retain
+    # this request's lifecycle state across copied ContextVars until postrun.
+    live = {"active": True}
+    request._bisheng_background_task_live = live
+
+    def is_current():
+        return live["active"] and request.id == task_id and getattr(request, "called_directly", True) is False
+
+    active = current_task._get_current_object()
+    if (
+        tenant_id is not None
+        and isinstance(task_id, str)
+        and task_id
+        and active is sender
+        and active.request is request
+        and is_current()
+    ):
+        proof = bind_background_task(_parse_tenant_id(tenant_id), task_id, _task_name(sender), is_current=is_current)
+    else:
+        proof = clear_background_task()
+    request._bisheng_background_task_token = proof
 
 
 def reset_tenant_context(sender=None, **kwargs):
@@ -121,6 +151,16 @@ def reset_tenant_context(sender=None, **kwargs):
             request._bisheng_copy_context_token = None
     else:
         trusted_copy_tenant.set(None)
+    live = getattr(request, "_bisheng_background_task_live", None)
+    if live is not None:
+        live["active"] = False
+        request._bisheng_background_task_live = None
+    proof = getattr(request, "_bisheng_background_task_token", None)
+    if proof is not None:
+        reset_background_task(proof)
+        request._bisheng_background_task_token = None
+    else:
+        clear_background_task()
     token = getattr(request, "_bisheng_tenant_context_token", None)
     if token is not None:
         try:

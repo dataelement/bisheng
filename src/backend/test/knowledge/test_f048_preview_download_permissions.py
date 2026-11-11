@@ -113,7 +113,7 @@ async def test_visible_or_preview_never_substitutes_for_download() -> None:
 
 
 @pytest.mark.asyncio
-async def test_rag_uses_library_use_and_fga_failures_propagate() -> None:
+async def test_rag_uses_library_visibility_and_fga_failures_propagate() -> None:
     files = _Adapter()
     libraries = _Adapter()
     port = KnowledgeFileDeliveryAuthorizationPort(
@@ -122,7 +122,7 @@ async def test_rag_uses_library_use_and_fga_failures_propagate() -> None:
     )
 
     await port.require_rag_use(library_id="71", actor=_actor())
-    assert libraries.calls[0]["action"] == "use"
+    assert libraries.calls[0]["action"] == "visible"
 
     files.error = PermissionFGAUnavailableError()
     with pytest.raises(PermissionFGAUnavailableError):

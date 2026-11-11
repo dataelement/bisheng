@@ -91,7 +91,7 @@ def _actor(tenant_id: int = 5) -> PermissionActor:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "action",
-    ("visible", "use", "edit", "delete", "manage_permission"),
+    ("visible", "edit", "delete", "manage_permission"),
 )
 async def test_custom_tool_uses_exact_action(action) -> None:
     record = _record()
@@ -157,7 +157,7 @@ async def test_preset_tool_create_projects_read_only_system_actions() -> None:
     await adapter.authorize_created(record=preset, actor=_actor())
 
     system = permission.calls[0][1]
-    assert system["action_codes"] == ("use", "visible")
+    assert system["action_codes"] == ("visible",)
     assert "owner_user_id" not in system
 
 
@@ -172,7 +172,7 @@ async def test_preset_tool_allows_creator_and_keeps_read_only_actions() -> None:
     assert await adapter.check_action(
         resource_id="10",
         actor=_actor(),
-        action="use",
+        action="visible",
     )
     with pytest.raises(InvalidCatalogActionError):
         await adapter.check_action(
@@ -189,7 +189,7 @@ async def test_preset_tool_allows_creator_and_keeps_read_only_actions() -> None:
     assert await adapter.check_action(
         resource_id="10",
         actor=_actor(),
-        action="use",
+        action="visible",
     )
     with pytest.raises(InvalidCatalogActionError):
         await adapter.resolve_permission_target(resource_id="10", actor=_actor(), action="edit")
@@ -208,7 +208,7 @@ async def test_fga_failure_does_not_fallback_to_legacy_tool_service() -> None:
         await adapter.check_action(
             resource_id="10",
             actor=_actor(),
-            action="use",
+            action="visible",
         )
     assert len(permission.calls) == 1
 

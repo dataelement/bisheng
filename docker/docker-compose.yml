@@ -15,6 +15,41 @@ x-runtime-platform-env: &runtime-platform-env
   BISHENG_RUNTIME_SERVICE_KEYS: '{"manager-node-1":{"secret":"${BISHENG_RUNTIME_MANAGER_SECRET:-}","node_id":"${BISHENG_RUNTIME_NODE_ID:-docker-node-1}","roles":["manager"]},"egress-node-1":{"secret":"${BISHENG_RUNTIME_EGRESS_SECRET:-}","node_id":"${BISHENG_RUNTIME_NODE_ID:-docker-node-1}","roles":["egress"]},"host-isolation-node-1":{"secret":"${BISHENG_RUNTIME_HOST_ISOLATION_SECRET:-}","node_id":"${BISHENG_RUNTIME_NODE_ID:-docker-node-1}","roles":["host-isolation"]},"entry-reader":{"secret":"${BISHENG_RUNTIME_ENTRY_SECRET:-}","roles":["entry"]}}'
 
 services:
+  ft_server:
+    profiles: [ft]
+    container_name: bisheng-ft-server
+    # Optional GPU service; keep the base stack usable without FT settings.
+    image: ${BISHENG_FT_IMAGE:-cr.dataelem.com/dataelement/bisheng-ft:v0.5.0}
+    shm_size: "4g"
+    ports:
+      - "${BISHENG_FT_PORT:-8000}:8000"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng-ft/config.yaml:/opt/bisheng-ft/sft_server/config.yaml:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/llm:/opt/bisheng-ft/models/model_repository
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/finetune_output:/opt/bisheng-ft/finetune_output
+    security_opt:
+      - seccomp:unconfined
+    command: bash start-sft-server.sh
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      start_period: 30s
+      interval: 90s
+      timeout: 30s
+      retries: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
   gateway-db-init:
     profiles: [gateway]
     image: ${MYSQL_IMAGE:?set MYSQL_IMAGE in docker/.env (see .env.example)}

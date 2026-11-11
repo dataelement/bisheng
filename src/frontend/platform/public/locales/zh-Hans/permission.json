@@ -211,7 +211,8 @@
     "inheritedFrom": "继承自",
     "parentFolder": "上级文件夹",
     "parentKnowledgeSpace": "上级知识空间",
-    "parentResource": "上级资源"
+    "parentResource": "上级资源",
+    "visibility_only": "仅可见，不包含内容操作"
   },
   "scope": {
     "local": "本级",

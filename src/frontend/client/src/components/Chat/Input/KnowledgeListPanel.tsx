@@ -4,14 +4,12 @@
  *
  * Two shapes:
  *  - flat (`items`)  — organization knowledge bases, server-paginated;
- *  - grouped (`groups`) — knowledge spaces, split into 部门知识空间 / 我创建的 /
- *    我加入的. Callers drop empty groups before passing them in, so a group
- *    title never renders without rows underneath it.
+ *  - grouped (`groups`) — optional titled sections.
  */
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenuItem } from "~/components/ui";
-import { Checkbox } from '@bisheng/ui';
+import { Button, Checkbox } from '@bisheng/ui';
 import { SearchInput, StateView } from "@bisheng/ui";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { cn } from "~/utils";
@@ -43,6 +41,8 @@ interface KnowledgeListPanelProps {
   hasMore: boolean;
   onLoadMore: () => void;
   emptyText: string;
+  isError?: boolean;
+  onRetry?: () => void;
   /** Hold the list at its unfiltered height while a keyword is active, so a
    *  centre-aligned panel doesn't jump as results shrink. Opt-in: only the
    *  panels that are vertically centred on their trigger need it. */
@@ -61,6 +61,8 @@ export const KnowledgeListPanel = ({
   hasMore,
   onLoadMore,
   emptyText,
+  isError = false,
+  onRetry,
   freezeHeightOnFilter = false,
 }: KnowledgeListPanelProps) => {
   const localize = useLocalize();
@@ -207,12 +209,19 @@ export const KnowledgeListPanel = ({
             </div>
           ))}
 
+          {isError && <div role="alert" className="flex flex-col gap-2 text-body-sm text-text-3">
+            <span>{localize("dshChat.knowledgeLoadError")}</span>
+            <Button color="default" variant="outlined" onClick={onRetry}>{localize("dshChat.retryKnowledge")}</Button>
+          </div>}
+          {hasMore && !isError && <Button color="default" variant="outlined" loading={isFetching} onClick={onLoadMore}>
+            {localize("dshChat.loadMoreKnowledge")}
+          </Button>}
           {isFetching && (
             <div className="flex justify-center py-3">
               <Loader2 size={16} className="animate-spin text-slate-300" />
             </div>
           )}
-          {!isFetching && totalCount === 0 && (
+          {!isFetching && !isError && !hasMore && totalCount === 0 && (
             // Inline tier (组件-State状态页.md §3): a selector with no options
             // gets one centered line and no artwork. Fills the scroll viewport
             // so the copy sits in the panel's middle rather than stranded under

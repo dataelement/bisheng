@@ -178,3 +178,42 @@ async def test_sso_subtree_move_updates_descendants_and_retires_secondary_suppor
         async with binding_db.sessions() as session:
             assert (await session.get(Department, 32)).path == "/10/40/31/32/"
             assert not (await session.exec(select(UserRole).where(UserRole.user_id == 77, UserRole.role_id == 9))).all()
+
+
+async def test_mounted_tenant_factory_retires_bindings_in_its_coverage_transaction(binding_db, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from bisheng.database.models.tenant import Tenant
+    from bisheng.tenant.application import tenant_creation
+
+    monkeypatch.setattr(tenant_creation, "get_async_db_session", binding_db.sessions)
+    monkeypatch.setattr(
+        tenant_creation,
+        "UnificationCoverageRepository",
+        Mock(return_value=SimpleNamespace(aallocate_epoch=AsyncMock(return_value=2))),
+    )
+    monkeypatch.setattr(
+        tenant_creation,
+        "production_coverage_factory",
+        Mock(
+            return_value=SimpleNamespace(
+                arequire_global_ready=AsyncMock(
+                    return_value=SimpleNamespace(verified_tenant_ids=(1, 2, 3), coverage_epoch=1)
+                )
+            )
+        ),
+    )
+    certify = AsyncMock()
+    monkeypatch.setattr(tenant_creation, "_certify_created_tenant", certify)
+    with bypass_tenant_filter():
+        tenant = await tenant_creation.create_mounted_tenant_with_coverage(
+            tenant=Tenant(tenant_code="new-mount", tenant_name="New", parent_tenant_id=2, root_dept_id=30),
+            department_id=30,
+            department_tenant_id=1,
+        )
+        async with binding_db.sessions() as session:
+            assert (await session.get(Department, 30)).mounted_tenant_id == tenant.id
+            bindings = (await session.exec(select(UserRole).where(UserRole.user_id == 77))).all()
+            assert {(row.role_id, row.tenant_id) for row in bindings} == {(1, 1)}
+    certify.assert_awaited_once()

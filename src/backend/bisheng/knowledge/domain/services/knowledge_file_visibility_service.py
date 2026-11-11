@@ -14,13 +14,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from fastapi import Request
-from sqlmodel import select
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.errcode.permission import InvalidCatalogActionError
 from bisheng.core.config.settings import KnowledgeQAFilterConf
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
+from bisheng.knowledge.domain.repositories.retrieval_file_repository import KnowledgeRetrievalFileRepository
+from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.permission.application.access import get_f048_resource_adapter
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
@@ -151,6 +153,7 @@ class KnowledgeFileVisibilityService:
             candidates &= {int(x) for x in candidate_file_ids}
 
         scoped = await self._batch_visible_file_ids(space_id, candidates)
+        await self._require_retrieval_processing_idle(space_id, has_visible_files=bool(scoped))
 
         if not scoped:
             return IndexFilter(strategy="empty", accessible_size=0)
@@ -284,20 +287,35 @@ class KnowledgeFileVisibilityService:
         space_id: int,
         file_ids: Iterable[int],
     ) -> set[int]:
-        """Return visible current-primary files eligible for RAG retrieval.
+        """Return visible successful current-primary files eligible for RAG retrieval.
 
         Non-primary versions stay indexed by design, so index filters are only
         an optimization. This result-layer intersection is the correctness
         boundary for IN, NOT-IN, and unfiltered retrieval strategies.
         """
         visible_ids = await self.post_filter_visible_files(space_id, file_ids)
+        await self._require_retrieval_processing_idle(space_id, has_visible_files=bool(visible_ids))
         if not visible_ids:
             return set()
-        return visible_ids - await self._non_primary_ids(space_id)
+        successful_ids = await self._successful_file_ids(space_id, visible_ids)
+        return successful_ids - await self._non_primary_ids(space_id) if successful_ids else set()
 
     # ------------------------------------------------------------------
     # Internal helpers (patched by tests via monkeypatch)
     # ------------------------------------------------------------------
+
+    async def _require_retrieval_processing_idle(self, space_id: int, *, has_visible_files: bool) -> None:
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if (
+            space is None
+            or space.type != KnowledgeTypeEnum.SPACE.value
+            or (space.state != KnowledgeState.REBUILDING.value and space.model_transition is None)
+        ):
+            return
+        # An independently visible child already proves the original retrieval
+        # qualification. Only an empty file scope needs the existing space gate.
+        if has_visible_files or await self.is_space_visible(space_id):
+            require_space_processing_idle(space, operation="retrieval")
 
     async def _list_primary_file_ids_in_space(
         self,
@@ -305,16 +323,19 @@ class KnowledgeFileVisibilityService:
         *,
         non_primary_ids: set[int] | None = None,
     ) -> set[int]:
-        """List the primary-version file ids in the space."""
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-
-        async with get_async_db_session() as session:
-            rows = (await session.exec(select(KnowledgeFile.id).where(KnowledgeFile.knowledge_id == space_id))).all()
-        all_ids = {int(row) for row in rows}
+        """List successful primary-version file ids without affecting delivery visibility."""
+        all_ids = await self._successful_file_ids(space_id)
         excluded = non_primary_ids
         if excluded is None:
             excluded = await self._non_primary_ids(space_id)
         return all_ids - excluded
+
+    async def _successful_file_ids(self, space_id: int, file_ids: Iterable[int] | None = None) -> set[int]:
+        """Re-read success and actual SPACE primary links on each retrieval round."""
+        async with get_async_db_session() as session:
+            return await KnowledgeRetrievalFileRepository().alist_successful_files(
+                session, space_id=space_id, file_ids=file_ids
+            )
 
     async def _non_primary_ids(self, space_id: int) -> set[int]:
         """Resolve the set of non-primary file ids for the given space."""

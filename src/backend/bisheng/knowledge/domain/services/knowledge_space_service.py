@@ -2,13 +2,12 @@ import asyncio
 import json
 import logging
 import re
-import tempfile
 from collections.abc import Iterator
-from contextlib import contextmanager
-from dataclasses import replace
+from contextlib import contextmanager, nullcontext
+from copy import deepcopy
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from hashlib import sha256
-from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -18,7 +17,7 @@ from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
-from bisheng.api.v1.schemas import ExcelRule, FileProcessBase, KnowledgeFileOne
+from bisheng.api.v1.schemas import FileProcessBase, KnowledgeFileOne
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
@@ -27,9 +26,11 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
 )
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
+from bisheng.common.errcode.admin_scope import AdminScopeTenantRequiredError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError, KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpacePrivateError,
+    KnowledgeSpaceInvalidCursorError,
     SpaceCreationRequestConflictError,
     SpaceFileDuplicateError,
     SpaceFileExtensionError,
@@ -50,21 +51,28 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceTenantMismatchError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
-from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
+from bisheng.common.errcode.permission import PermissionDeniedError, PermissionEnumerationIncompleteError
 from bisheng.common.models.space_channel_member import (
-    BusinessTypeEnum,
     MembershipStatusEnum,
     SpaceChannelMember,
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.context.tenant import (
+    get_admin_scope_tenant_id,
+    get_current_tenant_id,
+    get_is_management_api,
+    is_tenant_filter_bypassed,
+    management_tenant_scope,
+    tenant_execution_scope,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao
+from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
@@ -77,7 +85,6 @@ from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeState,
     KnowledgeTypeEnum,
 )
-from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import (
     KnowledgeDocumentVersion,
 )
@@ -94,6 +101,7 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
 )
 from bisheng.knowledge.domain.models.knowledge_space_user_pin import KnowledgeSpaceUserPinDao
 from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
+from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     InitialPermissionApplyResult,
@@ -104,13 +112,23 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceListItemResp,
     SpaceSubscriptionStatusEnum,
 )
+from bisheng.knowledge.domain.schemas.processing_settings import (
+    LegacyProcessingOverrides,
+    ProcessingDefaults,
+    ProcessingOverrides,
+)
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
     KnowledgeAuditTelemetryService,
+)
+from bisheng.knowledge.domain.services.knowledge_creation_policy import (
+    KnowledgeCreationContext,
+    KnowledgeCreationPolicy,
 )
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerPermissionRecord,
     KnowledgeFilePermissionRecord,
 )
+from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_chat_history_retention_service import (
     build_knowledge_chat_flows,
@@ -148,11 +166,11 @@ from bisheng.permission.application.prospective_grant import ProspectiveGrantApp
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import generate_uuid, get_request_ip
+from bisheng.utils import generate_knowledge_index_name, get_request_ip
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
-    from bisheng.common.schemas.api import PageInfiniteCursorData
+    from bisheng.common.schemas.api import PageData, PageInfiniteCursorData
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
         KnowledgeDocumentRepository,
     )
@@ -218,11 +236,14 @@ _MANAGED_PERMISSION_BATCH_SIZE = 100
 # filtering is refilled from the next OFFSET window, so this only bounds per-round
 # DB fetch + visibility evaluation, not the page size.
 _SEARCH_SCAN_BATCH_SIZE = 100
-# Chinese punctuation is intentionally distinct from ASCII punctuation.
-_WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]  # noqa: RUF001
-_WEB_LINK_SEPARATOR_RULES = ["after"] * len(_WEB_LINK_SEPARATORS)
 _AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
 _VIDEO_FILE_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
+
+
+@dataclass(slots=True)
+class _UploadDispatchBatch:
+    files: list[tuple[KnowledgeFile, str | None]] = field(default_factory=list)
+    folder_paths: list[str] = field(default_factory=list)
 
 
 class KnowledgeSpaceService(KnowledgeUtils):
@@ -241,6 +262,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         prospective_grant_application: ProspectiveGrantApplication | None = None,
         knowledge_file_repo: "KnowledgeFileRepository | None" = None,
         space_listing_repository: KnowledgeSpaceListingRepository | None = None,
+        upload_application_factory=None,
     ):
         self.request = request
         self.login_user = login_user
@@ -251,6 +273,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
         self.knowledge_file_repo = knowledge_file_repo
+        self.upload_application_factory = upload_application_factory
+        self._upload_accounting_user = None
+        self._upload_execution_guard = None
         self.space_listing_repository = space_listing_repository or KnowledgeSpaceListingRepository()
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
@@ -1050,6 +1075,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         del lineage
         return set()
 
+    async def require_upload_container(self, space_id: int, parent_id: int | None = None) -> None:
+        """Read upload rules with the same target action as the actual upload."""
+        await self._require_action("folder" if parent_id else "knowledge_space", parent_id or space_id, "upload_file")
+        space, _ = await self._load_space_listing_scope(space_id, parent_id)
+        self._ensure_space_async_task_tenant_consistency(space, "read_upload_settings")
+
     async def can_write_space_container(self, space_id: int, parent_id: int | None = None) -> bool:
         """F030: best-effort boolean — can the acting user upload into this container?
 
@@ -1242,18 +1273,62 @@ class KnowledgeSpaceService(KnowledgeUtils):
         creation_request_id: str | None = None,
         initial_permissions: InitialPermissionsRequest | None = None,
         skip_user_limit: bool = False,
+        embedding_model_id: int | None = None,
+        processing_defaults: ProcessingDefaults | None = None,
+        web_creation_context: KnowledgeCreationContext | None = None,
+        entry_kind: str = "web",
+        initial_metadata_fields: list[dict] | None = None,
     ) -> KnowledgeSpaceCreateResp:
         """Create a new knowledge space, subject to the role-level creation quota."""
 
+        if entry_kind not in {"web", "open_api"}:
+            raise PermissionDeniedError()
+        advanced = (
+            embedding_model_id is not None or processing_defaults is not None or initial_metadata_fields is not None
+        )
+        if entry_kind == "open_api":
+            from bisheng.open_api.domain.context import get_current_open_api_principal
+
+            principal = get_current_open_api_principal()
+            if (
+                principal is None
+                or web_creation_context is not None
+                or not principal.has_scope("knowledge:write")
+                or principal.tenant_id != get_current_tenant_id()
+                or (principal.effective_user_id or principal.resource_owner_user_id) != self.login_user.user_id
+            ):
+                raise PermissionDeniedError()
+        elif advanced and (
+            not isinstance(web_creation_context, KnowledgeCreationContext)
+            or web_creation_context.user_id != self.login_user.user_id
+        ):
+            raise PermissionDeniedError()
+        if web_creation_context is not None:
+            await KnowledgeCreationPolicy.revalidate(web_creation_context)
+        if embedding_model_id is not None and (type(embedding_model_id) is not int or embedding_model_id <= 0):
+            raise ValueError("embedding_model_id must be a positive integer")
+        defaults = (
+            ProcessingDefaults.model_validate(processing_defaults.model_dump(mode="json"))
+            if processing_defaults is not None
+            else None
+        )
+        if initial_metadata_fields is not None:
+            from bisheng.knowledge.domain.schemas.knowledge_schema import MetadataField
+
+            initial_metadata_fields = [
+                MetadataField.model_validate(value).model_dump(mode="json") for value in initial_metadata_fields
+            ]
         existing = await self._existing_creation(creation_request_id, None)
-        workbench_llm = None
+        selected_model_id = embedding_model_id
         if existing is None:
             if not skip_user_limit:
                 await self._assert_space_creation_quota()
 
-            workbench_llm = await LLMService.get_workbench_llm()
-            if not workbench_llm or not workbench_llm.embedding_model:
-                raise WorkbenchEmbeddingError()
+            if selected_model_id is None:
+                workbench_llm = await LLMService.get_workbench_llm()
+                if not workbench_llm or not workbench_llm.embedding_model:
+                    raise WorkbenchEmbeddingError()
+                selected_model_id = workbench_llm.embedding_model.id
 
         # Defence-in-depth: a tenant with the feature flag off must not be able to
         # configure auto-tag by hand-crafting requests. Normalize before hashing
@@ -1274,7 +1349,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             auto_tag_library_id=auto_tag_library_id,
             auto_tag_custom_tags=auto_tag_custom_tags,
             initial_permissions=initial_permissions,
+            embedding_model_id=embedding_model_id,
+            processing_defaults=defaults,
         )
+        if initial_metadata_fields is not None:
+            schema_input = json.dumps(
+                initial_metadata_fields, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+            )
+            payload_hash = sha256(f"{payload_hash}|initial_metadata|{schema_input}".encode()).hexdigest()
         if existing is not None:
             if existing.creation_payload_hash != payload_hash:
                 raise SpaceCreationRequestConflictError()
@@ -1283,7 +1365,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 creation_request_id=creation_request_id,
                 initial_permissions=initial_permissions,
             )
-        if workbench_llm is None or workbench_llm.embedding_model is None:
+        if selected_model_id is None:
             raise WorkbenchEmbeddingError()
 
         # Library-id needs the freshly minted knowledge.id when we are upserting
@@ -1294,7 +1376,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             icon=icon,
             auth_type=auth_type,
             type=KnowledgeTypeEnum.SPACE.value,
-            model=workbench_llm.embedding_model.id,
+            model=selected_model_id,
+            metadata_fields=initial_metadata_fields,
+            processing_defaults=defaults.model_dump(mode="json") if defaults is not None else None,
             is_released=is_released,
             auto_tag_enabled=False,
             auto_tag_library_id=None,
@@ -1304,9 +1388,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         created = True
         try:
-            knowledge_space = KnowledgeService.create_knowledge_base(
-                self.request, self.login_user, db_knowledge, skip_hook=True
-            )
+            if web_creation_context is not None:
+                await KnowledgeCreationPolicy.revalidate(web_creation_context)
+            knowledge_space = await self._create_space_with_model(db_knowledge)
         except IntegrityError:
             # A concurrent request with the same durable key won the insert.
             # Only that exact command may be resumed; a different hash conflicts.
@@ -1322,7 +1406,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 auto_tag_library_id=auto_tag_library_id,
                 auto_tag_custom_tags=auto_tag_custom_tags,
                 user_id=self.login_user.user_id,
-                tenant_id=self.login_user.tenant_id,
+                tenant_id=knowledge_space.tenant_id,
             )
             if resolved_enabled or resolved_library_id is not None:
                 knowledge_space.auto_tag_enabled = resolved_enabled
@@ -1333,19 +1417,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             knowledge_space,
             creation_request_id=creation_request_id,
             initial_permissions=initial_permissions,
+            project_created=not created,
         )
 
         if not created:
             return result
-
-        member = SpaceChannelMember(
-            business_id=str(knowledge_space.id),
-            business_type=BusinessTypeEnum.SPACE,
-            user_id=self.login_user.user_id,
-            user_role=UserRoleEnum.CREATOR,
-            status=MembershipStatusEnum.ACTIVE,
-        )
-        await SpaceChannelMemberDao.async_insert_member(member)
 
         # Audit log for knowledge space creation
         await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
@@ -1354,13 +1430,28 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return result
 
-    async def _complete_knowledge_creation(
-        self,
-        knowledge_space: Knowledge,
-        *,
-        creation_request_id: str | None,
-        initial_permissions: InitialPermissionsRequest | None,
-    ) -> KnowledgeSpaceCreateResp:
+    async def _create_space_with_model(self, knowledge_space: Knowledge) -> Knowledge:
+        """Persist the actual SPACE, creator and outgoing references together."""
+        knowledge_space.index_name = generate_knowledge_index_name()
+        knowledge_space.collection_name = knowledge_space.index_name
+        knowledge_space.user_id = self.login_user.user_id
+        knowledge_space.tenant_id = KnowledgeModelReferenceApplication.repository._tenant_id()
+        async with get_async_db_session() as session:
+
+            async def project_created(actual):
+                await KnowledgeModelReferenceApplication.repository.aadd_space_creator(
+                    session, actual, user_id=self.login_user.user_id
+                )
+                await self._project_space_created(actual)
+
+            await KnowledgeModelReferenceApplication.acreate(
+                session, knowledge_space, login_user=self.login_user, project_created=project_created
+            )
+            await session.commit()
+        await asyncio.to_thread(KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, knowledge_space)
+        return knowledge_space
+
+    async def _project_space_created(self, knowledge_space: Knowledge) -> None:
         container_adapter = await self._resource_adapter("knowledge_space")
         actor = await self._permission_actor()
         await container_adapter.authorize_created(
@@ -1376,6 +1467,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ),
             actor=actor,
         )
+
+    async def _complete_knowledge_creation(
+        self,
+        knowledge_space: Knowledge,
+        *,
+        creation_request_id: str | None,
+        initial_permissions: InitialPermissionsRequest | None,
+        project_created: bool = True,
+    ) -> KnowledgeSpaceCreateResp:
+        container_adapter = await self._resource_adapter("knowledge_space")
+        actor = await self._permission_actor()
+        if project_created:
+            await self._project_space_created(knowledge_space)
         permission_result = None
         if initial_permissions is not None and initial_permissions.grants:
             if self.initial_grant_application is None or creation_request_id is None:
@@ -1439,7 +1543,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if creation_request_id is None:
             return None
         existing = await KnowledgeDao.aget_by_creation_request(
-            tenant_id=int(self.login_user.tenant_id),
+            tenant_id=KnowledgeModelReferenceApplication.repository._tenant_id(),
             user_id=int(self.login_user.user_id),
             knowledge_type=KnowledgeTypeEnum.SPACE.value,
             creation_request_id=creation_request_id,
@@ -1460,6 +1564,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_library_id: int | None,
         auto_tag_custom_tags: list[str] | None,
         initial_permissions: InitialPermissionsRequest | None,
+        embedding_model_id: int | None = None,
+        processing_defaults: ProcessingDefaults | None = None,
     ) -> str:
         payload = {
             "name": name,
@@ -1472,6 +1578,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "auto_tag_custom_tags": auto_tag_custom_tags,
             "initial_permissions": None,
         }
+        # Omitted fields retain the legacy command hash for durable retries.
+        if embedding_model_id is not None:
+            payload["embedding_model_id"] = embedding_model_id
+        if processing_defaults is not None:
+            payload["processing_defaults"] = processing_defaults.model_dump(mode="json")
         if initial_permissions is not None:
             grants = sorted(
                 (
@@ -1653,9 +1764,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
         try:
-            with measure_stage("prepare"):
-                from bisheng.worker import rebuild_knowledge_celery
-
             with measure_stage("auth"):
                 space, has_content_permission = await self._require_space_info_permission(space_id)
 
@@ -1721,23 +1829,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self._decorate_auto_tag_for_info(result)
 
             with measure_stage("rebuild"):
-                if space.state != KnowledgeState.PUBLISHED.value:
-                    current_tid = get_current_tenant_id()
-                    if space.tenant_id is None or current_tid in (None, space.tenant_id):
-                        rebuild_knowledge_celery.delay(
-                            space_id,
-                            new_model_id=space.model,
-                            invoke_user_id=self.login_user.user_id,
-                        )
-                    else:
-                        logger.warning(
-                            "skip knowledge space rebuild across tenant boundary: "
-                            "space_id={} space_tenant_id={} current_tenant_id={} user_id={}",
-                            space.id,
-                            space.tenant_id,
-                            current_tid,
-                            self.login_user.user_id,
-                        )
+                # This query only observes rebuild status. An explicit model
+                # change owns operation proof, SQL/R2 and subsequent dispatch.
+                result.state = space.state
         except Exception as exc:
             emit_info_metric(status="error", error_type=type(exc).__name__)
             raise
@@ -1746,69 +1840,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return result
 
     async def clear_space(self, space_id: int) -> None:
-        """F030: clear a knowledge space's contents but keep the space itself.
-
-        Mirrors ``delete_space``'s content cleanup (vector + ES + minio + child
-        file/folder rows + child FGA tuples) while preserving the space row, its
-        members, space-level FGA tuples and tag library — i.e. name/description/id
-        and membership survive, only the files/folders inside are removed.
-        """
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-        await self._require_action("knowledge_space", space_id, "delete")
-        child_resources = await self._list_space_child_resources(space_id)
-        child_permission_records = await self._load_resource_permission_records(child_resources)
-        await self._project_resource_deletes(child_permission_records)
-
-        # Cleaned vector + ES data
-        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
-        # Cleaned minio data
-        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
-
-        # Remove child file/folder rows only (only_clear keeps the space row).
-        await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id, only_clear=True)
+        """Clear through the confirmed lifecycle, preserving the space and model."""
+        manifest = await self._deletion_application().aordinary_delete(
+            identity=self.login_user, space_id=space_id, operation="knowledge_space_clear"
+        )
         self._dispatch_knowledge_chat_rehome(
             source_space_id=space_id,
-            resources=child_resources,
+            resources=[(row["resource_type"], row["resource_id"]) for row in manifest["fga_resources"]],
             reason="clear_space",
         )
-
-        # The vector drop above removed the Milvus collection + ES index; recreate
-        # empty ones so the cleared space stays queryable (empty result, not 500).
-        await asyncio.to_thread(KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, space)
 
     async def delete_space(self, space_id: int) -> None:
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
         await self._require_action("knowledge_space", space_id, "delete")
-        child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         original_member_ids = {member.user_id for member in original_members}
         original_member_ids.update(await self._authorized_space_user_ids(space_id))
-        child_permission_records = await self._load_resource_permission_records(child_resources)
-        container_adapter = await self._resource_adapter("knowledge_space")
-        container_record = await container_adapter.load_permission_record(
-            resource_type="knowledge_space",
-            resource_id=str(space_id),
+        await self._deletion_application().aordinary_delete(
+            identity=self.login_user, space_id=space_id, operation="knowledge_space_delete"
         )
-        if container_record is None:
-            raise SpaceNotFoundError()
-        actor = await self._permission_actor()
-        await self._project_resource_deletes(child_permission_records)
-        await container_adapter.project_delete(
-            record=container_record,
-            actor=actor,
-        )
-
-        # Cleaned vectorData in
-        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
-
-        # CleanedminioData
-        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
-
-        await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
         await self._send_space_event_notification(
             action_code=SPACE_DELETED_MESSAGE,
             receiver_user_ids=sorted(original_member_ids),
@@ -1816,37 +1868,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_name=space.name,
             navigable=False,
         )
-
-        # Drop the private auto-tag library bound to this space (if any) so
-        # we never leave orphan rows in knowledge_space_tag_library.
-        try:
-            await KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge(space_id)
-        except Exception as e:
-            _logger.warning(
-                "Failed to delete private tag library for space %s: %s",
-                space_id,
-                e,
-            )
-
-        # delete space channel memeber
-        await SpaceChannelMemberDao.clean_space_member(space_id)
-
-        # TC-040: prune channel ➜ knowledge-space sync bindings that target
-        # this space so the channel UI and the Celery sync worker stop
-        # referencing a tombstone. Import lazily to avoid pulling the channel
-        # module into the knowledge module's import graph.
-        from bisheng.channel.domain.models.channel_knowledge_sync import (
-            ChannelKnowledgeSyncDao,
-        )
-
-        try:
-            await ChannelKnowledgeSyncDao.adelete_by_space_id(str(space_id))
-        except Exception as e:
-            _logger.warning(
-                "Failed to cleanup channel knowledge sync bindings for space %s: %s",
-                space_id,
-                e,
-            )
 
         # Audit log and telemetry
         await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(self.login_user, self.request, space)
@@ -2055,6 +2076,157 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             members = [member for member in members if int(member.business_id) not in department_space_ids]
         return await self._format_member_spaces(members, order_by)
+
+    def _is_management_super_actor(self, actor: PermissionActor, tenant_id: int) -> bool:
+        """Keep the original identity while using one trusted management tenant."""
+        return (
+            actor.subject_type == "user"
+            and actor.subject_id == self.login_user.user_id
+            and actor.current_tenant_id == self.login_user.tenant_id
+            and actor.super_admin
+            and actor.data_scope == DATA_SCOPE_ALL
+            and get_is_management_api()
+            and get_admin_scope_tenant_id() == tenant_id == get_current_tenant_id()
+        )
+
+    async def list_admin_spaces(
+        self, *, keyword: str | None = None, page: int = 1, page_size: int = 20, has_abnormal: bool | None = None
+    ) -> "PageData[KnowledgeSpaceListItemResp]":
+        """List one trusted management tenant without ordinary visibility filters."""
+        from bisheng.common.schemas.api import PageData
+
+        if type(page) is not int or page < 1 or type(page_size) is not int or not 1 <= page_size <= 200:
+            raise ValueError("page and page_size must be positive and page_size at most 200")
+        tenant_id = get_admin_scope_tenant_id()
+        if type(tenant_id) is not int or tenant_id <= 0:
+            raise AdminScopeTenantRequiredError()
+        actor = await self._permission_actor()
+        if (
+            tenant_id != get_current_tenant_id()
+            or (actor.current_tenant_id != tenant_id and not self._is_management_super_actor(actor, tenant_id))
+            or actor.subject_type != "user"
+            or actor.data_scope != DATA_SCOPE_ALL
+            or not (actor.super_admin or tenant_id in actor.tenant_admin_tenant_ids)
+        ):
+            raise PermissionDeniedError()
+        rows, total = await self.space_listing_repository.alist_admin(
+            keyword=keyword, page=page, page_size=page_size, has_abnormal=has_abnormal is True
+        )
+        if any(row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value for row in rows):
+            raise SpaceNotFoundError()
+        abnormal = await self.space_listing_repository.aexists_abnormal_files(space_ids=[row.id for row in rows])
+        return PageData[KnowledgeSpaceListItemResp](
+            data=[
+                KnowledgeSpaceListItemResp.model_validate(row).model_copy(
+                    update={"has_abnormal_files": row.id in abnormal}
+                )
+                for row in rows
+            ],
+            total=total,
+        )
+
+    async def list_visible_spaces(
+        self,
+        *,
+        keyword: str | None = None,
+        page_size: int = 20,
+        cursor: str | None = None,
+        has_abnormal: bool | None = None,
+        name_only: bool = False,
+    ) -> "PageInfiniteCursorData[KnowledgeSpaceListItemResp]":
+        """Consume at most 1000 SQL candidates, independently of visible density."""
+        from bisheng.common.cursor import decode_cursor, encode_cursor
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+
+        if type(page_size) is not int or not 1 <= page_size <= 200:
+            raise ValueError("page_size must contain 1..200 items")
+        tenant_id = get_current_tenant_id()
+        actor = await self._permission_actor()
+        management_super = self._is_management_super_actor(actor, tenant_id)
+        if (
+            type(tenant_id) is not int
+            or tenant_id <= 0
+            or (actor.current_tenant_id != tenant_id and not management_super)
+        ):
+            raise PermissionDeniedError()
+        keyword = keyword.strip() if keyword is not None else None
+        has_abnormal = True if has_abnormal is True else None
+        context_values = [tenant_id, actor.fga_subject, actor.data_scope, keyword or "", page_size, has_abnormal]
+        if name_only:
+            context_values.append("name_only")
+        context = "knowledge-space-visible|" + sha256(json.dumps(context_values).encode()).hexdigest()
+        try:
+            decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
+            after = None
+            if decoded is not None:
+                timestamp, ident = decoded
+                if type(ident) is not int or ident <= 0 or (timestamp is not None and not isinstance(timestamp, str)):
+                    raise ValueError("invalid space seek key")
+                timestamp = datetime.fromisoformat(timestamp) if timestamp is not None else None
+                if timestamp is not None and timestamp.tzinfo is not None:
+                    raise ValueError("space seek timestamps use the database's naive time")
+                after = (timestamp, ident)
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise KnowledgeSpaceInvalidCursorError() from exc
+
+        items: list[KnowledgeSpaceListItemResp] = []
+        consumed = 0
+        last_key = after
+        adapter = self.f048_permission_adapter or await self._resource_adapter("knowledge_space")
+        name_options = {"name_only": True} if name_only else {}
+
+        async def result(has_more):
+            abnormal = await self.space_listing_repository.aexists_abnormal_files(space_ids=[item.id for item in items])
+            return PageInfiniteCursorData[KnowledgeSpaceListItemResp](
+                data=[item.model_copy(update={"has_abnormal_files": item.id in abnormal}) for item in items],
+                page_size=page_size,
+                has_more=has_more,
+                next_cursor=encode_cursor(last_key, context=context) if has_more else None,
+            )
+
+        while consumed < 1000:
+            limit = min(100, 1000 - consumed)
+            batch = await self.space_listing_repository.alist_candidates(
+                keyword=keyword, after=after, limit=limit, has_abnormal=has_abnormal, **name_options
+            )
+            if not batch:
+                return await result(False)
+            if any(row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value for row in batch):
+                raise SpaceNotFoundError()
+            # The repository released its data connection before permission I/O.
+            targets = await adapter.resolve_permission_targets_from_rows(
+                rows=batch, resource_type="knowledge_space", actor=actor
+            )
+            if management_super:
+                # The system shortcut accepts only IDs that passed this loaded
+                # business/snapshot validation, never the raw SQL candidates.
+                actions = await self._batch_actions(
+                    "knowledge_space", [target.resource_id for target in targets], ("visible",)
+                )
+                visible = {("knowledge_space", ident): "visible" in codes for ident, codes in actions.items()}
+            else:
+                visible = await batch_check_verified_business_visible(actor=actor, targets=targets)
+            for row in batch:
+                if len(items) == page_size:
+                    # This row has not been consumed and must remain on the next page.
+                    return await result(True)
+                consumed += 1
+                last_key = (row.update_time, row.id)
+                if visible.get(("knowledge_space", str(row.id)), False):
+                    items.append(
+                        KnowledgeSpaceListItemResp.model_validate(row).model_copy(update={"actions": ["visible"]})
+                    )
+            after = last_key
+            if len(batch) < limit:
+                return await result(False)
+            if len(items) == page_size or consumed == 1000:
+                # A one-row, unconsumed SQL probe distinguishes EOF. It neither
+                # checks permission nor advances the consumption cursor/budget.
+                pending = await self.space_listing_repository.alist_candidates(
+                    keyword=keyword, after=after, limit=1, has_abnormal=has_abnormal, **name_options
+                )
+                return await result(bool(pending))
+        return await result(False)
 
     @staticmethod
     async def _complete_visible_space_ids(actor: PermissionActor, runtime) -> list[int]:
@@ -3424,17 +3596,78 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
         return updated_folder
 
+    def _deletion_application(self):
+        factory = getattr(self, "deletion_application_factory", None)
+        if factory is None:
+            raise RuntimeError("knowledge deletion composition is not configured")
+        return factory()
+
+    async def confirm_deletion(self, space_id, change):
+        """New confirmation retains the old notifications, audit and chat hooks."""
+        application = self._deletion_application()
+        operation, _ = await application.acompletion_details(
+            identity=self.login_user, space_id=space_id, request=change
+        )
+        space, recipients = None, set()
+        if operation == "knowledge_space_delete":
+            space = await KnowledgeDao.aquery_by_id(space_id)
+            if space is not None:
+                members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
+                recipients = {member.user_id for member in members}
+                recipients.update(await self._authorized_space_user_ids(space_id))
+        result = await application.aconfirm(identity=self.login_user, space_id=space_id, request=change)
+        if result["state"] != "succeeded" or result.get("reused"):
+            return result
+        _, manifest = await application.acompletion_details(
+            identity=self.login_user, space_id=space_id, request=change, completed=True
+        )
+        if operation == "knowledge_space_delete":
+            if space is not None:
+                await self._send_space_event_notification(
+                    action_code=SPACE_DELETED_MESSAGE,
+                    receiver_user_ids=sorted(recipients),
+                    space_id=space_id,
+                    space_name=space.name,
+                    navigable=False,
+                )
+                await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(self.login_user, self.request, space)
+                KnowledgeAuditTelemetryService.telemetry_delete_knowledge(self.login_user)
+        else:
+            self._dispatch_knowledge_chat_rehome(
+                source_space_id=space_id,
+                resources=[(row["resource_type"], row["resource_id"]) for row in manifest["fga_resources"]],
+                reason=operation,
+            )
+            await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        return result
+
     async def _delete_formal_resource(self, resource) -> dict:
-        from bisheng.knowledge.domain.services.knowledge_space_direct_delete_service import (
-            KnowledgeSpaceDirectDeleteService,
+        return await self._deletion_application().aordinary_delete(
+            identity=self.login_user,
+            space_id=resource.knowledge_id,
+            selections=(DeleteSelection("folder" if resource.file_type == 0 else "knowledge_file", resource.id),),
         )
 
-        return await KnowledgeSpaceDirectDeleteService(
-            authorize=self._require_action,
-            load_permission_records=self._load_resource_permission_records,
-        ).delete(resource=resource, applicant_user_id=self.login_user.user_id)
+    def _audit_space(self, event_type: str, object_id: str, object_name: str, note: str) -> None:
+        from bisheng.api.services.audit_log import AuditLogService
+        from bisheng.utils import get_request_ip
 
-    async def delete_folder(self, space_id: int, folder_id: int):
+        ip_address = ""
+        if self.request is not None:
+            ip_address = get_request_ip(self.request)
+        AuditLogService.record(
+            operator_id=self.login_user.user_id,
+            operator_name=self.login_user.user_name,
+            system_id="knowledge_space",
+            event_type=event_type,
+            object_type="knowledge_space",
+            object_id=object_id,
+            object_name=object_name,
+            ip_address=ip_address,
+            note=note,
+        )
+
+    async def delete_folder(self, space_id: int, folder_id: int, *, audit: bool = True):
         folder = await self._get_folder_for_action(space_id, folder_id)
         await self._require_action("folder", folder_id, "delete")
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -3449,23 +3682,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             reason="delete_folder",
         )
 
-        # Prune channel ➜ knowledge-folder sync bindings that target the deleted
-        # folders so the Celery sync worker stops referencing a tombstone.
-        from bisheng.channel.domain.models.channel_knowledge_sync import (
-            ChannelKnowledgeSyncDao,
-        )
-
-        try:
-            await ChannelKnowledgeSyncDao.adelete_by_folder_ids(manifest["folder_ids"])
-        except Exception as e:
-            _logger.warning(
-                "Failed to cleanup channel knowledge sync bindings for folders %s: %s",
-                manifest["folder_ids"],
-                e,
-            )
-
         await self.update_folder_update_time(folder.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
+        if audit:
+            self._audit_space(
+                "delete_file",
+                str(space_id),
+                folder.file_name,
+                "来源=知识空间；类型=文件夹；结果=成功",  # noqa: RUF001
+            )
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> list[dict]:
         file_record = await self._require_file_or_folder_action(
@@ -3525,48 +3750,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return f"original/{file_id}.md"
 
     @staticmethod
-    def _build_web_link_split_rule(knowledge_id: int) -> dict:
-        split_rule = FileProcessBase(knowledge_id=knowledge_id).model_dump()
-        split_rule["separator"] = _WEB_LINK_SEPARATORS
-        split_rule["separator_rule"] = _WEB_LINK_SEPARATOR_RULES
-        split_rule["chunk_overlap"] = 0
-        return split_rule
+    def _build_web_link_split_rule(knowledge: Knowledge, *, file_name: str) -> dict:
+        from bisheng.knowledge.application.file_processing_adapter import legacy_rule_from_snapshot
 
-    async def _create_primary_document_for_file(self, db_file: KnowledgeFile) -> None:
-        async with get_async_db_session() as v_session:
-            v_doc = KnowledgeDocument(
-                knowledge_id=db_file.knowledge_id,
-                file_level_path=db_file.file_level_path,
-                level=db_file.level or 0,
-            )
-            v_session.add(v_doc)
-            await v_session.flush()
-            v_version = KnowledgeDocumentVersion(
-                document_id=v_doc.id,
-                knowledge_file_id=db_file.id,
-                version_no=1,
-                is_primary=True,
-            )
-            v_session.add(v_version)
-            await v_session.flush()
-            v_doc.primary_version_id = v_version.id
-            v_session.add(v_doc)
-            await v_session.commit()
-
-    async def _cleanup_created_web_link_file(self, db_file: KnowledgeFile | None) -> None:
-        if not db_file or not getattr(db_file, "id", None):
-            return
-        expanded_ids = await self._cascade_version_links_on_delete([db_file.id])
-        await self._cleanup_resource_tuples([("knowledge_file", file_id) for file_id in expanded_ids])
-        await KnowledgeFileDao.adelete_batch(expanded_ids)
-        minio_client = get_minio_storage_sync()
-        metadata = db_file.user_metadata or {}
-        for object_name in {db_file.object_name, metadata.get("html_snapshot_object_name")}:
-            if object_name:
-                try:
-                    minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=object_name)
-                except Exception as exc:
-                    logger.warning(f"Failed to cleanup web link object {object_name}: {exc}")
+        snapshot = KnowledgeUtils.processing_snapshot_for_legacy_request(
+            FileProcessBase(knowledge_id=knowledge.id),
+            knowledge=knowledge,
+            file_name=file_name,
+            file_source=FileSource.WEB_LINK.value,
+        )
+        rule = legacy_rule_from_snapshot(snapshot, space_id=knowledge.id).model_dump(mode="json")
+        rule["_effective_processing"] = snapshot.model_dump(mode="json")
+        return rule
 
     async def import_web_link(
         self,
@@ -3589,7 +3784,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_knowledge:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "import_web_link")
+        require_space_processing_idle(db_knowledge, operation="import_web_link")
 
+        with self._upload_execution_scope(db_knowledge):
+            return await self._import_web_link_in_execution_scope(
+                db_knowledge, url=url, title=title, parent_id=parent_id, overwrite=overwrite
+            )
+
+    async def _import_web_link_in_execution_scope(
+        self, db_knowledge: Knowledge, *, url: str, title: str | None, parent_id: int | None, overwrite: bool
+    ) -> KnowledgeFile:
+        from bisheng.knowledge.application.web_link_upload import PreparedWebLink
+
+        knowledge_id = db_knowledge.id
         level = 0
         file_level_path = ""
         parent_type = "knowledge_space"
@@ -3641,7 +3848,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             raise QuotaService._make_storage_quota_error(blocker, "storage_gb")
 
-        split_rule = self._build_web_link_split_rule(knowledge_id)
+        split_rule = self._build_web_link_split_rule(db_knowledge, file_name=file_name)
         user_metadata = {
             "source_type": FileSource.WEB_LINK.value,
             "source_url": url,
@@ -3667,52 +3874,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 parent_resource_id=parent_resource_id,
             )
 
-        db_file: KnowledgeFile | None = None
+        application = self.upload_application_factory()
         try:
-            db_file = KnowledgeFile(
-                knowledge_id=knowledge_id,
-                tenant_id=db_knowledge.tenant_id,
-                file_name=file_name,
-                file_size=len(markdown_bytes),
-                md5=import_result.content_hash,
-                split_rule=json.dumps(split_rule, ensure_ascii=False),
-                user_id=self.login_user.user_id,
-                user_name=self.login_user.user_name,
-                updater_id=self.login_user.user_id,
-                updater_name=self.login_user.user_name,
-                level=level,
-                file_level_path=file_level_path,
-                file_source=FileSource.WEB_LINK.value,
-                user_metadata=user_metadata,
+            db_file = await application.acreate_web_link(
+                knowledge=db_knowledge,
+                parent_id=parent_id,
+                prepared=PreparedWebLink(
+                    file_name=file_name,
+                    content_hash=import_result.content_hash,
+                    markdown_bytes=markdown_bytes,
+                    html_snapshot_bytes=html_snapshot_bytes,
+                    split_rule=json.dumps(split_rule, ensure_ascii=False),
+                    user_metadata=user_metadata,
+                ),
             )
-            db_file = KnowledgeFileDao.add_file(db_file)
-            db_file.object_name = self._get_web_link_markdown_object_name(db_file.id)
-            html_snapshot_object_name = f"preview/{db_file.id}.html"
-            db_file.user_metadata = {**user_metadata, "html_snapshot_object_name": html_snapshot_object_name}
-            minio_client = get_minio_storage_sync()
-            minio_client.put_object_sync(
-                bucket_name=minio_client.bucket,
-                object_name=db_file.object_name,
-                file=markdown_bytes,
-                content_type="text/markdown; charset=utf-8",
-            )
-            if html_snapshot_bytes:
-                minio_client.put_object_sync(
-                    bucket_name=minio_client.bucket,
-                    object_name=html_snapshot_object_name,
-                    file=html_snapshot_bytes,
-                    content_type="text/html; charset=utf-8",
-                )
-            db_file = KnowledgeFileDao.update(db_file)
-            await self._create_primary_document_for_file(db_file)
-            await self._initialize_child_resource_permissions(
-                "knowledge_file",
-                db_file.id,
-                parent_type,
-                parent_resource_id,
-            )
-        except Exception:
-            await self._cleanup_created_web_link_file(db_file)
+        except BaseException:
+            await self._compensate_upload(application)
             raise
 
         KnowledgeService.audit_telemetry_service.telemetry_new_knowledge_file(self.login_user)
@@ -3722,8 +3899,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_id=db_file.user_id,
             file_id=db_file.id,
             file_name=db_file.file_name,
-            preview_cache_key=self.get_preview_cache_key(
-                knowledge_id, import_result.final_url, import_result.content_hash
+            preview_cache_key=self.preview_cache_key_for_split_rule(
+                knowledge_id, import_result.final_url, split_rule, md5_value=import_result.content_hash
             ),
             callback_url=None,
         )
@@ -3747,6 +3924,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_type: str,
         parent_resource_id: int,
     ) -> KnowledgeFile:
+        from bisheng.knowledge.domain.repositories.knowledge_version_read_repository import (
+            KnowledgeVersionReadRepository,
+        )
+
+        # A retained file never gains an initial-upload deletion receipt. Validate
+        # its full existing chain before the original in-place object writes.
+        anchor = await KnowledgeVersionReadRepository(get_async_db_session).aget_anchor(
+            tenant_id=get_current_tenant_id(), file_id=db_file.id
+        )
+        if anchor is None or anchor.space.id != db_file.knowledge_id:
+            raise SpaceFileNotFoundError()
         old_parent = self._parent_ref_from_level_path(db_file.file_level_path, db_file.knowledge_id)
         new_parent = (parent_type, parent_resource_id)
         db_file.file_name = file_name
@@ -3789,8 +3977,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_id=updated_file.user_id,
             file_id=updated_file.id,
             file_name=updated_file.file_name,
-            preview_cache_key=self.get_preview_cache_key(
-                updated_file.knowledge_id, user_metadata.get("final_url", ""), content_hash
+            preview_cache_key=self.preview_cache_key_for_split_rule(
+                updated_file.knowledge_id, user_metadata.get("final_url", ""), split_rule, md5_value=content_hash
             ),
             callback_url=None,
         )
@@ -3836,7 +4024,33 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_source: FileSource = None,
         skip_approval: bool = False,
         skip_dedup: bool = False,
+        audit: bool = True,
+        *,
+        processing_overrides: ProcessingOverrides | LegacyProcessingOverrides | None = None,
+        callback_url: str | None = None,
+        _legacy_inputs: tuple[KnowledgeFileOne, ...] | None = None,
+        _legacy_request: FileProcessBase | None = None,
+        _application=None,
+        _deferred: _UploadDispatchBatch | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
+        if (_legacy_inputs is None) != (_legacy_request is None):
+            raise ValueError("Legacy inputs and request must be paired")
+        if _legacy_inputs is not None:
+            if (
+                not isinstance(_legacy_inputs, tuple)
+                or not isinstance(_legacy_request, FileProcessBase)
+                or _legacy_request.knowledge_id != knowledge_id
+                or processing_overrides is not None
+                or len(_legacy_inputs) != len(file_path)
+                or any(
+                    not isinstance(one, KnowledgeFileOne) or one.file_path != path
+                    for one, path in zip(_legacy_inputs, file_path, strict=True)
+                )
+            ):
+                raise ValueError("Legacy upload inputs must exactly match this SPACE batch")
+            _legacy_inputs, _legacy_request = deepcopy((_legacy_inputs, _legacy_request))
+        if _deferred is not None and callback_url is not None:
+            raise ValueError("Deferred uploads cannot dispatch callbacks")
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
         if parent_id:
@@ -3852,23 +4066,80 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_knowledge:
             raise SpaceFolderNotFoundError()
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "upload_file")
+        require_space_processing_idle(db_knowledge, operation="upload_file")
 
-        level = 0
+        if (_application is None) != (_deferred is None):
+            raise ValueError("Shared upload application and dispatch batch must be paired")
+        with self._upload_execution_scope(db_knowledge):
+            return await self._add_files_in_execution_scope(
+                db_knowledge,
+                file_path,
+                parent_id=parent_id,
+                file_source=file_source,
+                skip_dedup=skip_dedup,
+                processing_overrides=processing_overrides,
+                callback_url=callback_url,
+                audit=audit,
+                legacy_inputs=_legacy_inputs,
+                legacy_request=_legacy_request,
+                application=_application,
+                deferred=_deferred,
+            )
+
+    @contextmanager
+    def _upload_execution_scope(self, knowledge: Knowledge):
+        target_tid = knowledge.tenant_id
+        if (
+            type(target_tid) is not int
+            or target_tid <= 0
+            or type(get_current_tenant_id()) is not int
+            or get_current_tenant_id() != target_tid
+            or is_tenant_filter_bypassed()
+            or (get_admin_scope_tenant_id() is not None and not get_is_management_api())
+        ):
+            raise SpaceTenantMismatchError.http_exception()
+        if self.upload_application_factory is None:
+            raise RuntimeError("SPACE upload application factory is not configured")
+        # The original authorization above admits the concrete destination.
+        # Bind dispatch as well as SQL; the scheduler reads the raw tenant var.
+        pin = get_admin_scope_tenant_id()
+        management = get_is_management_api()
+        with (
+            tenant_execution_scope(target_tid),
+            management_tenant_scope(pin) if management and pin is not None else nullcontext(),
+        ):
+            yield
+
+    async def _add_files_in_execution_scope(
+        self,
+        db_knowledge: Knowledge,
+        file_path: list[str],
+        *,
+        parent_id: int | None,
+        file_source: FileSource,
+        skip_dedup: bool,
+        processing_overrides: ProcessingOverrides | LegacyProcessingOverrides | None,
+        callback_url: str | None = None,
+        audit: bool = True,
+        legacy_inputs: tuple[KnowledgeFileOne, ...] | None = None,
+        legacy_request: FileProcessBase | None = None,
+        application=None,
+        deferred: _UploadDispatchBatch | None = None,
+    ) -> list[KnowledgeSpaceFileResponse]:
+        knowledge_id = db_knowledge.id
         file_level_path = ""
-        parent_type = "knowledge_space"
-        parent_resource_id = knowledge_id
 
         if parent_id:
             parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
-            level = parent_folder.level + 1
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
-            parent_type = "folder"
-            parent_resource_id = parent_id
 
         # User-role cap (multi-role max GB; admin returns None = unlimited).
-        role_user_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
+        accounting_user = self._upload_accounting_user or self.login_user
+        if self._upload_accounting_user is not None and accounting_user.tenant_id != db_knowledge.tenant_id:
+            raise SpaceTenantMismatchError.http_exception()
+        role_user_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(accounting_user)
         logger.debug(f"space_file_upload_limit_bytes={role_user_limit_bytes} user_id={self.login_user.user_id}")
-        current_user_total = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
+        current_user_total = int(await SpaceFileDao.get_user_total_file_size(accounting_user.user_id))
 
         # Tenant-level cap: applies to the *target tenant* of the destination
         # knowledge space, regardless of the writer's role/admin status.
@@ -3900,61 +4171,73 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 tmp += f"/{folder_name}"
             return tmp
 
-        file_split_rule = FileProcessBase(knowledge_id=knowledge_id)
+        legacy_overrides = isinstance(processing_overrides, LegacyProcessingOverrides)
+        explicit_rules = (
+            (
+                processing_overrides if legacy_overrides else ProcessingOverrides.model_validate(processing_overrides)
+            ).model_dump(mode="json", exclude_none=True)
+            if processing_overrides is not None
+            else {}
+        )
+        file_split_rule = legacy_request or FileProcessBase(
+            knowledge_id=knowledge_id,
+            **explicit_rules.get("document", {}),
+            **({"excel_rule": explicit_rules["table"]} if explicit_rules.get("table") else {}),
+        )
         process_files = []
         failed_files = []
         preview_cache_keys = []
-        created_files = []
+        application = application if application is not None else self.upload_application_factory()
 
         try:
-            for one in file_path:
-                db_file = KnowledgeService.process_one_file(
+            for index, one in enumerate(file_path):
+                if self._upload_execution_guard is not None:
+                    await self._upload_execution_guard()
+                prepared = KnowledgeService.prepare_one_file(
                     self.login_user,
                     knowledge=db_knowledge,
-                    file_info=KnowledgeFileOne(file_path=one, excel_rule=ExcelRule()),
+                    file_info=legacy_inputs[index] if legacy_inputs is not None else KnowledgeFileOne(file_path=one),
                     split_rule=file_split_rule.model_dump(),
-                    file_kwargs={
-                        "level": level,
-                        "file_level_path": file_level_path,
-                        "file_source": file_source.value,
-                    },
-                    skip_dedup=skip_dedup,
+                    file_kwargs={"file_source": file_source.value},
+                    processing_rule_request=file_split_rule,
+                    ordinary_overrides_only=legacy_inputs is None and not legacy_overrides,
                 )
+                if self._upload_execution_guard is not None:
+                    await self._upload_execution_guard()
+                repeat_files = KnowledgeFileDao.get_file_by_condition(
+                    knowledge_id=knowledge_id,
+                    md5_=prepared.md5,
+                    file_name=prepared.original_file_name,
+                )
+                if repeat_files and not skip_dedup:
+                    db_file = KnowledgeService.stage_prepared_duplicate(prepared=prepared, repeat_files=repeat_files)
+                else:
+                    projected_user_total = current_user_total + prepared.file_size
+                    projected_tenant_total = current_tenant_total_bytes + prepared.file_size
+                    if tenant_cap_bytes is not None and projected_tenant_total > tenant_cap_bytes:
+                        blocker = (
+                            target_tid,
+                            "tenant_limit",
+                            round(projected_tenant_total / (1024**3), 2),
+                            round(tenant_cap_bytes / (1024**3), 2),
+                            "",
+                        )
+                        raise QuotaService._make_storage_quota_error(blocker, "storage_gb")
+                    if role_user_limit_bytes is not None and projected_user_total > role_user_limit_bytes:
+                        raise SpaceFileSizeLimitError()
+                    resolved_source = self._resolve_upload_file_source(prepared.original_file_name, file_source.value)
+                    db_file = await application.acreate_file(
+                        knowledge=db_knowledge,
+                        parent_id=parent_id,
+                        prepared=prepared,
+                        file_source=FileSource(resolved_source),
+                    )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
-                    if getattr(db_file, "id", None):
-                        created_files.append(db_file)
-                    resolved_file_source = self._resolve_upload_file_source(db_file.file_name, file_source.value)
-                    if db_file.file_source != resolved_file_source:
-                        db_file.file_source = resolved_file_source
-                        db_file = KnowledgeFileDao.update(db_file)
-                    if getattr(db_file, "id", None):
-                        # Plan 2 Task 9: also create a logical document + V1 (primary) for the uploaded file.
-                        # This is independent of the version-management switch (D3): the rows always
-                        # exist so the file list can be document-driven even when the switch is off.
-                        async with get_async_db_session() as v_session:
-                            v_doc = KnowledgeDocument(
-                                knowledge_id=db_file.knowledge_id,
-                                file_level_path=db_file.file_level_path,
-                                level=db_file.level or 0,
-                            )
-                            v_session.add(v_doc)
-                            await v_session.flush()
-                            v_version = KnowledgeDocumentVersion(
-                                document_id=v_doc.id,
-                                knowledge_file_id=db_file.id,
-                                version_no=1,
-                                is_primary=True,
-                            )
-                            v_session.add(v_version)
-                            await v_session.flush()
-                            v_doc.primary_version_id = v_version.id
-                            v_session.add(v_doc)
-                            await v_session.commit()
                     # Get a preview cache of this filekey
                     cache_key = self.preview_cache_key_for_split_rule(
                         knowledge_id,
                         one,
-                        {**file_split_rule.model_dump(), "excel_rule": ExcelRule().model_dump()},
+                        json.loads(db_file.split_rule),
                     )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
@@ -3963,51 +4246,60 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 else:
                     failed_file = KnowledgeSpaceFileResponse(**db_file.model_dump())
                     failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
-                    failed_file.file_level_path = file_level_path
-                    failed_files.append(failed_file)
-                # Tenant-level cap: applies to admins as well; the write triggered by
-                # this upload would push the target tenant over its storage_gb cap.
-                if tenant_cap_bytes is not None and current_tenant_total_bytes > tenant_cap_bytes:
-                    blocker = (
-                        target_tid,
-                        "tenant_limit",
-                        round(current_tenant_total_bytes / (1024**3), 2),
-                        round(tenant_cap_bytes / (1024**3), 2),
-                        "",
+                    # Overwrite retains the actual existing document's parent;
+                    # the duplicate dialog is not a move confirmation.
+                    failed_file.file_level_path = db_file.file_level_path
+                    failed_files.append(
+                        {**failed_file.model_dump(), "file_path": one} if legacy_inputs is not None else failed_file
                     )
-                    raise QuotaService._make_storage_quota_error(blocker, "storage_gb")
-                # User-role cap (preserved). Admins skip this branch because
-                # role_user_limit_bytes is None for them.
-                if role_user_limit_bytes is not None and current_user_total > role_user_limit_bytes:
-                    raise SpaceFileSizeLimitError()
-            for created_file in created_files:
-                await self._initialize_child_resource_permissions(
-                    "knowledge_file",
-                    created_file.id,
-                    parent_type,
-                    parent_resource_id,
-                )
-        except Exception:
-            try:
-                await self._rollback_uploaded_files(
-                    created_files, parent_type=parent_type, parent_id=parent_resource_id
-                )
-            except Exception as cleanup_exc:
-                logger.exception("Failed to cleanup files after knowledge space upload error: {}", cleanup_exc)
+        except BaseException:
+            if deferred is None:
+                await self._compensate_upload(application)
             raise
+        batch = deferred if deferred is not None else _UploadDispatchBatch()
+        batch.files.extend(zip(process_files, preview_cache_keys, strict=True))
+        batch.folder_paths.append(file_level_path)
+        if deferred is None:
+            await self._dispatch_upload_batch(knowledge_id, batch, callback_url=callback_url)
+            if audit and process_files:
+                self._audit_space(
+                    "upload_file",
+                    str(knowledge_id),
+                    db_knowledge.name,
+                    f"来源=知识空间；类型=文件；数量={len(process_files)}；结果=成功",  # noqa: RUF001
+                )
+        return failed_files + process_files
+
+    @staticmethod
+    async def _compensate_upload(application) -> None:
+        try:
+            await application.arollback_created()
+        except BaseException:
+            # Keep the staging error primary; uncertain ownership is retained.
+            logger.opt(exception=True).error("Initial SPACE upload compensation requires reconciliation")
+
+    async def _dispatch_upload_batch(
+        self, knowledge_id: int, batch: _UploadDispatchBatch, *, callback_url: str | None = None
+    ) -> None:
         from bisheng.worker.knowledge import scheduler as file_scheduler
 
-        for index, one in enumerate(process_files):
+        if self._upload_execution_guard is not None:
+            await self._upload_execution_guard()
+        # Dispatch can have succeeded even when its acknowledgement fails.
+        # Callers must not compensate registered resources after entering here.
+        for row, cache_key in batch.files:
             file_scheduler.enqueue_or_dispatch(
-                user_id=one.user_id,
-                file_id=one.id,
-                file_name=one.file_name,
-                preview_cache_key=preview_cache_keys[index],
-                callback_url=None,
+                user_id=row.user_id,
+                file_id=row.id,
+                file_name=row.file_name,
+                preview_cache_key=cache_key,
+                callback_url=callback_url,
             )
-        await self.update_folder_update_time(file_level_path)
+        for folder_path in dict.fromkeys(batch.folder_paths):
+            await self.update_folder_update_time(folder_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
-        return failed_files + process_files
+        if self._upload_execution_guard is not None:
+            await self._upload_execution_guard()
 
     MAX_FOLDER_UPLOAD_FILES = 1000
 
@@ -4016,6 +4308,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         knowledge_id: int,
         items: list[FolderUploadItem],
         parent_id: int | None = None,
+        *,
+        processing_overrides: ProcessingOverrides | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         """F034 §5.5 folder upload: rebuild the client-side directory tree, then
         register every file through the regular add_file pipeline.
@@ -4042,7 +4336,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_knowledge:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "upload_file")
+        require_space_processing_idle(db_knowledge, operation="upload_folder_items")
 
+        with self._upload_execution_scope(db_knowledge):
+            return await self._upload_folder_items_in_execution_scope(
+                db_knowledge, items, parent_id, processing_overrides=processing_overrides
+            )
+
+    async def _upload_folder_items_in_execution_scope(
+        self,
+        db_knowledge: Knowledge,
+        items: list[FolderUploadItem],
+        parent_id: int | None,
+        *,
+        processing_overrides: ProcessingOverrides | None = None,
+    ) -> list[KnowledgeSpaceFileResponse]:
+        knowledge_id = db_knowledge.id
         base_path = ""
         base_child_level = 0
         if parent_id:
@@ -4101,51 +4410,52 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # (folder_id, file_level_path for its children, level for its children);
         # the empty chain is the drop point itself.
         node_info: dict[tuple[str, ...], tuple[int | None, str, int]] = {(): (parent_id, base_path, base_child_level)}
-        created_folders: list[KnowledgeFile] = []
+        application = self.upload_application_factory()
+        batch = _UploadDispatchBatch()
+        results: list[KnowledgeSpaceFileResponse] = []
         try:
             for dir_parts in sorted(dir_set, key=len):
-                parent_node_id, child_path, child_level = node_info[dir_parts[:-1]]
-                folder_row = await KnowledgeFileDao.aadd_file(
-                    KnowledgeFile(
-                        knowledge_id=knowledge_id,
-                        user_id=self.login_user.user_id,
-                        user_name=self.login_user.user_name,
-                        updater_id=self.login_user.user_id,
-                        updater_name=self.login_user.user_name,
-                        file_name=dir_parts[-1],
-                        file_type=0,
-                        level=child_level,
-                        file_level_path=child_path,
-                        status=KnowledgeFileStatus.SUCCESS.value,
+                parent_node_id, _, _ = node_info[dir_parts[:-1]]
+                folder_row = await application.acreate_folder(
+                    knowledge=db_knowledge,
+                    parent_id=parent_node_id,
+                    folder_name=dir_parts[-1],
+                )
+                node_info[dir_parts] = (
+                    folder_row.id,
+                    f"{folder_row.file_level_path}/{folder_row.id}",
+                    folder_row.level + 1,
+                )
+
+            # Each group retains the ordinary permission/quota/dedup pipeline.
+            # One receipt owner covers the entire request; no group dispatches.
+            groups: dict[tuple[str, ...], list[str]] = {}
+            for dir_parts, file_path in parsed:
+                groups.setdefault(dir_parts, []).append(file_path)
+            for dir_parts, file_paths in groups.items():
+                results.extend(
+                    await self.add_file(
+                        knowledge_id,
+                        file_paths,
+                        parent_id=node_info[dir_parts][0],
+                        audit=False,
+                        processing_overrides=processing_overrides,
+                        _application=application,
+                        _deferred=batch,
                     )
                 )
-                created_folders.append(folder_row)
-                # Every created node must get its permission tuple (design 坑 U7);
-                # skipping this leaves an ownerless folder with a broken
-                # inheritance chain.
-                await self._initialize_child_resource_permissions(
-                    "folder",
-                    folder_row.id,
-                    "folder" if parent_node_id else "knowledge_space",
-                    parent_node_id or knowledge_id,
-                )
-                node_info[dir_parts] = (folder_row.id, f"{child_path}/{folder_row.id}", child_level + 1)
-        except Exception:
-            try:
-                await self._cleanup_resource_tuples([("folder", row.id) for row in created_folders])
-            finally:
-                await KnowledgeFileDao.adelete_batch([row.id for row in created_folders])
+        except BaseException:
+            await self._compensate_upload(application)
             raise
 
-        # Register files per directory through the regular pipeline (quota,
-        # dedup/FAILED semantics, doc+V1 rows, parse dispatch all reused).
-        groups: dict[tuple[str, ...], list[str]] = {}
-        for dir_parts, file_path in parsed:
-            groups.setdefault(dir_parts, []).append(file_path)
-        results: list[KnowledgeSpaceFileResponse] = []
-        for dir_parts, file_paths in groups.items():
-            results.extend(await self.add_file(knowledge_id, file_paths, parent_id=node_info[dir_parts][0]))
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
+        await self._dispatch_upload_batch(knowledge_id, batch)
+        if dir_set or results:
+            self._audit_space(
+                "upload_file",
+                str(knowledge_id),
+                "",
+                f"来源=知识空间；类型=文件夹；目录={len(dir_set)}；文件={len(results)}；结果=成功",  # noqa: RUF001
+            )
         return results
 
     async def rename_file(self, file_id: int, new_name: str) -> KnowledgeFile:
@@ -4273,254 +4583,42 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 all_files.add(v.knowledge_file_id)
         return all_files, all_docs
 
-    async def move_items(
-        self,
-        space_id: int,
-        items: list[dict],
-        target_space_id: int,
-        target_folder_id: int | None = None,
-        skip_invalid: bool = False,
-    ) -> dict:
-        """Move files/folders within a space or across spaces (F034).
+    async def aprecheck_move(self, space_id, request):
+        if not callable(getattr(self, "move_application_factory", None)):
+            from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-        Returns ``{"moved": [...], "invalid": [...]}``; see design §4.2. Same-space
-        is a synchronous metadata move; cross-space additionally relocates the whole
-        version chain, clears tags (AC-23), marks SUCCESS files REBUILDING, and
-        dispatches async retrieval-data migration per file.
-        """
-        from sqlmodel import col, func, or_, select
+            raise KnowledgeOperationPlanConflictError(reason="move_application_unconfigured")
+        application = await self.move_application_factory()
+        return await application.aprecheck(space_id, request, identity=self.login_user, entry_kind="web")
 
-        from bisheng.knowledge.domain.models.knowledge import Knowledge
-        from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+    async def aconfirm_move(self, space_id, request):
+        if not callable(getattr(self, "move_application_factory", None)):
+            from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-        await self._require_read_permission(space_id)
-        cross_space = target_space_id != space_id
-        # Depth limit counts FOLDER layers only (see MAX_FOLDER_LEVEL). Files may
-        # sit inside a deepest-level folder, so file moves carry no depth check.
-        max_folder_level = MAX_FOLDER_LEVEL
+            raise KnowledgeOperationPlanConflictError(reason="move_application_unconfigured")
+        application = await self.move_application_factory()
+        return await application.aconfirm(space_id, request, identity=self.login_user, entry_kind="web")
 
-        async with get_async_db_session() as session:
-            source_space = await session.get(Knowledge, space_id)
-            target_space = await session.get(Knowledge, target_space_id)
-            if not target_space or target_space.type != KnowledgeTypeEnum.SPACE.value:
-                raise SpaceNotFoundError()
-            if source_space and target_space.tenant_id != source_space.tenant_id:
-                raise SpaceTenantMismatchError()
+    async def move_items(self, space_id, items, target_space_id, target_folder_id=None, skip_invalid=False):
+        """Retain synchronous same-space moves; cross-space requires confirmation."""
+        from bisheng.knowledge.domain.schemas.knowledge_space_schema import FileMoveReq
 
-            if target_folder_id:
-                target_folder = await session.get(KnowledgeFile, target_folder_id)
-                if (
-                    not target_folder
-                    or target_folder.file_type != FileType.DIR.value
-                    or target_folder.knowledge_id != target_space_id
-                ):
-                    raise SpaceFolderNotFoundError()
-                target_level_path = f"{target_folder.file_level_path}/{target_folder.id}"
-                target_level = target_folder.level + 1
-                new_parent: tuple[str, int] = ("folder", target_folder.id)
-            else:
-                target_level_path = ""
-                target_level = 0
-                new_parent = ("knowledge_space", target_space_id)
+        if not callable(getattr(self, "move_application_factory", None)):
+            from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-            # Target-side upload permission (same + cross space): moving items
-            # into a folder / space root is semantically "placing files there",
-            # so require upload_file on the target — mirrors add_file. The move
-            # dialog already hides targets the user can't upload to; this also
-            # blocks direct API calls into a no-permission target (decision-8
-            # reversal, see 测试反馈修复-R1.md #5).
-            if target_folder_id:
-                target_actions = await self._get_effective_actions("folder", target_folder_id, space_id=target_space_id)
-            else:
-                target_actions = await self._get_effective_actions(
-                    "knowledge_space", target_space_id, space_id=target_space_id
-                )
-            if "upload_file" not in target_actions:
-                raise SpacePermissionDeniedError()
-
-            # ── validate each item ──
-            valid: list[KnowledgeFile] = []
-            invalid: list[dict] = []
-            for it in items:
-                rec = await session.get(KnowledgeFile, int(it["id"]))
-                if not rec or rec.knowledge_id != space_id:
-                    raise SpaceFileNotFoundError()
-                is_folder = rec.file_type == FileType.DIR.value
-                word = "folder" if is_folder else "file"
-                otype = "folder" if is_folder else "knowledge_file"
-                self_prefix = f"{rec.file_level_path}/{rec.id}"
-
-                reason: str | None = None
-                effective_actions = await self._get_effective_actions(
-                    otype,
-                    rec.id,
-                    space_id=space_id,
-                )
-                if "move" not in effective_actions:
-                    reason = "no_permission"
-                elif is_folder and not cross_space and target_folder_id == rec.id:
-                    reason = "into_self"
-                elif is_folder and not cross_space and target_level_path.startswith(f"{self_prefix}/"):
-                    reason = "into_subtree"
-                elif not cross_space and target_level_path == (rec.file_level_path or ""):
-                    reason = "into_current_parent"
-                else:
-                    if is_folder:
-                        # Deepest FOLDER in the moved subtree (the folder itself
-                        # included); files are excluded — they don't count as a
-                        # layer, so an empty folder and a folder whose deepest
-                        # node is a file are both limited by their folders only.
-                        max_sub = await session.scalar(
-                            select(func.max(KnowledgeFile.level)).where(
-                                KnowledgeFile.knowledge_id == space_id,
-                                KnowledgeFile.file_type == FileType.DIR.value,
-                                or_(
-                                    KnowledgeFile.id == rec.id,
-                                    col(KnowledgeFile.file_level_path) == self_prefix,
-                                    col(KnowledgeFile.file_level_path).like(f"{self_prefix}/%"),
-                                ),
-                            )
-                        )
-                        depth_after = target_level + ((max_sub or rec.level) - rec.level)
-                        if depth_after > max_folder_level:
-                            reason = "depth_exceeded"
-                    # AC-12: same-level FOLDER name conflict is rejected for BOTH
-                    # same-space and cross-space moves (the dup query already scopes
-                    # to target_space_id). Files are never name-checked on move.
-                    if reason is None and is_folder:
-                        # Root-level rows persist file_level_path as NULL or "";
-                        # normalise both at the target root, otherwise SQL's
-                        # NULL == "" (false) lets a same-name root folder slip
-                        # through the dup check and the move silently succeeds.
-                        level_path_cond = (
-                            SpaceFileDao._root_path_filter()
-                            if target_level_path == ""
-                            else KnowledgeFile.file_level_path == target_level_path
-                        )
-                        dup = await session.scalar(
-                            select(func.count(KnowledgeFile.id)).where(
-                                KnowledgeFile.knowledge_id == target_space_id,
-                                KnowledgeFile.file_type == FileType.DIR.value,
-                                KnowledgeFile.file_name == rec.file_name,
-                                level_path_cond,
-                                KnowledgeFile.id != rec.id,
-                            )
-                        )
-                        if dup and dup > 0:
-                            reason = "name_conflict"
-
-                if reason:
-                    invalid.append({"id": rec.id, "type": word, "name": rec.file_name, "reason": reason})
-                else:
-                    valid.append(rec)
-
-            if invalid and not skip_invalid:
-                return {"moved": [], "invalid": invalid}
-
-            # ── execute valid items ──
-            moved: list[dict] = []
-            moved_file_ids: set[int] = set()  # all relocated files (tag clearing, AC-23)
-            files_to_migrate: set[int] = set()  # only files with data to move (was SUCCESS → REBUILDING)
-            direct_move_resources: set[tuple[str, int]] = set()
-            for rec in valid:
-                is_folder = rec.file_type == FileType.DIR.value
-                word = "folder" if is_folder else "file"
-                old_parent = self._parent_ref_from_level_path(rec.file_level_path, space_id)
-                level_delta = target_level - rec.level
-
-                rows: list[KnowledgeFile] = [rec]
-                if is_folder:
-                    old_self_prefix = f"{rec.file_level_path}/{rec.id}"
-                    new_self_prefix = f"{target_level_path}/{rec.id}"
-                    descendants = (
-                        await session.exec(
-                            select(KnowledgeFile).where(
-                                KnowledgeFile.knowledge_id == space_id,
-                                or_(
-                                    col(KnowledgeFile.file_level_path) == old_self_prefix,
-                                    col(KnowledgeFile.file_level_path).like(f"{old_self_prefix}/%"),
-                                ),
-                            )
-                        )
-                    ).all()
-                    for d in descendants:
-                        d.file_level_path = new_self_prefix + (d.file_level_path or "")[len(old_self_prefix) :]
-                        d.level = d.level + level_delta
-                        rows.append(d)
-                if cross_space:
-                    direct_move_resources.update(
-                        (
-                            "folder" if row.file_type == FileType.DIR.value else "knowledge_file",
-                            row.id,
-                        )
-                        for row in rows
-                    )
-                rec.file_level_path = target_level_path
-                rec.level = target_level
-
-                if cross_space:
-                    leaf_file_ids = [r.id for r in rows if r.file_type == FileType.FILE.value]
-                    chain_files, chain_docs = await self._collect_version_chain_file_ids(session, leaf_file_ids)
-                    for cfid in chain_files:
-                        cf = await session.get(KnowledgeFile, cfid)
-                        if cf is None:
-                            continue
-                        cf.knowledge_id = target_space_id
-                        moved_file_ids.add(cfid)
-                        if cf.status == KnowledgeFileStatus.SUCCESS.value:
-                            # Only completed files have chunks to migrate. Files still
-                            # parsing/failed continue in the target space via their own
-                            # parse/retry flow (AC-21); no migration dispatch for them.
-                            cf.status = KnowledgeFileStatus.REBUILDING.value
-                            files_to_migrate.add(cfid)
-                        session.add(cf)
-                    for r in rows:
-                        r.knowledge_id = target_space_id
-                    for did in chain_docs:
-                        doc = await session.get(KnowledgeDocument, did)
-                        if doc is not None:
-                            doc.knowledge_id = target_space_id
-                            session.add(doc)
-
-                for r in rows:
-                    session.add(r)
-
-                moved.append(
-                    {
-                        "id": rec.id,
-                        "type": word,
-                        "old_parent_id": old_parent[1] if old_parent[0] == "folder" else None,
-                        "cross_space": cross_space,
-                    }
-                )
-
-            await session.commit()
-
-        # ── post-commit side effects (FGA tuples / tags / async dispatch) ──
-        if cross_space:
-            self._dispatch_knowledge_chat_rehome(
-                source_space_id=space_id,
-                resources=sorted(direct_move_resources),
-                reason="cross_space_move",
-            )
-
-        for m in moved:
-            otype = "folder" if m["type"] == "folder" else "knowledge_file"
-            old_parent = ("folder", m["old_parent_id"]) if m["old_parent_id"] else ("knowledge_space", space_id)
-            await self._replace_resource_parent_tuple(otype, m["id"], old_parent, new_parent)
-
-        if cross_space:
-            # AC-23: clear space tags on every relocated file (tags don't migrate).
-            for fid in moved_file_ids:
-                await TagDao.aupdate_resource_tags([], str(fid), ResourceTypeEnum.SPACE_FILE, self.login_user.user_id)
-            # Dispatch retrieval-data migration only for files that had data (source = old space).
-            for fid in files_to_migrate:
-                await self._dispatch_cross_space_migration(fid, source_space_id=space_id)
-
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
-        if cross_space:
-            await KnowledgeDao.async_update_knowledge_update_time_by_id(target_space_id)
-        return {"moved": moved, "invalid": invalid}
+            raise KnowledgeOperationPlanConflictError(reason="move_application_unconfigured")
+        application = await self.move_application_factory()
+        return await application.move_legacy(
+            space_id,
+            FileMoveReq(
+                items=items,
+                target_space_id=target_space_id,
+                target_folder_id=target_folder_id,
+                skip_invalid=skip_invalid,
+            ),
+            identity=self.login_user,
+            entry_kind="web",
+        )
 
     async def update_file_encoding(
         self,
@@ -4598,8 +4696,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return list(expanded)
 
-    async def delete_file(self, file_id: int):
-        file_record = await self._get_file_for_action(file_id)
+    async def delete_file(self, file_id: int, *, space_id: int | None = None):
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_action("knowledge_file", file_id, "delete")
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
         if not space:
@@ -4614,6 +4712,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
+        self._audit_space(
+            "delete_file",
+            str(file_record.knowledge_id),
+            file_record.file_name,
+            "来源=知识空间；类型=文件；结果=成功",  # noqa: RUF001
+        )
 
     async def get_file_preview(self, file_id: int, *, space_id: int | None = None) -> dict:
         """Authorize current file visibility before issuing content URLs."""
@@ -4639,7 +4743,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def get_file_download(self, file_id: int, *, space_id: int | None = None) -> dict:
-        await self._get_file_for_action(file_id, space_id=space_id)
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
         if self.f048_file_delivery is not None:
             from bisheng.permission.domain.services.permission_action_service import (
                 PermissionActor,
@@ -4662,6 +4766,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
+        self._audit_space(
+            "download_file",
+            str(file_record.knowledge_id),
+            file_record.file_name,
+            "来源=知识空间；类型=文件；结果=成功",  # noqa: RUF001
+        )
 
         return {
             "original_url": original_url,
@@ -4714,115 +4824,54 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, self.login_user.user_id)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
+    async def _ordinary_batch(self, space_id, operation, items, **parameters):
+        from bisheng.knowledge.domain.schemas.knowledge_batch import BatchCommand
+
+        factory = getattr(self, "batch_application_factory", None)
+        if factory is None:
+            raise RuntimeError("ordinary batch application is not configured")
+        app = factory()
+        if hasattr(app, "__await__"):
+            app = await app
+        return await app.aordinary(
+            identity=self.login_user,
+            space_id=space_id,
+            command=BatchCommand(operation=operation, items=items, **parameters),
+        )
+
     async def batch_add_file_tags(self, space_id: int, file_ids: list[int], tag_ids: list[int]):
-        """Batch add tags to files."""
-        await self._require_read_permission(space_id)
         if not file_ids or not tag_ids:
             return
+        await self._ordinary_batch(
+            space_id, "tag", [{"id": ident, "type": "file"} for ident in file_ids], tag_ids=tag_ids
+        )
 
-        files = await self._get_space_files_or_raise(space_id, file_ids)
-
-        resource_type = ResourceTypeEnum.SPACE_FILE
-        for file_record in files:
-            await self._require_action(
-                "knowledge_file",
-                file_record.id,
-                "rename",
-            )
-            await TagDao.add_tags(tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
-
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
-
-    async def retry_space_files(self, space_id: int, req_data: dict) -> list:
-        """
-        Retry logic for multiple files in a knowledge space with potentially new split rules.
-        Similar to KnowledgeService.retry_files but scoped to a space.
-        """
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-        await self._require_read_permission(space_id)
-        self._ensure_space_async_task_tenant_consistency(space, "retry_space_files")
-
-        db_file_retry = req_data.get("file_objs")
-        if not db_file_retry:
+    async def retry_space_files(self, space_id: int, req_data: dict):
+        factory = getattr(self, "legacy_retry_factory", None)
+        if not callable(factory):
+            raise RuntimeError("SPACE legacy retry application is not configured")
+        result = await factory().aretry(
+            request=self.request,
+            identity=self.login_user,
+            req_data=req_data,
+            space_id=space_id,
+        )
+        if not isinstance(result, tuple):
+            return result
+        _space, _files, file_level_path = result
+        if not _files:
             return []
-
-        id2input = {file.get("id"): file for file in db_file_retry}
-        file_ids = list(id2input.keys())
-        db_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
-        if not db_files:
-            return []
-
-        for db_file in db_files:
-            if db_file.knowledge_id != space_id:
-                raise SpaceFileNotFoundError()
-            await self._require_resource_action(
-                "rename",
-                "knowledge_file",
-                db_file.id,
-            )
-
-        _tmp, file_level_path = await self.process_retry_files(db_files, id2input, self.login_user)
-
-        for folder_path in file_level_path:
-            await self.update_folder_update_time(folder_path)
-
+        for path in file_level_path:
+            await self.update_folder_update_time(path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
         return []
 
     async def batch_retry_failed_files(self, space_id: int, file_ids: list[int]):
-        from bisheng.worker import retry_knowledge_file_celery
-
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space:
-            raise SpaceNotFoundError()
-        await self._require_read_permission(space_id)
-        self._ensure_space_async_task_tenant_consistency(space, "batch_retry_failed_files")
-
-        retry_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
-        all_file_ids = []
-        all_file_level_path = set()
-        retryable_status = KnowledgeFileStatus.abnormal_values()
-        for file in retry_files:
-            if file.knowledge_id != space_id:
-                continue
-            if file.file_type == FileType.FILE.value and file.status in retryable_status:
-                await self._require_resource_action(
-                    "rename",
-                    "knowledge_file",
-                    file.id,
-                )
-                retry_knowledge_file_celery.delay(file.id)
-                all_file_ids.append(file.id)
-                all_file_level_path.add(file.file_level_path)
-            elif file.file_type == FileType.DIR.value:
-                await self._require_resource_action(
-                    "rename",
-                    "folder",
-                    file.id,
-                )
-                all_failed_files = await SpaceFileDao.get_children_by_prefix(
-                    knowledge_id=space_id, prefix=file.file_level_path + f"/{file.id}"
-                )
-                for item in all_failed_files:
-                    if item.status in retryable_status and item.file_type == FileType.FILE.value:
-                        await self._require_resource_action(
-                            "rename",
-                            "knowledge_file",
-                            item.id,
-                        )
-                        retry_knowledge_file_celery.delay(item.id)
-                        all_file_ids.append(item.id)
-                        all_file_level_path.add(file.file_level_path)
-        if all_file_ids:
-            await KnowledgeFileDao.aupdate_file_status(
-                all_file_ids, KnowledgeFileStatus.WAITING, "batch_retry_failed_files"
-            )
-            await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
-        for one in all_file_level_path:
-            if one:
-                await self.update_folder_update_time(one)
+        records = await KnowledgeFileDao.aget_file_by_ids(file_ids)
+        types = {row.id: "folder" if row.file_type == 0 else "file" for row in records}
+        await self._ordinary_batch(
+            space_id, "retry", [{"id": ident, "type": types.get(ident, "file")} for ident in file_ids]
+        )
         return True
 
     # ──────────────────────────── Batch Ops ───────────────────────────────────
@@ -4832,227 +4881,46 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not knowledge:
             raise SpaceNotFoundError()
 
-        await self._require_read_permission(knowledge_id)
         self._ensure_space_async_task_tenant_consistency(knowledge, "batch_delete")
-        file_ids, folder_ids = await self._normalize_batch_delete_inputs(
-            knowledge_id,
-            file_ids,
-            folder_ids,
+        selections = tuple(
+            [DeleteSelection("folder", ident) for ident in self._dedupe_ids(folder_ids)]
+            + [DeleteSelection("knowledge_file", ident) for ident in self._dedupe_ids(file_ids)]
+        )
+        if not selections:
+            return
+        manifest = await self._deletion_application().aordinary_delete(
+            identity=self.login_user, space_id=knowledge_id, selections=selections
+        )
+        self._dispatch_knowledge_chat_rehome(
+            source_space_id=knowledge_id,
+            resources=[(row["resource_type"], row["resource_id"]) for row in manifest["fga_resources"]],
+            reason="batch_delete_files",
+        )
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
+        self._audit_space(
+            "delete_file",
+            str(knowledge.id),
+            knowledge.name,
+            f"来源=知识空间；类型=批量；文件={len(file_ids)}；文件夹={len(folder_ids)}；结果=成功",  # noqa: RUF001
         )
 
-        for folder_id in folder_ids:
-            await self.delete_folder(knowledge.id, folder_id)
-
-        if file_ids:
-            direct_files = []
-            for file_id in self._dedupe_ids(file_ids):
-                file_record = await self._get_file_for_action(file_id, space_id=knowledge_id)
-                await self._require_action(
-                    "knowledge_file",
-                    file_id,
-                    "delete",
-                )
-                direct_files.append(file_record)
-            deleted_ids: set[int] = set()
-            for file_record in direct_files:
-                if file_record.id in deleted_ids:
-                    continue
-                manifest = await self._delete_formal_resource(file_record)
-                deleted_ids.update(manifest["file_ids"])
-                self._dispatch_knowledge_chat_rehome(
-                    source_space_id=knowledge.id,
-                    resources=[(item["resource_type"], item["resource_id"]) for item in manifest["fga_resources"]],
-                    reason="batch_delete_files",
-                )
-        # Prune channel ➜ knowledge-folder sync bindings for the top-level
-        # folders deleted in this batch so the Celery sync worker stops
-        # referencing a tombstone. Per-folder cascades are pruned by
-        # delete_folder() above.
-        if folder_ids:
-            from bisheng.channel.domain.models.channel_knowledge_sync import (
-                ChannelKnowledgeSyncDao,
-            )
-
-            try:
-                await ChannelKnowledgeSyncDao.adelete_by_folder_ids(folder_ids)
-            except Exception as e:
-                _logger.warning(
-                    "Failed to cleanup channel knowledge sync bindings for folders %s: %s",
-                    folder_ids,
-                    e,
-                )
-
-        if file_ids:
-            await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)
-
     async def batch_download(self, space_id: int, file_ids: list[int], folder_ids: list[int]) -> str:
-        """
-        Download selected files and folders, preserving the original directory structure,
-        compress into a zip archive, upload to the MinIO tmp bucket, and return a
-        presigned URL (valid for 7 days).
-
-        Directory structure is reconstructed from file_level_path (e.g. '/7/42') by
-        resolving each segment id to the corresponding folder name.
-        """
+        result = await self._ordinary_batch(
+            space_id,
+            "download",
+            [{"id": ident, "type": "file"} for ident in file_ids]
+            + [{"id": ident, "type": "folder"} for ident in folder_ids],
+        )
+        if any(row["state"] == "failed" for row in result["items"]):
+            raise KnowledgeOperationPlanChangedError(reason="batch_download_partial_failure", result=result)
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-
-        # ── 1. Collect all file records to include ────────────────────────────
-        # Explicit files requested directly
-        direct_files = []
-        for file_id in self._dedupe_ids(file_ids):
-            file_record = await self._get_file_for_action(file_id, space_id=space_id)
-            await self._require_action(
-                "knowledge_file",
-                file_id,
-                "download",
-            )
-            direct_files.append(file_record)
-
-        # Files & sub-folders under every requested folder_id
-        folder_db_records: list[KnowledgeFile] = []
-        for folder_id in self._dedupe_ids(folder_ids):
-            folder = await self._get_folder_for_action(space_id, folder_id)
-            await self._require_action("folder", folder_id, "download")
-            prefix = f"{folder.file_level_path}/{folder.id}"
-            descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
-            for descendant in descendants:
-                if descendant.file_type == FileType.DIR.value:
-                    await self._require_action(
-                        "folder",
-                        descendant.id,
-                        "download",
-                    )
-                else:
-                    await self._require_action(
-                        "knowledge_file",
-                        descendant.id,
-                        "download",
-                    )
-            folder_db_records.append(folder)
-            folder_db_records.extend(descendants)
-
-        # All KnowledgeFile objects this download touches
-        all_records: list[KnowledgeFile] = direct_files + folder_db_records
-
-        # ── 2. Build id→name map for every folder encountered ─────────────────
-        #       We need this to translate '/7/42' → 'Reports/Q1'
-        folder_id_to_name: dict[int, str] = {}
-        for rec in all_records:
-            if rec.file_type == FileType.DIR.value:
-                folder_id_to_name[rec.id] = rec.file_name
-
-        # Collect any ancestor folder IDs referenced in file_level_path but not yet known
-        missing_ids: set[int] = set()
-        for rec in all_records:
-            if not rec.file_level_path:
-                continue
-            for part in rec.file_level_path.split("/"):
-                if not part:
-                    continue
-                try:
-                    fid = int(part)
-                    if fid not in folder_id_to_name:
-                        missing_ids.add(fid)
-                except ValueError:
-                    pass
-
-        if missing_ids:
-            extra_folders = await KnowledgeFileDao.aget_file_by_ids(list(missing_ids))
-            for f in extra_folders:
-                if f.file_type == FileType.DIR.value:
-                    folder_id_to_name[f.id] = f.file_name
-
-        def resolve_dir_path(file_level_path: str | None) -> str:
-            """Convert '/7/42' to 'FolderA/SubFolderB' using the name map."""
-            if not file_level_path:
-                return ""
-            parts = [p for p in file_level_path.split("/") if p]
-            names = []
-            for part in parts:
-                try:
-                    fid = int(part)
-                    names.append(folder_id_to_name.get(fid, str(fid)))
-                except ValueError:
-                    names.append(part)
-            return "/".join(names)
-
-        # ── 3. Download files from MinIO and write into a temp dir ────────────
-        from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
-
-        minio = get_minio_storage_sync()
-
-        import os
-        import zipfile
-        from datetime import datetime
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for rec in all_records:
-                rel_dir = resolve_dir_path(rec.file_level_path)
-                local_dir = os.path.join(tmp_dir, rel_dir) if rel_dir else tmp_dir
-                os.makedirs(local_dir, exist_ok=True)
-                local_path = os.path.join(local_dir, rec.file_name)
-
-                if rec.file_type == FileType.DIR.value:
-                    # Create the folder explicitly so empty folders exist in tmp_dir
-                    os.makedirs(local_path, exist_ok=True)
-                    continue
-
-                target_object_name = rec.object_name
-                # If file source is CHANNEL, use preview_object_name to download the HTML file
-                if rec.file_source == FileSource.CHANNEL.value and rec.preview_file_object_name:
-                    target_object_name = rec.preview_file_object_name
-                    name, _ = os.path.splitext(rec.file_name)
-                    local_path = os.path.join(local_dir, f"{name}.html")
-
-                if not target_object_name:  # No stored object to download.
-                    continue
-
-                try:
-                    response = minio.download_object_sync(object_name=target_object_name)
-                    with open(local_path, "wb") as f:
-                        for one in response.stream(65536):
-                            f.write(one)
-                except Exception:
-                    # Skip files that cannot be fetched (e.g. not yet parsed)
-                    continue
-                finally:
-                    response.close()
-                    response.release_conn()
-
-            # ── 4. Create zip archive ─────────────────────────────────────────
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            zip_folder = generate_uuid()
-            zip_name = f"{timestamp}_{zip_folder[:6]}.zip"
-            zip_path = os.path.join(tmp_dir, zip_name)
-
-            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                for root, dirs, files in os.walk(tmp_dir):
-                    # Add directories to ensure empty directories are included in the zip
-                    for dirname in dirs:
-                        dir_path = os.path.join(root, dirname)
-                        arcname = os.path.relpath(dir_path, tmp_dir)
-                        zf.write(dir_path, arcname)
-                    # Add files
-                    for filename in files:
-                        if filename == zip_name:
-                            continue  # don't zip the zip itself
-                        full_path = os.path.join(root, filename)
-                        arcname = os.path.relpath(full_path, tmp_dir)
-                        zf.write(full_path, arcname)
-
-            # ── 5. Upload zip to MinIO tmp bucket & return presigned URL ──────
-            minio_object_name = f"download/{zip_folder}/{zip_name}"
-            await minio.put_object_tmp(minio_object_name, Path(zip_path), content_type="application/zip")
-            share_url = await minio.get_share_link(
-                minio_object_name,
-                bucket=minio.tmp_bucket,
-                clear_host=True,
-                expire_days=7,
-            )
-
-        return share_url
+        self._audit_space(
+            "download_file",
+            str(space_id),
+            space.name if space is not None else "",
+            f"来源=知识空间；类型=批量；文件={len(file_ids)}；文件夹={len(folder_ids)}；结果=成功",  # noqa: RUF001
+        )
+        return result["url"]
 
     # ──────────────────────────── Subscribe ───────────────────────────────────
 

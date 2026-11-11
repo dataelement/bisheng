@@ -10,6 +10,7 @@ from bisheng.common.errcode.server import (
     TtsModelTypeError,
     TtsProviderDeletedError,
 )
+from bisheng.common.services.failure_context import failure_boundary
 from bisheng.core.ai import AliyunTTSClient, AzureOpenAITTSClient, BaseTTSClient, OpenAITTSClient
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMModel, LLMServer
@@ -105,5 +106,6 @@ class BishengTTS(BishengBase):
         return client
 
     @wrapper_bisheng_model_limit_check_async
+    @failure_boundary("model_service", "tts", "synthesize")
     async def ainvoke(self, text: str, **kwargs) -> bytes:
         return await self.tts.synthesize(text, **kwargs)

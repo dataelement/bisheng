@@ -48,6 +48,9 @@ class Runtime:
     def capabilities(self):
         return {"executor_kind": "kubernetes", "status_policy_revision": "v1", "mandatory_isolation": True}
 
+    def preflight(self, operation):
+        """Image checks have dedicated executor tests; this double models their success."""
+
     def prepare(self, operation):
         self.calls.append("prepare")
         return {"mode": "bundle", "compiled_artifact_id": "compiled-a"}

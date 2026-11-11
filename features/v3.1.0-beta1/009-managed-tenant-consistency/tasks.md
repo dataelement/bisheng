@@ -358,7 +358,7 @@
   **覆盖 AC**：AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-09, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18, AC-19, AC-20, AC-21, AC-22, AC-23, AC-24, AC-25, AC-26, AC-27, AC-28, AC-29, AC-30, AC-31, AC-32, AC-34, AC-35, AC-36, AC-37, AC-38, AC-39, AC-40
   **依赖**：T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013, T014, T015, T016, T017, T018, T019, T020, T021, T022, T023, T024, T025, T026, T027, T028, T029, T030, T031, T032, T033, T034, T035, T036, T037, T038, T039, T040, T041, T042, T043, T044, T045, T046, T049, T050
 
-- [ ] **T048**：任务/特性级最终审查（审查）
+- [x] **T048**：任务/特性级最终审查（审查）
   **文件**：`/Users/zhangguoqing/works/bisheng/.worktrees/managed-tenant-bugfix/features/v3.1.0-beta1/009-managed-tenant-consistency/task-reviews.md`、`/Users/zhangguoqing/works/bisheng/.worktrees/managed-tenant-bugfix/features/v3.1.0-beta1/009-managed-tenant-consistency/code-review.md`
   **逻辑/验证**：逐任务L1及特性SDD七维审查；arch-guard、必要pytest/ruff/i18n、DDL单head；只报真实结果，不标延期AC完成；无合并部署。
   **覆盖 AC**：AC-01, AC-30, AC-39
@@ -499,3 +499,9 @@ T011前置完成T017/T019的只读主体事实接口；写入/终止随后完成
 补充T051–T070记录实际生产者/消费者和旧单测替身适配；没有增加表、恢复中心或延期AC承诺。前端生成错误码产物由源locale生成，六份产物不作为手写目标。T047仅3条HTTP用例已编写且本地skip，完整QA矩阵和浏览器尚待隔离环境；T048本地七维审查记录已写，但合入门禁未通过，均不打勾。
 
 最终基线核对：本地缓存origin发布线已领先2156提交、38路径重叠；未fetch/合并，不能将当前局部实现称为对当前发布线已集成。T048明确包含后续同步、冲突/迁移head核对与重跑，保持未勾选。
+
+## 2026-11-11 用户要求合并后的集成记录
+
+实际fetch df927a7f6e，解决13文件冲突；保留F118 workflow参考绑定/迁移来源个人豁免/挂载覆盖事务及worker执行证明。新增空merge migration；补挂载factory真实同事务终止用例，适配F118创建/配额旧合同测试及unmount窄替身，修复人员弹窗类型推断。不是新增AC或新业务表。
+
+T048本地集成复核已完成并按用户明确授权合并；T047真实HTTP/浏览器仍未执行，依赖例外为本次用户已知待验项后的明确合并指令，不伪造完成。最新去重353 passed / 10基线失败及87本批回归见merge-validation.json；此前“未fetch/未合并”的记录为历史快照。

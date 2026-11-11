@@ -206,7 +206,7 @@
     "skills": "構  築",
     "createApp": "アプリの作成",
     "createKnowledge": "ナレッジベース新規作成",
-    "knowledge": "知  識",
+    "knowledge": "ナレッジスペース",
     "evaluation": "評  価",
     "annotation": "注  釈",
     "approval": "承  認",
@@ -690,7 +690,7 @@
     "tts": "音声合成(TTS)",
     "updateSuccess": "更新に成功しました",
     "voiceType": "音声タイプ",
-    "voiceTypeRequired": "音声タイプは必須項目です",
+    "voiceTypeRequired": "音色タイプは空にできません",
     "voiceTypeTooltip": "音声合成で使用する音声タイプを選択してください",
     "webSearch": "モデル内蔵のウェブ検索",
     "visitOfficialWebsiteToViewAvailableModels": "公式サイトで利用可能なモデルを確認してください",
@@ -1568,7 +1568,37 @@
       "link_file_version": "ファイルバージョンを関連付け",
       "set_primary_version": "ファイルのメインバージョンを設定",
       "delete_file_version": "履歴ファイルバージョンを削除",
-      "dismiss_similar_file": "類似ファイルの提案を無視"
+      "dismiss_similar_file": "類似ファイルの提案を無視",
+      "download_file": "ナレッジファイルのダウンロードを申請",
+      "export_qa": "QA 項目をエクスポート",
+      "create_qa": "QA 項目を追加",
+      "update_qa": "QA 項目を変更",
+      "delete_qa": "QA 項目を削除",
+      "enable_qa": "QA 項目を有効化",
+      "disable_qa": "QA 項目を停止",
+      "create_local_user": "管理者がローカルアカウントを作成",
+      "reset_user_password": "管理者がユーザーパスワードをリセット",
+      "change_own_password": "ユーザーが自身のパスワードを変更",
+      "update_dept_admin": "部門管理者を調整",
+      "update_dept_default_role": "部門のデフォルトロールを変更",
+      "update_sensitive_policy": "機密語審査ポリシーを変更",
+      "move_department": "部門を移動",
+      "change_member_dept": "メンバーの所属を変更",
+      "grant_resource": "リソース権限を付与",
+      "revoke_resource": "リソース権限を回収",
+      "update_resource_mode": "リソース権限モードを変更",
+      "personal_skill_create": "個人スキルを作成またはインポート",
+      "personal_skill_status": "個人スキルを有効化または停止",
+      "personal_skill_delete": "個人スキルを削除",
+      "personal_skill_overwrite": "個人スキルを上書き更新",
+      "openApiPatCreate": "個人トークンを作成",
+      "openApiPatRegenerate": "個人トークンを再生成",
+      "openApiPatRevoke": "トークン単位で個人トークンを失効",
+      "openApiPatDelete": "ユーザーが自身の個人トークンを削除",
+      "openApiPatRevokeHolder": "保有者単位で個人トークンを失効",
+      "openApiPatTenantMigrate": "アカウントのテナント移行時に個人トークンを失効",
+      "openApiPatSettingsUpdate": "個人トークンのテナント方針を変更",
+      "llmSystemConfigUpdate": "デフォルトおよびシステムモデル設定を変更"
     },
     "objectTypeEnum": {
       "app": "アプリ",
@@ -1588,6 +1618,7 @@
       "workstation": "ワークステーション（日常モード）",
       "channel": "チャンネル",
       "knowledge_space": "ナレッジスペース",
+      "department": "部門",
       "tenant": "テナント",
       "llm_server": "モデルプロバイダ",
       "approval_instance": "審査インスタンス",
@@ -1839,6 +1870,7 @@
     },
     "usageType": {
       "label": "利用タイプ",
+      "all": "すべて",
       "daily": "日常会話",
       "assistant": "アシスタント会話",
       "workflow": "ワークフロー会話",
@@ -3431,6 +3463,26 @@
       "group_order": "初回登録日時順",
       "group_last": "最新リクエスト",
       "group_count": "保存済み {{count}} 件",
+      "group_like": "高評価",
+      "group_dislike": "低評価",
+      "group_likes": "高評価 {{count}}",
+      "group_dislikes": "低評価 {{count}}",
+      "feedback_heading": "メッセージ評価",
+      "feedback": {
+        "rating": {
+          "positive": "高評価",
+          "negative": "低評価"
+        },
+        "category": {
+          "task-result": "タスク結果",
+          "instruction-following": "指示の遵守",
+          "product-interaction": "製品操作",
+          "service-stability": "サービスの安定性",
+          "resource-cost": "リソースとコスト",
+          "security-privacy-permission": "セキュリティ、プライバシー、権限",
+          "other": "その他"
+        }
+      },
       "group_abnormal": "異常 {{count}} 件",
       "group_scope": "条件に一致するリクエストのみ表示しています。集計は会話内の登録済み全件が対象で、反映が遅れる場合があります。",
       "group_all": "保存済み全リクエストを表示",
@@ -4385,5 +4437,14 @@
       "admin": "管理者",
       "children": "下位部門を含む"
     }
+  },
+  "references": {
+    "saved": "保存済みの参照",
+    "unavailable": "現在選択できません",
+    "unconfirmed": "一部の保存済み ID は現在の候補にありません。ここでは状態を確認できないため、元の ID を保持します。",
+    "partialRepair": "一部の修正を保存できます。実行や公開にはすべての参照が有効である必要があります。",
+    "invalid_deleted": "削除済み",
+    "invalid_legacy": "過去の参照が見つかりません",
+    "deleting": "削除中"
   }
 }

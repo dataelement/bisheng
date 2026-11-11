@@ -1,9 +1,9 @@
 # F009 升级、盘点与回滚
 
-状态：操作说明，尚未在部署执行。当前修复基线落后本地缓存发布线2156提交，且发布线新增work130迁移合并revision，必须先完成代码/迁移集成再使用本说明，不能直接拿本分支旧head迁移上线。本批只增加三个既有表的四列，不新增业务表，不回填/搬迁/删除历史业务数据。需先完成隔离环境验收，不能把本地回归视为上线许可。
+状态：操作说明，尚未在部署执行。已完成df927a7f6e发布线集成，当前唯一head为v310b1_merge_f009_release_heads；旧四列revision父链保留，新增空merge连接F118删除/work130，不用旧单head结论替代当前图。本批只增加三个既有表的四列，不新增业务表，不回填/搬迁/删除历史业务数据。需先完成隔离环境验收，不能把本地回归视为上线许可。
 
 1. 保留旧版本应用/worker镜像与数据库备份；停止相关写入并排空旧文档/QA复制任务。旧消息没有本次精确关联或可信header，新worker会拒绝猜测执行。确认无在途外部写后再换worker。
-2. 先对旧数据库做只读归属/旧COPYING核查；运行四列DDL：`flow.creation_state`、`t_gpts_tools_type.creation_state`默认READY，`knowledge.copy_source_id/copy_target_id`默认NULL。父head为`v310b1_f004_workflow_soft_delete`，升级到`v310b1_f009_managed_tenant`；部署前重新确认发布线没有新的迁移head需要合并。MySQL/DM8均需集中验证。
+2. 先对旧数据库做只读归属/旧COPYING核查；运行四列DDL：`flow.creation_state`、`t_gpts_tools_type.creation_state`默认READY，`knowledge.copy_source_id/copy_target_id`默认NULL。父head为`v310b1_f004_workflow_soft_delete`，经过四列revision升级至当前唯一head`v310b1_merge_f009_release_heads`；部署前重新确认发布线没有新的迁移head需要合并。MySQL/DM8均需集中验证。
 3. 在四列已存在后运行新版只读脚本：从backend执行 `python scripts/managed_tenant_preflight.py --tenant-id <T> --user-id <U> --limit 100`。脚本需要新列，不能拿它直接扫描未迁移旧库。使用测试/部署既有安全配置，不复制凭据到日志。默认最多100人/每类资源，最高1000；truncated=true不能当全量盘点完成。UNKNOWN保持未知，FGA输出NOT_RUN需另核对。无apply。
 4. 盘点当前H、原绑定/E、普通菜单/预算/审批标签、可选DSH、权限SQL镜像及pending/复制关联；旧READY默认不是完整权限证明。旧无关联COPYING标UNKNOWN_LEGACY_COPYING，名称相近不能证明同一复制意图。确认前不得自动补指针、迁移或清理。
 5. API和worker同版本发布后，以专用数据完成e2e-checklist/QA；检查真实H与M、子表T和PENDING拒绝。受控创建恢复仅所属Service.resume_creation内部端口，要求原owner当前合法、固定T/资源/原key；FAILED_CLOSED不盲重放。没有新HTTP恢复中心或扫描任务。

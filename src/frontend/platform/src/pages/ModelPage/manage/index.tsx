@@ -12,6 +12,8 @@ import { useTranslation } from "react-i18next"
 
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLLmModelStatus } from "@/controllers/API/finetune"
 import { useQuery } from "@tanstack/react-query"
+import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope"
+import { managementRequestScope } from "@/controllers/managementScope"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
@@ -198,9 +200,19 @@ export default function Management() {
 
 // model list（embeddings llm）
 export function useModel(type = 'llm') {
+    const { scopes } = useKnowledgePageScope();
+    const scope = scopes?.ordinary;
+    const pin = managementRequestScope();
     const { data, isLoading, refetch } = useQuery({
-        queryKey: [type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey"],
-        queryFn: () => type === 'llm' ? getModelListApi() : getAssistantModelList(),
+        queryKey: [type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey", scope?.identityKey, scope?.tenantId, scope?.managementTenantId, pin],
+        enabled: !!scope,
+        cacheTime: 0,
+        queryFn: async () => {
+            if (managementRequestScope() !== pin) throw new Error('management_scope_changed');
+            const result = await (type === 'llm' ? getModelListApi() : getAssistantModelList());
+            if (managementRequestScope() !== pin) throw new Error('management_scope_changed');
+            return result;
+        },
         select: (data) => {
             const llmOptions = []
             const embeddings = []
@@ -249,7 +261,7 @@ export function useModel(type = 'llm') {
         asrModel = [],
         ttsModel = [],
         rerank = []
-    } = data ?? {};
+    } = (scope ? data : undefined) ?? {};
     return {
         llmOptions,
         embeddings,

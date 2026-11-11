@@ -87,6 +87,146 @@ const protectedAssignee: PermissionGrantAssignee = {
   editable: false,
 }
 
+describe("F118 server-issued pure visibility grants", () => {
+  const pureModel = {
+    key: "pure-original",
+    name: "Original visible model",
+    level: 3 as const,
+    active: true,
+    visibility_only: true,
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getGrantablePermissionModelsApi).mockResolvedValue([pureModel]);
+    vi.mocked(mutateResourceGrantsApi).mockResolvedValue({
+      resource_version: 9,
+      items: [],
+    });
+  });
+
+  it("offers a server-issued pure model at its original level and submits only its key", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="tool"
+        resourceId="tool-1"
+        context={context}
+        onSuccess={vi.fn()}
+      />,
+    );
+    await screen.findByLabelText("grant.addModel");
+    await waitFor(() =>
+      expect(screen.getByLabelText("grant.addModel")).toHaveTextContent(
+        pureModel.name,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "select-alice" }));
+    fireEvent.click(screen.getByRole("button", { name: "grant.submit" }));
+    await waitFor(() => expect(mutateResourceGrantsApi).toHaveBeenCalledOnce());
+    const body = vi.mocked(mutateResourceGrantsApi).mock.calls[0][2];
+    expect(body).toMatchObject({
+      expected_resource_version: 8,
+      expected_catalog_release_id: 14,
+      changes: [
+        {
+          op: "ADD",
+          model_key: "pure-original",
+          subject: { type: "user", id: "9" },
+        },
+      ],
+    });
+    expect(pureModel.level).toBe(3);
+    expect(JSON.stringify(body)).not.toMatch(
+      /visibility_only|action_codes|"level"|"use"|"visible"/,
+    );
+  });
+
+  it("removes an editable inactive pure source without changing another source", async () => {
+    const retired = {
+      ...editableAssignee,
+      model: { ...pureModel, key: "retired-pure", active: false },
+    };
+    const retained = {
+      ...editableAssignee,
+      assignee_id: "43",
+      assignee_version: 5,
+      model: pureModel,
+      source: { type: "DEPARTMENT", include_children: true },
+    };
+    const response = { resource_version: 9, items: [retained] };
+    vi.mocked(mutateResourceGrantsApi).mockResolvedValue(response);
+    const onSuccess = vi.fn();
+    const view = render(
+      <PermissionGrantTab
+        resourceType="tool"
+        resourceId="tool-1"
+        context={context}
+        assignees={[retired, retained]}
+        onSuccess={onSuccess}
+      />,
+    );
+    const remove = await screen.findByRole("button", {
+      name: "grant.remove.41",
+    });
+    await waitFor(() => expect(remove).toBeEnabled());
+    fireEvent.click(remove);
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(response));
+    expect(vi.mocked(mutateResourceGrantsApi).mock.calls[0][2]).toMatchObject({
+      expected_resource_version: 8,
+      expected_catalog_release_id: 14,
+      changes: [
+        { op: "REMOVE", assignee_id: "41", expected_assignee_version: 2 },
+      ],
+    });
+    view.rerender(
+      <PermissionGrantTab
+        resourceType="tool"
+        resourceId="tool-1"
+        context={{ ...context, resource_version: 9 }}
+        assignees={response.items}
+        onSuccess={onSuccess}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "grant.remove.41" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "grant.remove.43" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/source.department/)).toBeInTheDocument();
+  });
+
+  it.each(["protected", "inherited", "uneditable", "no-management"])(
+    "keeps the original %s restriction for a pure model",
+    async (boundary) => {
+      const assignee: PermissionGrantAssignee = {
+        ...editableAssignee,
+        model: pureModel,
+        protected: boundary === "protected",
+        editable: boundary !== "uneditable",
+        scope: boundary === "inherited" ? "INHERITED" : "LOCAL",
+      };
+      render(
+        <PermissionGrantTab
+          resourceType="tool"
+          resourceId="tool-1"
+          context={{
+            ...context,
+            can_manage_permission: boundary !== "no-management",
+          }}
+          assignees={[assignee]}
+          onSuccess={vi.fn()}
+        />,
+      );
+      const remove = await screen.findByRole("button", {
+        name: "grant.remove.41",
+      });
+      expect(remove).toBeDisabled();
+      fireEvent.click(remove);
+      expect(mutateResourceGrantsApi).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe("F048 PermissionGrantTab", () => {
   beforeEach(() => {
     vi.clearAllMocks()

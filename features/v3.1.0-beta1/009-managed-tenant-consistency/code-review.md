@@ -1,9 +1,21 @@
 # Code Review Report
 
-**Feature**：F009 管理租户最小修复。**日期**：2026-11-11。  
-**Review scope**：当前worktree中相对HEAD的tracked diff和新增源码/测试；原七表草稿仅作历史，不套用旧LGTM。  
-**Base**：`24c02859e2582ed319281bb52285c99930daf81c`；目标发布线`feat/3.1.0-beta1`（合入前需重新核对目标HEAD）。  
-**Changed backend Python**：91个路径，含58个bisheng生产路径，其余测试/脚本；涵盖实际生产者和消费者。四列、零新表；薄application/Repository是领域边界，不是新恢复中心。无新依赖或HTTP恢复端点。  
+## 最新集成复核（2026-11-11）
+
+当前结论：**PASS_WITH_WARNINGS（本地代码/发布线集成）**，非上线验收结论。用户在得知待验项后明确要求合并；按该授权合并发布线。原Compatibility HIGH已由实际fetch df927a7f6e、逐段解决13文件冲突、F118兼容回归及单head测试关闭。此前Test Coverage HIGH保留为发布前真实环境待验，不宣称E2E通过；SDD Guide §6将有外部依赖的双DB/中间件/Playwright验收归集中回归，本地不伪造环境。
+
+去重测试353通过/10已在最新基线复现失败；本批87项和F118等兼容53项均为其子集。增量ruff无新增诊断、arch-guard无VIOLATION，locale一致；完整前端TSC的共享依赖/组件诊断和真实行锁/外部系统仍为MEDIUM待验。修复本次人员表单Set<number>推断；后台contextual_operation保留原业务入口装饰，copy证明与实际worker证明共存。
+
+语义冲突处理：工作流SQL/引用先原子提交，PENDING阻止使用，权限确认才READY；F118来源豁免与q/T计量同时保留；挂载使用coverage factory且绑定终止在其同事务；QA仅替换copy函数、保留发布线重建函数；locale按键合并而非覆盖整文件。空merge revision只收敛迁移图，不重写已发布迁移。
+
+详细证据见merge-validation.json，影响与测试重点见docs/reviews/managed-tenant-impact-test-focus-20261111.md。下列为合并前检查快照，不能继续拿“未fetch/未集成”描述当前代码，也不能将本次分支合并当生产部署。
+
+## 合并前检查快照（保留历史）
+
+**Feature**：F009 管理租户最小修复。**日期**：2026-11-11。\
+**Review scope**：当前worktree中相对HEAD的tracked diff和新增源码/测试；原七表草稿仅作历史，不套用旧LGTM。\
+**Base**：`24c02859e2582ed319281bb52285c99930daf81c`；目标发布线`feat/3.1.0-beta1`（合入前需重新核对目标HEAD）。\
+**Changed backend Python**：91个路径，含58个bisheng生产路径，其余测试/脚本；涵盖实际生产者和消费者。四列、零新表；薄application/Repository是领域边界，不是新恢复中心。无新依赖或HTTP恢复端点。\
 **结论**：业务实现与本地回归完成，未发现尚未处理的新增代码HIGH缺陷；真实集成/前端验收未完成，**整体NEEDS_FIX（验收门禁未满足）**。这不是可以合并/上线的PASS。
 
 ## Summary

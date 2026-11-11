@@ -22,6 +22,7 @@ import { useCallback } from 'react';
 import { Outlined } from 'bisheng-icons';
 import { useMessageSelection } from '~/hooks/useMessageSelection';
 import { useSelectionMessages } from './SelectionMessagesContext';
+import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
 export interface ExportSelectionButtonProps {
@@ -38,8 +39,10 @@ export function ExportSelectionButton({
 }: ExportSelectionButtonProps) {
     const { enterSelectionMode, exitSelectionMode, isActiveForChat } =
         useMessageSelection();
+    const localize = useLocalize();
     const messages = useSelectionMessages();
     const active = isActiveForChat(chatId);
+    const label = localize(active ? 'com_ui_exit_selection' : 'com_endpoint_export');
 
     const handleClick = useCallback(
         (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -63,8 +66,8 @@ export function ExportSelectionButton({
                 active && 'bg-[#F0F0F0]',
                 className,
             )}
-            title={active ? '退出选择' : '导出'}
-            aria-label={active ? '退出选择' : '导出'}
+            title={label}
+            aria-label={label}
             aria-pressed={active}
         >
             <Outlined.FileExport

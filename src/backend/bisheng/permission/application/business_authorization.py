@@ -22,12 +22,11 @@ from bisheng.permission.application.identity import (
 )
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
-from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.permission.domain.services.permission_action_service import PermissionActor, normalize_legacy_action
 
 _MAX_BATCH_CHECKS = 100
 
 
-@contextual_operation
 async def _require_creation_ready(resource_type, resource_ids):
     from bisheng.core.context.tenant import get_current_tenant_id
 
@@ -45,6 +44,7 @@ async def _require_creation_ready(resource_type, resource_ids):
     await require_creation_ready(get_current_tenant_id(), resource_ids)
 
 
+@contextual_operation
 async def check_business_action(
     login_user: LoginPermissionIdentity,
     *,
@@ -57,7 +57,8 @@ async def check_business_action(
 
     await _require_creation_ready(resource_type, [resource_id])
     actor = actor or await resolve_permission_actor(login_user)
-    if action in {"visible", "use"} and resource_type in {"workflow", "assistant"}:
+    action = normalize_legacy_action(action)
+    if action == "visible" and resource_type in {"workflow", "assistant"}:
         from bisheng.public_endpoints.domain.services.guest_policy import (
             ensure_guest_link_enabled,
             is_public_published_resource,
@@ -158,7 +159,8 @@ async def batch_check_business_actions(
     registry = await get_f048_resource_registry()
     result: dict[str, set[str]] = {resource_id: set() for resource_id in normalized_ids}
     runtime = await get_f048_runtime()
-    for action in normalized_actions:
+    for requested_action in normalized_actions:
+        action = normalize_legacy_action(requested_action)
         resolved = await asyncio.gather(
             *(
                 registry.resolve(
@@ -217,7 +219,7 @@ async def batch_check_business_actions(
                 strict=True,
             ):
                 if is_allowed:
-                    result[resource_id].add(action)
+                    result[resource_id].add(requested_action)
     return {resource_id: frozenset(action_codes) for resource_id, action_codes in result.items()}
 
 

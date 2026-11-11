@@ -79,6 +79,31 @@ from bisheng.permission.domain.services.projection_plan import ProjectionPlan
 
 logger = logging.getLogger(__name__)
 
+
+def _audit_department(
+    login_user,
+    event_type: str,
+    *,
+    object_id: str,
+    object_name: str,
+    note: str,
+    object_type: str = "department",
+) -> None:
+    from bisheng.api.services.audit_log import AuditLogService
+
+    operator_id = int(getattr(login_user, "user_id", 0) or 0)
+    AuditLogService.record(
+        operator_id=operator_id,
+        operator_name=getattr(login_user, "user_name", "") or ("system" if operator_id == 0 else ""),
+        system_id="system",
+        event_type=event_type,
+        object_type=object_type,
+        object_id=object_id,
+        object_name=object_name,
+        note=note,
+    )
+
+
 # AdminRole = 1, same as bisheng.database.constants.AdminRole
 _ADMIN_ROLE_ID = 1
 
@@ -1394,6 +1419,7 @@ class DepartmentService:
                 if dup:
                     raise DepartmentNameDuplicateError()
 
+            old_default_roles = list(dept.default_role_ids or [])
             # Apply updates (only non-None fields)
             if data.name is not None:
                 dept.name = data.name
@@ -1426,6 +1452,19 @@ class DepartmentService:
                 member_user_ids,
                 role_ids_for_grant,
                 login_user,
+            )
+
+        if data.default_role_ids is not None or data.apply_default_roles_to_existing_members:
+            _audit_department(
+                login_user,
+                "update_dept_default_role",
+                object_id=str(dept.id),
+                object_name=dept.name,
+                note=(
+                    f"原角色={old_default_roles}；新角色={list(dept.default_role_ids or [])}；"
+                    f"应用存量={'是' if data.apply_default_roles_to_existing_members else '否'}；"
+                    f"影响人数={len(member_user_ids) if data.apply_default_roles_to_existing_members else 0}；结果=成功"
+                ),
             )
 
         return dept
@@ -1721,6 +1760,13 @@ class DepartmentService:
                 logger.exception("Department move committed; user tenant synchronization incomplete")
                 raise
 
+        _audit_department(
+            login_user,
+            "move_department",
+            object_id=str(dept.id),
+            object_name=dept.name,
+            note=f"被移动部门={dept.name}；原上级={old_parent_id}；目标上级={data.new_parent_id}；结果=成功",
+        )
         return dept
 
     @classmethod
@@ -2123,6 +2169,13 @@ class DepartmentService:
                 added_user_ids=to_add,
                 removed_user_ids=to_remove,
             )
+            _audit_department(
+                login_user,
+                "update_dept_admin",
+                object_id=str(dept.id),
+                object_name=dept.name,
+                note=f"增加={to_add}；移除={to_remove}；结果=成功",
+            )
 
         return await cls.aget_admins(dept_id, login_user)
 
@@ -2514,6 +2567,14 @@ class DepartmentService:
             user.user_id,
             trigger=UserTenantSyncTrigger.DEPT_CHANGE,
         )
+        _audit_department(
+            login_user,
+            "create_local_user",
+            object_id=str(user.user_id),
+            object_name=user.user_name,
+            object_type="user_conf",
+            note="来源=组织成员；结果=成功",
+        )
 
         from bisheng.department.application.business_scope import department_policy_facts
         from bisheng.user.application.policy_bindings import grant_policy_bindings
@@ -2737,6 +2798,14 @@ class DepartmentService:
         await UserTenantSyncService.sync_user(
             user_id,
             trigger=UserTenantSyncTrigger.DEPT_CHANGE,
+        )
+        _audit_department(
+            login_user,
+            "change_member_dept",
+            object_id=str(user_id),
+            object_name="",
+            object_type="user_conf",
+            note=f"用户={user_id}；原部门={old_dept_id_for_fga or '无'}；新部门={new_dept_id}；结果=成功",
         )
 
     @classmethod

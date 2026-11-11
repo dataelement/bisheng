@@ -17,7 +17,7 @@ from bisheng.permission.domain.services.permission_action_service import (
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 
-SYSTEM_TOOL_ACTIONS = frozenset({"visible", "use"})
+SYSTEM_TOOL_ACTIONS = frozenset({"visible"})
 
 
 @dataclass(frozen=True, slots=True)

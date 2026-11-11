@@ -1,12 +1,12 @@
 # Design: 管理租户缺陷的最小修复
 
-**版本**：v3.1.0-beta1 / F009。  
-**状态**：2026-11-10按用户“最小改动、最小影响范围”重新收敛的设计；用户已确认“采用最小修复范围，继续开发”。业务实现及本地回归已完成，真实环境验收与最终合入门禁待完成，见tasks.md。原设计的LGTM/PROCEED不适用于本稿。  
-**进展**：[tasks.md](tasks.md)及[验证记录](verification.md)持续更新；已实现部分不代表全部验收。  
-**集成限制**：本地缓存发布线已领先当前基线2156提交，38个路径重叠；未fetch/合并，迁移head及兼容性需集成复测，见release-baseline-check.json。  
-**基线**：`codex/3.1.0-beta1/managed-tenant-bugfix` / `24c02859e2582ed319281bb52285c99930daf81c`。  
-**需求**：[已确认的完整40条AC](spec.md)；本批保留/收窄/延期结果逐条见[范围调整](scope-revision.md)，不宣称零新表即可交付全部原AC。  
-**审查**：[最小化独立复审](minimal-change-architecture-review.md)（针对原设计，REVISE）；[修订稿最终复核](minimal-change-architecture-review-v3.md)为PROCEED；[SDD检查](design-review.md)原剩余范围确认已由用户关闭；实现验证和未完成门禁见code-review，不套用旧LGTM。  
+**版本**：v3.1.0-beta1 / F009。\
+**状态**：2026-11-10按用户“最小改动、最小影响范围”重新收敛的设计；用户已确认“采用最小修复范围，继续开发”。业务实现及发布线集成本地回归已完成；用户已明确授权合并，真实环境验收仍待完成，见tasks.md。原设计的LGTM/PROCEED不适用于本稿。\
+**进展**：[tasks.md](tasks.md)及[验证记录](verification.md)持续更新；已实现部分不代表全部验收。\
+**集成状态**：2026-11-11按用户指示合并；已集成实际fetch的发布线df927a7f6e，保留F118/后台执行契约，单head已核实；真实中间件/浏览器仍待集中验收，见merge-validation.json。
+**基线**：`codex/3.1.0-beta1/managed-tenant-bugfix` / `24c02859e2582ed319281bb52285c99930daf81c`。\
+**需求**：[已确认的完整40条AC](spec.md)；本批保留/收窄/延期结果逐条见[范围调整](scope-revision.md)，不宣称零新表即可交付全部原AC。\
+**审查**：[最小化独立复审](minimal-change-architecture-review.md)（针对原设计，REVISE）；[修订稿最终复核](minimal-change-architecture-review-v3.md)为PROCEED；[SDD检查](design-review.md)原剩余范围确认已由用户关闭；实现验证和未完成门禁见code-review，不套用旧LGTM。\
 **历史**：[七表设计快照](design-full-recovery-superseded.md)，保留作取舍依据，不作为当前开发目标。
 
 ## 1. 目标与非目标
@@ -143,6 +143,7 @@ Knowledge新增 `copy_source_id: int | null`（目标记源）与 `copy_target_i
 - 旧 `/user/info` 使用LoginUser请求内E；旧建人UserService.create_user改async（API唯一调用方同步await），初始Root无主属账户先校验合法角色，再同步H/发放；旧role重置不写操作者M。
 - E sync及部门业务目录接受内部可选session，DSH同UoW读当前事实；普通模型调用不先加载全组织目录。无新缓存或全模型刷新。
 - 工具更新按父creator预算、T及子项净增量判断；角色delta与租户delta分别计算，合法零增量替换保留。新增子项继承父T及creator。
+- 发布线FlowService.create_workflow负责父/v0/F118绑定同事务，SQL提交后complete_creation投影/READY，保留PENDING故障定位；挂载创建沿tenant_creation coverage factory同事务终止绑定，历史migration_origin只豁免个人空间数量。
 - 工具/Flow内部CreationRepository负责精确load/READY CAS；permission business_action负责super/public前负向就绪门禁。Flow联合应用查询、simple读和版本查询同样覆盖；这些都不提供新的权限ALLOW。
 - 原权限创建恢复使用现有稳定key（包含原owner）、冻结checksum与store/model；PREPARED且owner SQL未准备时按同key重新prepare；原操作FINALIZED后核实mode.operation_id/version=1/CURRENT和CREATOR，再完成owner/assignee/visible镜像。FAILED_CLOSED不重放。
 - 复制可信header仅两条copy任务启用，body T需匹配可信ContextVar；领取前和发布前复核当前actor。Knowledge复制过的库仍可再作源，copy_source_id是其历史来源，copy_target_id才是当前占用；正常未发布草稿不视为复制目标。
@@ -220,3 +221,5 @@ config=/tmp/bisheng-managed-tenant-review-config.yaml PYTHONPATH=. PYTHONDONTWRI
 | 2026-11-10 | 从七表全恢复方案收敛为零新表、四个必要字段的缺陷修复候选；拆出明确延期结果 | 用户要求最小改动/最小影响，独立复审REVISE及当前调用链核对 |
 | 2026-11-10 | 用户确认最小范围后开始实施：定义O事务、E/组织事实、登录菜单/Quota及实际gate、四列DDL | 31项局部回归通过；完整消费与业务任务继续进行 |
 | 2026-11-11 | 最小范围业务实施完成；补齐旧人员入口、真实工具增量、SSO后代路径/兼属终止、创建恢复镜像和联合列表门禁；四列无新增表；验证限制见verification | 当前源码及真实SQLite回归/静态检查；真实中间件与浏览器仍待验收 |
+
+2026-11-11合并补充：不改已发布迁移父链，新增空merge revision v310b1_merge_f009_release_heads汇合F009/F118删除/work130。没有新业务表/列。合并回归353通过/10基线已有失败；影响与测试重点见对应交付文档。

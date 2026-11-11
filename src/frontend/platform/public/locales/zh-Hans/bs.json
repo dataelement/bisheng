@@ -207,7 +207,7 @@
     "skills": "构  建",
     "createApp": "创建应用",
     "createKnowledge": "新建知识库",
-    "knowledge": "知  识",
+    "knowledge": "知识空间",
     "evaluation": "评  测",
     "board": "看  板",
     "workbenchHome": "首页",
@@ -695,7 +695,7 @@
     "tts": "语音合成(TTS)",
     "updateSuccess": "更新成功",
     "voiceType": "语音类型",
-    "voiceTypeRequired": "语音类型为必填项",
+    "voiceTypeRequired": "音色类型不可为空",
     "voiceTypeTooltip": "选择语音合成的声音类型",
     "webSearch": "模型内置联网搜索",
     "visitOfficialWebsiteToViewAvailableModels": "前往官网查看可用模型",
@@ -1568,7 +1568,37 @@
       "link_file_version": "关联文件版本",
       "set_primary_version": "设置文件主版本",
       "delete_file_version": "删除历史文件版本",
-      "dismiss_similar_file": "忽略相似文件建议"
+      "dismiss_similar_file": "忽略相似文件建议",
+      "download_file": "申请知识文件下载",
+      "export_qa": "导出 QA 条目",
+      "create_qa": "新增 QA 条目",
+      "update_qa": "修改 QA 条目",
+      "delete_qa": "删除 QA 条目",
+      "enable_qa": "启用 QA 条目",
+      "disable_qa": "停用 QA 条目",
+      "create_local_user": "管理员创建本地账号",
+      "reset_user_password": "管理员重置用户密码",
+      "change_own_password": "用户修改自身密码",
+      "update_dept_admin": "调整部门管理员",
+      "update_dept_default_role": "修改部门默认角色配置",
+      "update_sensitive_policy": "修改敏感词审核策略",
+      "move_department": "部门移动",
+      "change_member_dept": "成员归属变更",
+      "grant_resource": "资源授权",
+      "revoke_resource": "回收资源权限",
+      "update_resource_mode": "修改资源权限模式",
+      "personal_skill_create": "创建或导入个人 Skill",
+      "personal_skill_status": "启用或停用个人 Skill",
+      "personal_skill_delete": "删除个人 Skill",
+      "personal_skill_overwrite": "覆盖更新个人 Skill",
+      "openApiPatCreate": "创建个人令牌",
+      "openApiPatRegenerate": "重生成个人令牌",
+      "openApiPatRevoke": "按令牌撤销个人令牌",
+      "openApiPatDelete": "用户删除自身个人令牌",
+      "openApiPatRevokeHolder": "按持有人撤销个人令牌",
+      "openApiPatTenantMigrate": "账号迁租户时撤销个人令牌",
+      "openApiPatSettingsUpdate": "修改个人令牌租户策略",
+      "llmSystemConfigUpdate": "修改默认及系统模型配置"
     },
     "objectTypeEnum": {
       "app": "应用",
@@ -1588,6 +1618,7 @@
       "workstation": "工作台（日常模式）",
       "channel": "频道",
       "knowledge_space": "知识空间",
+      "department": "部门",
       "tenant": "租户",
       "llm_server": "模型供应方",
       "approval_instance": "审批实例",
@@ -1839,6 +1870,7 @@
     },
     "usageType": {
       "label": "使用类型",
+      "all": "全部",
       "daily": "日常对话",
       "assistant": "助手会话",
       "workflow": "工作流会话",
@@ -3431,6 +3463,26 @@
       "group_order": "按会话首次收录时间排序",
       "group_last": "最近请求",
       "group_count": "已存 {{count}} 个请求",
+      "group_like": "赞",
+      "group_dislike": "踩",
+      "group_likes": "赞 {{count}}",
+      "group_dislikes": "踩 {{count}}",
+      "feedback_heading": "消息反馈",
+      "feedback": {
+        "rating": {
+          "positive": "赞",
+          "negative": "踩"
+        },
+        "category": {
+          "task-result": "任务结果",
+          "instruction-following": "指令遵循",
+          "product-interaction": "产品交互",
+          "service-stability": "服务稳定性",
+          "resource-cost": "资源与成本",
+          "security-privacy-permission": "安全、隐私与权限",
+          "other": "其他"
+        }
+      },
       "group_abnormal": "异常 {{count}}",
       "group_scope": "当前仅显示筛选命中的请求；会话数量与状态汇总涵盖全部已索引请求，可能存在更新延迟。",
       "group_all": "查看全部已存请求",
@@ -4385,5 +4437,14 @@
       "admin": "管理员",
       "children": "包含下级部门"
     }
+  },
+  "references": {
+    "saved": "已保存的引用",
+    "unavailable": "当前不可选",
+    "unconfirmed": "部分已保存 ID 不在当前候选中，此处无法确认其状态，原 ID 会保留。",
+    "partialRepair": "可保存部分修复；所有引用有效后才能运行或发布。",
+    "invalid_deleted": "已删除",
+    "invalid_legacy": "历史引用已失效",
+    "deleting": "正在删除"
   }
 }

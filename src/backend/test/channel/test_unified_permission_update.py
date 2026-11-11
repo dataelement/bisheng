@@ -1,125 +1,64 @@
-"""F050 Channel settings save order and PRIVATE permission contracts."""
+"""F050 settings save/permission/member order with the real F118 SQL unit."""
 
-from __future__ import annotations
-
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
+from bisheng.channel.domain.repositories.reference_binding_repository import ChannelReferenceBindingRepository
 from bisheng.channel.domain.schemas.channel_manager_schema import UpdateChannelRequest
-from bisheng.channel.domain.services.channel_service import ChannelService
+from bisheng.channel.domain.services import channel_service as service_module
+from bisheng.common.models.space_channel_member import SpaceChannelMember
+from test.knowledge_unification import test_ch_bindings as fixtures
 
-_CS = "bisheng.channel.domain.services.channel_service"
-
-
-def _channel() -> Channel:
-    return Channel(
-        id="channel-1",
-        name="News",
-        source_list=[],
-        visibility=ChannelVisibilityEnum.PUBLIC,
-        user_id=7,
-        tenant_id=3,
-    )
+store = fixtures.store
+tenant = fixtures.tenant
+business = fixtures.business
 
 
-def _service(repository, members):
-    return ChannelService(
-        channel_repository=repository,
-        space_channel_member_repository=members,
-        channel_info_source_repository=SimpleNamespace(),
-    )
+async def test_business_save_failure_does_not_touch_grants_or_memberships(business, monkeypatch):
+    root = await fixtures.create(business)
+    before = await fixtures.state(business)
+    lookup = AsyncMock()
+    monkeypatch.setattr(service_module, "get_f048_resource_adapter", lookup)
+    monkeypatch.setattr(ChannelReferenceBindingRepository, "asave", AsyncMock(side_effect=RuntimeError("save failed")))
+    with pytest.raises(RuntimeError, match="save failed"):
+        await business.service.update_channel(root.id, UpdateChannelRequest(visibility="private"), business.user)
+    lookup.assert_not_awaited()
+    assert await fixtures.state(business) == before
 
 
-async def test_business_save_failure_does_not_touch_grants_or_memberships() -> None:
-    repository = SimpleNamespace(
-        find_by_id=AsyncMock(return_value=_channel()),
-        update=AsyncMock(side_effect=RuntimeError("save failed")),
-    )
-    members = SimpleNamespace(remove_non_creator_members=AsyncMock())
-    service = _service(repository, members)
-    adapter_lookup = AsyncMock()
-    with (
-        patch(f"{_CS}.require_business_action", new=AsyncMock()),
-        patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=SimpleNamespace())),
-        patch(f"{_CS}.get_f048_resource_adapter", new=adapter_lookup),
-    ):
-        with pytest.raises(RuntimeError, match="save failed"):
-            await service.update_channel(
-                "channel-1",
-                UpdateChannelRequest(visibility=ChannelVisibilityEnum.PRIVATE),
-                SimpleNamespace(user_id=7, user_name="creator", tenant_id=3),
-            )
-
-    adapter_lookup.assert_not_awaited()
-    members.remove_non_creator_members.assert_not_awaited()
-
-
-async def test_private_projection_commits_before_membership_cleanup() -> None:
+async def test_private_projection_commits_before_membership_cleanup(business, monkeypatch):
+    root = await fixtures.create(business)
+    async with business.sessions() as session, session.begin():
+        session.add(SpaceChannelMember(business_id=root.id, business_type="channel", user_id=8, user_role="member"))
     order = []
-    channel = _channel()
+    original_save = ChannelReferenceBindingRepository.asave
+    original_members = ChannelReferenceBindingRepository.amutate_members
 
-    async def save(value):
+    async def save(repo, session, row):
         order.append("business")
-        return value
+        return await original_save(repo, session, row)
 
-    adapter = SimpleNamespace(
-        load_permission_record=AsyncMock(return_value=SimpleNamespace(resource_id="channel-1")),
-        remove_ordinary_sources=AsyncMock(side_effect=lambda **_: order.append("permission")),
-    )
-
-    async def remove_members(_channel_id):
+    async def members(repo, session, row, **kwargs):
         order.append("membership")
+        return await original_members(repo, session, row, **kwargs)
 
-    repository = SimpleNamespace(find_by_id=AsyncMock(return_value=channel), update=AsyncMock(side_effect=save))
-    members = SimpleNamespace(
-        find_members_by_role=AsyncMock(return_value=[SimpleNamespace(user_id=7)]),
-        remove_non_creator_members=AsyncMock(side_effect=remove_members),
-    )
-    service = _service(repository, members)
-    with (
-        patch(f"{_CS}.require_business_action", new=AsyncMock()),
-        patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=SimpleNamespace())),
-        patch(f"{_CS}.get_f048_resource_adapter", new=AsyncMock(return_value=adapter)),
-        patch(f"{_CS}.resolve_permission_actor", new=AsyncMock(return_value=SimpleNamespace(user_id=7))),
-    ):
-        result = await service.update_channel(
-            "channel-1",
-            UpdateChannelRequest(visibility=ChannelVisibilityEnum.PRIVATE),
-            SimpleNamespace(user_id=7, user_name="creator", tenant_id=3),
-        )
-
-    assert result.visibility == ChannelVisibilityEnum.PRIVATE
+    business.adapter.remove_ordinary_sources.side_effect = lambda **_: order.append("permission")
+    monkeypatch.setattr(ChannelReferenceBindingRepository, "asave", save)
+    monkeypatch.setattr(ChannelReferenceBindingRepository, "amutate_members", members)
+    result = await business.service.update_channel(root.id, UpdateChannelRequest(visibility="private"), business.user)
+    assert result.visibility.value == "private"
     assert order == ["business", "permission", "membership"]
+    rows = (await fixtures.state(business))["space_channel_member"]
+    assert {row["user_id"] for row in rows if row["business_id"] == root.id} == {7}
 
 
-async def test_private_projection_failure_preserves_membership_rows() -> None:
-    repository = SimpleNamespace(
-        find_by_id=AsyncMock(return_value=_channel()),
-        update=AsyncMock(side_effect=lambda value: value),
-    )
-    members = SimpleNamespace(
-        find_members_by_role=AsyncMock(return_value=[]),
-        remove_non_creator_members=AsyncMock(),
-    )
-    adapter = SimpleNamespace(
-        load_permission_record=AsyncMock(return_value=SimpleNamespace(resource_id="channel-1")),
-        remove_ordinary_sources=AsyncMock(side_effect=RuntimeError("projection failed")),
-    )
-    service = _service(repository, members)
-    with (
-        patch(f"{_CS}.require_business_action", new=AsyncMock()),
-        patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=SimpleNamespace())),
-        patch(f"{_CS}.get_f048_resource_adapter", new=AsyncMock(return_value=adapter)),
-        patch(f"{_CS}.resolve_permission_actor", new=AsyncMock(return_value=SimpleNamespace(user_id=7))),
-    ):
-        with pytest.raises(RuntimeError, match="projection failed"):
-            await service.update_channel(
-                "channel-1",
-                UpdateChannelRequest(visibility=ChannelVisibilityEnum.PRIVATE),
-                SimpleNamespace(user_id=7, user_name="creator", tenant_id=3),
-            )
-
-    members.remove_non_creator_members.assert_not_awaited()
+async def test_private_projection_failure_preserves_membership_rows(business):
+    root = await fixtures.create(business)
+    async with business.sessions() as session, session.begin():
+        session.add(SpaceChannelMember(business_id=root.id, business_type="channel", user_id=8, user_role="member"))
+    before = await fixtures.state(business)
+    business.adapter.remove_ordinary_sources.side_effect = RuntimeError("projection failed")
+    with pytest.raises(RuntimeError, match="projection failed"):
+        await business.service.update_channel(root.id, UpdateChannelRequest(visibility="private"), business.user)
+    assert await fixtures.state(business) == before

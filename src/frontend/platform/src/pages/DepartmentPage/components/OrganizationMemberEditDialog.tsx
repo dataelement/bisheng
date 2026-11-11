@@ -247,7 +247,7 @@ export function OrganizationMemberEditDialog({
       } else {
         const affiliate_roles = (form.affiliate_rows ?? []).filter((row) => row.policy_editable !== false).map((row) => ({
           dept_id: row.dept_id,
-          role_ids: Array.from(affRoleByDept[row.dept_id] ?? new Set()),
+          role_ids: Array.from(affRoleByDept[row.dept_id] ?? new Set<number>()),
         }))
         const body: Parameters<typeof applyDepartmentMemberEditApi>[2] = {
           user_name: form.edit_mode === "local_primary" ? userName.trim() : undefined,

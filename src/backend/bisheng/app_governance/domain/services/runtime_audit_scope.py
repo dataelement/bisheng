@@ -35,8 +35,12 @@ async def resolve_scope(user, tenant_id=None, *, app_id=None):
         await authorize_app(fresh, app_id, "audit_read")
         apps = (app_id,)
     else:
-        if not fresh.is_global_super:
-            if not await is_tenant_admin(fresh.user_id, effective):
+        tenant_admin = await is_tenant_admin(fresh.user_id, effective)
+        # A child-tenant administrator is also stamped is_global_super via
+        # AdminRole. They still get the department crop; a platform super
+        # who is not this tenant's admin stays unrestricted.
+        if not fresh.is_global_super or tenant_admin:
+            if not tenant_admin:
                 await UserPayload.assert_effective_web_menu_contains(fresh.user_id, "log")
             try:
                 dept_scope = await AuditDeptScopeService.resolve(fresh, effective)

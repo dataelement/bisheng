@@ -7,16 +7,15 @@ worker does no user-level checks while it runs (design decision 4), so what is
 not rejected here is not rejected at all.
 
 The configuration query is built from the same sources and filters as these
-checks (``usable_models``, the tool ``use`` filter, the enabled-skill set, the
-library ``use`` / space ``visible`` listings), so anything it lists is accepted
-at submit (spec AC-05).
+checks (``usable_models``, the tool visibility filter, the enabled-skill set,
+and unified visible space listings), so anything it lists is accepted at submit
+(spec AC-05).
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime
 
 from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -24,10 +23,13 @@ from loguru import logger
 from starlette.concurrency import iterate_in_threadpool
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
-from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
-from bisheng.common.errcode.knowledge import KnowledgeNotExistError, KnowledgeTypeNotSupportedError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeInvalidCursorError,
+    KnowledgeNotExistError,
+    KnowledgeTypeNotSupportedError,
+)
 from bisheng.common.errcode.knowledge_space import (
     KnowledgeSpaceInvalidCursorError,
     SpaceNotFoundError,
@@ -43,9 +45,10 @@ from bisheng.common.errcode.open_api import (
 )
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.common.schemas.api import PageInfiniteCursorData
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.database.models.role_access import WebMenuResource
 from bisheng.database.models.session import MessageSessionDao
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.services.temp_upload_service import TempUploadService
 from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao
 from bisheng.linsight.domain.models.linsight_session_version import (
@@ -73,8 +76,6 @@ from bisheng.open_api.domain.services.session_subject_service import session_sub
 
 SESSION_NAME_MAX_CHARS = 30
 KNOWLEDGE_PAGE_MAX = 100
-_SPACE_VISIBLE_MAX_RESULTS = 5_000
-_SPACE_CURSOR_CONTEXT = "open_task|knowledge_space"
 
 _STATUS_MAP: dict[SessionVersionStatusEnum, OpenTaskStatus] = {
     SessionVersionStatusEnum.NOT_STARTED: OpenTaskStatus.QUEUED,
@@ -233,39 +234,87 @@ class OpenTaskModeService:
 
     @staticmethod
     async def check_knowledge_libraries(login_user: UserPayload, ids: list[int] | None) -> None:
-        from bisheng.permission.application.business_authorization import batch_check_business_actions
-
         if not ids:
             return
-        rows = {row.id: row for row in await KnowledgeDao.aget_list_by_ids(list(ids))}
+        ids = list(dict.fromkeys(ids))
+        tenant_id = get_current_tenant_id()
+        if type(tenant_id) is not int or tenant_id <= 0:
+            raise KnowledgeNotExistError(knowledge_id=ids[0])
+        with strict_tenant_filter():
+            rows = {row.id: row for row in await KnowledgeDao.aget_list_by_ids(ids)}
         for knowledge_id in ids:
             row = rows.get(knowledge_id)
-            if row is None:
+            if row is None or row.tenant_id != tenant_id:
                 raise KnowledgeNotExistError(knowledge_id=knowledge_id)
-            if row.type != KnowledgeTypeEnum.NORMAL.value:
+            if row.type not in {KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.SPACE.value}:
                 raise KnowledgeTypeNotSupportedError(knowledge_id=knowledge_id)
-        allowed = await batch_check_business_actions(
-            login_user, resource_type="knowledge_library", resource_ids=ids, actions=("use",)
+        visible = await OpenTaskModeService._visible_loaded_knowledge(
+            login_user, list(rows.values()), library_slot=True
         )
         for knowledge_id in ids:
-            if "use" not in allowed.get(str(knowledge_id), frozenset()):
+            namespace = (
+                "knowledge_library" if rows[knowledge_id].type == KnowledgeTypeEnum.NORMAL.value else "knowledge_space"
+            )
+            if not visible.get((namespace, str(knowledge_id)), False):
                 raise PermissionDeniedError(knowledge_id=knowledge_id)
 
     @staticmethod
     async def check_knowledge_spaces(login_user: UserPayload, ids: list[int] | None) -> None:
-        from bisheng.permission.application.business_authorization import batch_check_business_visible
-
         if not ids:
             return
-        rows = {row.id: row for row in await KnowledgeDao.aget_list_by_ids(list(ids))}
+        ids = list(dict.fromkeys(ids))
+        tenant_id = get_current_tenant_id()
+        if type(tenant_id) is not int or tenant_id <= 0:
+            raise SpaceNotFoundError(knowledge_space_id=ids[0])
+        with strict_tenant_filter():
+            rows = {row.id: row for row in await KnowledgeDao.aget_list_by_ids(ids)}
         for space_id in ids:
             row = rows.get(space_id)
-            if row is None or row.type != KnowledgeTypeEnum.SPACE.value:
+            if row is None or row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value:
                 raise SpaceNotFoundError(knowledge_space_id=space_id)
-        visible = await batch_check_business_visible(login_user, resource_type="knowledge_space", resource_ids=ids)
+        visible = await OpenTaskModeService._visible_loaded_knowledge(login_user, list(rows.values()))
         for space_id in ids:
-            if not visible.get(str(space_id)):
+            if not visible.get(("knowledge_space", str(space_id)), False):
                 raise SpacePermissionDeniedError(knowledge_space_id=space_id)
+
+    @staticmethod
+    async def _visible_loaded_knowledge(
+        login_user: UserPayload, rows: list[Knowledge], *, library_slot: bool = False
+    ) -> dict[tuple[str, str], bool]:
+        from bisheng.permission.application.access import get_f048_resource_adapter
+        from bisheng.permission.application.business_authorization import (
+            batch_check_business_actions,
+            batch_check_verified_business_visible,
+        )
+        from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
+        from bisheng.permission.application.identity import resolve_permission_actor
+
+        actor = await resolve_permission_actor(login_user)
+        visible = {}
+        for kind, namespace in (
+            (KnowledgeTypeEnum.NORMAL.value, "knowledge_library"),
+            (KnowledgeTypeEnum.SPACE.value, "knowledge_space"),
+        ):
+            grouped = [row for row in rows if row.type == kind]
+            if not grouped:
+                continue
+            adapter = await get_f048_resource_adapter(namespace)
+            targets = await adapter.resolve_permission_targets_from_rows(
+                rows=grouped, resource_type=namespace, actor=actor
+            )
+            if library_slot and actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
+                # Preserve only the original library-slot system shortcut, after
+                # validating real rows and their current permission snapshots.
+                allowed = await batch_check_business_actions(
+                    login_user,
+                    resource_type=namespace,
+                    resource_ids=[target.resource_id for target in targets],
+                    actions=("visible",),
+                )
+                visible.update({(namespace, ident): "visible" in actions for ident, actions in allowed.items()})
+            else:
+                visible.update(await batch_check_verified_business_visible(actor=actor, targets=targets))
+        return visible
 
     @staticmethod
     def check_content(login_user: UserPayload, *texts: str | None) -> None:
@@ -540,79 +589,23 @@ class OpenTaskModeService:
     ) -> PageInfiniteCursorData:
         await cls.check_task_mode_access(principal)
         page_size = max(1, min(int(page_size or 20), KNOWLEDGE_PAGE_MAX))
-        if knowledge_type == "library":
-            return await cls._list_libraries(request, login_user, name, cursor, page_size)
-        if knowledge_type == "space":
-            return await cls._list_spaces(login_user, name, cursor, page_size)
-        raise KnowledgeTypeNotSupportedError(knowledge_type=knowledge_type)
+        if knowledge_type not in {"library", "space"}:
+            raise KnowledgeTypeNotSupportedError(knowledge_type=knowledge_type)
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
-    @staticmethod
-    async def _list_libraries(
-        request: Request, login_user: UserPayload, name: str | None, cursor: str | None, page_size: int
-    ) -> PageInfiniteCursorData:
-        from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-
-        page = await KnowledgeService.get_knowledge(
-            request,
-            login_user,
-            KnowledgeTypeEnum.NORMAL,
-            name=name,
-            cursor=cursor,
-            page_size=page_size,
-            action="use",  # the same action the submit check requires
-        )
+        try:
+            page = await KnowledgeSpaceService(request, login_user).list_visible_spaces(
+                keyword=name, name_only=True, cursor=cursor, page_size=page_size
+            )
+        except KnowledgeSpaceInvalidCursorError as exc:
+            if knowledge_type == "library":
+                raise KnowledgeInvalidCursorError(exception=exc) from exc
+            raise
         return PageInfiniteCursorData(
             data=[_knowledge_item(row) for row in page.data],
             page_size=page.page_size,
             has_more=page.has_more,
             next_cursor=page.next_cursor,
-        )
-
-    @staticmethod
-    async def _list_spaces(
-        login_user: UserPayload, name: str | None, cursor: str | None, page_size: int
-    ) -> PageInfiniteCursorData:
-        """Spaces the actor can see — the same ``visible`` the submit check uses.
-
-        Not "created + joined" (``KnowledgeSpaceService.alist_mine_and_joined_cursor``):
-        "created" is keyed by ``login_user.user_id``, which in self identity is
-        the resource owner, not the service account.
-        """
-        from bisheng.permission.application.access import get_f048_runtime
-        from bisheng.permission.application.identity import resolve_permission_actor
-
-        try:
-            decoded = decode_cursor(cursor, expected_key_len=1, expected_context=_SPACE_CURSOR_CONTEXT)
-        except CursorDecodeError as exc:
-            raise KnowledgeSpaceInvalidCursorError(exception=exc) from exc
-        page_num = decoded[0] if decoded else 1
-        if not isinstance(page_num, int) or page_num < 1:
-            raise KnowledgeSpaceInvalidCursorError()
-
-        actor = await resolve_permission_actor(login_user)
-        runtime = await get_f048_runtime()
-        visible = await runtime.list_visible_objects(
-            actor, resource_type="knowledge_space", max_results=_SPACE_VISIBLE_MAX_RESULTS
-        )
-        ids = [int(value) for value in visible.object_ids]
-        rows = (
-            [row for row in await KnowledgeDao.aget_list_by_ids(ids) if row.type == KnowledgeTypeEnum.SPACE.value]
-            if ids
-            else []
-        )
-        if name:
-            keyword = name.strip().lower()
-            rows = [row for row in rows if row.name and keyword in row.name.lower()]
-        rows.sort(key=lambda row: (row.update_time or row.create_time or datetime.min, row.id), reverse=True)
-
-        start = (page_num - 1) * page_size
-        window = rows[start : start + page_size + 1]
-        has_more = len(window) > page_size
-        return PageInfiniteCursorData(
-            data=[_knowledge_item(row) for row in window[:page_size]],
-            page_size=page_size,
-            has_more=has_more,
-            next_cursor=encode_cursor((page_num + 1,), context=_SPACE_CURSOR_CONTEXT) if has_more else None,
         )
 
 

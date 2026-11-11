@@ -60,31 +60,43 @@ def test_errcode_value():
 # T06 — create dispatch
 # --------------------------------------------------------------------------- #
 async def test_create_dispatch_kb(monkeypatch):
-    """AC-07/AC-12: type=0 → KnowledgeService; auth_type/is_released forced to default;
+    """AC-07/AC-12: old type=0 → actual SPACE owner; auth_type/is_released forced to default;
     output enriched to KnowledgeRead (user_name + actions)."""
     captured = {}
 
-    async def _fake_acreate(cls, request, login_user, knowledge):
-        captured["knowledge"] = knowledge
-        return type("K", (), {"id": 1, "type": knowledge.type, "user_id": 1})()
+    async def _fake_space_create(self, **kwargs):
+        from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceCreateResp
+
+        captured.update(kwargs)
+        return KnowledgeSpaceCreateResp(id=1, type=3, name="kb", user_id=1, model="12")
 
     async def _fake_convert(cls, login_user, knowledge_list):
-        return [{"id": 1, "type": knowledge_list[0].type, "user_name": "operator", "actions": ["use_kb", "edit_kb"]}]
+        assert knowledge_list[0].type == KnowledgeTypeEnum.SPACE.value
+        return [
+            {
+                "id": 1,
+                "name": "kb",
+                "type": knowledge_list[0].type,
+                "user_name": "operator",
+                "copiable": True,
+                "actions": ["visible", "edit"],
+            }
+        ]
 
-    monkeypatch.setattr(KnowledgeService, "acreate_knowledge", classmethod(_fake_acreate))
+    monkeypatch.setattr(KnowledgeSpaceService, "create_knowledge_space", _fake_space_create)
     monkeypatch.setattr(KnowledgeService, "aconvert_knowledge_read", classmethod(_fake_convert))
 
     req = KnowledgeCreate(
         name="kb", type=KnowledgeTypeEnum.NORMAL.value, model="12", auth_type=AuthTypeEnum.APPROVAL, is_released=True
     )
     resp = await filelib.create(request=None, knowledge=req, version_repo=None, doc_repo=None)
-    assert resp.data["type"] == KnowledgeTypeEnum.NORMAL.value
-    assert resp.data["user_name"] == "operator"  # enriched
-    assert resp.data["actions"]  # enriched, non-empty
-    assert "permission_ids" not in resp.data
+    assert resp.data.type == KnowledgeTypeEnum.NORMAL.value
+    assert resp.data.user_name == "operator"  # enriched
+    assert resp.data.actions and resp.data.copiable is True
+    assert "permission_ids" not in resp.data.model_dump()
     # AC-12: KB ignores auth_type / is_released (forced to defaults before create).
-    assert captured["knowledge"].auth_type == AuthTypeEnum.PUBLIC
-    assert captured["knowledge"].is_released is False
+    assert captured["auth_type"] == AuthTypeEnum.PUBLIC
+    assert captured["is_released"] is False
 
 
 async def test_create_dispatch_space(monkeypatch):
@@ -145,7 +157,13 @@ async def test_update_dispatch_space_preserves_is_released(monkeypatch):
 
     async def _fake_space_update(self, **kwargs):
         captured.update(kwargs)
-        return {"id": kwargs["space_id"]}
+        return {
+            "id": kwargs["space_id"],
+            "type": 3,
+            "name": kwargs["name"],
+            "description": kwargs["description"],
+            "is_released": kwargs["is_released"],
+        }
 
     monkeypatch.setattr(filelib.KnowledgeDao, "aquery_by_id", staticmethod(_fake_query))
     monkeypatch.setattr(KnowledgeSpaceService, "update_knowledge_space", _fake_space_update)
@@ -172,12 +190,15 @@ async def test_update_missing_resource(monkeypatch):
 # T06 — list dispatch
 # --------------------------------------------------------------------------- #
 async def test_list_dispatch_kb(monkeypatch):
-    """AC-01: type=0 → KnowledgeService.get_knowledge (cursor page)."""
+    """AC-01: old type=0 → the bounded legacy SPACE facade (cursor page)."""
+    from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
 
-    async def _fake_get(cls, request, login_user, ktype, **kwargs):
+    async def _fake_get(self, **kwargs):
+        assert kwargs["identity"].user_id == _FakeUser.user_id
+        assert kwargs["sort_by"] == "update_time" and kwargs["page_size"] == 10
         return {"data": [], "page_size": 10, "has_more": False, "next_cursor": None}
 
-    monkeypatch.setattr(KnowledgeService, "get_knowledge", classmethod(_fake_get))
+    monkeypatch.setattr(LegacyDocumentsApplication, "alist", _fake_get)
     # F049 dropped the per-request `user_id` delegation kwarg: identity delegation
     # is now supplied only via the `X-On-Behalf-Of` header, resolved centrally
     # into the principal the `_patch_identity` fixture fakes out above.
@@ -354,61 +375,8 @@ async def test_clear_dispatch_space(monkeypatch):
     assert called["space_id"] == 7
 
 
-def _setup_delete_knowledge_mocks(monkeypatch, knowledge, qa_delete_spy):
-    """Stub the heavy deps of KnowledgeService.delete_knowledge for unit testing."""
-    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-    from bisheng.knowledge.domain.models.knowledge_file import QAKnoweldgeDao
-
-    monkeypatch.setattr(KnowledgeDao, "query_by_id", classmethod(lambda cls, kid: knowledge))
-    monkeypatch.setattr(KnowledgeDao, "delete_knowledge", classmethod(lambda cls, kid, only_clear=False: None))
-    monkeypatch.setattr(KnowledgeService, "delete_knowledge_file_in_vector", classmethod(lambda cls, k: None))
-    monkeypatch.setattr(KnowledgeService, "delete_knowledge_file_in_minio", classmethod(lambda cls, kid: None))
-    monkeypatch.setattr(KnowledgeService.permission_service, "ensure_knowledge_delete_sync", lambda **kw: None)
-    monkeypatch.setattr(KnowledgeService.audit_telemetry_service, "telemetry_delete_knowledge", lambda u: None)
-
-    async def _project_library_deletion(
-        cls,
-        login_user,
-        *,
-        knowledge_id,
-        include_container,
-    ):
-        return None
-
-    monkeypatch.setattr(
-        KnowledgeService,
-        "_project_library_deletion",
-        classmethod(_project_library_deletion),
-    )
-
-    class _QA:
-        def __init__(self, i):
-            self.id = i
-
-    monkeypatch.setattr(
-        QAKnoweldgeDao, "get_qa_knowledge_by_knowledge_ids", classmethod(lambda cls, kids: [_QA(11), _QA(12)])
-    )
-    monkeypatch.setattr(
-        QAKnoweldgeDao, "delete_batch", classmethod(lambda cls, ids: qa_delete_spy.update({"ids": ids}))
-    )
-
-
-def test_clear_qa_removes_qa_rows(monkeypatch):
-    """偏差6-QA: clearing a QA knowledge base also deletes its QAKnowledge rows."""
-    qa = type("K", (), {"type": KnowledgeTypeEnum.QA.value, "user_id": 1, "id": 5})()
-    spy = {}
-    _setup_delete_knowledge_mocks(monkeypatch, qa, spy)
-    KnowledgeService.delete_knowledge(request=None, login_user=_FakeUser(), knowledge_id=5, only_clear=True)
-    assert spy.get("ids") == [11, 12]
-
-
-def test_clear_normal_kb_skips_qa_rows(monkeypatch):
-    """A document KB (type=0) clear must NOT touch the QAKnowledge table."""
-    kb = type("K", (), {"type": KnowledgeTypeEnum.NORMAL.value, "user_id": 1, "id": 6})()
-    spy = {}
-    _setup_delete_knowledge_mocks(monkeypatch, kb, spy)
-    KnowledgeService.delete_knowledge(request=None, login_user=_FakeUser(), knowledge_id=6, only_clear=True)
-    assert "ids" not in spy  # QA delete path not taken
+# QA clear/delete and NORMAL QA-table isolation now use native SQL/R2/identity
+# in test/knowledge_unification/test_qa_bindings.py.
 
 
 async def test_delete_rejects_type2(monkeypatch):

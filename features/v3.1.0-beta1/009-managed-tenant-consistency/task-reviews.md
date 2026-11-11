@@ -1,5 +1,8 @@
 # F009 L1任务检查（最终本地快照）
 
+2026-11-11合并更新：T048已在实际发布线df927a7f6e上完成本地集成复核，结果PASS_WITH_WARNINGS，按用户明确指令合并；T047真实环境仍待验。下列69项及T048旧NEEDS_FIX为合并前历史快照，最新证据以merge-validation/code-review为准。
+
+
 日期：2026-11-11。按task-review七项清单检查当前实现，不沿用历史“未开始”状态。71项任务中69项代码/测试资产已完成；T047真实环境验收和T048最终合入门禁未完成。任务勾选表示所述实现与本地检查完成，不表示对应全部AC已通过真实环境验收。
 
 共同证据：[verification.md](verification.md)、[validation-results.json](validation-results.json)、[code-review.md](code-review.md)。零新增业务表、四列；新ORM在Repository，跨域事实走application；显式目标T/O/H与负向门禁保留F048唯一PDP。新测试86通过；既有相关202通过/10个基线已失败；新lint0，arch-guard无VIOLATION。发布线集成/真实锁/外部系统和UI另验，未宣称全部TDD。
@@ -1277,4 +1280,3 @@
 **元数据验证**：文件范围PASS（生成locale产物/空包入口见tasks偏差说明） | 配对测试PASS，本地正确行为回归 | 依赖PASS（实现依赖）；集中验收另列T047。
 
 **结果**：PASS。
-

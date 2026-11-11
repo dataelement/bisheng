@@ -10,6 +10,7 @@ from bisheng.common.errcode.server import (
     AsrProviderDeletedError,
     NoAsrModelConfigError,
 )
+from bisheng.common.services.failure_context import failure_boundary
 from bisheng.core.ai import AliyunASRClient, AzureOpenAIASRClient, BaseASRClient, OpenAIASRClient
 from bisheng.core.ai.asr.realtime import RealtimeASRClient, realtime_protocol
 from bisheng.core.ai.asr.speech_cloud import BaiduRealtimeASRClient, TencentRealtimeASRClient
@@ -153,6 +154,7 @@ class BishengASR(BishengBase):
         return _asr_client_type[server_info.type]["client"](**new_params)
 
     @wrapper_bisheng_model_limit_check_async
+    @failure_boundary("model_service", "asr", "transcribe")
     async def ainvoke(self, audio: Union[str, bytes, BinaryIO], **kwargs) -> str:
         return await self.asr.transcribe(audio=audio, **kwargs)
 
