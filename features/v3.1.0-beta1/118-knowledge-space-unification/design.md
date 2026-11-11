@@ -957,14 +957,14 @@ M2原生SQL检查和原pin定点HIGHER_CONSISTENCY读取发生在正式盘点事
 
 M3读取完整已验证冻结图后，在任何租户业务写入前重读例外的原资源/文件、用户存在性、零文件计数、缺失目录和SQL授权计数。FGA外部IO使用关闭SQLSession后的原pin读取，再开新原生事务重验SQL事实与Catalog/pin未变；续跑相同，不能在SQL事务中等待M3外部IO。对原type3资源不生成owner/成员初始化命令，只有正常type0沿原创建者规则转换。
 
-现有空间空动作到纯可见的闸门保留：先验证原ACTIVE来源的完整canonical证明、原等级及allow_same_level，再要求前后编译无来源补齐、无退休/可见差异、相同贡献和主体。只有实际已生效的原授权获得兼容；当前无证据/INACTIVE及等级改变仍拒绝。空间3426的原Grant14827/Source19883/可见投影9763和等级2按此核验，保留原效果，无自动新分配或提级。
+现有空间空动作到纯可见的闸门保留：先验证原ACTIVE来源的完整canonical证明、原等级及allow_same_level，再要求前后编译无来源补齐、无退休/可见差异、相同贡献和主体。只有实际已生效的原授权获得兼容；有效关系无证据或等级改变仍拒绝；INACTIVE历史仅在双编译及Store证明零效果时原状态保留。空间3426的原Grant14827/Source19883/可见投影9763和等级2按此核验，保留原效果，无自动新分配或提级。
 
 
 ### 2026-11-11 续办兼容：原失效链和退役来源
 
 ConversionPlanBuilder只对已有type3、primary_version_id=NULL、零主标志、全文件FAILED的非空且编号唯一的已有链允许无转换命令通过；原链所有文件已登记，不生成V1，不选择/提升主版本，也不修正业务数据。普通type0及可用文件坏链仍拒绝。
 
-_namespace_visible对未匹配且RETIRED的原行，以保留的INACTIVE旧Grant/model及INACTIVE assignee重建历史canonical贡献，核对所有原身份字段及严格历史版本上界。只变既定namespace和tuple指纹，历史状态/行ID/操作号等保持；ACTIVE投影前后编译与原Store全图仍执行，不将历史行加入有效授权。
+_namespace_visible对未匹配且RETIRED的原行，按AC-104核对原scope、来源身份及自洽贡献/tuple指纹；同ID现存来源继续核对身份与版本上界，原Grant/assignee已删除的审计历史不重建为授权。只变既定namespace和tuple指纹，历史状态/行ID/操作号等保持；ACTIVE投影前后编译与原Store全图仍执行，不将历史行加入有效授权。
 
 跨租户知识空间使用原始明确ID的existing_invalid_scope分类，回填实际owner和parent空间ID，legacy字段全部NULL。Target Owner只对原来源/版本的原space绑定查询确切ID+owner，Root和普通目标按统一数值顺序加锁，再锁文件。读Owner只查标量事实，返回invalid_scope/is_valid=false；新增、复制、预览及执行保持拒绝，原槽位可保留/移除，owner_query不扩大范围。跨租户文件不纳入兼容。M4对目标的已签名0→3变化按实际目标owner查冻结命令，不按来源tenant猜测；其余物理事实变化仍拒绝。
 
