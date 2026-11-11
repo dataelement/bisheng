@@ -73,7 +73,7 @@ interface DroppableAttachment {
 
 interface AiChatInputProps {
     size?: '' | 'mini';
-    /** Conversation setup choices belong to the new-chat surface. */
+    /** Use the new-chat placeholder instead of the follow-up placeholder. */
     allowConfiguration?: boolean;
     features?: AiChatInputFeatures;
     disabled?: boolean;
@@ -352,7 +352,7 @@ const AiChatInput = memo(
         const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
             && (taskMode || (taskModeEntry && !!onToggleTaskMode))
             && showAddSkill;
-        const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
+        const showToolPicker = tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const filesDisabled = !!disabled;
 
         const navigate = useNavigate();
