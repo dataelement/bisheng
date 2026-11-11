@@ -45,6 +45,60 @@ and citations in Work. Keep the account enable switch and document permissions i
 the acceptance path. Code deployment, successful data upgrade, and real Work task
 acceptance are separate delivery states.
 
+## Departed membership visibility repair
+
+`repair_f048_membership_orphan.py` cleans the exact direct `visible` tuple left
+by the membership reactivation version bug. Deploy the code fix first. Run from
+`src/backend` with the same `config` as the live service:
+
+```bash
+python scripts/repair_f048_membership_orphan.py \
+  --tenant-id 1 --resource-key knowledge_space:14 --user-id 10
+```
+
+The default is read-only. The JSON plan contains the Store/model, resource
+version, historical source evidence, exact tuple selection and `plan_checksum`.
+It requires no ACTIVE business membership, only INACTIVE unprotected membership
+sources, and evidence of a RETIRED projection with an older source version.
+All current SQL source contributions are checked before selecting an orphan.
+An ACTIVE persisted contribution (including protected/non-Grant sources) also
+prevents deletion. Other users' tuples are never selected.
+
+For apply, back up the business and OpenFGA databases, stop **all permission
+writers using this Store**, including API, workers and periodic jobs, then wait
+for F048 heartbeats to expire (default TTL 45 seconds). Use an isolated maintenance
+process with the same config, mounts, network and installed backend image;
+copying this script is sufficient because it reuses the shipped reconciliation
+module. Do not restart the normal API entrypoint to run maintenance.
+
+```bash
+python scripts/repair_f048_membership_orphan.py \
+  --tenant-id 1 --resource-key knowledge_space:14 --user-id 10 \
+  --apply --operator-id 1 --confirm-store-id <preview-store-id> \
+  --confirm-plan-checksum <preview-plan-checksum>
+```
+
+Apply repeats the preview, checks Store/plan confirmations, refuses live runtime
+heartbeats or nonterminal projections, and deletes through the durable F048
+projection ledger. It verifies that the selected tuple disappeared and all other
+direct visible tuples stayed unchanged. The resource version advances through
+the normal finalizer; retired source records and memberships remain as history.
+Repeated successful apply is a no-op. A changed plan must be previewed again.
+
+Resume the stopped services and verify the departed ordinary user's joined list
+and resource/file visibility, as well as the creator's access. No full-Store
+reconcile, model publication, Catalog cutover or table deletion is performed.
+For another confirmed case, repeat with its exact tenant/resource/user; channels
+use `--resource-key channel:<id>`. The script intentionally does not infer that
+every unsupported relation was caused by this bug.
+
+Exit codes: `0` success/read-only preview; `2` invalid arguments; `3` a safety or
+data invariant blocked the operation; other nonzero codes indicate runtime failure.
+Retain the preview, database backups and projection operation IDs. On a partial
+failure, keep writers stopped and recover the recorded operation with the existing
+projection recovery procedure; do not restore a tuple without reviewing current
+authorization sources.
+
 ## Diagnostic Scripts
 
 ### `measure_dsh_model_audit.py`
@@ -95,6 +149,54 @@ The script never writes to the database. Exit `0` means reflection found the
 column, exit `2` confirms a catalog/reflection mismatch, exit `3` means the
 column is absent from the DM catalog, and exit `4` means the diagnostic itself
 failed.
+
+## Model Configuration Upgrade
+
+### `migrate_model_token_configs.py`
+
+Convert legacy LLM `config.max_tokens` into advanced `config.user_kwargs` while
+preserving the effective limit and other parameters. Ollama writes `num_ctx`;
+other LLM providers write `max_tokens`. Model IDs, status, tenant ownership and
+provider daily-call quotas retain their values.
+
+Run from `src/backend/` with the live service's `config` environment:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants
+python scripts/migrate_model_token_configs.py --tenant-id 1
+```
+
+Dry-run is the default. After draining model calls and stopping API/Worker/
+Linsight configuration writers, use the new backend runtime and a fresh private
+backup path to apply. Complete the target schema upgrade first:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants --apply \
+  --backup-file /secure-backups/model-tokens-before.json
+```
+
+Any invalid legacy configuration blocks the entire batch. The script creates
+an exclusive mode-0600 backup before writing; an existing backup path blocks
+writes. Re-running migrated rows is a no-op. Reports contain identifiers and
+counts; protect the backup because model configuration can contain credentials.
+Restart API/Worker/Linsight after migration to clear process-local model caches.
+Never delete daily-call Redis counters during this upgrade.
+
+To restore from a reviewed backup in the same maintenance window:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants \
+  --restore-backup /secure-backups/model-tokens-before.json
+python scripts/migrate_model_token_configs.py --all-tenants --apply \
+  --restore-backup /secure-backups/model-tokens-before.json \
+  --backup-file /secure-backups/model-tokens-before-restore.json
+```
+
+Restore checks the saved identity and post-upgrade configuration before writing.
+A later edit or a missing model blocks the batch; newly created models stay
+intact. Fix reported conflicts before retrying. MySQL/DM8 JSON conversion runs
+in Python; this procedure performs data maintenance outside Alembic revisions.
+See [the feature upgrade runbook](../../../features/v3.0.0/model-discovery/upgrade.md).
 
 ### `verify_mcp_stdio_blocked.py`
 
@@ -1050,6 +1152,34 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/migrate_linsight_task_
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/migrate_linsight_task_model_to_default.py --apply    # write
 ```
 
+### `backfill_workbench_upgrade.py`
+
+> **v3.0 upgrade — AUTO at startup.** Both steps run on service startup
+> (`main.lifespan`, idempotent, failure never blocks boot). This CLI is for a
+> dry-run preview or a manual re-run. See `docs/architecture/08-deployment.md` → 升级 checklist.
+
+Carries pre-3.0 workbench model settings into the 3.0 model settings:
+
+1. **Daily-mode default model** — a `linsight_llm` row whose `chat_default_model_id` is
+   absent or `null` gets the last listed model, which is what the 2.x client opened daily
+   chat with (and what the 3.0 client still falls back to when no default is set).
+2. **User-selectable model visibility** — each active tenant's workbench models become
+   "visible to all members". Runs once per tenant (audit
+   `migration:workbench-visibility-v1`), so an admin's later edits are kept. A tenant that
+   already has any `dsh_model_visibility` row is skipped (its admin already manages
+   visibility); pass `--include-configured-tenants` to fill only its unconfigured models.
+   A tenant holding unmigrated legacy DSH grants is skipped: run
+   `scripts/dsh/migrate_unified_credits.py` for it first, then rerun this script.
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py            # dry-run
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py --apply    # write
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py --apply --tenant-id 2 --actor-id 1
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py --apply --tenant-id 2 --include-configured-tenants
+```
+
 ### `seed_overflow_skill.py`
 
 > **Dev/QA fixture — NOT part of any upgrade checklist.** Seeds ONE throwaway
@@ -1391,3 +1521,42 @@ establish those guarantees.
 ## 工具与技能全员授权升级（f048-v6）
 
 `migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。
+
+### F009 managed tenant inventory (read-only)
+
+From `src/backend/`: `python scripts/managed_tenant_preflight.py --tenant-id <T> [--user-id <id>] [--limit 100]`. Lists current role eligibility differences and pending resource/copy associations within the specified scope. There is no apply mode. Historical READY defaults are not proof of complete permission projections; verify against the existing permission inventory before rollout. Resolve pending/uncertain copies manually before downgrading the four columns.
+
+## F118 knowledge-space unification
+
+Run from `src/backend` after the operator has stopped all business writers and
+created the immutable backup/schema evidence artifacts. Use the same `config`
+as the service. The default preview validates an existing frozen graph and
+reports its scope without SQL/FGA/artifact writes; it does not freeze a fresh
+inventory or certify readiness.
+
+```bash
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production \
+  --backup-ref '{"object_key":"f118/unification/maintenance-1/verification/<hash>.json","sha256":"<hash>"}' \
+  --schema-ref '{"object_key":"f118/unification/maintenance-1/verification/<schema-hash>.json","sha256":"<schema-hash>"}'
+```
+
+Add `--apply --operator-id 7` for the actual M2 freeze, original SQL conversion,
+permission publication, six-source backfill, full reconciliation and persisted
+Coverage certificate. After interruption, repeat the identical arguments with
+`--apply --resume`; this requires the same already-frozen Run and never rebuilds
+its baseline. Old frozen artifacts lacking original index/deletion facts require
+a new stopped-service inventory, not a guessed legacy classification. Output
+contains the Run/hashes, tenant scope, six-source proofs and the immutable plan
+reference containing the invalid-slot inventory. Nonzero exit preserves the
+checkpoint and never restarts services. Enable business traffic only after the
+operator has accepted the overall upgrade verification and real environment
+checks; a local component test is not that acceptance.
+
+F118 deliberately uses a narrow context assembly rather than the general
+`initialize_app_context` convention: the eager general initializer constructs
+`MinioStorage` and may initialize buckets/policies. The command registers the
+original DB/Redis managers from the live service settings and closes them with
+`close_app_context`; its existing owned raw MinIO/ES/Milvus and permission
+adapters never invoke the API startup, default seeds or bucket/policy writers.
+This feature-specific exception preserves the frozen read-only inventory
+contract and does not change general script initialization.

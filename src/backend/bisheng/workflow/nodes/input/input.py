@@ -65,7 +65,9 @@ class InputNode(BaseNode):
                 if value_info["type"] == "file":
                     value_key = f"file_{generate_uuid()[:8]}"
                     self._file_key_map[value_info["key"]] = value_info
-                new_node_params[value_key] = value_info["value"]
+                # `value` is the label shown on the form. The runtime answer starts empty
+                # so a field the user leaves blank is not passed downstream as that label.
+                new_node_params[value_key] = [] if value_info["type"] == "file" else ""
                 self._node_params_map[value_key] = value_info
 
         self.node_params = new_node_params

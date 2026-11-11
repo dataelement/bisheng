@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
+from bisheng.common.errcode.linsight import LinsightUseUpError
 from bisheng.common.errcode.open_api import OpenApiTaskQueueUnavailableError
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -29,6 +30,10 @@ from bisheng.workstation.domain.services import task_submit_service
 
 @pytest.fixture
 def io(monkeypatch: pytest.MonkeyPatch):
+    async def _config_off(self):
+        return {}
+
+    monkeypatch.setattr(type(task_submit_service.settings), "aget_all_config", _config_off)
     captured: dict = {"versions": [], "promote_kwargs": None, "telemetry": None}
 
     async def _insert_session(_cls, data: MessageSession):
@@ -58,6 +63,27 @@ def _user(user_id: int = 7):
     user = MagicMock()
     user.user_id = user_id
     return user
+
+
+async def test_verified_desktop_business_hook_runs_before_task_persistence(io):
+    from bisheng.user.domain.services.auth import LoginUser
+
+    user = LoginUser.model_construct(user_id=7, tenant_id=1)
+    activity = user._business_activity_recorder = AsyncMock()
+    await LinsightWorkbenchImpl.submit_user_question(LinsightQuestionSubmitSchema(question="q"), user)
+    activity.assert_awaited_once()
+    assert io["versions"]
+
+
+async def test_expired_desktop_hook_prevents_task_persistence(io):
+    from bisheng.common.errcode.dsh import DshSessionExpiredError
+    from bisheng.user.domain.services.auth import LoginUser
+
+    user = LoginUser.model_construct(user_id=7, tenant_id=1)
+    user._business_activity_recorder = AsyncMock(side_effect=DshSessionExpiredError())
+    with pytest.raises(DshSessionExpiredError):
+        await LinsightWorkbenchImpl.submit_user_question(LinsightQuestionSubmitSchema(question="q"), user)
+    assert not io["versions"]
 
 
 def _service_account_subject():
@@ -156,3 +182,20 @@ async def test_task_turn_is_persisted_before_enqueue(io, monkeypatch):
     await task_submit_service.submit_task_turn(_request(), _user(), strict_enqueue=True)
 
     assert order == ["persist", "enqueue"]
+
+
+async def test_invite_switch_rejects_a_submit_with_no_remaining_uses(io, monkeypatch):
+    async def _config_on(self):
+        return {"linsight_invitation_code": True}
+
+    monkeypatch.setattr(type(task_submit_service.settings), "aget_all_config", _config_on)
+    monkeypatch.setattr(
+        task_submit_service.InviteCodeService,
+        "use_invite_code",
+        AsyncMock(return_value=False),
+    )
+
+    with pytest.raises(LinsightUseUpError):
+        await task_submit_service.submit_task_turn(_request(), _user())
+
+    assert io["versions"] == []

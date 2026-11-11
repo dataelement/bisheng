@@ -37,20 +37,26 @@ class _FakeToolNode:
 async def test_a_tool_node_runs_in_a_worker_thread_with_the_request_context():
     node = _FakeToolNode()
     token = current_tenant_id.set(7)
+    identity = SimpleNamespace(user_id=1)
+    node_data = {"id": "tool_1", "data": {"id": "tool_1", "type": "tool", "name": "web_fetch", "description": ""}}
+    node_input = {"url": "https://example.com"}
+    admitted = AsyncMock(return_value=SimpleNamespace(node_data=node_data, node_input=node_input))
     try:
         with (
             patch.object(workflow_service.FlowDao, "get_flow_by_id", return_value=SimpleNamespace(id="w1", name="wf")),
             patch.object(workflow_service, "require_business_action", AsyncMock()),
             patch.object(workflow_service.NodeFactory, "instance_node", return_value=node),
+            patch.object(workflow_service, "prepare_node_preview", admitted),
         ):
             result = await WorkFlowService.run_once(
-                SimpleNamespace(user_id=1),
-                {"url": "https://example.com"},
-                {"id": "tool_1", "data": {"id": "tool_1", "type": "tool", "name": "web_fetch", "description": ""}},
+                identity,
+                node_input,
+                node_data,
                 "w1",
             )
     finally:
         current_tenant_id.reset(token)
 
+    admitted.assert_awaited_once_with(identity, "w1", node_data, node_input)
     assert node.seen == {"input": {"url": "https://example.com"}, "on_loop": False, "tenant": 7}
     assert result == [[{"key": "output", "value": "page", "type": "variable"}]]

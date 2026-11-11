@@ -204,7 +204,7 @@ async def record_used_app(
     resolve under their own types and are not the concern of this endpoint.
     """
     flow_id = data.flow_id
-    if not await check_business_action(login_user, resource_type="app", resource_id=flow_id, action="use"):
+    if not await check_business_action(login_user, resource_type="app", resource_id=flow_id, action="visible"):
         return UnAuthorizedError.return_resp()
     UserLinkDao.touch_user_link(user_id=login_user.user_id, type=USED_APP_RECENT_TYPE, type_detail=flow_id)
     return resp_200(message="Recorded")
@@ -232,7 +232,7 @@ async def pin_used_app(login_user=LoginUserDep, data: UsedAppPin = Body(..., des
         login_user,
         resource_type=object_type,
         resource_id=flow_id,
-        action="use",
+        action="visible",
     ):
         return UnAuthorizedError.return_resp()
 

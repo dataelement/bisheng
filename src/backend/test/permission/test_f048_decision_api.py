@@ -124,13 +124,13 @@ def test_concrete_action_check_returns_true_and_normal_false_as_200() -> None:
         assert coordinator.targets[0].context_version == "business-v7"
 
 
-def test_super_admin_visible_check_short_circuits_only_the_http_decision() -> None:
+def test_super_admin_visible_check_short_circuits_only_nonlegacy_http_decision() -> None:
     decision, business, coordinator = _decision(allowed=False)
     with TestClient(_app(decision, super_admin=True)) as client:
         visible = client.post(
             "/api/v1/permissions/check",
             json={
-                "resource_type": "knowledge_library",
+                "resource_type": "workflow",
                 "resource_id": "4192",
                 "action": "visible",
             },

@@ -1,0 +1,38 @@
+import { useSyncExternalStore } from "react";
+import {
+  getClientEnvironment,
+  subscribeClientEnvironment,
+} from "~/utils/clientEnvironment";
+import useFinePointer from "./useFinePointer";
+import useMediaQuery from "./useMediaQuery";
+
+export function useClientLayout() {
+  const identity = useSyncExternalStore(
+    subscribeClientEnvironment,
+    getClientEnvironment,
+    getClientEnvironment,
+  );
+  const isNarrowViewport = useMediaQuery("(max-width: 767px)");
+  // The DSH host owns the shell even when its content pane is narrow.
+  const prefersMobileLayout = identity.channel === "web" && isNarrowViewport;
+  return { identity, isNarrowViewport, prefersMobileLayout };
+}
+
+/** Container, space, input and device facts deliberately remain separate. */
+export function useClientEnvironment() {
+  const { identity, isNarrowViewport } = useClientLayout();
+  const isCompactViewport = useMediaQuery("(max-width: 1023px)");
+  const prefersHoverInteraction = useFinePointer();
+  let hasTouchInput = false;
+  try {
+    hasTouchInput =
+      typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
+  } catch {
+    /* Unknown capability. */
+  }
+  return {
+    ...identity,
+    layout: { isNarrowViewport, isCompactViewport },
+    input: { prefersHoverInteraction, hasTouchInput },
+  } as const;
+}

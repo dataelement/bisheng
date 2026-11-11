@@ -17,7 +17,7 @@ from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
 
-SYSTEM_APPLICATION_ACTIONS = frozenset({"visible", "use"})
+SYSTEM_APPLICATION_ACTIONS = frozenset({"visible"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +31,8 @@ class ApplicationPermissionRecord:
     context_version: str
     system_owned: bool = False
     system_allowlisted: bool = False
+
+    creation_state: str = "READY"
 
 
 class ApplicationPermissionLoader(Protocol):
@@ -94,6 +96,7 @@ class ApplicationDaoPermissionLoader:
             owner_user_id=owner_id,
             permission_version=version,
             context_version=context_version,
+            creation_state=getattr(row, "creation_state", "READY"),
         )
 
 
@@ -248,6 +251,15 @@ class F048ApplicationPermissionAdapter:
         *,
         action: str | None,
     ) -> VerifiedPermissionTarget:
+        if (
+            action is not None
+            and record is not None
+            and record.resource_type == "workflow"
+            and record.creation_state != "READY"
+        ):
+            from bisheng.common.errcode.flow import WorkflowCreationPendingError
+
+            raise WorkflowCreationPendingError()
         if (
             record is None
             or resource_type not in {"workflow", "assistant"}

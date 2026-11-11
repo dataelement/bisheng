@@ -16,7 +16,7 @@ import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 import { Tooltip, TooltipProvider } from "@bisheng/ui";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, matchPath, useLocation, useNavigate } from "react-router-dom";
 import { Separator } from "../components/bs-ui/separator";
 import { darkContext } from "../contexts/darkContext";
 import { userContext } from "../contexts/userContext";
@@ -26,7 +26,7 @@ import { getBrandAssetUrl } from "../utils/brand";
 import { HeaderMenu } from "./HeaderMenu";
 import { LicenseBanner } from "./LicenseBanner";
 
-const PRIMARY_PAGE_PATHS = new Set([
+const INSET_PAGE_PATHS = new Set([
     "/dashboard",
     "/build/client",
     "/filelib",
@@ -113,7 +113,8 @@ export default function MainLayout() {
     // NavLink matches on pathname only, so every link falling back to
     // /menu-pending?menu=<key> would light up together; disambiguate by `menu`.
     const location = useLocation();
-    const isPrimaryPage = PRIMARY_PAGE_PATHS.has(location.pathname.replace(/\/$/, ""));
+    const hasInsetPanel = INSET_PAGE_PATHS.has(location.pathname.replace(/\/$/, "")) ||
+        matchPath("/log/chatlog/*", location.pathname) !== null;
     const pendingNavClass =
         (menuKey: string) =>
         ({ isActive }: { isActive: boolean }) => {
@@ -448,7 +449,7 @@ export default function MainLayout() {
                     by the scrollbar width and forced a horizontal document scrollbar
                     (which then cost vertical space and produced a second, outer scrollbar). */}
                     {/* Clip child backgrounds to the shared radius without creating a scroll container. */}
-                    <div className={`flex-1 min-w-0 bg-background-main-content rounded-lg${isPrimaryPage ? " mr-4 mb-4 overflow-clip" : ""}`}>
+                    <div className={`flex-1 min-w-0 bg-background-main-content rounded-lg${hasInsetPanel ? " mr-4 mb-4 overflow-clip" : ""}`}>
                         <Suspense
                             fallback={
                                 <div className="flex items-center justify-center h-full">

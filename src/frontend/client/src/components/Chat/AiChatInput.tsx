@@ -8,6 +8,7 @@ import {
     useCallback,
     useEffect,
     useLayoutEffect,
+    useMemo,
     useRef,
     useState,
     type KeyboardEvent,
@@ -71,6 +72,8 @@ interface DroppableAttachment {
 }
 
 interface AiChatInputProps {
+    /** Identifies the composer across async admission checks and navigation. */
+    composerIdentity?: string;
     size?: '' | 'mini';
     /** Conversation setup choices belong to the new-chat surface. */
     allowConfiguration?: boolean;
@@ -107,7 +110,7 @@ interface AiChatInputProps {
     onModelAutoChange?: (val: string) => void;
     placeholder?: string;
     /** files: uploaded file list [{path, name}], null means still uploading */
-    onSend: (text: string, files?: any[] | null) => void | boolean;
+    onSend: (text: string, files?: any[] | null) => void | boolean | Promise<void | boolean>;
     onStop: () => void;
     onScrollToBottom: () => void;
     /** Optional controlled value — for filling in preset questions */
@@ -150,6 +153,7 @@ interface AiChatInputProps {
 const AiChatInput = memo(
     ({
         size = '',
+        composerIdentity = '',
         allowConfiguration = true,
         features,
         disabled = false,
@@ -378,10 +382,21 @@ const AiChatInput = memo(
             (file) => file?.parsing_status && !['completed', 'failed'].includes(file.parsing_status),
         );
 
-        const handleSend = useCallback(() => {
+        // Blocks a second send while an async onSend (e.g. the department lease
+        // check) is still deciding; the draft is not cleared until it resolves.
+        const composerIdentityRef = useRef(composerIdentity);
+        composerIdentityRef.current = composerIdentity;
+        const mountedRef = useRef(true);
+        useEffect(() => {
+            mountedRef.current = true;
+            return () => { mountedRef.current = false; };
+        }, []);
+        const sendPendingRef = useRef<{ identity: string } | null>(null);
+        const handleSend = useCallback(async () => {
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
             if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
+            if (sendPendingRef.current?.identity === composerIdentity) return;
             if (!taskMode && !isLingsi && chatFiles?.some((file) => !canProcessChatImage(
                 file.name || file.file_name || file.filename || '', supportsVision, supportsImageParsing,
             ))) {
@@ -392,12 +407,21 @@ const AiChatInput = memo(
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
             // bubble goes back to `cover_filepath` once parsing produces it.
-            const accepted = onSend(trimmed, chatFiles?.map((file) => (
-                file?.mediaCoverUrl?.startsWith('blob:')
-                    ? { ...file, mediaCoverUrl: undefined }
-                    : file
-            )) ?? chatFiles);
-            if (accepted === false) return;
+            const pending = { identity: composerIdentity };
+            sendPendingRef.current = pending;
+            let accepted: void | boolean;
+            try {
+                accepted = await onSend(trimmed, chatFiles?.map((file) => (
+                    file?.mediaCoverUrl?.startsWith('blob:')
+                        ? { ...file, mediaCoverUrl: undefined }
+                        : file
+                )) ?? chatFiles);
+            } finally {
+                if (sendPendingRef.current === pending) sendPendingRef.current = null;
+            }
+            // A lease check may finish after another project draft was opened.
+            // Its result must not clear the new draft's text or attachments.
+            if (accepted === false || !mountedRef.current || composerIdentityRef.current !== pending.identity) return;
             setText("");
             setChatFiles(null);
             setUploadingFiles([]);
@@ -412,7 +436,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize, composerIdentity]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);
@@ -473,10 +497,20 @@ const AiChatInput = memo(
 
         // Resource IDs share the native editor document while execution metadata stays in state.
         const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
-        const mountedTools = tools && agentMode && !isLingsi && onSelectedOrgKbsChange ? selectedTools : [];
+        // Default-checked (auto) tools stay selected but out of the editor text;
+        // the "+" menu shows them. Editor edits only replace the visible part.
+        const showMountedTools = !!tools && agentMode && !isLingsi && !!onSelectedOrgKbsChange;
+        const mountedTools = useMemo(
+            () => (showMountedTools ? selectedTools.filter((tool) => !tool.auto) : []),
+            [showMountedTools, selectedTools],
+        );
+        const handleVisibleToolsChange = useCallback(
+            (items: typeof selectedTools) => setSelectedTools((prev) => [...prev.filter((tool) => tool.auto), ...items]),
+            [setSelectedTools],
+        );
         const { references, onReferencesChange } = useComposerReferences(
             mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
-            mountedTools, setSelectedTools,
+            mountedTools, handleVisibleToolsChange,
         );
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0 || mountedTools.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
@@ -565,6 +599,7 @@ const AiChatInput = memo(
                             uploadSizeLimits={resolveUploadSizeLimits(envConfig)}
                             size={envConfig?.uploaded_files_maximum_size || 50}
                             onFilesStateChange={(currentFiles: any[] = []) => {
+                                if (!mountedRef.current) return;
                                 const pending = currentFiles
                                     .filter((f) => f?.isUploading)
                                     .map((f) => ({
@@ -614,6 +649,8 @@ const AiChatInput = memo(
                                 }
                             }}
                             onChange={(files: any) => {
+                                // An abandoned composer's upload may finish late.
+                                if (!mountedRef.current) return;
                                 if (files === null) {
                                     setFileUploading(true);
                                     return;
@@ -770,11 +807,15 @@ const AiChatInput = memo(
                                         fileUploading ||
                                         filesParsing
                                     }
-                                    className="dsh-composer-submit btn-brand-primary"
+                                    className="dsh-composer-submit dsh-composer-send btn-brand-primary"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >
-                                    <Outlined.ArrowUp size={18} />
+                                    <Outlined.ArrowUp size={18} className="dsh-composer-web-send-icon" />
+                                    {/* Match the 16px filled arrow used by the native Work InputBar. */}
+                                    <svg className="dsh-composer-native-send-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                                        <path fill="currentColor" d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" />
+                                    </svg>
                                 </button>
                                 </div>
                             )}

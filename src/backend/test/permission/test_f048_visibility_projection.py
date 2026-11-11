@@ -25,6 +25,7 @@ def _grant(
     sources: tuple[GrantSourceRecord, ...],
     model_active: bool = True,
     actions: tuple[str, ...] = ("edit",),
+    visibility_only: bool = False,
 ) -> GrantSnapshot:
     return GrantSnapshot(
         grant_id=grant_id,
@@ -35,6 +36,10 @@ def _grant(
             model_key=model_key,
             active=model_active,
             action_codes=actions,
+            derived_level=1 if visibility_only else None,
+            visibility_only_resource_types=("knowledge_space",) if visibility_only else (),
+            visibility_level=1 if visibility_only else None,
+            visibility_only=visibility_only,
         ),
         active=True,
         sources=sources,
@@ -132,9 +137,7 @@ def test_multiple_models_and_sources_share_one_aggregate_until_last_revoke() -> 
     )
     assert len(initial.active_sources) == 2
     assert len({row.contribution_fingerprint for row in initial.active_sources}) == 2
-    assert [(row.action, row.relation) for row in initial.deltas] == [
-        ("WRITE", "visible")
-    ]
+    assert [(row.action, row.relation) for row in initial.deltas] == [("WRITE", "visible")]
 
     one_remaining = compiler.compile(
         tenant_id=7,
@@ -152,9 +155,7 @@ def test_multiple_models_and_sources_share_one_aggregate_until_last_revoke() -> 
     )
     assert none_remaining.active_sources == ()
     assert len(none_remaining.retired_sources) == 1
-    assert [(row.action, row.relation) for row in none_remaining.deltas] == [
-        ("DELETE", "visible")
-    ]
+    assert [(row.action, row.relation) for row in none_remaining.deltas] == [("DELETE", "visible")]
 
 
 def test_inactive_and_visibility_only_existing_grants_still_contribute() -> None:
@@ -173,15 +174,14 @@ def test_inactive_and_visibility_only_existing_grants_still_contribute() -> None
                 sources=(source,),
                 model_active=False,
                 actions=(),
+                visibility_only=True,
             ),
         ),
         existing_sources=(),
     )
     assert len(result.active_sources) == 1
     assert result.active_sources[0].model_key == "inactive-custom"
-    assert [(row.action, row.relation) for row in result.deltas] == [
-        ("WRITE", "visible")
-    ]
+    assert [(row.action, row.relation) for row in result.deltas] == [("WRITE", "visible")]
 
 
 def test_system_public_and_shared_sources_do_not_enter_grant_projection() -> None:

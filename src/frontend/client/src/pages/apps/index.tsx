@@ -1,21 +1,22 @@
+import { Outlined } from 'bisheng-icons';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react';
+import { Trans } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { ModuleHomeHeader } from '~/components/ModuleHome';
+import { Button } from '@bisheng/ui';
+import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_INTRO, ModuleHomeHeader } from '~/components/ModuleHome';
 import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
 import { EmptyStateIllustration } from '~/components/illustrations';
 import { useAppCenter } from './hooks/useAppCenter';
 import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from '~/hooks';
-import { ChannelBlocksArrowsIcon } from '~/components/icons/channels';
 import { cn } from '~/utils';
 
 export default function AppCenter() {
     const localize = useLocalize();
     // 页面标题跟随后台配置的菜单显示名称
     const menuNames = useWorkbenchMenuNames();
-    const recentAppsHint = localize('com_app.recent_apps_hint');
     const {
         apps,
         loading,
@@ -76,8 +77,7 @@ export default function AppCenter() {
     const [appGridCols, setAppGridCols] = useState(() => {
         if (typeof window === 'undefined') return 3;
         const width = window.innerWidth;
-        const mobile = window.matchMedia('(max-width: 767px)').matches;
-        if (mobile) {
+        if (isMobileLayout) {
             return width < 480 ? 1 : 2;
         }
         if (width < 480) return 1;
@@ -149,79 +149,55 @@ export default function AppCenter() {
         }
     }, []);
 
-    const exploreLink = (
-        <Link
-            to="/apps/explore"
-            className="flex shrink-0 items-center justify-center gap-[6px] rounded-lg px-[10px] py-[6px] transition-colors fine-pointer:hover:bg-gray-50"
-        >
-            <ChannelBlocksArrowsIcon className="size-4 text-blue-500" />
-            <span className="font-['PingFang_SC'] text-text-1 text-[12px] leading-[20px] whitespace-nowrap">
-                {localize('com_app.explore_more')}
-            </span>
-        </Link>
-    );
-
     return (
         <div
             className={cn(
-                // 填满 MainLayout 白卡片；正文区单独滚动 + scroll-on-scroll（含 PC 窄屏）
-                'bg-white flex h-full min-h-0 flex-1 w-full flex-col items-center relative overflow-hidden',
-                // 与首页 MobileNav（px-4）水平对齐；顶栏由 MainLayout 提供，正文略留底距
-                isMobileLayout ? 'px-4 pb-5 pt-3' : 'px-[12px] py-[20px]',
+                MODULE_HOME_FRAME,
+                'relative flex-1',
+                // Align with the mobile shell's navigation and preserve its content spacing.
+                isMobileLayout && 'px-4 pb-5 pt-3',
             )}
         >
-            {isMobileLayout ? (
-                <>
-                    {/* H5：标题已上移到顶栏（MainLayout）。此行只保留 最近使用文案（可省略）| 探索；下一行搜索占满宽 */}
-                    <header className="flex w-full max-w-[1000px] shrink-0 items-center gap-2 min-w-0">
-                        <p
-                            className="font-['PingFang_SC'] text-[#666] text-[13px] leading-[20px] min-w-0 flex-1 truncate"
-                            title={recentAppsHint}
-                        >
-                            {recentAppsHint}
-                        </p>
-                        {exploreLink}
-                    </header>
-                    <div className="mt-3 mb-4 w-full max-w-[1000px] shrink-0 min-w-0">
+            {!isMobileLayout && (
+                <ModuleHomeHeader title={menuNames.apps}>
+                    <Button variant="link" asChild><Link to="/apps/cloud-workbenches">{localize('shared:cloudWorkbenches.title')}</Link></Button>
+                    <div className="w-auto min-w-[120px] shrink-0">
                         <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
                     </div>
-                </>
-            ) : (
-                <>
-                    {/* Shared module-home frame (~/components/ModuleHome): the page's tools on
-                        the right — 应用 has nothing to create here, so that is the search alone.
-                        Discovering apps is the sidebar's 广场; the 探索更多应用 link stays on
-                        mobile only. */}
-                    <ModuleHomeHeader title={menuNames.apps}>
-                        <div className="w-auto min-w-[120px] shrink-0">
-                            <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
-                        </div>
-                    </ModuleHomeHeader>
-
-                    <div className="mt-4 mb-4 flex w-full max-w-[1000px] min-w-0 shrink-0 items-center gap-4 sm:gap-6">
-                        <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">
-                            <div className="flex w-max max-w-full min-w-0 items-center gap-[24px]">
-                                <p
-                                    className="font-['PingFang_SC'] text-[#666] text-[14px] leading-[22px] min-w-0 shrink truncate"
-                                    title={recentAppsHint}
-                                >
-                                    {recentAppsHint}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </>
+                </ModuleHomeHeader>
+            )}
+            <p className={cn(
+                MODULE_HOME_COLUMN,
+                'flex min-w-0 shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1 text-text-2',
+                isMobileLayout ? 'text-body-sm' : [MODULE_HOME_INTRO, 'my-4 text-body'],
+            )}>
+                <span>{localize('com_app.recent_apps_hint')}</span>
+                {isMobileLayout && <Link to="/apps/cloud-workbenches" className="text-body-sm text-primary">{localize('shared:cloudWorkbenches.title')}</Link>}
+                <span>
+                    <Trans
+                        i18nKey="com_app.explore_plaza"
+                        components={{
+                            cta: <Link to="/apps/explore" className="inline-flex items-center gap-0.5 font-normal text-blue-500 hover:text-blue-600" />,
+                            arrow: <Outlined.ArrowRight aria-hidden className="size-3.5 shrink-0" />,
+                        }}
+                    />
+                </span>
+            </p>
+            {isMobileLayout && (
+                <div className={cn(MODULE_HOME_COLUMN, 'mt-3 mb-4 shrink-0 min-w-0')}>
+                    <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
+                </div>
             )}
 
             {/* 内容区域：flex-1 内滚动，PC 窄屏与移动端一致用 scroll-on-scroll。
                 滚动区占满整宽（滚动条贴最右），内容居中约束在 1000px */}
             <main
                 ref={mainRef}
-                className="relative flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto scroll-on-scroll"
+                className={cn(MODULE_HOME_BODY, 'relative flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto scroll-on-scroll')}
                 onScroll={handleMainScroll}
                 data-scrolling={isMainScrolling ? 'true' : 'false'}
             >
-                <div className="flex w-full max-w-[1000px] flex-1 flex-col items-start gap-[14px]">
+                <div className={cn(MODULE_HOME_COLUMN, 'flex flex-1 flex-col items-start gap-[14px]')}>
                     {loading ? (
                         <div className="flex w-full flex-1 flex-col items-center justify-center gap-3 text-text-3">
                             <LoadingIcon className="size-20 text-primary" />

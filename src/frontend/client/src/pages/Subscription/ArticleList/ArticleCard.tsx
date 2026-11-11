@@ -153,6 +153,8 @@ interface ArticleCardProps {
     searchQuery?: string;
     /** When false, hides add-to-knowledge and share (e.g. channel plaza preview drawer). */
     showArticleActions?: boolean;
+    /** Mobile lists draw the divider on the card; desktop rows draw their own. */
+    showBottomDivider?: boolean;
     /** 'list' = reading-mode single column (cover left); 'grid' = browse-mode two columns (thumbnail right). */
     variant?: 'list' | 'grid';
 }
@@ -163,6 +165,7 @@ export function ArticleCard({
     isSelected,
     searchQuery,
     showArticleActions = true,
+    showBottomDivider = false,
     variant = 'list',
 }: ArticleCardProps) {
     const localize = useLocalize();
@@ -218,11 +221,14 @@ export function ArticleCard({
     );
 
     // Browse-mode grid card: content left, 100x100 thumbnail right, single-line description.
-    // Coarse-pointer (mobile) tweaks: dashed divider, always-visible action buttons w/ no bg, bumped title size.
+    // Compact cards keep their existing sizing and action layout.
     return (
         <>
                 <div
-                    className="group relative flex cursor-pointer gap-6 min-[768px]:h-[120px] min-[768px]:overflow-hidden min-[768px]:py-4 max-[767px]:h-[100px] max-[767px]:overflow-hidden max-[767px]:border-b max-[767px]:border-dashed max-[767px]:border-[#E0E0E0] max-[767px]:py-3"
+                    className={cn(
+                        "group relative flex cursor-pointer gap-6 min-[768px]:h-[120px] min-[768px]:overflow-hidden min-[768px]:py-4 max-[767px]:h-[100px] max-[767px]:overflow-hidden max-[767px]:py-3",
+                        showBottomDivider && "border-b border-dashed border-[#E0E0E0]",
+                    )}
                     onClick={() => onSelect(article)}
                 >
                     {/* Left content */}

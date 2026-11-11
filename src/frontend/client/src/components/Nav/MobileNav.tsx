@@ -1,27 +1,28 @@
-import React, { useState } from 'react';
-import { useRecoilValue, useSetRecoilState } from 'recoil';
-import { useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, Menu, X } from 'lucide-react';
-import { Outlined } from 'bisheng-icons';
-import { useNavigate } from 'react-router-dom';
-import { QueryKeys, Constants } from '~/types/chat';
-import type { TMessage } from '~/types/chat';
-import type { Dispatch, SetStateAction } from 'react';
-import ShareChat from '~/components/Share/ShareChat';
-import { useLocalize, useNewConvo } from '~/hooks';
-import { cn } from '~/utils';
-import store from '~/store';
-import { MobileChatHistoryDropdown } from './MobileChatHistoryDropdown';
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
+import React, { useState } from "react";
+import { useRecoilValue, useSetRecoilState } from "recoil";
+import { useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, Menu, X } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+import { useNavigate } from "react-router-dom";
+import { QueryKeys, Constants } from "~/types/chat";
+import type { TMessage } from "~/types/chat";
+import type { Dispatch, SetStateAction } from "react";
+import ShareChat from "~/components/Share/ShareChat";
+import { useLocalize, useNewConvo } from "~/hooks";
+import { cn } from "~/utils";
+import store from "~/store";
+import { MobileChatHistoryDropdown } from "./MobileChatHistoryDropdown";
 
 const shareChatTypes = {
-  1: 'skill',
-  5: 'assistant',
-  10: 'workflow',
-  15: 'workbench_chat',
+  1: "skill",
+  5: "assistant",
+  10: "workflow",
+  15: "workbench_chat",
 } as const;
 
 type MobileNavProps = {
-  variant?: 'chat' | 'app';
+  variant?: "chat" | "app";
   navVisible: boolean;
   setNavVisible: Dispatch<SetStateAction<boolean>>;
   persistNavVisibleInLocalStorage?: boolean;
@@ -40,16 +41,12 @@ type MobileNavProps = {
   onToggleAppHistoryDropdown?: () => void;
 };
 
-/**
- * 移动端顶栏：左会话抽屉、右新建。
- * 主站 chat：中间不展示标题（收起态无左侧窄栏）。
- */
 export default function MobileNav({
-  variant = 'chat',
+  variant = "chat",
   navVisible,
   setNavVisible,
   persistNavVisibleInLocalStorage = true,
-  navigateToNewChatPath = '/c/new',
+  navigateToNewChatPath = "/c/new",
   onNewChat,
   onMenuClick,
   preferBackButton = false,
@@ -59,25 +56,27 @@ export default function MobileNav({
   onToggleAppHistoryDropdown,
 }: MobileNavProps) {
   const mobileHeadIconBtnClassName =
-    'inline-flex size-5 shrink-0 items-center justify-center text-text-1';
+    "inline-flex size-5 shrink-0 items-center justify-center text-text-1";
+  const { channel, capabilities } = useClientEnvironment();
+  const canOpenMenu = Boolean(onMenuClick) || channel === "web";
   const localize = useLocalize();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { newConversation } = useNewConvo();
   const conversation = useRecoilValue(store.conversationByIndex(0));
-  const { title = 'New Chat' } = conversation || {};
+  const { title = "New Chat" } = conversation || {};
   const chatMobileHeader = useRecoilValue(store.chatMobileHeaderState);
   const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
-  /** H5: 标题下拉(对话列表)展开状态 */
+
   const [historyDropdownOpen, setHistoryDropdownOpen] = useState(false);
   const showWorkbenchMergedBar =
-    variant === 'chat' && chatMobileHeader !== null;
+    variant === "chat" && chatMobileHeader !== null;
 
   const toggleSidebar = () => {
     setNavVisible((prev) => {
       const next = !prev;
       if (persistNavVisibleInLocalStorage) {
-        localStorage.setItem('navVisible', JSON.stringify(next));
+        localStorage.setItem("navVisible", JSON.stringify(next));
       }
       return next;
     });
@@ -115,27 +114,30 @@ export default function MobileNav({
     (appHistoryDropdownOpen && Boolean(appSurfaceBackAction));
 
   // App navigation is available throughout conversation-title hydration.
-  const appSurfaceShowBackWithMenu = Boolean(appSurfaceBackAction) && preferBackButton === false;
+  const appSurfaceShowBackWithMenu =
+    Boolean(appSurfaceBackAction) && preferBackButton === false;
 
   const handleMenuClick = () => {
     setHistoryDropdownOpen(false);
     if (appHistoryDropdownOpen) onToggleAppHistoryDropdown?.();
     if (onMenuClick) onMenuClick();
-    else setSystemMenuOpen(true);
+    else if (channel === "web") setSystemMenuOpen(true);
   };
 
   const appBackBtnClassName =
-    'inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-border-base bg-white text-text-1 shadow-sm transition-colors hover:bg-fill-1';
+    "inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-border-base bg-white text-text-1 shadow-sm transition-colors hover:bg-fill-1";
+
+  if (capabilities?.hasHostChatHeader) return null;
 
   return (
     <div
       className={cn(
-        'dsh-mobile-chat-header bg-token-main-surface-primary sticky top-0 z-10 w-full bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)] dark:bg-gray-800 dark:text-white',
+        "dsh-mobile-chat-header bg-token-main-surface-primary sticky top-0 z-10 w-full bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)] dark:bg-gray-800 dark:text-white",
       )}
     >
       <div
         className={cn(
-          'relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4',
+          "relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4",
         )}
       >
         {appSurfaceShowBackWithMenu ? (
@@ -143,9 +145,14 @@ export default function MobileNav({
             <button
               type="button"
               data-testid="mobile-header-left-action"
-              aria-label={localize(onMenuClick && navVisible ? 'com_nav_close_sidebar' : 'com_nav_open_sidebar')}
+              aria-label={localize(
+                onMenuClick && navVisible
+                  ? "com_nav_close_sidebar"
+                  : "com_nav_open_sidebar",
+              )}
               aria-expanded={onMenuClick ? navVisible : undefined}
               className={appBackBtnClassName}
+              hidden={!canOpenMenu}
               onClick={handleMenuClick}
             >
               {onMenuClick && navVisible ? (
@@ -157,24 +164,37 @@ export default function MobileNav({
             <button
               type="button"
               data-testid="mobile-header-app-back"
-              aria-label={localize('com_ui_go_back')}
+              aria-label={localize("com_ui_go_back")}
               className={appBackBtnClassName}
               onClick={appSurfaceBackAction}
             >
               <ChevronLeft className="size-4" strokeWidth={2} />
             </button>
           </div>
-        ) : (
+        ) : canOpenMenu || preferBackButton ? (
           <button
             type="button"
             data-testid="mobile-header-left-action"
-            aria-label={preferBackButton ? localize('com_ui_go_back') : localize(onMenuClick && navVisible ? 'com_nav_close_sidebar' : 'com_nav_open_sidebar')}
+            aria-label={
+              preferBackButton
+                ? localize("com_ui_go_back")
+                : localize(
+                    onMenuClick && navVisible
+                      ? "com_nav_close_sidebar"
+                      : "com_nav_open_sidebar",
+                  )
+            }
             aria-expanded={onMenuClick ? navVisible : undefined}
             className={cn(
               mobileHeadIconBtnClassName,
-              !onMenuClick && (historyDropdownOpen || appHistoryDropdownOpen) && 'pointer-events-none text-text-4',
+              "workbench-menu-trigger relative",
+              !onMenuClick &&
+                (historyDropdownOpen || appHistoryDropdownOpen) &&
+                "pointer-events-none text-text-4",
             )}
-            onClick={preferBackButton ? (onBack ?? toggleSidebar) : handleMenuClick}
+            onClick={
+              preferBackButton ? (onBack ?? toggleSidebar) : handleMenuClick
+            }
           >
             {preferBackButton ? (
               <ChevronLeft className="size-4" strokeWidth={2} />
@@ -182,6 +202,8 @@ export default function MobileNav({
               <Outlined.SidebarMenu className="size-5" />
             )}
           </button>
+        ) : (
+          <span aria-hidden="true" className="size-5 shrink-0" />
         )}
         {showWorkbenchMergedBar && chatMobileHeader ? (
           <>
@@ -191,10 +213,14 @@ export default function MobileNav({
                 either edge. max-w reserves room for the menu (left) and the
                 share + new-chat icons (right) so a long title truncates rather
                 than sliding under them. Mirrors the 知识空间 / 订阅 mobile headers. */}
-            <div className={cn(
-              'absolute left-1/2 top-0 flex h-full -translate-x-1/2 items-center justify-center px-1',
-              appSurfaceShowBackWithMenu ? 'max-w-[calc(100%-176px)]' : 'max-w-[calc(100%-128px)]',
-            )}>
+            <div
+              className={cn(
+                "absolute left-1/2 top-0 flex h-full -translate-x-1/2 items-center justify-center px-1",
+                appSurfaceShowBackWithMenu
+                  ? "max-w-[calc(100%-176px)]"
+                  : "max-w-[calc(100%-128px)]",
+              )}
+            >
               {appSurfaceBackAction ? (
                 // App-surface chat: title opens the app-chat history dropdown (app card
                 // + conversation list). The dropdown itself is rendered by AppRoot which
@@ -213,8 +239,8 @@ export default function MobileNav({
                     </span>
                     <Outlined.Down
                       className={cn(
-                        'size-4 shrink-0 text-text-3 transition-transform',
-                        appHistoryDropdownOpen && 'rotate-180',
+                        "size-4 shrink-0 text-text-3 transition-transform",
+                        appHistoryDropdownOpen && "rotate-180",
                       )}
                     />
                   </button>
@@ -243,8 +269,8 @@ export default function MobileNav({
                   </span>
                   <Outlined.Down
                     className={cn(
-                      'size-4 shrink-0 text-text-3 transition-transform',
-                      historyDropdownOpen && 'rotate-180',
+                      "size-4 shrink-0 text-text-3 transition-transform",
+                      historyDropdownOpen && "rotate-180",
                     )}
                   />
                 </button>
@@ -254,23 +280,25 @@ export default function MobileNav({
               {/* While the matching history dropdown is open, dim+disable only the share
                   button (mirrors the greyed left menu). The new-chat button stays active so
                   it can always start a conversation — handleNewChat closes the list first. */}
-              {!chatMobileHeader.readOnly && !chatMobileHeader.hideShare && shareType && (
-                <ShareChat
-                  type={shareType}
-                  flowId={chatMobileHeader.flowId || undefined}
-                  chatId={chatMobileHeader.conversationId}
-                  iconClassName="size-5 shrink-0"
-                  buttonClassName={cn(
-                    mobileHeadIconBtnClassName,
-                    'p-0 hover:bg-transparent',
-                    mergedHistoryActive && 'pointer-events-none text-text-4',
-                  )}
-                />
-              )}
+              {!chatMobileHeader.readOnly &&
+                !chatMobileHeader.hideShare &&
+                shareType && (
+                  <ShareChat
+                    type={shareType}
+                    flowId={chatMobileHeader.flowId || undefined}
+                    chatId={chatMobileHeader.conversationId}
+                    iconClassName="size-5 shrink-0"
+                    buttonClassName={cn(
+                      mobileHeadIconBtnClassName,
+                      "p-0 hover:bg-transparent",
+                      mergedHistoryActive && "pointer-events-none text-text-4",
+                    )}
+                  />
+                )}
               <button
                 type="button"
                 data-testid="mobile-header-new-chat-button"
-                aria-label={localize('com_ui_new_chat')}
+                aria-label={localize("com_ui_new_chat")}
                 className={mobileHeadIconBtnClassName}
                 onClick={handleNewChat}
               >
@@ -280,37 +308,12 @@ export default function MobileNav({
           </>
         ) : (
           <>
-            {variant === 'app' ? (
-              <>
-                <div className="min-w-0 flex-1" aria-hidden />
-                <span className="sr-only">{localize('com_ui_new_chat')}</span>
-              </>
-            ) : (
-              // Wrapper centers within the bar; the button itself is content-width so only
-              // the title + caret is tappable (avoids mis-tapping the ≡ / + on the edges).
-              <div className="flex min-w-0 flex-1 justify-center px-1">
-                <button
-                  type="button"
-                  onClick={() => setHistoryDropdownOpen((o) => !o)}
-                  aria-expanded={historyDropdownOpen}
-                  className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
-                >
-                  <span className="truncate text-[16px] font-medium leading-6 text-text-1">
-                    {localize('com_ui_chat_list')}
-                  </span>
-                  <Outlined.Down
-                    className={cn(
-                      'size-4 shrink-0 text-text-3 transition-transform',
-                      historyDropdownOpen && 'rotate-180',
-                    )}
-                  />
-                </button>
-              </div>
+            <div className="min-w-0 flex-1" aria-hidden />
+            {variant === "app" && (
+              <span className="sr-only">{localize("com_ui_new_chat")}</span>
             )}
-            {/* No active conversation here (new-chat landing / chat list): the user is
-                already in a fresh chat, so the new-chat "+" would be a no-op — hide it.
-                A same-width spacer keeps the centered title from shifting right.
-                (The list dropdown still offers a "+ 新对话" entry as a fallback.) */}
+            {/* The landing page uses the global sidebar for history and already starts a
+                fresh chat, so it needs neither a history title nor a new-chat action. */}
             <div className="size-5 shrink-0" aria-hidden />
           </>
         )}

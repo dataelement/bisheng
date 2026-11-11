@@ -8,6 +8,7 @@ from bisheng.common.errcode.dsh import DshOperationConflictError
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.role import Role
+from bisheng.database.models.role_access import RoleAccess
 from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.dsh.domain.models.admin_operation import DshAdminOperation
 from bisheng.dsh.domain.models.model_call import DshModelCall
@@ -40,6 +41,7 @@ def subject_store(tmp_path):
         User,
         Department,
         Role,
+        RoleAccess,
         UserDepartment,
         UserTenant,
         DshUserPolicy,
@@ -54,7 +56,7 @@ def subject_store(tmp_path):
     with Session(engine) as session, session.begin():
         session.add_all(
             [
-                Tenant(id=2, tenant_code="tenant-2", tenant_name="测试组织"),
+                Tenant(id=2, tenant_code="tenant-2", tenant_name="测试组织", root_dept_id=10),
                 User(user_id=20, user_name="admin", password="x"),
                 User(user_id=21, user_name="guest", password="x"),
                 Department(id=10, dept_id="root", name="研发中心", tenant_id=2, parent_id=None, path="/10/"),
@@ -64,8 +66,8 @@ def subject_store(tmp_path):
                     dept_id="first-root",
                     name="综合管理部",
                     tenant_id=2,
-                    parent_id=None,
-                    path="/12/",
+                    parent_id=10,
+                    path="/10/12/",
                     sort_order=-1,
                 ),
                 Role(id=41, role_name="产品经理", role_type="tenant", tenant_id=2),
@@ -73,6 +75,7 @@ def subject_store(tmp_path):
                 UserTenant(id=1, user_id=20, tenant_id=2, status="active", is_active=1),
                 UserTenant(id=2, user_id=21, tenant_id=2, status="active", is_active=1),
                 UserDepartment(id=100, user_id=20, department_id=11),
+                UserDepartment(id=102, user_id=21, department_id=12),
                 UserRole(id=200, user_id=20, role_id=41, tenant_id=2),
             ]
         )
@@ -96,7 +99,7 @@ def update(repository, subject_type, subject_id, limit, *, expected=0, enabled=T
 def test_personal_override_precedes_department_and_role_quotas(subject_store):
     with Session(subject_store) as session, session.begin():
         repository = DshSubjectPolicyRepository(session)
-        update(repository, "DEPARTMENT", 10, 100)
+        update(repository, "DEPARTMENT", 11, 100)
         update(repository, "ROLE", 41, 300)
         session.add(
             DshUserPolicy(
@@ -121,7 +124,7 @@ def test_personal_override_precedes_department_and_role_quotas(subject_store):
         assert repository.effective(20).rows[0].monthly_token_limit == 200
         direct = session.exec(select(DshUserPolicy).where(DshUserPolicy.user_id == 20)).one()
         direct.enabled = 0
-        session.add(UserDepartment(id=101, user_id=21, department_id=11))
+        session.add(UserDepartment(id=101, user_id=21, department_id=11, is_primary=0))
         session.flush()
         assert repository.effective(20).rows[0].monthly_token_limit == 100
         assert repository.effective(21).rows[0].monthly_token_limit == 100
@@ -130,7 +133,7 @@ def test_personal_override_precedes_department_and_role_quotas(subject_store):
 def test_user_permission_page_explains_department_role_and_legacy_sources(subject_store):
     with Session(subject_store) as session, session.begin():
         repository = DshSubjectPolicyRepository(session)
-        update(repository, "DEPARTMENT", 10, 100)
+        update(repository, "DEPARTMENT", 11, 100)
         update(repository, "ROLE", 41, 300)
         session.add(
             DshUserPolicy(
@@ -163,12 +166,12 @@ def test_user_permission_page_explains_department_role_and_legacy_sources(subjec
             (source["subject_type"], source["monthly_token_limit"], source["inherited"], source["winning"])
             for source in admin["sources"]
         } == {
-            ("DEPARTMENT", 100, True, False),
+            ("DEPARTMENT", 100, False, False),
             ("USER", 200, False, True),
         }
         assert page["items"][1]["authorized"] is False
         assert repository.department_scope_ids(10, include_descendants=False) == [10]
-        assert repository.department_scope_ids(10, include_descendants=True) == [10, 11]
+        assert repository.department_scope_ids(10, include_descendants=True) == [10, 12, 11]
 
 
 def test_inventory_versions_and_immutable_audit(subject_store):
@@ -176,17 +179,17 @@ def test_inventory_versions_and_immutable_audit(subject_store):
         repository = DshSubjectPolicyRepository(session)
         inventory = repository.inventory(7)
         assert [(row["name"], row["depth"]) for row in inventory["departments"]] == [
-            ("综合管理部", 0),
             ("研发中心", 0),
+            ("综合管理部", 1),
             ("平台组", 1),
         ]
         assert {row["name"] for row in inventory["roles"]} == {"产品经理", "审阅者"}
-        first = update(repository, "DEPARTMENT", 10, 100)
+        first = update(repository, "DEPARTMENT", 11, 100)
         assert first["version"] == 1
-        second = update(repository, "DEPARTMENT", 10, 250, expected=1)
+        second = update(repository, "DEPARTMENT", 11, 250, expected=1)
         assert second["version"] == 2
         with pytest.raises(DshOperationConflictError):
-            update(repository, "DEPARTMENT", 10, 300, expected=1)
+            update(repository, "DEPARTMENT", 11, 300, expected=1)
         audits = session.exec(select(DshSubjectPolicyAudit).order_by(DshSubjectPolicyAudit.id)).all()
         assert audits[0].before_values is None
         assert audits[0].after_values["monthly_token_limit"] == 100
@@ -197,8 +200,8 @@ def test_inventory_versions_and_immutable_audit(subject_store):
 def test_subject_only_member_usage_projects_without_direct_user_policy(subject_store):
     with Session(subject_store) as session, session.begin():
         repository = DshSubjectPolicyRepository(session)
-        update(repository, "DEPARTMENT", 10, 100)
-        session.add(UserDepartment(id=101, user_id=21, department_id=11))
+        update(repository, "DEPARTMENT", 11, 100)
+        session.add(UserDepartment(id=101, user_id=21, department_id=11, is_primary=0))
     event = terminal(running(model=7)).model_copy(update={"user_id": 21})
     with Session(subject_store) as session, session.begin():
         membership = session.exec(select(UserTenant).where(UserTenant.user_id == 21)).one()

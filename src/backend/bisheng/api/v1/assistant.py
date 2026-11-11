@@ -34,9 +34,9 @@ async def get_assistant(
     page_size: int | None = Query(default=10, gt=0, description="Items per page"),
     status: int | None = Query(default=None, description="Is online status"),
     action: str = Query(
-        default="use",
+        default="visible",
         pattern="^(visible|use)$",
-        description="Concrete action required for each assistant",
+        description="Visibility required for each assistant; legacy use is interpreted as visible",
     ),
     cursor: str | None = Query(
         default=None,
@@ -58,7 +58,7 @@ async def get_assistant(
         tag_id=tag_id,
         cursor=cursor,
         page_size=page_size,
-        action=action,
+        action="visible" if action == "use" else action,
     )
     return resp_200(data=result)
 
@@ -247,6 +247,7 @@ async def chat(
     assistant_id: str,
     websocket: WebSocket,
     chat_id: str | None = None,
+    flow_lease_id: str | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
     try:
@@ -254,9 +255,19 @@ async def chat(
             login_user,
             resource_type="assistant",
             resource_id=assistant_id,
-            action="use",
+            action="visible",
         )
-        await chat_manager.dispatch_client(websocket, assistant_id, chat_id, login_user, WorkType.GPTS, websocket)
+        # ``flow_lease_id`` is the page lease opened by the session page; without
+        # it the connection takes its own execution lease.
+        await chat_manager.dispatch_client(
+            websocket,
+            assistant_id,
+            chat_id,
+            login_user,
+            WorkType.GPTS,
+            websocket,
+            flow_lease_id=flow_lease_id,
+        )
     except UnAuthorizedError:
         await websocket.close(
             code=http_status.WS_1008_POLICY_VIOLATION,

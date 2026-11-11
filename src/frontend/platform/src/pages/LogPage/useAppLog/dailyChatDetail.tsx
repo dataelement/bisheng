@@ -104,13 +104,13 @@ export default function DailyChatDetail() {
     }
 
     return (
-        <div>
+        <div className="relative h-full">
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>}
 
-            <div className="bg-background-login px-4">
-                <div className="flex justify-between items-center py-4">
+            <div className="flex h-full flex-col bg-background-login px-4">
+                <div className="flex shrink-0 justify-between items-center py-4">
                     <div className="flex items-center">
                         <Tooltip content={t('back')} side="top">
                             <Button size="medium" aria-label={t('back')} variant="outlined" onClick={() => window.history.back()} color="default" iconOnly><Outlined.ArrowLeft size={16} /></Button>
@@ -120,7 +120,7 @@ export default function DailyChatDetail() {
                 </div>
 
                 {/* messages */}
-                <div className="h-[calc(100vh-132px-var(--license-banner-h,0px))] overflow-y-auto">
+                <div className="min-h-0 flex-1 overflow-y-auto">
                     <div className="max-w-4xl mx-auto px-4 py-8">
                         {messages.map((msg) => (
                             <div key={msg.messageId} className="mb-8 flex items-start gap-4">

@@ -422,11 +422,11 @@ app_runtime:
 
 **先发代码 → 再往 config.yaml 加键 → 再全量重启。**
 
-后端加载 config.yaml 时，对**不认识的顶层键直接抛 `KeyError` 拒绝启动**
-（`bisheng/common/services/config_service.py` 的 `load_settings_from_yaml`）。
-所以把 `app_runtime:` / `open_platform:` 加到还没升级到 v3.0 的镜像上，
-后端**起不来**——症状是容器反复重启，日志里一行 `Key app_runtime not found in settings`，
-看起来像"升级把平台搞坏了"，实际只是顺序反了。
+旧镜像加载 config.yaml 时，会对不认识的顶层键抛 `KeyError` 拒绝启动，
+例如在不支持应用工场的镜像上添加 `app_runtime:`。
+包含未知字段兼容修复的新镜像会警告并忽略不认识的顶层键，不再因此阻止启动；
+但忽略字段不代表支持该功能，所以仍应先升级代码，再启用配置并重启。
+合法字段的类型校验、YAML 解析和必需环境变量检查不变。
 
 标准升级步骤：
 
@@ -561,7 +561,7 @@ time docker stop <容器名>
 
 | 症状 | 最可能的原因 |
 |------|------------|
-| 后端反复重启，日志 `Key app_runtime not found in settings` | 顺序反了：先加的键、后发的代码。见「⚠️ 升级顺序（不可颠倒）」 |
+| 旧镜像反复重启，日志 `Key app_runtime not found in settings`；新镜像警告 `Ignoring unknown top-level config key` | 当前镜像不认识该字段。先升级至支持该功能的版本，再启用配置；警告并忽略不代表功能已生效 |
 | 升级后**前端全站白屏**（不只是应用打不开） | nginx 里 `location /apps/` 写成了静态 `proxy_pass http://app-proxy:8090`，而 app-proxy 没起 → nginx 整个加载失败 |
 | 访问 `/apps/{slug}` 得到"本环境未启用应用工场" | `app_runtime.enabled` 仍是 `false`，或后端没重启 |
 | 访问 `/apps/{slug}` 一直是"应用暂时不可用"兜底页 | ①`proxy_hmac_secret` 与 `APP_PROXY_BACKEND_SECRET` 不一致（后端日志 401）；②`APP_PROXY_BACKEND_BASE` 指向了 `127.0.0.1`（在容器里就是它自己） |

@@ -1,239 +1,280 @@
-import { useEffect, useRef, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useRecoilState, useRecoilValue } from 'recoil';
-import { ChevronLeft } from 'lucide-react';
-import { useUnactivate } from 'react-activation';
-import type { ContextType } from '~/common';
-import { Banner } from '~/components/Banners';
-import { MobileNav } from '~/components/Nav';
-import { MobileAppHistoryDropdown } from '~/components/Nav/MobileAppHistoryDropdown';
-import NavToggle from '~/components/Nav/NavToggle';
-import { useAuthContext, useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
-import { SideNav } from '~/pages/appChat/SideNav';
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
+import { useEffect, useRef, useState } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useRecoilState, useRecoilValue } from "recoil";
+import { ChevronLeft } from "lucide-react";
+import { useUnactivate } from "react-activation";
+import type { ContextType } from "~/common";
+import { Banner } from "~/components/Banners";
+import { MobileNav } from "~/components/Nav";
+import { MobileAppHistoryDropdown } from "~/components/Nav/MobileAppHistoryDropdown";
+import NavToggle from "~/components/Nav/NavToggle";
+import { useAuthContext, useLocalize, useMediaQuery } from "~/hooks";
+import { SideNav } from "~/pages/appChat/SideNav";
 import {
-    copyAppChatReturnTo,
-    copyAppChatOrigin,
-    normalizeAppChatReturn,
-    resolveAppChatExitNavigateTarget,
-    writeAppChatReturnTo,
-} from '~/pages/appChat/appChatOrigin';
-import { appConversationsState, sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
-import store from '~/store';
-import { cn, generateUUID } from '~/utils';
+  copyAppChatReturnTo,
+  copyAppChatOrigin,
+  normalizeAppChatReturn,
+  resolveAppChatExitNavigateTarget,
+  writeAppChatReturnTo,
+} from "~/pages/appChat/appChatOrigin";
+import {
+  appConversationsState,
+  sidebarVisibleState,
+} from "~/pages/appChat/store/appSidebarAtoms";
+import store from "~/store";
+import { cn, generateUUID } from "~/utils";
 
 export default function AppRoot() {
-    const location = useLocation();
-    const localize = useLocalize();
-    const [bannerHeight, setBannerHeight] = useState(0);
-    const [navVisible, setNavVisible] = useState(() => {
-        const savedNavVisible = localStorage.getItem('navVisible');
-        return savedNavVisible !== null ? JSON.parse(savedNavVisible) : true;
-    });
-    const [isHovering, setIsHovering] = useState(false);
-    /** H5 app-surface: title-anchored dropdown showing the app card + conversation list. */
-    const [appHistoryOpen, setAppHistoryOpen] = useState(false);
+  const location = useLocation();
+  const localize = useLocalize();
+  const [bannerHeight, setBannerHeight] = useState(0);
+  const [navVisible, setNavVisible] = useState(() => {
+    const savedNavVisible = localStorage.getItem("navVisible");
+    return savedNavVisible !== null ? JSON.parse(savedNavVisible) : true;
+  });
+  const [isHovering, setIsHovering] = useState(false);
+  /** H5 app-surface: title-anchored dropdown showing the app card + conversation list. */
+  const [appHistoryOpen, setAppHistoryOpen] = useState(false);
 
-    const navigate = useNavigate();
-    const { isAuthenticated } = useAuthContext();
-    const [, setAppConversations] = useRecoilState(appConversationsState);
-    const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
-    const mobileNavHidden = useRecoilValue(store.chatMobileNavHiddenState);
-    const isTabletOrMobile = usePrefersMobileLayout();
-    /** 与 tailwind touch-mobile 一致：768–1023 仍用合并顶栏，避免仅 isTabletOrMobile 时出现 absolute 悬浮菜单 + 内层标题双行 */
-    /** ≤1023：合并顶栏 + 禁止左上角 absolute 悬浮钮（与 tailwind touch-mobile 一致） */
-    const isAppChatCompact = useMediaQuery('(max-width: 1023px)');
-    const isNarrowContent = useMediaQuery('(max-width: 767px)');
-    // Embedded desktop panes use the existing history region below this width,
-    // leaving the full content width available to the header and conversation.
-    const usesHistoryNavigation = isNarrowContent && !isTabletOrMobile;
-    const sidebarWidth = 240;
-    const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(location.pathname);
-    /** AppRoot 仅挂在 /app/*；含 `/app/:fid/:type` 入口，不能用仅三段的 isAppConversationRoute 控制顶栏 */
-    const isAppSurface = location.pathname.includes('/app/');
-    const scrollLockPrevRef = useRef<{ body: string; html: string } | null>(null);
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuthContext();
+  const [, setAppConversations] = useRecoilState(appConversationsState);
+  const [sidebarVisible, setSidebarVisible] =
+    useRecoilState(sidebarVisibleState);
+  const mobileNavHidden = useRecoilValue(store.chatMobileNavHiddenState);
+  const {
+    channel,
+    capabilities,
+    layout: { isNarrowViewport: isTabletOrMobile },
+  } = useClientEnvironment();
+  const hasHostChatHeader = capabilities?.hasHostChatHeader ?? false;
 
-    type AppSurfaceLocationState = { appSurfaceReturn?: string };
+  const isAppChatCompact = useMediaQuery("(max-width: 1023px)");
+  const isNarrowContent = useMediaQuery("(max-width: 767px)");
+  // Embedded desktop panes use the existing history region below this width,
+  // leaving the full content width available to the header and conversation.
+  const usesHistoryNavigation = isNarrowContent && channel === "desktop";
+  const sidebarWidth = 240;
+  const isAppConversationRoute = /^\/app\/[^/]+\/[^/]+\/[^/]+(?:\/|$)/.test(
+    location.pathname,
+  );
 
-    const toggleSidebar = () => setSidebarVisible((prev) => !prev);
-    const handleDesktopMenu = () => {
-        if (usesHistoryNavigation) setAppHistoryOpen(!appHistoryOpen);
-        else toggleSidebar();
-    };
-    const handleGoBack = () => {
-        const pathSegments = location.pathname.split('/').filter(Boolean);
-        const appSegmentIndex = pathSegments.indexOf('app');
-        const conversationId =
-            appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
-        const target = resolveAppChatExitNavigateTarget(
-            conversationId || undefined,
-            { state: location.state, search: location.search },
-        );
-        navigate(target, { replace: target === '/apps' });
-    };
-    const handleCreateNewAppChat = () => {
-        const pathSegments = location.pathname.split('/').filter(Boolean);
-        const appSegmentIndex = pathSegments.indexOf('app');
-        const flowId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 2] : '';
-        const flowType = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 3] : '';
-        const conversationId =
-            appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
-        if (!flowId || !flowType) {
-            navigate('/apps');
-            return;
-        }
-        const chatId = generateUUID(32);
-        if (conversationId) copyAppChatOrigin(conversationId, chatId);
-        if (conversationId) copyAppChatReturnTo(conversationId, chatId);
-        const now = new Date().toISOString();
-        setAppConversations((prev) => [
-            {
-                id: chatId,
-                title: localize('com_ui_new_chat'),
-                flowId,
-                flowType: Number(flowType),
-                updatedAt: now,
-                createdAt: now,
-            },
-            ...prev,
-        ]);
-        navigate(`/app/${chatId}/${flowId}/${flowType}`, { state: location.state });
-    };
+  const isAppSurface = location.pathname.includes("/app/");
+  const scrollLockPrevRef = useRef<{ body: string; html: string } | null>(null);
 
-    // Back-fill sessionStorage from URL/state so back button only relies on conversation return target.
-    useEffect(() => {
-        if (!isAppConversationRoute) return;
-        const pathSegments = location.pathname.split('/').filter(Boolean);
-        const appSegmentIndex = pathSegments.indexOf('app');
-        const conversationId = appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : '';
-        if (!conversationId) return;
-        const normalizedReturnTo = normalizeAppChatReturn(new URLSearchParams(location.search).get('returnTo'))
-            ?? normalizeAppChatReturn((location.state as AppSurfaceLocationState | null)?.appSurfaceReturn);
-        if (normalizedReturnTo) writeAppChatReturnTo(conversationId, normalizedReturnTo);
-    }, [isAppConversationRoute, location.pathname, location.search, location.state]);
+  type AppSurfaceLocationState = { appSurfaceReturn?: string };
 
-    useEffect(() => {
-        if (!isAuthenticated) {
-            return;
-        }
-        const prevBodyOverflow = document.body.style.overflow;
-        const prevHtmlOverflow = document.documentElement.style.overflow;
-        scrollLockPrevRef.current = { body: prevBodyOverflow, html: prevHtmlOverflow };
-        document.body.style.overflow = 'hidden';
-        document.documentElement.style.overflow = 'hidden';
-        return () => {
-            document.body.style.overflow = prevBodyOverflow;
-            document.documentElement.style.overflow = prevHtmlOverflow;
-            scrollLockPrevRef.current = null;
-        };
-    }, [isAuthenticated]);
-
-    // KeepAlive deactivation does not unmount this component; ensure global
-    // scroll lock is released when leaving the app-chat surface.
-    useUnactivate(() => {
-        const prev = scrollLockPrevRef.current;
-        if (!prev) return;
-        document.body.style.overflow = prev.body;
-        document.documentElement.style.overflow = prev.html;
-        scrollLockPrevRef.current = null;
-    });
-
-    useEffect(() => {
-        if (isAppChatCompact === false) setAppHistoryOpen(false);
-    }, [isAppChatCompact]);
-
-    if (!isAuthenticated) {
-        return null;
-    }
-    // Root uses h-full so it fills the MainLayout panel whatever that panel's
-    // height is; inner height math is relative (100%) too.
-    return (
-        <div className="h-full w-full overflow-hidden">
-            {/* Page header banner */}
-            <Banner onHeightChange={setBannerHeight} />
-            <div
-                className={cn(
-                    "flex w-full overflow-hidden bg-white",
-                    isAppConversationRoute
-                        ? " touch-mobile:p-0 max-[768px]:p-0"
-                        : " touch-mobile:p-0",
-                )}
-                style={{ height: `calc(100% - ${bannerHeight}px)` }}
-            >
-                <div
-                    className={cn(
-                        "relative z-0 flex h-full w-full overflow-hidden",
-                        "bg-white p-0",
-                    )}
-                >
-
-                    {/* Desktop/Tablet sidebar */}
-                    {!isTabletOrMobile && !usesHistoryNavigation && (
-                        <div
-                            className={cn(
-                                'transition-all duration-300 overflow-hidden flex-shrink-0',
-                                sidebarVisible ? 'w-[240px]' : 'w-0',
-                            )}
-                        >
-                            <SideNav />
-                        </div>
-                    )}
-
-                    {/* Floating toggle button - lives outside the clipped sidebar */}
-                    {!isTabletOrMobile && !(isAppSurface && isAppChatCompact) && (
-                        <NavToggle
-                            navVisible={sidebarVisible}
-                            onToggle={toggleSidebar}
-                            isHovering={isHovering}
-                            setIsHovering={setIsHovering}
-                            className="absolute left-0 top-1/2 z-[50]"
-                            translateX={sidebarWidth - 5}
-                        />
-                    )}
-
-                    {/* 宽屏侧栏收起：仅保留返回（菜单已进 MobileNav）。勿用 flex+hidden 叠类名，避免 twMerge 后仍显示 absolute 钮叠在顶栏上 */}
-                    {!sidebarVisible && !(isAppSurface && isAppChatCompact) && (
-                        <div className="absolute left-3 top-3 z-[40] flex items-center gap-2 transition-all duration-300">
-                            <button
-                                type="button"
-                                onClick={handleGoBack}
-                                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border-base bg-white text-text-1 shadow-sm transition-colors hover:bg-gray-50"
-                                aria-label={localize('com_ui_go_back')}
-                            >
-                                <ChevronLeft size={16} className="text-text-1" />
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Chat panel (routed) */}
-                    <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden">
-                        {isAppSurface && isAppChatCompact && !mobileNavHidden && (
-                            <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
-                                <MobileNav
-                                    variant="chat"
-                                    navVisible={usesHistoryNavigation ? appHistoryOpen : sidebarVisible}
-                                    setNavVisible={usesHistoryNavigation ? setAppHistoryOpen : setSidebarVisible}
-                                    persistNavVisibleInLocalStorage={false}
-                                    navigateToNewChatPath={false}
-                                    onNewChat={handleCreateNewAppChat}
-                                    onMenuClick={isTabletOrMobile ? undefined : handleDesktopMenu}
-                                    appSurfaceBackAction={handleGoBack}
-                                    appHistoryDropdownOpen={appHistoryOpen}
-                                    onToggleAppHistoryDropdown={() => setAppHistoryOpen((o) => !o)}
-                                />
-                            </div>
-                        )}
-                        {isAppSurface && isAppChatCompact && (
-                            <MobileAppHistoryDropdown
-                                open={appHistoryOpen}
-                                onClose={() => setAppHistoryOpen(false)}
-                            />
-                        )}
-                        <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
-                            <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+  const toggleSidebar = () => setSidebarVisible((prev) => !prev);
+  const handleDesktopMenu = () => {
+    if (usesHistoryNavigation) setAppHistoryOpen(!appHistoryOpen);
+    else toggleSidebar();
+  };
+  const handleGoBack = () => {
+    const pathSegments = location.pathname.split("/").filter(Boolean);
+    const appSegmentIndex = pathSegments.indexOf("app");
+    const conversationId =
+      appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : "";
+    const target = resolveAppChatExitNavigateTarget(
+      conversationId || undefined,
+      { state: location.state, search: location.search },
     );
+    navigate(target, { replace: target === "/apps" });
+  };
+  const handleCreateNewAppChat = () => {
+    const pathSegments = location.pathname.split("/").filter(Boolean);
+    const appSegmentIndex = pathSegments.indexOf("app");
+    const flowId =
+      appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 2] : "";
+    const flowType =
+      appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 3] : "";
+    const conversationId =
+      appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : "";
+    if (!flowId || !flowType) {
+      navigate("/apps");
+      return;
+    }
+    const chatId = generateUUID(32);
+    if (conversationId) copyAppChatOrigin(conversationId, chatId);
+    if (conversationId) copyAppChatReturnTo(conversationId, chatId);
+    const now = new Date().toISOString();
+    setAppConversations((prev) => [
+      {
+        id: chatId,
+        title: localize("com_ui_new_chat"),
+        flowId,
+        flowType: Number(flowType),
+        updatedAt: now,
+        createdAt: now,
+      },
+      ...prev,
+    ]);
+    navigate(`/app/${chatId}/${flowId}/${flowType}`, { state: location.state });
+  };
+
+  // Back-fill sessionStorage from URL/state so back button only relies on conversation return target.
+  useEffect(() => {
+    if (!isAppConversationRoute) return;
+    const pathSegments = location.pathname.split("/").filter(Boolean);
+    const appSegmentIndex = pathSegments.indexOf("app");
+    const conversationId =
+      appSegmentIndex >= 0 ? pathSegments[appSegmentIndex + 1] : "";
+    if (!conversationId) return;
+    const normalizedReturnTo =
+      normalizeAppChatReturn(
+        new URLSearchParams(location.search).get("returnTo"),
+      ) ??
+      normalizeAppChatReturn(
+        (location.state as AppSurfaceLocationState | null)?.appSurfaceReturn,
+      );
+    if (normalizedReturnTo)
+      writeAppChatReturnTo(conversationId, normalizedReturnTo);
+  }, [
+    isAppConversationRoute,
+    location.pathname,
+    location.search,
+    location.state,
+  ]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    scrollLockPrevRef.current = {
+      body: prevBodyOverflow,
+      html: prevHtmlOverflow,
+    };
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      scrollLockPrevRef.current = null;
+    };
+  }, [isAuthenticated]);
+
+  // KeepAlive deactivation does not unmount this component; ensure global
+  // scroll lock is released when leaving the app-chat surface.
+  useUnactivate(() => {
+    const prev = scrollLockPrevRef.current;
+    if (!prev) return;
+    document.body.style.overflow = prev.body;
+    document.documentElement.style.overflow = prev.html;
+    scrollLockPrevRef.current = null;
+  });
+
+  useEffect(() => {
+    if (!isAppChatCompact || hasHostChatHeader) setAppHistoryOpen(false);
+  }, [isAppChatCompact, hasHostChatHeader]);
+
+  if (!isAuthenticated) {
+    return null;
+  }
+  // Root uses h-full so it fills the MainLayout panel whatever that panel's
+  // height is; inner height math is relative (100%) too.
+  return (
+    <div className="h-full w-full overflow-hidden">
+      {/* Page header banner */}
+      <Banner onHeightChange={setBannerHeight} />
+      <div
+        className={cn(
+          "flex w-full overflow-hidden bg-white",
+          isAppConversationRoute
+            ? " touch-mobile:p-0 max-[768px]:p-0"
+            : " touch-mobile:p-0",
+        )}
+        style={{ height: `calc(100% - ${bannerHeight}px)` }}
+      >
+        <div
+          className={cn(
+            "relative z-0 flex h-full w-full overflow-hidden",
+            "bg-white p-0",
+          )}
+        >
+          {/* Desktop/Tablet sidebar */}
+          {!isTabletOrMobile && !usesHistoryNavigation && (
+            <div
+              className={cn(
+                "transition-all duration-300 overflow-hidden flex-shrink-0",
+                sidebarVisible ? "w-[240px]" : "w-0",
+              )}
+            >
+              <SideNav />
+            </div>
+          )}
+
+          {/* Floating toggle button - lives outside the clipped sidebar */}
+          {!isTabletOrMobile && !(isAppSurface && isAppChatCompact) && (
+            <NavToggle
+              navVisible={sidebarVisible}
+              onToggle={toggleSidebar}
+              isHovering={isHovering}
+              setIsHovering={setIsHovering}
+              className="absolute left-0 top-1/2 z-[50]"
+              translateX={sidebarWidth - 5}
+            />
+          )}
+
+          {/* When the wide sidebar closes, retain back only; MobileNav owns the menu. */}
+          {!sidebarVisible && !(isAppSurface && isAppChatCompact) && (
+            <div className="absolute left-3 top-3 z-[40] flex items-center gap-2 transition-all duration-300">
+              <button
+                type="button"
+                onClick={handleGoBack}
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border-base bg-white text-text-1 shadow-sm transition-colors hover:bg-gray-50"
+                aria-label={localize("com_ui_go_back")}
+              >
+                <ChevronLeft size={16} className="text-text-1" />
+              </button>
+            </div>
+          )}
+
+          {/* Chat panel (routed) */}
+          <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden">
+            {isAppSurface && isAppChatCompact && !mobileNavHidden && (
+              <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
+                <MobileNav
+                  variant="chat"
+                  navVisible={
+                    usesHistoryNavigation ? appHistoryOpen : sidebarVisible
+                  }
+                  setNavVisible={
+                    usesHistoryNavigation
+                      ? setAppHistoryOpen
+                      : setSidebarVisible
+                  }
+                  persistNavVisibleInLocalStorage={false}
+                  navigateToNewChatPath={false}
+                  onNewChat={handleCreateNewAppChat}
+                  onMenuClick={
+                    isTabletOrMobile && channel === "web"
+                      ? undefined
+                      : handleDesktopMenu
+                  }
+                  appSurfaceBackAction={handleGoBack}
+                  appHistoryDropdownOpen={appHistoryOpen}
+                  onToggleAppHistoryDropdown={() =>
+                    setAppHistoryOpen((o) => !o)
+                  }
+                />
+              </div>
+            )}
+            {isAppSurface && isAppChatCompact && !hasHostChatHeader && (
+              <MobileAppHistoryDropdown
+                open={appHistoryOpen}
+                onClose={() => setAppHistoryOpen(false)}
+              />
+            )}
+            <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
+              <Outlet
+                context={{ navVisible, setNavVisible } satisfies ContextType}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

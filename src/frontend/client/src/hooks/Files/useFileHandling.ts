@@ -137,7 +137,7 @@ const useFileHandling = (params?: UseFileHandling) => {
         clearUploadTimer(file_id as string);
         deleteFileById(file_id as string);
         if (error?.code !== 'ERR_CANCELED') {
-          setError(file_name + ' 解析失败');
+          setError(localize('com_ui_file_parse_failed_named', { 0: file_name }));
         }
         // const errorMessage =
         //   error?.code === 'ERR_CANCELED'

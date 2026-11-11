@@ -23,9 +23,11 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
 )
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.assistant import AssistantDeletedError, AssistantNotOnlineError, AssistantOtherError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData, NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -88,6 +90,10 @@ class ChatClient:
         self.message_tasks: set[asyncio.Task] = set()
         self.finalizing_tasks: set[asyncio.Task] = set()
         self.background_tasks: set[asyncio.Task] = set()
+        # Department concurrency lease held by this connection (execution lease
+        # only — a page lease belongs to the browser tab and is never stored).
+        self.execution_lease = None
+        self.execution_renew_task = None
         # A queue of streaming outputs to accept the content of the streaming output, processing newquestionEmpty at all times
         self.stream_queue = Queue()
 
@@ -250,15 +256,21 @@ class ChatClient:
             # raise IgnoreException(f'get assistant info error: {str(e)}')
 
             if self.chat_id and self.gpts_agent is None:
-                self.db_assistant = assistant
                 # Conversation businessagentFixed generation from database data,Don't change every time
-                self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
-                await self.gpts_agent.init_assistant(self.gpts_async_callback)
-            elif not self.chat_id:
+                candidate_agent = AssistantAgent(
+                    assistant, self.chat_id, invoke_user_id=self.user_id, login_user=self.login_user
+                )
+                await candidate_agent.init_assistant(self.gpts_async_callback)
+                self.gpts_agent = candidate_agent
                 self.db_assistant = assistant
+            elif not self.chat_id:
                 # The debugging interface is regenerated every time
-                self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
-                await self.gpts_agent.init_assistant(self.gpts_async_callback)
+                candidate_agent = AssistantAgent(
+                    assistant, self.chat_id, invoke_user_id=self.user_id, login_user=self.login_user
+                )
+                await candidate_agent.init_assistant(self.gpts_async_callback)
+                self.gpts_agent = candidate_agent
+                self.db_assistant = assistant
 
         except BaseErrorCode as e:
             logger.exception("get assistant info error")
@@ -376,10 +388,25 @@ class ChatClient:
                 await self.init_gpts_agent()
                 return
 
+            # Local import: ``clients/__init__`` pulls in WorkflowClient, which
+            # imports this package's siblings — a module-level import here makes
+            # ``bisheng.common.chat`` circular.
+            from bisheng.common.chat.clients.base import ensure_client_execution_lease
+
+            # Department concurrency: a page lease is only re-asserted; without
+            # one this connection takes its own execution lease on first
+            # execution and keeps it until the socket closes.
+            flow_outcome = await ensure_client_execution_lease(self)
+            if flow_outcome == "rejected":
+                # The existing ``except BaseErrorCode`` below turns this into the
+                # standard error frame with status_code 12045.
+                raise DepartmentDailyChatConcurrentLimitError()
+
             # Inisialisasiagent
             await self.init_gpts_agent()
 
             # Write user issue to database
+            await record_business_activity(self.login_user)
             question_saved = True
             await self.add_message("human", json.dumps(inputs, ensure_ascii=False), "question")
             await self.send_response("processing", "begin", "")
@@ -472,6 +499,10 @@ class ChatClient:
             raise
         except BaseErrorCode as e:
             logger.exception("handle gpts message error: ")
+            if isinstance(e, KnowledgeOperationPlanConflictError):
+                self.gpts_agent = None
+                self.db_assistant = None
+                self.gpts_async_callback = None
             await self.send_response("system", "start", "")
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         except Exception as e:

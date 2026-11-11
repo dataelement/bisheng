@@ -1,4 +1,4 @@
-"""Current use recipients, only after approval's existing read qualification."""
+"""Current visible recipients, after approval's existing read qualification."""
 
 import asyncio
 from time import monotonic
@@ -78,9 +78,9 @@ class AppPublishCurrentVisibilityService:
         runtime = await get_f048_runtime()
         adapter = await get_f048_resource_adapter("app")
         target = await adapter.resolve_permission_target(
-            resource_id=app.id, actor=await _person_actor(viewer), action="use"
+            resource_id=app.id, actor=await _person_actor(viewer), action="visible"
         )
-        sources = await runtime.read_effective_action_sources(target=target, action="use")
+        sources = await runtime.read_effective_action_sources(target=target, action="visible")
         directory = await get_grant_subject_directory()
         subjects = await directory.describe_active_sources(tenant_id=app.tenant_id, sources=sources)
         facts = (await read_current_person_facts([app.owner_user_id])).get(app.owner_user_id)
@@ -96,7 +96,7 @@ class AppPublishCurrentVisibilityService:
                 tenant_id=facts["tenant_id"],
                 token_version=facts["token_version"],
             )
-            eligible = await runtime.check_action(await _person_actor(owner), target, "use")
+            eligible = await runtime.check_action(await _person_actor(owner), target, "visible")
         owner_id = str(app.owner_user_id)
         subjects = [row for row in subjects if not (row["type"] == "user" and row["id"] == owner_id)]
         owner_only = bool(eligible and not subjects)
@@ -104,7 +104,7 @@ class AppPublishCurrentVisibilityService:
             subjects.insert(0, {"type": "user", "id": owner_id, "name": facts["name"]})
         # Names/identity checks can cross a concurrent Grant edit. Recheck via
         # the public permission port, not its private repository or state.
-        if sources != await runtime.read_effective_action_sources(target=target, action="use"):
+        if sources != await runtime.read_effective_action_sources(target=target, action="visible"):
             raise PermissionPublishNotReadyError(reason="summary_scope_changed")
         return visibility_state(
             "available",

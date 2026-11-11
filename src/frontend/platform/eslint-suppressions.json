@@ -207,14 +207,6 @@
       "count": 2
     }
   },
-  "src/components/bs-comp/selectComponent/knowledge.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 10
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/components/bs-comp/sheets/SkillChatSheet.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -645,11 +637,6 @@
       "count": 18
     }
   },
-  "src/controllers/API/linsight.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    }
-  },
   "src/controllers/API/log.ts": {
     "@typescript-eslint/no-empty-object-type": {
       "count": 1
@@ -680,7 +667,7 @@
   },
   "src/controllers/API/user.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
+      "count": 11
     }
   },
   "src/controllers/API/workflow.ts": {
@@ -693,11 +680,6 @@
   },
   "src/controllers/hooks/knowledge.ts": {
     "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/controllers/request.ts": {
-    "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
@@ -1019,7 +1001,7 @@
   },
   "src/pages/BuildPage/assistant/editAssistant/index.tsx": {
     "@typescript-eslint/no-unused-expressions": {
-      "count": 4
+      "count": 3
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -1060,7 +1042,7 @@
   },
   "src/pages/BuildPage/bench/OrgKbConfig.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     }
   },
   "src/pages/BuildPage/bench/RecommendedAppsConfig.tsx": {
@@ -1325,26 +1307,11 @@
     }
   },
   "src/pages/BuildPage/flow/FlowNode/component/KnowledgeQaSelectItem.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 3
-    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
   },
   "src/pages/BuildPage/flow/FlowNode/component/KnowledgeSelectItem.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 3
     }
@@ -1365,7 +1332,7 @@
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 3
+      "count": 2
     }
   },
   "src/pages/BuildPage/flow/FlowNode/component/NumberInput.tsx": {
@@ -1872,16 +1839,6 @@
       "count": 2
     }
   },
-  "src/pages/DepartmentPage/components/DepartmentSettings.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/DepartmentPage/components/DepartmentTrafficControl.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
   "src/pages/DepartmentPage/components/MountTenantDialog.tsx": {
     "no-restricted-syntax": {
       "count": 16
@@ -1889,14 +1846,6 @@
   },
   "src/pages/EvaluationPage/EvaluationCreate.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/KnowledgePage/KnowledgeFile.tsx": {
-    "no-console": {
-      "count": 8
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },
@@ -1974,25 +1923,6 @@
     },
     "no-restricted-syntax": {
       "count": 10
-    }
-  },
-  "src/pages/KnowledgePage/components/Files.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/KnowledgePage/components/Header.tsx": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
     }
   },
   "src/pages/KnowledgePage/components/ImportQa.tsx": {
@@ -2128,31 +2058,7 @@
       "count": 1
     }
   },
-  "src/pages/KnowledgePage/components/WebLinkImportDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 17
-    }
-  },
   "src/pages/KnowledgePage/components/tags/KnowledgeTagSelect.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/KnowledgePage/detail.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/KnowledgePage/filesUpload.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2218,7 +2124,7 @@
       "count": 1
     },
     "@typescript-eslint/no-explicit-any": {
-      "count": 4
+      "count": 2
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
@@ -2251,7 +2157,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2367,10 +2273,7 @@
   },
   "src/pages/ModelPage/manage/ModelConfig.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 1
     }
   },
   "src/pages/ModelPage/manage/SystemConfigBanners.tsx": {

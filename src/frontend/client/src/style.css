@@ -1,3 +1,7 @@
+@import './desktop-buttons.css';
+@import './desktop-tabs.css';
+@import './desktop-switches.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -90,6 +94,8 @@ html {
   --foreground: 0 0% 3.9%;
   --card: 0 0% 100%;
   --card-foreground: 0 0% 3.9%;
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
   /* #165DFF — design brand blue. Fractional HSL so hsl(var(--primary)) rounds to
      exactly rgb(22,93,255) = --brand-500; integer 222 100% 54% drifted to (20,91,255). */
   --primary: 221.51 100% 54.22%;
@@ -166,6 +172,7 @@ html {
   --foreground: 0 0% 98%;
   --card: 0 0% 3.9%;
   --card-foreground: 0 0% 98%;
+  --popover: var(--secondary);
   --primary: 0 0% 98%;
   --primary-foreground: 0 0% 9%;
   --secondary: 0 0% 14.9%;
@@ -1796,20 +1803,22 @@ html {
   padding-top: 0;
 }
 
-/* iOS mobile Safari auto-zooms focused inputs when font-size < 16px.
-   Keep text-like form controls at >=16px on H5 to avoid sticky page zoom
-   after blur (covers create channel/knowledge and filter/search inputs). */
+/* Reserved legacy input floor. Opt in through the same root attribute as
+   @bisheng/ui; mobile typography is disabled by default. Desktop embedded
+   panes keep desktop sizes. */
 @media (max-width: 767px) {
-  :root:not([data-bisheng-surface="desktop"]) input[type='text'],
-  :root:not([data-bisheng-surface="desktop"]) input[type='search'],
-  :root:not([data-bisheng-surface="desktop"]) input[type='email'],
-  :root:not([data-bisheng-surface="desktop"]) input[type='url'],
-  :root:not([data-bisheng-surface="desktop"]) input[type='tel'],
-  :root:not([data-bisheng-surface="desktop"]) input[type='password'],
-  :root:not([data-bisheng-surface="desktop"]) input[type='number'],
-  :root:not([data-bisheng-surface="desktop"]) textarea,
-  :root:not([data-bisheng-surface="desktop"]) select {
-    font-size: 16px !important;
+  :root[data-mobile-typography="enabled"]:not([data-bisheng-surface="desktop"]) :is(
+    input[type='text'],
+    input[type='search'],
+    input[type='email'],
+    input[type='url'],
+    input[type='tel'],
+    input[type='password'],
+    input[type='number'],
+    textarea,
+    select
+  ) {
+    font-size: max(1em, 1rem, 16px) !important;
   }
 }
 

@@ -16,7 +16,7 @@ def isolated_tenant_context():
 
 
 def record(id, source="builtin", owner=None):
-    return SimpleNamespace(id=id, name=f"skill-{id}", source=source, created_by=owner)
+    return SimpleNamespace(id=id, name=f"skill-{id}", source=source, created_by=owner, enabled=True)
 
 
 @pytest.mark.parametrize("owner,current,allowed", [(7, 7, True), (7, 8, False), (7, None, False)])
@@ -32,7 +32,7 @@ async def test_account_switches_keep_disabled_entries_manageable_and_filter_runt
     monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", AsyncMock(return_value=False))
     monkeypatch.setattr(
         "bisheng.permission.application.business_authorization.batch_check_business_actions",
-        AsyncMock(return_value={"1": {"use"}, "2": {"use"}}),
+        AsyncMock(return_value={"1": {"visible"}, "2": {"visible"}}),
     )
     rows = [record(1), record(2, "personal", 7), record(3, "personal", 8)]
     monkeypatch.setattr(LinsightSkillDao, "list_enabled", AsyncMock(return_value=rows))
@@ -68,7 +68,7 @@ async def test_revoked_skill_cannot_be_listed_downloaded_or_reenabled(monkeypatc
     set_current_tenant_id(1)
     monkeypatch.setattr(LinsightSkillDao, "list_enabled", AsyncMock(return_value=[record(1), record(2)]))
     monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", AsyncMock(return_value=False))
-    decisions = AsyncMock(return_value={"1": {"use"}})
+    decisions = AsyncMock(return_value={"1": {"visible"}})
     monkeypatch.setattr("bisheng.permission.application.business_authorization.batch_check_business_actions", decisions)
     repo = SimpleNamespace(disabled_ids=AsyncMock(return_value=set()), save=AsyncMock())
     service = UserSkillsService(7, repo)

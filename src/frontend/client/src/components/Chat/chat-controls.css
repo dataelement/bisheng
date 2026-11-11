@@ -25,12 +25,36 @@ body[data-dsh-chat-theme] .dsh-add-menu [role^="menuitem"]:not(.dsh-command-skil
 }
 .dsh-chat-surface .dsh-composer-trailing { gap:12px; margin-left:auto; max-width:100%; }
 .dsh-chat-surface .dsh-composer-submit {
+  --dsh-composer-submit-fill: rgb(var(--brand-500));
+  --dsh-composer-submit-hover: rgb(var(--brand-600));
   display:inline-flex; flex:none; align-items:center; justify-content:center;
   width:34px; height:34px; padding:5px; border:0; border-radius:50%;
-  transform:translateY(-2px); color:white; background:rgb(var(--brand-500));
+  transform:translateY(-2px); color:white; background:var(--dsh-composer-submit-fill);
   transition:background-color 150ms ease-out,transform 150ms ease-out;
 }
 .dsh-chat-surface .dsh-composer-submit:disabled { background:rgb(var(--fill-3)); color:rgb(var(--text-3)); opacity:1; }
+:root[data-bisheng-surface='desktop'] .dsh-chat-surface .dsh-composer-add {
+  background:var(--dsh-native-composer-selector);
+  corner-shape:round;
+}
+@media (hover:hover) and (pointer:fine) {
+  :root[data-bisheng-surface='desktop'] .dsh-chat-surface .dsh-composer-add:hover:enabled {
+    background:var(--dsh-native-composer-selector-hover);
+  }
+}
+/* The native InputBar uses the info button palette for its circular send action. */
+:root[data-bisheng-surface='desktop'] .dsh-chat-surface button.dsh-composer-send {
+  --dsh-primary-fill: var(--dsh-native-composer-send);
+  --dsh-primary-foreground: white;
+  --dsh-primary-hover: var(--dsh-native-composer-send-hover);
+  border-radius: 50%;
+  corner-shape: round;
+  transition:background-color 100ms;
+}
+:root[data-bisheng-surface='desktop'] .dsh-chat-surface button.dsh-composer-send:active:enabled { transform:translateY(-2px); }
+.dsh-chat-surface .dsh-composer-send .dsh-composer-native-send-icon { display:none; }
+:root[data-bisheng-surface='desktop'] .dsh-chat-surface .dsh-composer-send .dsh-composer-web-send-icon { display:none; }
+:root[data-bisheng-surface='desktop'] .dsh-chat-surface .dsh-composer-send .dsh-composer-native-send-icon { display:block; }
 .dsh-chat-surface .dsh-composer-voice {
   display:inline-flex; flex:none; align-items:center; justify-content:center;
   width:34px !important; height:34px !important; min-width:34px; min-height:34px;
@@ -99,7 +123,7 @@ body[data-dsh-chat-theme] .dsh-chat-menu {
 @media (hover:hover) and (pointer:fine) {
   .dsh-chat-surface .dsh-composer-control:hover,
   .dsh-chat-surface .dsh-composer-add:hover { background:rgb(var(--fill-1)); }
-  .dsh-chat-surface .dsh-composer-submit:hover:enabled { background:rgb(var(--brand-600)); }
+  .dsh-chat-surface .dsh-composer-submit:hover:enabled { background:var(--dsh-composer-submit-hover); }
 }
 @container (width <= 560px) {
   .dsh-chat-surface .dsh-composer-trailing { gap:8px; }

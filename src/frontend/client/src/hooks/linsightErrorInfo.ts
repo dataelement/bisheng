@@ -1,3 +1,4 @@
+import { taskFailureMetadata, type FailureInfo } from '~/utils/failureInfo';
 import type { LinsightInfo } from '~/store/linsight';
 
 /** Failure classification as the backend persisted it in `output_result`. */
@@ -5,6 +6,7 @@ interface PersistedFailure {
     error_code?: number;
     error_type?: string;
     detail?: string;
+    failure_info?: FailureInfo;
 }
 
 /**
@@ -17,10 +19,6 @@ export function taskErrorInfoFromOutput(
     status: string | undefined,
     outputResult: PersistedFailure | null | undefined,
 ): LinsightInfo['taskErrorInfo'] {
-    if (status !== 'failed' || !outputResult?.error_type) return undefined;
-    return {
-        error_code: outputResult.error_code,
-        error_type: outputResult.error_type,
-        detail: outputResult.detail,
-    };
+    if (status !== 'failed' || !outputResult) return undefined;
+    return taskFailureMetadata(outputResult);
 }

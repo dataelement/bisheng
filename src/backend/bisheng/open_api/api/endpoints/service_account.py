@@ -11,7 +11,12 @@ from bisheng.open_api.domain.schemas.service_account import (
 )
 from bisheng.open_api.domain.services.service_account_service import ServiceAccountService
 from bisheng.permission.api.actors import permission_actor
-from bisheng.permission.api.dependencies import ResourcePermissionApiPort, get_resource_permission_api
+from bisheng.permission.api.dependencies import (
+    PermissionResourceNormalizerPort,
+    ResourcePermissionApiPort,
+    get_permission_resource_normalizer,
+    get_resource_permission_api,
+)
 from bisheng.permission.domain.schemas import GrantMutationRequest
 
 router = APIRouter(prefix="/service-accounts", tags=["ServiceAccount"])
@@ -132,12 +137,14 @@ async def mutate_service_account_resource_grants(
     resource_id: str = Query(min_length=1, max_length=128),
     admin: UserPayload = Depends(get_service_account_manager),
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
+    resources: PermissionResourceNormalizerPort = Depends(get_permission_resource_normalizer),
 ):
     """Mutate grants while fixing every addressed subject to this account."""
 
     from bisheng.common.errcode.open_api import ServiceAccountOperationForbiddenError
 
     await ServiceAccountService.get_row(service_account_id)
+    resource_type = await resources.anormalize_permission_resource(resource_type, resource_id)
     actor = await permission_actor(admin)
     existing = await api.list_grants(
         resource_type=resource_type,

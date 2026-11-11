@@ -17,9 +17,11 @@ from bisheng.open_mcp.contracts import (
 @pytest.mark.asyncio
 async def test_list_knowledge_dispatches_kb_without_touching_http_endpoint(monkeypatch):
     user = SimpleNamespace(user_id=7, user_name="f067")
+    from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
     service = AsyncMock(return_value={"data": []})
     monkeypatch.setattr(application, "get_open_api_operator_async", AsyncMock(return_value=user))
-    monkeypatch.setattr(application.KnowledgeService, "get_knowledge", service)
+    monkeypatch.setattr(LegacyDocumentsApplication, "alist", service)
 
     command = KnowledgeListInput(type=0, page_size=5)
     result = await application.list_knowledge(
@@ -30,7 +32,7 @@ async def test_list_knowledge_dispatches_kb_without_touching_http_endpoint(monke
     )
 
     assert result == {"data": []}
-    assert service.await_args.args[2].value == 0
+    assert service.await_args.kwargs["identity"] is user
     assert service.await_args.kwargs["page_size"] == 5
 
 
@@ -55,12 +57,19 @@ async def test_list_knowledge_dispatches_space_to_existing_space_service(monkeyp
 
 @pytest.mark.asyncio
 async def test_create_kb_preserves_frozen_public_unreleased_semantics(monkeypatch):
-    user = SimpleNamespace(user_id=7, user_name="f067")
-    created = SimpleNamespace(id=67)
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+    user = SimpleNamespace(user_id=7, user_name="f067", tenant_id=1)
+    created = Knowledge(id=67, name="f067", type=3, user_id=7, tenant_id=1, model="11")
     create = AsyncMock(return_value=created)
-    convert = AsyncMock(return_value=[{"id": 67}])
+
+    async def convert(identity, rows):
+        assert identity is user and rows == [created] and rows[0].type == 3
+        return rows
+
     monkeypatch.setattr(application, "get_open_api_operator_async", AsyncMock(return_value=user))
-    monkeypatch.setattr(application.KnowledgeService, "acreate_knowledge", create)
+    monkeypatch.setattr(KnowledgeSpaceService, "create_knowledge_space", create)
     monkeypatch.setattr(application.KnowledgeService, "aconvert_knowledge_read", convert)
 
     result = await application.create_knowledge(
@@ -68,7 +77,7 @@ async def test_create_kb_preserves_frozen_public_unreleased_semantics(monkeypatc
         command=KnowledgeCreateInput(
             name="f067",
             type=0,
-            model="embedding",
+            model="11",
             auth_type="private",
             is_released=True,
         ),
@@ -76,10 +85,11 @@ async def test_create_kb_preserves_frozen_public_unreleased_semantics(monkeypatc
         doc_repo=object(),
     )
 
-    command = create.await_args.args[2]
-    assert command.auth_type == AuthTypeEnum.PUBLIC
-    assert command.is_released is False
-    assert result == {"id": 67}
+    command = create.await_args.kwargs
+    assert command["auth_type"] == AuthTypeEnum.PUBLIC
+    assert command["is_released"] is False
+    assert command["embedding_model_id"] == 11 and command["entry_kind"] == "open_api"
+    assert result.id == 67 and result.type == 0 and created.type == 3
 
 
 @pytest.mark.asyncio

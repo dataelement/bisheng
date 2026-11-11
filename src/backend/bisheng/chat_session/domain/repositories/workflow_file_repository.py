@@ -5,6 +5,7 @@ import json
 from collections.abc import Callable
 from urllib.parse import parse_qsl, unquote, urlsplit, urlunsplit
 
+from sqlalchemy import delete
 from sqlmodel import select, update
 
 from bisheng.chat_session.domain.models.workflow_file_manifest import WorkflowFileManifest
@@ -142,7 +143,11 @@ class WorkflowFileRepository:
 
     @staticmethod
     async def soft_delete_owned_session(chat_id: str, *, user_id: int, tenant_id: int) -> None:
+        """Soft-delete a natural-person session and unbind its project membership in one commit."""
+        from bisheng.chat_session.domain.models.project import ChatProjectMembership
+
         async with get_async_db_session() as session:
+            # Bulk statements do not receive the automatic tenant filter: scope explicitly.
             await session.exec(
                 update(MessageSession)
                 .where(
@@ -152,6 +157,13 @@ class WorkflowFileRepository:
                     MessageSession.api_subject_type.is_(None),
                 )
                 .values(is_delete=True)
+            )
+            await session.exec(
+                delete(ChatProjectMembership).where(
+                    ChatProjectMembership.chat_id == chat_id,
+                    ChatProjectMembership.user_id == user_id,
+                    ChatProjectMembership.tenant_id == tenant_id,
+                )
             )
             await session.commit()
 

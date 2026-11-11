@@ -1,0 +1,45 @@
+.page {
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  background: var(--vnext-surface-page);
+}
+.primaryButton, .secondaryButton {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--vnext-geometry-8);
+  min-height: var(--vnext-control-height); padding: var(--vnext-geometry-8) var(--vnext-button-padding-inline);
+  border: 1px solid var(--vnext-action-secondary-border); border-radius: var(--vnext-radius-control);
+  font: inherit; font-size: var(--vnext-control-size); line-height: var(--vnext-control-line-height); font-weight: var(--vnext-weight-regular); box-shadow: var(--vnext-shadow-control);
+  color: var(--vnext-action-secondary-fg); background: var(--vnext-action-secondary-bg);
+}
+.primaryButton { color: var(--vnext-action-primary-fg); background: var(--vnext-action-primary-bg); font-weight: var(--vnext-weight-regular); }
+.primaryButton > svg { width: var(--vnext-geometry-16); height: var(--vnext-geometry-16); flex: none; }
+.toolbar { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: var(--vnext-geometry-16) var(--vnext-geometry-24); margin-top: 16px; margin-bottom: 16px; }
+.sort { margin-left: auto; flex: none; max-width: 100%; }
+.panel { min-width: 0; flex: none; padding-bottom: var(--vnext-geometry-24); container-type: inline-size; container-name: knowledge-home; }
+.emptyPanel { flex: 1; min-height: 0; padding-bottom: 0; container-type: size; }
+.emptyPanel .emptyCompact { display: none; }
+@container knowledge-home (width < 320px) or (height < 200px) {
+  .emptyPanel .emptyFull { display: none; }
+  .emptyPanel .emptyCompact { display: flex; }
+}
+/* Reflow fluid cards against a fixed minimum; narrower containers cannot add columns. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--vnext-card-min-width)), 1fr));
+  column-gap: var(--vnext-grid-gap-inline);
+  row-gap: var(--vnext-grid-gap-block);
+}
+.status { display: flex; flex-direction: column; align-items: center; gap: var(--vnext-geometry-16); padding: var(--vnext-geometry-48) 0; text-align: center; color: var(--vnext-text-secondary); }
+.page button:not([data-product-control]):not([role='tab']):focus-visible, .panel:focus-visible { outline: var(--vnext-focus-width) solid var(--vnext-focus-color); outline-offset: var(--vnext-focus-offset); }
+.page button:not([data-product-control]):disabled { cursor: not-allowed; background: var(--vnext-action-disabled-bg); color: var(--vnext-action-disabled-fg); }
+.primaryButton:active:not(:disabled) { background: var(--vnext-action-primary-pressed); }
+.secondaryButton:active:not(:disabled) { background: var(--vnext-action-secondary-pressed); }
+@media (hover: hover) {
+  .primaryButton:hover:not(:disabled) { background: var(--vnext-action-primary-hover); opacity: var(--vnext-action-hover-opacity); }
+  .secondaryButton:hover:not(:disabled) { background: var(--vnext-action-secondary-hover); }
+}
+
+/* Layout only: native component visuals come from @bisheng/ui. */
+.productTabs { flex: 1 1 auto; min-width: 0; }
+
+.productSegments { flex: 1 1 auto; min-width: 0; overflow-x: auto; }
+.segmentIcon { width: var(--vnext-geometry-16); height: var(--vnext-geometry-16); object-fit: contain; flex: none; }

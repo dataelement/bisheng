@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -29,6 +30,7 @@ from bisheng.open_mcp.server import OpenMcpDispatchMiddleware, create_open_mcp_r
 from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
 from bisheng.public_endpoints.api.router import router_public
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
+from bisheng.utils.mask_data import redact_validation_errors
 from bisheng.utils.threadpool import thread_pool
 
 
@@ -55,11 +57,12 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
     # Pydantic validator context can contain ValueError instances.
+    errors = redact_validation_errors(exc.errors())
     msg = jsonable_encoder(
-        {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": exc.errors()},
+        {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": errors},
         custom_encoder={ValueError: str},
     )
-    logger.error(f"{req.method} {req.url} {str(exc.errors())[:100]}")
+    logger.error(f"{req.method} {req.url} {str(errors)[:100]}")
     return JSONResponse(content=msg)
 
 
@@ -81,6 +84,7 @@ def _register_permission_runtime_contexts() -> None:
         get_department_projection_scope,
         register_department_projection_runtime_context,
     )
+    from bisheng.llm.application.model_provider_projection import get_model_provider_projection_scope
     from bisheng.permission.application.process_runtime import (
         register_f048_permission_runtime_context,
     )
@@ -90,6 +94,7 @@ def _register_permission_runtime_contexts() -> None:
             client,
             external_scopes={
                 "department": get_department_projection_scope(),
+                "llm_model_deletion": get_model_provider_projection_scope(),
             },
         )
 
@@ -113,6 +118,31 @@ def _register_app_publish_composition() -> None:
         logger.exception("app_publish composition root failed to register; continuing startup")
 
 
+def _register_resource_reference_composition() -> None:
+    from bisheng.resource_reference.composition import register
+
+    register()
+    from bisheng.tenant.application.tenant_creation import (
+        create_mounted_tenant_with_coverage,
+        create_tenant_with_coverage,
+    )
+    from bisheng.tenant.domain.services.tenant_service import TenantService
+
+    TenantService.configure_creation(create_tenant_with_coverage)
+    from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService
+
+    TenantMountService.configure_creation(create_mounted_tenant_with_coverage)
+
+
+async def _prepare_native_reference_permissions() -> None:
+    """Await permission readiness before synchronous business readers run."""
+    if not settings.openfga.enabled:
+        return
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+
+    await get_f048_process_runtime()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with AsyncExitStack() as stack:
@@ -120,7 +150,9 @@ async def lifespan(app: FastAPI):
         await stack.enter_async_context(app.state.work_mcp_runtime.run())
         await initialize_app_context(config=settings)
         _register_permission_runtime_contexts()
+        await _prepare_native_reference_permissions()
         _register_app_publish_composition()
+        _register_resource_reference_composition()
         from bisheng.app_runtime.domain.services.entry_authz_service import diagnose_obo_configuration
 
         diagnose_obo_configuration()
@@ -130,7 +162,9 @@ async def lifespan(app: FastAPI):
         # by a face a local coding agent calls in a loop.
         model_call_record_writer.start()
         try:
-            await init_default_data()
+            from bisheng.knowledge.application.unification_coverage import bootstrap_created_root
+
+            await init_default_data(reference_bootstrap=bootstrap_created_root)
             # F035 task-mode compatibility data remains unrelated to F048 resource
             # authorization and is safe to maintain independently.
             try:
@@ -141,14 +175,17 @@ async def lifespan(app: FastAPI):
                 await backfill_linsight_task_mode_web_menu()
             except Exception:
                 logger.exception("linsight task-mode menu backfill failed; continuing startup")
+            # F118: legacy default JSON conversion is an offline upgrade step
+            # after service shutdown and formal baseline freeze. API startup
+            # must never change a source payload without its reference index.
             try:
-                from bisheng.llm.domain.services.linsight_default_model_backfill import (
-                    backfill_linsight_default_model,
+                from bisheng.dsh.domain.services.workbench_visibility_backfill import (
+                    backfill_workbench_model_visibility,
                 )
 
-                await backfill_linsight_default_model()
+                await asyncio.to_thread(backfill_workbench_model_visibility)
             except Exception:
-                logger.exception("linsight default-model backfill failed; continuing startup")
+                logger.exception("workbench model visibility backfill failed; continuing startup")
             # Skill bundles moved from node-local disk to object storage. Publish what
             # this host still holds so an upgraded deployment heals itself; anything it
             # cannot resolve is logged by name for the operator to run the migration

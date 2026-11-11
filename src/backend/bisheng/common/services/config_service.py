@@ -100,7 +100,7 @@ def read_from_conf(file_path: str) -> str:
     return content
 
 
-def parse_key(keys: list[str], setting_str: str = None, include_key: bool = False) -> str:
+def parse_key(keys: list[str], setting_str: str | None = None, include_key: bool = False) -> str:
     # Setujukey  Back  yamlConfigure invalueAll strings, including comments
     if not setting_str:
         setting_str = read_from_conf(config_file)
@@ -174,12 +174,22 @@ class ConfigService(Settings):
         with open(file_path, encoding="utf-8") as f:
             settings_dict = yaml.safe_load(f)
 
-        for key in settings_dict:
-            if key not in Settings.model_fields.keys():
-                raise KeyError(f"Key {key} not found in settings")
+        if "admin" in settings_dict:
+            # Old deployment files must remain loadable, but cannot create users.
+            settings_dict.pop("admin")
+            logger.warning("Ignoring retired admin bootstrap setting; the first registered user becomes administrator")
+
+        known_settings = {}
+        for key, value in settings_dict.items():
+            if key not in Settings.model_fields:
+                logger.warning(
+                    "Ignoring unknown top-level config key {!r} in {}; this setting has no effect", key, file_path
+                )
+                continue
+            known_settings[key] = value
             logger.debug(f"Loading {key} from {file_path}")
 
-        return ConfigService(**settings_dict)
+        return ConfigService(**known_settings)
 
     async def init_config(self):
         # Inisialisasiconfig

@@ -8,6 +8,7 @@ from bisheng.app_runtime.domain.schemas.app_authorization import required_action
 from bisheng.app_runtime.domain.services.app_authorization_service import AppAuthorizationService
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.core.context.tenant import management_tenant_scope, tenant_execution_scope
+from bisheng.dsh.application.runtime_identity import resolve_desktop_runtime_identity
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.open_api.application.runtime_authorization import runtime_credential_context, without_open_api_identity
 from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
@@ -35,7 +36,7 @@ class RuntimeAuthorizationService:
             self_review = principal.resource_owner_user_id
         else:
             reference = deepcopy(getattr(identity, "_runtime_credential_reference", None))
-            if not reference or reference.get("kind") != "web_session":
+            if not reference or reference.get("kind") not in {"web_session", "dsh_session"}:
                 raise PermissionDeniedError(reason="runtime_web_identity_unavailable")
             self_review = actor.subject_id
         return {
@@ -119,12 +120,15 @@ class RuntimeAuthorizationService:
                     }:
                         raise PermissionDeniedError(reason="runtime_identity_changed")
                     yield identity
-            elif reference.get("kind") == "web_session":
+            elif reference.get("kind") in {"web_session", "dsh_session"}:
                 principal_scope = without_open_api_identity()
                 principal_scope.__enter__()
                 actor_token = set_current_permission_actor(None)
                 try:
-                    identity = await resolve_web_runtime_identity(reference)
+                    if reference["kind"] == "dsh_session":
+                        identity = await resolve_desktop_runtime_identity(reference)
+                    else:
+                        identity = await resolve_web_runtime_identity(reference)
                     actor = await AppAuthorizationService.resolve_actor(identity)
                     if actor_ref != {
                         "subject_type": actor.subject_type,
@@ -220,6 +224,39 @@ class RuntimeAuthorizationService:
         }
 
     @classmethod
+    def capture_system_retry(cls, app, route, previous, delivery):
+        """Carry the original serving proof across one fenced recovery retry."""
+        from bisheng.app_runtime.domain.services.runtime_protocol import content_digest
+
+        context = deepcopy(previous.payload.get("authorization_context") or {})
+        transition = previous.payload.get("maintenance_transition") or {}
+        current = cls.route_snapshot(route)
+        original = (context.get("source") or {}).get("route")
+        maintenance_inherited = bool(route.status == "maintenance" and transition.get("after") == current)
+        serving_untouched = bool(route.status == "serving" and not transition and original == current)
+        if (
+            app.state != "online"
+            or app.current_version_id != route.version_id
+            or route.tenant_id != app.tenant_id
+            or route.app_id != app.id
+            or previous.status not in {"failed", "timed_out"}
+            or previous.cleanup_status != "complete"
+            or previous.version_id != route.version_id
+            or previous.payload.get("resolved_delivery") != delivery.content
+            or delivery.delivery_digest != content_digest(delivery.content)
+            or context.get("origin_kind") != "system_recovery"
+            or not (maintenance_inherited or serving_untouched)
+        ):
+            raise PermissionDeniedError(reason="runtime_recovery_source_invalid")
+        context["retry"] = {
+            "parent_operation_id": previous.id,
+            "parent_request_digest": previous.request_digest,
+            "attempt": int(previous.payload.get("recovery_attempt", 0)) + 1,
+            "maintenance_inherited": maintenance_inherited,
+        }
+        return context
+
+    @classmethod
     async def validate_system(cls, context, app, op, repo):
         from bisheng.app_runtime.domain.models.runtime_delivery import (
             RuntimeDelivery,
@@ -273,6 +310,61 @@ class RuntimeAuthorizationService:
             for key in ("node_id", "operation_id", "exec_ref", "generation", "owner_epoch", "route_epoch")
         ):
             refuse()
+        retry = context.get("retry")
+        if retry is not None:
+            if not isinstance(retry, dict) or set(retry) != {
+                "parent_operation_id",
+                "parent_request_digest",
+                "attempt",
+                "maintenance_inherited",
+            }:
+                refuse()
+            parent = await repo.get(RuntimeOperation, retry.get("parent_operation_id"))
+            parent_transition = parent.payload.get("maintenance_transition") if parent else None
+            if (
+                parent is None
+                or parent.request_digest != retry.get("parent_request_digest")
+                or (parent.tenant_id, parent.app_id, parent.version_id, parent.node_id)
+                != (app.tenant_id, app.id, op.version_id, op.node_id)
+                or parent.status not in {"failed", "timed_out"}
+                or parent.cleanup_status != "complete"
+                or parent.payload.get("authorization_context", {}).get("source") != source
+                or parent.payload.get("resolved_delivery") != deliveries[0].content
+                or int(parent.payload.get("recovery_attempt", 0)) + 1 != retry.get("attempt")
+                or op.payload.get("recovery_attempt") != retry.get("attempt")
+            ):
+                refuse()
+            if retry.get("maintenance_inherited") is True:
+                if (
+                    not isinstance(parent_transition, dict)
+                    or parent_transition.get("after") != current
+                    or current.get("status") != "maintenance"
+                ):
+                    refuse()
+                transition = op.payload.get("maintenance_transition")
+                if transition is None:
+                    return
+                if (
+                    transition.get("operation_id") != op.id
+                    or transition.get("generation") != op.generation
+                    or transition.get("owner_epoch") != op.owner_epoch
+                    or transition.get("before") != current
+                    or transition.get("after") != current
+                ):
+                    refuse()
+                facts = await repo.find(
+                    RuntimeExecutionFact, operation_id=op.id, sequence=transition.get("fact_sequence")
+                )
+                if not facts or (facts[0].phase, facts[0].node_id, facts[0].generation, facts[0].owner_epoch) != (
+                    "maintenance",
+                    op.node_id,
+                    op.generation,
+                    op.owner_epoch,
+                ):
+                    refuse()
+                return
+            if retry.get("maintenance_inherited") is not False or parent_transition:
+                refuse()
         if current == before:
             return
         transition = op.payload.get("maintenance_transition") or {}

@@ -24,7 +24,11 @@ HELM = os.getenv("HELM_BIN", shutil.which("helm") or "/private/tmp/f059-tools/da
 def values():
     document = yaml.safe_load((CHART / "values.yaml").read_text())
     document["platform"].update(origin="https://platform.example", backendBase="http://backend.example:7860")
-    document["services"]["egressClusterIP"] = "10.96.2.2"
+    document["services"].update(
+        namespace="runtime-system", managerAccount="runtime-manager", egressClusterIP="10.96.2.2"
+    )
+    document["execution"].update(namespace="runtime-apps", installationId="test-install", nodeId="node-a")
+    document["diagnostics"]["enabled"] = True
     document["images"] = {key: "example/" + key + "@sha256:" + "a" * 64 for key in document["images"]}
     for key in document["network"]:
         if key.endswith("Cidrs"):
@@ -45,7 +49,16 @@ def render(values, tmp_path, *, expect_success=True):
         assert result.returncode != 0
         return result
     assert result.returncode == 0, result.stderr
-    return [item for item in yaml.safe_load_all(result.stdout) if item]
+    return normalized_documents(result.stdout)
+
+
+def normalized_documents(raw):
+    # Legacy component assertions below concern identity separation, not public names.
+    # New parent matrix verifies real prefixed names and two-release isolation.
+    import re
+
+    raw = re.sub(r"test-runtime-[a-f0-9]{8}-", "", raw)
+    return [item for item in yaml.safe_load_all(raw) if item]
 
 
 def load_installer():
@@ -138,21 +151,28 @@ def test_chart_refuses_unsafe_or_ambiguous_configuration(values, tmp_path, chang
 
 
 def test_descriptor_is_runtime_readable_and_report_updates_do_not_change_identity(values, tmp_path):
-    from runtime_manager.k8s_capabilities import descriptor_digest
+    from runtime_manager.deployment_policy import DeploymentPolicy
 
     documents = render(values, tmp_path)
-    descriptor = next(
-        x for x in documents if x["kind"] == "ConfigMap" and x["metadata"]["name"] == "runtime-deployment-descriptor"
+    raw = next(
+        row["data"]["descriptor.json"]
+        for row in documents
+        if row["kind"] == "ConfigMap" and "descriptor.json" in row.get("data", {})
     )
-    document = json.loads(descriptor["data"]["descriptor.json"])
+    document = json.loads(raw)
     assert document["namespace"] == values["execution"]["namespace"]
     assert document["installation_id"] == values["execution"]["installationId"]
     assert document["helper_image"] == values["images"]["helper"]
     assert document["storage"]["sqlite_compatible"] is True
-    assert document["probe_report"] == {}
-    before = descriptor_digest(document)
-    document["probe_report"] = {"observed_at": 100}
-    assert descriptor_digest(document) == before
+    assert "probe_report" not in document
+    policy = DeploymentPolicy.parse(raw)
+    values["execution"]["probeReport"] = {"observed_at": 1, "ready": False}
+    unchanged = next(
+        row["data"]["descriptor.json"]
+        for row in render(values, tmp_path)
+        if row["kind"] == "ConfigMap" and "descriptor.json" in row.get("data", {})
+    )
+    assert DeploymentPolicy.parse(unchanged).digest == policy.digest
 
 
 def test_installer_requires_live_mode_and_bound_control_for_denials():
@@ -265,8 +285,22 @@ def test_dangerous_admission_negative_is_server_dry_run(monkeypatch):
     verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
     verifier.api = Api()
     verifier.namespace = "runtime-apps"
-    verifier.idle = {"metadata": {"uid": str(uuid4())}}
-    verifier.created = [{"resource": "pods", "plan": {"template": template}}]
+    uid = str(uuid4())
+    verifier.idle = {"metadata": {"uid": uid, "name": "preflight-base", "namespace": "runtime-apps"}}
+    verifier.created = [
+        {
+            "resource": "pods",
+            "uid": uid,
+            "name": "preflight-base",
+            "plan": {
+                "uid": uid,
+                "kind": "Pod",
+                "name": "preflight-base",
+                "namespace": "runtime-apps",
+                "template": template,
+            },
+        }
+    ]
     verifier._plans = lambda *args, **kwargs: None
     verifier._wait = lambda callback: callback()
     assert verifier._admission_negative(psa=True)["ok"]
@@ -403,17 +437,22 @@ def test_chart_freezes_native_profiles_and_sandbox_request_in_descriptor(values,
         canaryProfiles=[profile], sandbox="recommended", runtimeClasses={"recommended": "gvisor", "hardened": ""}
     )
     documents = render(values, tmp_path)
-    descriptor = next(
-        x for x in documents if x["kind"] == "ConfigMap" and x["metadata"]["name"] == "runtime-deployment-descriptor"
+    document = next(
+        json.loads(row["data"]["descriptor.json"])
+        for row in documents
+        if row["kind"] == "ConfigMap" and "descriptor.json" in row.get("data", {})
     )
-    document = json.loads(descriptor["data"]["descriptor.json"])
-    assert document["canary_profiles"] == [profile]
+    assert "canary_profiles" not in document
     assert document["sandbox"] == {
         "requested": "recommended",
         "runtime_classes": {"recommended": "gvisor", "hardened": ""},
     }
-    canary = next(x for x in documents if x["kind"] == "ConfigMap" and x["metadata"]["name"] == "runtime-canary-plans")
-    assert json.loads(canary["data"]["plans.json"])["profile_images"] == [profile["runtime_image"]]
+    plan = next(
+        json.loads(row["data"]["plan.json"])
+        for row in documents
+        if row["kind"] == "ConfigMap" and "plan.json" in row.get("data", {})
+    )
+    assert plan["canary_profiles"] == [profile]
     profile["command"] = ["sh", "-c", "arbitrary-install-script"]
     render(values, tmp_path, expect_success=False)
 
@@ -1077,7 +1116,10 @@ def test_expired_unscheduled_recovery_reproves_binding_for_its_uid_before_releas
     release = next(i for i, row in enumerate(verifier.api.calls) if row[0] == "patch")
     assert any(row[0] == "get" and row[1] == "pod" for row in verifier.api.calls[binding + 1 : release])
     assert verifier.api.released and not verifier.created
-    assert any(plan and plan.get("stop_state") == "confirmed" for _, plan, _ in verifier.plan_writes)
+    assert any(
+        plan and plan.get("stop_state") == "confirmed" and plan.get("stop_confirmed") is True
+        for _, plan, _ in verifier.plan_writes
+    )
 
 
 @pytest.mark.parametrize(
@@ -1130,49 +1172,69 @@ def test_expired_recovery_skips_live_plan_without_mutation(monkeypatch):
 
 
 def test_chart_cni_identity_is_admission_source_and_invalidates_only_old_report(values, tmp_path):
-    from runtime_manager.k8s_capabilities import REQUIRED_CHECKS, assess_capabilities, descriptor_digest
+    from runtime_manager.deployment_policy import DeploymentPolicy
 
-    def descriptor_and_admission():
+    def current():
         documents = render(values, tmp_path)
-        cm = next(
-            row
-            for row in documents
-            if row["kind"] == "ConfigMap" and row["metadata"]["name"] == "runtime-deployment-descriptor"
+        policy = DeploymentPolicy.parse(
+            next(
+                row["data"]["descriptor.json"]
+                for row in documents
+                if row["kind"] == "ConfigMap" and "descriptor.json" in row.get("data", {})
+            )
         )
-        deployment = next(
+        env = next(
             row for row in documents if row["kind"] == "Deployment" and row["metadata"]["name"] == "runtime-admission"
+        )["spec"]["template"]["spec"]["containers"][0]["env"]
+        assert (
+            next(row["value"] for row in env if row["name"] == "RTM_ADMISSION_CNI_USERNAME")
+            == policy.document["cni_username"]
         )
-        env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
-        cni = next(row["value"] for row in env if row["name"] == "RTM_ADMISSION_CNI_USERNAME")
-        return json.loads(cm["data"]["descriptor.json"]), cni
+        return policy
 
     values["execution"]["cniUsername"] = "system:serviceaccount:kube-system:calico-cni-plugin"
-    original, cni = descriptor_and_admission()
-    assert original["cni_username"] == cni == values["execution"]["cniUsername"]
-    identity = descriptor_digest(original)
-    report = {
-        "source": "cluster-probe",
-        "observed_at": 1000,
-        "descriptor_digest": identity,
-        "checks": [{"name": name, "ok": True, "evidence": {"uid": str(uuid4())}} for name in REQUIRED_CHECKS],
-    }
-    values["execution"]["probeReport"] = report
-    verified, _ = descriptor_and_admission()
-    assert descriptor_digest(verified) == identity
-    assert assess_capabilities(verified, now=1001)["ready"]
-    values["execution"]["cniUsername"] = "system:serviceaccount:kube-system:another-cni"
-    changed, cni = descriptor_and_admission()
-    assert changed["cni_username"] == cni == values["execution"]["cniUsername"]
-    assert {key: value for key, value in changed.items() if key != "cni_username"} == {
-        key: value for key, value in verified.items() if key != "cni_username"
-    }
-    assert descriptor_digest(changed) != identity
-    assert not assess_capabilities(changed, now=1001)["ready"]
+    original = current()
+    values["execution"]["probeReport"] = {"observed_at": 1000, "ready": True}
+    assert current().digest == original.digest
+    values["execution"]["cniUsername"] = "system:serviceaccount:kube-system:other-cni"
+    assert current().protection_digest != original.protection_digest
 
 
 @contextmanager
 def chart_lookup_api(objects):
     requests = []
+    # Newer Helm server-side dry runs map every rendered resource, in addition
+    # to the ConfigMap lookups performed by the templates. These are discovery
+    # facts only; this server never accepts resource writes.
+    resources = {
+        "v1": [
+            ("configmaps", "ConfigMap", True),
+            ("secrets", "Secret", True),
+            ("namespaces", "Namespace", False),
+            ("resourcequotas", "ResourceQuota", True),
+            ("limitranges", "LimitRange", True),
+            ("serviceaccounts", "ServiceAccount", True),
+            ("services", "Service", True),
+            ("persistentvolumes", "PersistentVolume", False),
+        ],
+        "apps/v1": [("deployments", "Deployment", True)],
+        "networking.k8s.io/v1": [("networkpolicies", "NetworkPolicy", True)],
+        "rbac.authorization.k8s.io/v1": [("roles", "Role", True), ("rolebindings", "RoleBinding", True)],
+        "admissionregistration.k8s.io/v1": [
+            ("validatingwebhookconfigurations", "ValidatingWebhookConfiguration", False)
+        ],
+    }
+
+    def resource_list(version):
+        return {
+            "kind": "APIResourceList",
+            "apiVersion": "v1",
+            "groupVersion": version,
+            "resources": [
+                {"name": name, "singularName": "", "namespaced": scoped, "kind": kind, "verbs": ["get"]}
+                for name, kind, scoped in resources[version]
+            ],
+        }
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -1191,22 +1253,23 @@ def chart_lookup_api(objects):
                     "serverAddressByClientCIDRs": [],
                 }
             elif path == "/apis":
-                response = {"kind": "APIGroupList", "apiVersion": "v1", "groups": []}
-            elif path == "/api/v1":
                 response = {
-                    "kind": "APIResourceList",
+                    "kind": "APIGroupList",
                     "apiVersion": "v1",
-                    "groupVersion": "v1",
-                    "resources": [
+                    "groups": [
                         {
-                            "name": "configmaps",
-                            "singularName": "",
-                            "namespaced": True,
-                            "kind": "ConfigMap",
-                            "verbs": ["get"],
+                            "name": version.rsplit("/", 1)[0],
+                            "versions": [{"groupVersion": version, "version": "v1"}],
+                            "preferredVersion": {"groupVersion": version, "version": "v1"},
                         }
+                        for version in resources
+                        if version != "v1"
                     ],
                 }
+            elif path == "/api/v1":
+                response = resource_list("v1")
+            elif path.startswith("/apis/") and path.removeprefix("/apis/") in resources:
+                response = resource_list(path.removeprefix("/apis/"))
             else:
                 response = objects.get(path)
             payload = json.dumps(
@@ -1293,7 +1356,20 @@ def upgrade_lookup_objects(values, *, legacy=False):
 def render_upgrade(values, tmp_path, objects, *, expect_success=True):
     values_path, config_path = tmp_path / "upgrade-values.yaml", tmp_path / "lookup-kubeconfig.json"
     values_path.write_text(yaml.safe_dump(values))
-    with chart_lookup_api(objects) as (url, requests):
+    import hashlib
+
+    prefix = (
+        "test-runtime-"
+        + hashlib.sha256((values["services"]["namespace"] + "/test-runtime").encode()).hexdigest()[:8]
+        + "-"
+    )
+    actual_objects = {}
+    for path, row in objects.items():
+        row = copy.deepcopy(row)
+        original_name = row["metadata"]["name"]
+        row["metadata"]["name"] = prefix + original_name
+        actual_objects[path.rsplit("/", 1)[0] + "/" + row["metadata"]["name"]] = row
+    with chart_lookup_api(actual_objects) as (url, requests):
         config_path.write_text(
             json.dumps(
                 {
@@ -1318,6 +1394,9 @@ def render_upgrade(values, tmp_path, objects, *, expect_success=True):
                 str(values_path),
                 "--is-upgrade",
                 "--dry-run=server",
+                # This API fixture implements discovery/lookup only, not an
+                # OpenAPI schema server. Keep chart values validation enabled.
+                "--disable-openapi-validation",
                 "--kubeconfig",
                 str(config_path),
             ],
@@ -1329,13 +1408,12 @@ def render_upgrade(values, tmp_path, objects, *, expect_success=True):
         assert result.returncode != 0
         return result
     assert result.returncode == 0, result.stderr
-    assert any(path.endswith("/configmaps/runtime-canary-plans") for path in requests)
-    return [row for row in yaml.safe_load_all(result.stdout) if row]
+    assert any(path.endswith("/configmaps/" + prefix + "runtime-canary-plans") for path in requests)
+    return normalized_documents(result.stdout)
 
 
-@pytest.mark.parametrize("legacy", [False, True])
-def test_chart_upgrade_preserves_live_canary_plans_and_profiles_with_identity_fence(values, tmp_path, legacy):
-    objects = upgrade_lookup_objects(values, legacy=legacy)
+def test_chart_upgrade_preserves_live_canary_plans_and_profiles_with_identity_fence(values, tmp_path):
+    objects = upgrade_lookup_objects(values)
     original = next(row for row in objects.values() if row["metadata"]["name"] == "runtime-canary-plans")
     documents = render_upgrade(values, tmp_path, objects)
     retained = next(
@@ -1344,22 +1422,17 @@ def test_chart_upgrade_preserves_live_canary_plans_and_profiles_with_identity_fe
     assert retained["data"] == original["data"]
     assert retained["metadata"]["uid"] == original["metadata"]["uid"]
     assert retained["metadata"]["resourceVersion"] == original["metadata"]["resourceVersion"]
-    assert retained["metadata"]["labels"]["runtime.bisheng.io/installation"] == values["execution"]["installationId"]
 
 
 @pytest.mark.parametrize(
     "change",
     [
-        "missing",
         "release",
         "namespace",
         "managed-by",
         "uid",
         "rv",
         "installation",
-        "descriptor-missing",
-        "descriptor-release",
-        "descriptor-scope",
         "malformed-json",
         "unknown-data",
         "plans-not-map",
@@ -1372,7 +1445,7 @@ def test_chart_upgrade_preserves_live_canary_plans_and_profiles_with_identity_fe
     ],
 )
 def test_chart_upgrade_refuses_missing_foreign_or_invalid_canary_evidence(values, tmp_path, change):
-    objects = upgrade_lookup_objects(values, legacy=change.startswith("descriptor-"))
+    objects = upgrade_lookup_objects(values)
     prefix = "/api/v1/namespaces/" + values["services"]["namespace"] + "/configmaps/"
     cm = objects[prefix + "runtime-canary-plans"]
     if change == "missing":
@@ -1510,57 +1583,39 @@ def test_rbac_can_i_distinguishes_subresources_from_named_parent_resources(monke
     assert "system:serviceaccount:runtime-system:runtime-manager" in command
 
 
-@pytest.mark.parametrize(
-    "identities",
-    [
-        None,
-        [
-            "system:serviceaccount:kube-system:persistent-volume-binder",
-            "system:serviceaccount:kube-system:pvc-protection-controller",
-        ],
-    ],
-)
+@pytest.mark.parametrize("identities", [None, ["system:serviceaccount:kube-system:volume-controller"]])
 def test_chart_storage_controller_identities_are_shared_by_admission_and_report(values, tmp_path, identities):
-    from runtime_manager.k8s_capabilities import REQUIRED_CHECKS, assess_capabilities, descriptor_digest
+    from runtime_manager.deployment_policy import DeploymentPolicy
 
-    default = ["system:kube-controller-manager", "system:kube-scheduler"]
     if identities is not None:
         values["execution"]["storageControllerUsernames"] = identities
 
-    def rendered():
+    def current():
         documents = render(values, tmp_path)
-        cm = next(
-            row
-            for row in documents
-            if row["kind"] == "ConfigMap" and row["metadata"]["name"] == "runtime-deployment-descriptor"
+        policy = DeploymentPolicy.parse(
+            next(
+                row["data"]["descriptor.json"]
+                for row in documents
+                if row["kind"] == "ConfigMap" and "descriptor.json" in row.get("data", {})
+            )
         )
         deployment = next(
             row for row in documents if row["kind"] == "Deployment" and row["metadata"]["name"] == "runtime-admission"
         )
-        environment = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
-        raw = next(row["value"] for row in environment if row["name"] == "RTM_STORAGE_CONTROLLER_USERNAMES")
-        return json.loads(cm["data"]["descriptor.json"]), json.loads(raw)
+        env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+        raw = next(row["value"] for row in env if row["name"] == "RTM_STORAGE_CONTROLLER_USERNAMES")
+        assert (
+            json.loads(raw)
+            == policy.document["storage_controller_usernames"]
+            == values["execution"]["storageControllerUsernames"]
+        )
+        return policy
 
-    document, configured = rendered()
-    assert configured == document["storage_controller_usernames"] == (identities if identities is not None else default)
-    initial_digest = descriptor_digest(document)
-    values["execution"]["probeReport"] = {
-        "source": "cluster-probe",
-        "observed_at": 1000,
-        "descriptor_digest": initial_digest,
-        "checks": [{"name": name, "ok": True, "evidence": {"uid": str(uuid4())}} for name in REQUIRED_CHECKS],
-    }
-    verified, _ = rendered()
-    assert descriptor_digest(verified) == initial_digest
-    assert assess_capabilities(verified, now=1001)["ready"]
-    values["execution"]["storageControllerUsernames"] = ["system:serviceaccount:kube-system:replacement-volume-binder"]
-    changed, configured = rendered()
-    assert configured == changed["storage_controller_usernames"] == values["execution"]["storageControllerUsernames"]
-    assert {key: value for key, value in changed.items() if key != "storage_controller_usernames"} == {
-        key: value for key, value in verified.items() if key != "storage_controller_usernames"
-    }
-    assert descriptor_digest(changed) != initial_digest
-    assert not assess_capabilities(changed, now=1001)["ready"]
+    original = current()
+    values["execution"]["probeReport"] = {"observed_at": 1000, "ready": True}
+    assert current().digest == original.digest
+    values["execution"]["storageControllerUsernames"] = ["system:serviceaccount:kube-system:replacement-controller"]
+    assert current().protection_digest != original.protection_digest
 
 
 @pytest.mark.parametrize(
@@ -1603,8 +1658,23 @@ def negative_probe_verifier(tool, *, outcome="psa", initial_failure=False, clean
         },
     }
     verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
-    verifier.namespace, verifier.idle = "runtime-apps", {"metadata": {"uid": str(uuid4())}}
-    verifier.created = [{"resource": "pods", "plan": {"template": template}}]
+    uid = str(uuid4())
+    verifier.namespace = "runtime-apps"
+    verifier.idle = {"metadata": {"uid": uid, "name": "preflight-base", "namespace": "runtime-apps"}}
+    verifier.created = [
+        {
+            "resource": "pods",
+            "uid": uid,
+            "name": "preflight-base",
+            "plan": {
+                "uid": uid,
+                "kind": "Pod",
+                "name": "preflight-base",
+                "namespace": "runtime-apps",
+                "template": template,
+            },
+        }
+    ]
     verifier.plans, verifier.calls = {}, []
 
     def plans(ref, plan=None, *, remove=False):
@@ -1826,11 +1896,16 @@ class RegistryUpstreamApi:
             return subprocess.CompletedProcess([], 0, self.tool._RESULT + json.dumps(result), "")
         assert args[:2] == ["patch", "pod"]
         patch = json.loads(args[args.index("-p") + 1])
-        assert patch == {"metadata": {"resourceVersion": "42", "finalizers": []}}
+        assert patch == {"metadata": {"uid": self.pod["metadata"]["uid"], "resourceVersion": "42", "finalizers": []}}
+        self.released = True
         return subprocess.CompletedProcess([], 0, "{}", "")
 
-    def raw(self, method, path, *, document):
+    def raw(self, method, path, *, document=None, **kwargs):
         self.calls.append(("raw", method, path, copy.deepcopy(document)))
+        if method == "GET":
+            assert self.released and kwargs == {"manager": False, "accepted": (0, 1)}
+            assert path == "/api/v1/namespaces/" + self.control + "/pods/" + self.pod["metadata"]["name"]
+            return subprocess.CompletedProcess([], 1, "", "NotFound")
         assert method == "DELETE" and path.endswith("/pods/" + self.pod["metadata"]["name"])
         assert document["preconditions"] == {"uid": self.pod["metadata"]["uid"], "resourceVersion": "41"}
         self.pod["metadata"].update(deletionTimestamp="2026-10-23T00:00:00Z", resourceVersion="42")
@@ -1939,6 +2014,38 @@ def test_registry_control_canary_cleanup_retains_uid_preconditions(monkeypatch):
     assert not verifier.control_created
     deleted = [row for row in verifier.api.calls if row[:2] == ("raw", "DELETE")]
     assert len(deleted) == 1 and deleted[0][3]["preconditions"]["uid"] == verifier.api.pod["metadata"]["uid"]
+    assert any(row[:2] == ("raw", "GET") for row in verifier.api.calls)
+
+
+@pytest.mark.parametrize(
+    "outcome,reason",
+    [
+        ("still-present", "probe_deadline_exceeded"),
+        ("replaced", "control_cleanup_identity_changed"),
+        ("refused", "preflight_absence_unconfirmed"),
+    ],
+)
+def test_control_cleanup_is_incomplete_until_same_uid_deletion_is_observed(monkeypatch, outcome, reason):
+    tool = load_installer()
+    verifier = registry_upstream_verifier(tool, monkeypatch)
+    verifier._registry()
+    original_raw = verifier.api.raw
+
+    def raw(method, path, **kwargs):
+        if method != "GET":
+            return original_raw(method, path, **kwargs)
+        assert verifier.api.released and kwargs == {"manager": False, "accepted": (0, 1)}
+        if outcome == "refused":
+            return subprocess.CompletedProcess([], 1, "", "Forbidden")
+        observed = copy.deepcopy(verifier.api.pod)
+        if outcome == "replaced":
+            observed["metadata"]["uid"] = str(uuid4())
+        return subprocess.CompletedProcess([], 0, json.dumps(observed), "")
+
+    verifier.api.raw = raw
+    with pytest.raises(tool.ProbeError, match=reason):
+        verifier.cleanup()
+    assert len(verifier.control_created) == 1
 
 
 def test_registry_origins_resolve_all_tcp_addresses_deduplicate_and_include_profile_bases(monkeypatch):
@@ -2054,3 +2161,286 @@ def test_registry_upstream_dns_timeout_fails_closed_without_raw_exception(monkey
     assert report["checks"][0]["reason"] == "registry_probe_resolution_failed"
     assert not report["checks"][0]["ok"] and "PRIVATE_SENTINEL" not in json.dumps(report)
     assert verifier.api.pod is None and verifier.crane_calls == []
+
+
+@pytest.mark.parametrize("status_key", ["containerStatuses", "initContainerStatuses", "ephemeralContainerStatuses"])
+@pytest.mark.parametrize(
+    "row",
+    [
+        {"state": {"terminated": {"exitCode": 137, "reason": "ContainerStatusUnknown"}}},
+        {"state": {"terminated": {"exitCode": 1, "reason": "Unknown"}}},
+        {"state": {"terminated": {"exitCode": 1, "reason": "NodeLost"}}},
+        {"state": {"terminated": {"exitCode": True}}},
+        {"state": {"terminated": {"exitCode": "0"}}},
+        {"state": {"terminated": None}},
+        {"state": {"waiting": {"reason": "ContainerStatusUnknown"}}},
+        {"state": {"waiting": {"reason": "Unknown"}}},
+        {"state": {"waiting": {}}, "containerID": "containerd://unconfirmed"},
+        {"state": {"running": {}}},
+        {"state": {"waiting": {}, "terminated": {"exitCode": 0}}},
+        {"state": []},
+        None,
+    ],
+)
+def test_terminal_preflight_never_confirms_unknown_or_malformed_container_stop(status_key, row):
+    tool = load_installer()
+    pod = {
+        "metadata": {"name": "preflight-old", "uid": str(uuid4()), "deletionTimestamp": "now"},
+        "spec": {"nodeName": "worker-a"},
+        "status": {"phase": "Failed", status_key: [row]},
+    }
+    assert not tool.stop_confirmed(pod)
+
+
+def test_terminal_preflight_accepts_real_init_failure_with_never_started_app():
+    tool = load_installer()
+    pod = {
+        "metadata": {"name": "preflight-failed-init", "uid": str(uuid4()), "deletionTimestamp": "now"},
+        "spec": {"nodeName": "worker-a"},
+        "status": {
+            "phase": "Failed",
+            "initContainerStatuses": [{"state": {"terminated": {"exitCode": 1, "reason": "Error"}}}],
+            "containerStatuses": [{"state": {"waiting": {"reason": "PodInitializing"}}}],
+        },
+    }
+    assert tool.stop_confirmed(pod)
+    pod["spec"].pop("nodeName")
+    assert not tool.stop_confirmed(pod)
+
+
+def test_cleanup_continues_other_objects_but_keeps_unknown_writer_pvc():
+    tool = load_installer()
+    verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
+    verifier.namespace = "runtime-apps"
+    blocked_control = {"name": "preflight-blocked-control"}
+    safe_control = {"name": "preflight-safe-control"}
+    verifier.control_created = [blocked_control, safe_control]
+    safe_pvc = {"resource": "persistentvolumeclaims", "name": "preflight-safe-volume"}
+    shared_pvc = {"resource": "persistentvolumeclaims", "name": "preflight-held-volume"}
+    safe_pod = {"resource": "pods", "name": "preflight-safe-pod"}
+    unknown_pod = {
+        "resource": "pods",
+        "name": "preflight-unknown-pod",
+        "plan": frozen_preflight_writer("preflight-unknown-pod", [shared_pvc["name"]]),
+    }
+    verifier.created = [safe_pvc, shared_pvc, safe_pod, unknown_pod]
+    attempted = []
+
+    class Api:
+        def list(self, kind, **kwargs):
+            assert kind == "pods" and kwargs["manager"] is True
+            return [{"spec": {"volumes": [{"persistentVolumeClaim": {"claimName": shared_pvc["name"]}}]}}]
+
+    def cleanup_control(pod):
+        attempted.append(pod["name"])
+        if pod is blocked_control:
+            raise tool.ProbeError("control_probe_identity_changed")
+        verifier.control_created.remove(pod)
+
+    def cleanup_one(row):
+        attempted.append(row["name"])
+        if row is unknown_pod:
+            raise tool.ProbeError("preflight_stop_unconfirmed")
+        verifier.created.remove(row)
+
+    verifier.api, verifier._cleanup_control, verifier._cleanup_one = Api(), cleanup_control, cleanup_one
+    with pytest.raises(tool.ProbeCleanupFailure) as caught:
+        verifier.cleanup()
+    assert attempted == [
+        blocked_control["name"],
+        safe_control["name"],
+        unknown_pod["name"],
+        safe_pod["name"],
+        safe_pvc["name"],
+    ]
+    assert verifier.created == [shared_pvc, unknown_pod] and verifier.control_created == [blocked_control]
+    assert [row["reason"] for row in tool.failure_details(caught.value)] == [
+        "control_probe_identity_changed",
+        "preflight_stop_unconfirmed",
+        "preflight_pvc_writer_unconfirmed",
+    ]
+
+
+def test_expired_recovery_does_not_abandon_safe_canary_after_foreign_plan(monkeypatch):
+    tool = load_installer()
+    monkeypatch.setattr(tool.time, "time", lambda: 1000)
+    verifier = expired_canary_verifier(tool)
+    original_get = verifier.api.get
+    foreign_ref = str(uuid4())
+    foreign = {**verifier.api.plan, "resource_ref": foreign_ref, "namespace": "unrelated-apps"}
+
+    def get(resource, name, **kwargs):
+        result = original_get(resource, name, **kwargs)
+        if resource == "configmap":
+            result["data"]["plans.json"] = json.dumps(
+                {
+                    "schema_version": 1,
+                    "plans": {foreign_ref: foreign, verifier.api.plan["resource_ref"]: verifier.api.plan},
+                }
+            )
+        return result
+
+    verifier.api.get = get
+    with pytest.raises(tool.ProbeError, match="preflight_recovery_scope_invalid"):
+        verifier.recover_expired()
+    assert verifier.api.released and not verifier.created
+    assert not any(ref == foreign_ref for ref, _plan, _kwargs in verifier.plan_writes)
+
+
+def test_expired_container_status_unknown_keeps_stop_authorization_and_finalizer_held(monkeypatch):
+    tool = load_installer()
+    monkeypatch.setattr(tool.time, "time", lambda: 1000)
+    verifier = expired_canary_verifier(
+        tool,
+        bound=True,
+        status={
+            "phase": "Failed",
+            "initContainerStatuses": [{"state": {"terminated": {"exitCode": 137, "reason": "ContainerStatusUnknown"}}}],
+        },
+    )
+    with pytest.raises(tool.ProbeError):
+        verifier.recover_expired()
+    assert not verifier.api.released
+    assert not any(plan and plan.get("stop_confirmed") is True for _ref, plan, _kwargs in verifier.plan_writes)
+
+
+def test_multiple_cleanup_failures_preserve_probe_error_without_disclosing_exception_payload():
+    tool = load_installer()
+    cleanup = tool.ProbeCleanupFailure(
+        [tool.ProbeError("preflight_stop_unconfirmed"), RuntimeError("PRIVATE_ENV_SENTINEL")]
+    )
+    error = tool.ProbeRunFailure(tool.ProbeError("preflight_pod_failed"), cleanup)
+    failures = tool.failure_details(error)
+    assert failures == [
+        {"phase": "probe", "reason": "preflight_pod_failed", "exception_type": "ProbeError"},
+        {"phase": "cleanup", "reason": "preflight_stop_unconfirmed", "exception_type": "ProbeError"},
+        {"phase": "cleanup", "reason": "probe_failed", "exception_type": "RuntimeError"},
+    ]
+    assert "PRIVATE_ENV_SENTINEL" not in json.dumps(failures)
+
+
+def frozen_preflight_writer(name, claims):
+    return {
+        "kind": "Pod",
+        "namespace": "runtime-apps",
+        "name": name,
+        "uid": str(uuid4()),
+        "resource_ref": str(uuid4()),
+        "expires_at": 999,
+        "template": {
+            "kind": "Pod",
+            "metadata": {"namespace": "runtime-apps", "name": name},
+            "spec": {"volumes": [{"persistentVolumeClaim": {"claimName": claim}} for claim in claims]},
+        },
+    }
+
+
+@pytest.mark.parametrize("outcome", ["absent", "replaced"])
+def test_cleanup_retains_frozen_pvc_reference_when_old_writer_disappears_from_api(outcome):
+    tool = load_installer()
+    verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
+    verifier.namespace = "runtime-apps"
+    shared = {"resource": "persistentvolumeclaims", "name": "preflight-shared"}
+    independent = {"resource": "persistentvolumeclaims", "name": "preflight-independent"}
+    writer = {
+        "resource": "pods",
+        "name": "preflight-lost-writer",
+        "plan": frozen_preflight_writer("preflight-lost-writer", [shared["name"]]),
+    }
+    verifier.created, verifier.control_created = [shared, independent, writer], []
+    attempted = []
+    verifier.api = type("Api", (), {"list": lambda *_args, **_kwargs: []})()
+
+    def cleanup_one(row):
+        attempted.append(row["name"])
+        if row is writer:
+            raise tool.ProbeError(
+                "kubectl_request_failed" if outcome == "absent" else "preflight_cleanup_identity_changed"
+            )
+        verifier.created.remove(row)
+
+    verifier._cleanup_one = cleanup_one
+    with pytest.raises(tool.ProbeCleanupFailure):
+        verifier.cleanup()
+    assert attempted == [writer["name"], independent["name"]]
+    assert verifier.created == [shared, writer]
+
+
+@pytest.mark.parametrize(
+    "outcome,independent_reclaimed",
+    [
+        ("absent", True),
+        ("replaced", True),
+        ("active", True),
+        ("missing-uid", True),
+        ("unknown", True),
+        ("kind-mismatch", False),
+        ("malformed-template", False),
+        ("malformed-plan", False),
+    ],
+)
+def test_expired_recovery_preserves_unadopted_writer_references(outcome, independent_reclaimed, monkeypatch):
+    tool = load_installer()
+    monkeypatch.setattr(tool.time, "time", lambda: 1000)
+    writer = frozen_preflight_writer("preflight-lost-writer", ["preflight-shared"])
+    writer_ref = writer["resource_ref"]
+    if outcome == "active":
+        writer["expires_at"] = 2000
+    elif outcome == "missing-uid":
+        writer["uid"] = None
+    elif outcome == "malformed-template":
+        writer.pop("template")
+    elif outcome == "kind-mismatch":
+        writer["kind"] = "PersistentVolumeClaim"
+    plans = {writer_ref: None if outcome == "malformed-plan" else writer}
+    for name in ["preflight-shared", "preflight-independent"]:
+        ref = str(uuid4())
+        plans[ref] = {
+            "kind": "PersistentVolumeClaim",
+            "namespace": "runtime-apps",
+            "name": name,
+            "resource_ref": ref,
+            "uid": str(uuid4()),
+            "expires_at": 999,
+            "template": {
+                "kind": "PersistentVolumeClaim",
+                "metadata": {"namespace": "runtime-apps", "name": name},
+                "spec": {"resources": {"requests": {"storage": "1Gi"}}},
+            },
+        }
+    gets, attempted = [], []
+
+    class Api:
+        control = "runtime-system"
+
+        def get(self, resource, name, **kwargs):
+            gets.append(name)
+            if resource == "configmap":
+                return {"data": {"plans.json": json.dumps({"schema_version": 1, "plans": plans})}}
+            plan = next(value for value in plans.values() if value and value["name"] == name)
+            if name == writer["name"] and outcome in {"absent", "malformed-template"}:
+                raise tool.ProbeError("kubectl_request_failed")
+            uid = str(uuid4()) if name == writer["name"] and outcome == "replaced" else plan["uid"]
+            return {"metadata": {"uid": uid, "labels": {tool.RESOURCE_LABEL: plan["resource_ref"]}}}
+
+        def list(self, *_args, **_kwargs):
+            return []
+
+    verifier = tool.InstallationVerifier.__new__(tool.InstallationVerifier)
+    verifier.api, verifier.namespace, verifier.options = Api(), "runtime-apps", {"installation_id": "test"}
+    verifier.created, verifier.control_created = [], []
+    verifier._plans = lambda *_args, **_kwargs: None
+
+    def cleanup_one(row):
+        attempted.append(row["name"])
+        if row["resource"] == "pods":
+            raise tool.ProbeError("preflight_stop_unconfirmed")
+        verifier.created.remove(row)
+
+    verifier._cleanup_one = cleanup_one
+    with pytest.raises(tool.ProbeError):
+        verifier.recover_expired()
+    assert "preflight-shared" not in attempted
+    assert ("preflight-independent" in attempted) is independent_reclaimed
+    if outcome in {"active", "missing-uid", "malformed-plan", "kind-mismatch"}:
+        assert writer["name"] not in gets

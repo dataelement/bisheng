@@ -1,18 +1,19 @@
+import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { refreshChannelState } from "./hooks/useChannelStateRefresh";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TransitionEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getRecommendedChannelsApi, subscribeManagerChannelApi } from "~/api/channels";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
 import { cn } from "~/utils";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { ChannelSquareCard } from "../ChannelSquareCard";
-import { ChannelSquareTabs } from "./ChannelSquareTabs";
-import { SERIF_FONT_STACK } from "./ArticleList/ChannelSwitcher";
 
 type DiscoverStatus = "join" | "joined" | "pending" | "private";
 
@@ -220,54 +221,26 @@ export function ChannelDiscoveryHome({
             return (
                 <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                     <div className="relative flex h-11 items-center px-4">
-                        <button
+                        <WorkbenchMenuButton
                             type="button"
                             aria-label={localize("com_nav_open_sidebar")}
                             onClick={onOpenMobileNav}
                             className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                         >
                             <Outlined.SidebarMenu className="size-5" />
-                        </button>
-                        {/* 频道/广场 切换器为跨视图常驻单实例（见 Subscription/index），
-                            屏幕居中悬浮在此行之上，这里不再各自渲染。 */}
+                        </WorkbenchMenuButton>
+                        <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-112px)] -translate-x-1/2 truncate text-h4 font-medium text-text-1">{menuNames.channel}</h1>
                     </div>
                 </div>
             );
         }
-        // Match the content-view header (ChannelSwitcher): same px-10/pt-5 offsets,
-        // borderless action on the left, centered 32px bold serif title. With no
-        // channel to show, the title keeps the module name (资讯订阅) and only the
-        // 创建频道 action remains (nothing to switch to).
         return (
-            <div className="shrink-0 px-10 pt-5 pb-4">
-                <div className="relative flex h-10 w-full min-w-0 items-center gap-6">
-                    {/* -ml-2 cancels the button's own px-2 so the label sits optically
-                        flush with the 40px content edge (same as the channel page). */}
-                    <button
-                        type="button"
-                        onClick={onCreateChannel}
-                        className="-ml-2 flex shrink-0 items-center gap-1 rounded-md px-2 py-[5px] text-sm leading-[22px] text-text-2 outline-none transition-colors fine-pointer:hover:bg-fill-1 fine-pointer:hover:text-text-1"
-                    >
-                        <Outlined.Plus className="size-4 shrink-0" />
-                        <span>{localize("com_subscription.create_channel")}</span>
-                    </button>
-                    {/* Absolute pane-midpoint centering — the discovery page never opens a
-                        side detail pane, so the title always sits on the true center. */}
-                    <h1
-                        className="pointer-events-none absolute left-1/2 top-1/2 max-w-[clamp(96px,calc(100%-480px),600px)] -translate-x-1/2 -translate-y-1/2 truncate text-[32px] font-bold leading-[40px] text-text-1"
-                        style={{ fontFamily: SERIF_FONT_STACK }}
-                    >
-                        {menuNames.channel}
-                    </h1>
-                    <div className="min-w-0 flex-1" aria-hidden />
-                    {/* Invisible clone of the persistent 频道/广场 toggle (overlaid at the
-                        row's right edge by Subscription/index) — reserves its width so the
-                        centered title keeps a real 24px gap to it. */}
-                    <div className="invisible shrink-0" aria-hidden>
-                        <ChannelSquareTabs active="channel" />
-                    </div>
-                </div>
-            </div>
+            <ModuleHomeHeader title={menuNames.channel}>
+                <Button onClick={onCreateChannel}>
+                    <Outlined.Plus />
+                    {localize("com_subscription.create_channel")}
+                </Button>
+            </ModuleHomeHeader>
         );
     };
 
@@ -362,11 +335,12 @@ export function ChannelDiscoveryHome({
     };
 
     return (
-        <div className="relative flex min-h-0 flex-1 flex-col bg-white">
+        <div className={isH5 ? "relative flex min-h-0 flex-1 flex-col bg-white" : cn(MODULE_HOME_FRAME, "relative flex-1")}>
             {renderHeader()}
             <div
                 className={cn(
-                    "flex min-h-0 flex-1 flex-col items-center justify-center px-4 pb-16",
+                    "flex min-h-0 flex-1 flex-col items-center justify-center pb-16",
+                    isH5 ? "px-4" : cn(MODULE_HOME_COLUMN, MODULE_HOME_BODY),
                     // Carousel supplies its own spacing via the viewport's py-8; only the
                     // empty illustration / loading states need the gap to the actions.
                     !showCarousel && "gap-9",

@@ -32,6 +32,7 @@ from uuid import uuid4
 
 from loguru import logger
 
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.utils.think_tags import strip_reasoning_tags
 from bisheng_langchain.linsight.event import (
     BaseEvent,
@@ -462,6 +463,20 @@ class StreamEventMapper:
         enriched = self._reconcile_open_delegations()
 
         # Thinking stream: reasoning_content (DeepSeek-R1) or thinking blocks.
+        if info := FailureContextAdapter.from_payload(getattr(message, "additional_kwargs", None)):
+            enriched.append(
+                ExecStep(
+                    task_id=self.ctx.svid,
+                    call_id=f"model_failure:{info['failure_id']}",
+                    name="model_call",
+                    call_reason="",
+                    params=None,
+                    output="Model call failed.",
+                    step_type="tool",
+                    status="end",
+                    extra_info={"failure_info": info, **({"namespace": ns} if ns else {})},
+                )
+            )
         thinking = self._extract_thinking(message)
         # A whitespace-only delta is the model's own line break and MUST survive:
         # dropping it split the segment (``normalize`` closes a segment on any
@@ -699,6 +714,8 @@ class StreamEventMapper:
     def _build_end_step(self, open_call: _OpenCall, payload: dict[str, Any]) -> ExecStep:
         output, truncated = _truncate(payload.get("output"))
         extra_info: dict[str, Any] = {"truncated": truncated}
+        if info := FailureContextAdapter.from_payload(payload.get("output")):
+            extra_info["failure_info"] = info
         if open_call.delegate_goal is not None:
             extra_info["delegate_goal"] = open_call.delegate_goal
         if open_call.namespace:

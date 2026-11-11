@@ -12,15 +12,15 @@ export default function ModelSelect({ type = 'assistant', modelType = 'llm', val
 
     const { llmOptions, embeddings, isLoading } = useModel(type === 'assistant' ? type : 'llm')
     const options = useMemo(
-        () => toGroupedModelOptions(modelType === 'llm' ? llmOptions : embeddings),
-        [modelType, llmOptions, embeddings],
+        () => toGroupedModelOptions(modelType === 'llm' ? llmOptions : embeddings, value, t('references.unavailable')),
+        [modelType, llmOptions, embeddings, value, t],
     )
 
-    if (isLoading) return null
     return <Select
         {...selectLabels}
         className="w-full"
         options={options}
+        loading={isLoading}
         filterOption={filterModelOption}
         value={toModelSelectValue(value)}
         onChange={(v) => onChange(v == null ? null : String(v))}

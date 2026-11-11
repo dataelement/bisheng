@@ -347,6 +347,37 @@ class TestGetAllOperatorsTenantScope:
 
         assert names == {"only-iso"}
 
+    def test_most_used_name_is_listed_first(self, patch_dao_session, session):
+        """A renamed account must stay findable under the name on its rows.
+
+        The dropdown keeps one label per operator. The DAO orders names by
+        how many visible rows use them, so a rare later alias cannot hide
+        the name the table still shows.
+        """
+        for index in range(3):
+            _insert_audit(
+                session,
+                action=f"majority.{index}",
+                tenant_id=1,
+                operator_tenant_id=1,
+                operator_id=3,
+                operator_name="admin",
+            )
+        _insert_audit(
+            session,
+            action="alias.once",
+            tenant_id=1,
+            operator_tenant_id=1,
+            operator_id=3,
+            operator_name="11",
+        )
+
+        rows = AuditLogDao.get_all_operators([])
+        names = [name for operator_id, name in rows if operator_id == 3]
+
+        assert names[0] == "admin"
+        assert set(names) == {"admin", "11"}
+
 
 # ===========================================================================
 # MessageSession tenant_id predicate — app-usage tab
@@ -1029,12 +1060,70 @@ class TestGetAllOperatorsServiceEndToEnd:
                 "bisheng.api.services.audit_log.get_current_tenant_id",
                 return_value=2,
             ),
+            patch(
+                "bisheng.api.services.audit_log.UserDao.aget_user_by_ids",
+                new=AsyncMock(return_value=[]),
+            ),
         ):
             ops = await AuditLogService.get_all_operators(child_admin)
 
         names = {o["user_name"] for o in ops}
         assert names == {"child2-bob"}
         assert "root-only-admin" not in names
+
+    async def test_current_account_name_wins_over_a_shared_historical_name(
+        self,
+        patch_dao_session,
+        session,
+    ):
+        """Two accounts can both have rows named admin. The dropdown uses the
+        name on the user record, so the account still called admin stays
+        selectable and a renamed account is not offered under the old name.
+        """
+        for index in range(3):
+            _insert_audit(
+                session,
+                action=f"old.{index}",
+                tenant_id=1,
+                operator_tenant_id=1,
+                operator_id=1,
+                operator_name="admin",
+            )
+        _insert_audit(
+            session,
+            action="current",
+            tenant_id=1,
+            operator_tenant_id=1,
+            operator_id=3,
+            operator_name="admin",
+        )
+
+        login = MagicMock()
+        login.user_id = 3
+        login.is_admin.return_value = True
+        login.is_global_super = True
+
+        renamed = MagicMock(user_id=1, user_name="yaojin")
+        current = MagicMock(user_id=3, user_name="admin")
+        with (
+            patch(
+                "bisheng.api.services.audit_log.get_admin_scope_tenant_id",
+                return_value=None,
+            ),
+            patch(
+                "bisheng.api.services.audit_log.get_current_tenant_id",
+                return_value=None,
+            ),
+            patch(
+                "bisheng.api.services.audit_log.UserDao.aget_user_by_ids",
+                new=AsyncMock(return_value=[renamed, current]),
+            ),
+        ):
+            ops = await AuditLogService.get_all_operators(login)
+
+        by_id = {one["user_id"]: one["user_name"] for one in ops}
+        assert by_id[3] == "admin"
+        assert by_id[1] == "yaojin"
 
 
 # ===========================================================================
@@ -1083,6 +1172,10 @@ def _patch_session_dao_helpers(monkeypatch, session):
     monkeypatch.setattr(
         "bisheng.api.services.audit_log.AssistantDao.aget_assistants_by_ids",
         AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "bisheng.api.services.audit_log.AuditSessionRepository.chat_ids_with_task_version",
+        AsyncMock(return_value=set()),
     )
 
 

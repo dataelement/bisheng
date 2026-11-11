@@ -148,6 +148,7 @@ CREATE TABLE IF NOT EXISTS flow (
     logo VARCHAR(512),
     status INTEGER DEFAULT 1,
     flow_type INTEGER DEFAULT 10,
+    is_delete INTEGER NOT NULL DEFAULT 0,
     guide_word VARCHAR(1000),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -171,6 +172,13 @@ CREATE TABLE IF NOT EXISTS knowledge (
     auto_tag_enabled INTEGER NOT NULL DEFAULT 0,
     auto_tag_library_id INTEGER,
     metadata_fields JSON,
+    processing_defaults JSON,
+    processing_config_version INTEGER NOT NULL DEFAULT 0,
+    metadata_schema_revision INTEGER NOT NULL DEFAULT 0,
+    model_config_revision INTEGER NOT NULL DEFAULT 0,
+    model_transition JSON,
+    index_generation VARCHAR(64),
+    migration_origin VARCHAR(64),
     creation_request_id VARCHAR(64),
     creation_payload_hash VARCHAR(64),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -229,6 +237,8 @@ CREATE TABLE IF NOT EXISTS auditlog (
     target_id VARCHAR(64),
     reason TEXT,
     metadata JSON,
+    operator_dept_id INTEGER,
+    operator_dept_path VARCHAR(1024),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""

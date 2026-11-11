@@ -17,14 +17,15 @@ from typing import Union
 
 from bisheng.common.errcode.role import QuotaConfigInvalidError
 from bisheng.common.errcode.tenant_quota import (
+    QuotaResponsibilityChangedError,
+    QuotaUsageUnavailableError,
     TenantQuotaExceededError,
     TenantRoleQuotaExceededError,
     TenantStorageQuotaExceededError,
 )
-from bisheng.database.constants import AdminRole
-from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tenant import TenantDao
-from bisheng.user.domain.models.user_role import UserRoleDao
+from bisheng.role.application.effective_roles import load_effective_roles
+from bisheng.role.domain.repositories.quota_repository import QuotaRepository
 
 logger = logging.getLogger(__name__)
 
@@ -57,58 +58,6 @@ _MENU_APPROVAL_MODE_KEYS = {
 _ROLE_QUOTA_METADATA_KEYS = set(_MENU_APPROVAL_MODE_KEYS)
 
 VALID_QUOTA_KEYS = set(DEFAULT_ROLE_QUOTA.keys()) | _TENANT_ONLY_QUOTA_KEYS | _ROLE_QUOTA_METADATA_KEYS
-
-# Resource counting SQL templates — keyed by {col}=:{param} placeholder.
-# Shared between tenant-level and user-level counts.
-_RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
-    # `knowledge_space` is NOT here — it needs `type = 3` plus a department-space
-    # exclusion, and `type` is a reserved word on DM8 that raw text() cannot quote
-    # portably. It is dispatched to `_count_knowledge_space` (ORM) from
-    # `_count_resource` instead.
-    # Storage usage = every file whose source contributed to tenant minio
-    # occupancy (knowledge-space manual uploads + channel article imports).
-    # No status filter: a parse failure / timeout still leaves an object on
-    # disk until the user explicitly deletes the row, so it must continue
-    # to count against the quota until then.
-    "knowledge_space_file": "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND file_source IN ('channel','space_upload')",
-    # KI-01 fix: channel has no `status` column either; removed filter to
-    # avoid silent 0 counts via _count_resource's try/except.
-    "channel": "SELECT COUNT(*) FROM channel WHERE {col}=:{param}",
-    "channel_subscribe": (
-        "SELECT COUNT(*) FROM space_channel_member scm "
-        "INNER JOIN channel c ON c.id=scm.business_id "
-        "WHERE scm.business_type='CHANNEL' "
-        "AND scm.user_role IN ('MEMBER','ADMIN') "
-        "AND scm.status IN ('ACTIVE','PENDING') "
-        "AND {qualified_col}=:{param}"
-    ),
-    # Knowledge-space subscriptions a user has joined (non-creator). Mirrors
-    # channel_subscribe but business_type='SPACE'; tenant-level count joins the
-    # knowledge table to scope by the space's tenant. User-level enforcement
-    # lives in KnowledgeSpaceService.subscribe_space (raises 18032); this row
-    # powers the /me/quotas display + multi-role aggregation.
-    "knowledge_space_subscribe": (
-        "SELECT COUNT(*) FROM space_channel_member scm "
-        "INNER JOIN knowledge k ON k.id=scm.business_id "
-        "WHERE scm.business_type='SPACE' "
-        "AND scm.user_role IN ('MEMBER','ADMIN') "
-        "AND scm.status IN ('ACTIVE','PENDING') "
-        "AND {qualified_col}=:{param}"
-    ),
-    "workflow": "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=10 AND status!=0",
-    "assistant": "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=5 AND status!=0",
-    # KI-01 fix: actual table is `t_gpts_tools` (t_ prefix); `gpts_tools`
-    # does not exist on any deployment.
-    "tool": "SELECT COUNT(*) FROM t_gpts_tools WHERE {col}=:{param} AND is_delete=0",
-    "dashboard": "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=15 AND status!=0",
-    # F016 T02: tenant-only resource types.
-    # storage_gb: total bytes of active knowledge files; converted to GB in _count_resource.
-    "storage_gb": "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND file_source IN ('channel','space_upload')",
-    # user_count and model_tokens_monthly handled outside this dict — they
-    # need cross-dialect identifier quoting (`user`, `delete` are reserved
-    # on DM8) and portable first-of-month math (no DATE_FORMAT on DM8).
-    # See _count_user_count / _count_tokens_monthly below.
-}
 
 
 class QuotaResourceType:
@@ -149,19 +98,19 @@ class QuotaService:
         if login_user and login_user.is_admin():
             return -1
 
-        user_roles = await UserRoleDao.aget_user_roles(user_id)
-        role_ids = [r.role_id for r in user_roles]
-
-        if not role_ids:
-            role_quota = DEFAULT_ROLE_QUOTA.get(resource_type, -1)
-        else:
-            roles = await RoleDao.aget_role_by_ids(role_ids)
-            all_quotas = cls._compute_role_quotas(roles)
-            role_quota = all_quotas.get(resource_type, DEFAULT_ROLE_QUOTA.get(resource_type, -1))
-            if role_quota == -1:
-                return -1
+        policy = await cls._budget_policy(user_id, tenant_id)
+        role_quota = cls._compute_role_quotas(policy.roles).get(
+            resource_type, DEFAULT_ROLE_QUOTA.get(resource_type, -1)
+        )
 
         return await cls._apply_tenant_cap(role_quota, tenant_id, resource_type)
+
+    @staticmethod
+    async def _budget_policy(user_id: int, tenant_id: int):
+        policy = await load_effective_roles(user_id)
+        if policy.home_tenant_id != tenant_id:
+            raise QuotaResponsibilityChangedError()
+        return policy
 
     @classmethod
     async def _apply_tenant_cap(
@@ -174,7 +123,9 @@ class QuotaService:
         `_apply_tenant_chain_cap` (F016 T04, used only by `check_quota`).
         """
         tenant = await TenantDao.aget_by_id(tenant_id)
-        tenant_limit = (tenant.quota_config or {}).get(resource_type, -1) if tenant else -1
+        if tenant is None or tenant.status != "active":
+            raise QuotaUsageUnavailableError(usage_state="UNAVAILABLE")
+        tenant_limit = (tenant.quota_config or {}).get(resource_type, -1)
 
         if tenant_limit == -1:
             return role_quota
@@ -231,17 +182,16 @@ class QuotaService:
 
         with bypass_tenant_filter():
             tenant = await TenantDao.aget_by_id(tenant_id)
-            if not tenant:
-                # Tenant disappeared — fail open (do not block); caller will
-                # surface other errors upstream.
-                return role_quota, None
+            if not tenant or tenant.status != "active":
+                raise QuotaUsageUnavailableError(usage_state="UNAVAILABLE")
 
             # MVP 2-layer: chain is [leaf] or [leaf, Root]; F011 INV-T1.
             chain: list = [tenant]
             if tenant.parent_tenant_id is not None:
                 root = await TenantDao.aget_by_id(tenant.parent_tenant_id)
-                if root:
-                    chain.append(root)
+                if not root or root.status != "active":
+                    raise QuotaUsageUnavailableError(usage_state="UNAVAILABLE")
+                chain.append(root)
 
         # Tenant config writes "storage_gb"; role config writes "knowledge_space_file".
         # When checking storage from the role-level decorator, alias to storage_gb.
@@ -292,6 +242,8 @@ class QuotaService:
         resource_type: str,
         tenant_id: int,
         login_user=None,
+        delta: int | float = 1,
+        tenant_delta: int | float | None = None,
     ) -> bool:
         """Check if user can create one more resource (F016 T04 Tenant-tree aware).
 
@@ -313,16 +265,22 @@ class QuotaService:
         if login_user and login_user.is_admin():
             return True
 
-        user_roles = await UserRoleDao.aget_user_roles(user_id)
-        role_ids = [r.role_id for r in user_roles]
-        if not role_ids:
-            role_quota = DEFAULT_ROLE_QUOTA.get(resource_type, -1)
-        else:
-            roles = await RoleDao.aget_role_by_ids(role_ids)
-            all_quotas = cls._compute_role_quotas(roles)
-            role_quota = all_quotas.get(resource_type, DEFAULT_ROLE_QUOTA.get(resource_type, -1))
-
-        effective, blocker = await cls._apply_tenant_chain_cap(role_quota, tenant_id, resource_type)
+        if isinstance(delta, bool) or not isinstance(delta, (int, float)) or delta < 0:
+            raise ValueError("Quota delta must be a nonnegative number")
+        if tenant_delta is not None and tenant_delta > delta:
+            raise ValueError("Tenant delta cannot exceed this resource owner's delta")
+        if delta == 0:
+            return True
+        tenant_delta = delta if tenant_delta is None else tenant_delta
+        if isinstance(tenant_delta, bool) or not isinstance(tenant_delta, (int, float)) or tenant_delta < 0:
+            raise ValueError("Tenant quota delta must be a nonnegative number")
+        policy = await cls._budget_policy(user_id, tenant_id)
+        role_quota = cls._compute_role_quotas(policy.roles).get(
+            resource_type, DEFAULT_ROLE_QUOTA.get(resource_type, -1)
+        )
+        tenant_remaining, blocker = (-1, None)
+        if tenant_delta > 0:
+            tenant_remaining, blocker = await cls._apply_tenant_chain_cap(-1, tenant_id, resource_type)
 
         if blocker is not None:
             blocker_tid, reason, used, limit, tenant_name = blocker
@@ -349,19 +307,15 @@ class QuotaService:
                 reason=reason,
             )
 
-        if effective == -1:
+        if tenant_remaining != -1 and tenant_delta > tenant_remaining:
+            if resource_type in ("storage_gb", "knowledge_space_file"):
+                raise TenantStorageQuotaExceededError()
+            raise TenantQuotaExceededError()
+        if role_quota == -1:
             return True
-
-        user_used = await cls.get_user_resource_count(user_id, resource_type)
-        if resource_type == "knowledge_space_file":
-            if float(user_used) >= float(effective) - 1e-9:
-                raise TenantRoleQuotaExceededError(
-                    msg=(f"Role quota exceeded for {resource_type} (user_used={user_used}, effective={effective})"),
-                )
-        elif user_used >= effective:
-            raise TenantRoleQuotaExceededError(
-                msg=(f"Role quota exceeded for {resource_type} (user_used={user_used}, effective={effective})"),
-            )
+        user_used = await cls.get_user_resource_count(user_id, resource_type, tenant_id=tenant_id)
+        if user_used + delta > role_quota + (1e-9 if resource_type == "knowledge_space_file" else 0):
+            raise TenantRoleQuotaExceededError(used=user_used, quota=role_quota, resource_type=resource_type)
         return True
 
     @classmethod
@@ -382,13 +336,8 @@ class QuotaService:
         if is_admin:
             role_quotas = dict.fromkeys(DEFAULT_ROLE_QUOTA, -1)
         else:
-            user_roles = await UserRoleDao.aget_user_roles(user_id)
-            role_ids = [r.role_id for r in user_roles]
-            if role_ids:
-                roles = await RoleDao.aget_role_by_ids(role_ids)
-                role_quotas = cls._compute_role_quotas(roles)
-            else:
-                role_quotas = dict(DEFAULT_ROLE_QUOTA)
+            policy = await cls._budget_policy(user_id, tenant_id)
+            role_quotas = cls._compute_role_quotas(policy.roles)
 
         tenant = await TenantDao.aget_by_id(tenant_id)
         tenant_config = (tenant.quota_config or {}) if tenant else {}
@@ -397,7 +346,7 @@ class QuotaService:
         resource_types = list(DEFAULT_ROLE_QUOTA.keys())
         tenant_counts, user_counts = await asyncio.gather(
             asyncio.gather(*(cls.get_tenant_resource_count(tenant_id, rt) for rt in resource_types)),
-            asyncio.gather(*(cls.get_user_resource_count(user_id, rt) for rt in resource_types)),
+            asyncio.gather(*(cls.get_user_resource_count(user_id, rt, tenant_id=tenant_id) for rt in resource_types)),
         )
 
         items = []
@@ -415,6 +364,14 @@ class QuotaService:
                 tenant_remaining = max(tenant_q - tenant_used, 0)
                 effective = tenant_remaining if role_q == -1 else min(tenant_remaining, role_q)
 
+            if is_admin:
+                available = -1
+            else:
+                tenant_remaining, _ = await cls._apply_tenant_chain_cap(-1, tenant_id, resource_type)
+                role_remaining = -1 if role_q == -1 else max(role_q - user_used, 0)
+                finite = [value for value in (role_remaining, tenant_remaining) if value != -1]
+                available = min(finite) if finite else -1
+
             items.append(
                 EffectiveQuotaItem(
                     resource_type=resource_type,
@@ -423,6 +380,7 @@ class QuotaService:
                     tenant_used=tenant_used,
                     user_used=user_used,
                     effective=effective,
+                    available=available,
                 )
             )
         return items
@@ -484,14 +442,14 @@ class QuotaService:
         short-circuit — super admin writes also count toward the target tenant.
         """
         if tenant_id is None:
-            return 0
+            raise QuotaUsageUnavailableError(usage_state="UNAVAILABLE")
         from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.database.models.tenant import TenantDao
 
         with bypass_tenant_filter():
             tenant = await TenantDao.aget_by_id(tenant_id)
         if not tenant:
-            return 0
+            raise QuotaUsageUnavailableError(usage_state="UNAVAILABLE")
         used_gb = (
             await cls._aggregate_root_usage(tenant_id, "storage_gb")
             if tenant.parent_tenant_id is None
@@ -542,12 +500,8 @@ class QuotaService:
             return None
         user_id = login_user.user_id
         tenant_id = login_user.tenant_id
-        user_roles = await UserRoleDao.aget_user_roles(user_id)
-        if not user_roles:
-            role_gb = float(DEFAULT_ROLE_QUOTA["knowledge_space_file"])
-        else:
-            role_rows = await RoleDao.aget_role_by_ids([r.role_id for r in user_roles])
-            role_gb = cls._aggregate_knowledge_space_file_limit_gb(role_rows)
+        policy = await cls._budget_policy(user_id, tenant_id)
+        role_gb = cls._aggregate_knowledge_space_file_limit_gb(policy.roles)
         if role_gb == -1:
             eff, blocker = await cls._apply_tenant_chain_cap(-1, tenant_id, "knowledge_space_file")
             if blocker is not None:
@@ -582,152 +536,28 @@ class QuotaService:
         return result
 
     @classmethod
-    async def _count_resource(cls, col: str, val, resource_type: str) -> Union[int, float]:
-        """Shared resource counting — used by both tenant and user counts."""
-        if resource_type == "user_count":
-            return await cls._count_user_count(col, val)
-        if resource_type == "model_tokens_monthly":
-            return await cls._count_tokens_monthly(col, val)
-        if resource_type == "knowledge_space":
-            return await cls._count_knowledge_space(col, val)
-        if resource_type == "info_source_subscribe":
-            return len(await cls._distinct_info_source_ids(col, val))
-
-        from sqlalchemy import text
-
-        from bisheng.core.database import get_async_db_session
-
-        template = _RESOURCE_COUNT_TEMPLATES.get(resource_type)
-        if not template:
-            return 0
-
-        param = "id_val"
-        # Subscribe templates join space_channel_member (alias scm) to the
-        # resource table; qualify the filter column to the right alias.
-        if resource_type in ("channel_subscribe", "knowledge_space_subscribe"):
-            if col == "user_id":
-                qualified_col = "scm.user_id"
-            elif col == "tenant_id":
-                qualified_col = "c.tenant_id" if resource_type == "channel_subscribe" else "k.tenant_id"
-            else:
-                qualified_col = col
-        else:
-            qualified_col = col
-        sql = template.format(col=col, qualified_col=qualified_col, param=param)
-        try:
-            async with get_async_db_session() as session:
-                result = await session.execute(text(sql), {param: val})
-                count = result.scalar() or 0
-                if resource_type in ("knowledge_space_file", "storage_gb"):
-                    count = float(count) / (1024 * 1024 * 1024)
-                return count
-        except Exception as e:
-            logger.warning("Failed to count resource %s for %s=%s: %s", resource_type, col, val, e)
-            return 0
-
-    @classmethod
-    async def _count_knowledge_space(cls, col: str, val) -> int:
-        """Count Knowledge Spaces (``knowledge.type = 3``) for a user or tenant.
-
-        Deliberately not a raw-SQL template like the other resources: the filter
-        needs ``type`` — a reserved word on DM8 that ``text()`` cannot quote
-        portably — plus a NOT IN against ``department_knowledge_space``. The ORM
-        quotes per dialect.
-
-        Department spaces are excluded from ``user_id`` counts only. Batch
-        department-space creation rewrites ``user_id`` to the operator, so
-        counting them would burn an admin's personal quota — that is the whole
-        reason ``exclude_department_spaces`` exists. ``tenant_id`` counts keep
-        them: they do occupy tenant capacity.
-
-        ``bypass_tenant_filter()`` is required, not defensive. For a single-table
-        ``select(func.count(...))`` the tenant listener misses its
-        ``column_descriptions`` path (a count has no ``entity`` key) but matches
-        via ``get_final_froms()`` on the bare ``knowledge`` table, and would AND
-        the *caller's* tenant onto the explicit ``tenant_id == val`` below —
-        making Root aggregation over child tenants (``_aggregate_root_usage``)
-        return 0, a silent fail-open. Isolation here comes from the explicit
-        ``tenant_id`` / ``user_id`` predicate, which is stricter than the
-        listener's IN-list anyway.
-
-        Note this is a *global* per-user count (no tenant predicate for
-        ``user_id``), matching the raw-SQL behaviour of the other eight resource
-        types and keeping the function usable outside a request context. The
-        domain-side gate in ``KnowledgeSpaceService`` counts via
-        ``KnowledgeDao.async_count_spaces_by_user`` instead, which the ORM
-        listener does scope to the current tenant.
-        """
-        from bisheng.core.context.tenant import bypass_tenant_filter
-        from bisheng.core.database import get_async_db_session
-
-        stmt = cls._knowledge_space_count_stmt(col, val)
-        if stmt is None:
-            return 0
-
-        try:
-            with bypass_tenant_filter():
-                async with get_async_db_session() as session:
-                    return (await session.execute(stmt)).scalar() or 0
-        except Exception as e:
-            logger.warning("Failed to count knowledge_space for %s=%s: %s", col, val, e)
-            return 0
-
-    @staticmethod
-    def _knowledge_space_count_stmt(col: str, val):
-        """Build the COUNT statement for `_count_knowledge_space`.
-
-        Split out so tests can compile and assert the predicates (type filter,
-        department exclusion, strict tenant equality per AC-10) without a DB.
-        Returns ``None`` for an unsupported column.
-        """
-        from sqlalchemy import func, select
-
-        from bisheng.knowledge.domain.models.knowledge import (
-            Knowledge,
-            KnowledgeDao,
-            KnowledgeTypeEnum,
-        )
-
-        stmt = select(func.count(Knowledge.id)).where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
-        if col == "user_id":
-            # Reuse the DAO helper so this stays the same predicate the domain
-            # gate uses — two definitions of "department space" would drift.
-            return KnowledgeDao._exclude_department_spaces(stmt.where(Knowledge.user_id == val))
+    async def _count_resource(cls, col: str, val, resource_type: str, *, tenant_id: int | None = None):
         if col == "tenant_id":
-            return stmt.where(Knowledge.tenant_id == val)
-        return None
+            return await QuotaRepository.count(int(val), resource_type)
+        if col != "user_id":
+            raise ValueError("Unknown usage subject")
+        if tenant_id is None:
+            from bisheng.user.application.policy_bindings import read_policy_subject
+
+            tenant_id = (await read_policy_subject(int(val))).home_tenant_id
+        return await QuotaRepository.count(tenant_id, resource_type, user_id=int(val))
 
     @classmethod
-    async def _distinct_info_source_ids(cls, col: str, val) -> set[str]:
-        """Distinct info-source ids referenced by channels (creator / tenant scope).
+    async def _distinct_info_source_ids(cls, col: str, val, *, tenant_id: int | None = None):
+        if col == "tenant_id":
+            return await QuotaRepository.source_ids(int(val))
+        if col != "user_id":
+            raise ValueError("Unknown usage subject")
+        if tenant_id is None:
+            from bisheng.user.application.policy_bindings import read_policy_subject
 
-        A user "subscribes" info sources by attaching them to channels they
-        create, so usage = deduped union of ``channel.source_list``. That
-        column is a JSON array and DM8 has no JSON_TABLE equivalent, so the
-        dedup runs in Python over ORM rows (same escape hatch as
-        ``_count_user_count``).
-        """
-        if col not in ("user_id", "tenant_id"):
-            return set()
-        # sqlmodel's select, not sqlalchemy's: Session.exec() only unwraps the
-        # single selected column when the statement is a SelectOfScalar. Given a
-        # plain sqlalchemy Select it hands back Row tuples, so each "source_list"
-        # below would be a one-element Row and the comprehension would try to
-        # hash the JSON array itself — "unhashable type: 'list'" out of
-        # /quota/effective for any tenant whose channels carry sources.
-        from sqlmodel import select
-
-        from bisheng.channel.domain.models.channel import Channel
-        from bisheng.core.database import get_async_db_session
-
-        stmt = select(Channel.source_list).where(getattr(Channel, col) == val)
-        try:
-            async with get_async_db_session() as session:
-                rows = (await session.exec(stmt)).all()
-        except Exception as e:
-            logger.warning("Failed to count info_source_subscribe for %s=%s: %s", col, val, e)
-            return set()
-        return {sid for source_list in rows for sid in (source_list or [])}
+            tenant_id = (await read_policy_subject(int(val))).home_tenant_id
+        return await QuotaRepository.source_ids(tenant_id, user_id=int(val))
 
     @classmethod
     async def check_info_source_subscribe_limit(
@@ -747,96 +577,39 @@ class QuotaService:
         """
         if not candidate_source_ids:
             return
+        used_ids = await cls._distinct_info_source_ids("user_id", user_id, tenant_id=tenant_id)
+        candidates = {sid for sid in candidate_source_ids if sid}
+        delta = len(candidates - used_ids)
+        if delta == 0:
+            return
+        policy = await load_effective_roles(user_id)
+        if policy.is_identity_admin:
+            return  # Existing budget-owner super-admin exemption.
+        if policy.home_tenant_id != tenant_id:
+            raise QuotaResponsibilityChangedError()
         if login_user and login_user.is_admin():
             return
-        # The quota owner is not necessarily the operator (managers/editors can add
-        # sources to someone else's channel), so get_effective_quota's login_user
-        # short-circuit never sees an admin OWNER. AdminRole carries no -1
-        # quota_config — without this check a manager editing an admin's channel
-        # would trip the owner's 200 default even though admins are quota-exempt.
-        owner_role_ids = [r.role_id for r in await UserRoleDao.aget_user_roles(user_id)]
-        if AdminRole in owner_role_ids:
-            return
-        effective = await cls.get_effective_quota(user_id, QuotaResourceType.INFO_SOURCE_SUBSCRIBE, tenant_id)
-        if effective == -1:
-            return
-        used_ids = await cls._distinct_info_source_ids("user_id", user_id)
-        total_after = len(used_ids | {sid for sid in candidate_source_ids if sid})
-        if total_after > effective:
-            raise TenantRoleQuotaExceededError(
-                msg=(
-                    f"Role quota exceeded for info_source_subscribe "
-                    f"(used={len(used_ids)}, total_after={total_after}, effective={effective})"
-                ),
+        role_limit = cls._compute_role_quotas(policy.roles)[QuotaResourceType.INFO_SOURCE_SUBSCRIBE]
+        if role_limit != -1 and len(used_ids) + delta > role_limit:
+            raise TenantRoleQuotaExceededError(used=len(used_ids), quota=role_limit)
+        tenant_ids = await cls._distinct_info_source_ids("tenant_id", tenant_id)
+        tenant_delta = len(candidates - tenant_ids)
+        if tenant_delta:
+            remaining, blocker = await cls._apply_tenant_chain_cap(
+                -1, tenant_id, QuotaResourceType.INFO_SOURCE_SUBSCRIBE
             )
+            if blocker is not None or (remaining != -1 and tenant_delta > remaining):
+                raise TenantQuotaExceededError()
 
     @classmethod
-    async def _count_user_count(cls, col: str, val) -> int:
-        """Active users for tenant_id. Uses SQLAlchemy ORM so ``user`` and
-        ``delete`` (reserved on DM8 / MySQL keywords) are auto-quoted per
-        dialect — raw text() with backticks does not work on DM8.
-
-        Only ``col == 'tenant_id'`` is meaningful (per legacy template).
-        """
-        if col != "tenant_id":
-            return 0
-        from sqlalchemy import func, select
-
-        from bisheng.core.database import get_async_db_session
-        from bisheng.database.models.tenant import UserTenant
-        from bisheng.user.domain.models.user import User
-
-        stmt = (
-            select(func.count(func.distinct(UserTenant.user_id)))
-            .join(User, User.user_id == UserTenant.user_id)
-            .where(
-                UserTenant.tenant_id == val,
-                UserTenant.is_active == 1,
-                User.delete == 0,
-            )
-        )
-        try:
-            async with get_async_db_session() as session:
-                return (await session.execute(stmt)).scalar() or 0
-        except Exception as e:
-            logger.warning("Failed to count user_count for %s=%s: %s", col, val, e)
-            return 0
-
-    @classmethod
-    async def _count_tokens_monthly(cls, col: str, val) -> int:
-        """Sum llm_token_log.total_tokens since the first day of the current
-        month. Computes the boundary in Python (portable across MySQL/DM8 —
-        MySQL's ``DATE_FORMAT(NOW(), '%Y-%m-01')`` is not supported on DM8).
-        """
-        from datetime import datetime
-
-        from sqlalchemy import text
-
-        from bisheng.core.database import get_async_db_session
-
-        now = datetime.now()
-        first_of_month = datetime(now.year, now.month, 1)
-        sql = f"SELECT COALESCE(SUM(total_tokens), 0) FROM llm_token_log WHERE {col}=:id_val AND created_at >= :since"
-        try:
-            async with get_async_db_session() as session:
-                result = await session.execute(
-                    text(sql),
-                    {"id_val": val, "since": first_of_month},
-                )
-                return result.scalar() or 0
-        except Exception as e:
-            logger.warning("Failed to count model_tokens_monthly for %s=%s: %s", col, val, e)
-            return 0
-
-    @classmethod
-    async def get_tenant_resource_count(cls, tenant_id: int, resource_type: str) -> int:
-        """Count tenant-level resource usage."""
+    async def get_tenant_resource_count(cls, tenant_id: int, resource_type: str) -> int | float:
         return await cls._count_resource("tenant_id", tenant_id, resource_type)
 
     @classmethod
-    async def get_user_resource_count(cls, user_id: int, resource_type: str) -> int:
-        """Count user-level resource usage."""
-        return await cls._count_resource("user_id", user_id, resource_type)
+    async def get_user_resource_count(
+        cls, user_id: int, resource_type: str, *, tenant_id: int | None = None
+    ) -> int | float:
+        return await cls._count_resource("user_id", user_id, resource_type, tenant_id=tenant_id)
 
     # -----------------------------------------------------------------------
     # F016 T03: Tenant-tree quota counting helpers.
@@ -844,21 +617,10 @@ class QuotaService:
 
     @classmethod
     async def _count_usage_strict(cls, tenant_id: int, resource_type: str) -> int:
-        """Strict-equality tenant count — prevents IN-list over-counting (INV-T6).
+        """Bind each chain node independently before the scoped ORM count."""
+        from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
 
-        Wraps ``get_tenant_resource_count`` in ``strict_tenant_filter()`` so Root's
-        shared resources don't inflate Child usage (AC-02, AC-09). For the
-        template-driven resources the underlying ``_count_resource`` uses raw
-        ``text()`` SQL with explicit ``WHERE tenant_id=:id``, so the ORM event
-        listener does not rewrite the query — the wrapper is kept for semantic
-        clarity. ``knowledge_space`` has since moved to the ORM
-        (``_count_knowledge_space``) and bypasses the listener outright; there the
-        strict-equality invariant is carried structurally by its explicit
-        ``tenant_id ==`` predicate rather than by this context manager.
-        """
-        from bisheng.core.context.tenant import strict_tenant_filter
-
-        with strict_tenant_filter():
+        with tenant_execution_scope(tenant_id), strict_tenant_filter():
             return await cls.get_tenant_resource_count(tenant_id, resource_type)
 
     @classmethod
@@ -1018,11 +780,23 @@ def require_quota(resource_type: str):
         async def wrapper(*args, **kwargs):
             login_user = kwargs.get("login_user")
             if login_user:
+                delta = 1
+                if resource_type == QuotaResourceType.TOOL:
+                    payload = kwargs.get("req")
+                    children = payload.get("children") if isinstance(payload, dict) else None
+                    if isinstance(children, list):
+                        delta = max(len(children), 1)  # Keep the existing empty-category precheck.
+                if resource_type == QuotaResourceType.KNOWLEDGE_SPACE_FILE:
+                    size = getattr(kwargs.get("file"), "size", None)
+                    if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+                        raise QuotaUsageUnavailableError(usage_state="UNAVAILABLE")
+                    delta = size / (1024**3)
                 await QuotaService.check_quota(
                     user_id=login_user.user_id,
                     resource_type=resource_type,
                     tenant_id=login_user.tenant_id,
                     login_user=login_user,
+                    delta=delta,
                 )
             if asyncio.iscoroutinefunction(func):
                 return await func(*args, **kwargs)

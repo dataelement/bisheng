@@ -13,6 +13,7 @@ from runtime_manager.container_runner import OP_LABEL, PHASE_LABEL, ExecutionErr
 from runtime_manager.docker_backend import get_docker_backend
 from runtime_manager.executors.docker import DockerExecutor
 from runtime_manager.executors.protocol import ExecutorError
+from runtime_manager.k8s_client import KubernetesAPIError
 from runtime_manager.platform_client import PlatformClient, PlatformError
 
 logger = logging.getLogger(__name__)
@@ -538,7 +539,8 @@ class OperationExecutor:
         if unknown_build and current["status"] in TERMINAL:
             return
         tail = getattr(exc, "tail", "")
-        if not tail and current["status"] not in TERMINAL and hasattr(self.runtime, "diagnostics"):
+        quota = exc.quota if isinstance(exc, KubernetesAPIError) and str(exc) == "k8s_quota_exceeded" else {}
+        if not quota and not tail and current["status"] not in TERMINAL and hasattr(self.runtime, "diagnostics"):
             try:
                 tail = self.runtime.diagnostics(operation)
             except Exception as diagnostic_error:
@@ -554,11 +556,19 @@ class OperationExecutor:
             stopped = complete
         except Exception as cleanup_error:
             logger.error("operation cleanup pending: %s (%s)", operation["operation_id"], type(cleanup_error).__name__)
+        resource_text = f"{exc}\n{tail}".lower()
+        disk_full = getattr(exc, "errno", None) == 28 or "no space left on device" in resource_text
         reason = (
             "legacy_build_stop_unconfirmed"
             if unknown_build
             else (
-                str(exc) if isinstance(exc, (ExecutionError, ExecutorError, BundleInputError)) else "execution_failed"
+                "disk_full"
+                if disk_full
+                else (
+                    str(exc)
+                    if isinstance(exc, (ExecutionError, ExecutorError, BundleInputError, KubernetesAPIError))
+                    else "execution_failed"
+                )
             )
         )
         phase = (
@@ -576,6 +586,7 @@ class OperationExecutor:
 
         failure = {
             **image_failure_context(exc),
+            **({"quota": quota} if quota else {}),
             "reason": reason,
             "diagnostic_tail": self._safe_diagnostic(operation, tail),
             "failed_stage": current["stage"],
@@ -598,6 +609,7 @@ class OperationExecutor:
                     "data_may_have_changed",
                     "image_role",
                     "image_ref",
+                    "quota",
                 }
             }
         try:
@@ -623,7 +635,8 @@ class OperationExecutor:
         else:
             capabilities = self.runtime.capabilities()
             probe = self.runtime.probe_report()
-        probe["ready"] = probe.get("ready") is True and capabilities.get("orchestration_available") is True
+        if not capabilities.get("configuration"):
+            probe["ready"] = probe.get("ready") is True and capabilities.get("orchestration_available") is True
         self.platform.heartbeat(
             {
                 "engine_id": descriptor.cluster_id + "/" + descriptor.namespace,

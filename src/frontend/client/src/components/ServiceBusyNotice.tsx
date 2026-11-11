@@ -8,8 +8,9 @@
  * by the Linsight task-mode failure card and the daily-mode chat error bubble so
  * both surfaces read identically.
  */
+import { FailureInfoDetails } from '~/components/FailureInfoDetails';
+import { parseFailureInfo } from '~/utils/failureInfo';
 import { Outlined } from 'bisheng-icons';
-import { useState } from 'react';
 import { useLocalize } from '~/hooks';
 import { Button } from '~/components/ui/Button';
 import { cn } from '~/utils';
@@ -64,6 +65,7 @@ function BusyGaugeIcon({ size = 16, className }: { size?: number; className?: st
 }
 
 interface ServiceBusyNoticeProps {
+    failureInfo?: unknown;
     /** localized one-line description, e.g. "当前使用人数较多，请稍后再试。" */
     desc?: string;
     /** optional localized title, e.g. "模型服务繁忙" (task mode shows it; daily chat omits it) */
@@ -83,14 +85,15 @@ interface ServiceBusyNoticeProps {
 export function ServiceBusyNotice({
     desc,
     title,
-    detail,
+    failureInfo,
     onRetry,
     retrying,
     icon = 'gauge',
     className,
 }: ServiceBusyNoticeProps) {
     const localize = useLocalize();
-    const [showDetail, setShowDetail] = useState(false);
+    const failure = parseFailureInfo(failureInfo);
+    const displayTitle = failure ? localize(`api_errors.failure_${failure.category}`) : title;
 
     // Right-aligned action group. It rides the description's last line when
     // there is no detail disclosure, and the 查看详情 row when there is one —
@@ -134,37 +137,17 @@ export function ServiceBusyNotice({
                     )}
                 </span>
                 <div className="min-w-0 flex-1">
-                    {title && <div className="font-medium text-text-2">{title}</div>}
+                    {displayTitle && <div className="font-medium text-text-2">{displayTitle}</div>}
                     {/* No detail disclosure → the actions share the description's
                         row, bottom-aligned so they read as centered on its LAST
                         line (24px button ≈ the ~23px line box). */}
                     <div className={cn('flex items-end gap-3', title && 'mt-1')}>
-                        <p className="min-w-0 flex-1 leading-relaxed text-text-3">{desc}</p>
-                        {!detail && actions}
+                        <p className="min-w-0 flex-1 leading-relaxed text-text-3">{failure ? undefined : desc}</p>
+                        {actions}
                     </div>
 
-                    {/* With a detail disclosure the actions move down here instead,
-                        vertically centered on the 查看详情 row (toggle left, buttons
-                        right). */}
-                    {detail && (
-                        <div className="mt-2.5 flex items-center justify-between gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowDetail((v) => !v)}
-                                className="inline-flex items-center gap-1 text-body text-gray-400 transition-colors hover:text-gray-600"
-                            >
-                                {localize(showDetail ? 'com_linsight_error_hide_detail' : 'com_linsight_error_view_detail')}
-                                {showDetail ? <Outlined.Down size={14} /> : <Outlined.Right size={14} />}
-                            </button>
-                            {actions}
-                        </div>
-                    )}
+                    <FailureInfoDetails failureInfo={failure} />
 
-                    {detail && showDetail && (
-                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-100 p-2.5 text-xs leading-relaxed text-gray-500">
-                            {detail}
-                        </pre>
-                    )}
                 </div>
             </div>
         </div>

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { SidebarProjects } from './SidebarProjects';
 
@@ -14,6 +14,9 @@ jest.mock('~/hooks/queries/data-provider', () => ({
   useConversationsInfiniteQuery: () => ({ data: { pages: [{ conversations: [] }] } }),
 }));
 jest.mock('./useSidebarProjects', () => ({ useSidebarProjects: () => [mockProject, mockReadonlyProject] }));
+jest.mock('~/hooks/useChatProjects', () => ({ useChatProjectActions: () => ({ mutateAsync: jest.fn() }), useProjectIdentity: () => 'account-a' }));
+jest.mock('./ProjectConversations', () => ({ ProjectConversations: () => null }));
+jest.mock('./ProjectSyncStatus', () => ({ ProjectSyncStatus: () => null }));
 jest.mock('./projectsStore', () => ({
   useMockProjectChats: () => ({}), createMockProject: () => mockProject,
   deleteMockProject: noop, renameMockProject: noop,
@@ -28,9 +31,15 @@ jest.mock('@bisheng/ui', () => ({
   DropdownItem: () => null,
 }));
 
+function Projects({ onStartChat }: { onStartChat: (id: string) => void }) {
+  const [openIds, onOpenIdsChange] = useState<string[]>([]);
+  return <SidebarProjects openIds={openIds} onOpenIdsChange={onOpenIdsChange}
+    onNavigate={noop} onStartChat={onStartChat} />;
+}
+
 it('starts a chat in the selected project and expands it', () => {
   const onStartChat = jest.fn();
-  render(<SidebarProjects onStartChat={onStartChat} />);
+  render(<Projects onStartChat={onStartChat} />);
   expect(screen.getByRole('button', { name: 'Project one' })).toHaveAttribute('aria-expanded', 'false');
 
   fireEvent.click(screen.getByRole('button', { name: 'com_nav_start_new_chat · Project one' }));
@@ -40,6 +49,6 @@ it('starts a chat in the selected project and expands it', () => {
 });
 
 it('offers no new-chat entry on read-only demo projects', () => {
-  render(<SidebarProjects onStartChat={jest.fn()} />);
+  render(<Projects onStartChat={jest.fn()} />);
   expect(screen.queryByRole('button', { name: 'com_nav_start_new_chat · Demo project' })).not.toBeInTheDocument();
 });

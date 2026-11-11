@@ -1,0 +1,97 @@
+# Kubernetes 运行时产品问题清单
+
+日期：2026-11-05。核查基线：`feat/3.1.0-beta1@0639aa623f`。
+分支：`codex/3.1.0-beta1/runtime-deployment-bugfixes`。
+
+2026-11-06 更新：修复分支已同步发布线 `f20c9cd21c`，R1–R4、R6、R9、R10 已提交 `541036331d`；随后按用户确认在同一分支继续修复 R5、R7、R8。仅交付代码和配套分发产物，不构建或更新镜像、不部署线上。122 的历史对象运维处置与产品缺陷关闭分别记录。
+
+## 待修复清单
+
+| 编号 | 问题 | 范围与修复目标 | 状态 |
+|---|---|---|---|
+| R1 | 空 initContainers 与 API omitempty 不一致 | 生成端不输出空字段；Admission 对旧空字段仅做窄兼容，非空模板保持严格校验 | 代码已修复 |
+| R2 | image-check 不在日志容器白名单 | 允许固定容器名，保留路径、大小、时间范围约束 | 代码已修复 |
+| R3 | Kubernetes 配额拒绝丢失主因，误报依赖构建失败 | 受限提取原生/KubeSphere quota 原因与资源数字，Manager/Backend/CLI 分类及提示一致；普通403不得误判配额不足 | 代码已修复 |
+| R4 | API Key expires_at 丢时区后立即过期 | aware 输入转换为现有本地 naive 时间合同；保留 naive 输入和历史数据语义，不迁移历史记录 | 代码已修复 |
+| R5 | 预检 canary 漏传私有镜像拉取凭据 | 执行/控制域分别引用已有 Secret；descriptor传递既有execution/services配置，不读取/创建/复制密码 | 代码已修复 |
+| R6 | 预检异常停止、回收与恢复闭环不完整 | 停止证明、停止授权、逐对象汇总、控制域删除确认及未知 writer 的冻结卷引用保护；Unknown 维护恢复见 runbook | 代码已修复；异常维护流程已补 |
+| R7 | 冷镜像检查消耗 listener 的有限生命周期 | 镜像CRI优先，消费者检查前建立独立600秒listener，旧资源仍按UID回收，不延长期限 | 代码已修复 |
+| R8 | 网络正对照来源和瞬断处理不准确 | other-app前后用已有控制域runtime-manager身份；DNS仅正对照固定有界重试；负例不放宽 | 代码已修复 |
+| R9 | 移除配置文件自动预置管理员 | 删除启动建号逻辑与 Settings.admin；旧 YAML 忽略并固定告警；保留首次正常注册授超管 | 代码已修复 |
+| R10 | Docker 不同 cgroup 统计口径导致预算过低 | 有 limit 按承诺额度；无限制按 total_inactive_file / inactive_file / cache 存在性择一扣除；非法 usage 报采集失败 | 代码已修复 |
+
+配额数值、节点和存储等属于部署参数；资源/期限参数化及完整 Helm 产品化另按方案安排。自动排队、动态配额查询与自动调整额度不是这次缺陷修复的默认前提。
+
+本轮源码与配套分发产物、组合回归及既有失败对比见[2026-11-06代码修复验收](runtime-deployment-fixes-20261106.md)。代码修复完成不代表生产镜像已经更新。
+
+## R5、R7、R8：职责、流程与影响
+
+R5：创建私有镜像拉取 Secret、选择 namespace 并配置 `execution.pullSecret` / `services.pullSecret` 属于部署运维；动态创建 Pod 时引用既有 Secret 是工具职责。原 `PodPlan` 已支持 `pull_secret`，预检 `_pod` / `_control_probe` 漏传引用，运维配置正确后仍可能让未缓存私有镜像的节点拉取失败。本次通过 descriptor 的 `pull_secret` / `control_pull_secret` 分别传递两域配置，只带入 `imagePullSecrets` 名称引用，不读取或复制 Secret。
+
+R7原流程：先创建共享 idle listener（8080/8092，600秒），再启动并校验运行/准备镜像。冷节点下载可能耗尽listener寿命，后续网络检查对过期地址误失败，影响ready/新发布。修复后先以短命helper和每个profile取得真实CRI证据，各消费者在检查前创建独立listener；保持600秒、独立UID和R6回收记录，不跳过CRI、不续期旧Pod。失败仍明确报告，不直接重启业务Pod。
+
+R8原流程：网络拒绝测试前后的正对照从installer发起；other-app只允许特定控制域身份进入，正确隔离可能被误报。DNS又是单次UDP正对照，瞬时丢包便失败。修复后other-app前后均通过控制域NotReady的runtime-manager身份helper实测，核对Service隔离、同UID及结果目标名；DNS每轮最多3次、间隔0.2秒，只有恰好匹配目标且布尔成功才确认，参数错误不重试。应用Pod的拒绝测试仍单次，任何实际DNS响应仍判隔离失败；前置失败不开始负例，后置失败不能返回成功，不修改NetworkPolicy/RBAC。
+
+## R10：Docker 内存口径
+
+仅在未配置正的容器内存上限时，按字段是否存在依次选择 `total_inactive_file`（cgroup v1）、`inactive_file`（v2）、`cache`（旧 Docker）。零缓存有效；首个存在字段异常时保守使用总 usage，不改用其它缓存字段；不扣除全部 file。usage 缺失、负数、布尔值或非整数均使采集失败，不能发布零占用/伪造预算。字段口径参考 [Docker 官方统计说明](https://docs.docker.com/reference/cli/docker/container/stats/)。
+
+已配置内存上限继续按承诺额度计入，原80%预算比例、2048MiB预留、向上取整及平台资源预约保持。用户所述约2.7GiB是原生产快照的预期重算值，本轮没有重新采集生产或更新镜像，不将该估值当作实时上线验收结果。
+
+## R6：历史预检残留的归因
+
+### 现场对象
+
+| Pod | UID |
+|---|---|
+| preflight-066b70ef211142f69eca | 0c7b4553-aab7-4fdd-a0f5-3839686a9795 |
+| preflight-981c64a1625445cabf11 | 01747234-fcb5-40dd-b801-7a0b811c8f9e |
+| preflight-9d47932ff2ea48d1a64d | 4fd66c58-bd7f-4afa-a40f-92e10ac7dd73 |
+
+三者创建于 2026-11-04 18:30–18:36（台北时间），位于124节点；最终 Pod.phase=Failed、reason=DeadlineExceeded，data-layout 为 ContainerStatusUnknown，无可信 containerID/起止时间，均无 PVC/hostPath。PodSpec 均未携带 imagePullSecrets。现存历史 Events 已不足以逐一证明最初的拉取错误，不能把 Unknown 或占位 exit137 直接认作 OOM。
+
+2026-11-05 的节点复核发现：按三个精确 UID 查 Docker，仅剩已退出 pause sandbox；Running=false、PID=0，未发现对应运行中的应用/初始化容器。第三只虽已无 finalizer，kubelet 仍每10秒收到 `admission_kubelet_delete_unconfirmed`，与源码路径一致。
+
+### 分类与代码位置
+
+1. **R5 / 通用工具代码 Bug**：`scripts/verify_k8s_runtime.py::_pod`、`_control_probe` 没有传递相应 pull Secret。私有镜像需认证且未预拉取时可能触发；本次确认凭据引用缺失，但初始逐 Pod 拉取报错未完整保留，不能仅归因于122配置填错。
+2. **R6-a / 通用代码 Bug**：`stop_confirmed` 仅看 Pod 终态与无 running 状态，没有完整拒绝容器级 Unknown/NodeLost/ContainerStatusUnknown，与准入采用的停止证明规则不一致。
+3. **R6-b / 通用代码 Bug**：`_cleanup_one` 发布 stop_state=confirmed 时漏写 stop_confirmed=true，正常停止对象也可能缺少准入所需授权。
+4. **R6-c / 代码健壮性问题**：cleanup/recover_expired 中单个异常对象可中止后续对象回收。应独立汇总失败并回收其它已确认安全的对象，不静默忽略错误；共享卷/未知写入者仍必须阻断回收。
+5. **正确保护，不作为待放宽的Bug**：`k8s_admission.py::_terminal_status` 拒绝 Unknown，`_terminal_delete` 在 finalizer 检查前要求可信停止状态。不能把所有 Unknown 或所有管理员删除普遍放行。
+6. **R6-d / 产品交付的异常恢复能力缺口**：正式交付的预检清理/过期恢复路径，尚不能闭合这类经节点核实停止但 API 仍 Unknown 的旧 canary；需要标准化受精确 UID、维护身份和权限边界限制的恢复流程。正常自动回收与异常维护恢复应分开设计，不能仅删除 finalizer 或写入伪造停止状态。
+7. **122 运维遗留处置**：三个旧 API 对象需要单独安全清理。即使产品工具已补正，新版本也不能将历史 Unknown 自动视为已停止。
+
+上述归因来自2026-11-05现场：当时122自定义工具已修正部分凭据与停止字段，产品仓库尚未同步。2026-11-06的产品修复状态以表格和代码验收记录为准；历史对象清理本身不等于产品缺陷修复。
+
+第三只对象在 `_terminal_status` 的 Unknown 检查即被拒绝；漏写 `stop_confirmed` 不是已证实该对象卡住的直接原因，不能只补该布尔字段就视为完成修复。
+
+### 必需回归
+
+- 执行域/控制域不同 Secret 名的私有镜像预检。
+- Failed + Unknown、缺少 containerID/起止时间，不授权停止或卷复用。
+- 正常终止后发布完整停止授权，同 UID/RV 再解除 finalizer并删除。
+- finalizer 为空的 Unknown 对象，普通 kubelet 删除仍受停止证明保护。
+- 单个未知对象不阻断其它可证明安全对象的清理；整体仍明确返回失败和诊断。
+- 维护恢复严格限制对象 UID、身份、动作与核验时间；拒绝同名替换、业务Pod和业务卷。
+
+## 122 运维处置记录
+
+历史状态（2026-11-05）：**已完成历史对象清理，当时尚未修复产品代码**。最终现场核验时间：2026-11-05 09:27 UTC。2026-11-06代码修复未再次操作该集群。
+
+### 清理边界与方式
+
+- 按上表三个精确 UID，先在124节点复核对应 Docker 进程均已退出（Running=false、PID=0），只剩已退出 sandbox；对象均无 PVC/hostPath。
+- 普通删除受停止证明保护阻断，因此只对资源 Webhook 临时增加维护例外：限定管理员身份、目标 namespace、三个旧 UID、Failed 状态及 UPDATE/DELETE。UPDATE 只允许移除停止 finalizer，保持 spec/status、标签、注解、ownerReferences 不变；status Webhook 与 failurePolicy 未改。
+- 每个变更前校验节点证明时效，并带 UID/resourceVersion 前置条件；执行服务端 dry-run。移除 finalizer 或处理已有删除请求后，三个对象均确认 NotFound，未伪造 Pod 停止状态、未删除节点容器或业务卷。
+- 临时例外已撤销，Webhook 正文与原始备份精确一致。初次尝试遇到 API 拒绝及对象自动消失返回404，均恢复准入配置后再处理；原始错误记录保留。
+
+### 收尾验收
+
+- 三个目标 UID 均已不存在；核心服务配置、原 Pod UID 与重启次数、持久卷与配额未发生本次维护导致的变化；全部原 Helm release 的 revision/status/chart 不变。
+- 原运行中的预览 `task-5afd2067d381c23da78ecceda7fa4a67a48e67c8` 保持同 UID、Running/Ready、重启0次；本次未取消、重试或修改构建任务。
+- 只读查询确认两次现有部署 `1e3bb0cac04b4f0c8db67f765e53d206`、`4c65119bdef7472a8b5c2e7ab5bd461b` 均为 completed/cleanup complete。
+- 比对期间另有两个平台 stop 操作 `cca5cabaef5e45c7bbd312408f452e55`、`c5bdef7f025e4c3c8d0155d06b9514b1` 完成，对应应用服务与任务被正常回收；平台审计存在相应 `app.stop`（operator_id=1、reason=stopped by user）。本次维护没有调用 stop 接口。
+- `bisheng-information` 中两只带 `purpose=temporary-source-browser-probe` 的临时探针也在比对期间消失，原因未在本任务追查；本次未对该 namespace 执行写操作，其余核心服务基线一致。原始差异已保留，不将“所有对象完全未变”作为验收结论。
+
+操作证据保存于122服务器 `/root/bisheng-maintenance-audit/20261105-preflight/`。主要文件：`baseline.json`、`cri-proof.json`、`deleted-pods.json`、`webhook-restored.json`、`verification.json`（首轮原始差异）、`verification-final.json`（复核结果）、`application-verification.json`、`concurrent-stop-audit.json`。维护脚本作为本次审计材料保存，不作为产品启动补丁或标准回收方案。

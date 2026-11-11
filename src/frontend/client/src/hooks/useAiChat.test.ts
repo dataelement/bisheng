@@ -30,10 +30,19 @@ jest.mock('./useKnowledgeSpaceAccess', () => ({
 
 let mockSelectedSkills: Array<{ name: string }> = [];
 const mockOpenedStreams: Array<{ submission: SSESubmission; close: jest.Mock }> = [];
+let mockUseRealProjectTransport = false;
+const mockTransportPayloads: Record<string, unknown>[] = [];
+jest.mock('sse.js', () => ({ SSE: jest.fn().mockImplementation((_url, options) => {
+  mockTransportPayloads.push(JSON.parse(options.payload));
+  return { addEventListener: jest.fn(), stream: jest.fn(), close: jest.fn() };
+}) }));
 
 jest.mock("./useAiChatSSE", () => ({
-  openChatStream: (submission: SSESubmission) => {
-    const close = jest.fn();
+  openChatStream: (submission: SSESubmission, localize: (key: string) => string) => {
+    const handle = mockUseRealProjectTransport
+      ? jest.requireActual('./useAiChatSSE').openChatStream(submission, localize)
+      : { close: jest.fn() };
+    const close = handle.close;
     mockOpenedStreams.push({ submission, close });
     return { close };
   },
@@ -44,7 +53,9 @@ const mockGetSessionName = jest.fn();
 jest.mock("~/api/chatApi", () => ({
   getAgentMessages: (...args: unknown[]) => mockGetAgentMessages(...args),
   getSessionName: (...args: unknown[]) => mockGetSessionName(...args),
+  getSSEUrl: () => '/workstation/chat',
 }));
+jest.mock('~/api/request', () => ({ __esModule: true, default: {}, translateApiErrorMessage: () => '' }));
 
 // Recoil atoms are read-only fixtures here: `~/store` hands out tagged objects
 // and the mocked `useRecoilState` unwraps whatever value each one carries.
@@ -74,9 +85,10 @@ jest.mock("~/hooks/queries/data-provider", () => ({ useGetBsConfig: () => ({ dat
 jest.mock("~/utils/mediaAttachmentUtils", () => ({
   isMediaAttachmentFile: () => false,
 }));
-jest.mock("uuid", () => ({ v4: () => "test-owner" }));
+let mockUUIDSequence = 0;
+jest.mock("uuid", () => ({ v4: () => `test-${++mockUUIDSequence}` }));
 jest.mock("~/hooks/useLinsightManager", () => ({
-  useLinsightManager: () => ({ createLinsight: jest.fn(), updateLinsight: jest.fn() }),
+  useLinsightManager: () => ({ createLinsight: jest.fn(), updateLinsight: jest.fn(), linsightMap: new Map() }),
 }));
 jest.mock("~/api/linsight", () => ({
   startLinsight: jest.fn().mockResolvedValue(undefined),
@@ -97,6 +109,25 @@ jest.mock("@tanstack/react-query", () => ({
 // Imported after the jest.mock calls above on purpose — the hook pulls those
 // modules in at import time.
 import useAiChat from "./useAiChat";
+import { resetDesktopConversationBridge } from "~/components/Chat/desktopConversationBridge";
+
+// The desktop channel is sticky once sampled; tests choose it explicitly.
+let mockDesktopChannel = "web";
+jest.mock("~/utils/clientEnvironment", () => {
+  const actual = jest.requireActual("~/utils/clientEnvironment");
+  // React snapshots must stay stable between reads, so reuse one object per channel.
+  const snapshots = new Map();
+  const getClientEnvironment = () => {
+    const base = actual.getClientEnvironment();
+    const cached = snapshots.get(mockDesktopChannel);
+    if (cached?.base === base) return cached.value;
+    const value = { ...base, channel: mockDesktopChannel };
+    snapshots.set(mockDesktopChannel, { base, value });
+    return value;
+  };
+  return { ...actual, getClientEnvironment };
+});
+import { dataService } from "~/types/chat";
 
 const historyOf = (conversationId: string) => [
   {
@@ -119,6 +150,9 @@ const renderChat = (conversationId: string) =>
 const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 
 beforeEach(() => {
+  mockUUIDSequence = 0;
+  mockUseRealProjectTransport = false;
+  mockTransportPayloads.length = 0;
   mockKnowledgeBlocked = false;
   localStorage.clear();
   mockOpenedStreams.length = 0;
@@ -128,12 +162,146 @@ beforeEach(() => {
   mockGetSessionName.mockResolvedValue("");
 });
 
+describe('project draft through the real SSE serializer', () => {
+  const firstProject = '11111111-1111-4111-8111-111111111111';
+  const otherProject = '22222222-2222-4222-8222-222222222222';
+  it.each([false, true])('keeps the project selected before an asynchronous lease, task mode=%s', async taskMode => {
+    mockUseRealProjectTransport = true;
+    window.history.replaceState({ key: 'project-origin' }, '', `/workspace/c/new?projectId=${firstProject}`);
+    let grant: (value: { leaseId: string; blocked: boolean }) => void = () => {};
+    const lease = new Promise<{ leaseId: string; blocked: boolean }>(resolve => { grant = resolve; });
+    const { result } = renderHook(() => useAiChat('new', false, '', 'chat', () => lease));
+    let sending: Promise<boolean> | undefined;
+    act(() => { sending = result.current.sendMessage('From the first project', undefined, { taskMode }); });
+    window.history.replaceState({ key: 'another-project' }, '', `/workspace/c/new?projectId=${otherProject}`);
+    await act(async () => { grant({ leaseId: 'lease-one', blocked: false }); await sending; });
+    expect(mockTransportPayloads[0]).toMatchObject({ project_id: firstProject, task_mode: taskMode });
+  });
+
+  it('does not adopt a later project when an ordinary draft waits for its lease', async () => {
+    mockUseRealProjectTransport = true;
+    window.history.replaceState({ key: 'ordinary-origin' }, '', '/workspace/c/new');
+    let grant: (value: { leaseId: string; blocked: boolean }) => void = () => {};
+    const lease = new Promise<{ leaseId: string; blocked: boolean }>(resolve => { grant = resolve; });
+    const { result } = renderHook(() => useAiChat('new', false, '', 'chat', () => lease));
+    let sending: Promise<boolean> | undefined;
+    act(() => { sending = result.current.sendMessage('Ordinary question'); });
+    window.history.replaceState({ key: 'later-project' }, '', `/workspace/c/new?projectId=${otherProject}`);
+    await act(async () => { grant({ leaseId: 'lease-two', blocked: false }); await sending; });
+    expect(mockTransportPayloads[0].project_id).toBeUndefined();
+  });
+
+  it.each([false, true])('keeps the project on a same-draft retry, task mode=%s', async taskMode => {
+    mockUseRealProjectTransport = true;
+    window.history.replaceState({ key: 'draft-retry', usr: { newChatKey: 'same-intent' } }, '', `/workspace/c/new?projectId=${firstProject}`);
+    const { result } = renderHook(() => useAiChat('new'));
+    await act(async () => { await result.current.sendMessage('Retry this question', undefined, { taskMode }); });
+    act(() => { latestStream().submission.onError('response lost'); latestStream().submission.onEnd(); });
+    await act(async () => { await result.current.sendMessage('Retry this question', undefined, { taskMode }); });
+    expect(mockTransportPayloads[0].messageId).not.toBe(mockTransportPayloads[1].messageId);
+    expect(mockTransportPayloads[1].project_id).toBe(firstProject);
+  });
+});
+
+describe('new draft identity', () => {
+  const firstProject = '11111111-1111-4111-8111-111111111111';
+  const otherProject = '22222222-2222-4222-8222-222222222222';
+  const draft = () => renderHook(({ cid, key }: { cid: string; key: string }) => useAiChat(cid, false, '', 'chat', undefined, key), {
+    initialProps: { cid: 'new', key: 'first-project-draft' },
+  });
+  it.each([
+    ['same project', firstProject], ['another project', otherProject], ['ordinary draft', ''],
+  ])('starts an empty draft after a failed unsaved turn when opening %s', async (_label, project) => {
+    window.history.replaceState({}, '', `/workspace/c/new?projectId=${firstProject}`);
+    const { result, rerender } = draft();
+    await act(async () => { await result.current.sendMessage('Failed earlier question'); });
+    const old = latestStream();
+    act(() => { old.submission.onError('failed'); old.submission.onEnd(); });
+    expect(result.current.messages).toHaveLength(2);
+    window.history.replaceState({}, '', `/workspace/c/new${project ? '?projectId=' + project : ''}`);
+    rerender({ cid: 'new', key: 'fresh-explicit-draft' });
+    expect(result.current.conversationId).toBe('new');
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.isStreaming).toBe(false);
+    expect(old.close).not.toHaveBeenCalled();
+  });
+
+  it('keeps late created/answer callbacks in the original draft without cancelling generation', async () => {
+    window.history.replaceState({}, '', `/workspace/c/new?projectId=${firstProject}`);
+    const { result, rerender } = draft();
+    await act(async () => { await result.current.sendMessage('First project question'); });
+    const old = latestStream();
+    window.history.replaceState({}, '', `/workspace/c/new?projectId=${otherProject}`);
+    rerender({ cid: 'new', key: 'second-project-draft' });
+    await act(async () => { await result.current.sendMessage('Second project question'); });
+    const current = latestStream();
+    act(() => {
+      old.submission.onCreated('first-real-chat', { ...old.submission.userMessage, conversationId: 'first-real-chat' });
+      old.submission.onAgentUpdate?.({ text: 'Answer for first project' });
+    });
+    expect(result.current.conversationId).toBe('new');
+    expect(result.current.messages[0].text).toBe('Second project question');
+    act(() => current.submission.onCreated('second-real-chat', { ...current.submission.userMessage, conversationId: 'second-real-chat' }));
+    expect(result.current.conversationId).toBe('second-real-chat');
+    expect(result.current.messages[0].text).toBe('Second project question');
+    expect(old.close).not.toHaveBeenCalled();
+    await act(async () => { old.submission.onFinal({ final: true }); });
+    expect(dataService.genTitle).toHaveBeenLastCalledWith({ conversationId: 'first-real-chat' });
+    rerender({ cid: 'first-real-chat', key: 'first-real-route' });
+    expect(result.current.messages[0].text).toBe('First project question');
+    expect(result.current.messages[1].text).toBe('Answer for first project');
+  });
+
+  it('resets a promoted unsaved route on a same-URL explicit new-chat action', async () => {
+    const { result, rerender } = draft();
+    await act(async () => { await result.current.sendMessage('Earlier question'); });
+    const old = latestStream();
+    act(() => old.submission.onCreated('created-before-url-rewrite', { ...old.submission.userMessage, conversationId: 'created-before-url-rewrite' }));
+    expect(result.current.conversationId).toBe('created-before-url-rewrite');
+    rerender({ cid: 'new', key: 'new-click-before-rewrite' });
+    expect(result.current.conversationId).toBe('new');
+    expect(result.current.messages).toEqual([]);
+    expect(old.close).not.toHaveBeenCalled();
+  });
+
+  it('keeps a lease-delayed send from copying another draft’s messages', async () => {
+    window.history.replaceState({}, '', `/workspace/c/new?projectId=${firstProject}`);
+    let grant: (value: { leaseId: string; blocked: boolean }) => void = () => {};
+    const pending = new Promise<{ leaseId: string; blocked: boolean }>(resolve => { grant = resolve; });
+    const getLease = jest.fn().mockReturnValueOnce(pending).mockResolvedValue({ leaseId: 'immediate', blocked: false });
+    const { result, rerender } = renderHook(({ key }) => useAiChat('new', false, '', 'chat', getLease, key), { initialProps: { key: 'first-draft' } });
+    act(() => result.current.setSelectedOrgKbs([{ id: '101', name: 'A', type: 'space' }]));
+    let sending: Promise<boolean> | undefined;
+    act(() => { sending = result.current.sendMessage('First question waits'); });
+    window.history.replaceState({}, '', `/workspace/c/new?projectId=${otherProject}`);
+    rerender({ key: 'other-draft' });
+    act(() => result.current.setSelectedOrgKbs([{ id: '202', name: 'B', type: 'space' }]));
+    await act(async () => { await result.current.sendMessage('Other draft question'); });
+    await act(async () => { grant({ leaseId: 'delayed', blocked: false }); await sending; });
+    const first = latestStream();
+    expect(result.current.selectedOrgKbs).toEqual([{ id: '202', name: 'B', type: 'space' }]);
+    expect(first.submission.payload.use_knowledge_base.knowledge_space_ids).toEqual([101]);
+    act(() => first.submission.onCreated('first-real-chat', { ...first.submission.userMessage, conversationId: 'first-real-chat' }));
+    expect(result.current.messages[0].text).toBe('Other draft question');
+    expect(first.submission.payload.parentMessageId).toBe('00000000-0000-0000-0000-000000000000');
+  });
+
+  it('discards an ended abandoned draft instead of retaining every old unsaved bucket', async () => {
+    const { result, rerender } = draft();
+    await act(async () => { await result.current.sendMessage('Ended draft'); });
+    act(() => { latestStream().submission.onError('failed'); latestStream().submission.onEnd(); });
+    rerender({ cid: 'new', key: 'next-draft' });
+    rerender({ cid: 'new', key: 'first-project-draft' });
+    expect(result.current.messages).toEqual([]);
+  });
+});
+
 describe("useAiChat conversation switching", () => {
   it("keeps a turn streaming into its own conversation while another is on screen", async () => {
     const { result, rerender } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("hello"));
+    await act(async () => { await result.current.sendMessage("hello"); });
     expect(mockOpenedStreams).toHaveLength(1);
     const turn = latestStream();
 
@@ -183,7 +351,7 @@ describe("useAiChat conversation switching", () => {
     const { result, rerender } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("with a video", [{ name: "clip.mp4", filepath: "p" }]));
+    await act(async () => { await result.current.sendMessage("with a video", [{ name: "clip.mp4", filepath: "p" }]); });
     const before = jest.getTimerCount?.() ?? 0;
 
     rerender({ cid: "c2" });
@@ -199,7 +367,7 @@ describe("useAiChat conversation switching", () => {
     const { result, rerender } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("with a video", [{ name: "clip.mp4", filepath: "p" }]));
+    await act(async () => { await result.current.sendMessage("with a video", [{ name: "clip.mp4", filepath: "p" }]); });
 
     rerender({ cid: "c2" });
     await waitFor(() => expect(result.current.messages[0].text).toBe("c2 history"));
@@ -213,7 +381,7 @@ describe("useAiChat conversation switching", () => {
     const { result, rerender } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("hello"));
+    await act(async () => { await result.current.sendMessage("hello"); });
     act(() => {
       latestStream().submission.onStart();
       latestStream().submission.onAgentUpdate?.({ text: "streaming" });
@@ -235,7 +403,7 @@ describe("useAiChat conversation switching", () => {
     const { result, rerender } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("hello"));
+    await act(async () => { await result.current.sendMessage("hello"); });
     const turn = latestStream();
     act(() => turn.submission.onStart());
 
@@ -257,7 +425,7 @@ describe("useAiChat conversation switching", () => {
     const { result, unmount } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
 
-    act(() => result.current.sendMessage("hello"));
+    await act(async () => { await result.current.sendMessage("hello"); });
     const turn = latestStream();
     act(() => turn.submission.onStart());
 
@@ -287,7 +455,7 @@ describe("useAiChat adopts a new conversation id", () => {
   it("keeps the turn on screen when the task handoff binds a real chat id", async () => {
     const { result } = renderChat("new");
 
-    act(() => result.current.sendMessage("write me a report", null, { taskMode: true }));
+    await act(async () => { await result.current.sendMessage("write me a report", null, { taskMode: true }); });
     const turn = latestStream();
     act(() => {
       turn.submission.onStart();
@@ -305,7 +473,7 @@ describe("useAiChat adopts a new conversation id", () => {
   it("does not blank a new chat when the reply finishes in the same tick the id is minted", async () => {
     const { result } = renderChat("new");
 
-    act(() => result.current.sendMessage("blocked keyword"));
+    await act(async () => { await result.current.sendMessage("blocked keyword"); });
     const turn = latestStream();
     mockGetAgentMessages.mockClear();
 
@@ -341,7 +509,7 @@ describe("useAiChat adopts a new conversation id", () => {
   it("leaves nothing behind under the id the turn started with", async () => {
     const { result, rerender } = renderChat("new");
 
-    act(() => result.current.sendMessage("write me a report", null, { taskMode: true }));
+    await act(async () => { await result.current.sendMessage("write me a report", null, { taskMode: true }); });
     const turn = latestStream();
     act(() => {
       turn.submission.onStart();
@@ -395,7 +563,7 @@ describe("task mode owns skill execution", () => {
     mockSelectedSkills = [{ name: "writing" }];
     const { result } = renderChat("c1");
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
-    act(() => result.current.sendMessage("Use this skill", null, { taskMode }));
+    await act(async () => { await result.current.sendMessage("Use this skill", null, { taskMode }); });
     expect(latestStream().submission.payload).toMatchObject({
       task_mode: taskMode,
       skills: taskMode ? ["writing"] : [],
@@ -407,8 +575,8 @@ test("an incomplete upload rejects submission before starting a stream", async (
   const { result } = renderChat("c1");
   await waitFor(() => expect(result.current.messages).toHaveLength(1));
   let accepted;
-  act(() => {
-    accepted = result.current.sendMessage("Use this file", [{ name: "draft.txt", valid: false }], {
+  await act(async () => {
+    accepted = await result.current.sendMessage("Use this file", [{ name: "draft.txt", valid: false }], {
       taskMode: true,
     });
   });
@@ -440,12 +608,12 @@ describe("conversation knowledge isolation", () => {
     const reopened = renderChat("c1");
     await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
     expect(reopened.result.current.selectedOrgKbs).toEqual(k1);
-    act(() => reopened.result.current.sendMessage("search C1"));
+    await act(async () => { await reopened.result.current.sendMessage("search C1"); });
     expect(scope()).toMatchObject({ knowledge_space_ids: [101], organization_knowledge_ids: [] });
     reopened.rerender({ cid: "c2" });
     await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
     expect(reopened.result.current.selectedOrgKbs).toEqual(k2);
-    act(() => reopened.result.current.sendMessage("search C2"));
+    await act(async () => { await reopened.result.current.sendMessage("search C2"); });
     expect(scope()).toMatchObject({ knowledge_space_ids: [202] });
   });
 
@@ -487,7 +655,7 @@ describe("conversation knowledge isolation", () => {
     act(() => chat.result.current.setSelectedOrgKbs(k2));
     chat.rerender({ cid: "c1" });
     await waitFor(() => expect(chat.result.current.messages[0]?.messageId).toBe("c1-q"));
-    act(() => chat.result.current.regenerate("c1-q"));
+    await act(async () => { await chat.result.current.regenerate("c1-q"); });
     expect(scope()).toMatchObject({ knowledge_space_ids: [101] });
     act(() => {
       latestStream().submission.onEnd();
@@ -497,14 +665,14 @@ describe("conversation knowledge isolation", () => {
     const reopened = renderChat("c1");
     await waitFor(() => expect(reopened.result.current.isLoading).toBe(false));
     expect(reopened.result.current.selectedOrgKbs).toEqual([]);
-    act(() => reopened.result.current.sendMessage("empty selection"));
+    await act(async () => { await reopened.result.current.sendMessage("empty selection"); });
     expect(scope()).toMatchObject({ knowledge_space_ids: [], organization_knowledge_ids: [] });
   });
 
   it("carries the first turn scope into its server id while C2 stays selected", async () => {
     const chat = renderChat("new");
     act(() => chat.result.current.setSelectedOrgKbs(k1));
-    act(() => chat.result.current.sendMessage("first turn"));
+    await act(async () => { await chat.result.current.sendMessage("first turn"); });
     const first = latestStream();
     chat.rerender({ cid: "c2" });
     await waitFor(() => expect(chat.result.current.isLoading).toBe(false));
@@ -579,7 +747,7 @@ describe("knowledge-space asks across cached conversations", () => {
   });
 });
 
-test("knowledge handoff submits the chosen model ID and space in the real chat payload", () => {
+test("knowledge handoff submits the chosen model ID and space in the real chat payload", async () => {
   const modelAtom = store.chatModel as unknown as { __testValue: { id: number; name: string } };
   const initialModel = modelAtom.__testValue;
   parkChatAsk({ text: "Count entries", modelId: 2, space: { id: "28", name: "Knowledge" } });
@@ -604,7 +772,7 @@ test("knowledge handoff submits the chosen model ID and space in the real chat p
         onModelUnavailable: jest.fn(),
       });
     });
-    expect(mockOpenedStreams).toHaveLength(1);
+    await waitFor(() => expect(mockOpenedStreams).toHaveLength(1));
     expect(latestStream().submission.payload).toEqual(
       expect.objectContaining({
         text: "Count entries",
@@ -628,10 +796,10 @@ test('preserves a space tag across send, regeneration and conversation reload', 
   const { result, unmount } = renderChat('c1');
   await waitFor(() => expect(result.current.messages).toHaveLength(1));
   act(() => result.current.setSelectedOrgKbs(tagged));
-  act(() => result.current.sendMessage('tagged question'));
+  await act(async () => { await result.current.sendMessage('tagged question'); });
   expect(latestStream().submission.payload.use_knowledge_base.knowledge_space_tag_filters).toEqual({ '12': 7 });
   act(() => latestStream().submission.onEnd());
-  act(() => result.current.regenerate(result.current.messages[result.current.messages.length - 1].messageId));
+  await act(async () => { await result.current.regenerate(result.current.messages[result.current.messages.length - 1].messageId); });
   expect(latestStream().submission.payload.use_knowledge_base.knowledge_space_tag_filters).toEqual({ '12': 7 });
   act(() => latestStream().submission.onEnd());
   unmount();
@@ -645,7 +813,7 @@ test('rejects task-mode tag filtering without clearing the draft', async () => {
   const { result } = renderChat('c1');
   await waitFor(() => expect(result.current.messages).toHaveLength(1));
   act(() => result.current.setSelectedOrgKbs(tagged));
-  act(() => expect(result.current.sendMessage('question', [], { taskMode: true })).toBe(false));
+  await act(async () => { expect(await result.current.sendMessage('question', [], { taskMode: true })).toBe(false); });
   expect(mockOpenedStreams).toHaveLength(0);
   expect(result.current.selectedOrgKbs).toEqual(tagged);
 });
@@ -654,7 +822,7 @@ test('blocks image sends at the shared entry when neither vision nor image parsi
   mockBsConfig = { models: [{ id: 1, visual: false }], enable_etl4lm: false };
   const { result } = renderChat('c1');
   await waitFor(() => expect(result.current.messages).toHaveLength(1));
-  act(() => expect(result.current.sendMessage('Describe', [{ name: 'image.png', filepath: 'image.png' }])).toBe(false));
+  await act(async () => { expect(await result.current.sendMessage('Describe', [{ name: 'image.png', filepath: 'image.png' }])).toBe(false); });
   expect(mockOpenedStreams).toHaveLength(0);
   expect(result.current.messages).toHaveLength(1);
 });
@@ -664,7 +832,7 @@ test('does not regenerate an image turn with a model that has lost image support
   mockGetAgentMessages.mockResolvedValue([{ ...historyOf('c1')[0], files: [{ name: 'image.png', filepath: 'image.png' }] }]);
   const { result } = renderChat('c1');
   await waitFor(() => expect(result.current.messages).toHaveLength(1));
-  act(() => result.current.regenerate('c1-q'));
+  await act(async () => { await result.current.regenerate('c1-q'); });
   expect(mockOpenedStreams).toHaveLength(0);
   expect(result.current.messages).toHaveLength(1);
 });
@@ -676,10 +844,67 @@ describe('revoked knowledge scope submission gate', () => {
         const { result } = renderChat('retained');
         await waitFor(() => expect(result.current.messages.length).toBeGreaterThan(0));
         const originalMessages = result.current.messages;
-        act(() => expect(result.current.sendMessage('D6-W')).toBe(false));
-        act(() => result.current.regenerate('retained-q'));
+        await act(async () => { expect(await result.current.sendMessage('D6-W')).toBe(false); });
+        await act(async () => { await result.current.regenerate('retained-q'); });
         expect(mockOpenedStreams).toHaveLength(0);
         expect(result.current.messages).toEqual(originalMessages);
         expect(result.current.knowledgeAccessMessage).toBe('knowledgeAccess.revoked');
     });
+});
+
+
+describe("desktop host conversation sync", () => {
+  let renamed: ((conversationId: string) => void) | undefined;
+  const reportRunning = jest.fn();
+  beforeEach(() => {
+    resetDesktopConversationBridge();
+    reportRunning.mockClear();
+    mockDesktopChannel = "desktop";
+    window.dshChatPresentation = {
+      reportLanding: jest.fn(),
+      reportRunning,
+      onConversationRenamed: (listener) => { renamed = listener; return () => { renamed = undefined; }; },
+    };
+  });
+  afterEach(() => {
+    delete window.dshChatPresentation;
+    mockDesktopChannel = "web";
+  });
+
+  it("reports an answer as running while it streams, including after switching away", async () => {
+    const { result, rerender } = renderChat("c1");
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    // Sending awaits the department lease before the stream opens.
+    await act(async () => { await result.current.sendMessage("hello"); });
+    const turn = latestStream();
+    act(() => turn.submission.onStart());
+    expect(reportRunning).toHaveBeenLastCalledWith(["c1"]);
+    rerender({ cid: "c2" });
+    await waitFor(() => expect(result.current.messages[0].text).toBe("c2 history"));
+    expect(reportRunning).toHaveBeenLastCalledWith(["c1"]);
+    act(() => {
+      turn.submission.onFinal({ final: true });
+      turn.submission.onEnd();
+    });
+    expect(reportRunning).toHaveBeenLastCalledWith([]);
+  });
+
+  it("rereads the open conversation's name after the host renames it", async () => {
+    mockGetSessionName.mockResolvedValue("Quarterly review");
+    const { result } = renderChat("c1");
+    await waitFor(() => expect(result.current.title).toBe("Quarterly review"));
+    mockGetSessionName.mockResolvedValue("Annual review");
+    act(() => renamed?.("c1"));
+    await waitFor(() => expect(result.current.title).toBe("Annual review"));
+    expect(mockGetSessionName).toHaveBeenLastCalledWith("c1");
+  });
+
+  it("keeps the current name when the reread fails", async () => {
+    mockGetSessionName.mockResolvedValue("Quarterly review");
+    const { result } = renderChat("c1");
+    await waitFor(() => expect(result.current.title).toBe("Quarterly review"));
+    mockGetSessionName.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => { renamed?.("c1"); });
+    expect(result.current.title).toBe("Quarterly review");
+  });
 });

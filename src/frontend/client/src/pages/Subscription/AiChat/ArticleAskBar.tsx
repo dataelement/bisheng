@@ -9,6 +9,7 @@
  *
  * Parent contract is the dock's: render inside a `position: relative` container; the bar
  * is `absolute inset-x-0 bottom-0` and overlays the bottom of the article.
+ * ChannelLayout's desktop frame keeps it in normal flow to reserve its actual height.
  */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -17,6 +18,7 @@ import { parkChatAsk } from "~/components/Chat/chatAskHandoff";
 import { useLocalize, useNewConvo } from "~/hooks";
 import { buildArticleAskFile } from "./articleAskFile";
 import { DockInput, type ModelSelectProps } from "./ArticleDockInput";
+import desktopLayout from "../ChannelLayout.module.css";
 
 interface ArticleAskBarProps {
     article: Article;
@@ -46,7 +48,7 @@ export function ArticleAskBar({ article, model }: ArticleAskBarProps) {
     };
 
     return (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col bg-gradient-to-b from-white/0 to-white px-4 pb-4 pt-10">
+        <div className={`${desktopLayout.dock} pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col bg-gradient-to-b from-white/0 to-white px-4 pb-4 pt-10`}>
             <div className="pointer-events-auto mx-auto w-full max-w-[800px]">
                 <DockInput
                     value={inputText}

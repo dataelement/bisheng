@@ -15,13 +15,41 @@ import type {
   AuditGroupPage,
   AuditQueryReadiness,
   AuditTreePage,
+  AuditMessageFeedback,
 } from "@/types/dshModelAudit";
 
 const base = "/api/v1/dsh/admin/model-audit";
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
-const nonnegative = (value: unknown) =>
+const nonnegative = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const feedbackCategories = [
+  "task-result",
+  "instruction-following",
+  "product-interaction",
+  "service-stability",
+  "resource-cost",
+  "security-privacy-permission",
+  "other",
+];
+
+function readMessageFeedback(value: unknown): AuditMessageFeedback | undefined {
+  if (
+    !object(value) ||
+    typeof value.message_id !== "string" ||
+    value.message_id.length === 0 ||
+    value.message_id.length > 256
+  )
+    return undefined;
+  const item: AuditMessageFeedback = { message_id: value.message_id };
+  if (value.rating === "positive" || value.rating === "negative") item.rating = value.rating;
+  if (typeof value.category === "string" && feedbackCategories.includes(value.category)) {
+    item.category = value.category;
+  }
+  if (typeof value.note === "string") item.note = value.note;
+  if (nonnegative(value.event_seq)) item.event_seq = value.event_seq;
+  return item;
+}
 
 function validSafetySummary(value: unknown): boolean {
   if (!object(value)) return false;
@@ -283,6 +311,15 @@ export async function getAuditGroupRequests(
     (result.next_cursor !== null && typeof result.next_cursor !== "string")
   )
     throw new Error("Invalid audit group requests");
+  if (result.message_feedback !== undefined) {
+    const feedback = Array.isArray(result.message_feedback)
+      ? result.message_feedback
+      : [];
+    result.message_feedback = feedback
+      .map(readMessageFeedback)
+      .filter((item): item is AuditMessageFeedback => item !== undefined)
+      .slice(0, 100);
+  }
   return result;
 }
 export async function getAuditParent(

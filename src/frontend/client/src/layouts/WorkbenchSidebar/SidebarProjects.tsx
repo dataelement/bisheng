@@ -1,85 +1,68 @@
 import { Dropdown, DropdownItem } from "@bisheng/ui";
 import { Tooltip } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
-import { useMemo, useState } from 'react';
-import Convo from '~/components/Conversations/Convo';
-import { useAuthContext, useLocalize } from '~/hooks';
-import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
-import type { TConversation } from '~/types/chat';
+import { useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import { ProjectNameDialog } from './ProjectNameDialog';
 import { SIDEBAR_ICON_BUTTON_CLASS_NAME as ICON_BUTTON } from './sidebarIconButton';
-import { createMockProject, deleteMockProject, renameMockProject, useMockProjectChats } from './projectsStore';
+import { useChatProjectActions, useProjectIdentity } from '~/hooks/useChatProjects';
+import { ProjectConversations } from './ProjectConversations';
+import { ProjectSyncStatus } from './ProjectSyncStatus';
 import { useSidebarProjects } from './useSidebarProjects';
 
-const noop = () => undefined;
-
-const ROW = 'flex w-full items-center rounded-lg py-[5px] pr-2 text-left text-body text-text-1 transition-colors';
+const ROW = 'flex w-full items-center rounded-lg py-[5px] pr-2 text-left text-body text-text-1 transition-colors coarse-pointer:min-h-11 coarse-pointer:py-0';
 const PROJECT_ACTION_BUTTON = cn(
   ICON_BUTTON,
-  'opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
+  'opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100 group-has-[[data-menu-open]]/project:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
 );
 
 type NameDialogTarget = { mode: 'create' } | { mode: 'rename'; id: string; name: string };
 
 interface SidebarProjectsProps {
-  /** Opens a blank draft whose first conversation is filed into this project. */
+  openIds: string[];
+  onOpenIdsChange: Dispatch<SetStateAction<string[]>>;
+  onNavigate: () => void;
   onStartChat: (projectId: string) => void;
 }
 
-/**
- * 项目 section of the workbench sidebar. MOCK: the backend has no project model yet, so
- * projects — and which conversations were moved into them — live in localStorage
- * (see projectsStore); a conversation filed here leaves the flat 对话 list below.
- */
-export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
+/** Projects and their paged conversations come from the authenticated server. */
+export function SidebarProjects({ openIds, onOpenIdsChange, onNavigate, onStartChat }: SidebarProjectsProps) {
   const localize = useLocalize();
-  const { isAuthenticated } = useAuthContext();
   const projects = useSidebarProjects();
-  const projectChats = useMockProjectChats();
-
-  // Same query (and cache entry) as the 对话 list below: this only reads the pages it
-  // already loaded, so a moved conversation renders from the data that is in hand.
-  const { data } = useConversationsInfiniteQuery(
-    { pageNumber: '1', isArchived: false },
-    { enabled: isAuthenticated },
-  );
-  const conversationsByProject = useMemo(() => {
-    const grouped = new Map<string, TConversation[]>();
-    for (const convo of data?.pages.flatMap((page) => page.conversations) ?? []) {
-      const projectId = convo == null ? undefined : projectChats[convo.conversationId ?? ''];
-      if (projectId == null || convo == null) continue;
-      const list = grouped.get(projectId);
-      if (list) list.push(convo);
-      else grouped.set(projectId, [convo]);
-    }
-    return grouped;
-  }, [data, projectChats]);
-  const [openIds, setOpenIds] = useState<string[]>([]);
+  const actions = useChatProjectActions();
+  const identity = useProjectIdentity();
+  const [dialogIdentity, setDialogIdentity] = useState(identity);
+  const [actionFailed, setActionFailed] = useState(false);
   // The target outlives `open` so the dialog keeps its title while it animates out.
   const [nameDialog, setNameDialog] = useState<NameDialogTarget>({ mode: 'create' });
   const [nameDialogOpen, setNameDialogOpen] = useState(false);
   const openNameDialog = (target: NameDialogTarget) => {
+    setDialogIdentity(identity);
     setNameDialog(target);
     setNameDialogOpen(true);
   };
 
   const handleToggle = (id: string) => {
-    setOpenIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    onOpenIdsChange((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const handleNameSubmit = (name: string) => {
+  const handleNameSubmit = async (name: string, draftProjectId: string) => {
     if (nameDialog.mode === 'rename') {
-      renameMockProject(nameDialog.id, name);
+      await actions.mutateAsync({ operation: { operation: 'rename', project_id: nameDialog.id, name } });
       return;
     }
     // A new project opens at once, so the user sees where its conversations will go.
-    const project = createMockProject(name);
-    setOpenIds((prev) => [...prev, project.id]);
+    const result = await actions.mutateAsync({ operation: { operation: 'create', project_id: draftProjectId, name } });
+    const id = result.outcome.project_id;
+    if (id) onOpenIdsChange((prev) => [...prev, id]);
   };
 
   return (
     <section className="flex w-full shrink-0 flex-col gap-1 pb-4">
+      <ProjectSyncStatus />
+      {actionFailed && <p role="alert" className="px-2 text-caption text-danger">{localize('project_sync.save_failed')}</p>}
       <div className="flex w-full shrink-0 items-center justify-between px-2 py-[5px]">
         <span className="truncate text-caption text-text-3">{localize('com_workbench_sidebar.projects')}</span>
         <Tooltip content={localize('com_workbench_sidebar.project_new')}>
@@ -107,7 +90,6 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
 
       {projects.map((project) => {
         const open = openIds.includes(project.id);
-        const conversations = conversationsByProject.get(project.id) ?? [];
         return (
           <div key={project.id} className="flex w-full flex-col">
             <div className={cn(ROW, 'group/project relative pl-2 hover:bg-fill-1 has-[[data-state=open]]:bg-fill-1', open && 'mb-1')}>
@@ -115,7 +97,7 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
                 type="button"
                 aria-expanded={open}
                 onClick={() => handleToggle(project.id)}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left coarse-pointer:min-h-11"
               >
                 {open ? (
                   <Outlined.FolderOpen className="size-4 shrink-0" />
@@ -136,7 +118,10 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
                         <DropdownItem
                           danger
                           icon={<Outlined.Delete />}
-                          onSelect={() => deleteMockProject(project.id)}
+                          onSelect={() => {
+                            setActionFailed(false);
+                            void actions.mutateAsync({ operation: { operation: 'delete', project_id: project.id } }).catch(() => setActionFailed(true));
+                          }}
                         >{localize('com_ui_delete')}</DropdownItem>
                       </>}>
                         <button
@@ -156,8 +141,9 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
                         aria-label={`${localize('com_nav_start_new_chat')} · ${project.name}`}
                         className={PROJECT_ACTION_BUTTON}
                         onClick={() => {
-                          setOpenIds((prev) => (prev.includes(project.id) ? prev : [...prev, project.id]));
+                          onOpenIdsChange((prev) => prev.includes(project.id) ? prev : [...prev, project.id]);
                           onStartChat(project.id);
+                          onNavigate();
                         }}
                       >
                         <Outlined.MessagePlus className="size-4" />
@@ -169,25 +155,13 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
             </div>
             {open && (
               <>
-                {/* Real rows retain conversation navigation, rename, and menu actions. */}
-                {conversations.map((convo) => (
-                  <div key={convo.conversationId}>
-                    <Convo
-                      compact
-                      className="pl-8"
-                      isLatestConvo={false}
-                      conversation={convo}
-                      retainView={noop}
-                      toggleNav={noop}
-                    />
-                  </div>
-                ))}
+                {!project.readonly && <ProjectConversations projectId={project.id} onNavigate={onNavigate} />}
                 {project.demoChats.map((chat) => (
                   <div key={chat} className={cn(ROW, 'cursor-default pl-8 hover:bg-fill-1')}>
                     <span className="min-w-0 flex-1 truncate">{chat}</span>
                   </div>
                 ))}
-                {conversations.length === 0 && project.demoChats.length === 0 && (
+                {project.readonly && project.demoChats.length === 0 && (
                   <div className="w-full truncate py-[5px] pl-8 pr-2 text-caption text-text-3">
                     {localize('com_workbench_sidebar.project_empty')}
                   </div>
@@ -199,7 +173,7 @@ export function SidebarProjects({ onStartChat }: SidebarProjectsProps) {
       })}
 
       <ProjectNameDialog
-        open={nameDialogOpen}
+        open={nameDialogOpen && dialogIdentity === identity}
         onOpenChange={setNameDialogOpen}
         initialName={nameDialog.mode === 'rename' ? nameDialog.name : undefined}
         onSubmit={handleNameSubmit}

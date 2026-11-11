@@ -29,3 +29,18 @@ class InputDataParseError(BaseErrorCode):
 class WorkflowOfflineError(BaseErrorCode):
     Code = 13010
     Msg = "The current workflow is not online and cannot be chatted directly"
+
+
+class ProjectUnavailableError(BaseErrorCode):
+    Code: int = 13011
+    Msg = "This project is unavailable"
+
+
+class ProjectInputError(BaseErrorCode):
+    Code: int = 13012
+    Msg = "Invalid project operation"
+
+
+class ProjectConversationError(BaseErrorCode):
+    Code: int = 13015
+    Msg = "This conversation cannot be added to your project"

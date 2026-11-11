@@ -1,0 +1,41 @@
+/* Keep the underlay visible until the page has covered it during closing. */
+@keyframes workbench-sidebar-close {
+  from { opacity: 1; }
+  to { opacity: 1; }
+}
+
+.workbench-sidebar-underlay[data-state='closed'] {
+  animation: workbench-sidebar-close 300ms ease-out;
+}
+
+.workbench-sidebar-mobile {
+  padding-top: max(16px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+
+.workbench-menu-trigger::after {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+
+@media (max-width: 768px) {
+  [data-workbench-sidebar] .workbench-sidebar-logo {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  [data-workbench-sidebar] .workbench-sidebar-brand {
+    font-size: var(--text-h3);
+    line-height: var(--leading-h3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench-sidebar-underlay[data-state='closed'] {
+    animation-duration: 1ms;
+  }
+}

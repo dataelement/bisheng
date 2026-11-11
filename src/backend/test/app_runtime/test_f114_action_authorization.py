@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bisheng.app_runtime.domain.schemas.app_authorization import APP_ACTIONS, AppOperation, required_actions
+from bisheng.app_runtime.domain.schemas.app_authorization import MANAGEMENT_ACTIONS, AppOperation, required_actions
 from bisheng.common.errcode.app_factory import AppNotFoundError
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.permission.application.identity import PermissionActor
@@ -24,19 +24,16 @@ def authorization(monkeypatch):
     return mod, app, actor, checker
 
 
-@pytest.mark.parametrize("action", [value for value in APP_ACTIONS if value != "use"])
+@pytest.mark.parametrize("action", sorted(MANAGEMENT_ACTIONS))
 async def test_exact_action_controls_operation(authorization, action):
     mod, app, actor, checker = authorization
     operation = {
-        "use": None,
         "edit": "metadata_edit",
         "publish": "approved_start",
         "unpublish": "stop",
         "delete": "destroy",
         "manage_permission": "grant_manage",
     }[action]
-    if operation is None:
-        return
     checker.return_value = True
     result = await mod.AppAuthorizationService.authorize_app(actor, app.id, operation)
     assert result is app
@@ -45,12 +42,12 @@ async def test_exact_action_controls_operation(authorization, action):
     assert app.tenant_id == 2
 
 
-async def test_use_only_cannot_read_management(authorization):
+async def test_visible_only_cannot_read_management(authorization):
     mod, app, actor, checker = authorization
-    checker.side_effect = lambda *a, **kw: kw["action"] == "use"
+    checker.side_effect = lambda *a, **kw: kw["action"] == "visible"
     with pytest.raises(PermissionDeniedError):
         await mod.AppAuthorizationService.authorize_app(actor, app.id, "management_read")
-    assert {call.kwargs["action"] for call in checker.await_args_list} == set(APP_ACTIONS) - {"use"}
+    assert {call.kwargs["action"] for call in checker.await_args_list} == set(MANAGEMENT_ACTIONS)
 
 
 @pytest.mark.parametrize("action", ["edit", "publish", "unpublish", "delete", "manage_permission"])

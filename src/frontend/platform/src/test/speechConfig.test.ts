@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { TFunction } from 'i18next';
-import { asrHintKey, asrProviders, speechModelTypes, ttsProviders, configWithDefaults, getConfigError, getSpeechFields } from '../pages/ModelPage/manage/speechConfig';
+import { asrHintKey, fileAsrProviders, realtimeAsrProviders, speechModelTypes, ttsProviders, configWithDefaults, getConfigError, getSpeechFields } from '../pages/ModelPage/manage/speechConfig';
 import { getModelProviders } from '../pages/ModelPage/manage/modelProviderFields';
 
 const t = ((key: string) => key) as TFunction;
 
 describe('native speech provider configuration', () => {
     it('offers ASR for the added providers while preserving TTS capabilities', () => {
-        expect(asrProviders).toEqual(['openai', 'azure_openai', 'qwen', 'volcengine', 'qianfan', 'tencent']);
-        expect(speechModelTypes()).toEqual(['asr', 'asr_rt']);
+        expect(fileAsrProviders).toEqual(['openai', 'azure_openai', 'qwen']);
+        expect(realtimeAsrProviders).toEqual(['volcengine', 'qianfan', 'tencent', 'qwen']);
+        expect(speechModelTypes('openai')).toEqual(['asr']);
+        expect(speechModelTypes('volcengine')).toEqual(['asr_rt']);
+        expect(speechModelTypes('qwen')).toEqual(['asr', 'asr_rt']);
+        expect(speechModelTypes('silicon')).toEqual([]);
         expect(asrHintKey('qwen', 'asr')).toBe('model.fileAsrHint');
         expect(asrHintKey('qwen', 'asr_rt')).toBe('model.streamingAsrHint');
         expect(asrHintKey('tencent', 'asr_rt')).toBe('model.tencentAsrHint');
@@ -38,11 +42,17 @@ describe('native speech provider configuration', () => {
         expect(values).toEqual(stored);
         expect(getConfigError(values, getSpeechFields('qianfan', stored, t))).toBe('');
     });
+    it('shows the vendor base url when a saved address is blank', () => {
+        const fields = getModelProviders().qianfan;
+        const config = configWithDefaults({ base_url: '', api_key: '********' }, fields, false);
+        expect(config.base_url).toBe('https://qianfan.baidubce.com/v2');
+        expect(config.api_key).toBe('********');
+    });
     it('retains existing provider defaults and rejects whitespace credentials', () => {
         const fields = getModelProviders().qwen;
         const config = configWithDefaults({ openai_api_key: '  ' }, fields, true);
         expect(config.openai_api_base).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1');
         expect(getConfigError(config, fields)).toBe('API Key');
-        expect(getSpeechFields('tencent', {}, t).map(field => field.key)).toEqual(['speech_app_id', 'speech_secret_id', 'speech_secret_key']);
+        expect(getSpeechFields('tencent', {}, t).map(field => field.key)).toEqual(['speech_app_id']);
     });
 });

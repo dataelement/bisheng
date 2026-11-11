@@ -1,501 +1,583 @@
-import { Button, Dropdown, DropdownItem, DropdownSeparator, SearchInput, Select, toast, notification } from '@bisheng/ui';
-import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
-// @ts-strict-ignore
+import {
+  Button,
+  Dropdown,
+  DropdownItem,
+  Pagination,
+  SearchInput,
+  Select,
+  notification,
+} from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { Shield } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-
-
-import {
-Table,
-TableBody,
-TableCell,
-TableHead,
-TableHeader,
-TableRow
-} from "../../components/bs-ui/table";
-import { KnowledgeTooltip } from "./components/KnowledgeTooltip";
-
-
-
-import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
-
-
-
-
-import { useContext,useEffect,useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import LoadMore from "../../components/bs-comp/loadMore";
-import { userContext } from "../../contexts/userContext";
-import { copyLibDatabase,deleteFileLib,readFileLibDatabase } from "../../controllers/API";
-import { showApiError } from "../../controllers/request";
-import { useInfiniteCursorTable } from "../../util/hook";
+import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import LoadMore from "@/components/bs-comp/loadMore";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/bs-ui/table";
+import { userContext } from "@/contexts/userContext";
+import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
+import {
+  knowledgeQueryKeys,
+  useKnowledgeAdminSpaces,
+  useKnowledgeVisibleSpaces,
+  type KnowledgeQueryScope,
+} from "@/controllers/hooks/knowledge";
+import { showApiError } from "@/controllers/request";
+import { usePaginationLocale } from "@/hooks/usePaginationLocale";
+import type { User } from "@/types/api/user";
+import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
+import { KnowledgeTooltip } from "./components/KnowledgeTooltip";
+import { ProcessingDefaultsDialog } from "./components/ProcessingDefaultsDialog";
+import { SpaceProcessingDialog } from "./components/SpaceProcessingDialog";
+import { KnowledgeDeletionDialog } from "./components/KnowledgeDeletionDialog";
+import { useKnowledgeDeletion } from "./hooks/useKnowledgeDeletion";
 import { FileAbnormalStatusCell } from "./components/FileAbnormalStatusCell";
 
-// Knowledge base status
-const enum KnowledgeBaseStatus {
-    Unpublished = 0,
-    Published = 1,   // Document knowledge base build success status
-    Copying = 2,
-    Rebuilding = 3,  // Document knowledge base rebuilding status
-    Failed = 4       // Document knowledge base rebuild failed status
-}
-
-const KB_MANAGE_ACTION = 'manage_permission'
-const KB_ROW_ACTIONS = ['edit', 'delete', KB_MANAGE_ACTION]
-
-interface KnowledgeListRow {
-    id: string | number;
-    state: number;
-    actions?: string[];
-    name: string;
-    description?: string;
-    update_time: string;
-    user_name?: string;
-    has_abnormal_files?: boolean;
-}
-
-const doing = {} // Record knowledge bases being copied
+const ROW_ACTIONS = [
+  "visible",
+  "edit",
+  "manage_permission",
+  "upload_file",
+  "delete",
+];
 interface KnowledgeFileProps {
-    toolbarTarget?: HTMLDivElement | null;
+  scope: KnowledgeQueryScope;
+  toolbarTarget?: HTMLDivElement | null;
 }
 
-export default function KnowledgeFile({ toolbarTarget }: KnowledgeFileProps) {
-    const [open, setOpen] = useState(false);
-    const { user } = useContext(userContext);
+const pageWindow = window as Window & { LibPage?: { type: string } };
 
-    const navigate = useNavigate()
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    const [currentSettingLib, setCurrentSettingLib] = useState(null);
-    const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
-    // New: Control Select dropdown state to avoid occasional popup issues
-    const [selectOpenId, setSelectOpenId] = useState<string | null>(null);
-    const [modalKey, setModalKey] = useState(0); // New: Used to force re-render of modal
-    const [fileStatusFilter, setFileStatusFilter] = useState<string | null>(null);
-    const selectLabels = useSelectLabels();
-    // Permission management state
-    const [permDialogOpen, setPermDialogOpen] = useState(false);
-    const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
-    const {
-        actions: rowActions,
-        loading: rowActionsLoading,
-        load: loadRowActions,
-    } = useLazyResourceActions('knowledge_library', KB_ROW_ACTIONS);
-
-    // F027: cursor-based infinite scroll; no `total` / `page` anymore.
-    const { data: datalist, loading, hasMore, search, reload, loadMore, filterData } = useInfiniteCursorTable(
-        { cancelLoadingWhenReload: true },
-        (param) =>
-            readFileLibDatabase({
-                cursor: param.cursor,
-                pageSize: param.pageSize,
-                name: param.keyword,
-                action: 'visible',
-                has_abnormal: param.has_abnormal,
-            }),
+export default function KnowledgeFile({
+  scope,
+  toolbarTarget,
+}: KnowledgeFileProps) {
+  const { t } = useTranslation("knowledge"),
+    navigate = useNavigate(),
+    client = useQueryClient();
+  const { user }: { user: Partial<User> | null } = useContext(userContext);
+  const [keyword, setKeyword] = useState(""),
+    [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(20);
+  const [onlyAbnormal, setOnlyAbnormal] = useState(false);
+  const selectLabels = useSelectLabels();
+  const isAdmin = scope.view === "admin";
+  const query = useMemo(
+    () => ({
+      page_size: pageSize,
+      ...(keyword ? { keyword } : {}),
+      ...(onlyAbnormal ? { has_abnormal: true } : {}),
+    }),
+    [pageSize, keyword, onlyAbnormal],
+  );
+  const ordinary = useKnowledgeVisibleSpaces(scope, query);
+  const admin = useKnowledgeAdminSpaces(scope, { ...query, page });
+  const active = isAdmin ? admin : ordinary;
+  const rows = isAdmin
+    ? (admin.data?.data ?? [])
+    : (ordinary.data?.pages.flatMap((result) => result.data) ?? []);
+  const paginationLocale = usePaginationLocale();
+  const { identityKey, tenantId, managementTenantId, view } = scope;
+  const stableScope = useMemo(
+    () => ({
+      identityKey,
+      tenantId,
+      managementTenantId,
+      view,
+    }),
+    [identityKey, tenantId, managementTenantId, view],
+  );
+  const activeKey = useMemo(
+    () =>
+      isAdmin
+        ? knowledgeQueryKeys.admin(stableScope, { ...query, page })
+        : knowledgeQueryKeys.visible(stableScope, query),
+    [isAdmin, stableScope, query, page],
+  );
+  const epoch = useMemo(() => ({ activeKey }), [activeKey]);
+  const live = useRef<typeof epoch | null>(epoch);
+  live.current = epoch;
+  const refetch = active.refetch;
+  useEffect(() => {
+    live.current = epoch;
+    if (identityKey && Number.isSafeInteger(tenantId) && tenantId > 0) {
+      void refetch({ cancelRefetch: false }).catch((error) => {
+        if (live.current === epoch) showApiError(error);
+      });
+    }
+    return () => {
+      if (live.current === epoch) live.current = null;
+      void client.cancelQueries({
+        queryKey: activeKey,
+        exact: true,
+        type: "inactive",
+      });
+    };
+  }, [client, identityKey, tenantId, activeKey, epoch, refetch]);
+  const canCreate =
+    user?.is_global_super === true ||
+    user?.is_child_admin === true ||
+    user?.web_menu?.includes("create_knowledge") === true;
+  const [processing, setProcessing] = useState<{
+    row: KnowledgeSpaceInfo;
+    mode: "copy" | "embedding" | "jobs" | "schema";
+  } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<KnowledgeSpaceInfo | null>(null);
+  const [defaultsTarget, setDefaultsTarget] =
+    useState<KnowledgeSpaceInfo | null>(null);
+  const [permissionTarget, setPermissionTarget] =
+    useState<KnowledgeSpaceInfo | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const handleFilter = (value: string | number | null | undefined) => {
+    const next = value === "abnormal";
+    if (next === onlyAbnormal) return;
+    const nextQuery = {
+      page_size: pageSize,
+      ...(keyword ? { keyword } : {}),
+      ...(next ? { has_abnormal: true } : {}),
+    };
+    const incoming = isAdmin
+      ? knowledgeQueryKeys.admin(stableScope, { ...nextQuery, page: 1 })
+      : knowledgeQueryKeys.visible(stableScope, nextQuery);
+    // A previous visit to this filter must not restore its consumed cursor.
+    client.removeQueries({ queryKey: incoming, exact: true, type: "inactive" });
+    setOpenId(null);
+    setEditTarget(null);
+    setDefaultsTarget(null);
+    setPermissionTarget(null);
+    setProcessing(null);
+    setOnlyAbnormal(next);
+    setPage(1);
+  };
+  const filterOptions = [
+    { label: t("fileStatusFilterAll"), value: "all" },
+    { label: t("fileStatusAbnormal"), value: "abnormal" },
+  ];
+  const {
+    actions,
+    loading: actionLoading,
+    load: loadActions,
+  } = useLazyResourceActions("knowledge_space", ROW_ACTIONS);
+  const hasAction = (row: KnowledgeSpaceInfo, action: string) =>
+    actions[String(row.id)]?.includes(action) ?? false;
+  const handleLookupError = () =>
+    notification.open({
+      type: "error",
+      description: t("error.checkFailed", { ns: "permission" }),
+    });
+  const handleMenu = async (row: KnowledgeSpaceInfo, open: boolean) => {
+    const id = String(row.id);
+    if (!open) {
+      setOpenId((current) => (current === id ? null : current));
+      return;
+    }
+    setOpenId(id);
+    const result = await loadActions(id);
+    if (live.current !== epoch) return;
+    if (result.hasError) {
+      setOpenId((current) => (current === id ? null : current));
+      handleLookupError();
+    }
+  };
+  const handleRead = async (row: KnowledgeSpaceInfo) => {
+    let allowed = row.actions?.includes("visible") || hasAction(row, "visible");
+    if (!allowed) {
+      const result = await loadActions(String(row.id));
+      if (live.current !== epoch) return;
+      if (result.hasError) {
+        handleLookupError();
+        return;
+      }
+      allowed = result.actions.includes("visible");
+    }
+    if (!allowed || live.current !== epoch) return;
+    pageWindow.LibPage = { type: isAdmin ? "admin" : "file" };
+    navigate(`/filelib/${row.id}`);
+  };
+  const handleRefresh = async () => {
+    try {
+      await refetch();
+    } catch (error) {
+      if (live.current === epoch) showApiError(error);
+    }
+  };
+  const deletion = useKnowledgeDeletion(JSON.stringify([stableScope, epoch]));
+  const handleDeletion = async (
+    row: KnowledgeSpaceInfo,
+    kind: "delete" | "clear",
+    readonly = false,
+  ) => {
+    if (live.current !== epoch || !hasAction(row, "delete")) return;
+    setOpenId(null);
+    const owned = epoch;
+    if (await deletion.open({ spaceId: row.id, kind }, readonly)) {
+      if (live.current === owned)
+        await client.invalidateQueries({
+          queryKey: knowledgeQueryKeys.space(stableScope, row.id),
+        });
+      if (live.current === owned) await handleRefresh();
+    }
+  };
+  const renderMenu = (row: KnowledgeSpaceInfo) => {
+    if (actionLoading[String(row.id)])
+      return (
+        <DropdownItem disabled>
+          {t("knowledgeRowActions.loading", { ns: "permission" })}
+        </DropdownItem>
+      );
+    if (
+      !hasAction(row, "edit") &&
+      !hasAction(row, "manage_permission") &&
+      !hasAction(row, "delete")
     )
-
-    // Permission levels for badge display
-    // 列表已由后端 get_knowledge 按 ReBAC 过滤；勿再用批量 check 二次过滤，否则与 FGA/缓存短暂不同步时会出现「接口有数据但表格空白」。
-    const visibleLibs = datalist;
-    const hasAction = (el: KnowledgeListRow, action: string) =>
-        Array.isArray(el.actions) && el.actions.includes(action);
-    const hasRowAction = (el: KnowledgeListRow, action: string) =>
-        rowActions[String(el.id)]?.includes(action) ?? false;
-    const canEdit = (el: KnowledgeListRow) =>
-        hasRowAction(el, 'edit');
-    const canDelete = (el: KnowledgeListRow) =>
-        hasRowAction(el, 'delete');
-    // Copy retains the original menu qualification and source visibility.
-    const canCopyLibrary =
-        user.role === 'admin' ||
-        (user.web_menu || []).includes('create_knowledge');
-    const canCreateLibrary = canCopyLibrary || user.is_child_admin === true;
-    const canReadRow = (el: KnowledgeListRow) =>
-        hasAction(el, 'visible');
-    const canUseCopy = (el: KnowledgeListRow) => canCopyLibrary && canReadRow(el);
-    const canManageKb = (el: KnowledgeListRow) =>
-        hasRowAction(el, KB_MANAGE_ACTION);
-    const isLibraryBusy = (el: KnowledgeListRow) =>
-        [KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state);
-    const canCopy = (el: KnowledgeListRow) =>
-        canUseCopy(el) && el.state === KnowledgeBaseStatus.Published;
-    const hasRowActions = (el: KnowledgeListRow) =>
-        canManageKb(el) || canCopy(el) || canEdit(el) || canDelete(el);
-    const showOperationsColumn = visibleLibs.length > 0;
-
-    // Enable polling during copying
-    useEffect(() => {
-        const todos = datalist.reduce((prev, curr) => {
-            if (curr.state === KnowledgeBaseStatus.Copying) {
-                prev.push({ id: curr.id, name: curr.name })
-            }
-            return prev
-        }, [])
-
-        todos.map(todo => {
-            if (doing[todo.id]) {
-                const lib = datalist.find(item => item.id === todo.id);
-                if (lib && lib.state !== KnowledgeBaseStatus.Copying) {
-                    toast.show({ type: 'success', message: String(t('copyCompleted', { name: todo.name }) ?? '') })
-                    delete doing[todo.id]
-                }
-            }
-        })
-
-        let timer = null
-        if (todos.length > 0) {
-            timer = setTimeout(() => {
-                reload()
-            }, 5000);
-        }
-
-        return () => {
-            clearTimeout(timer)
-        }
-    }, [datalist])
-
-    const handleDelete = (id) => {
-        bsConfirm({
-            title: t('prompt'),
-            desc: t('lib.confirmDeleteLibrary', { ns: 'bs' }),
-            onOk(next) {
-                return deleteFileLib(id).then(() => {
-                    reload();
-                    next()
-                });
-            },
-        })
-    }
-
-    const handleOpenSettings = (lib) => {
-        console.log("=== handleOpenSettings execution started ===");
-        console.log("Clicked lib ID:", lib.id);
-        // 1. Deep copy: Completely break reference association with original lib (solving nested property reference issues)
-        const newCurrentLib = JSON.parse(JSON.stringify(lib));
-        // 2. Inject unique identifier: Ensure currentSettingLib reference is absolutely unique even if data is identical
-        newCurrentLib.__updateKey = Date.now(); // Generate different timestamp for each click
-
-        setCurrentSettingLib(newCurrentLib); // Now passing a completely new object reference
-        setSettingsOpen(true);
-        setModalKey(prev => prev + 1); // Keep modalKey to ensure modal re-mounts
-        console.log("handleOpenSettings called with lib:", newCurrentLib); // Verify print
-    };
-
-    const handleSettingsClose = (isOpen) => {
-        console.log("handleSettingsClose called with isOpen:", isOpen);
-        setSettingsOpen(isOpen);
-        if (!isOpen) {
-            setCurrentSettingLib(null);
-            setSelectOpenId(null);
-            console.log("Settings modal closed and state cleared");
-        }
-    };
-
-    // Cache the active tab hint before entering detail; the parent's
-    // ``defaultValue`` reads ``LibPage.type`` to restore the file/qa tab.
-    // F027: ``page`` is now an opaque cursor token, not restorable, so we
-    // only persist the type marker.
-    const handleCachePage = () => {
-        window.LibPage = { type: 'file' }
-    }
-
-    useEffect(() => {
-        // F027: ``useInfiniteCursorTable`` auto-loads page 1 on mount; we no
-        // longer try to restore a specific page on return from detail. Just
-        // drop the marker so subsequent navigations get a fresh first page.
-        delete window.LibPage;
-    }, [])
-
-    const { t, i18n } = useTranslation('knowledge');
-    const fileStatusFilterOptions = [
-        { label: t('fileStatusFilterAll'), value: 'all' },
-        { label: t('fileStatusAbnormal'), value: 'abnormal' },
-    ];
-    useEffect(() => {
-        i18n.loadNamespaces('knowledge');
-    }, [i18n]);
-
-    const handleRowMenuOpenChange = async (el: KnowledgeListRow, isOpen: boolean) => {
-        const resourceId = String(el.id);
-        if (!isOpen) {
-            setSelectOpenId((current) => current === resourceId ? null : current);
-            return;
-        }
-        if (isLibraryBusy(el) || copyLoadingId === resourceId) return;
-
-        setSelectOpenId(resourceId);
-        const result = await loadRowActions(resourceId);
-        if (result.hasError) {
-            setSelectOpenId((current) => current === resourceId ? null : current);
-            toast.show({ type: 'error', message: String(t('error.checkFailed', { ns: 'permission' }) ?? '') });
-        }
-    };
-
-    // Copy knowledge base
-    const handleCopy = async (elem) => {
-        const newName = `${elem.name}${t('copySuffix')}`;
-        if (newName.length > 200) {
-            notification.open({ type: 'error', title: String(t('operationFailed') ?? ''), description: String(t('copyNameExceedsLimit') ?? '') });
-
-            // Reset all related states
-            setSelectOpenId(null);
-            setCopyLoadingId(null);
-
-            // Force re-render of Select component
-            setModalKey(prev => prev + 1);
-            return;
-        }
-
-        setCopyLoadingId(String(elem.id));
-        doing[elem.id] = true;
-
-        try {
-            await copyLibDatabase(elem.id, newName);
-            reload();
-        } catch (error) {
-            delete doing[elem.id];
-            showApiError(error);
-        } finally {
-            setCopyLoadingId(null);
-            setSelectOpenId(null);
-            // Ensure Select component resets
-            setModalKey(prev => prev + 1);
-        }
-    }
-
-    useEffect(() => {
-        console.log("settingsOpen state changed:", settingsOpen);
-        console.log("currentSettingLib:", currentSettingLib);
-        console.log("modalKey:", modalKey);
-    }, [settingsOpen, currentSettingLib, modalKey]);
-
-    const renderRowMenu = (el: KnowledgeListRow) => {
-        const resourceId = String(el.id);
-        if (rowActionsLoading[resourceId]) {
-            return <DropdownItem disabled icon={<Outlined.Loading className="animate-spin" />}>
-                {t('knowledgeRowActions.loading', { ns: 'permission' })}
-            </DropdownItem>;
-        }
-        if (!hasRowActions(el)) {
-            return <DropdownItem disabled>{t('knowledgeRowActions.empty', { ns: 'permission' })}</DropdownItem>;
-        }
-        const hasLeadingItems = canManageKb(el) || canCopy(el) || canEdit(el);
-        return <>
-            {canManageKb(el) && (
-                <DropdownItem icon={<Shield />} onSelect={() => {
-                    setPermTarget({ id: resourceId, name: el.name });
-                    setPermDialogOpen(true);
-                    setModalKey(prev => prev + 1);
-                }}>
-                    {t('managePermission', { ns: 'permission' })}
-                </DropdownItem>
-            )}
-            {canCopy(el) && (
-                <DropdownItem icon={<Outlined.Copy />} disabled={copyLoadingId === resourceId} onSelect={() => handleCopy(el)}>
-                    {t('lib.copy', { ns: 'bs' })}
-                </DropdownItem>
-            )}
-            {canEdit(el) && (
-                <DropdownItem icon={<Outlined.Setting />} onSelect={() => handleOpenSettings(el)}>
-                    {t('settings')}
-                </DropdownItem>
-            )}
-            {canDelete(el) && <>
-                {hasLeadingItems && <DropdownSeparator />}
-                <DropdownItem danger icon={<Outlined.Delete />} onSelect={() => handleDelete(el.id)}>
-                    {t('delete')}
-                </DropdownItem>
-            </>}
-        </>;
-    };
-
-    const toolbar = (
-        <div className="flex items-center justify-end gap-4">
-            <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
-            {canCreateLibrary && <Button onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
-        </div>
-    );
-
+      return (
+        <DropdownItem disabled>
+          {t("knowledgeRowActions.empty", { ns: "permission" })}
+        </DropdownItem>
+      );
     return (
-        <div className="relative">
-            {toolbarTarget ? createPortal(toolbar, toolbarTarget) : toolbarTarget === undefined ? toolbar : null}
-            {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                <Outlined.Loading  className="size-4 animate-spin"/>
-            </div>}
-            <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
-                <Table noScroll>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>{t('lib.libraryName', { ns: 'bs' })}</TableHead>
-                            <TableHead>{t('updateTime')}</TableHead>
-                            <TableHead>{t('lib.createUser', { ns: 'bs' })}</TableHead>
-                            <TableHead>
-                                <div className="flex items-center">
-                                    {t('fileStatus')}
-                                    <Select
-                                        {...selectLabels}
-                                        options={fileStatusFilterOptions}
-                                        value={fileStatusFilter}
-                                        onChange={(value) => {
-                                            const next = value == null ? null : String(value);
-                                            setFileStatusFilter(next);
-                                            filterData({ has_abnormal: next === 'abnormal' ? true : undefined })
-                                        }}
-                                        trigger={
-                                            <button
-                                                type="button"
-                                                className="ml-3 inline-flex outline-none"
-                                                aria-label={t('fileStatusFilterLabel', {
-                                                    value: fileStatusFilterOptions.find(option => option.value === fileStatusFilter)?.label ?? t('fileStatusFilterAll'),
-                                                })}
-                                            >
-                                                <Outlined.Filter size={16} aria-hidden className={fileStatusFilter ? 'text-primary' : 'text-gray-400'} />
-                                            </button>
-                                        }
-                                    />
-                                </div>
-                            </TableHead>
-                            {showOperationsColumn && (
-                                <TableHead className="text-right">{t('operations')}</TableHead>
-                            )}
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {visibleLibs.map((el: KnowledgeListRow) => (
-                            <TableRow
-                                key={el.id}
-                                className=""
-                                onClick={() => {
-                                    if (!canReadRow(el)) return;
-                                    if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
-                                    window.libname = [el.name, el.description];
-                                    navigate(`/filelib/${el.id}`);
-                                    handleCachePage();
-                                }}
-                            >
-                                <TableCell
-                                    className="font-medium max-w-[200px]"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <div className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-fill-2 group-odd:bg-white dark:group-odd:bg-fill-2 text-text-2">
-                                            <Outlined.Books size={16} className="shrink-0" aria-hidden="true" />
-                                        </div>
-                                        <div>
-                                            <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2">
-                                                {el.name}
-                                            </div>
-                                            <KnowledgeTooltip
-                                                side="top"
-                                                content={el.description?.length > 30 ? el.description : ''}
-                                            >
-                                                <div className="truncate max-w-[500px] text-[12px] text-[#5A5A5A] pt-1">
-                                                    {el.description || ''}
-                                                </div>
-                                            </KnowledgeTooltip>
-                                        </div>
-                                    </div>
-                                </TableCell>
-
-                                <TableCell
-                                    className="text-[#5A5A5A]"
-                                >
-                                    {el.update_time.replace('T', ' ')}
-                                </TableCell>
-
-                                <TableCell
-                                    className="max-w-[300px] break-all"
-                                >
-                                    <div className="truncate-multiline text-[#5A5A5A]">{el.user_name || '--'}</div>
-                                </TableCell>
-
-                                <TableCell>
-                                    <FileAbnormalStatusCell hasAbnormalFiles={el.has_abnormal_files} />
-                                </TableCell>
-
-                                {showOperationsColumn && <TableCell className="text-right">
-                                    <div className="flex items-center justify-end gap-2">
-                                        {(isLibraryBusy(el) || canReadRow(el)) && (
-                                            // Menu clicks bubble through the portal; keep them off the row's onClick.
-                                            <span className="contents" onClick={(e) => e.stopPropagation()}>
-                                                <Dropdown
-                                                    key={`${el.id}-${modalKey}`}
-                                                    align="end"
-                                                    disabled={copyLoadingId === String(el.id)}
-                                                    open={selectOpenId === String(el.id)}
-                                                    onOpenChange={(isOpen) => void handleRowMenuOpenChange(el, isOpen)}
-                                                    menu={renderRowMenu(el)}
-                                                >
-                                                    <Button
-                                                        variant="text"
-                                                        color="default"
-                                                        size="large"
-                                                        iconOnly
-                                                        aria-label={t('more', { ns: 'bs' })}
-                                                        className="relative"
-                                                    >
-                                                        {[KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state) ? (
-                                                            <>
-                                                                <Outlined.Loading className="animate-spin" />
-                                                                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
-                                                                    {t('copying')}
-                                                                </div>
-                                                            </>
-                                                        ) : (
-                                                            <Outlined.More />
-                                                        )}
-                                                    </Button>
-                                                </Dropdown>
-                                            </span>
-                                        )}
-                                    </div>
-                                </TableCell>}
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-                {/* F027: infinite-scroll trigger lives INSIDE the
-                    `overflow-y-auto` scroll container so IntersectionObserver
-                    tracks in-container scroll. Outside-container placement
-                    keeps the footer always-visible and stalls pagination. */}
-                {hasMore && <LoadMore onScrollLoad={loadMore} />}
-            </div>
-            {/* Create modal */}
-            <KnowledgeLibraryDialog
-                datalist={datalist}
-                open={open}
-                onOpenChange={setOpen}
-                onLoadEnd={() => { }}
-                mode="create"
-            />
-
-            {/* Edit (Settings) modal - using key to force re-render */}
-            {settingsOpen && (
-                <KnowledgeLibraryDialog
-                    key={`settings-modal-${modalKey}`}
-                    datalist={datalist}
-                    open={settingsOpen}
-                    onOpenChange={handleSettingsClose}
-                    onLoadEnd={reload}
-                    mode="edit"
-                    currentLib={currentSettingLib}
-                />
-            )}
-
-            {/* Permission management dialog */}
-            {permTarget && (
-                <PermissionDialog
-                    open={permDialogOpen}
-                    onOpenChange={setPermDialogOpen}
-                    resourceType="knowledge_library"
-                    resourceId={permTarget.id}
-                    resourceName={permTarget.name}
-                />
-            )}
-        </div>
+      <>
+        {canCreate &&
+          user?.user_id === row.user_id &&
+          hasAction(row, "upload_file") && (
+            <DropdownItem
+              onSelect={() => {
+                setOpenId(null);
+                setProcessing({ row, mode: "copy" });
+              }}
+            >
+              {t("f118.processing_title_copy")}
+            </DropdownItem>
+          )}
+        {hasAction(row, "delete") && (
+          <>
+            <DropdownItem
+              onSelect={() => {
+                void handleDeletion(row, "delete", true);
+              }}
+            >
+              {t("deletion.references")}
+            </DropdownItem>
+            <DropdownItem
+              danger
+              onSelect={() => {
+                void handleDeletion(row, "clear");
+              }}
+            >
+              {t("deletion.clear")}
+            </DropdownItem>
+            <DropdownItem
+              danger
+              onSelect={() => {
+                void handleDeletion(row, "delete");
+              }}
+            >
+              {t("deletion.delete_space")}
+            </DropdownItem>
+          </>
+        )}
+        {hasAction(row, "manage_permission") && (
+          <DropdownItem
+            icon={<Shield />}
+            onSelect={() => {
+              setOpenId(null);
+              setPermissionTarget(row);
+            }}
+          >
+            {t("managePermission", { ns: "permission" })}
+          </DropdownItem>
+        )}
+        {hasAction(row, "edit") && (
+          <>
+            <DropdownItem
+              onSelect={() => {
+                setOpenId(null);
+                setEditTarget(row);
+              }}
+            >
+              {t("settings")}
+            </DropdownItem>
+            <DropdownItem
+              onSelect={() => {
+                setOpenId(null);
+                setProcessing({ row, mode: "schema" });
+              }}
+            >
+              {t("f118.processing_title_schema")}
+            </DropdownItem>
+            <DropdownItem
+              onSelect={() => {
+                setOpenId(null);
+                setProcessing({ row, mode: "embedding" });
+              }}
+            >
+              {t("f118.processing_title_embedding")}
+            </DropdownItem>
+            <DropdownItem
+              onSelect={() => {
+                setOpenId(null);
+                setProcessing({ row, mode: "jobs" });
+              }}
+            >
+              {t("f118.processing_title_jobs")}
+            </DropdownItem>
+            <DropdownItem
+              onSelect={() => {
+                setOpenId(null);
+                setDefaultsTarget(row);
+              }}
+            >
+              {t("f118.defaults_title")}
+            </DropdownItem>
+          </>
+        )}
+      </>
     );
+  };
+  const toolbar = (
+    <div className="flex items-center justify-end gap-4">
+      <SearchInput
+        placeholder={t("lib.searchPlaceholder", { ns: "bs" })}
+        value={keyword}
+        onChange={(event) => {
+          setKeyword(event.target.value);
+          setPage(1);
+        }}
+      />
+      {canCreate && (
+        <Button onClick={() => setCreateOpen(true)}>
+          {t("create", { ns: "bs" })}
+        </Button>
+      )}
+    </div>
+  );
+  return (
+    <div className="relative">
+      {processing && (
+        <SpaceProcessingDialog
+          key={JSON.stringify([scope, processing.row.id, processing.mode])}
+          scope={scope}
+          spaceId={processing.row.id}
+          mode={processing.mode}
+          includeCopies={user?.user_id === processing.row.user_id}
+          open
+          onOpenChange={(open) => {
+            if (!open) setProcessing(null);
+          }}
+          onSaved={() => {
+            void handleRefresh();
+          }}
+        />
+      )}
+      {toolbarTarget
+        ? createPortal(toolbar, toolbarTarget)
+        : toolbarTarget === undefined
+          ? toolbar
+          : null}
+      {active.isInitialLoading && (
+        <p role="status">{t("f118.loading_space")}</p>
+      )}
+      {active.isError && (
+        <div role="alert">
+          <p>{t("f118.load_failed")}</p>
+          <Button
+            onClick={() => {
+              void handleRefresh();
+            }}
+          >
+            {t("retry")}
+          </Button>
+        </div>
+      )}
+      <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
+        <Table noScroll>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("f118.space_name")}</TableHead>
+              <TableHead>{t("updateTime")}</TableHead>
+              <TableHead>{t("lib.createUser", { ns: "bs" })}</TableHead>
+              <TableHead>
+                <div className="flex items-center">
+                  {t("fileStatus")}
+                  <Select
+                    {...selectLabels}
+                    options={filterOptions}
+                    value={onlyAbnormal ? "abnormal" : "all"}
+                    onChange={handleFilter}
+                    trigger={
+                      <button
+                        type="button"
+                        className="ml-3 inline-flex outline-none"
+                        aria-label={t("fileStatusFilterLabel", {
+                          value: t(
+                            onlyAbnormal
+                              ? "fileStatusAbnormal"
+                              : "fileStatusFilterAll",
+                          ),
+                        })}
+                      >
+                        <Outlined.Filter
+                          size={16}
+                          aria-hidden
+                          className={
+                            onlyAbnormal ? "text-primary" : "text-gray-400"
+                          }
+                        />
+                      </button>
+                    }
+                  />
+                </div>
+              </TableHead>
+              <TableHead className="text-right">{t("operations")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow
+                key={row.id}
+                onClick={() => {
+                  void handleRead(row);
+                }}
+              >
+                <TableCell className="max-w-[200px] font-medium">
+                  <div className="flex items-center gap-2">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-fill-2 text-text-2">
+                      <Outlined.Books size={16} aria-hidden="true" />
+                    </div>
+                    <div>
+                      <div className="w-[264px] max-w-[500px] truncate pt-2 text-sm font-medium">
+                        {row.name}
+                      </div>
+                      <KnowledgeTooltip
+                        side="top"
+                        content={row.description || ""}
+                      >
+                        <div className="max-w-[500px] truncate pt-1 text-xs text-text-2">
+                          {row.description || ""}
+                        </div>
+                      </KnowledgeTooltip>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="text-text-2">
+                  {row.update_time?.replace("T", " ") || "--"}
+                </TableCell>
+                <TableCell className="max-w-[300px] break-all text-text-2">
+                  {row.user_name || "--"}
+                </TableCell>
+                <TableCell>
+                  <FileAbnormalStatusCell
+                    hasAbnormalFiles={row.has_abnormal_files}
+                  />
+                </TableCell>
+                <TableCell className="text-right">
+                  <span
+                    className="contents"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Dropdown
+                      align="end"
+                      open={openId === String(row.id)}
+                      onOpenChange={(open) => {
+                        void handleMenu(row, open);
+                      }}
+                      menu={renderMenu(row)}
+                    >
+                      <Button
+                        variant="text"
+                        color="default"
+                        size="large"
+                        iconOnly
+                        aria-label={t("more", { ns: "bs" })}
+                      >
+                        <Outlined.More />
+                      </Button>
+                    </Dropdown>
+                  </span>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {!isAdmin && ordinary.hasNextPage && (
+          <LoadMore
+            onScrollLoad={() => {
+              if (!ordinary.isFetchingNextPage)
+                void ordinary.fetchNextPage().catch((error) => {
+                  if (live.current === epoch) showApiError(error);
+                });
+            }}
+          />
+        )}
+        {isAdmin && admin.data && (
+          <Pagination
+            locale={paginationLocale}
+            current={page}
+            pageSize={pageSize}
+            total={admin.data.total}
+            showTotal
+            showSizeChanger
+            onChange={(next, size) => {
+              setPage(next);
+              setPageSize(size);
+            }}
+          />
+        )}
+      </div>
+      <KnowledgeDeletionDialog operation={deletion} />
+      <KnowledgeLibraryDialog
+        scope={scope}
+        datalist={rows}
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onLoadEnd={handleRefresh}
+      />
+      {editTarget && (
+        <KnowledgeLibraryDialog
+          scope={scope}
+          datalist={rows}
+          currentLib={{ id: editTarget.id, name: editTarget.name }}
+          mode="edit"
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditTarget(null);
+          }}
+          onLoadEnd={handleRefresh}
+        />
+      )}
+      {defaultsTarget && (
+        <ProcessingDefaultsDialog
+          scope={scope}
+          spaceId={defaultsTarget.id}
+          open
+          onOpenChange={(open) => {
+            if (!open) setDefaultsTarget(null);
+          }}
+        />
+      )}
+      {permissionTarget && (
+        <PermissionDialog
+          resourceType="knowledge_space"
+          resourceId={String(permissionTarget.id)}
+          resourceName={permissionTarget.name}
+          open
+          onOpenChange={(open) => {
+            if (!open) setPermissionTarget(null);
+          }}
+        />
+      )}
+    </div>
+  );
 }

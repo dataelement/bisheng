@@ -10,6 +10,7 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import event
 
+from bisheng.dsh.domain.models.model_audit_feedback import DshModelAuditMessageFeedback
 from bisheng.dsh.domain.models.model_audit_title import DshModelAuditConversationTitle
 from bisheng.dsh.infrastructure.model_audit_codec import conversation_key
 from test.dsh.test_content_safety_query_api import data, get, invalid
@@ -24,6 +25,7 @@ MODES = ("groups", "tree", "requests")
 @pytest.fixture(autouse=True)
 def title_metadata_table(query_engine):
     DshModelAuditConversationTitle.__table__.create(query_engine, checkfirst=True)
+    DshModelAuditMessageFeedback.__table__.create(query_engine, checkfirst=True)
 
 
 def route(mode, *, tenant=101, user=11):

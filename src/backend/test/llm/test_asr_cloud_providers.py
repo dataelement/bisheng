@@ -289,8 +289,8 @@ async def test_factory_and_capability_match(provider, model, config, cls):
     else:
         built = await BishengASR.init_asr_client(unknown, server)
         assert built.model == "unsupported"
-    legacy = await BishengASR.init_asr_client(SimpleNamespace(model_name=model, model_type="asr", config=None), server)
-    assert isinstance(legacy, cls)
+    with pytest.raises(ValueError, match="no file ASR client"):
+        await BishengASR.init_asr_client(SimpleNamespace(model_name=model, model_type="asr", config=None), server)
     with pytest.raises(ValueError, match="no file ASR client"):
         await BishengASR.init_asr_client(
             SimpleNamespace(model_name="unsupported", model_type="asr", config=None), server
@@ -519,6 +519,7 @@ async def test_empty_workbench_slot_accepts_realtime_asr(monkeypatch):
 
 
 async def test_file_typed_tencent_model_is_not_kept(monkeypatch):
+    from bisheng.llm.application import model_deletion
     from bisheng.llm.domain.models.llm_server import LLMDao
     from bisheng.llm.domain.schemas import LLMModelCreateReq, LLMServerCreateReq
     from bisheng.llm.domain.services.llm import LLMService
@@ -539,8 +540,11 @@ async def test_file_typed_tencent_model_is_not_kept(monkeypatch):
             models=[SimpleNamespace(id=21, model_name="16k_zh", model_type="asr")],
         )
 
-    async def delete(server_id):
+    async def delete(*, identity, server_id):
         deleted["id"] = server_id
+
+    async def application():
+        return SimpleNamespace(adelete_server=delete)
 
     async def lookup(_model_id):
         return (
@@ -550,7 +554,7 @@ async def test_file_typed_tencent_model_is_not_kept(monkeypatch):
 
     monkeypatch.setattr(LLMDao, "aget_server_by_name", no_server)
     monkeypatch.setattr(LLMDao, "ainsert_server_with_models", insert)
-    monkeypatch.setattr(LLMDao, "adelete_server_by_id", delete)
+    monkeypatch.setattr(model_deletion, "get_model_deletion_application", application)
     monkeypatch.setattr(LLMService, "get_one_llm", listed)
     monkeypatch.setattr(BishengASR, "get_model_server_info", lookup)
     server = LLMServerCreateReq(
@@ -565,6 +569,7 @@ async def test_file_typed_tencent_model_is_not_kept(monkeypatch):
 
 
 async def test_add_checks_speech_by_calling_the_provider(monkeypatch):
+    from bisheng.llm.application import model_deletion
     from bisheng.llm.domain.models.llm_server import LLMDao
     from bisheng.llm.domain.schemas import LLMModelCreateReq, LLMServerCreateReq
     from bisheng.llm.domain.services.llm import LLMService
@@ -586,8 +591,11 @@ async def test_add_checks_speech_by_calling_the_provider(monkeypatch):
             models=[SimpleNamespace(id=22, model_name="new-engine", model_type="asr_rt")],
         )
 
-    async def delete(server_id):
+    async def delete(*, identity, server_id):
         deleted["id"] = server_id
+
+    async def application():
+        return SimpleNamespace(adelete_server=delete)
 
     async def lookup(_model_id):
         return (
@@ -601,7 +609,7 @@ async def test_add_checks_speech_by_calling_the_provider(monkeypatch):
 
     monkeypatch.setattr(LLMDao, "aget_server_by_name", no_server)
     monkeypatch.setattr(LLMDao, "ainsert_server_with_models", insert)
-    monkeypatch.setattr(LLMDao, "adelete_server_by_id", delete)
+    monkeypatch.setattr(model_deletion, "get_model_deletion_application", application)
     monkeypatch.setattr(LLMService, "get_one_llm", listed)
     monkeypatch.setattr(BishengASR, "get_model_server_info", lookup)
     monkeypatch.setattr(BishengASR, "ainvoke", reject)

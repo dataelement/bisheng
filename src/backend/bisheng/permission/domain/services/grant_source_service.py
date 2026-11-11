@@ -9,6 +9,7 @@ from bisheng.common.errcode.permission import (
     PermissionModelStateConflictError,
     PermissionVersionConflictError,
 )
+from bisheng.permission.domain.services.catalog_policy import MIGRATED_RESOURCE_TYPES
 from bisheng.permission.domain.services.projection_service import (
     ProjectionTupleDelta,
 )
@@ -36,6 +37,99 @@ class GrantModelSnapshot:
     action_codes: tuple[str, ...]
     derived_level: int | None = None
     allow_same_level: bool = False
+    visibility_only_resource_types: tuple[str, ...] = ()
+    visibility_level: int | None = None
+    visibility_only: bool = False
+
+
+def is_untiered_empty_model(model: GrantModelSnapshot) -> bool:
+    """Recognize the old empty shape, without making it assignable or manageable.
+
+    This shape alone is not authority. Retaining its visibility additionally
+    requires the exact existing canonical contribution for every active source.
+    """
+    return (
+        isinstance(model.active, bool)
+        and model.action_codes == ()
+        and model.derived_level is None
+        and model.allow_same_level is False
+        and model.visibility_only_resource_types == ()
+        and model.visibility_level is None
+        and model.visibility_only is False
+    )
+
+
+def is_visibility_only_model(model: GrantModelSnapshot, resource_type: str | None = None) -> bool:
+    """Recognize only a validated, target-scoped server-owned empty capability."""
+
+    return (
+        model.visibility_only
+        and not model.action_codes
+        and bool(model.visibility_only_resource_types)
+        and len(set(model.visibility_only_resource_types)) == len(model.visibility_only_resource_types)
+        and set(model.visibility_only_resource_types) <= MIGRATED_RESOURCE_TYPES
+        and not isinstance(model.visibility_level, bool)
+        and model.visibility_level in {1, 2, 3, 4}
+        and model.derived_level == model.visibility_level
+        and (resource_type is None or resource_type in model.visibility_only_resource_types)
+    )
+
+
+def requires_existing_visibility_evidence(model: GrantModelSnapshot) -> bool:
+    """Recognize empty target capabilities that cannot mint visible sources.
+
+    A valid global tiered model can also have no action on a particular target
+    type. Its old visibility is retained only with the same source evidence;
+    this predicate does not authorize assigning that model to that target.
+    """
+    return is_untiered_empty_model(model) or (
+        isinstance(model.active, bool)
+        and isinstance(model.allow_same_level, bool)
+        and model.action_codes == ()
+        and type(model.derived_level) is int
+        and model.derived_level in {1, 2, 3, 4}
+        and model.visibility_only is False
+        and (
+            (model.visibility_only_resource_types == () and model.visibility_level is None)
+            or (
+                type(model.visibility_only_resource_types) is tuple
+                and bool(model.visibility_only_resource_types)
+                and len(set(model.visibility_only_resource_types)) == len(model.visibility_only_resource_types)
+                and set(model.visibility_only_resource_types) <= MIGRATED_RESOURCE_TYPES
+                and type(model.visibility_level) is int
+                and model.visibility_level in {1, 2, 3, 4}
+            )
+        )
+    )
+
+
+def model_snapshot_for_target(
+    model: GrantModelSnapshot,
+    *,
+    resource_type: str,
+    applicable_action_codes: tuple[str, ...],
+) -> GrantModelSnapshot:
+    """Bind Catalog-derived actions to a verified resource, preserving its tier."""
+
+    if resource_type not in MIGRATED_RESOURCE_TYPES:
+        raise ValueError("unknown permission resource type")
+    if not set(applicable_action_codes) <= set(model.action_codes):
+        raise ValueError("applicable actions must belong to the current model")
+    marked = resource_type in model.visibility_only_resource_types
+    visibility_only = marked and not applicable_action_codes
+    if marked and (
+        isinstance(model.visibility_level, bool)
+        or model.visibility_level not in {1, 2, 3, 4}
+        or len(set(model.visibility_only_resource_types)) != len(model.visibility_only_resource_types)
+        or not set(model.visibility_only_resource_types) <= MIGRATED_RESOURCE_TYPES
+    ):
+        raise ValueError("invalid visibility-only target metadata")
+    return replace(
+        model,
+        action_codes=tuple(applicable_action_codes),
+        derived_level=model.visibility_level if visibility_only else model.derived_level,
+        visibility_only=visibility_only,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +329,31 @@ class GrantSourceService:
             raise ValueError(f"{source_type} source_ref must not be empty")
         return f"{prefixes[source_type]}:{source_ref}", source_ref
 
+    def compile_existing_tuples(self, grants: tuple[GrantSnapshot, ...]) -> tuple[ProjectionTupleDelta, ...]:
+        """Project stored source/state facts without applying ADD eligibility.
+
+        Inactive models may retain existing assignments. Reconstructing those
+        edges must not call the new-source policy or regenerate source IDs.
+        """
+        result = {}
+        for grant in grants:
+            active = tuple(source for source in grant.sources if source.active)
+            if not grant.active or not active:
+                continue
+            values = [
+                self._model_delta(grant, action="WRITE", sequence=0),
+                self._grant_delta(grant, action="WRITE", sequence=1),
+            ]
+            seen = set()
+            for source in active:
+                key = source.projected_subject, source.protected
+                if key not in seen:
+                    seen.add(key)
+                    values.append(self._assignee_delta(grant, source, action="WRITE", sequence=len(values)))
+            for value in values:
+                result.setdefault(value.key, value)
+        return tuple(result.values())
+
     def add_source(
         self,
         grant: GrantSnapshot,
@@ -369,7 +488,9 @@ class GrantSourceService:
 
     @staticmethod
     def _ensure_target_model(grant: GrantSnapshot) -> None:
-        if not grant.model.active or not grant.model.action_codes:
+        if not grant.model.active or (
+            not grant.model.action_codes and not is_visibility_only_model(grant.model, grant.resource_type)
+        ):
             raise PermissionModelStateConflictError(msg=f"permission model {grant.model.model_key} is inactive")
 
     @staticmethod

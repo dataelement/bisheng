@@ -1,161 +1,46 @@
-// @ts-strict-ignore
-import MultiSelect from "@/components/bs-ui/select/multi";
+import MultiSelect from '@/components/bs-ui/select/multi';
 import { Tabs } from '@bisheng/ui';
-import { readFileLibDatabase } from "@/controllers/API";
-import { getSelectableKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
-import { showApiError } from "@/controllers/request";
-import { memo, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useKnowledgeCandidates } from './useKnowledgeCandidates';
 
-const TabsHead = memo(({ onChange }: { onChange: (v: string) => void }) => {
-    const { t } = useTranslation()
-
-    return <Tabs defaultActiveKey="file" className="mb-2" onChange={onChange} items={[{ key: "file", label: <>{t('lib.fileData')}</> },
-{ key: "qa", label: <>{t('lib.qaData')}</> }]} />
-})
-
-// F041: file / knowledge-space tab head, opt-in via `enableSpace` (assistant app).
-// Kept separate from the file/qa head so existing callers are untouched.
-const SpaceTabsHead = memo(({ onChange }: { onChange: (v: string) => void }) => {
-    const { t } = useTranslation()
-
-    return <Tabs defaultActiveKey="file" className="mb-2" onChange={onChange} items={[{ key: "file", label: <>{t('build.documentKnowledgeBase')}</> },
-{ key: "space", label: <>{t('build.knowledgeSpace')}</> }]} />
-})
-
-const enum KnowledgeType {
-    FILE = 'file',
-    QA = 'qa',
-    SPACE = 'space',
-    ALL = 'all'
+interface KnowledgeOption {
+    value: string | number;
+    label: string;
+    type?: string;
 }
-type KnowledgeTypeValues = `${KnowledgeType}`;
+interface KnowledgeSelectProps {
+    type?: 'file' | 'qa' | 'space' | 'all';
+    multiple?: boolean;
+    className?: string;
+    value: KnowledgeOption[];
+    disabled?: boolean;
+    enableSpace?: boolean;
+    errorKeys?: string[];
+    onChange: (value: KnowledgeOption[]) => void;
+    children?: (refresh: () => void) => React.ReactNode;
+}
 
-export default function KnowledgeSelect({
-    type = KnowledgeType.ALL,
-    multiple = false,
-    className = '',
-    value,
-    disabled = false,
-    // F041: opt-in second tab (文档知识库 + 知识空间) for the assistant app.
-    // Selected items carry a `type` ('file' | 'space') so the two sources can be
-    // told apart on echo (see design 决策 4 / 防坑 5.9: type='file' callers keep
-    // the plain file list unless they explicitly opt in).
-    enableSpace = false,
-    onChange,
-    children
-}:
-    { type?: KnowledgeTypeValues, multiple?: boolean, className?: string, value: any, disabled?: boolean, enableSpace?: boolean, onChange: (a: any) => any, children?: (fun: any) => React.ReactNode }) {
-
-    const { t } = useTranslation()
-    const [options, setOptions] = useState<any>([]);
-    const originOptionsRef = useRef([])
-
-    // F041: knowledge spaces are loaded once (INV-6 exception, full-return) and
-    // filtered client-side, matching the client daily-mode selector.
-    const [spaceOptions, setSpaceOptions] = useState<any>([])
-    const allSpacesRef = useRef<any[]>([])
-    // value -> type lookup so a click (MultiSelect only echoes {label,value})
-    // can be re-stamped with its source type before reaching the parent.
-    const typeByValueRef = useRef<Map<any, KnowledgeTypeValues>>(new Map())
-    const [tabType, setTabType] = useState<KnowledgeTypeValues>(KnowledgeType.FILE)
-
-    // F027: cursor-based pagination. `page > 1` semantics replaced by
-    // "do we have a cursor to fetch the next page?" The first call passes
-    // `cursor=null` for the first page; subsequent calls pass `next_cursor`.
-    const cursorRef = useRef<string | null>(null)
-    const typeRef = useRef(type === 'qa' ? 1 : 0)
-    const reload = (cursor: string | null, name: string) => {
-        readFileLibDatabase({ cursor, pageSize: 60, name, type: typeRef.current, action: 'use' }).then(res => {
-            cursorRef.current = res.next_cursor
-            originOptionsRef.current = res.data
-            const opts = res.data.map(el => ({ label: el.name, value: el.id, type: KnowledgeType.FILE }))
-            opts.forEach(o => typeByValueRef.current.set(o.value, KnowledgeType.FILE))
-            setOptions(_ops => cursor ? [..._ops, ...opts] : opts)
-        }).catch(showApiError)
-    }
-
-    // F041: load selectable knowledge spaces (mine + joined + department union).
-    const loadSpaces = () => {
-        getSelectableKnowledgeSpacesApi().then(spaces => {
-            allSpacesRef.current = spaces.map(s => ({ label: s.name, value: s.id, type: KnowledgeType.SPACE }))
-            allSpacesRef.current.forEach(o => typeByValueRef.current.set(o.value, KnowledgeType.SPACE))
-            setSpaceOptions(allSpacesRef.current)
-        }).catch(showApiError)
-    }
-    const filterSpaces = (name: string) => {
-        const kw = (name || '').toLowerCase()
-        setSpaceOptions(allSpacesRef.current.filter(o => o.label.toLowerCase().includes(kw)))
-    }
-
-    useEffect(() => {
-        reload(null, '')
-        if (enableSpace) loadSpaces()
-    }, [])
-
-    // Seed the type lookup from the echoed value so pre-selected items keep their
-    // source even before the space list finishes loading.
-    useEffect(() => {
-        (value || []).forEach((v: any) => {
-            if (v && v.value != null && v.type) typeByValueRef.current.set(v.value, v.type)
-        })
-    }, [value])
-
-    // const handleChange = (res) => {
-    //     // id => obj
-    //     onChange(res.map(el => originOptionsRef.current.find(el2 => el2.id === el)))
-    // }
-
-    // 加载更多
-    const loadMore = (name) => {
-        if (cursorRef.current) reload(cursorRef.current, name)
-    }
-
-    const handleTabChange = (val) => {
-        setTabType(val)
-        if (val === KnowledgeType.SPACE) {
-            loadSpaces()
-        } else {
-            typeRef.current = val === 'qa' ? 1 : 0
-            reload(null, '')
-        }
-        const inputDom = document.getElementById('knowledge-select')
-        if (inputDom) {
-            inputDom.value = ''
-        }
-    }
-
-    // F041: re-stamp each selected item with its source type (file | space) so the
-    // parent can persist and later echo it into the right tab.
-    const handleChange = (vals) => {
-        if (!enableSpace) return onChange(vals)
-        onChange(vals.map((el: any) => ({
-            ...el,
-            type: el.type || typeByValueRef.current.get(el.value) || KnowledgeType.FILE
-        })))
-    }
-
-    return <MultiSelect
+export default function KnowledgeSelect({ type = 'all', multiple = false, className = '', value,
+    disabled = false, enableSpace = false, errorKeys = [], onChange, children }: KnowledgeSelectProps) {
+    const { t } = useTranslation();
+    const [tab, setTab] = useState<'space' | 'qa'>(type === 'qa' ? 'qa' : 'space');
+    const candidates = useKnowledgeCandidates(tab);
+    const saved = new Map(value.map(item => [String(item.value), item]));
+    const options = candidates.options.map(item => ({ ...item, value: String(item.value) }));
+    const handleChange = (values: { value: string; label: string }[]) => onChange(values.map(item =>
+        saved.get(String(item.value)) ?? candidates.options.find(option => String(option.value) === item.value) ?? { ...item, type: tab }
+    ));
+    return <><MultiSelect
         id="knowledge-select"
-        tabs={enableSpace
-            ? <SpaceTabsHead onChange={handleTabChange} />
-            : type === KnowledgeType.ALL ? <TabsHead onChange={handleTabChange} /> : null}
-        multiple={multiple}
-        className={className}
-        value={value}
-        disabled={disabled}
-        options={enableSpace && tabType === KnowledgeType.SPACE ? spaceOptions : options}
-        placeholder={t('build.selectKnowledgeBase')}
-        searchPlaceholder={t('build.searchBaseName')}
-        onChange={handleChange}
-        onLoad={() => {
-            typeRef.current = type === 'qa' ? 1 : 0
-            reload(null, '');
-            if (enableSpace) loadSpaces();
-        }}
-        onSearch={(val) => (enableSpace && tabType === KnowledgeType.SPACE) ? filterSpaces(val) : reload(null, val)}
-        onScrollLoad={(val) => { if (!(enableSpace && tabType === KnowledgeType.SPACE)) loadMore(val) }}
-    >
-        {children?.(reload)}
-    </MultiSelect>
-};
+        tabs={type === 'all' && !enableSpace ? <Tabs activeKey={tab} onChange={next => setTab(next as 'space' | 'qa')}
+            items={[{ key: 'space', label: t('build.knowledgeSpace') }, { key: 'qa', label: t('lib.qaData') }]} /> : null}
+        multiple={multiple} className={className} value={value.map(item => ({ ...item, value: String(item.value) }))} disabled={disabled}
+        errorKeys={errorKeys} options={options} placeholder={t('build.selectKnowledgeBase')}
+        searchPlaceholder={t('build.searchBaseName')} onChange={handleChange}
+        onLoad={candidates.refresh} onSearch={candidates.search} onScrollLoad={candidates.loadMore}
+    >{children?.(candidates.refresh)}</MultiSelect>
+        {value.some(item => !options.some(option => option.value === String(item.value))) &&
+            <p className="text-xs text-text-3">{t('references.unconfirmed')}</p>}
+    </>;
+}

@@ -22,6 +22,7 @@ verbatim. It must never land on exit 1, which means "the CLI itself broke".
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from bisheng_cli.output import mask
@@ -369,6 +370,11 @@ def error_from_platform(
 ) -> CliError:
     """Translate a platform error code into a CliError."""
     hint = ERROR_HINTS.get(code)
+    if code in {16125, 16226} and isinstance(details, dict) and details.get("reason") == "k8s_quota_exceeded":
+        hint = (
+            "执行环境资源配额不足",
+            "请平台管理员检查部署资源配额与当前占用；资源释放或调整配额后重试，无需修改应用依赖。",
+        )
     if code == 16233:
         from bisheng_cli.release_notes import MAX_CODEPOINTS
         from bisheng_cli.release_notes import message as release_notes_message
@@ -479,11 +485,15 @@ def render_human(err: CliError) -> str:
         lines.append(f"  下一步: {err.next_step}")
     for hint in err.hints:
         lines.append(f"  提示: {hint}")
-    if err.code in {16124, 16227, 16228} and isinstance(err.details, dict):
+    if err.code in {16124, 16125, 16226, 16227, 16228} and isinstance(err.details, dict):
         for key, label in (("reason", "原因"), ("runtime_stage", "阶段"), ("operation_id", "操作")):
             value = err.details.get(key)
             if isinstance(value, str) and value:
                 lines.append(f"  {label}: {value}")
+        if err.code in {16125, 16226} and err.details.get("reason") == "k8s_quota_exceeded":
+            for resource, quantities in _quota_lines(err.details.get("quota")):
+                requested, used, limit = quantities
+                lines.append(f"  配额 {resource}: 本次申请 {requested}，当前占用 {used}，上限 {limit}")
     excerpt = _log_excerpt(err.details)
     if excerpt:
         label = "应用启动输出" if err.code == 16228 else ("交付准备输出" if err.code == 16227 else "运行输出")
@@ -492,3 +502,36 @@ def render_human(err: CliError) -> str:
     elif err.code in {16124, 16227, 16228}:
         lines.append("  暂无可用的运行输出；诊断可能未生成或已到期。")
     return mask("\n".join(lines))
+
+
+def _quota_lines(value):
+    """Render the public quota contract without interpolating arbitrary fields."""
+    if not isinstance(value, dict):
+        return []
+    resources = {
+        "cpu",
+        "memory",
+        "requests.cpu",
+        "limits.cpu",
+        "requests.memory",
+        "limits.memory",
+        "requests.storage",
+        "pods",
+        "count/pods",
+        "persistentvolumeclaims",
+        "count/persistentvolumeclaims",
+    }
+    rows = []
+    for resource in sorted(resources):
+        item = value.get(resource)
+        if not isinstance(item, dict):
+            continue
+        quantities = [item.get(key) for key in ("requested", "used", "limit")]
+        if all(
+            isinstance(x, str)
+            and len(x) <= 32
+            and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+|[EPTGMKk]i?|[mun])?", x)
+            for x in quantities
+        ):
+            rows.append((resource, quantities))
+    return rows

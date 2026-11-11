@@ -1,21 +1,20 @@
 import { useState, useRef, memo } from "react";
 import { Outlined } from "bisheng-icons";
 
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
-import { useChatContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
+import { useChatContext, useToastContext } from "~/Providers";
 import { Dropdown, DropdownItem, DropdownSeparator, DropdownSub, Tooltip } from "@bisheng/ui";
 import {
-  createMockProject,
-  moveChatToProject,
-  removeChatFromProject,
-  useMockProjectChats,
+  useProjectMemberships,
 } from "~/layouts/WorkbenchSidebar/projectsStore";
+import { useChatProjectActions, useProjectIdentity } from "~/hooks/useChatProjects";
 import { useSidebarProjects } from "~/layouts/WorkbenchSidebar/useSidebarProjects";
 import { SIDEBAR_ICON_BUTTON_CLASS_NAME } from "~/layouts/WorkbenchSidebar/sidebarIconButton";
 import { ProjectNameDialog } from "~/layouts/WorkbenchSidebar/ProjectNameDialog";
 import { useDeleteConversationConfirm } from "./useDeleteConversationConfirm";
 import ShareButton from "./ShareButton";
 import { cn } from "~/utils";
+import { NotificationSeverity } from "~/common";
 
 function ConvoOptions({
   conversationId,
@@ -41,27 +40,29 @@ function ConvoOptions({
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const createProjectAfterMenuCloseRef = useRef(false);
   const deleteConversationConfirm = useDeleteConversationConfirm();
-  // MOCK: projects live in localStorage until the backend has a model for them
-  // (see projectsStore) — moving a conversation only re-files it in the sidebar.
+  // Membership and project targets share the authenticated server cache.
   const projects = useSidebarProjects();
-  const projectChats = useMockProjectChats();
+  const projectChats = useProjectMemberships();
+  const actions = useChatProjectActions();
+  const identity = useProjectIdentity();
+  const [dialogIdentity, setDialogIdentity] = useState(identity);
+  const { showToast } = useToastContext();
+  const failed = () => showToast?.({ message: localize('project_sync.save_failed'), severity: NotificationSeverity.ERROR });
   const currentProjectId = conversationId ? projectChats[conversationId] : undefined;
-  // 项目 only exists in the desktop workbench sidebar, so mobile hides the row
-  // rather than filing a conversation into a folder it cannot show.
-  const isSmallScreen = usePrefersMobileLayout();
+  // Projects are accessible from the global workbench sidebar on every width.
 
   const handleMoveToProject = (projectId: string) => {
     if (!conversationId) {
       return;
     }
-    moveChatToProject(conversationId, projectId);
+    void actions.mutateAsync({ operation: { operation: 'assign', chat_id: conversationId, project_id: projectId } }).catch(failed);
   };
 
   const handleRemoveFromProject = () => {
     if (!conversationId) {
       return;
     }
-    removeChatFromProject(conversationId);
+    void actions.mutateAsync({ operation: { operation: 'assign', chat_id: conversationId, project_id: null } }).catch(failed);
   };
 
   const handleNewProject = () => {
@@ -76,13 +77,13 @@ function ConvoOptions({
     createProjectAfterMenuCloseRef.current = false;
     // Open the dialog after the menu releases its focus scope.
     event.preventDefault();
+    setDialogIdentity(identity);
     setNewProjectDialogOpen(true);
   };
 
-  const handleProjectCreate = (name: string) => {
+  const handleProjectCreate = async (name: string, draftProjectId: string) => {
     if (!conversationId) return;
-    const project = createMockProject(name);
-    moveChatToProject(conversationId, project.id);
+    await actions.mutateAsync({ operation: { operation: 'create', project_id: draftProjectId, name, chat_id: conversationId } });
   };
 
   const handleDelete = () => {
@@ -108,13 +109,12 @@ function ConvoOptions({
               <DropdownItem icon={<Outlined.Edit />} onSelect={renameHandler}>
                 {localize("com_ui_rename")}
               </DropdownItem>
-              {!isSmallScreen && (
                 <DropdownSub label={localize("com_workbench_sidebar.move_to_project")} icon={<Outlined.MoveToFolder />}>
                   <DropdownItem icon={<Outlined.Plus />} disabled={!conversationId} onSelect={handleNewProject}>
                     {localize("com_workbench_sidebar.project_new")}
                   </DropdownItem>
                   {projects.length > 0 && <DropdownSeparator />}
-                  {projects.map((project) => (
+                  {projects.filter(project => !project.readonly).map((project) => (
                     <DropdownItem key={project.id} icon={<Outlined.FolderClose />} onSelect={() => handleMoveToProject(project.id)}>
                       {project.name}
                     </DropdownItem>
@@ -128,7 +128,6 @@ function ConvoOptions({
                     </>
                   )}
                 </DropdownSub>
-              )}
               <DropdownSeparator />
               <DropdownItem danger icon={<Outlined.Delete />} onSelect={handleDelete}>
                 {localize("com_ui_delete")}
@@ -152,7 +151,7 @@ function ConvoOptions({
       </span>
       </Tooltip>
       <ProjectNameDialog
-        open={newProjectDialogOpen}
+        open={newProjectDialogOpen && dialogIdentity === identity}
         onOpenChange={setNewProjectDialogOpen}
         onSubmit={handleProjectCreate}
       />

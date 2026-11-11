@@ -1,14 +1,16 @@
 // @ts-strict-ignore
-import { Pagination, Button, Select } from '@bisheng/ui';
+import { Pagination, Button, DatePicker, Input, Select } from '@bisheng/ui';
+import type { DatePickerError, DatePickerOpenRange } from '@bisheng/ui';
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
-import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
+import { useDatePickerLocale } from "@/hooks/useDatePickerLocale";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { notification } from "@bisheng/ui";
 import {
     actionToI18nKey,
     AuditLogFilters,
+    EMPTY_ORG_SELECTION,
     exportSystemLogDataApi,
     getActionsApi,
     getActionsByModuleApi,
@@ -34,9 +36,13 @@ import {
     renderObjectName,
     renderObjectType,
     renderOperator,
+    renderOrg,
     renderSystemId,
     toAppOptions,
 } from "./auditRow";
+import { AuditEmptyState } from "../components/AuditEmptyState";
+import { OrgFilter } from "../components/OrgFilter";
+import type { OrgSelection } from "@/types/api/audit";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -93,23 +99,25 @@ export { actionToI18nKey }
 type FilterKeys = {
     userIds: number[]
     groupId: string
-    start?: Date
-    end?: Date
+    dateRange: DatePickerOpenRange | null
     moduleId: string
     action: string
     targetAppId: string
     tenantId: string
+    org: OrgSelection
+    note: string
 }
 
 const init: FilterKeys = {
     userIds: [],
     groupId: '',
-    start: undefined,
-    end: undefined,
+    dateRange: null,
     moduleId: '',
     action: '',
     targetAppId: '',
     tenantId: '',
+    org: EMPTY_ORG_SELECTION,
+    note: '',
 }
 
 // What the backend receives for one set of controls — the list and the
@@ -117,17 +125,20 @@ const init: FilterKeys = {
 const toFilters = (keys: FilterKeys): AuditLogFilters => ({
     userIds: keys.userIds,
     groupId: keys.groupId,
-    start: keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss'),
-    end: keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss').replace('00:00:00', '23:59:59'),
+    start: keys.dateRange?.[0] ? `${keys.dateRange[0]} 00:00:00` : undefined,
+    end: keys.dateRange?.[1] ? `${keys.dateRange[1]} 23:59:59` : undefined,
     moduleId: keys.moduleId,
     action: keys.action,
     targetAppId: keys.targetAppId,
     tenantId: keys.tenantId ? Number(keys.tenantId) : undefined,
+    org: keys.org,
+    note: keys.note.trim(),
 })
 
 export default function SystemLog() {
     const { t } = useTranslation()
     const paginationLocale = usePaginationLocale();
+    const datePickerLocale = useDatePickerLocale();
     const { appConfig } = useContext(locationContext)
     const { user } = useContext(userContext)
     const multiTenantEnabled = !!appConfig.multiTenantEnabled
@@ -137,12 +148,14 @@ export default function SystemLog() {
     const { modules, loadModules } = useModules(multiTenantEnabled)
     const { apps, searchApps, loadApps } = useAuditApps(t)
     const { showTenant, tenants, loadTenants } = useTenantFilter(multiTenantEnabled && Boolean(user?.is_global_super))
-    const { page, pageSize, loading, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
+    const { page, pageSize, loading, loaded, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
         getLogsApi({ ...param })
     )
 
     const [actions, setActions] = useState<any[]>([])
     const [keys, setKeys] = useState<FilterKeys>({ ...init })
+    const [dateError, setDateError] = useState<DatePickerError | null>(null)
+    const [datePickerVersion, setDatePickerVersion] = useState(0)
     // The filters the table currently shows — the export follows these, not
     // the controls, so a half-edited form cannot export something the user
     // has not looked at.
@@ -159,6 +172,8 @@ export default function SystemLog() {
     }
     const handleReset = () => {
         setKeys({ ...init })
+        setDateError(null)
+        setDatePickerVersion(version => version + 1)
         appliedRef.current = toFilters(init)
         filterData(toFilters(init))
     }
@@ -182,16 +197,16 @@ export default function SystemLog() {
         loadUsers()
     }, [])
 
-    const columnCount = showTenant ? 11 : 10
-
     return <div className="relative">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>
         )}
-        <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto px-2 py-4 pb-10">
-            <div className="flex flex-wrap gap-4">
+        <div className="flex h-[calc(100vh-128px-var(--license-banner-h,0px))] flex-col overflow-y-auto px-2 py-4 pb-10">
+            <div className="flex shrink-0 flex-wrap gap-4">
+                <OrgFilter value={keys.org} tenantId={keys.tenantId ? Number(keys.tenantId) : null}
+                    onChange={org => setKeys({ ...keys, org })} />
                 <Select
                     {...selectLabels}
                     multiple
@@ -215,12 +230,18 @@ export default function SystemLog() {
                     onChange={(value) => setKeys({ ...keys, groupId: value == null ? '' : value })}
                     options={groups.filter(g => g.id != null && g.id !== '').map(g => ({ value: g.id, label: g.group_name }))}
                 />
-                <div className="w-[180px] relative">
-                    <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({ ...keys, start: t })} />
-                </div>
-                <div className="w-[180px] relative">
-                    <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({ ...keys, end: t })} />
-                </div>
+                <DatePicker
+                    key={datePickerVersion}
+                    aria-label={t('datePicker.dateRange')}
+                    className="w-[336px] max-w-full"
+                    mode="range"
+                    allowOpenRange
+                    allowClear
+                    value={keys.dateRange}
+                    onChange={(dateRange: DatePickerOpenRange | null) => setKeys(current => ({ ...current, dateRange }))}
+                    onValidationChange={setDateError}
+                    locale={datePickerLocale}
+                />
                 <Select
                     {...selectLabels}
                     allowClear
@@ -253,23 +274,28 @@ export default function SystemLog() {
                     options={tenants.filter(tenant => tenant.id != null).map(tenant => ({ value: String(tenant.id), label: tenant.tenant_name }))}
                     value={keys.tenantId || null} onOpenChange={open => { if (open) loadTenants() }}
                     onChange={value => setKeys({ ...keys, tenantId: value == null ? '' : String(value) })} />}
-                <div className="flex items-center gap-2">
-                    <Button size="medium" onClick={handleSearch}>
+                <Input
+                    className="w-[200px]"
+                    aria-label={t('log.remark')}
+                    placeholder={t('log.remark')}
+                    value={keys.note}
+                    onChange={(event) => setKeys({ ...keys, note: event.target.value.slice(0, 200) })}
+                />
+                <div className="ml-auto mr-4 flex shrink-0 items-center gap-4">
+                    <Button size="medium" onClick={handleSearch} disabled={Boolean(dateError)}>
                         {t('log.searchButton')}
                     </Button>
                     <Button size="medium" variant="outlined" onClick={handleReset} color="default">
                         {t('log.resetButton')}
                     </Button>
-                    <Button size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
-                        {t('log.exportButton')}
-                    </Button>
                 </div>
             </div>
-            <Table className="mb-[50px]">
+            <Table className="mb-[50px]" containerClassName="shrink-0">
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
                         <TableHead className="w-[200px] min-w-[100px]">{t('log.username')}</TableHead>
+                        <TableHead className="w-[200px] min-w-[120px]">{t('log.org.column')}</TableHead>
                         <TableHead className="w-[200px] min-w-[100px]">{t('log.operationTime')}</TableHead>
                         <TableHead className="w-[100px] min-w-[100px]">{t('log.systemModule')}</TableHead>
                         <TableHead className="w-[150px] min-w-[100px]">{t('log.operationAction')}</TableHead>
@@ -291,6 +317,7 @@ export default function SystemLog() {
                                     <div className="max-w-[200px] break-all truncate-multiline">{operator.primary}</div>
                                     {operator.secondary && <div className="max-w-[200px] break-all text-xs text-muted-foreground">{operator.secondary}</div>}
                                 </TableCell>
+                                <TableCell><div className="max-w-[200px] break-all truncate-multiline">{renderOrg(log, t)}</div></TableCell>
                                 <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{renderSystemId(log, t)}</TableCell>
                                 <TableCell>{renderEventType(log, t, actionToI18nKey)}</TableCell>
@@ -308,19 +335,17 @@ export default function SystemLog() {
                         )
                     })}
                 </TableBody>
-                {!logs.length && <TableFooter>
-                    <TableRow>
-                        <TableCell colSpan={columnCount} className="text-center text-gray-400">{t('build.empty')}</TableCell>
-                    </TableRow>
-                </TableFooter>}
             </Table>
-            {!logs.length && <div className="h-[700px]"></div>}
+            {loaded && !loading && logs.length === 0 && <AuditEmptyState />}
         </div>
         {/* Pagination */}
 
-        <div className="bisheng-table-footer px-6 bg-background-login">
+        <div className="bisheng-table-footer gap-4 px-6 bg-background-login">
+            <Button className="shrink-0" size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
+                {t('log.exportButton')}
+            </Button>
             <Pagination locale={paginationLocale}
-                className="float-right justify-end w-full mr-6"
+                className="min-w-0"
                 current={page}
                 pageSize={pageSize}
                 total={total}

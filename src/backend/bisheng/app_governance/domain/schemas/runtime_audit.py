@@ -14,10 +14,15 @@ class AuthorizedRuntimeAuditScope:
     owner_tenant_id: int
     tenant_id: int | None
     authorized_app_ids: tuple[str, ...] | None = None
+    # ``AuditDeptScope`` (F003 decision 10); ``None`` means not department-limited.
+    dept_scope: object | None = None
 
     @property
     def digest(self):
-        return digest([self.creator_user_id, self.owner_tenant_id, self.tenant_id, self.authorized_app_ids])
+        parts = [self.creator_user_id, self.owner_tenant_id, self.tenant_id, self.authorized_app_ids]
+        if self.dept_scope is not None:
+            parts.append(self.dept_scope.digest_parts())
+        return digest(parts)
 
 
 def digest(value):
@@ -36,6 +41,33 @@ def utc_time(value):
         raise RuntimeAuditFilterInvalidError() from exc
 
 
+DEPT_FILTER_KEYS = ("dept_ids", "include_descendants", "include_none", "include_unrecorded")
+_FLAGS = {"true": True, "false": False}
+_MAX_DEPT_IDS = 200
+
+
+def normalize_dept_filters(result):
+    """In place: ``dept_ids`` comma string -> sorted unique positive ints; flags -> bool."""
+    if "dept_ids" in result:
+        raw = result["dept_ids"]
+        try:
+            ids = raw.split(",") if isinstance(raw, str) else list(raw)
+            parsed = sorted({int(str(one).strip()) for one in ids})
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise RuntimeAuditFilterInvalidError() from exc
+        if not parsed or parsed[0] <= 0 or len(parsed) > _MAX_DEPT_IDS:
+            raise RuntimeAuditFilterInvalidError()
+        result["dept_ids"] = parsed
+    for key in DEPT_FILTER_KEYS[1:]:
+        if key in result:
+            value = result[key]
+            if not isinstance(value, bool):
+                if not isinstance(value, str) or value.lower() not in _FLAGS:
+                    raise RuntimeAuditFilterInvalidError()
+                value = _FLAGS[value.lower()]
+            result[key] = value
+
+
 def normalize(kind, filters, *, now=None):
     if kind not in FIELDS or set(filters) - {
         "time_range",
@@ -44,6 +76,7 @@ def normalize(kind, filters, *, now=None):
         "app_id",
         "visitor_id",
         "credential_id",
+        *DEPT_FILTER_KEYS,
     }:
         raise RuntimeAuditFilterInvalidError()
     result = {k: v for k, v in filters.items() if v is not None and v != ""}
@@ -52,10 +85,14 @@ def normalize(kind, filters, *, now=None):
     if mode not in {"recent7d", "custom", "all"} or (kind != "model" and result.get("credential_id") is not None):
         raise RuntimeAuditFilterInvalidError()
     if mode == "custom":
-        start, end = utc_time(result.get("start_time")), utc_time(result.get("end_time"))
-        if start > end:
+        start = utc_time(result["start_time"]) if "start_time" in result else None
+        end = utc_time(result["end_time"]) if "end_time" in result else None
+        if (start is None and end is None) or (start is not None and end is not None and start > end):
             raise RuntimeAuditFilterInvalidError()
-        result.update(start_time=start.isoformat(), end_time=end.isoformat())
+        if start is not None:
+            result["start_time"] = start.isoformat()
+        if end is not None:
+            result["end_time"] = end.isoformat()
     elif result.get("start_time") or result.get("end_time"):
         raise RuntimeAuditFilterInvalidError()
     for key in ("visitor_id", "credential_id"):
@@ -68,6 +105,7 @@ def normalize(kind, filters, *, now=None):
                 raise RuntimeAuditFilterInvalidError() from exc
     if "app_id" in result and (not isinstance(result["app_id"], str) or len(result["app_id"]) > 64):
         raise RuntimeAuditFilterInvalidError()
+    normalize_dept_filters(result)
     frozen = dict(result)
     upper = now or datetime.utcnow()
     if mode == "recent7d":
@@ -109,6 +147,8 @@ FIELDS = {
         "latency_ms",
         "ttft_ms",
         "request_id",
+        "operator_dept_id",
+        "operator_dept_path",
     ),
     "capability": (
         "id",
@@ -124,6 +164,18 @@ FIELDS = {
         "chunk_count",
         "latency_ms",
         "version_id",
+        "operator_dept_id",
+        "operator_dept_path",
     ),
-    "access": ("id", "entry_time", "app_id", "app_name_snapshot", "user_id", "user_name", "request_id"),
+    "access": (
+        "id",
+        "entry_time",
+        "app_id",
+        "app_name_snapshot",
+        "user_id",
+        "user_name",
+        "request_id",
+        "operator_dept_id",
+        "operator_dept_path",
+    ),
 }

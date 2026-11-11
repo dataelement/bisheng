@@ -58,7 +58,7 @@ export default function SyncSpaceItem({ space, onDelete }: Props) {
                 onClick={onDelete}
                 className="shrink-0 px-1 text-[13px] text-text-3 hover:text-[#F53F3F]"
             >
-                {localize?.("com_subscription.delete") || "删除"}
+                {localize?.("com_subscription.delete")}
             </button>
         </div>
     );

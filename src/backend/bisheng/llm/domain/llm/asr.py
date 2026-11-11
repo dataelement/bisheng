@@ -10,6 +10,7 @@ from bisheng.common.errcode.server import (
     AsrProviderDeletedError,
     NoAsrModelConfigError,
 )
+from bisheng.common.services.failure_context import failure_boundary
 from bisheng.core.ai import AliyunASRClient, AzureOpenAIASRClient, BaseASRClient, OpenAIASRClient
 from bisheng.core.ai.asr.realtime import RealtimeASRClient, realtime_protocol
 from bisheng.core.ai.asr.speech_cloud import BaiduRealtimeASRClient, TencentRealtimeASRClient
@@ -98,17 +99,14 @@ class BishengASR(BishengBase):
 
     @classmethod
     def uses_realtime(cls, model_info: LLMModel | None, server_info: LLMServer | None) -> bool:
-        """Realtime when the row says so, or when it is a legacy file row for a streaming engine.
+        """Realtime only when the saved row is ``asr_rt``.
 
-        Volcengine, Baidu, and Tencent rows saved before ``asr_rt`` still have
-        ``model_type=asr``. They have no file client, so the workbench must
-        open the streaming session instead of posting the recording.
+        Engine names no longer redirect an ``asr`` row. Revision
+        ``asr_rt_model_type`` already moved the previous realtime rows.
         """
         if model_info is None or server_info is None:
             return False
-        if model_info.model_type == LLMModelType.ASR_RT.value:
-            return True
-        return realtime_protocol(server_info.type, model_info.model_name) is not None
+        return model_info.model_type == LLMModelType.ASR_RT.value
 
     @classmethod
     async def init_asr_client(cls, model_info: LLMModel, server_info: LLMServer) -> BaseASRClient:
@@ -156,6 +154,7 @@ class BishengASR(BishengBase):
         return _asr_client_type[server_info.type]["client"](**new_params)
 
     @wrapper_bisheng_model_limit_check_async
+    @failure_boundary("model_service", "asr", "transcribe")
     async def ainvoke(self, audio: Union[str, bytes, BinaryIO], **kwargs) -> str:
         return await self.asr.transcribe(audio=audio, **kwargs)
 

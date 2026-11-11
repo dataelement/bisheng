@@ -1,12 +1,25 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { EMPTY_ORG_SELECTION, getAuditAppListApi } from '@/controllers/API/log'
 import AppUseLog from './index'
 
-const mock = vi.hoisted(() => ({ filter: vi.fn(), page: vi.fn(), exportApi: vi.fn(), csv: vi.fn(), message: vi.fn() }))
+const mock = vi.hoisted(() => {
+    const rows = [
+        { id: 1, flow_type: 5, flow_name: 'Assistant', flow_id: 'app-1', chat_id: 'chat-1', usage_type: 'assistant', user_groups: [{ name: 'Group' }], create_time: '2026-10-20T10:00:00', sensitive_status: 1 },
+        { id: 2, flow_type: 15, chat_id: 'daily-1', usage_type: 'daily', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 2, operator_dept_id: 3, operator_dept_path: 'Root/Sales' },
+        { id: 3, flow_type: 20, flow_name: 'Space QA', chat_id: 'space-1', usage_type: 'workflow', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 1, operator_dept_id: -1 },
+        { id: 4, flow_type: 25, flow_name: 'Research', chat_id: 'task-1', usage_type: 'task', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 1 },
+    ]
+    return { filter: vi.fn(), page: vi.fn(), exportApi: vi.fn(), csv: vi.fn(), message: vi.fn(), rows, initialRows: rows }
+})
 vi.mock('@/contexts/locationContext', async () => ({ locationContext: (await import('react')).createContext({ appConfig: { isPro: true } }) }))
 vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: { user_name: 'Admin' } }) }))
-vi.mock('@/controllers/API/log', () => ({ getAuditAppListApi: vi.fn(), exportCsvDataApi: mock.exportApi }))
+vi.mock('@/controllers/API/log', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/controllers/API/log')>()),
+    getAuditAppListApi: vi.fn(), exportCsvDataApi: mock.exportApi,
+    getAuditSessionUsersApi: vi.fn().mockResolvedValue([{ user_id: 7, user_name: 'Alice' }]),
+}))
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
 const previous = await (() => ({ useToast: () => ({ message: mock.message }) }))();
@@ -15,19 +28,23 @@ return { ...actual, notification: { ...actual.notification, open: Reflect.get(pr
 })
 vi.mock('@/util/utils', async importOriginal => ({ ...(await importOriginal<typeof import('@/util/utils')>()), exportCsv: mock.csv }))
 vi.mock('@/components/bs-comp/filterTableDataComponent/FilterByApp', () => ({ default: ({ onChange }: { onChange: (value: string[]) => void }) => <button onClick={() => onChange(['app-1'])}>Pick app</button> }))
-vi.mock('@/components/bs-comp/filterTableDataComponent/FilterByUser', () => ({ default: () => null }))
 vi.mock('@/components/bs-comp/filterTableDataComponent/FilterByUsergroup', () => ({ default: () => null }))
-vi.mock('@/components/bs-comp/filterTableDataComponent/FilterByDate', () => ({ default: () => null }))
-vi.mock('@/util/hook', () => ({ useTable: () => ({ page: 2, pageSize: 20, total: 2, loading: false, setPage: mock.page, filterData: mock.filter, data: [
-    { id: 1, flow_type: 5, flow_name: 'Assistant', flow_id: 'app-1', chat_id: 'chat-1', user_groups: [{ name: 'Group' }], create_time: '2026-10-20T10:00:00', sensitive_status: 1 },
-    { id: 2, flow_type: 15, chat_id: 'daily-1', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 2 },
-] }) }))
-afterEach(() => { cleanup(); vi.clearAllMocks() })
+vi.mock('@/util/hook', () => ({
+    useTable: (_options: object, load: (params: object) => unknown) => ({
+        page: 2, pageSize: 20, total: mock.rows.length, loading: false, loaded: true, setPage: mock.page, data: mock.rows,
+        filterData: (params: object) => {
+            mock.filter(params)
+            load({ ...params, pageSize: 20 })
+        },
+    }),
+}))
+afterEach(() => { cleanup(); vi.clearAllMocks(); mock.rows = mock.initialRows })
 beforeEach(() => { mock.exportApi.mockResolvedValue({ data: [{ chat_id: 'chat-1', flow_name: 'Assistant', create_time: '2026-10-20T10:00:00', user_groups: [], messages: [{ message: '=formula', category: 'question', create_time: '2026-10-20T10:00:00', liked: 1, copied: true, sensitive_status: 1 }] }] }) })
 it('preserves assistant/daily detail links, applied filters and reset', () => {
     render(<MemoryRouter><AppUseLog /></MemoryRouter>)
-    expect(screen.getAllByRole('link', { name: 'lib.details' }).map(link => link.getAttribute('href'))).toEqual(['/log/chatlog/app-1/chat-1/5', '/log/chatlog/daily-1'])
-    expect(screen.getByText('log.sensitivePass')).toBeVisible()
+    expect(screen.getAllByRole('button')[0]).toHaveAccessibleName('log.org.placeholder')
+    expect(screen.getAllByRole('link', { name: 'lib.details' }).map(link => link.getAttribute('href'))).toEqual(['/log/chatlog/app-1/chat-1/5', '/log/chatlog/daily-1', '/log/chatlog/space-1', '/log/chatlog/task-1'])
+    expect(screen.getAllByText('log.sensitivePass')[0]).toBeVisible()
     expect(screen.getByText('log.sensitiveViolation')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Pick app' }))
     fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
@@ -45,6 +62,72 @@ it('keeps the export loading state, default 60-day request and CSV formula prote
     expect(mock.exportApi).toHaveBeenCalledWith(expect.objectContaining({ start_date: expect.stringMatching(/00:00:00$/), end_date: expect.stringMatching(/23:59:59$/) }))
     resolveExport({ data: [{ chat_id: 'chat-1', flow_name: 'Assistant', create_time: '2026-10-20T10:00:00', user_groups: [], messages: [{ message: '=formula', category: 'question', create_time: '2026-10-20T10:00:00', liked: 1, copied: true, sensitive_status: 1 }] }] })
     await waitFor(() => expect(mock.csv).toHaveBeenCalled())
-    expect(mock.csv.mock.calls[0][0][1][7]).toBe("'=formula")
+    const [header, line] = mock.csv.mock.calls[0][0]
+    expect(header.slice(0, 7)).toEqual(['log.csvHeaders.sessionId', 'log.csvHeaders.appName', 'log.csvHeaders.usageType', 'log.csvHeaders.sessionCreationTime', 'log.csvHeaders.userName', 'log.csvHeaders.org', 'log.csvHeaders.userGroup'])
+    expect(line[5]).toBe('log.org.unrecorded')
+    expect(line[9]).toBe("'=formula")
     await waitFor(() => expect(button).toBeEnabled())
+})
+it('queries with either date endpoint and keeps a single-date export within 60 days', async () => {
+    render(<MemoryRouter><AppUseLog /></MemoryRouter>)
+    const start = screen.getByRole('combobox', { name: 'datePicker.startDate' })
+    const search = screen.getByRole('button', { name: 'log.searchButton' })
+    const reset = screen.getByRole('button', { name: 'log.resetButton' })
+    fireEvent.change(start, { target: { value: '2026-10-20' } })
+    fireEvent.keyDown(start, { key: 'Enter' })
+    expect(screen.getByRole('combobox', { name: 'datePicker.endDate' })).toHaveAttribute('placeholder', 'datePicker.unlimited')
+    fireEvent.click(search)
+    expect(getAuditAppListApi).toHaveBeenLastCalledWith(expect.objectContaining({ start_date: '2026-10-20 00:00:00', end_date: undefined }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'log.exportButton' }))
+    expect(mock.exportApi).toHaveBeenLastCalledWith(expect.objectContaining({ start_date: '2026-10-20 00:00:00', end_date: '2026-12-18 23:59:59' }))
+    await waitFor(() => expect(mock.csv).toHaveBeenCalled())
+
+    fireEvent.click(reset)
+    const end = screen.getByRole('combobox', { name: 'datePicker.endDate' })
+    fireEvent.change(end, { target: { value: '2026-10-20' } })
+    fireEvent.keyDown(end, { key: 'Enter' })
+    fireEvent.click(search)
+    expect(getAuditAppListApi).toHaveBeenLastCalledWith(expect.objectContaining({ start_date: undefined, end_date: '2026-10-20 23:59:59' }))
+
+    fireEvent.click(reset)
+    fireEvent.change(screen.getByRole('combobox', { name: 'datePicker.endDate' }), { target: { value: '2026-02-30' } })
+    expect(search).toBeDisabled()
+    fireEvent.click(reset)
+    expect(screen.getByRole('combobox', { name: 'datePicker.endDate' })).toHaveValue('')
+    expect(search).toBeEnabled()
+})
+it('shows an empty state when the query returns no rows', () => {
+    mock.rows = []
+    render(<MemoryRouter><AppUseLog /></MemoryRouter>)
+    expect(screen.getByRole('status')).toHaveTextContent('log.emptyTitle')
+    expect(screen.getByText('log.emptyHint')).toBeVisible()
+    expect(screen.getByText('log.appName')).toBeVisible()
+})
+it('shows the organisation column and applies usage type and organisation only on query', async () => {
+    render(<MemoryRouter><AppUseLog /></MemoryRouter>)
+    expect(screen.getByText('Root/Sales')).toBeVisible()
+    expect(screen.getByText('log.org.notApplicable')).toBeVisible()
+    const appNames = screen.getAllByRole('row').slice(1).map(row => within(row).getAllByRole('cell')[0].textContent)
+    expect(appNames).toEqual(['Assistant', '--', 'Space QA', '--'])
+    expect(screen.getAllByText('log.usageType.label').length).toBeGreaterThan(0)
+    expect(screen.getByText('log.usageType.assistant')).toBeVisible()
+    expect(screen.getByText('log.usageType.daily')).toBeVisible()
+    expect(screen.getByText('log.usageType.workflow')).toBeVisible()
+    const usageType = screen.getByRole('combobox', { name: 'log.usageType.label' })
+    expect(usageType).toHaveTextContent('log.usageType.all')
+    const appPicker = screen.getByRole('button', { name: 'Pick app' })
+    expect(usageType.compareDocumentPosition(appPicker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.keyDown(usageType, { key: 'ArrowDown' })
+    expect(await screen.findByRole('option', { name: 'log.usageType.all' })).toBeVisible()
+    fireEvent.click(await screen.findByRole('option', { name: 'log.usageType.task' }))
+    expect(mock.filter).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
+    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ usageType: 'task', org: EMPTY_ORG_SELECTION }))
+    fireEvent.keyDown(usageType, { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'log.usageType.all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'log.searchButton' }))
+    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ usageType: 'all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'log.resetButton' }))
+    expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ usageType: 'all', userId: null }))
 })

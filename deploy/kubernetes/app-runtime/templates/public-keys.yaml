@@ -1,0 +1,14 @@
+{{- include "runtime.defaults" . -}}
+{{- $existing := lookup "v1" "ConfigMap" .Values.execution.namespace .Values.execution.dataKeyConfigMap -}}
+{{- if $existing -}}
+{{- if or (ne (get (default (dict) $existing.metadata.annotations) "meta.helm.sh/release-name") .Release.Name) (ne (get (default (dict) $existing.metadata.annotations) "meta.helm.sh/release-namespace") .Release.Namespace) }}{{ fail "public key ConfigMap belongs to another release" }}{{ end -}}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.execution.dataKeyConfigMap }}
+  namespace: {{ .Values.execution.namespace }}
+  labels:
+    runtime.bisheng.io/installation: {{ .Values.execution.installationId }}
+  annotations: {helm.sh/resource-policy: keep}
+data: {{ toYaml (default (dict) $existing.data) | nindent 2 }}

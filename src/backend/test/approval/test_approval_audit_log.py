@@ -85,6 +85,7 @@ async def test_update_scenario_writes_toggle_audit_when_enabled_flips():
     assert row["operator_id"] == 7
     assert row["ip_address"] == "10.0.0.1"
     assert row["metadata"]["scenario_code"] == "menu_access_request"
+    assert row["note"] == "菜单权限申请"
     assert row["metadata"]["before_enabled"] is True
     assert row["metadata"]["after_enabled"] is False
 
@@ -127,6 +128,7 @@ async def test_outbox_success_emits_handler_success_audit():
         id=11,
         tenant_id=1,
         scenario_code="menu_access_request",
+        scenario_name="菜单权限申请",
         handler_key="menu_access_request",
         business_name="菜单权限申请",
         status="approved",
@@ -163,6 +165,7 @@ async def test_outbox_success_emits_handler_success_audit():
     assert row["metadata"]["outbox_id"] == 77
     assert row["metadata"]["handler"] == "menu_access_request"
     assert row["metadata"]["business_result"] == "success"
+    assert row["note"] == "菜单权限申请"
 
 
 async def test_outbox_failure_emits_handler_failed_audit_with_error_summary():
@@ -171,8 +174,10 @@ async def test_outbox_failure_emits_handler_failed_audit_with_error_summary():
         id=11,
         tenant_id=1,
         scenario_code="menu_access_request",
+        scenario_name="菜单权限申请",
         handler_key="menu_access_request",
         business_name="菜单权限申请",
+        applicant_user_id=7,
         status="approved",
     )
     outbox = SimpleNamespace(
@@ -191,9 +196,15 @@ async def test_outbox_failure_emits_handler_failed_audit_with_error_summary():
         create_exception=AsyncMock(),
     )
 
-    with patch(
-        "bisheng.approval.domain.services.approval_outbox_service.AuditLogDao.ainsert_v2",
-        new=AsyncMock(side_effect=lambda **kw: captured.append(kw)),
+    with (
+        patch(
+            "bisheng.approval.domain.services.approval_outbox_service.AuditLogDao.ainsert_v2",
+            new=AsyncMock(side_effect=lambda **kw: captured.append(kw)),
+        ),
+        patch(
+            "bisheng.approval.domain.services.approval_notification_service.ApprovalNotificationService.notify_admins",
+            new=AsyncMock(),
+        ),
     ):
         service = ApprovalOutboxService(instance_repository=repo)
         result = await service.execute_outbox(
@@ -206,6 +217,7 @@ async def test_outbox_failure_emits_handler_failed_audit_with_error_summary():
     row = captured[0]
     assert row["action"] == "approval.handler.failed"
     assert row["reason"] == "boom: downstream 500"
+    assert row["note"] == "菜单权限申请"
     assert row["metadata"]["error_stack_summary"] == "boom: downstream 500"
     assert row["metadata"]["payload_snapshot"] == {"menu_key": "flow"}
 
@@ -331,6 +343,7 @@ async def test_gate_emits_submit_audit_when_route_missing_exception():
     assert row["ip_address"] == "10.0.0.42"
     assert row["reason"] == "需要权限"
     assert row["metadata"]["scenario_code"] == "menu_access_request"
+    assert row["note"] == "菜单权限申请"
     assert row["metadata"]["exception_type"] == ApprovalExceptionType.ROUTE_MISSING
     assert row["metadata"]["instance_status"] == ApprovalInstanceStatus.EXCEPTION
 
@@ -344,6 +357,7 @@ async def test_gate_emits_submit_audit_when_approver_empty_exception():
     row = captured[0]
     assert row["action"] == "approval.request.submit"
     assert row["target_id"] == str(result.instance_id)
+    assert row["note"] == "知识空间加入审批"
     assert row["metadata"]["exception_type"] == ApprovalExceptionType.APPROVER_EMPTY
     assert row["metadata"]["flow_version_id"] == 21
     assert row["metadata"]["route_rule_id"] == 31

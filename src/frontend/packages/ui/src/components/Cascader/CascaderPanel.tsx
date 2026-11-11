@@ -126,7 +126,6 @@ function CascaderRow(props: RowProps) {
     panelRadius,
     loadingKeys,
     failedKeys,
-    phone,
     searchResult,
     separator,
     onActive,
@@ -171,7 +170,7 @@ function CascaderRow(props: RowProps) {
       data-disabled={option.disabled ? '' : undefined}
       className={optionClass(
         panelRadius,
-        cn(phone && 'min-h-11 py-[11px]', !multiple && !checkStrictly && selected === true && 'font-medium'),
+        cn(!multiple && !checkStrictly && selected === true && 'font-medium'),
       )}
       onMouseDown={(event) => event.preventDefault()}
       onPointerMove={() => {
@@ -228,12 +227,31 @@ export function CascaderPanel(props: CascaderPanelProps) {
     phone,
   } = props;
 
+  const scrollPositions = React.useRef(new Map<string, number>());
+  const scrollNodes = React.useRef(new Map<string, HTMLDivElement>());
+  const setColumnRef = (key: string, node: HTMLDivElement | null) => {
+    const previous = scrollNodes.current.get(key);
+    if (previous) scrollPositions.current.set(key, previous.scrollTop);
+    if (node) {
+      scrollNodes.current.set(key, node);
+      node.scrollTop = scrollPositions.current.get(key) ?? 0;
+    } else {
+      scrollNodes.current.delete(key);
+    }
+  };
+
   React.useEffect(() => {
     const node = document.getElementById(
       cascaderOptionId(props.treeId, props.activeLevel, props.activeIndex),
     );
-    node?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [props.activeIndex, props.activeLevel, props.treeId]);
+    const column = node?.closest<HTMLElement>('[data-cascader-column]');
+    if (!node || !column) return;
+    // Scroll only the menu, never the document behind an anchored popover.
+    const rowBounds = node.getBoundingClientRect();
+    const columnBounds = column.getBoundingClientRect();
+    if (rowBounds.top < columnBounds.top) column.scrollTop += rowBounds.top - columnBounds.top;
+    else if (rowBounds.bottom > columnBounds.bottom) column.scrollTop += rowBounds.bottom - columnBounds.bottom;
+  }, [props.activeIndex, props.activeLevel, props.treeId, phone]);
 
   if (loading) {
     return (
@@ -247,7 +265,12 @@ export function CascaderPanel(props: CascaderPanelProps) {
   if (searchResults !== null) {
     if (searchResults.length === 0) return <div className={PANEL_MESSAGE}>{noMatchText}</div>;
     return (
-      <div className={cn(MENU_COLUMN, phone && 'max-h-none')} role="group">
+      <div
+        ref={(node) => setColumnRef('search', node)}
+        data-cascader-column
+        className={cn(MENU_COLUMN, 'min-h-0')}
+        role="group"
+      >
         {searchResults.map((entry, index) => {
           const option = entry.options[entry.options.length - 1];
           if (!option) return null;
@@ -272,15 +295,17 @@ export function CascaderPanel(props: CascaderPanelProps) {
   const visibleColumns = phone ? columns.slice(-1) : columns;
   const levelOffset = phone ? columns.length - 1 : 0;
   return (
-    <div role="group" className={cn('flex min-w-0', phone && 'block')}>
+    <div role="group" className={cn('flex min-w-0', phone && 'min-h-0 flex-col')}>
       {visibleColumns.map((column, visibleIndex) => {
         const level = visibleIndex + levelOffset;
         return (
           <React.Fragment key={JSON.stringify(column.parentPath)}>
             {visibleIndex > 0 && !phone && <div className="w-px shrink-0 bg-border-base" />}
             <div
+              ref={(node) => setColumnRef(JSON.stringify(column.parentPath), node)}
+              data-cascader-column
               role="group"
-              className={cn(MENU_COLUMN, 'min-w-40 flex-1 basis-40', phone && 'max-h-none')}
+              className={cn(MENU_COLUMN, 'min-h-0 flex-1', phone ? 'min-w-0' : 'min-w-40 basis-40')}
               style={phone ? undefined : { maxWidth: 240 }}
             >
               {column.options.map((option, index) => {

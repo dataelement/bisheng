@@ -17,7 +17,7 @@ from bisheng.permission.domain.services.permission_action_service import (
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 
-SYSTEM_TOOL_ACTIONS = frozenset({"visible", "use"})
+SYSTEM_TOOL_ACTIONS = frozenset({"visible"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +29,8 @@ class ToolPermissionRecord:
     permission_version: int
     context_version: str
     preset: bool
+
+    creation_state: str = "READY"
 
 
 class ToolPermissionLoader(Protocol):
@@ -72,6 +74,7 @@ class ToolDaoPermissionLoader:
             owner_user_id=row.user_id,
             permission_version=version,
             context_version=context_version,
+            creation_state=getattr(row, "creation_state", "READY"),
             preset=preset,
         )
 
@@ -209,6 +212,10 @@ class F048ToolPermissionAdapter:
         *,
         action: str | None,
     ) -> VerifiedPermissionTarget:
+        if action is not None and record is not None and not record.preset and record.creation_state != "READY":
+            from bisheng.common.errcode.tool import ToolCreationPendingError
+
+            raise ToolCreationPendingError()
         if (
             record is None
             or record.resource_id != resource_id

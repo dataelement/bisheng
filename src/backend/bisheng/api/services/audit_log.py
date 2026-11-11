@@ -8,6 +8,10 @@ from sqlmodel import and_, col, or_, select
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
+from bisheng.chat_session.domain.repositories.audit_session_repository import (
+    AUDIT_SESSION_FLOW_TYPES,
+    AuditSessionRepository,
+)
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.core.context.tenant import (
@@ -20,20 +24,21 @@ from bisheng.core.database.dialect_helpers import json_array_contains
 from bisheng.database.models.app import AppDao
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.audit_log import AuditLog, AuditLogDao, EventType, ObjectType, SystemId
-from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.group import Group
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.org_snapshot import AuditDeptScope, DeptSelection, build_dept_predicate
 from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.department.domain.services.audit_dept_scope import AuditDeptScopeService
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.user.domain.models.user import User, UserDao
-from bisheng.user.domain.services.auth import LoginUser
+from bisheng.workflow.domain.repositories.history_repository import WorkflowHistoryRepository
 
 
 def _db_dialect() -> str:
@@ -55,21 +60,6 @@ AUDIT_EXPORT_PAGE_SIZE = 500
 # todo change to async or submit thread pool
 class AuditLogService:
     @classmethod
-    async def _user_has_log_web_menu(cls, user: UserPayload) -> bool:
-        """Admit tenant administrators or roles with the audit menu."""
-        from bisheng.common.permission_identity import check_tenant_admin
-
-        tenant_id = get_current_tenant_id()
-        if tenant_id is not None and await check_tenant_admin(user.user_id, tenant_id):
-            return True
-        db_user = await UserDao.aget_user(user.user_id)
-        if not db_user:
-            return False
-        is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
-        _, web_menu = await LoginUser.get_roles_web_menu(db_user, is_department_admin=is_department_admin)
-        return "log" in set(web_menu)
-
-    @classmethod
     def _get_audit_tenant_scope(cls, user: UserPayload) -> int | None:
         """Tenant id to scope audit reads to, or None to skip scoping.
 
@@ -88,25 +78,13 @@ class AuditLogService:
         return get_current_tenant_id()
 
     @classmethod
-    async def _resolve_audit_groups(cls, login_user: UserPayload, group_ids: list[str]) -> list[str]:
-        """Group filter the caller is allowed to run, or ``UnAuthorizedError``.
+    async def _resolve_dept_scope(cls, login_user: UserPayload, tenant_scope: int | None) -> AuditDeptScope:
+        """Audit gate (F003 decision 4), or ``UnAuthorizedError``.
 
-        Admins and log-menu roles filter by whatever they picked (possibly
-        nothing); a user-group admin is pinned to the groups they manage,
-        intersected with their pick.
+        User-group administration no longer admits anyone (decision 9): the
+        group filter only narrows what the department scope already allows.
         """
-        if login_user.is_admin() or await cls._user_has_log_web_menu(login_user):
-            return list(group_ids)
-        groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
-        # Not an administrator of any user groups
-        if not groups:
-            raise UnAuthorizedError()
-        # Filter by group_id and administrator-permission groups, doing intersections
-        if group_ids:
-            groups = list(set(groups) & set(group_ids))
-            if not groups:
-                raise UnAuthorizedError()
-        return groups
+        return await AuditDeptScopeService.resolve(login_user, tenant_scope)
 
     @classmethod
     async def _group_member_ids(cls, groups: list[str]) -> list[int]:
@@ -157,20 +135,27 @@ class AuditLogService:
 
     @classmethod
     async def _prepare_audit_query(
-        cls, login_user: UserPayload, group_ids: list[str], target_app_id: str | None, tenant_id: int | None
-    ) -> tuple[list[str], list[int], int | None]:
+        cls,
+        login_user: UserPayload,
+        group_ids: list[str],
+        target_app_id: str | None,
+        tenant_id: int | None,
+        dept_selection: DeptSelection | None = None,
+    ) -> tuple[list[str], list[int], int | None, Any]:
         """Role gate + tenant boundary shared by the list and the export.
 
         One function on purpose (spec 决议-8): an export whose scope differs
         from the query's is a bypass, so both go through here and receive
-        the same ``(groups, member_ids, tenant_scope)``.
+        the same ``(groups, member_ids, tenant_scope, dept_predicate)``.
         """
-        groups = await cls._resolve_audit_groups(login_user, group_ids)
         tenant_scope = cls._resolve_tenant_scope(login_user, tenant_id)
+        dept_scope = await cls._resolve_dept_scope(login_user, tenant_scope)
         if target_app_id:
             await cls._assert_app_in_scope(target_app_id, tenant_scope)
+        groups = list(group_ids)
         member_ids = await cls._group_member_ids(groups)
-        return groups, member_ids, tenant_scope
+        dept_predicate = build_dept_predicate(AuditLog.operator_dept_id, dept_scope, dept_selection)
+        return groups, member_ids, tenant_scope, dept_predicate
 
     @classmethod
     def _row_metadata(cls, row: AuditLog) -> dict[str, Any]:
@@ -308,10 +293,12 @@ class AuditLogService:
         limit,
         target_app_id: str | None = None,
         tenant_id: int | None = None,
+        dept_selection: DeptSelection | None = None,
+        note: str | None = None,
     ) -> Any:
         try:
-            groups, member_ids, tenant_scope = await cls._prepare_audit_query(
-                login_user, group_ids, target_app_id, tenant_id
+            groups, member_ids, tenant_scope, dept_predicate = await cls._prepare_audit_query(
+                login_user, group_ids, target_app_id, tenant_id, dept_selection
             )
         except UnAuthorizedError:
             return UnAuthorizedError.return_resp()
@@ -327,6 +314,8 @@ class AuditLogService:
             tenant_scope=tenant_scope,
             target_app_id=target_app_id,
             group_member_ids=member_ids,
+            dept_predicate=dept_predicate,
+            note=note,
         )
         return resp_200(data={"data": await cls._enrich_audit_rows(data), "total": total})
 
@@ -342,6 +331,8 @@ class AuditLogService:
         event_type,
         target_app_id: str | None = None,
         tenant_id: int | None = None,
+        dept_selection: DeptSelection | None = None,
+        note: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """Every row the same query would list, in list order (F056 AC-32).
 
@@ -351,8 +342,8 @@ class AuditLogService:
         projection as :meth:`get_audit_log` — the only difference is that
         pagination is driven from here.
         """
-        groups, member_ids, tenant_scope = await cls._prepare_audit_query(
-            login_user, group_ids, target_app_id, tenant_id
+        groups, member_ids, tenant_scope, dept_predicate = await cls._prepare_audit_query(
+            login_user, group_ids, target_app_id, tenant_id, dept_selection
         )
         rows: list[dict[str, Any]] = []
         page = 1
@@ -370,6 +361,8 @@ class AuditLogService:
                 tenant_scope=tenant_scope,
                 target_app_id=target_app_id,
                 group_member_ids=member_ids,
+                dept_predicate=dept_predicate,
+                note=note,
             )
             if not chunk:
                 break
@@ -388,8 +381,8 @@ class AuditLogService:
         applications are included on purpose — their delete event is the
         one a reader is most likely looking for (AC-21).
         """
-        await cls._resolve_audit_groups(login_user, [])
         tenant_scope = cls._get_audit_tenant_scope(login_user)
+        await cls._resolve_dept_scope(login_user, tenant_scope)
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 apps = await AppDao.asearch_for_audit(session, tenant_scope, keyword, limit)
@@ -399,22 +392,63 @@ class AuditLogService:
         ]
 
     @classmethod
-    async def get_all_operators(cls, login_user: UserPayload) -> list[dict]:
-        groups: list[int] = []
-        if not login_user.is_admin():
-            if not await cls._user_has_log_web_menu(login_user):
-                groups = [one.group_id for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
-                if not groups:
-                    raise UnAuthorizedError()
+    async def get_audit_departments(
+        cls,
+        login_user: UserPayload,
+        *,
+        parent_id: int | None,
+        keyword: str | None,
+        tenant_id: int | None,
+        limit: int,
+    ) -> dict:
+        """Organisation picker shared by the three audit tabs (F003 design §6.1)."""
+        tenant_scope = cls._resolve_tenant_scope(login_user, tenant_id)
+        dept_scope = await cls._resolve_dept_scope(login_user, tenant_scope)
+        return await AuditDeptScopeService.candidates(
+            dept_scope, tenant_scope, parent_id=parent_id, keyword=keyword, limit=limit
+        )
 
+    @classmethod
+    async def get_all_operators(cls, login_user: UserPayload) -> list[dict]:
+        """Operator candidates, limited to the rows the caller may list (AC-18)."""
         tenant_scope = cls._get_audit_tenant_scope(login_user)
-        data = AuditLogDao.get_all_operators(groups, tenant_scope=tenant_scope)
+        dept_scope = await cls._resolve_dept_scope(login_user, tenant_scope)
+        data = AuditLogDao.get_all_operators(
+            [],
+            tenant_scope=tenant_scope,
+            dept_predicate=build_dept_predicate(AuditLog.operator_dept_id, dept_scope),
+        )
+        # One option per operator. The DAO lists every historical name, most
+        # frequent first, so a later alias (an old email, a one-off label)
+        # cannot replace the name the account's rows actually show.
         res = {}
-        for one in data:
-            if not one[1]:
+        for operator_id, operator_name in data:
+            if not operator_name or operator_id in res:
                 continue
-            res[one[0]] = {"user_id": one[0], "user_name": one[1]}
+            res[operator_id] = {"user_id": operator_id, "user_name": operator_name}
+        await cls._apply_live_operator_names(res)
         return list(res.values())
+
+    @classmethod
+    async def _apply_live_operator_names(cls, options: dict) -> None:
+        """Label each option with the account's current name when it still exists.
+
+        Audit rows keep the name from the moment they were written. After a
+        rename, the most common historical name can belong to a different
+        person than the account the operator is looking for. The user row is
+        the name they type into the filter.
+        """
+        ids = [operator_id for operator_id in options if isinstance(operator_id, int) and operator_id > 0]
+        if not ids:
+            return
+        try:
+            users = await UserDao.aget_user_by_ids(ids)
+        except Exception:
+            logger.warning("audit operator name lookup failed for {} ids", len(ids))
+            return
+        for user in users or []:
+            if user.user_id in options and user.user_name:
+                options[user.user_id]["user_name"] = user.user_name
 
     @classmethod
     def _chat_log(
@@ -766,6 +800,8 @@ class AuditLogService:
         object_name: str,
         resource_type: ResourceTypeEnum,
         resource_id: str,
+        note: str = "",
+        system_id: SystemId | None = None,
     ):
         """
         Logs of Knowledge Base Modules
@@ -779,12 +815,13 @@ class AuditLogService:
             operator_id=user.user_id,
             operator_name=user.user_name,
             group_ids=group_ids,
-            system_id=SystemId.KNOWLEDGE.value,
+            system_id=(system_id or SystemId.KNOWLEDGE).value,
             event_type=event_type.value,
             object_type=object_type.value,
             object_id=object_id,
             object_name=object_name,
             ip_address=ip_address,
+            note=note,
         )
         AuditLogDao.insert_audit_logs([audit_log])
 
@@ -873,7 +910,16 @@ class AuditLogService:
         await AuditLogDao.ainsert_audit_logs([audit_log])
 
     @classmethod
-    def upload_knowledge_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, file_name: str):
+    def upload_knowledge_file(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        knowledge_id: int,
+        file_name: str,
+        *,
+        note: str = "",
+        system_id: SystemId | None = None,
+    ):
         """
         Audit Logs for Knowledge Base Upload Files
         """
@@ -889,10 +935,21 @@ class AuditLogService:
             file_name,
             ResourceTypeEnum.KNOWLEDGE,
             str(knowledge_id),
+            note=note,
+            system_id=system_id,
         )
 
     @classmethod
-    def delete_knowledge_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, file_name: str):
+    def delete_knowledge_file(
+        cls,
+        user: UserPayload,
+        ip_address: str,
+        knowledge_id: int,
+        file_name: str,
+        *,
+        note: str = "",
+        system_id: SystemId | None = None,
+    ):
         """
         Audit Logs for Knowledge Base Deletion Files
         """
@@ -908,6 +965,8 @@ class AuditLogService:
             file_name,
             ResourceTypeEnum.KNOWLEDGE,
             str(knowledge_id),
+            note=note,
+            system_id=system_id,
         )
 
     @classmethod
@@ -1028,7 +1087,7 @@ class AuditLogService:
         )
 
     @classmethod
-    def forbid_user(cls, user: UserPayload, ip_address: str, user_info: User):
+    def forbid_user(cls, user: UserPayload, ip_address: str, user_info: User, note: str = "触发=人工；结果=成功"):
         """
         user: Action User
         user_info: Operated by user
@@ -1045,6 +1104,7 @@ class AuditLogService:
             ObjectType.USER_CONF,
             str(user_info.user_id),
             user_info.user_name,
+            note,
         )
 
     @classmethod
@@ -1077,7 +1137,7 @@ class AuditLogService:
         )
 
     @classmethod
-    def update_user_group(cls, user: UserPayload, ip_address: str, group_info: Group):
+    def update_user_group(cls, user: UserPayload, ip_address: str, group_info: Group, note: str = ""):
         logger.info(f"act=update_user_group user={user.user_name} ip={ip_address} group_id={group_info.id}")
         # Get user group information
         cls._system_log(
@@ -1088,6 +1148,7 @@ class AuditLogService:
             ObjectType.USER_GROUP_CONF,
             str(group_info.id),
             group_info.group_name,
+            note,
         )
 
     @classmethod
@@ -1180,7 +1241,43 @@ class AuditLogService:
         with bypass_tenant_filter():
             user_group = UserGroupDao.get_user_group(user.user_id)
         user_group = [one.group_id for one in user_group]
-        cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN, ObjectType.NONE, "", "")
+        cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN, ObjectType.NONE, "", "", "结果=成功")
+
+    @classmethod
+    def record(
+        cls,
+        *,
+        operator_id: int,
+        operator_name: str,
+        system_id: str,
+        event_type: str,
+        object_type: str,
+        object_id: str = "",
+        object_name: str = "",
+        ip_address: str = "",
+        note: str = "",
+        group_ids: list | None = None,
+    ) -> None:
+        """Write one legacy audit row. A failure here never fails the business action."""
+        try:
+            AuditLogDao.insert_audit_logs(
+                [
+                    AuditLog(
+                        operator_id=operator_id,
+                        operator_name=operator_name or ("system" if operator_id == 0 else ""),
+                        group_ids=group_ids or [],
+                        system_id=system_id,
+                        event_type=event_type,
+                        object_type=object_type,
+                        object_id=object_id,
+                        object_name=object_name,
+                        ip_address=ip_address or "",
+                        note=note,
+                    )
+                ]
+            )
+        except Exception:
+            logger.exception("audit record failed event={} operator={}", event_type, operator_id)
 
     @classmethod
     async def _dashboard_log(
@@ -1270,50 +1367,21 @@ class AuditLogService:
         await AuditLogDao.ainsert_audit_logs([audit_log])
 
     @classmethod
-    async def get_filter_flow_ids(cls, user: UserPayload, flow_ids: list[str], group_ids: list[int]) -> (bool, list):
-        """Filter workflow, assistant and workstation ids by visible groups."""
-        flow_ids = [one for one in flow_ids]
-        group_admins = []
-        if not user.is_admin():
-            if not await cls._user_has_log_web_menu(user):
-                user_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
-                # Not a user group administrator, no permissions
-                if not user_groups:
-                    raise UnAuthorizedError.http_exception()
-                group_admins = [one.group_id for one in user_groups]
-        # GroupingidDoing Intersections
-        if group_ids:
-            if group_admins:
-                # Query user group not belonging to user management, return empty
-                group_admins = list(set(group_admins) & set(group_ids))
-                if len(group_admins) == 0:
-                    return False, []
-            else:
-                group_admins = group_ids
-
-        # Get all apps under groupingID
-        group_flows = []
-        if group_admins:
-            group_flows = await GroupResourceDao.get_groups_resource(
-                group_admins,
-                resource_types=[ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT, ResourceTypeEnum.WORKSTATION],
-            )
-            # User group under user management has no resources
-            if not group_flows:
-                return False, []
-            group_flows = [one.third_id for one in group_flows]
-
-        # Acquire the final skillIDRestrict to list
-        filter_flow_ids = []
-        if flow_ids and group_flows:
-            filter_flow_ids = list(set(group_flows) & set(flow_ids))
-            if not filter_flow_ids:
-                return False, []
-        elif flow_ids:
-            filter_flow_ids = flow_ids
-        elif group_flows:
-            filter_flow_ids = group_flows
-        return True, filter_flow_ids
+    async def _session_scope_conditions(cls, user: UserPayload, dept_selection: DeptSelection | None = None) -> list:
+        """Gate + scope every application-usage read shares (list, export,
+        user candidates, detail check), or ``UnAuthorizedError``."""
+        tenant_scope = cls._get_audit_tenant_scope(user)
+        dept_scope = await cls._resolve_dept_scope(user, tenant_scope)
+        conditions = [col(MessageSession.flow_type).in_(AUDIT_SESSION_FLOW_TYPES)]
+        # v2.5.0 audit isolation: Tenant Admin (and anyone scoped) sees only
+        # sessions whose creator's leaf tenant matches their tenant. Without
+        # this the F012 IN-list lets Child users read Root sessions too.
+        if tenant_scope is not None:
+            conditions.append(MessageSession.tenant_id == tenant_scope)
+        dept_predicate = build_dept_predicate(MessageSession.operator_dept_id, dept_scope, dept_selection)
+        if dept_predicate is not None:
+            conditions.append(dept_predicate)
+        return conditions
 
     @classmethod
     async def get_session_list(
@@ -1328,38 +1396,13 @@ class AuditLogService:
         sensitive_status: int,
         page: int,
         page_size: int,
+        dept_selection: DeptSelection | None = None,
+        usage_type: str | None = None,
     ) -> tuple[list[AppChatList], int]:
-
-        if user.is_admin() or await cls._user_has_log_web_menu(user):
-            # Administrator, or 角色中开启「审计」菜单：与超管同级的会话列表范围（可筛选用户组，不传则不过滤组）
-            search_group_ids = group_ids or []
-        else:
-            # Regular users: 用户组管理员，仅能看所管组内会话
-            user_managed_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
-            if not user_managed_groups:
-                raise UnAuthorizedError.http_exception()
-
-            managed_group_ids = {one.group_id for one in user_managed_groups}
-
-            if group_ids:
-                # Find the intersection: the intersection of the frontend requests
-                valid_group_ids = list(set(group_ids) & managed_group_ids)
-                if not valid_group_ids:
-                    return [], 0
-                search_group_ids = valid_group_ids
-            else:
-                # Default: All managed groups
-                search_group_ids = list(managed_group_ids)
-
-        tenant_scope = cls._get_audit_tenant_scope(user)
-
-        conditions = []
-
-        # v2.5.0 audit isolation: Tenant Admin (and anyone scoped) sees only
-        # sessions whose creator's leaf tenant matches their tenant. Without
-        # this the F012 IN-list lets Child users read Root sessions too.
-        if tenant_scope is not None:
-            conditions.append(MessageSession.tenant_id == tenant_scope)
+        try:
+            conditions = await cls._session_scope_conditions(user, dept_selection)
+        except UnAuthorizedError:
+            raise UnAuthorizedError.http_exception()
 
         # Basic equality/range filtering
         if sensitive_status:
@@ -1376,12 +1419,9 @@ class AuditLogService:
         if flow_ids:
             conditions.append(col(MessageSession.flow_id).in_(flow_ids))
 
-        # Process type filtering (fixed enumeration)
-        conditions.append(
-            col(MessageSession.flow_type).in_(
-                [FlowType.WORKFLOW.value, FlowType.ASSISTANT.value, FlowType.WORKSTATION.value]
-            )
-        )
+        usage_clause = AuditSessionRepository.usage_type_clause(usage_type)
+        if usage_clause is not None:
+            conditions.append(usage_clause)
 
         # Feedback status filtering
         feedback_map = {
@@ -1392,12 +1432,10 @@ class AuditLogService:
         if feedback in feedback_map:
             conditions.append(feedback_map[feedback])
 
-        # Group membership filtering
-        if search_group_ids:
+        # Group membership filtering: narrows only, never widens (F003 decision 9)
+        if group_ids:
             dialect = _db_dialect()
-            group_filters = [
-                json_array_contains(MessageSession.group_ids, str(gid), dialect) for gid in search_group_ids
-            ]
+            group_filters = [json_array_contains(MessageSession.group_ids, str(gid), dialect) for gid in group_ids]
             conditions.append(or_(*group_filters))
 
         # build query statement
@@ -1432,11 +1470,12 @@ class AuditLogService:
             results = await asyncio.gather(*tasks)
             return dict(zip(u_ids, results))
 
-        users_data, flows_data, assistants_data, user_groups_map = await asyncio.gather(
+        users_data, flows_data, assistants_data, user_groups_map, versioned = await asyncio.gather(
             UserDao.aget_user_by_ids(target_user_ids_list),
-            FlowDao.aget_flow_by_ids(list(target_flow_ids)),
+            WorkflowHistoryRepository.aget_by_ids(list(target_flow_ids)),
             AssistantDao.aget_assistants_by_ids(list(target_assistant_ids)),
             get_users_groups_map(target_user_ids_list),
+            AuditSessionRepository.chat_ids_with_task_version(session.chat_id for session in res),
         )
 
         user_map = {u.user_id: u.user_name for u in users_data}
@@ -1447,7 +1486,7 @@ class AuditLogService:
         result: list[AppChatList] = []
 
         for session in res:
-            # Determine the current name
+            # Determine the current name; 20/25/30 have no flow row and keep the session's own name
             current_name = session.flow_name
             if session.flow_type in [FlowType.WORKFLOW.value, FlowType.WORKSTATION.value]:
                 current_name = flow_map.get(session.flow_id, current_name)
@@ -1458,16 +1497,43 @@ class AuditLogService:
             result.append(
                 AppChatList(
                     **session.model_dump(exclude={"flow_name"}),
-                    flow_name=current_name,
+                    flow_name=current_name or "",
                     like_count=session.like,
                     dislike_count=session.dislike,
                     copied_count=session.copied,
                     user_name=user_map.get(session.user_id, ""),  # get user name
                     user_groups=user_groups_map.get(session.user_id, []),
+                    usage_type=AuditSessionRepository.usage_type_of(session.flow_type, session.chat_id in versioned),
                 )
             )
 
         return result, total
+
+    @classmethod
+    async def assert_session_in_audit_scope(
+        cls, user: UserPayload, chat_id: str, *, session_owner_id: int | None = None, app_id: str | None = None
+    ) -> None:
+        """Detail reads answer the same scope question as the list (F003 decision 8).
+
+        Pass ``session_owner_id`` / ``app_id`` only from ``/session/chat/history``:
+        that endpoint also serves the build-page debugger (the owner) and the
+        annotation page (users assigned to a task covering the app), neither of
+        which is an audit read. Raises ``UnAuthorizedError``.
+        """
+        if session_owner_id is not None and session_owner_id == user.user_id:
+            return
+        if app_id and await AuditSessionRepository.is_annotator_of(user.user_id, app_id):
+            return
+        conditions = await cls._session_scope_conditions(user)
+        if not await AuditSessionRepository.matches(chat_id, conditions):
+            raise UnAuthorizedError()
+
+    @classmethod
+    async def get_session_users(cls, user: UserPayload, keyword: str | None, limit: int) -> list[dict]:
+        """User candidates of the application-usage tab, within the list's scope (AC-18)."""
+        conditions = await cls._session_scope_conditions(user)
+        rows = await AuditSessionRepository.session_users(conditions, keyword, limit)
+        return [{"user_id": user_id, "user_name": user_name} for user_id, user_name in rows]
 
     @classmethod
     async def get_session_messages(
@@ -1480,13 +1546,26 @@ class AuditLogService:
         end_date: datetime,
         feedback: str,
         sensitive_status: int,
+        dept_selection: DeptSelection | None = None,
+        usage_type: str | None = None,
     ) -> list[AppChatList]:
         page = 1
         page_size = 50
         res = []
         while True:
             result, total = await cls.get_session_list(
-                user, flow_ids, user_ids, group_ids, start_date, end_date, feedback, sensitive_status, page, page_size
+                user,
+                flow_ids,
+                user_ids,
+                group_ids,
+                start_date,
+                end_date,
+                feedback,
+                sensitive_status,
+                page,
+                page_size,
+                dept_selection=dept_selection,
+                usage_type=usage_type,
             )
             if not result:
                 break

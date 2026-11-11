@@ -6,6 +6,8 @@ from fastapi import APIRouter, Body, Depends, Query, Request
 
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.common.errcode.open_api import OpenApiTaskModeUnsupportedError
+from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
+from bisheng.department.domain.services.department_flow_service import DepartmentFlowService, SlotOutcome
 from bisheng.open_api.api.dependencies import get_open_api_execution
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.schemas.workstation import OpenDailyChatCompletionReq
@@ -79,7 +81,13 @@ async def chat_completions(
     if payload.get("run_mode") == RUN_MODE_TASK:
         submission = parse_task_submission(payload)
         operator = await get_open_api_operator_async()
-        submitted = await OpenTaskModeService.submit(principal, submission, operator)
+        # Department concurrency: this call has no page lease, so the execution
+        # lease covers exactly this HTTP request — ``submit`` returns after the
+        # task is queued.
+        async with DepartmentFlowService.hold_execution_lease(operator) as (outcome, _lease):
+            if outcome is SlotOutcome.REJECTED:
+                raise DepartmentDailyChatConcurrentLimitError()
+            submitted = await OpenTaskModeService.submit(principal, submission, operator)
         return resp_200(data=submitted.model_dump(mode="json"))
 
     data = validate_body(OpenDailyChatCompletionReq, payload)

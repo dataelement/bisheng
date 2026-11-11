@@ -48,22 +48,7 @@ async def get_logout_runtime(request: Request, config: DshSettings = Depends(get
         runtime = getattr(request.app.state, "dsh_runtime", None)
         if runtime is not None:
             return runtime
-        from bisheng.core.cache.redis_manager import get_redis_client
-        from bisheng.dsh.operations_runtime import repository_scope
-
-        redis = (await get_redis_client()).async_connection
-        authorizations = DshAuthorizationService(redis, config.platform_public_url)
-        identity = IdentityService(TicketRepository(redis), CurrentIdentityRecords(), authorizations)
-        keys = LocalTokenKeys()
-        sessions = DshLocalSessionService(
-            lambda: repository_scope(DshSessionRepository),
-            identity,
-            keys,
-            access_seconds=config.access_ttl_seconds,
-            session_seconds=config.session_ttl_seconds,
-        )
-        access = DshAccessService(ISSUER, keys, identity, sessions)
-        runtime = DshRuntime(config, identity, access, sessions, authorizations)
+        runtime = await build_runtime(config)
         request.app.state.dsh_runtime = runtime
         return runtime
 
@@ -73,3 +58,26 @@ async def get_runtime(request: Request, config: DshSettings = Depends(get_settin
         raise DshDshDisabledError()
     await DshSettingsService().require_enabled()
     return await get_logout_runtime(request, config)
+
+
+async def build_runtime(config: DshSettings) -> DshRuntime:
+    """Compose the same session validator for HTTP requests and queued work."""
+    from bisheng.core.cache.redis_manager import get_redis_client
+    from bisheng.dsh.operations_runtime import repository_scope
+
+    redis = (await get_redis_client()).async_connection
+    authorizations = DshAuthorizationService(redis, config.platform_public_url)
+    identity = IdentityService(TicketRepository(redis), CurrentIdentityRecords(), authorizations)
+    keys = LocalTokenKeys()
+    sessions = DshLocalSessionService(
+        lambda: repository_scope(DshSessionRepository),
+        identity,
+        keys,
+        access_seconds=config.access_ttl_seconds,
+        session_seconds=config.session_ttl_seconds,
+        refresh_grace_seconds=config.refresh_reuse_grace_seconds,
+        idle_seconds=config.session_idle_ttl_seconds,
+        migrate_idle_sessions=config.session_idle_migrate_existing,
+    )
+    access = DshAccessService(ISSUER, keys, identity, sessions)
+    return DshRuntime(config, identity, access, sessions, authorizations)

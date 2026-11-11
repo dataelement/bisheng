@@ -1,16 +1,52 @@
-import usePrefersMobileLayout from './usePrefersMobileLayout';
+import { act, renderHook } from "@testing-library/react";
+import { refreshClientEnvironment } from "~/utils/clientEnvironment";
+import usePrefersMobileLayout from "./usePrefersMobileLayout";
 
-let mockNarrow = true;
-let mockEmbedded = false;
-jest.mock('./useMediaQuery', () => ({ __esModule: true, default: () => mockNarrow }));
-jest.mock('~/components/Chat/desktopEmbedding', () => ({ isDesktopEmbedded: () => mockEmbedded }));
+it("keeps the desktop layout across resizes and route changes after a DSH entry", () => {
+  let width = 595;
+  const originalMatchMedia = window.matchMedia;
+  window.matchMedia = (query) => ({
+    media: query,
+    get matches() {
+      return query === "(max-width: 767px)" && width <= 767;
+    },
+    onchange: null,
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+    addListener: jest.fn(),
+    removeListener: jest.fn(),
+    dispatchEvent: jest.fn(),
+  });
+  const resize = (nextWidth: number) => act(() => {
+    width = nextWidth;
+    window.dispatchEvent(new Event("resize"));
+  });
+  const navigate = (path: string) => act(() => {
+    window.history.replaceState({}, "", path);
+    refreshClientEnvironment();
+  });
 
-it('uses desktop pages inside the host and viewport-based layouts in the browser', () => {
-  expect(usePrefersMobileLayout()).toBe(true);
-  mockEmbedded = true;
-  expect(usePrefersMobileLayout()).toBe(false);
-  mockNarrow = false;
-  expect(usePrefersMobileLayout()).toBe(false);
-  mockEmbedded = false;
-  expect(usePrefersMobileLayout()).toBe(false);
+  const { result, unmount } = renderHook(usePrefersMobileLayout);
+  try {
+    expect(result.current).toBe(true);
+    resize(768);
+    expect(result.current).toBe(false);
+    resize(767);
+    expect(result.current).toBe(true);
+    navigate("/workspace/knowledge?embed=mobile-app");
+    expect(result.current).toBe(true);
+
+    navigate("/workspace/knowledge?embed=dsh");
+    expect(result.current).toBe(false);
+    navigate("/workspace/channel");
+    resize(1200);
+    expect(result.current).toBe(false);
+    resize(390);
+    expect(result.current).toBe(false);
+  } finally {
+    unmount();
+    window.matchMedia = originalMatchMedia;
+    window.history.replaceState({}, "", "/");
+    window.sessionStorage.clear();
+  }
 });

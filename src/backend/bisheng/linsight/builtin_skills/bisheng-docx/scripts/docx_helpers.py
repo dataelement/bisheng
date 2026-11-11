@@ -607,6 +607,34 @@ def clone_paragraph(proto, text: str, after=None, keep_leading: bool = True):
     return Paragraph(new_p, proto._parent)
 
 
+def fill_label_value(paragraph, value: str):
+    """Fill a 「标签：值」 line in place: replace only what follows the colon.
+
+    Template info bars (主办部门 / 撰 稿 人 / 核 稿 人 / 完成日期) are pushed right
+    with leading spaces, and those spaces often sit in the *same run* as the
+    label (``"             核 稿 人："``). ``run.text = "核 稿 人：…"`` therefore
+    deletes them and the line jumps to the left margin (106, 2026-11-06).
+
+    Everything up to and including the first ``：``/``:`` is kept verbatim. The
+    value goes into the first run after the colon that carries text (so it
+    keeps the template's specimen formatting, e.g. an underline), or into the
+    colon's own run when nothing follows; the remaining runs are emptied.
+    """
+    runs = list(paragraph.runs)
+    for index, run in enumerate(runs):
+        cut = min((k for k in (run.text.find("："), run.text.find(":")) if k != -1), default=-1)
+        if cut == -1:
+            continue
+        head, rest = run.text[: cut + 1], run.text[cut + 1 :]
+        tail = runs[index + 1 :]
+        target = None if rest.strip() else next((r for r in tail if r.text.strip()), None)
+        run.text = head if target is not None else head + value
+        for other in tail:
+            other.text = value if other is target else ""
+        return paragraph
+    raise ValueError(f"段落里没有冒号，不是「标签：值」行：{paragraph.text.strip()[:30]}")
+
+
 def copy_table(table, after, font: str | None = None, size_pt: float | None = None):
     """Copy a table (e.g. from the source document) to sit after ``after``.
 

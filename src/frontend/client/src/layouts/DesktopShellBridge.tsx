@@ -1,37 +1,64 @@
-import { useEffect } from 'react';
-import { useGetBsConfig } from '~/hooks/queries/data-provider';
-import { useLocalize } from '~/hooks';
-import { workbenchBranding } from '~/components/Chat/workbenchBranding';
-import { useLocation } from 'react-router-dom';
-import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
-import { useDesktopNavigation } from '~/components/Chat/useDesktopNavigation';
-import { useDesktopAppearance } from '~/components/Chat/useDesktopAppearance';
-import { useWorkbenchNavLinks } from './useWorkbenchNavLinks';
-import { splitSidebarEntries, useSidebarEntries } from './WorkbenchSidebar/useSidebarEntries';
-import { usePersonalTokenEnabled } from '~/hooks/useVersionManagementEnabled';
-import { useDesktopLocale } from './useDesktopLocale';
+import { useEffect } from "react";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { useLocalize } from "~/hooks";
+import { workbenchBranding } from "~/components/Chat/workbenchBranding";
+import { useLocation } from "react-router-dom";
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
+import { readDesktopPresentation } from "~/utils/clientEnvironment";
+import { resendConversationActivity } from "~/components/Chat/desktopConversationBridge";
+import { useDesktopNavigation } from "~/components/Chat/useDesktopNavigation";
+import { useDesktopAppearance } from "~/components/Chat/useDesktopAppearance";
+import { useWorkbenchNavLinks } from "./useWorkbenchNavLinks";
+import {
+  splitSidebarEntries,
+  useSidebarEntries,
+} from "./WorkbenchSidebar/useSidebarEntries";
+import { usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
+import { useDesktopLocale } from "./useDesktopLocale";
+import { useDesktopProjectRefresh } from "~/hooks/useChatProjects";
+import { useProjectMigration } from "~/hooks/useProjectMigration";
 
 /** The web app owns grants, labels and ordering; the host owns desktop navigation chrome. */
 export function DesktopShellBridge() {
+  useDesktopProjectRefresh();
+  useProjectMigration();
   useDesktopNavigation();
   useDesktopAppearance();
   useDesktopLocale();
+  const {
+    channel,
+    capabilities: { hasNativePresentation },
+  } = useClientEnvironment();
   const { pathname, search } = useLocation();
   const { data: bsConfig } = useGetBsConfig();
   const localize = useLocalize();
   const aiAccess = usePersonalTokenEnabled();
   const entries = useSidebarEntries();
   const { links } = useWorkbenchNavLinks();
-  const { shown } = splitSidebarEntries(entries, links.some(link => link.section === 'home'));
+  const { shown } = splitSidebarEntries(
+    entries,
+    links.some((link) => link.section === "home"),
+  );
   const payload = JSON.stringify({
     settings: { aiAccess },
-    entries: entries.map(({ id, to, label, active }) => ({ id, path: to, label, active, primary: shown.some(entry => entry.id === id) })),
-    branding: workbenchBranding(bsConfig, localize('dshChat.welcome')),
-    homeLabel: links.find(link => link.section === 'home')?.label,
+    entries: entries.map(({ id, to, label, active }) => ({
+      id,
+      path: to,
+      label,
+      active,
+      primary: shown.some((entry) => entry.id === id),
+    })),
+    branding: workbenchBranding(bsConfig, localize("dshChat.welcome")),
+    homeLabel: links.find((link) => link.section === "home")?.label,
     path: pathname + search,
   });
   useEffect(() => {
-    if (isDesktopEmbedded()) window.dshChatPresentation?.reportNavigation?.(JSON.parse(payload));
-  }, [payload]);
+    if (channel === "desktop")
+      readDesktopPresentation().reportNavigation?.(JSON.parse(payload));
+  }, [payload, channel, hasNativePresentation]);
+  // The host drops activity reported under a stale path, e.g. while /c/new becomes /c/<id>.
+  useEffect(() => {
+    resendConversationActivity();
+  }, [pathname]);
   return null;
 }

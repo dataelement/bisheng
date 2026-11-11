@@ -135,7 +135,7 @@ export const addLLmServer = async (data: any) => {
             ...other
         } : item
     })
-    return await axios.post(`/api/v1/llm`, data)
+    return await axios.post(`/api/v1/llm`, data, { showError: false })
 };
 
 // 修改模型
@@ -147,7 +147,7 @@ export const updateLLmServer = async (data: any) => {
             ...other
         } : item
     })
-    return await axios.put(`/api/v1/llm`, data)
+    return await axios.put(`/api/v1/llm`, data, { showError: false })
 }
 
 // 删除模型
