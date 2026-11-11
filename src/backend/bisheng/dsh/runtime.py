@@ -134,6 +134,8 @@ async def get_model_runtime(runtime) -> ModelRuntime:
     from bisheng.dsh.domain.services.model_display import read_display_names
 
     audit = ModelAuditRuntime(config, redis)
+    # Chat credit accounting uses a quota-only runtime without native desktop sessions.
+    sessions = getattr(runtime, "sessions", None)
     model = DshModelService(
         policy_reader=read_policy,
         model_loader=LLMService.get_dsh_model_snapshot,
@@ -144,7 +146,7 @@ async def get_model_runtime(runtime) -> ModelRuntime:
         billing_timezone=config.billing_timezone,
         audit_factory=audit.capture,
         display_names_reader=read_display_names,
-        activity_recorder=runtime.sessions.record_activity,
+        activity_recorder=sessions.record_activity if sessions is not None else None,
     )
     result = ModelRuntime(model, usage, quota, config, audit=audit)
     runtime.models = result

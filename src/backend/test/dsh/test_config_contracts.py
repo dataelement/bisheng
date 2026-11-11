@@ -25,7 +25,9 @@ def test_disabled_defaults_and_invalid_capacity_bounds():
             DshSettings(**values)
 
 
-async def _construct_enabled_factories():
+async def _construct_enabled_factories(with_sessions=False):
+    from unittest.mock import AsyncMock
+
     from bisheng.dsh.operations_runtime import OperationsRuntime
     from bisheng.dsh.runtime import get_model_runtime
 
@@ -43,8 +45,14 @@ async def _construct_enabled_factories():
     )
     # Construction is deliberately network-free; port 1 must never be contacted.
     worker = OperationsRuntime(settings)
-    api = await get_model_runtime(SimpleNamespace(settings=settings))
+    holder = SimpleNamespace(settings=settings)
+    recorder = AsyncMock() if with_sessions else None
+    if with_sessions:
+        holder.sessions = SimpleNamespace(record_activity=recorder)
+    api = await get_model_runtime(holder)
     try:
+        assert api.model.activity_recorder is recorder
+        assert await get_model_runtime(holder) is api
         for quota in (worker.quota, api.quota):
             assert quota.pressure_args() == ["0", str(32 * 1024 * 1024), "7654", "45000"]
             assert not quota.topology.ready
@@ -53,10 +61,11 @@ async def _construct_enabled_factories():
         assert worker.projection.max_seconds == 2.5
     finally:
         await worker.quota.redis.aclose()
-        await api.quota.redis.aclose()
+        await api.close()
 
 
-def test_enabled_api_and_worker_factories_use_identical_capacity(tmp_path):
+@pytest.mark.parametrize("with_sessions", [False, True], ids=["chat-credits", "desktop"])
+def test_enabled_api_and_worker_factories_use_identical_capacity(tmp_path, with_sessions):
     import os
     import subprocess
     import sys
@@ -72,7 +81,8 @@ def test_enabled_api_and_worker_factories_use_identical_capacity(tmp_path):
         [
             sys.executable,
             "-c",
-            "import asyncio; from test.dsh.test_config_contracts import _construct_enabled_factories; asyncio.run(_construct_enabled_factories())",
+            "import asyncio; from test.dsh.test_config_contracts import _construct_enabled_factories; "
+            f"asyncio.run(_construct_enabled_factories(with_sessions={with_sessions!r}))",
         ],
         env={**os.environ, "config": str(configuration), "MPLCONFIGDIR": str(tmp_path)},
         capture_output=True,
