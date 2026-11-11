@@ -3,7 +3,8 @@
 - **Feature ID**: F121（合入前复核）
 - **Status**: MOCK_IMPLEMENTED
 - **Mode**: IMPLEMENT_MOCK
-- **Updated**: 2026-11-06（Asia/Shanghai）
+- **Updated**: 2026-11-10（Asia/Shanghai）
+- **管理页补充** · T026–T034 已实施并通过本地 Mock 验证，T035–T036 真实环境待执行。
 - **关联**: [规格](./spec.md)、[设计](./design.md)、[版本契约](../release-contract.md)。
 
 ## 1. 状态与范围
@@ -11,12 +12,14 @@
 | 阶段 | 状态 | 说明 |
 | --- | --- | --- |
 | 规格与设计 | CONFIRMED | 首轮复用毕昇画布和管理接口，昆联主动拉取发布与下线变化。 |
-| 任务规划 | CONFIRMED | 用户授权 T001–T021。 |
+| 任务规划 | CONFIRMED | 用户授权 T001–T021、T026–T034。 |
 | 实现 | PARTIAL | T001–T021 本地实施与 Mock 验证完成，21 / 25。T022–T025 保持待执行。 |
+| 工作流管理页补充 | MOCK_VERIFIED | T026–T034 已完成，分批验收见 §6 与验证记录 E-012 至 E-016。 |
+| 管理页真实验证 | NOT_RUN | T035–T036 覆盖真实数据库、OpenFGA 和昆联 SSO。 |
 | 双方合同 | WAITING_EXTERNAL | EXT-01 至 EXT-05 按任务解除。 |
 | 环境验证 | NOT_RUN | 真实数据库、权限、浏览器和昆联同步待执行。 |
 
-本轮在工作区实施 T001–T021，复用既有画布、F118、F048、F119／F120 和开放平台的职责边界。候选接口由隔离测试应用装配，真实合同与环境验证分别待执行。拟增持久结构的实际创建、配置启用和部署按项目规则另行确认。证据见 [verification.md](./verification.md)。
+T001–T021 和 T026–T034 在工作区完成本地验证，复用既有画布、F118、F048、F119／F120 和开放平台的职责边界。候选接口由隔离测试应用装配，正式合同和真实环境验证分别待执行。证据见 [verification.md](./verification.md)。
 
 路径前缀均相对仓库根目录。`B/` 为 `src/backend/bisheng/`，`BT/` 为 `src/backend/test/workflow/`，`P/` 为 `src/frontend/platform/src/`，`F/` 为本特性目录。
 
@@ -243,3 +246,113 @@
 ## 5. 实际偏差记录
 
 2026-11-06，创建请求通过既有创建入口携带幂等键，草稿通过版本接口携带修订值。当前版本列表只读取摘要，F121 从服务端完整图计算修订并合并到既有列表。候选同步接口仅在隔离 ASGI 测试应用装配。上述落点属于现有设计，运行证据见 [verification.md](./verification.md)。
+
+## 6. 工作流管理页补充任务
+
+依据[已确认设计 §4.6](./design.md#46-工作流管理页)，先用隔离 API 夹具和浏览器 Mock 完成管理页。浏览器验证使用模拟会话和响应，服务端权限、租户及幂等用例通过实际路由和仓储执行，外部服务使用夹具。每批通过后在 [verification.md](./verification.md) 记录命令、结果和证据。
+
+| 批次 | 任务 | 验收方式 |
+| --- | --- | --- |
+| W6 管理页与列表 | T026–T027 | 后端用根租户、其他租户、当前租户和跨页数据验证可见范围。浏览器 Mock 检查卡片、搜索、状态筛选、加载、空状态及翻页请求。 |
+| W7 只读、编辑及返回 | T028–T030 | 后端直接请求验证详情、画布和写入权限。浏览器 Mock 验证只读详情与编辑器分流、撤权反馈、刷新后返回及未保存确认。 |
+| W8 新建与幂等 | T031–T032 | 后端隔离 SQL 夹具验证同键重试、并发、冲突及投影恢复。浏览器 Mock 验证直开工作流表单、重试复用请求键及创建后的跳转。 |
+| W9 SSO 回跳与页面闭环 | T033–T034 | 用浏览器 Mock 验证已有会话直达、首次回跳、取消与失败，以及管理页创建、查看、编辑和返回的完整路径。运行本批相关前端回归。 |
+| W10 真实环境 | T035–T036 | 在受控环境验证 MySQL／DM8、OpenFGA、昆联按钮和真实 SSO。状态为 NOT_RUN。 |
+
+### W6 管理页与列表
+
+- [x] **T026** [后端／测试] 收敛管理页列表的类型、租户和游标范围
+  - 在 `B/api/v1/workflow.py` 和 `B/api/services/workflow.py` 为现有列表接入 `scope=workflow_management`，固定工作流类型和 `visible` 动作，复用 `strict_tenant_filter()` 在分页前收敛当前租户。游标绑定主体、租户、范围和筛选条件，普通应用列表沿用原请求行为。
+  - _Requirements: REQ-03, REQ-11_
+  - _Acceptance: AC-14_
+  - _Verification: V-02。复用 `BT/test_kunlian_workflow_management.py` 的路由和权限夹具，验证可见工作流入列、其他租户和根租户资源排除、筛选及游标隔离。_
+  - _Depends: T006_
+  - _Boundary: 工作流浏览器列表与现有租户过滤。_
+
+- [x] **T027** [前端 Platform] 接入独立工作流管理页
+  - 在 `P/routes/index.tsx`、`P/contexts/userContext.tsx`、`P/layout/MainLayout.tsx` 和 `P/pages/BuildPage/apps.tsx` 增加 `/build/workflows`，复用 `build` 菜单准入及应用卡片。请求走 `P/controllers/API/flow.ts`。隐藏其他类型和导航，保留搜索、状态、分页及加载和错误状态。租户或身份变化时重置列表并丢弃旧响应。
+  - _Requirements: REQ-03, REQ-11_
+  - _Acceptance: AC-14_
+  - _Verification: V-05。Mock 浏览器检查页面和请求参数，确认第二页、筛选重置和空列表可用。_
+  - _Depends: T026_
+  - _Boundary: Platform 管理页与现有应用列表复用。_
+
+### W7 只读、编辑及返回
+
+- [x] **T028** [后端／测试] 分离只读详情与画布读取
+  - 在 `B/api/v1/workflow.py` 和 `B/api/services/flow.py` 接入管理页详情范围。当前租户内有 `visible` 权限时返回只读摘要，画布数据通过 `edit` 校验后读取。保存、发布和下线继续分别走已有动作检查。
+  - _Requirements: REQ-03, REQ-11_
+  - _Acceptance: AC-15_
+  - _Verification: V-02。隔离 API 验证只读摘要、未授权图数据及写入拒绝、授权后编辑和撤权后的旧详情地址。_
+  - _Depends: T026_
+  - _Boundary: 现有详情、版本读取及动作授权。_
+
+- [x] **T029** [前端 Platform] 连接只读详情和有权执行的管理动作
+  - 在 `P/pages/BuildPage/` 接入 `/build/workflows/:id`，仅有查看权限时打开只读详情，有编辑权限时进入既有画布。复用 `useResourceActions` 并按主体及租户隔离动作状态，编辑、发布、下线按各自权限显示和执行。
+  - _Requirements: REQ-03, REQ-11_
+  - _Acceptance: AC-15_
+  - _Verification: V-05。Mock 浏览器验证查看者和编辑者分流，权限状态变化后控件和详情响应符合预期。_
+  - _Depends: T027, T028_
+  - _Boundary: 管理页卡片、只读详情和动作展示。_
+
+- [x] **T030** [前端 Platform] 统一画布返回目标
+  - 在 `P/pages/BuildPage/flow/{index,Header}.tsx` 和 `flow/hooks/useBeforeUnload.ts` 接入固定的 `from=workflow-management` 来源标记。编辑器返回、确认离开及发布成功回跳使用同一解析，保留未保存提示和普通入口的原有导航。
+  - _Requirements: REQ-03, REQ-11_
+  - _Acceptance: AC-15, AC-17_
+  - _Verification: V-05。Mock 浏览器刷新画布后返回管理页，验证取消离开时保留编辑状态，伪造来源值无法改成任意跳转。_
+  - _Depends: T028, T029_
+  - _Boundary: 画布来源、授权读取和返回导航。_
+
+### W8 新建与幂等
+
+- [x] **T031** [后端／测试] 复用持久创建恢复并区分登记资格
+  - 在既有创建接口、`B/workflow/application/kunlian_workflow_creation.py`、`kunlian_workflow_management.py` 及登记仓储落地独立的管理页请求键用途。复用原创建记录、同事务的初始版本及 F048 所有者投影。同键同参恢复原对象，同键异参拒绝。未完成对象在管理页分页前过滤，授权读取和写入沿用待完成检查。管理页创建记录只用于去重与恢复，登记资格沿用原登记键和显式范围。
+  - _Requirements: REQ-02, REQ-03, REQ-11_
+  - _Acceptance: AC-03, AC-04, AC-16_
+  - _Verification: V-02。隔离 SQL 与真实路由夹具覆盖并发同键、投影失败后恢复、无创建权限、普通和旧登记入口兼容及管理页创建不自动纳入登记。_
+  - _Depends: T005, T026, T028_
+  - _Boundary: 既有工作流创建接口及恢复记录。双数据库实测归 T035。_
+
+- [x] **T032** [前端 Platform] 从管理页直接新建工作流
+  - 在 `P/pages/BuildPage/CreateApp.tsx` 复用 `AppType.FLOW` 表单与原权限门槛，连接 `P/controllers/API/workflow.ts` 的管理页幂等请求。提交中的按钮保持锁定。同一次失败恢复复用请求键，成功进入带管理页来源标记的画布。
+  - _Requirements: REQ-02, REQ-11_
+  - _Acceptance: AC-16, AC-17_
+  - _Verification: V-05。Mock 浏览器验证无创建权入口隐藏、直接打开工作流表单、失败重试复用键、成功后编辑及返回。_
+  - _Depends: T027, T030, T031_
+  - _Boundary: 创建表单与管理页导航。_
+
+### W9 SSO 回跳与页面闭环
+
+- [x] **T033** [前端 Platform] 接入 F118 登录回跳
+  - 在 Platform 路由和现有登录桥接处先解析会话。已登录直达，未登录且昆联入口已就绪时用 F118 的安全同站回跳机制发起一次登录。保留原目标路径，取消、失败或入口未就绪时走既有登录或错误处理。
+  - _Requirements: REQ-01, REQ-11_
+  - _Acceptance: AC-13_
+  - _Verification: V-05。Mock F118 入口及回调，核对 `return_to`、已有会话直达、失败后无循环跳转。_
+  - _Depends: T027_
+  - _Boundary: Platform 跳转与既有 F118 浏览器合同。_
+
+- [x] **T034** [测试／交付] 运行 Mock 浏览器闭环并记录证据
+  - 按项目浏览器端到端验证方式运行管理页场景。使用隔离的会话和业务响应，覆盖从昆联入口进入、浏览工作流、创建、查看与编辑分流和返回。结合前几批结果执行一次相关后端回归和 Platform 类型、定向 lint、相关 Vitest 回归，将结果登记到 `F/verification.md`。
+  - _Requirements: REQ-01, REQ-02, REQ-03, REQ-11_
+  - _Acceptance: AC-13, AC-14, AC-15, AC-16, AC-17_
+  - _Verification: V-05 浏览器闭环及 W6–W8 已有 V-02 证据复核。Mock 与真实环境结果分别记录。_
+  - _Depends: T030, T032, T033_
+  - _Boundary: 本地 Mock 和关联回归。_
+
+### W10 真实环境（NOT_RUN）
+
+- [ ] **T035** [测试／环境] 验证真实存储、租户与 OpenFGA 权限
+  - 在受控环境验证严格租户过滤、分页前排除未完成对象、创建键并发及重放、旧记录兼容和真实 OpenFGA 撤权。分别记录 MySQL／DM8 与权限服务结果。
+  - _Requirements: REQ-02, REQ-03, REQ-11_
+  - _Acceptance: AC-03, AC-14, AC-15, AC-16_
+  - _Verification: V-02 真实存储及权限证据。状态 NOT_RUN。_
+  - _Depends: T034；受控数据库、OpenFGA、专用测试数据及运行授权。_
+  - _Boundary: 真实测试环境中的管理页读取和创建行为。_
+
+- [ ] **T036** [测试／双方联调] 验证昆联按钮和真实 SSO
+  - 在双方测试站点从昆联点击「工作流管理」，分别用有会话和无会话浏览器验证到达 `/build/workflows`。以授权测试账号核对列表范围、只读详情、新建、管理动作和编辑器返回，记录登录失败与回跳结果。
+  - _Requirements: REQ-01, REQ-03, REQ-11_
+  - _Acceptance: AC-13, AC-14, AC-15, AC-16, AC-17_
+  - _Verification: V-04 真实浏览器与 F118 证据。状态 NOT_RUN。_
+  - _Depends: T034；浏览器可达的联调 Origin、昆联按钮 URL、F118 凭据及回调登记、已同步并授权的测试账号齐备。_
+  - _Boundary: 工作流管理页的双方联调。发布登记沿用 T022–T025。_

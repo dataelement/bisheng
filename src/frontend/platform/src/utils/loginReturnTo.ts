@@ -2,11 +2,12 @@ import { kunlianLoginUrl } from '@bisheng/api-client';
 
 export { kunlianSession } from '@/controllers/kunlianSession';
 
-export function buildKunlianLoginUrl(): string {
+export function buildKunlianLoginUrl(target?: string): string {
+    if (target) return kunlianLoginUrl(target);
     const remembered = consumeLoginReturnTo();
     if (!remembered) return kunlianLoginUrl();
-    const target = new URL(remembered, location.origin);
-    return kunlianLoginUrl(`${target.pathname}${target.search}`);
+    const rememberedTarget = new URL(remembered, location.origin);
+    return kunlianLoginUrl(`${rememberedTarget.pathname}${rememberedTarget.search}`);
 }
 
 /**

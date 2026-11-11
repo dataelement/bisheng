@@ -1,8 +1,8 @@
 import time
-from typing import Union
+from typing import Literal, Union
 
 import jwt
-from fastapi import APIRouter, Body, Depends, Query, Request, WebSocket, WebSocketException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
 from loguru import logger
 from sqlmodel import select
@@ -424,6 +424,7 @@ async def create_flow(
     *,
     request: Request,
     flow: FlowCreate,
+    scope: Literal["workflow_management"] | None = None,
     login_user: UserPayload = Depends(UserPayload.get_app_creator_user),
 ):
     """Create a new flow."""
@@ -437,8 +438,10 @@ async def create_flow(
             tenant_id=login_user.tenant_id, login_user=login_user,
         )
 
-    if key := request.headers.get("Idempotency-Key"):
-        if not mock_scope(login_user.tenant_id):
+    workflow_management = scope == "workflow_management"
+    key = request.headers.get("Idempotency-Key")
+    if key or workflow_management:
+        if not workflow_management and not mock_scope(login_user.tenant_id):
             from bisheng.common.errcode.flow import WorkflowRegistrationUnavailable
 
             raise WorkflowRegistrationUnavailable()
@@ -446,7 +449,8 @@ async def create_flow(
             await FlowService.create_flow_hook(request, login_user, workflow)
 
         workflow, version_id = await create_registered_workflow(
-            RegistrationRepository(), login_user, flow, key, check_quota, project_owner
+            RegistrationRepository(), login_user, flow, key, check_quota, project_owner,
+            workflow_management=workflow_management,
         )
         return resp_200(data=FlowRead.model_validate(workflow).model_copy(update={"version_id": version_id}))
 
@@ -558,10 +562,14 @@ async def change_version(
 async def read_flow(
     *,
     flow_id: str,
+    scope: Literal["workflow_management"] | None = None,
+    view: Literal["edit"] | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ):
     """Read a flow."""
+    if scope == "workflow_management":
+        return await FlowService.get_management_flow(login_user, flow_id, for_edit=view == "edit")
     return await FlowService.get_one_flow(login_user, flow_id, share_link)
 
 
@@ -586,13 +594,22 @@ async def update_flow(
 
     from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
 
-    if (scope := workflow_scope(db_flow.tenant_id, flow_id, user=login_user)) and "status" in flow_data:
+    scope = workflow_scope(db_flow.tenant_id, flow_id, user=login_user)
+    if "status" in flow_data:
+        status = flow_data["status"]
+        if status not in (FlowStatus.ONLINE.value, FlowStatus.OFFLINE.value):
+            raise HTTPException(status_code=422, detail="Invalid workflow status")
+        await require_business_action(
+            login_user, resource_type="workflow", resource_id=flow_id,
+            action="publish" if status == FlowStatus.ONLINE.value else "unpublish",
+        )
+
+    if scope and "status" in flow_data:
         from bisheng.common.errcode.flow import WorkflowRegistrationConflict
         from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
 
         if flow_data["status"] != FlowStatus.OFFLINE.value:
             raise WorkflowRegistrationConflict()
-        await require_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="unpublish")
         RegistrationRepository().unpublish(scope, flow_id)
         db_flow.status = FlowStatus.OFFLINE.value
     else:
@@ -634,6 +651,7 @@ async def read_flows(
     flow_type: int = Query(default=None, description="Type 5 assistant 10 workflow 35 hosted app"),
     page_size: int = Query(default=10, description="Items per page"),
     status: int | None = None,
+    scope: Literal["workflow_management"] | None = None,
     app_state: str | None = Query(
         default=None,
         description="F054 hosted-application state (draft / online / pending_capacity / stopped / deleted). "
@@ -670,5 +688,6 @@ async def read_flows(
         managed=managed,
         action=action,
         app_state=app_state,
+        workflow_management=scope == "workflow_management",
     )
     return resp_200(data=result)

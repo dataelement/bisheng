@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+MANAGEMENT_CREATION_KEY_PREFIX = "m"
+
 
 @dataclass(frozen=True)
 class RegistrationScope:

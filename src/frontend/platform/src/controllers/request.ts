@@ -7,6 +7,7 @@ import { notification } from '@bisheng/ui';
 import axios from "axios";
 import i18next from "i18next";
 import { managementRequestScope,requiresManagementScope,guardManagementResponse } from './managementScope';
+import { claimWorkflowManagementSsoAttempt, isWorkflowManagementPath } from '@/utils/workflowManagement';
 
 window.addEventListener('storage', event => {
     if (event.key === 'bs:management-scope' && event.oldValue !== event.newValue) window.location.reload();
@@ -246,12 +247,16 @@ export async function handleRequestError(cause) {
         localStorage.removeItem('ws_token');
         const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
         localStorage.removeItem('UUR_INFO');
+        const base = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+        if (cause.config?.url?.split('?')[0] === '/api/v1/user/info' &&
+            isWorkflowManagementPath(window.location.pathname.replace(base, ''))) {
+            return Promise.reject(error);
+        }
         if (thirdPartyLoginUrl) {
             window.location.href = thirdPartyLoginUrl;
             return Promise.reject(error);
         }
         if (hadSession) {
-            const base = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
             window.location.href = `${base}/`;
         }
         return Promise.reject(error);
@@ -303,12 +308,21 @@ export async function requestWriteHeaders(url: string): Promise<Record<string, s
 function presentKunlianFailure(error, url: string, silent = false): boolean {
     const reason = kunlianFailure(error, error.httpStatus);
     if (!reason) return false;
-    if (url.split('?')[0] === '/api/v1/user/info') {
+    const path = url.split('?')[0];
+    const userInfo = path === '/api/v1/user/info';
+    const base = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+    const workflowBootstrap = userInfo && isWorkflowManagementPath(window.location.pathname.replace(base, ''));
+    let reauthorize = reason === 'SESSION_EXPIRED' && !silent && ![KUNLIAN_CSRF_PATH, '/api/v1/user/logout'].includes(path);
+    if (reauthorize && workflowBootstrap) {
+        reauthorize = !kunlianSession.isKunlian() && !new URLSearchParams(window.location.search).has('status_code') &&
+            claimWorkflowManagementSsoAttempt();
+    }
+    if (userInfo) {
         kunlianSession.expectLocalProtocol();
-        if (reason !== 'SESSION_EXPIRED') kunlianSession.deferAutomaticLogin();
+        if (reason !== 'SESSION_EXPIRED' || (workflowBootstrap && !reauthorize)) kunlianSession.deferAutomaticLogin();
     }
     kunlianSession.observeFailure(reason);
-    if (reason === 'SESSION_EXPIRED' && !silent && ![KUNLIAN_CSRF_PATH, '/api/v1/user/logout'].includes(url.split('?')[0])) {
+    if (reauthorize) {
         kunlianSession.reauthorize();
     } else if (!silent && kunlianSession.shouldPresent(reason)) {
         showApiError(error);

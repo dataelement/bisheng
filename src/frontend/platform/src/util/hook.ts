@@ -34,6 +34,7 @@ export function useInfiniteCursorTable<T extends object>(
     const [hasMore, setHasMore] = useState(false);
     const [loading, setLoading] = useState(false);
     const [loaded, setLoaded] = useState(false);
+    const [loadError, setLoadError] = useState(false);
 
     // requestIdRef serialises in-flight responses; only the latest wins.
     const requestIdRef = useRef(0);
@@ -50,6 +51,7 @@ export function useInfiniteCursorTable<T extends object>(
     const loadPage = useCallback(
         (nextCursor: string | null, append: boolean) => {
             if (!cancelLoadingWhenReload) setLoading(true);
+            setLoadError(false);
             const reqId = ++requestIdRef.current;
             cursorRef.current = nextCursor;
             apiFun({
@@ -66,7 +68,11 @@ export function useInfiniteCursorTable<T extends object>(
                     setLoading(false);
                     setLoaded(true);
                 })
-                .catch(() => setLoading(false));
+                .catch(() => {
+                    if (reqId !== requestIdRef.current) return;
+                    setLoadError(true);
+                    setLoading(false);
+                });
         },
         [apiFun, pageSize, cancelLoadingWhenReload],
     );
@@ -138,6 +144,7 @@ export function useInfiniteCursorTable<T extends object>(
         keyword,
         loading,
         loaded,
+        loadError,
         hasMore,
         pageSize,
         search,

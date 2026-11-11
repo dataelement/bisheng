@@ -26,6 +26,7 @@ import { User } from "../types/api/user";
 import { getBrandAssetUrl } from "../utils/brand";
 import { HeaderMenu } from "./HeaderMenu";
 import { LicenseBanner } from "./LicenseBanner";
+import { isWorkflowManagementPath } from "@/utils/workflowManagement";
 
 const PRIMARY_PAGE_PATHS = new Set([
     "/dashboard",
@@ -119,6 +120,7 @@ export default function MainLayout() {
     // NavLink matches on pathname only, so every link falling back to
     // /menu-pending?menu=<key> would light up together; disambiguate by `menu`.
     const location = useLocation();
+    const workflowManagement = isWorkflowManagementPath(location.pathname);
     const isPrimaryPage = PRIMARY_PAGE_PATHS.has(location.pathname.replace(/\/$/, ""));
     const pendingNavClass =
         (menuKey: string) =>
@@ -161,10 +163,10 @@ export default function MainLayout() {
                         </div>
                     </div>
                     <div>
-                        <HeaderMenu />
+                        {!workflowManagement && <HeaderMenu />}
                     </div>
                     <div className="relative z-10 flex items-center justify-self-end gap-x-4 pr-8">
-                        {isGlobalSuper && appConfig.multiTenantEnabled && <HeaderTenantScope user={user} />}
+                        {!workflowManagement && isGlobalSuper && appConfig.multiTenantEnabled && <HeaderTenantScope user={user} />}
                         <div className="flex items-center gap-x-1">
                             <TooltipProvider>
                                 <Tooltip
@@ -234,7 +236,7 @@ export default function MainLayout() {
                     </div>
                 </div>
                 <div className="flex flex-1 min-h-0">
-                    <div className="relative z-10 bg-[#f8f8f8] dark:bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
+                    {!workflowManagement && <div className="relative z-10 bg-[#f8f8f8] dark:bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
                         <nav
                             className="overflow-y-auto overflow-x-hidden [&_.navlink>svg]:text-text-2 [&_.navlink.active>svg]:text-inherit"
                             style={{ maxHeight: "calc(100vh - 64px - 90px - var(--license-banner-h, 0px))" }}
@@ -448,7 +450,7 @@ export default function MainLayout() {
                                 </div>
                             </div>
                         )}
-                    </div>
+                    </div>}
                     {/* Width comes from the flex row, not from 100vw: 100vw counts the
                     document scrollbar, so calc(100vw-184px) overshot the free space
                     by the scrollbar width and forced a horizontal document scrollbar

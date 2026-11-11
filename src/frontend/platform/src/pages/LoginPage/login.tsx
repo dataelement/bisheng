@@ -16,9 +16,10 @@ import json from "../../../package.json";
 import { locationContext } from "@/contexts/locationContext";
 import { getSSOurlApi, ldapLoginApi } from "@/controllers/API/pro";
 import { getBrandAssetUrl } from "@/utils/brand";
-import { consumeLoginReturnTo } from "@/utils/loginReturnTo";
+import { buildKunlianLoginUrl, consumeLoginReturnTo } from "@/utils/loginReturnTo";
 import { kunlianSession } from '@/controllers/kunlianSession';
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
+import { claimWorkflowManagementSsoAttempt, isWorkflowManagementPath } from "@/utils/workflowManagement";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
 import { showApiError } from "../../controllers/request";
@@ -36,6 +37,9 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     const { t, i18n } = useTranslation();
 
     const navigate = useNavigate();
+    const { pathname, search } = useLocation();
+    const workflowTarget = isWorkflowManagementPath(pathname) ? pathname : undefined;
+    const workflowLoginFailed = Boolean(workflowTarget) && new URLSearchParams(search).has('status_code');
     const { appConfig } = useContext(locationContext);
     const isLoading = false;
 
@@ -52,6 +56,7 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     const [oauthData, setOauthData] = useState<any>(null);
 
     useEffect(() => {
+        let active = true;
         if (forceLocal) {
             // Strip any stale third-party URLs left by a previous visit to `/`,
             // otherwise the 401 interceptor and logout handlers would still
@@ -61,6 +66,7 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
         }
         getSSOurlApi()
             .then((urls: any) => {
+                if (!active) return;
                 setOauthData(urls);
                 if (urls?.ldap) {
                     setHasLdap(true);
@@ -72,6 +78,15 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                 if (forceLocal) {
                     // Backdoor route: never persist redirect URLs and never auto-jump.
                     setOauthLoading(false);
+                    return;
+                }
+                if (workflowTarget) {
+                    setOauthLoading(false);
+                    if (urls?.kunlian === '/api/oauth2/kunlian' &&
+                        !workflowLoginFailed && !kunlianSession.isKunlian() && !kunlianSession.requiresManualLogin() &&
+                        claimWorkflowManagementSsoAttempt()) {
+                        window.location.assign(buildKunlianLoginUrl(workflowTarget));
+                    }
                     return;
                 }
                 if (kunlianSession.isKunlian()) {
@@ -99,9 +114,10 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
             })
             .catch(() => {
                 // Third-party service unavailable — fall through to normal login
-                setOauthLoading(false);
+                if (active) setOauthLoading(false);
             });
-    }, [forceLocal]);
+        return () => { active = false; };
+    }, [forceLocal, workflowLoginFailed, workflowTarget]);
 
     useLoginError();
 
@@ -174,7 +190,9 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                 // back to it. Validated + consumed in one place so this path and
                 // the SSO landing in App.tsx cannot drift apart.
                 const returnTo = consumeLoginReturnTo();
-                if (returnTo) {
+                if (workflowTarget) {
+                    window.location.href = `${__APP_ENV__.BASE_URL}${workflowTarget}`;
+                } else if (returnTo) {
                     location.href = returnTo;
                 } else {
                     const entry = (res as { default_entry?: string }).default_entry;
@@ -356,7 +374,11 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                                     </Button>
                                 </>
                             )}
-                            {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setHasLdap} />}
+                            {(appConfig.isPro || workflowTarget) && <LoginBridge
+                                oauthData={appConfig.isPro ? oauthData : { kunlian: oauthData?.kunlian }}
+                                onHasLdap={setHasLdap}
+                                kunlianTarget={workflowTarget}
+                            />}
                         </div>
                         <div className=" absolute right-[16px] bottom-[16px] flex">
                             <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>

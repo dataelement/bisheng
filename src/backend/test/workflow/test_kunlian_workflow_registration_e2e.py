@@ -38,6 +38,79 @@ def example_graph():
     return graph
 
 
+async def test_management_routes_keep_create_and_editor_permissions_separate(monkeypatch):
+    from bisheng.common.schemas.api import resp_200
+    from bisheng.user.domain.services.auth import AuthJwt
+
+    user = UserPayload(user_id=12, tenant_id=7, user_role=[])
+    graph = {"nodes": [], "edges": []}
+    visible = AsyncMock(return_value=resp_200({"id": FLOW_ID, "name": "visible", "data": graph}))
+    monkeypatch.setattr(flow_api.FlowService, "get_one_flow", visible)
+    monkeypatch.setattr(
+        flow_api.FlowService, "get_version_list_by_flow", AsyncMock(return_value=resp_200({"data": []}))
+    )
+    monkeypatch.setattr(flow_api, "require_business_action", AsyncMock(side_effect=UnAuthorizedError()))
+    login_dependency = UserPayload.get_login_user
+    monkeypatch.setattr(UserPayload, "get_login_user", AsyncMock(return_value=user))
+    assert_create = AsyncMock(side_effect=UnAuthorizedError())
+    monkeypatch.setattr(UserPayload, "assert_effective_web_menu_contains", assert_create)
+    app = FastAPI()
+    app.include_router(browser.router)
+    app.dependency_overrides[AuthJwt] = lambda: None
+    app.dependency_overrides[login_dependency] = lambda: user
+    app.dependency_overrides[browser.header_share_token_parser] = lambda: None
+
+    async def deny(_request, error):
+        return JSONResponse(error.to_dict(), status_code=403)
+
+    app.add_exception_handler(UnAuthorizedError, deny)
+    url = f"/workflow/get_one_flow/{FLOW_ID}?scope=workflow_management"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://fixture") as client:
+        summary = await client.get(url)
+        assert summary.status_code == 200 and "data" not in summary.json()["data"]
+        assert (await client.get(url + "&view=edit")).status_code == 403
+        create = await client.post(
+            "/workflow/create?scope=workflow_management",
+            headers={"Idempotency-Key": "fixture"},
+            json={"name": "denied"},
+        )
+        assert create.status_code == 403
+        assert_create.assert_awaited_once_with(user.user_id, "create_app")
+        visible.side_effect = UnAuthorizedError()
+        assert (await client.get(url)).status_code == 403
+
+
+@pytest.mark.parametrize(("status", "required_action"), [(1, "unpublish"), (2, "publish")])
+async def test_legacy_status_patch_requires_action_for_unregistered_workflow(monkeypatch, status, required_action):
+    user = UserPayload(user_id=12, tenant_id=7, user_role=[])
+    flow = Flow(id=FLOW_ID, name="fixture", tenant_id=7, status=3 - status)
+    monkeypatch.setattr(browser.FlowDao, "aget_flow_by_id", AsyncMock(return_value=flow))
+    update = AsyncMock(return_value=flow)
+    monkeypatch.setattr(browser.FlowDao, "aupdate_flow", update)
+    monkeypatch.setattr(management, "workflow_scope", lambda *args, **kwargs: None)
+    monkeypatch.setattr(browser, "check_business_action", AsyncMock(return_value=True))
+    authorize = AsyncMock(side_effect=[UnAuthorizedError(), None])
+    monkeypatch.setattr(browser, "require_business_action", authorize)
+    monkeypatch.setattr(browser.telemetry_service, "log_event", AsyncMock())
+    monkeypatch.setattr(flow_api.FlowService, "update_flow_hook", AsyncMock())
+    app = FastAPI()
+    app.include_router(browser.router)
+    app.dependency_overrides[UserPayload.get_login_user] = lambda: user
+
+    async def deny(_request, error):
+        return JSONResponse(error.to_dict(), status_code=403)
+
+    app.add_exception_handler(UnAuthorizedError, deny)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://fixture") as client:
+        url = f"/workflow/update/{FLOW_ID}"
+        assert (await client.patch(url, json={"status": status})).status_code == 403
+        assert flow.status == 3 - status
+        update.assert_not_awaited()
+        assert (await client.patch(url, json={"status": status})).status_code == 200
+    assert authorize.await_args.kwargs["action"] == required_action
+    assert flow.status == status
+
+
 @pytest.mark.parametrize(
     ("method", "path", "body", "version_tenant"),
     [

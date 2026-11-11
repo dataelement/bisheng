@@ -4,6 +4,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
 import { hasDesktopLoginReturnTo } from "@/utils/loginReturnTo";
+import { isWorkflowManagementPath } from "@/utils/workflowManagement";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
@@ -100,7 +101,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     useLayoutEffect(() => {
         // 链接ar参数存cookie（免登录接口）
-        const cookie = location.search.match(/(?<=token=)[^&]+/g)?.[0]
+        const basePath = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+        const managementEntry = isWorkflowManagementPath(location.pathname.replace(basePath, ''));
+        const cookie = managementEntry ? undefined : location.search.match(/(?<=token=)[^&]+/g)?.[0];
         if (cookie) {
             document.cookie = `access_token_cookie=${cookie}; path=/`;
             localStorage.setItem('isLogin', '1')
@@ -245,7 +248,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     '/log': 'log',
                 }
                 const normalizedPath = pathName.replace(/\/+$/, '') || '/'
-                let menuName = MENU_KEY_MAP[normalizedPath]
+                let menuName = isWorkflowManagementPath(normalizedPath) ? 'build' : MENU_KEY_MAP[normalizedPath]
                 if (!menuName && normalizedPath.startsWith('/label')) {
                     menuName = 'mark_task'
                 }

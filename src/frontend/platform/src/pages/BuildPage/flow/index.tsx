@@ -1,9 +1,10 @@
 // @ts-strict-ignore
-import { checkAppEditPermission, getFlowApi } from "@/controllers/API/flow";
+import { checkAppEditPermission, getFlowApi, getWorkflowManagementEditorFlow } from "@/controllers/API/flow";
 import { showApiError } from "@/controllers/request";
 import { flowVersionCompatible } from "@/util/flowCompatible";
+import { workflowManagementReturnTarget } from "@/utils/workflowManagement";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import Panne from "./Panne";
 import useFlowStore from "./flowStore";
 
@@ -11,6 +12,7 @@ import useFlowStore from "./flowStore";
 export default function FlowPage() {
     // const { flow, setFlow } = useContext(TabsContext);
     const { id } = useParams();
+    const returnTarget = workflowManagementReturnTarget(useLocation().search);
 
     // useEffect(() => {
     //     if (id && flow?.id !== id) {
@@ -22,11 +24,13 @@ export default function FlowPage() {
     const { flow, setFlow, clearRunCache, clearNotifications } = useFlowStore()
     const [checking, setChecking] = useState(true)
 
-    const flowInit = async () => {
-        await checkAppEditPermission(id, 10)
-        
-        await getFlowApi(id).then(f => {
-            setChecking(false)
+    useEffect(() => {
+        let active = true;
+        setChecking(true);
+        const flowInit = async () => {
+            if (!returnTarget) await checkAppEditPermission(id, 10);
+            const f = await (returnTarget ? getWorkflowManagementEditorFlow(id) : getFlowApi(id));
+            if (!active) return;
             clearRunCache();
 
             if (f.data) {
@@ -50,18 +54,20 @@ export default function FlowPage() {
                 },
                 version_list: []
             });
-        })
-    }
-
-    useEffect(() => {
-        void flowInit().catch(showApiError).finally(() => setChecking(false))
+        };
+        void flowInit().catch(error => {
+            if (active) showApiError(error);
+        }).finally(() => {
+            if (active) setChecking(false);
+        });
 
         return () => {
+            active = false;
             setFlow(null);
             clearRunCache();
             clearNotifications()
         }
-    }, [])
+    }, [id, returnTarget, setFlow, clearRunCache, clearNotifications])
 
     const [copyFlow, preFlow] = useMemo(() => {
         if (flow?.id === id) {

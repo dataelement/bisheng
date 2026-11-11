@@ -3,7 +3,7 @@ import { isEqual } from "lodash-es";
 import { useEffect,useMemo,useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useBlocker,useNavigate } from "react-router-dom";
-export const useBeforeUnload = (flow: WorkFlow | null, nodes: WorkFlow["nodes"], preFlow: string, onPreFlowChange: () => void) => {
+export const useBeforeUnload = (flow: WorkFlow | null, nodes: WorkFlow["nodes"], preFlow: string, onPreFlowChange: () => void, returnTarget?: string) => {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
@@ -46,6 +46,10 @@ export const useBeforeUnload = (flow: WorkFlow | null, nodes: WorkFlow["nodes"],
 
     const isReturningRef = useRef(false);
     const handleReturn = () => {
+        if (returnTarget) {
+            navigate(returnTarget);
+            return;
+        }
         onPreFlowChange();
         isReturningRef.current = true;
     };

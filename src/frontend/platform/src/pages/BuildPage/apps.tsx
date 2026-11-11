@@ -19,9 +19,9 @@ import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels
 import { userContext } from "@/contexts/userContext";
 import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/assistant";
 import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
-import { deleteFlowFromDatabase, getAppsApi, getFlowApi } from "@/controllers/API/flow";
+import { deleteFlowFromDatabase, getAppsApi, getFlowApi, getWorkflowManagementEditorFlow, getWorkflowManagementSummary } from "@/controllers/API/flow";
 import type { HostedAppActionResult } from "@/controllers/API/hostedApp";
-import { copyReportTemplate, createWorkflowApi, onlineWorkflow } from "@/controllers/API/workflow";
+import { copyReportTemplate, createWorkflowApi, onlineWorkflow, onlineWorkflowApi } from "@/controllers/API/workflow";
 import { handleUiRequest } from "@/controllers/request";
 import { AppNumType, AppType } from "@/types/app";
 import { locationContext } from "@/contexts/locationContext";
@@ -35,6 +35,7 @@ import { Select, Tag } from "@bisheng/ui";
 import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
+import { WORKFLOW_MANAGEMENT_PATH, WORKFLOW_MANAGEMENT_SCOPE, workflowManagementEditorPath } from "@/utils/workflowManagement";
 import CardSelectVersion from "./CardSelectVersion";
 import CreateApp from "./CreateApp";
 import CreateTemp from "./CreateTemp";
@@ -170,7 +171,17 @@ const APP_ACTIONS = [
     'manage_permission',
 ]
 
-export default function Apps() {
+interface AppsProps {
+    workflowOnly?: boolean;
+}
+
+export default function Apps({ workflowOnly = false }: AppsProps) {
+    const { user } = useContext(userContext);
+    const scopeKey = workflowOnly ? `workflow:${user?.user_id}:${user?.tenant_id}` : 'apps';
+    return <AppList key={scopeKey} workflowOnly={workflowOnly} />;
+}
+
+function AppList({ workflowOnly }: AppsProps) {
     const { t, i18n } = useTranslation()
     // useErrorPrompt();
 
@@ -193,17 +204,19 @@ export default function Apps() {
     // `managed: true` is seeded via initial param so it flows through every
     // request automatically; `filterData({tag_id|type|status: ...})` then
     // mutates paramsRef and triggers a fresh first-page load.
-    const { data: dataSource, loading, hasMore, search, reload, loadMore, filterData, refreshData } = useInfiniteCursorTable<FlowType>(
+    const { data: dataSource, loading, loaded, loadError, hasMore, search, reload, loadMore, filterData, refreshData } = useInfiniteCursorTable<FlowType>(
         { pageSize: 14, cancelLoadingWhenReload: true, managed: true },
         (param) => getAppsApi({
             cursor: param.cursor,
             pageSize: param.pageSize,
             keyword: param.keyword,
             tag_id: param.tag_id,
-            type: param.type,
+            type: workflowOnly ? AppType.FLOW : param.type,
             status: param.status,
             app_state: param.app_state,
-            managed: param.managed,
+            managed: workflowOnly ? false : param.managed,
+            action: workflowOnly ? 'visible' : undefined,
+            scope: workflowOnly ? WORKFLOW_MANAGEMENT_SCOPE : undefined,
         }),
     )
 
@@ -213,7 +226,7 @@ export default function Apps() {
     // Three buckets, one per resource type. A hosted app that fell into the
     // workflow bucket would be checked against the wrong type and come back
     // with no actions at all — a card you can see but cannot touch.
-    const appRows = dataSource as AppListRow[];
+    const appRows = (dataSource as AppListRow[]).filter(item => !workflowOnly || item.flow_type === AppNumType.FLOW);
     const workflowResourceIds = appRows
         .filter((item) => item.flow_type !== AppNumType.ASSISTANT && item.flow_type !== AppNumType.HOSTED_APP)
         .map((item) => String(item.id));
@@ -223,7 +236,8 @@ export default function Apps() {
     const hostedAppResourceIds = appRows
         .filter((item) => item.flow_type === AppNumType.HOSTED_APP)
         .map((item) => String(item.id));
-    const { actions: workflowActions } = useResourceActions('workflow', workflowResourceIds, APP_ACTIONS);
+    const { actions: workflowActions } = useResourceActions('workflow', workflowResourceIds, APP_ACTIONS,
+        workflowOnly ? String(user.tenant_id) : undefined);
     const { actions: assistantActions } = useResourceActions('assistant', assistantResourceIds, APP_ACTIONS);
     const { actions: hostedAppActions } = useResourceActions('app', hostedAppResourceIds, APP_ACTIONS);
     const resourceActions = { ...workflowActions, ...assistantActions, ...hostedAppActions };
@@ -239,17 +253,18 @@ export default function Apps() {
     const canDelete = (id: string | number) => hasResourceAction(resourceActions, id, 'delete');
     const visibleApps = appRows;
 
-    const canManageTemplates = canManageAppTemplates(user);
+    const canManageTemplates = !workflowOnly && canManageAppTemplates(user);
     // Application creation and template management have separate permissions.
     // Only global super admins bypass the role menu permission.
     const canCreateApp =
         user.role === 'admin' ||
         (user.web_menu || []).includes('create_app');
+    const canCopy = (id: string | number) => canCreateApp && (workflowOnly ? canEdit(id) : canRead(id));
 
     const [copyingId, setCopyingId] = useState<string | number | null>(null);
 
     const handleCopyApp = async (item: any) => {
-        if (!canCreateApp || !canRead(item.id) || copyingId) return;
+        if (!canCopy(item.id) || copyingId) return;
         setCopyingId(item.id);
         try {
             if (item.flow_type === AppNumType.ASSISTANT) {
@@ -271,7 +286,7 @@ export default function Apps() {
                 reload();
                 return;
             }
-            const flow = await getFlowApi(String(item.id));
+            const flow = await (workflowOnly ? getWorkflowManagementEditorFlow : getFlowApi)(String(item.id));
             if (!flow) return;
             if (item.flow_type === AppNumType.FLOW) {
                 const payload = JSON.parse(JSON.stringify(flow)) as typeof flow;
@@ -286,7 +301,7 @@ export default function Apps() {
                 const res = await createWorkflowApi(payload.name, payload.description || '', payload.logo || '', payload);
                 if (res?.id) {
                     reload();
-                    navigate(`/flow/${res.id}`);
+                    navigate(workflowOnly ? workflowManagementEditorPath(res.id) : `/flow/${res.id}`);
                 }
                 return;
             }
@@ -306,9 +321,16 @@ export default function Apps() {
     const { open: tempOpen, tempType, flowRef, toggleTempModal } = useCreateTemp()
 
     // on/off line
-    const handleCheckedChange = (checked, data) => {
-        if (checked && !canPublish(data.id)) return;
-        if (!checked && !canUnpublish(data.id)) return;
+    const handleCheckedChange = async (checked, data) => {
+        if (checked ? !canPublish(data.id) : !canUnpublish(data.id)) return false;
+        if (workflowOnly) {
+            const { versions } = await getWorkflowManagementSummary(String(data.id));
+            const current = versions.find(version => version.is_current === 1);
+            if (!current) return false;
+            await onlineWorkflowApi({ flow_id: data.id, version_id: current.id, status: checked ? 2 : 1 });
+            reload();
+            return true;
+        }
         if (data.flow_type === 5) {
             return changeAssistantStatusApi(data.id, checked ? 2 : 1).then(res => {
                 if (res === null) {
@@ -366,6 +388,11 @@ export default function Apps() {
 
 
     const handleSetting = (data) => {
+        if (workflowOnly) {
+            return navigate(canEdit(data.id)
+                ? workflowManagementEditorPath(String(data.id))
+                : `${WORKFLOW_MANAGEMENT_PATH}/${encodeURIComponent(data.id)}`);
+        }
         if (data.flow_type === AppNumType.HOSTED_APP) {
             return navigate(`/build/apps/${data.id}`)
         }
@@ -402,16 +429,17 @@ export default function Apps() {
     const tempTypeRef = useRef(null)
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-[#f8f8f8] dark:bg-background-main border-t">
+            {workflowOnly && <h1 className="text-xl font-semibold mb-5">{t('build.workflowManagement')}</h1>}
             <div className="flex gap-4">
-                <SearchInput className="w-64" placeholder={t('build.searchApp')} onChange={(e) => search(e.target.value)}></SearchInput>
-                <SelectType all includeHosted={hostedAppEnabled} onChange={(v) => {
+                <SearchInput className="w-64" placeholder={t(workflowOnly ? 'build.searchWorkflow' : 'build.searchApp')} onChange={(e) => search(e.target.value)}></SearchInput>
+                {!workflowOnly && <SelectType all includeHosted={hostedAppEnabled} onChange={(v) => {
                     tempTypeRef.current = v
                     setTypeFilter(v)
                     // Switching type resets the state filter: `status` and
                     // `app_state` are two different columns and leaving the
                     // previous one set would silently narrow the new list.
                     filterData({ type: v, status: undefined, app_state: undefined })
-                }} />
+                }} />}
                 <SelectAppStatus
                     key={hostedSelected ? 'hosted' : 'default'}
                     hosted={hostedSelected}
@@ -421,23 +449,25 @@ export default function Apps() {
                             : { status: v === 'all' ? undefined : Number(v), app_state: undefined })
                     }}
                 />
-                <LabelFilterSelect
+                {!workflowOnly && <LabelFilterSelect
                     options={allOptions}
                     value={selectLabel.value}
                     onChange={handleLabelSearch}
-                />
+                />}
                 {canManageTemplates && (
                     <Button variant="text" className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto" onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL && tempTypeRef.current !== AppType.HOSTED_APP ? tempTypeRef.current : AppType.FLOW}`)} color="default"><Outlined.MoveToFolder className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
                 )}
             </div>
             {/* list */}
             {
-                loading
+                loading || (workflowOnly && !loaded && !loadError)
                     ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                         <LoadingIcon />
                     </div>
                     : <div className="mt-6 flex gap-2 flex-wrap pb-20">
-                        {canCreateApp && (
+                        {canCreateApp && (workflowOnly ? (
+                            <Button onClick={() => handleCreateApp(AppType.FLOW)}>{t('build.createWorkflow')}</Button>
+                        ) : (
                             <AppTempSheet onSelect={handleCreateApp} onCustomCreate={handleCreateApp}>
                                 <CardComponent<FlowType>
                                     data={null}
@@ -448,6 +478,12 @@ export default function Apps() {
                                     </>)}
                                 ></CardComponent>
                             </AppTempSheet>
+                        ))}
+                        {workflowOnly && loadError && (
+                            <Button variant="outlined" onClick={reload}>{t('build.reloadWorkflows')}</Button>
+                        )}
+                        {workflowOnly && loaded && !loadError && !visibleApps.length && (
+                            <p className="text-muted-foreground">{t('build.noWorkflows')}</p>
                         )}
                         {
                             visibleApps.map((item) => item.flow_type === AppNumType.HOSTED_APP ? (
@@ -486,7 +522,7 @@ export default function Apps() {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     currentUser={user}
-                                    onClick={() => canEdit(item.id) && handleSetting(item)}
+                                    onClick={() => (workflowOnly || canEdit(item.id)) && handleSetting(item)}
                                     // onSwitchClick={() => {
                                     //     !item.write && item.status !== 2 && message({
                                     //         description: t('build.noPermissionToPublish', { type: typeCnNames[item.flow_type] }),
@@ -501,14 +537,14 @@ export default function Apps() {
                                     onPermission={canManage(item.id) ? handleOpenPermission : undefined}
                                     showSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
                                     canSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
-                                    showCopy={canCreateApp && canRead(item.id)}
-                                    onCopy={canCreateApp && canRead(item.id) ? handleUiRequest(handleCopyApp) : undefined}
+                                    showCopy={canCopy(item.id)}
+                                    onCopy={canCopy(item.id) ? handleUiRequest(handleCopyApp) : undefined}
                                     headSelecter={(
-                                        item.version_list?.length ? <CardSelectVersion
+                                        (workflowOnly ? canEdit(item.id) : true) && item.version_list?.length ? <CardSelectVersion
                                             showPop={item.status !== 2}
                                             data={item}
                                         /> : null)}
-                                    labelPannel={
+                                    labelPannel={workflowOnly ? undefined :
                                         <LabelShow
                                             data={item}
                                             user={user}
@@ -536,16 +572,16 @@ export default function Apps() {
         {/* add template */}
         <CreateTemp flow={flowRef.current} type={tempType} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
-        <div className="flex justify-between absolute bottom-0 left-0 w-full bg-[#f8f8f8] dark:bg-background-main h-16 items-center px-10 z-20">
+        {!workflowOnly && <div className="flex justify-between absolute bottom-0 left-0 w-full bg-[#f8f8f8] dark:bg-background-main h-16 items-center px-10 z-20">
             <div className="flex items-center gap-2">
                 <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
             </div>
             {/* F027: legacy AutoPagination slot — infinite scroll trigger
                 moved INSIDE the scroll container above; this bar now only
                 holds the "manage your applications" caption. */}
-        </div>
+        </div>}
         {/* create flow&assistant */}
-        <CreateApp ref={createAppModalRef} kunlianEntry={kunlianEntry} />
+        <CreateApp ref={createAppModalRef} kunlianEntry={kunlianEntry} workflowManagement={workflowOnly} />
         {/* Permission management dialog */}
         {permTarget && (
             <PermissionDialog

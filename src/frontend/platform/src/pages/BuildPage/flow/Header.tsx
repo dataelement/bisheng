@@ -14,7 +14,8 @@ import { Popover,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popove
 import { darkContext } from "@/contexts/darkContext";
 import { TabsContext } from "@/contexts/tabsContext";
 import { copyReportTemplate,createWorkFlowVersion,deleteVersion,getVersionDetails,getWorkFlowVersions,onlineWorkflow,onlineWorkflowApi,saveWorkflow,updateVersion } from "@/controllers/API/workflow";
-import { getFlowApi } from "@/controllers/API/flow";
+import { getFlowApi, getWorkflowManagementEditorFlow } from "@/controllers/API/flow";
+import { workflowManagementReturnTarget } from "@/utils/workflowManagement";
 import { handleUiRequest, showApiError } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
@@ -49,7 +50,8 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     const { t: tbs } = useTranslation('bs')
     const [modelVersionId, setModelVersionId] = useState(0)
     const navigate = useNavigate()
-    const { state } = useLocation();
+    const { state, search } = useLocation();
+    const returnTarget = workflowManagementReturnTarget(search);
     const loca = state?.flow; // 获取传递的 flow 数据
     const flowId = flow?.id ? String(flow.id) : '';
     const { actions } = useResourceActions('workflow', flowId ? [flowId] : [], APP_HEADER_ACTIONS);
@@ -105,7 +107,9 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         const res = await onlineWorkflowApi({ flow_id: flow.id, version_id: version.id, status: 2 })
         if (res === null) {
             toast.show({ type: 'success', message: String(`${version?.name} ${t('hasBeenLaunched')}`) })
-            window.history.length > 1 ? window.history.back() : navigate('/build/apps')
+            if (returnTarget) navigate(returnTarget);
+            else if (window.history.length > 1) window.history.back();
+            else navigate('/build/apps');
         }
     }
     const handleOfflineClick = async () => {
@@ -115,7 +119,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             flow.status = 1
             await refrenshVersions()
             if (flow.kunlian_registration) {
-                const current = await getFlowApi(flow.id);
+                const current = await (returnTarget ? getWorkflowManagementEditorFlow(flow.id) : getFlowApi(flow.id));
                 setFlow({ ...flow, kunlian_registration: current.kunlian_registration });
             }
         }
@@ -242,7 +246,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         returnPage,
         blocker,
         hasChanged
-    } = useBeforeUnload(flow, nodes, preFlow, onPreFlowChange)
+    } = useBeforeUnload(flow, nodes, preFlow, onPreFlowChange, returnTarget)
     // 离开并保存
     const handleSaveAndClose = async () => {
         if (isOnlineVersion) {

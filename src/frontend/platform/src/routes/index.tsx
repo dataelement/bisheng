@@ -11,11 +11,14 @@ import { AppNumType } from "../types/app";
 import RouteErrorBoundary from "./RouteErrorBoundary";
 import EditorPage from "@/pages/Dashboard/editor";
 import SharePage from "@/pages/Dashboard/share";
+import { WORKFLOW_MANAGEMENT_PATH } from "@/utils/workflowManagement";
 
 // Load page components lazily.
 const DshLogin = lazy(() => import('@/pages/DshLogin').then(module => ({ default: module.DshLogin })));
 const Templates = lazy(() => import("@/pages/BuildPage/appTemps"));
 const Apps = lazy(() => import("@/pages/BuildPage/apps"));
+const WorkflowManagementDetail = lazy(() => import("@/pages/BuildPage/WorkflowManagementDetail")
+  .then(module => ({ default: module.WorkflowManagementDetail })));
 const HostedAppDetail = lazy(() => import("@/pages/BuildPage/hostedApp"));
 const AppRuntimeGuide = lazy(() => import("@/pages/AppRuntimeGuide"));
 const EditAssistantPage = lazy(() => import("@/pages/BuildPage/assistant/editAssistant"));
@@ -87,6 +90,8 @@ const privateRouter = [
       { path: "filelib/adjust/:fileId", element: <AdjustFilesUpload />, permission: 'knowledge', },
       { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
       { path: "build/apps", element: <Apps />, permission: 'build', },
+      { path: WORKFLOW_MANAGEMENT_PATH, element: <Apps workflowOnly />, permission: 'build', },
+      { path: `${WORKFLOW_MANAGEMENT_PATH}/:id`, element: <WorkflowManagementDetail />, permission: 'build', },
       // F054 hosted-application detail. Rides the existing `build`
       // permission on purpose: AC-58 forbids a new menu or permission point.
       { path: "build/apps/:appId", element: <HostedAppDetail />, permission: 'build', },

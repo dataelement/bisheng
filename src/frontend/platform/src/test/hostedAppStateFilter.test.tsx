@@ -6,11 +6,13 @@ import Apps from "@/pages/BuildPage/apps"
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  patch: vi.fn(),
+  actions: [] as string[],
   i18n: { loadNamespaces: vi.fn() },
 }))
 
 vi.mock("@/controllers/request", () => ({
-  default: { get: mocks.get },
+  default: { get: mocks.get, patch: mocks.patch },
   handleUiRequest: (handler: unknown) => handler,
   showApiError: vi.fn(),
 }))
@@ -25,7 +27,7 @@ vi.mock("@/contexts/locationContext", async () => ({
 }))
 vi.mock("@/components/bs-comp/permission/useResourceActions", () => ({
   useResourceActions: () => ({ actions: {} }),
-  hasResourceAction: () => false,
+  hasResourceAction: (_actions: unknown, _id: string, action: string) => mocks.actions.includes(action),
 }))
 vi.mock("@/pages/BuildPage/hook", () => ({
   useCreateTemp: () => ({ open: false, flowRef: { current: null }, toggleTempModal: vi.fn() }),
@@ -44,7 +46,38 @@ vi.mock("@/pages/BuildPage/CreateTemp", () => ({ default: () => null }))
 
 beforeEach(() => {
   mocks.get.mockReset().mockResolvedValue({ data: [], page_size: 14, has_more: false, next_cursor: null })
+  mocks.patch.mockReset().mockResolvedValue(null)
+  mocks.actions = []
 })
+
+it("keeps the workflow management list in the visible workflow scope", async () => {
+  const user = userEvent.setup()
+  render(<MemoryRouter><Apps workflowOnly /></MemoryRouter>)
+  await screen.findByText("build.noWorkflows")
+  expect(screen.queryByRole("combobox", { name: "build.appTypeFilter" })).toBeNull()
+  await user.type(screen.getByPlaceholderText("build.searchWorkflow"), "A&B")
+  await selectOption(user, "tenant.statusFilter", "build.offline")
+  await waitFor(() => expect(latestQuery().get("status")).toBe("1"))
+  expect(Object.fromEntries(latestQuery())).toMatchObject({
+    name: "A&B", flow_type: "10", managed: "false", action: "visible", scope: "workflow_management",
+  })
+})
+
+it.each([[1, 2, 'publish'], [2, 1, 'unpublish']])(
+  'changes workflow status from %i to %i with the independent action', async (from, to, action) => {
+    mocks.actions = ['visible', action]
+    const versions = [{ id: 6, name: 'previous', is_current: 0 }, { id: 7, name: 'current', is_current: 1 }]
+    const row = { id: 'workflow', name: 'fixture', flow_type: 10, status: from, version_list: versions }
+    mocks.get.mockImplementation(async (url: string) => url.includes('/get_one_flow/')
+      ? { id: row.id, versions }
+      : { data: [row], page_size: 14, has_more: false, next_cursor: null })
+    render(<MemoryRouter><Apps workflowOnly /></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('switch'))
+    await waitFor(() => expect(mocks.patch).toHaveBeenCalledWith('/api/v1/workflow/status', {
+      flow_id: row.id, version_id: 7, status: to,
+    }))
+  },
+)
 
 function latestQuery() {
   const calls = mocks.get.mock.calls.filter(([url]) => String(url).includes("/workflow/list?"))

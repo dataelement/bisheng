@@ -29,6 +29,7 @@ from bisheng.common.errcode.flow import (
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
+from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersion, FlowVersionDao, FlowVersionRead
@@ -350,6 +351,25 @@ class FlowService(BaseService):
             action="share",
         )
         return resp_200(data=payload)
+
+    @classmethod
+    async def get_management_flow(cls, user: UserPayload, flow_id: str, *, for_edit: bool = False):
+        with tenant_execution_scope(user.tenant_id), strict_tenant_filter():
+            result = await cls.get_one_flow(user, flow_id)
+            if for_edit:
+                await require_business_action(user, resource_type="workflow", resource_id=flow_id, action="edit")
+                return result
+            versions = await cls.get_version_list_by_flow(user, flow_id)
+            summary = {
+                key: result.data[key]
+                for key in ("id", "name", "description", "status", "logo")
+                if key in result.data
+            }
+            summary["versions"] = [
+                {key: version[key] for key in ("id", "name", "is_current") if key in version}
+                for version in jsonable_encoder(versions.data["data"])
+            ]
+            return resp_200(data=summary)
 
     @classmethod
     async def get_compare_tasks(cls, user: UserPayload, req: FlowCompareReq) -> list:

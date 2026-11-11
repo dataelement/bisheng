@@ -87,8 +87,13 @@ async def test_version_save_switch_and_delete_keep_the_last_published_graph(agen
     from bisheng.api.v1.schemas import FlowVersionCreate
     from bisheng.database.models.flow import Flow
     from bisheng.database.models.flow_version import FlowVersion
+    from bisheng.workflow.application import kunlian_workflow_management
+    from bisheng.workflow.domain.models.kunlian_registration import KunlianWorkflowCreation
+    from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
 
     repo, sessions, graph, _ = agent_store
+    KunlianWorkflowCreation.__table__.create(sessions.kw["bind"])
+    monkeypatch.setattr(kunlian_workflow_management, "RegistrationRepository", lambda: RegistrationRepository(sessions))
     published = {**graph, "_platform_agent_publication": {"nodes": {"old": {}}}}
     with sessions() as session:
         flow = session.get(Flow, "f" * 32)

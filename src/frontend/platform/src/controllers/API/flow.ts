@@ -2,6 +2,7 @@
 import { ReactFlowJsonObject } from "@xyflow/react";
 import { FlowStyleType, FlowType, FlowVersionItem } from "../../types/flow";
 import axios from "../request";
+import { WORKFLOW_MANAGEMENT_SCOPE } from "@/utils/workflowManagement";
 
 /**
  * 保存组件 variables 变量
@@ -126,6 +127,26 @@ export async function getFlowApi(flowId: string, version: string = 'v1'): Promis
     return await axios.get(`/api/${version}/flows/${flowId}`)
 }
 
+export interface WorkflowManagementSummary {
+    id: string;
+    name: string;
+    description?: string;
+    status: number;
+    versions: { id: number; name: string; is_current?: number }[];
+}
+
+export function getWorkflowManagementSummary(id: string): Promise<WorkflowManagementSummary> {
+    return axios.get(`/api/v1/workflow/get_one_flow/${encodeURIComponent(id)}`, {
+        params: { scope: WORKFLOW_MANAGEMENT_SCOPE },
+    });
+}
+
+export function getWorkflowManagementEditorFlow(id: string): Promise<FlowType> {
+    return axios.get(`/api/v1/workflow/get_one_flow/${encodeURIComponent(id)}`, {
+        params: { scope: WORKFLOW_MANAGEMENT_SCOPE, view: 'edit' },
+    });
+}
+
 /**
  * 删除的技能 工作流详情
  */
@@ -191,6 +212,7 @@ export async function getAppsApi(
         status,
         app_state,
         action = 'use',
+        scope,
     }: {
         cursor?: string | null;
         pageSize?: number;
@@ -202,6 +224,7 @@ export async function getAppsApi(
         /** F054 hosted-application state; ignored by the other two types. */
         app_state?: string;
         action?: 'visible' | 'use';
+        scope?: 'workflow_management';
     },
 ): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
@@ -213,8 +236,9 @@ export async function getAppsApi(
     const statusStr = (status === 1 || status === 2) ? `&status=${status}` : ''
     const appStateStr = app_state ? `&app_state=${encodeURIComponent(app_state)}` : ''
     const cursorStr = cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+    const scopeStr = scope ? `&scope=${scope}` : ''
     const res = await axios.get(
-        `/api/v1/workflow/list?page_size=${pageSize}&name=${keyword ?? ''}${tagIdStr}${flowType}${managedStr}${statusStr}${appStateStr}&action=${action}${cursorStr}`,
+        `/api/v1/workflow/list?page_size=${pageSize}&name=${encodeURIComponent(keyword ?? '')}${tagIdStr}${flowType}${managedStr}${statusStr}${appStateStr}&action=${action}${scopeStr}${cursorStr}`,
     )
     const envelope = res as any as { data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }
     const newData = envelope.data.map((item: any) => {

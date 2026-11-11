@@ -3,6 +3,7 @@ import { WorkFlow } from "@/types/flow";
 import type { PlatformAgentPage, PlatformAgentVersion, PlatformAgentCapabilities, PlatformAgentValidation } from "@/types/flow";
 import axios from "../request";
 import { platformKnowledgeTemplate } from "./platformKnowledge";
+import { WORKFLOW_MANAGEMENT_SCOPE } from "@/utils/workflowManagement";
 
 export async function getPlatformAgentCapabilities(): Promise<PlatformAgentCapabilities> {
     const env = await axios.get('/api/v1/env');
@@ -49,7 +50,7 @@ export const getWorkflowReportTemplate = async (key: string, flowId: string): Pr
 /**
  * 创建工作流
  */
-export const createWorkflowApi = async (name, desc, url, flow?, registrationKey?: string): Promise<any> => {
+export const createWorkflowApi = async (name, desc, url, flow?, registrationKey?: string, workflowManagement = false): Promise<any> => {
     if (url) {
         // logo保存相对路径
         url = url.replace('/bisheng', '')
@@ -60,7 +61,10 @@ export const createWorkflowApi = async (name, desc, url, flow?, registrationKey?
         name,
         description: desc,
         logo: url
-    }, registrationKey ? { headers: { 'Idempotency-Key': registrationKey } } : undefined);
+    }, registrationKey ? {
+        headers: { 'Idempotency-Key': registrationKey },
+        ...(workflowManagement ? { params: { scope: WORKFLOW_MANAGEMENT_SCOPE } } : {}),
+    } : undefined);
 }
 
 /**

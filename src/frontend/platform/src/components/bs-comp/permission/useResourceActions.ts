@@ -210,6 +210,7 @@ export function useResourceActions(
   resourceType: ResourceType,
   resourceIds: string[],
   requestedActions: string[],
+  tenantScope?: string,
 ): { actions: Record<string, string[]>; loading: boolean } {
   const { user } = useContext(userContext)
   const { t } = useTranslation("permission")
@@ -239,7 +240,7 @@ export function useResourceActions(
     setLoading(true)
     let disposed = false
     getResourceActions(
-      userId,
+      tenantScope === undefined ? userId : JSON.stringify([userId, tenantScope]),
       resourceType,
       resourceIds,
       requestedActions,
@@ -261,6 +262,7 @@ export function useResourceActions(
     requestedActionsKey,
     user?.role,
     userId,
+    tenantScope,
   ])
 
   return { actions, loading }

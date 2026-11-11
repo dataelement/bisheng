@@ -24,6 +24,7 @@ from bisheng.workflow.domain.models.kunlian_registration import (
     KunlianWorkflowVersion,
 )
 from bisheng.workflow.domain.repositories.platform_node_publication import PlatformNodePublication
+from bisheng.workflow.domain.schemas.kunlian_registration import MANAGEMENT_CREATION_KEY_PREFIX
 from bisheng.workflow.domain.schemas.platform_agent import PUBLICATION_KEY as AGENT_BINDING
 from bisheng.workflow.domain.schemas.platform_agent import canonical_digest
 from bisheng.workflow.domain.schemas.platform_knowledge import PUBLICATION_KEY as KNOWLEDGE_BINDING
@@ -125,17 +126,23 @@ class RegistrationRepository:
             row.completed = True
 
     @staticmethod
-    def _creation_by_workflow(session, tenant_id, workflow_id):
-        return session.exec(
-            select(KunlianWorkflowCreation.completed).where(
+    def _creation_by_workflow(session, tenant_id, workflow_id, *, management_only=False):
+        row = session.exec(
+            select(KunlianWorkflowCreation.key, KunlianWorkflowCreation.completed).where(
                 KunlianWorkflowCreation.tenant_id == tenant_id,
                 KunlianWorkflowCreation.workflow_id == workflow_id,
             )
         ).first()
+        if row is None:
+            return None
+        key, completed = row
+        if key.startswith(MANAGEMENT_CREATION_KEY_PREFIX):
+            return None if completed else False
+        return None if management_only else completed
 
-    def creation_by_workflow(self, tenant_id, workflow_id):
+    def creation_by_workflow(self, tenant_id, workflow_id, *, management_only=False):
         with tenant_execution_scope(tenant_id), self.transaction() as session:
-            return self._creation_by_workflow(session, tenant_id, workflow_id)
+            return self._creation_by_workflow(session, tenant_id, workflow_id, management_only=management_only)
 
     def workflow_ids_in_tenant(self, tenant_id, workflow_ids):
         if not workflow_ids:

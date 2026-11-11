@@ -22,12 +22,12 @@ def is_enrolled(workflow_id, created):
 
 
 def workflow_scope(tenant_id, workflow_id, *, user=None, repository=None):
-    scope = mock_scope(tenant_id)
-    if not scope:
+    if not tenant_id:
         return None
+    scope = mock_scope(tenant_id)
     repository = repository or RegistrationRepository()
-    created = repository.creation_by_workflow(tenant_id, workflow_id)
-    if created is not False and not is_enrolled(workflow_id, created):
+    created = repository.creation_by_workflow(tenant_id, workflow_id, management_only=scope is None)
+    if created is not False and (scope is None or not is_enrolled(workflow_id, created)):
         return None
     if user is not None and user.tenant_id != tenant_id:
         raise UnAuthorizedError()

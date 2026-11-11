@@ -57,6 +57,23 @@ it('only a matching SESSION_EXPIRED contract starts one fixed same-origin reauth
   expect(location.href).toBe('/api/oauth2/kunlian?return_to=%2Fflow%2Ffixture%3Ftab%3Drun');
 });
 
+it.each(['initial', 'callback', 'attempted', 'rejected'] as const)(
+  'only starts management reauthorization on the initial navigation (%s)', async state => {
+  location.pathname = '/build/workflows';
+  location.search = state === 'rejected' ? '?status_code=19320' : '';
+  location.hash = state === 'callback' ? '#kunlian-login' : '';
+  location.href = 'https://app.fixture.invalid/build/workflows' + location.search + location.hash;
+  if (state === 'attempted') vi.stubGlobal('history', { state: { workflowManagementSsoAttempted: true }, replaceState: vi.fn() });
+  const current = location.href;
+  const module = await import('./request');
+  module.default.defaults.adapter = async config => {
+    throw Object.assign(new Error('expired'), { config, response: { config, status: 401,
+      data: { status_code: 19323, data: { reason_code: 'SESSION_EXPIRED' } } } });
+  };
+  await expect(module.default.get('/api/v1/user/info')).rejects.toMatchObject({ httpStatus: 401 });
+  expect(location.href).toBe(state === 'initial' ? '/api/oauth2/kunlian?return_to=%2Fbuild%2Fworkflows' : current);
+});
+
 it('does not treat a directory-management rejection as an ordinary administrator identity change', async () => {
   const module = await import('./request');
   const { kunlianSession } = await import('./kunlianSession');

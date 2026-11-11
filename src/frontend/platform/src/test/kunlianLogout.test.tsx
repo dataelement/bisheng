@@ -125,6 +125,29 @@ it.each([true, false])('keeps the old automatic login separate from the Kunlian 
   }
 });
 
+it('retries a failed management login without carrying its error or a different return target', async () => {
+  location.pathname = '/build/workflows';
+  location.search = '?status_code=19320';
+  localStorage.setItem('LOGIN_PATHNAME', '/workspace/old');
+  api.sso.mockResolvedValue({ kunlian: '/api/oauth2/kunlian' });
+  const { MemoryRouter } = await import('react-router-dom');
+  const { LoginPage } = await import('@/pages/LoginPage/login');
+  render(<MemoryRouter initialEntries={['/build/workflows?status_code=19320']}><LoginPage /></MemoryRouter>);
+  const retry = await screen.findByRole('button', { name: 'shared:kunlian.login' });
+  fireEvent.click(retry);
+  expect(location.href).toBe('/api/oauth2/kunlian?return_to=%2Fbuild%2Fworkflows');
+});
+
+it('resolves a management session without importing the legacy query-token login', async () => {
+  location.pathname = '/build/workflows';
+  location.search = '?token=fixture';
+  const current = location.href;
+  const { UserProvider } = await vi.importActual<typeof import('@/contexts/userContext')>('@/contexts/userContext');
+  render(<UserProvider><div>probe</div></UserProvider>);
+  expect(api.getInfo).toHaveBeenCalled();
+  expect(location.href).toBe(current);
+});
+
 it('creates the assistant debug socket URL without the forbidden t query', async () => {
   const { kunlianSession } = await import('@/utils/loginReturnTo'); kunlianSession.confirmUser({ auth_source: 'kunlian' });
   const captures: string[] = [];

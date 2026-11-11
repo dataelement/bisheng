@@ -10,9 +10,10 @@ import Wxpro from "./icons/wxpro.svg?react";
 interface LoginBridgeProps {
     oauthData: any;
     onHasLdap: (v: boolean) => void;
+    kunlianTarget?: string;
 }
 
-export default function LoginBridge({ oauthData, onHasLdap }: LoginBridgeProps) {
+export default function LoginBridge({ oauthData, onHasLdap, kunlianTarget }: LoginBridgeProps) {
     const { t } = useTranslation();
 
     const ssoUrl = oauthData?.sso || "";
@@ -29,7 +30,7 @@ export default function LoginBridge({ oauthData, onHasLdap }: LoginBridgeProps) 
         <div>
             <Separator className="my-4" text={t("login.otherMethods")}></Separator>
             <div className="flex justify-center items-center gap-4">
-                {hasKunlian && <Button size="small" color="default" variant="outlined" onClick={() => { location.href = buildKunlianLoginUrl(); }}>
+                {hasKunlian && <Button size="small" color="default" variant="outlined" onClick={() => { location.href = buildKunlianLoginUrl(kunlianTarget); }}>
                     {t('shared:kunlian.login')}
                 </Button>}
                 {ssoUrl && (

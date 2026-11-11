@@ -21,6 +21,7 @@ import { AppType,AppTypeToNum } from "@/types/app";
 import { forwardRef,useContext,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { workflowManagementEditorPath } from "@/utils/workflowManagement";
 import { assistantRoleExample } from "./assistant/editAssistant/roleExample";
 import { instantiateAssistantTemplate, type AssistantTemplateDraft } from './assistantTemplate';
 
@@ -30,8 +31,8 @@ type ModalRef = {
     edit: (type: string, appId: string) => void;
 };
 
-const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any; kunlianEntry?: boolean }>(
-    ({ onSave, loca, kunlianEntry }, ref) => {
+const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any; kunlianEntry?: boolean; workflowManagement?: boolean }>(
+    ({ onSave, loca, kunlianEntry, workflowManagement = false }, ref) => {
         const [open, setOpen] = useState(false);
         const [formData, setFormData] = useState({
             url: '',
@@ -47,10 +48,13 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any; kunlianEntry?:
         const submitting = useRef(false);
         const registrationRequest = useRef<{ fingerprint: string; key: string } | null>(null);
         const registrationKey = () => {
-            if (!kunlianEntry) return undefined;
+            if (!kunlianEntry && !workflowManagement) return undefined;
             const fingerprint = JSON.stringify(formData);
             if (registrationRequest.current?.fingerprint !== fingerprint) {
-                registrationRequest.current = { fingerprint, key: crypto.randomUUID() };
+                const key = crypto.randomUUID?.() ?? Array.from(
+                    crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0'),
+                ).join('');
+                registrationRequest.current = { fingerprint, key };
             }
             return registrationRequest.current.key;
         };
@@ -64,6 +68,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any; kunlianEntry?:
         useImperativeHandle(ref, () => ({
             open(type: AppType, tempId?: number) {
                 ++generation.current;
+                if (workflowManagement) registrationRequest.current = null;
                 assistantDraft.current = {};
                 submitting.current = false;
                 setLoading(false);
@@ -249,15 +254,19 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any; kunlianEntry?:
                         navigate('/assistant/' + res.id)
                     }
                 } else {
-                    if (appId) return navigate('/flow/' + appId);
-                    const workflow = await createWorkflowApi(formData.name, formData.desc, formData.url, undefined, registrationKey());
-                    if (workflow) {
-                        const navigateToFlow = (id) => navigate(`/flow/${id}`);
-                        if (!appConfig.isPro) return navigateToFlow(workflow.id);
+                    const navigateToFlow = (id: string) => navigate(
+                        workflowManagement ? workflowManagementEditorPath(id) : `/flow/${id}`,
+                    );
+                    if (appId && !workflowManagement) return navigateToFlow(appId);
+                    const workflowId = appId || (await createWorkflowApi(
+                        formData.name, formData.desc, formData.url, undefined, registrationKey(), workflowManagement,
+                    ))?.id;
+                    if (workflowId && request === generation.current) {
+                        if (!appConfig.isPro) return navigateToFlow(workflowId);
 
-                        setAppId(workflow.id);
-                        const securityCreated = await securityRef.current.create(workflow.id);
-                        if (securityCreated) navigateToFlow(workflow.id);
+                        setAppId(workflowId);
+                        const securityCreated = await securityRef.current.create(workflowId);
+                        if (securityCreated && request === generation.current) navigateToFlow(workflowId);
                     }
                 }
             }
@@ -319,7 +328,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any; kunlianEntry?:
                         </Accordion>}
                     </div>
                     <DialogFooter>
-                        <DialogClose>
+                        <DialogClose asChild>
                             <Button variant="outlined" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })} color="default">
                                 {t('cancel')}
                             </Button>

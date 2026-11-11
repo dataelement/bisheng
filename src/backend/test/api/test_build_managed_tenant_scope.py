@@ -27,6 +27,13 @@ def app_list_context(monkeypatch):
     visible_token = set_visible_tenant_ids(frozenset({1, 60}))
     monkeypatch.setattr(workflow_module.settings.app_runtime, "enabled", True)
     monkeypatch.setattr(WorkFlowService, "add_extra_field", lambda _user, rows, *_args, **_kwargs: rows)
+
+    async def hosted_actions(_user, rows):
+        for row in rows:
+            if row["flow_type"] == 35:
+                row["allowed_actions"] = ["edit"]
+
+    monkeypatch.setattr(WorkFlowService, "_managed_hosted_actions", hosted_actions)
     monkeypatch.setattr(workflow_module, "emit_metric", lambda *_args, **_kwargs: None)
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
@@ -99,6 +106,32 @@ async def test_super_admin_keeps_existing_scope(app_list_context, monkeypatch):
     result = await _list(monkeypatch, super_admin=True, page_size=20)
     assert len(result.data) == 6
     assert is_strict_tenant_filter() is False
+
+
+async def test_workflow_management_lists_only_current_tenant_workflows(app_list_context, monkeypatch):
+    from bisheng.common.cursor import encode_cursor
+    from bisheng.common.errcode.flow import AppInvalidCursorError
+    from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
+
+    monkeypatch.setattr(RegistrationRepository, "pending_ids", lambda _self, _tenant, _ids: set())
+
+    def enrich(_user, rows, *_args, **_kwargs):
+        assert current_tenant_id.get() == 60
+        assert visible_tenant_ids.get() == frozenset({60})
+        return rows
+
+    monkeypatch.setattr(WorkFlowService, "add_extra_field", enrich)
+    first = await _list(monkeypatch, super_admin=True, page_size=1, workflow_management=True)
+    assert [row["id"] for row in first.data] == ["flow-60"]
+    assert first.has_more is False
+    assert is_strict_tenant_filter() is False
+    assert visible_tenant_ids.get() == frozenset({1, 60})
+    ordinary_cursor = encode_cursor(
+        ("2026-10-29T10:00:00", "flow-60"),
+        context="flow|sort=update_time|action=visible|managed=0",
+    )
+    with pytest.raises(AppInvalidCursorError):
+        await _list(monkeypatch, workflow_management=True, cursor=ordinary_cursor)
 
 
 async def test_unmanaged_list_does_not_enter_management_scope(app_list_context, monkeypatch):

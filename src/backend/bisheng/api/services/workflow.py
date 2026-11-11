@@ -28,7 +28,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.common.services.config_service import settings
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.core.context.tenant import strict_tenant_filter
+from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
@@ -478,6 +478,7 @@ class WorkFlowService(BaseService):
         required_action: str,
         app_state: str | None = None,
         admin_bypass: bool = False,
+        workflow_management: bool = False,
     ) -> tuple[list[dict], bool, set[str]]:
         """F027 cursor-paginated scan for /workflow/list: keep fetching DB
         batches via keyset, apply ReBAC fine-grained filtering, accumulate
@@ -581,10 +582,11 @@ class WorkFlowService(BaseService):
 
             from bisheng.workflow.application.kunlian_workflow_management import mock_scope
 
-            if kept and (scope := mock_scope(getattr(user, "tenant_id", None))):
+            tenant_id = getattr(user, "tenant_id", None)
+            if kept and (workflow_management or mock_scope(tenant_id)):
                 from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
 
-                pending = RegistrationRepository().pending_ids(scope.tenant_id, [str(row["id"]) for row in kept])
+                pending = RegistrationRepository().pending_ids(tenant_id, [str(row["id"]) for row in kept])
                 kept = [row for row in kept if str(row["id"]) not in pending]
             for item in kept:
                 visible.append(item)
@@ -868,6 +870,7 @@ class WorkFlowService(BaseService):
         search_description: bool = False,
         action: str = "use",
         app_state: str | None = None,
+        workflow_management: bool = False,
     ) -> "PageInfiniteCursorData":
         """F027 cursor envelope wrapper for ``/api/v1/workflow/list``.
 
@@ -882,8 +885,15 @@ class WorkFlowService(BaseService):
         from bisheng.common.schemas.api import PageInfiniteCursorData
 
         total_start = perf_counter()
+        if workflow_management:
+            managed, action, flow_type, app_state = False, "visible", FlowType.WORKFLOW.value, None
         required_action = "edit" if managed else action
         context = f"flow|sort=update_time|action={required_action}|managed={int(managed)}"
+        if workflow_management:
+            from bisheng.workflow.domain.schemas.platform_agent import canonical_digest
+
+            scope = canonical_digest([user.tenant_id, user.user_id, name or "", status, tag_id, page_size])
+            context = f"workflow_management|{scope}"
         try:
             decoded = decode_cursor(
                 cursor,
@@ -966,30 +976,28 @@ class WorkFlowService(BaseService):
                 )
             effective_flow_ids = visible_id_list
 
-        management_scope = strict_tenant_filter() if managed and is_admin and not actor.super_admin else nullcontext()
-        with management_scope:
-            data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
-                user=user,
-                name=name,
-                status=status,
-                flow_ids=effective_flow_ids,
-                flow_type=flow_type,
-                cursor=decoded,
-                page_size=page_size,
-                managed=managed,
-                search_description=search_description,
-                required_action=required_action,
-                app_state=app_state,
-                admin_bypass=is_admin,
-            )
+        strict = workflow_management or (managed and is_admin and not actor.super_admin)
+        tenant_scope = tenant_execution_scope(user.tenant_id) if workflow_management else nullcontext()
+        with tenant_scope:
+            with (strict_tenant_filter() if strict else nullcontext()):
+                data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
+                    user=user,
+                    name=name,
+                    status=status,
+                    flow_ids=effective_flow_ids,
+                    flow_type=flow_type,
+                    cursor=decoded,
+                    page_size=page_size,
+                    managed=managed,
+                    search_description=search_description,
+                    required_action=required_action,
+                    app_state=app_state,
+                    admin_bypass=is_admin,
+                    workflow_management=workflow_management,
+                )
 
-        enrich_start = perf_counter()
-        data = cls.add_extra_field(
-            user,
-            data,
-            managed,
-            writeable_ids=writeable_ids,
-        )
+            enrich_start = perf_counter()
+            data = cls.add_extra_field(user, data, managed, writeable_ids=writeable_ids)
         logger.info(
             "[perf][workflow.list.enrich] user_id={} flow_type={} rows={} took_ms={:.2f}",
             user.user_id,
