@@ -1,0 +1,390 @@
+pageType: cover
+background:
+  type: solid
+  color: '#F0EAE0'
+notes: 'Authored layout: 架构封面. All content is illustrative. Replace with user facts.'
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 24
+      - 700
+      - 18
+    content:
+      text: ENGINEERING NOTES
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 10
+      color: '#68665F'
+      lineHeight: 1.2
+      letterSpacing: 1.2
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 50
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      color: '#68665F'
+      width: 0.6
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 68
+      - 864
+      - 64
+    content:
+      text: 让架构决策，可以被验证
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 31
+      color: '#252824'
+      lineHeight: 1.2
+      bold: true
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 505
+      - 760
+      - 16
+    content:
+      text: 自编示例，非外部事实
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#68665F'
+      lineHeight: 1.2
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 860
+      - 504
+      - 48
+      - 18
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#252824'
+      lineHeight: 1.2
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 170
+      - 480
+      - 172
+    content:
+      text: |-
+        工程蓝图
+        让系统可解释
+      fontFamily: *ref_1
+      fontSize: 64
+      color: '#252824'
+      lineHeight: 1.2
+      bold: true
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 52
+      - 356
+      - 460
+      - 80
+    content:
+      text: |-
+        约束 → 边界 → 反馈
+        用证据连接设计与运行。
+      fontFamily: *ref_0
+      fontSize: 23
+      color: '#68665F'
+      lineHeight: 1.2
+  - elementId: l8
+    elementType: line
+    bounds:
+      - 580
+      - 148
+      - 1
+      - 298
+    viewBox:
+      - 1
+      - 298
+    points: 0,0 0,298
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l9
+    elementType: line
+    bounds:
+      - 628
+      - 148
+      - 1
+      - 298
+    viewBox:
+      - 1
+      - 298
+    points: 0,0 0,298
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l10
+    elementType: line
+    bounds:
+      - 676
+      - 148
+      - 1
+      - 298
+    viewBox:
+      - 1
+      - 298
+    points: 0,0 0,298
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l11
+    elementType: line
+    bounds:
+      - 724
+      - 148
+      - 1
+      - 298
+    viewBox:
+      - 1
+      - 298
+    points: 0,0 0,298
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l12
+    elementType: line
+    bounds:
+      - 772
+      - 148
+      - 1
+      - 298
+    viewBox:
+      - 1
+      - 298
+    points: 0,0 0,298
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l13
+    elementType: line
+    bounds:
+      - 820
+      - 148
+      - 1
+      - 298
+    viewBox:
+      - 1
+      - 298
+    points: 0,0 0,298
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l14
+    elementType: line
+    bounds:
+      - 868
+      - 148
+      - 1
+      - 298
+    viewBox:
+      - 1
+      - 298
+    points: 0,0 0,298
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l15
+    elementType: line
+    bounds:
+      - 580
+      - 148
+      - 332
+      - 1
+    viewBox:
+      - 332
+      - 1
+    points: 0,0 332,0
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l16
+    elementType: line
+    bounds:
+      - 580
+      - 196
+      - 332
+      - 1
+    viewBox:
+      - 332
+      - 1
+    points: 0,0 332,0
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l17
+    elementType: line
+    bounds:
+      - 580
+      - 244
+      - 332
+      - 1
+    viewBox:
+      - 332
+      - 1
+    points: 0,0 332,0
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l18
+    elementType: line
+    bounds:
+      - 580
+      - 292
+      - 332
+      - 1
+    viewBox:
+      - 332
+      - 1
+    points: 0,0 332,0
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l19
+    elementType: line
+    bounds:
+      - 580
+      - 340
+      - 332
+      - 1
+    viewBox:
+      - 332
+      - 1
+    points: 0,0 332,0
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l20
+    elementType: line
+    bounds:
+      - 580
+      - 388
+      - 332
+      - 1
+    viewBox:
+      - 332
+      - 1
+    points: 0,0 332,0
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: l21
+    elementType: line
+    bounds:
+      - 580
+      - 436
+      - 332
+      - 1
+    viewBox:
+      - 332
+      - 1
+    points: 0,0 332,0
+    border:
+      color: '#68665F'
+      width: 0.25
+  - elementId: s22
+    elementType: shape
+    bounds:
+      - 600
+      - 176
+      - 224
+      - 56
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#F0EAE0'
+    border:
+      color: '#68665F'
+      width: 0.7
+  - elementId: t23
+    elementType: text
+    bounds:
+      - 618
+      - 190
+      - 185
+      - 32
+    content:
+      text: 01 / 输入
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#252824'
+      lineHeight: 1.2
+  - elementId: s24
+    elementType: shape
+    bounds:
+      - 634
+      - 258
+      - 224
+      - 56
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#F0EAE0'
+    border:
+      color: '#68665F'
+      width: 0.7
+  - elementId: t25
+    elementType: text
+    bounds:
+      - 652
+      - 272
+      - 185
+      - 32
+    content:
+      text: 02 / 处理
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#252824'
+      lineHeight: 1.2
+  - elementId: s26
+    elementType: shape
+    bounds:
+      - 668
+      - 340
+      - 224
+      - 56
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#F0EAE0'
+    border:
+      color: '#68665F'
+      width: 0.7
+  - elementId: t27
+    elementType: text
+    bounds:
+      - 686
+      - 354
+      - 185
+      - 32
+    content:
+      text: 03 / 验证
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#252824'
+      lineHeight: 1.2

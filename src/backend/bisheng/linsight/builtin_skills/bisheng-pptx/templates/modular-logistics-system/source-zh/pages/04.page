@@ -1,0 +1,408 @@
+pageType: evidence
+background:
+  type: solid
+  color: $paper
+notes: |
+  2024 年中国跨境电商进出口总额 2.71 万亿元，同比增长 14.0%，占货物贸易 6.2%。其中出口 2.15 万亿元，同比增长 16.9%；进口 5552.5 亿元，同比增长 4.1%。出口和进口份额及 3.9 倍关系根据海关披露数据计算。
+  来源：https://dzswgf.mofcom.gov.cn/news/phone/182/2025/6/m-1750214318814.html
+elements:
+  - elementId: p04-top-rule
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 960
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p04-kicker
+    elementType: text
+    bounds:
+      - 54
+      - 32
+      - 420
+      - 18
+    content:
+      style: $section
+      text: 02 / EXPORT-LED STRUCTURE
+  - elementId: p04-title
+    elementType: text
+    bounds:
+      - 52
+      - 58
+      - 850
+      - 42
+    content:
+      style: $pageTitle
+      text: 出口占 79.3%：跨境电商首先是供给出海的效率战
+  - elementId: p04-donut-panel
+    elementType: shape
+    bounds:
+      - 54
+      - 130
+      - 392
+      - 324
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p04-donut
+    elementType: chart
+    bounds:
+      - 90
+      - 190
+      - 320
+      - 210
+    data:
+      cols:
+        - 类型
+        - 金额
+      rows:
+        - - 出口
+          - 2.15
+        - - 进口
+          - 0.55525
+    series:
+      - type: pie
+        name: 2024结构
+        encode:
+          category: 类型
+          value: 金额
+        innerRadius: 0.68
+        fill:
+          - $yellow
+          - $steel
+        dataLabels:
+          show: false
+    legend:
+      show: false
+    fontFamily: &ref_0
+      latin: Arial
+      ea: Noto Sans CJK SC
+      mac: PingFang SC
+      win: Microsoft YaHei
+    fill:
+      type: solid
+      color: '#FFFFFF00'
+  - elementId: p04-donut-main
+    elementType: text
+    bounds:
+      - 88
+      - 156
+      - 260
+      - 28
+    content:
+      text: 出口占比 79.3%
+      fontFamily: *ref_0
+      fontSize: 20
+      color: $graphite
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p04-legend-export
+    elementType: shape
+    bounds:
+      - 124
+      - 420
+      - 12
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p04-legend-export-t
+    elementType: text
+    bounds:
+      - 142
+      - 416
+      - 100
+      - 20
+    content:
+      text: 出口 79.3%
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p04-legend-import
+    elementType: shape
+    bounds:
+      - 260
+      - 420
+      - 12
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $steel
+    border:
+      color: $steel
+      width: 0
+  - elementId: p04-legend-import-t
+    elementType: text
+    bounds:
+      - 278
+      - 416
+      - 100
+      - 20
+    content:
+      text: 进口 20.5%
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p04-total-card
+    elementType: shape
+    bounds:
+      - 474
+      - 130
+      - 432
+      - 86
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p04-total-label
+    elementType: text
+    bounds:
+      - 494
+      - 146
+      - 178
+      - 18
+    content:
+      text: 2024 TOTAL / 更新统计
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $yellow
+      bold: true
+      letterSpacing: 0.8
+  - elementId: p04-total-number
+    elementType: text
+    bounds:
+      - 494
+      - 168
+      - 180
+      - 34
+    content:
+      text: 2.71 万亿元
+      fontFamily: *ref_0
+      fontSize: 24
+      color: $white
+      bold: true
+  - elementId: p04-total-meta
+    elementType: text
+    bounds:
+      - 694
+      - 158
+      - 188
+      - 38
+    content:
+      text: |-
+        同比 +14.0%
+        占货物贸易 6.2%
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $white
+      bold: true
+      lineHeight: 1.2
+      align:
+        - right
+        - middle
+  - elementId: p04-export-card
+    elementType: shape
+    bounds:
+      - 474
+      - 232
+      - 432
+      - 88
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p04-export-label
+    elementType: text
+    bounds:
+      - 494
+      - 246
+      - 80
+      - 18
+    content:
+      text: EXPORT
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $graphite
+      bold: true
+      letterSpacing: 0.8
+  - elementId: p04-export-number
+    elementType: text
+    bounds:
+      - 494
+      - 270
+      - 184
+      - 34
+    content:
+      text: 2.15 万亿元
+      fontFamily: *ref_0
+      fontSize: 22
+      color: $graphite
+      bold: true
+  - elementId: p04-export-meta
+    elementType: text
+    bounds:
+      - 688
+      - 254
+      - 194
+      - 42
+    content:
+      text: |-
+        同比 +16.9%
+        占货物出口 8.5%
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      bold: true
+      lineHeight: 1.2
+      align:
+        - right
+        - middle
+  - elementId: p04-import-card
+    elementType: shape
+    bounds:
+      - 474
+      - 336
+      - 432
+      - 88
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p04-import-label
+    elementType: text
+    bounds:
+      - 494
+      - 350
+      - 80
+      - 18
+    content:
+      text: IMPORT
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $slate
+      bold: true
+      letterSpacing: 0.8
+  - elementId: p04-import-number
+    elementType: text
+    bounds:
+      - 494
+      - 374
+      - 194
+      - 34
+    content:
+      text: 5552.5 亿元
+      fontFamily: *ref_0
+      fontSize: 22
+      color: $graphite
+      bold: true
+  - elementId: p04-import-meta
+    elementType: text
+    bounds:
+      - 688
+      - 358
+      - 194
+      - 42
+    content:
+      text: |-
+        同比 +4.1%
+        占货物进口 3.0%
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      bold: true
+      lineHeight: 1.2
+      align:
+        - right
+        - middle
+  - elementId: p04-ratio-strip
+    elementType: shape
+    bounds:
+      - 474
+      - 438
+      - 432
+      - 46
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p04-ratio-strip-t
+    elementType: text
+    bounds:
+      - 494
+      - 447
+      - 388
+      - 26
+    content:
+      text: 出口金额约为进口 3.9 倍｜根据海关披露数据计算
+      fontFamily: *ref_0
+      fontSize: 12
+      color: $yellow
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p04-footer
+    elementType: text
+    bounds:
+      - 54
+      - 506
+      - 704
+      - 14
+    content:
+      text: 来源：海关总署、商务部｜2024 更新统计｜占比根据披露数据计算
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $slate
+  - elementId: p04-page
+    elementType: text
+    bounds:
+      - 882
+      - 504
+      - 28
+      - 16
+    content:
+      text: '04'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - right
+        - top

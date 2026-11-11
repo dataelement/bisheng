@@ -1,0 +1,124 @@
+pageType: cover
+background:
+  type: solid
+  color: '#F8F8F6'
+notes: 'Authored layout: 手记封面. All content is illustrative. Replace with user facts.'
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 24
+      - 700
+      - 18
+    content:
+      text: FIELD NOTES
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 10
+      color: '#76716A'
+      lineHeight: 1.2
+      letterSpacing: 1.2
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 50
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      color: '#76716A'
+      width: 0.6
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 68
+      - 864
+      - 64
+    content:
+      text: 真正值得记录的，是判断如何改变
+      fontFamily: &ref_1
+        latin: Georgia
+        ea: Noto Serif CJK SC
+        mac: Songti SC
+        win: SimSun
+      fontSize: 31
+      color: '#252320'
+      lineHeight: 1.2
+      bold: true
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 505
+      - 760
+      - 16
+    content:
+      text: 自编示例，非外部事实
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#76716A'
+      lineHeight: 1.2
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 860
+      - 504
+      - 48
+      - 18
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#252320'
+      lineHeight: 1.2
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 166
+      - 798
+      - 172
+    content:
+      text: |-
+        从观察，
+        到有依据的判断。
+      fontFamily: *ref_1
+      fontSize: 64
+      color: '#252320'
+      lineHeight: 1.2
+  - elementId: l7
+    elementType: line
+    bounds:
+      - 48
+      - 344
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      color: '#76716A'
+      width: 0.6
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 48
+      - 372
+      - 796
+      - 65
+    content:
+      text: 一份关于证据、解释和行动的编辑手记
+      fontFamily: *ref_0
+      fontSize: 24
+      color: '#76716A'
+      lineHeight: 1.2

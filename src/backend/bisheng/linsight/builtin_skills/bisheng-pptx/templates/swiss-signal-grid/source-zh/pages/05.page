@@ -1,0 +1,439 @@
+pageType: evidence
+background:
+  type: solid
+  color: $paper
+elements:
+  - elementId: market-index-field
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 52
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: market-red-tab
+    elementType: shape
+    bounds:
+      - 52
+      - 0
+      - 10
+      - 116
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: market-rule-top
+    elementType: line
+    bounds:
+      - 80
+      - 42
+      - 808
+      - 1
+    viewBox:
+      - 808
+      - 1
+    points: 0,0 808,0
+    border:
+      color: $black
+      width: 1.2
+  - elementId: market-divider
+    elementType: line
+    bounds:
+      - 480
+      - 150
+      - 1
+      - 278
+    viewBox:
+      - 1
+      - 278
+    points: 0,0 0,278
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: market-risk-band
+    elementType: shape
+    bounds:
+      - 80
+      - 436
+      - 808
+      - 66
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: market-export-chart
+    elementType: chart
+    bounds:
+      - 80
+      - 176
+      - 326
+      - 248
+    data:
+      cols:
+        - market
+        - share
+      rows:
+        - - 美国
+          - 36.2
+        - - 英国
+          - 11.7
+        - - 德国
+          - 5.7
+    series:
+      - type: bar
+        name: 出口目的地
+        encode:
+          x: share
+          'y': market
+        fill:
+          type: solid
+          color: $red
+        dataLabels:
+          show: false
+    xAxis:
+      min: 0
+      max: 40
+      label:
+        fontSize: 9
+        color: $gray
+      gridLine:
+        color: $grid
+        style: dot
+    yAxis:
+      label:
+        fontSize: 10
+        color: $black
+      gridLine: false
+    legend:
+      show: false
+    fontFamily: &ref_0
+      latin: Arial
+      ea: Noto Sans CJK SC
+      mac: PingFang SC
+      win: Microsoft YaHei
+    fill:
+      type: solid
+      color: '#FFFFFF00'
+  - elementId: market-import-chart
+    elementType: chart
+    bounds:
+      - 520
+      - 176
+      - 326
+      - 248
+    data:
+      cols:
+        - market
+        - share
+      rows:
+        - - 美国
+          - 15.8
+        - - 日本
+          - 10.5
+        - - 德国
+          - 9.8
+    series:
+      - type: bar
+        name: 进口来源地
+        encode:
+          x: share
+          'y': market
+        fill:
+          type: solid
+          color: $black
+        dataLabels:
+          show: false
+    xAxis:
+      min: 0
+      max: 20
+      label:
+        fontSize: 9
+        color: $gray
+      gridLine:
+        color: $grid
+        style: dot
+    yAxis:
+      label:
+        fontSize: 10
+        color: $black
+      gridLine: false
+    legend:
+      show: false
+    fontFamily: *ref_0
+    fill:
+      type: solid
+      color: '#FFFFFF00'
+  - elementId: market-index
+    elementType: text
+    bounds:
+      - 10
+      - 433
+      - 32
+      - 78
+    rotation: 270
+    content:
+      text: 05 / FOCUS
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: market-kicker
+    elementType: text
+    bounds:
+      - 80
+      - 54
+      - 500
+      - 18
+    content:
+      text: CONCENTRATION / MARKET + REGION
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $red
+  - elementId: market-title
+    elementType: text
+    bounds:
+      - 80
+      - 78
+      - 808
+      - 42
+    content:
+      style: $title
+      text: 规模增长没有分散风险，市场与货源仍高度集中
+  - elementId: market-lead
+    elementType: text
+    bounds:
+      - 80
+      - 126
+      - 808
+      - 24
+    content:
+      style: $lead
+      text: 出口前三占 53.6%，高于进口前三的 36.1%
+  - elementId: market-export-label
+    elementType: text
+    bounds:
+      - 80
+      - 154
+      - 220
+      - 18
+    content:
+      text: 出口目的地 / TOP 3
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $black
+  - elementId: market-export-total
+    elementType: text
+    bounds:
+      - 318
+      - 146
+      - 122
+      - 28
+    content:
+      text: 53.6%
+      fontFamily: *ref_0
+      fontSize: 24
+      bold: true
+      color: $red
+      align:
+        - right
+        - top
+  - elementId: market-import-label
+    elementType: text
+    bounds:
+      - 520
+      - 154
+      - 240
+      - 18
+    content:
+      text: 进口来源地 / TOP 3
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $black
+  - elementId: market-import-total
+    elementType: text
+    bounds:
+      - 766
+      - 146
+      - 122
+      - 28
+    content:
+      text: 36.1%
+      fontFamily: *ref_0
+      fontSize: 24
+      bold: true
+      color: $black
+      align:
+        - right
+        - top
+  - elementId: market-export-us
+    elementType: text
+    bounds:
+      - 410
+      - 218
+      - 46
+      - 18
+    content:
+      text: '36.2'
+      fontFamily: *ref_0
+      fontSize: 10.5
+      bold: true
+      color: $red
+      align:
+        - right
+        - middle
+  - elementId: market-export-uk
+    elementType: text
+    bounds:
+      - 410
+      - 292
+      - 46
+      - 18
+    content:
+      text: '11.7'
+      fontFamily: *ref_0
+      fontSize: 10.5
+      bold: true
+      color: $red
+      align:
+        - right
+        - middle
+  - elementId: market-export-de
+    elementType: text
+    bounds:
+      - 410
+      - 366
+      - 46
+      - 18
+    content:
+      text: '5.7'
+      fontFamily: *ref_0
+      fontSize: 10.5
+      bold: true
+      color: $red
+      align:
+        - right
+        - middle
+  - elementId: market-import-us
+    elementType: text
+    bounds:
+      - 850
+      - 218
+      - 38
+      - 18
+    content:
+      text: '15.8'
+      fontFamily: *ref_0
+      fontSize: 10.5
+      bold: true
+      color: $black
+      align:
+        - right
+        - middle
+  - elementId: market-import-jp
+    elementType: text
+    bounds:
+      - 850
+      - 292
+      - 38
+      - 18
+    content:
+      text: '10.5'
+      fontFamily: *ref_0
+      fontSize: 10.5
+      bold: true
+      color: $black
+      align:
+        - right
+        - middle
+  - elementId: market-import-de
+    elementType: text
+    bounds:
+      - 850
+      - 366
+      - 38
+      - 18
+    content:
+      text: '9.8'
+      fontFamily: *ref_0
+      fontSize: 10.5
+      bold: true
+      color: $black
+      align:
+        - right
+        - middle
+  - elementId: market-risk
+    elementType: text
+    bounds:
+      - 96
+      - 446
+      - 770
+      - 22
+    content:
+      text: 管理判断｜客户集中 + 货源集中：新市场进入必须同步配置渠道分散与产地备份。
+      fontFamily: *ref_0
+      fontSize: 13.5
+      bold: true
+      color: $white
+      align:
+        - left
+        - middle
+  - elementId: market-region-list
+    elementType: text
+    bounds:
+      - 96
+      - 476
+      - 770
+      - 16
+    content:
+      text: 货源地  广东 · 浙江 · 福建 · 江苏 · 山东   /   进口目的地  广东 · 江苏 · 浙江 · 上海 · 北京
+      fontFamily: *ref_0
+      fontSize: 10.5
+      color: $white
+  - elementId: market-source
+    elementType: text
+    bounds:
+      - 80
+      - 512
+      - 720
+      - 12
+    content:
+      text: 来源：海关总署公开数据（商务部电子商务公共服务网转载）；区域名单为主要货源地/目的地。
+      fontFamily: *ref_0
+      fontSize: 8.5
+      color: $gray
+  - elementId: market-page
+    elementType: text
+    bounds:
+      - 856
+      - 510
+      - 32
+      - 12
+    content:
+      text: '05'
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $black
+      align:
+        - right
+        - bottom

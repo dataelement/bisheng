@@ -45,3 +45,19 @@ RUN python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); 
 # 安装 playwright chromium（包已在 venv 里，此处下载 chromium 二进制及系统依赖）
 RUN playwright install chromium && playwright install-deps
 
+# PPTD 引擎运行环境（内置技能「PPT 制作」用，见 pptd_runtime/README.md）：
+# Node 官方二进制 + package-lock.json 锁定的 npm 依赖，装在 /opt/pptd-runtime。
+# 引擎本体 dsh-ppt/ 由应用镜像 Dockerfile 拷入，库升级不需要重打 base。
+# 代码执行器以非特权 uid 运行脚本，所以 Node 必须在 /root 之外且全员可读。
+ARG TARGETARCH
+ARG PPTD_NODE_VERSION=24.19.0
+COPY ./pptd_runtime/package.json ./pptd_runtime/package-lock.json /opt/pptd-runtime/
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in amd64) NODE_ARCH=x64 ;; arm64) NODE_ARCH=arm64 ;; *) echo "unsupported arch ${TARGETARCH}"; exit 1 ;; esac; \
+    mkdir -p /opt/pptd-runtime/bin; \
+    curl -fsSL "https://nodejs.org/dist/v${PPTD_NODE_VERSION}/node-v${PPTD_NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" | tar -xJ -C /opt/pptd-runtime; \
+    mv /opt/pptd-runtime/node-v${PPTD_NODE_VERSION}-linux-${NODE_ARCH} /opt/pptd-runtime/node; \
+    ln -s ../node/bin/node /opt/pptd-runtime/bin/node; \
+    cd /opt/pptd-runtime && PATH=/opt/pptd-runtime/node/bin:$PATH npm ci --omit=dev --no-audit --no-fund; \
+    rm -rf /root/.npm; \
+    chmod -R a+rX /opt/pptd-runtime

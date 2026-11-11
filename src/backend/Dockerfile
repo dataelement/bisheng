@@ -12,6 +12,11 @@ RUN python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); 
 
 COPY ./ ./
 
+# PPTD 引擎本体（内置技能「PPT 制作」用）：Node 与 npm 依赖在 base 镜像的 /opt/pptd-runtime，
+# 这里只放随代码提交的引擎库，路径须在 node_modules 之外（见 pptd_runtime/README.md）。
+COPY ./pptd_runtime/dsh-ppt /opt/pptd-runtime/engine
+RUN chmod -R a+rX /opt/pptd-runtime/engine
+
 # dmPython 附带的 dmssl 包含 libssl.so / libcrypto.so 等原生库。
 # 将它们移入 bin/ 子目录，然后设置 DM_HOME，驱动即可找到这些库。
 # dmPython / dmSQLAlchemy / dmAsync 在 Linux 上由 pyproject.toml 自动包含，
