@@ -45,3 +45,17 @@ U1 和 U2 是"模拟无人值守"。114 的日常模式配置里没有任何工�
 
 1. **主图把口令抄进委派说明**（C2、C3、C4、C7）。委派说明会显示在任务步骤里。已在主图和子代理的提示词里都加上"不要把凭据抄进可见文字"，并补了单测。C8、C9 复测时，委派说明里不再出现口令。
 2. **读取 SKILL.md 时，凭据会进入步骤历史（未解决，属于结构性问题，需要决策）**。`read_file` 的输出会原样保存为步骤输出，界面上能看到，分享链接也能看到。代码执行器的步骤里也可能出现连接语句。提示词无法阻止这一点。
+
+## 复测：凭据改放 `secrets/`（2026-11-11，code review HIGH 修复后）
+
+- **代码**：在 `8284643f9` 的临时 detached worktree 上只套用本特性的补丁（`agent_factory.py`、`workspace_backend.py`、`base_executor.py`，三处都 clean apply），新增测试在该树上通过；再用 `push-wip.sh` 推到 114。
+- **技能 v2**：SKILL.md 只写"连接信息在 `secrets/conn.json`，在代码里读"，口令只放在 `secrets/conn.json`。
+
+| 会话 | 请求 | 结果 | 步骤历史里口令出现次数 |
+|---|---|---|---|
+| C10 | 明确查询（同 C1） | 完成，76s，数字与直接 SQL 一致；子代理代码用 `json.load(open("skills/shop-sales-db/secrets/conn.json"))` 连接 | 0 |
+| C11 | 先要连接信息，再查数 | 完成，91s；主图拒绝给出凭据并说明原因，订单数照常给出 | 0 |
+
+修复前，11 个会话的步骤历史里都出现了口令；修复后两个会话都是 0 次。两个会话都没有用 read_file 打开 `secrets/`，所以后端拒读这次没有被实际触发，由 `test_skill_secrets_guard.py` 覆盖。
+
+**清理**：push-wip 已 reset（HEAD `8284643f9`，无本地修改），worker 已重启，临时容器、种子文件、技能 id 108、临时 worktree 都已删除。

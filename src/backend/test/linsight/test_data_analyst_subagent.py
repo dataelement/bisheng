@@ -139,7 +139,7 @@ def test_data_analyst_prompt_contract():
 
     assert "__CODE_INTERPRETER_RULES__" not in prompt
     assert agent_factory._CODE_INTERPRETER_RULES_ZH in prompt
-    assert agent_factory._NEED_CLARIFICATION_PREFIX in prompt
+    assert "NEED_CLARIFICATION:" in prompt
     assert "只执行 SELECT" in prompt
     assert "scratch/" in prompt and "顶层" in prompt  # top-level files get harvested
     assert "CSV" in prompt
@@ -211,3 +211,4 @@ def test_prompts_forbid_copying_credentials_into_visible_text():
     sub = agent_factory._build_data_analyst_subagent([_code_interpreter])["system_prompt"]
     assert "不要把口令、密钥等凭据抄进 description" in main
     assert "凭据只在代码里使用" in sub
+    assert "secrets/" in main and "secrets/" in sub

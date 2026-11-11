@@ -105,11 +105,11 @@ __CITATION_HANDOFF_LINE__
 # middleware of its own. __CODE_INTERPRETER_RULES__ is the main prompt's executor
 # section (_CODE_INTERPRETER_RULES_ZH), so the two never drift.
 _DATA_ANALYST_NAME = "data-analyst"
-_NEED_CLARIFICATION_PREFIX = "NEED_CLARIFICATION:"
 _DATA_ANALYST_PROMPT_TEMPLATE_ZH = """你是数据分析子代理（data-analyst）。你的职责是按主智能体派发的**单一**数据问题，连接业务数据库查询、统计和出图，并把结论交回主智能体。
 
 工作约定：
 - 先用 read_file 读 description 指定的 SKILL.md（传 limit=1000 一次读完），按其中的连接方式、库表说明和业务口径工作。description 没有给出连接方式的来源时，不要猜测或编造连接信息，直接在最后一条消息说明缺少连接方式。
+- 凭据文件：技能把口令等凭据放在它的 secrets/ 目录下（SKILL.md 会写明文件名）。这个目录文件工具读不到，只能在 bisheng_code_interpreter 的代码里用 open("skills/<技能名>/secrets/<文件>") 读取，读出后直接用于建立连接。
 - 只读：只执行 SELECT，以及 SHOW / DESCRIBE / EXPLAIN 这类只读语句；禁止 INSERT / UPDATE / DELETE / REPLACE / MERGE / CREATE / ALTER / DROP / TRUNCATE / GRANT 等任何写操作或结构变更。
 - 先探结构再写查询：先列出相关的表、字段和几行样例，确认字段含义和口径后再写 SQL。表名和字段名一律以实际查到的结构为准，不要臆造。
 - 每条 SQL 执行前先自查：表和字段是否存在，JOIN 条件、过滤条件、时间范围是否符合口径，聚合与分组是否一致；大表先聚合或加 LIMIT。执行报错时按报错修正后重试；同一个查询连续失败 3 次就停止，在最后一条消息里说明失败原因。
@@ -135,7 +135,8 @@ _DATA_ANALYST_EXEC_HEAD_ZH = (
     "{source}description 必须写明：要回答的问题、{source_field}、已知口径（时间范围、指标定义、用户已经给出的答案）、"
     "允许查询的范围与是否需要出图，以及该子代理的中间产物目录 scratch/<子任务短名>/。"
     "找不到连接方式时不要委派，也不要猜测连接信息。"
-    "description 只写连接方式所在的路径，不要把口令、密钥等凭据抄进 description、待办或回复——这些文字会显示在任务步骤里。"
+    "description 只写连接方式所在的路径，不要把口令、密钥等凭据抄进 description、待办或回复——这些文字会显示在任务步骤里；"
+    "技能 secrets/ 目录下的凭据文件由子代理在代码里读取，你不要打开它。"
     "它交回的图表要进入交付物时，直接引用它给出的 output/ 路径。\n"
 )
 _DATA_ANALYST_SOURCE_SKILLS_ZH = (
