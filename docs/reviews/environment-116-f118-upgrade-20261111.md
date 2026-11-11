@@ -2,7 +2,7 @@
 
 记录日期：2026 年 11 月 11 日。时间均为 UTC+8。
 
-**状态（18:55）：30个租户的正式M2冻结图已验证并在18:40持久冻结；M3的4,023条SQL计划命令已全部提交。转换后143个原索引绑定和物理事实复核通过，正在执行权限发布前全Store一致性核验。尚未完成CURRENT切换与M4，业务API/Worker仍停机；空索引替换从未执行。** 本记录保留 192.168.106.116 升级中遇到的真实阻塞、数据处置范围和备份边界，供判断应改进迁移脚本、历史业务清理逻辑还是现场数据。当前镜像已经包含 F118；本次需要执行知识空间统一与全平台 `use` 退役，单独发布 OpenFGA 模型不足以完成升级。
+**状态（20:26）：30个租户正式M2/M3/M4全部完成，原生全局覆盖检查READY；4,023条SQL计划命令、11,113个权限资源、637个FGA发布操作完成。CURRENT已切换Catalog203/授权发布8；10个特殊权限样本前后相同，保留业务数据对照通过。API及两个Worker已恢复，页面/静态资源/工作台与后端健康检查通过。143个原索引绑定及物理数据保留，空索引替换从未执行。** 本记录保留 192.168.106.116 升级中遇到的真实阻塞、数据处置范围和备份边界，供判断应改进迁移脚本、历史业务清理逻辑还是现场数据。当前镜像已经包含 F118；本次需要执行知识空间统一与全平台 `use` 退役，单独发布 OpenFGA 模型不足以完成升级。
 
 ## 环境与最初报错
 
@@ -431,3 +431,29 @@ tuple-endpoint-evidence-v2完整保存冻结描述符、原140,903条tuple、冲
 239个缺标记涉及198个对象（35个软删除、163个实体不存在）以及5个旧资源的服务账号标记。保持原缺失状态，不补permission_enabled或模式标记以免重新启用。原两条父边为folder:96177→knowledge_file:96211及knowledge_space:3209→knowledge_file:94710；SQL当前父分别为folder:96179、knowledge_space:3727。根据最新保留/抽检要求，两条FGA旧边原样保留，未在本次迁移额外清理，留待用户后续评估处理。
 
 Tuple builder限定保留未变namespace、双schema合法且typed身份不变的原键，原保留键零新增写入；不反向创建SQL授权，不采用原新destination上的未授权边，未知需要改写namespace的关系仍阻断。原缺失技术marker不由SQLMode自动补齐。68项发布及中断恢复回归通过，包括新destination拒绝、标记不补、旧父保留及零新增写入。原冻结计划保持不变，从同run resume继续。
+
+
+### 19:59 OpenFGA全Store读取性能定位与修复
+
+现场每100条tuple的原生OpenFGA API读取为768–805ms，完整扫描约十多分钟；不是请求走代理。只读捕获实际SQL发现按store过滤、按ulid分页时，原有PRIMARY选择产生filesort，估计扫描114,204行。原idx_tuple_ulid只覆盖ulid，不满足该组合访问。全Store原140,903个ULID均唯一，原游标顺序可以保持。
+
+在原OpenFGA MySQL表追加查询索引`idx_bisheng_store_ulid_read(store,ulid)`，DDL使用`ALGORITHM=INPLACE, LOCK=NONE`，12.745秒完成（19:59:26）。未删除原索引、未修改tuple或业务行；这是OpenFGA后端SQL性能索引，与知识库ES/Milvus索引绑定无关。之后EXPLAIN使用新索引且无filesort，原SQL3.36–3.83ms，API稳定5.34–7.69ms（首次连接13.09ms）。证据在fga-read-index、相关脚本及日志中；回退DDL也已记录。不能据此声称漏了官方必需DDL步骤。
+
+### 20:21正式升级完成与保留数据复核
+
+同一冻结run继续执行，原baseline hash `5701a4712be128f71747b8e6c473f77db9eab1676d7acec5b9bbc693a80a7332`、plan hash `a877f39d8d2124f07fb255b1dfc59a3b7674119d74eec85a5e0072b543e427e8`没有替换。30个租户全部completed，coverage_epoch=1，正式apply返回complete=true、ready=true。CURRENT为Catalog203（checksum `5806c73bfbb477bbf2f7269d396bd038c38b01d96ff8d808d9a764adea1b63b1`），授权发布8，模型`f048-v6-app-f118`、ID `01M757QMF1EJZHV5RCDQZ4NWQJ`、checksum `f9ed9a3faf49f369a40d78d092848c2637d9586b9b3d7aeda5576b5fc838f382`，write_fenced=0。
+
+按用户要求只做特殊类别权限抽检：空模型2、原旧父关系2、停用关联2、删除/退休资源2、重复父边1、活动工作流1，共10样本visible/can_edit前后相同，differences=[]。停用关联样本仍可能有其他合法来源，不能由其可见结果推断该停用关联自身有效；不声称完整业务ACL逐项证明。空yifei模型仍无动作/等级，2139/2163两处原可见来源由正常facade及HIGHER_CONSISTENCY确认，跨租户可见拒绝、无具体动作来自空模型。
+
+保留数据全字段对照通过：244助手、491知识关联未变；179旧名称助手失效标记与知识保护已登记，无伪造model引用；91工作流、636版本、9缺创建者空间、2文档/4版本/4失败文件、103失败及上下文文件、4757错误归属原行和5条退休审计保持。3条批准清理UserRole已不存在。检查器初次将合法knowledge_id=0空选择当目标、将SQL JSON字符串“[]”当非空，已按原生提取器/JSON语义修正检查器；没有为通过检查修改业务数据。日志compat-postcheck.log和preserved-data-postcheck.log保存最终证据。
+
+
+### 20:23–20:26访问恢复与交付边界
+
+20:23:37通过原compose重建启动backend、backend_worker、backend_worker_ocr，保持原镜像4ed6b328c478…及每个服务39个只读文件补丁。20:26:32复核API为healthy、两个Worker运行；宿主机及本机直连116前端/静态JS返回200，/workspace/返回200，后端7861/health返回OK。原生Redis运行心跳为api4、celery5、linsight4，全部ready，均加载Catalog203及同一新模型checksum，无legacy/dual model。正常任务已开始消费。运行心跳角色实际是celery，检查器已与原生worker初始化代码对齐；未将其误当缺Worker或修改业务进程。
+
+原生facade、正式global READY、特殊权限10样本、原始业务记录对照与原物理索引证明均通过；未执行登录后完整页面操作、全部业务运行、完整F118 QA或DM8验证。旧名称、跨租户引用和失败文件仍按已确认范围保留失效；升级完成不等于这些旧配置自动可用。服务使用原镜像叠加只读补丁，新镜像包含修复前必须保留docker-compose.override.yml与所引用代码路径。
+
+此次阻塞数量不能直接当作业务数据损坏数量：真实失效关联已按批准范围备份清理；RETIRED/INACTIVE审计、软删除对象、旧类型标记、空模型、SQL无文件而物理索引有数据等，多数属于历史状态与迁移假设不兼容。另有可复现脚本缺陷：来源分页证据顺序、Kombu控制回复识别、已存在目标父键及缺技术标记误补。全Store读取慢则是OpenFGA MySQL访问路径问题。应先改预检汇总与兼容分类，再评估是否需要补业务历史清理机制，避免把所有阻塞都归为现场脏数据。
+
+最终快照v6含所选失效关联原行、上下文、原FGA图证据、正式冻结/执行/检查日志、补丁与最终状态，并做逐文件SHA256及归档校验。v1–v5按历史保留；最终归档不是全环境备份，最初53条操作无删除前完整行的边界仍保留。未做全环境恢复演练，回灌脚本仅供评估，不能直接在升级后盲目执行。
