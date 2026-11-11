@@ -16,6 +16,7 @@ import { memo, useEffect, useState, type FC } from "react";
 import type { AgentToolCall } from "~/api/chatApi";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { toolCallDisplayName } from "~/utils/toolCallName";
 
 export interface ToolCallDisplayProps {
     toolCall: AgentToolCall;
@@ -52,7 +53,7 @@ function resolveToolName(
 ): string {
     const key = BUILTIN_TOOL_I18N[(tc.tool_name || "").toLowerCase()];
     if (key) return localize(key);
-    return tc.display_name || tc.tool_name || localize("com_tools_generic_fallback");
+    return toolCallDisplayName(tc.display_name || tc.tool_name || localize("com_tools_generic_fallback"));
 }
 
 function parseResults(raw: any): any[] {
