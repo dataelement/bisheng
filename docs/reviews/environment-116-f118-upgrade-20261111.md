@@ -348,3 +348,14 @@ v4维护容器已加载AC-100–102，30租户逐项预检27通过。剩余实�
 tenant60首处通过后又定位到同类mode10954/app ac03e3f7a34c4a16a1d7bf2cdfc395a2：21068为RETIRED，assignee1932647580758220349已从模型6f06…改绑viewer、版本1→2且保持ACTIVE；旧Grant18105因其他用户组仍使用而ACTIVE。兼容必须保留退役贡献，而不要求整个Grant/来源都停用。补充完整备份next-blockers-evidence-v2：2mode、48Grant、5assignee、8可见来源及原工作流/目标，rows SHA256 f511dcea95599598ad00d96e87cb072deccee8e27f1e5a4bdc7faf91ff46689c，宿主机全校验通过；无SQL清理。
 
 扩展选集1995 passed / 3 failed：一项旧预检仍期望外租户空间立即阻断，已按同一失效保留合同修订为existing_invalid_scope并保留名称解析拒绝；另两项实际尝试本机未初始化MySQL连接，分别为legacy_document_permissions的混合原类型列表，以及已知deleted_channel配额策略no-network问题。补充原生锁顺序/Owner/M4选集63 passed，历史贡献及纯规划85 passed；最终现场验证仍另记。
+
+
+## 原角色和工作流来源历史后续
+
+用户追加明确确认：清理userrole 21/22/28、保留工作流版本4757为失效来源。role-and-version-evidence保存完整3关联/1版本/1父流程及原引用/根守卫/权限mode均0事实，rows SHA256 3d785e2f01307535231c5b59dca3d308b4f179349ca01f2bb7ea4fd1980a411d，宿主机校验通过。原生事务锁定并比较3行、核实Role5/7/8仍不存在后，只删3行；4757仍tenant60，实际父3bee2193352b4a459646ef0fd4a2bf5e仍tenant1。apply-result.json记录，无FGA/对象/索引修改。
+
+全量角色/版本父事实审计另发现旧type1流程版本、实际type10父的旧type1版本181条，以及父全局已删且自身is_delete=1的type10历史454条。已按当前运行时源码核对：旧版标记并不决定工作流父域，读取以真实父Flow.type10与tenant为准。修复盘点范围，保留所有旧值；已删历史与4757以明确原因/原载荷摘要进入失效来源清单，空原登记才接受，正常来源、版本census和M4原生事实仍闭合。没有把跨租户来源登记为正常、把仍存在的父流程伪装为已删或修改业务删除标志。
+
+workflow-history-evidence另存完整636个版本（454已删历史+181旧标记+4757）和91个实际父流程，DDL/恢复SQL/manifest全SHA256验证；rows SHA256 57dbd84675a94003b98dfcea86334a4acbe50a2b89bf35c2418e51f3faa799cb。native M2/M3/M4、续跑及owner/载荷/状态漂移拒绝通过，最终现场发布/服务恢复结果继续另记。
+
+两项本地数据库依赖失败已在精确前置24b5f2153a独立worktree重复复现，失败类型和用例一致，日志bisheng116-history-baseline-failures.log；并非本增量新失败。

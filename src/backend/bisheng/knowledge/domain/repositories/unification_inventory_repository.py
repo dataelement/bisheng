@@ -309,25 +309,108 @@ class UnificationInventoryRepository:
 
     async def alist_workflow_versions(self, session, *, after_id=None, limit=200) -> InventoryPage[WorkflowVersionRow]:
         parent = Flow.__table__.alias("inventory_workflow_parent")
-        query = select(
-            *_columns(FlowVersion, WorkflowVersionRow, {"data_json": FlowVersion.data}),
-            parent.c.id.label("parent_id"),
-            parent.c.tenant_id.label("parent_tenant"),
-            parent.c.flow_type.label("parent_type"),
-        ).outerjoin(parent, parent.c.id == FlowVersion.flow_id)
+        query = (
+            select(
+                *_columns(FlowVersion, WorkflowVersionRow, {"data_json": FlowVersion.data}),
+                parent.c.id.label("parent_id"),
+                parent.c.tenant_id.label("parent_tenant"),
+                parent.c.flow_type.label("parent_type"),
+            )
+            .outerjoin(parent, parent.c.id == FlowVersion.flow_id)
+            .where(
+                or_(
+                    parent.c.flow_type == FlowType.WORKFLOW.value,
+                    FlowVersion.flow_type == FlowType.WORKFLOW.value,
+                    FlowVersion.flow_type.is_(None),
+                )
+            )
+        )
 
         def check(row):
+            # Explicitly deleted versions of a hard-deleted workflow remain
+            # retired history. Foreign-parent versions remain invalid sources;
+            # the application freezes their exact facts and empty index proof.
+            if row["parent_id"] is None and row["is_delete"] == 1 and row["flow_type"] in (None, 10):
+                return
+            if (
+                row["parent_id"] is not None
+                and row["parent_tenant"] != row["tenant_id"]
+                and row["parent_type"] == 10
+                and row["flow_type"] == 10
+            ):
+                return
             if (
                 row["parent_id"] is None
                 or row["parent_tenant"] != row["tenant_id"]
                 or row["parent_type"] != FlowType.WORKFLOW.value
-                or row["flow_type"] not in (None, FlowType.WORKFLOW.value)
+                # Existing Workflow runtime uses the real parent's type and
+                # accepts old type1 version tags without rewriting them.
+                or row["flow_type"] not in (None, 1, FlowType.WORKFLOW.value)
             ):
                 _blocked("workflow_parent_invalid")
 
         return await self._page(
             session, FlowVersion, WorkflowVersionRow, after_id, limit, int, statement=query, check=check
         )
+
+    async def aload_invalid_workflow_parent(self, session, *, root_key):
+        """Exact global parent facts, only for a tenant's retained invalid source."""
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.resource_reference.application.contracts import SourceRootKey, SourceType
+
+        tenant = _scope(session)
+        if (
+            type(root_key) is not SourceRootKey
+            or root_key.tenant_id != tenant
+            or root_key.source_type != SourceType.WORKFLOW_VERSION
+        ):
+            _blocked("invalid_workflow_root_scope")
+        query = (
+            select(*_columns(Flow, WorkflowRootRow, {"data_json": Flow.data}))
+            .where(Flow.id == root_key.source_id)
+            .with_for_update()
+        )
+        with session.no_autoflush, bypass_tenant_filter():
+            rows = tuple((await session.execute(query)).mappings())
+        if len(rows) > 1:
+            _blocked("invalid_workflow_parent_duplicate")
+        parent = _row(WorkflowRootRow, rows[0]) if rows else None
+        if parent is not None and (parent.tenant_id == tenant or parent.flow_type != 10):
+            _blocked("invalid_workflow_parent_changed")
+        return parent
+
+    async def aload_invalid_workflow_version(self, session, *, source_key):
+        from bisheng.resource_reference.application.contracts import SourceKey, SourceRootKey, SourceType
+
+        tenant = _scope(session)
+        if (
+            type(source_key) is not SourceKey
+            or source_key.tenant_id != tenant
+            or source_key.source_type != SourceType.WORKFLOW_VERSION
+            or not source_key.source_version.isdecimal()
+        ):
+            _blocked("invalid_workflow_version_scope")
+        rows = await self._read(
+            session,
+            select(*_columns(FlowVersion, WorkflowVersionRow, {"data_json": FlowVersion.data}))
+            .where(
+                FlowVersion.tenant_id == tenant,
+                FlowVersion.id == int(source_key.source_version),
+                FlowVersion.flow_id == source_key.source_id,
+            )
+            .with_for_update(),
+        )
+        if len(rows) != 1:
+            _blocked("invalid_workflow_version_changed")
+        version = _row(WorkflowVersionRow, rows[0])
+        parent = await self.aload_invalid_workflow_parent(
+            session, root_key=SourceRootKey(tenant, SourceType.WORKFLOW_VERSION, source_key.source_id)
+        )
+        if (parent is None and (version.is_delete != 1 or version.flow_type not in (None, 10))) or (
+            parent is not None and version.flow_type != 10
+        ):
+            _blocked("invalid_workflow_version_not_retired")
+        return parent, version
 
     async def alist_app_roots(self, session, *, after_id=None, limit=200) -> InventoryPage[AppRootRow]:
         return await self._page(session, App, AppRootRow, after_id, limit, str)

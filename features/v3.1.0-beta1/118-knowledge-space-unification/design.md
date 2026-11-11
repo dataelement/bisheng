@@ -969,3 +969,10 @@ _namespace_visible对未匹配且RETIRED的原行，以保留的INACTIVE旧Grant
 跨租户知识空间使用原始明确ID的existing_invalid_scope分类，回填实际owner和parent空间ID，legacy字段全部NULL。Target Owner只对原来源/版本的原space绑定查询确切ID+owner，Root和普通目标按统一数值顺序加锁，再锁文件。读Owner只查标量事实，返回invalid_scope/is_valid=false；新增、复制、预览及执行保持拒绝，原槽位可保留/移除，owner_query不扩大范围。跨租户文件不纳入兼容。M4对目标的已签名0→3变化按实际目标owner查冻结命令，不按来源tenant猜测；其余物理事实变化仍拒绝。
 
 退役历史补充：旧Grant可能仍被其他主体使用，当前assignee也可能在新Grant继续ACTIVE；这不使原RETIRED贡献复活。只核对同一来源确已改绑到不同Grant、历史版本严格更小、旧模型及全canonical身份指纹，原ACTIVE编译仍必须完全闭合。
+
+
+### 已确认续办：工作流历史和错误归属来源（AC-105–107）
+
+原运行时WorkflowReferenceSourceRepository.aget_version按实际父Flow.type10及版本/父租户确认，不要求历史version.flow_type=10；盘点对同租户type1旧标记采用同一口径。工作流版本SQL范围为父type10或版本type10/NULL，其他type1领域保持原样。活孤儿、错误父类型仍拒绝。
+
+新增纯unification_workflow_retention事实编译：全局明确父ID不存在且原版本is_delete=1，或父真实存在但属于其他租户，生成带deleted_parent/foreign_parent原因的RetiredInventoryRecord。此容器只作迁移失效来源清单，不改业务is_delete、不假装父已删除；伪根不计入真实root_count或有效来源。原Root及版本摘要、生命周期、真实owner均冻结；M4精确原生重读并比较，源恢复/载荷变化拒绝。仅原索引根/来源头和引用均空时接纳，不能借兼容清除既有登记；M4完整SQL来源/版本census仍包含这些版本。既有Source Owner所有权与运行拒绝保持，无新HTTP状态或权限入口。

@@ -400,6 +400,7 @@ class ReferenceMigration:
 
     async def _tenant(self, tenant, *, verify_only=False):
         from bisheng.knowledge.application.unification_reference_state import PHYSICAL_ROOT_ABSENT
+        from bisheng.knowledge.application.unification_workflow_retention import invalid_root
 
         phase, goal = await self._phase(tenant)
         retired_digest = await self._retire(tenant, verify_only=verify_only)
@@ -431,6 +432,7 @@ class ReferenceMigration:
                 located.header.root_key.tenant_id == tenant
                 and located.header.source_key is None
                 and located.header.lifecycle != PHYSICAL_ROOT_ABSENT
+                and not invalid_root(located.header)
             ):
                 proofs[located.header.root_key.source_type.value]["root_count"] += 1
         checksum, ordinal = _seed(self.frozen, tenant), 0

@@ -129,7 +129,32 @@ class ReferenceAfterSources:
         ), tuple((ref, original[(ref.slot_key, ref.target)]) for ref in references)
 
     async def averify_retired(self, session, *, header):
+        from bisheng.knowledge.application.unification_workflow_retention import (
+            invalid_root,
+            invalid_version,
+            invalid_workflow_root,
+            invalid_workflow_version,
+        )
         from bisheng.resource_reference.application.contracts import SourceKey
+
+        if invalid_root(header):
+            parent = await self.repository.aload_invalid_workflow_parent(session, root_key=header.root_key)
+            actual = invalid_workflow_root(header.root_key, parent)
+        elif invalid_version(header):
+            parent, version = await self.repository.aload_invalid_workflow_version(
+                session, source_key=header.source_key
+            )
+            actual = invalid_workflow_version(header.source_key, parent, version)
+        else:
+            actual = None
+        if actual is not None:
+            if (actual.lifecycle, actual.configuration_digest, actual.business_revision_digest) != (
+                header.lifecycle,
+                header.configuration_digest,
+                header.business_revision_digest,
+            ):
+                blocked("invalid_workflow_source_changed")
+            return
 
         if header.lifecycle == PHYSICAL_ROOT_ABSENT:
             validate_inventory_fact(header)
@@ -183,6 +208,8 @@ class ReferenceAfterSources:
             blocked("retired_business_changed")
 
     async def acensus(self, session, *, plan, tenant, reference_repository):
+        from bisheng.knowledge.application.unification_workflow_retention import invalid_root
+
         actual_roots, actual_sources, actual_versions = await self.repository.acensus_reference_sources(session)
         expected_sources = frozenset(
             entry.header.source_key for entry in plan.sources if entry.header.source_key.tenant_id == tenant
@@ -194,6 +221,7 @@ class ReferenceAfterSources:
             if row.header.root_key.tenant_id == tenant
             and row.header.source_key is None
             and row.header.lifecycle != PHYSICAL_ROOT_ABSENT
+            and not invalid_root(row.header)
         )
         expected_versions = {
             key

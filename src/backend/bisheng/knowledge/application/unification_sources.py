@@ -292,12 +292,32 @@ class UnificationSourceInventory:
                 roots[row.id] = (key, creator, lifecycle, _digest(asdict(row)), deleted)
                 counts[row.id] = 0
         cache[2].update(row[0] for row in roots.values() if row[4])
+        invalid_roots = set()
         async for page in self._pages(session, f"alist_{prefix}_versions"):
             entries = []
             for row in page:
                 parent = row.flow_id if workflow else row.app_id
                 if parent not in roots:
-                    _blocked("missing_version_parent")
+                    if not workflow:
+                        _blocked("missing_version_parent")
+                    from bisheng.knowledge.application.unification_workflow_retention import (
+                        invalid_workflow_root,
+                        invalid_workflow_version,
+                    )
+
+                    key = SourceKey(tenant, kind, parent, str(row.id))
+                    actual_parent, actual_version = await self.repository.aload_invalid_workflow_version(
+                        session, source_key=key
+                    )
+                    if actual_version != row:
+                        _blocked("invalid_workflow_version_drift")
+                    root_key = SourceRootKey(tenant, kind, parent)
+                    if root_key not in invalid_roots:
+                        yield invalid_workflow_root(root_key, actual_parent)
+                        invalid_roots.add(root_key)
+                        cache[2].add(root_key)
+                    entries.append(invalid_workflow_version(key, actual_parent, row))
+                    continue
                 root, _, _, _, root_deleted = roots[parent]
                 revision = _digest({"root": roots[parent][3], "version": asdict(row)})
                 key = SourceKey(tenant, kind, parent, str(row.id))
@@ -593,6 +613,14 @@ class UnificationSourceInventory:
                     source_key=record.source_key,
                 )
                 current()
+                from bisheng.knowledge.application.unification_workflow_retention import invalid_root
+
+                if invalid_root(record):
+                    from bisheng.knowledge.application.unification_reference_state import parse_retired
+
+                    proof = parse_retired(state)
+                    if proof["root_head"] is not None or proof["source_heads"] or proof["raw_count"] or proof["legacy"]:
+                        _blocked("invalid_workflow_source_has_index")
                 return replace(record, frozen_index=state)
             return record
 
