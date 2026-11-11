@@ -53,9 +53,11 @@ export class KunlianBrowserFlow {
   private manualLoginRequired = false;
   private redirecting = false;
   private notices = new Map<string, number>();
+  private readonly callbackEntry: boolean;
 
   constructor() {
-    if (typeof location !== 'undefined' && location.hash === '#kunlian-login') {
+    this.callbackEntry = typeof location !== 'undefined' && location.hash === '#kunlian-login';
+    if (this.callbackEntry) {
       this.expected = true;
       this.clearLocalHints();
       history.replaceState(history.state, '', `${location.pathname}${location.search}`);
@@ -63,6 +65,7 @@ export class KunlianBrowserFlow {
   }
 
   isKunlian(): boolean { return this.expected || this.confirmed; }
+  isCallbackEntry(): boolean { return this.callbackEntry; }
 
   confirmUser(user: unknown): boolean {
     const kunlian = record(user).auth_source === 'kunlian';

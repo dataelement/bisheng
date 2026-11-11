@@ -14,12 +14,14 @@ import json from "../../../package.json";
 // import { alertContext } from "../contexts/alertContext";
 
 import { locationContext } from "@/contexts/locationContext";
+import { userContext } from "@/contexts/userContext";
+import { claimKunlianWorkflowLoginAttempt } from '@bisheng/api-client';
 import { getSSOurlApi, ldapLoginApi } from "@/controllers/API/pro";
 import { getBrandAssetUrl } from "@/utils/brand";
 import { buildKunlianLoginUrl, consumeLoginReturnTo } from "@/utils/loginReturnTo";
 import { kunlianSession } from '@/controllers/kunlianSession';
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
-import { claimWorkflowManagementSsoAttempt, isWorkflowManagementPath } from "@/utils/workflowManagement";
+import { claimWorkflowManagementSsoAttempt, isWorkflowManagementPath, platformWorkflowEntry } from "@/utils/workflowManagement";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
 import { showApiError } from "../../controllers/request";
@@ -38,8 +40,21 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
 
     const navigate = useNavigate();
     const { pathname, search } = useLocation();
-    const workflowTarget = isWorkflowManagementPath(pathname) ? pathname : undefined;
+    const workflowEntry = platformWorkflowEntry(pathname, search);
+    const editorTarget = workflowEntry.kind === 'edit' ? workflowEntry.returnTo : undefined;
+    const invalidEntry = workflowEntry.kind === 'invalid-entry';
+    const workflowTarget = editorTarget ?? (isWorkflowManagementPath(pathname) ? pathname : undefined);
     const workflowLoginFailed = Boolean(workflowTarget) && new URLSearchParams(search).has('status_code');
+    const { workflowEntryError } = useContext(userContext);
+    const entryError = workflowEntryError as { httpStatus?: number; status_code?: number; data?: { reason_code?: string } } | undefined;
+    const initialSessionMissing = !entryError ||
+        (entryError.httpStatus === 401 && (entryError.status_code === undefined || entryError.status_code === 401)) ||
+        ([200, 401].includes(entryError.httpStatus) && entryError.status_code === 19323 && entryError.data?.reason_code === 'SESSION_EXPIRED');
+    const knownEntryCode = Number.isInteger(entryError?.status_code) && entryError.status_code >= 19320 && entryError.status_code <= 19329
+        ? entryError.status_code : undefined;
+    const entryFailureCode = knownEntryCode ?? (workflowEntry.kind === 'edit' ? workflowEntry.failureCode : undefined);
+    const entryFailureKey = entryFailureCode !== undefined
+        ? `api_errors:${entryFailureCode}` : 'shared:kunlian.source_mismatch';
     const { appConfig } = useContext(locationContext);
     const isLoading = false;
 
@@ -80,9 +95,20 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                     setOauthLoading(false);
                     return;
                 }
+                if (invalidEntry) {
+                    setOauthLoading(false);
+                    return;
+                }
                 if (workflowTarget) {
                     setOauthLoading(false);
-                    if (urls?.kunlian === '/api/oauth2/kunlian' &&
+                    if (editorTarget) {
+                        const entry = platformWorkflowEntry(pathname, search);
+                        if (entry.kind === 'edit' && urls?.kunlian === '/api/oauth2/kunlian' &&
+                            initialSessionMissing && !kunlianSession.requiresManualLogin() &&
+                            claimKunlianWorkflowLoginAttempt(entry, { callback: kunlianSession.isCallbackEntry() })) {
+                            window.location.assign(buildKunlianLoginUrl(entry.returnTo));
+                        }
+                    } else if (urls?.kunlian === '/api/oauth2/kunlian' &&
                         !workflowLoginFailed && !kunlianSession.isKunlian() && !kunlianSession.requiresManualLogin() &&
                         claimWorkflowManagementSsoAttempt()) {
                         window.location.assign(buildKunlianLoginUrl(workflowTarget));
@@ -90,7 +116,7 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                     return;
                 }
                 if (kunlianSession.isKunlian()) {
-                    // 昆联失败保留手动入口。旧自动登录设置不得抢走当前流程。
+                    // Keep failures manual; legacy redirects must not take this flow over.
                     setOauthLoading(false);
                     return;
                 }
@@ -117,9 +143,9 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                 if (active) setOauthLoading(false);
             });
         return () => { active = false; };
-    }, [forceLocal, workflowLoginFailed, workflowTarget]);
+    }, [forceLocal, workflowLoginFailed, workflowTarget, editorTarget, invalidEntry, initialSessionMissing, pathname, search]);
 
-    useLoginError();
+    useLoginError(Boolean(editorTarget || invalidEntry));
 
     // captcha
     const captchaRef = useRef(null);
@@ -374,8 +400,11 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                                     </Button>
                                 </>
                             )}
-                            {(appConfig.isPro || workflowTarget) && <LoginBridge
-                                oauthData={appConfig.isPro ? oauthData : { kunlian: oauthData?.kunlian }}
+                            {(editorTarget || invalidEntry) && <p role="alert">
+                                {t(entryFailureKey)}
+                            </p>}
+                            {!invalidEntry && (appConfig.isPro || workflowTarget) && <LoginBridge
+                                oauthData={editorTarget || !appConfig.isPro ? { kunlian: oauthData?.kunlian } : oauthData}
                                 onHasLdap={setHasLdap}
                                 kunlianTarget={workflowTarget}
                             />}
@@ -403,16 +432,17 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     );
 };
 
-export const useLoginError = () => {
+export const useLoginError = (entryOwnsError = false) => {
     const location = useLocation();
 
     const { t } = useTranslation();
 
     useEffect(() => {
+        if (entryOwnsError) return;
         const queryParams = new URLSearchParams(location.search);
         const code = queryParams.get("status_code");
         if (code) {
             notification.open({ type: "error", description: String(t("errors." + code) ?? '') });
         }
-    }, [location]);
+    }, [location, entryOwnsError, t]);
 };

@@ -466,7 +466,13 @@ function AppList({ workflowOnly }: AppsProps) {
                     </div>
                     : <div className="mt-6 flex gap-2 flex-wrap pb-20">
                         {canCreateApp && (workflowOnly ? (
-                            <Button onClick={() => handleCreateApp(AppType.FLOW)}>{t('build.createWorkflow')}</Button>
+                            <CardComponent<FlowType>
+                                data={null}
+                                type={AppType.FLOW}
+                                title={t('build.createWorkflow')}
+                                description={t('build.createWorkflowHint')}
+                                onClick={() => handleCreateApp(AppType.FLOW)}
+                            />
                         ) : (
                             <AppTempSheet onSelect={handleCreateApp} onCustomCreate={handleCreateApp}>
                                 <CardComponent<FlowType>
@@ -544,7 +550,7 @@ function AppList({ workflowOnly }: AppsProps) {
                                             showPop={item.status !== 2}
                                             data={item}
                                         /> : null)}
-                                    labelPannel={workflowOnly ? undefined :
+                                    labelPannel={workflowOnly ? <div /> :
                                         <LabelShow
                                             data={item}
                                             user={user}

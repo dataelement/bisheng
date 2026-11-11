@@ -1,4 +1,5 @@
 import { Button } from '@bisheng/ui';
+import { claimKunlianWorkflowLoginAttempt, parseKunlianWorkflowEntry } from '@bisheng/api-client';
 import Separator from "@/components/bs-comp/chatComponent/Separator";
 import { buildKunlianLoginUrl } from '@/utils/loginReturnTo';
 
@@ -30,7 +31,12 @@ export default function LoginBridge({ oauthData, onHasLdap, kunlianTarget }: Log
         <div>
             <Separator className="my-4" text={t("login.otherMethods")}></Separator>
             <div className="flex justify-center items-center gap-4">
-                {hasKunlian && <Button size="small" color="default" variant="outlined" onClick={() => { location.href = buildKunlianLoginUrl(kunlianTarget); }}>
+                {hasKunlian && <Button size="small" color="default" variant="outlined" onClick={() => {
+                    const entry = parseKunlianWorkflowEntry(kunlianTarget ?? '');
+                    if (entry.kind === 'invalid-entry') return;
+                    if (entry.kind === 'edit' && !claimKunlianWorkflowLoginAttempt(entry, { manual: true })) return;
+                    location.href = buildKunlianLoginUrl(kunlianTarget);
+                }}>
                     {t('shared:kunlian.login')}
                 </Button>}
                 {ssoUrl && (

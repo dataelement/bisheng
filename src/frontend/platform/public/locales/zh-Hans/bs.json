@@ -1172,6 +1172,7 @@
     "workflowReadOnly": "只读",
     "searchWorkflow": "搜索工作流",
     "createWorkflow": "新建工作流",
+    "createWorkflowHint": "创建并编排工作流",
     "reloadWorkflows": "重新加载工作流",
     "noWorkflows": "暂无可查看的工作流",
     "workFlow": "工作流",

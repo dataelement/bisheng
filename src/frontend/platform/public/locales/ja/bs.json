@@ -1166,6 +1166,7 @@
     "workflowReadOnly": "閲覧のみ",
     "searchWorkflow": "ワークフローを検索",
     "createWorkflow": "ワークフローを作成",
+    "createWorkflowHint": "ワークフローを作成して処理を組み立てます",
     "reloadWorkflows": "ワークフローを再読み込み",
     "noWorkflows": "表示できるワークフローはありません",
     "workFlow": "ワークフロー",

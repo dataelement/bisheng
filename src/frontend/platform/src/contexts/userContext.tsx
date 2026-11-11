@@ -1,10 +1,11 @@
 // @ts-strict-ignore
 import { notification } from '@bisheng/ui';
+import { clearKunlianWorkflowLoginAttempt } from '@bisheng/api-client';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
 import { hasDesktopLoginReturnTo } from "@/utils/loginReturnTo";
-import { isWorkflowManagementPath } from "@/utils/workflowManagement";
+import { isWorkflowManagementPath, KUNLIAN_WORKFLOW_IDENTITY_FAILURE, platformWorkflowEntry } from "@/utils/workflowManagement";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
@@ -16,6 +17,7 @@ import { User } from "../types/api/user";
 
 type userContextType = {
     user: any; // {} loading null login
+    workflowEntryError?: unknown;
     setUser: (newState: User) => void;
     savedComponents: any;
     addSavedComponent: (newCom: any, overrid: boolean, rename?: boolean) => Promise<any>;
@@ -37,6 +39,7 @@ export const userContext = createContext<userContextType>(initialValue);
 
 export function UserProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<any>(initialValue.user);
+    const [workflowEntryError, setWorkflowEntryError] = useState<unknown>();
     const [savedComponents, setSavedComponents] = useState([]);
 
     const loadComponents = async () => {
@@ -100,10 +103,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
 
     useLayoutEffect(() => {
-        // 链接ar参数存cookie（免登录接口）
+        // Validate marked links before the legacy URL-token login can run.
         const basePath = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+        const workflowEntry = platformWorkflowEntry();
+        if (workflowEntry.kind !== 'not-entry') {
+            try {
+                localStorage.removeItem('LOGIN_PATHNAME');
+                localStorage.removeItem('LOGIN_PATHNAME_AT');
+            } catch { /* Disabled storage must leave the explicit login target usable. */ }
+        }
+        if (workflowEntry.kind === 'invalid-entry') {
+            history.replaceState(null, '', `${basePath}/403`);
+            setUser(null);
+            return;
+        }
         const managementEntry = isWorkflowManagementPath(location.pathname.replace(basePath, ''));
-        const cookie = managementEntry ? undefined : location.search.match(/(?<=token=)[^&]+/g)?.[0];
+        const cookie = managementEntry || workflowEntry.kind === 'edit' ? undefined : location.search.match(/(?<=token=)[^&]+/g)?.[0];
         if (cookie) {
             document.cookie = `access_token_cookie=${cookie}; path=/`;
             localStorage.setItem('isLogin', '1')
@@ -164,9 +179,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 },
             })
         }
-        // 获取用户信息
+        const handleWorkflowIdentityFailure = (event: Event) => {
+            if (platformWorkflowEntry().kind !== 'edit') return;
+            setWorkflowEntryError((event as CustomEvent<unknown>).detail);
+            setUser(null);
+        };
+        window.addEventListener(KUNLIAN_WORKFLOW_IDENTITY_FAILURE, handleWorkflowIdentityFailure);
+        // Reuse the existing bootstrap query; URL markers never establish identity.
         getUserInfo().then(res => {
             setUser(res.user_id ? res : null)
+            if (workflowEntry.kind === 'edit' && !res.user_id) return;
             const { user_id } = res;
             // Apply the same Child Admin compatibility grants used by the route layer.
             const web_menu: string[] = resolveRoutePermissions(res);
@@ -204,6 +226,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     || web_menu.some((k: string) => adminMenuKeys.has(k))
                 )
             if (!canAccessPlatform) {
+                if (workflowEntry.kind === 'edit') {
+                    history.replaceState(null, '', `${basePath}/403`);
+                    return;
+                }
                 // Check if the user can at least access the workspace client.
                 // If neither platform nor workspace is accessible, redirect to /403
                 // to avoid a back-and-forth redirect loop between the two apps.
@@ -248,7 +274,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     '/log': 'log',
                 }
                 const normalizedPath = pathName.replace(/\/+$/, '') || '/'
-                let menuName = isWorkflowManagementPath(normalizedPath) ? 'build' : MENU_KEY_MAP[normalizedPath]
+                let menuName = workflowEntry.kind === 'edit' || isWorkflowManagementPath(normalizedPath) ? 'build' : MENU_KEY_MAP[normalizedPath]
                 if (!menuName && normalizedPath.startsWith('/label')) {
                     menuName = 'mark_task'
                 }
@@ -261,18 +287,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     && !web_menu.includes(menuName)
                     && !(res.menu_approval_mode_admin ?? res.menu_approval_mode)
                 ) {
-                    history.pushState(null, '', BASE_URL + '/403');
+                    if (workflowEntry.kind === 'edit') history.replaceState(null, '', `${basePath}/403`);
+                    else history.pushState(null, '', BASE_URL + '/403');
+                    return;
                 }
             }
+            if (workflowEntry.kind === 'edit') {
+                clearKunlianWorkflowLoginAttempt(workflowEntry);
+                setWorkflowEntryError(undefined);
+            }
         }).catch(e => {
+            if (workflowEntry.kind === 'edit') setWorkflowEntryError(e);
             setUser(null)
-        })
+        });
+        return () => window.removeEventListener(KUNLIAN_WORKFLOW_IDENTITY_FAILURE, handleWorkflowIdentityFailure);
     }, [])
 
     return (
         <userContext.Provider
             value={{
-                user, setUser, savedComponents, checkComponentsName, delComponent, addSavedComponent
+                user, setUser, workflowEntryError, savedComponents, checkComponentsName, delComponent, addSavedComponent
             }}
         >
             {children}

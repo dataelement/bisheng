@@ -7,7 +7,7 @@ import { notification } from '@bisheng/ui';
 import axios from "axios";
 import i18next from "i18next";
 import { managementRequestScope,requiresManagementScope,guardManagementResponse } from './managementScope';
-import { claimWorkflowManagementSsoAttempt, isWorkflowManagementPath } from '@/utils/workflowManagement';
+import { claimWorkflowManagementSsoAttempt, isWorkflowManagementPath, KUNLIAN_WORKFLOW_IDENTITY_FAILURE, platformWorkflowEntry } from '@/utils/workflowManagement';
 
 window.addEventListener('storage', event => {
     if (event.key === 'bs:management-scope' && event.oldValue !== event.newValue) window.location.reload();
@@ -202,6 +202,7 @@ export async function handleRequestResponse(response) {
     }
     if (envelope.status_code === 11010) return envelope;
     const error = await responseError(envelope, response);
+    if (handoffWorkflowIdentityFailure(error, response.config?.url || '')) return Promise.reject(error);
     if (presentKunlianFailure(error, response.config?.url || '', response.config?.silent)) return Promise.reject(error);
     if (response.config.silent) return Promise.reject(error);
     const statusCode = envelope.status_code;
@@ -237,6 +238,7 @@ export async function handleRequestResponse(response) {
 
 export async function handleRequestError(cause) {
     const error = await responseError(cause);
+    if (handoffWorkflowIdentityFailure(error, cause.config?.url || '')) return Promise.reject(error);
     if (presentKunlianFailure(error, cause.config?.url || '', cause.config?.silent)) return Promise.reject(error);
     if (cause.config?.url?.split('?')[0] === KUNLIAN_CSRF_PATH) return Promise.reject(error);
     if (error.httpStatus === 401) {
@@ -303,6 +305,31 @@ export async function requestWriteHeaders(url: string): Promise<Record<string, s
         }).finally(() => { csrfPending = null; });
     }
     return { ...headers, 'X-CSRF-Token': await csrfPending };
+}
+
+function handoffWorkflowIdentityFailure(error, url: string): boolean {
+    if ([KUNLIAN_CSRF_PATH, '/api/v1/user/logout'].includes(url.split('?')[0])) return false;
+    if (platformWorkflowEntry().kind === 'not-entry' || !isBrowserIdentityUrl(url)) return false;
+    // Business refusals may arrive in HTTP 200; still validate the full code/reason pair.
+    const reason = kunlianFailure(error, error.httpStatus) ?? (error.httpStatus === 200
+        ? [400, 401, 403, 409, 502, 503].map(status => kunlianFailure(error, status)).find(Boolean) : null);
+    if (!reason && error.httpStatus !== 401 && error.status_code !== 401) return false;
+    if (error.httpStatus === 401 || reason === 'SESSION_EXPIRED') {
+        localStorage.removeItem('ws_token');
+        localStorage.removeItem('UUR_INFO');
+    }
+    if (reason) {
+        kunlianSession.expectLocalProtocol();
+        kunlianSession.observeFailure(reason);
+        if (reason !== 'SESSION_EXPIRED') kunlianSession.deferAutomaticLogin();
+    }
+    // The page owns navigation and presentation, including failures after READY.
+    // Keep the original rejected ApiError; never invoke legacy redirects here.
+    if (url.split('?')[0] !== '/api/v1/user/info') {
+        window.dispatchEvent(new CustomEvent(KUNLIAN_WORKFLOW_IDENTITY_FAILURE, { detail: error }));
+    }
+    error.presentation = 'global';
+    return true;
 }
 
 function presentKunlianFailure(error, url: string, silent = false): boolean {

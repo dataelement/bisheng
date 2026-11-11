@@ -119,3 +119,27 @@ it('carries CSRF through the real fetch streaming path without a Bearer', async 
   expect(fetch.mock.calls[0][1].headers.Authorization).toBeUndefined();
   await stream.cancel();
 });
+
+it.each(['http', 'business', 'ordinary'] as const)(
+  'returns concurrent editor identity failures to the entry owner without any transport navigation (%s)', async mode => {
+    location.pathname = '/flow/' + 'a'.repeat(32);
+    location.search = '?from=workflow-management&entry=kunlian';
+    const current = location.href;
+    localStorage.setItem('THIRD_PARTY_LOGIN_URL', 'https://old-idp.fixture.invalid');
+    localStorage.setItem('ws_token', 'stale-bearer');
+    const module = await import('./request');
+    const failed = vi.fn();
+    window.addEventListener('kunlian:workflow-identity-failure', failed);
+    module.default.defaults.adapter = async config => {
+      const data = mode === 'ordinary' ? { status_code: 401 } : { status_code: 19323, data: { reason_code: 'SESSION_EXPIRED' } };
+      if (mode === 'business') return { config, status: 200, statusText: 'OK', headers: {}, data };
+      throw Object.assign(new Error('private-detail'), { config, response: { config, status: 401, data } });
+    };
+    const errors = await Promise.all([module.default.get('/api/v1/user/info'), module.default.get('/api/v1/probe')].map(p => p.catch(error => error)));
+    expect(errors.every(error => error.name === 'ApiError')).toBe(true);
+    expect(failed).toHaveBeenCalledOnce();
+    window.removeEventListener('kunlian:workflow-identity-failure', failed);
+    expect(location.href).toBe(current);
+    expect(sessionStorage.getItem('kunlian:workflow-entry-attempt')).toBeNull();
+  },
+);

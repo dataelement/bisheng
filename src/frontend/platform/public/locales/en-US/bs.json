@@ -1183,6 +1183,7 @@
     "workflowReadOnly": "Read only",
     "searchWorkflow": "Search workflows",
     "createWorkflow": "New workflow",
+    "createWorkflowHint": "Create and orchestrate a workflow",
     "reloadWorkflows": "Reload workflows",
     "noWorkflows": "No workflows to display",
     "workFlow": "Workflow",
