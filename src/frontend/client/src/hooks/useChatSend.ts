@@ -247,7 +247,9 @@ export function useChatSend({ conversationId, isStreaming, chatModel, selectedOr
                         prev.map((m) =>
                             m.messageId === userMessageId
                                 ? { ...m, ...mergedUser, messageId: serverMessageId }
-                                : m
+                                : m.parentMessageId === userMessageId
+                                    ? { ...m, parentMessageId: serverMessageId }
+                                    : m
                         )
                     );
                 },

@@ -93,7 +93,17 @@ export async function getAgentMessages(
     const headers = shareToken ? { 'share-token': shareToken } : undefined;
     const res = await http.get(API.agentMessages(conversationId), headers ? { headers } : undefined);
     const rows: any[] = res?.data ?? res ?? [];
-    return rows.map(mapAgentResponseItem);
+    // Agent history is linear and does not persist parent IDs. Restore the
+    // question/answer links that the retry action uses to find its input.
+    let previousMessageId = "";
+    let questionMessageId = "";
+    return rows.map((row) => {
+        const message = mapAgentResponseItem(row);
+        message.parentMessageId = message.isCreatedByUser ? previousMessageId : questionMessageId;
+        if (message.isCreatedByUser) questionMessageId = message.messageId;
+        previousMessageId = message.messageId;
+        return message;
+    });
 }
 
 /**

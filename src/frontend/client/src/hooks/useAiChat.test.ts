@@ -57,7 +57,8 @@ jest.mock("~/hooks/queries/data-provider", () => ({ useGetBsConfig: () => ({ dat
 jest.mock("~/utils/mediaAttachmentUtils", () => ({
     isMediaAttachmentFile: () => false,
 }));
-jest.mock("uuid", () => ({ v4: () => "test-owner" }));
+let mockNextId = 0;
+jest.mock("uuid", () => ({ v4: () => `test-id-${++mockNextId}` }));
 jest.mock("~/hooks/useLinsightManager", () => ({
     useLinsightManager: () => ({ createLinsight: jest.fn(), updateLinsight: jest.fn() }),
 }));
@@ -80,6 +81,7 @@ jest.mock("@tanstack/react-query", () => ({
 // Imported after the jest.mock calls above on purpose — the hook pulls those
 // modules in at import time.
 import useAiChat from "./useAiChat";
+import store from "~/store";
 
 const historyOf = (conversationId: string) => [
     {
@@ -105,6 +107,46 @@ beforeEach(() => {
     mockOpenedStreams.length = 0;
     mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
     mockGetSessionName.mockResolvedValue("");
+    (store.chatModel as unknown as { __testValue: { id: number; name: string } }).__testValue = { id: 1, name: 'test-model' };
+});
+
+describe('daily retry', () => {
+    it('retries a failed live turn after the question gets its database ID, using the selected model and original files', async () => {
+        const { result, rerender } = renderChat('c1');
+        await waitFor(() => expect(result.current.messages).toHaveLength(1));
+        const files = [{ name: 'notes.txt', filepath: 'notes.txt' }];
+        act(() => result.current.sendMessage('Original question', files));
+        const initial = latestStream().submission;
+        act(() => {
+            initial.onCreated('c1', { ...initial.userMessage, messageId: '101' });
+            initial.onError('Model unavailable');
+            initial.onEnd();
+        });
+        (store.chatModel as unknown as { __testValue: { id: number; name: string } }).__testValue = { id: 9, name: 'working-model' };
+        rerender({ cid: 'c1' });
+        const failed = result.current.messages[result.current.messages.length - 1];
+        act(() => result.current.regenerate(failed.parentMessageId));
+        expect(mockOpenedStreams).toHaveLength(2);
+        expect(latestStream().submission.payload).toMatchObject({ text: 'Original question', messageId: '101', model: '9', files });
+    });
+
+    it('keeps receiving a retried answer after its temporary ID is replaced by the server ID', async () => {
+        const { result } = renderChat('c1');
+        await waitFor(() => expect(result.current.messages).toHaveLength(1));
+        act(() => result.current.regenerate('c1-q'));
+        const retry = latestStream().submission;
+        act(() => {
+            retry.onCreated('c1', { ...retry.userMessage, messageId: '102' });
+            retry.onAgentUpdate?.({ messageId: '202', text: 'Partial answer' });
+            retry.onAgentUpdate?.({ messageId: '202', text: 'Complete answer' });
+            retry.onError('Connection lost', 500);
+            retry.onEnd();
+        });
+        expect(result.current.messages.at(-1)).toMatchObject({ messageId: '202', parentMessageId: '102', text: 'Complete answer', error: true, errorText: 'Connection lost' });
+        act(() => result.current.regenerate('102'));
+        expect(mockOpenedStreams).toHaveLength(2);
+        expect(latestStream().submission.payload).toMatchObject({ messageId: '102', text: 'c1 history' });
+    });
 });
 
 describe("useAiChat conversation switching", () => {
