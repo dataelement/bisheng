@@ -2,7 +2,7 @@
 
 记录日期：2026 年 11 月 11 日。时间均为 UTC+8。
 
-**状态（18:05）：已批准的失效关联清理、原始行备份和兼容修复已完成；正式F118升级正在执行M2全Store盘点，尚未完成冻结、转换和发布，业务API/Worker仍停机。143个原索引绑定及ES/Milvus数据保留，切换空索引方案已撤回且未执行。** 本记录保留 192.168.106.116 升级中遇到的真实阻塞、数据处置范围和备份边界，供判断应改进迁移脚本、历史业务清理逻辑还是现场数据。当前镜像已经包含 F118；本次需要执行知识空间统一与全平台 `use` 退役，单独发布 OpenFGA 模型不足以完成升级。
+**状态（18:55）：30个租户的正式M2冻结图已验证并在18:40持久冻结；M3的4,023条SQL计划命令已全部提交。转换后143个原索引绑定和物理事实复核通过，正在执行权限发布前全Store一致性核验。尚未完成CURRENT切换与M4，业务API/Worker仍停机；空索引替换从未执行。** 本记录保留 192.168.106.116 升级中遇到的真实阻塞、数据处置范围和备份边界，供判断应改进迁移脚本、历史业务清理逻辑还是现场数据。当前镜像已经包含 F118；本次需要执行知识空间统一与全平台 `use` 退役，单独发布 OpenFGA 模型不足以完成升级。
 
 ## 环境与最初报错
 
@@ -403,3 +403,13 @@ v9权限预检已推进Root permission_namespace至67,354/71,784行，发现work
 正式全Store扫描和30个租户原生盘点均完成，随后Redis broker盘点报migration_broker_unknown_task_identity。未产生全局freeze，尚未开始M3/M4。只读取证确认仅1条消息：旧Mac客户端的reply.celery.pidbox巡检回复，无Celery任务task/id；其原始字节、列表位置、协议头及SHA256保存在broker-evidence，原文SHA256为61cd70a92e9e3308c18b51408994fb7678618caa35169e3f5a1cbc4ff4cd4df7。无知识任务事实，Redis零写入。
 
 对照已安装Kombu pidbox.py的Mailbox._publish_reply/get_reply_queue实现，新增明确非知识控制回复分类；要求原JSON/base64、精确ticket/clock头、UUID和reply exchange，禁止借此跳过任务字段或未知知识任务。不清消息、不删队列。真实Mailbox协议与Redis读取/正式broker链83项回归通过；Ruff/架构guard和diff检查通过。正式M2须从原事实重新完整盘点，不用诊断结果替换冻结基线。
+
+### 18:40–18:55 正式冻结与SQL转换完成
+
+第二轮正式M2重新完整读取Store，全部30个租户及原生Redis broker盘点通过。18:40:47全局冻结提交，30条run均为baseline_frozen，原baseline/plan描述符与摘要另存freeze-evidence，不以诊断或内存结果代替正式计划。此后仅沿同一冻结run续跑，不重新prepare或替换基线。
+
+18:42:51前所有租户sql_conversion检查点已complete：Root1为3,952条，租户13为36、14为4、18为15、19为2、24为8、25为4、60为2，其余为0，共4,023条。当前converting阶段还包含后续权限发布，不能因SQL complete宣称全升级完成。
+
+18:47:22只读复核143个原绑定，允许计划内type0→3，index_name/collection_name、原schema、实体/文档计数和identifier_compatible事实完全不变，143份保留证明闭合，SQL/物理写入均0。日志retention-postcheck.log，完整结果retention-post-validation.json。未换空索引。
+
+权限发布原生流程在发布前完整重读Store，并在切换前/后再次全量核验；现场一次扫描约十多分钟，属于实际维护时长的主要成本。早先1–2小时估计偏乐观，已向用户修订剩余45–90分钟区间，仍以最终发布/覆盖与运行验证为完成条件。
