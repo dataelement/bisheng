@@ -163,6 +163,25 @@ def test_missing_engine_is_reported_and_exits_zero(tmp_path):
     assert "不可用" in out
 
 
+def test_engine_that_cannot_start_is_reported_and_exits_zero(tmp_path):
+    """AC-04: a node binary this uid cannot execute is a report, not a traceback on stderr."""
+    runtime = tmp_path / "rt"
+    (runtime / "bin").mkdir(parents=True)
+    (runtime / "engine" / "lib").mkdir(parents=True)
+    (runtime / "bin" / "node").write_text("not a binary")  # exists, not executable
+    (runtime / "engine" / "lib" / "bin.js").write_text("")
+    out = run_pptd("check", tmp_path, cwd=tmp_path, runtime=runtime)
+    assert "PPT 引擎无法启动" in out
+    assert pptd.FAIL in out and pptd.PASS not in out
+
+
+def test_engine_json_is_read_past_trailing_runtime_warnings():
+    """Render/convert JSON on stdout followed by a Node warning on stderr must still parse."""
+    text = '{"status": "pass", "pageCount": 12}\n\n(node:42) ExperimentalWarning: something {x}'
+    assert pptd.parse_json(text) == {"status": "pass", "pageCount": 12}
+    assert pptd.parse_json("no json here") is None
+
+
 def test_font_floor_flags_small_body_note_and_table_text(tmp_path):
     """AC-09, bad direction."""
     table = {

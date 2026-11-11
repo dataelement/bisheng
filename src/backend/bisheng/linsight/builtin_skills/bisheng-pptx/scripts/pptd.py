@@ -48,6 +48,8 @@ def run(args):
         p = subprocess.run([NODE, CLI, *args], capture_output=True, text=True, timeout=300)
     except subprocess.TimeoutExpired:
         return 1, "引擎执行超过 300 秒，已中止。请减少页数分批处理。"
+    except OSError as e:  # node present but not executable for this uid, etc.
+        return 1, f"PPT 引擎无法启动：{e.strerror or e}。请联系管理员检查安装。"
     return p.returncode, (p.stdout or "") + ("\n" + p.stderr if p.stderr else "")
 
 
@@ -61,8 +63,9 @@ def not_ready():
 
 
 def parse_json(text):
+    """The first JSON object in the output; runtime warnings on stderr may follow it."""
     try:
-        return json.loads(text[text.index("{") :])
+        return json.JSONDecoder().raw_decode(text[text.index("{") :])[0]
     except ValueError:
         return None
 
