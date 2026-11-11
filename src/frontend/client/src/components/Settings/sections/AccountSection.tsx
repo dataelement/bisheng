@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera } from "lucide-react";
+import { Outlined } from 'bisheng-icons';
 import { useQueryClient } from "@tanstack/react-query";
-import { uploadUserAvatarFileApi } from "~/api/user";
+import { Button, Input, Tooltip } from '@bisheng/ui';
+import { uploadUserAvatarFileApi, type NicknameProfile } from "~/api/user";
 import { NotificationSeverity } from "~/common";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { useLocalize } from "~/hooks";
@@ -11,23 +13,54 @@ import { useToastContext } from "~/Providers";
 import { useSetRecoilState } from "recoil";
 import store from "~/store";
 import { QueryKeys } from "~/types/chat";
+import type { TUser } from '~/types/chat';
 import { PasswordForm } from "./PasswordForm";
+import { NicknameEditor } from './NicknameEditor';
+import { copyText } from '~/utils';
 
 export interface AccountSectionProps {
     username: string;
+    account?: string | null;
     avatarUrl: string;
     onAvatarUpdated?: (url: string) => void;
 }
 
 /** Basic info (avatar + username) and security settings (password), formerly AccountInfoDialog. */
-export function AccountSection({ username, avatarUrl, onAvatarUpdated }: AccountSectionProps) {
+export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }: AccountSectionProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
     const setUser = useSetRecoilState(store.user);
     const [isEditing, setIsEditing] = useState(false);
+    const [isEditingNickname, setIsEditingNickname] = useState(false);
+    const [currentNickname, setCurrentNickname] = useState(username);
     const [currentAvatarUrl, setCurrentAvatarUrl] = useState(avatarUrl);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const handleCopyAccount = async () => {
+        if (!account) return;
+        try {
+            await copyText(account);
+            showToast({ message: localize('accountIdentity.accountCopied'), severity: NotificationSeverity.SUCCESS });
+        } catch {
+            showToast({ message: localize('accountIdentity.copyFailed'), severity: NotificationSeverity.WARNING });
+        }
+    };
+    useEffect(() => { setCurrentNickname(username); }, [username]);
+
+    const handleNicknameSaved = (profile: NicknameProfile) => {
+        setCurrentNickname(profile.user_name);
+        setIsEditingNickname(false);
+        const update = (previous: TUser) => String(previous.id) === String(profile.user_id)
+            ? { ...previous, username: profile.user_name, name: profile.user_name, external_id: profile.external_id }
+            : previous;
+        setUser(previous => previous ? update(previous) : previous);
+        queryClient.setQueryData<TUser>([QueryKeys.user], previous => previous ? update(previous) : previous);
+        // Refresh is optional after the committed result is already visible.
+        void queryClient.invalidateQueries({ queryKey: [QueryKeys.user] }).catch((error: unknown) => {
+            console.warn('Account refresh after nickname update failed', error instanceof Error ? error.name : typeof error);
+        });
+        showToast({ message: localize('accountIdentity.nicknameSaved'), severity: NotificationSeverity.SUCCESS });
+    };
 
     // Keep the in-dialog avatar in sync when the caller updates it
     useEffect(() => {
@@ -102,7 +135,7 @@ export function AccountSection({ username, avatarUrl, onAvatarUpdated }: Account
                 <h3 className="text-[14px] font-semibold leading-5 text-[#212121]">
                     {localize("com_account_info_basic_info")}
                 </h3>
-                <div className="flex items-center gap-4 border-b border-[#f2f3f5] pb-4">
+                <div className="flex items-center gap-4 border-b border-border pb-4">
                     <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
@@ -110,16 +143,30 @@ export function AccountSection({ username, avatarUrl, onAvatarUpdated }: Account
                         className="group relative shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     >
                         <Avatar className="size-14 ring-1 ring-[#f2f3f5]">
-                            {currentAvatarUrl ? <AvatarImage src={currentAvatarUrl} alt="User" /> : <AvatarName name={username} />}
+                            {currentAvatarUrl ? <AvatarImage src={currentAvatarUrl} alt="User" /> : <AvatarName name={currentNickname} />}
                         </Avatar>
                         <div className="absolute inset-0 flex items-center justify-center rounded-full bg-[rgba(0,0,0,0.55)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                             <Camera className="size-6 text-white" aria-hidden />
                         </div>
                     </button>
-                    <p className="min-w-0 text-[14px] leading-6 text-[#212121]">
-                        <span className="font-medium">{username}</span>
-                        <span>{localize("com_account_info_username_suffix")}</span>
-                    </p>
+                    <div className="min-w-0 flex-1 text-body text-text-1">
+                        <p className="text-caption text-text-3">{localize('accountIdentity.nickname')}</p>
+                        <p className="truncate" title={currentNickname}>{currentNickname}</p>
+                    </div>
+                    {!isEditingNickname && <Button type="button" variant="text" color="primary" onClick={() => setIsEditingNickname(true)}>
+                        {localize('accountIdentity.editNickname')}
+                    </Button>}
+                </div>
+                {isEditingNickname && <NicknameEditor nickname={currentNickname} onCancel={() => setIsEditingNickname(false)} onSaved={handleNicknameSaved} />}
+                <div className="grid gap-2 border-b border-border pb-5">
+                    <label htmlFor="profile-account" className="text-body text-text-1">{localize('accountIdentity.account')}</label>
+                    <Input id="profile-account" size="medium" readOnly value={account ?? ''} title={account ?? ''}
+                        placeholder={localize('accountIdentity.noAccount')}
+                        suffix={<Tooltip content={localize('accountIdentity.copyAccount')}><Button type="button" size="small" variant="text" color="default" iconOnly disabled={!account}
+                            aria-label={localize('accountIdentity.copyAccount')} onClick={() => void handleCopyAccount()}>
+                            <Outlined.Copy aria-hidden />
+                        </Button></Tooltip>} />
+                    <p className="text-caption text-text-3">{localize('accountIdentity.accountPurpose')}</p>
                 </div>
             </section>
 

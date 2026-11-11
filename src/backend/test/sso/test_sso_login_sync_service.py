@@ -140,6 +140,11 @@ def patches(monkeypatch):
         AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
+        m.UserService,
+        "apersist_profile_update",
+        AsyncMock(side_effect=lambda user, **_kwargs: user),
+    )
+    monkeypatch.setattr(
         m.UserDao,
         "aget_token_version",
         AsyncMock(return_value=0),
@@ -769,8 +774,9 @@ class TestExistingUserAttrUpdate:
 
         await LoginSyncService.execute(_payload(name="NewName", email="new@x.com"), request_ip="1.2.3.4")
 
-        m.UserDao.aupdate_user.assert_awaited_once()
-        updated_user = m.UserDao.aupdate_user.await_args.args[0]
+        m.UserService.apersist_profile_update.assert_awaited_once()
+        assert m.UserService.apersist_profile_update.await_args.kwargs == {"from_sync": True}
+        updated_user = m.UserService.apersist_profile_update.await_args.args[0]
         assert updated_user.user_name == "NewName"
         assert updated_user.email == "new@x.com"
 
@@ -792,8 +798,9 @@ class TestExistingUserAttrUpdate:
             request_ip="1.2.3.4",
         )
 
-        m.UserDao.aupdate_user.assert_awaited_once()
-        updated_user = m.UserDao.aupdate_user.await_args.args[0]
+        m.UserService.apersist_profile_update.assert_awaited_once()
+        assert m.UserService.apersist_profile_update.await_args.kwargs == {"from_sync": True}
+        updated_user = m.UserService.apersist_profile_update.await_args.args[0]
         assert updated_user.update_time is not None
 
 

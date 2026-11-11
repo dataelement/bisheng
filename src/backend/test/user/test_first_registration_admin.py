@@ -12,6 +12,7 @@ from bisheng.core.config.settings import Settings
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.user.domain.models.user import User, UserCreate
 from bisheng.user.domain.services import user as users
+from bisheng.user.domain.services.account_identity_service import AccountIdentityService
 
 
 def test_retired_admin_yaml_is_ignored_without_disabling_unknown_key_validation(tmp_path, monkeypatch):
@@ -85,17 +86,14 @@ async def test_registration_preserves_first_admin_and_subsequent_default_role(mo
     monkeypatch.setattr(
         users, "settings", SimpleNamespace(get_from_db=lambda _: False, multi_tenant=SimpleNamespace(enabled=False))
     )
-    monkeypatch.setattr(users.UserDao, "aget_by_external_id", AsyncMock(return_value=None))
-    monkeypatch.setattr(users.UserDao, "aget_user", AsyncMock(return_value=object() if admin_exists else None))
 
-    async def persist(row):
+    async def persist(row, *, bootstrap):
+        assert bootstrap is True
         row.user_id = 2 if admin_exists else 1
         return row
 
-    admin_create = AsyncMock(side_effect=persist)
-    default_create = AsyncMock(side_effect=persist)
-    monkeypatch.setattr(users.UserDao, "add_user_and_admin_role", admin_create)
-    monkeypatch.setattr(users.UserDao, "add_user_and_default_role", default_create)
+    create = AsyncMock(side_effect=persist)
+    monkeypatch.setattr(AccountIdentityService, "acreate_local", create)
     sync = AsyncMock()
     monkeypatch.setattr(users.LegacyRBACSyncService, "sync_user_auth_created", sync)
     monkeypatch.setattr(users.UserService, "decrypt_md5_password_strict", lambda _: "encrypted-password-hash")
@@ -111,5 +109,4 @@ async def test_registration_preserves_first_admin_and_subsequent_default_role(mo
     )
     assert row.external_id == "person-id"
     sync.assert_awaited_once_with(row.user_id, [DefaultRole if admin_exists else AdminRole])
-    assert admin_create.await_count == (0 if admin_exists else 1)
-    assert default_create.await_count == (1 if admin_exists else 0)
+    create.assert_awaited_once()
