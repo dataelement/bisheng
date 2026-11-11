@@ -46,6 +46,7 @@ from ..utils import (
     wrapper_bisheng_model_limit_check_async,
 )
 from .base import BishengBase
+from .response_validation import validate_astream, validate_result, validate_stream
 
 
 def _get_user_kwargs(model_config: dict) -> dict:
@@ -330,9 +331,12 @@ class BishengLLM(BishengBase, BaseChatModel):
             # to dispatch streaming models to `_stream`). Because we delegate to the inner
             # model directly, aggregate the stream here — this also keeps `on_llm_new_token`
             # callbacks firing so workflow / chat UI streaming keeps working.
-            ret = generate_from_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
+            ret = generate_from_stream(
+                validate_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
+            )
         else:
             ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+        validate_result(ret)
         return normalize_reasoning_content(ret)
 
     @wrapper_bisheng_model_limit_check_async
@@ -348,9 +352,12 @@ class BishengLLM(BishengBase, BaseChatModel):
         if getattr(self.llm, "streaming", False):
             # See `_generate`: aggregate the inner stream so `on_llm_new_token` callbacks
             # keep firing (workflow / chat UI streaming) instead of returning a raw Stream.
-            ret = await agenerate_from_stream(self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs))
+            ret = await agenerate_from_stream(
+                validate_astream(self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs))
+            )
         else:
             ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+        validate_result(ret)
         return normalize_reasoning_content(ret)
 
     def _get_ls_params(self, stop: list[str] | None = None, **kwargs: Any) -> LangSmithParams:
@@ -379,14 +386,8 @@ class BishengLLM(BishengBase, BaseChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        received_chunk = False
-        for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
-            received_chunk = True
+        for one in validate_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs)):
             yield normalize_reasoning_content(one)
-        if not received_chunk:
-            # SDKs may silently consume a non-SSE HTTP 200 response. Raise inside
-            # the model boundary so LangChain's later aggregation cannot lose it.
-            raise ValueError("Model returned no stream chunks")
 
     @wrapper_bisheng_model_generator_async
     @failure_boundary("model_service", "llm", "invoke_model")
@@ -397,9 +398,5 @@ class BishengLLM(BishengBase, BaseChatModel):
         run_manager: AsyncCallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        received_chunk = False
-        async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
-            received_chunk = True
+        async for one in validate_astream(self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs)):
             yield normalize_reasoning_content(one)
-        if not received_chunk:
-            raise ValueError("Model returned no stream chunks")

@@ -68,6 +68,7 @@ jest.mock('lucide-react', () => ({
 }));
 
 jest.mock('~/components/ChatErrorCard', () => ({
+    isTransientErrorType: (type?: string) => ['rate_limit', 'network_timeout', 'service_unavailable'].includes(type ?? ''),
     ChatErrorCard: ({
         onRetry,
         onSwitchModel,
@@ -154,12 +155,12 @@ describe('TaskTurnPanel model rate-limit retry', () => {
         expect(onModelChange).toHaveBeenCalledWith('22', 'Available Model');
     });
 
-    it('does not change retry behavior for other task errors', () => {
+    it.each(['service_unavailable', 'network_timeout'])('offers retry for a recoverable %s task failure', async (errorType) => {
         mockGetLinsight.mockReturnValue({
             status: 'stoped',
             question: 'Analyze gold trend',
             taskError: 'service unavailable',
-            taskErrorInfo: { error_type: 'service_unavailable' },
+            taskErrorInfo: { error_type: errorType },
             tasks: [],
             sessionSteps: [],
             file_list: [],
@@ -169,6 +170,18 @@ describe('TaskTurnPanel model rate-limit retry', () => {
 
         renderToStaticMarkup(<TaskTurnPanel versionId="version-1" />);
 
+        expect(mockOnRetry).toBeDefined();
+        await mockOnRetry?.();
+        expect(mockContinueConversation).toHaveBeenCalledWith('version-1', 'Analyze gold trend');
+        expect(mockOnSwitchModel).toBeUndefined();
+    });
+
+    it.each(['content_filter', 'auth_error', 'quota_exhausted', 'unknown'])('does not offer a blind retry for %s', (errorType) => {
+        mockGetLinsight.mockReturnValue({
+            ...mockGetLinsight(),
+            taskErrorInfo: { error_type: errorType },
+        });
+        renderToStaticMarkup(<TaskTurnPanel versionId="version-1" />);
         expect(mockOnRetry).toBeUndefined();
         expect(mockOnSwitchModel).toBeUndefined();
     });

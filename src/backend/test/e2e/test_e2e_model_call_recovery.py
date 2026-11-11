@@ -136,14 +136,17 @@ class TestE2EModelCallRecovery:
         assert case["execution_id"] in str(switched)
 
     @pytest.mark.parametrize("entry", ["daily", "knowledge", "channel"])
-    async def test_ac46_history_keeps_only_user_fact_until_recovery_succeeds(
+    async def test_ac46_history_adds_one_answer_when_recovery_succeeds(
         self,
         entry,
         client,
         admin_token,
         cases,
     ):
-        """AC-37/AC-39/AC-50: a throttle writes no answer; success writes one."""
+        """Recovery adds one successful answer without duplicating the question.
+
+        Daily history may already contain the persisted rate-limit card.
+        """
         case = require_case(cases, f"{entry}_history")
         await configure_fake_provider(case)
         before = assert_resp_200(await client.get(case["history_path"], headers=auth_headers(admin_token)))

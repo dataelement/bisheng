@@ -9,6 +9,37 @@ const failure = { version: 1, failure_id: 'failure-one', category: 'object_stora
 const message = (): ChatMessage => ({ messageId: 'answer', parentMessageId: '', conversationId: 'chat', sender: 'assistant', text: 'Partial answer' });
 
 describe('daily failure history', () => {
+    it.each(['', 'Partial answer before throttling'])('restores a persisted rate-limit card and its original question after reopening: %s', async (text) => {
+        jest.mocked(http.get).mockResolvedValueOnce({ data: [
+            { message_id: 101, chat_id: 'chat', category: 'question', is_bot: false, message: { query: 'Original question' } },
+            {
+                message_id: 102,
+                chat_id: 'chat',
+                category: 'agent_answer',
+                is_bot: true,
+                message: { msg: text, events: text ? [{ type: 'text', content: text }] : [] },
+                extra: {
+                    error: true,
+                    error_code: 12046,
+                    error_type: 'rate_limit',
+                    execution_id: '101',
+                    attempt_id: 'attempt-1',
+                    recovery_subject_id: '101',
+                    model_id: 17,
+                    rate_limit_state: 'busy',
+                },
+            },
+        ] });
+
+        const messages = await getAgentMessages('chat');
+
+        expect(messages[1]).toMatchObject({
+            messageId: '102', parentMessageId: '101', text,
+            error: true, errorCode: 12046, errorType: 'rate_limit',
+            executionId: '101', attemptId: 'attempt-1', recoverySubjectId: '101', modelId: 17, rateLimitState: 'busy',
+        });
+        expect(messages[1].events).toEqual(text ? [{ type: 'text', content: text }] : []);
+    });
     it('links each restored answer to its own question for retry, retaining attachments', async () => {
         const files = [{ file_id: 'file-1', filename: 'notes.txt', filepath: 'notes.txt' }];
         jest.mocked(http.get).mockResolvedValueOnce({ data: [

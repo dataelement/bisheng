@@ -129,19 +129,24 @@ def build_daily_model_call_context(
     )
 
 
+def build_daily_rate_limit_metadata(observation: RateLimitObservation, failure_info: dict | None = None) -> dict:
+    """Share the public recovery identity between the live stream and history."""
+    return {
+        "execution_id": observation.execution_id,
+        "attempt_id": observation.attempt_id,
+        "error_type": observation.error_type,
+        "rate_limit_state": observation.rate_limit_state.value if observation.rate_limit_state is not None else None,
+        "busy_until": observation.busy_until.isoformat() if observation.busy_until is not None else None,
+        "status_version": observation.status_version,
+        "recovery_subject_id": observation.subject_id,
+        "model_id": observation.model_id,
+        **({"failure_info": failure_info} if failure_info else {}),
+    }
+
+
 def build_daily_rate_limit_sse(observation: RateLimitObservation, failure_info: dict | None = None) -> str:
     """Expose only the stable recovery contract, never provider diagnostics."""
-    return LLMRateLimitError(
-        execution_id=observation.execution_id,
-        attempt_id=observation.attempt_id,
-        error_type=observation.error_type,
-        rate_limit_state=(observation.rate_limit_state.value if observation.rate_limit_state is not None else None),
-        busy_until=observation.busy_until.isoformat() if observation.busy_until is not None else None,
-        status_version=observation.status_version,
-        recovery_subject_id=observation.subject_id,
-        model_id=observation.model_id,
-        **({"failure_info": failure_info} if failure_info else {}),
-    ).to_sse_event_instance_str()
+    return LLMRateLimitError(**build_daily_rate_limit_metadata(observation, failure_info)).to_sse_event_instance_str()
 
 
 @dataclass(frozen=True, slots=True)
@@ -2350,23 +2355,20 @@ async def _agent_stream_chat_completion(
                 rate_limit_observation = None
             if rate_limit_observation is not None:
                 error_msg = ""
-                yield build_daily_rate_limit_sse(rate_limit_observation, failure_info)
+                error_metadata = {
+                    **build_daily_rate_limit_metadata(rate_limit_observation, failure_info),
+                    "error_code": LLMRateLimitError.Code,
+                }
             else:
                 error_msg = FailureContextAdapter.safe_detail(exc)
-            # The classified type + the raw provider text ride along in `data`
-            # so the bubble can render the same title/explanation/"view details"
-            # card task mode uses, instead of a bare "服务器错误".
-            error_type = label_error(unwrap(exc))
-            # `unknown` is deliberately renamed for this surface: the shared card's
-            # generic copy talks about a "task", which reads wrong on a chat turn.
-            classified = {
-                "error_type": "chat_unknown" if error_type == ErrorType.UNKNOWN else error_type.value,
-                **({"failure_info": failure_info} if failure_info else {}),
-            }
-            error_metadata = classified
-            # Upstream LLM throttling (RPM/TPM/burst) → friendly "service busy"
-            # copy instead of dumping the raw provider 500 on the user.
-            if rate_limit_observation is None:
+                error_type = label_error(unwrap(exc))
+                # `unknown` is renamed because the shared card's generic copy
+                # talks about a task rather than a daily chat turn.
+                classified = {
+                    "error_type": "chat_unknown" if error_type == ErrorType.UNKNOWN else error_type.value,
+                    **({"failure_info": failure_info} if failure_info else {}),
+                }
+                error_metadata = classified
                 if error_type == ErrorType.RATE_LIMIT:
                     yield LLMRateLimitError().to_sse_event_instance_str(data=classified)
                 else:
@@ -2384,11 +2386,6 @@ async def _agent_stream_chat_completion(
         # Finalise any dangling thinking / tool events (e.g. stream interrupted
         # mid-reasoning or mid-tool).
         finalise_dangling_events()
-
-        # A provider throttle is a page-local status, not a bot answer. The
-        # original question remains available for an explicit recovery call.
-        if rate_limit_observation is not None:
-            return
 
         if not error_flag:
             try:
@@ -2425,6 +2422,11 @@ async def _agent_stream_chat_completion(
             yield f"data: {json.dumps({'final': True, 'conversation': {'conversationId': conversation_id}})}\n\n"
             return
 
+        # Save first so navigating away as soon as the error appears cannot
+        # discard the card before the conversation history has a durable row.
+        if rate_limit_observation is not None:
+            yield build_daily_rate_limit_sse(rate_limit_observation, failure_info)
+
         yield _sse_resp(
             "agent_answer",
             "end",
@@ -2447,6 +2449,10 @@ async def _agent_stream_chat_completion(
             },
         }
         yield f"data: {json.dumps(final_payload, ensure_ascii=False)}\n\n"
+
+        # A persisted throttle card must not trigger another model call for a title.
+        if rate_limit_observation is not None:
+            return
 
         # Title generation runs in the background (fire-and-forget) so it survives
         # the frontend closing this stream on `final`. The client then reads the

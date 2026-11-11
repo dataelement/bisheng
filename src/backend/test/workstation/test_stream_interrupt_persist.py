@@ -197,7 +197,14 @@ async def test_completed_stream_persists_exactly_once(stream_env):
     assert any('"final": true' in c for c in chunks)
 
 
-async def test_rate_limit_does_not_persist_a_bot_answer(stream_env):
+@pytest.mark.parametrize("answer_chunks", [[], ["Partial answer", " before throttling"]])
+@pytest.mark.parametrize("leave_on_error", [False, True])
+async def test_rate_limit_persists_history_card_with_recovery_identity_and_partial_answer(
+    stream_env, answer_chunks, leave_on_error
+):
+    from bisheng.workstation.domain.services.chat_helpers import _format_new_message
+
+    stream_env.state["chunks"] = answer_chunks
     stream_env.state["after"] = RuntimeError("provider throttled")
     stream_env.state["observation"] = RateLimitObservation(
         execution_id="101",
@@ -210,10 +217,37 @@ async def test_rate_limit_does_not_persist_a_bot_answer(stream_env):
         model_id=17,
     )
 
-    chunks = await _drain(await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock()))
+    response = await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock())
+    chunks = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk)
+        if leave_on_error and chunk.startswith("event: error"):
+            await response.body_iterator.aclose()
+            break
 
-    assert _answer_rows(stream_env.inserted) == []
-    assert any("rate_limit" in chunk for chunk in chunks)
+    rows = _answer_rows(stream_env.inserted)
+    assert len(rows) == 1
+    history = _format_new_message(rows[0])
+    assert history["message"]["msg"] == "".join(answer_chunks)
+    assert history["extra"] == {
+        "error": True,
+        "error_msg": "Request failed.",
+        "error_code": 12046,
+        "execution_id": "101",
+        "attempt_id": "attempt-1",
+        "error_type": "rate_limit",
+        "rate_limit_state": "busy",
+        "busy_until": None,
+        "status_version": 2,
+        "recovery_subject_id": "101",
+        "model_id": 17,
+    }
+    error = next(json.loads(chunk.split("data: ", 1)[1]) for chunk in chunks if chunk.startswith("event: error"))
+    assert error["status_code"] == 12046
+    assert all(history["extra"][key] == value for key, value in error["data"].items() if key != "exception")
+    assert "provider throttled" not in json.dumps(history)
+    if not leave_on_error:
+        assert any('"final": true' in chunk for chunk in chunks)
 
 
 async def test_daily_recovery_reinvokes_agent_without_checkpoint(stream_env, monkeypatch):

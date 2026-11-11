@@ -26,7 +26,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { NotificationSeverity } from '~/common';
-import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { ChatErrorCard, isTransientErrorType } from '~/components/ChatErrorCard';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
 import { getRecoveryModelCandidates } from '~/components/modelRateLimitRecoveryDialogHelpers';
@@ -273,7 +273,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                     fallbackMessage={linsight.taskError}
                     onRetry={
                         readOnly
-                        || linsight.taskErrorInfo?.error_type !== 'rate_limit'
+                        || !isTransientErrorType(linsight.taskErrorInfo?.error_type)
                         || !linsight.question
                             ? undefined
                             : handleRetry
