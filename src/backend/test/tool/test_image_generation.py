@@ -280,6 +280,7 @@ async def test_executor_uses_latest_config_and_authorized_tenant_storage(upstrea
     uploaded = storage.put_object_sync.call_args.kwargs
     assert uploaded["object_name"].startswith("tenant_acme/chat/42/")
     assert uploaded["file"] == upstream["png"]
+    storage.get_share_link_sync.assert_called_once_with(uploaded["object_name"])
     permission.side_effect = PermissionError("denied")
     with pytest.raises(PermissionError):
         await instance._arun(query="forest", config={})

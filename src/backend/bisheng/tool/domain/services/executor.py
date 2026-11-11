@@ -567,7 +567,7 @@ class ToolExecutor(BaseTool):
             )
             storage = get_minio_storage_sync()
             storage.put_object_sync(object_name=object_name, file=data, content_type=content_type)
-            return storage.get_share_link_sync(object_name, clear_host=False)
+            return storage.get_share_link_sync(object_name)
 
         return upload
 
