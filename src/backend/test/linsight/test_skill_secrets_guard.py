@@ -1,4 +1,4 @@
-"""F009: ``skills/<name>/secrets/`` is readable by executor code only.
+"""F013: ``skills/<name>/secrets/`` is readable by executor code only.
 
 E2E on 114 (2026-11-11) showed that whatever read_file returns is stored as step
 output, which the UI and share links render (``execute-task-detail`` bypasses the

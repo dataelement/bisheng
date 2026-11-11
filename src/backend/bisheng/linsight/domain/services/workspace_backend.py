@@ -131,7 +131,7 @@ SKILLS_DIR = "skills"
 # without pinning the whole sentence.
 SKILLS_READONLY_ERROR_PREFIX = "[read-only]"
 
-# F009: a skill keeps credentials (e.g. a business-database password) under
+# F013: a skill keeps credentials (e.g. a business-database password) under
 # ``skills/<name>/secrets/``. The workspace file tools never return that content:
 # whatever read_file / grep return is stored as step output, which the UI and share
 # links render. Code in bisheng_code_interpreter still reads it from the local disk

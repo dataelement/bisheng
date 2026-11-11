@@ -14,7 +14,7 @@
 |---|---|---|
 | 2026-09 | v1（v2.6 定位） | 初版，已 approve，未实现 |
 | 2026-11-10 | v2（v3.1 定位） | 按 3.1 代码逐条重审，见下文"v1 → v2 变更" |
-| 2026-11-11 | v2.1（已实现） | F009 实现、114 E2E 与 code review 后的回写，见文末"附录 B：实现与验证回写" |
+| 2026-11-11 | v2.1（已实现） | F013 实现、114 E2E 与 code review 后的回写，见文末"附录 B：实现与验证回写" |
 
 **v1 → v2 变更**（只列改变结论的条目，逐条核对依据见附录 A）：
 
@@ -294,7 +294,7 @@
 
 ## 附录 B：实现与验证回写（2026-11-11）
 
-**实现**：分支 `feat/3.1.0-beta1-009-taskmode-data-analyst`，spec 见 `features/v3.1.0-beta1/009-taskmode-data-analyst/spec.md`，E2E 记录见同目录 `e2e-report.md`。
+**实现**：分支 `feat/3.1.0-beta1-013-taskmode-data-analyst`，spec 见 `features/v3.1.0-beta1/013-taskmode-data-analyst/spec.md`，E2E 记录见同目录 `e2e-report.md`。
 
 **与本方案正文不同的实现决定**：
 

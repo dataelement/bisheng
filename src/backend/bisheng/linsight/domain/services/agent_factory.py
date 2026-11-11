@@ -98,7 +98,7 @@ __KB_RESEARCH_LINE__
 __CITATION_HANDOFF_LINE__
 请全程使用与任务描述一致的语言（默认简体中文）——这**包括你的思考与推理过程（thinking）**、调研旁白与最终回传，绝不允许“用英文思考、再用中文回传”。"""
 
-# F009: the data-analyst subagent (NL2SQL). Assembled IFF bisheng_code_interpreter
+# F013: the data-analyst subagent (NL2SQL). Assembled IFF bisheng_code_interpreter
 # is bound — the executor is the only way it can reach a database. Connection
 # details live in a skill's SKILL.md; the MAIN graph (which sees the mounted skill
 # list) names that path in the task description, so this subagent mounts no skills
@@ -471,7 +471,7 @@ def _build_linsight_system_prompt(
 ) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
 
-    ``has_data_analyst`` (F009) adds the data-analyst delegation lines IFF that
+    ``has_data_analyst`` (F013) adds the data-analyst delegation lines IFF that
     subagent is assembled, with the unattended NEED_CLARIFICATION variant when no
     ask_user is bound.
 
@@ -1303,7 +1303,7 @@ def _data_analyst_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
 
 
 def _build_data_analyst_subagent(tools: Sequence[BaseTool]) -> dict | None:
-    """F009: the read-only data-analyst subagent spec, or None without an executor.
+    """F013: the read-only data-analyst subagent spec, or None without an executor.
 
     Same safety basis as the researcher: explicit ``tools`` (never ask_user), no
     ``model`` / ``permissions`` / ``interrupt_on`` keys, so it has no interrupt
@@ -1753,7 +1753,7 @@ async def create_linsight_agent(
         ],
     )
     subagents = [researcher]
-    # F009: the data-analyst, IFF a code interpreter is bound. Same stack and the
+    # F013: the data-analyst, IFF a code interpreter is bound. Same stack and the
     # same resilience instance as the researcher (one shared degrade allowance,
     # which the main graph's subagent-overflow handler also draws from); no
     # citation layers — query results carry no source handles.

@@ -1,6 +1,6 @@
-"""F009: data-analyst subagent (NL2SQL) and ask-when-necessary clarification.
+"""F013: data-analyst subagent (NL2SQL) and ask-when-necessary clarification.
 
-Spec: features/v3.1.0-beta1/009-taskmode-data-analyst/spec.md. These tests pin the
+Spec: features/v3.1.0-beta1/013-taskmode-data-analyst/spec.md. These tests pin the
 deterministic side (assembly, tools, middleware order, prompt text); whether the
 model asks sparingly (AC-07b) is observed end to end, not here.
 """
