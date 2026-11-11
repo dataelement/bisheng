@@ -1,5 +1,7 @@
 # BiSheng 管理租户问题修复交接
 
+术语说明：H为用户主属租户，M为当前管理目标租户；其他符号见[统一术语表](../../features/v3.1.0-beta1/009-managed-tenant-consistency/terminology.md)。
+
 > 2026-11-11实施状态更新：用户已确认最小范围；当前工作树已落地零新增业务表/四列的业务修复。本文原调查/方案叙述保留作历史依据，当前范围与接口以[design](../../features/v3.1.0-beta1/009-managed-tenant-consistency/design.md)及[scope-revision](../../features/v3.1.0-beta1/009-managed-tenant-consistency/scope-revision.md)为准。新增86项回归通过；真实集成、前端完整类型检查及发布线同步尚未完成，详见[verification](../../features/v3.1.0-beta1/009-managed-tenant-consistency/verification.md)。未提交、推送、合并或部署，不把原完整40条AC全标完成。
 
 交接日期：2026-11-10。接收方：负责修复开发与回归验收的 agent。

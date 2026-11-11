@@ -1,5 +1,7 @@
 # Code Review Report
 
+术语说明：本文技术符号和英文状态值统一见[术语与缩写说明](terminology.md)；H为用户主属租户，M为当前管理目标租户。业务阅读可直接参阅使用中文全称的[影响范围与测试重点](../../../docs/reviews/managed-tenant-impact-test-focus-20261111.md)。
+
 ## 最新集成复核（2026-11-11）
 
 当前结论：**PASS_WITH_WARNINGS（本地代码/发布线集成）**，非上线验收结论。用户在得知待验项后明确要求合并；按该授权合并发布线。原Compatibility HIGH已由实际fetch df927a7f6e、逐段解决13文件冲突、F118兼容回归及单head测试关闭。此前Test Coverage HIGH保留为发布前真实环境待验，不宣称E2E通过；SDD Guide §6将有外部依赖的双DB/中间件/Playwright验收归集中回归，本地不伪造环境。

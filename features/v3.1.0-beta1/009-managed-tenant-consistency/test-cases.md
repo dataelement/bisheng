@@ -1,5 +1,7 @@
 # 管理租户最小修复测试用例（QA参考）
 
+术语说明：本文技术符号和英文状态值统一见[术语与缩写说明](terminology.md)；H为用户主属租户，M为当前管理目标租户。业务阅读可直接参阅使用中文全称的[影响范围与测试重点](../../../docs/reviews/managed-tenant-impact-test-focus-20261111.md)。
+
 ## 依据与范围
 
 - 原spec与2026-11-10已确认scope-revision共同定义预期；design同日获用户确认。

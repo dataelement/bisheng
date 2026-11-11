@@ -1,5 +1,7 @@
 # F009 最小修复范围调整（已确认）
 
+术语说明：本文技术符号和英文状态值统一见[术语与缩写说明](terminology.md)；H为用户主属租户，M为当前管理目标租户。业务阅读可直接参阅使用中文全称的[影响范围与测试重点](../../../docs/reviews/managed-tenant-impact-test-focus-20261111.md)。
+
 日期：2026-11-10。用户已确认的原spec有40条AC；用户随后未确认七表设计，要求重新评审并按最小改动/最小影响修复租户缺陷。本表是**候选交付范围调整**，不是将原AC删除或标记已完成。2026-11-10用户明确确认“采用最小修复范围，继续开发”，本表成为本批验收边界。
 
 当前[design.md](design.md)取代七表方案作为候选：**零新增业务表、三个既有表共四列、保留原API必填参数**。四列分别为Flow.creation_state、GptsToolsType.creation_state、Knowledge.copy_source_id、Knowledge.copy_target_id；后者只定位复制关系，不提供逐项重放账本。
