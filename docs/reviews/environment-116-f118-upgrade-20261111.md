@@ -281,7 +281,7 @@ tenant1 在 `PhysicalInventoryReader._index → _physical_batch` 报 `migration_
 
 `file-hierarchy-plan.json` 保存112条原诊断分类，规范化版SHA256 `7a464bb65c9bcc185d12d67db9f52791ec8a616974a5609b51869fac4cc16a34`；旧版本单独保留。当前原112条异常中还剩111条未修复（103缺模式、8有父边漂移）。tenant25的问题仍在这8条范围内，不能将97402的修复称为tenant25已通过。
 
-### 已准备但未执行：143 个无 SQL 文件库的索引绑定切换
+### 曾准备、后撤回且未执行：143 个库的索引绑定切换
 
 可回退方案：只修改这143个库的 `index_name/collection_name`，切到逐库独立的新标识 `f118_k{knowledge_id}_20261111`；不在维护脚本中创建索引，不调用embedding，也不修改原ES/Milvus集合或其中任何数据。新标识既未被任何knowledge绑定，也已用原原生客户端确认不存在物理索引。后续有合法模型并上传文件时使用新的索引，原索引继续按旧名称保留。
 
@@ -292,3 +292,14 @@ tenant1 在 `PhysicalInventoryReader._index → _physical_batch` 报 `migration_
 `bisheng116_legacy_index_plan.py --prepare` 未执行任何SQL或物理索引修改；实际切换入口需要独立显式参数，并将再次精确核对原行、确认143个库仍无文件、尚无frozen run及新名称不存在。该步骤只解决旧索引绑定阻塞，其他已记录的文件/授权/跨租户来源/孤儿元数据问题仍需处理，不能承诺切换后整套升级立即成功。
 
 用户随后询问“索引标识是什么意思？”，这不是切换授权。已解释为 knowledge.index_name / collection_name 对应的 ES 索引名和 Milvus 集合名，改变它们会改变知识库查询的数据位置；旧索引实体及数据保留，143库的新绑定方案继续保持未执行。
+
+
+## 用户指出原技术方案约束后的纠正：撤回索引切换建议
+
+用户追问“为什么需要修改这个？技术方案里不是说不修改milvus和es的数据吗？”。重新核对已确认合同：spec AC-57要求保留索引位置；design §7.2（第525行）明确列出原 collection_name、index_name 不改，第528行要求已有索引不改物理位置，并证明原 file/document 标识能正确解读。
+
+此前提出的“修改SQL绑定、保留物理索引”虽不写ES/Milvus数据，但会断开库与原索引的关联，仍偏离了已确认的升级方案，不能当作本次升级的默认修复。**现已撤回该建议；143个库的索引绑定从未执行切换，所有旧index_name/collection_name和物理索引保持原样。** 用户关于术语和技术方案的追问不是授权。
+
+当前已证实的根因是预检 `_milvus_compatible/_es_compatible` 对原 schema 的要求：缺少或类型不符的 document_id / knowledge_id 被拒绝；样例旧集合只有 source/text/pk/vector。这个事实说明“原结构未满足当前校验”，不等于F118必须更换索引，也尚不能断言校验应无条件放宽。后续须沿保留原绑定的合同核查旧结构如何解释、是否存在可证明的兼容映射，或更早版本的索引转换前置条件未满足；不能把切换空索引或强制兼容标志当作迁移成功。
+
+原准备方案和备份作为历史证据保留，新增 decision.json 标记withdrawn，准备脚本的apply入口已禁用以免误执行。不修改spec/design以追认该偏差，不改写旧索引，不跳过物理完整性检查。42条model清空及97402仅level计数修正是此前已执行事项，均与索引绑定切换无关。
