@@ -5,7 +5,12 @@ from dataclasses import asdict, replace
 
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
 from bisheng.app_publish.domain.services.reference_extractor import extract_app_references
-from bisheng.assistant.domain.services.reference_extractor import extract_assistant_references
+from bisheng.assistant.domain.services.reference_extractor import (
+    LEGACY_NAME_PREFIX,
+    extract_assistant_references,
+    extract_legacy_assistant_knowledge_references,
+    legacy_assistant_name_version,
+)
 from bisheng.channel.domain.services.reference_extractor import extract_channel_sync_references
 from bisheng.knowledge.application.unification_reference_state import (
     PHYSICAL_ROOT_ABSENT,
@@ -55,7 +60,10 @@ class ReferenceAfterSources:
                 blocked("source_retired_after_freeze")
             lifecycle = root.status, root.is_delete
             configuration = {"model_name": root.model_name, "links": links}
-            references = extract_assistant_references(
+            legacy = header.extractor_version.startswith(LEGACY_NAME_PREFIX)
+            if legacy and legacy_assistant_name_version(root.model_name) != header.extractor_version:
+                blocked("legacy_assistant_name_changed")
+            references = (extract_legacy_assistant_knowledge_references if legacy else extract_assistant_references)(
                 model_name=root.model_name,
                 knowledge_ids=tuple(child.knowledge_id for child in children if child.knowledge_id is not None),
             )

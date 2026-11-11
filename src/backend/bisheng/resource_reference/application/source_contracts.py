@@ -78,6 +78,7 @@ class AuthorizedSourceSnapshot:
     extractor_version: str
     configuration_digest: str
     payload_json: str = field(repr=False)
+    invalid_reason: str | None = None
 
     def __post_init__(self):
         if not isinstance(self.source_key, SourceKey):
@@ -86,6 +87,8 @@ class AuthorizedSourceSnapshot:
             raise TypeError("source references must be a tuple")
         object.__setattr__(self, "references", normalize_references(self.references))
         _text(self.extractor_version, "extractor version", 128)
+        if self.invalid_reason is not None:
+            _text(self.invalid_reason, "source invalid reason", 128)
         if self.configuration_digest != payload_digest(self.payload_json):
             raise ValueError("source configuration digest does not match its immutable payload")
 

@@ -542,6 +542,7 @@ class UnificationInventoryApplication:
             await self._physical_batch(pages, tenant, resource_requests, object_requests, session=session)
         header, refs = None, []
         creators = set()
+        source_headers = {}
         batch = []
 
         def finish_source():
@@ -552,6 +553,14 @@ class UnificationInventoryApplication:
 
         async def consume(items):
             def retained(row):
+                from bisheng.knowledge.application.unification_structural_retention import (
+                    retained_invalid_assistant_creator,
+                )
+
+                if type(row) is RootInventoryRecord and retained_invalid_assistant_creator(
+                    row, source_headers.get(row.root_key)
+                ):
+                    return True
                 return (
                     type(row) is RootInventoryRecord
                     and row.root_key.source_type.value == "knowledge"
@@ -584,6 +593,11 @@ class UnificationInventoryApplication:
                 await pages.add("sources", tenant, row)
 
         async for row in source_inventory.aiter_tenant_source_records(session, **identity, context=context):
+            if type(row) is SourceInventoryRecord:
+                from bisheng.resource_reference.application.contracts import SourceRootKey
+
+                key = row.source_key
+                source_headers[SourceRootKey(key.tenant_id, key.source_type, key.source_id)] = row
             if type(row) is ReferenceInventoryRecord:
                 if header is None or row.source_key != header.source_key:
                     _blocked("source_header_missing")

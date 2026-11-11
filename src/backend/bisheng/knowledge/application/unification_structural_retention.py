@@ -16,6 +16,28 @@ FILE_RETENTION = "stranded_file_retention"
 RETENTIONS = frozenset({CREATOR_RETENTION, FILE_RETENTION})
 
 
+def retained_invalid_assistant_creator(root, source):
+    """Bind the approved invalid-name source to its unchanged original owner."""
+    from bisheng.assistant.domain.services.reference_extractor import LEGACY_NAME_PREFIX
+    from bisheng.knowledge.application.unification_sources import RootInventoryRecord, SourceInventoryRecord
+    from bisheng.resource_reference.application.contracts import SourceRootKey
+
+    return (
+        type(root) is RootInventoryRecord
+        and type(source) is SourceInventoryRecord
+        and root.root_key.source_type.value == "assistant"
+        and source.source_key.source_version == "current"
+        and root.root_key
+        == SourceRootKey(source.source_key.tenant_id, source.source_key.source_type, source.source_key.source_id)
+        and type(root.creator_id) is int
+        and root.creator_id > 0
+        and root.retained_version_count == 1
+        and re.fullmatch(re.escape(LEGACY_NAME_PREFIX) + r"[0-9a-f]{32}", source.extractor_version) is not None
+        and (root.configuration_digest, root.business_revision_digest, root.lifecycle)
+        == (source.configuration_digest, source.business_revision_digest, source.lifecycle)
+    )
+
+
 def blocked(reason):
     raise KnowledgeOperationPlanConflictError(reason="structural_retention_" + reason)
 
@@ -110,15 +132,25 @@ class StructuralRetentionInventoryVerifier:
         self.proofs = {tag: {} for tag in RETENTIONS}
         self.permissions, self.fga = Counter(), set()
         self.sources = []
+        self.source_roots, self.source_headers = {}, {}
         self.file_reference_targets = set()
 
     def observe_source(self, record):
-        from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord, RootInventoryRecord
+        from bisheng.knowledge.application.unification_sources import (
+            ReferenceInventoryRecord,
+            RootInventoryRecord,
+            SourceInventoryRecord,
+        )
+        from bisheng.resource_reference.application.contracts import SourceRootKey
 
         if type(record) is ReferenceInventoryRecord and record.target.target_type.value == "knowledge_file":
             self.file_reference_targets.add(int(record.target.target_id))
         if type(record) is RootInventoryRecord and record.creator_id is not None:
             self.sources.append((record.root_key, record.creator_id))
+            self.source_roots[record.root_key] = record
+        if type(record) is SourceInventoryRecord:
+            key = record.source_key
+            self.source_headers[SourceRootKey(key.tenant_id, key.source_type, key.source_id)] = record
 
     def observe(self, *, kind, section, tenant_id, record):
         tag, value = record.record_type, record.data
@@ -170,14 +202,29 @@ class StructuralRetentionInventoryVerifier:
                 blocked("creator_proof_changed")
             explained_creators.add((key[0], resource["user_id"]))
         missing_creators = {key for key, value in self.creators.items() if value["exists"] is False}
+        invalid_assistants = {
+            key
+            for key, root in self.source_roots.items()
+            if retained_invalid_assistant_creator(root, self.source_headers.get(key))
+        }
+        explained_creators.update(
+            (key.tenant_id, self.source_roots[key].creator_id)
+            for key in invalid_assistants
+            if (key.tenant_id, self.source_roots[key].creator_id) in missing_creators
+        )
         if missing_creators != explained_creators:
             blocked("unexplained_missing_creator")
         for source, creator in self.sources:
-            if (source.tenant_id, creator) in missing_creators and (
-                source.source_type.value != "knowledge"
-                or not source.source_id.isdecimal()
-                or (source.tenant_id, int(source.source_id)) not in self.proofs[CREATOR_RETENTION]
-                or self.proofs[CREATOR_RETENTION][source.tenant_id, int(source.source_id)]["creator_user_id"] != creator
+            if (
+                (source.tenant_id, creator) in missing_creators
+                and source not in invalid_assistants
+                and (
+                    source.source_type.value != "knowledge"
+                    or not source.source_id.isdecimal()
+                    or (source.tenant_id, int(source.source_id)) not in self.proofs[CREATOR_RETENTION]
+                    or self.proofs[CREATOR_RETENTION][source.tenant_id, int(source.source_id)]["creator_user_id"]
+                    != creator
+                )
             ):
                 blocked("missing_creator_borrowed_by_other_source")
         if self.file_reference_targets & {key[1] for key in self.proofs[FILE_RETENTION]}:

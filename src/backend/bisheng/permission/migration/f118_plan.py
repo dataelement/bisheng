@@ -643,24 +643,37 @@ def _grants(resource, by_model, scopes, sources_by_grant):
     result = []
     for grant in resource.grants:
         if grant.model_key not in by_model:
-            _blocked("grant_model_missing")
-        model = by_model[grant.model_key]
-        snapshot = GrantModelSnapshot(
-            model.model_key,
-            model.active,
-            model.effective_action_codes,
-            model.derived_level,
-            model.allow_same_level,
-            model.visibility_only_resource_types,
-            model.visibility_level,
-        )
-        snapshot = model_snapshot_for_target(
-            snapshot,
-            resource_type=resource.resource_type,
-            applicable_action_codes=tuple(
-                code for code in model.effective_action_codes if resource.resource_type in scopes[code]
-            ),
-        )
+            if (
+                grant.state != "INACTIVE"
+                or any(source.active for source in sources_by_grant.get(grant.id, ()))
+                or any(
+                    row.source.model_key == grant.model_key and row.source.state == "ACTIVE"
+                    for row in resource.visible_sources
+                )
+            ):
+                _blocked("grant_model_missing")
+            # An inactive Grant may outlive its deleted Catalog definition.
+            # This is an inert comparison value, never a Catalog model or a
+            # reconstructed action/tier. Keep its real key and retired audit.
+            snapshot = GrantModelSnapshot(grant.model_key, False, (), None, False)
+        else:
+            model = by_model[grant.model_key]
+            snapshot = GrantModelSnapshot(
+                model.model_key,
+                model.active,
+                model.effective_action_codes,
+                model.derived_level,
+                model.allow_same_level,
+                model.visibility_only_resource_types,
+                model.visibility_level,
+            )
+            snapshot = model_snapshot_for_target(
+                snapshot,
+                resource_type=resource.resource_type,
+                applicable_action_codes=tuple(
+                    code for code in model.effective_action_codes if resource.resource_type in scopes[code]
+                ),
+            )
         result.append(
             GrantSnapshot(
                 str(grant.id),
@@ -838,12 +851,12 @@ def _build_resource_retirement_plan(context, before, namespace_target=None):
             and not previous.model.action_codes
             and not previous.model.visibility_only
             and current.model.visibility_only
+            and previous.active
+            and previous.model.active
+            and any(source.active for source in previous.sources)
         )
         if any(
-            not previous.active
-            or not previous.model.active
-            or not any(source.active for source in previous.sources)
-            or (previous.model.model_key, previous.model.derived_level, previous.model.allow_same_level)
+            (previous.model.model_key, previous.model.derived_level, previous.model.allow_same_level)
             != (current.model.model_key, current.model.derived_level, current.model.allow_same_level)
             or current.model.action_codes
             for previous, current in scope_retention

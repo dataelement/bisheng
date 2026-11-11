@@ -146,6 +146,50 @@ def test_original_unmapped_resource_keeps_its_fixed_prechange_checksum():
     assert verify.verify_resource_retirement(plan=result, actual=before).complete
 
 
+@pytest.mark.parametrize(
+    "change", ["retain_empty", "retain_retired", "active_grant", "active_assignee", "active_visibility"]
+)
+def test_deleted_model_definition_is_only_retained_as_inert_grant_history(change):
+    catalog = legacy_catalog()
+    before = original_resource(catalog, retired=False)
+    grant = replace(before.grants[0], model_key="deleted-definition", state="INACTIVE")
+    assignee = next(row for row in before.assignees if row.state == "INACTIVE")
+    snapshot = plans.GrantSnapshot(
+        str(grant.id),
+        before.tenant_id,
+        before.resource_type,
+        before.resource_id,
+        plans.GrantModelSnapshot(grant.model_key, False, (), None, False),
+        False,
+        (assignee.to_source_record(),),
+        grant.version,
+    )
+    visible = VisibilityProjectionCompiler._compile_source(101, snapshot, assignee.to_source_record()).model_copy(
+        update={"state": "RETIRED"}
+    )
+    if change == "active_grant":
+        grant = replace(grant, state="ACTIVE")
+    if change == "active_assignee":
+        assignee = replace(assignee, state="ACTIVE")
+    if change == "active_visibility":
+        visible = visible.model_copy(update={"state": "ACTIVE"})
+    before = replace(
+        before,
+        grants=(grant,),
+        assignees=() if change == "retain_empty" else (assignee,),
+        visible_sources=() if change == "retain_empty" else (plans.PermissionVisibleSourceBaseline(99, visible),),
+    )
+    if change.startswith("active"):
+        with pytest.raises(PermissionMigrationBlockedError):
+            compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
+        return
+    result = compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
+    assert result.after.grants[0].model_key == "deleted-definition" and result.after.grants[0].state == "INACTIVE"
+    assert not result.visible_subjects and not result.visibility_deltas
+    assert all(row.model_key != "deleted-definition" for row in result.catalog_plan.after_models)
+    assert verify.verify_resource_retirement(plan=result, actual=result.after).complete
+
+
 @pytest.fixture
 async def original(storage, monkeypatch):
     catalog = legacy_catalog()
@@ -272,8 +316,8 @@ def test_existing_space_requires_original_active_proof_before_accepting_visibili
             ),
         )
     if inactive:
-        with pytest.raises(PermissionMigrationBlockedError):
-            compile_resource(mapped(before_catalog), before, before.mode)
+        plan = compile_resource(mapped(before_catalog), before, before.mode)
+        assert plan.after == before and not plan.visible_subjects and not plan.visibility_deltas
     else:
         plan = compile_resource(mapped(before_catalog), before, before.mode)
         assert plan.after == before and not plan.visibility_deltas

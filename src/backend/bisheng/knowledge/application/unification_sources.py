@@ -25,6 +25,8 @@ from bisheng.app_runtime.domain.constants import AppState
 from bisheng.assistant.domain.services.reference_extractor import (
     ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
     extract_assistant_references,
+    extract_legacy_assistant_knowledge_references,
+    legacy_assistant_name_version,
 )
 from bisheng.channel.domain.services.reference_extractor import (
     CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
@@ -244,6 +246,12 @@ class UnificationSourceInventory:
                 yield entry
                 continue
             key, extractor, configuration, references, lifecycle, origins, revision = entry
+            from bisheng.assistant.domain.services.reference_extractor import LEGACY_NAME_PREFIX
+
+            if extractor.startswith(LEGACY_NAME_PREFIX) and any(
+                row["target_type"] == "model" for row in snapshots[key][2]
+            ):
+                _blocked("legacy_assistant_existing_model_binding")
             frozen_index, states = await self.original_state.acapture(
                 session,
                 source_key=key,
@@ -393,10 +401,17 @@ class UnificationSourceInventory:
                     lifecycle = (row.status, row.is_delete)
                     configuration = {"model_name": row.model_name, "links": links}
                     extractor = ASSISTANT_REFERENCE_EXTRACTOR_VERSION
+                    legacy_version = legacy_assistant_name_version(row.model_name)
+                    if not deleted and legacy_version is not None:
+                        extractor = legacy_version
                     references = (
                         ()
                         if deleted
-                        else extract_assistant_references(
+                        else (
+                            extract_legacy_assistant_knowledge_references
+                            if legacy_version
+                            else extract_assistant_references
+                        )(
                             model_name=row.model_name,
                             knowledge_ids=tuple(
                                 child.knowledge_id for child in children[row.id] if child.knowledge_id is not None

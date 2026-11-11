@@ -359,3 +359,16 @@ tenant60首处通过后又定位到同类mode10954/app ac03e3f7a34c4a16a1d7bf2cd
 workflow-history-evidence另存完整636个版本（454已删历史+181旧标记+4757）和91个实际父流程，DDL/恢复SQL/manifest全SHA256验证；rows SHA256 57dbd84675a94003b98dfcea86334a4acbe50a2b89bf35c2418e51f3faa799cb。native M2/M3/M4、续跑及owner/载荷/状态漂移拒绝通过，最终现场发布/服务恢复结果继续另记。
 
 两项本地数据库依赖失败已在精确前置24b5f2153a独立worktree重复复现，失败类型和用例一致，日志bisheng116-history-baseline-failures.log；并非本增量新失败。
+
+
+## 旧名称助手及Root授权历史
+
+完整备份assistant-and-grant-history-evidence：244原旧名称助手（179未删除）、491关联、143缺定义Grant、1原INACTIVE assignee、0可见来源；DDL/恢复SQL/manifest全部宿主机SHA256通过，rows hash 641c0d4d8c1ed11bd841b7eeb52f0030ffc5cce7d4f80182ef471cecd9747640。179个活动记录中，部分名称无目标、deepseek-chat重名；即使某名称当前唯一，也不能据此证明原服务商身份，因此没有自动改绑。用户明确确认原配置保留失效且知识关联继续保护。
+
+实现独立原名称指纹提取器标记和源失效读态，不产生模型ID、缺失目标、复制模型或默认回退。179原助手的名称、提示词、状态、知识关联和归属均不修改；其中2782f21868cd4b63b584c41e99c03ae7及d524b5e5e4124f32aacb3d6bbdb52671原creator196不存在，按同一失效来源摘要闭合保留，不借知识空间创建者例外、不补用户/授权。有效普通来源缺创建者仍拒绝。详情增加源配置失效原因，执行/发布闸拒绝；修复选择明确模型ID后，正常绑定与保护同事务恢复。
+
+Root143缺当前模型定义的Grant全INACTIVE、唯一assignee也INACTIVE且无可见来源，原行保留为惰性历史，不重建PermissionModel/动作/tier。空间1479预检遇到的空动作历史Grant也是INACTIVE/零来源，不能要求其具备“原有效可见授权”的证明；兼容只允许前后零效果，原ACTIVE关系仍按3426同等级/同主体/完整证据核对。
+
+Root全局RoleFact在子租户快照中实际tenant_id=1，原编码器错把“物理事实owner”当作“关联分片owner”阻断；仅允许真实Root角色事实保留原owner，不改UserRole、角色或权限。修复助手详情invalid_scope枚举，防止已登记跨租户失效在DTO层变为500。
+
+扩展938 passed、3 failed/2 errors均在精确前置24b5f2153a复现同一5用例，为本地数据库/角色策略依赖，不是新增失败；日志bisheng116-assistant-regression-baseline.log。另117、41及91项定向验证通过。服务器v8已暂存加载10文件并核对全部原始hash，36个只读补丁挂载；Root全部5604来源/7424引用、tenant60来源链已通过只读检查。原完整预检仍停在惰性空间授权判定，未正式冻结/M3/M4，未恢复访问。

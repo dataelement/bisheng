@@ -329,11 +329,14 @@ class AssistantReferenceView(BaseModel):
     slot_key: str
     target_type: Literal["model", "knowledge_space", "knowledge_file"]
     target_id: str
-    state: Literal["valid", "deleting", "invalid_deleted", "invalid_legacy"]
+    state: Literal["valid", "deleting", "invalid_deleted", "invalid_legacy", "invalid_scope"]
     is_valid: bool
 
 
 class AssistantInfo(AssistantBase):
+    source_invalid_reason: str | None = Field(
+        default=None, description="Invalid saved configuration requiring explicit repair"
+    )
     tool_list: list[GptsToolsRead] = Field(default_factory=list, description="Tools for assistantsIDVertical")
     flow_list: list[FlowRead] = Field(default_factory=list, description="Skills for assistantsIDVertical")
     knowledge_list: list[KnowledgeRead] = Field(default_factory=list, description="The knowledge base uponIDVertical")

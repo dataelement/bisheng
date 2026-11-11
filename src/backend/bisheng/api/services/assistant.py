@@ -17,6 +17,8 @@ from bisheng.assistant.domain.repositories.assistant_repository import Assistant
 from bisheng.assistant.domain.services.reference_extractor import (
     ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
     extract_assistant_references,
+    extract_legacy_assistant_knowledge_references,
+    legacy_assistant_name_version,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -164,20 +166,42 @@ class AssistantService(BaseService, AssistantUtils):
 
             await authorize(candidate)
             old_links = await repository.alist_links(session, assistant_id)
-            old_references = cls._extract_references(candidate, old_links)
             source = cls._reference_source(candidate)
-            new_references = (
-                ()
-                if deleting
-                else cls._configuration_references(
-                    changes.get("model_name", candidate.model_name),
-                    (
-                        knowledge_ids
-                        if knowledge_ids is not None
-                        else [link.knowledge_id for link in old_links if link.knowledge_id]
-                    ),
-                )
+            from bisheng.assistant.domain.repositories.reference_source_repository import (
+                AssistantReferenceSourceRepository,
             )
+
+            original_model_name = candidate.model_name
+            legacy_version = legacy_assistant_name_version(original_model_name)
+            legacy_repo = AssistantReferenceSourceRepository()
+            retained_legacy = legacy_version is not None and await legacy_repo.ahas_legacy_name_retention(
+                session, source, legacy_version
+            )
+            old_references = (
+                extract_legacy_assistant_knowledge_references(
+                    model_name=original_model_name,
+                    knowledge_ids=[link.knowledge_id for link in old_links if link.knowledge_id],
+                )
+                if retained_legacy
+                else cls._extract_references(candidate, old_links)
+            )
+            if require_valid and retained_legacy:
+                raise ResourceReferenceInvalidError(reason="assistant_legacy_model_name_unresolved")
+            new_name = changes.get("model_name", original_model_name)
+            retained_new = retained_legacy and new_name == original_model_name and not deleting
+            selected_knowledge = (
+                knowledge_ids
+                if knowledge_ids is not None
+                else [link.knowledge_id for link in old_links if link.knowledge_id]
+            )
+            if deleting:
+                new_references = ()
+            elif retained_new:
+                new_references = extract_legacy_assistant_knowledge_references(
+                    model_name=new_name, knowledge_ids=selected_knowledge
+                )
+            else:
+                new_references = cls._configuration_references(new_name, selected_knowledge)
             locked = None
 
             async def lock_root(active_session):
@@ -186,7 +210,20 @@ class AssistantService(BaseService, AssistantUtils):
                 if locked is None or locked.is_delete:
                     raise AssistantNotExistsError()
                 links = await repository.alist_links(active_session, assistant_id)
-                if cls._extract_references(locked, links) != old_references:
+                if retained_legacy and (
+                    locked.model_name != original_model_name
+                    or not await legacy_repo.ahas_legacy_name_retention(active_session, source, legacy_version)
+                ):
+                    raise ResourceReferenceInvalidError(reason="reference_lock_plan_changed")
+                actual_old = (
+                    extract_legacy_assistant_knowledge_references(
+                        model_name=locked.model_name,
+                        knowledge_ids=[link.knowledge_id for link in links if link.knowledge_id],
+                    )
+                    if retained_legacy
+                    else cls._extract_references(locked, links)
+                )
+                if actual_old != old_references:
                     raise ResourceReferenceInvalidError(reason="reference_lock_plan_changed")
                 await authorize(locked)
                 return locked
@@ -195,7 +232,7 @@ class AssistantService(BaseService, AssistantUtils):
                 session,
                 source,
                 new_references,
-                extractor_version=ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
+                extractor_version=legacy_version if retained_new else ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
                 lock_source_root=lock_root,
                 effective=not deleting,
             )
@@ -500,6 +537,7 @@ class AssistantService(BaseService, AssistantUtils):
         )
         return AssistantInfo(
             **assistant.model_dump(),
+            source_invalid_reason=inspected.snapshot.invalid_reason,
             tool_list=tool_list,
             flow_list=flow_list,
             knowledge_list=knowledge_list,
