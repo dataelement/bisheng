@@ -419,7 +419,7 @@ async def test_retired_root_and_version_cleanup_is_exact_and_resume_stable(publi
 @pytest.mark.parametrize("occupied", [False, True])
 async def test_real_mounted_tenant_creation_never_fakes_empty_source_proof(published_input, monkeypatch, occupied):
     from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
-    from bisheng.database.models.department import Department
+    from bisheng.database.models.department import Department, UserDepartment
     from bisheng.database.models.tenant import Tenant
     from bisheng.knowledge.domain.models.knowledge import Knowledge
     from bisheng.tenant.application import tenant_creation
@@ -428,8 +428,14 @@ async def test_real_mounted_tenant_creation_never_fakes_empty_source_proof(publi
     before = await app(value).arun_references(**value.input, operator_id=7)
     async with value.database.engine.begin() as connection:
         await connection.run_sync(lambda conn: Department.__table__.create(conn, checkfirst=True))
+        await connection.run_sync(lambda conn: UserDepartment.__table__.create(conn, checkfirst=True))
     async with value.sessions() as session, session.begin():
         next_id = (await session.execute(sa.select(sa.func.max(Tenant.id)))).scalar_one() + 1
+        await session.execute(
+            sa.insert(Department.__table__).values(
+                id=1, dept_id="native-root", name="Root", parent_id=None, tenant_id=1, path="/1/"
+            )
+        )
         await session.execute(
             sa.insert(Department.__table__).values(
                 id=700, dept_id="native-mount", name="Mount", parent_id=1, tenant_id=1, path="/1/700/"

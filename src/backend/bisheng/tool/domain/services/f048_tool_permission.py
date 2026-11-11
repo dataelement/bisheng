@@ -30,6 +30,8 @@ class ToolPermissionRecord:
     context_version: str
     preset: bool
 
+    creation_state: str = "READY"
+
 
 class ToolPermissionLoader(Protocol):
     async def load_permission_record(
@@ -72,6 +74,7 @@ class ToolDaoPermissionLoader:
             owner_user_id=row.user_id,
             permission_version=version,
             context_version=context_version,
+            creation_state=getattr(row, "creation_state", "READY"),
             preset=preset,
         )
 
@@ -209,6 +212,10 @@ class F048ToolPermissionAdapter:
         *,
         action: str | None,
     ) -> VerifiedPermissionTarget:
+        if action is not None and record is not None and not record.preset and record.creation_state != "READY":
+            from bisheng.common.errcode.tool import ToolCreationPendingError
+
+            raise ToolCreationPendingError()
         if (
             record is None
             or record.resource_id != resource_id

@@ -1692,34 +1692,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def _assert_space_creation_quota(self) -> None:
-        """Enforce the role-configurable cap on Knowledge Spaces a user may create.
+        """Check role usage and tenant remaining independently, including prospective reads."""
+        from bisheng.common.errcode.tenant_quota import TenantRoleQuotaExceededError
 
-        Reads the quota through ``get_effective_quota`` rather than
-        ``check_quota``: this also guards the six F050 prospective-grant GET
-        endpoints, two of which fire on every keystroke in a search box.
-        ``check_quota`` walks the tenant chain and, on a Root tenant, fans out
-        one COUNT per active child; ``get_effective_quota`` short-circuits on an
-        unlimited role quota and only touches the tenant when that tenant
-        actually sets the key.
-
-        Counting stays on ``async_count_spaces_by_user`` (department spaces
-        excluded) so the gate keeps its own single definition, independent of
-        the quota engine's counting path.
-        """
-        effective = await QuotaService.get_effective_quota(
-            self.login_user.user_id,
-            QuotaResourceType.KNOWLEDGE_SPACE,
-            self.login_user.tenant_id,
-            login_user=self.login_user,
-        )
-        if effective == -1:
-            return
-        count = await KnowledgeDao.async_count_spaces_by_user(
-            self.login_user.user_id,
-            exclude_department_spaces=True,
-        )
-        if count >= effective:
-            raise SpaceLimitError()
+        try:
+            await QuotaService.check_quota(
+                self.login_user.user_id,
+                QuotaResourceType.KNOWLEDGE_SPACE,
+                self.login_user.tenant_id,
+                login_user=self.login_user,
+            )
+        except TenantRoleQuotaExceededError as exc:
+            raise SpaceLimitError() from exc
 
     async def _prospective_creation_access(self):
         if self.prospective_grant_application is None:
@@ -4983,26 +4967,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # re-click creates no duplicate approval instance.
 
         if not existing or existing.status == MembershipStatusEnum.REJECTED:
-            # Limit is role-configurable via F005 quota (knowledge_space_subscribe,
-            # default 100; admins/-1 = unlimited). Tenant cap applies only if the
-            # tenant sets the key; otherwise effective == role quota.
-            effective = await QuotaService.get_effective_quota(
-                self.login_user.user_id,
-                QuotaResourceType.KNOWLEDGE_SPACE_SUBSCRIBE,
-                self.login_user.tenant_id,
-                login_user=self.login_user,
-            )
-            if effective != -1:
-                # Count only joined spaces that STILL EXIST. The legacy DAO count reads
-                # space_channel_member without joining `knowledge`, so a subscription to a
-                # since-deleted space (orphan row) would inflate the count and reject the
-                # next join one slot early. get_user_resource_count uses the canonical
-                # INNER JOIN knowledge template, matching the front-end joined-spaces count.
-                count = await QuotaService.get_user_resource_count(
-                    self.login_user.user_id, QuotaResourceType.KNOWLEDGE_SPACE_SUBSCRIBE
+            from bisheng.common.errcode.tenant_quota import TenantRoleQuotaExceededError
+
+            try:
+                await QuotaService.check_quota(
+                    self.login_user.user_id,
+                    QuotaResourceType.KNOWLEDGE_SPACE_SUBSCRIBE,
+                    self.login_user.tenant_id,
+                    login_user=self.login_user,
                 )
-                if count >= effective:
-                    raise SpaceSubscribeLimitError(quota=effective)
+            except TenantRoleQuotaExceededError as exc:
+                raise SpaceSubscribeLimitError(quota=exc.kwargs.get("quota")) from exc
 
         previous_status = existing.status if existing else None
 

@@ -15,7 +15,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.api.services import flow as flow_service
 from bisheng.api.services.f048_application_permission import F048ApplicationPermissionAdapter
 from bisheng.api.v1 import workflow as workflow_endpoint
-from bisheng.common.errcode.flow import WorkflowNameExistsError
+from bisheng.common.errcode.flow import WorkflowCreationPendingError, WorkflowNameExistsError
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.database.models import flow as flow_model
 from bisheng.database.models import flow_version as version_model
@@ -127,6 +127,9 @@ async def bindings(store, monkeypatch):
             yield session
 
     monkeypatch.setattr(flow_service, "get_async_db_session", session_factory, raising=False)
+    from bisheng.workflow.domain.repositories import creation_repository
+
+    monkeypatch.setattr(creation_repository, "get_async_db_session", session_factory)
     monkeypatch.setattr(flow_model, "get_async_db_session", session_factory)
     monkeypatch.setattr(version_model, "get_async_db_session", session_factory)
     monkeypatch.setattr(version_model, "get_sync_db_session", flow_model.get_sync_db_session)
@@ -218,24 +221,26 @@ async def test_copy_or_import_new_root_cannot_introduce_a_missing_target(binding
     bindings.permission.authorize_created.assert_not_awaited()
 
 
-async def test_projection_precedes_business_commit_without_reloading_uncommitted_root(bindings):
-    async def assert_not_committed(**kwargs):
+async def test_projection_follows_atomic_root_and_reference_commit_while_pending(bindings):
+    async def assert_committed_pending(**kwargs):
         target = kwargs["target"]
-        assert all(row["id"] != target.resource_id for row in rows(bindings, "flow"))
-        assert not rows(bindings, "business_reference_set")
+        root = next(row for row in rows(bindings, "flow") if row["id"] == target.resource_id)
+        assert root["creation_state"] == "PENDING"
+        assert rows(bindings, "business_reference_set")
 
-    bindings.permission.authorize_created.side_effect = assert_not_committed
+    bindings.permission.authorize_created.side_effect = assert_committed_pending
     result = await create(bindings, saved_data=graph(node("llm", "llm", model_id=7)))
     assert any(row["id"] == result.data.id for row in rows(bindings, "flow"))
     bindings.loader.load_permission_record.assert_not_awaited()
 
 
-async def test_projection_failure_does_not_commit_business_or_reference_rows(bindings):
+async def test_projection_failure_preserves_pending_root_and_committed_reference_rows(bindings):
     bindings.permission.authorize_created.side_effect = RuntimeError("projection failed")
-    with pytest.raises(RuntimeError, match="projection failed"):
+    with pytest.raises(WorkflowCreationPendingError):
         await create(bindings, saved_data=graph(node("llm", "llm", model_id=7)))
-    assert all(row["name"] != "new-workflow" for row in rows(bindings, "flow"))
-    assert not rows(bindings, "business_reference_set") and not rows(bindings, "business_resource_reference")
+    roots = [row for row in rows(bindings, "flow") if row["name"] == "new-workflow"]
+    assert len(roots) == 1 and roots[0]["creation_state"] == "PENDING"
+    assert rows(bindings, "business_reference_set") and rows(bindings, "business_resource_reference")
 
 
 async def test_duplicate_workflow_name_preserves_existing_business_guard(bindings):

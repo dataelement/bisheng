@@ -29,6 +29,7 @@ from bisheng.permission.domain.models import (
     PermissionGrantAssignee,
     PermissionModel,
     PermissionModelAction,
+    PermissionProjectionOperation,
     PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
@@ -977,6 +978,29 @@ class SqlPermissionControlState:
         del error
         async with get_async_db_session() as session:
             async with session.begin():
+                if context.target.resource_type in {"tool", "workflow"}:
+                    mode_row = (
+                        (
+                            await session.execute(
+                                select(ResourcePermissionMode).where(
+                                    ResourcePermissionMode.tenant_id == context.target.tenant_id,
+                                    ResourcePermissionMode.resource_type == context.target.resource_type,
+                                    ResourcePermissionMode.resource_id == context.target.resource_id,
+                                )
+                            )
+                        )
+                        .scalars()
+                        .first()
+                    )
+                    operation = (
+                        await session.get(PermissionProjectionOperation, mode_row.operation_id)
+                        if mode_row and mode_row.operation_id
+                        else None
+                    )
+                    if operation is None:
+                        raise PermissionVersionConflictError(msg="Creation projection fence is missing")
+                    if str(operation.status) != "FAILED_CLOSED":
+                        return  # The durable ledger retains the exact uncertainty; do not relabel it terminal.
                 await session.execute(
                     update(ResourcePermissionMode)
                     .where(

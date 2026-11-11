@@ -88,12 +88,17 @@ class UserTenantSyncService:
         trigger_value = cls._trigger_str(trigger)
 
         new_leaf = await TenantResolver.resolve_user_leaf_tenant(user_id)
+        from bisheng.user.application.policy_bindings import verify_resolved_policy_home
+        await verify_resolved_policy_home(user_id, int(new_leaf.id))
         current = await UserTenantDao.aget_active_user_tenant(user_id)
 
         if current is not None and current.tenant_id == new_leaf.id:
             await cls._migrate_relocated_personal_token(user_id, new_leaf.id)
             return new_leaf  # No change — cheap exit.
 
+        from bisheng.user.application.policy_bindings import initial_account_default_binding
+
+        initial_default = current is None and await initial_account_default_binding(user_id)
         old_tenant_id: int | None = current.tenant_id if current is not None else None
 
         owned_count = 0
@@ -116,6 +121,10 @@ class UserTenantSyncService:
                 new_tenant_id=new_leaf.id,
             )
 
+        # Old and historical future-home grants cannot become active on relocation.
+        from bisheng.user.application.policy_bindings import terminate_policy_for_relocation
+        await terminate_policy_for_relocation(user_id)
+
         # Perform the swap.
         from bisheng.user.domain.services.user import UserService
 
@@ -124,6 +133,15 @@ class UserTenantSyncService:
         else:
             await UserTenantDao.aactivate_user_tenant(user_id, new_leaf.id)
             await UserDao.aincrement_token_version(user_id)
+        from bisheng.user.application.policy_bindings import retire_current_policy_bindings, seed_policy_defaults
+
+        await retire_current_policy_bindings(user_id)
+        await seed_policy_defaults(user_id)
+        if initial_default:
+            from bisheng.database.constants import DefaultRole
+            from bisheng.user.application.policy_bindings import grant_policy_bindings
+
+            await grant_policy_bindings(user_id, new_leaf.id, {DefaultRole})
         await cls._rewrite_tenant_membership_permissions(
             user_id,
             old_tenant_id,
@@ -326,14 +344,9 @@ class UserTenantSyncService:
         try:
             permissions = await get_permission_relation_api()
             await permissions.apply_changes(tuple(changes), crash_safe=True)
-        except Exception as exc:
-            logger.warning(
-                "Permission membership update for user %d relocate %s→%s failed: %s",
-                user_id,
-                old_tenant_id,
-                new_tenant_id,
-                exc,
-            )
+        except Exception:
+            logger.exception("Permission membership update failed after tenant relocation for user %d", user_id)
+            raise
 
     @classmethod
     async def _invalidate_redis_caches(cls, user_id: int) -> None:

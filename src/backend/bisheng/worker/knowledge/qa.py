@@ -6,7 +6,7 @@ from bisheng.common.errcode.knowledge import KnowledgeFileFailedError, Knowledge
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnoweldgeDao,
     QAKnowledge,
@@ -40,132 +40,116 @@ def insert_qa_celery(qa_id: int):
 
 
 @bisheng_celery.task
-def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int, login_user_id: int):
-    """
-    SalinQAkey learning points
-    :param login_user_id: Login userID
-    :param source_knowledge_id: Source Knowledge PointsID
-    :param target_knowledge_id: Target Knowledge PointsID
-    :return:
-    """
-    trace_id_var.set(f"copy_qa_knowledge_{source_knowledge_id}_{target_knowledge_id}")
+def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int, login_user_id: int, tenant_id=None):
+    from bisheng.knowledge.application.copy_execution import assert_copy_actor, claim_copy, copy_execution_scope
+    from bisheng.knowledge.domain.repositories.copy_repository import CopyRepository
 
-    try:
-        source_knowledge = KnowledgeDao.query_by_id(source_knowledge_id)
+    with copy_execution_scope(tenant_id):
+        pair = claim_copy(tenant_id, source_knowledge_id, target_knowledge_id, login_user_id)
+        if pair is None:
+            return "duplicate copy ignored"
+        source_knowledge, target_knowledge = pair
+        try:
+            qa_count = QAKnoweldgeDao.count_by_id(source_knowledge_id)
 
-        target_knowledge = KnowledgeDao.query_by_id(target_knowledge_id)
+            if qa_count == 0:
+                logger.info(f"No QA knowledge to copy from knowledge id {source_knowledge_id}.")
+                raise KnowledgeFileFailedError(msg="Source QA became empty")
 
-        qa_count = QAKnoweldgeDao.count_by_id(source_knowledge_id)
-
-        if qa_count == 0:
-            logger.info(f"No QA knowledge to copy from knowledge id {source_knowledge_id}.")
-            return
-
-        source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-            0, knowledge=source_knowledge, embeddings=FakeEmbeddings()
-        )
-
-        # create new collection name for target knowledge
-        new_col = Collection(
-            name=target_knowledge.collection_name,
-            schema=source_milvus.col.schema,
-            using=source_milvus.alias,
-            consistency_level=source_milvus.consistency_level,
-        )
-
-        target_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-            0, knowledge=target_knowledge, embeddings=FakeEmbeddings()
-        )
-
-        # Batched SalinQAkey learning points Start from the first page
-        batch_size = 100
-        for page in range((qa_count + batch_size - 1) // batch_size):
-            page += 1
-            qa_list: list[QAKnowledge] = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_id(
-                knowledge_id=source_knowledge_id, page=page, page_size=batch_size
+            source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+                0, knowledge=source_knowledge, embeddings=FakeEmbeddings()
             )
-            try:
-                # SalinQAkey learning points Batch Insert
-                new_qa_list = []
-                for qa in qa_list:
-                    qa_dict = qa.model_dump()
-                    qa_dict.pop("id")
-                    qa_dict.pop("create_time")
-                    qa_dict.pop("update_time")
-                    qa_dict["user_id"] = login_user_id
-                    qa_dict["knowledge_id"] = target_knowledge_id
-                    new_qa = QAKnowledgeUpsert(**qa_dict)
-                    new_qa_list.append(new_qa)
 
-                result = QAKnoweldgeDao.batch_insert_qa(new_qa_list)
+            # create new collection name for target knowledge
+            new_col = Collection(
+                name=target_knowledge.collection_name,
+                schema=source_milvus.col.schema,
+                using=source_milvus.alias,
+                consistency_level=source_milvus.consistency_level,
+            )
 
-                id_mapping = {qa_list[i].id: result[i].id for i in range(len(qa_list))}
+            target_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+                0, knowledge=target_knowledge, embeddings=FakeEmbeddings()
+            )
 
-                # Copy Vector
-                source_ids = [int(qa.id) for qa in qa_list if qa.status == QAStatus.ENABLED.value]
-                fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
-                vectors = source_milvus.col.query(
-                    expr=f"file_id in {source_ids} && knowledge_id == '{source_knowledge_id}'", output_fields=fields
+            # Batched SalinQAkey learning points Start from the first page
+            batch_size = 100
+            for page in range((qa_count + batch_size - 1) // batch_size):
+                page += 1
+                qa_list: list[QAKnowledge] = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_id(
+                    knowledge_id=source_knowledge_id, page=page, page_size=batch_size
                 )
+                result = []
+                try:
+                    # SalinQAkey learning points Batch Insert
+                    new_qa_list = []
+                    for qa in qa_list:
+                        qa_dict = qa.model_dump()
+                        qa_dict.pop("id")
+                        qa_dict.pop("create_time")
+                        qa_dict.pop("update_time")
+                        qa_dict["user_id"] = login_user_id
+                        qa_dict["knowledge_id"] = target_knowledge_id
+                        new_qa = QAKnowledgeUpsert(**qa_dict)
+                        new_qa_list.append(new_qa)
 
-                for vector in vectors:
-                    vector["file_id"] = id_mapping[vector["file_id"]]
-                    vector["knowledge_id"] = str(target_knowledge_id)
-                    vector.pop("pk")
+                    result = QAKnoweldgeDao.batch_insert_qa(new_qa_list)
 
-                if vectors.__len__() != 0:
-                    target_milvus.col.insert(vectors)
+                    id_mapping = {qa_list[i].id: result[i].id for i in range(len(qa_list))}
 
-                logger.info(
-                    f"Copied {len(qa_list)} QA knowledge from knowledge id {source_knowledge_id} "
-                    f"to knowledge id {target_knowledge_id}."
-                )
+                    # Copy Vector
+                    source_ids = [int(qa.id) for qa in qa_list if qa.status == QAStatus.ENABLED.value]
+                    fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
+                    vectors = source_milvus.col.query(
+                        expr=f"file_id in {source_ids} && knowledge_id == '{source_knowledge_id}'", output_fields=fields
+                    )
 
-                # es Salin
-                es_db = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=target_knowledge)
-                es_texts = []
-                es_metadatas = []
-                for vector in vectors:
-                    text = vector.pop("text")
-                    vector.pop("vector")
-                    es_texts.append(text)
-                    es_metadatas.append(vector)
+                    for vector in vectors:
+                        vector["file_id"] = id_mapping[vector["file_id"]]
+                        vector["knowledge_id"] = str(target_knowledge_id)
+                        vector.pop("pk")
 
-                if es_texts.__len__() != 0:
-                    es_db.add_texts(es_texts, es_metadatas)
+                    if vectors.__len__() != 0:
+                        target_milvus.col.insert(vectors)
 
-                logger.info(f"Updated status to SUCCESS for copied QA knowledge in knowledge id {target_knowledge_id}.")
+                    logger.info(
+                        f"Copied {len(qa_list)} QA knowledge from knowledge id {source_knowledge_id} "
+                        f"to knowledge id {target_knowledge_id}."
+                    )
 
-                logger.info(f"Finished copying batch {page + 1} of QA knowledge.")
-            except Exception as e:
-                logger.error(f"Error copying batch {page + 1} of QA knowledge: {e}")
+                    # es Salin
+                    es_db = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=target_knowledge)
+                    es_texts = []
+                    es_metadatas = []
+                    for vector in vectors:
+                        text = vector.pop("text")
+                        vector.pop("vector")
+                        es_texts.append(text)
+                        es_metadatas.append(vector)
 
-                QAKnoweldgeDao.batch_update_status_by_ids(
-                    qa_ids=[new_qa.id for new_qa in result],
-                    status=QAStatus.FAILED,
-                    remark=KnowledgeFileFailedError(exception=e).to_json_str(),
-                )
+                    if es_texts.__len__() != 0:
+                        es_db.add_texts(es_texts, es_metadatas)
 
-        # All copied Update statuses
+                    logger.info(
+                        f"Updated status to SUCCESS for copied QA knowledge in knowledge id {target_knowledge_id}."
+                    )
 
-        target_knowledge.state = KnowledgeState.PUBLISHED.value
-        KnowledgeDao.update_state(
-            knowledge_id=source_knowledge.id, state=KnowledgeState.PUBLISHED, update_time=source_knowledge.update_time
-        )
-        KnowledgeDao.update_one(target_knowledge)
+                    logger.info(f"Finished copying batch {page + 1} of QA knowledge.")
+                except Exception as e:
+                    logger.error(f"Error copying batch {page + 1} of QA knowledge: {e}")
 
-        logger.info(
-            f"Finished copying all QA knowledge from knowledge id {source_knowledge_id} "
-            f"to knowledge id {target_knowledge_id}."
-        )
-    except Exception as e:
-        logger.error(
-            f"Error copying QA knowledge from knowledge id {source_knowledge_id} "
-            f"to knowledge id {target_knowledge_id}: {e}"
-        )
-
-        KnowledgeDao.update_state(knowledge_id=target_knowledge_id, state=KnowledgeState.FAILED)
-        KnowledgeDao.update_state(knowledge_id=source_knowledge.id, state=KnowledgeState.PUBLISHED)
+                    QAKnoweldgeDao.batch_update_status_by_ids(
+                        qa_ids=[new_qa.id for new_qa in result],
+                        status=QAStatus.FAILED,
+                        remark=KnowledgeFileFailedError(exception=e).to_json_str(),
+                    )
+                    raise
+            assert_copy_actor(tenant_id, source_knowledge, login_user_id)
+            CopyRepository.finish(tenant_id, source_knowledge_id, target_knowledge_id, succeeded=True)
+        except Exception:
+            logger.exception("QA copy failed source={} target={}", source_knowledge_id, target_knowledge_id)
+            CopyRepository.finish(tenant_id, source_knowledge_id, target_knowledge_id, succeeded=False)
+            raise
 
 
 @bisheng_celery.task

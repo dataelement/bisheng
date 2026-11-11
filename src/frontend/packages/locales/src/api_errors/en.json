@@ -772,5 +772,10 @@
   "18085": "This idempotency key was used for a different request. Submit a new operation.",
   "18086": "Review the impact and confirm the operation first.",
   "18087": "The operation impact changed. Review and confirm it again.",
-  "18088": "The operation confirmation expired. Review and confirm it again."
+  "18088": "The operation confirmation expired. Review and confirm it again.",
+  "24006": "Current role policy could not be verified. Please try again later.",
+  "19404": "Resource usage could not be verified. Adding resources is temporarily unavailable.",
+  "19405": "The resource owner has moved to another tenant. Complete the resource handover first.",
+  "15090": "Tool creation is pending. Contact an administrator for inspection.",
+  "10590": "Workflow creation is pending. Contact an administrator for inspection."
 }

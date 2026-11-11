@@ -181,7 +181,7 @@ export function FilterConditionEditor({
     const addCondition = () => {
         if (atTotalLimit) {
             showToast({
-                message: localize("com_subscription.max_conditions_reached") || "已达条件上限",
+                message: localize("com_subscription.max_conditions_reached"),
                 severity: NotificationSeverity.WARNING,
             });
             return;

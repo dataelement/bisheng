@@ -6,8 +6,9 @@ Tests:
   - No login_user kwarg: decorator skips check, calls original function
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 @pytest.fixture
@@ -25,36 +26,37 @@ class TestRequireQuotaAsync:
     @pytest.mark.asyncio
     async def test_calls_check_quota_before_endpoint(self, mock_login_user):
         """Decorator calls QuotaService.check_quota before the wrapped function."""
-        from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
+        from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 
         call_order = []
 
         @require_quota(QuotaResourceType.WORKFLOW)
         async def create_workflow(*, login_user=None):
-            call_order.append('endpoint')
-            return {'id': 1}
+            call_order.append("endpoint")
+            return {"id": 1}
 
         with patch(
-            'bisheng.role.domain.services.quota_service.QuotaService.check_quota',
+            "bisheng.role.domain.services.quota_service.QuotaService.check_quota",
             new_callable=AsyncMock,
         ) as mock_check:
-            mock_check.side_effect = lambda **kw: call_order.append('check_quota')
+            mock_check.side_effect = lambda **kw: call_order.append("check_quota")
             result = await create_workflow(login_user=mock_login_user)
 
-        assert call_order == ['check_quota', 'endpoint']
-        assert result == {'id': 1}
+        assert call_order == ["check_quota", "endpoint"]
+        assert result == {"id": 1}
         mock_check.assert_called_once_with(
             user_id=10,
-            resource_type='workflow',
+            resource_type="workflow",
             tenant_id=1,
             login_user=mock_login_user,
+            delta=1,
         )
 
     @pytest.mark.asyncio
     async def test_raises_when_quota_exceeded(self, mock_login_user):
         """Decorator propagates TenantQuotaExceededError from check_quota (F016 T04)."""
-        from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
         from bisheng.common.errcode.tenant_quota import TenantQuotaExceededError
+        from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 
         endpoint_called = False
 
@@ -64,7 +66,7 @@ class TestRequireQuotaAsync:
             endpoint_called = True
 
         with patch(
-            'bisheng.role.domain.services.quota_service.QuotaService.check_quota',
+            "bisheng.role.domain.services.quota_service.QuotaService.check_quota",
             new_callable=AsyncMock,
             side_effect=TenantQuotaExceededError(),
         ):
@@ -76,19 +78,19 @@ class TestRequireQuotaAsync:
     @pytest.mark.asyncio
     async def test_skips_check_when_no_login_user(self):
         """Decorator skips quota check if login_user is not in kwargs."""
-        from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
+        from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 
         @require_quota(QuotaResourceType.TOOL)
         async def internal_create():
-            return 'ok'
+            return "ok"
 
         with patch(
-            'bisheng.role.domain.services.quota_service.QuotaService.check_quota',
+            "bisheng.role.domain.services.quota_service.QuotaService.check_quota",
             new_callable=AsyncMock,
         ) as mock_check:
             result = await internal_create()
 
-        assert result == 'ok'
+        assert result == "ok"
         mock_check.assert_not_called()
 
 
@@ -98,33 +100,33 @@ class TestRequireQuotaSync:
     @pytest.mark.asyncio
     async def test_sync_function_works(self, mock_login_user):
         """Decorator wraps sync functions without 'await non-coroutine' error."""
-        from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
+        from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 
         @require_quota(QuotaResourceType.WORKFLOW)
         def create_flow_sync(*, login_user=None):
-            return {'id': 42}
+            return {"id": 42}
 
         with patch(
-            'bisheng.role.domain.services.quota_service.QuotaService.check_quota',
+            "bisheng.role.domain.services.quota_service.QuotaService.check_quota",
             new_callable=AsyncMock,
         ) as mock_check:
             result = await create_flow_sync(login_user=mock_login_user)
 
-        assert result == {'id': 42}
+        assert result == {"id": 42}
         mock_check.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_sync_function_raises_on_exceeded(self, mock_login_user):
         """Sync function also gets blocked by TenantQuotaExceededError (F016 T04)."""
-        from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
         from bisheng.common.errcode.tenant_quota import TenantQuotaExceededError
+        from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 
         @require_quota(QuotaResourceType.CHANNEL)
         def create_channel_sync(*, login_user=None):
-            return 'should not reach'
+            return "should not reach"
 
         with patch(
-            'bisheng.role.domain.services.quota_service.QuotaService.check_quota',
+            "bisheng.role.domain.services.quota_service.QuotaService.check_quota",
             new_callable=AsyncMock,
             side_effect=TenantQuotaExceededError(),
         ):

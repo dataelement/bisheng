@@ -198,7 +198,10 @@ export type DepartmentMemberEditForm = {
     role_ids: number[]
   }
   can_change_primary: boolean
-  affiliate_rows: { dept_id: string; name: string; role_ids: number[] }[]
+  policy_editable?: boolean
+  role_apply_status?: "APPLICABLE" | "NOT_APPLICABLE_CROSS_TENANT"
+  role_binding_mode?: "PERSON_IN_HOME_TENANT"
+  affiliate_rows: { dept_id: string; name: string; role_ids: number[]; policy_editable?: boolean }[]
   assignable_roles_catalog: Record<
     string,
     { id: number; role_name: string; role_type?: string; department_id?: number | null }[]

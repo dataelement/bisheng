@@ -98,6 +98,9 @@ class UserDepartmentService:
         business_committed = False
         try:
             async with get_async_db_session() as session:
+                from bisheng.user.application.policy_bindings import retire_invalid_policy_bindings
+                await retire_invalid_policy_bindings([user_id], session=session, derive_primary_home=True,
+                                                     operator_id=operator_id)
                 if _uses_f048_department_projection():
                     department = (await session.exec(select(Department).where(Department.id == new_dept_id))).first()
                     if department is None:
@@ -142,6 +145,11 @@ class UserDepartmentService:
                         )
                         .values(is_primary=1)
                     )
+                from bisheng.user.application.policy_bindings import retire_invalid_policy_bindings
+
+                await retire_invalid_policy_bindings(
+                    [user_id], session=session, derive_primary_home=True, operator_id=operator_id
+                )
                 await _bind_department_projection(session, projection)
                 await session.commit()
                 business_committed = True
