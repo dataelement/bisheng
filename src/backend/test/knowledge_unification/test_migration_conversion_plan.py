@@ -185,6 +185,36 @@ async def test_existing_all_version_chain_never_creates_extra_v1_and_bad_primary
         build(module, rows | {"documents": (replace(rows["documents"][0], primary_version_id=999),)})
 
 
+@pytest.mark.parametrize("change", ["retain", "success", "normal", "pointer", "flag", "duplicate_number"])
+async def test_failed_unpromoted_existing_space_chain_is_retained_without_choosing_a_primary(module, native, change):
+    await native.insert(original.Knowledge, [original.resource(9000, type=0 if change == "normal" else 3)])
+    await native.insert(original.KnowledgeFile, [original.file(1, status=3), original.file(2, status=3)])
+    await native.insert(original.KnowledgeDocument, [original.data("documents", 1) | {"primary_version_id": None}])
+    await native.insert(
+        original.KnowledgeDocumentVersion,
+        [
+            original.data("versions", 1) | {"is_primary": False},
+            original.data("versions", 2) | {"document_id": 1, "version_no": 2, "is_primary": False},
+        ],
+    )
+    rows = await acquire(native)
+    if change == "retain":
+        assert build(module, rows)[1] == ()
+        return
+    if change == "success":
+        rows["files"] = (replace(rows["files"][0], status=2), rows["files"][1])
+    elif change == "normal":
+        pass  # Acquired the real conversion membership above; the chain still fails.
+    elif change == "pointer":
+        rows["documents"] = (replace(rows["documents"][0], primary_version_id=999),)
+    elif change == "flag":
+        rows["versions"] = (replace(rows["versions"][0], is_primary=True), rows["versions"][1])
+    else:
+        rows["versions"] = (rows["versions"][0], replace(rows["versions"][1], version_no=1))
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        build(module, rows)
+
+
 async def test_tag_owner_and_exact_target_link_collision_keep_existing_eight(module, native):
     await native.insert(original.Knowledge, [original.resource(9000)])
     await native.insert(original.KnowledgeFile, [original.file(1)])

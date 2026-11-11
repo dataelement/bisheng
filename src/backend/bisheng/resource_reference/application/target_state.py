@@ -12,6 +12,7 @@ from bisheng.resource_reference.application.contracts import (
     VerifiedReferenceTarget,
     canonical_target_id,
     is_preserved_foreign_model_reference,
+    is_preserved_foreign_space_reference,
 )
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 
@@ -116,6 +117,9 @@ def resolve_target_state(
         state = (
             ReferenceState.INVALID_SCOPE
             if is_preserved_foreign_model_reference(
+                original_reference, source_key=source_key, target=target, target_tenant_id=target_tenant_id
+            )
+            or is_preserved_foreign_space_reference(
                 original_reference, source_key=source_key, target=target, target_tenant_id=target_tenant_id
             )
             else ReferenceState.VALID

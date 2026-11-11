@@ -784,6 +784,26 @@ def _namespace_visible(before, after, old_grants, new_grants, compiler):
         ):
             _blocked("namespace_source_metadata_invalid")
         key = row.source.contribution_fingerprint
+        if key not in canonical and row.source.state == "RETIRED":
+            # A reassigned assignee keeps its identity while its former Grant
+            # and visibility contributions remain as inactive audit history.
+            # Reconstruct only that exact old identity; never project it ACTIVE.
+            matches = [
+                (previous, current, source.to_source_record())
+                for previous, current in zip(old_grants, new_grants, strict=True)
+                for source in before.assignees
+                if not previous.active
+                and previous.model.model_key == row.source.model_key
+                and source.state == "INACTIVE"
+                and row.source.source_owner_key == f"grant_assignee:{source.id}"
+                and row.source.source_version <= source.version
+            ]
+            if len(matches) == 1:
+                previous, current, source = matches[0]
+                original = compiler._compile_source(before.tenant_id, previous, source)
+                updated = compiler._compile_source(before.tenant_id, current, source)
+                compiler._assert_same_canonical_source(row.source, original)
+                canonical[key] = original, updated
         if key not in canonical or key in seen:
             _blocked("namespace_source_backing_missing_or_duplicate")
         seen.add(key)

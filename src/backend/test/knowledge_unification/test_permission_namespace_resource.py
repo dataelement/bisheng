@@ -93,6 +93,46 @@ def compile_resource(catalog, before, mode):
     return plans.build_resource_retirement_plan(catalog_plan=catalog, before=before, namespace_target=mode)
 
 
+@pytest.mark.parametrize("change", ["retain", "active", "fingerprint", "future_version", "missing_grant"])
+def test_retired_reassignment_history_keeps_old_model_identity_without_restoring_authority(change):
+    catalog = legacy_catalog()
+    before = original_resource(catalog, retired=False)
+    active = next(row for row in before.assignees if row.state == "INACTIVE")
+    historical = replace(before.grants[0], id=12, model_key="pure-use", state="INACTIVE")
+    old = plans._grants(
+        replace(before, grants=(historical,)),
+        {row.model_key: row for row in catalog.models},
+        {row.code: row.resource_types for row in catalog.actions},
+        {},
+    )[0]
+    record = VisibilityProjectionCompiler._compile_source(101, old, active.to_source_record()).model_copy(
+        update={"state": "RETIRED", "source_version": 2, "operation_id": 19}
+    )
+    if change == "active":
+        record = record.model_copy(update={"state": "ACTIVE"})
+    elif change == "fingerprint":
+        record = record.model_copy(update={"source_fingerprint": "f" * 64})
+    elif change == "future_version":
+        record = record.model_copy(update={"source_version": 4})
+    before = replace(
+        before,
+        grants=(*before.grants, historical) if change != "missing_grant" else before.grants,
+        visible_sources=(*before.visible_sources, plans.PermissionVisibleSourceBaseline(99, record)),
+    )
+    if change != "retain":
+        with pytest.raises(PermissionMigrationBlockedError):
+            compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
+        return
+    result = compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
+    retained = next(row for row in result.after.visible_sources if row.id == 99)
+    assert retained.source.state == "RETIRED" and retained.source.model_key == "pure-use"
+    assert result.after.assignees == before.assignees
+    ordinary = original_resource(catalog, retired=False)
+    expected = compile_resource(mapped(catalog), ordinary, target(ordinary, resource_type="knowledge_space"))
+    assert result.visibility_deltas == expected.visibility_deltas
+    assert verify.verify_resource_retirement(plan=result, actual=result.after).complete
+
+
 def test_original_unmapped_resource_keeps_its_fixed_prechange_checksum():
     catalog = legacy_catalog()
     before = original_resource(catalog)

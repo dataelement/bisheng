@@ -167,7 +167,7 @@ class ReferenceMigration:
             if before != after:
                 # Only the signed Root0→3 conversion changes this physical fact.
                 parent = record.physical_fact.knowledge_id if record.target.target_type != TargetType.MODEL else None
-                command = self.resources.get((record.source_key.tenant_id, parent))
+                command = self.resources.get((record.physical_fact.target_tenant_id, parent))
                 if not (
                     command is not None
                     and before.get("knowledge_type") == 0
@@ -246,6 +246,8 @@ class ReferenceMigration:
                 else None
             )
             parent = str(parent) if parent is not None else old["target_space_id"] if old else None
+            if decision == "existing_invalid_scope" and reference.target.target_type == TargetType.KNOWLEDGE_SPACE:
+                parent = reference.target.target_id
             values.append(
                 {
                     "slot_key": reference.slot_key,

@@ -78,14 +78,18 @@ def source_decision(record, *, tenant_id):
             disposition = "existing_saved_slot"
     else:
         if (
-            fact.target_tenant_id != tenant_id
-            or not fact.space_exists
-            or fact.space_tenant_id != tenant_id
+            not fact.space_exists
+            or fact.space_tenant_id != fact.target_tenant_id
             or fact.knowledge_type not in {0, 1, 3}
             or (fact.file_type is not None and fact.file_type not in {0, 1})
         ):
             _blocked("knowledge_physical_parent")
-        disposition = "existing_saved_slot"
+        if fact.target_tenant_id != tenant_id:
+            if record.origin != "explicit_id" or record.target.target_type.value != "knowledge_space":
+                _blocked("knowledge_physical_parent")
+            disposition = "existing_invalid_scope"
+        else:
+            disposition = "existing_saved_slot"
     original, direct, ancestors, legacy = (
         state[name] for name in ("original", "target_tombstones", "ancestor_tombstones", "legacy")
     )
