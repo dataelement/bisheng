@@ -156,8 +156,6 @@ docker compose logs -f backend backend_worker
 
 サービスの準備ができたら、ブラウザで `http://サーバーIP:3001` にアクセスしてユーザー登録を行います。最初に登録したユーザーがシステム管理者になります。その後、モデルを設定してください。
 
-Gateway はデフォルトでは無効です。ホスティングアプリの実行環境には追加設定が必要です。Gateway、ホスティングアプリ、OnlyOffice、ARM イメージ、デプロイ設定の詳細は [Docker デプロイガイド](docker/README.md) を参照してください。
-
 すべての機能（BISHENG クライアント、ホスティングアプリ、ファインチューニングなど）を有効にするには、ドキュメントをご参照ください：[プライベート環境へのデプロイ](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 ## 謝辞

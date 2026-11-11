@@ -156,8 +156,6 @@ docker compose logs -f backend backend_worker
 
 Cuando los servicios estén listos, abra `http://IP_DEL_SERVIDOR:3001` en el navegador y registre un usuario. El primer usuario registrado será el administrador del sistema. Después, configure los modelos.
 
-Gateway está desactivado de forma predeterminada y el entorno de ejecución de las aplicaciones alojadas requiere configuración adicional. Para Gateway, aplicaciones alojadas, OnlyOffice, imágenes ARM y ajustes personalizados, consulte la [guía de implementación con Docker](docker/README.md).
-
 Para habilitar todas las funcionalidades (BISHENG Desktop, aplicaciones alojadas, ajuste fino y más), consulte la documentación: [Alojamiento propio](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 ## Agradecimientos

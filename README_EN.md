@@ -156,8 +156,6 @@ docker compose logs -f backend backend_worker
 
 Once the services are ready, open `http://SERVER_IP:3001` in your browser and register a user. By default, the first registered user becomes the system admin. Configure your models afterward.
 
-Gateway is disabled by default, and the Hosted Apps runtime requires additional configuration. For Gateway, Hosted Apps, OnlyOffice, ARM images, and custom deployment settings, see the [Docker deployment guide](docker/README.md).
-
 To enable all features (BISHENG Desktop, Hosted Apps, fine-tuning, and more), see the documentation: [Self-hosting](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 ## Acknowledgement
