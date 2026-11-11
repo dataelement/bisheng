@@ -47,7 +47,9 @@ def register_dsh_tasks(app):
                     await service.cleanup_batch(tenant_id, user_id)
                     if next_cursor:
                         inspect_usage.apply_async(
-                            args=[tenant_id, user_id, next_cursor], headers={"tenant_id": tenant_id}
+                            args=[tenant_id, user_id, next_cursor],
+                            headers={"tenant_id": tenant_id},
+                            countdown=1,
                         )
                     return changed
 
@@ -89,7 +91,11 @@ def register_dsh_tasks(app):
                         target = inspect_usage if inspect_requests else project
                         target.apply_async(args=[tenant_id, user_id], headers={"tenant_id": tenant_id})
                 if next_cursor:
-                    scan_usage.apply_async(args=[next_cursor, inspect_requests, scan_owner])
+                    # Redis SCAN is incremental, but an immediate Celery chain can still
+                    # traverse a large shared DB at hundreds of task receipts per second.
+                    # One page per second keeps the lease alive while bounding broker,
+                    # Redis and task-lifecycle log pressure.
+                    scan_usage.apply_async(args=[next_cursor, inspect_requests, scan_owner], countdown=1)
                 else:
                     await quota.redis.eval(
                         "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",

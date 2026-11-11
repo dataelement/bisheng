@@ -556,13 +556,19 @@ class OperationExecutor:
             stopped = complete
         except Exception as cleanup_error:
             logger.error("operation cleanup pending: %s (%s)", operation["operation_id"], type(cleanup_error).__name__)
+        resource_text = f"{exc}\n{tail}".lower()
+        disk_full = getattr(exc, "errno", None) == 28 or "no space left on device" in resource_text
         reason = (
             "legacy_build_stop_unconfirmed"
             if unknown_build
             else (
-                str(exc)
-                if isinstance(exc, (ExecutionError, ExecutorError, BundleInputError, KubernetesAPIError))
-                else "execution_failed"
+                "disk_full"
+                if disk_full
+                else (
+                    str(exc)
+                    if isinstance(exc, (ExecutionError, ExecutorError, BundleInputError, KubernetesAPIError))
+                    else "execution_failed"
+                )
             )
         )
         phase = (

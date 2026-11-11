@@ -91,6 +91,7 @@ export * from './components/Select';
 // adds desktop columns, phone drill-down, path values, strict selection,
 // search and lazy children. Copy and data stay with the caller.
 export * from './components/Cascader';
+export * from './components/DatePicker';
 // Dropdown — a set of related ACTIONS behind one trigger; picking runs it and
 // the trigger never changes (组件-Dropdown下拉菜单.md). Danger rows, disabled
 // rows, toggle rows, one submenu level and click / hover triggering are baked
