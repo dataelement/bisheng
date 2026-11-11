@@ -6,8 +6,8 @@ What has to hold at once, and is easy to break one at a time:
   distinguishable from an ordinary failure and actionable without a log;
 * it **does not fall back to the old value** — no cached whitelist, no last
   known good id;
-* the application **stays usable as a whole**: one dead knowledge base must not
-  take the other five, or the models, down with it;
+* one invalid saved reference **blocks the whole version**, while inspection
+  retains every declaration and its frozen ID for repair;
 * a new iteration's declaration takes effect **within five seconds** of going
   online, with nothing polling to make that true;
 * the publish surface's marks are **computed on demand** — nothing persisted,
@@ -32,11 +32,16 @@ from bisheng.app_publish.domain.services.capability_bus_service import (
     model_capability_status,
 )
 from bisheng.common.errcode.app_publish import AppCapabilityRevokedError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.common.errcode.model_face import ModelFaceModelAmbiguousError, ModelFaceModelNotFoundError
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+from bisheng.open_api.application.runtime_authorization import without_open_api_identity
+
+from .reference_fixtures import bind_saved_source as bind_saved_source
+from .reference_fixtures import delete_knowledge_target
 
 
-async def _online_app_declaring(publish_db, app_factory, capabilities):
+async def _online_app_declaring(publish_db, app_factory, capabilities, *, binding=None):
     from bisheng.database.models.app_version import AppVersionDao
 
     app_row, version = await app_factory(state="online")
@@ -45,6 +50,8 @@ async def _online_app_declaring(publish_db, app_factory, capabilities):
         row.capabilities = capabilities
         session.add(row)
         await session.commit()
+    if binding is not None:
+        await binding(app_row, version)
     return app_row, version
 
 
@@ -75,8 +82,8 @@ def test_16274_is_a_different_answer_from_16273():
     assert undeclared.code != AppCapabilityRevokedError(capability="财务档案").code
 
 
-async def test_one_dead_knowledge_base_leaves_the_rest_of_the_declaration_working(
-    publish_db, app_factory, knowledge_factory
+async def test_one_dead_knowledge_base_blocks_the_whole_saved_version_but_preserves_its_declaration(
+    publish_db, app_factory, knowledge_factory, bind_saved_source
 ):
     alive = await knowledge_factory(name="产品手册")
     dead = await knowledge_factory(name="将被删除")
@@ -87,37 +94,43 @@ async def test_one_dead_knowledge_base_leaves_the_rest_of_the_declaration_workin
             "models": [{"name": "qwen-max"}],
             "knowledge_bases": [{"id": str(alive.id)}, {"id": str(dead.id)}],
         },
+        binding=bind_saved_source,
     )
 
     async with publish_db() as session:
-        await session.delete(await session.get(type(dead), dead.id))
+        await delete_knowledge_target(session, dead)
         await session.commit()
 
-    declaration = await load_effective_declaration(app_row.id)
-
-    # The surviving capability is still in the whitelist and the model
-    # declaration is untouched — AC-53's "应用整体保持可用".
-    assert declaration.knowledge_whitelist == [alive.id]
+    with pytest.raises(ResourceReferenceInvalidError):
+        await load_effective_declaration(app_row.id)
+    declaration = await load_effective_declaration(app_row.id, purpose="inspect")
+    assert {one.knowledge_id for one in declaration.knowledge} == {alive.id, dead.id}
+    with pytest.raises(ResourceReferenceInvalidError):
+        _ = declaration.knowledge_whitelist
     assert declaration.model_names == frozenset({"qwen-max"})
 
 
-async def test_a_revoked_capability_never_falls_back_to_its_old_value(publish_db, app_factory, knowledge_factory):
+async def test_a_revoked_capability_never_falls_back_to_its_old_value(
+    publish_db, app_factory, knowledge_factory, bind_saved_source
+):
     dead = await knowledge_factory(name="将被删除")
     app_row, _version = await _online_app_declaring(
-        publish_db, app_factory, {"knowledge_bases": [{"id": str(dead.id)}]}
+        publish_db, app_factory, {"knowledge_bases": [{"id": str(dead.id)}]}, binding=bind_saved_source
     )
 
     first = await load_effective_declaration(app_row.id)
     assert first.knowledge_whitelist == [dead.id]
 
     async with publish_db() as session:
-        await session.delete(await session.get(type(dead), dead.id))
+        await delete_knowledge_target(session, dead)
         await session.commit()
 
-    second = await load_effective_declaration(app_row.id)
-
-    # Nothing cached the previous resolution; the id is simply gone.
-    assert second.knowledge_whitelist == []
+    with pytest.raises(ResourceReferenceInvalidError):
+        await load_effective_declaration(app_row.id)
+    second = await load_effective_declaration(app_row.id, purpose="inspect")
+    assert second.knowledge[0].knowledge_id == dead.id
+    with pytest.raises(ResourceReferenceInvalidError):
+        _ = second.knowledge_whitelist
     assert second.knowledge[0].reason == REASON_REVOKED
 
 
@@ -127,7 +140,7 @@ async def test_a_revoked_capability_never_falls_back_to_its_old_value(publish_db
 
 
 async def test_a_capability_dropped_by_the_new_iteration_stops_working_when_it_goes_online(
-    publish_db, app_factory, knowledge_factory
+    publish_db, app_factory, knowledge_factory, bind_saved_source
 ):
     """AC-37's five seconds, with nothing polling to make it true.
 
@@ -148,6 +161,7 @@ async def test_a_capability_dropped_by_the_new_iteration_stops_working_when_it_g
         publish_db,
         app_factory,
         {"knowledge_bases": [{"id": str(dropped.id)}, {"id": str(kept.id)}]},
+        binding=bind_saved_source,
     )
     before = await load_effective_declaration(app_row.id)
     assert set(before.knowledge_whitelist) == {dropped.id, kept.id}
@@ -171,6 +185,7 @@ async def test_a_capability_dropped_by_the_new_iteration_stops_working_when_it_g
         session.add(stored)
         await session.commit()
 
+    await bind_saved_source(app_row, iteration)
     after = await load_effective_declaration(app_row.id)
 
     assert after.knowledge_whitelist == [kept.id]
@@ -209,7 +224,14 @@ async def test_the_capability_list_marks_the_dead_entries_with_a_reason(publish_
         },
     )
 
-    rows = await capability_status(app_id=app_row.id)
+    # Draft precheck can show unresolved declarations without inventing an indexed source.
+    rows = await capability_status(
+        tenant_id=app_row.tenant_id,
+        capabilities={
+            "models": [{"name": "qwen-max"}],
+            "knowledge_bases": [{"id": str(alive.id)}, {"id": str(qa.id)}, {"name": "重名库"}],
+        },
+    )
 
     by_label = {row.label: row for row in rows}
     assert by_label[str(alive.id)].display_name == "产品手册"
@@ -219,22 +241,32 @@ async def test_the_capability_list_marks_the_dead_entries_with_a_reason(publish_
     assert by_label["qwen-max"].kind == CAPABILITY_KIND_MODEL
 
 
-async def test_nothing_about_the_marks_is_persisted(publish_db, app_factory, knowledge_factory):
+async def test_nothing_about_the_marks_is_persisted(
+    publish_db, app_factory, knowledge_factory, bind_saved_source, owner_user
+):
     """AC-63 is a read-time computation: no column, no row, no timer.
 
     Asserted by computing the list twice around a change and requiring the second
     answer to reflect it — a stored mark would still say what it said before.
     """
     kb = await knowledge_factory(name="产品手册")
-    app_row, version = await _online_app_declaring(publish_db, app_factory, {"knowledge_bases": [{"id": str(kb.id)}]})
+    app_row, version = await _online_app_declaring(
+        publish_db, app_factory, {"knowledge_bases": [{"id": str(kb.id)}]}, binding=bind_saved_source
+    )
 
-    assert (await capability_status(app_id=app_row.id))[0].revoked is False
+    with without_open_api_identity():
+        assert (await capability_bus_service.inspect_saved_capabilities(app_row.id, version.id, owner_user.payload))[
+            0
+        ].revoked is False
 
     async with publish_db() as session:
-        await session.delete(await session.get(type(kb), kb.id))
+        await delete_knowledge_target(session, kb)
         await session.commit()
 
-    assert (await capability_status(app_id=app_row.id))[0].revoked is True
+    with without_open_api_identity():
+        assert (await capability_bus_service.inspect_saved_capabilities(app_row.id, version.id, owner_user.payload))[
+            0
+        ].revoked is True
 
     # And the version row that carries the declaration was never written to.
     from bisheng.database.models.app_version import AppVersionDao
@@ -262,7 +294,9 @@ async def test_model_marks_use_f051s_resolution_not_a_second_rule(monkeypatch, p
         app_factory,
         {"models": [{"name": "qwen-max"}, {"name": "gone"}, {"name": "重名模型"}]},
     )
-    declaration = await load_effective_declaration(app_row.id)
+    declaration = capability_bus_service.EffectiveDeclaration(
+        app_row.id, app_row.tenant_id, "", models=("qwen-max", "gone", "重名模型")
+    )
 
     async def _resolve(tenant_id, requested, *, range=None):
         if requested == "gone":
@@ -287,60 +321,104 @@ async def test_model_marks_use_f051s_resolution_not_a_second_rule(monkeypatch, p
 
 
 async def test_the_publish_surface_serves_the_marks_it_computed(
-    monkeypatch, publish_db, app_factory, knowledge_factory, tier_seed
+    monkeypatch, publish_db, app_factory, knowledge_factory, tier_seed, bind_saved_source, owner_user
 ):
     """AC-61 / AC-63 on the read model the publish page actually calls."""
     from bisheng.app_publish.domain.services.publish_status_service import PublishStatusService
 
     alive = await knowledge_factory(name="产品手册")
+    deleted = await knowledge_factory(name="将被删除")
     app_row, _version = await _online_app_declaring(
         publish_db,
         app_factory,
-        {"models": [{"name": "qwen-max"}], "knowledge_bases": [{"id": str(alive.id)}, {"id": "999999"}]},
+        {"models": [{"name": "qwen-max"}], "knowledge_bases": [{"id": str(alive.id)}, {"id": str(deleted.id)}]},
+        binding=bind_saved_source,
     )
+
+    import sqlalchemy as sa
 
     import bisheng.llm.domain.services.model_catalog as catalog
+    from bisheng.llm.domain.models.llm_server import LLMModel
 
-    async def _resolve(tenant_id, requested, *, range=None):
-        raise ModelFaceModelNotFoundError(model=requested)
+    async def _resolve(*args, **kwargs):
+        raise AssertionError("saved inspection must not use the cached catalog")
 
     monkeypatch.setattr(catalog, "resolve_model_name", _resolve)
-
-    status = await PublishStatusService.get_publish_status(
-        app_row.id,
-        actor=SimpleNamespace(user_id=app_row.owner_user_id, tenant_id=app_row.tenant_id, is_global_super=False),
-    )
+    async with publish_db() as session, session.begin():
+        model = (await session.execute(sa.select(LLMModel).where(LLMModel.model_name == "qwen-max"))).scalars().one()
+        model.online = False
+        model_id = str(model.id)
+        await delete_knowledge_target(session, deleted)
+    with without_open_api_identity():
+        status = await PublishStatusService.get_publish_status(app_row.id, actor=owner_user.payload)
 
     assert status["capabilities"] == [
         # The model was taken away in model management — marked, not hidden.
-        {"kind": CAPABILITY_KIND_MODEL, "name": "qwen-max", "revoked": True, "reason": REASON_REVOKED},
-        {"kind": CAPABILITY_KIND_KNOWLEDGE, "name": "产品手册", "revoked": False, "reason": REASON_OK},
-        {"kind": CAPABILITY_KIND_KNOWLEDGE, "name": "999999", "revoked": True, "reason": REASON_REVOKED},
+        {
+            "kind": CAPABILITY_KIND_MODEL,
+            "name": "qwen-max",
+            "label": "qwen-max",
+            "revoked": True,
+            "reason": "offline",
+            "target_id": model_id,
+            "target_type": "model",
+            "state": "valid",
+        },
+        {
+            "kind": CAPABILITY_KIND_KNOWLEDGE,
+            "name": "产品手册",
+            "label": str(alive.id),
+            "revoked": False,
+            "reason": REASON_OK,
+            "target_id": str(alive.id),
+            "target_type": "knowledge_space",
+            "state": "valid",
+        },
+        {
+            "kind": CAPABILITY_KIND_KNOWLEDGE,
+            "name": str(deleted.id),
+            "label": str(deleted.id),
+            "revoked": True,
+            "reason": "invalid_deleted",
+            "target_id": str(deleted.id),
+            "target_type": "knowledge_space",
+            "state": "invalid_deleted",
+        },
     ]
 
 
 async def test_the_publish_surface_still_renders_when_resolution_is_unavailable(
-    monkeypatch, publish_db, app_factory, knowledge_factory, tier_seed
+    monkeypatch, publish_db, app_factory, knowledge_factory, tier_seed, bind_saved_source, owner_user
 ):
     """A bad minute in the catalog must not take the whole page down."""
     from bisheng.app_publish.domain.services import capability_bus_service as bus
     from bisheng.app_publish.domain.services.publish_status_service import PublishStatusService
 
     kb = await knowledge_factory(name="产品手册")
-    app_row, _version = await _online_app_declaring(publish_db, app_factory, {"knowledge_bases": [{"id": str(kb.id)}]})
-
-    async def _explode(**kwargs):
-        raise RuntimeError("knowledge module unavailable")
-
-    monkeypatch.setattr(bus, "capability_status", _explode)
-
-    status = await PublishStatusService.get_publish_status(
-        app_row.id,
-        actor=SimpleNamespace(user_id=app_row.owner_user_id, tenant_id=app_row.tenant_id, is_global_super=False),
+    app_row, _version = await _online_app_declaring(
+        publish_db, app_factory, {"knowledge_bases": [{"id": str(kb.id)}]}, binding=bind_saved_source
     )
 
-    # Empty reads as "no declaration shown", never as "everything is fine".
-    assert status["capabilities"] == []
+    async def _explode(*args, **kwargs):
+        raise RuntimeError("knowledge module unavailable")
+
+    monkeypatch.setattr(bus, "inspect_saved_capabilities", _explode)
+
+    with without_open_api_identity():
+        status = await PublishStatusService.get_publish_status(app_row.id, actor=owner_user.payload)
+
+    assert status["capabilities"] == [
+        {
+            "kind": "knowledge",
+            "name": str(kb.id),
+            "label": str(kb.id),
+            "revoked": True,
+            "reason": "not_ready",
+            "target_id": str(kb.id),
+            "target_type": "knowledge_space",
+            "state": "not_ready",
+        }
+    ]
     assert status["app_id"] == app_row.id
 
 

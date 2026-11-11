@@ -13,12 +13,15 @@
  * move and is kept — renaming ~20 keys across three locales would change nothing
  * a user sees.
  */
+import { FailureInfoDetails } from '~/components/FailureInfoDetails';
+import { parseFailureInfo, localizedBusinessFailure } from '~/utils/failureInfo';
 import { Outlined } from 'bisheng-icons';
-import { useState } from 'react';
 import { useLocalize } from '~/hooks';
 import { ServiceBusyNotice } from '~/components/ServiceBusyNotice';
 
 interface ChatErrorCardProps {
+    failureInfo?: unknown;
+    errorCode?: number;
     /** stable classification from the backend (error_message event / SSE error `data.error_type`) */
     errorType?: string;
     /** raw provider text for the "view details" disclosure */
@@ -92,21 +95,23 @@ export function isTransientErrorType(errorType?: string): boolean {
 
 export function ChatErrorCard({
     errorType,
-    detail,
-    fallbackMessage,
+    failureInfo,
+    errorCode,
     onRetry,
     retrying,
     description,
     hideHint,
 }: ChatErrorCardProps) {
     const localize = useLocalize();
-    const [showDetail, setShowDetail] = useState(false);
+    const failure = parseFailureInfo(failureInfo);
+    // Preserve the release line's actionable credit/context feedback.
+    const serviceFailure = ['credit_exhausted', 'context_overflow', 'context_compress_failed'].includes(errorType ?? '')
+        ? undefined : failure;
 
     const key = errorType && KNOWN_TYPES.has(errorType) ? errorType : 'unknown';
-    const title = localize(`com_linsight_error_title_${key}`);
-    const desc = description ?? localize(`com_linsight_error_desc_${key}`);
-    const hint = hideHint ? '' : localize(`com_linsight_error_hint_${key}`);
-    const rawDetail = detail || fallbackMessage || '';
+    const title = serviceFailure ? localize(`api_errors.failure_${serviceFailure.category}`) : localize(`com_linsight_error_title_${key}`);
+    const desc = serviceFailure ? undefined : localizedBusinessFailure(errorCode, localize) ?? description ?? localize(`com_linsight_error_desc_${key}`);
+    const hint = serviceFailure || hideHint ? '' : localize(`com_linsight_error_hint_${key}`);
 
     // Transient → calm neutral notice (with retry where the surface wires it).
     if (TRANSIENT_TYPES.has(key)) {
@@ -119,7 +124,7 @@ export function ChatErrorCard({
                 // load) family; timeout / unavailable are outages, so they get
                 // the static gray attention mark.
                 icon={isRateLimit ? 'gauge' : 'attention'}
-                detail={isRateLimit ? undefined : rawDetail}
+                failureInfo={failure}
                 onRetry={onRetry}
                 retrying={retrying}
             />
@@ -138,23 +143,8 @@ export function ChatErrorCard({
                     <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-text-3">{desc}</p>
                     {hint && <p className="mt-1.5 leading-relaxed text-text-3">{hint}</p>}
 
-                    {rawDetail && (
-                        <div className="mt-2.5">
-                            <button
-                                type="button"
-                                onClick={() => setShowDetail((v) => !v)}
-                                className="inline-flex items-center gap-1 text-body text-gray-400 transition-colors hover:text-gray-600"
-                            >
-                                {localize(showDetail ? 'com_linsight_error_hide_detail' : 'com_linsight_error_view_detail')}
-                                {showDetail ? <Outlined.Down size={14} /> : <Outlined.Right size={14} />}
-                            </button>
-                            {showDetail && (
-                                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-100 p-2.5 text-xs leading-relaxed text-gray-500">
-                                    {rawDetail}
-                                </pre>
-                            )}
-                        </div>
-                    )}
+                    <FailureInfoDetails failureInfo={failure} />
+
                 </div>
             </div>
         </div>

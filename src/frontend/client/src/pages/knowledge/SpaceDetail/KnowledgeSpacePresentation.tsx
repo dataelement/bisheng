@@ -1,3 +1,7 @@
+import { SpaceProcessingPanel } from "./SpaceProcessingPanel";
+import { BatchOperationDialog } from "./BatchOperationDialog";
+import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
+import { Button } from "@bisheng/ui";
 import { Fragment } from "react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { FolderPlus, Link2 } from "lucide-react";
@@ -17,9 +21,7 @@ import desktopLayout from "./KnowledgeSpaceLayout.module.css";
 interface KnowledgeSpacePresentationProps {
   model: KnowledgeSpaceModel;
 }
-export function KnowledgeSpacePresentation({
-  model,
-}: KnowledgeSpacePresentationProps) {
+export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentationProps) {
   const {
     localize,
     isH5,
@@ -43,6 +45,7 @@ export function KnowledgeSpacePresentation({
     canCreateFolder,
     canUploadFile,
     canMoveFile,
+    moveEntryIds,
     canMoveFolder,
     isSearching,
     permissionEntryIds,
@@ -93,6 +96,27 @@ export function KnowledgeSpacePresentation({
       onDrop={handleDrop}
     >
       <KnowledgeSpaceToolbar model={model} />
+      <SpaceProcessingPanel spaceId={space.id} canEdit={model.canEditSpace} state={space.state} />
+      <KnowledgeDeletionDialog operation={model.deletion} />
+      <BatchOperationDialog operation={model.batch} />
+      {(model.canDeleteSpace || (model.selectedFiles.size > 0 && model.canBatchDelete)) && (
+        <div className="flex shrink-0 justify-end gap-2 px-4 py-2">
+          <Button variant="text" onClick={model.handleReferences}>
+            {localize("com_knowledge.deletion.references")}
+          </Button>
+          {model.canDeleteSpace && (
+            <Button
+              variant="text"
+              color="danger"
+              onClick={() => {
+                void model.handleClearSpace();
+              }}
+            >
+              {localize("com_knowledge.deletion.clear")}
+            </Button>
+          )}
+        </div>
+      )}
       {/* The content scrolls while narrow-layout pagination stays below it. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div
@@ -105,10 +129,7 @@ export function KnowledgeSpacePresentation({
             menu={
               <>
                 {canUploadFile && (
-                  <DropdownItem
-                    icon={<Outlined.Upload />}
-                    onSelect={triggerUpload}
-                  >
+                  <DropdownItem icon={<Outlined.Upload />} onSelect={triggerUpload}>
                     {localize("com_knowledge.upload_file")}
                   </DropdownItem>
                 )}
@@ -118,10 +139,7 @@ export function KnowledgeSpacePresentation({
                   </DropdownItem>
                 )}
                 {canCreateFolder && (
-                  <DropdownItem
-                    icon={<FolderPlus />}
-                    onSelect={() => onCreateFolder()}
-                  >
+                  <DropdownItem icon={<FolderPlus />} onSelect={() => onCreateFolder()}>
                     {localize("com_knowledge.new_folder")}
                   </DropdownItem>
                 )}
@@ -216,17 +234,11 @@ export function KnowledgeSpacePresentation({
                       onEnsureFilePermissions={ensureFilePermissions}
                       permissionsLoading={pendingFileIds.has(String(file.id))}
                       isSelected={selectedFiles.has(file.id)}
-                      onSelect={(selected) =>
-                        handleSelectFile(file.id, selected)
-                      }
+                      onSelect={(selected) => handleSelectFile(file.id, selected)}
                       onDownload={() => handleSingleDownload(file.id)}
                       onRename={(newName) => onRenameFile(file.id, newName)}
                       onMove={() => openMove([file])}
-                      canMove={
-                        file.type === FileType.FOLDER
-                          ? canMoveFolder
-                          : canMoveFile
-                      }
+                      canMove={moveEntryIds.has(file.id)}
                       onDelete={() => handleDelete(file.id)}
                       onEditTags={() => handleOpenEditTags(file.id)}
                       onRetry={() => handleSingleRetry(file.id)}
@@ -291,12 +303,10 @@ export function KnowledgeSpacePresentation({
                 onRename={(id, newName) => onRenameFile(id, newName)}
                 onMove={(file) => openMove([file])}
                 canMoveFile={canMoveFile}
+                moveEntryIds={moveEntryIds}
                 canMoveFolder={canMoveFolder}
-                onMoveToFolder={
-                  canUploadFile
-                    ? (folderId, items, folderName) =>
-                        dropMoveToFolder(items, folderId, folderName)
-                    : undefined
+                onMoveToFolder={(folderId, items, folderName) =>
+                  dropMoveToFolder(items, folderId, folderName)
                 }
                 onDelete={(id) => handleDelete(id)}
                 onRetry={(id) => handleSingleRetry(id)}
@@ -346,9 +356,7 @@ export function KnowledgeSpacePresentation({
           <div className="flex w-full items-center rounded-[20px] border border-border-base bg-white p-3 shadow-[0_6px_24px_0_rgba(0,17,147,0.12)]">
             {inlineActions.map((a, i) => (
               <Fragment key={a.key}>
-                {i > 0 && (
-                  <span className="h-3 w-px shrink-0 bg-fill-3" aria-hidden />
-                )}
+                {i > 0 && <span className="h-3 w-px shrink-0 bg-fill-3" aria-hidden />}
                 <button
                   type="button"
                   onClick={a.onClick}
@@ -373,11 +381,7 @@ export function KnowledgeSpacePresentation({
                   menu={overflowActions.map((a, i) => (
                     <Fragment key={a.key}>
                       {a.danger && i > 0 && <DropdownSeparator />}
-                      <DropdownItem
-                        danger={a.danger}
-                        icon={<a.Icon />}
-                        onSelect={a.onClick}
-                      >
+                      <DropdownItem danger={a.danger} icon={<a.Icon />} onSelect={a.onClick}>
                         {a.label}
                       </DropdownItem>
                     </Fragment>

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager, nullcontext
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpaceCreationRequestConflictError
+from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import InitialPermissionsRequest
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -63,7 +66,25 @@ class _InitialGrants:
 
 
 def _user():
-    return SimpleNamespace(user_id=11, user_name="creator", tenant_id=7, role="user")
+    return UserPayload(user_id=11, user_name="creator", tenant_id=7, user_role=[])
+
+
+@pytest.fixture(autouse=True)
+def transaction_transport(monkeypatch):
+    """F050 tests isolate SQL; the real SQL/R2 lifecycle has dedicated coverage."""
+    token = set_current_tenant_id(7)
+
+    @asynccontextmanager
+    async def sessions():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    path = "bisheng.knowledge.domain.services.knowledge_space_service"
+    monkeypatch.setattr(f"{path}.get_async_db_session", sessions)
+    monkeypatch.setattr(f"{path}.KnowledgeService._init_knowledge_indices_sync", MagicMock())
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(token)
 
 
 def _space(*, request_id: str | None = None, payload_hash: str | None = None) -> Knowledge:
@@ -103,8 +124,17 @@ def _service(adapter: _Adapter, grants: _InitialGrants | None = None) -> Knowled
 
 
 def _creation_patches(space: Knowledge):
+    async def create(session, row, *, login_user, project_created):
+        # The new application callback receives the actually flushed SPACE.
+        # Model/SQL/receipt semantics are exercised by the real lifecycle suite.
+        row.id = space.id
+        row.tenant_id = space.tenant_id
+        row.user_id = space.user_id
+        await project_created(row)
+        return row
+
     return (
-        patch.object(KnowledgeSpaceService, "_is_square_preview_space", return_value=False),
+        nullcontext(),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user",
             new_callable=AsyncMock,
@@ -116,11 +146,13 @@ def _creation_patches(space: Knowledge):
             return_value=SimpleNamespace(embedding_model=SimpleNamespace(id=3)),
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base",
-            return_value=space,
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeModelReferenceApplication.acreate",
+            new_callable=AsyncMock,
+            side_effect=create,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member",
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeModelReferenceApplication.repository.aadd_space_creator",
             new_callable=AsyncMock,
         ),
         patch(
@@ -159,7 +191,7 @@ async def test_legacy_payload_preserves_original_response_and_side_effects() -> 
 
     assert result.id == 101
     assert result.initial_permission_result is None
-    assert create.call_args.args[2].creation_request_id is None
+    assert create.call_args.args[1].creation_request_id is None
     assert adapter.authorized == 1
     member.assert_awaited_once()
     audit.assert_awaited_once()
@@ -236,12 +268,12 @@ async def test_new_payload_persists_hash_preserves_auto_tag_and_applies_grants()
             initial_permissions=_initial(),
         )
 
-    db_space = create.call_args.args[2]
+    db_space = create.call_args.args[1]
     assert db_space.creation_request_id == "req-1"
     assert len(db_space.creation_payload_hash) == 64
     tags.assert_awaited_once()
-    assert inserted.auto_tag_enabled is True
-    assert inserted.auto_tag_library_id == 19
+    assert result.auto_tag_enabled is True
+    assert result.auto_tag_library_id == 19
     assert result.initial_permission_result.status == "succeeded"
     assert result.initial_permission_result.assignee_ids == ["91"]
     assert grants.requests[0]["request"].command_key == "req-1"
@@ -354,17 +386,18 @@ async def test_same_key_retry_resumes_permissions_without_business_side_effects(
     )
     existing = _space(request_id="req-1", payload_hash=payload_hash)
     with (
-        patch.object(KnowledgeSpaceService, "_is_square_preview_space", return_value=False),
+        nullcontext(),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_by_creation_request",
             new_callable=AsyncMock,
             return_value=existing,
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base"
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeModelReferenceApplication.acreate"
         ) as create,
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member",
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeModelReferenceApplication.repository.aadd_space_creator",
             new_callable=AsyncMock,
         ) as member,
     ):
@@ -418,7 +451,8 @@ async def test_unique_key_race_loads_winner_and_skips_duplicate_side_effects() -
         patches[1],
         patches[2],
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeModelReferenceApplication.acreate",
+            new_callable=AsyncMock,
             side_effect=IntegrityError("duplicate", None, Exception("duplicate")),
         ),
         patches[4] as member,

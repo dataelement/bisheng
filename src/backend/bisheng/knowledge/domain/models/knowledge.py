@@ -139,6 +139,25 @@ class Knowledge(KnowledgeBase, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    # Server-owned metadata lives only on the ORM model. KnowledgeBase is
+    # inherited by legacy response DTOs, whose shape must remain unchanged.
+    # Some legacy endpoints return this ORM directly inside an Any envelope;
+    # exclude private columns there too. Owners use attributes and explicit DTOs.
+    processing_defaults: dict | None = Field(default=None, exclude=True, sa_column=Column(JsonType, nullable=True))
+    processing_config_version: int = Field(
+        default=0, exclude=True, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+    metadata_schema_revision: int = Field(
+        default=0, exclude=True, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+    model_config_revision: int = Field(
+        default=0, exclude=True, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+    # Effective switch settings belong to the business resource, never a job's
+    # historical parameters. The owning use case validates the phase contract.
+    model_transition: dict | None = Field(default=None, exclude=True, sa_column=Column(JsonType, nullable=True))
+    index_generation: str | None = Field(default=None, exclude=True, max_length=64)
+    migration_origin: str | None = Field(default=None, exclude=True, max_length=64)
     creation_request_id: str | None = Field(
         default=None,
         sa_column=Column(String(64), nullable=True),
@@ -147,6 +166,11 @@ class Knowledge(KnowledgeBase, table=True):
         default=None,
         sa_column=Column(String(64), nullable=True),
     )
+
+
+def _personal_space_quota_count_predicate():
+    """Only personal quota counts exempt a durable, nonempty migration origin."""
+    return or_(col(Knowledge.migration_origin).is_(None), Knowledge.migration_origin == "")
 
 
 class KnowledgeRead(KnowledgeBase):
@@ -761,7 +785,9 @@ class KnowledgeDao(KnowledgeBase):
     def count_spaces_by_user(cls, user_id: int, exclude_department_spaces: bool = False) -> int:
         """Count how many Knowledge Spaces a user has created"""
         statement = select(func.count(Knowledge.id)).where(
-            Knowledge.user_id == user_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value
+            Knowledge.user_id == user_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            _personal_space_quota_count_predicate(),
         )
         if exclude_department_spaces:
             statement = cls._exclude_department_spaces(statement)
@@ -772,7 +798,9 @@ class KnowledgeDao(KnowledgeBase):
     async def async_count_spaces_by_user(cls, user_id: int, exclude_department_spaces: bool = False) -> int:
         """Async: Count how many Knowledge Spaces a user has created"""
         statement = select(func.count(Knowledge.id)).where(
-            Knowledge.user_id == user_id, Knowledge.type == KnowledgeTypeEnum.SPACE.value
+            Knowledge.user_id == user_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            _personal_space_quota_count_predicate(),
         )
         if exclude_department_spaces:
             statement = cls._exclude_department_spaces(statement)

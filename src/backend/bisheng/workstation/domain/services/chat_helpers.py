@@ -7,11 +7,13 @@ import aiofiles
 from fastapi import Request
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
+from loguru import logger
 from pydantic import BaseModel
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.chat.utils import SourceType, process_source_document
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
@@ -108,6 +110,37 @@ async def final_message(
     return f"event: message\ndata: {msg}\n\n"
 
 
+async def resolve_title_llm(chat_llm: BaseChatModel, login_user: UserPayload) -> BaseChatModel:
+    """Pick the model that names a workbench conversation.
+
+    The admin's 会话标题生成模型 (workbench config ``chat_title_llm``) wins when
+    set, so a fast non-thinking model can take naming off the chat model; with
+    none set, the conversation's own chat model names it, as before.
+    """
+    from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+    from bisheng.llm.domain import LLMService
+
+    model_id = None
+    try:
+        conf = await LLMService.get_workbench_llm()
+        model_id = conf.chat_title_llm.id if conf and conf.chat_title_llm else None
+        if not model_id:
+            return chat_llm
+        return await LLMService.get_bisheng_llm(
+            model_id=model_id,
+            app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+            app_name="workstation_chat_title",
+            app_type=ApplicationTypeEnum.DAILY_CHAT,
+            user_id=login_user.user_id,
+        )
+    except Exception:
+        # Offline or deleted: naming is not worth failing over; say so in the log.
+        logger.opt(exception=True).warning(
+            f"Chat title model {model_id!r} could not be loaded; naming with the chat model"
+        )
+        return chat_llm
+
+
 async def gen_title(
     human: str,
     llm: BaseChatModel,
@@ -119,8 +152,11 @@ async def gen_title(
 
     The assistant's reply is deliberately NOT used: waiting for it is what tied
     the title to the end of a round, and the question already states the topic.
+    ``llm`` is the conversation's chat model; the configured title model, when
+    set, takes its place (``resolve_title_llm``).
     """
-    title = await generate_conversation_title_async(question=human, llm=llm)
+    title_llm = await resolve_title_llm(llm, login_user)
+    title = await generate_conversation_title_async(question=human, llm=title_llm)
     session = await MessageSessionDao.async_get_one(conversation_id)
     if session:
         from bisheng.chat_session.domain.chat import ChatSessionService
@@ -315,6 +351,20 @@ def _format_new_message(msg: ChatMessage) -> dict:
             extra = {}
     except (json.JSONDecodeError, TypeError):
         extra = {}
+    extra = FailureContextAdapter.public_payload(extra)
+    if isinstance(message_content, dict):
+        for event in message_content.get("events") or []:
+            if not isinstance(event, dict) or event.get("type") != "tool_call":
+                continue
+            failed = bool(event.get("error"))
+            if failed:
+                event["error"] = "Tool execution failed."
+            event["results"] = FailureContextAdapter.public_tool_result(event.get("results"), failed=failed)
+            event.pop("detail", None)
+            event.pop("exception", None)
+            info = FailureContextAdapter.validate(event.pop("failure_info", None))
+            if info:
+                event["failure_info"] = info
     return {
         **_message_base_fields(msg),
         "message": message_content,

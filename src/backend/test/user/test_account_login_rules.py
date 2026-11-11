@@ -6,7 +6,15 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from sqlmodel import Session, select
 
-from bisheng.common.errcode.user import AmbiguousAccountError, CaptchaError, NicknameValidationError, UserValidateError
+from bisheng.common.errcode.user import (
+    AmbiguousAccountError,
+    CaptchaError,
+    NicknameValidationError,
+    UserForbiddenError,
+    UserPasswordExpireError,
+    UserPasswordMaxTryError,
+    UserValidateError,
+)
 from bisheng.database.models.user_role import UserRole
 from bisheng.user.domain.models.user import UserCreate, UserLogin
 from bisheng.user.domain.services.account_identity_service import AccountIdentityService
@@ -26,6 +34,8 @@ def user_module(monkeypatch, tmp_path):
         aget_from_db=AsyncMock(return_value=False),
     )
     monkeypatch.setattr(module, "settings", configuration)
+    monkeypatch.setattr(module.UserService, "_audit_login_failure", Mock())
+    monkeypatch.setattr(module.UserService, "_audit_auto_forbid", Mock())
     return module
 
 
@@ -93,6 +103,7 @@ async def test_login_does_not_try_passwords_to_resolve_ambiguity(user_module, mo
         await user_module.UserService.user_login(SimpleNamespace(), UserLogin(user_name="old01", password="cipher"))
     decrypt.assert_not_called()
     judge.assert_not_awaited()
+    user_module.UserService._audit_login_failure.assert_called_once()
 
 
 async def test_wrong_password_checks_only_the_resolved_identity(user_module, identity_store, monkeypatch):  # noqa: F811
@@ -108,3 +119,42 @@ async def test_wrong_password_checks_only_the_resolved_identity(user_module, ide
     )
     assert result.status_code == 10600
     judge.assert_awaited_once_with(target, "candidate-digest")
+    user_module.UserService._audit_login_failure.assert_called_once()
+    assert user_module.UserService._audit_login_failure.call_args.kwargs["account"] == target.user_name
+
+
+@pytest.mark.parametrize("disabled", [False, True])
+async def test_unresolved_identity_keeps_the_release_line_failure_audit(user_module, monkeypatch, disabled):
+    """AC-11, AC-15: exact matching retains missing and disabled login audit paths."""
+    resolve = AsyncMock(side_effect=UserForbiddenError()) if disabled else AsyncMock(return_value=None)
+    monkeypatch.setattr(AccountIdentityService, "aresolve_login", resolve)
+    request = SimpleNamespace()
+    result = await user_module.UserService.user_login(request, UserLogin(user_name="RawCase01", password="cipher"))
+    expected = UserForbiddenError() if disabled else UserValidateError()
+    assert result.status_code == expected.code
+    call = user_module.UserService._audit_login_failure.call_args
+    assert call.args == (request,)
+    assert call.kwargs["account"] == "RawCase01"
+
+
+@pytest.mark.parametrize("error_type", [UserPasswordExpireError, UserPasswordMaxTryError])
+async def test_password_guard_failures_keep_audit_and_automatic_forbid(user_module, monkeypatch, error_type):
+    """AC-15: the single resolved identity retains expiry, lockout and audit behavior."""
+    target = SimpleNamespace(user_id=7, user_name="display-name")
+    monkeypatch.setattr(AccountIdentityService, "aresolve_login", AsyncMock(return_value=target))
+    monkeypatch.setattr(user_module.UserService, "decrypt_md5_password", Mock(return_value="test-digest"))
+    judge = AsyncMock(side_effect=error_type())
+    monkeypatch.setattr(user_module.UserService, "judge_user_password", judge)
+    request = SimpleNamespace()
+    with pytest.raises(error_type):
+        await user_module.UserService.user_login(request, UserLogin(user_name="RawCase01", password="cipher"))
+    judge.assert_awaited_once_with(target, "test-digest")
+    audit = user_module.UserService._audit_login_failure.call_args
+    assert audit.args == (request,)
+    assert audit.kwargs["user_id"] == target.user_id
+    assert audit.kwargs["account"] == target.user_name
+    AccountIdentityService.aresolve_login.assert_awaited_once_with("RawCase01")
+    if error_type is UserPasswordMaxTryError:
+        user_module.UserService._audit_auto_forbid.assert_called_once_with(request, target)
+    else:
+        user_module.UserService._audit_auto_forbid.assert_not_called()

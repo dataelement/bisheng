@@ -19,7 +19,7 @@
 | user_account_reservation | 新表，记录 v1 精确占用；停用或删除人员不释放。 |
 | user_identity_write_guard | 新表，低频身份创建共用一行锁。首次使用由 repository 在独立事务初始化。 |
 
-迁移：`v310b1_f011_account_identity`，父版本：`v310b1_f004_workflow_soft_delete`。新表沿用项目模型发现与启动建表机制；迁移处理已有表增列及索引。
+迁移：`v310b1_f011_account_identity`，父版本：`v310b1_f009_system_profiles`。新表沿用项目模型发现与启动建表机制；迁移处理已有表增列及索引。
 
 ## 发布前只读核对
 

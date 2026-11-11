@@ -217,8 +217,8 @@ logger_conf:
 # 应用工场（v3.0 新增）
 #
 # ⚠️ 升级顺序不可颠倒：**先发代码 → 再加下面的键 → 再全量重启**。
-#    后端加载 config.yaml 时对**不认识的顶层键直接抛 KeyError 拒绝启动**
-#    （common/services/config_service.py 的 load_settings_from_yaml）。
+#    旧镜像加载 config.yaml 时可能对不认识的顶层键抛 KeyError 拒绝启动；
+#    包含兼容修复的新镜像会警告并忽略未知顶层键，但对应功能不会生效。
 #    也就是说：把 `app_runtime:` / `open_platform:` 加到还没升级到 v3.0 的
 #    镜像上，后端会起不来，症状是容器反复重启而不是"功能没生效"。
 #    正因如此，**下面两块默认整体注释掉**——本文件要能被任何镜像版本安全加载。

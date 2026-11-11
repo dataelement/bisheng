@@ -1,19 +1,18 @@
-bisheng {{ .Chart.Version }}
+BiSheng source Chart {{ .Chart.Version }}.
 
-Frontend Service: {{ include "bisheng.frontendService" . }}:{{ .Values.frontend.service.port }}
-Backend Service:  {{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }}
+Use a compatible digest-locked image-set and official runtime catalog. Source lint/template
+checks are not a real cluster installation. See docker/helm/README.md.
 
+First user registration follows the normal super-admin flow.
+{{- if not .Values.gateway.enabled }}
+Gateway is disabled. Native DSH follows its independent setting.
+{{- end }}
+{{- if .Values.runtime.enabled }}
+Vibe is enabled. CNI NetworkPolicy and bounded SQLite-compatible CSI storage are required.
+Manual diagnosis is optional; no report renewal or environment preflight Job is installed.
+{{- end }}
 {{- if .Values.sandbox.enabled }}
-
-Sandbox endpoints (one URL per replica, not the Service VIP):
-{{- range .Values.sandbox.endpoints }}
-  {{ . }}
+Code sandbox is enabled. Existing environments switching it off need the deferred endpoint/executor handling.
 {{- end }}
 
-Install the sibling chart first, for example:
-
-  helm upgrade --install sandbox docker/helm/bisheng-sandbox \
-    --namespace bisheng-sandbox --create-namespace
-
-Keep SANDBOX_TOKEN / BS_SANDBOX_CONF__TOKEN identical on both releases.
-{{- end }}
+kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "bisheng.frontendService" . }} 3001:{{ .Values.frontend.service.port }}

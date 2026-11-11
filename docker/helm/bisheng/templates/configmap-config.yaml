@@ -1,17 +1,67 @@
-{{- if not .Values.config.existingConfigMap }}
+{{- if not .Values.config.existingConfigMap -}}
+{{- include "bisheng.runtimeDefaults" . -}}
+{{- $settings := deepCopy .Values.config.settings -}}
+{{- if not (hasKey $settings "environment") }}{{ $_ := set $settings "environment" (dict "env" "prod") }}{{ end -}}
+{{- if not (hasKey $settings "database_pool") }}{{ $_ := set $settings "database_pool" (dict "pool_size" 10 "max_overflow" 10 "pool_pre_ping" true) }}{{ end -}}
+{{- $runtime := default (dict) (get $settings "app_runtime") -}}
+{{- if not (hasKey $runtime "enabled") }}{{ $_ := set $runtime "enabled" .Values.runtime.enabled }}{{ end -}}
+{{- $bindings := list (dict "path" (list "jwt_secret") "file" "/run/settings-secrets/jwt-secret") (dict "path" (list "sso_sync" "gateway_hmac_secret") "file" "/run/settings-secrets/gateway-hmac") -}}
+{{- $fg := dict "enabled" true "api_url" (printf "%s://%s:%d" .Values.openfga.external.scheme (include "bisheng.host" (list . "openfga")) (int .Values.openfga.external.port)) "store_name" .Values.openfga.storeName "force_write_model" false -}}
+{{- $fg = mergeOverwrite $fg (default (dict) (get $settings "openfga")) -}}
+{{- $_ := set $fg "force_write_model" false -}}
+{{- $_ := set $settings "openfga" $fg -}}
+{{- $_ := set $settings "dsh" (mergeOverwrite (dict "enabled" .Values.dsh.enabled "platform_public_url" .Values.publicUrl) (default (dict) (get $settings "dsh"))) -}}
+{{- $_ := set $settings "open_platform" (mergeOverwrite (dict "enabled" .Values.openPlatform.enabled) (default (dict) (get $settings "open_platform"))) -}}
+{{- $minioHost := printf "%s:%d" (include "bisheng.host" (list . "minio")) (int .Values.minio.external.port) -}}
+{{- $share := .Values.minio.external.sharepoint -}}
+{{- if not $share }}{{ $share = get (urlParse .Values.publicUrl) "host" }}{{ end -}}
+{{- $objectStorage := (dict "type" "minio" "minio" (dict "endpoint" $minioHost "sharepoint" $share "schema" .Values.minio.external.secure "public_bucket" .Values.minio.buckets.public "tmp_bucket" .Values.minio.buckets.temporary)) -}}
+{{- $_ := set $settings "object_storage" (mergeOverwrite $objectStorage (default (dict) (get $settings "object_storage"))) -}}
+{{- $bindings = append $bindings (dict "path" (list "object_storage" "minio" "access_key") "file" "/run/settings-secrets/minio/access-key") -}}
+{{- $bindings = append $bindings (dict "path" (list "object_storage" "minio" "secret_key") "file" "/run/settings-secrets/minio/secret-key") -}}
+{{- $vectorStores := (dict "milvus" (dict "connection_args" (dict "host" (include "bisheng.host" (list . "milvus")) "port" (printf "%d" (int .Values.milvus.external.port)) "user" .Values.milvus.user "secure" .Values.milvus.secure)) "elasticsearch" (dict "url" (printf "%s://%s:%d" .Values.elasticsearch.external.scheme (include "bisheng.host" (list . "elasticsearch")) (int .Values.elasticsearch.external.port)))) -}}
+{{- $_ := set $settings "vector_stores" (mergeOverwrite $vectorStores (default (dict) (get $settings "vector_stores"))) -}}
+{{- if .Values.elasticsearch.auth.enabled -}}
+{{- $bindings = append $bindings (dict "path" (list "vector_stores" "elasticsearch" "ssl_verify" "basic_auth") "file" "/run/settings-secrets/elasticsearch/basic-auth" "encoding" "json") -}}
+{{- end -}}
+{{- if .Values.milvus.auth.enabled -}}
+{{- $bindings = append $bindings (dict "path" (list "vector_stores" "milvus" "connection_args" "password") "file" "/run/settings-secrets/milvus/password") -}}
+{{- end -}}
+{{- if .Values.sandbox.enabled -}}
+{{- $_ := set $settings "sandbox_conf" (mergeOverwrite (dict "endpoints" (include "bisheng.sandboxEndpoints" . | fromJsonArray)) (default (dict) (get $settings "sandbox_conf"))) -}}
+{{- $bindings = append $bindings (dict "path" (list "sandbox_conf" "token") "file" "/run/settings-secrets/sandbox/token") -}}
+{{- end -}}
+{{- if .Values.runtime.enabled -}}
+{{- $context := dict "Release" .Release "Values" .Values.runtime "Chart" .Chart -}}
+{{- include "runtime.defaults" $context -}}
+{{- $_ := set $runtime "runtime_kubernetes_nodes" (dict .Values.runtime.execution.nodeId "/run/runtime-policy/descriptor.json") -}}
+{{- $_ := set $runtime "runtime_default_node_id" .Values.runtime.execution.nodeId -}}
+{{- $_ := set $runtime "runtime_protocol_version" 2 -}}
+{{- $_ := set $runtime "runtime_task_timeout_seconds" .Values.runtime.execution.operationTimeoutSeconds -}}
+{{- $_ := set $runtime "runtime_offline" .Values.runtime.offline.enabled -}}
+{{- $_ := set $runtime "runtime_control_key_id" "control" -}}
+{{- $_ := set $runtime "manager_base_url" (printf "http://%s:%d" (include "runtime.name" (list . "runtime-manager")) 8091) -}}
+{{- $_ := set $runtime "runtime_platform_base_url" (printf "https://%s:443" (include "bisheng.component" (list . "internal"))) -}}
+{{- $keys := dict -}}
+{{- range $role := list "manager" "entry" "egress" "admission" -}}
+{{- $_ := set $keys $role (dict "node_id" $.Values.runtime.execution.nodeId "roles" (list $role)) -}}
+{{- $bindings = append $bindings (dict "path" (list "app_runtime" "runtime_service_keys" $role "secret") "file" (printf "/run/settings-secrets/%s-secret" $role)) -}}
+{{- end -}}
+{{- $_ := set $runtime "runtime_service_keys" $keys -}}
+{{- range $key, $file := dict "runtime_payload_key" "payload-key" "runtime_control_secret" "control-secret" "manager_hmac_secret" "control-secret" "proxy_hmac_secret" "authz-secret" "obo_secret" "obo-secret" -}}
+{{- $bindings = append $bindings (dict "path" (list "app_runtime" $key) "file" (printf "/run/settings-secrets/%s" $file)) -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $settings "app_runtime" $runtime -}}
+{{- $database := dict "host" (include "bisheng.databaseHost" .) "port" .Values.database.port "name" .Values.database.name "username" .Values.database.username "driver" "mysql+pymysql" "password_file" "/run/settings-secrets/database/password" -}}
+{{- if eq .Values.database.engine "dm8" }}{{ $_ := set $database "driver" "dm+dmPython" }}{{ $_ := set $database "name" "" }}{{ $_ := set $database "query" (dict "schema" .Values.database.name) }}{{ end -}}
+{{- $redis := dict "host" (include "bisheng.host" (list . "redis")) "port" .Values.redis.external.port "username" .Values.redis.username "tls" .Values.redis.tls "password_file" "/run/settings-secrets/redis/password" "cacheDb" .Values.redis.cacheDb "celeryDb" .Values.redis.celeryDb -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "bisheng.fullname" . }}-config
-  labels:
-    {{- include "bisheng.labels" . | nindent 4 }}
+  name: {{ include "bisheng.component" (list . "config") }}
+  labels: {{ include "bisheng.labels" . | nindent 4 }}
 data:
-  config.yaml: |
-{{- if .Values.config.yaml }}
-{{ .Values.config.yaml | nindent 4 }}
-{{- else if .Values.config.file }}
-{{ .Files.Get .Values.config.file | nindent 4 }}
-{{- else }}
-{{ .Files.Get "files/config.yaml" | nindent 4 }}
-{{- end }}
+  deployment.json: {{ dict "settings" $settings "database" $database "redis" $redis "secret_files" $bindings | toJson | quote }}
+
 {{- end }}

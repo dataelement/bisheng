@@ -11,7 +11,7 @@ from bisheng.core.database.alembic_helpers.online import (
 )
 
 revision = "v310b1_f011_account_identity"
-down_revision = "v310b1_f004_workflow_soft_delete"
+down_revision = "v310b1_f009_system_profiles"
 branch_labels = None
 depends_on = None
 

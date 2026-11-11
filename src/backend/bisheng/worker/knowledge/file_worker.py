@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 
 from langchain_elasticsearch import ElasticsearchStore
 from loguru import logger
@@ -11,8 +12,17 @@ from bisheng.api.services.knowledge_imp import (
     process_file_task,
 )
 from bisheng.api.v1.schemas import FileProcessBase
-from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
+from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.knowledge import (
+    KnowledgeFileEmptyError,
+    KnowledgeFileFailedError,
+    KnowledgeOperationPlanConflictError,
+    KnowledgeUnificationError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.core.ai import FakeEmbeddings
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -22,9 +32,171 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.schemas.processing_settings import EffectiveProcessingSnapshot
+from bisheng.knowledge.rag.knowledge_file_pipeline import (
+    FILE_PROCESSING_PATCH_FIELDS,
+    FileProcessingResult,
+    KnowledgeFilePipeline,
+    PreparedFileProcessing,
+    physical_processing_source_digest,
+)
+from bisheng.knowledge.rag.pipeline.types import PipelineConfig, PipelineStage
+from bisheng.llm.domain import LLMService
+from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViolation
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
 from bisheng_langchain.vectorstores import Milvus
+
+
+def _processing_source(file_id, space_id):
+    rows = KnowledgeFileDao.get_file_by_ids([file_id])
+    if (
+        not rows
+        or rows[0].tenant_id != get_current_tenant_id()
+        or rows[0].knowledge_id != space_id
+        or rows[0].file_type != 1
+    ):
+        raise ResourceReferenceInvalidError(reason="processing_file_source_changed")
+    return rows[0]
+
+
+def _processing_model(space_id, expected_model_config_revision, expected_index_generation):
+    from bisheng.worker.knowledge.rebuild_knowledge_worker import _require_processing_model
+
+    return _require_processing_model(
+        space_id,
+        operation_id=None,
+        expected_model_config_revision=expected_model_config_revision,
+        expected_index_generation=expected_index_generation,
+    )
+
+
+def prepare_processing_file(
+    file_id,
+    *,
+    space_id,
+    invoke_user_id,
+    kind,
+    processing_snapshot,
+    expected_model_config_revision,
+    expected_index_generation,
+) -> PreparedFileProcessing:
+    _processing_model(space_id, expected_model_config_revision, expected_index_generation)
+    if (
+        kind not in {"file_reprocess", "file_resplit"}
+        or processing_snapshot.get("mode") != kind
+        or type(processing_snapshot.get("schema_version")) is not int
+        or processing_snapshot.get("schema_version") != 1
+        or set(processing_snapshot)
+        != {"schema_version", "mode", "original_status", "effective_processing", "source_revision"}
+    ):
+        raise KnowledgeOperationPlanConflictError(reason="processing_file_snapshot_invalid")
+    effective = EffectiveProcessingSnapshot.model_validate(processing_snapshot["effective_processing"])
+    source = _processing_source(file_id, space_id)
+    digest = physical_processing_source_digest(source)
+    detached = KnowledgeFile.model_validate(deepcopy(source.model_dump()))
+    detached.simhash = None
+    detached.similar_status = 0
+    documents, status, code = (), 2, None
+    try:
+        result = KnowledgeFilePipeline(
+            invoke_user_id=invoke_user_id, db_file=detached, effective_processing=effective, need_thumbnail=True
+        ).run(PipelineConfig(stop_at=PipelineStage.TRANSFORMER))
+        documents = tuple(result.documents or ())
+        if not documents:
+            raise KnowledgeFileEmptyError()
+    except KnowledgeUnificationError:
+        raise
+    except ContentSafetyViolation:
+        logger.opt(exception=True).warning("Knowledge processing safety rejection file={}", file_id)
+        status, code = 7, KnowledgeFileFailedError.Code
+    except BaseErrorCode as error:
+        logger.opt(exception=True).warning("Knowledge processing parse rejected file={} code={}", file_id, error.Code)
+        status, code = 3, error.Code
+    except Exception:
+        logger.exception("Knowledge processing parse failed file={}", file_id)
+        status, code = 3, KnowledgeFileFailedError.Code
+    patch = {name: deepcopy(getattr(detached, name)) for name in FILE_PROCESSING_PATCH_FIELDS}
+    return PreparedFileProcessing(
+        file_id,
+        source.tenant_id,
+        space_id,
+        expected_model_config_revision,
+        expected_index_generation,
+        digest,
+        processing_snapshot["source_revision"],
+        documents,
+        patch,
+        status,
+        code,
+    )
+
+
+def write_processing_file(
+    prepared, *, space_id, invoke_user_id, expected_model_config_revision, expected_index_generation
+) -> FileProcessingResult:
+    knowledge, admitted, scope = _processing_model(space_id, expected_model_config_revision, expected_index_generation)
+    if not isinstance(prepared, PreparedFileProcessing) or (
+        prepared.space_id,
+        prepared.tenant_id,
+        prepared.model_config_revision,
+        prepared.index_generation,
+    ) != (space_id, get_current_tenant_id(), expected_model_config_revision, expected_index_generation):
+        raise KnowledgeOperationPlanConflictError(reason="processing_file_prepared_changed")
+    source = _processing_source(prepared.file_id, space_id)
+    if physical_processing_source_digest(source) != prepared.physical_source_digest:
+        raise KnowledgeOperationPlanConflictError(reason="processing_file_source_changed")
+    if prepared.status != 2:
+        return FileProcessingResult(
+            prepared.file_id,
+            prepared.source_revision,
+            prepared.status,
+            0,
+            deepcopy(prepared.file_patch),
+            prepared.error_code,
+        )
+    embedding = LLMService.get_bisheng_knowledge_embedding_sync(
+        model_id=admitted.model_id, invoke_user_id=invoke_user_id
+    )
+    vector = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+        invoke_user_id=invoke_user_id,
+        knowledge=knowledge,
+        embeddings=embedding,
+        metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+        **scope,
+    )
+    es = KnowledgeRag.init_knowledge_es_vectorstore_sync(
+        knowledge=knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA, **scope
+    )
+
+    def clear():
+        if vector.col is not None:
+            vector.col.delete(f"document_id == {int(prepared.file_id)} && knowledge_id == {int(space_id)}")
+        if es.client.indices.exists(index=knowledge.index_name):
+            es.client.delete_by_query(
+                index=knowledge.index_name, query={"terms": {"metadata.document_id": [prepared.file_id]}}
+            )
+
+    clear()
+    try:
+        vector.add_documents(deepcopy(list(prepared.documents)))
+        es.add_documents(deepcopy(list(prepared.documents)))
+    except KnowledgeUnificationError:
+        raise
+    except Exception:
+        logger.exception("Knowledge processing ingest failed file={}", prepared.file_id)
+        clear()  # Mandatory cleanup failure remains a global, recoverable failure.
+        return FileProcessingResult(
+            prepared.file_id,
+            prepared.source_revision,
+            3,
+            len(prepared.documents),
+            deepcopy(prepared.file_patch),
+            KnowledgeFileFailedError.Code,
+        )
+    return FileProcessingResult(
+        prepared.file_id, prepared.source_revision, 2, len(prepared.documents), deepcopy(prepared.file_patch)
+    )
 
 
 @bisheng_celery.task(acks_late=True)

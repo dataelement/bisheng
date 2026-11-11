@@ -1,3 +1,4 @@
+import { KnowledgeDeletionDialog } from "../SpaceDetail/KnowledgeDeletionDialog";
 import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { useKnowledgeSpaceLists } from "../hooks/useKnowledgeSpaceLists";
 import { ChevronDown, Plus, X } from "lucide-react";
@@ -222,7 +223,7 @@ export function KnowledgeSpaceSidebar({
   };
 
   // CRUD operations with optimistic updates (mirrors useChannelActions)
-  const { handleUpdateSpace, handleDeleteSpace, handleLeaveSpace, handlePinSpace } = useSpaceActions({
+  const { deletion, handleUpdateSpace, handleDeleteSpace, handleLeaveSpace, handlePinSpace } = useSpaceActions({
     activeSpaceId,
     createdSortBy,
     joinedSortBy,
@@ -540,6 +541,7 @@ export function KnowledgeSpaceSidebar({
           style={{ left: sidebarWidth }}
         />
       )}
+      <KnowledgeDeletionDialog operation={deletion} />
       <NavToggle
         navVisible={!collapsed}
         onToggle={() => setCollapsed(!collapsed)}

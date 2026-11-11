@@ -163,7 +163,7 @@ async def astamp_session(row: Any) -> None:
 class AuditDeptScope:
     """Which departments a caller may read. Built by ``department.domain``.
 
-    ``unrestricted`` — global super / tenant admin: no department condition.
+    ``unrestricted`` — platform super only: no department condition.
     Otherwise the closure is every department under one of ``admin_paths``
     (any status) plus ``exact_ids``; an empty closure means nothing is visible.
     Rows whose department is NULL / 0 / -1 are never in a closure.

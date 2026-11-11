@@ -115,7 +115,10 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(chat_service.ChatMessageDao, "insert_one", MagicMock(side_effect=_record))
     monkeypatch.setattr(chat_service.ChatMessageDao, "ainsert_one", AsyncMock(side_effect=_record))
-    return SimpleNamespace(inserted=inserted, state=state)
+    monkeypatch.setattr(chat_service.ChatMessageDao, "aupdate_message_model", AsyncMock())
+    marked = MagicMock()
+    monkeypatch.setattr(chat_service, "mark_session_content_violation", marked)
+    return SimpleNamespace(inserted=inserted, state=state, marked=marked)
 
 
 async def _drain(response) -> list[str]:
@@ -174,6 +177,7 @@ async def test_output_hit_at_100_replaces_persisted_answer(stream_env, monkeypat
     assert "should-not-appear" not in body["msg"]
     assert "x" * 60 not in body["msg"]
     assert scanners[0].fed == ["x" * 60, "y" * 50]
+    stream_env.marked.assert_called_with("chat-1")
 
 
 async def test_thinking_with_banned_word_is_not_scanned(stream_env, monkeypatch):

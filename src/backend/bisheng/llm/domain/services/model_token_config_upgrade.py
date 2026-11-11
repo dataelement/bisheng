@@ -37,7 +37,9 @@ def transform_token_config(config: dict | None, provider: str) -> dict | None:
     result = deepcopy(config)
     params = deepcopy(params)
     limit = result.pop("max_tokens")
-    if limit is not None and limit != "" and limit != 0:
+    # bool is an int subclass, and False == 0. Only a real integer zero is inactive.
+    inactive = limit is None or limit == "" or (type(limit) is int and limit == 0)
+    if not inactive:
         if isinstance(limit, str) and limit.isdecimal():
             limit = int(limit)
         if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:

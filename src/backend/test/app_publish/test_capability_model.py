@@ -42,6 +42,8 @@ from bisheng.app_publish.domain.services.capability_bus_service import (
     undeployable_scopes,
 )
 
+from .reference_fixtures import bind_saved_source as bind_saved_source
+
 
 def _declaration(models=(), knowledge=()):
     return CapabilityDeclaration.model_validate(
@@ -164,7 +166,7 @@ def test_a_model_declaration_needs_the_extension_scope_this_deployment_may_not_o
 # ---------------------------------------------------------------------------
 
 
-async def test_the_port_reports_the_running_versions_models(publish_db, app_factory):
+async def test_the_port_reports_the_running_versions_models(publish_db, app_factory, bind_saved_source):
     from bisheng.database.models.app_version import AppVersionDao
 
     app_row, version = await app_factory(state="online")
@@ -174,14 +176,16 @@ async def test_the_port_reports_the_running_versions_models(publish_db, app_fact
         session.add(row)
         await session.commit()
 
+    await bind_saved_source(app_row, version)
     declared = await HostedAppDeclarationAdapter().declared_model_names(app_row.id, app_row.tenant_id)
 
     assert declared == frozenset({"qwen-max", "provider/gpt-4o"})
 
 
-async def test_declaring_no_models_is_an_empty_set_not_unknown(publish_db, app_factory):
+async def test_declaring_no_models_is_an_empty_set_not_unknown(publish_db, app_factory, bind_saved_source):
     app_row, _version = await app_factory(state="online")
 
+    await bind_saved_source(app_row, _version)
     declared = await HostedAppDeclarationAdapter().declared_model_names(app_row.id, app_row.tenant_id)
 
     # Empty set and None are two different answers on F051's face: 26515 ("you
@@ -191,19 +195,33 @@ async def test_declaring_no_models_is_an_empty_set_not_unknown(publish_db, app_f
 
 
 @pytest.mark.parametrize("state", ["draft", "stopped", "pending_capacity", "deleted"])
-async def test_an_application_that_is_not_online_declares_nothing_knowable(publish_db, app_factory, state):
-    app_row, _version = await app_factory(state=state)
+async def test_an_application_that_is_not_online_declares_nothing_knowable(
+    publish_db, app_factory, state, bind_saved_source
+):
+    import sqlalchemy as sa
 
-    assert await HostedAppDeclarationAdapter().declared_model_names(app_row.id, app_row.tenant_id) is None
+    from bisheng.common.errcode.base import BaseErrorCode
+    from bisheng.database.models.app import App
+
+    app_row, version = await app_factory(state="online")
+    await bind_saved_source(app_row, version)
+    async with publish_db() as session, session.begin():
+        await session.execute(sa.update(App).where(App.id == app_row.id).values(state=state))
+
+    with pytest.raises(BaseErrorCode):
+        await HostedAppDeclarationAdapter().declared_model_names(app_row.id, app_row.tenant_id)
 
 
-async def test_another_tenants_application_is_unknowable_rather_than_readable(publish_db, app_factory):
+async def test_another_tenants_application_is_unknowable_rather_than_readable(
+    publish_db, app_factory, bind_saved_source
+):
     app_row, _version = await app_factory(state="online")
+    await bind_saved_source(app_row, _version)
 
     assert await HostedAppDeclarationAdapter().declared_model_names(app_row.id, 987654) is None
 
 
-async def test_the_pending_version_does_not_grant_itself_capabilities(publish_db, app_factory):
+async def test_the_pending_version_does_not_grant_itself_capabilities(publish_db, app_factory, bind_saved_source):
     """An iteration under approval must not widen the running range (AC-51).
 
     The declaration is read off ``current_version_id``; submitting a version that
@@ -238,6 +256,7 @@ async def test_the_pending_version_does_not_grant_itself_capabilities(publish_db
         session.add(stored)
         await session.commit()
 
+    await bind_saved_source(app_row, version)
     declared = await HostedAppDeclarationAdapter().declared_model_names(app_row.id, app_row.tenant_id)
 
     assert declared == frozenset({"qwen-max"})
@@ -290,7 +309,9 @@ def test_no_capability_surface_accepts_a_provider_account_or_endpoint():
 
 
 @pytest.fixture()
-async def published_app_client(monkeypatch, publish_db, credential_redis, hosted_app_resolver, app_factory):
+async def published_app_client(
+    monkeypatch, publish_db, credential_redis, hosted_app_resolver, app_factory, bind_saved_source
+):
     """``await published_app_client(models=("gpt-4o",))`` → an httpx client on the face.
 
     The application is online, its running version declares ``models``, and the
@@ -299,7 +320,6 @@ async def published_app_client(monkeypatch, publish_db, credential_redis, hosted
     """
     from httpx import ASGITransport, AsyncClient
 
-    from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
     from bisheng.common.services.config_service import settings
     from bisheng.database.models.app_version import AppVersionDao
     from test.open_api.model_gateway_fixtures import (
@@ -333,7 +353,13 @@ async def published_app_client(monkeypatch, publish_db, credential_redis, hosted
         install_fake_llm(monkeypatch, FakeBishengLLM())
         records = capture_records(monkeypatch)
 
-        plaintext = await AppRuntimeCredentialService.issue(app_row.id, scopes=[MODEL_SCOPE])
+        bound = await bind_saved_source(
+            app_row,
+            version,
+            server_name="azure-openai",
+            model_rows=tuple((20 + index, 1, name, online) for index, (name, online) in enumerate(tenant_models)),
+        )
+        plaintext = bound.plaintext
         client = AsyncClient(
             transport=ASGITransport(app=build_model_face_app()),
             base_url="http://test",
@@ -440,7 +466,9 @@ def test_this_features_capability_codes_are_never_raised_for_a_model():
         )
 
 
-async def test_the_model_face_and_the_publish_surface_read_the_same_resolution(publish_db, app_factory, monkeypatch):
+async def test_the_model_face_and_the_publish_surface_read_the_same_resolution(
+    publish_db, app_factory, monkeypatch, bind_saved_source
+):
     """AC-63's 「已失效」 mark and the face's refusal come from one function.
 
     Two queries answering "is this model callable" is how a publish surface ends
@@ -472,7 +500,10 @@ async def test_the_model_face_and_the_publish_surface_read_the_same_resolution(p
         [model_row(20, 1, "gpt-4o"), model_row(21, 1, "retired", online=False)],
     )
 
-    declaration = await load_effective_declaration(app_row.id)
+    await bind_saved_source(
+        app_row, version, server_name="azure-openai", model_rows=((20, 1, "gpt-4o", True), (21, 1, "retired", False))
+    )
+    declaration = await load_effective_declaration(app_row.id, purpose="inspect")
     rows = await model_capability_status(declaration)
 
     assert {row.label: row.revoked for row in rows} == {"gpt-4o": False, "retired": True}

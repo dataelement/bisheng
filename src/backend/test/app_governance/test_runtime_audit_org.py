@@ -154,13 +154,13 @@ class TestResolveScope:
         from bisheng.app_governance.domain.services import runtime_audit_scope as module
         from bisheng.common.dependencies.user_deps import UserPayload
 
-        state = SimpleNamespace(tenant_admin=False, resolved=[])
+        state = SimpleNamespace(tenant_admin=False, global_super=False, resolved=[])
 
         async def account(*args):
             return SimpleNamespace(token_version=0)
 
         async def fresh(**kwargs):
-            return SimpleNamespace(is_global_super=False, user_id=7, tenant_id=1)
+            return SimpleNamespace(is_global_super=state.global_super, user_id=7, tenant_id=1)
 
         async def own(*args, **kwargs):
             return SimpleNamespace(tenant_id=1)
@@ -200,14 +200,26 @@ class TestResolveScope:
         assert scope.dept_scope == AuditDeptScope.restricted(exact_ids=[3])
         assert state.resolved == [1]
 
-    async def test_tenant_admin_unlimited(self, env):
+    async def test_tenant_admin_gets_dept_scope(self, env):
         from bisheng.core.context.tenant import tenant_execution_scope
 
         module, state, user = env
         state.tenant_admin = True
         with tenant_execution_scope(1):
             scope = await module.resolve_scope(user)
-        assert scope.dept_scope is None and state.resolved == []
+        assert scope.dept_scope == AuditDeptScope.restricted(exact_ids=[3])
+        assert state.resolved == [1]
+
+    async def test_rbac_super_tenant_admin_still_gets_dept_scope(self, env):
+        from bisheng.core.context.tenant import tenant_execution_scope
+
+        module, state, user = env
+        state.tenant_admin = True
+        state.global_super = True
+        with tenant_execution_scope(1):
+            scope = await module.resolve_scope(user)
+        assert scope.dept_scope == AuditDeptScope.restricted(exact_ids=[3])
+        assert state.resolved == [1]
 
     async def test_per_app_grant_unlimited(self, env):
         from bisheng.core.context.tenant import tenant_execution_scope

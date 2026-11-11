@@ -27,6 +27,8 @@ import { useLinsightManager } from "~/hooks/useLinsightManager";
 import { startLinsight, getLinsightSessionVersionList } from "~/api/linsight";
 import { SopStatus, taskModeSkillsState } from "~/store/linsight";
 import { isMediaAttachmentFile, type MediaParsingState } from "~/utils/mediaAttachmentUtils";
+import { useDesktopConversationActivity, useDesktopConversationRenamed } from "~/components/Chat/desktopConversationBridge";
+import { runningConversationIds } from "~/components/Chat/runningConversations";
 import { captureProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 
 /**
@@ -268,7 +270,22 @@ export default function useAiChat(
     // F035 Track J (TJ-6): task-mode turns reuse the linsight execution machinery
     // (createLinsight seeds the per-SV store, startLinsight kicks off the run, the
     // inline task bubble hosts the WS). The turn stays in THIS daily conversation.
-    const { createLinsight, updateLinsight } = useLinsightManager();
+    const { createLinsight, updateLinsight, linsightMap } = useLinsightManager();
+
+    // The desktop host lists conversations itself; keep its running state and names in step.
+    useDesktopConversationActivity(ownerIdRef.current, runningConversationIds(streamingByConvo, linsightMap));
+    useDesktopConversationRenamed(useCallback((renamedId: string) => {
+        getSessionName(renamedId)
+            .then((name) => {
+                if (!name) return;
+                setTitleFor(renamedId, name);
+                queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) =>
+                    convoData ? updateConvoFields(convoData, { conversationId: renamedId, title: name } as TConversation) : convoData);
+            })
+            .catch(() => {
+                // Non-critical: the header keeps the previous name until the conversation reopens.
+            });
+    }, [queryClient, setTitleFor]));
 
     // --- SSE hook ---
     /**
@@ -1169,6 +1186,7 @@ export default function useAiChat(
                                 errorCode,
                                 errorType: meta?.errorType,
                                 errorDetail: meta?.errorDetail,
+                                failureInfo: meta?.failureInfo,
                             };
                         }
                         return msgs;
@@ -1385,6 +1403,7 @@ export default function useAiChat(
                                 errorCode,
                                 errorType: meta?.errorType,
                                 errorDetail: meta?.errorDetail,
+                                failureInfo: meta?.failureInfo,
                             };
                         }
                         return msgs;

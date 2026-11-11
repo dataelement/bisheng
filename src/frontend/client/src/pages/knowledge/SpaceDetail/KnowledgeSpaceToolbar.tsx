@@ -2,7 +2,7 @@ import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { FolderPlus, Link2 } from "lucide-react";
 import { SortDirection, SortType, SpaceRole } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
-import { Dropdown, DropdownGroup, DropdownItem } from "@bisheng/ui";
+import { Button, Dropdown, DropdownGroup, DropdownItem } from "@bisheng/ui";
 import { CompoundSearchInput } from "./CompoundSearchInput";
 import { FileListToolbar } from "./FileListToolbar";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
@@ -15,6 +15,7 @@ interface KnowledgeSpaceToolbarProps {
 export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
   const {
     localize,
+    moveProgress,
     isH5,
     viewMode,
     setViewMode,
@@ -331,6 +332,17 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
               )}
             </div>
           </div>
+        </div>
+      )}
+      {moveProgress?.available && (
+        <div className="flex justify-end">
+          <Button
+            size="small"
+            variant="text"
+            onClick={moveProgress.showHistory}
+          >
+            {localize("com_knowledge.move_progress_title")}
+          </Button>
         </div>
       )}
       {/* Header (desktop only; on mobile these actions live in the top-bar menu) */}

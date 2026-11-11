@@ -466,6 +466,7 @@ def test_log_contract_covers_only_real_fixed_template_names(client_factory):
                 command=("python", "-I", "-m", "runtime_manager.image_check"),
                 material_secret="",
                 schema_plan=(),
+                temporary_mb=256,
             )
         spec = pod_template(plan)["spec"]
         names.update(c["name"] for c in spec.get("initContainers", []) + spec["containers"])

@@ -39,6 +39,7 @@ from langchain_core.exceptions import ContextOverflowError
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from loguru import logger
 
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.services.llm_error_classifier import Behavior, classify_behavior
 
 # Synthetic reply substituted for a degraded subagent step. Read by the PARENT
@@ -666,7 +667,8 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         if not self.is_subagent:
             raise exc
         self.take_degrade_slot(exc)
-        return AIMessage(content=_DEGRADE_MESSAGE)
+        info = FailureContextAdapter.from_error(exc)
+        return AIMessage(content=_DEGRADE_MESSAGE, additional_kwargs={"failure_info": info} if info else {})
 
     def take_degrade_slot(self, exc: Exception) -> None:
         """Count one skipped subagent step; re-raise ``exc`` once over ``max_degrade``.
@@ -708,6 +710,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             try:
                 response = await handler(current)
             except Exception as exc:
+                FailureContextAdapter.from_error(exc)
                 behavior = classify_behavior(exc)
                 if behavior is Behavior.FAIL_FAST:
                     logger.warning(f"[linsight-resilience] fail-fast ({type(exc).__name__}): {exc}")
@@ -804,6 +807,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             try:
                 response = handler(current)
             except Exception as exc:
+                FailureContextAdapter.from_error(exc)
                 behavior = classify_behavior(exc)
                 if behavior is Behavior.FAIL_FAST:
                     raise

@@ -58,6 +58,7 @@ from bisheng.app_publish.domain.models.app_deployment import (
     AppDeploymentDao,
 )
 from bisheng.app_publish.domain.release_notes import normalize_release_notes
+from bisheng.app_publish.domain.repositories.admission import AdmissionRepository
 from bisheng.app_publish.domain.schemas.app_manifest import ICON_EXTENSIONS, MAX_ICON_BYTES, AppManifest
 from bisheng.app_publish.domain.schemas.failure import failure_from_error
 from bisheng.app_publish.domain.services import (
@@ -70,6 +71,7 @@ from bisheng.app_publish.domain.services.release_audit import write_release_audi
 from bisheng.app_publish.domain.services.secret_scanner import scan_package
 from bisheng.app_publish.domain.services.version_service import VersionService
 from bisheng.app_runtime.application.authorization import authorize_app, management_actions, resolve_app_actor
+from bisheng.common.errcode.app_factory import AppStateConflictError
 from bisheng.common.errcode.app_publish import (
     AppNotOwnedBySubjectError,
     AppPublishRuntimeLayerDisabledError,
@@ -77,7 +79,7 @@ from bisheng.common.errcode.app_publish import (
 )
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import get_current_tenant_id, set_current_tenant_id
+from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id, set_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.app import AppDao
@@ -205,6 +207,8 @@ class PublishPipelineService:
         confirm_schema_change: bool = False,
         tenant_id: int | None = None,
         release_notes: str | None = None,
+        base_version_id: str | None = None,
+        check_base_version: bool = False,
     ) -> AcceptResult:
         """Receive one package. Fast, local, and it leaves nothing behind when it refuses.
 
@@ -302,9 +306,18 @@ class PublishPipelineService:
                 manifest=validated.manifest.model_dump(),
                 tier_code=validated.tier.code,
             )
-            async with get_async_db_session() as session:
-                await AppDeploymentDao.acreate(session, deployment)
-                await session.commit()
+            async with AdmissionRepository.locked(app_id) as admission:
+                # All entry points serialize here; the next submitter observes
+                # this accepted deployment before passing the admission gate.
+                if (check_base_version or base_version_id is not None) and (
+                    not admission.exists or admission.current_version_id != base_version_id
+                ):
+                    raise AppStateConflictError(
+                        msg="The published version changed. Fetch source again and merge your changes.",
+                        details={"reason": "base_version_changed"},
+                    )
+                await cls._assert_submittable(app_id)
+                await admission.insert(deployment)
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
 
@@ -317,7 +330,7 @@ class PublishPipelineService:
             # either way; the name is what keeps the row attributable.
             operator_name=getattr(principal, "actor_name", None),
             metadata={
-                "source": "cli",
+                "source": getattr(principal, "source", "cli"),
                 "tier_code": validated.tier.code,
                 "confirm_schema_change": bool(confirm_schema_change),
                 "schema_change": schema_change.to_payload() if schema_change is not None else None,
@@ -497,8 +510,13 @@ class PublishPipelineService:
     @classmethod
     async def run_pipeline(cls, deployment_id: str) -> None:
         """Scan → build → probe → metadata → approval request. One UPDATE and one audit per stage."""
-        async with get_async_db_session() as session:
-            deployment = await AppDeploymentDao.aget(session, deployment_id)
+        # Internal queued work must resolve its immutable owner before applying
+        # tenant filters. A missing Celery header must not hide a child job.
+        # This bypass is limited to this lookup; all pipeline steps are rebound
+        # below to the persisted tenant, never a caller-supplied tenant.
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                deployment = await AppDeploymentDao.aget(session, deployment_id)
         if deployment is None:
             logger.warning(f"app_publish.pipeline deployment_id={deployment_id} vanished before the worker ran")
             return

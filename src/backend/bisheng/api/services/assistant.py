@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import Sequence
 from datetime import datetime
 from hashlib import sha256
@@ -11,6 +12,12 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq, StreamData
+from bisheng.assistant.application.execution_admission import AssistantExecutionAdmission
+from bisheng.assistant.domain.repositories.assistant_repository import AssistantRepository
+from bisheng.assistant.domain.services.reference_extractor import (
+    ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
+    extract_assistant_references,
+)
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import (
@@ -20,19 +27,24 @@ from bisheng.common.errcode.assistant import (
     AssistantNotEditError,
     AssistantNotExistsError,
 )
-from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.knowledge import KnowledgeEmbeddingUnavailableError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeEmbeddingUnavailableError,
+    KnowledgeUnificationError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.core.cache import InMemoryCache
+from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.assistant import Assistant, AssistantDao, AssistantLinkDao, AssistantStatus
+from bisheng.database.models.assistant import Assistant, AssistantDao, AssistantStatus
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService
 from bisheng.permission.application.access import get_f048_resource_adapter
 from bisheng.permission.application.business_authorization import (
@@ -42,6 +54,8 @@ from bisheng.permission.application.business_authorization import (
 )
 from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
+from bisheng.resource_reference.application.access import get_reference_binding_runtime
+from bisheng.resource_reference.application.contracts import SourceKey, TargetType, reference_set_digest
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao
 from bisheng.user.domain.models.user import UserDao
@@ -83,6 +97,154 @@ class AssistantResourceAuthorizationPort:
 class AssistantService(BaseService, AssistantUtils):
     UserCache: InMemoryCache = InMemoryCache()
 
+    @staticmethod
+    def _reference_source(assistant: Assistant) -> SourceKey:
+        return SourceKey(assistant.tenant_id, "assistant", str(assistant.id), "current")
+
+    @staticmethod
+    def _extract_references(assistant: Assistant, links):
+        return AssistantService._configuration_references(
+            assistant.model_name, [link.knowledge_id for link in links if link.knowledge_id]
+        )
+
+    @staticmethod
+    def _configuration_references(model_name, knowledge_ids):
+        try:
+            return extract_assistant_references(model_name=model_name, knowledge_ids=knowledge_ids)
+        except (TypeError, ValueError) as exc:
+            raise ResourceReferenceInvalidError(reason="reference_target_invalid") from exc
+
+    @classmethod
+    async def _persist_assistant_changes(
+        cls,
+        assistant_id: str,
+        user_payload: UserPayload,
+        *,
+        changes: dict | None = None,
+        tool_ids: list[int] | None = None,
+        flow_ids: list[str] | None = None,
+        knowledge_ids: list[int] | None = None,
+        action: str = "edit",
+        deleting: bool = False,
+        require_valid: bool = False,
+        skip_unchanged_status: int | None = None,
+        before_save=None,
+        condition=None,
+    ) -> Assistant:
+        """Every assistant config writer participates in the reference fence.
+
+        Candidate reads never mutate ORM rows. The runtime locks all old/new
+        targets before the callback obtains a refreshing lock on the real root.
+        It then guards root/source revisions in the same external transaction.
+        """
+        repository = AssistantRepository()
+        runtime = await get_reference_binding_runtime()
+        changes = changes or {}
+        if skip_unchanged_status is not None and (
+            skip_unchanged_status != AssistantStatus.ONLINE.value
+            or action != "publish"
+            or not require_valid
+            or deleting
+            or changes != {"status": skip_unchanged_status}
+            or any(value is not None for value in (tool_ids, flow_ids, knowledge_ids))
+        ):
+            raise ValueError("only an unchanged ONLINE transition may skip persistence")
+        async with get_async_db_session() as session:
+            candidate = await repository.aget(session, assistant_id)
+            if candidate is None or candidate.is_delete:
+                raise AssistantNotExistsError()
+
+            async def authorize(row):
+                if action == "edit":
+                    await cls.check_update_permission_async(row, user_payload)
+                else:
+                    await require_business_action(
+                        user_payload, resource_type="assistant", resource_id=row.id, action=action
+                    )
+
+            await authorize(candidate)
+            old_links = await repository.alist_links(session, assistant_id)
+            old_references = cls._extract_references(candidate, old_links)
+            source = cls._reference_source(candidate)
+            new_references = (
+                ()
+                if deleting
+                else cls._configuration_references(
+                    changes.get("model_name", candidate.model_name),
+                    (
+                        knowledge_ids
+                        if knowledge_ids is not None
+                        else [link.knowledge_id for link in old_links if link.knowledge_id]
+                    ),
+                )
+            )
+            locked = None
+
+            async def lock_root(active_session):
+                nonlocal locked
+                locked = await repository.aget(active_session, assistant_id, for_update=True)
+                if locked is None or locked.is_delete:
+                    raise AssistantNotExistsError()
+                links = await repository.alist_links(active_session, assistant_id)
+                if cls._extract_references(locked, links) != old_references:
+                    raise ResourceReferenceInvalidError(reason="reference_lock_plan_changed")
+                await authorize(locked)
+                return locked
+
+            prepared = await runtime.aprepare_source_bindings(
+                session,
+                source,
+                new_references,
+                extractor_version=ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
+                lock_source_root=lock_root,
+                effective=not deleting,
+            )
+            if prepared.verified.context.old_references_digest != reference_set_digest(old_references):
+                raise ReferenceCoverageNotReadyError(reason="source_configuration_drift")
+            if condition is not None and not condition(locked):
+                return locked
+            # Target Owners verify physical existence/tenant/shared facts. A
+            # newly selected resource also needs the configuring actor's own
+            # visible decision, including any credential narrowing. Existing
+            # unchanged slots remain repairable even if now hidden or deleted.
+            added_knowledge_ids = tuple(
+                sorted(
+                    int(reference.target.target_id)
+                    for reference in set(new_references) - set(old_references)
+                    if reference.slot_key == "knowledge_list"
+                    and reference.target.target_type == TargetType.KNOWLEDGE_SPACE
+                )
+            )
+            kinds = await repository.alock_knowledge_kinds(session, added_knowledge_ids)
+            for knowledge_id, kind in kinds.items():
+                await require_business_action(
+                    user_payload,
+                    resource_type="knowledge_space" if kind == KnowledgeTypeEnum.SPACE.value else "knowledge_library",
+                    resource_id=knowledge_id,
+                    action="visible",
+                )
+            if require_valid:
+                await runtime.arequire_source_valid(session, source, references=old_references)
+            if skip_unchanged_status is not None and locked.status == skip_unchanged_status:
+                return locked
+            if before_save is not None:
+                await before_save(session, locked)
+            if "name" in changes and changes["name"] != locked.name:
+                if cls.judge_name_repeat(changes["name"], locked.user_id):
+                    raise AssistantNameRepeatError()
+            for key, value in changes.items():
+                setattr(locked, key, value)
+            if deleting:
+                await repository.asoft_delete(session, locked)
+            else:
+                await repository.asave(session, locked)
+                await repository.areplace_links(
+                    session, assistant_id, tool_ids=tool_ids, flow_ids=flow_ids, knowledge_ids=knowledge_ids
+                )
+            await runtime.aapply_source_bindings(session, prepared)
+            await session.commit()
+            return locked
+
     @classmethod
     async def get_assistant(
         cls,
@@ -92,11 +254,12 @@ class AssistantService(BaseService, AssistantUtils):
         tag_id: int | None = None,
         page: int = 1,
         limit: int = 20,
-        action: str = "use",
+        action: str = "visible",
     ) -> (list[AssistantSimpleInfo], int):
         """
         Get list of assistants
         """
+        action = "visible" if action == "use" else action
         assistant_ids = []
         if tag_id:
             ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
@@ -209,7 +372,7 @@ class AssistantService(BaseService, AssistantUtils):
         tag_id: int | None = None,
         cursor: str | None = None,
         page_size: int = 10,
-        action: str = "use",
+        action: str = "visible",
     ) -> "PageInfiniteCursorData":
         """F040/F027 cursor envelope for ``GET /api/v1/assistant``.
 
@@ -224,6 +387,7 @@ class AssistantService(BaseService, AssistantUtils):
         from bisheng.common.errcode.flow import AppInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
 
+        action = "visible" if action == "use" else action
         context = f"assistant|sort=update_time|action={action}"
         try:
             decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
@@ -289,44 +453,44 @@ class AssistantService(BaseService, AssistantUtils):
     async def get_assistant_info(
         cls, assistant_id: str, login_user: UserPayload, share_link: Union["ShareLink", None] = None
     ) -> AssistantInfo:
-        assistant = await AssistantDao.aget_one_assistant(assistant_id)
-        if not assistant or assistant.is_delete:
-            raise AssistantNotExistsError()
-        # A valid share-token grants view access to any logged-in recipient
-        # who lacks a direct app permission grant. Assistant chat shares
-        # generated by ShareChat.tsx store the conversation id in resource_id
-        # and the actual assistant id under meta_data.flowId; direct
-        # assistant shares store the assistant id in resource_id. Try
-        # meta_data.flowId first, then fall back to resource_id so both
-        # shapes work.
-        has_share_grant = False
-        if share_link is not None:
-            meta_data = share_link.meta_data or {}
-            share_assistant_id = str(meta_data.get("flowId") or share_link.resource_id or "")
-            has_share_grant = share_assistant_id == str(assistant_id)
-        if not has_share_grant and not await check_business_action(
+        # An ORM/share object is not an authorization receipt. Only its secret
+        # is forwarded; the Owner rechecks the real token and source binding.
+        inspected = await AssistantExecutionAdmission.prepare(
             login_user,
-            resource_type="assistant",
-            resource_id=assistant.id,
-            action="visible",
-        ):
-            raise UnAuthorizedError()
-
-        tool_list = []
-        flow_list = []
-        knowledge_list = []
-
-        links = await AssistantLinkDao.get_assistant_link(assistant_id)
-        for one in links:
-            if one.tool_id:
-                tool_list.append(one.tool_id)
-            elif one.knowledge_id:
-                knowledge_list.append(one.knowledge_id)
-            elif one.flow_id:
-                flow_list.append(one.flow_id)
-            else:
-                logger.error(f"not expect link info: {one.model_dump()}")
-        tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list, knowledge_list)
+            assistant_id,
+            purpose="inspect",
+            inspect_token=share_link.share_token if share_link is not None else None,
+        )
+        payload = json.loads(inspected.snapshot.payload_json)
+        assistant = Assistant.model_validate(payload["assistant"])
+        links = payload["links"]
+        knowledge_ids = list(dict.fromkeys(link["knowledge_id"] for link in links if link.get("knowledge_id")))
+        facts = {fact.key: fact for fact in inspected.target_states}
+        metadata_ids = {
+            int(fact.key.target_id)
+            for fact in inspected.target_states
+            if fact.key.target_type == TargetType.KNOWLEDGE_SPACE and fact.state in {"valid", "deleting"}
+        }
+        visible_ids = []
+        for row in KnowledgeDao.get_list_by_ids(sorted(metadata_ids)) if metadata_ids else ():
+            if row.type not in {
+                KnowledgeTypeEnum.NORMAL.value,
+                KnowledgeTypeEnum.QA.value,
+                KnowledgeTypeEnum.SPACE.value,
+            }:
+                continue
+            if await check_business_action(
+                login_user,
+                resource_type="knowledge_space" if row.type == KnowledgeTypeEnum.SPACE.value else "knowledge_library",
+                resource_id=row.id,
+                action="visible",
+            ):
+                visible_ids.append(row.id)
+        tool_list, flow_list, knowledge_list = cls.get_link_info(
+            [link["tool_id"] for link in links if link.get("tool_id")],
+            [link["flow_id"] for link in links if link.get("flow_id")],
+            visible_ids,
+        )
         assistant.logo = await cls.get_logo_share_link_async(assistant.logo)
         can_share = await check_business_action(
             login_user,
@@ -339,6 +503,17 @@ class AssistantService(BaseService, AssistantUtils):
             tool_list=tool_list,
             flow_list=flow_list,
             knowledge_list=knowledge_list,
+            knowledge_ids=knowledge_ids,
+            reference_states=[
+                {
+                    "slot_key": ref.slot_key,
+                    "target_type": ref.target.target_type.value,
+                    "target_id": ref.target.target_id,
+                    "state": facts[ref.target].state.value,
+                    "is_valid": facts[ref.target].is_valid,
+                }
+                for ref in inspected.snapshot.references
+            ],
             can_share=can_share,
         )
 
@@ -371,7 +546,29 @@ class AssistantService(BaseService, AssistantUtils):
 
         # The description is generated afterwards by the config page (description_stream),
         # so a slow or unreachable model neither delays nor fails creation.
-        assistant = AssistantDao.create_assistant(assistant)
+        runtime = await get_reference_binding_runtime()
+        repository = AssistantRepository()
+        async with get_async_db_session() as session:
+            # The UUID exists before insertion. Flush the new real root in this
+            # transaction; a failed binding write rolls the insertion back.
+            await repository.ainsert(session, assistant)
+
+            async def lock_root(active_session):
+                return await repository.aget(active_session, assistant.id, for_update=True)
+
+            prepared = await runtime.aprepare_source_bindings(
+                session,
+                cls._reference_source(assistant),
+                cls._extract_references(assistant, ()),
+                extractor_version=ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
+                lock_source_root=lock_root,
+                new_source=True,
+            )
+            await runtime.aapply_source_bindings(session, prepared)
+            # The permission hook consumes the already verified new-root record;
+            # its durable projection must succeed before SQL is finalized.
+            await cls.create_assistant_hook_async(request, assistant, login_user)
+            await session.commit()
 
         # RecordTelemetryJournal
         await telemetry_service.log_event(
@@ -383,8 +580,6 @@ class AssistantService(BaseService, AssistantUtils):
             ),
         )
 
-        await cls.create_assistant_hook_async(request, assistant, login_user)
-
         can_share = await check_business_action(
             login_user,
             resource_type="assistant",
@@ -392,7 +587,13 @@ class AssistantService(BaseService, AssistantUtils):
             action="share",
         )
         return AssistantInfo(
-            **assistant.model_dump(), tool_list=[], flow_list=[], knowledge_list=[], can_share=can_share
+            **assistant.model_dump(),
+            tool_list=[],
+            flow_list=[],
+            knowledge_list=[],
+            knowledge_ids=[],
+            reference_states=None,
+            can_share=can_share,
         )
 
     @classmethod
@@ -422,29 +623,16 @@ class AssistantService(BaseService, AssistantUtils):
         login_user: UserPayload,
         assistant_id: str,
     ) -> bool:
-        assistant = await AssistantDao.aget_one_assistant(assistant_id)
-        if not assistant:
-            raise AssistantNotExistsError()
+        async def project_delete(_session, assistant):
+            adapter = await get_f048_resource_adapter("assistant")
+            record = await adapter.load_permission_record(resource_type="assistant", resource_id=str(assistant.id))
+            if record is None:
+                raise AssistantNotExistsError()
+            await adapter.project_delete(record=record, actor=await resolve_permission_actor(login_user))
 
-        await require_business_action(
-            login_user,
-            resource_type="assistant",
-            resource_id=assistant.id,
-            action="delete",
+        assistant = await cls._persist_assistant_changes(
+            assistant_id, login_user, action="delete", deleting=True, before_save=project_delete
         )
-        adapter = await get_f048_resource_adapter("assistant")
-        record = await adapter.load_permission_record(
-            resource_type="assistant",
-            resource_id=str(assistant.id),
-        )
-        if record is None:
-            raise AssistantNotExistsError()
-        await adapter.project_delete(
-            record=record,
-            actor=await resolve_permission_actor(login_user),
-        )
-
-        AssistantDao.delete_assistant(assistant)
         telemetry_service.log_event_sync(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.DELETE_APPLICATION, trace_id=trace_id_var.get()
         )
@@ -475,7 +663,7 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.prompt = prompt
 
         # Inisialisasillm
-        auto_agent = AssistantAgent(assistant, "", login_user.user_id)
+        auto_agent = AssistantAgent(assistant, "", login_user.user_id, login_user=login_user)
         await auto_agent.init_auto_update_llm()
 
         # Streaming Generation Prompts
@@ -519,44 +707,45 @@ class AssistantService(BaseService, AssistantUtils):
         cls, request: Request, login_user: UserPayload, req: AssistantUpdateReq
     ) -> AssistantInfo:
         """Update Assistant Information"""
-        assistant = AssistantDao.get_one_assistant(req.id)
-        if not assistant:
-            raise AssistantNotExistsError()
-
-        await cls.check_update_permission_async(assistant, login_user)
-
-        # Update Assistant Data
-        if req.name and req.name != assistant.name:
-            # Check if there are any duplicate names under
-            if cls.judge_name_repeat(req.name, assistant.user_id):
-                raise AssistantNameRepeatError()
-            assistant.name = req.name
-        assistant.desc = req.desc
-        assistant.logo = req.logo if req.logo else assistant.logo
-        assistant.prompt = req.prompt
-        assistant.guide_word = req.guide_word
-        assistant.guide_question = req.guide_question
-        assistant.model_name = req.model_name
-        assistant.temperature = req.temperature
-        assistant.update_time = datetime.now()
-        assistant.max_token = req.max_token
+        changes = {
+            "desc": req.desc,
+            "prompt": req.prompt,
+            "guide_word": req.guide_word,
+            "guide_question": req.guide_question,
+            "model_name": req.model_name,
+            "temperature": req.temperature,
+            "update_time": datetime.now(),
+            "max_token": req.max_token,
+        }
+        if req.name:
+            changes["name"] = req.name
+        if req.logo:
+            changes["logo"] = req.logo
         # F041: persist the 用户知识库权限校验 toggle (None = untouched, keep current value)
         if req.knowledge_auth is not None:
-            assistant.knowledge_auth = req.knowledge_auth
-        AssistantDao.update_assistant(assistant)
+            changes["knowledge_auth"] = req.knowledge_auth
+        assistant = await cls._persist_assistant_changes(
+            req.id,
+            login_user,
+            changes=changes,
+            tool_ids=req.tool_list,
+            flow_ids=req.flow_list,
+            knowledge_ids=req.knowledge_list,
+        )
         await telemetry_service.log_event(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
 
-        # Update assistant association information
-        if req.tool_list is not None:
-            AssistantLinkDao.update_assistant_tool(assistant.id, tool_list=req.tool_list)
-        if req.flow_list is not None:
-            AssistantLinkDao.update_assistant_flow(assistant.id, flow_list=req.flow_list)
-        if req.knowledge_list is not None:
-            # Using Configuredflow Perform skill replenishment
-            AssistantLinkDao.update_assistant_knowledge(assistant.id, knowledge_list=req.knowledge_list, flow_id="")
         tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list, req.knowledge_list)
+        if req.knowledge_list is None:
+            # None means this write retained its selections. Reading their
+            # IDs does not re-run admission or turn an accepted save into a
+            # reference-coverage failure.
+            async with get_async_db_session() as response_session:
+                links = await AssistantRepository().alist_links(response_session, assistant.id)
+            knowledge_ids = list(dict.fromkeys(link.knowledge_id for link in links if link.knowledge_id))
+        else:
+            knowledge_ids = list(dict.fromkeys(req.knowledge_list))
         cls.update_assistant_hook(request, login_user, assistant)
         can_share = await check_business_action(
             login_user,
@@ -569,6 +758,8 @@ class AssistantService(BaseService, AssistantUtils):
             tool_list=tool_list,
             flow_list=flow_list,
             knowledge_list=knowledge_list,
+            knowledge_ids=knowledge_ids,
+            reference_states=None,
             can_share=can_share,
         )
 
@@ -587,8 +778,9 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     async def update_status(cls, request: Request, login_user: UserPayload, assistant_id: str, status: int) -> bool:
         """Update Assistant Status"""
-        assistant = AssistantDao.get_one_assistant(assistant_id)
-        if not assistant:
+        async with get_async_db_session() as session:
+            assistant = await AssistantRepository().aget(session, assistant_id)
+        if not assistant or assistant.is_delete:
             raise AssistantNotExistsError()
         required_action = "publish" if status == AssistantStatus.ONLINE.value else "unpublish"
         await require_business_action(
@@ -597,23 +789,41 @@ class AssistantService(BaseService, AssistantUtils):
             resource_id=assistant.id,
             action=required_action,
         )
-        # Equal status without modification
-        if assistant.status == status:
+        online = status == AssistantStatus.ONLINE.value
+        # A repeated stop changes no configuration and does not require its
+        # deleted targets to become executable again. ONLINE must revalidate.
+        if assistant.status == status and not online:
             return True
 
         # Try to initializeagent, go online if initialization is successful, otherwise not go online
-        if status == AssistantStatus.ONLINE.value:
-            tmp_agent = AssistantAgent(assistant, "", login_user.user_id)
+        initialized = False
+
+        async def initialize(session, row):
+            nonlocal initialized
+            tmp_agent = AssistantAgent(row, "", login_user.user_id, login_user=login_user, reference_session=session)
             try:
                 await tmp_agent.init_assistant()
+                initialized = True
             except KnowledgeEmbeddingUnavailableError as e:
                 logger.exception("online agent knowledge embedding init failed")
                 raise AssistantKnowledgeEmbeddingUnavailableError(**e.kwargs) from e
+            except KnowledgeUnificationError:
+                raise
             except Exception as e:
                 logger.exception("online agent init failed")
                 raise AssistantInitError(exception=e, msg=f"Assistant onboarding failed: {e}") from e
-        assistant.status = status
-        AssistantDao.update_assistant(assistant)
+
+        assistant = await cls._persist_assistant_changes(
+            assistant_id,
+            login_user,
+            changes={"status": status},
+            action=required_action,
+            require_valid=online,
+            skip_unchanged_status=status if online else None,
+            before_save=initialize if online else None,
+        )
+        if online and not initialized:
+            return True
         await telemetry_service.log_event(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
@@ -623,14 +833,7 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     async def update_prompt(cls, assistant_id: str, prompt: str, user_payload: UserPayload) -> bool:
         """Update assistant prompts"""
-        assistant = AssistantDao.get_one_assistant(assistant_id)
-        if not assistant:
-            raise AssistantNotExistsError()
-
-        await cls.check_update_permission_async(assistant, user_payload)
-
-        assistant.prompt = prompt
-        AssistantDao.update_assistant(assistant)
+        await cls._persist_assistant_changes(assistant_id, user_payload, changes={"prompt": prompt})
         await telemetry_service.log_event(
             user_id=user_payload.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
@@ -639,25 +842,13 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     async def update_flow_list(cls, assistant_id: str, flow_list: list[str], user_payload: UserPayload) -> bool:
         """Update Assistant Skills List"""
-        assistant = AssistantDao.get_one_assistant(assistant_id)
-        if not assistant:
-            raise AssistantNotExistsError()
-
-        await cls.check_update_permission_async(assistant, user_payload)
-
-        AssistantLinkDao.update_assistant_flow(assistant_id, flow_list=flow_list)
+        await cls._persist_assistant_changes(assistant_id, user_payload, flow_ids=flow_list)
         return True
 
     @classmethod
     async def update_tool_list(cls, assistant_id: str, tool_list: list[int], user_payload: UserPayload) -> bool:
         """Update Assistant Tool List"""
-        assistant = AssistantDao.get_one_assistant(assistant_id)
-        if not assistant:
-            raise AssistantNotExistsError()
-
-        await cls.check_update_permission_async(assistant, user_payload)
-
-        AssistantLinkDao.update_assistant_tool(assistant_id, tool_list=tool_list)
+        await cls._persist_assistant_changes(assistant_id, user_payload, tool_ids=tool_list)
         return True
 
     @classmethod
@@ -733,7 +924,7 @@ class AssistantService(BaseService, AssistantUtils):
         if assistant.desc or not assistant.prompt:
             return
 
-        auto_agent = AssistantAgent(assistant, "", login_user.user_id)
+        auto_agent = AssistantAgent(assistant, "", login_user.user_id, login_user=login_user)
         await auto_agent.init_auto_update_llm()
 
         desc = ""
@@ -746,12 +937,14 @@ class AssistantService(BaseService, AssistantUtils):
         desc = desc.strip()
         if not desc:
             return
-        current = await AssistantDao.aget_one_assistant(assistant_id)
         # A save while streaming stores a prefix of this text, which is completed here;
         # any other value is the owner's own description and is left alone.
-        if current and desc.startswith((current.desc or "").strip()):
-            current.desc = desc
-            AssistantDao.update_assistant(current)
+        await cls._persist_assistant_changes(
+            assistant_id,
+            login_user,
+            changes={"desc": desc},
+            condition=lambda current: desc.startswith((current.desc or "").strip()),
+        )
 
     @classmethod
     def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> list[GptsTools]:

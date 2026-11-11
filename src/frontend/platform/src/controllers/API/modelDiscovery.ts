@@ -25,6 +25,6 @@ export interface DiscoveryConnection {
 export async function discoverModels(
   connection: DiscoveryConnection,
 ): Promise<DiscoveryResult> {
-  const options = { preserveError: true, timeout: 60000 };
+  const options = { preserveError: true, showError: false, timeout: 60000 };
   return await request.post("/api/v1/llm/models/discover", connection, options);
 }

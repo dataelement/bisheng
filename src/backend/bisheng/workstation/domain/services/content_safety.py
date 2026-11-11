@@ -21,6 +21,21 @@ def blocked_answer_extra() -> str:
     return json.dumps({"content_safety": True})
 
 
+def mark_session_content_violation(chat_id: str) -> None:
+    """Record the conversation as a content-safety violation.
+
+    Daily mode and deep research persist the turn but used to leave
+    ``MessageSession.sensitive_status`` at its default (pass). The audit
+    column and the violation filter both read that field. Assistants and
+    workflows already set it when a review hits.
+    """
+    if not chat_id:
+        return
+    from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
+
+    MessageSessionDao.update_sensitive_status(chat_id, SensitiveStatus.VIOLATIONS)
+
+
 def build_blocked_answer_row(
     *,
     user_id: int,

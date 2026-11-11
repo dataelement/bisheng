@@ -69,8 +69,6 @@ class PublishedAssistantService:
         operator: UserPayload,
     ) -> tuple[AssistantCompletion, object]:
         assistant_info = await cls.get_info(assistant_id, operator)
-        if temperature != 0:
-            assistant_info.temperature = temperature
 
         history = []
         question = ""
@@ -83,7 +81,13 @@ class PublishedAssistantService:
         if history and history[-1].content == question:
             history = history[:-1]
 
-        agent = AssistantAgent(assistant_info, "", invoke_user_id=operator.user_id)
+        agent = AssistantAgent(
+            assistant_info,
+            "",
+            invoke_user_id=operator.user_id,
+            login_user=operator,
+            runtime_temperature=temperature if temperature != 0 else None,
+        )
         await agent.init_assistant()
         supports_streaming = cls._supports_streaming(agent)
         response_id = generate_uuid()

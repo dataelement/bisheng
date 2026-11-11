@@ -5,7 +5,7 @@ Implements spec AC-02, AC-03, AC-04a/b/c/d, AC-07:
   - ``mount_child``: global-super marks a department as a Child Tenant
     mount point. Enforces INV-T1 (2-layer lock), records audit_log.
   - ``unmount_child``: removes a Child mount. v2.5.1 收窄到唯一路径
-    （资源迁回 Root + Child 归档）。旧的 archive / manual 策略已删除——
+    (资源迁回 Root + Child 归档)。旧的 archive / manual 策略已删除——
     "冻结子公司不迁移资源" 的需求归到 §5.1.3 的 disable Child 动作。
   - ``migrate_resources_from_root``: AC-04d Root→Child resource sinking
     (INV-T10 — the one path that does NOT go through F018 transfer-owner).
@@ -149,6 +149,14 @@ async def _require_super(operator) -> None:
 class TenantMountService:
     """Stateless service implementing the Child Tenant lifecycle."""
 
+    _creation_factory = None
+
+    @classmethod
+    def configure_creation(cls, factory):
+        if not callable(factory):
+            raise TypeError("mounted tenant creation application factory required")
+        cls._creation_factory = staticmethod(factory)
+
     # -----------------------------------------------------------------------
     # mount_child
     # -----------------------------------------------------------------------
@@ -186,6 +194,22 @@ class TenantMountService:
             # Root department — never a mount point (AC-03).
             raise TenantTreeRootDeptMountError()
         if getattr(dept, "is_tenant_root", 0) == 1:
+            from bisheng.common.dependencies.user_deps import UserPayload
+            from bisheng.llm.application.model_mount_sharing import get_model_mount_sharing_application
+
+            if not isinstance(operator, UserPayload) or type(getattr(dept, "mounted_tenant_id", None)) is not int:
+                raise TenantTreeMountConflictError()
+            application = await get_model_mount_sharing_application()
+            restored = await application.aresume(
+                identity=operator,
+                root_dept_id=dept_id,
+                child_id=dept.mounted_tenant_id,
+                tenant_code=tenant_code or default_tenant_code(dept_id),
+                tenant_name=tenant_name,
+                auto_distribute=auto_distribute,
+            )
+            if restored is not None:
+                return restored
             raise TenantTreeMountConflictError()
         ancestor = await DepartmentDao.aget_ancestors_with_mount(dept_id)
         if ancestor is not None:
@@ -209,23 +233,18 @@ class TenantMountService:
         # (dept.mounted_tenant_id ↔ tenant.root_dept_id) is set in one shot —
         # downstream readers (e.g. TenantUserDialog member-picker scope) rely
         # on this column being populated.
-        async with get_async_db_session() as session:
-            new_tenant = Tenant(
-                tenant_code=tenant_code,
-                tenant_name=tenant_name,
-                parent_tenant_id=ROOT_TENANT_ID,
-                status="active",
-                root_dept_id=dept_id,
-            )
-            session.add(new_tenant)
-            await session.flush()  # populate new_tenant.id for the dept update
-            await session.execute(
-                sa_update(Department)
-                .where(Department.id == dept_id)
-                .values(is_tenant_root=1, mounted_tenant_id=new_tenant.id)
-            )
-            await session.commit()
-            await session.refresh(new_tenant)
+        new_tenant = Tenant(
+            tenant_code=tenant_code,
+            tenant_name=tenant_name,
+            parent_tenant_id=ROOT_TENANT_ID,
+            status="active",
+            root_dept_id=dept_id,
+        )
+        if cls._creation_factory is None:
+            raise TenantTreeMountConflictError()
+        new_tenant = await cls._creation_factory(
+            tenant=new_tenant, department_id=dept_id, department_tenant_id=dept.tenant_id
+        )
 
         from bisheng.workstation.domain.services import WorkStationService
 
@@ -252,6 +271,7 @@ class TenantMountService:
         distributed_resources = await cls._on_child_mounted(
             new_tenant.id,
             auto_distribute=auto_distribute,
+            operator=operator,
         )
 
         # Backfill user_tenant for primary-dept members under the subtree so
@@ -289,6 +309,8 @@ class TenantMountService:
         cls,
         new_child_id: int,
         auto_distribute: bool,
+        *,
+        operator=None,
     ) -> list[dict[str, Any]]:
         """F017 AC-02 / AC-13: on new Child mount, write the Tenant-level
         ``shared_to`` tuple and return a snapshot of shared Root resources.
@@ -328,12 +350,7 @@ class TenantMountService:
 
             from bisheng.core.database import get_async_db_session
             from bisheng.database.models.tenant import TenantDao
-            from bisheng.permission.application import (
-                PermissionObject,
-                PermissionRelation,
-                PermissionSubject,
-                get_permission_relation_api,
-            )
+            from bisheng.llm.application.model_mount_sharing import get_model_mount_sharing_application
 
             root_tenant = await TenantDao.aget_by_id(ROOT_TENANT_ID)
             share_default = (
@@ -354,17 +371,29 @@ class TenantMountService:
                     )
                     server_ids = [r[0] for r in res.all()]
                 if server_ids:
-                    permissions = await get_permission_relation_api()
-                    grants = tuple(
-                        PermissionRelation(
-                            subject=PermissionSubject("tenant", str(new_child_id)),
-                            relation="shared_with",
-                            resource=PermissionObject("llm_server", str(server_id)),
-                        )
-                        for sid in server_ids
-                        for server_id in (sid,)
-                    )
-                    await permissions.grant(grants)
+                    if operator is None:
+                        raise ValueError("LLM mount sharing requires the original operator")
+                    application = await get_model_mount_sharing_application()
+                    child = await TenantDao.aget_by_id(new_child_id)
+                    if child is None:
+                        raise TenantTreeMountConflictError()
+                    failures = []
+                    for server_id in server_ids:
+                        try:
+                            await application.ashare(
+                                identity=operator,
+                                server_id=server_id,
+                                root_dept_id=child.root_dept_id,
+                                child_id=new_child_id,
+                                tenant_code=child.tenant_code,
+                                tenant_name=child.tenant_name,
+                                auto_distribute=auto_distribute,
+                            )
+                        except Exception as error:
+                            logger.exception("[F029] Protected provider mount sharing failed for {}", server_id)
+                            failures.append(error)
+                    if failures:
+                        raise failures[0]
         except Exception as e:  # pragma: no cover — compensator handles retry
             logger.warning(
                 "[F029] llm_server fanout to child %s failed: %s",
@@ -504,9 +533,9 @@ class TenantMountService:
     ) -> dict[str, Any]:
         """Reverse a mount.
 
-        v2.5.1 收窄到唯一路径：资源整体迁回 Root + Child 归档（PRD §5.2.2）。
+        v2.5.1 收窄到唯一路径: 资源整体迁回 Root + Child 归档(PRD §5.2.2)。
         旧的 archive / manual 策略已删除——"冻结子公司不迁移资源"的需求归到
-        §5.1.3 的 disable Child Tenant 动作，与 unmount 完全分开。
+        §5.1.3 的 disable Child Tenant 动作, 与 unmount 完全分开。
 
         Stale-flag idempotency: if a department carries ``is_tenant_root=1``
         but ``mounted_tenant_id IS NULL`` (legacy/half-written rows from
@@ -543,7 +572,7 @@ class TenantMountService:
                 }
             raise TenantTreeMountConflictError()
 
-        # 1. 资源迁移：Child 名下所有 tenant_aware 业务表批量改为 Root
+        # 1. 资源迁移: Child 名下所有 tenant_aware 业务表批量改为 Root
         migrated_counts = await cls._migrate_child_resources_to_root(
             child_tenant_id,
         )

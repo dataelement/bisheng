@@ -210,3 +210,14 @@ async def get_permission_decision_api() -> PermissionDecisionApiPort:
     if _permission_decision_api is None:
         raise RuntimeError("F048 permission decision API is not configured")
     return _permission_decision_api
+
+
+class PermissionResourceNormalizerPort(Protocol):
+    async def anormalize_permission_resource(self, resource_type: str, resource_id: str) -> str: ...
+
+
+async def get_permission_resource_normalizer() -> PermissionResourceNormalizerPort:
+    """Inject the knowledge Owner at the HTTP composition boundary only."""
+    from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+    return LegacyDocumentsApplication()

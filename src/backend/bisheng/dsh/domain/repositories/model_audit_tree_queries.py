@@ -237,7 +237,9 @@ class AuditTreeQueryRepository(AuditTreeBuildRepository):
             ).decode()
         names = self.user_names(item["user_id"] for item in items)
         return {
-            "items": self.with_titles([{**item, "user_name": names.get(item["user_id"])} for item in items]),
+            "items": self.with_feedback(
+                self.with_titles([{**item, "user_name": names.get(item["user_id"])} for item in items])
+            ),
             "next_cursor": next_cursor,
             "scan_limited": bool(next_cursor and len(items) < limit),
             "progress": progress,
@@ -265,11 +267,13 @@ class AuditTreeQueryRepository(AuditTreeBuildRepository):
             raise ValueError("Invalid tree location scope")
         names = self.user_names([node.user_id])
         return {
-            "items": self.with_titles(
-                [
-                    {**self._tree_metadata(ancestor, summary_ready=False), "user_name": names.get(node.user_id)}
-                    for ancestor in result
-                ]
+            "items": self.with_feedback(
+                self.with_titles(
+                    [
+                        {**self._tree_metadata(ancestor, summary_ready=False), "user_name": names.get(node.user_id)}
+                        for ancestor in result
+                    ]
+                )
             ),
             "progress": self.tree_progress(),
         }

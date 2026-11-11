@@ -274,6 +274,7 @@ class UserGroupService:
         # Emit OpenFGA tuple operations while retaining a legacy admin row for compatibility.
         ops = GroupChangeHandler.on_created(group.id, login_user.user_id)
         await GroupChangeHandler.execute_async(ops)
+        cls._audit_group(login_user, group, "create")
 
         return await cls._enrich_group(group)
 
@@ -343,6 +344,7 @@ class UserGroupService:
         group.update_user = login_user.user_id
 
         group = await GroupDao.aupdate(group)
+        cls._audit_group(login_user, group, "update")
         return await cls._enrich_group(group)
 
     @classmethod
@@ -366,6 +368,7 @@ class UserGroupService:
 
         ops = GroupChangeHandler.on_deleted(group_id)
         await GroupChangeHandler.execute_async(ops)
+        cls._audit_group(login_user, group, "delete")
 
     @classmethod
     async def aget_members(
@@ -424,6 +427,7 @@ class UserGroupService:
 
         ops = GroupChangeHandler.on_members_added(group_id, to_add)
         await GroupChangeHandler.execute_async(ops)
+        cls._audit_group(login_user, group, "update", note=f"增加={_id_brief(to_add)}；移除=无；结果=成功")
 
     @classmethod
     async def async_plain_members(
@@ -455,6 +459,13 @@ class UserGroupService:
             await UserGroupDao.aadd_members_batch(group_id, to_add)
             ops = GroupChangeHandler.on_members_added(group_id, to_add)
             await GroupChangeHandler.execute_async(ops)
+        if to_add or to_remove:
+            cls._audit_group(
+                login_user,
+                group,
+                "update",
+                note=f"增加={_id_brief(to_add)}；移除={_id_brief(to_remove)}；结果=成功",
+            )
 
     @classmethod
     async def areplace_user_memberships(
@@ -508,6 +519,7 @@ class UserGroupService:
 
         ops = GroupChangeHandler.on_member_removed(group_id, user_id)
         await GroupChangeHandler.execute_async(ops)
+        cls._audit_group(login_user, group, "update", note=f"增加=无；移除={user_id}；结果=成功")
 
     @classmethod
     async def aset_admins(
@@ -521,6 +533,23 @@ class UserGroupService:
             raise UserGroupNotFoundError()
         await _ensure_mutate_group(login_user, group)
         raise UserGroupNoSeparateAdminsError()
+
+    @staticmethod
+    def _audit_group(login_user, group, kind: str, note: str = "") -> None:
+        from bisheng.api.services.audit_log import AuditLogService
+
+        writer = {
+            "create": AuditLogService.create_user_group,
+            "update": AuditLogService.update_user_group,
+            "delete": AuditLogService.delete_user_group,
+        }[kind]
+        try:
+            if kind == "update":
+                writer(login_user, "", group, note)
+            else:
+                writer(login_user, "", group)
+        except Exception:
+            logger.exception("user group audit failed group_id=%s", getattr(group, "id", None))
 
     # --- Private helpers ---
 
@@ -583,3 +612,10 @@ class UserGroupService:
                 }
             )
         return items
+
+
+def _id_brief(ids: list[int]) -> str:
+    if not ids:
+        return "无"
+    shown = ",".join(str(item) for item in ids[:20])
+    return shown if len(ids) <= 20 else f"{shown} 等{len(ids)}人"

@@ -59,7 +59,13 @@ class RuntimeOperationService:
         self.clock = clock
 
     async def create(self, request):
-        if {"sealed_env", "runtime_env", "build_env"} & request.payload.keys():
+        if {
+            "sealed_env",
+            "runtime_env",
+            "build_env",
+            "execution_policy_json",
+            "execution_policy_digest",
+        } & request.payload.keys():
             raise RuntimeConflict("caller_environment_refused")
         app = await self.app_loader(request.app_id)
         if app is None or app.state == "deleted":
@@ -84,6 +90,12 @@ class RuntimeOperationService:
             raise AppOrchestratorUnavailableError(reason="runtime_prerequisites_blocked")
         assignments = await self.repo.find(RuntimeAssignment, app_id=app.id)
         generation = max(request.generation, assignments[0].generation + 1 if assignments else 1)
+        frozen_policy = {}
+        if node and node.executor_kind == "kubernetes" and (node.capabilities or {}).get("configuration"):
+            from bisheng.app_runtime.domain.services.runtime_deployment_policy import expected_policy, policy_digest
+
+            raw, _ = expected_policy(node.id)
+            frozen_policy = {"execution_policy_json": raw, "execution_policy_digest": policy_digest(raw)}
         op = RuntimeOperation(
             tenant_id=app.tenant_id,
             app_id=app.id,
@@ -95,7 +107,7 @@ class RuntimeOperationService:
             generation=generation,
             owner_epoch=request.owner_epoch,
             deadline=datetime.utcnow() + timedelta(seconds=settings.app_runtime.runtime_task_timeout_seconds),
-            payload={**request.payload, "tenant_id": app.tenant_id},
+            payload={**request.payload, **frozen_policy, "tenant_id": app.tenant_id},
             diagnostics_until=datetime.utcnow() + timedelta(days=settings.app_runtime.runtime_diagnostic_days),
             version_id=request.version_id,
             deployment_id=request.deployment_id,
@@ -174,6 +186,10 @@ class RuntimeOperationService:
             raise RuntimeConflict("node_execution_domain_invalid")
         if (capabilities.get("cluster_id"), capabilities.get("namespace")) != tuple(parts):
             raise RuntimeConflict("node_execution_domain_invalid")
+        if capabilities.get("configuration"):
+            from bisheng.app_runtime.domain.services.runtime_deployment_policy import matches_heartbeat
+
+            return matches_heartbeat(body, capabilities.get("node_id"))
         cidrs = capabilities.get("service_cidrs", [])
         if not isinstance(cidrs, list) or len(cidrs) > 32:
             raise RuntimeConflict("node_service_cidrs_invalid")
@@ -206,6 +222,46 @@ class RuntimeOperationService:
     def _protection_update(node, body):
         capabilities = copy.deepcopy(body.capabilities)
         previous = node.capabilities or {}
+        if capabilities.get("configuration") or previous.get("configuration"):
+            from bisheng.app_runtime.domain.services.runtime_deployment_policy import (
+                expected_policy,
+                matches_heartbeat,
+                protection_digest,
+            )
+
+            valid = matches_heartbeat(body, node.id)
+            previous_digest = previous.get("protection_baseline_digest")
+            changed = False
+            baseline = previous_digest
+            try:
+                _, expected = expected_policy(node.id)
+                baseline = protection_digest(expected)
+                changed = bool(previous_digest and previous_digest != baseline)
+            except RuntimeConflict:
+                pass
+            if previous:
+                observed = (capabilities.get("configuration") or {}).get("protection_baseline_digest")
+                changed = changed or bool(
+                    previous.get("status_policy_revision") != capabilities.get("status_policy_revision")
+                    or previous.get("cluster_id") != capabilities.get("cluster_id")
+                    or previous.get("namespace") != capabilities.get("namespace")
+                    or (
+                        previous_digest
+                        and isinstance(observed, str)
+                        and re.fullmatch(r"[a-f0-9]{64}", observed)
+                        and observed != previous_digest
+                    )
+                )
+            # Ordinary API/config unavailability removes current stop authority,
+            # but does not fabricate a confirmed break in historical protection.
+            capabilities["protection_contract_version"] = 2
+            capabilities["protection_baseline_digest"] = baseline
+            capabilities["serving_protection_valid"] = bool(
+                not changed and (valid or previous.get("serving_protection_valid") is True)
+            )
+            if not valid:
+                capabilities["status_protection"] = capabilities["binding_protection"] = False
+            return capabilities, changed, changed, not valid
         # These markers are server-owned and survive malformed/downgraded input.
         capabilities.pop("protection_contract_version", None)
         capabilities.pop("protection_baseline_digest", None)
@@ -273,6 +329,12 @@ class RuntimeOperationService:
     async def heartbeat(self, identity, body):
         if not identity.node_id or (body.executor_kind == "kubernetes" and set(identity.roles) != {"manager"}):
             raise RuntimeConflict("node_identity_required")
+        if identity.node_id in settings.app_runtime.runtime_kubernetes_nodes and not body.capabilities.get(
+            "configuration"
+        ):
+            raise RuntimeConflict("deployment_policy_heartbeat_required")
+        if body.capabilities.get("configuration") and body.capabilities.get("node_id") != identity.node_id:
+            raise RuntimeConflict("node_identity_mismatch")
         ready = self._node_report(body)
         async with self.repo.transaction() as session:
             node = await self.repo.get(RuntimeNode, identity.node_id, lock=True)
@@ -308,6 +370,11 @@ class RuntimeOperationService:
                             if binding_gap:
                                 resource.binding_policy_verified = False
                             await self.repo.save(resource)
+                        # A confirmed protection change invalidates existing routes
+                        # durably. A later valid heartbeat cannot repair old UIDs.
+                        for route in await self.repo.find(RuntimeRoute, node_id=node.id, status="serving", lock=True):
+                            route.status = "unhealthy"
+                            await self.repo.save(route)
             else:
                 from bisheng.app_runtime.domain.repositories.host_isolation_repository import HostIsolationRepository
 
@@ -779,8 +846,13 @@ class RuntimeOperationService:
             node = await self.repo.get(RuntimeNode, route.node_id)
         if node is None:
             return {"decision": "transition", "phase": "node_unavailable"}
-        if node.executor_kind == "kubernetes" and node.status != "ready":
-            return {"decision": "transition", "phase": "unhealthy"}
+        if node.executor_kind == "kubernetes":
+            capabilities = node.capabilities or {}
+            if capabilities.get("configuration"):
+                if capabilities.get("serving_protection_valid") is not True:
+                    return {"decision": "transition", "phase": "unhealthy"}
+            elif node.status != "ready":
+                return {"decision": "transition", "phase": "unhealthy"}
         if node and node.executor_kind == "docker":
             try:
                 await self.repo.require_host_isolation(node.id)
@@ -846,31 +918,69 @@ class RuntimeOperationService:
         }
 
     async def application(self, identity, app_id):
-        with bypass_tenant_filter():
-            assignments = await self.repo.find(RuntimeAssignment, app_id=app_id)
-            if not assignments or assignments[0].node_id != identity.node_id:
-                raise RuntimeConflict("application_not_found")
-            app = await self.app_loader(app_id)
-            if app is None or app.state == "deleted":
-                raise RuntimeConflict("application_not_found")
-            routes = await self.repo.find(RuntimeRoute, route_key=f"app:{app_id}")
-            route = routes[0] if routes else None
-            return {
-                "app_id": app.id,
-                "tenant_id": app.tenant_id,
-                "node_id": identity.node_id,
-                "generation": assignments[0].generation,
-                "owner_epoch": assignments[0].owner_epoch,
-                "phase": route.status if route else app.state,
-                "exec_ref": route.exec_ref if route else None,
-                "runtime_user": (await self.repo.get(RuntimeOperation, route.operation_id))
-                .payload.get("resolved_delivery", {})
-                .get("profile", {})
-                if route and route.operation_id
-                else {},
-                "operation_id": route.operation_id if route else None,
-                "target": route.target if route else None,
-            }
+        # One fresh repository UoW keeps the assignment, destroy and route facts
+        # in the same read snapshot. It grants no business/source access.
+        async with self.repo.transaction():
+            with bypass_tenant_filter():
+                assignments = await self.repo.find(RuntimeAssignment, app_id=app_id)
+                if len(assignments) != 1 or assignments[0].node_id != identity.node_id:
+                    raise RuntimeConflict("application_not_found")
+                assignment = assignments[0]
+                app = await self.app_loader(app_id)
+                if app is None:
+                    raise RuntimeConflict("application_not_found")
+                if app.state == "deleted":
+                    destroy = (
+                        await self.repo.get(RuntimeOperation, assignment.active_operation_id)
+                        if assignment.active_operation_id
+                        else None
+                    )
+                    now = self.clock()
+                    normal = bool(
+                        destroy
+                        and destroy.status not in {"completed", "failed", "cancelled", "timed_out"}
+                        and destroy.deadline > now
+                        and destroy.cleanup_status != "complete"
+                    )
+                    recovery = bool(
+                        destroy
+                        and destroy.status == "timed_out"
+                        and destroy.cleanup_status == "pending"
+                        and destroy.deadline <= now
+                        and isinstance(destroy.failure, dict)
+                        and destroy.failure.get("reason") == "operation_timeout"
+                    )
+                    if (
+                        destroy is None
+                        or not (normal or recovery)
+                        or (destroy.app_id, destroy.tenant_id, destroy.node_id, destroy.generation, destroy.owner_epoch)
+                        != (app.id, app.tenant_id, assignment.node_id, assignment.generation, assignment.owner_epoch)
+                        or assignment.tenant_id != app.tenant_id
+                        or destroy.scope_key != f"{app.tenant_id}/{app.id}"
+                        or destroy.kind != "destroy"
+                        or not isinstance(destroy.payload, dict)
+                        or destroy.payload.get("purge_volume") is not True
+                        or destroy.payload.get("delete_secret_config") is not True
+                    ):
+                        raise RuntimeConflict("application_not_found")
+                routes = await self.repo.find(RuntimeRoute, route_key=f"app:{app_id}")
+                route = routes[0] if routes else None
+                return {
+                    "app_id": app.id,
+                    "tenant_id": app.tenant_id,
+                    "node_id": identity.node_id,
+                    "generation": assignment.generation,
+                    "owner_epoch": assignment.owner_epoch,
+                    "phase": route.status if route else app.state,
+                    "exec_ref": route.exec_ref if route else None,
+                    "runtime_user": (await self.repo.get(RuntimeOperation, route.operation_id))
+                    .payload.get("resolved_delivery", {})
+                    .get("profile", {})
+                    if route and route.operation_id
+                    else {},
+                    "operation_id": route.operation_id if route else None,
+                    "target": route.target if route else None,
+                }
 
     async def observation(self, identity, body):
         with bypass_tenant_filter():

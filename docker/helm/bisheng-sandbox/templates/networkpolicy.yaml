@@ -16,7 +16,18 @@ spec:
     {{- end }}
   ingress:
     - from:
+{{- if .Values.networkPolicy.allowFrom }}
         {{- toYaml .Values.networkPolicy.allowFrom | nindent 8 }}
+{{- else }}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Release.Namespace }}}
+          podSelector:
+            matchLabels: {app.kubernetes.io/instance: {{ .Release.Name }}}
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values: [backend, worker, linsight]
+{{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.service.port }}

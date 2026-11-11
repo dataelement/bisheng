@@ -16,10 +16,9 @@ app does not exist" (AC-30 / AC-62); without it the entry path degrades to a
 Sibling, not sub-key, of ``open_platform`` (F049). The two switches are
 independent and any combination must boot (AC-61) — do not merge them.
 
-**Deployment order** (design pit 23): ``load_settings_from_yaml`` raises
-``KeyError`` on an unknown top-level key, so a config.yaml carrying
-``app_runtime:`` in front of code that knows it makes the backend refuse to
-start. Ship the code first, add the key second, restart third.
+**Deployment order** (design pit 23): older loaders reject unknown top-level
+keys; current loaders warn and ignore them. An ignored ``app_runtime:`` still
+cannot enable the feature. Ship code first, add the key second, restart third.
 
 Secrets (``manager_hmac_secret`` / ``proxy_hmac_secret`` / ``obo_secret``) come
 from ``!env`` or the Fernet-encrypted YAML — never a literal (C6). An empty
@@ -82,6 +81,10 @@ class AppRuntimeConf(BaseModel):
     )
     runtime_host_isolation_nodes: dict[str, dict] = Field(
         default_factory=lambda: json.loads(os.environ.get("BISHENG_RUNTIME_HOST_ISOLATION_NODES") or "{}")
+    )
+    runtime_kubernetes_nodes: dict[str, str] = Field(
+        default_factory=lambda: json.loads(os.environ.get("BISHENG_RUNTIME_KUBERNETES_NODES") or "{}"),
+        description="Deployment-owned node id to mounted policy JSON path; not supplied by manager heartbeats",
     )
     runtime_protocol_version: int = Field(
         default_factory=lambda: int(os.environ.get("BISHENG_RUNTIME_PROTOCOL_VERSION", "2")),

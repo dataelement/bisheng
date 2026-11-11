@@ -3,7 +3,6 @@
 Part of F002-department-tree.
 """
 
-
 from fastapi import APIRouter, Depends, Query, Request
 
 from bisheng.common.dependencies.user_deps import UserPayload

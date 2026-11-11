@@ -17,7 +17,7 @@ from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
 from bisheng.citation.domain.services.citation_prompt_helper import strip_citation_markers
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.linsight import (
@@ -33,11 +33,12 @@ from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimi
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter_if, get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.database.models.session import MessageSessionDao
+from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
 from bisheng.department.domain.services.department_flow_service import (
     DepartmentFlowService,
     SlotOutcome,
@@ -70,8 +71,8 @@ from bisheng.linsight.domain.services.state_message_manager import (
 )
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
-from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.share_link.domain.services.share_token_dependencies import header_share_token_parser
 from bisheng.utils import util
 
 router = APIRouter()
@@ -201,6 +202,10 @@ async def submit_linsight_workbench(
             submit_obj.session_id or "",
         )
 
+        session_id = submit_obj.session_id if isinstance(submit_obj.session_id, str) else ""
+        if session_id:
+            MessageSessionDao.update_sensitive_status(session_id, SensitiveStatus.VIOLATIONS)
+
         async def blocked_generator():
             auto_reply = blocked.auto_reply or ""
             yield {
@@ -254,10 +259,10 @@ async def submit_linsight_workbench(
         except BaseErrorCode as e:
             # Typed business errors (folder-upload limits, …) keep their own code so
             # the client can show the right copy instead of a generic submit failure.
-            yield e.to_sse_event_instance()
+            yield FailureContextAdapter.public_sse_event(e)
             return
         except Exception as e:
-            yield LinsightQuestionError(exception=e).to_sse_event_instance()
+            yield FailureContextAdapter.public_sse_event(LinsightQuestionError(), cause=e)
             return
         finally:
             # The lease covers the submit only — title generation below runs after
@@ -387,6 +392,8 @@ async def continue_conversation(
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
+    await record_business_activity(login_user)
+
     # Flip back to IN_PROGRESS BEFORE enqueue so the worker's pre-flight
     # non-terminal guard accepts the continue item.
     await LinsightSessionVersionDao.batch_update_session_versions_status(
@@ -462,6 +469,7 @@ async def user_input(
     already_completed = existing_task is not None and existing_task.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
     if not already_completed:
+        await record_business_activity(login_user)
         # Legacy parked sessions created before the pseudo-task row existed have
         # no row for a session-level clarify; the resume reads the answer from the
         # queue item, so persistence is best-effort there (skip when no row).
@@ -621,7 +629,9 @@ async def get_execute_task_detail(
     """
 
     with bypass_tenant_filter_if(share_link is not None):
-        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(session_version_id)
+        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(
+            session_version_id, login_user=login_user
+        )
 
         if not execute_task_models:
             return resp_200([])

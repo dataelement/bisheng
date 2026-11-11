@@ -1,10 +1,11 @@
+from copy import deepcopy
 from datetime import datetime
 from enum import Enum
 from typing import Any, Generic, Literal, TypeVar, Union
 
 from langchain_classic.docstore.document import Document
 from orjson import orjson
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.database.models.assistant import AssistantBase
@@ -322,10 +323,26 @@ class AssistantSimpleInfo(BaseModel):
     update_time: datetime
 
 
+class AssistantReferenceView(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slot_key: str
+    target_type: Literal["model", "knowledge_space", "knowledge_file"]
+    target_id: str
+    state: Literal["valid", "deleting", "invalid_deleted", "invalid_legacy"]
+    is_valid: bool
+
+
 class AssistantInfo(AssistantBase):
     tool_list: list[GptsToolsRead] = Field(default_factory=list, description="Tools for assistantsIDVertical")
     flow_list: list[FlowRead] = Field(default_factory=list, description="Skills for assistantsIDVertical")
     knowledge_list: list[KnowledgeRead] = Field(default_factory=list, description="The knowledge base uponIDVertical")
+    knowledge_ids: list[int] = Field(
+        default_factory=list, description="Original configured knowledge IDs, including invalid selections"
+    )
+    reference_states: list[AssistantReferenceView] | None = Field(
+        default=None, description="Inspected reference facts; null when a write response has not read them"
+    )
     can_share: bool = Field(
         default=False,
         description="Current user may create an app share link",
@@ -564,6 +581,21 @@ class KnowledgeSpaceConfig(BaseModel):
 
 
 class ExcelRule(BaseModel):
+    _processing_explicit_input: dict = PrivateAttr(default_factory=dict)
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def capture_processing_input(cls, value, handler):
+        raw = (
+            {key: deepcopy(item) for key, item in value.items() if key in cls.model_fields and item is not None}
+            if isinstance(value, dict)
+            else None
+        )
+        result = handler(deepcopy(value) if isinstance(value, dict) else value)
+        if raw is not None:
+            result._processing_explicit_input = raw
+        return result
+
     slice_length: int | None = Field(default=10, description="Data Line")
     header_start_row: int | None = Field(default=1, description="Table header start")
     header_end_row: int | None = Field(default=1, description="End of header")
@@ -572,6 +604,38 @@ class ExcelRule(BaseModel):
 
 # File Split Request Base Parameters
 class FileProcessBase(BaseModel):
+    _processing_explicit_input: dict = PrivateAttr(default_factory=dict)
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def capture_processing_input(cls, value, handler):
+        # This wrap runs before the legacy before-validator fills defaults.
+        # Only rule fields are retained; paths/callbacks/credentials are not.
+        rule_fields = {
+            "split_mode",
+            "separator",
+            "separator_rule",
+            "chunk_size",
+            "chunk_overlap",
+            "hierarchy_level",
+            "append_title",
+            "max_chunk_size",
+            "retain_images",
+            "force_ocr",
+            "enable_formula",
+            "filter_page_header_footer",
+            "excel_rule",
+        }
+        raw = (
+            {key: deepcopy(item) for key, item in value.items() if key in rule_fields and item is not None}
+            if isinstance(value, dict)
+            else None
+        )
+        result = handler(deepcopy(value) if isinstance(value, dict) else value)
+        if raw is not None:
+            result._processing_explicit_input = raw
+        return result
+
     knowledge_id: int = Field(..., description="The knowledge base uponID")
     split_mode: Literal["auto", "custom", "hierarchical"] = Field(
         default="auto", description="Document split mode: auto/custom/hierarchical"
@@ -667,6 +731,9 @@ class KnowledgeFileProcess(FileProcessBase):
 
 # Knowledge Base Re-Segment Adjustment
 class KnowledgeFileReProcess(FileProcessBase):
+    confirmation_id: str | None = None
+    plan_digest: str | None = None
+    idempotency_key: str | None = None
     kb_file_id: int = Field(..., description="Knowledge Base FilesID")
     file_path: str = Field(default="", description="FilePath")
     excel_rule: ExcelRule | None = Field(default=None, description="Excel rules")
@@ -687,6 +754,10 @@ class UsedAppPin(BaseModel):
 
 class UpdateKnowledgeReq(BaseModel):
     """Update Knowledge Base Model Request"""
+
+    confirmation_id: str | None = None
+    plan_digest: str | None = None
+    idempotency_key: str | None = None
 
     model_id: int = Field(..., description="embeddingModelsID")
     model_type: str | None = Field(

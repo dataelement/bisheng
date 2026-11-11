@@ -19,12 +19,12 @@ BACKEND_CONTAINER="bisheng-backend"
 WORKER_CONTAINER="bisheng-backend-worker"
 
 # 所有可管理的 compose service 名称
-ALL_SERVICES=(backend backend_worker frontend mysql redis elasticsearch minio milvus etcd gateway runtime-manager app-proxy)
+ALL_SERVICES=(backend backend_worker frontend mysql redis elasticsearch minio milvus etcd gateway ft_server runtime-manager app-proxy)
 
 # 挂在 compose profile 后面的 service。它们默认**不启动**——「应用工场运行时层
 # 整层不装」是产品明确支持的形态（F054 GOV-10 / AC-59）。要带上它们，所有
 # compose 命令都得加 --profile，否则 docker compose 会说 "no such service"。
-PROFILE_SERVICES=(runtime-manager app-proxy egress-proxy docker-socket-proxy gateway)
+PROFILE_SERVICES=(runtime-manager app-proxy egress-proxy docker-socket-proxy gateway ft_server)
 APP_RUNTIME_PROFILE="app-runtime"
 
 # 若参数里出现任何 profile service，就给 compose 命令补上 --profile。
@@ -37,6 +37,8 @@ compose_with_profile() {
       if [[ "$svc" = "$p" ]]; then
         if [[ "$svc" = gateway ]]; then
           profile_args+=(--profile gateway)
+        elif [[ "$svc" = ft_server ]]; then
+          profile_args+=(--profile ft)
         else
           profile_args+=(--profile "${APP_RUNTIME_PROFILE}")
         fi
@@ -66,7 +68,7 @@ usage() {
   header "   BiSheng 运维管理脚本"
   header "═══════════════════════════════════════════════"
   echo ""
-  echo "  $0 install                   生成 .env 并部署（默认不启用 Gateway）"
+  echo "  $0 install [--ft]            生成 .env 并部署（默认不启用 Gateway 和 FT）"
   echo ""
   echo -e "${BOLD}查看日志：${RESET}"
   echo "  $0 logs backend              实时跟踪 backend 日志（默认最近 200 行）"
@@ -116,6 +118,7 @@ resolve_service() {
     etcd)                   echo "etcd" ;;
     rtm|runtime-manager)    echo "runtime-manager" ;;
     proxy|app-proxy)        echo "app-proxy" ;;
+    ft|bisheng-ft|ft_server) echo "ft_server" ;;
     *)                      echo "$1" ;;  # 原样传入，让 docker compose 自行报错
   esac
 }
