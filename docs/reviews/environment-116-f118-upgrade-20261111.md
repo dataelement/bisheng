@@ -311,3 +311,16 @@ tenant1 在 `PhysicalInventoryReader._index → _physical_batch` 报 `migration_
 本地组合回归 2,041 passed / 1 failed；失败是频道配额加载角色策略触发 no-network，在改动前基线也单项复现。最终关键选集 72 passed；含原索引 SQL 转换/续跑、文件/目录/绑定漂移拒绝和真实 M2/M3/M4 跨租户失效覆盖闭合。代码审查见 `f118-preserve-index-and-invalid-scope-20261111.md`；Ruff、架构 guard 与 diff-check 通过。现场原 13 个文件与本次基线完全匹配，新增物理保留证明模块原不存在，原件及最终候选哈希保存于 `preserve-index-and-scope-fix-v2/`。
 
 进一步核对已备份的 103 条缺 mode 文件：全部是 Root 租户 space_upload 的 FAILED 文件，仍有非空对象名及非零文件大小；102 条在知识资源3494下引用已不存在的目录90829，另1条在3490下引用已不存在的89614。上传失败或缺权限元数据不能当作文件可删除证据；本次未删这些记录、未清对象文件、未重建目录或凭空补授权。其他 8 条层级计数错误同时有 FGA 多 parent，328 条资源已不存在的权限 mode 及关联、170 条无容器且无 TagLink 的标签、现有空间3426的授权适用范围闸门仍需处理。保留完整诊断及行级备份，未绕过检查。
+
+### 本轮现场验证及未完成状态（14:44–15:00，+08:00）
+
+- 修复提交 `54a66afa7f9212bffe0e8d05eb330b73795285ca`，合入本地发布线 `aac80d7fe1`。已保留发布线期间其他人的提交和主工作区所有无关未提交文件；没有推送。
+- 新维护容器 `bisheng-test-permission-upgrade-v3` 使用原镜像加只读 19 个文件挂载（原权限兼容5个 + 本次14个），所有新挂载哈希逐一匹配提交代码。宿主机 override 原件另存 `preserve-index-and-scope-fix-v2/docker-compose.override.before.yml`。三个业务容器仍停止、未重建；这些挂载对它们仍是待重建生效配置，不声称业务已加载。
+- `logs/preserved-original-indexes-live.log`：通过实际补丁 M2 `_physical_batch` 对143个库生成143条零托管文件保留证明，实时SQL绑定以及原ES/Milvus schema/count事实全部逐字段相同。SQL和物理索引写入均为0；结果为 `retention-live-validation.json`，不是正式M2冻结。
+- `logs/approved-invalid-scope-live.log`：实际助手原 `model_name=800` 保留；真实模型存在，模型和服务商都归租户18。租户13转换决策为 `existing_invalid_scope`、`exists=true`，租户13整租户只读预检通过。正式引用回填尚未执行，不把诊断记录冒充已完成的M4标记。
+- `logs/tenant-preflight-preserved-index-scope.log`：30租户中25通过。当前首个阻塞为 Root 创建者缺失、tenant18现有空间scope闸门、tenant20孤立标签、tenant25文件层级、tenant60失效权限容器。原其余完整性错误仍保留，不凭首个错误覆盖掉既知问题。
+- 新暴露的9条均是**既有type3空空间**，ID1479/1480/1483/1484/1485/1486/1487/1490/1501，创建者ID没有实际User，均无SQL文件。没有把它们改为Root管理员或生成创建者授权。全行、schema、恢复SQL及哈希写入 `missing-creator-evidence/`；SHA256校验全部OK，rows哈希 `67f9c44e755ecfd8aad82a824c84aef40c6be41424be5be34260da74358e07ab`。
+- `remaining-native-details.json`：103条父目录丢失的失败文件及目录89614/90829，在当前原模型下HIGHER_CONSISTENCY读取均为0条tuple，不能据此创造父目录或继承授权。空间3426则有既存ACTIVE可见来源9763、授权14827、来源19883，不能按失效元数据删除；其模型等级2的证据与授权范围继续保留。
+- 待核实清理候选逐条ID清单 `remaining-metadata-candidate-scope.json`：mode328、Grant653、assignee399、visible source401、tag170，共1951行，均已包括在原 `remaining-preflight/rows.json` 全量证据中。排除有效mode7592及空间3426的全部有效上下文；投影Operation/Tuple历史不在候选删除范围内。完整下游及FGA核验尚待执行，这不是无条件删除许可。
+
+本轮没有新增SQL/FGA业务数据写入或物理存储修改。仍为 Catalog198/Authorization7，正式run `116-f118-20261111` 无冻结行，无本轮M3/M4，无权限CURRENT发布，升级**未完成**。原空模型的user747/user745两项HIGHER_CONSISTENCY可见检查继续保留。剩余“历史结构失效保留”合同和已删除目标元数据清理已分别向用户发出补充确认，在取得答复前不实施依赖它们的变更。完整本轮材料以新版本包v4归档，不覆盖v1/v2/v3。
