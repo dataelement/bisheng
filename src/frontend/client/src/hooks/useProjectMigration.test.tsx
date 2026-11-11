@@ -61,6 +61,14 @@ it('lets every account in the same browser import its own share; the server deci
   expect(other).toMatchObject({ phase: 'done', skipped: 1, details: [{ id: 'old-0', status: 'not_owned' }] });
 });
 
+it('does not import again for an account that finished the earlier migration', async () => {
+  legacy();
+  localStorage.setItem(`bs_project_import_done_v1:${identity}`, 'old-source');
+  const perform = jest.fn<Promise<ProjectActionResult>, [ProjectOperation]>().mockResolvedValue(result);
+  expect(await migrateLegacyProjects(identity, perform, () => true)).toMatchObject({ phase: 'idle' });
+  expect(perform).not.toHaveBeenCalled();
+});
+
 it('ignores a late result after the identity changed', async () => {
   legacy();
   let current = true;

@@ -30,7 +30,7 @@
 2. 统计该项目的旧归属中，属于当前账号、未删除、自然人会话、且当前没有云端归属的对话。数量为 0 时返回 `not_owned`，不创建项目。
 3. 数量大于 0 时创建项目，只写入这些对话的归属，返回 `imported`；其余归属按原因返回 `conversation_unavailable` 或 `cloud_membership_kept`。
 
-前端去掉“来源绑定首个账号”（`bs_project_import_owner_v1`）；完成标记按账号记录（`bs_project_import_done_v2:<身份>`），同一浏览器的每个账号各自导入一次。
+前端去掉“来源绑定首个账号”（`bs_project_import_owner_v1`）；完成标记按账号记录（`bs_project_import_done_v2:<身份>`），同一浏览器的每个账号各自导入一次。已有 `bs_project_import_done_v1:<身份>` 的账号视为已完成，因为旧版导入使用随机项目 ID，再按确定性 ID 导入会产生重复项目。Desktop 旧数据按账号作用域保存，沿用原完成标记。
 
 **对外契约（取代 §6.1 中的同名条目）**：
 

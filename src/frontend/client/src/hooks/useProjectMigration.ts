@@ -22,7 +22,10 @@ export async function migrateLegacyProjects(
   current: () => boolean,
 ): Promise<ProjectMigrationStatus> {
   const marker = `bs_project_import_done_v2:${identity}`;
-  if (!identity || !current() || !hasLegacyProjects() || localStorage.getItem(marker)) return idle;
+  // v1 imports used random project ids; importing again under the deterministic
+  // ids of v2 would duplicate every project, so an account done under v1 stays done.
+  const doneUnderV1 = localStorage.getItem(`bs_project_import_done_v1:${identity}`);
+  if (!identity || !current() || !hasLegacyProjects() || localStorage.getItem(marker) || doneUnderV1) return idle;
   const legacy = readLegacyProjects();
   const result = await perform({ operation: 'import', projects: legacy.projects, memberships: legacy.memberships });
   if (!current()) throw new DOMException('Identity changed', 'AbortError');
