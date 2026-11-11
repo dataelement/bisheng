@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useId, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
 import { Button, Input } from '@bisheng/ui';
 import { characterCount, stripIdentityWhitespace, validateNicknameChange } from '@bisheng/identity';
 import { isApiError } from '@bisheng/api-client';
@@ -7,12 +7,14 @@ import { useLocalize } from '~/hooks';
 
 interface NicknameEditorProps {
     nickname: string;
+    autoFocus?: boolean;
     onCancel: () => void;
     onSaved: (profile: NicknameProfile) => void;
 }
 
-export function NicknameEditor({ nickname, onCancel, onSaved }: NicknameEditorProps) {
+export function NicknameEditor({ nickname, autoFocus = true, onCancel, onSaved }: NicknameEditorProps) {
     const localize = useLocalize();
+    const errorId = useId();
     const [value, setValue] = useState(nickname);
     const [saving, setSaving] = useState(false);
     const [serverError, setServerError] = useState<string>();
@@ -35,6 +37,12 @@ export function NicknameEditor({ nickname, onCancel, onSaved }: NicknameEditorPr
     const handleChange = (event: ChangeEvent<HTMLInputElement>) =>
         handleInputValue(event.currentTarget, (event.nativeEvent as InputEvent).isComposing);
 
+    const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.keyCode === 229) return;
+        event.preventDefault();
+        if (!event.repeat) event.currentTarget.form?.requestSubmit();
+    };
+
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
         if (pending.current || value === nickname || errorCode) return;
@@ -54,7 +62,7 @@ export function NicknameEditor({ nickname, onCancel, onSaved }: NicknameEditorPr
         onSaved(saved);
     };
 
-    return <form className="grid gap-2 border-b border-border pb-5" onSubmit={handleSubmit}
+    return <form onSubmit={handleSubmit}
         onKeyDown={event => {
             if (event.key === 'Escape') {
                 event.preventDefault();
@@ -62,23 +70,24 @@ export function NicknameEditor({ nickname, onCancel, onSaved }: NicknameEditorPr
                 if (!pending.current) onCancel();
             }
         }} noValidate>
-        <label htmlFor="profile-nickname" className="text-body text-text-1">{localize('accountIdentity.nickname')}</label>
-        <Input id="profile-nickname" size="medium" value={value} autoFocus disabled={saving}
-            onChange={handleChange} onCompositionEnd={event => handleInputValue(event.currentTarget)}
-            status={error ? 'error' : 'default'} aria-invalid={Boolean(error)}
-            aria-describedby="profile-nickname-rule profile-nickname-effect"
-            suffix={<span className="text-caption text-text-3">{characterCount(value)}/32</span>} />
-        <p id="profile-nickname-rule" className={`text-caption ${error ? 'text-danger' : 'text-text-3'}`} aria-live="polite">
-            {error || localize('accountIdentity.nicknameRules')}
-        </p>
-        <p id="profile-nickname-effect" className="text-caption text-text-3">{localize('accountIdentity.nicknameEffectSelf')}</p>
-        <div className="mt-2 flex justify-end gap-2">
-            <Button type="button" variant="outlined" color="default" disabled={saving} onClick={onCancel}>
-                {localize('com_ui_cancel')}
-            </Button>
-            <Button type="submit" disabled={saving || value === nickname || Boolean(errorCode)} loading={saving}>
-                {localize('accountIdentity.saveNickname')}
-            </Button>
+        <div className="flex flex-wrap items-center gap-2">
+            <Input size="medium" className="min-w-0 max-w-[22rem] flex-1 basis-48" value={value} autoFocus={autoFocus} disabled={saving}
+                enterKeyHint="done" onChange={handleChange} onKeyDown={handleInputKeyDown}
+                onCompositionEnd={event => handleInputValue(event.currentTarget)}
+                status={error ? 'error' : 'default'} aria-invalid={Boolean(error)}
+                aria-label={localize('accountIdentity.nickname')} aria-describedby={error ? errorId : undefined}
+                suffix={<span className="text-caption text-text-3">{characterCount(value)}/32</span>} />
+            <div className="ms-auto flex max-w-full flex-wrap justify-end gap-2">
+                <Button type="button" variant="outlined" color="default" disabled={saving} onClick={onCancel}>
+                    {localize('com_ui_cancel')}
+                </Button>
+                <Button type="submit" disabled={saving || value === nickname || Boolean(errorCode)} loading={saving}>
+                    {localize('com_ui_save')}
+                </Button>
+            </div>
         </div>
+        <p id={errorId} className={error ? 'mt-2 text-caption text-danger' : undefined} aria-live="polite">
+            {error}
+        </p>
     </form>;
 }
