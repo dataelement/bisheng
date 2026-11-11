@@ -148,12 +148,38 @@ class F118PermissionTupleBuilder:
         return False
 
     def finish(self, *, stage_tuples, before_release_key, after_release_key):
-        # Destination nodes have no original SQL owner in a valid before graph.
-        # Adopting dormant edges here would activate unsigned assignments when
-        # the new resource/grant links are published, even if the raw edge is
-        # legal under the schema. A Run intent is the only partial-stage proof.
+        # A duplicated parent can already name the destination while its exact
+        # old parent remains present and both are backed by the signed SQL plan.
+        # It adds nothing to the intended after graph. All other dormant
+        # destination edges remain unsigned, even when schema-legal.
         destinations = set(self.moves.values())
-        if any(user.partition("#")[0] in destinations or obj in destinations for user, _, obj in self.before):
+        destination_edges = {
+            key for key in self.before if key[0].partition("#")[0] in destinations or key[2] in destinations
+        }
+        duplicate_parents = set()
+        for key in destination_edges:
+            user, relation, obj = key
+            if (
+                relation != "parent"
+                or not user.startswith("knowledge_space:")
+                or "#" in user
+                or obj.partition(":")[0] not in {"folder", "knowledge_file"}
+                or obj not in self.resources
+                or obj in destinations
+            ):
+                continue
+            previous_user = "knowledge_library:" + user.partition(":")[2]
+            previous = (previous_user, relation, obj)
+            if (
+                self.moves.get(previous_user) == user
+                and previous in self.before
+                and previous in self.expected_before
+                and key in self.expected_after
+                and permits(self.source, key)
+                and permits(self.target, key)
+            ):
+                duplicate_parents.add(key)
+        if destination_edges - duplicate_parents:
             blocked("unowned_destination_endpoint")
         controlled = {"permission_enabled", "custom_mode", "inherit_mode", "parent", "grant", "visible"}
         owned = {
@@ -162,7 +188,7 @@ class F118PermissionTupleBuilder:
             if (key[2] in self.resources and key[1] in controlled)
             or (key[2] in self.grants and key[1] in {"model", "ordinary_assignee", "protected_assignee"})
         }
-        extras = owned - self.expected_before
+        extras = owned - self.expected_before - duplicate_parents
         for key in extras:
             if not self._extra(key) or not permits(self.source, key):
                 blocked("existing_graph_drift")

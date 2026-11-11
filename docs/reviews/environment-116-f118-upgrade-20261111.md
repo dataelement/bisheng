@@ -413,3 +413,11 @@ v9权限预检已推进Root permission_namespace至67,354/71,784行，发现work
 18:47:22只读复核143个原绑定，允许计划内type0→3，index_name/collection_name、原schema、实体/文档计数和identifier_compatible事实完全不变，143份保留证明闭合，SQL/物理写入均0。日志retention-postcheck.log，完整结果retention-post-validation.json。未换空索引。
 
 权限发布原生流程在发布前完整重读Store，并在切换前/后再次全量核验；现场一次扫描约十多分钟，属于实际维护时长的主要成本。早先1–2小时估计偏乐观，已向用户修订剩余45–90分钟区间，仍以最终发布/覆盖与运行验证为完成条件。
+
+### 18:57–19:10 已冻结目标父关系的过严guard
+
+SQL全部完成后，发布前完整Store重读与冻结before一致；尚未创建新模型或Catalog，tuple builder在unowned_destination_endpoint guard停止。30个run仍converting、SQL checkpoint complete，Catalog198未切换；冻结计划不替换。
+
+tuple-endpoint-evidence-v2完整保存冻结描述符、原140,903条tuple、冲突键、模式及源schema。精确17条均为parent，涉及目标knowledge_space:4059/4062/4063/4094/4156；17/17同时满足目标键属于canonical after、逆namespace旧父边在原Store及canonical before。不是新主体或额外授权，而是原SQL父关系同时已有旧/新namespace重复键。
+
+将guard限定为封闭父边等价：原SQL文件/目录、精确同ID库→空间映射、实际旧父边与before计划、相同after父边及两schema合法均须满足。已有目标键保留且不额外写入，原计划删除旧父键；其他目标端点/赋权/错父/错子/无SQL继续阻断。未改变冻结文件、ResourceRetirementPlan、SQL命令或原主体/等级。正例先复现原失败；原生发布及续跑66项回归通过，含原P0目标端点拒绝。静态检查通过。后续先编译原冻结全计划确认，再沿同run resume执行。
