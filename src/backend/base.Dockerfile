@@ -60,4 +60,5 @@ RUN set -eux; \
     ln -s ../node/bin/node /opt/pptd-runtime/bin/node; \
     cd /opt/pptd-runtime && PATH=/opt/pptd-runtime/node/bin:$PATH npm ci --omit=dev --no-audit --no-fund; \
     rm -rf /root/.npm; \
+    /opt/pptd-runtime/bin/node -e "import('sharp').then(m => console.log('sharp', m.default.versions.sharp, process.arch))"; \
     chmod -R a+rX /opt/pptd-runtime

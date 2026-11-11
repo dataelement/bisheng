@@ -205,6 +205,21 @@ def test_font_floor_passes_readable_text_and_resolves_styles(tmp_path):
     assert pptd.font_issues(str(write_project(tmp_path / "deck", [page], theme))) == []
 
 
+def test_missing_pyyaml_skips_the_floor_instead_of_blocking(tmp_path, monkeypatch):
+    """A skipped check is not a finding: it must not block render."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_yaml(name, *args, **kwargs):
+        if name == "yaml":
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_yaml)
+    assert pptd.font_issues(str(tmp_path)) is None
+
+
 def test_gov_red_reference_pages_meet_the_floor():
     assert pptd.font_issues(str(TEMPLATES / "gov-red" / "source-zh")) == []
 

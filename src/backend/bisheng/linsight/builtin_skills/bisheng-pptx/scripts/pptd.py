@@ -89,10 +89,11 @@ def _size(*candidates):
 
 
 def font_issues(project):
+    """Below-floor text in the project, or None when the check cannot run here."""
     try:
         import yaml
     except ImportError:
-        return ["(未做字号检查：缺少 PyYAML)"]
+        return None
     deck = os.path.join(project, "deck.pptd") if os.path.isdir(project) else project
     root = os.path.dirname(deck)
     try:
@@ -186,6 +187,9 @@ def cmd_check(project):
     rc, text = run(["check", project])
     print(text.strip()[-6000:])
     extra = font_issues(project)
+    if extra is None:
+        print("\n（本环境缺少 PyYAML，未做字号下限检查；请自行按 SKILL.md 的字号要求核对。）")
+        extra = []
     if extra:
         print(f"\n字号低于下限（按 error 处理，共 {len(extra)} 处；放大字号，放不下就删字或拆页）:")
         print("\n".join(extra[:60]))
@@ -196,7 +200,7 @@ def cmd_check(project):
 def cmd_render(project, out):
     if not engine_ready():
         return not_ready()
-    extra = font_issues(project)
+    extra = font_issues(project) or []
     if extra:
         print(f"未导出：{len(extra)} 处字号低于下限，先改再 check：")
         print("\n".join(extra[:60]))
