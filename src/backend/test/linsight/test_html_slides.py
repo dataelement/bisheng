@@ -95,25 +95,56 @@ def _small_deck():
 
 
 # ---------------------------------------------------------------------------
-# consistency with the PPT skill (AC-06 / AC-07)
+# consistency with the PPT skill (F006 AC-06 / AC-07, F014 AC-20)
 # ---------------------------------------------------------------------------
 
 
-def _pptx_catalog():
-    return json.loads((SKILLS / "bisheng-pptx" / "templates" / "catalog.json").read_text(encoding="utf-8"))["templates"]
+def _pptd_gov_red_colors():
+    import yaml
+
+    deck = SKILLS / "bisheng-pptx" / "templates" / "gov-red" / "source-zh" / "deck.pptd"
+    return yaml.safe_load(deck.read_text(encoding="utf-8"))["theme"]["colors"]
 
 
-def test_themes_match_the_pptx_catalog():
-    catalog = {t["id"]: t for t in _pptx_catalog()}
-    assert set(slides.THEMES) == set(catalog)
-    for tid, theme in slides.THEMES.items():
-        assert theme["name"] == catalog[tid]["name"]
-        assert theme["palette"] == catalog[tid]["palette"], f"{tid} palette drifted from the PPT templates"
+# html-report palette role -> colour name in the PPT skill's gov-red PPTD template
+_GOV_RED_ROLES = {
+    "primary": "red",
+    "secondary": "gold",
+    "accent": "accent",
+    "background": "white",
+    "surface": "surface",
+    "text": "ink",
+    "muted": "muted",
+}
 
 
-def test_layouts_are_the_layouts_every_pptx_template_shares():
-    shared = set.intersection(*(set(t["layouts"]) for t in _pptx_catalog()))
-    assert set(slides.LAYOUTS) == shared
+def test_gov_red_palette_matches_the_pptx_gov_red_template():
+    """F014 AC-20: a web deck and a .pptx deck for the same Party-committee meeting must
+    use the same reds and golds. Only gov-red is paired; the other web themes are
+    html-report's own since the PPT skill moved to PPTD templates."""
+    colors = _pptd_gov_red_colors()
+    palette = slides.THEMES["gov-red"]["palette"]
+    for role, name in _GOV_RED_ROLES.items():
+        assert "#" + palette[role].upper() == colors[name].upper(), f"gov-red {role} drifted from the PPT template"
+
+
+def test_layouts_are_the_fixed_set():
+    assert set(slides.LAYOUTS) == {
+        "cover",
+        "agenda",
+        "section",
+        "statement",
+        "two-column",
+        "cards-3",
+        "cards-4",
+        "kpi-4",
+        "chart-insight",
+        "compare",
+        "process",
+        "timeline",
+        "table",
+        "closing",
+    }
 
 
 def test_committed_template_is_the_generated_sample():

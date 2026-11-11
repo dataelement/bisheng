@@ -1,0 +1,417 @@
+pageType: statement
+background:
+  type: solid
+  color: $black
+elements:
+  - elementId: capability-index-field
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 52
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: capability-field
+    elementType: shape
+    bounds:
+      - 760
+      - 158
+      - 128
+      - 310
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: capability-line-1
+    elementType: line
+    bounds:
+      - 108
+      - 208
+      - 604
+      - 1
+    viewBox:
+      - 604
+      - 1
+    points: 0,0 604,0
+    border:
+      color: '#FFFFFF33'
+      width: 0.8
+  - elementId: capability-line-2
+    elementType: line
+    bounds:
+      - 108
+      - 264
+      - 604
+      - 1
+    viewBox:
+      - 604
+      - 1
+    points: 0,0 604,0
+    border:
+      color: '#FFFFFF33'
+      width: 0.8
+  - elementId: capability-line-3
+    elementType: line
+    bounds:
+      - 108
+      - 320
+      - 604
+      - 1
+    viewBox:
+      - 604
+      - 1
+    points: 0,0 604,0
+    border:
+      color: '#FFFFFF33'
+      width: 0.8
+  - elementId: capability-line-4
+    elementType: line
+    bounds:
+      - 108
+      - 376
+      - 604
+      - 1
+    viewBox:
+      - 604
+      - 1
+    points: 0,0 604,0
+    border:
+      color: '#FFFFFF33'
+      width: 0.8
+  - elementId: capability-line-5
+    elementType: line
+    bounds:
+      - 108
+      - 432
+      - 604
+      - 1
+    viewBox:
+      - 604
+      - 1
+    points: 0,0 604,0
+    border:
+      color: '#FFFFFF33'
+      width: 0.8
+  - elementId: capability-index
+    elementType: text
+    bounds:
+      - 10
+      - 424
+      - 32
+      - 86
+    rotation: 270
+    content:
+      text: 08 / MOAT
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: capability-kicker
+    elementType: text
+    bounds:
+      - 108
+      - 50
+      - 500
+      - 18
+    content:
+      text: CAPABILITY SYSTEM / LOCAL OPERATING LOOP
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $red
+  - elementId: capability-title
+    elementType: text
+    bounds:
+      - 108
+      - 80
+      - 744
+      - 68
+    content:
+      text: 下一阶段竞争的护城河<br>是五种能力组成的经营闭环
+      fontFamily:
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 30
+      bold: true
+      lineHeight: 1.05
+      color: $white
+  - elementId: capability-01
+    elementType: text
+    bounds:
+      - 108
+      - 170
+      - 52
+      - 30
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 24
+      bold: true
+      color: $red
+  - elementId: capability-01-name
+    elementType: text
+    bounds:
+      - 174
+      - 170
+      - 170
+      - 30
+    content:
+      text: 需求洞察
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+  - elementId: capability-01-note
+    elementType: text
+    bounds:
+      - 360
+      - 174
+      - 350
+      - 24
+    content:
+      text: 市场信号 → 选品、价格与节奏
+      fontFamily: *ref_0
+      fontSize: 12
+      color: '#FFFFFFAA'
+  - elementId: capability-02
+    elementType: text
+    bounds:
+      - 108
+      - 226
+      - 52
+      - 30
+    content:
+      text: '02'
+      fontFamily: *ref_0
+      fontSize: 24
+      bold: true
+      color: $red
+  - elementId: capability-02-name
+    elementType: text
+    bounds:
+      - 174
+      - 226
+      - 170
+      - 30
+    content:
+      text: 本地内容
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+  - elementId: capability-02-note
+    elementType: text
+    bounds:
+      - 360
+      - 230
+      - 350
+      - 24
+    content:
+      text: 语言、场景与信任机制本地化
+      fontFamily: *ref_0
+      fontSize: 12
+      color: '#FFFFFFAA'
+  - elementId: capability-03
+    elementType: text
+    bounds:
+      - 108
+      - 282
+      - 52
+      - 30
+    content:
+      text: '03'
+      fontFamily: *ref_0
+      fontSize: 24
+      bold: true
+      color: $red
+  - elementId: capability-03-name
+    elementType: text
+    bounds:
+      - 174
+      - 282
+      - 170
+      - 30
+    content:
+      text: 履约调度
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+  - elementId: capability-03-note
+    elementType: text
+    bounds:
+      - 360
+      - 286
+      - 350
+      - 24
+    content:
+      text: 仓网、时效、库存与退换货联动
+      fontFamily: *ref_0
+      fontSize: 12
+      color: '#FFFFFFAA'
+  - elementId: capability-04
+    elementType: text
+    bounds:
+      - 108
+      - 338
+      - 52
+      - 30
+    content:
+      text: '04'
+      fontFamily: *ref_0
+      fontSize: 24
+      bold: true
+      color: $red
+  - elementId: capability-04-name
+    elementType: text
+    bounds:
+      - 174
+      - 338
+      - 170
+      - 30
+    content:
+      text: 合规控制
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+  - elementId: capability-04-note
+    elementType: text
+    bounds:
+      - 360
+      - 342
+      - 350
+      - 24
+    content:
+      text: 产品、税务、数据与消费者权益
+      fontFamily: *ref_0
+      fontSize: 12
+      color: '#FFFFFFAA'
+  - elementId: capability-05
+    elementType: text
+    bounds:
+      - 108
+      - 394
+      - 52
+      - 30
+    content:
+      text: '05'
+      fontFamily: *ref_0
+      fontSize: 24
+      bold: true
+      color: $red
+  - elementId: capability-05-name
+    elementType: text
+    bounds:
+      - 174
+      - 394
+      - 170
+      - 30
+    content:
+      text: 经营组织
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+  - elementId: capability-05-note
+    elementType: text
+    bounds:
+      - 360
+      - 398
+      - 350
+      - 24
+    content:
+      text: 本地团队、P&L 与快速决策权限
+      fontFamily: *ref_0
+      fontSize: 12
+      color: '#FFFFFFAA'
+  - elementId: capability-shift-top
+    elementType: text
+    bounds:
+      - 776
+      - 182
+      - 98
+      - 16
+    content:
+      text: THE SHIFT
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $white
+  - elementId: capability-shift
+    elementType: text
+    bounds:
+      - 776
+      - 226
+      - 98
+      - 174
+    content:
+      text: 从流量<br>效率<br><br>到经营<br>质量
+      fontFamily: *ref_0
+      fontSize: 23
+      bold: true
+      lineHeight: 1.08
+      color: $white
+  - elementId: capability-shift-bottom
+    elementType: text
+    bounds:
+      - 776
+      - 424
+      - 98
+      - 28
+    content:
+      text: 闭环比单点<br>更难复制
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      lineHeight: 1.2
+      color: $white
+  - elementId: capability-source
+    elementType: text
+    bounds:
+      - 108
+      - 500
+      - 640
+      - 12
+    content:
+      text: 管理层研判：能力闭环来自前述规模、结构、集中度与海外仓证据。
+      fontFamily: *ref_0
+      fontSize: 8.5
+      color: '#FFFFFF88'
+  - elementId: capability-page
+    elementType: text
+    bounds:
+      - 856
+      - 500
+      - 32
+      - 12
+    content:
+      text: '08'
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $paper
+      align:
+        - right
+        - bottom

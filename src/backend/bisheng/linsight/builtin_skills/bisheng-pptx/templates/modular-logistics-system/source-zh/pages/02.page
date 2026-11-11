@@ -1,0 +1,499 @@
+pageType: summary
+background:
+  type: solid
+  color: $paper
+notes: |
+  管理层摘要：规模仍增长，结构上以出口为主，竞争优势开始从流量套利转向本地履约、客户资产、合规和现金效率的系统组合。
+  来源：https://dzswgf.mofcom.gov.cn/news/phone/182/2025/6/m-1750214318814.html
+  来源：https://dzswgf.mofcom.gov.cn/news/182/2025/4/1744004653888.html
+elements:
+  - elementId: p02-top-rule
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 960
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p02-kicker
+    elementType: text
+    bounds:
+      - 54
+      - 32
+      - 420
+      - 18
+    content:
+      style: $section
+      text: 00 / EXECUTIVE SUMMARY
+  - elementId: p02-title
+    elementType: text
+    bounds:
+      - 52
+      - 58
+      - 850
+      - 42
+    content:
+      style: $pageTitle
+      text: 规模增长确定，价值池正从流量获取迁移到本地经营
+  - elementId: p02-route-01
+    elementType: line
+    bounds:
+      - 314
+      - 244
+      - 30
+      - 2
+    viewBox:
+      - 30
+      - 2
+    points: 0,1 30,1
+    border:
+      width: 3
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p02-route-02
+    elementType: line
+    bounds:
+      - 600
+      - 244
+      - 30
+      - 2
+    viewBox:
+      - 30
+      - 2
+    points: 0,1 30,1
+    border:
+      width: 3
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p02-card-01
+    elementType: shape
+    bounds:
+      - 54
+      - 132
+      - 260
+      - 262
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.5
+  - elementId: p02-card-01-head
+    elementType: shape
+    bounds:
+      - 54
+      - 132
+      - 260
+      - 32
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p02-card-01-code
+    elementType: text
+    bounds:
+      - 70
+      - 141
+      - 220
+      - 16
+    content:
+      text: MODULE 01 / SCALE
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      color: $yellow
+      bold: true
+      letterSpacing: 1
+  - elementId: p02-card-01-metric
+    elementType: text
+    bounds:
+      - 70
+      - 184
+      - 220
+      - 58
+    content:
+      text: '2.71'
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 46
+      color: $graphite
+      bold: true
+  - elementId: p02-card-01-unit
+    elementType: text
+    bounds:
+      - 72
+      - 240
+      - 220
+      - 24
+    content:
+      text: 万亿元｜2024 更新统计
+      fontFamily: *ref_0
+      fontSize: 12
+      color: $graphite
+      bold: true
+  - elementId: p02-card-01-yoy
+    elementType: shape
+    bounds:
+      - 70
+      - 278
+      - 92
+      - 30
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p02-card-01-yoytext
+    elementType: text
+    bounds:
+      - 80
+      - 285
+      - 72
+      - 16
+    content:
+      text: 同比 +14.0%
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p02-card-01-copy
+    elementType: text
+    bounds:
+      - 70
+      - 326
+      - 220
+      - 46
+    content:
+      text: |-
+        2024 较 2020 约增长 67%；
+        总量增长仍提供扩张空间。
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $slate
+      lineHeight: 1.2
+  - elementId: p02-card-02
+    elementType: shape
+    bounds:
+      - 344
+      - 132
+      - 256
+      - 262
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.5
+  - elementId: p02-card-02-head
+    elementType: shape
+    bounds:
+      - 344
+      - 132
+      - 256
+      - 32
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p02-card-02-code
+    elementType: text
+    bounds:
+      - 360
+      - 141
+      - 216
+      - 16
+    content:
+      text: MODULE 02 / STRUCTURE
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $yellow
+      bold: true
+      letterSpacing: 1
+  - elementId: p02-card-02-metric
+    elementType: text
+    bounds:
+      - 360
+      - 184
+      - 216
+      - 58
+    content:
+      text: 79.3%
+      fontFamily: *ref_1
+      fontSize: 46
+      color: $graphite
+      bold: true
+  - elementId: p02-card-02-unit
+    elementType: text
+    bounds:
+      - 362
+      - 240
+      - 214
+      - 24
+    content:
+      text: 出口占比｜派生计算
+      fontFamily: *ref_0
+      fontSize: 12
+      color: $graphite
+      bold: true
+  - elementId: p02-card-02-yoy
+    elementType: shape
+    bounds:
+      - 360
+      - 278
+      - 100
+      - 30
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p02-card-02-yoytext
+    elementType: text
+    bounds:
+      - 370
+      - 285
+      - 80
+      - 16
+    content:
+      text: 出口约 3.9×
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p02-card-02-copy
+    elementType: text
+    bounds:
+      - 360
+      - 326
+      - 216
+      - 46
+    content:
+      text: |-
+        供给与履约效率仍是基本盘；
+        进口增长相对温和。
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $slate
+      lineHeight: 1.2
+  - elementId: p02-card-03
+    elementType: shape
+    bounds:
+      - 630
+      - 132
+      - 276
+      - 262
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 1.5
+  - elementId: p02-card-03-head
+    elementType: shape
+    bounds:
+      - 630
+      - 132
+      - 276
+      - 32
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p02-card-03-code
+    elementType: text
+    bounds:
+      - 646
+      - 141
+      - 236
+      - 16
+    content:
+      text: MODULE 03 / LOCAL OPS
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $graphite
+      bold: true
+      letterSpacing: 1
+  - elementId: p02-card-03-metric
+    elementType: text
+    bounds:
+      - 646
+      - 184
+      - 236
+      - 58
+    content:
+      text: 2500+
+      fontFamily: *ref_1
+      fontSize: 46
+      color: $yellow
+      bold: true
+  - elementId: p02-card-03-unit
+    elementType: text
+    bounds:
+      - 648
+      - 240
+      - 232
+      - 24
+    content:
+      text: 海外仓｜公开年份
+      fontFamily: *ref_0
+      fontSize: 12
+      color: $white
+      bold: true
+  - elementId: p02-card-03-yoy
+    elementType: shape
+    bounds:
+      - 646
+      - 278
+      - 112
+      - 30
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $surface
+      width: 0
+  - elementId: p02-card-03-yoytext
+    elementType: text
+    bounds:
+      - 656
+      - 285
+      - 92
+      - 16
+    content:
+      text: 货邮 +29.3%
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p02-card-03-copy
+    elementType: text
+    bounds:
+      - 646
+      - 326
+      - 236
+      - 46
+    content:
+      text: |-
+        仓配、退换、售后、合规与现金
+        开始决定体验和复购。
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $white
+      lineHeight: 1.2
+  - elementId: p02-conclusion
+    elementType: shape
+    bounds:
+      - 54
+      - 420
+      - 852
+      - 70
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $graphite
+      width: 2
+  - elementId: p02-conclusion-label
+    elementType: text
+    bounds:
+      - 72
+      - 434
+      - 154
+      - 18
+    content:
+      text: MANAGEMENT PRIORITY
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $graphite
+      bold: true
+      letterSpacing: 0.8
+  - elementId: p02-conclusion-text
+    elementType: text
+    bounds:
+      - 244
+      - 430
+      - 632
+      - 42
+    content:
+      text: |-
+        把国家选择、客户资产、仓配体验、合规责任和现金占用
+        纳入一套阶段门，而不是分别优化。
+      fontFamily: *ref_0
+      fontSize: 14
+      color: $graphite
+      bold: true
+      lineHeight: 1.22
+      align:
+        - left
+        - middle
+  - elementId: p02-footer
+    elementType: text
+    bounds:
+      - 54
+      - 506
+      - 704
+      - 14
+    content:
+      text: 来源：海关总署、商务部公开资料｜2024 更新统计 / 公开年份
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $slate
+  - elementId: p02-page
+    elementType: text
+    bounds:
+      - 882
+      - 504
+      - 28
+      - 16
+    content:
+      text: '02'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - right
+        - top

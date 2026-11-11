@@ -1,0 +1,458 @@
+pageType: decision
+background:
+  type: solid
+  color: $paper
+elements:
+  - elementId: entry-index-field
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 52
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: entry-red-tab
+    elementType: shape
+    bounds:
+      - 52
+      - 212
+      - 10
+      - 116
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: entry-rule-top
+    elementType: line
+    bounds:
+      - 80
+      - 42
+      - 808
+      - 1
+    viewBox:
+      - 808
+      - 1
+    points: 0,0 808,0
+    border:
+      color: $black
+      width: 1.2
+  - elementId: entry-matrix-q1
+    elementType: shape
+    bounds:
+      - 110
+      - 184
+      - 244
+      - 126
+    shapeName: rect
+    fill:
+      type: solid
+      color: $wash
+    border:
+      color: $grid
+      width: 0.7
+  - elementId: entry-matrix-q2
+    elementType: shape
+    bounds:
+      - 354
+      - 184
+      - 244
+      - 126
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: entry-matrix-q3
+    elementType: shape
+    bounds:
+      - 110
+      - 310
+      - 244
+      - 126
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#FFFFFF00'
+    border:
+      color: $grid
+      width: 0.7
+  - elementId: entry-matrix-q4
+    elementType: shape
+    bounds:
+      - 354
+      - 310
+      - 244
+      - 126
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: entry-gate-line-1
+    elementType: line
+    bounds:
+      - 658
+      - 220
+      - 230
+      - 1
+    viewBox:
+      - 230
+      - 1
+    points: 0,0 230,0
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: entry-gate-line-2
+    elementType: line
+    bounds:
+      - 658
+      - 274
+      - 230
+      - 1
+    viewBox:
+      - 230
+      - 1
+    points: 0,0 230,0
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: entry-gate-line-3
+    elementType: line
+    bounds:
+      - 658
+      - 328
+      - 230
+      - 1
+    viewBox:
+      - 230
+      - 1
+    points: 0,0 230,0
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: entry-gate-line-4
+    elementType: line
+    bounds:
+      - 658
+      - 382
+      - 230
+      - 1
+    viewBox:
+      - 230
+      - 1
+    points: 0,0 230,0
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: entry-index
+    elementType: text
+    bounds:
+      - 10
+      - 426
+      - 32
+      - 84
+    rotation: 270
+    content:
+      text: 09 / TRADE-OFF
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 8.5
+      bold: true
+      letterSpacing: 1.1
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: entry-kicker
+    elementType: text
+    bounds:
+      - 80
+      - 54
+      - 500
+      - 18
+    content:
+      text: MARKET ENTRY / POTENTIAL × CONTROL
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $red
+  - elementId: entry-title
+    elementType: text
+    bounds:
+      - 80
+      - 78
+      - 808
+      - 42
+    content:
+      style: $title
+      text: 新市场进入顺序，应由市场潜力与经营可控度共同决定
+  - elementId: entry-lead
+    elementType: text
+    bounds:
+      - 80
+      - 126
+      - 808
+      - 24
+    content:
+      style: $lead
+      text: GMV 机会只是起点，履约、合规与组织覆盖决定可持续性
+  - elementId: entry-axis-y
+    elementType: text
+    bounds:
+      - 78
+      - 236
+      - 30
+      - 170
+    rotation: 270
+    content:
+      text: 经营可控度  低 → 高
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $gray
+      align:
+        - center
+        - middle
+  - elementId: entry-axis-x
+    elementType: text
+    bounds:
+      - 254
+      - 446
+      - 200
+      - 18
+    content:
+      text: 市场潜力  低 → 高
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $gray
+      align:
+        - center
+        - top
+  - elementId: entry-q1-title
+    elementType: text
+    bounds:
+      - 130
+      - 208
+      - 204
+      - 26
+    content:
+      text: 效率补位
+      fontFamily: *ref_0
+      fontSize: 18
+      bold: true
+      color: $black
+  - elementId: entry-q1-note
+    elementType: text
+    bounds:
+      - 130
+      - 248
+      - 200
+      - 42
+    content:
+      text: 低成本覆盖<br>聚焦既有复购
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.25
+      color: $gray
+  - elementId: entry-q2-title
+    elementType: text
+    bounds:
+      - 374
+      - 208
+      - 204
+      - 26
+    content:
+      text: 优先进入
+      fontFamily: *ref_0
+      fontSize: 18
+      bold: true
+      color: $white
+  - elementId: entry-q2-note
+    elementType: text
+    bounds:
+      - 374
+      - 248
+      - 200
+      - 42
+    content:
+      text: 配置本地仓与团队<br>形成规模经营
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.25
+      color: $white
+  - elementId: entry-q3-title
+    elementType: text
+    bounds:
+      - 130
+      - 334
+      - 204
+      - 26
+    content:
+      text: 暂缓进入
+      fontFamily: *ref_0
+      fontSize: 18
+      bold: true
+      color: $black
+  - elementId: entry-q3-note
+    elementType: text
+    bounds:
+      - 130
+      - 374
+      - 200
+      - 42
+    content:
+      text: 资源占用高<br>缺少战略必要性
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.25
+      color: $gray
+  - elementId: entry-q4-title
+    elementType: text
+    bounds:
+      - 374
+      - 334
+      - 204
+      - 26
+    content:
+      text: 小规模验证
+      fontFamily: *ref_0
+      fontSize: 18
+      bold: true
+      color: $white
+  - elementId: entry-q4-note
+    elementType: text
+    bounds:
+      - 374
+      - 374
+      - 200
+      - 42
+    content:
+      text: 先验证需求<br>再补齐经营条件
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.25
+      color: $white
+  - elementId: entry-gate-title
+    elementType: text
+    bounds:
+      - 658
+      - 174
+      - 230
+      - 28
+    content:
+      text: 进入前四个门槛
+      fontFamily: *ref_0
+      fontSize: 19
+      bold: true
+      color: $black
+  - elementId: entry-gate-1
+    elementType: text
+    bounds:
+      - 658
+      - 226
+      - 230
+      - 32
+    content:
+      text: 01  需求是否足够集中？
+      fontFamily: *ref_0
+      fontSize: 13
+      bold: true
+      color: $black
+  - elementId: entry-gate-2
+    elementType: text
+    bounds:
+      - 658
+      - 280
+      - 230
+      - 32
+    content:
+      text: 02  仓网能否兑现时效？
+      fontFamily: *ref_0
+      fontSize: 13
+      bold: true
+      color: $black
+  - elementId: entry-gate-3
+    elementType: text
+    bounds:
+      - 658
+      - 334
+      - 230
+      - 32
+    content:
+      text: 03  合规成本能否承受？
+      fontFamily: *ref_0
+      fontSize: 13
+      bold: true
+      color: $black
+  - elementId: entry-gate-4
+    elementType: text
+    bounds:
+      - 658
+      - 388
+      - 230
+      - 32
+    content:
+      text: 04  本地团队是否覆盖？
+      fontFamily: *ref_0
+      fontSize: 13
+      bold: true
+      color: $black
+  - elementId: entry-decision
+    elementType: text
+    bounds:
+      - 658
+      - 446
+      - 230
+      - 42
+    content:
+      text: 先补齐短板，再放大预算。
+      fontFamily: *ref_0
+      fontSize: 15
+      bold: true
+      color: $red
+  - elementId: entry-source
+    elementType: text
+    bounds:
+      - 80
+      - 512
+      - 720
+      - 12
+    content:
+      text: 管理层决策框架：矩阵为方法论，不代表具体国家评分。
+      fontFamily: *ref_0
+      fontSize: 8.5
+      color: $gray
+  - elementId: entry-page
+    elementType: text
+    bounds:
+      - 856
+      - 510
+      - 32
+      - 12
+    content:
+      text: '09'
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $black
+      align:
+        - right
+        - bottom

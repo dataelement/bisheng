@@ -1,0 +1,499 @@
+pageType: cover
+background:
+  type: solid
+  color: $paper
+notes: |
+  模板 06｜模块化物流系统。本页确立整套演示的工业白、石墨灰与安全黄色彩，以及仓储栅格、路线编号和托盘模块语言。
+elements:
+  - elementId: p01-grid-v1
+    elementType: line
+    bounds:
+      - 638
+      - 0
+      - 1
+      - 540
+    viewBox:
+      - 1
+      - 540
+    points: 0,0 0,540
+    border:
+      width: 0.6
+      color: $grid
+      style: dash
+  - elementId: p01-grid-v2
+    elementType: line
+    bounds:
+      - 726
+      - 0
+      - 1
+      - 540
+    viewBox:
+      - 1
+      - 540
+    points: 0,0 0,540
+    border:
+      width: 0.6
+      color: $grid
+      style: dash
+  - elementId: p01-grid-v3
+    elementType: line
+    bounds:
+      - 814
+      - 0
+      - 1
+      - 540
+    viewBox:
+      - 1
+      - 540
+    points: 0,0 0,540
+    border:
+      width: 0.6
+      color: $grid
+      style: dash
+  - elementId: p01-grid-h1
+    elementType: line
+    bounds:
+      - 600
+      - 104
+      - 360
+      - 1
+    viewBox:
+      - 360
+      - 1
+    points: 0,0 360,0
+    border:
+      width: 0.6
+      color: $grid
+      style: dash
+  - elementId: p01-grid-h2
+    elementType: line
+    bounds:
+      - 600
+      - 192
+      - 360
+      - 1
+    viewBox:
+      - 360
+      - 1
+    points: 0,0 360,0
+    border:
+      width: 0.6
+      color: $grid
+      style: dash
+  - elementId: p01-grid-h3
+    elementType: line
+    bounds:
+      - 600
+      - 280
+      - 360
+      - 1
+    viewBox:
+      - 360
+      - 1
+    points: 0,0 360,0
+    border:
+      width: 0.6
+      color: $grid
+      style: dash
+  - elementId: p01-safety-rail
+    elementType: shape
+    bounds:
+      - 54
+      - 70
+      - 14
+      - 302
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p01-code
+    elementType: text
+    bounds:
+      - 88
+      - 48
+      - 340
+      - 20
+    content:
+      style: $section
+      text: TEMPLATE 06 / ROUTE CHN-XBORD
+  - elementId: p01-title
+    elementType: text
+    bounds:
+      - 86
+      - 86
+      - 540
+      - 160
+    content:
+      style: $display
+      fontSize: 54
+      text: |-
+        中国跨境电商
+        从流量到本地经营
+  - elementId: p01-subtitle
+    elementType: text
+    bounds:
+      - 90
+      - 258
+      - 472
+      - 58
+    content:
+      text: |-
+        增长仍在继续，竞争单元已经从“获客”切换到
+        “履约 × 合规 × 复购”的本地经营系统。
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 18
+      color: $slate
+      lineHeight: 1.25
+  - elementId: p01-meta
+    elementType: text
+    bounds:
+      - 90
+      - 334
+      - 430
+      - 18
+    content:
+      text: 管理层决策简报  /  2024 更新统计
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+  - elementId: p01-route-line-01
+    elementType: line
+    bounds:
+      - 650
+      - 112
+      - 48
+      - 1
+    viewBox:
+      - 48
+      - 1
+    points: 0,0 48,0
+    border:
+      width: 4
+      color: $graphite
+  - elementId: p01-route-line-02
+    elementType: line
+    bounds:
+      - 696
+      - 112
+      - 1
+      - 70
+    viewBox:
+      - 1
+      - 70
+    points: 0,0 0,70
+    border:
+      width: 4
+      color: $graphite
+  - elementId: p01-route-line-03
+    elementType: line
+    bounds:
+      - 696
+      - 180
+      - 70
+      - 1
+    viewBox:
+      - 70
+      - 1
+    points: 0,0 70,0
+    border:
+      width: 4
+      color: $graphite
+  - elementId: p01-route-line-04
+    elementType: line
+    bounds:
+      - 764
+      - 180
+      - 1
+      - 74
+    viewBox:
+      - 1
+      - 74
+    points: 0,0 0,74
+    border:
+      width: 4
+      color: $graphite
+  - elementId: p01-route-line-05
+    elementType: line
+    bounds:
+      - 764
+      - 252
+      - 92
+      - 1
+    viewBox:
+      - 92
+      - 1
+    points: 0,0 92,0
+    border:
+      width: 4
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p01-node-01
+    elementType: shape
+    bounds:
+      - 628
+      - 96
+      - 84
+      - 56
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 2
+  - elementId: p01-node-01-tag
+    elementType: shape
+    bounds:
+      - 628
+      - 96
+      - 84
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p01-node-01-text
+    elementType: text
+    bounds:
+      - 638
+      - 115
+      - 64
+      - 26
+    content:
+      text: |-
+        01
+        流量
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p01-node-02
+    elementType: shape
+    bounds:
+      - 714
+      - 166
+      - 96
+      - 62
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 2
+  - elementId: p01-node-02-tag
+    elementType: text
+    bounds:
+      - 724
+      - 177
+      - 76
+      - 38
+    content:
+      text: |-
+        02
+        商品验证
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $white
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p01-node-03
+    elementType: shape
+    bounds:
+      - 798
+      - 240
+      - 112
+      - 68
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $graphite
+      width: 2
+  - elementId: p01-node-03-text
+    elementType: text
+    bounds:
+      - 808
+      - 252
+      - 92
+      - 42
+    content:
+      text: |-
+        03
+        本地履约
+      fontFamily: *ref_0
+      fontSize: 12
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p01-pallet-top
+    elementType: shape
+    bounds:
+      - 654
+      - 344
+      - 214
+      - 54
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 2
+  - elementId: p01-pallet-label
+    elementType: text
+    bounds:
+      - 668
+      - 357
+      - 186
+      - 24
+    content:
+      text: LOCAL OPS / READY
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      bold: true
+      letterSpacing: 1.1
+      align:
+        - center
+        - middle
+  - elementId: p01-pallet-base-1
+    elementType: shape
+    bounds:
+      - 644
+      - 404
+      - 234
+      - 10
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p01-pallet-foot-1
+    elementType: shape
+    bounds:
+      - 660
+      - 414
+      - 34
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p01-pallet-foot-2
+    elementType: shape
+    bounds:
+      - 744
+      - 414
+      - 34
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p01-pallet-foot-3
+    elementType: shape
+    bounds:
+      - 828
+      - 414
+      - 34
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p01-claim-band
+    elementType: shape
+    bounds:
+      - 54
+      - 454
+      - 852
+      - 58
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p01-claim-label
+    elementType: text
+    bounds:
+      - 74
+      - 468
+      - 132
+      - 24
+    content:
+      text: MANAGEMENT CLAIM
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $yellow
+      bold: true
+      letterSpacing: 0.8
+      align:
+        - left
+        - middle
+  - elementId: p01-claim
+    elementType: text
+    bounds:
+      - 220
+      - 464
+      - 652
+      - 32
+    content:
+      text: 下一轮优势来自经营系统的可复制性，而非单次流量红利。
+      fontFamily: *ref_0
+      fontSize: 17
+      color: $white
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p01-page
+    elementType: text
+    bounds:
+      - 886
+      - 30
+      - 28
+      - 18
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      bold: true
+      align:
+        - right
+        - top

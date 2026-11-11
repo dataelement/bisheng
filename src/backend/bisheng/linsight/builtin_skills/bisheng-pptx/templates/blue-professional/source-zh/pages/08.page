@@ -1,0 +1,769 @@
+pageType: content
+background:
+  type: solid
+  color: '#FDFAE7'
+notes: Authored composition experiment using the parent pack palette and typography. All figures are fictional demonstration data; replace with actual evidence.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 26
+      - 820
+      - 20
+    content:
+      text: 07 / 运营模型
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 11
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 57
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.5
+      color: '#C9C8BC'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 78
+      - 864
+      - 68
+    content:
+      text: 明确交接关系的服务系统
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 34
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 195
+      - 104
+      - 32
+    content:
+      text: 计划
+      fontFamily: *ref_0
+      fontSize: 15
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s5
+    elementType: shape
+    bounds:
+      - 170
+      - 173
+      - 150
+      - 69
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E9E8E0'
+    border:
+      width: 0
+      color: '#E9E8E0'
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 182
+      - 190
+      - 126
+      - 49
+    content:
+      text: 需求预测
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+      align: center
+  - elementId: l7
+    elementType: line
+    bounds:
+      - 321
+      - 208
+      - 19
+      - 1
+    viewBox:
+      - 19
+      - 1
+    points: 0,0 19,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l8
+    elementType: line
+    bounds:
+      - 334
+      - 204
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,0 6,4
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l9
+    elementType: line
+    bounds:
+      - 334
+      - 208
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,4 6,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: s10
+    elementType: shape
+    bounds:
+      - 342
+      - 173
+      - 150
+      - 69
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E9E8E0'
+    border:
+      width: 0
+      color: '#E9E8E0'
+  - elementId: t11
+    elementType: text
+    bounds:
+      - 354
+      - 190
+      - 126
+      - 49
+    content:
+      text: 运力计划
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+      align: center
+  - elementId: l12
+    elementType: line
+    bounds:
+      - 493
+      - 208
+      - 19
+      - 1
+    viewBox:
+      - 19
+      - 1
+    points: 0,0 19,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l13
+    elementType: line
+    bounds:
+      - 506
+      - 204
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,0 6,4
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l14
+    elementType: line
+    bounds:
+      - 506
+      - 208
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,4 6,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: s15
+    elementType: shape
+    bounds:
+      - 514
+      - 173
+      - 150
+      - 69
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E9E8E0'
+    border:
+      width: 0
+      color: '#E9E8E0'
+  - elementId: t16
+    elementType: text
+    bounds:
+      - 526
+      - 190
+      - 126
+      - 49
+    content:
+      text: 线路设计
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+      align: center
+  - elementId: l17
+    elementType: line
+    bounds:
+      - 417
+      - 244
+      - 1
+      - 31
+    viewBox:
+      - 1
+      - 31
+    points: 0,0 0,31
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l18
+    elementType: line
+    bounds:
+      - 413
+      - 269
+      - 4
+      - 6
+    viewBox:
+      - 4
+      - 6
+    points: 0,0 4,6
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l19
+    elementType: line
+    bounds:
+      - 417
+      - 269
+      - 4
+      - 6
+    viewBox:
+      - 4
+      - 6
+    points: 4,0 0,6
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: t20
+    elementType: text
+    bounds:
+      - 48
+      - 299
+      - 104
+      - 32
+    content:
+      text: 执行
+      fontFamily: *ref_0
+      fontSize: 15
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s21
+    elementType: shape
+    bounds:
+      - 170
+      - 277
+      - 150
+      - 69
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#1E2BFA'
+    border:
+      width: 0
+      color: '#1E2BFA'
+  - elementId: t22
+    elementType: text
+    bounds:
+      - 182
+      - 294
+      - 126
+      - 49
+    content:
+      text: 订单接入
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#FFFFFF'
+      lineHeight: 1.12
+      bold: false
+      align: center
+  - elementId: l23
+    elementType: line
+    bounds:
+      - 321
+      - 312
+      - 19
+      - 1
+    viewBox:
+      - 19
+      - 1
+    points: 0,0 19,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l24
+    elementType: line
+    bounds:
+      - 334
+      - 308
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,0 6,4
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l25
+    elementType: line
+    bounds:
+      - 334
+      - 312
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,4 6,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: s26
+    elementType: shape
+    bounds:
+      - 342
+      - 277
+      - 150
+      - 69
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#1E2BFA'
+    border:
+      width: 0
+      color: '#1E2BFA'
+  - elementId: t27
+    elementType: text
+    bounds:
+      - 354
+      - 294
+      - 126
+      - 49
+    content:
+      text: 调度
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#FFFFFF'
+      lineHeight: 1.12
+      bold: false
+      align: center
+  - elementId: l28
+    elementType: line
+    bounds:
+      - 493
+      - 312
+      - 19
+      - 1
+    viewBox:
+      - 19
+      - 1
+    points: 0,0 19,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l29
+    elementType: line
+    bounds:
+      - 506
+      - 308
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,0 6,4
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l30
+    elementType: line
+    bounds:
+      - 506
+      - 312
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,4 6,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: s31
+    elementType: shape
+    bounds:
+      - 514
+      - 277
+      - 150
+      - 69
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#1E2BFA'
+    border:
+      width: 0
+      color: '#1E2BFA'
+  - elementId: t32
+    elementType: text
+    bounds:
+      - 526
+      - 294
+      - 126
+      - 49
+    content:
+      text: 配送
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#FFFFFF'
+      lineHeight: 1.12
+      bold: false
+      align: center
+  - elementId: l33
+    elementType: line
+    bounds:
+      - 417
+      - 348
+      - 1
+      - 31
+    viewBox:
+      - 1
+      - 31
+    points: 0,0 0,31
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l34
+    elementType: line
+    bounds:
+      - 413
+      - 373
+      - 4
+      - 6
+    viewBox:
+      - 4
+      - 6
+    points: 0,0 4,6
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l35
+    elementType: line
+    bounds:
+      - 417
+      - 373
+      - 4
+      - 6
+    viewBox:
+      - 4
+      - 6
+    points: 4,0 0,6
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: t36
+    elementType: text
+    bounds:
+      - 48
+      - 403
+      - 104
+      - 32
+    content:
+      text: 学习
+      fontFamily: *ref_0
+      fontSize: 15
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s37
+    elementType: shape
+    bounds:
+      - 170
+      - 381
+      - 150
+      - 69
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E9E8E0'
+    border:
+      width: 0
+      color: '#E9E8E0'
+  - elementId: t38
+    elementType: text
+    bounds:
+      - 182
+      - 398
+      - 126
+      - 49
+    content:
+      text: 服务数据
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+      align: center
+  - elementId: l39
+    elementType: line
+    bounds:
+      - 321
+      - 416
+      - 19
+      - 1
+    viewBox:
+      - 19
+      - 1
+    points: 0,0 19,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l40
+    elementType: line
+    bounds:
+      - 334
+      - 412
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,0 6,4
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l41
+    elementType: line
+    bounds:
+      - 334
+      - 416
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,4 6,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: s42
+    elementType: shape
+    bounds:
+      - 342
+      - 381
+      - 150
+      - 69
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E9E8E0'
+    border:
+      width: 0
+      color: '#E9E8E0'
+  - elementId: t43
+    elementType: text
+    bounds:
+      - 354
+      - 398
+      - 126
+      - 49
+    content:
+      text: 问题复盘
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+      align: center
+  - elementId: l44
+    elementType: line
+    bounds:
+      - 493
+      - 416
+      - 19
+      - 1
+    viewBox:
+      - 19
+      - 1
+    points: 0,0 19,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l45
+    elementType: line
+    bounds:
+      - 506
+      - 412
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,0 6,4
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: l46
+    elementType: line
+    bounds:
+      - 506
+      - 416
+      - 6
+      - 4
+    viewBox:
+      - 6
+      - 4
+    points: 0,4 6,0
+    border:
+      width: 1.5
+      color: '#1E2BFA'
+  - elementId: s47
+    elementType: shape
+    bounds:
+      - 514
+      - 381
+      - 150
+      - 69
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E9E8E0'
+    border:
+      width: 0
+      color: '#E9E8E0'
+  - elementId: t48
+    elementType: text
+    bounds:
+      - 526
+      - 398
+      - 126
+      - 49
+    content:
+      text: 线路更新
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+      align: center
+  - elementId: l49
+    elementType: line
+    bounds:
+      - 708
+      - 173
+      - 1
+      - 281
+    viewBox:
+      - 1
+      - 281
+    points: 0,0 0,281
+    border:
+      width: 0.7
+      color: '#C9C8BC'
+  - elementId: t50
+    elementType: text
+    bounds:
+      - 741
+      - 190
+      - 168
+      - 98
+    content:
+      text: |-
+        每次交接
+        都有负责人
+      fontFamily: *ref_1
+      fontSize: 28
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t51
+    elementType: text
+    bounds:
+      - 741
+      - 329
+      - 168
+      - 117
+    content:
+      text: |-
+        衡量团队产出
+        及交接等待时间
+      fontFamily: *ref_0
+      fontSize: 19
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t52
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 760
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t53
+    elementType: text
+    bounds:
+      - 870
+      - 504
+      - 42
+      - 22
+    content:
+      text: '08'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false

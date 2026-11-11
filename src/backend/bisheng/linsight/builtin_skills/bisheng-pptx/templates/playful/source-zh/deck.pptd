@@ -1,0 +1,21 @@
+version: v2
+title: 杏色创意
+size:
+  - 960
+  - 540
+template:
+  id: playful
+  name: Playful
+pages:
+  - pages/01.page
+  - pages/02.page
+  - pages/03.page
+  - pages/04.page
+  - pages/05.page
+  - pages/06.page
+  - pages/07.page
+  - pages/08.page
+  - pages/09.page
+  - pages/10.page
+  - pages/11.page
+  - pages/12.page
