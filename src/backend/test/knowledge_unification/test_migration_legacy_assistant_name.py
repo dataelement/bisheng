@@ -316,3 +316,21 @@ async def test_inert_missing_model_definition_survives_full_native_m2_m3_m4(publ
                 sa.select(PermissionModel.id).where(PermissionModel.model_key == "deleted-definition")
             )
         ).all()
+
+
+async def seed_paged_legacy_missing_creator(database):
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    await seed_legacy_missing_creator(database)
+    async with AsyncSession(database.engine) as session, session.begin():
+        # The actual linked-source reader emits 199 roots before their headers.
+        session.add_all(
+            Assistant(id=f"paged-{index:03}", tenant_id=101, user_id=7, name="original", model_name=NAME)
+            for index in range(198)
+        )
+
+
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_paged_legacy_missing_creator}], indirect=True)
+async def test_missing_creator_retention_waits_for_actual_header_across_the_199_record_boundary(published_input):
+    value = published_input
+    assert (await app(value).arun_references(**value.input, operator_id=7)).complete

@@ -541,8 +541,9 @@ class UnificationInventoryApplication:
         if resource_requests or object_requests:
             await self._physical_batch(pages, tenant, resource_requests, object_requests, session=session)
         header, refs = None, []
-        creators = set()
+        creators = {}
         source_headers = {}
+        pending_creators = {}
         batch = []
 
         def finish_source():
@@ -551,45 +552,50 @@ class UnificationInventoryApplication:
             ):
                 _blocked("source_reference_set")
 
+        def retained(row):
+            from bisheng.knowledge.application.unification_structural_retention import (
+                retained_invalid_assistant_creator,
+            )
+
+            if type(row) is RootInventoryRecord and retained_invalid_assistant_creator(
+                row, source_headers.get(row.root_key)
+            ):
+                return True
+            return (
+                type(row) is RootInventoryRecord
+                and row.root_key.source_type.value == "knowledge"
+                and row.root_key.source_id.isdecimal()
+                and retained_creators.get(int(row.root_key.source_id)) == row.creator_id
+            )
+
         async def consume(items):
-            def retained(row):
-                from bisheng.knowledge.application.unification_structural_retention import (
-                    retained_invalid_assistant_creator,
-                )
-
-                if type(row) is RootInventoryRecord and retained_invalid_assistant_creator(
-                    row, source_headers.get(row.root_key)
-                ):
-                    return True
-                return (
-                    type(row) is RootInventoryRecord
-                    and row.root_key.source_type.value == "knowledge"
-                    and row.root_key.source_id.isdecimal()
-                    and retained_creators.get(int(row.root_key.source_id)) == row.creator_id
-                )
-
             wanted = tuple(
                 sorted(
                     {row.creator_id for row in items if type(row) is RootInventoryRecord and row.creator_id is not None}
-                    - creators
+                    - creators.keys()
                 )
             )
             for offset in range(0, len(wanted), 200):
                 for fact in await self.preflight.controls.ainspect_users(
                     session, user_ids=wanted[offset : offset + 200]
                 ):
-                    if not fact.exists and not all(
-                        retained(row)
-                        for row in items
-                        if type(row) is RootInventoryRecord and row.creator_id == fact.user_id
-                    ):
-                        _blocked("source_creator_missing")
-                    creators.add(fact.user_id)
+                    creators[fact.user_id] = fact.exists
                     await pages.add("control", tenant, record_from_row(fact))
-            missing_ids = set(retained_creators.values())
             for row in items:
-                if type(row) is RootInventoryRecord and row.creator_id in missing_ids and not retained(row):
-                    _blocked("source_creator_missing")
+                if type(row) is RootInventoryRecord and row.creator_id is not None:
+                    if row.creator_id not in creators:
+                        _blocked("source_creator_fact_missing")
+                    if not creators[row.creator_id] and not retained(row):
+                        if (
+                            row.root_key.source_type.value == "assistant"
+                            and row.retained_version_count == 1
+                            and row.root_key not in source_headers
+                        ):
+                            # Linked-source pages emit their roots before their
+                            # source headers. Defer only until that exact header.
+                            pending_creators[row.root_key] = row
+                        else:
+                            _blocked("source_creator_missing")
                 await pages.add("sources", tenant, row)
 
         async for row in source_inventory.aiter_tenant_source_records(session, **identity, context=context):
@@ -597,7 +603,12 @@ class UnificationInventoryApplication:
                 from bisheng.resource_reference.application.contracts import SourceRootKey
 
                 key = row.source_key
-                source_headers[SourceRootKey(key.tenant_id, key.source_type, key.source_id)] = row
+                root_key = SourceRootKey(key.tenant_id, key.source_type, key.source_id)
+                source_headers[root_key] = row
+                if root_key in pending_creators:
+                    if not retained(pending_creators[root_key]):
+                        _blocked("source_creator_missing")
+                    del pending_creators[root_key]
             if type(row) is ReferenceInventoryRecord:
                 if header is None or row.source_key != header.source_key:
                     _blocked("source_header_missing")
@@ -613,6 +624,8 @@ class UnificationInventoryApplication:
         finish_source()
         if batch:
             await consume(batch)
+        if pending_creators:
+            _blocked("source_creator_missing")
 
     async def arun(
         self, session: AsyncSession, *, run_id, writer_contract_version, environment, backup_ref, schema_ref

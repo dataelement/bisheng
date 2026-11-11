@@ -15,3 +15,5 @@
 未删除、移动或改写业务配置。空动作有效授权仍要原ACTIVE可见证据/同级别；原未生效历史通过双编译零效果证明保留，不恢复。缺当前Catalog定义的比较值不进入Catalog、不重建动作/tier。详情schema同时接受invalid_scope并暴露source_invalid_reason，避免源失效伪造成成功或500。
 
 Overall: PASS_WITH_WARNINGS。SQLite不证明DM8/MySQL物理锁调度；116正式迁移与恢复由运维报告续记。
+
+分页补充：native linked reader逐页先Root后Source，Root的缺创建者兼容证据必须等待同一来源的精确header，不能在199行flush时过早拒绝。只暂存单版本助手缺创建者Root；header到达即校验旧名称标记/原摘要/生命周期，末尾未闭合拒绝。每个后续Root独立检查同creator，不能借此前已兼容来源放行。真实199记录M2/M3/M4及旧名称/结构保留40项通过，无新权限或新增接口。
