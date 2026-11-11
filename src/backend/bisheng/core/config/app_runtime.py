@@ -83,6 +83,10 @@ class AppRuntimeConf(BaseModel):
     runtime_host_isolation_nodes: dict[str, dict] = Field(
         default_factory=lambda: json.loads(os.environ.get("BISHENG_RUNTIME_HOST_ISOLATION_NODES") or "{}")
     )
+    runtime_kubernetes_nodes: dict[str, str] = Field(
+        default_factory=lambda: json.loads(os.environ.get("BISHENG_RUNTIME_KUBERNETES_NODES") or "{}"),
+        description="Deployment-owned node id to mounted policy JSON path; not supplied by manager heartbeats",
+    )
     runtime_protocol_version: int = Field(
         default_factory=lambda: int(os.environ.get("BISHENG_RUNTIME_PROTOCOL_VERSION", "2")),
         ge=2,

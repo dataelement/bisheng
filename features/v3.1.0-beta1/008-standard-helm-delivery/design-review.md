@@ -2,7 +2,25 @@
 
 日期：2026-11-10。方法：仓库 `sdd-review design` 的 24 项检查、Constitution Check、三路独立范围审查。依据为 [已确认 spec](./spec.md)、[design](./design.md)、版本契约和实际源码基线 `90fa8fb953`。
 
-结论：**LGTM，设计文档审查通过，待用户确认。** 初轮问题已修订，运行时、平台初始化、Chart/交付三组复核均明确 LGTM。本结论不等于代码或集群验收通过；本阶段没有开始业务实现、构建镜像或部署线上。
+历史复评结论（已由下列最新决定覆盖）：**REVISE。** 用户要求复评后，以 `19ba119e48` 的设计和源码进行新的独立架构审查、初始化链路审查及 Runtime 合同审查，确认下文 §4 的 5 项缺口。此前的 LGTM 结论和 24 项核对作为上一轮记录保留，由本轮结论覆盖；本轮只更新评审报告，没有修订设计、实现业务代码、构建镜像或部署线上。
+
+独立架构报告原文见 [architecture-critique.md](./architecture-critique.md)。评审是建议，不新增审批环节；用户随后已确认简化方案并授权实施，原评审快照保留追溯。
+
+**用户后续讨论的优先决定**：R-02 的旧部署接入兼容移出本期；R-05 的沙箱启用后关闭联动延期，不作为阻塞。R-03 中旧部署前代映射部分随范围移出，保留标准 Chart 自身后续升级的运行保护要求。R-01/R-04 先重新判断新增标记/地址冻结的必要性，不能把补齐所提新机制直接当作必修业务 Bug。完整解释及流程图见 [复评澄清](./design-clarifications.md)。下文五项保留为原评审快照，不再表示五项均属当前必修。
+
+## 最新闭环（2026-11-10）
+
+用户授权按最新讨论继续源码实施，以下是当前口径；后面的表格是历史审查记录。
+
+| 复评项 | 最新处理 |
+| --- | --- |
+| R-01 初始化标记 | 删除拟新增的总标记/claim；等待实际 Alembic、匹配模型/Catalog 和官方目录。不是新增请求放行记录。 |
+| R-02 旧安装迁入 | 用户排除；仅全新标准安装与其后续正常升级。 |
+| R-03 Pod 保护 | 原 Admission/UID/删除基线 437 通过，无原规则缺陷；新增策略/资源接线保留保护，按实际问题修正新的参数链路。 |
+| R-04 额外地址冻结 | 删除拟新增状态；稳定 Service、Manager 启动解析，应用仍仅经代理。 |
+| R-05 沙箱热关闭 | 用户明确延期，默认开启持续使用；不宣称解决。 |
+
+实现现状见 design.md，源码测试和真实集群未验收边界见 verification.md。本轮未构建镜像、未部署。旧 D-04/D-05 的总标记/claim、D-11 前代映射等建议不进入本期实现。
 
 ## 1. 重要问题与修订闭环
 
@@ -57,3 +75,49 @@ D-05、D-06 经平台二轮复核进一步补齐 claim 的物理作用域/生命
 文档的链接、代码 fence、表格列数、AC 编号和空白可在本阶段静态校验。Job 代次/密钥三方升级、CAS 互斥、中断续办、双数据库、冻结策略与保护历史、正常入口独立性等必须在代码阶段以有意义的配对测试证明，不能用本报告替代。
 
 兼容镜像/catalog、DM8/Linux、真实 CNI/CSI 和独立新集群证据仍是后续相应发行/部署验收前提；遵守本轮只改代码与部署文件的边界。
+
+## 4. 用户要求复评后的确认问题
+
+日期：2026-11-10。审查对象：`19ba119e48` 中的 `design.md`，未修改。方法：一名未参与设计的架构审查者，以及两名分别追查初始化、Runtime 生产消费链路的审查者，均只读源码。以下为设计缺口，不是已经发生的线上故障，也不能仅因代码尚未实现而成立。
+
+### R-01 / P1：完成标记没有绑定完整授权目标
+
+- **设计锚点**：§4.5，L171–172、L186–188、L194–206；对应独立报告 B1。
+- **触发与影响**：只变更 OpenFGA 服务/Store 绑定，或只更新授权模型代码，而平台数据库、Alembic heads、官方 Runtime catalog 和功能开关不变，设计列举的 `init_target_digest` 输入仍可相同。新 Job 即使校验 SQL CURRENT pin/模型失败，新 API/worker 也可能凭旧 succeeded 标记启动。
+- **源码证据**：`src/backend/bisheng/core/openfga/manager.py:69–113` 独立计算预期模型 checksum，且允许发现前代模型后启动 API/worker，同时将权限运行时置为不可用；`src/backend/bisheng/permission/application/catalog_bootstrap.py:218–229` 将 SQL CURRENT 绑定到授权模型 release。原 lifespan 不代替新 bootstrap 完成条件。
+- **最小修订方向**：将预期授权模型 checksum、权限初始化合同/初始 Catalog manifest checksum、OpenFGA 服务及 Store 归属纳入目标，完成标记记录经验证的实际 pin；bootstrap 与等待者使用相同目标算法。无需把用户可编辑的实际 CURRENT Catalog 内容冻结进 Helm。
+
+### R-02 / P1：旧安装首次接入新初始化协议没有接受路径
+
+- **设计锚点**：§4.5，L188–204；对应独立报告 S1。
+- **触发与影响**：健康旧安装有用户、CURRENT 和匹配模型，但没有本设计新增的 `deployment_bootstrap_claim`、目标摘要及完成标记。现有矩阵要求已有目标匹配或前代 claim 已成功，旧安装均无法满足；不能将它简单视为全新空库或外来库。
+- **源码证据**：`src/backend/entrypoint.sh:42–56` 只有 Alembic 后启动 API，不产生这些新协调记录。§4.4 的 Runtime 保护前代映射也没有建立数据库初始化归属。
+- **最小修订方向**：声明支持的旧版本基线，并提供验证 schema、授权 pin、数据归属后建立首个 claim/标记的受控接纳分支；保留既有用户、默认项和业务授权。此分支不承担 122 多 release 整并或卷迁移。
+
+### R-03 / P1：前代保护映射只在 Backend，Admission 没有对应消费规则
+
+- **设计锚点**：§4.3–4.4，L130、L139–159；对应独立报告 S2。
+- **触发与影响**：部署映射接受旧保护历史，但目标 revision 与旧 Pod/PVC 注解不同。Backend 保留 true，Admission 却可能拒绝 kubelet 的真实终态或 PVC binding，导致停止证明无法完成，旧写入者及资源预约持续保留。
+- **源码证据**：`src/runtime-manager/runtime_manager/k8s_admission.py:87–88、378–380、535–536、590–600` 使用单一 `self.revision`；`src/backend/bisheng/app_runtime/domain/repositories/runtime_kubernetes_repository.py:354–360` 要求停止证据匹配资源原 revision。
+- **最小修订方向**：若兼容升级只适配摘要/schema，明确要求 revision 和完整 writer 规则不变；若允许变化，则明确受信前代 guard 的生产、分发和 Admission 本地消费及精确作用域。不能改写旧 UID 注解、追认 false/unknown 或让 status 路径回调 Backend。
+
+### R-04 / P2：动态 Egress 地址尚未落入操作冻结权威
+
+- **设计锚点**：§4.3、§4.7，L105、L128、L226。
+- **触发与影响**：首装 Service UID/自动 ClusterIP 在 Helm 渲染时不存在；设计只冻结静态 policy，却未定义动态观测的持久字段、首次冻结时机和 Backend 已登记身份的来源。若观测只存于心跳/内存，Manager 重启或 Service 重建后，同一操作不同阶段可能使用不同地址。
+- **源码证据**：`src/runtime-manager/runtime_manager/executors/kubernetes.py:615–623、718–721、1282–1285` 的材料 identity、运行环境、image-check 分别读取进程 egress 配置。
+- **最小修订方向**：复用 Backend 保留的 operation payload，在首次资源 intention 前 CAS 冻结 namespace/name/UID/IP/port，并绑定 operation/policy digest；所有消费者统一读取。新操作可观测新 Service，旧操作保留原地址和期限，无需新建 Service 注册中心。
+
+### R-05 / P2：关闭内置沙箱后，DB/Redis 旧端点仍可覆盖回来
+
+- **设计锚点**：§4.2、§4.5–4.6，L76、L184、L216；规格 AC-12。
+- **触发与影响**：页面曾保存本 release 的 ordinal Code Runner 地址，随后 `sandbox.enabled=false` 删除 Runner。仅清空部署默认端点仍会被 DB/Redis 保存的地址覆盖，代码执行继续引用已不存在的服务。
+- **源码证据**：`src/backend/bisheng/common/services/config_service.py:55–67、584–627` 将页面配置覆盖部署配置；`src/backend/bisheng_langchain/gpts/tools/code_interpreter/factory.py:35–50` 将合并配置交给执行器。
+- **最小修订方向**：明确关闭开关在有效配置解析/执行选择中的消费规则，抑制已关闭内置池的端点，保存值可保留供重新开启；使用外部池时应有明确外部绑定。不能静默切到 local，也不能无条件覆盖用户设置。
+
+### 已排除的疑点与保持项
+
+- 默认租户/角色/普通配置仍在原 lifespan，并不因此构成初始化循环：F001 Alembic 已 seed 默认租户；profile/Catalog 种子不依赖普通默认数据；`merge_old_config` 只遍历其默认配置键，额外完成标记不会混入 `initdb_config`。
+- 未发现设计重新引入强制环境验收或 24 小时门槛；实际 UID 保护、权限、单写、阶段网络限制继续保留。
+- Helper requests/limits 等值、init 有效 requests 与重叠预约已有明确约定；密钥派生的最小权限和升级保留公钥 CM 已覆盖。
+- 本轮确认的问题均可在现有边界内补齐，不需要恢复环境预检、另建定期巡检或再建一套 Runtime 生命周期。

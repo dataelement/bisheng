@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from runtime_manager.deployment_policy import HELPERS, DeploymentPolicy
 from runtime_manager.executors.protocol import ExecutorError
 from runtime_manager.k8s_admission import template_projection
 from runtime_manager.k8s_client import KubernetesAPIError, KubernetesClient
@@ -108,6 +109,45 @@ class KubernetesExecutor:
                 raise ExecutorError("material_issuer_file_invalid")
 
     def _probe_state(self):
+        if self.document.get("schema_version") == 2:
+            from runtime_manager.deployment_policy import DeploymentPolicy, PolicyError
+            from runtime_manager.k8s_config import KubernetesConfigurationError
+
+            original = DeploymentPolicy.parse(self.descriptor.raw_policy)
+            active = False
+            baseline = original.protection_digest
+            try:
+                fresh = self.settings.descriptor()
+                current = DeploymentPolicy.parse(fresh.raw_policy)
+                active = current.digest == original.digest
+                baseline = current.protection_digest
+            except (KubernetesConfigurationError, PolicyError):
+                pass
+            requested = self.document.get("sandbox", {}).get("requested", "default")
+            selected = self.document.get("sandbox", {}).get("runtime_classes", {}).get(requested, "")
+            # No diagnostic is proof of a stronger RuntimeClass. Preserve the
+            # baseline fallback and its explicit warning without a report gate.
+            fallback = requested != "default"
+            return {
+                "ready": active,
+                "checks": [],
+                "paths": {
+                    "bundle": active,
+                    "image": active,
+                    "source-image": bool(
+                        active and self.document.get("assembler_image") and self.document.get("image_repository")
+                    ),
+                },
+                "sandbox": {
+                    "requested": requested,
+                    "effective": "default",
+                    "runtime_class": "",
+                    "fallback": fallback,
+                    "reason": "sandbox_unconfirmed" if fallback and selected else "default",
+                },
+                "warnings": (["sandbox_fallback_default"] if fallback else [])
+                + ([] if active else ["configuration_changed_restart_required"]),
+            }, {"version": 2, "baseline_digest": baseline, "state": "configured" if active else "unconfirmed"}
         from runtime_manager.k8s_capabilities import (
             assess_capabilities,
             descriptor_digest,
@@ -143,6 +183,40 @@ class KubernetesExecutor:
     def probe_report(self):
         return self._probe_state()[0]
 
+    def diagnostic_report(self):
+        path = os.environ.get("RTM_K8S_DIAGNOSTIC_FILE", "")
+        if not path:
+            return {"state": "not_run", "observed_at": None, "checks": []}
+        try:
+            with open(path, encoding="utf-8") as source:
+                raw = source.read(32769)
+            if len(raw.encode()) > 32768:
+                raise ValueError()
+            report = json.loads(raw)
+            if not isinstance(report, dict) or not isinstance(report.get("checks"), list):
+                raise ValueError()
+            from runtime_manager.k8s_capabilities import REQUIRED_CHECKS, _check, _finite_time
+
+            allowed = REQUIRED_CHECKS | {"registry-push", "sandbox-recommended", "sandbox-hardened"}
+            checks = [
+                _check(row, row["name"])
+                for row in report["checks"]
+                if isinstance(row, dict) and row.get("name") in allowed
+            ]
+            digest = DeploymentPolicy.parse(self.descriptor.raw_policy).digest
+            return {
+                "state": "completed" if report.get("policy_digest") == digest else "previous_configuration",
+                "policy_digest": report.get("policy_digest")
+                if re.fullmatch(r"[a-f0-9]{64}", str(report.get("policy_digest", "")))
+                else None,
+                "observed_at": report.get("observed_at") if _finite_time(report.get("observed_at")) else None,
+                "checks": checks,
+            }
+        except FileNotFoundError:
+            return {"state": "not_run", "observed_at": None, "checks": []}
+        except (OSError, ValueError):
+            return {"state": "unavailable", "observed_at": None, "checks": []}
+
     def _package_sources(self):
         sources = [
             self.config.build_index_url or "https://pypi.org/simple",
@@ -174,12 +248,33 @@ class KubernetesExecutor:
             available = False
         report, protection = self._probe_state()
         passed = {check["name"] for check in report.get("checks", []) if check.get("ok")}
+        configured = self.document.get("schema_version") == 2
+        configuration = {}
+        if configured:
+            from runtime_manager.deployment_policy import DeploymentPolicy
+
+            policy = DeploymentPolicy.parse(self.descriptor.raw_policy)
+            configuration = {
+                "configuration": {
+                    "version": 2,
+                    "source": "operator-configured",
+                    "policy_digest": policy.digest,
+                    "protection_baseline_digest": protection["baseline_digest"],
+                    "state": "configured" if report["ready"] else "invalid",
+                },
+                "node_id": self.config.node_id,
+            }
         return {
             "capabilities": {
                 **capabilities,
+                **configuration,
                 "mandatory_isolation": bool(report["ready"]),
-                "status_protection": "status-provenance" in passed,
-                "binding_protection": "binding-delete-fence" in passed,
+                "status_protection": bool(report["ready"] and available)
+                if configured
+                else "status-provenance" in passed,
+                "binding_protection": bool(report["ready"] and available)
+                if configured
+                else "binding-delete-fence" in passed,
                 "protection_observation": protection,
                 "paths": report.get("paths", {}),
                 "sandbox": report.get("sandbox", {}),
@@ -190,6 +285,7 @@ class KubernetesExecutor:
                 "orchestration_available": available,
                 "protocol_version": 2,
                 "platform": self.descriptor.platform,
+                "service_cidrs": self.document.get("service_cidrs", []),
                 "helper_image": self.document.get("helper_image", ""),
                 "assembler_image": self.document.get("assembler_image", ""),
                 "image_check_registry_secret": self.document.get("registry_secret")
@@ -200,7 +296,7 @@ class KubernetesExecutor:
                 "status_policy_revision": self.descriptor.status_policy_revision,
                 "data_transport_ready": self.data_transport is not None,
             },
-            "probe_report": report,
+            "probe_report": self.diagnostic_report() if configured else report,
         }
 
     def capabilities(self):
@@ -301,6 +397,24 @@ class KubernetesExecutor:
 
     def _plan(self, operation, purpose, *, reference=None, image=None, deadline=None):
         payload = operation["payload"]
+        policy = None
+        if payload.get("execution_policy_json"):
+            from runtime_manager.deployment_policy import DeploymentPolicy
+
+            policy = DeploymentPolicy.parse(payload["execution_policy_json"])
+            if policy.digest != payload.get("execution_policy_digest") or any(
+                policy.document.get(key) != expected
+                for key, expected in {
+                    "node_id": self.config.node_id,
+                    "cluster_id": self.settings.cluster_id,
+                    "namespace": self.settings.namespace,
+                    "status_policy_revision": self.descriptor.status_policy_revision,
+                }.items()
+            ):
+                raise ExecutorError("frozen_execution_policy_mismatch")
+        elif self.document.get("schema_version") == 2:
+            raise ExecutorError("frozen_execution_policy_required")
+        inputs = policy.document if policy else self.document
         delivery, profile = self._delivery_profile(operation, purge=purpose == "purge")
         platform = (
             self.descriptor.platform
@@ -387,7 +501,10 @@ class KubernetesExecutor:
             platform=platform,
             status_policy_revision=self.descriptor.status_policy_revision,
             image=image or delivery.get("image_ref") or profile.get("runtime_image", ""),
-            helper_image=self.document.get("helper_image", ""),
+            helper_image=(policy.document if policy else self.document).get("helper_image", ""),
+            helper_resources={key: policy.helper(key) for key in HELPERS} if policy else {},
+            placement=copy.deepcopy(policy.document.get("placement", {})) if policy else {},
+            timeouts={key: policy.timeout(key) for key in ("image_check", "init_phase", "health")} if policy else {},
             command=tuple(command),
             memory_mb=tier.get("memory_mb", 512),
             cpu_millicores=tier.get("cpu_millicores", 250),
@@ -399,16 +516,16 @@ class KubernetesExecutor:
             health_path=health.get("path", "/"),
             env=defaults,
             schema_plan=tuple(payload.get("migration_plan", [])) if purpose in {"probe", "preview"} else (),
-            temporary_mb=self.document.get("temporary_storage_mb", 4096),
+            temporary_mb=inputs.get("temporary_storage_mb", 4096),
             volume_guard={
                 "namespace": self.settings.namespace,
-                "installation_id": self.document.get("installation_id", self.settings.cluster_id),
-                "filesystem": self.document.get("storage", {}).get("filesystem", "ext4"),
-                "capacity_bytes": self.document.get("storage", {}).get(
+                "installation_id": inputs.get("installation_id", self.settings.cluster_id),
+                "filesystem": inputs.get("storage", {}).get("filesystem", "ext4"),
+                "capacity_bytes": inputs.get("storage", {}).get(
                     "scratch_size_mb" if purpose in PREPARATION else "size_mb", 1024
                 )
                 * 1024**2,
-                "marker_required": self.document.get("storage", {}).get("static_pool") is True,
+                "marker_required": inputs.get("storage", {}).get("static_pool") is True,
             }
             if purpose in PRODUCTION | PREPARATION
             else {},
@@ -424,8 +541,8 @@ class KubernetesExecutor:
             secret_env=tuple(sorted(env)),
             deadline_seconds=deadline,
             runtime_class=runtime_class,
-            pull_secret=self.document.get("pull_secret", ""),
-            data_key_configmap=self.document.get("data_public_keys_configmap", "runtime-data-public-keys"),
+            pull_secret=inputs.get("pull_secret", ""),
+            data_key_configmap=inputs.get("data_public_keys_configmap", "runtime-data-public-keys"),
         )
 
     def _intent(self, operation, plan, template, reference):
@@ -574,7 +691,8 @@ class KubernetesExecutor:
                 raise ExecutorError("volume_identity_unconfirmed")
             self._fresh(row)
             return
-        storage = self.document.get("storage", {})
+        raw_policy = operation.get("payload", {}).get("execution_policy_json")
+        storage = (DeploymentPolicy.parse(raw_policy).document if raw_policy else self.document).get("storage", {})
         template = pvc_template(
             replace(plan, resource_ref=reference),
             name=name,
@@ -649,6 +767,9 @@ class KubernetesExecutor:
         return deadline
 
     def _startup_window(self, operation, row, pod):
+        policy_raw = operation.get("payload", {}).get("execution_policy_json")
+        timeouts = json.loads(policy_raw).get("timeouts", {}) if policy_raw else {}
+        init_window, health_window = timeouts.get("init_phase", 90), timeouts.get("health", 90)
         now = self.clock.time()
 
         def timestamp(raw):
@@ -696,15 +817,15 @@ class KubernetesExecutor:
                 finished = timestamp(terminated.get("finishedAt"))
                 if finished < anchor - 5:
                     raise ExecutorError("workload_stage_time_invalid")
-                if finished > anchor + 90:
+                if finished > anchor + init_window:
                     raise ExecutorError("workload_readiness_timeout")
                 # A bounded API-server/kubelet clock skew cannot move an anchor backwards.
                 anchor = max(anchor, finished)
                 continue
             if any(set(states.get(later, {})) & {"running", "terminated"} for later in expected[index + 1 :]):
                 raise ExecutorError("workload_stage_state_invalid")
-            return min(_seconds(operation["deadline"]), anchor + 90), False
-        return min(_seconds(operation["deadline"]), anchor + 90), True
+            return min(_seconds(operation["deadline"]), anchor + init_window), False
+        return min(_seconds(operation["deadline"]), anchor + health_window), True
 
     def launch(self, operation, *, preview=False):
         expected = {
@@ -1267,11 +1388,16 @@ class KubernetesExecutor:
         from runtime_manager.image_check import check_document, registry_sources
 
         self._startup_checkpoint(operation)
-        document = check_document(operation, self.document, self.descriptor.platform)
+        policy_raw = operation["payload"].get("execution_policy_json")
+        deployment = DeploymentPolicy.parse(policy_raw) if policy_raw else None
+        if deployment and deployment.digest != operation["payload"].get("execution_policy_digest"):
+            raise ExecutorError("frozen_execution_policy_mismatch")
+        inputs = deployment.document if deployment else self.document
+        document = check_document(operation, inputs, self.descriptor.platform)
         targets = document["targets"]
         sources = registry_sources(
             targets,
-            endpoints=self.document.get("image_registry_endpoints", []),
+            endpoints=inputs.get("image_registry_endpoints", []),
             insecure_registries=document.get("insecure_registries", []),
         )
         reference = _ref(operation, "image-check", operation.get("stage", "admitted"))
@@ -1283,7 +1409,8 @@ class KubernetesExecutor:
             credentials = self.platform.egress(operation["operation_id"], "image-check", package_sources=sources)
             proxy = egress_env(self.config, **credentials)
             environment.update({key: proxy[key] for key in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY")})
-        deadline = min(120, int(_seconds(operation["deadline"]) - self.clock.time()))
+        image_check_window = json.loads(policy_raw).get("timeouts", {}).get("image_check", 120) if policy_raw else 120
+        deadline = min(image_check_window, int(_seconds(operation["deadline"]) - self.clock.time()))
         if deadline <= 0:
             raise ExecutorError("image_check_timeout")
         plan = replace(
@@ -1291,7 +1418,7 @@ class KubernetesExecutor:
                 operation,
                 "image-check",
                 reference=reference,
-                image=self.document.get("helper_image", ""),
+                image=inputs.get("helper_image", ""),
                 deadline=deadline,
             ),
             mode="image",
@@ -1301,7 +1428,7 @@ class KubernetesExecutor:
             app_secret="",
             secret_env=(),
             command=("python", "-I", "-m", "runtime_manager.image_check"),
-            registry_secret=self.document.get("registry_secret") or self.document.get("pull_secret", ""),
+            registry_secret=inputs.get("registry_secret") or inputs.get("pull_secret", ""),
             env={},
             helper_env=environment,
             schema_plan=(),
@@ -1316,7 +1443,7 @@ class KubernetesExecutor:
             self._controller()
             pod = self._fresh(self.platform.resource(reference))
             created = pod.get("metadata", {}).get("creationTimestamp")
-            if created and self.clock.time() - _seconds(created) >= 120:
+            if created and self.clock.time() - _seconds(created) >= image_check_window:
                 raise ExecutorError("image_check_expired")
             phase = pod.get("status", {}).get("phase")
             if phase == "Failed":

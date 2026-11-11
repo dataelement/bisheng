@@ -1,0 +1,9 @@
+dependencies:
+- name: bisheng-app-runtime
+  repository: file://../../../deploy/kubernetes/app-runtime
+  version: 0.2.0
+- name: bisheng-sandbox
+  repository: file://../bisheng-sandbox
+  version: 0.2.0
+digest: sha256:e76e1cf8fcfec7e0ea3789efdbcd055786d320ee7bd498dcbc60fba89648adc7
+generated: "2026-11-10T21:15:33.627493+08:00"

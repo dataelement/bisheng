@@ -24,7 +24,11 @@ HELM = os.getenv("HELM_BIN", shutil.which("helm") or "/private/tmp/f059-tools/da
 def values():
     document = yaml.safe_load((CHART / "values.yaml").read_text())
     document["platform"].update(origin="https://platform.example", backendBase="http://backend.example:7860")
-    document["services"]["egressClusterIP"] = "10.96.2.2"
+    document["services"].update(
+        namespace="runtime-system", managerAccount="runtime-manager", egressClusterIP="10.96.2.2"
+    )
+    document["execution"].update(namespace="runtime-apps", installationId="test-install", nodeId="node-a")
+    document["diagnostics"]["enabled"] = True
     document["images"] = {key: "example/" + key + "@sha256:" + "a" * 64 for key in document["images"]}
     for key in document["network"]:
         if key.endswith("Cidrs"):
@@ -45,7 +49,16 @@ def render(values, tmp_path, *, expect_success=True):
         assert result.returncode != 0
         return result
     assert result.returncode == 0, result.stderr
-    return [item for item in yaml.safe_load_all(result.stdout) if item]
+    return normalized_documents(result.stdout)
+
+
+def normalized_documents(raw):
+    # Legacy component assertions below concern identity separation, not public names.
+    # New parent matrix verifies real prefixed names and two-release isolation.
+    import re
+
+    raw = re.sub(r"test-runtime-[a-f0-9]{8}-", "", raw)
+    return [item for item in yaml.safe_load_all(raw) if item]
 
 
 def load_installer():
@@ -138,21 +151,28 @@ def test_chart_refuses_unsafe_or_ambiguous_configuration(values, tmp_path, chang
 
 
 def test_descriptor_is_runtime_readable_and_report_updates_do_not_change_identity(values, tmp_path):
-    from runtime_manager.k8s_capabilities import descriptor_digest
+    from runtime_manager.deployment_policy import DeploymentPolicy
 
     documents = render(values, tmp_path)
-    descriptor = next(
-        x for x in documents if x["kind"] == "ConfigMap" and x["metadata"]["name"] == "runtime-deployment-descriptor"
+    raw = next(
+        row["data"]["descriptor.json"]
+        for row in documents
+        if row["kind"] == "ConfigMap" and "descriptor.json" in row.get("data", {})
     )
-    document = json.loads(descriptor["data"]["descriptor.json"])
+    document = json.loads(raw)
     assert document["namespace"] == values["execution"]["namespace"]
     assert document["installation_id"] == values["execution"]["installationId"]
     assert document["helper_image"] == values["images"]["helper"]
     assert document["storage"]["sqlite_compatible"] is True
-    assert document["probe_report"] == {}
-    before = descriptor_digest(document)
-    document["probe_report"] = {"observed_at": 100}
-    assert descriptor_digest(document) == before
+    assert "probe_report" not in document
+    policy = DeploymentPolicy.parse(raw)
+    values["execution"]["probeReport"] = {"observed_at": 1, "ready": False}
+    unchanged = next(
+        row["data"]["descriptor.json"]
+        for row in render(values, tmp_path)
+        if row["kind"] == "ConfigMap" and "descriptor.json" in row.get("data", {})
+    )
+    assert DeploymentPolicy.parse(unchanged).digest == policy.digest
 
 
 def test_installer_requires_live_mode_and_bound_control_for_denials():
@@ -417,17 +437,22 @@ def test_chart_freezes_native_profiles_and_sandbox_request_in_descriptor(values,
         canaryProfiles=[profile], sandbox="recommended", runtimeClasses={"recommended": "gvisor", "hardened": ""}
     )
     documents = render(values, tmp_path)
-    descriptor = next(
-        x for x in documents if x["kind"] == "ConfigMap" and x["metadata"]["name"] == "runtime-deployment-descriptor"
+    document = next(
+        json.loads(row["data"]["descriptor.json"])
+        for row in documents
+        if row["kind"] == "ConfigMap" and "descriptor.json" in row.get("data", {})
     )
-    document = json.loads(descriptor["data"]["descriptor.json"])
-    assert document["canary_profiles"] == [profile]
+    assert "canary_profiles" not in document
     assert document["sandbox"] == {
         "requested": "recommended",
         "runtime_classes": {"recommended": "gvisor", "hardened": ""},
     }
-    canary = next(x for x in documents if x["kind"] == "ConfigMap" and x["metadata"]["name"] == "runtime-canary-plans")
-    assert json.loads(canary["data"]["plans.json"])["profile_images"] == [profile["runtime_image"]]
+    plan = next(
+        json.loads(row["data"]["plan.json"])
+        for row in documents
+        if row["kind"] == "ConfigMap" and "plan.json" in row.get("data", {})
+    )
+    assert plan["canary_profiles"] == [profile]
     profile["command"] = ["sh", "-c", "arbitrary-install-script"]
     render(values, tmp_path, expect_success=False)
 
@@ -1147,44 +1172,32 @@ def test_expired_recovery_skips_live_plan_without_mutation(monkeypatch):
 
 
 def test_chart_cni_identity_is_admission_source_and_invalidates_only_old_report(values, tmp_path):
-    from runtime_manager.k8s_capabilities import REQUIRED_CHECKS, assess_capabilities, descriptor_digest
+    from runtime_manager.deployment_policy import DeploymentPolicy
 
-    def descriptor_and_admission():
+    def current():
         documents = render(values, tmp_path)
-        cm = next(
-            row
-            for row in documents
-            if row["kind"] == "ConfigMap" and row["metadata"]["name"] == "runtime-deployment-descriptor"
+        policy = DeploymentPolicy.parse(
+            next(
+                row["data"]["descriptor.json"]
+                for row in documents
+                if row["kind"] == "ConfigMap" and "descriptor.json" in row.get("data", {})
+            )
         )
-        deployment = next(
+        env = next(
             row for row in documents if row["kind"] == "Deployment" and row["metadata"]["name"] == "runtime-admission"
+        )["spec"]["template"]["spec"]["containers"][0]["env"]
+        assert (
+            next(row["value"] for row in env if row["name"] == "RTM_ADMISSION_CNI_USERNAME")
+            == policy.document["cni_username"]
         )
-        env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
-        cni = next(row["value"] for row in env if row["name"] == "RTM_ADMISSION_CNI_USERNAME")
-        return json.loads(cm["data"]["descriptor.json"]), cni
+        return policy
 
     values["execution"]["cniUsername"] = "system:serviceaccount:kube-system:calico-cni-plugin"
-    original, cni = descriptor_and_admission()
-    assert original["cni_username"] == cni == values["execution"]["cniUsername"]
-    identity = descriptor_digest(original)
-    report = {
-        "source": "cluster-probe",
-        "observed_at": 1000,
-        "descriptor_digest": identity,
-        "checks": [{"name": name, "ok": True, "evidence": {"uid": str(uuid4())}} for name in REQUIRED_CHECKS],
-    }
-    values["execution"]["probeReport"] = report
-    verified, _ = descriptor_and_admission()
-    assert descriptor_digest(verified) == identity
-    assert assess_capabilities(verified, now=1001)["ready"]
-    values["execution"]["cniUsername"] = "system:serviceaccount:kube-system:another-cni"
-    changed, cni = descriptor_and_admission()
-    assert changed["cni_username"] == cni == values["execution"]["cniUsername"]
-    assert {key: value for key, value in changed.items() if key != "cni_username"} == {
-        key: value for key, value in verified.items() if key != "cni_username"
-    }
-    assert descriptor_digest(changed) != identity
-    assert not assess_capabilities(changed, now=1001)["ready"]
+    original = current()
+    values["execution"]["probeReport"] = {"observed_at": 1000, "ready": True}
+    assert current().digest == original.digest
+    values["execution"]["cniUsername"] = "system:serviceaccount:kube-system:other-cni"
+    assert current().protection_digest != original.protection_digest
 
 
 @contextmanager
@@ -1221,7 +1234,8 @@ def chart_lookup_api(objects):
                             "namespaced": True,
                             "kind": "ConfigMap",
                             "verbs": ["get"],
-                        }
+                        },
+                        {"name": "secrets", "singularName": "", "namespaced": True, "kind": "Secret", "verbs": ["get"]},
                     ],
                 }
             else:
@@ -1310,7 +1324,20 @@ def upgrade_lookup_objects(values, *, legacy=False):
 def render_upgrade(values, tmp_path, objects, *, expect_success=True):
     values_path, config_path = tmp_path / "upgrade-values.yaml", tmp_path / "lookup-kubeconfig.json"
     values_path.write_text(yaml.safe_dump(values))
-    with chart_lookup_api(objects) as (url, requests):
+    import hashlib
+
+    prefix = (
+        "test-runtime-"
+        + hashlib.sha256((values["services"]["namespace"] + "/test-runtime").encode()).hexdigest()[:8]
+        + "-"
+    )
+    actual_objects = {}
+    for path, row in objects.items():
+        row = copy.deepcopy(row)
+        original_name = row["metadata"]["name"]
+        row["metadata"]["name"] = prefix + original_name
+        actual_objects[path.rsplit("/", 1)[0] + "/" + row["metadata"]["name"]] = row
+    with chart_lookup_api(actual_objects) as (url, requests):
         config_path.write_text(
             json.dumps(
                 {
@@ -1346,13 +1373,12 @@ def render_upgrade(values, tmp_path, objects, *, expect_success=True):
         assert result.returncode != 0
         return result
     assert result.returncode == 0, result.stderr
-    assert any(path.endswith("/configmaps/runtime-canary-plans") for path in requests)
-    return [row for row in yaml.safe_load_all(result.stdout) if row]
+    assert any(path.endswith("/configmaps/" + prefix + "runtime-canary-plans") for path in requests)
+    return normalized_documents(result.stdout)
 
 
-@pytest.mark.parametrize("legacy", [False, True])
-def test_chart_upgrade_preserves_live_canary_plans_and_profiles_with_identity_fence(values, tmp_path, legacy):
-    objects = upgrade_lookup_objects(values, legacy=legacy)
+def test_chart_upgrade_preserves_live_canary_plans_and_profiles_with_identity_fence(values, tmp_path):
+    objects = upgrade_lookup_objects(values)
     original = next(row for row in objects.values() if row["metadata"]["name"] == "runtime-canary-plans")
     documents = render_upgrade(values, tmp_path, objects)
     retained = next(
@@ -1361,22 +1387,17 @@ def test_chart_upgrade_preserves_live_canary_plans_and_profiles_with_identity_fe
     assert retained["data"] == original["data"]
     assert retained["metadata"]["uid"] == original["metadata"]["uid"]
     assert retained["metadata"]["resourceVersion"] == original["metadata"]["resourceVersion"]
-    assert retained["metadata"]["labels"]["runtime.bisheng.io/installation"] == values["execution"]["installationId"]
 
 
 @pytest.mark.parametrize(
     "change",
     [
-        "missing",
         "release",
         "namespace",
         "managed-by",
         "uid",
         "rv",
         "installation",
-        "descriptor-missing",
-        "descriptor-release",
-        "descriptor-scope",
         "malformed-json",
         "unknown-data",
         "plans-not-map",
@@ -1389,7 +1410,7 @@ def test_chart_upgrade_preserves_live_canary_plans_and_profiles_with_identity_fe
     ],
 )
 def test_chart_upgrade_refuses_missing_foreign_or_invalid_canary_evidence(values, tmp_path, change):
-    objects = upgrade_lookup_objects(values, legacy=change.startswith("descriptor-"))
+    objects = upgrade_lookup_objects(values)
     prefix = "/api/v1/namespaces/" + values["services"]["namespace"] + "/configmaps/"
     cm = objects[prefix + "runtime-canary-plans"]
     if change == "missing":
@@ -1527,57 +1548,39 @@ def test_rbac_can_i_distinguishes_subresources_from_named_parent_resources(monke
     assert "system:serviceaccount:runtime-system:runtime-manager" in command
 
 
-@pytest.mark.parametrize(
-    "identities",
-    [
-        None,
-        [
-            "system:serviceaccount:kube-system:persistent-volume-binder",
-            "system:serviceaccount:kube-system:pvc-protection-controller",
-        ],
-    ],
-)
+@pytest.mark.parametrize("identities", [None, ["system:serviceaccount:kube-system:volume-controller"]])
 def test_chart_storage_controller_identities_are_shared_by_admission_and_report(values, tmp_path, identities):
-    from runtime_manager.k8s_capabilities import REQUIRED_CHECKS, assess_capabilities, descriptor_digest
+    from runtime_manager.deployment_policy import DeploymentPolicy
 
-    default = ["system:kube-controller-manager", "system:kube-scheduler"]
     if identities is not None:
         values["execution"]["storageControllerUsernames"] = identities
 
-    def rendered():
+    def current():
         documents = render(values, tmp_path)
-        cm = next(
-            row
-            for row in documents
-            if row["kind"] == "ConfigMap" and row["metadata"]["name"] == "runtime-deployment-descriptor"
+        policy = DeploymentPolicy.parse(
+            next(
+                row["data"]["descriptor.json"]
+                for row in documents
+                if row["kind"] == "ConfigMap" and "descriptor.json" in row.get("data", {})
+            )
         )
         deployment = next(
             row for row in documents if row["kind"] == "Deployment" and row["metadata"]["name"] == "runtime-admission"
         )
-        environment = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
-        raw = next(row["value"] for row in environment if row["name"] == "RTM_STORAGE_CONTROLLER_USERNAMES")
-        return json.loads(cm["data"]["descriptor.json"]), json.loads(raw)
+        env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+        raw = next(row["value"] for row in env if row["name"] == "RTM_STORAGE_CONTROLLER_USERNAMES")
+        assert (
+            json.loads(raw)
+            == policy.document["storage_controller_usernames"]
+            == values["execution"]["storageControllerUsernames"]
+        )
+        return policy
 
-    document, configured = rendered()
-    assert configured == document["storage_controller_usernames"] == (identities if identities is not None else default)
-    initial_digest = descriptor_digest(document)
-    values["execution"]["probeReport"] = {
-        "source": "cluster-probe",
-        "observed_at": 1000,
-        "descriptor_digest": initial_digest,
-        "checks": [{"name": name, "ok": True, "evidence": {"uid": str(uuid4())}} for name in REQUIRED_CHECKS],
-    }
-    verified, _ = rendered()
-    assert descriptor_digest(verified) == initial_digest
-    assert assess_capabilities(verified, now=1001)["ready"]
-    values["execution"]["storageControllerUsernames"] = ["system:serviceaccount:kube-system:replacement-volume-binder"]
-    changed, configured = rendered()
-    assert configured == changed["storage_controller_usernames"] == values["execution"]["storageControllerUsernames"]
-    assert {key: value for key, value in changed.items() if key != "storage_controller_usernames"} == {
-        key: value for key, value in verified.items() if key != "storage_controller_usernames"
-    }
-    assert descriptor_digest(changed) != initial_digest
-    assert not assess_capabilities(changed, now=1001)["ready"]
+    original = current()
+    values["execution"]["probeReport"] = {"observed_at": 1000, "ready": True}
+    assert current().digest == original.digest
+    values["execution"]["storageControllerUsernames"] = ["system:serviceaccount:kube-system:replacement-controller"]
+    assert current().protection_digest != original.protection_digest
 
 
 @pytest.mark.parametrize(

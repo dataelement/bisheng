@@ -1,35 +1,17 @@
-{{- if .Values.persistence.enabled }}
+{{- range $name := list "backend" "worker" "linsight" "beat" -}}
+{{- $value := index $.Values $name -}}
+{{- if and $value.cache.enabled (not $value.cache.existingClaim) }}
+{{ print "\n---" }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "bisheng.fullname" . }}-backend-data
-  labels:
-    {{- include "bisheng.labels" . | nindent 4 }}
-    app.kubernetes.io/component: backend
+  name: {{ include "bisheng.component" (list $ (printf "%s-cache" $name)) }}
+  annotations: {helm.sh/resource-policy: keep}
 spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: {{ .Values.persistence.size }}
-  {{- with .Values.persistence.storageClass }}
-  storageClassName: {{ . }}
-  {{- end }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ include "bisheng.fullname" . }}-worker-data
-  labels:
-    {{- include "bisheng.labels" . | nindent 4 }}
-    app.kubernetes.io/component: worker
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: {{ .Values.persistence.size }}
-  {{- with .Values.persistence.storageClass }}
-  storageClassName: {{ . }}
-  {{- end }}
+  accessModes: [{{ $value.cache.accessMode }}]
+{{- if ne (kindOf $value.cache.storageClass) "invalid" }}
+  storageClassName: {{ $value.cache.storageClass | quote }}
 {{- end }}
+  resources: {requests: {storage: {{ $value.cache.size }}}}
+{{- end -}}
+{{- end -}}

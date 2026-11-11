@@ -1,0 +1,126 @@
+{
+  "$defs": {
+    "PlatformEnvironment": {
+      "additionalProperties": false,
+      "properties": {
+        "runtime_image": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Runtime Image",
+          "type": "string"
+        },
+        "runtime_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Runtime Digest",
+          "type": "string"
+        },
+        "runtime_image_id": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Runtime Image Id",
+          "type": "string"
+        },
+        "preparer_image": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Preparer Image",
+          "type": "string"
+        },
+        "preparer_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Preparer Digest",
+          "type": "string"
+        },
+        "preparer_image_id": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Preparer Image Id",
+          "type": "string"
+        },
+        "abi": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Abi",
+          "type": "string"
+        },
+        "toolchain": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Toolchain",
+          "type": "object"
+        },
+        "uid": {
+          "default": 10001,
+          "minimum": 1,
+          "title": "Uid",
+          "type": "integer"
+        },
+        "gid": {
+          "default": 10001,
+          "minimum": 1,
+          "title": "Gid",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "runtime_image",
+        "runtime_digest",
+        "runtime_image_id",
+        "preparer_image",
+        "preparer_digest",
+        "preparer_image_id",
+        "abi",
+        "toolchain"
+      ],
+      "title": "PlatformEnvironment",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+      "title": "Code",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "language": {
+      "enum": [
+        "python3.11",
+        "node20",
+        "static"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Contract Version",
+      "type": "integer"
+    },
+    "official": {
+      "default": false,
+      "title": "Official",
+      "type": "boolean"
+    },
+    "platforms": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PlatformEnvironment"
+      },
+      "title": "Platforms",
+      "type": "object"
+    }
+  },
+  "required": [
+    "code",
+    "revision",
+    "language",
+    "platforms"
+  ],
+  "title": "RuntimeProfileDefinition",
+  "type": "object"
+}
