@@ -173,6 +173,16 @@
 - **引擎集成测试**（有 `/opt/pptd-runtime` 时运行，否则跳过）：对仓库内的样例工程执行 check/render/convert，断言导出成功、页数正确、无整页图片、字体为 YaHei/Arial。
 - **环境验收**：114（x86，源码部署，跑 `install.sh`）重跑 2026-11-11 四道题，对照 AC-11/14/21。arm64 不使用客户环境，由 base 镜像 arm64 原生构建中的 sharp 加载检查覆盖（AC-22）。
 - **114 实测（2026-11-11）**：`install.sh` 首次 2 分 20 秒（主要是下载 Node），`/opt/pptd-runtime` 327MB；nobody + `prlimit --as=2GB` 下 gov-red 12 页 check 1.56 秒、render 1.63 秒，264 个原生元素（AC-02）；重启 API 后 3 个租户的 `bisheng-pptx` 哈希更新、enabled/default_checked 保持原值（AC-17）。
+- **114 四题验收（2026-11-11，DeepSeek-V4.1-Flash，每题 1 次，skills=bisheng-pptx）**：
+
+  | 题 | 墙钟 | 页 | 字/页 | 图表/表格 | 字号中位 | <10pt | 模板 |
+  |---|---|---|---|---|---|---|---|
+  | P1 央国企年度总结 | 273s | 12 | 189 | 2/1 | 13.0 | 0% | gov-red |
+  | P2 医院技术方案 | 454s | 11 | 310 | 0/3 | 11.0 | 18% | — |
+  | P3 季度经营分析 | 499s | 9 | 306 | 2/2 | 11.0 | 17% | nordic-operating-report |
+  | P4 新员工培训 | 288s | 12 | 239 | 0/0 | 14.0 | 13% | — |
+
+  对照：旧 bisheng-pptx 137–198s、字/页 164–208；桌面端 13–26 分钟、<10pt 35–71%。4 份文件字体只有 Microsoft YaHei + Arial，无图片（AC-10/11/14/21 满足，样本量 1）。
 - **手动验证**：
   - 引擎：`/opt/pptd-runtime/bin/node /opt/pptd-runtime/engine/lib/bin.js --help` 应打印用法。
   - 隔离环境：`runuser -u nobody -- prlimit --as=2147483648 /opt/pptd-runtime/bin/node /opt/pptd-runtime/engine/lib/bin.js check <样例工程>`。
