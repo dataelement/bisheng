@@ -567,7 +567,11 @@ class ToolExecutor(BaseTool):
             )
             storage = get_minio_storage_sync()
             storage.put_object_sync(object_name=object_name, file=data, content_type=content_type)
-            return storage.get_share_link_sync(object_name)
+            public_base_url = settings.open_api.public_base_url.rstrip("/")
+            if public_base_url:
+                # Keep the storage signature intact while exposing the frontend proxy to API clients.
+                return public_base_url + storage.get_share_link_sync(object_name)
+            return storage.get_share_link_sync(object_name, clear_host=False)
 
         return upload
 

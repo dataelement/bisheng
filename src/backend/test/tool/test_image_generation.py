@@ -228,7 +228,8 @@ def test_legacy_child_config_is_masked():
     assert "private-child-key" not in view.children[0].extra
 
 
-async def test_executor_uses_latest_config_and_authorized_tenant_storage(upstream, monkeypatch):
+@pytest.mark.parametrize("public_base_url", ["https://portal.example/bisheng", ""])
+async def test_executor_uses_latest_config_and_authorized_tenant_storage(upstream, monkeypatch, public_base_url):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
@@ -259,7 +260,11 @@ async def test_executor_uses_latest_config_and_authorized_tenant_storage(upstrea
         lambda tenant_id: SimpleNamespace(tenant_code="acme") if tenant_id == 2 else None,
     )
     storage = Mock()
-    storage.get_share_link_sync.return_value = "https://storage.example/signed.png"
+    signed_path = "/bisheng/tenant_acme/chat/42/generated.png?X-Amz-Signature=test-signature"
+    storage.get_share_link_sync.return_value = (
+        signed_path if public_base_url else "https://storage.example" + signed_path
+    )
+    monkeypatch.setattr(executor.settings.open_api, "public_base_url", public_base_url)
     monkeypatch.setattr("bisheng.core.storage.minio.minio_manager.get_minio_storage_sync", lambda: storage)
     instance = ToolExecutor.init_by_tool_instance(
         base_tool=tool(upstream, name="dalle_image_generator", model="initial-model"),
@@ -274,13 +279,17 @@ async def test_executor_uses_latest_config_and_authorized_tenant_storage(upstrea
         {"openai_api_key": "test-image-key", "openai_api_base": upstream["base"], "model": "model-after"}
     )
     upstream["body"] = {"data": [{"b64_json": base64.b64encode(upstream["png"]).decode()}]}
-    assert "https://storage.example/signed.png" in await instance._arun(query="forest", config={})
+    expected_url = (public_base_url or "https://storage.example") + signed_path
+    assert expected_url in await instance._arun(query="forest", config={})
     assert [call[2]["model"] for call in upstream["calls"]] == ["model-before", "model-after"]
     assert instance.tool_instance.image_config["model"] == "initial-model"
     uploaded = storage.put_object_sync.call_args.kwargs
     assert uploaded["object_name"].startswith("tenant_acme/chat/42/")
     assert uploaded["file"] == upstream["png"]
-    storage.get_share_link_sync.assert_called_once_with(uploaded["object_name"])
+    if public_base_url:
+        storage.get_share_link_sync.assert_called_once_with(uploaded["object_name"])
+    else:
+        storage.get_share_link_sync.assert_called_once_with(uploaded["object_name"], clear_host=False)
     permission.side_effect = PermissionError("denied")
     with pytest.raises(PermissionError):
         await instance._arun(query="forest", config={})

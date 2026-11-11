@@ -50,7 +50,7 @@ DSH 当前生成函数只接收第一张 Base64 图片并保存到本地工作�
 
 有效 HTTP(S) `url` 直接输出，不额外下载。`b64_json` 严格解码并用已有 Pillow 校验 PNG/JPEG/WebP，随后通过注入的简单上传函数 `upload_image(bytes, content_type) -> str` 使用平台存储；运行包不导入 `bisheng`。
 
-上传函数放在现有 executor 模块，绑定当前调用用户和租户，复用 `TenantDao.get_by_id`、`get_minio_prefix`、`build_chat_object_name`、`put_object_sync`、`get_share_link_sync(clear_host=False)`。不新建存储服务或 bucket。签名沿用平台默认 7 天，不承诺历史链接永久有效。
+上传函数放在现有 executor 模块，绑定当前调用用户和租户，复用 `TenantDao.get_by_id`、`get_minio_prefix`、`build_chat_object_name`、`put_object_sync`。配置 `open_api.public_base_url` 时，将该对外平台地址与 `get_share_link_sync()` 的签名相对路径拼接；保留签名查询串及内部签名 host，由既有前端 Nginx 代理访问 MinIO。未配置平台对外地址时使用 `get_share_link_sync(clear_host=False)`，此时运维必须确保 MinIO sharepoint 可被调用方访问。不返回相对路径，也不从未经信任的请求 Host 推断持久链接。不新建存储服务或 bucket。签名沿用平台默认 7 天，不承诺历史链接永久有效。
 
 每张图片输出一条 `![image N](URL)`，按上游顺序保留。空结果或无效图片明确失败，不返回 Base64 文本。先校验全部图片再上传；存储失败不返回成功，已上传的孤立文件本期不新增清理任务。
 
@@ -70,6 +70,7 @@ DSH 当前生成函数只接收第一张 Base64 图片并保存到本地工作�
 | 旧 Azure Key 不能当 OpenAI Key 自动使用 | 检测旧 Azure 配置并要求重新配置，避免误发。 |
 | 工厂会过滤未声明参数 | model 和上传函数必须登记；用实际加载链路测试。 |
 | 直接改底层工具名会改变历史调用名 | 旧键只作别名加载，保留名称；不另建一份实现。 |
+| MinIO sharepoint 可能是容器内部地址，而相对路径仅在浏览器同源可用 | 对外 API 图片需完整 URL；设置平台 public_base_url，经前端代理下载并保留存储签名。 |
 | DSH 写本地文件，毕昇可能多节点运行 | 只参考协议处理，图片交付复用 MinIO。 |
 
 ## 6. 对外契约与依赖
@@ -94,3 +95,5 @@ DSH 当前生成函数只接收第一张 Base64 图片并保存到本地工作�
 |---|---|---|
 | 2026-11-09 | 去掉 Azure，参考 DSH 收敛为单一兼容协议 | 用户要求避免过度设计。 |
 | 2026-11-09 | 完成单模块实现、现有平台接入及本地验证 | 同步实际代码和验证边界，见 verification-local.md。 |
+
+| 2026-11-11 | 生成图片使用完整对外下载地址，复用 public_base_url 与签名代理路径 | 修复相对图片链接在独立 API 调用方无法下载的问题。 |
