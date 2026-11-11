@@ -3,13 +3,18 @@ import { useState } from 'react'
 import { getRuntimeAuditExport, getRuntimeAuditRecords } from '@/controllers/API/runtimeAudit'
 import type { RuntimeAuditFilters, RuntimeAuditKind } from '@/controllers/API/runtimeAudit'
 
+// Keep explicit searches distinct even after switching audit views.
+let searchSequence = 0
+
 export function useRuntimeAudit(kind: RuntimeAuditKind, filters: RuntimeAuditFilters, scopeKey: string) {
   const selection = JSON.stringify([scopeKey, kind, filters])
   const [paging, setPaging] = useState({ selection, cursors: [undefined as string | undefined], index: 0 })
+  const [searchVersion, setSearchVersion] = useState(0)
   const [exportSelection, setExportSelection] = useState<{ selection: string; id: string } | null>(null)
   const current = paging.selection === selection ? paging : { selection, cursors: [undefined], index: 0 }
+  const resetPage = () => setPaging({ selection, cursors: [undefined], index: 0 })
   const query = useQuery({
-    queryKey: ['runtime-audit', selection, current.cursors[current.index]],
+    queryKey: ['runtime-audit', selection, searchVersion, current.cursors[current.index]],
     queryFn: () => getRuntimeAuditRecords(kind, filters, current.cursors[current.index]),
     keepPreviousData: false,
     retry: false,
@@ -25,6 +30,12 @@ export function useRuntimeAudit(kind: RuntimeAuditKind, filters: RuntimeAuditFil
   return {
     query, exportQuery, jobId, page: current.index + 1,
     setJob: (id: string) => setExportSelection({ selection, id }),
+    resetPage,
+    reloadFromFirstPage: () => {
+      resetPage()
+      searchSequence += 1
+      setSearchVersion(searchSequence)
+    },
     next: () => {
       if (!query.data?.next_cursor) return
       setPaging({ selection, cursors: [...current.cursors.slice(0, current.index + 1), query.data.next_cursor], index: current.index + 1 })
