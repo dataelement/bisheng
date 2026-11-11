@@ -364,7 +364,7 @@ export default function AppUseLog() {
                             <TableCell className="font-medium max-w-[200px]">
                                 {/* <div className=" truncate-multiline"></div> */}
                                 <div className="truncate-multiline">
-                                    {appNameOf(el, t)}
+                                    {supportsAppFilter(el.usage_type) ? appNameOf(el, t) : '--'}
                                 </div>
                             </TableCell>
                             <TableCell>{usageTypeOf(el, t)}</TableCell>
@@ -374,27 +374,29 @@ export default function AppUseLog() {
                             </TableCell>
                             <TableCell>{el.userGroupsString}</TableCell>
                             <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                            <TableCell className="break-all flex gap-2">
-                                <div className="text-center text-xs relative">
-                                    <Outlined.ThumbsUp
-                                        size={16} aria-hidden
-                                        className={el.like_count ? 'text-primary' : 'text-gray-400'}
-                                    />
-                                    <span className="left-4 top-[-4px] break-keep">{el.like_count}</span>
-                                </div>
-                                <div className="text-center text-xs relative">
-                                    <Outlined.ThumbsDown
-                                        size={16} aria-hidden
-                                        className={el.dislike_count ? 'text-primary' : 'text-gray-400'}
-                                    />
-                                    <span className="left-4 top-[-4px] break-keep">{el.dislike_count}</span>
-                                </div>
-                                <div className="text-center text-xs relative">
-                                    <Outlined.Copy
-                                        size={16} aria-hidden
-                                        className={el.copied_count ? 'text-primary' : 'text-gray-400'}
-                                    />
-                                    <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
+                            <TableCell>
+                                <div className="flex items-center gap-2 text-xs">
+                                    <div className="flex flex-col items-center">
+                                        <Outlined.ThumbsUp
+                                            size={16} aria-hidden
+                                            className={el.like_count ? 'text-primary' : 'text-gray-400'}
+                                        />
+                                        <span>{el.like_count}</span>
+                                    </div>
+                                    <div className="flex flex-col items-center">
+                                        <Outlined.ThumbsDown
+                                            size={16} aria-hidden
+                                            className={el.dislike_count ? 'text-primary' : 'text-gray-400'}
+                                        />
+                                        <span>{el.dislike_count}</span>
+                                    </div>
+                                    <div className="flex flex-col items-center">
+                                        <Outlined.Copy
+                                            size={16} aria-hidden
+                                            className={el.copied_count ? 'text-primary' : 'text-gray-400'}
+                                        />
+                                        <span>{el.copied_count}</span>
+                                    </div>
                                 </div>
                             </TableCell>
                             {appConfig.isPro && <TableCell>

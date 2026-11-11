@@ -1,7 +1,7 @@
 import { useContext, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Button, DatePicker, Segmented, Select } from '@bisheng/ui'
+import { Button, DatePicker, Pagination, Segmented, Select } from '@bisheng/ui'
 import type { DatePickerError, DatePickerOpenRange } from '@bisheng/ui'
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table'
@@ -9,6 +9,7 @@ import { locationContext } from '@/contexts/locationContext'
 import { userContext } from '@/contexts/userContext'
 import { useAdminScope } from '@/hooks/useAdminScope'
 import { useDatePickerLocale } from '@/hooks/useDatePickerLocale'
+import { usePaginationLocale } from '@/hooks/usePaginationLocale'
 import { showApiError } from '@/controllers/request'
 import { getTenantsApi } from '@/controllers/API/tenant'
 import { cancelRuntimeAuditExport, createRuntimeAuditExport, downloadRuntimeAuditExport, getRuntimeAuditCandidates, withRuntimeOrg } from '@/controllers/API/runtimeAudit'
@@ -53,6 +54,7 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
   const { t } = useTranslation()
   const labels = useSelectLabels()
   const datePickerLocale = useDatePickerLocale()
+  const paginationLocale = usePaginationLocale()
   const initialFilters: RuntimeAuditFilters = { time_range: 'recent7d', tenant_id: tenantId }
   const [filters, setFilters] = useState(initialFilters)
   const [range, setRange] = useState(initialFilters.time_range)
@@ -64,7 +66,7 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
   const [busy, setBusy] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [createFailed, setCreateFailed] = useState(false)
-  const { query, exportQuery, jobId, page, setJob, resetPage, reloadFromFirstPage, next, previous } = useRuntimeAudit(kind, filters, scopeKey)
+  const { query, exportQuery, jobId, page, setJob, resetPage, reloadFromFirstPage, setPage } = useRuntimeAudit(kind, filters, scopeKey)
   const handleSearch = () => {
     const [start, end] = (range === 'custom' ? dateRange : null) ?? [null, null]
     if (range === 'custom' && !start && !end) {
@@ -170,11 +172,15 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
     </div>
     <div className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-x-4 px-4">
       <Button disabled={busy || !query.data || query.isError} onClick={handleExport}>{t('log.runtime.export')}</Button>
-      <div className="ml-auto flex items-center gap-2">
-        <Button disabled={page === 1 || query.isFetching} onClick={previous}>{t('log.runtime.previous')}</Button>
-        <span>{page}</span>
-        <Button disabled={!query.data?.next_cursor || query.isFetching} onClick={next}>{t('log.runtime.next')}</Button>
-      </div>
+      <Pagination
+        className="ml-auto w-auto max-w-full"
+        total={null}
+        hasNextPage={Boolean(query.data?.next_cursor)}
+        current={page}
+        disabled={query.isFetching}
+        locale={paginationLocale}
+        onChange={setPage}
+      />
     </div>
     <RuntimeAuditExportDialog open={exportOpen} onOpenChange={setExportOpen} kind={kind} filters={filters}
       job={exportQuery.data} busy={busy} createFailed={createFailed} queryFailed={exportQuery.isError}
