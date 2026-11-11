@@ -160,7 +160,7 @@ Gateway 默认关闭，无许可证/数据库必需引用。开启配置 `gatewa
 
 应用不能直接访问 DNS、平台数据库、集群 API 或其他应用；仅到 Egress Service 的代理端口。Manager 在启动时解析稳定 Service 地址，应用无须 DNS；不维护额外地址注册表。Egress 继续核对平台给出的任务目标、域名/IP 和材料身份，不是任意公网代理。替换 Egress Service 的 ClusterIP 需要停发任务、重启 Manager 并按实际失败恢复，普通 Pod 滚动不会改变 Service 地址。
 
-在线安装仅在既有受控下载阶段允许配置的依赖源。编译/安装隔离阶段和应用运行阶段沿用既有权限；企业包源的转发、证书、认证由运维配置。不支持的依赖源/构建方式应失败并给出原因，不自动回退公网。离线模式 `runtime.offline.enabled: true`，还须按发行清单准备 runtime/preparer/helper/基础服务镜像及依赖材料；仅配置开关不等于材料已准备好。需要推送组装镜像的方式才要求可写 OCI 仓库。
+默认 `runtime.offline.enabled: false`，Python 准备阶段使用 `https://pypi.org/simple` 下载镜像中不存在的 wheel；编译/安装隔离阶段和应用运行阶段仍沿用既有权限。生产私有化环境可将 `runtime.offline.packageIndex` 替换为企业镜像，企业包源的转发、证书、认证由运维配置。不支持的依赖源/构建方式应失败并给出原因，不自动切换到其它源。完全离线时显式设置 `runtime.offline.enabled: true`，并按发行清单准备 runtime/preparer/helper/基础服务镜像及依赖材料；仅配置开关不等于材料已准备好。需要推送组装镜像的方式才要求可写 OCI 仓库。
 
 ## 7. 手动诊断与验收
 

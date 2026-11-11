@@ -863,8 +863,8 @@ runtime:
     timeoutSeconds: 5
     managedByParent: true
   offline:
-    enabled: true
-    packageIndex: ''
+    enabled: false
+    packageIndex: https://pypi.org/simple
     extraPackageIndex: ''
     npmRegistry: ''
     packageEndpoints: []
