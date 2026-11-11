@@ -343,3 +343,8 @@ tenant1 在 `PhysicalInventoryReader._index → _physical_batch` 报 `migration_
 v4维护容器已加载AC-100–102，30租户逐项预检27通过。剩余实际记录：①Root空间3495的文档1703/2705，4个版本对应文件88520/88519/89520/89522全部FAILED，原主指针NULL、全部is_primary=0；不选择主版本、不改原链，只保留已有type3的此类原失败状态。②租户25工作流1d63b332d55849e189b2aade9efda872，版本4442，node:rag_fa801.knowledge引用Root空间3603「验证性能」，原is_shared=0；沿用保留配置、跨租户失效、不新增权限原则，保留真实owner=1，不视为Root共享或目标缺失。③租户60应用b9cde779b7144b91b3184b1f3b700e3c的mode10949中，原21064/21065/21066都是RETIRED来源历史，旧Grant仍INACTIVE，assignee4220529232719530634已改绑且INACTIVE；迁移错误地要求全部历史行对应当前Grant/model。保留历史，以原主体/来源指纹和旧INACTIVE Grant闭合重建，不恢复有效授权。
 
 完整原行/DDL/恢复SQL/manifest已持久保存并SHA256核验：primary-chain-evidence（2文档、4版本、4文件、1空间）、next-blockers-evidence（原工作流/版本/目标空间及24Grant、2assignee、4可见来源、mode1，原引用表当时0）。后者rows SHA256 b993f49fbce8d259db29ce1636b1a6f4f9a437f63bda4b88b5c666b5c0ff12dd。本段没有新SQL/FGA业务修复，也没有改动原索引或文件，正式升级/访问恢复仍待后续执行和核验。
+
+
+tenant60首处通过后又定位到同类mode10954/app ac03e3f7a34c4a16a1d7bf2cdfc395a2：21068为RETIRED，assignee1932647580758220349已从模型6f06…改绑viewer、版本1→2且保持ACTIVE；旧Grant18105因其他用户组仍使用而ACTIVE。兼容必须保留退役贡献，而不要求整个Grant/来源都停用。补充完整备份next-blockers-evidence-v2：2mode、48Grant、5assignee、8可见来源及原工作流/目标，rows SHA256 f511dcea95599598ad00d96e87cb072deccee8e27f1e5a4bdc7faf91ff46689c，宿主机全校验通过；无SQL清理。
+
+扩展选集1995 passed / 3 failed：一项旧预检仍期望外租户空间立即阻断，已按同一失效保留合同修订为existing_invalid_scope并保留名称解析拒绝；另两项实际尝试本机未初始化MySQL连接，分别为legacy_document_permissions的混合原类型列表，以及已知deleted_channel配额策略no-network问题。补充原生锁顺序/Owner/M4选集63 passed，历史贡献及纯规划85 passed；最终现场验证仍另记。

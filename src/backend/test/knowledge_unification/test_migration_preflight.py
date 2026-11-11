@@ -317,7 +317,10 @@ async def test_explicit_missing_is_not_foreign_retired_or_existing_offline_and_n
     ]
     assert module.source_decision(rows[0], tenant_id=101).data["disposition"] == "existing_saved_slot"
     assert module.source_decision(rows[1], tenant_id=101).data["disposition"] == "initial_missing"
-    for row in rows[2:]:
+    assert module.source_decision(rows[2], tenant_id=101).data["disposition"] == "existing_invalid_scope"
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        module.source_decision(replace(rows[2], origin="resolved_name"), tenant_id=101)
+    for row in rows[3:]:
         with pytest.raises(KnowledgeOperationPlanConflictError):
             module.source_decision(row, tenant_id=101)
     with pytest.raises(KnowledgeOperationPlanConflictError):

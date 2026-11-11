@@ -93,12 +93,17 @@ def compile_resource(catalog, before, mode):
     return plans.build_resource_retirement_plan(catalog_plan=catalog, before=before, namespace_target=mode)
 
 
-@pytest.mark.parametrize("change", ["retain", "active", "fingerprint", "future_version", "missing_grant"])
+@pytest.mark.parametrize(
+    "change", ["retain", "active_assignee_and_grant", "active", "fingerprint", "future_version", "missing_grant"]
+)
 def test_retired_reassignment_history_keeps_old_model_identity_without_restoring_authority(change):
     catalog = legacy_catalog()
     before = original_resource(catalog, retired=False)
     active = next(row for row in before.assignees if row.state == "INACTIVE")
     historical = replace(before.grants[0], id=12, model_key="pure-use", state="INACTIVE")
+    if change == "active_assignee_and_grant":
+        active = before.assignees[0]
+        historical = replace(historical, state="ACTIVE")
     old = plans._grants(
         replace(before, grants=(historical,)),
         {row.model_key: row for row in catalog.models},
@@ -119,7 +124,7 @@ def test_retired_reassignment_history_keeps_old_model_identity_without_restoring
         grants=(*before.grants, historical) if change != "missing_grant" else before.grants,
         visible_sources=(*before.visible_sources, plans.PermissionVisibleSourceBaseline(99, record)),
     )
-    if change != "retain":
+    if change not in {"retain", "active_assignee_and_grant"}:
         with pytest.raises(PermissionMigrationBlockedError):
             compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
         return
