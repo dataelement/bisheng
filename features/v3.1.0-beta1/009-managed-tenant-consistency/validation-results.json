@@ -1,0 +1,96 @@
+{
+  "baseline": "24c02859e2582ed319281bb52285c99930daf81c",
+  "branch": "codex/3.1.0-beta1/managed-tenant-bugfix",
+  "date": "2026-11-11",
+  "new_regressions": {
+    "passed": 86,
+    "failed": 0,
+    "files": [
+      "test/approval/test_managed_tenant_labels.py",
+      "test/database/test_managed_tenant_migration.py",
+      "test/department/test_managed_tenant_members.py",
+      "test/department/test_managed_tenant_scope.py",
+      "test/dsh/test_managed_tenant_role_policy.py",
+      "test/knowledge/test_managed_copy_worker.py",
+      "test/knowledge/test_managed_tenant_copy.py",
+      "test/permission/test_managed_tenant_creation_recovery.py",
+      "test/quota/test_managed_tenant_creation_gates.py",
+      "test/quota/test_managed_tenant_quota.py",
+      "test/role/test_effective_roles.py",
+      "test/role/test_managed_tenant_role.py",
+      "test/sso_sync/test_managed_tenant_defaults.py",
+      "test/tenant/test_managed_tenant_preflight.py",
+      "test/tool/test_managed_tenant_creation.py",
+      "test/tool/test_managed_tenant_readiness.py",
+      "test/tool/test_managed_tenant_update.py",
+      "test/user/test_managed_tenant_bindings.py",
+      "test/user/test_managed_tenant_legacy_roles.py",
+      "test/user/test_managed_tenant_policy.py",
+      "test/workflow/test_managed_tenant_creation.py"
+    ]
+  },
+  "related_regressions": {
+    "passed": 202,
+    "failed": 10,
+    "baseline_failure_ids": [
+      "test/sso/test_sso_login_sync_service.py::TestDisabledSsoUser::test_wecom_explicit_re_enable_clears_delete",
+      "test/sso/test_sso_login_sync_service.py::TestDepartmentAdminFgaReconcile::test_empty_admin_list_removes_fga_admin_on_sso_member_dept",
+      "test/sso/test_sso_login_sync_service.py::TestDepartmentAdminFgaReconcile::test_leader_dept_grants_admin_tuple",
+      "test/sso/test_sso_login_sync_service.py::TestExistingUserAttrUpdate::test_name_change_triggers_update",
+      "test/sso/test_sso_login_sync_service.py::TestExistingUserAttrUpdate::test_successful_existing_user_sync_touches_update_time",
+      "test/sso/test_sso_login_sync_service.py::TestGuestFallbackPlacement::test_disabled_user_skips_guest_reconcile",
+      "test/department/test_dept_member_add_sync.py::test_aadd_members_secondary_path_skips_sync",
+      "test/department/test_dept_member_add_sync.py::test_aadd_members_primary_path_routes_to_change_primary",
+      "test/department/test_dept_member_add_sync.py::test_aadd_members_primary_propagates_relocate_blocked",
+      "test/department/test_dept_member_add_sync.py::test_acreate_local_member_triggers_sync_for_new_user"
+    ]
+  },
+  "http_e2e": {
+    "passed": 0,
+    "skipped": 3,
+    "reason": "Dedicated environment and ephemeral prefixed fixture tokens not supplied"
+  },
+  "migration": {
+    "head": "v310b1_f009_managed_tenant",
+    "parent": "v310b1_f004_workflow_soft_delete",
+    "sqlite_schema_test": "PASS",
+    "mysql_dm8": "NOT_RUN"
+  },
+  "static_audit": {
+    "new_lint": {},
+    "legacy_lint": {
+      "src/backend/bisheng/department/domain/services/department_service.py": 89,
+      "src/backend/bisheng/knowledge/domain/models/knowledge.py": 24,
+      "src/backend/bisheng/knowledge/domain/services/knowledge_service.py": 38,
+      "src/backend/bisheng/role/api/endpoints/quota.py": 2,
+      "src/backend/bisheng/role/domain/schemas/role_schema.py": 3,
+      "src/backend/bisheng/role/domain/services/quota_service.py": 7,
+      "src/backend/bisheng/sso_sync/domain/services/login_sync_service.py": 1,
+      "src/backend/bisheng/tenant/domain/services/tenant_mount_service.py": 7,
+      "src/backend/bisheng/user/api/user.py": 60,
+      "src/backend/bisheng/worker/knowledge/file_worker.py": 10,
+      "src/backend/bisheng/worker/knowledge/qa.py": 4,
+      "src/backend/test/quota/test_quota_service_check_chain.py": 7,
+      "src/backend/test/quota/test_quota_service_tenant_tree.py": 1,
+      "src/backend/test/quota/test_require_quota_decorator.py": 6,
+      "src/backend/test/sso/test_sso_login_sync_service.py": 1
+    },
+    "architecture": {
+      "src/backend/bisheng/api/v1/workflow.py": "⚠️  [arch-guard] RULE-3 WARNING: workflow.py — Endpoint 直接导入 database/models（应通过 Domain 层）",
+      "src/backend/test/role/test_effective_roles.py": "⚠️  [arch-guard] RULE-7 WARNING: test_effective_roles.py — 疑似硬编码敏感信息",
+      "src/backend/test/sso_sync/test_managed_tenant_defaults.py": "⚠️  [arch-guard] RULE-7 WARNING: test_managed_tenant_defaults.py — 疑似硬编码敏感信息",
+      "src/backend/test/user/test_managed_tenant_legacy_roles.py": "⚠️  [arch-guard] RULE-7 WARNING: test_managed_tenant_legacy_roles.py — 疑似硬编码敏感信息"
+    }
+  },
+  "i18n": "PASS",
+  "frontend_transpile": "PASS, two changed TS/TSX files",
+  "frontend_full_tsc": "FAILED: workspace dependencies/types unresolved; not accepted as a passed typecheck",
+  "external_systems": "NOT_RUN: MySQL, DM8, FGA, Redis, Celery broker, MinIO, Milvus, ES, browser",
+  "git_actions": "No commit/push/merge/deploy",
+  "release_line_integration": {
+    "status": "NOT_DONE",
+    "evidence": "release-baseline-check.json",
+    "cached_ref_behind_commits": 2156,
+    "overlapping_paths": 38
+  }
+}

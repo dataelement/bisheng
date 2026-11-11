@@ -4283,7 +4283,9 @@
   "department": {
     "defaultOrganization": "默认组织",
     "searchUsersPlaceholder": "搜索用户名称或 ID",
-    "searchMember": "搜索用户名称或 ID"
+    "searchMember": "搜索用户名称或 ID",
+    "foreignMembershipPolicyHint": "跨租户兼属仅保留组织关系，不在此部门授予角色、菜单或配额。",
+    "personRoleBindingHint": "角色绑定到人员在归属租户的身份。同租户各部门显示的是同一份绑定，修改会共同生效。"
   },
   "tenant": {
     "searchUser": "搜索用户名称或 ID",

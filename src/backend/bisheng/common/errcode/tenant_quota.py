@@ -3,7 +3,18 @@
 Declared in CLAUDE.md + release-contract.md; this file is the authoritative registry.
 Inherits BaseErrorCode -> HTTP 200 + UnifiedResponseModel.status_code (per project convention).
 """
+
 from .base import BaseErrorCode
+
+
+class QuotaUsageUnavailableError(BaseErrorCode):
+    Code: int = 19404
+    Msg: str = "Resource usage is unavailable. New resources cannot be added until usage can be verified."
+
+
+class QuotaResponsibilityChangedError(BaseErrorCode):
+    Code: int = 19405
+    Msg: str = "The budget owner no longer belongs to this resource's tenant. New usage is blocked."
 
 
 class TenantQuotaExceededError(BaseErrorCode):
@@ -12,17 +23,20 @@ class TenantQuotaExceededError(BaseErrorCode):
     When raised because Root usage reached Root limit (Child creation blocked
     by group-wide cap), the Msg variant should contain '集团总量已耗尽' for AC-08.
     """
+
     Code: int = 19401
-    Msg: str = 'Tenant quota exceeded'
+    Msg: str = "Tenant quota exceeded"
 
 
 class TenantRoleQuotaExceededError(BaseErrorCode):
     """Role-level quota exceeded after Tenant chain check passed (AC-01)."""
+
     Code: int = 19402
-    Msg: str = 'Role quota exceeded'
+    Msg: str = "Role quota exceeded"
 
 
 class TenantStorageQuotaExceededError(BaseErrorCode):
     """Storage quota (storage_gb / knowledge_space_file) exceeded (AC-04)."""
+
     Code: int = 19403
-    Msg: str = 'Storage quota exceeded'
+    Msg: str = "Storage quota exceeded"

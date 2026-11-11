@@ -4283,7 +4283,9 @@
   "department": {
     "defaultOrganization": "デフォルト組織",
     "searchUsersPlaceholder": "ユーザー名または ID で検索",
-    "searchMember": "ユーザー名または ID で検索"
+    "searchMember": "ユーザー名または ID で検索",
+    "foreignMembershipPolicyHint": "他テナントへの兼属は組織上の関係のみです。この部署のロール、メニュー、クォータは適用されません。",
+    "personRoleBindingHint": "ロールは所属テナント内の個人に紐付きます。同じテナントの部署は同じ紐付けを表示し、変更は共通して適用されます。"
   },
   "tenant": {
     "searchUser": "ユーザー名または ID で検索",

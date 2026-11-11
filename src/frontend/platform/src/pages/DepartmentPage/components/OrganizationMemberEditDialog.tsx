@@ -242,10 +242,10 @@ export function OrganizationMemberEditDialog({
     try {
       if (form.edit_mode === "affiliate") {
         await applyDepartmentMemberEditApi(deptId, member.user_id, {
-            context_role_ids: Array.from(ctxRoles),
+            ...(form.policy_editable !== false ? { context_role_ids: Array.from(ctxRoles) } : {}),
           })
       } else {
-        const affiliate_roles = (form.affiliate_rows ?? []).map((row) => ({
+        const affiliate_roles = (form.affiliate_rows ?? []).filter((row) => row.policy_editable !== false).map((row) => ({
           dept_id: row.dept_id,
           role_ids: Array.from(affRoleByDept[row.dept_id] ?? new Set()),
         }))
@@ -421,7 +421,9 @@ export function OrganizationMemberEditDialog({
                     {form.affiliate_rows.map((row) => (
                       <div key={row.dept_id} className="rounded border p-3">
                         <div className="mb-2 text-sm font-medium">{row.name}</div>
-                        {renderRoleMultiSelect(
+                        {row.policy_editable === false ? (
+                          <p className="text-sm text-muted-foreground">{t("bs:department.foreignMembershipPolicyHint")}</p>
+                        ) : renderRoleMultiSelect(
                           form.assignable_roles_catalog[row.dept_id] ?? [],
                           affRoleByDept[row.dept_id] ?? new Set(),
                           (next) =>
@@ -435,7 +437,11 @@ export function OrganizationMemberEditDialog({
               </>
             )}
 
-            {form.edit_mode === "affiliate" && (
+            <p className="text-sm text-muted-foreground">{t("bs:department.personRoleBindingHint")}</p>
+            {form.edit_mode === "affiliate" && form.policy_editable === false && (
+              <p className="text-sm text-muted-foreground">{t("bs:department.foreignMembershipPolicyHint")}</p>
+            )}
+            {form.edit_mode === "affiliate" && form.policy_editable !== false && (
               <div>
                 <Label>{t("bs:department.roles")}</Label>
                 {renderRoleMultiSelect(
@@ -460,7 +466,7 @@ export function OrganizationMemberEditDialog({
             <Button variant="outlined" onClick={onClose} disabled={saving} color="default">
               {t("cancel")}
             </Button>
-            <Button onClick={() => void handleSave()} disabled={saving || loading || !form}>
+            <Button onClick={() => void handleSave()} disabled={saving || loading || !form || (form.edit_mode === "affiliate" && form.policy_editable === false)}>
               {t("save")}
             </Button>
           </div>

@@ -117,6 +117,9 @@ class ToolExecutor(BaseTool):
 
     @classmethod
     async def _ensure_use_permission_async(cls, tool_type: GptsToolsType, user_id: int) -> None:
+        from bisheng.tool.domain.models.gpts_tools import assert_tool_ready
+
+        assert_tool_ready(tool_type)
         if not tool_type.id or not tool_type.tenant_id:
             raise PermissionError("Permission denied: use")
         login_user = await cls._build_permission_user(
@@ -369,6 +372,9 @@ class ToolExecutor(BaseTool):
             tool_type = tool_types_map.get(tool.type)
             if not tool_type:
                 raise ValueError(f"Tool type with id {tool.type} not found.")
+            from bisheng.tool.domain.models.gpts_tools import assert_tool_ready
+
+            assert_tool_ready(tool_type)
             if enforce_permission:
                 cls._ensure_use_permission_sync(tool_type, user_id)
             result.append(

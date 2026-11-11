@@ -12,7 +12,7 @@ from hashlib import sha256
 from types import SimpleNamespace
 
 from fastapi import HTTPException
-from sqlalchemy import and_, delete, func, or_, update
+from sqlalchemy import delete, func, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
@@ -737,6 +737,17 @@ class DepartmentTopologyProjectionService:
                     .with_for_update()
                 )
                 department = (await session.exec(statement)).first()
+                previous_path = department.path if department is not None else None
+                previous_parent = department.parent_id if department is not None else None
+                before_users = []
+                if department is not None and previous_parent != normalized_parent_id:
+                    from bisheng.user.application.policy_bindings import (
+                        affected_policy_users,
+                        retire_invalid_policy_bindings,
+                    )
+                    before_users = await affected_policy_users(session=session, subtree_path=previous_path)
+                    await retire_invalid_policy_bindings(before_users, session=session, derive_primary_home=True,
+                                                         operator_id=operator_id)
                 was_active = bool(
                     department is not None and department.status == "active" and int(department.is_deleted or 0) == 0
                 )
@@ -773,6 +784,10 @@ class DepartmentTopologyProjectionService:
                     parent_path,
                     int(department.id),
                 )
+                if previous_path and previous_path != department.path:
+                    await session.execute(update(Department).where(Department.tenant_id == department.tenant_id,
+                        Department.id != department.id, Department.path.like(f"{previous_path}%"))
+                        .values(path=func.replace(Department.path, previous_path, department.path)))
                 session.add(department)
                 await session.flush()
 
@@ -820,6 +835,16 @@ class DepartmentTopologyProjectionService:
                     )
                     await _bind_department_projection(session, projection)
 
+                if topology_changed:
+                    from bisheng.user.application.policy_bindings import (
+                        affected_policy_users,
+                        retire_invalid_policy_bindings,
+                    )
+
+                    affected = set(before_users) | set(await affected_policy_users(session=session, subtree_path=department.path))
+                    await retire_invalid_policy_bindings(
+                        affected, session=session, derive_primary_home=True, operator_id=operator_id
+                    )
                 await session.commit()
                 business_committed = True
         except Exception as exc:
@@ -883,6 +908,15 @@ class DepartmentTopologyProjectionService:
                 session.add(department)
                 await session.flush()
                 await _bind_department_projection(session, projection)
+                from bisheng.user.application.policy_bindings import (
+                    affected_policy_users,
+                    retire_invalid_policy_bindings,
+                )
+
+                affected = await affected_policy_users(session=session, subtree_path=department.path)
+                await retire_invalid_policy_bindings(
+                    affected, session=session, derive_primary_home=True, operator_id=operator_id
+                )
                 await session.commit()
                 business_committed = True
         except Exception as exc:
@@ -1427,6 +1461,15 @@ class DepartmentService:
                 dept.status = "archived"
                 session.add(dept)
                 await _bind_department_projection(session, projection)
+                from bisheng.user.application.policy_bindings import (
+                    affected_policy_users,
+                    retire_invalid_policy_bindings,
+                )
+
+                affected = await affected_policy_users(session=session, subtree_path=dept.path)
+                await retire_invalid_policy_bindings(
+                    affected, session=session, derive_primary_home=True, operator_id=login_user.user_id
+                )
                 await session.commit()
                 business_committed = True
         except Exception as exc:
@@ -1569,6 +1612,9 @@ class DepartmentService:
                 if not new_parent or new_parent.status != "active":
                     raise DepartmentNotFoundError(msg="New parent department not found")
 
+                if not await cls._department_in_admin_writable_scope(login_user, new_parent):
+                    raise DepartmentPermissionDeniedError()
+
                 # Circular detection: can't move to self or own subtree.
                 if data.new_parent_id == dept.id:
                     raise DepartmentCircularMoveError()
@@ -1584,6 +1630,13 @@ class DepartmentService:
                 old_parent_id = dept.parent_id
                 if old_parent_id is None:
                     raise DepartmentPermissionDeniedError(msg="Root department cannot be moved")
+                from bisheng.user.application.policy_bindings import (
+                    affected_policy_users,
+                    retire_invalid_policy_bindings,
+                )
+                before_users = await affected_policy_users(session=session, subtree_path=dept.path)
+                await retire_invalid_policy_bindings(before_users, session=session, derive_primary_home=True,
+                                                     operator_id=login_user.user_id)
                 old_path = dept.path
                 new_path = f"{new_parent.path}{dept.id}/"
                 projection = await _prepare_department_projection(
@@ -1618,6 +1671,15 @@ class DepartmentService:
                 dept.path = new_path
                 session.add(dept)
                 await _bind_department_projection(session, projection)
+                from bisheng.user.application.policy_bindings import (
+                    affected_policy_users,
+                    retire_invalid_policy_bindings,
+                )
+
+                affected = await affected_policy_users(session=session, subtree_path=new_path)
+                await retire_invalid_policy_bindings(
+                    affected, session=session, derive_primary_home=True, operator_id=login_user.user_id
+                )
                 await session.commit()
                 business_committed = True
                 await session.refresh(dept)
@@ -1648,17 +1710,16 @@ class DepartmentService:
                     UserTenantSyncService,
                 )
 
-                await UserTenantSyncService.sync_subtree_primary_users(
+                sync_result = await UserTenantSyncService.sync_subtree_primary_users(
                     dept_path=dept.path,
                     trigger=UserTenantSyncTrigger.DEPT_MOVED,
                 )
-            except Exception as exc:
-                logger.warning(
-                    "sync_subtree_primary_users on dept move %s→%s failed: %s",
-                    old_parent_id,
-                    data.new_parent_id,
-                    exc,
-                )
+                from bisheng.tenant.application.sync_result import assert_subtree_sync_complete
+
+                assert_subtree_sync_complete(sync_result)
+            except Exception:
+                logger.exception("Department move committed; user tenant synchronization incomplete")
+                raise
 
         return dept
 
@@ -1734,24 +1795,22 @@ class DepartmentService:
         """Grant department default roles to users (assignable domain, skip AdminRole, idempotent)."""
         if not default_role_ids or not user_ids:
             return
-        from bisheng.database.constants import AdminRole
-        from bisheng.user.domain.models.user_role import UserRoleDao
+        from bisheng.department.application.business_scope import membership_policy_facts
+        from bisheng.user.application.policy_bindings import grant_policy_bindings, read_policy_subject
 
-        assignable = await cls.aget_assignable_roles(dept_id, login_user)
-        allowed_ids = {r["id"] for r in assignable}
-        to_apply = [rid for rid in default_role_ids if rid != AdminRole and rid in allowed_ids]
-        if not to_apply:
+        async with get_async_db_session() as session:
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+        eligible = []
+        for uid in sorted(set(user_ids)):
+            subject = await read_policy_subject(uid)
+            if await membership_policy_facts(int(dept.id), subject.home_tenant_id) is not None:
+                eligible.append(subject)
+        if not eligible:
             return
-        for uid in user_ids:
-            existing = {int(ur.role_id) for ur in UserRoleDao.get_user_roles(uid)}
-            need_add = [r for r in to_apply if r not in existing]
-            if need_add:
-                UserRoleDao.add_user_roles(uid, need_add)
-                await LegacyRBACSyncService.sync_user_role_change(
-                    uid,
-                    existing,
-                    existing | set(need_add),
-                )
+        allowed_ids = {row["id"] for row in await cls.aget_assignable_roles(dept_id, login_user)}
+        picked = set(default_role_ids) & allowed_ids
+        for subject in eligible:
+            await grant_policy_bindings(subject.user_id, subject.home_tenant_id, picked, operator_id=login_user.user_id)
 
     @classmethod
     async def aadd_members(
@@ -1761,6 +1820,7 @@ class DepartmentService:
         login_user,
     ) -> None:
         default_role_ids_snapshot: list[int] = []
+        new_member_ids: list[int] = []
         is_primary_add = int(data.is_primary or 0) == 1
         projection = None
         resumed_projection = False
@@ -1777,6 +1837,19 @@ class DepartmentService:
                 resumed_projection = await _resume_department_projection_if_needed(
                     dept,
                 )
+                if is_primary_add:
+                    from bisheng.department.application.business_scope import department_policy_facts
+                    from bisheng.user.application.policy_bindings import read_policy_subject
+                    target_facts = await department_policy_facts(int(dept.id))
+                    if not login_user.is_admin():
+                        for uid in data.user_ids:
+                            subject = await read_policy_subject(uid)
+                            primary = next((row for row in subject.memberships if row.is_primary), None)
+                            if primary is not None:
+                                if not await _can_access_dept(login_user, primary.department_id):
+                                    raise DepartmentPermissionDeniedError()
+                            elif subject.home_tenant_id != target_facts.business_tenant_id:
+                                raise DepartmentPermissionDeniedError()
                 raw_defaults = dept.default_role_ids or []
                 default_role_ids_snapshot = [int(x) for x in raw_defaults if x is not None]
 
@@ -1788,6 +1861,7 @@ class DepartmentService:
                     )
                 )
                 existing_ids = existing_result.all()
+                new_member_ids = sorted(set(data.user_ids) - set(existing_ids))
                 if existing_ids:
                     if not (resumed_projection and set(existing_ids) == set(data.user_ids)):
                         raise DepartmentMemberExistsError(
@@ -1795,6 +1869,9 @@ class DepartmentService:
                         )
 
                 if not is_primary_add and not existing_ids:
+                    from bisheng.user.application.policy_bindings import retire_invalid_policy_bindings
+                    await retire_invalid_policy_bindings(data.user_ids, session=session, derive_primary_home=True,
+                                                         operator_id=login_user.user_id)
                     projection = await _prepare_department_projection(
                         department=dept,
                         login_user=login_user,
@@ -1856,7 +1933,7 @@ class DepartmentService:
         # 部门「默认角色」：加入本部门后自动授予（可分配域内、且用户尚未拥有）
         await cls._grant_default_roles_to_users(
             dept_id,
-            list(data.user_ids),
+            new_member_ids,
             default_role_ids_snapshot,
             login_user,
         )
@@ -1907,6 +1984,11 @@ class DepartmentService:
                         ),
                     )
                     await session.delete(ud)
+                    from bisheng.user.application.policy_bindings import retire_invalid_policy_bindings
+
+                    await retire_invalid_policy_bindings(
+                        [user_id], session=session, derive_primary_home=True, operator_id=login_user.user_id
+                    )
                     await _bind_department_projection(session, projection)
                     await session.commit()
                     business_committed = True
@@ -2291,164 +2373,32 @@ class DepartmentService:
         return chain
 
     @classmethod
-    async def aget_assignable_roles(
-        cls,
-        dept_id: str,
-        login_user,
-    ) -> list[dict]:
-        """当前部门上下文中可授予的角色：全局 + 作用域落在上级链（含本部门）上的角色（不含内置超管）。
-
-        规则：角色若绑定作用域部门 S，则可在任意「当前成员所属/操作上下文部门 T」为 S 或 S 的下级时使用；
-        实现为 Role.department_id 为空，或 Role.department_id 属于当前部门 T 的祖先链（含 T）。
-        """
-        from bisheng.core.context.tenant import bypass_tenant_filter
-        from bisheng.database.constants import AdminRole
-        from bisheng.database.models.role import Role
-
+    async def aget_assignable_roles(cls, dept_id: str, login_user) -> list[dict]:
+        """Candidates follow verified department business ownership, independent of actor home."""
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-
-            scope_chain_ids = await cls._aget_ancestor_chain_ids(session, dept)
-            if not scope_chain_ids:
-                scope_chain_ids = [int(dept.id)] if dept.id is not None else []
-
-            # 作用域：department_id 为空表示无部门限制、全局可选；
-            # 否则仅当角色作用域部门为「当前上下文部门的祖先或自身」时可授予（非兄弟子树）。
-            dept_scope = or_(
-                Role.department_id.is_(None),
-                Role.department_id.in_(scope_chain_ids),
-            )
-            # Global built-in roles live outside child tenant scopes. The role
-            # list API already bypasses the tenant filter and then explicitly
-            # scopes tenant roles; keep this catalog aligned with it while
-            # leaving department lookup/permission checks under normal scoping.
-            with bypass_tenant_filter():
-                stmt = (
-                    select(Role)
-                    .where(
-                        Role.id > AdminRole,
-                        or_(
-                            and_(Role.role_type == "global", dept_scope),
-                            and_(
-                                Role.role_type == "tenant",
-                                Role.tenant_id == login_user.tenant_id,
-                                dept_scope,
-                            ),
-                            # 兼容旧数据：历史角色可能未写 role_type，默认按 tenant 角色处理
-                            and_(
-                                or_(Role.role_type.is_(None), Role.role_type == ""),
-                                Role.tenant_id == login_user.tenant_id,
-                                dept_scope,
-                            ),
-                        ),
-                    )
-                    .order_by(Role.role_name.asc())
-                )
-                roles = (await session.exec(stmt)).all()
-
-        return [
-            {
-                "id": r.id,
-                "role_name": r.role_name,
-                "role_type": r.role_type,
-                "department_id": r.department_id,
-            }
-            for r in roles
-        ]
-
-    @staticmethod
-    def _department_scope_chain_ids(dept: Department) -> list[int]:
-        """Return ancestor ids from materialized path plus the department itself."""
-        chain: list[int] = []
-        seen: set[int] = set()
-        for part in (dept.path or "").split("/"):
-            if not part.strip() or not part.isdigit():
-                continue
-            did = int(part)
-            if did not in seen:
-                seen.add(did)
-                chain.append(did)
-        if dept.id is not None:
-            did = int(dept.id)
-            if did not in seen:
-                chain.append(did)
-        return chain
+        return (await cls._aget_assignable_roles_catalog([dept], login_user)).get(dept.dept_id, [])
 
     @classmethod
-    async def _aget_assignable_roles_catalog(
-        cls,
-        depts: list[Department],
-        login_user,
-    ) -> dict:
-        """Batch build assignable-role catalogs for multiple departments."""
-        from bisheng.core.context.tenant import bypass_tenant_filter
-        from bisheng.database.constants import AdminRole
-        from bisheng.database.models.role import Role
+    async def _aget_assignable_roles_catalog(cls, depts: list[Department], login_user) -> dict:
+        from bisheng.department.application.business_scope import department_policy_facts
+        from bisheng.role.application.effective_roles import assignable_role_catalog
 
-        if not depts:
-            return {}
-
-        scope_by_dept_id: dict[str, set[int]] = {}
-        all_scope_ids: set[int] = set()
-        accessible_depts: list[Department] = []
-        for dept in depts:
-            # Soft-skip departments outside the operator's scope; member-edit
-            # callers may pass the target user's full dept set (incl. foreign
-            # affiliates) and we want to degrade gracefully instead of 21009.
-            if not await _can_access_dept(login_user, int(dept.id)):
-                continue
-            accessible_depts.append(dept)
-            scope_ids = set(cls._department_scope_chain_ids(dept))
-            if not scope_ids and dept.id is not None:
-                scope_ids = {int(dept.id)}
-            scope_by_dept_id[dept.dept_id] = scope_ids
-            all_scope_ids.update(scope_ids)
-        depts = accessible_depts
-        if not depts:
-            return {}
-
-        dept_scope = or_(
-            Role.department_id.is_(None),
-            Role.department_id.in_(list(all_scope_ids)),
-        )
-        with bypass_tenant_filter():
-            async with get_async_db_session() as session:
-                stmt = (
-                    select(Role)
-                    .where(
-                        Role.id > AdminRole,
-                        or_(
-                            and_(Role.role_type == "global", dept_scope),
-                            and_(
-                                Role.role_type == "tenant",
-                                Role.tenant_id == login_user.tenant_id,
-                                dept_scope,
-                            ),
-                            and_(
-                                or_(Role.role_type.is_(None), Role.role_type == ""),
-                                Role.tenant_id == login_user.tenant_id,
-                                dept_scope,
-                            ),
-                        ),
-                    )
-                    .order_by(Role.role_name.asc())
-                )
-                roles = (await session.exec(stmt)).all()
-
-        catalog: dict = {}
-        for dept in depts:
-            scope_ids = scope_by_dept_id.get(dept.dept_id, set())
-            catalog[dept.dept_id] = [
+        accessible = [dept for dept in depts if await _can_access_dept(login_user, int(dept.id))]
+        facts = [await department_policy_facts(int(dept.id)) for dept in accessible]
+        roles = await assignable_role_catalog(facts)
+        return {
+            dept.dept_id: [
                 {
                     "id": role.id,
                     "role_name": role.role_name,
                     "role_type": role.role_type,
                     "department_id": role.department_id,
                 }
-                for role in roles
-                if role.department_id is None or int(role.department_id) in scope_ids
+                for role in roles.get(int(dept.id), [])
             ]
-        return catalog
+            for dept in accessible
+        }
 
     @classmethod
     async def acreate_local_member(
@@ -2502,13 +2452,13 @@ class DepartmentService:
             user = UserDao.add_user_with_groups_and_roles(
                 user,
                 [],
-                final_role_ids,
+                [],
             )
         except IntegrityError:
             raise DepartmentPersonIdDuplicateError() from None
         await LegacyRBACSyncService.sync_user_auth_created(
             user.user_id,
-            final_role_ids,
+            [],
         )
 
         projection = None
@@ -2563,6 +2513,16 @@ class DepartmentService:
         await UserTenantSyncService.sync_user(
             user.user_id,
             trigger=UserTenantSyncTrigger.DEPT_CHANGE,
+        )
+
+        from bisheng.department.application.business_scope import department_policy_facts
+        from bisheng.user.application.policy_bindings import grant_policy_bindings
+
+        await grant_policy_bindings(
+            user.user_id,
+            (await department_policy_facts(int(dept.id))).business_tenant_id,
+            final_role_ids,
+            operator_id=login_user.user_id,
         )
 
         return {
@@ -2657,6 +2617,10 @@ class DepartmentService:
                     None,
                 )
 
+                from bisheng.user.application.policy_bindings import retire_invalid_policy_bindings
+                await retire_invalid_policy_bindings([user_id], session=session, derive_primary_home=True,
+                    operator_id=login_user.user_id if login_user else None)
+
                 if _uses_f048_department_projection():
                     projection_dept_ids = {int(new_dept_id)}
                     if old_primary is not None:
@@ -2715,10 +2679,10 @@ class DepartmentService:
                     fga_add_new = True
 
                 for projection in projections:
-                    await _bind_department_projection(
-                        session,
-                        projection,
-                    )
+                    await _bind_department_projection(session, projection)
+                from bisheng.user.application.policy_bindings import retire_invalid_policy_bindings
+
+                await retire_invalid_policy_bindings([user_id], session=session, derive_primary_home=True)
                 await session.commit()
                 business_committed = True
         except Exception as exc:
@@ -2813,8 +2777,8 @@ class DepartmentService:
     ) -> dict:
         """删除人员前预检：是否挂载数据资产。"""
         from bisheng.database.constants import AdminRole
+        from bisheng.user.application.policy_bindings import read_policy_subject
         from bisheng.user.domain.models.user import UserDao
-        from bisheng.user.domain.models.user_role import UserRoleDao
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
@@ -2837,8 +2801,8 @@ class DepartmentService:
         if getattr(user, "source", "local") != "local":
             raise DepartmentMemberDeleteForbiddenError()
 
-        old_roles = UserRoleDao.get_user_roles(user_id)
-        if any(int(r.role_id) == AdminRole for r in old_roles):
+        subject = await read_policy_subject(user_id)
+        if any(int(r.role_id) == AdminRole for r in subject.bindings):
             raise DepartmentPermissionDeniedError()
 
         counts = await cls._count_user_owned_data_assets(user_id)
@@ -2905,10 +2869,10 @@ class DepartmentService:
                     db_user.delete = 1
                     session.add(db_user)
                 for projection in projections:
-                    await _bind_department_projection(
-                        session,
-                        projection,
-                    )
+                    await _bind_department_projection(session, projection)
+                from bisheng.user.application.policy_bindings import retire_invalid_policy_bindings
+
+                await retire_invalid_policy_bindings([user_id], session=session, derive_primary_home=True)
                 await session.commit()
                 business_committed = True
         except Exception as exc:
@@ -2947,8 +2911,8 @@ class DepartmentService:
         from bisheng.database.constants import AdminRole
         from bisheng.database.models.group import GroupDao
         from bisheng.database.models.user_group import UserGroupDao
+        from bisheng.user.application.policy_bindings import read_policy_subject
         from bisheng.user.domain.models.user import UserDao
-        from bisheng.user.domain.models.user_role import UserRoleDao
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
@@ -2969,10 +2933,14 @@ class DepartmentService:
         if not user or user.delete != 0:
             raise DepartmentMemberNotFoundError()
 
-        old_roles = await UserRoleDao.aget_user_roles(user_id)
-        role_ids_user = {int(r.role_id) for r in old_roles}
-        if AdminRole in role_ids_user:
+        subject = await read_policy_subject(user_id)
+        if any(row.role_id == AdminRole for row in subject.bindings):
             raise DepartmentPermissionDeniedError()
+        from bisheng.role.application.effective_roles import load_effective_roles
+
+        # A stale primary/home projection must not look like an editable policy.
+        effective = await load_effective_roles(user_id, expected_home_tenant_id=subject.home_tenant_id)
+        role_ids_user = set(effective.role_ids)
 
         all_uds = await UserDepartmentDao.aget_user_departments(user_id)
         dept_int_ids = list({ud.department_id for ud in all_uds})
@@ -2995,7 +2963,14 @@ class DepartmentService:
         else:
             edit_mode = "synced_primary"
 
-        catalog = await cls._aget_assignable_roles_catalog(depts, login_user)
+        from bisheng.department.application.business_scope import membership_policy_facts
+
+        applicable = {
+            int(d.id) for d in depts if await membership_policy_facts(int(d.id), subject.home_tenant_id) is not None
+        }
+        catalog = await cls._aget_assignable_roles_catalog([d for d in depts if int(d.id) in applicable], login_user)
+        catalog.update({d.dept_id: [] for d in depts if int(d.id) not in applicable})
+        policy_editable = int(ctx_dept.id) in applicable
 
         primary_ud = next((x for x in all_uds if x.is_primary == 1), None)
         primary_block = None
@@ -3025,6 +3000,7 @@ class DepartmentService:
                     "dept_id": d.dept_id,
                     "name": d.name,
                     "role_ids": sorted(list(role_ids_user & ap)),
+                    "policy_editable": int(d.id) in applicable,
                 }
             )
 
@@ -3056,6 +3032,9 @@ class DepartmentService:
 
         return {
             "edit_mode": edit_mode,
+            "policy_editable": policy_editable,
+            "role_apply_status": "APPLICABLE" if policy_editable else "NOT_APPLICABLE_CROSS_TENANT",
+            "role_binding_mode": "PERSON_IN_HOME_TENANT",
             "user": {
                 "user_id": user.user_id,
                 "user_name": user.user_name,
@@ -3087,8 +3066,8 @@ class DepartmentService:
     ) -> None:
         """PRD 3.2.2：保存编辑（用户组合并替换 + 角色按部门可分配域合并）。"""
         from bisheng.database.constants import AdminRole
+        from bisheng.user.application.policy_bindings import read_policy_subject
         from bisheng.user.domain.models.user import UserDao
-        from bisheng.user.domain.models.user_role import UserRoleDao
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
@@ -3109,9 +3088,9 @@ class DepartmentService:
         if not user or user.delete != 0:
             raise DepartmentMemberNotFoundError()
 
-        old_roles = UserRoleDao.get_user_roles(user_id)
-        old_role_ids = [int(r.role_id) for r in old_roles]
-        if AdminRole in old_role_ids:
+        subject = await read_policy_subject(user_id)
+        old_role_ids = [int(row.role_id) for row in subject.bindings if row.tenant_id == subject.home_tenant_id]
+        if any(row.role_id == AdminRole for row in subject.bindings):
             raise DepartmentPermissionDeniedError()
 
         role_ids_user = set(old_role_ids)
@@ -3123,6 +3102,122 @@ class DepartmentService:
         else:
             edit_mode = "synced_primary"
 
+        from bisheng.department.application.business_scope import department_policy_facts, membership_policy_facts
+
+        policy_requested = any(
+            value is not None for value in (data.context_role_ids, data.primary_role_ids, data.affiliate_roles)
+        )
+        if mem.is_primary == 0 and policy_requested:
+            if await membership_policy_facts(int(ctx_dept.id), subject.home_tenant_id) is None:
+                raise DepartmentInvalidRolesError()
+        # Validate the final primary department before committing name, groups or membership.
+        target = None
+        final_home = subject.home_tenant_id
+        if edit_mode == "local_primary" and data.primary_department_id is not None:
+            from bisheng.department.application.business_scope import load_policy_edit_department
+
+            target = await load_policy_edit_department(int(data.primary_department_id))
+            if not target:
+                raise DepartmentNotFoundError()
+            if not await cls._department_in_admin_writable_scope(login_user, target):
+                raise DepartmentPermissionDeniedError()
+            final_home = (await department_policy_facts(int(target.id))).business_tenant_id
+        if policy_requested and target is None:
+            from bisheng.role.application.effective_roles import load_effective_roles
+
+            # Validate convergence before the earlier name/group commits as well.
+            await load_effective_roles(user_id, expected_home_tenant_id=subject.home_tenant_id)
+        if not policy_requested:
+            if data.user_name is not None and edit_mode == "local_primary":
+                name = (data.user_name or "").strip()
+                if name and name != user.user_name:
+                    user.user_name = name
+                    await UserDao.aupdate_user(user)
+
+            if edit_mode == "local_primary" and data.primary_department_id is not None:
+                async with get_async_db_session() as session:
+                    target = (
+                        await session.exec(
+                            select(Department).where(
+                                Department.id == int(data.primary_department_id),
+                            ),
+                        )
+                    ).first()
+                if not target:
+                    raise DepartmentNotFoundError()
+                if not await cls._department_in_admin_writable_scope(login_user, target):
+                    raise DepartmentPermissionDeniedError()
+                primary_row = await UserDepartmentDao.aget_user_primary_department(user_id)
+                cur_pid = int(primary_row.department_id) if primary_row else None
+                if cur_pid is None or cur_pid != int(target.id):
+                    await cls._apply_local_primary_department_change(
+                        user_id,
+                        int(target.id),
+                        login_user,
+                    )
+
+            if edit_mode != "affiliate" and data.group_ids is not None:
+                from bisheng.user_group.domain.services.user_group_service import (
+                    UserGroupService,
+                )
+
+                req = [int(x) for x in data.group_ids]
+                await UserGroupService.areplace_user_memberships(
+                    user_id,
+                    req,
+                    login_user,
+                )
+            return
+
+        replace_ids: set[int] = set()
+        picked: set[int] = set()
+        if edit_mode == "affiliate":
+            if data.primary_role_ids is not None or data.affiliate_roles is not None:
+                raise DepartmentInvalidRolesError()
+            replace_ids = await cls._assignable_role_id_set(ctx_dept.dept_id, login_user)
+            picked = {int(x) for x in data.context_role_ids or []}
+            if not picked.issubset(replace_ids):
+                raise DepartmentInvalidRolesError()
+        else:
+            if data.context_role_ids is not None:
+                raise DepartmentInvalidRolesError()
+            all_uds = await UserDepartmentDao.aget_user_departments(user_id)
+            depts = await DepartmentDao.aget_by_ids([row.department_id for row in all_uds])
+            by_key = {dept.dept_id: dept for dept in depts}
+            primary_ud = next((row for row in all_uds if row.is_primary), None)
+            pdept = target or next((dept for dept in depts if primary_ud and dept.id == primary_ud.department_id), None)
+            if not pdept:
+                raise DepartmentInvalidRolesError()
+            if data.primary_role_ids is not None:
+                allowed = await cls._assignable_role_id_set(pdept.dept_id, login_user)
+                requested = {int(x) for x in data.primary_role_ids}
+                if not requested.issubset(allowed):
+                    raise DepartmentInvalidRolesError()
+                replace_ids |= allowed
+                picked |= requested
+            seen = set()
+            secondary_ids = {row.department_id for row in all_uds if not row.is_primary}
+            for row in data.affiliate_roles or []:
+                dept = by_key.get(str(row.dept_id))
+                if row.dept_id in seen or dept is None or dept.id not in secondary_ids:
+                    raise DepartmentInvalidRolesError()
+                seen.add(row.dept_id)
+                if await membership_policy_facts(int(dept.id), final_home) is None:
+                    # Old forms may submit a displayed foreign row with no policy; never grant there.
+                    if row.role_ids:
+                        raise DepartmentInvalidRolesError()
+                    continue
+                allowed = await cls._assignable_role_id_set(dept.dept_id, login_user)
+                requested = {int(x) for x in row.role_ids}
+                if not requested.issubset(allowed):
+                    raise DepartmentInvalidRolesError()
+                replace_ids |= allowed
+                picked |= requested
+        new_roles = (role_ids_user - replace_ids) | picked
+
+        if AdminRole in new_roles:
+            raise DepartmentInvalidRolesError()
+
         if data.user_name is not None and edit_mode == "local_primary":
             name = (data.user_name or "").strip()
             if name and name != user.user_name:
@@ -3130,14 +3225,9 @@ class DepartmentService:
                 await UserDao.aupdate_user(user)
 
         if edit_mode == "local_primary" and data.primary_department_id is not None:
-            async with get_async_db_session() as session:
-                target = (
-                    await session.exec(
-                        select(Department).where(
-                            Department.id == int(data.primary_department_id),
-                        ),
-                    )
-                ).first()
+            from bisheng.department.application.business_scope import load_policy_edit_department
+
+            target = await load_policy_edit_department(int(data.primary_department_id))
             if not target:
                 raise DepartmentNotFoundError()
             if not await cls._department_in_admin_writable_scope(login_user, target):
@@ -3163,74 +3253,6 @@ class DepartmentService:
                 login_user,
             )
 
-        if edit_mode == "affiliate":
-            a_ctx = await cls._assignable_role_id_set(ctx_dept.dept_id, login_user)
-            picked = {int(x) for x in (data.context_role_ids or [])}
-            if not picked.issubset(a_ctx):
-                raise DepartmentInvalidRolesError()
-            u_union = a_ctx
-            new_roles = (role_ids_user - (role_ids_user & u_union)) | picked
-        else:
-            all_uds = await UserDepartmentDao.aget_user_departments(user_id)
-            primary_ud = next((x for x in all_uds if x.is_primary == 1), None)
-            if not primary_ud:
-                raise DepartmentInvalidRolesError()
-            depts = await DepartmentDao.aget_by_ids([d.department_id for d in all_uds])
-            # Mirror aget_member_edit_form: hide affiliate rows outside the
-            # operator's scope so a sub-tenant admin can save without 21009 on
-            # foreign affiliates. Primary dept equals ctx_dept here (mem.is_primary
-            # == 1) and is always accessible.
-            depts = [d for d in depts if d.id == ctx_dept.id or await _can_access_dept(login_user, int(d.id))]
-            dept_by_id = {d.id: d for d in depts}
-            pdept = dept_by_id.get(primary_ud.department_id)
-            if not pdept:
-                raise DepartmentInvalidRolesError()
+        from bisheng.user.application.policy_bindings import replace_policy_bindings
 
-            u_union: set = set()
-            u_union |= await cls._assignable_role_id_set(pdept.dept_id, login_user)
-
-            secondary_keys = []
-            for ud in all_uds:
-                if ud.is_primary != 0:
-                    continue
-                d = dept_by_id.get(ud.department_id)
-                if not d:
-                    continue
-                secondary_keys.append(d.dept_id)
-                u_union |= await cls._assignable_role_id_set(d.dept_id, login_user)
-
-            pr = {int(x) for x in (data.primary_role_ids or [])}
-            ap = await cls._assignable_role_id_set(pdept.dept_id, login_user)
-            if not pr.issubset(ap):
-                raise DepartmentInvalidRolesError()
-
-            aff_rows = data.affiliate_roles or []
-            aff_payload = {str(x.dept_id): [int(r) for r in x.role_ids] for x in aff_rows}
-            if set(aff_payload.keys()) != set(secondary_keys):
-                raise DepartmentInvalidRolesError()
-
-            picked = set(pr)
-            for dk, rlist in aff_payload.items():
-                rs = {int(x) for x in rlist}
-                a_set = await cls._assignable_role_id_set(dk, login_user)
-                if not rs.issubset(a_set):
-                    raise DepartmentInvalidRolesError()
-                picked |= rs
-
-            new_roles = (role_ids_user - (role_ids_user & u_union)) | picked
-
-        if AdminRole in new_roles:
-            raise DepartmentInvalidRolesError()
-
-        need_add = sorted(new_roles - role_ids_user)
-        need_del = sorted(role_ids_user - new_roles)
-        if need_add:
-            UserRoleDao.add_user_roles(user_id, need_add)
-        if need_del:
-            UserRoleDao.delete_user_roles(user_id, need_del)
-        if need_add or need_del:
-            await LegacyRBACSyncService.sync_user_role_change(
-                user_id,
-                role_ids_user,
-                new_roles,
-            )
+        await replace_policy_bindings(user_id, final_home, replace_ids, picked, operator_id=login_user.user_id)

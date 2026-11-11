@@ -4338,7 +4338,9 @@
   "department": {
     "defaultOrganization": "Default Org",
     "searchUsersPlaceholder": "Search user name or ID",
-    "searchMember": "Search user name or ID"
+    "searchMember": "Search user name or ID",
+    "foreignMembershipPolicyHint": "Cross-tenant membership keeps organization relationships only. Roles, menus and quotas do not apply here.",
+    "personRoleBindingHint": "Roles belong to the person in their home tenant. Departments in that tenant share the same bindings; changes apply to all of them."
   },
   "tenant": {
     "searchUser": "Search user name or ID",

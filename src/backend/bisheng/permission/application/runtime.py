@@ -66,6 +66,7 @@ from bisheng.permission.domain.services.owner_service import (
     OwnerProjectionContext,
 )
 from bisheng.permission.domain.services.permission_action_service import (
+    DATA_SCOPE_ALL,
     F048PermissionService,
     PermissionActor,
 )
@@ -514,6 +515,50 @@ class F048PermissionRuntime:
                 permission_mode="CUSTOM",
             )
         )
+
+    async def resume_created(self, *, actor, target, owner_user_id):
+        """Resume a business-verified pending tool/workflow from its frozen creation ledger."""
+        from bisheng.permission.domain.repositories.creation_recovery_repository import CreationRecoveryRepository
+
+        if (
+            target.resource_type not in {"tool", "workflow"}
+            or target.resource_version != 0
+            or actor.subject_type != "user"
+            or actor.user_id != owner_user_id
+            or actor.data_scope != DATA_SCOPE_ALL
+        ):
+            raise PermissionInvalidResourceError()
+        repository = CreationRecoveryRepository()
+        key = _idempotency_key("create", target.tenant_id, target.resource_type, target.resource_id, owner_user_id)
+        operation = await repository.aget_operation_by_idempotency(key)
+        if operation is None:
+            return await self.authorize_created(
+                actor=actor, target=target, owner_user_id=owner_user_id, mode="CUSTOM", idempotency_key=key
+            )
+        plan = restore_projection_plan(operation, await repository.aget_operation_tuples(operation.id))
+        catalog = await self._runtime_catalog()
+        if (
+            plan.tenant_id != target.tenant_id
+            or plan.scope_type != "resource"
+            or plan.scope_key != f"{target.resource_type}:{target.resource_id}"
+            or plan.operation_type != "RESOURCE_CREATE"
+            or plan.operator_id != actor.user_id
+            or plan.expected_version != 0
+            or plan.target_version != 1
+            or (plan.store_id, plan.model_id) != (catalog.store_id, catalog.model_id)
+            or any(delta.action != "WRITE" for delta in plan.deltas)
+        ):
+            raise PermissionInvalidResourceError()
+        if str(operation.status) == "FAILED_CLOSED":
+            raise PermissionPublishNotReadyError(msg="Creation requires controlled failed-closed recovery")
+        if str(operation.status) == "PREPARED" and not await repository.has_prepared_owner(target, int(operation.id)):
+            # Crash between durable plan and owner SQL prepare: recreate the same deterministic
+            # owner context. prepare() compares the complete checksum before any mirror write.
+            return await self.authorize_created(actor=actor, target=target, owner_user_id=owner_user_id,
+                                                mode="CUSTOM", idempotency_key=key)
+        outcome = await self._projection.reconcile_operation(int(operation.id))
+        await repository.finalize_creation(target, int(operation.id), owner_user_id)
+        return outcome
 
     async def rollback_created(
         self,

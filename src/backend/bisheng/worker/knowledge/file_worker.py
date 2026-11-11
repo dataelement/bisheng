@@ -16,7 +16,7 @@ from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
@@ -35,54 +35,64 @@ def file_copy_celery(param: json) -> str:
     3. Replication of vectors
     """
 
-    source_knowledge_id = param.get("source_knowledge_id")
-    target_id = param.get("target_id")
-    login_user_id = param.get("login_user_id")
-    logger.info(
-        "file_copy_celery start source_id={} target_id={}",
-        source_knowledge_id,
-        target_id,
+    from bisheng.knowledge.application.copy_execution import claim_copy, copy_execution_scope
+    from bisheng.knowledge.domain.repositories.copy_repository import CopyRepository
+
+    source_knowledge_id, target_id, login_user_id = (
+        param["source_knowledge_id"],
+        param["target_id"],
+        param["login_user_id"],
     )
-    page_size = 20
-    page_num = 1
-    source_knowledge = KnowledgeDao.query_by_id(source_knowledge_id)
-    target_knowledge = KnowledgeDao.query_by_id(target_id)
+    tenant_id = param.get("tenant_id")
+    with copy_execution_scope(tenant_id):
+        pair = claim_copy(tenant_id, source_knowledge_id, target_id, login_user_id)
+        if pair is None:
+            return "duplicate copy ignored"
+        source_knowledge, target_knowledge = pair
+        try:
+            page_size = 20
+            page_num = 1
 
-    target_list: list[KnowledgeFile] = KnowledgeFileDao.get_file_by_condition(target_id)  # All files
-    if target_list:
-        target_list = [t.md5 for t in target_list]
-    while True:
-        if source_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
-            files = KnowledgeFileDao.get_file_by_filters(source_knowledge_id, page=page_num, page_size=page_size)
-
-            if not files:
-                # No more documents Buatmilvus collection And es index
-                create_milvus_col_and_es_index(source_knowledge, target_knowledge)
-                break
-
-            for one in files:
-                if target_list and one.md5 in target_list:
-                    # Duplicate Tasks Prevent Duplicate Writes
-                    continue
-                try:
-                    copy_normal(
-                        one,
-                        source_knowledge,
-                        target_knowledge,
-                        login_user_id,
+            target_list: list[KnowledgeFile] = KnowledgeFileDao.get_file_by_condition(target_id)  # All files
+            if target_list:
+                target_list = [t.md5 for t in target_list]
+            while True:
+                if source_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+                    files = KnowledgeFileDao.get_file_by_filters(
+                        source_knowledge_id, page=page_num, page_size=page_size
                     )
-                except Exception as e:
-                    logger.error(f"copy file error: {one.file_name} {e}")
-        page_num += 1
-        if not files or len(files) < page_size:
-            break
-    # Recovery status
-    logger.info("file_copy_celery end")
-    target_knowledge.state = 1
-    KnowledgeDao.update_state(
-        knowledge_id=source_knowledge.id, state=KnowledgeState.PUBLISHED, update_time=source_knowledge.update_time
-    )
-    KnowledgeDao.update_one(target_knowledge)
+
+                    if not files:
+                        # No more documents Buatmilvus collection And es index
+                        create_milvus_col_and_es_index(source_knowledge, target_knowledge)
+                        break
+
+                    for one in files:
+                        if target_list and one.md5 in target_list:
+                            # Duplicate Tasks Prevent Duplicate Writes
+                            continue
+                        try:
+                            copy_normal(
+                                one,
+                                source_knowledge,
+                                target_knowledge,
+                                login_user_id,
+                            )
+                        except Exception:
+                            logger.exception("Copy file failed id={}", one.id)
+                            raise
+                page_num += 1
+                if not files or len(files) < page_size:
+                    create_milvus_col_and_es_index(source_knowledge, target_knowledge)
+                    break
+            from bisheng.knowledge.application.copy_execution import assert_copy_actor
+
+            assert_copy_actor(tenant_id, source_knowledge, login_user_id)
+            CopyRepository.finish(tenant_id, source_knowledge_id, target_id, succeeded=True)
+        except Exception:
+            logger.exception("Copy failed source={} target={}", source_knowledge_id, target_id)
+            CopyRepository.finish(tenant_id, source_knowledge_id, target_id, succeeded=False)
+            raise
     return "copy task done"
 
 
@@ -165,7 +175,7 @@ def copy_normal(
         knowledge_new.remark = KnowledgeFileFailedError(exception=e).to_json_str()
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
-        return
+        raise
 
     # copy vector
     try:
@@ -181,6 +191,7 @@ def copy_normal(
         knowledge_new.remark = KnowledgeFileFailedError(exception=e).to_json_str()
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
+        raise
 
 
 def copy_vector(

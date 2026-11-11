@@ -39,7 +39,6 @@ from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.user.domain.models.user import User, UserCreate, UserDao, UserLogin, UserRead
-from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid, get_request_ip, md5_hash
 from bisheng.utils.constants import RSA_KEY
 
@@ -282,7 +281,7 @@ class UserService:
         return md5_hash(plain)
 
     @classmethod
-    def create_user(cls, request: Request, login_user: LoginUser, req_data: "CreateUserReq"):
+    async def create_user(cls, request: Request, login_user: LoginUser, req_data: "CreateUserReq"):
         """
         Create User
         """
@@ -304,7 +303,18 @@ class UserService:
         role_ids = list(dict.fromkeys(role_ids))
         if not role_ids:
             role_ids = [DefaultRole]
-        user = UserDao.add_user_with_groups_and_roles(user, group_ids, role_ids)
+        from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+        from bisheng.role.application.effective_roles import validate_policy_role_ids
+        from bisheng.tenant.domain.services.user_tenant_sync_service import UserTenantSyncService
+        from bisheng.user.application.policy_bindings import grant_policy_bindings
+
+        # This legacy account form has no primary department: the authoritative initial home is Root.
+        # Creating a child-tenant member uses the department-member endpoint instead.
+        await validate_policy_role_ids(1, role_ids)
+        user = UserDao.add_user_with_groups_and_roles(user, group_ids, [])
+        with tenant_execution_scope(1), strict_tenant_filter():
+            home = await UserTenantSyncService.sync_user(user.user_id)
+        await grant_policy_bindings(user.user_id, home.id, role_ids, operator_id=login_user.user_id)
         return user
 
     @staticmethod
@@ -507,11 +517,10 @@ class UserService:
         # NoTenantContextError because do_orm_execute can't infer a tenant for
         # tenant-aware tables (userrole/department/usergroup/roleaccess).
         with bypass_tenant_filter():
-            if role_ids is None:
-                roles = await UserRoleDao.aget_user_roles(db_user.user_id)
-                resolved_role_ids = [role.role_id for role in roles]
-            else:
-                resolved_role_ids = list(role_ids)
+            from bisheng.role.application.effective_roles import load_effective_roles
+
+            policy = await load_effective_roles(db_user.user_id)
+            resolved_role_ids = ([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids)
             if AdminRole in resolved_role_ids:
                 return None
             if is_department_admin is None:
@@ -571,20 +580,6 @@ class UserService:
             return UserValidateError.return_resp()
 
         await cls.clear_error_password_key(db_user.user_id)
-
-        with bypass_tenant_filter():
-            login_user_roles = await UserRoleDao.aget_user_roles(db_user.user_id)
-            login_role_ids = [role.role_id for role in login_user_roles]
-            login_is_department_admin = False
-            if AdminRole not in login_role_ids:
-                login_is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(db_user.user_id))
-            no_role_resp = await cls._reject_login_if_user_has_no_usable_access(
-                db_user,
-                role_ids=login_role_ids,
-                is_department_admin=login_is_department_admin,
-            )
-        if no_role_resp is not None:
-            return no_role_resp
 
         # Multi-tenant login flow
         tenant_id = None
@@ -655,9 +650,8 @@ class UserService:
         # v2.5.1 F012: resolve canonical leaf tenant + bump token_version.
         # sync_user is a no-op when the resolved leaf already matches the
         # active user_tenant row; otherwise it swaps the row, writes the
-        # audit log and rewrites FGA tuples. Fail-open: if the service
-        # errors (unusual — typically config missing) we fall back to the
-        # tenant_id computed above so the user can still log in.
+        # audit log and rewrites FGA tuples. A failure cannot authorize a
+        # guessed legacy home before the current policy is verified.
         try:
             from bisheng.tenant.domain.constants import UserTenantSyncTrigger
             from bisheng.tenant.domain.services.user_tenant_sync_service import (
@@ -673,11 +667,27 @@ class UserService:
             if leaf is not None and getattr(leaf, "id", None):
                 tenant_id = leaf.id
         except Exception as exc:
-            logger.warning(
-                "F012 login-time tenant sync failed for user %d: %s — falling back to legacy tenant resolution",
-                db_user.user_id,
-                exc,
-            )
+            from bisheng.common.errcode.base import BaseErrorCode
+            from bisheng.common.errcode.role import RolePolicyUnavailableError
+
+            if isinstance(exc, BaseErrorCode):
+                raise
+            logger.exception("Login tenant synchronization failed for user={}", db_user.user_id)
+            raise RolePolicyUnavailableError() from exc
+
+        from bisheng.role.application.effective_roles import load_effective_roles
+
+        policy = await load_effective_roles(db_user.user_id, expected_home_tenant_id=tenant_id)
+        login_role_ids = ([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids)
+        with bypass_tenant_filter():
+            login_is_department_admin = False
+            if not policy.is_identity_admin:
+                login_is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(db_user.user_id))
+        no_role_resp = await cls._reject_login_if_user_has_no_usable_access(
+            db_user, role_ids=login_role_ids, is_department_admin=login_is_department_admin
+        )
+        if no_role_resp is not None:
+            return no_role_resp
 
         # Block login when the resolved leaf tenant is disabled/archived.
         # Without this gate the JWT is issued and the very next request gets

@@ -359,6 +359,20 @@ class FlowService(BaseService):
         raise ValueError("flow is not supported")
 
     @classmethod
+    async def complete_creation(cls, request, login_user, flow_info):
+        from bisheng.common.errcode.flow import WorkflowCreationPendingError
+        from bisheng.workflow.domain.repositories.creation_repository import CreationRepository
+
+        try:
+            await cls.create_flow_hook(request, login_user, flow_info)
+        except Exception as exc:
+            current = await CreationRepository.load(flow_info.tenant_id, flow_info.id)
+            if current is not None and current.creation_state == "READY":
+                raise
+            logger.exception("Workflow creation pending: tenant={} id={}", flow_info.tenant_id, flow_info.id)
+            raise WorkflowCreationPendingError(resource_id=flow_info.id) from exc
+
+    @classmethod
     async def create_flow_hook(
         cls,
         request: Request,
@@ -373,6 +387,9 @@ class FlowService(BaseService):
             actor=await resolve_permission_actor(login_user),
         )
 
+        from bisheng.workflow.domain.repositories.creation_repository import CreationRepository
+
+        await CreationRepository.ready(flow_info.tenant_id, flow_info.id)
         AuditLogService.create_build_workflow(login_user, get_request_ip(request), flow_info.id)
 
         cls.get_logo_share_link(flow_info.logo)
@@ -427,6 +444,45 @@ class FlowService(BaseService):
         )
         delete_app_guest_link("workflow", str(flow_info.id))
         return True
+
+    @classmethod
+    async def resume_creation(cls, resource_id, login_user):
+        from bisheng.common.errcode.permission import PermissionInvalidResourceError
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.permission.application.creation_recovery import resume_created_permission
+        from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+        from bisheng.role.application.effective_roles import load_effective_roles
+        from bisheng.user.domain.services.auth import LoginUser
+        from bisheng.workflow.domain.repositories.creation_repository import CreationRepository
+
+        tenant_id = get_current_tenant_id()
+        row = await CreationRepository.load(tenant_id, resource_id)
+        policy = await load_effective_roles(login_user.user_id)
+        if (
+            row is None
+            or row.user_id != login_user.user_id
+            or (policy.home_tenant_id != tenant_id and not policy.is_identity_admin)
+        ):
+            raise PermissionInvalidResourceError()
+        if row.creation_state == "READY":
+            return row
+        if not policy.is_identity_admin:
+            await LoginUser.assert_effective_web_menu_contains(login_user.user_id, "create_app")
+        fresh_user = await LoginUser.init_login_user(login_user.user_id, login_user.user_name)
+        actor = await resolve_permission_actor(fresh_user)
+        await resume_created_permission(
+            actor=actor,
+            target=VerifiedPermissionTarget(
+                tenant_id=tenant_id,
+                resource_type="workflow",
+                resource_id=str(row.id),
+                resource_version=0,
+                context_version=cls._new_permission_record(row).context_version,
+            ),
+            owner_user_id=row.user_id,
+        )
+        await CreationRepository.ready(tenant_id, row.id)
+        return await CreationRepository.load(tenant_id, row.id)
 
     @staticmethod
     def _new_permission_record(

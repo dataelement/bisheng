@@ -181,7 +181,7 @@ class UnifiedPolicyRepository:
         tenant = require_tenant()
         if lock:
             self.memberships._lock_tenant()
-        departments = self.memberships._department_ancestor_ids(user_id, self.memberships._departments())
+        departments = self.memberships._department_ancestor_ids(user_id, [])
         roles = self.memberships._role_ids(user_id)
         with strict_tenant_filter():
             models = self.session.exec(select(ModelVisibility)).all()

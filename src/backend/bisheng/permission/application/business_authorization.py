@@ -28,6 +28,23 @@ _MAX_BATCH_CHECKS = 100
 
 
 @contextual_operation
+async def _require_creation_ready(resource_type, resource_ids):
+    from bisheng.core.context.tenant import get_current_tenant_id
+
+    if resource_type == "knowledge_library":
+        from bisheng.knowledge.application.copy_execution import require_copy_ready
+
+        await require_copy_ready(resource_ids)
+        return
+    if resource_type == "tool":
+        from bisheng.tool.application.creation import require_creation_ready
+    elif resource_type == "workflow":
+        from bisheng.workflow.application.creation import require_creation_ready
+    else:
+        return
+    await require_creation_ready(get_current_tenant_id(), resource_ids)
+
+
 async def check_business_action(
     login_user: LoginPermissionIdentity,
     *,
@@ -38,6 +55,7 @@ async def check_business_action(
 ) -> bool:
     """Check one business-verified resource through the sole F048 facade."""
 
+    await _require_creation_ready(resource_type, [resource_id])
     actor = actor or await resolve_permission_actor(login_user)
     if action in {"visible", "use"} and resource_type in {"workflow", "assistant"}:
         from bisheng.public_endpoints.domain.services.guest_policy import (
@@ -126,6 +144,7 @@ async def batch_check_business_actions(
     if not normalized_ids or not normalized_actions:
         return {}
 
+    await _require_creation_ready(resource_type, normalized_ids)
     actor = await resolve_permission_actor(login_user)
     if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
         # The decision layer already allows a super admin unconditionally, but it

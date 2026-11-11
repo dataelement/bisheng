@@ -440,17 +440,20 @@ async def create_flow(
     # before_flush hook (bisheng.core.database.tenant_filter) auto-fills it
     # from current_tenant_id. Keeping this explicit assignment so future
     # callers without an HTTP middleware (CLI, scripts) still set it right.
-    db_flow.tenant_id = login_user.tenant_id
+    from bisheng.core.context.tenant import get_current_tenant_id
+
+    db_flow.tenant_id = get_current_tenant_id()
+    db_flow.creation_state = "PENDING"
     db_flow.create_time = None
     db_flow.update_time = None
     db_flow.flow_type = FlowType.WORKFLOW.value
     # Create New Skill
     db_flow = FlowDao.create_flow(db_flow, FlowType.WORKFLOW.value)
 
+    await FlowService.complete_creation(request, login_user, db_flow)
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id)
     ret = FlowRead.model_validate(db_flow)
     ret.version_id = current_version.id
-    await FlowService.create_flow_hook(request, login_user, db_flow)
     return resp_200(data=ret)
 
 

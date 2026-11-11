@@ -717,5 +717,10 @@
   "25025": "A permission model with this name already exists.",
   "25026": "The last owner of this resource cannot be removed.",
   "19704": "The tenant view changed. Refresh the page before continuing.",
-  "19705": "No valid tenant view is available. Contact an administrator."
+  "19705": "No valid tenant view is available. Contact an administrator.",
+  "24006": "Current role policy could not be verified. Please try again later.",
+  "19404": "Resource usage could not be verified. Adding resources is temporarily unavailable.",
+  "19405": "The resource owner has moved to another tenant. Complete the resource handover first.",
+  "15090": "Tool creation is pending. Contact an administrator for inspection.",
+  "10590": "Workflow creation is pending. Contact an administrator for inspection."
 }
