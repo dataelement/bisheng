@@ -52,6 +52,7 @@ class DeploymentDescriptor:
     cpu_budget_millicores: int
     status_policy_revision: str
     document: dict
+    raw_policy: str = ""
 
 
 @dataclass(frozen=True)
@@ -140,7 +141,16 @@ class KubernetesConfig:
             raise KubernetesConfigurationError("k8s_descriptor_unavailable") from None
         if not isinstance(document, dict) or type(document.get("schema_version")) is not int:
             raise KubernetesConfigurationError("k8s_descriptor_invalid")
-        if document["schema_version"] != 1:
+        policy_raw = ""
+        if document["schema_version"] == 2:
+            from runtime_manager.deployment_policy import DeploymentPolicy, PolicyError
+
+            try:
+                policy = DeploymentPolicy.parse(raw.decode("utf-8"))
+                document, policy_raw = policy.document, policy.raw
+            except PolicyError:
+                raise KubernetesConfigurationError("k8s_deployment_policy_invalid") from None
+        elif document["schema_version"] != 1:
             raise KubernetesConfigurationError("k8s_descriptor_version_unsupported")
         if (document.get("cluster_id"), document.get("namespace")) != (self.cluster_id, self.namespace):
             raise KubernetesConfigurationError("k8s_descriptor_scope_mismatch")
@@ -160,4 +170,5 @@ class KubernetesConfig:
             cpu_budget_millicores=_positive_int(document, "cpu_budget_millicores"),
             status_policy_revision=policy,
             document=document,
+            raw_policy=policy_raw,
         )
