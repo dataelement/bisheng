@@ -153,7 +153,7 @@ def validate_certificate(row, history, writer):
     for kind, proof in cert["proofs"].items():
         if (
             type(proof) is not dict
-            or set(proof) != _PROOF_FIELDS
+            or set(proof) not in (_PROOF_FIELDS, _PROOF_FIELDS | {"invalid_scope_count"})
             or type(proof["extractor_version"]) is not str
             or proof["extractor_version"] != reference_extractor_versions()[kind]
             or not _hash(proof["source_digest"])
@@ -162,17 +162,15 @@ def validate_certificate(row, history, writer):
             blocked("source_proof")
         if any(
             type(proof[name]) is not int or proof[name] < 0
-            for name in _PROOF_FIELDS - {"extractor_version", "source_digest", "reference_digest"}
+            for name in set(proof) - {"extractor_version", "source_digest", "reference_digest"}
         ):
             blocked("source_counts")
-        if (
-            proof["zero_reference_count"] > proof["source_count"]
-            or proof["reference_count"]
-            != proof["valid_count"] + proof["invalid_legacy_count"] + proof["invalid_deleted_count"]
-        ):
+        if proof["zero_reference_count"] > proof["source_count"] or proof["reference_count"] != proof[
+            "valid_count"
+        ] + proof["invalid_legacy_count"] + proof["invalid_deleted_count"] + proof.get("invalid_scope_count", 0):
             blocked("source_count_closure")
         if row["origin"] == "empty_tenant" and any(
-            proof[name] for name in _PROOF_FIELDS - {"extractor_version", "source_digest", "reference_digest"}
+            proof[name] for name in set(proof) - {"extractor_version", "source_digest", "reference_digest"}
         ):
             blocked("empty_tenant_not_empty")
     if any(item["phase"] not in {"completed", "failed"} for item in history):
@@ -434,6 +432,7 @@ async def _certify_created_tenant(session, *, tenant_id, prior_tenant_ids, prior
             "valid_count": 0,
             "invalid_legacy_count": 0,
             "invalid_deleted_count": 0,
+            "invalid_scope_count": 0,
             "source_digest": digest([]),
             "reference_digest": digest([]),
         }

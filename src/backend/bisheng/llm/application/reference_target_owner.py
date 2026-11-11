@@ -11,7 +11,12 @@ from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.llm.domain.repositories.reference_target_repository import ModelReferenceTargetRepository
 from bisheng.permission.application import PermissionSubject, get_permission_relation_api
 from bisheng.permission.application.relation_api import get_permission_relation_api_sync
-from bisheng.resource_reference.application.contracts import LegacyEvidence, TargetLockReceipt, TransactionIdentity
+from bisheng.resource_reference.application.contracts import (
+    LegacyEvidence,
+    TargetLockReceipt,
+    TransactionIdentity,
+    is_preserved_foreign_model_reference,
+)
 from bisheng.resource_reference.application.target_state import resolve_target_state
 
 if TYPE_CHECKING:
@@ -99,7 +104,10 @@ class ModelReferenceTargetOwner:
                 {
                     int(row.model_server_id)
                     for row in observations
-                    if row.exists and row.deletion is None and row.target_tenant_id != tenant_id
+                    if row.exists
+                    and row.deletion is None
+                    and row.target_tenant_id == 1
+                    and row.target_tenant_id != tenant_id
                 }
             )
         )
@@ -147,6 +155,17 @@ class ModelReferenceTargetOwner:
 
     @staticmethod
     def _new_binding_allowed(observation, source_key, allowed):
+        if (
+            observation.exists
+            and observation.deletion is None
+            and is_preserved_foreign_model_reference(
+                observation.original,
+                source_key=source_key,
+                target=observation.key,
+                target_tenant_id=observation.target_tenant_id,
+            )
+        ):
+            return False
         if (
             not observation.exists
             or observation.deletion is not None

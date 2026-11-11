@@ -427,6 +427,58 @@ class UnificationResourceRepository:
     ) -> InventoryPage[FileRow]:
         return await self._page(session, KnowledgeFile, FILE_COLUMNS, FileRow, after_id, limit)
 
+    async def acount_resource_files(self, session: AsyncSession, *, resource_ids: tuple[int, ...]):
+        """Count every managed file/folder in one native tenant snapshot."""
+        tenant = _scope(session)
+        if (
+            type(resource_ids) is not tuple
+            or not 1 <= len(resource_ids) <= 199
+            or len(set(resource_ids)) != len(resource_ids)
+            or any(type(ident) is not int or ident <= 0 for ident in resource_ids)
+        ):
+            _blocked("invalid_file_count_resources")
+        resources = await self._read(
+            session,
+            select(Knowledge.id).where(Knowledge.tenant_id == tenant, Knowledge.id.in_(resource_ids)),
+        )
+        if {row["id"] for row in resources} != set(resource_ids):
+            _blocked("file_count_resource_scope_changed")
+        rows = await self._read(
+            session,
+            select(KnowledgeFile.knowledge_id, func.count().label("file_count"))
+            .where(KnowledgeFile.tenant_id == tenant, KnowledgeFile.knowledge_id.in_(resource_ids))
+            .group_by(KnowledgeFile.knowledge_id),
+        )
+        counts = dict.fromkeys(resource_ids, 0)
+        for row in rows:
+            counts[row["knowledge_id"]] = row["file_count"]
+        return counts
+
+    async def avalidate_retained_index_bindings(self, session: AsyncSession, *, bindings: tuple):
+        tenant = _scope(session)
+        if type(bindings) is not tuple or not bindings:
+            _blocked("retained_index_bindings_required")
+        for offset in range(0, len(bindings), 199):
+            batch = bindings[offset : offset + 199]
+            if any(type(row) is not tuple or len(row) != 3 for row in batch):
+                _blocked("invalid_retained_index_binding")
+            ids = tuple(row[0] for row in batch)
+            counts = await self.acount_resource_files(session, resource_ids=ids)
+            rows = await self._read(
+                session,
+                select(Knowledge.id, Knowledge.type, Knowledge.index_name, Knowledge.collection_name).where(
+                    Knowledge.tenant_id == tenant, Knowledge.id.in_(ids)
+                ),
+            )
+            expected = {ident: (index, collection) for ident, index, collection in batch}
+            if any(
+                row["type"] not in {0, 3}
+                or counts[row["id"]] != 0
+                or (row["index_name"], row["collection_name"]) != expected[row["id"]]
+                for row in rows
+            ):
+                _blocked("retained_index_live_state_changed")
+
     async def alist_documents(
         self, session: AsyncSession, *, after_id: int | None = None, limit: int = 200
     ) -> InventoryPage[DocumentRow]:

@@ -14,7 +14,12 @@ from bisheng.llm.domain.repositories.reference_target_repository import (
     ModelReferenceTargetRepository,
     _original,
 )
-from bisheng.resource_reference.application.contracts import DeletionEvidence, TargetKey, TargetType
+from bisheng.resource_reference.application.contracts import (
+    DeletionEvidence,
+    TargetKey,
+    TargetType,
+    is_preserved_foreign_model_reference,
+)
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
 
@@ -140,7 +145,21 @@ class ModelSourceReadTargetRepository:
         keys = tuple(sorted(target_keys, key=lambda key: key.lock_order_key))
         originals_by_key = self._originals_by_key(originals, keys)
         originals = tuple(row for bucket in originals_by_key.values() for row in bucket)
-        owners = tuple(sorted({tenant_id, ROOT_TENANT_ID}))
+        owners = tuple(
+            sorted(
+                {tenant_id, ROOT_TENANT_ID}
+                | {
+                    row.target_tenant_id
+                    for row in originals
+                    if is_preserved_foreign_model_reference(
+                        row,
+                        source_key=snapshot.source_key,
+                        target=TargetKey(row.target_type, row.target_id),
+                        target_tenant_id=row.target_tenant_id,
+                    )
+                }
+            )
+        )
         if any(row.target_tenant_id not in (*owners, None) or row.target_space_id is not None for row in originals):
             raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
         ids = {int(key.target_id) for key in keys}
@@ -187,6 +206,9 @@ class ModelSourceReadTargetRepository:
                     and (
                         row.tenant_id != ROOT_TENANT_ID
                         or not ModelReferenceTargetRepository._child(topology, tenant_id)
+                    )
+                    and not is_preserved_foreign_model_reference(
+                        original, source_key=snapshot.source_key, target=key, target_tenant_id=row.tenant_id
                     )
                 )
             ):
@@ -258,7 +280,21 @@ class ModelSourceReadTargetRepository:
         keys = tuple(sorted(target_keys, key=lambda key: key.lock_order_key))
         originals_by_key = self._originals_by_key(originals, keys)
         originals = tuple(row for bucket in originals_by_key.values() for row in bucket)
-        owners = tuple(sorted({tenant_id, ROOT_TENANT_ID}))
+        owners = tuple(
+            sorted(
+                {tenant_id, ROOT_TENANT_ID}
+                | {
+                    row.target_tenant_id
+                    for row in originals
+                    if is_preserved_foreign_model_reference(
+                        row,
+                        source_key=snapshot.source_key,
+                        target=TargetKey(row.target_type, row.target_id),
+                        target_tenant_id=row.target_tenant_id,
+                    )
+                }
+            )
+        )
         if any(row.target_tenant_id not in (*owners, None) or row.target_space_id is not None for row in originals):
             raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
         ids = {int(key.target_id) for key in keys}
@@ -305,6 +341,9 @@ class ModelSourceReadTargetRepository:
                     and (
                         row.tenant_id != ROOT_TENANT_ID
                         or not ModelReferenceTargetRepository._child(topology, tenant_id)
+                    )
+                    and not is_preserved_foreign_model_reference(
+                        original, source_key=snapshot.source_key, target=key, target_tenant_id=row.tenant_id
                     )
                 )
             ):

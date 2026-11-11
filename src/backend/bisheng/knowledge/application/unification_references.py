@@ -207,7 +207,10 @@ class ReferenceMigration:
         return facts
 
     def _templates(self, key, pairs, facts, revision):
-        values, counts = [], {"valid_count": 0, "invalid_legacy_count": 0, "invalid_deleted_count": 0}
+        values, counts = (
+            [],
+            {"valid_count": 0, "invalid_legacy_count": 0, "invalid_deleted_count": 0, "invalid_scope_count": 0},
+        )
         for reference, original in pairs:
             decision = source_decision(original, tenant_id=key.tenant_id).data["disposition"]
             state, fact = parse_frozen(original.frozen_state), facts[reference.target]
@@ -229,6 +232,8 @@ class ReferenceMigration:
                 if legacy
                 else "invalid_deleted_count"
                 if decision == "existing_invalid_deleted"
+                else "invalid_scope_count"
+                if decision == "existing_invalid_scope"
                 else "valid_count"
             ] += 1
             deletion = state["target_tombstones"] or state["ancestor_tombstones"]
@@ -410,6 +415,7 @@ class ReferenceMigration:
                 "valid_count": 0,
                 "invalid_legacy_count": 0,
                 "invalid_deleted_count": 0,
+                "invalid_scope_count": 0,
                 "source_digest": digest({"seed": _seed(self.frozen, tenant), "retired": retired_digest}),
                 "reference_digest": _seed(self.frozen, tenant),
             }

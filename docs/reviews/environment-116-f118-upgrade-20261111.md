@@ -303,3 +303,11 @@ tenant1 在 `PhysicalInventoryReader._index → _physical_batch` 报 `migration_
 当前已证实的根因是预检 `_milvus_compatible/_es_compatible` 对原 schema 的要求：缺少或类型不符的 document_id / knowledge_id 被拒绝；样例旧集合只有 source/text/pk/vector。这个事实说明“原结构未满足当前校验”，不等于F118必须更换索引，也尚不能断言校验应无条件放宽。后续须沿保留原绑定的合同核查旧结构如何解释、是否存在可证明的兼容映射，或更早版本的索引转换前置条件未满足；不能把切换空索引或强制兼容标志当作迁移成功。
 
 原准备方案和备份作为历史证据保留，新增 decision.json 标记withdrawn，准备脚本的apply入口已禁用以免误执行。不修改spec/design以追认该偏差，不改写旧索引，不跳过物理完整性检查。42条model清空及97402仅level计数修正是此前已执行事项，均与索引绑定切换无关。
+
+## 原索引保留和跨租户失效增量（2026-11-11 后续）
+
+用户明确拒绝换空索引并要求原技术方案继续；另确认原助手 `e029e59bda05450aaf82ac11d252c3a7` 的模型800配置保留为跨租户失效，不共享、不复制、不新增权限，运行/发布继续拒绝。相应 AC-93 窄例外、design、QA 与发布合同已同步。14 个生产文件兼容补丁：仅对没有 SQL 文件或目录的原资源冻结可核对的索引保留证明，原 physical identifier_compatible=false 及 schema/count/绑定仍如实保留；M3 和续跑之前核对所有相关租户实时零文件集与原绑定。旧模型槽位登记真实 target_tenant_id，并单列 invalid_scope_count；同步/异步 Owner 仅允许原槽位保留/移除，详情返回失效，运行、发布、预览与新增/复制继续拒绝。
+
+本地组合回归 2,041 passed / 1 failed；失败是频道配额加载角色策略触发 no-network，在改动前基线也单项复现。最终关键选集 72 passed；含原索引 SQL 转换/续跑、文件/目录/绑定漂移拒绝和真实 M2/M3/M4 跨租户失效覆盖闭合。代码审查见 `f118-preserve-index-and-invalid-scope-20261111.md`；Ruff、架构 guard 与 diff-check 通过。现场原 13 个文件与本次基线完全匹配，新增物理保留证明模块原不存在，原件及最终候选哈希保存于 `preserve-index-and-scope-fix-v2/`。
+
+进一步核对已备份的 103 条缺 mode 文件：全部是 Root 租户 space_upload 的 FAILED 文件，仍有非空对象名及非零文件大小；102 条在知识资源3494下引用已不存在的目录90829，另1条在3490下引用已不存在的89614。上传失败或缺权限元数据不能当作文件可删除证据；本次未删这些记录、未清对象文件、未重建目录或凭空补授权。其他 8 条层级计数错误同时有 FGA 多 parent，328 条资源已不存在的权限 mode 及关联、170 条无容器且无 TagLink 的标签、现有空间3426的授权适用范围闸门仍需处理。保留完整诊断及行级备份，未绕过检查。

@@ -18,6 +18,8 @@ from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.knowledge.application.unification_artifacts import UnificationArtifactStore
 from bisheng.knowledge.application.unification_conversion_codec import decode_sql_conversion_page
 from bisheng.knowledge.application.unification_inventory import UnificationInventoryApplication
+from bisheng.knowledge.application.unification_inventory_codec import decode_inventory_page
+from bisheng.knowledge.domain.repositories.unification_resource_repository import UnificationResourceRepository
 from bisheng.knowledge.domain.repositories.unification_run_repository import KnowledgeUnificationRunRepository
 from bisheng.knowledge.domain.services.unification_conversion import SQLConversionProgress, UnificationConversionService
 
@@ -121,11 +123,29 @@ class UnificationSQLConversionApplication:
     async def _plan(self, frozen, *, environment, backup_ref, schema_ref):
         members = {tenant: [] for tenant in frozen.tenant_ids}
         totals, deferred = dict.fromkeys(frozen.tenant_ids, 0), dict.fromkeys(frozen.tenant_ids, 0)
+        physical, retained = {}, {tenant: [] for tenant in frozen.tenant_ids}
         # Exhaust the entire verified graph, including late non-SQL leaves and
         # backup/schema materials, before opening any business-write transaction.
         async for page in self.reader.aiter_frozen_pages(
             frozen, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref
         ):
+            if page.section == "physical":
+                decoded = decode_inventory_page(
+                    page.content,
+                    run_id=frozen.run_id,
+                    section=page.section,
+                    scope=page.scope,
+                    tenant_id=page.tenant_id,
+                    page_index=page.page_index,
+                    kind=page.kind,
+                )
+                for record in decoded.records:
+                    value = record.data
+                    key = (page.tenant_id, value["space_id"])
+                    if record.record_type == "physical_index":
+                        physical[key] = (value["space_id"], value["index_name"], value["collection_name"])
+                    elif record.record_type == "physical_index_retention":
+                        retained[page.tenant_id].append(key)
             if page.kind != "plan" or page.section != "conversion":
                 continue
             if page.scope != "tenant" or page.tenant_id not in members:
@@ -144,7 +164,20 @@ class UnificationSQLConversionApplication:
                     page.tenant_id, page.page_index, page.record_count, len(decoded.commands), dict(page.descriptor)
                 )
             )
-        return members, totals, deferred
+        return (
+            members,
+            totals,
+            deferred,
+            {tenant: tuple(physical[key] for key in keys) for tenant, keys in retained.items() if keys},
+        )
+
+    async def _verify_retained_indexes(self, frozen, retained):
+        # Check all tenants before the first business write, including resume.
+        for tenant, bindings in retained.items():
+            with tenant_execution_scope(tenant):
+                async with self._session() as session, session.begin():
+                    await self._scope_run(session, frozen)
+                    await UnificationResourceRepository().avalidate_retained_index_bindings(session, bindings=bindings)
 
     async def _page(self, frozen, member):
         content = await self.store.aload_canonical(member.descriptor, run_id=frozen.run_id, kind="plan")
@@ -308,9 +341,10 @@ class UnificationSQLConversionApplication:
             self.runs._identity(run_id, writer_contract_version)
             state["run_id"] = run_id
             frozen = await self._admit(run_id, writer_contract_version)
-            members, totals, deferred = await self._plan(
+            members, totals, deferred, retained = await self._plan(
                 frozen, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref
             )
+            await self._verify_retained_indexes(frozen, retained)
             result = []
             for tenant in frozen.tenant_ids:
                 with tenant_execution_scope(tenant):
