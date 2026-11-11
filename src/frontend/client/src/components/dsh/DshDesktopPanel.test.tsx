@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { DshDesktopDialog } from './DshDesktopDialog';
+import { DshDesktopPanel } from './DshDesktopPanel';
 import { getDshUsageSummary } from '~/api/dsh';
 import type { DshUsageTimeSummary } from '~/api/dsh';
 
@@ -8,16 +8,11 @@ jest.mock('~/api/dsh', () => ({ getDshUsageSummary: jest.fn() }));
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: { id: '20' } }) }));
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string, values?: Record<string, unknown>) => values ? `${key} ${JSON.stringify(values)}` : key, i18n: { language: 'en' } }) }));
 jest.mock('@bisheng/ui', () => ({ Button: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => <button onClick={onClick}>{children}</button> }));
-jest.mock('~/components/ui/Dialog', () => ({
-  Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogContent: ({ children }: { children: React.ReactNode }) => <div role="dialog">{children}</div>,
-  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
-}));
 const metrics = { message_count: 2, qa_count: 2, failed_count: 0, cancelled_count: 0, running_count: 0, usage_unknown_count: 0, recorded_usage_count: 2, missing_usage_count: 0, input_tokens: 60, output_tokens: 40, total_tokens: 100 };
 const summary: DshUsageTimeSummary = { start_at: '2025-09-18T00:00:00+08:00', end_at: '2026-09-17T12:00:00+08:00', timezone: 'Asia/Shanghai', granularity: 'day', totals: metrics, points: [{ ...metrics, start_at: '2026-09-17T00:00:00+08:00', end_at: '2026-09-17T12:00:00+08:00' }] };
-function show(downloadUrl: string | null = null, open = true) {
+function show(downloadUrl: string | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } }, logger: { log: () => undefined, warn: console.warn, error: () => undefined } });
-  return render(<QueryClientProvider client={client}><DshDesktopDialog open={open} onOpenChange={jest.fn()} downloadUrl={downloadUrl} launchUrl="dsh-desktop://login" /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><DshDesktopPanel downloadUrl={downloadUrl} launchUrl="dsh-desktop://login" /></QueryClientProvider>);
 }
 beforeEach(() => { jest.mocked(getDshUsageSummary).mockResolvedValue(summary); });
 it('renders the annual calendar and synchronizes metric totals and tooltip', async () => {
@@ -81,8 +76,4 @@ it('allows retry after a summary request fails', async () => {
   fireEvent.click(screen.getByText('dsh_retry'));
   await screen.findByRole('list');
   await waitFor(() => expect(getDshUsageSummary).toHaveBeenCalledTimes(2));
-});
-it('fetches on opening the dialog', () => {
-  show(null, false);
-  expect(getDshUsageSummary).not.toHaveBeenCalled();
 });

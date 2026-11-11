@@ -20,7 +20,7 @@ import { copyText } from '~/utils';
 
 const accountFieldLabelClassName = 'mb-1 text-[14px] text-[#86909c]';
 // Offset the small button's 5px icon inset to keep 8px of visual spacing.
-const inlineActionClassName = '-ms-[0.3125rem] shrink-0';
+const inlineActionClassName = '-ms-[0.3125rem] shrink-0 text-text-3';
 
 export interface AccountSectionProps {
     username: string;
@@ -173,7 +173,7 @@ export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }
                                             type="button"
                                             size="small"
                                             variant="text"
-                                            color="primary"
+                                            color="default"
                                             iconOnly
                                             aria-label={editNicknameLabel}
                                             className={inlineActionClassName}
