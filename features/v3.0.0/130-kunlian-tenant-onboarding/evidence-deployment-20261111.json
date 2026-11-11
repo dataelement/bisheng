@@ -1,0 +1,262 @@
+{
+  "release": "20261111-f130-2000",
+  "commits": {
+    "bisheng": "34198e6105755174e7f57de7d68c8a50c63d0ec5",
+    "gateway": "bab8dd72d2c20323cbb896c88e4d2c65433e0652"
+  },
+  "gateway_sha256": "8400c1b2bb7f19d91bda6f1e0f7b73a574d369fd598abce5854334acb0c038b5",
+  "runtime_source_files": 17,
+  "static_files_verified": 813,
+  "configuration_files_preserved": 16,
+  "platform_build_seconds": 52.41,
+  "database_backup": {
+    "bytes": 6458328,
+    "sha256": "8bb0d6db103a4cb6d751fa1c57c69bdc4c1ca019f9ef815d0775541aec3187de"
+  },
+  "runtime_audit": {
+    "containers": [
+      {
+        "name": "/bisheng-kunlian-backend",
+        "container_preserved": true,
+        "image_env_mounts_network_names_unchanged": true,
+        "addresses_changed": true,
+        "before_ips": {
+          "bisheng-kunlian-network": "172.19.0.10",
+          "bisheng-sandbox": "172.20.0.5"
+        },
+        "after_ips": {
+          "bisheng-kunlian-network": "172.19.0.9",
+          "bisheng-sandbox": "172.20.0.4"
+        },
+        "running": true,
+        "restart_count": 0
+      },
+      {
+        "name": "/bisheng-kunlian-backend-worker",
+        "container_preserved": true,
+        "image_env_mounts_network_names_unchanged": true,
+        "addresses_changed": true,
+        "before_ips": {
+          "bisheng-kunlian-network": "172.19.0.9",
+          "bisheng-sandbox": "172.20.0.4"
+        },
+        "after_ips": {
+          "bisheng-kunlian-network": "172.19.0.10",
+          "bisheng-sandbox": "172.20.0.5"
+        },
+        "running": true,
+        "restart_count": 0
+      },
+      {
+        "name": "/bisheng-kunlian-frontend",
+        "container_preserved": true,
+        "image_env_mounts_network_names_unchanged": true,
+        "addresses_changed": false,
+        "before_ips": {
+          "bisheng-kunlian-network": "172.19.0.11"
+        },
+        "after_ips": {
+          "bisheng-kunlian-network": "172.19.0.11"
+        },
+        "running": true,
+        "restart_count": 0
+      },
+      {
+        "name": "/bisheng-gateway",
+        "container_preserved": true,
+        "image_env_mounts_network_names_unchanged": true,
+        "addresses_changed": false,
+        "before_ips": {
+          "bisheng-kunlian-network": "172.19.0.12"
+        },
+        "after_ips": {
+          "bisheng-kunlian-network": "172.19.0.12"
+        },
+        "running": true,
+        "restart_count": 0
+      }
+    ],
+    "added_tables": [
+      "bisheng\trole_external_basic_role",
+      "bisheng\ttenant_external_provision",
+      "bisheng\tuser_external_basic_access"
+    ],
+    "removed_tables": [],
+    "runtime_probe": [
+      {
+        "config": "PASS",
+        "login_enabled": true,
+        "directory_enabled": true,
+        "scope_mode": "fixed",
+        "auto_onboarding_enabled": false
+      },
+      {
+        "tables": [
+          "tenant_external_provision",
+          "role_external_basic_role",
+          "user_external_basic_access"
+        ],
+        "rows": 0,
+        "tenant_indexes": "PASS",
+        "alembic": [
+          "f114_app_authorization"
+        ]
+      },
+      {
+        "sync": [
+          {
+            "enabled": 1,
+            "policy_revision": 2,
+            "sync_requested_version": 26,
+            "sync_completed_version": 26
+          }
+        ]
+      }
+    ]
+  },
+  "http_smoke": [
+    {
+      "origin": "http://192.168.106.104:3001",
+      "route": "/build/workflows",
+      "status": 200,
+      "seconds": 0.0482,
+      "bytes": 3504
+    },
+    {
+      "origin": "http://192.168.106.104:3001",
+      "route": "/flow/2c3bcfd3f5d840ec9d68e8027644aac4?from=workflow-management&entry=kunlian",
+      "status": 200,
+      "seconds": 0.0218,
+      "bytes": 3504
+    },
+    {
+      "origin": "http://192.168.106.104:3001",
+      "route": "/workspace/c/new",
+      "status": 200,
+      "seconds": 0.021,
+      "bytes": 4408
+    },
+    {
+      "origin": "http://192.168.106.104:3001",
+      "route": "/api/v1/env",
+      "status": 200,
+      "seconds": 0.1239,
+      "bytes": 1163
+    },
+    {
+      "origin": "http://192.168.106.104:3001",
+      "route": "/workspace/api/v1/env",
+      "status": 200,
+      "seconds": 0.15,
+      "bytes": 1163
+    },
+    {
+      "origin": "http://192.168.106.104:3001",
+      "route": "/api/oauth2/list",
+      "status": 200,
+      "seconds": 0.0289,
+      "bytes": 80,
+      "kunlian_enabled": true
+    },
+    {
+      "origin": "http://192.168.106.104:3001",
+      "route": "/locales/zh-Hans/bs.json",
+      "status": 200,
+      "seconds": 0.0803,
+      "bytes": 228893,
+      "new_menu_text": "PASS"
+    },
+    {
+      "origin": "http://192.168.106.104:3001",
+      "route": "/api/oauth2/kunlian",
+      "status": 403,
+      "unregistered_browser_origin_refused": true
+    },
+    {
+      "origin": "http://192.168.106.104:3001",
+      "route": "POST /api/v1/workflow/create (unauthenticated)",
+      "status": 401,
+      "creation_refused": true
+    },
+    {
+      "origin": "http://110.16.193.170:50055",
+      "route": "/build/workflows",
+      "status": 200,
+      "seconds": 0.0495,
+      "bytes": 3504
+    },
+    {
+      "origin": "http://110.16.193.170:50055",
+      "route": "/flow/2c3bcfd3f5d840ec9d68e8027644aac4?from=workflow-management&entry=kunlian",
+      "status": 200,
+      "seconds": 0.0239,
+      "bytes": 3504
+    },
+    {
+      "origin": "http://110.16.193.170:50055",
+      "route": "/workspace/c/new",
+      "status": 200,
+      "seconds": 0.0912,
+      "bytes": 4408
+    },
+    {
+      "origin": "http://110.16.193.170:50055",
+      "route": "/api/v1/env",
+      "status": 200,
+      "seconds": 0.1238,
+      "bytes": 1163
+    },
+    {
+      "origin": "http://110.16.193.170:50055",
+      "route": "/workspace/api/v1/env",
+      "status": 200,
+      "seconds": 0.1208,
+      "bytes": 1163
+    },
+    {
+      "origin": "http://110.16.193.170:50055",
+      "route": "/api/oauth2/list",
+      "status": 200,
+      "seconds": 0.0299,
+      "bytes": 80,
+      "kunlian_enabled": true
+    },
+    {
+      "origin": "http://110.16.193.170:50055",
+      "route": "/locales/zh-Hans/bs.json",
+      "status": 200,
+      "seconds": 0.246,
+      "bytes": 228893,
+      "new_menu_text": "PASS"
+    },
+    {
+      "origin": "http://110.16.193.170:50055",
+      "route": "/api/oauth2/kunlian",
+      "status": 303,
+      "redirect_authority": "ai-idp.comlansh.com:30001",
+      "redirect_path": "/oidc/authorize"
+    },
+    {
+      "origin": "http://110.16.193.170:50055",
+      "route": "POST /api/v1/workflow/create (unauthenticated)",
+      "status": 401,
+      "creation_refused": true
+    }
+  ],
+  "browser": {
+    "browser": "Chrome",
+    "origin": "http://192.168.106.104:3001",
+    "identity": "existing admin session",
+    "management_list": "PASS",
+    "new_workflow_form": "PASS; cancelled; no object created",
+    "console_errors_observed": 0
+  },
+  "scope_limits": [
+    "No automatic onboarding enabled",
+    "No multi-tenant token/session path enabled",
+    "No full SSO login/logout retest",
+    "No true multi-tenant joint acceptance",
+    "No rollback restore drill",
+    "No Git push"
+  ]
+}
