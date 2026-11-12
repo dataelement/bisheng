@@ -126,17 +126,17 @@ describe("module and object captions", () => {
   });
 
   it("folds historical aliases onto the existing captions", () => {
-    expect(renderSystemId({ system_id: "linsight" }, captions)).toBe("System");
-    expect(renderObjectType({ object_type: "workflow" }, captions)).toBe("Workflow");
-    expect(renderObjectType({ target_type: "workflow" }, captions)).toBe("Workflow");
-    expect(renderObjectType({ object_type: "linsight_skill" }, captions)).toBe("Personal skill");
-    expect(renderObjectType({ object_type: "knowledge_library" }, captions)).toBe("Knowledge library");
+    expect(renderSystemId({ ...base, system_id: "linsight" }, captions)).toBe("System");
+    expect(renderObjectType({ ...base, object_type: "workflow" }, captions)).toBe("Workflow");
+    expect(renderObjectType({ ...base, target_type: "workflow" }, captions)).toBe("Workflow");
+    expect(renderObjectType({ ...base, object_type: "linsight_skill" }, captions)).toBe("Personal skill");
+    expect(renderObjectType({ ...base, object_type: "knowledge_library" }, captions)).toBe("Knowledge library");
   });
 
   it("uses the unknown caption instead of an i18n key", () => {
-    expect(renderSystemId({ system_id: "not_a_module" }, captions)).toBe("Unknown module");
-    expect(renderObjectType({ object_type: "mystery" }, captions)).toBe("Unknown object type");
-    expect(renderEventType({ event_type: "not_an_action" }, captions, (action) => action)).toBe("Unknown action");
+    expect(renderSystemId({ ...base, system_id: "not_a_module" }, captions)).toBe("Unknown module");
+    expect(renderObjectType({ ...base, object_type: "mystery" }, captions)).toBe("Unknown object type");
+    expect(renderEventType({ ...base, event_type: "not_an_action" }, captions, (action) => action)).toBe("Unknown action");
   });
 });
 
