@@ -273,7 +273,7 @@ class AssistantAgent(AssistantUtils):
 
     async def init_llm(self):
         # Get a list of configured helper models
-        assistant_llm = await LLMService.get_assistant_llm()
+        assistant_llm = await LLMService.get_assistant_llm(login_user=self.login_user, session=self.reference_session)
         if not assistant_llm.llm_list:
             raise AssistantModelEmptyError()
         default_llm = None
@@ -305,7 +305,7 @@ class AssistantAgent(AssistantUtils):
 
     async def init_auto_update_llm(self):
         """Initialize Automatic Optimization prompt and other information.llmInstances"""
-        assistant_llm = await LLMService.get_assistant_llm()
+        assistant_llm = await LLMService.get_assistant_llm(login_user=self.login_user, session=self.reference_session)
         if not assistant_llm.auto_llm:
             raise AssistantAutoLLMError()
 
@@ -386,7 +386,13 @@ class AssistantAgent(AssistantUtils):
                         continue
                     kb_ids.append(knowledge_id)
                     knowledge_tool = await ToolExecutor.init_knowledge_tool(
-                        self.invoke_user_id, knowledge_id, llm=self.llm, callbacks=callbacks, **self.knowledge_retriever
+                        self.invoke_user_id,
+                        knowledge_id,
+                        login_user=self.login_user,
+                        reference_session=self.reference_session,
+                        llm=self.llm,
+                        callbacks=callbacks,
+                        **self.knowledge_retriever,
                     )
                     tools.append(knowledge_tool)
         if space_ids:
