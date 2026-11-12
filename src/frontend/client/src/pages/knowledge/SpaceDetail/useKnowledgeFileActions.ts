@@ -22,7 +22,6 @@ export function useKnowledgeFileActions({
   confirm,
   selectedList,
   canBatchDelete,
-  canDeleteSpace,
   deletionScopeKey,
   space,
   onDeleteFile,
@@ -197,33 +196,6 @@ export function useKnowledgeFileActions({
     const file = displayFiles.find((file) => file.id === fileId);
     if (file && deleteEntryIds.has(fileId)) await deleteItems([file]);
   };
-  const handleClearSpace = async () => {
-    if (!canDeleteSpace) return;
-    if (await deletion.open({ spaceId: Number(space.id), kind: "clear" })) {
-      setSelectedFiles(new Set());
-      onDeleteFile("");
-      dispatchKnowledgeSpaceFilesRefresh(space.id);
-      void queryClient.invalidateQueries({ queryKey: ["file-versions"] });
-      showToast({ message: localize("com_knowledge.deletion.success"), status: "success" });
-    }
-  };
-  const handleReferences = () => {
-    if (selectedList.length && canBatchDelete)
-      void deletion.open(
-        {
-          spaceId: Number(space.id),
-          kind: "files",
-          items: selectedList.map((file) => ({
-            id: Number(file.id),
-            type: file.type === FileType.FOLDER ? "folder" : "file",
-          })),
-        },
-        true,
-      );
-    else if (!selectedList.length && canDeleteSpace)
-      void deletion.open({ spaceId: Number(space.id), kind: "delete" }, true);
-  };
-
   const handleBatchRetry = async () => {
     await runOrdinaryBatch("retry", selectedList);
   };
@@ -275,8 +247,6 @@ export function useKnowledgeFileActions({
     batch,
     handleBatchTagsSaved,
     deletion,
-    handleClearSpace,
-    handleReferences,
     handleBatchDownload,
     handleBatchTag,
     moveProgress,

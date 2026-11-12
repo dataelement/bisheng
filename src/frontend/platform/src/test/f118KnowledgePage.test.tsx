@@ -36,7 +36,14 @@ vi.mock("react-i18next", () => ({
     i18n: { loadNamespaces: vi.fn(), resolvedLanguage: "en" },
   }),
 }));
-vi.mock("react-router-dom", () => ({ useNavigate: () => mocks.navigate }));
+vi.mock("react-router-dom", () => ({
+  useNavigate: () => mocks.navigate,
+  useParams: () => ({}),
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+}));
+vi.mock("@/pages/KnowledgePage/sidebar/KnowledgeSpaceSidebar", () => ({
+  KnowledgeSpaceSidebar: () => <aside data-testid="knowledge-space-tree" />,
+}));
 vi.mock("@/hooks/useAdminScope", () => ({ useAdminScope: mocks.scope }));
 vi.mock("@/controllers/API", () => ({
   readFileLibDatabase: mocks.legacy,
