@@ -1,16 +1,18 @@
 import { expect, it } from 'vitest'
 import type { AuditScope } from '@/controllers/API/log'
+import zh from '../../../../public/locales/zh-Hans/bs.json'
 import { auditScopeDescription } from './auditScopeDescription'
 
+const scopeCopy = zh.log.scope
 const copy: Record<string, string> = {
-  'log.scope.summary': '当前范围：{{tenant}}，{{organization}}',
-  'log.scope.allTenants': '全部租户',
-  'log.scope.tenant': '租户「{{name}}」',
-  'log.scope.allOrganizations': '全部组织',
-  'log.scope.subtree': '{{name}}及其下级',
-  'log.scope.exact': '仅「{{name}}」',
-  'log.scope.noOrganization': '没有可查看的组织',
-  'log.scope.separator': '、',
+  'log.scope.summary': scopeCopy.summary,
+  'log.scope.allTenants': scopeCopy.allTenants,
+  'log.scope.tenant': scopeCopy.tenant,
+  'log.scope.allOrganizations': scopeCopy.allOrganizations,
+  'log.scope.subtree': scopeCopy.subtree,
+  'log.scope.exact': scopeCopy.exact,
+  'log.scope.noOrganization': scopeCopy.noOrganization,
+  'log.scope.separator': scopeCopy.separator,
 }
 
 const t = (key: string, opts?: Record<string, unknown>) =>
@@ -29,28 +31,45 @@ const scope = (patch: Partial<AuditScope>): AuditScope => ({
 
 it('names every tenant and organization when the reader is not limited', () => {
   expect(auditScopeDescription(scope({ unrestricted_organization: true }), t)).toBe(
-    '当前范围：全部租户，全部组织',
+    t('log.scope.summary', {
+      tenant: t('log.scope.allTenants'),
+      organization: t('log.scope.allOrganizations'),
+    }),
   )
 })
 
 it('names the tenant and each authorized department', () => {
+  const tenantName = 'child-tenant'
+  const parent = 'research'
+  const leaf = 'finance'
   expect(
     auditScopeDescription(
       scope({
         tenant_id: 60,
-        tenant_name: '测试子租户1',
+        tenant_name: tenantName,
         organizations: [
-          { name: '研发部', includes_descendants: true },
-          { name: '财务部', includes_descendants: false },
+          { name: parent, includes_descendants: true },
+          { name: leaf, includes_descendants: false },
         ],
       }),
       t,
     ),
-  ).toBe('当前范围：租户「测试子租户1」，研发部及其下级、仅「财务部」')
+  ).toBe(
+    t('log.scope.summary', {
+      tenant: t('log.scope.tenant', { name: tenantName }),
+      organization: [t('log.scope.subtree', { name: parent }), t('log.scope.exact', { name: leaf })].join(
+        t('log.scope.separator'),
+      ),
+    }),
+  )
 })
 
 it('says when the authorized range contains no department', () => {
-  expect(auditScopeDescription(scope({ tenant_id: 60, tenant_name: '测试子租户1' }), t)).toBe(
-    '当前范围：租户「测试子租户1」，没有可查看的组织',
+  const tenantName = 'child-tenant'
+  expect(auditScopeDescription(scope({ tenant_id: 60, tenant_name: tenantName }), t)).toBe(
+    t('log.scope.summary', {
+      tenant: t('log.scope.tenant', { name: tenantName }),
+      organization: t('log.scope.noOrganization'),
+    }),
   )
 })
