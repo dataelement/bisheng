@@ -379,6 +379,16 @@ class DshContentSafetyTooLargeError(BaseErrorCode):
     ErrorType: str = "invalid_request_error"
 
 
+class DshModelPricingMissingError(BaseErrorCode):
+    """F015: a billed model has no price record (upgrade backfill not done); never billed as free."""
+
+    Code: int = 26176
+    Msg: str = "Model pricing is not configured; contact the administrator"
+    HttpStatus: int = 503
+    ClientCode: str = "model_pricing_missing"
+    ErrorType: str = "service_unavailable_error"
+
+
 DSH_ERROR_TYPES = (
     DshContentSafetyAuthError,
     DshContentSafetyInvalidEventError,
@@ -386,6 +396,7 @@ DSH_ERROR_TYPES = (
     DshContentSafetyExpiredError,
     DshContentSafetyUnavailableError,
     DshContentSafetyTooLargeError,
+    DshModelPricingMissingError,
     DshToolNotFoundError,
     DshToolPermissionDeniedError,
     DshToolUnsupportedError,

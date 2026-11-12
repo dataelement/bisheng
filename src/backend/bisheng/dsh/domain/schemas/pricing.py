@@ -1,11 +1,11 @@
 """F015 credit settings and per-call price snapshots (integer micro-units)."""
 
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Literal, NamedTuple
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
-from bisheng.dsh.domain.schemas.contracts import DshContract
+from bisheng.dsh.domain.schemas.contracts import DshContract, DshTokenUsage
 from bisheng.llm.domain.pricing import MICRO, price_to_micro
 from bisheng.llm.domain.pricing.schemas import Price
 
@@ -63,3 +63,66 @@ class CreditSettingInput(DshContract):
         if not low <= self.usd_cny_rate_micro <= high:
             raise ValueError("Exchange rate must be between 0.01 and 100")
         return self
+
+
+# Converted per-million prices stay far below this; the bound only fences corrupt input.
+MAX_PRICE_MICRO = 10**15
+PriceMicro = Annotated[int, Field(strict=True, ge=0, le=MAX_PRICE_MICRO)]
+
+
+class PricingSnapshot(DshContract):
+    """Billing-only prices frozen when a call starts (design decisions 2 and 19).
+
+    All prices are per million tokens in the billing currency, as integer
+    micro-units. Bounds stay loose on purpose: historical events must still
+    validate on replay even if the admin-facing ranges change later.
+    """
+
+    currency: Currency
+    credit_value_micro: int = Field(strict=True, ge=1)
+    input_micro: PriceMicro
+    cache_read_micro: PriceMicro
+    cache_write_micro: PriceMicro
+    output_micro: PriceMicro
+    usd_cny_rate_micro: int | None = Field(default=None, strict=True, ge=1)  # only when a conversion happened
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_rate(self, handler):
+        # Every event JSON copy lives in Redis for 30 days; do not store a null per copy.
+        data = handler(self)
+        if data.get("usd_cny_rate_micro") is None:
+            data.pop("usd_cny_rate_micro", None)
+        return data
+
+    @property
+    def free(self) -> bool:
+        return not (self.input_micro or self.cache_read_micro or self.cache_write_micro or self.output_micro)
+
+
+class PriceResult(NamedTuple):
+    cost_micro: int  # spend in billing-currency micro-units
+    billed: int  # microcredits charged to the ledger
+
+
+def ceil_div(numerator: int, denominator: int) -> int:
+    return -(-numerator // denominator)
+
+
+def price_usage(usage: DshTokenUsage, snapshot: PricingSnapshot) -> PriceResult | None:
+    """Price one call; ``None`` when usage is unknown (nothing is billed)."""
+    if usage.total_tokens is None:
+        return None
+    read = usage.cache_read_tokens or 0
+    write = usage.cache_creation_tokens or 0
+    miss = usage.input_tokens - read - write
+    if miss < 0:
+        # An input that included its cached tokens cannot be smaller than them: this source
+        # reported input exclusive of cache, so every reported input token is a miss (decision 16).
+        miss = usage.input_tokens
+    raw = (
+        miss * snapshot.input_micro
+        + read * snapshot.cache_read_micro
+        + write * snapshot.cache_write_micro
+        + usage.output_tokens * snapshot.output_micro
+    )
+    return PriceResult(ceil_div(raw, MICRO), ceil_div(raw, snapshot.credit_value_micro))
