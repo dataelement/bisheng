@@ -125,3 +125,12 @@ describe("model price fields", () => {
         expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ output: "30" }));
     });
 });
+
+it("says nothing about the price list before a model name has been looked up", () => {
+    matchPriceCatalog.mockReset();
+    render(<Harness onChange={vi.fn()} modelName="" />);
+    expect(screen.queryByText("model.pricing.defaultTag")).toBeNull();
+    expect(screen.queryByText("model.pricing.statusDefault")).toBeNull();
+    expect(matchPriceCatalog).not.toHaveBeenCalled();
+    expect(screen.getByText("model.pricing.help")).toBeTruthy();
+});

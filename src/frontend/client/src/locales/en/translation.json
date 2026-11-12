@@ -2943,7 +2943,6 @@
   "modelPicker": {
     "unknownProvider": "Other providers",
     "back": "Back",
-    "ratioBase": "Base",
     "ratioFree": "Free"
   },
   "com_select": {

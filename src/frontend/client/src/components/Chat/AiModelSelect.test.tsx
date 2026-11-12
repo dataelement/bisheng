@@ -101,7 +101,7 @@ test('sizes the trigger from the selected label and keeps its sizing text while 
   expect(sizer).toHaveAttribute('data-label', 'Gamma');
 });
 
-test('F016: shows the server credit ratio after model names, including base and free models', async () => {
+test('F016: shows the server credit ratio after model names, with the base model as a plain 1.00x', async () => {
   const priced = [
     { ...options[0], pricing_hint: { ratio: '3.00', base: false, free: false } },
     { ...options[1], pricing_hint: { ratio: '1.00', base: true, free: false } },
@@ -120,5 +120,5 @@ test('F016: shows the server credit ratio after model names, including base and 
   expect(screen.getByRole('treeitem', { name: 'Delta' })).toBeInTheDocument();
   expect(screen.getByRole('treeitem', { name: 'Epsilon' })).toBeInTheDocument();
   await user.click(screen.getByRole('treeitem', { name: 'Provider B' }));
-  expect(screen.getByRole('treeitem', { name: 'Beta · 1.00x modelPicker.ratioBase' })).toBeInTheDocument();
+  expect(screen.getByRole('treeitem', { name: 'Beta · 1.00x' })).toBeInTheDocument();
 });

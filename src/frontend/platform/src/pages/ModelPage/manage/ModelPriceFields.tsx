@@ -74,7 +74,8 @@ export function ModelPriceFields({ value, providerType, modelName, onChange }: M
         onChange(withPrices(value, { ...shown, ...changes }));
     };
 
-    const status = pricingStatus(shown, match);
+    // Nothing to say until the catalog has answered for this name (or while no name is typed).
+    const status = match ? pricingStatus(shown, match) : null;
     const entry = match?.entry;
     const currencyName = (currency: PricingCurrency) =>
         t(currency === "USD" ? "model.pricing.currencyUSD" : "model.pricing.currencyCNY");

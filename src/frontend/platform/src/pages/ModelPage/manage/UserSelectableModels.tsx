@@ -47,7 +47,7 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
             </Button>
         </p>}
         <div className="overflow-x-auto rounded-lg border bg-background">
-            <Table className={`${enterpriseEnabled ? 'min-w-[1280px]' : 'min-w-[900px]'} table-fixed`}>
+            <Table className={`${enterpriseEnabled ? 'min-w-[1120px]' : 'min-w-[900px]'} table-fixed`}>
                 <TableHeader><TableRow>
                     <TableHead className="w-[22%]">{t('model.modelName')}</TableHead>
                     <TableHead className="w-[12%]">{t('model.serviceProvider')}</TableHead>
@@ -59,7 +59,7 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
                             <ModelFieldHint className="ml-1" content={t('dsh.pricing.ratioHelp', { ns: 'bs' })} />
                         </span>
                     </TableHead>}
-                    {enterpriseEnabled && <TableHead className="w-56">{t('dsh.pricing.price', { ns: 'bs' })}</TableHead>}
+                    {enterpriseEnabled && <TableHead className="w-52">{t('dsh.pricing.price', { ns: 'bs' })}</TableHead>}
                     {enterpriseEnabled && <TableHead className="w-28 text-left">{t('model.visibilityScope')}</TableHead>}
                 </TableRow></TableHeader>
                 <TableBody>{models.map(model => {
