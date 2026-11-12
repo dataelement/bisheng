@@ -9,6 +9,7 @@ import type { FilesProps } from "@/pages/KnowledgePage/components/Files";
 const mock = vi.hoisted(() => ({ get: vi.fn(), scope: vi.fn() }));
 vi.mock("@/contexts/userContext", async () => ({ userContext: (await import("react")).createContext({ user: {} }) }));
 vi.mock("@/hooks/useKnowledgePageScope", () => ({ useKnowledgePageScope: mock.scope }));
+vi.mock("@/controllers/API/permission", () => ({ getMyResourcePermissionsApi: async () => ({ actions: [] }) }));
 vi.mock("@/controllers/request", () => ({ default: { get: mock.get }, showApiError: vi.fn() }));
 vi.mock("@/pages/KnowledgePage/KnowledgeFile", () => ({ default: ({ scope }: { scope: { view: string } }) => <p>{scope.view}-list</p> }));
 vi.mock("@/pages/KnowledgePage/KnowledgeQa", () => ({ default: () => <p>qa-list</p> }));
@@ -46,7 +47,7 @@ it("keeps the expanded tree and routes selected folders into the workspace file 
   expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?fileStatus=abnormal&keep=1&parent_id=9");
   expect(screen.getByTestId("files")).toHaveTextContent('"presentation":"workspace"');
   expect(within(screen.getByRole("complementary")).getByRole("button", { name: "Finance" })).toHaveAttribute("aria-current", "page");
-  fireEvent.click(within(screen.getByRole("complementary")).getByRole("button", { name: "f118.spaces" }));
+  fireEvent.click(within(screen.getByRole("complementary")).getByRole("button", { name: "sidebar.all_spaces" }));
   expect(await screen.findByText("ordinary-list")).toBeVisible();
 });
 
@@ -68,4 +69,12 @@ it("rejects invalid directory links without loading their file content", async (
   expect(screen.queryByTestId("files")).toBeNull();
   await screen.findByRole("button", { name: "Reports" });
   expect(mock.get.mock.calls.some(([url]) => String(url).endsWith("/info"))).toBe(false);
+});
+
+it("selects file content from a configuration deep link while retaining directory filters", async () => {
+  mount("/filelib/7?tab=embedding&fileStatus=abnormal&keep=1");
+  const tree = screen.getByRole("complementary");
+  fireEvent.click(await within(tree).findByRole("button", { name: "Finance" }));
+  await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?fileStatus=abnormal&keep=1&parent_id=9"));
+  expect(screen.getByTestId("location")).not.toHaveTextContent("tab=");
 });

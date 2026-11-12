@@ -711,7 +711,10 @@
         "load_failed": "Failed to load",
         "empty": "No spaces",
         "no_folders": "No folders",
-        "more_folders": "Load more folders"
+        "more_folders": "Load more folders",
+        "all_spaces": "All spaces",
+        "collapse_navigation": "Collapse space navigation",
+        "expand_navigation": "Expand space navigation"
     },
     "workspace": {
         "files": "Space files",
@@ -725,5 +728,20 @@
         "ascending": "Ascending",
         "descending": "Descending",
         "select_all": "Select all"
+    },
+    "detail": {
+        "files": "Files",
+        "defaults": "Parsing and splitting",
+        "metadata": "Metadata",
+        "embedding": "Model and index",
+        "jobs": "Processing tasks",
+        "settings": "Space settings",
+        "members": "Members and permissions",
+        "batch": "Batch actions",
+        "add": "Add",
+        "saved": "Saved",
+        "no_metadata": "No metadata fields",
+        "no_jobs": "No processing tasks",
+        "back_to_jobs": "Back to task list"
     }
 }

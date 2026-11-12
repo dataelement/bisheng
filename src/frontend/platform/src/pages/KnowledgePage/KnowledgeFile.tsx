@@ -39,7 +39,6 @@ import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import type { User } from "@/types/api/user";
 import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
 import { KnowledgeTooltip } from "./components/KnowledgeTooltip";
-import { ProcessingDefaultsDialog } from "./components/ProcessingDefaultsDialog";
 import { SpaceProcessingDialog } from "./components/SpaceProcessingDialog";
 import { KnowledgeDeletionDialog } from "./components/KnowledgeDeletionDialog";
 import { useKnowledgeDeletion } from "./hooks/useKnowledgeDeletion";
@@ -131,12 +130,9 @@ export default function KnowledgeFile({
     user?.web_menu?.includes("create_knowledge") === true;
   const [processing, setProcessing] = useState<{
     row: KnowledgeSpaceInfo;
-    mode: "copy" | "embedding" | "jobs" | "schema";
+    mode: "copy";
   } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<KnowledgeSpaceInfo | null>(null);
-  const [defaultsTarget, setDefaultsTarget] =
-    useState<KnowledgeSpaceInfo | null>(null);
   const [permissionTarget, setPermissionTarget] =
     useState<KnowledgeSpaceInfo | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -154,8 +150,6 @@ export default function KnowledgeFile({
     // A previous visit to this filter must not restore its consumed cursor.
     client.removeQueries({ queryKey: incoming, exact: true, type: "inactive" });
     setOpenId(null);
-    setEditTarget(null);
-    setDefaultsTarget(null);
     setPermissionTarget(null);
     setProcessing(null);
     setOnlyAbnormal(next);
@@ -205,6 +199,11 @@ export default function KnowledgeFile({
     if (!allowed || live.current !== epoch) return;
     pageWindow.LibPage = { type: isAdmin ? "admin" : "file" };
     navigate(`/filelib/${row.id}`);
+  };
+  const handleConfiguration = (row: KnowledgeSpaceInfo, tab: string) => {
+    setOpenId(null);
+    pageWindow.LibPage = { type: isAdmin ? "admin" : "file" };
+    navigate(`/filelib/${row.id}?tab=${tab}`);
   };
   const handleRefresh = async () => {
     try {
@@ -303,40 +302,35 @@ export default function KnowledgeFile({
           <>
             <DropdownItem
               onSelect={() => {
-                setOpenId(null);
-                setEditTarget(row);
+                handleConfiguration(row, "settings");
               }}
             >
               {t("settings")}
             </DropdownItem>
             <DropdownItem
               onSelect={() => {
-                setOpenId(null);
-                setProcessing({ row, mode: "schema" });
+                handleConfiguration(row, "metadata");
               }}
             >
               {t("f118.processing_title_schema")}
             </DropdownItem>
             <DropdownItem
               onSelect={() => {
-                setOpenId(null);
-                setProcessing({ row, mode: "embedding" });
+                handleConfiguration(row, "embedding");
               }}
             >
               {t("f118.processing_title_embedding")}
             </DropdownItem>
             <DropdownItem
               onSelect={() => {
-                setOpenId(null);
-                setProcessing({ row, mode: "jobs" });
+                handleConfiguration(row, "jobs");
               }}
             >
               {t("f118.processing_title_jobs")}
             </DropdownItem>
             <DropdownItem
               onSelect={() => {
-                setOpenId(null);
-                setDefaultsTarget(row);
+                handleConfiguration(row, "defaults");
               }}
             >
               {t("f118.defaults_title")}
@@ -544,29 +538,6 @@ export default function KnowledgeFile({
         onOpenChange={setCreateOpen}
         onLoadEnd={handleRefresh}
       />
-      {editTarget && (
-        <KnowledgeLibraryDialog
-          scope={scope}
-          datalist={rows}
-          currentLib={{ id: editTarget.id, name: editTarget.name }}
-          mode="edit"
-          open
-          onOpenChange={(open) => {
-            if (!open) setEditTarget(null);
-          }}
-          onLoadEnd={handleRefresh}
-        />
-      )}
-      {defaultsTarget && (
-        <ProcessingDefaultsDialog
-          scope={scope}
-          spaceId={defaultsTarget.id}
-          open
-          onOpenChange={(open) => {
-            if (!open) setDefaultsTarget(null);
-          }}
-        />
-      )}
       {permissionTarget && (
         <PermissionDialog
           resourceType="knowledge_space"

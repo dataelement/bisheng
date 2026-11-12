@@ -31,8 +31,9 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, children }: KnowledgeS
   );
   const canCreate = user?.is_global_super === true || user?.is_child_admin === true ||
     user?.web_menu?.includes("create_knowledge") === true;
-  const handleSelect = (id: number, folderId: number | null) => {
+  const handleSelect = (id: number, folderId: number | null, showFiles = false) => {
     const next = new URLSearchParams(params);
+    if (showFiles) next.delete("tab");
     if (folderId === null) next.delete("parent_id");
     else next.set("parent_id", String(folderId));
     navigate({ pathname: `/filelib/${id}`, search: next.toString() });
@@ -45,7 +46,7 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, children }: KnowledgeS
         parentId={invalid ? null : parentId}
         canCreate={canCreate}
         onCreate={() => setCreateOpen(true)}
-        onSelect={handleSelect}
+        onSelect={(id, folderId) => handleSelect(id, folderId, true)}
         onOverview={() => navigate("/filelib")}
         onSquare={() => window.open(getWorkspaceClientUrl("/knowledge?square=1"), "_blank", "noopener,noreferrer")}
       />

@@ -19,7 +19,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
-import { ProcessingDefaultsDialog } from "@/pages/KnowledgePage/components/ProcessingDefaultsDialog";
+import { ProcessingDefaultsDialog, ProcessingDefaultsPanel } from "@/pages/KnowledgePage/components/ProcessingDefaultsDialog";
 
 vi.mock("@/controllers/API", () => ({ getKnowledgeDetailApi: vi.fn() }));
 vi.mock("@/controllers/request", () => ({
@@ -125,6 +125,22 @@ function deferred<T>() {
   return { promise, resolve };
 }
 const ready = () => screen.findByRole("spinbutton", { name: "splitLength" });
+
+it("echoes effective defaults inline and uses the saved revision on the next save", async () => {
+  const f = setup();
+  render(<QueryClientProvider client={f.client}><ProcessingDefaultsPanel scope={scope} spaceId={7} api={f.api} /></QueryClientProvider>);
+  expect(await ready()).toHaveValue("300");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  fireEvent.change(await ready(), { target: { value: "450" } });
+  fireEvent.click(screen.getByRole("button", { name: "save" }));
+  await waitFor(() => expect(f.api.updateProcessingSettings).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getByRole("button", { name: "save" })).not.toBeDisabled());
+  expect(await ready()).toHaveValue("450");
+  fireEvent.change(await ready(), { target: { value: "500" } });
+  fireEvent.click(screen.getByRole("button", { name: "save" }));
+  await waitFor(() => expect(f.api.updateProcessingSettings).toHaveBeenCalledTimes(2));
+  expect(f.api.updateProcessingSettings.mock.calls[1][1]).toEqual(expect.objectContaining({ expected_config_version: 5 }));
+});
 
 it("retires an unfinished opening read before reopening with a new settings version", async () => {
   const f = setup(),
