@@ -1,5 +1,8 @@
 import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
+import { format } from 'date-fns';
+import { Button } from '~/components/ui/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/Collapsible';
 import { useLocalize } from '~/hooks';
 import { parseFailureInfo } from '~/utils/failureInfo';
 
@@ -8,6 +11,8 @@ interface FailureInfoDetailsProps {
     /** Support reference for a failure without dependency provenance; shown
         only when there is no valid failureInfo. */
     referenceId?: string;
+    /** Redacted text shares the metadata disclosure when provenance is valid. */
+    detail?: string;
 }
 
 const OPERATIONS = new Set(['search', 'read_file', 'invoke_model', 'parse_file', 'write_file', 'authenticate', 'transcribe', 'synthesize', 'enqueue', 'upload', 'download', 'rerank', 'embed', 'tool_call']);
@@ -15,8 +20,9 @@ const OPERATIONS = new Set(['search', 'read_file', 'invoke_model', 'parse_file',
 const SERVICES = new Set(['database', 'mysql', 'dm8', 'redis', 'milvus', 'elasticsearch', 'llm', 'embedding', 'rerank', 'asr', 'tts', 'minio', 'transport', 'browser_connection', 'sso', 'object_storage', 'model_service', 'network', 'etl4lm', 'bisheng_knowledge', 'openfga']);
 
 /** Only public, validated metadata is displayed; unknown operation tokens stay hidden. */
-export function FailureInfoDetails({ failureInfo, referenceId }: FailureInfoDetailsProps) {
+export function FailureInfoDetails({ failureInfo, referenceId, detail }: FailureInfoDetailsProps) {
     const localize = useLocalize();
+    const [open, setOpen] = useState(false);
     const info = parseFailureInfo(failureInfo);
     if (!info) {
         if (!referenceId || !/^[A-Za-z0-9_-]{1,128}$/.test(referenceId)) return null;
@@ -29,11 +35,24 @@ export function FailureInfoDetails({ failureInfo, referenceId }: FailureInfoDeta
     const parts = [
         serviceName || localize(`api_errors.failure_service_${info.service && SERVICES.has(info.service) ? info.service : info.category}`),
         info.operation && OPERATIONS.has(info.operation) ? localize(`api_errors.failure_operation_${info.operation}`) : undefined,
-        info.occurred_at,
+        format(new Date(info.occurred_at), "yyyy-MM-dd HH:mm:ss 'UTC'xxx"),
         localize('api_errors.failure_id', { 0: info.failure_id }),
         info.trace_id ? localize('api_errors.failure_trace_id', { 0: info.trace_id }) : undefined,
     ].filter(Boolean);
-    return <p className="mt-1 whitespace-pre-wrap break-words text-caption text-text-3">{parts.join(' · ')}</p>;
+    return (
+        <Collapsible open={open} onOpenChange={setOpen} className="mt-1">
+            <CollapsibleTrigger asChild>
+                <Button type="button" color="default" variant="text" size="small" className="text-caption text-text-3">
+                    <Outlined.Down aria-hidden="true" className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
+                    {localize(open ? 'com_linsight_error_hide_detail' : 'com_linsight_error_view_detail')}
+                </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+                <p className="mt-1 whitespace-pre-wrap break-words text-caption text-text-3">{parts.join(' · ')}</p>
+                {detail && <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-100 p-2.5 text-xs leading-relaxed text-gray-500">{detail}</pre>}
+            </CollapsibleContent>
+        </Collapsible>
+    );
 }
 
 /** Redacted exception text behind a "view details" toggle. The backend masks

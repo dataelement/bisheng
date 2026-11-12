@@ -54,6 +54,7 @@ from ..utils import (
 )
 from .base import BishengBase
 from .context_overflow import as_context_overflow
+from .response_validation import validate_astream, validate_result, validate_stream
 
 
 def _get_user_kwargs(model_config: dict) -> dict:
@@ -475,9 +476,12 @@ class BishengLLM(BishengBase, BaseChatModel):
                 # to dispatch streaming models to `_stream`). Because we delegate to the inner
                 # model directly, aggregate the stream here — this also keeps `on_llm_new_token`
                 # callbacks firing so workflow / chat UI streaming keeps working.
-                ret = generate_from_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
+                ret = generate_from_stream(
+                    validate_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
+                )
             else:
                 ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+            validate_result(ret)
         except Exception as exc:
             _raise_as_context_overflow(exc)
             raise
@@ -499,10 +503,11 @@ class BishengLLM(BishengBase, BaseChatModel):
                 # See `_generate`: aggregate the inner stream so `on_llm_new_token` callbacks
                 # keep firing (workflow / chat UI streaming) instead of returning a raw Stream.
                 ret = await agenerate_from_stream(
-                    self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs)
+                    validate_astream(self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs))
                 )
             else:
                 ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+            validate_result(ret)
         except Exception as exc:
             _raise_as_context_overflow(exc)
             raise
@@ -536,7 +541,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         try:
-            for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
+            for one in validate_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs)):
                 yield normalize_reasoning_content(one)
         except Exception as exc:
             _raise_as_context_overflow(exc)
@@ -553,7 +558,9 @@ class BishengLLM(BishengBase, BaseChatModel):
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         try:
-            async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+            async for one in validate_astream(
+                self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs)
+            ):
                 yield normalize_reasoning_content(one)
         except Exception as exc:
             _raise_as_context_overflow(exc)

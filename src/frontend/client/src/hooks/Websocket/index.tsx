@@ -1,6 +1,6 @@
 // @ts-strict-ignore
-import { taskFailureMetadata } from '~/utils/failureInfo';
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { createBrowserNetworkFailure, taskFailureMetadata, type FailureInfo } from '~/utils/failureInfo';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getLinsightSessionVersionList, userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
 import { appendStepFrame } from "~/components/Linsight/Execution/stepFold";
 import { refreshInviteQuota } from "~/hooks/inviteQuotaRefresh";
@@ -18,6 +18,13 @@ export const useLinsightWebSocket = (versionId) => {
     const { getLinsight, updateLinsight, reconcileLinsightFromServer } = useLinsightManager()
     const { showToast } = useToastContext();
     const maxRetryCountRef = useRef(5);
+    const ownedSocketRef = useRef<WebSocket | MockWebSocket | null>(null);
+    const [transportFailure, setTransportFailure] = useState<{ versionId: string; info: FailureInfo }>();
+    const reportDisconnect = useCallback((id: string) => {
+        setTransportFailure((previous) => previous?.versionId === id
+            ? previous
+            : { versionId: id, info: createBrowserNetworkFailure() });
+    }, []);
 
     const linsight = getLinsight(versionId);
     const task = useMemo(() => {
@@ -44,7 +51,7 @@ export const useLinsightWebSocket = (versionId) => {
 
     useEffect(() => {
         runningRef.current = task.running;
-    }, [task.running]);
+    }, [task.running, versionId]);
 
     useEffect(() => {
         reconcileRef.current = reconcileLinsightFromServer;
@@ -82,8 +89,11 @@ export const useLinsightWebSocket = (versionId) => {
         const websocket = MOCK ? new MockWebSocket(`xx`)
             : new WebSocket(getWebSocketUrl(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/task-message-stream?session_version_id=${id}`));
         connections[id] = websocket;
+        ownedSocketRef.current = websocket;
 
         websocket.onopen = () => {
+            if (connections[id] !== websocket || activeVersionIdRef.current !== id || !runningRef.current) return;
+            setTransportFailure((previous) => previous?.versionId === id ? undefined : previous);
             console.log("WebSocket connection established!");
             // websocket.send(JSON.stringify(msg));
             // The run may have reached its end while we had no socket, and the
@@ -399,6 +409,9 @@ export const useLinsightWebSocket = (versionId) => {
             console.log(`WebSocket closed for session ${id}`);
             if (connections[id] === websocket) {
                 delete connections[id];
+                if (activeVersionIdRef.current !== id || !runningRef.current) return;
+                reportDisconnect(id);
+                if (navigator.onLine === false) return;
                 if (maxRetryCountRef.current > 0) {
                     setTimeout(() => {
                         // Guard against zombie reconnects: only relink if this
@@ -406,9 +419,10 @@ export const useLinsightWebSocket = (versionId) => {
                         // running. A completed / parked / navigated-away session
                         // must not be resurrected (the server closes it again,
                         // which would just burn through the retry budget).
-                        if (activeVersionIdRef.current !== id || !runningRef.current) return;
-                        connect(id, { type: 'relink' })
+                        if (activeVersionIdRef.current !== id || !runningRef.current || navigator.onLine === false) return;
+                        if (connections[id] && connections[id].readyState <= WebSocket.OPEN) return;
                         maxRetryCountRef.current--;
+                        connect(id, { type: 'relink' })
                     }, 1000);
                 } else if (runningRef.current) {
                     // Retry budget spent while still running: there will be no
@@ -427,19 +441,38 @@ export const useLinsightWebSocket = (versionId) => {
         websocket.onerror = (error) => {
             console.error(`WebSocket error for session ${id}:`, error);
         };
-    }, [])
+    }, [reportDisconnect])
 
 
     useEffect(() => {
         if (!task.running) return;
 
-        // 当没有连接或连接已关闭时创建新连接
-        if (!connections[task.versionId] ||
-            connections[task.versionId].readyState !== WebSocket.OPEN) {
-            connect(task.versionId, { type: 'init' });
+        const handleOffline = () => {
+            reportDisconnect(task.versionId);
+            connections[task.versionId]?.close();
+        };
+        const handleOnline = () => {
+            if (connections[task.versionId] && connections[task.versionId].readyState <= WebSocket.OPEN) return;
             maxRetryCountRef.current = 3;
-        }
-    }, [task])
+            connect(task.versionId, { type: 'relink' });
+        };
+        window.addEventListener('offline', handleOffline);
+        window.addEventListener('online', handleOnline);
+        if (navigator.onLine === false) handleOffline();
+        else handleOnline();
+        return () => {
+            window.removeEventListener('offline', handleOffline);
+            window.removeEventListener('online', handleOnline);
+            runningRef.current = false;
+            const socket = ownedSocketRef.current;
+            ownedSocketRef.current = null;
+            if (socket && connections[task.versionId] === socket) {
+                // A remount must own fresh callbacks, not inherit a dead hook.
+                delete connections[task.versionId];
+                socket.close();
+            }
+        };
+    }, [task, connect, reportDisconnect])
 
     const stop = useCallback(() => {
         if (MOCK) {
@@ -512,6 +545,13 @@ export const useLinsightWebSocket = (versionId) => {
         }
     }, [versionId]);
 
-    return { stop, sendInput };
+    return {
+        stop,
+        sendInput,
+        // The worker may still be running; never persist transport loss as a task failure.
+        networkFailure: task.running && transportFailure?.versionId === versionId
+            ? transportFailure.info
+            : undefined,
+    };
 };
 

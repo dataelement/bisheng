@@ -150,8 +150,8 @@ export function ServiceBusyNotice({
                         {actions}
                     </div>
 
-                    <FailureInfoDetails failureInfo={failure} referenceId={referenceId} />
-                    <ErrorDetailDisclosure detail={detail} />
+                    <FailureInfoDetails failureInfo={failure} referenceId={referenceId} detail={detail} />
+                    {!failure && <ErrorDetailDisclosure detail={detail} />}
 
                 </div>
             </div>

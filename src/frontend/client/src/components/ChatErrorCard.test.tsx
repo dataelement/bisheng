@@ -57,4 +57,13 @@ describe("unclassified task failure", () => {
         render(<ChatErrorCard errorType="unknown" failureInfo={failureInfo} referenceId="other-ref" />);
         expect(screen.queryByText(apiErrors.failure_id.replace("{{0}}", "other-ref"))).not.toBeInTheDocument();
     });
+
+    it("uses one disclosure for dependency metadata and redacted detail", () => {
+        render(<ChatErrorCard errorType="unknown" failureInfo={failureInfo} detail="Redacted detail" />);
+        expect(screen.getAllByText(zh.com_linsight_error_view_detail)).toHaveLength(1);
+        expect(screen.queryByText("Redacted detail")).not.toBeInTheDocument();
+        fireEvent.click(screen.getByText(zh.com_linsight_error_view_detail));
+        expect(screen.getByText("Redacted detail")).toBeInTheDocument();
+        expect(screen.getByText(/test-failure/)).toBeInTheDocument();
+    });
 });
