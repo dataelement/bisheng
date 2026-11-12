@@ -5,6 +5,7 @@ from bisheng.common.errcode.permission import PermissionServiceUnavailableError
 from bisheng.llm.domain.repositories.source_read_target_repository import ModelSourceReadTargetRepository
 from bisheng.permission.application import PermissionSubject, get_permission_relation_api
 from bisheng.permission.application.relation_api import get_permission_relation_api_sync
+from bisheng.resource_reference.application.contracts import is_preserved_foreign_model_reference
 from bisheng.resource_reference.application.source_contracts import ReferenceTargetReadFact
 from bisheng.resource_reference.application.target_state import resolve_target_state
 
@@ -23,7 +24,10 @@ class ModelSourceReadTargetOwner:
                 {
                     int(row.model_server_id)
                     for row in plan.observations
-                    if row.exists and row.deletion is None and row.target_tenant_id != plan.tenant_id
+                    if row.exists
+                    and row.deletion is None
+                    and row.target_tenant_id == 1
+                    and row.target_tenant_id != plan.tenant_id
                 }
             )
         )
@@ -47,6 +51,10 @@ class ModelSourceReadTargetOwner:
 
     @staticmethod
     def _eligible(row, tenant_id, allowed, snapshot, transient):
+        if not transient and is_preserved_foreign_model_reference(
+            row.original, source_key=snapshot.source_key, target=row.key, target_tenant_id=row.target_tenant_id
+        ):
+            return False
         if (
             not row.exists
             or row.deletion is not None
@@ -137,7 +145,10 @@ class ModelSourceReadTargetOwner:
                 {
                     int(row.model_server_id)
                     for row in plan.observations
-                    if row.exists and row.deletion is None and row.target_tenant_id != plan.tenant_id
+                    if row.exists
+                    and row.deletion is None
+                    and row.target_tenant_id == 1
+                    and row.target_tenant_id != plan.tenant_id
                 }
             )
         )

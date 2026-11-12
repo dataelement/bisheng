@@ -1,5 +1,22 @@
 import request from "./request";
 
+export interface NicknameProfile {
+  user_id: number;
+  user_name: string;
+  external_id: string | null;
+}
+
+export async function updateNicknameApi(nickname: string): Promise<NicknameProfile> {
+  const response: unknown = await request.patch('/api/v1/user/profile/nickname', { user_name: nickname });
+  const envelope = response as { status_code?: number; data?: NicknameProfile } | null;
+  if (Number(envelope?.status_code) !== 200 || typeof envelope?.data?.user_name !== 'string' ||
+      !Number.isSafeInteger(envelope.data.user_id) || envelope.data.user_id <= 0 ||
+      (envelope.data.external_id !== null && typeof envelope.data.external_id !== 'string')) {
+    throw new Error('Invalid nickname update response');
+  }
+  return envelope.data;
+}
+
 /**
  * 修改密码（复用后端已有 /user/change_password）
  * @param oldPassword 原密码

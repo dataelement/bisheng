@@ -1,0 +1,606 @@
+pageType: process
+background:
+  type: solid
+  color: $paper
+notes: |
+  下一阶段的竞争能力不是单一流量、仓库或内容能力，而是一套跨职能经营系统：用需求信号选择国家和品类，用商品毛利管理供给，用内容和客户资产推动复购，用仓配售后兑现体验，再用合规和现金约束扩张节奏。
+elements:
+  - elementId: p08-top-rule
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 960
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p08-kicker
+    elementType: text
+    bounds:
+      - 54
+      - 32
+      - 420
+      - 18
+    content:
+      style: $section
+      text: 06 / NEXT-STAGE CAPABILITIES
+  - elementId: p08-title
+    elementType: text
+    bounds:
+      - 52
+      - 58
+      - 850
+      - 42
+    content:
+      style: $pageTitle
+      text: 下一阶段竞争，比拼的是跨职能系统而非单点效率
+  - elementId: p08-control-rail
+    elementType: shape
+    bounds:
+      - 54
+      - 128
+      - 852
+      - 40
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p08-control-rail-label
+    elementType: text
+    bounds:
+      - 72
+      - 138
+      - 180
+      - 20
+    content:
+      text: CONTROL TOWER / 经营节奏
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 11
+      color: $yellow
+      bold: true
+  - elementId: p08-control-rail-copy
+    elementType: text
+    bounds:
+      - 278
+      - 138
+      - 606
+      - 20
+    content:
+      text: 周看需求与履约　｜　月看国家损益与现金　｜　季看仓网和组织复制
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $white
+      bold: true
+      align:
+        - right
+        - middle
+  - elementId: p08-card-01
+    elementType: shape
+    bounds:
+      - 54
+      - 190
+      - 154
+      - 230
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p08-card-01-tag
+    elementType: shape
+    bounds:
+      - 54
+      - 190
+      - 154
+      - 28
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p08-card-01-no
+    elementType: text
+    bounds:
+      - 68
+      - 197
+      - 126
+      - 14
+    content:
+      text: MODULE 01 / SIGNAL
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p08-card-01-title
+    elementType: text
+    bounds:
+      - 70
+      - 238
+      - 122
+      - 40
+    content:
+      text: 需求验证
+      fontFamily: *ref_0
+      fontSize: 17
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-card-01-body
+    elementType: text
+    bounds:
+      - 70
+      - 296
+      - 122
+      - 86
+    content:
+      text: |-
+        国家 × 品类
+        转化 × 复购
+        退货 × 时效
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $slate
+      lineHeight: 1.55
+      align:
+        - center
+        - middle
+  - elementId: p08-card-01-out
+    elementType: text
+    bounds:
+      - 70
+      - 390
+      - 122
+      - 16
+    content:
+      text: 输出：进入优先级
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-card-02
+    elementType: shape
+    bounds:
+      - 226
+      - 190
+      - 154
+      - 230
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p08-card-02-tag
+    elementType: shape
+    bounds:
+      - 226
+      - 190
+      - 154
+      - 28
+    shapeName: rect
+    fill:
+      type: solid
+      color: $steel
+    border:
+      color: $steel
+      width: 0
+  - elementId: p08-card-02-no
+    elementType: text
+    bounds:
+      - 240
+      - 197
+      - 126
+      - 14
+    content:
+      text: MODULE 02 / OFFER
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p08-card-02-title
+    elementType: text
+    bounds:
+      - 242
+      - 238
+      - 122
+      - 40
+    content:
+      text: 商品与毛利
+      fontFamily: *ref_0
+      fontSize: 17
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-card-02-body
+    elementType: text
+    bounds:
+      - 242
+      - 296
+      - 122
+      - 86
+    content:
+      text: |-
+        到岸成本
+        价格带
+        组合与补货
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $slate
+      lineHeight: 1.55
+      align:
+        - center
+        - middle
+  - elementId: p08-card-02-out
+    elementType: text
+    bounds:
+      - 242
+      - 390
+      - 122
+      - 16
+    content:
+      text: 输出：可持续单品
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-card-03
+    elementType: shape
+    bounds:
+      - 398
+      - 190
+      - 154
+      - 230
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p08-card-03-tag
+    elementType: shape
+    bounds:
+      - 398
+      - 190
+      - 154
+      - 28
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p08-card-03-no
+    elementType: text
+    bounds:
+      - 412
+      - 197
+      - 126
+      - 14
+    content:
+      text: MODULE 03 / CUSTOMER
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p08-card-03-title
+    elementType: text
+    bounds:
+      - 414
+      - 238
+      - 122
+      - 40
+    content:
+      text: 内容与客户
+      fontFamily: *ref_0
+      fontSize: 17
+      color: $white
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-card-03-body
+    elementType: text
+    bounds:
+      - 414
+      - 296
+      - 122
+      - 86
+    content:
+      text: |-
+        本地表达
+        会员资产
+        复购与口碑
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $steel
+      lineHeight: 1.55
+      align:
+        - center
+        - middle
+  - elementId: p08-card-03-out
+    elementType: text
+    bounds:
+      - 414
+      - 390
+      - 122
+      - 16
+    content:
+      text: 输出：客户终身价值
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $yellow
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-card-04
+    elementType: shape
+    bounds:
+      - 570
+      - 190
+      - 154
+      - 230
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p08-card-04-tag
+    elementType: shape
+    bounds:
+      - 570
+      - 190
+      - 154
+      - 28
+    shapeName: rect
+    fill:
+      type: solid
+      color: $steel
+    border:
+      color: $steel
+      width: 0
+  - elementId: p08-card-04-no
+    elementType: text
+    bounds:
+      - 584
+      - 197
+      - 126
+      - 14
+    content:
+      text: MODULE 04 / FULFILL
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p08-card-04-title
+    elementType: text
+    bounds:
+      - 586
+      - 238
+      - 122
+      - 40
+    content:
+      text: 仓配与售后
+      fontFamily: *ref_0
+      fontSize: 17
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-card-04-body
+    elementType: text
+    bounds:
+      - 586
+      - 296
+      - 122
+      - 86
+    content:
+      text: |-
+        库存可用率
+        交付承诺
+        退换货闭环
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $slate
+      lineHeight: 1.55
+      align:
+        - center
+        - middle
+  - elementId: p08-card-04-out
+    elementType: text
+    bounds:
+      - 586
+      - 390
+      - 122
+      - 16
+    content:
+      text: 输出：体验确定性
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-card-05
+    elementType: shape
+    bounds:
+      - 742
+      - 190
+      - 164
+      - 230
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p08-card-05-tag
+    elementType: shape
+    bounds:
+      - 742
+      - 190
+      - 164
+      - 28
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p08-card-05-no
+    elementType: text
+    bounds:
+      - 756
+      - 197
+      - 136
+      - 14
+    content:
+      text: MODULE 05 / CONTROL
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p08-card-05-title
+    elementType: text
+    bounds:
+      - 758
+      - 238
+      - 132
+      - 40
+    content:
+      text: 合规与现金
+      fontFamily: *ref_0
+      fontSize: 17
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-card-05-body
+    elementType: text
+    bounds:
+      - 758
+      - 296
+      - 132
+      - 86
+    content:
+      text: |-
+        税务与认证
+        库存资金
+        责任与审计
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $slate
+      lineHeight: 1.55
+      align:
+        - center
+        - middle
+  - elementId: p08-card-05-out
+    elementType: text
+    bounds:
+      - 758
+      - 390
+      - 132
+      - 16
+    content:
+      text: 输出：扩张边界
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-result-band
+    elementType: shape
+    bounds:
+      - 54
+      - 442
+      - 852
+      - 48
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $graphite
+      width: 2
+  - elementId: p08-result-band-t
+    elementType: text
+    bounds:
+      - 76
+      - 453
+      - 808
+      - 26
+    content:
+      text: 经营系统｜同一套决策节奏联通前台、中台与后台，形成可跨市场复制的能力。
+      fontFamily: *ref_0
+      fontSize: 14
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p08-footer
+    elementType: text
+    bounds:
+      - 54
+      - 506
+      - 704
+      - 14
+    content:
+      text: 管理框架：需求信号 → 商品毛利 → 客户资产 → 履约体验 → 合规现金
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $slate
+  - elementId: p08-page
+    elementType: text
+    bounds:
+      - 882
+      - 504
+      - 28
+      - 16
+    content:
+      text: '08'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - right
+        - top

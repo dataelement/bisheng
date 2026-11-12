@@ -11,6 +11,7 @@ from bisheng.resource_reference.application.contracts import (
     TargetType,
     VerifiedReferenceTarget,
     canonical_target_id,
+    is_preserved_foreign_model_reference,
 )
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 
@@ -112,12 +113,26 @@ def resolve_target_state(
     elif exists:
         if original_reference is not None and original_reference.legacy_invalid_reason is not None:
             raise ResourceReferenceInvalidError(reason="reference_legacy_target_reappeared")
-        state, evidence = ReferenceState.VALID, None
+        state = (
+            ReferenceState.INVALID_SCOPE
+            if is_preserved_foreign_model_reference(
+                original_reference, source_key=source_key, target=target, target_tenant_id=target_tenant_id
+            )
+            else ReferenceState.VALID
+        )
+        evidence = None
     else:
         raise ResourceReferenceInvalidError(reason="reference_target_unexplained_missing")
     try:
         return VerifiedReferenceTarget(
-            target, target_tenant_id, target_space_id, model_server_id, state, target_revision, evidence
+            target,
+            target_tenant_id,
+            target_space_id,
+            model_server_id,
+            state,
+            target_revision,
+            evidence,
+            new_binding_allowed=state != ReferenceState.INVALID_SCOPE,
         )
     except (TypeError, ValueError) as exc:
         raise ResourceReferenceInvalidError(reason="reference_target_observation_invalid") from exc

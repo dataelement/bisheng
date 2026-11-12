@@ -17,7 +17,7 @@ from loguru import logger
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.linsight import (
@@ -316,7 +316,6 @@ class LinsightWorkbenchImpl:
             # codes the frontend branches on, which a deferred ingest could only
             # report minutes later as a generic task failure.
             cls.validate_submitted_files(submit_obj.files)
-            await record_business_activity(login_user)
             # Continue an existing session when session_id is supplied, else
             # start a fresh one. Continuing reuses the MessageSession and only
             # appends a new version, so follow-up rounds stay in one 会话 (F035).
@@ -369,11 +368,7 @@ class LinsightWorkbenchImpl:
                     if session_subject is not None or api_meta is not None:
                         raise ProjectInputError()
                     message_session = await ChatSessionService.create_owned_project_session(
-                        message_session,
-                        login_user,
-                        project_intent["project_id"],
-                        project_intent["request_id"],
-                        project_intent["payload"],
+                        message_session, login_user, project_intent["project_id"]
                     )
                 else:
                     message_session = await MessageSessionDao.async_insert_one(message_session)
@@ -1687,9 +1682,7 @@ class LinsightWorkbenchImpl:
             # touch the event loop.
             logger.warning("Task title generation cancelled (client likely disconnected); writing fallback title")
             try:
-                from bisheng.chat_session.domain.chat import ChatSessionService
-
-                ChatSessionService.update_generated_session_name_sync(chat_id, cls._fallback_title(question))
+                MessageSessionDao.update_session_name_sync(chat_id, cls._fallback_title(question))
             except Exception:
                 logger.exception("Failed to write fallback task title after cancellation")
             # Cancellation must keep propagating: swallowing GeneratorExit makes
@@ -1733,9 +1726,7 @@ class LinsightWorkbenchImpl:
         """Update session title"""
         session = await MessageSessionDao.async_get_one(chat_id)
         if session:
-            from bisheng.chat_session.domain.chat import ChatSessionService
-
-            await ChatSessionService.update_generated_session_name(chat_id, title)
+            await MessageSessionDao.update_session_name(chat_id, title)
 
     @classmethod
     async def get_linsight_session_version_list(cls, session_id: str) -> list[LinsightSessionVersion]:

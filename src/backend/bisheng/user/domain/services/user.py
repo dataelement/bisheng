@@ -1,4 +1,3 @@
-import re
 from base64 import b64decode
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -10,9 +9,9 @@ from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.user import (
+    AmbiguousAccountError,
     CaptchaError,
     UserForbiddenError,
-    UserNameTooLongError,
     UserNoRoleForLoginError,
     UserNoWebMenuForLoginError,
     UserPasswordExpireError,
@@ -39,7 +38,6 @@ from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
 from bisheng.user.domain.models.user import User, UserCreate, UserDao, UserLogin, UserRead
-from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid, get_request_ip, md5_hash
 from bisheng.utils.constants import RSA_KEY
 
@@ -60,10 +58,6 @@ ALLOWED_AVATAR_TYPES = {
 MAX_AVATAR_SIZE = 10 * 1024 * 1024  # 10MB
 AVATAR_OBJECT_PREFIX = "avatar/"
 
-# Password strength rule, kept in sync with the frontend PWD_RULE:
-# at least 8 chars, with a lowercase, an uppercase, a digit and a symbol.
-PASSWORD_STRENGTH_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,128}$")
-
 
 class UserService:
     @classmethod
@@ -81,10 +75,10 @@ class UserService:
         return configuration.get("enabled") is True if isinstance(configuration, dict) else bool(configuration.enabled)
 
     @classmethod
-    def _persist_profile_in_session(cls, session, changed: User) -> User:
+    def _persist_profile_in_session(cls, session, changed: User, *, from_sync: bool = False) -> User:
         from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
 
-        user, profile_changed = UserDshProfileRepository.apply_detached_changes(session, changed)
+        user, profile_changed = UserDshProfileRepository.apply_detached_changes(session, changed, from_sync=from_sync)
         if cls._dsh_enabled() and profile_changed:
             cls._record_profile_in_session(session, user)
         return UserDshProfileRepository.detach(session, user)
@@ -97,17 +91,19 @@ class UserService:
         return snapshot
 
     @classmethod
-    def persist_profile_update(cls, changed: User, *, session_scope=None) -> User:
+    def persist_profile_update(cls, changed: User, *, session_scope=None, from_sync: bool = False) -> User:
         """Persist user changes and local profile version in the same transaction."""
         from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepository
 
         with (session_scope or UserDshProfileRepository.transaction)() as session:
-            return cls._persist_profile_in_session(session, changed)
+            return cls._persist_profile_in_session(session, changed, from_sync=from_sync)
 
     @classmethod
-    async def apersist_profile_update(cls, changed: User) -> User:
+    async def apersist_profile_update(cls, changed: User, *, from_sync: bool = False) -> User:
         async with get_async_db_session() as session:
-            user = await session.run_sync(lambda sync: cls._persist_profile_in_session(sync, changed))
+            user = await session.run_sync(
+                lambda sync: cls._persist_profile_in_session(sync, changed, from_sync=from_sync)
+            )
             await session.commit()
             return user
 
@@ -260,9 +256,9 @@ class UserService:
 
     @classmethod
     def password_meets_policy(cls, plain: str) -> bool:
-        """Same rule as the frontend: >=8 chars with lowercase, uppercase,
-        digit and symbol."""
-        return bool(PASSWORD_STRENGTH_PATTERN.match(plain or ""))
+        from bisheng.user.domain.rules.identity import password_meets_policy
+
+        return password_meets_policy(plain)
 
     @classmethod
     def validate_password_strength(cls, plain: str) -> None:
@@ -282,7 +278,7 @@ class UserService:
         return md5_hash(plain)
 
     @classmethod
-    def create_user(cls, request: Request, login_user: LoginUser, req_data: "CreateUserReq"):
+    async def create_user(cls, request: Request, login_user: LoginUser, req_data: "CreateUserReq"):
         """
         Create User
         """
@@ -290,10 +286,7 @@ class UserService:
             user_name=req_data.user_name,
             password=cls.decrypt_md5_password_strict(req_data.password),
             source="local",
-            # Default external_id to user_name so password login (which queries
-            # external_id only since 94323e3ec) works out of the box. SSO-synced
-            # users set their own external_id via org_sync, not through here.
-            external_id=req_data.user_name,
+            external_id=req_data.external_id if req_data.external_id is not None else req_data.user_name,
         )
         group_ids = []
         role_ids = []
@@ -304,7 +297,20 @@ class UserService:
         role_ids = list(dict.fromkeys(role_ids))
         if not role_ids:
             role_ids = [DefaultRole]
-        user = UserDao.add_user_with_groups_and_roles(user, group_ids, role_ids)
+        from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+        from bisheng.role.application.effective_roles import validate_policy_role_ids
+        from bisheng.tenant.domain.services.user_tenant_sync_service import UserTenantSyncService
+        from bisheng.user.application.policy_bindings import grant_policy_bindings
+
+        # This legacy account form has no primary department: the authoritative initial home is Root.
+        # Creating a child-tenant member uses the department-member endpoint instead.
+        await validate_policy_role_ids(1, role_ids)
+        from bisheng.user.domain.services.account_identity_service import AccountIdentityService
+
+        user = AccountIdentityService.create_local(user, group_ids=group_ids, role_ids=[])
+        with tenant_execution_scope(1), strict_tenant_filter():
+            home = await UserTenantSyncService.sync_user(user.user_id)
+        await grant_policy_bindings(user.user_id, home.id, role_ids, operator_id=login_user.user_id)
         from bisheng.api.services.audit_log import AuditLogService
         from bisheng.utils import get_request_ip
 
@@ -404,18 +410,13 @@ class UserService:
             if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
                 raise CaptchaError()
 
-        db_user = User.model_validate(user)
-        person_id = (db_user.external_id or "").strip()
-        if not person_id:
-            raise UserValidateError(msg="Person ID is required")
-        existing_pid = await UserDao.aget_by_external_id(person_id)
-        if existing_pid:
-            raise UserValidateError(msg="Person ID already exists")
-        db_user.external_id = person_id
+        from bisheng.user.domain.rules.identity import validate_account, validate_nickname
+        from bisheng.user.domain.services.account_identity_service import AccountIdentityService
 
-        # Names may repeat; external_id and user_id identify the person.
-        if len(db_user.user_name) > 30:
-            raise UserNameTooLongError()
+        validate_account(user.external_id)
+        validate_nickname(user.user_name)
+        db_user = User.model_validate(user)
+        db_user.source, db_user.delete, db_user.disable_source = "local", 0, None
         db_user.password = cls.decrypt_md5_password_strict(user.password)
         # Under JudgmentadminDoes the user exist
         assigned_tenant_id = await cls._resolve_registration_tenant_id()
@@ -424,20 +425,11 @@ class UserService:
         if settings.multi_tenant.enabled:
             tenant_token = set_current_tenant_id(int(assigned_tenant_id))
         try:
-            admin = await UserDao.aget_user(1)
-            if admin:
-                db_user = await UserDao.add_user_and_default_role(db_user)
-                await LegacyRBACSyncService.sync_user_auth_created(
-                    db_user.user_id,
-                    [DefaultRole],
-                )
-            else:
-                db_user.user_id = 1
-                db_user = await UserDao.add_user_and_admin_role(db_user)
-                await LegacyRBACSyncService.sync_user_auth_created(
-                    db_user.user_id,
-                    [AdminRole],
-                )
+            db_user = await AccountIdentityService.acreate_local(db_user, bootstrap=True)
+            await LegacyRBACSyncService.sync_user_auth_created(
+                db_user.user_id,
+                [AdminRole if db_user.user_id == 1 else DefaultRole],
+            )
 
             await cls._ensure_user_default_tenant_association(
                 db_user.user_id,
@@ -556,11 +548,10 @@ class UserService:
         # NoTenantContextError because do_orm_execute can't infer a tenant for
         # tenant-aware tables (userrole/department/usergroup/roleaccess).
         with bypass_tenant_filter():
-            if role_ids is None:
-                roles = await UserRoleDao.aget_user_roles(db_user.user_id)
-                resolved_role_ids = [role.role_id for role in roles]
-            else:
-                resolved_role_ids = list(role_ids)
+            from bisheng.role.application.effective_roles import load_effective_roles
+
+            policy = await load_effective_roles(db_user.user_id)
+            resolved_role_ids = ([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids)
             if AdminRole in resolved_role_ids:
                 return None
             if is_department_admin is None:
@@ -593,61 +584,34 @@ class UserService:
                 cls._audit_login_failure(request, account=user.user_name, reason="验证码错误")
                 raise CaptchaError()
 
-        # Accept names or external_id; check each matching account when names repeat.
-        candidates = await UserDao.aget_login_candidates_by_account(user.user_name)
-        if not candidates:
-            # Disabled users are excluded from candidates; report the disabled account separately.
-            if await UserDao.aexists_disabled_login_account(user.user_name):
-                cls._audit_login_failure(request, account=user.user_name, reason="账号已停用")
-                return UserForbiddenError.return_resp()
+        from bisheng.user.domain.services.account_identity_service import AccountIdentityService
+
+        try:
+            db_user = await AccountIdentityService.aresolve_login(user.user_name)
+        except UserForbiddenError:
+            cls._audit_login_failure(request, account=user.user_name, reason="账号已停用")
+            return UserForbiddenError.return_resp()
+        except AmbiguousAccountError:
+            cls._audit_login_failure(request, account=user.user_name, reason="账号匹配多个用户")
+            raise
+        if db_user is None:
             cls._audit_login_failure(request, account=user.user_name, reason="账号不存在")
             return UserValidateError.return_resp()
-
         password = cls.decrypt_md5_password(user.password)
-        db_user = None
-        for c in candidates:
-            if c.delete == 1:
-                continue
-            try:
-                await cls.judge_user_password(c, password)
-                db_user = c
-                break
-            except UserPasswordExpireError:
-                cls._audit_login_failure(request, account=c.user_name, reason="密码已过期", user_id=c.user_id)
-                raise
-            except UserPasswordMaxTryError:
-                cls._audit_login_failure(request, account=c.user_name, reason="连续密码错误", user_id=c.user_id)
-                cls._audit_auto_forbid(request, c)
-                raise
-            except UserValidateError:
-                # Try the next account with the same name when the password does not match.
-                continue
-        if not db_user:
-            only = candidates[0] if len(candidates) == 1 else None
-            cls._audit_login_failure(
-                request,
-                account=only.user_name if only else user.user_name,
-                reason="密码错误",
-                user_id=only.user_id if only else 0,
-            )
+        try:
+            await cls.judge_user_password(db_user, password)
+        except UserPasswordExpireError:
+            cls._audit_login_failure(request, account=db_user.user_name, reason="密码已过期", user_id=db_user.user_id)
+            raise
+        except UserPasswordMaxTryError:
+            cls._audit_login_failure(request, account=db_user.user_name, reason="连续密码错误", user_id=db_user.user_id)
+            cls._audit_auto_forbid(request, db_user)
+            raise
+        except UserValidateError:
+            cls._audit_login_failure(request, account=db_user.user_name, reason="密码错误", user_id=db_user.user_id)
             return UserValidateError.return_resp()
 
         await cls.clear_error_password_key(db_user.user_id)
-
-        with bypass_tenant_filter():
-            login_user_roles = await UserRoleDao.aget_user_roles(db_user.user_id)
-            login_role_ids = [role.role_id for role in login_user_roles]
-            login_is_department_admin = False
-            if AdminRole not in login_role_ids:
-                login_is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(db_user.user_id))
-            no_role_resp = await cls._reject_login_if_user_has_no_usable_access(
-                db_user,
-                role_ids=login_role_ids,
-                is_department_admin=login_is_department_admin,
-            )
-        if no_role_resp is not None:
-            cls._audit_login_failure(request, account=db_user.user_name, reason="没有可用权限", user_id=db_user.user_id)
-            return no_role_resp
 
         # Multi-tenant login flow
         tenant_id = None
@@ -724,9 +688,8 @@ class UserService:
         # v2.5.1 F012: resolve canonical leaf tenant + bump token_version.
         # sync_user is a no-op when the resolved leaf already matches the
         # active user_tenant row; otherwise it swaps the row, writes the
-        # audit log and rewrites FGA tuples. Fail-open: if the service
-        # errors (unusual — typically config missing) we fall back to the
-        # tenant_id computed above so the user can still log in.
+        # audit log and rewrites FGA tuples. A failure cannot authorize a
+        # guessed legacy home before the current policy is verified.
         try:
             from bisheng.tenant.domain.constants import UserTenantSyncTrigger
             from bisheng.tenant.domain.services.user_tenant_sync_service import (
@@ -742,11 +705,28 @@ class UserService:
             if leaf is not None and getattr(leaf, "id", None):
                 tenant_id = leaf.id
         except Exception as exc:
-            logger.warning(
-                "F012 login-time tenant sync failed for user %d: %s — falling back to legacy tenant resolution",
-                db_user.user_id,
-                exc,
-            )
+            from bisheng.common.errcode.base import BaseErrorCode
+            from bisheng.common.errcode.role import RolePolicyUnavailableError
+
+            if isinstance(exc, BaseErrorCode):
+                raise
+            logger.exception("Login tenant synchronization failed for user={}", db_user.user_id)
+            raise RolePolicyUnavailableError() from exc
+
+        from bisheng.role.application.effective_roles import load_effective_roles
+
+        policy = await load_effective_roles(db_user.user_id, expected_home_tenant_id=tenant_id)
+        login_role_ids = ([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids)
+        with bypass_tenant_filter():
+            login_is_department_admin = False
+            if not policy.is_identity_admin:
+                login_is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(db_user.user_id))
+        no_role_resp = await cls._reject_login_if_user_has_no_usable_access(
+            db_user, role_ids=login_role_ids, is_department_admin=login_is_department_admin
+        )
+        if no_role_resp is not None:
+            cls._audit_login_failure(request, account=db_user.user_name, reason="没有可用权限", user_id=db_user.user_id)
+            return no_role_resp
 
         # Block login when the resolved leaf tenant is disabled/archived.
         # Without this gate the JWT is issued and the very next request gets

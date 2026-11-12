@@ -62,6 +62,26 @@ class RuntimeProjectionService:
             }
             await self.repo.save(op)
 
+    async def preserve_recovery_maintenance(self, operation):
+        """A retry inherits its parent's fenced maintenance route without advancing it."""
+        from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
+        from bisheng.app_runtime.domain.services.runtime_authorization_service import RuntimeAuthorizationService
+
+        context = operation.payload.get("authorization_context") or {}
+        retry = context.get("retry") or {}
+        parent = await self.repo.get(RuntimeOperation, retry.get("parent_operation_id"), lock=True)
+        routes = await self.repo.find(RuntimeRoute, route_key=f"app:{operation.app_id}", lock=True)
+        route = routes[0] if routes else None
+        if (
+            parent is None
+            or route is None
+            or parent.payload.get("maintenance_transition", {}).get("after")
+            != RuntimeAuthorizationService.route_snapshot(route)
+            or route.status != "maintenance"
+        ):
+            raise RuntimeConflict("recovery_maintenance_origin_changed")
+        return RuntimeAuthorizationService.route_snapshot(route)
+
     async def verify_config_restart_origin(self, op):
         from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import RuntimeConflict
 

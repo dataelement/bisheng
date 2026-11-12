@@ -7,8 +7,9 @@ Uses mock/patch to avoid DB + celery dependencies (matches test_quota_service.py
 baseline style).
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 class TestCountUsageStrict:
@@ -19,12 +20,14 @@ class TestCountUsageStrict:
         """Verify _count_usage_strict enters strict_tenant_filter context manager."""
         from bisheng.role.domain.services.quota_service import QuotaService
 
-        with patch('bisheng.core.context.tenant.strict_tenant_filter') as mock_cm, \
-             patch.object(QuotaService, 'get_tenant_resource_count', new=AsyncMock(return_value=42)):
+        with (
+            patch("bisheng.core.context.tenant.strict_tenant_filter") as mock_cm,
+            patch.object(QuotaService, "get_tenant_resource_count", new=AsyncMock(return_value=42)),
+        ):
             # strict_tenant_filter returns a context manager; simulate one.
             mock_cm.return_value.__enter__ = MagicMock()
             mock_cm.return_value.__exit__ = MagicMock()
-            result = await QuotaService._count_usage_strict(5, 'knowledge_space')
+            result = await QuotaService._count_usage_strict(5, "knowledge_space")
 
         assert result == 42
         mock_cm.assert_called_once()
@@ -32,16 +35,12 @@ class TestCountUsageStrict:
         mock_cm.return_value.__exit__.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_count_usage_strict_returns_zero_on_missing_template(self):
-        """Resource type with no SQL template + strict_filter enabled → 0 (stub-safe).
-
-        ``_count_resource`` returns 0 early when the template map lookup misses,
-        so no DB session is opened and no patching is needed.
-        """
+    async def test_unknown_metric_is_unavailable(self):
+        from bisheng.common.errcode.tenant_quota import QuotaUsageUnavailableError
         from bisheng.role.domain.services.quota_service import QuotaService
 
-        result = await QuotaService._count_usage_strict(5, 'nonexistent_type')
-        assert result == 0
+        with pytest.raises(QuotaUsageUnavailableError):
+            await QuotaService._count_usage_strict(5, "nonexistent_type")
 
 
 class TestAggregateRootUsage:
@@ -52,14 +51,15 @@ class TestAggregateRootUsage:
         """Root with zero active children → root_self count only."""
         from bisheng.role.domain.services.quota_service import QuotaService
 
-        with patch.object(QuotaService, '_count_usage_strict', new=AsyncMock(return_value=7)) as mock_count, \
-             patch('bisheng.database.models.tenant.TenantDao.aget_children_ids_active',
-                   new=AsyncMock(return_value=[])):
-            result = await QuotaService._aggregate_root_usage(1, 'knowledge_space')
+        with (
+            patch.object(QuotaService, "_count_usage_strict", new=AsyncMock(return_value=7)) as mock_count,
+            patch("bisheng.database.models.tenant.TenantDao.aget_children_ids_active", new=AsyncMock(return_value=[])),
+        ):
+            result = await QuotaService._aggregate_root_usage(1, "knowledge_space")
 
         assert result == 7
         # Only one call: for root itself.
-        mock_count.assert_awaited_once_with(1, 'knowledge_space')
+        mock_count.assert_awaited_once_with(1, "knowledge_space")
 
     @pytest.mark.asyncio
     async def test_aggregate_root_sums_self_plus_active_children(self):
@@ -72,10 +72,13 @@ class TestAggregateRootUsage:
         async def fake_count(tid, rt):
             return per_tenant_counts[tid]
 
-        with patch.object(QuotaService, '_count_usage_strict', new=AsyncMock(side_effect=fake_count)) as mock_count, \
-             patch('bisheng.database.models.tenant.TenantDao.aget_children_ids_active',
-                   new=AsyncMock(return_value=[5, 6])):
-            result = await QuotaService._aggregate_root_usage(1, 'knowledge_space')
+        with (
+            patch.object(QuotaService, "_count_usage_strict", new=AsyncMock(side_effect=fake_count)) as mock_count,
+            patch(
+                "bisheng.database.models.tenant.TenantDao.aget_children_ids_active", new=AsyncMock(return_value=[5, 6])
+            ),
+        ):
+            result = await QuotaService._aggregate_root_usage(1, "knowledge_space")
 
         assert result == 100
         # Root self (1) + 2 children (5, 6) = 3 calls total.
@@ -97,10 +100,11 @@ class TestAggregateRootUsage:
             return per_tenant_counts[tid]
 
         # DAO returns only active children → [5]; archived Child 7 excluded.
-        with patch.object(QuotaService, '_count_usage_strict', new=AsyncMock(side_effect=fake_count)), \
-             patch('bisheng.database.models.tenant.TenantDao.aget_children_ids_active',
-                   new=AsyncMock(return_value=[5])):
-            result = await QuotaService._aggregate_root_usage(1, 'knowledge_space')
+        with (
+            patch.object(QuotaService, "_count_usage_strict", new=AsyncMock(side_effect=fake_count)),
+            patch("bisheng.database.models.tenant.TenantDao.aget_children_ids_active", new=AsyncMock(return_value=[5])),
+        ):
+            result = await QuotaService._aggregate_root_usage(1, "knowledge_space")
 
         # 10 (Root) + 30 (Child 5) = 40; Child 7's 99 excluded.
         assert result == 40

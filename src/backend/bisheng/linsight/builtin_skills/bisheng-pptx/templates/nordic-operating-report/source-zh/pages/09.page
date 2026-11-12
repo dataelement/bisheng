@@ -1,0 +1,337 @@
+pageType: decision
+background:
+  type: solid
+  color: $navy
+notes: |
+  新市场进入要先用可逆成本获得信息，再用固定投入兑现体验。平台跨境验证需求，独立站沉淀客户资产，海外仓改善时效和退换货，本地组织承担品牌、合规与本地 P&L。
+elements:
+  - elementId: entry-cyan-rail
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 14
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: entry-top-rule
+    elementType: line
+    bounds:
+      - 52
+      - 46
+      - 856
+      - 1
+    viewBox:
+      - 856
+      - 1
+    points: 0,0 856,0
+    border:
+      color: $mist
+      width: 0.8
+  - elementId: entry-step-1
+    elementType: shape
+    bounds:
+      - 52
+      - 352
+      - 178
+      - 92
+    shapeName: rect
+    fill:
+      type: solid
+      color: $paper
+    border:
+      color: $paper
+      width: 0
+  - elementId: entry-step-2
+    elementType: shape
+    bounds:
+      - 232
+      - 306
+      - 190
+      - 138
+    shapeName: rect
+    fill:
+      type: solid
+      color: $mist
+    border:
+      color: $mist
+      width: 0
+  - elementId: entry-step-3
+    elementType: shape
+    bounds:
+      - 424
+      - 254
+      - 202
+      - 190
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: entry-step-4
+    elementType: shape
+    bounds:
+      - 628
+      - 190
+      - 280
+      - 254
+    shapeName: rect
+    fill:
+      type: solid
+      color: $clay
+    border:
+      color: $clay
+      width: 0
+  - elementId: entry-axis
+    elementType: line
+    bounds:
+      - 52
+      - 462
+      - 856
+      - 1
+    viewBox:
+      - 856
+      - 1
+    points: 0,0 856,0
+    border:
+      color: $mist
+      width: 1.1
+    arrow:
+      - null
+      - triangle
+  - elementId: entry-kicker
+    elementType: text
+    bounds:
+      - 52
+      - 20
+      - 520
+      - 18
+    content:
+      text: MARKET ENTRY / REVERSIBLE FIRST
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 8.5
+      bold: true
+      letterSpacing: 1.15
+      color: $mist
+  - elementId: entry-title
+    elementType: text
+    bounds:
+      - 52
+      - 76
+      - 650
+      - 46
+    content:
+      text: 先用可逆成本买信息，再用固定投入买体验
+      fontFamily:
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 31
+      bold: true
+      color: $white
+  - elementId: entry-gates
+    elementType: text
+    bounds:
+      - 704
+      - 78
+      - 204
+      - 88
+    content:
+      text: 进入闸门<br>G0　市场容量与集中风险<br>G1　单品毛利与退货率<br>G2　合规责任与现金安全垫
+      fontFamily: *ref_0
+      fontSize: 8.7
+      lineHeight: 1.5
+      color: $mist
+      align:
+        - right
+        - top
+  - elementId: entry-s1-no
+    elementType: text
+    bounds:
+      - 68
+      - 368
+      - 148
+      - 18
+    content:
+      text: 01 / TEST
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $muted
+  - elementId: entry-s1-title
+    elementType: text
+    bounds:
+      - 68
+      - 394
+      - 148
+      - 38
+    content:
+      text: 平台跨境<br>验证需求
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      lineHeight: 1.3
+      color: $ink
+  - elementId: entry-s2-no
+    elementType: text
+    bounds:
+      - 248
+      - 322
+      - 158
+      - 18
+    content:
+      text: 02 / OWN
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $muted
+  - elementId: entry-s2-title
+    elementType: text
+    bounds:
+      - 248
+      - 350
+      - 158
+      - 50
+    content:
+      text: 独立站<br>沉淀客户与内容资产
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      lineHeight: 1.3
+      color: $ink
+  - elementId: entry-s3-no
+    elementType: text
+    bounds:
+      - 442
+      - 270
+      - 168
+      - 18
+    content:
+      text: 03 / FULFIL
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $ink
+  - elementId: entry-s3-title
+    elementType: text
+    bounds:
+      - 442
+      - 300
+      - 168
+      - 66
+    content:
+      text: 海外仓<br>兑现时效、退换货<br>与售后体验
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      lineHeight: 1.35
+      color: $ink
+  - elementId: entry-s4-no
+    elementType: text
+    bounds:
+      - 650
+      - 208
+      - 232
+      - 18
+    content:
+      text: 04 / OPERATE
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $ink
+  - elementId: entry-s4-title
+    elementType: text
+    bounds:
+      - 650
+      - 240
+      - 232
+      - 88
+    content:
+      text: 本地组织<br>承担品牌、合规<br>与本地 P&L
+      fontFamily: *ref_0
+      fontSize: 16
+      bold: true
+      lineHeight: 1.35
+      color: $ink
+  - elementId: entry-s4-note
+    elementType: text
+    bounds:
+      - 650
+      - 362
+      - 232
+      - 48
+    content:
+      text: 当销量确定性、毛利和现金安全垫<br>同时过线，才进入固定投入。
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.4
+      color: $ink
+  - elementId: entry-axis-label-low
+    elementType: text
+    bounds:
+      - 52
+      - 472
+      - 250
+      - 20
+    content:
+      text: 固定投入与不可逆性　低
+      fontFamily: *ref_0
+      fontSize: 8.5
+      bold: true
+      color: $mist
+  - elementId: entry-axis-label-high
+    elementType: text
+    bounds:
+      - 790
+      - 472
+      - 118
+      - 20
+    content:
+      text: 高
+      fontFamily: *ref_0
+      fontSize: 8.5
+      bold: true
+      color: $mist
+      align:
+        - right
+        - top
+  - elementId: entry-source
+    elementType: text
+    bounds:
+      - 52
+      - 510
+      - 720
+      - 14
+    content:
+      text: 进入路径为管理层判断框架，决策对象为国家 × 品类 × 履约组合。
+      fontFamily: *ref_0
+      fontSize: 7.5
+      color: $mist
+  - elementId: entry-page
+    elementType: text
+    bounds:
+      - 862
+      - 510
+      - 46
+      - 14
+    content:
+      text: 16—09
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $mist
+      align:
+        - right
+        - bottom

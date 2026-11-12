@@ -302,6 +302,9 @@ class TenantMountService:
                 "failed_user_count": len(sync_result["failed"]),
             },
         )
+        from bisheng.tenant.application.sync_result import assert_subtree_sync_complete
+
+        assert_subtree_sync_complete(sync_result, tenant_id=new_tenant.id)
         return new_tenant
 
     @classmethod
@@ -603,6 +606,13 @@ class TenantMountService:
                     .where(Department.id == dept_id)
                     .values(is_tenant_root=0, mounted_tenant_id=None)
                 )
+                from bisheng.user.application.policy_bindings import (
+                    affected_policy_users,
+                    retire_invalid_policy_bindings,
+                )
+
+                affected = await affected_policy_users(session=session, subtree_path=dept.path)
+                await retire_invalid_policy_bindings(affected, session=session, derive_primary_home=True)
                 await session.commit()
 
         # F017 hook: revoke the ``tenant:{child}#shared_to → tenant:{root}``
@@ -635,6 +645,9 @@ class TenantMountService:
                 "failed_user_count": len(sync_result["failed"]),
             },
         )
+        from bisheng.tenant.application.sync_result import assert_subtree_sync_complete
+
+        assert_subtree_sync_complete(sync_result, tenant_id=child_tenant_id)
         return {
             "tenant_id": child_tenant_id,
             "migrated_counts": migrated_counts,
@@ -806,35 +819,18 @@ async def _safe_audit(**kwargs: Any) -> None:
         )
 
 
-async def _safe_sync_subtree(
-    dept_path: str | None,
-    trigger: UserTenantSyncTrigger,
-) -> dict[str, list]:
-    """Best-effort wrapper around ``UserTenantSyncService.sync_subtree_primary_users``.
-
-    Returns the ``{synced, failed}`` shape always — on any unhandled error
-    the function logs and returns empty lists so the mount/unmount/move
-    main flow is never blocked by a downstream sync hiccup. The
-    login-time lazy path will pick up missed users on their next login.
-    Local import keeps the tenant_mount_service ↔ user_tenant_sync_service
-    cycle off the top-level import graph.
-    """
+async def _safe_sync_subtree(dept_path, trigger):
+    """Collect per-user failures; dispatch errors remain explicit after the SQL commit."""
     if not dept_path:
         return {"synced": [], "failed": []}
     try:
-        from bisheng.tenant.domain.services.user_tenant_sync_service import (
-            UserTenantSyncService,
-        )
+        from bisheng.tenant.domain.services.user_tenant_sync_service import UserTenantSyncService
 
-        return await UserTenantSyncService.sync_subtree_primary_users(
-            dept_path=dept_path,
-            trigger=trigger,
-        )
+        return await UserTenantSyncService.sync_subtree_primary_users(dept_path=dept_path, trigger=trigger)
     except Exception as exc:
-        logger.warning(
-            "sync_subtree_primary_users dispatch failed for path=%s trigger=%s: %s",
-            dept_path,
-            getattr(trigger, "value", trigger),
-            exc,
-        )
-        return {"synced": [], "failed": []}
+        from bisheng.common.errcode.tenant_resolver import TenantResolveFailedError
+
+        logger.exception("Subtree synchronization dispatch failed for path=%s", dept_path)
+        raise TenantResolveFailedError(
+            msg="Organization saved; user tenant synchronization failed", committed=True
+        ) from exc

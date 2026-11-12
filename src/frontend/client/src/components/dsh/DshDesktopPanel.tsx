@@ -1,35 +1,28 @@
 import { Button } from '@bisheng/ui';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { dshLaunchUrl } from '~/utils/dshLaunch';
 import { getDshUsageSummary } from '~/api/dsh';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { DshUsageCalendar } from './DshUsageCalendar';
 
 interface DshDesktopPanelProps {
-  /** Usage loads only when the panel is on screen; the dialog passes its open state. */
-  active: boolean;
   downloadUrl: string | null;
   launchUrl: string;
 }
 
-/**
- * Launch/download actions plus the usage calendar. Shared so the dialog and the
- * settings section show the same thing rather than drifting apart.
- */
-export function DshDesktopPanel({ active, downloadUrl, launchUrl }: DshDesktopPanelProps) {
+export function DshDesktopPanel({ downloadUrl, launchUrl }: DshDesktopPanelProps) {
   const t = useLocalize();
   const { user } = useAuthContext();
   // The launch is a protocol handover the page cannot observe, so the guidance
-  // stays up until the panel is closed or left.
+  // stays up until the user leaves this section.
   const [launchAttempted, setLaunchAttempted] = useState(false);
-  useEffect(() => { if (!active) setLaunchAttempted(false); }, [active]);
   const handleOpenDesktop = () => {
     setLaunchAttempted(true);
     window.location.assign(dshLaunchUrl(launchUrl));
   };
   const usage = useQuery({
-    queryKey: ['dsh-self-usage-summary', user?.id], enabled: active && Boolean(user?.id), retry: false, staleTime: 0,
+    queryKey: ['dsh-self-usage-summary', user?.id], enabled: Boolean(user?.id), retry: false, staleTime: 0,
     queryFn: ({ signal }) => getDshUsageSummary(signal),
   });
   return <>

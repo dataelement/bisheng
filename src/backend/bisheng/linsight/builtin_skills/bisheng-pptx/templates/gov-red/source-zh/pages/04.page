@@ -1,0 +1,544 @@
+pageType: evidence
+background:
+  type: solid
+  color: $white
+elements:
+- elementId: top-band
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 960
+  - 8
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: top-gold
+  elementType: shape
+  bounds:
+  - 0
+  - 8
+  - 960
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: kicker
+  elementType: text
+  bounds:
+  - 48
+  - 28
+  - 600
+  - 16
+  content:
+    text: 一、年度工作总体情况
+    style: $kicker
+- elementId: title
+  elementType: text
+  bounds:
+  - 48
+  - 46
+  - 864
+  - 36
+  content:
+    text: 主要经营指标全面完成，利润增速高于收入增速
+    style: $title
+- elementId: title-mark
+  elementType: shape
+  bounds:
+  - 48
+  - 88
+  - 56
+  - 3
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: footer-rule
+  elementType: line
+  bounds:
+  - 48
+  - 502
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: footer-org
+  elementType: text
+  bounds:
+  - 48
+  - 508
+  - 500
+  - 16
+  content:
+    text: 示例单位 · 2026 年度工作汇报
+    style: $meta
+- elementId: footer-no
+  elementType: text
+  bounds:
+  - 852
+  - 508
+  - 60
+  - 16
+  content:
+    text: '04'
+    style: $meta
+    align:
+    - right
+    - top
+- elementId: kpi-card-1
+  elementType: shape
+  bounds:
+  - 48
+  - 118
+  - 204
+  - 210
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: kpi-bar-1
+  elementType: shape
+  bounds:
+  - 48
+  - 118
+  - 204
+  - 4
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: kpi-label-1
+  elementType: text
+  bounds:
+  - 64
+  - 136
+  - 172
+  - 20
+  content:
+    text: 营业收入
+    style: $label
+    fontSize: 13
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-num-1
+  elementType: text
+  bounds:
+  - 64
+  - 166
+  - 134
+  - 56
+  content:
+    text: '386.2'
+    style: $title
+    fontSize: 40
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-unit-1
+  elementType: text
+  bounds:
+  - 192
+  - 188
+  - 44
+  - 24
+  content:
+    text: 亿元
+    style: $label
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-rule-1
+  elementType: line
+  bounds:
+  - 64
+  - 236
+  - 172
+  - 1
+  viewBox:
+  - 172
+  - 1
+  points: 0,0 172,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: kpi-note-1
+  elementType: text
+  bounds:
+  - 64
+  - 248
+  - 172
+  - 64
+  content:
+    text: 同比增长 8.6%，完成年度目标的 103%
+    style: $body
+    fontSize: 12
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-card-2
+  elementType: shape
+  bounds:
+  - 268
+  - 118
+  - 204
+  - 210
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: kpi-bar-2
+  elementType: shape
+  bounds:
+  - 268
+  - 118
+  - 204
+  - 4
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: kpi-label-2
+  elementType: text
+  bounds:
+  - 284
+  - 136
+  - 172
+  - 20
+  content:
+    text: 利润总额
+    style: $label
+    fontSize: 13
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-num-2
+  elementType: text
+  bounds:
+  - 284
+  - 166
+  - 134
+  - 56
+  content:
+    text: '42.7'
+    style: $title
+    fontSize: 40
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-unit-2
+  elementType: text
+  bounds:
+  - 412
+  - 188
+  - 44
+  - 24
+  content:
+    text: 亿元
+    style: $label
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-rule-2
+  elementType: line
+  bounds:
+  - 284
+  - 236
+  - 172
+  - 1
+  viewBox:
+  - 172
+  - 1
+  points: 0,0 172,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: kpi-note-2
+  elementType: text
+  bounds:
+  - 284
+  - 248
+  - 172
+  - 64
+  content:
+    text: 同比增长 11.2%，增速高于收入 2.6 个百分点
+    style: $body
+    fontSize: 12
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-card-3
+  elementType: shape
+  bounds:
+  - 488
+  - 118
+  - 204
+  - 210
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: kpi-bar-3
+  elementType: shape
+  bounds:
+  - 488
+  - 118
+  - 204
+  - 4
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: kpi-label-3
+  elementType: text
+  bounds:
+  - 504
+  - 136
+  - 172
+  - 20
+  content:
+    text: 研发投入强度
+    style: $label
+    fontSize: 13
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-num-3
+  elementType: text
+  bounds:
+  - 504
+  - 166
+  - 134
+  - 56
+  content:
+    text: '3.4'
+    style: $title
+    fontSize: 40
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-unit-3
+  elementType: text
+  bounds:
+  - 632
+  - 188
+  - 44
+  - 24
+  content:
+    text: '%'
+    style: $label
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-rule-3
+  elementType: line
+  bounds:
+  - 504
+  - 236
+  - 172
+  - 1
+  viewBox:
+  - 172
+  - 1
+  points: 0,0 172,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: kpi-note-3
+  elementType: text
+  bounds:
+  - 504
+  - 248
+  - 172
+  - 64
+  content:
+    text: 较上年提高 0.5 个百分点
+    style: $body
+    fontSize: 12
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-card-4
+  elementType: shape
+  bounds:
+  - 708
+  - 118
+  - 204
+  - 210
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: kpi-bar-4
+  elementType: shape
+  bounds:
+  - 708
+  - 118
+  - 204
+  - 4
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: kpi-label-4
+  elementType: text
+  bounds:
+  - 724
+  - 136
+  - 172
+  - 20
+  content:
+    text: 安全生产事故
+    style: $label
+    fontSize: 13
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-num-4
+  elementType: text
+  bounds:
+  - 724
+  - 166
+  - 134
+  - 56
+  content:
+    text: '0'
+    style: $title
+    fontSize: 40
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-unit-4
+  elementType: text
+  bounds:
+  - 852
+  - 188
+  - 44
+  - 24
+  content:
+    text: 起
+    style: $label
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-rule-4
+  elementType: line
+  bounds:
+  - 724
+  - 236
+  - 172
+  - 1
+  viewBox:
+  - 172
+  - 1
+  points: 0,0 172,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: kpi-note-4
+  elementType: text
+  bounds:
+  - 724
+  - 248
+  - 172
+  - 64
+  content:
+    text: 连续 5 年未发生较大及以上事故
+    style: $body
+    fontSize: 12
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: kpi-insight-band
+  elementType: shape
+  bounds:
+  - 48
+  - 350
+  - 864
+  - 120
+  shapeName: rect
+  fill:
+    type: solid
+    color: $white
+  border:
+    color: $rule
+    width: 0.8
+- elementId: kpi-insight-mark
+  elementType: shape
+  bounds:
+  - 48
+  - 350
+  - 4
+  - 120
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: kpi-insight-head
+  elementType: text
+  bounds:
+  - 68
+  - 364
+  - 300
+  - 22
+  content:
+    text: 总体判断
+    style: $lead
+- elementId: kpi-insight-body
+  elementType: text
+  bounds:
+  - 68
+  - 392
+  - 824
+  - 64
+  content:
+    text: 规模与效益同步提升，利润增速连续两年高于收入增速，说明结构调整开始见效；研发投入强度首次超过 3%，为下一阶段转型打下基础。（示例数据，不代表事实）
+    style: $body

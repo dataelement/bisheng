@@ -90,7 +90,7 @@ async def test_explicit_revocation_is_a_live_non_executable_fact_and_preview_can
             await ctx.model.ainspect_transient_targets(session, preview, (ref.target,), identity=ctx.identity)
 
 
-@pytest.mark.parametrize("case", ["error", "malformed", "foreign", "owner_change"])
+@pytest.mark.parametrize("case", ["error", "malformed", "owner_change"])
 async def test_sharing_and_owner_failures_are_never_an_allow_fallback(model_read_context, case):
     ctx = model_read_context
     ref = knowledge.spec("model", 33 if case == "foreign" else 22)

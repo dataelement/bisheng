@@ -188,7 +188,7 @@ environment:
 # 可根据loguru的文档配置不同 handlers
 logger_conf:
   # 默认输出到sys.stdout的日志级别, 大于等于此级别都会输出
-  level: DEBUG
+  level: INFO
   # 默认输出格式
   format: '<level>[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
   # 参考loguru.add()中的参数可以配置多个handler
@@ -199,8 +199,8 @@ logger_conf:
       level: INFO
       # 日志格式化函数，extra内支持trace_id
       format: '<level>[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
-      # 每天的几点进行切割
-      rotation: "00:00"
+      # 单文件 100MB 切割；各部署环境可按磁盘预算调整切割与保留策略
+      rotation: "100 MB"
       retention: "3 Days"
       enqueue: ture
     - sink: "/app/data/statistic.log"
@@ -208,7 +208,7 @@ logger_conf:
       # 和原生不一样，后端会将配置使用eval()执行转为函数用来过滤特定日志级别。推荐lambda
       filter: "lambda record: record['level'].name == 'INFO' and record['message'].startswith('k=s')"
       format: "[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}]|{level}|BISHENG|{extra[trace_id]}||{process.id}|{thread.id}|||#EX_ERR:POS={name},line {line},ERR=500,EMSG={message}"
-      rotation: "00:00"
+      rotation: "100 MB"
       retention: "3 Days"
       enqueue: ture
 

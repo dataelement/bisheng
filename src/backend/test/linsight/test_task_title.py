@@ -121,7 +121,7 @@ class TestTaskTitleCancellation:
         with (
             patch.object(LinsightWorkbenchImpl, "_get_llm", new=AsyncMock(return_value=(fake_llm, None))),
             patch.object(LinsightWorkbenchImpl, "_generate_title_prompt", new=AsyncMock(return_value=[])),
-            patch("bisheng.chat_session.domain.chat.ChatSessionService.update_generated_session_name_sync") as sync_upd,
+            patch.object(MessageSessionDao, "update_session_name_sync") as sync_upd,
             patch.object(LinsightWorkbenchImpl, "_update_session_title", new=AsyncMock()) as async_upd,
         ):
             with pytest.raises(exc):
@@ -142,7 +142,7 @@ class TestTaskTitleCancellation:
         with (
             patch.object(LinsightWorkbenchImpl, "_get_llm", new=AsyncMock(return_value=(fake_llm, None))),
             patch.object(LinsightWorkbenchImpl, "_generate_title_prompt", new=AsyncMock(return_value=[])),
-            patch("bisheng.chat_session.domain.chat.ChatSessionService.update_generated_session_name_sync"),
+            patch.object(MessageSessionDao, "update_session_name_sync"),
         ):
             with pytest.raises(asyncio.CancelledError):
                 await LinsightWorkbenchImpl.task_title_generate(question="q", chat_id="c1", login_user=login_user)
@@ -153,10 +153,7 @@ class TestTaskTitleCancellation:
         with (
             patch.object(LinsightWorkbenchImpl, "_get_llm", new=AsyncMock(return_value=(fake_llm, None))),
             patch.object(LinsightWorkbenchImpl, "_generate_title_prompt", new=AsyncMock(return_value=[])),
-            patch(
-                "bisheng.chat_session.domain.chat.ChatSessionService.update_generated_session_name_sync",
-                side_effect=RuntimeError("db down"),
-            ),
+            patch.object(MessageSessionDao, "update_session_name_sync", side_effect=RuntimeError("db down")),
         ):
             with pytest.raises(GeneratorExit):
                 await LinsightWorkbenchImpl.task_title_generate(question="q", chat_id="c1", login_user=login_user)

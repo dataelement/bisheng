@@ -30,7 +30,8 @@ beforeEach(() => {
 
 it('submits immutable project intent before created and never writes a local assignment', () => {
   const stream = start();
-  expect(stream.payload).toMatchObject({ project_id: projectId, project_request_id: expect.any(String) });
+  expect(stream.payload).toMatchObject({ project_id: projectId });
+  expect(stream.payload).not.toHaveProperty('project_request_id');
   window.history.replaceState({}, '', '/workspace/c/new');
   stream.emit({ created: true, message: { conversationId: 'created-chat', messageId: '42' } });
   expect(localStorage.getItem('bs_mock_project_chats')).toBeNull();
@@ -59,39 +60,8 @@ it.each([
   expect(start({ payload: { conversationId }, sseUrl }).payload.project_id).toBeUndefined();
 });
 
-it('restores an existing conversation on a replay instead of starting another generation', () => {
-  const recovered = jest.fn();
-  window.addEventListener('bisheng:project-conversation-recovered', recovered);
-  const stream = start();
-  stream.emit({ status_code: 13018, data: { chat_id: 'existing-chat' } }, 'error');
-  expect(recovered).toHaveBeenCalledTimes(1);
-  expect(stream.submission.onError).not.toHaveBeenCalled();
-  expect(stream.submission.onEnd).toHaveBeenCalledTimes(1);
-  window.removeEventListener('bisheng:project-conversation-recovered', recovered);
-});
-
-it('does not navigate a later draft when an earlier project request is replayed', () => {
+it('keeps the project captured before the route changed', () => {
   const projectDraft = captureProjectChatDraft(null);
-  const recovered = jest.fn();
-  window.addEventListener('bisheng:project-conversation-recovered', recovered);
   window.history.replaceState({}, '', '/workspace/c/new?projectId=22222222-2222-4222-8222-222222222222');
-  const stream = start({ projectDraft });
-  expect(stream.payload.project_id).toBe(projectId);
-  stream.emit({ status_code: 13018, data: { chat_id: 'existing-chat' } }, 'error');
-  expect(recovered).not.toHaveBeenCalled();
-  expect(stream.submission.onEnd).toHaveBeenCalledTimes(1);
-  window.removeEventListener('bisheng:project-conversation-recovered', recovered);
-});
-
-it('does not recover an old chat into a different logical draft with the same project URL', () => {
-  window.history.replaceState({ key: 'first-router-key', usr: { newChatKey: 'first-intent' } }, '', window.location.href);
-  const projectDraft = captureProjectChatDraft(null);
-  const recovered = jest.fn();
-  window.addEventListener('bisheng:project-conversation-recovered', recovered);
-  window.history.replaceState({ key: 'second-router-key', usr: { newChatKey: 'second-intent' } }, '', window.location.href);
-  const stream = start({ projectDraft });
-  stream.emit({ status_code: 13018, data: { chat_id: 'old-chat' } }, 'error');
-  expect(recovered).not.toHaveBeenCalled();
-  expect(stream.submission.onEnd).toHaveBeenCalledTimes(1);
-  window.removeEventListener('bisheng:project-conversation-recovered', recovered);
+  expect(start({ projectDraft }).payload.project_id).toBe(projectId);
 });

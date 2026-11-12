@@ -1,0 +1,1041 @@
+pageType: content
+background:
+  type: solid
+  color: '#F0EAE0'
+notes: Authored experiment composition. All new example statements and figures are illustrative, not reported facts. Replace them with user evidence. One hypothesis with comparison, measure and a predeclared decision rule
+elements:
+  - elementId: l1
+    elementType: line
+    bounds:
+      - 48
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 72
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l3
+    elementType: line
+    bounds:
+      - 96
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l4
+    elementType: line
+    bounds:
+      - 120
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l5
+    elementType: line
+    bounds:
+      - 144
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l6
+    elementType: line
+    bounds:
+      - 168
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l7
+    elementType: line
+    bounds:
+      - 192
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l8
+    elementType: line
+    bounds:
+      - 216
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l9
+    elementType: line
+    bounds:
+      - 240
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l10
+    elementType: line
+    bounds:
+      - 264
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l11
+    elementType: line
+    bounds:
+      - 288
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l12
+    elementType: line
+    bounds:
+      - 312
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l13
+    elementType: line
+    bounds:
+      - 336
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l14
+    elementType: line
+    bounds:
+      - 360
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l15
+    elementType: line
+    bounds:
+      - 384
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l16
+    elementType: line
+    bounds:
+      - 408
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l17
+    elementType: line
+    bounds:
+      - 432
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l18
+    elementType: line
+    bounds:
+      - 456
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l19
+    elementType: line
+    bounds:
+      - 480
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l20
+    elementType: line
+    bounds:
+      - 504
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l21
+    elementType: line
+    bounds:
+      - 528
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l22
+    elementType: line
+    bounds:
+      - 552
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l23
+    elementType: line
+    bounds:
+      - 576
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l24
+    elementType: line
+    bounds:
+      - 600
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l25
+    elementType: line
+    bounds:
+      - 624
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l26
+    elementType: line
+    bounds:
+      - 648
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l27
+    elementType: line
+    bounds:
+      - 672
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l28
+    elementType: line
+    bounds:
+      - 696
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l29
+    elementType: line
+    bounds:
+      - 720
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l30
+    elementType: line
+    bounds:
+      - 744
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l31
+    elementType: line
+    bounds:
+      - 768
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l32
+    elementType: line
+    bounds:
+      - 792
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l33
+    elementType: line
+    bounds:
+      - 816
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l34
+    elementType: line
+    bounds:
+      - 840
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l35
+    elementType: line
+    bounds:
+      - 864
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l36
+    elementType: line
+    bounds:
+      - 888
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l37
+    elementType: line
+    bounds:
+      - 912
+      - 150
+      - 1
+      - 308
+    viewBox:
+      - 1
+      - 308
+    points: 0,0 0,308
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l38
+    elementType: line
+    bounds:
+      - 48
+      - 150
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l39
+    elementType: line
+    bounds:
+      - 48
+      - 174
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l40
+    elementType: line
+    bounds:
+      - 48
+      - 198
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l41
+    elementType: line
+    bounds:
+      - 48
+      - 222
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l42
+    elementType: line
+    bounds:
+      - 48
+      - 246
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l43
+    elementType: line
+    bounds:
+      - 48
+      - 270
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l44
+    elementType: line
+    bounds:
+      - 48
+      - 294
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l45
+    elementType: line
+    bounds:
+      - 48
+      - 318
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l46
+    elementType: line
+    bounds:
+      - 48
+      - 342
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l47
+    elementType: line
+    bounds:
+      - 48
+      - 366
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l48
+    elementType: line
+    bounds:
+      - 48
+      - 390
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l49
+    elementType: line
+    bounds:
+      - 48
+      - 414
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: l50
+    elementType: line
+    bounds:
+      - 48
+      - 438
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.35
+      color: '#e3ddd4'
+  - elementId: t51
+    elementType: text
+    bounds:
+      - 48
+      - 27
+      - 665
+      - 20
+    content:
+      text: ENGINEERING BLUEPRINT
+      fontFamily: &ref_0
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#252824'
+      bold: false
+  - elementId: l52
+    elementType: line
+    bounds:
+      - 48
+      - 59
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#b3b0a8'
+  - elementId: t53
+    elementType: text
+    bounds:
+      - 48
+      - 76
+      - 864
+      - 64
+    content:
+      text: 看到结果之前，先设计验证方法
+      fontFamily: &ref_1
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#252824'
+      bold: true
+  - elementId: t54
+    elementType: text
+    bounds:
+      - 754
+      - 46
+      - 158
+      - 13
+    content:
+      text: 图示 07
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#62625c'
+      bold: false
+      align: right
+  - elementId: t55
+    elementType: text
+    bounds:
+      - 48
+      - 174
+      - 275
+      - 104
+    content:
+      text: |-
+        一次验证
+        一个假设
+      fontFamily: *ref_1
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#252824'
+      bold: true
+  - elementId: t56
+    elementType: text
+    bounds:
+      - 48
+      - 331
+      - 278
+      - 117
+    content:
+      text: |-
+        先明确接口和故障路径
+        再考虑增加服务
+      fontFamily: *ref_0
+      fontSize: 21
+      lineHeight: 1.1
+      color: '#252824'
+      bold: false
+  - elementId: l57
+    elementType: line
+    bounds:
+      - 365
+      - 174
+      - 1
+      - 276
+    viewBox:
+      - 1
+      - 276
+    points: 0,0 0,276
+    border:
+      width: 0.6
+      color: '#b3b0a8'
+  - elementId: t58
+    elementType: text
+    bounds:
+      - 402
+      - 177
+      - 141
+      - 34
+    content:
+      text: 假设
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#252824'
+      bold: true
+  - elementId: t59
+    elementType: text
+    bounds:
+      - 561
+      - 177
+      - 350
+      - 58
+    content:
+      text: 明确下一步能够减少犹豫。
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#252824'
+      bold: false
+  - elementId: l60
+    elementType: line
+    bounds:
+      - 402
+      - 239
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: '#bdbab1'
+  - elementId: t61
+    elementType: text
+    bounds:
+      - 402
+      - 248
+      - 141
+      - 34
+    content:
+      text: 比较
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#252824'
+      bold: true
+  - elementId: t62
+    elementType: text
+    bounds:
+      - 561
+      - 248
+      - 350
+      - 58
+    content:
+      text: 相同任务；比较现有与修改后的引导。
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#252824'
+      bold: false
+  - elementId: l63
+    elementType: line
+    bounds:
+      - 402
+      - 310
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: '#bdbab1'
+  - elementId: t64
+    elementType: text
+    bounds:
+      - 402
+      - 319
+      - 141
+      - 34
+    content:
+      text: 衡量
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#252824'
+      bold: true
+  - elementId: t65
+    elementType: text
+    bounds:
+      - 561
+      - 319
+      - 350
+      - 58
+    content:
+      text: 完成率、耗时与求助次数。
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#252824'
+      bold: false
+  - elementId: l66
+    elementType: line
+    bounds:
+      - 402
+      - 381
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: '#bdbab1'
+  - elementId: t67
+    elementType: text
+    bounds:
+      - 402
+      - 390
+      - 141
+      - 34
+    content:
+      text: 决策
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#252824'
+      bold: true
+  - elementId: t68
+    elementType: text
+    bounds:
+      - 561
+      - 390
+      - 350
+      - 58
+    content:
+      text: 达到约定目标后再采用。
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#252824'
+      bold: false
+  - elementId: l69
+    elementType: line
+    bounds:
+      - 402
+      - 452
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: '#bdbab1'
+  - elementId: l70
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#c3bfb7'
+  - elementId: t71
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: 收集结果前先定义成功标准，同时记录相反证据。
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#252824'
+      bold: false
+  - elementId: t72
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 783
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#252824'
+      bold: false
+  - elementId: t73
+    elementType: text
+    bounds:
+      - 871
+      - 504
+      - 41
+      - 22
+    content:
+      text: '08'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#252824'
+      bold: false

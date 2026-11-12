@@ -3,7 +3,7 @@ x-runtime-platform-env: &runtime-platform-env
   BISHENG_RUNTIME_NODE_ID: ${BISHENG_RUNTIME_NODE_ID:-docker-node-1}
   BISHENG_RUNTIME_PLATFORM_BASE_URL: 'http://backend:7860'
   BISHENG_RUNTIME_AUDIT_SOURCE_TIMEZONE: '${BISHENG_RUNTIME_AUDIT_SOURCE_TIMEZONE:-}'
-  BISHENG_RUNTIME_OFFLINE: ${BISHENG_RUNTIME_OFFLINE:-true}
+  BISHENG_RUNTIME_OFFLINE: ${BISHENG_RUNTIME_OFFLINE:-false}
   BISHENG_RUNTIME_TASK_TIMEOUT_SECONDS: ${BISHENG_RUNTIME_TASK_TIMEOUT_SECONDS:-1800}
   BISHENG_RUNTIME_PAYLOAD_KEY: ${BISHENG_RUNTIME_PAYLOAD_KEY:-}
   BISHENG_APP_PROXY_HMAC_SECRET: ${BISHENG_APP_PROXY_HMAC_SECRET:-}
@@ -13,6 +13,12 @@ x-runtime-platform-env: &runtime-platform-env
   # Generate this node descriptor on the Docker host; see deploy/runtime-manager/README.md.
   BISHENG_RUNTIME_HOST_ISOLATION_NODES: '${BISHENG_RUNTIME_HOST_ISOLATION_NODES:-}'
   BISHENG_RUNTIME_SERVICE_KEYS: '{"manager-node-1":{"secret":"${BISHENG_RUNTIME_MANAGER_SECRET:-}","node_id":"${BISHENG_RUNTIME_NODE_ID:-docker-node-1}","roles":["manager"]},"egress-node-1":{"secret":"${BISHENG_RUNTIME_EGRESS_SECRET:-}","node_id":"${BISHENG_RUNTIME_NODE_ID:-docker-node-1}","roles":["egress"]},"host-isolation-node-1":{"secret":"${BISHENG_RUNTIME_HOST_ISOLATION_SECRET:-}","node_id":"${BISHENG_RUNTIME_NODE_ID:-docker-node-1}","roles":["host-isolation"]},"entry-reader":{"secret":"${BISHENG_RUNTIME_ENTRY_SECRET:-}","roles":["entry"]}}'
+
+x-bisheng-json-logging: &bisheng-json-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "5"
 
 services:
   ft_server:
@@ -217,6 +223,7 @@ services:
       - default
       - sandbox_net
     restart: on-failure
+    logging: *bisheng-json-logging
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
       start_period: 30s
@@ -268,6 +275,7 @@ services:
       - seccomp:unconfined
     command: sh entrypoint.sh worker  # 启动celery的异步worker服务，用来处理一些耗时的任务
     restart: on-failure
+    logging: *bisheng-json-logging
     networks:
       - default
       - sandbox_net
@@ -422,7 +430,7 @@ services:
       RTM_RESERVE_MB: ${BISHENG_RTM_RESERVE_MB:-2048}
       RTM_OVERCOMMIT_RATIO: ${BISHENG_RTM_OVERCOMMIT_RATIO:-0.8}
       RTM_BUILD_RESERVE_MB: ${BISHENG_RTM_BUILD_RESERVE_MB:-2048}
-      RTM_BUILD_INDEX_URL: ${BISHENG_RTM_BUILD_INDEX_URL:-}
+      RTM_BUILD_INDEX_URL: ${BISHENG_RTM_BUILD_INDEX_URL:-https://pypi.org/simple}
       RTM_BUILD_NPM_REGISTRY: ${BISHENG_RTM_BUILD_NPM_REGISTRY:-}
       RTM_BUILD_EXTRA_INDEX_URL: 'http://backend:7860/api/v1/dev-toolkit/simple/'
       RTM_BUILD_EXTRA_TRUSTED_HOST: backend

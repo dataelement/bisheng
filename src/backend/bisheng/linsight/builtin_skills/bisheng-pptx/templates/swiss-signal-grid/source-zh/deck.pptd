@@ -1,0 +1,91 @@
+version: v2
+title: 中国跨境电商｜从流量出海到本地经营
+size:
+  - 960
+  - 540
+theme:
+  colors:
+    paper: '#F5F3EE'
+    black: '#111111'
+    red: '#E52333'
+    gray: '#6E6D68'
+    grid: '#CBC8C0'
+    wash: '#E8E5DE'
+    white: '#FFFFFF'
+  textStyles:
+    title:
+      fontFamily:
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 30
+      bold: true
+      color: $black
+      lineHeight: 1.02
+      align:
+        - left
+        - top
+    lead:
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 18
+      bold: true
+      color: $black
+      lineHeight: 1.15
+      align:
+        - left
+        - top
+    body:
+      fontFamily: *ref_0
+      fontSize: 14
+      color: $black
+      lineHeight: 1.25
+      align:
+        - left
+        - top
+    meta:
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $gray
+      lineHeight: 1.15
+      align:
+        - left
+        - top
+  tableStyles:
+    swiss-matrix:
+      cellStyle:
+        fontFamily: *ref_0
+        fontSize: 11
+        color: $black
+        fill:
+          type: solid
+          color: $paper
+        border:
+          color: $grid
+          width: 0.7
+      firstRowStyle:
+        bold: true
+        color: $white
+        fill:
+          type: solid
+          color: $black
+pages:
+  - pages/01.page
+  - pages/02.page
+  - pages/03.page
+  - pages/04.page
+  - pages/05.page
+  - pages/06.page
+  - pages/07.page
+  - pages/08.page
+  - pages/09.page
+  - pages/10.page
+  - pages/11.page
+  - pages/12.page
+template:
+  id: swiss-signal-grid
+  name: Swiss Signal Grid

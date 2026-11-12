@@ -81,6 +81,9 @@ class PodPlan:
     schema_plan: tuple[dict, ...] = field(default_factory=tuple, repr=False)
     temporary_mb: int = 256
     volume_guard: dict = field(default_factory=dict, repr=False)
+    helper_resources: dict = field(default_factory=dict, repr=False)
+    placement: dict = field(default_factory=dict, repr=False)
+    timeouts: dict = field(default_factory=dict, repr=False)
 
     def validate(self):
         validate_namespace(self.namespace)
@@ -146,7 +149,7 @@ class PodPlan:
         if self.purpose == "image-check" and (
             self.image != self.helper_image
             or self.command != ("python", "-I", "-m", "runtime_manager.image_check")
-            or self.deadline_seconds > 120
+            or self.deadline_seconds > self.timeouts.get("image_check", 120)
             or self.pvc_name
             or self.scratch_pvc
             or self.material_secret
@@ -247,6 +250,20 @@ def _container(plan, name, *, image=None, command=None, mounts=(), helper=False,
         "memory": "128Mi" if helper else f"{plan.memory_mb}Mi",
         "ephemeral-storage": f"{plan.temporary_mb}Mi",
     }
+    purpose = ("sidecar" if name == "data-helper" and plan.purpose != "data" else "init") if helper else plan.purpose
+    if name == "image-check":
+        purpose = "image-check"
+    elif name == "maintenance" or (name == "data-helper" and plan.purpose == "data"):
+        purpose = "data"
+    elif name == "transfer" and plan.purpose in PREPARATION:
+        purpose = plan.purpose
+    if purpose in plan.helper_resources:
+        configured = plan.helper_resources[purpose]
+        if set(configured) != {"memory_mb", "cpu_millicores"} or any(
+            type(v) is not int or v <= 0 for v in configured.values()
+        ):
+            raise ValueError("k8s_helper_resources_invalid")
+        budget.update(cpu=f"{configured['cpu_millicores']}m", memory=f"{configured['memory_mb']}Mi")
     item = {
         "name": name,
         "image": image or plan.image,
@@ -305,6 +322,16 @@ def pod_template(plan: PodPlan) -> dict:
         "containers": [],
         "initContainers": [],
     }
+    if plan.placement:
+        if set(plan.placement) - {"nodeSelector", "affinity", "tolerations"}:
+            raise ValueError("k8s_placement_invalid")
+        selectors = plan.placement.get("nodeSelector", {})
+        if any(key in selectors and selectors[key] != value for key, value in spec["nodeSelector"].items()):
+            raise ValueError("k8s_platform_selector_conflict")
+        spec["nodeSelector"].update(selectors)
+        if plan.placement.get("affinity"):
+            spec["affinity"] = plan.placement["affinity"]
+        spec["tolerations"].extend(plan.placement.get("tolerations", []))
     if plan.runtime_class:
         spec["runtimeClassName"] = plan.runtime_class
     if plan.pull_secret:
@@ -504,7 +531,7 @@ def pod_template(plan: PodPlan) -> dict:
             app["startupProbe"] = {
                 "httpGet": {"path": plan.health_path, "port": "http"},
                 "periodSeconds": 3,
-                "failureThreshold": 30,
+                "failureThreshold": max(1, (plan.timeouts.get("health", 90) + 2) // 3),
                 "timeoutSeconds": 2,
             }
             containers.append(app)
@@ -571,7 +598,9 @@ def service_template(plan: PodPlan) -> dict:
     }
 
 
-def pvc_template(plan: PodPlan, *, name: str, size_mb: int, storage_class: str, static_pool: bool = False) -> dict:
+def pvc_template(
+    plan: PodPlan, *, name: str, size_mb: int, storage_class: str | None, static_pool: bool = False
+) -> dict:
     plan.validate()
     if not _NAME.fullmatch(name) or type(size_mb) is not int or size_mb <= 0:
         raise ValueError("k8s_pvc_invalid")
@@ -588,6 +617,8 @@ def pvc_template(plan: PodPlan, *, name: str, size_mb: int, storage_class: str, 
             "resources": {"requests": {"storage": f"{size_mb}Mi"}},
         },
     }
+    if storage_class is None:
+        result["spec"].pop("storageClassName")
 
     if static_pool:
         result["spec"]["selector"] = {

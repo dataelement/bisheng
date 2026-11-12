@@ -2,8 +2,6 @@ import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AccountSection } from "~/components/Settings/sections/AccountSection";
-import { DshDesktopDialog } from "~/components/dsh/DshDesktopDialog";
-import { useDshDesktop } from "~/hooks/useDshDesktop";
 import { Button } from "~/components/ui/Button";
 import { useAuthContext, useLocalize } from "~/hooks";
 
@@ -14,9 +12,8 @@ import { useAuthContext, useLocalize } from "~/hooks";
  */
 export function AccountPane() {
   const localize = useLocalize();
-  const dsh = useDshDesktop();
   const { user, logout } = useAuthContext();
-  const displayName = user?.username || "admin";
+  const displayName = user?.username ?? '';
   const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -33,25 +30,10 @@ export function AccountPane() {
     <div className="flex flex-col gap-6">
       <AccountSection
         username={displayName}
+        account={user?.external_id}
         avatarUrl={avatarUrl || user?.avatar || ""}
         onAvatarUpdated={setAvatarUrl}
       />
-
-      {dsh.enabled && (
-        <section className="flex flex-col gap-4 border-t border-fill-2 pt-5">
-          <Button variant="outline" className="w-fit" onClick={() => dsh.setOpen(true)}>
-            {localize("dsh_title")}
-          </Button>
-        </section>
-      )}
-      {dsh.open && (
-        <DshDesktopDialog
-          open={dsh.open}
-          onOpenChange={dsh.setOpen}
-          downloadUrl={dsh.downloadUrl}
-          launchUrl={dsh.launchUrl}
-        />
-      )}
 
       <section className="flex flex-col gap-4 border-t border-fill-2 pt-5">
         <Button color="danger" variant="filled" className="w-fit" onClick={() => logout()}>

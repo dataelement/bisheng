@@ -1,0 +1,24 @@
+{{- if and .Values.config.existingConfigMap (not (empty .Values.config.settings)) }}{{ fail "config.existingConfigMap and config.settings are mutually exclusive" }}{{ end -}}
+{{- if ne (int .Values.beat.replicaCount) 1 }}{{ fail "beat.replicaCount must be 1 to avoid duplicate schedules" }}{{ end -}}
+{{- if not (has .Values.database.engine (list "mysql" "dm8")) }}{{ fail "database.engine must be mysql or dm8" }}{{ end -}}
+{{- if and (eq .Values.database.engine "dm8") (empty .Values.database.host) }}{{ fail "external DM8 requires database.host, port, schema and a dedicated existingSecret" }}{{ end -}}
+{{- range $name := list "backend" "worker" "linsight" "beat" "frontend" -}}
+{{- $component := index $.Values $name -}}
+{{- if lt (int $component.replicaCount) 1 }}{{ fail (printf "%s.replicaCount must be positive" $name) }}{{ end -}}
+{{- if and (or $component.cache.enabled $component.cache.existingClaim) (gt (int $component.replicaCount) 1) (ne $component.cache.accessMode "ReadWriteMany") }}{{ fail "a shared non-RWX platform cache cannot be mounted by multiple arbitrary-node replicas" }}{{ end -}}
+{{- end -}}
+{{- if .Values.runtime.enabled -}}
+{{- include "bisheng.runtimeDefaults" . -}}
+{{- $tls := .Values.global.credentials -}}
+{{- if and (or $tls.existingTlsSecret $tls.existingAdmissionTlsSecret $tls.existingCaConfigMap $tls.caBundle) (not (and $tls.existingTlsSecret $tls.existingAdmissionTlsSecret $tls.existingCaConfigMap $tls.caBundle)) }}{{ fail "external TLS must provide both leaf Secrets, public CA ConfigMap and caBundle together" }}{{ end -}}
+{{- if not .Values.runtime.storage.sqliteCompatible }}{{ fail "runtime.storage.sqliteCompatible must be explicitly confirmed for the selected bounded filesystem" }}{{ end -}}
+{{- range $key := list "serviceCidrs" "podCidrs" "kubernetesApiCidrs" "dnsCidrs" "backendCidrs" -}}
+{{- if empty (get $.Values.runtime.network $key) }}{{ fail (printf "runtime.network.%s must describe this cluster" $key) }}{{ end -}}
+{{- end -}}
+{{- range $key, $required := dict "kubernetes.io/os" "linux" "kubernetes.io/arch" .Values.runtime.execution.architecture -}}
+{{- if and (hasKey $.Values.runtime.services.placement.nodeSelector $key) (ne (get $.Values.runtime.services.placement.nodeSelector $key) $required) }}{{ fail "runtime control placement conflicts with Linux/architecture" }}{{ end -}}
+{{- end -}}
+{{- if and .Values.fullnameOverride (ne .Values.runtime.platform.origin (printf "https://%s:443" (include "bisheng.component" (list . "internal")))) }}{{ fail "fullnameOverride with runtime requires explicit runtime.platform.origin matching the internal Service" }}{{ end -}}
+{{- if ne .Values.runtime.services.namespace .Release.Namespace }}{{ fail "parent Chart control plane uses the release namespace; select it with --namespace" }}{{ end -}}
+{{- end -}}
+{{- if or (lt (int .Values.redis.cacheDb) 0) (gt (int .Values.redis.cacheDb) 15) (lt (int .Values.redis.celeryDb) 0) (gt (int .Values.redis.celeryDb) 15) }}{{ fail "managed Redis database indices must be between 0 and 15" }}{{ end -}}

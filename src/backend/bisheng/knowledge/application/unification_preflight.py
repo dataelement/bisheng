@@ -64,15 +64,16 @@ def source_decision(record, *, tenant_id):
             _blocked("unresolved_name")
         disposition = "initial_missing"
     elif isinstance(fact, ModelMigrationTargetFact):
-        if (
-            not fact.server_exists
-            or fact.target_tenant_id != fact.server_tenant_id
-            or fact.target_tenant_id not in {tenant_id, 1}
-        ):
+        if not fact.server_exists or fact.target_tenant_id != fact.server_tenant_id:
             _blocked("model_physical_parent")
         # This records the original numeric slot, not new-bind share authority.
         # Offline and revoked Root sharing remain physically existing facts.
-        disposition = "existing_saved_slot"
+        if fact.target_tenant_id not in {tenant_id, 1}:
+            if record.origin != "explicit_id":
+                _blocked("model_foreign_name")
+            disposition = "existing_invalid_scope"
+        else:
+            disposition = "existing_saved_slot"
     else:
         if (
             fact.target_tenant_id != tenant_id
@@ -86,6 +87,8 @@ def source_decision(record, *, tenant_id):
     original, direct, ancestors, legacy = (
         state[name] for name in ("original", "target_tombstones", "ancestor_tombstones", "legacy")
     )
+    if isinstance(fact, ModelMigrationTargetFact) and original is not None and original["target_space_id"] is not None:
+        _blocked("original_model_parent_metadata")
     if original is not None and (
         (
             original["tenant_id"],

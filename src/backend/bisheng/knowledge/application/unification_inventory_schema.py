@@ -66,6 +66,9 @@ _SCHEMAS = {
     "role_fact": _spec(
         "id:positive exists:bool tenant_id:int? role_type:str? department_id:int? knowledge_space_file_limit:int? update_time:str? quota_digest:hash row_digest:hash"
     ),
+    "physical_index_retention": _spec(
+        "tenant_id:positive space_id:positive reason:str managed_file_count:nonnegative resource_digest:hash physical_fact_digest:hash"
+    ),
     "physical_index": _spec(
         "tenant_id:positive space_id:positive index_name:str? collection_name:str? es_exists:bool milvus_exists:bool es_mapping_digest:hash? milvus_schema_digest:hash? es_count:nonnegative? milvus_count:nonnegative? identifier_compatible:bool"
     ),

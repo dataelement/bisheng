@@ -1522,6 +1522,10 @@ establish those guarantees.
 
 `migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。
 
+### F009 managed tenant inventory (read-only)
+
+From `src/backend/`: `python scripts/managed_tenant_preflight.py --tenant-id <T> [--user-id <id>] [--limit 100]`. Lists current role eligibility differences and pending resource/copy associations within the specified scope. There is no apply mode. Historical READY defaults are not proof of complete permission projections; verify against the existing permission inventory before rollout. Resolve pending/uncertain copies manually before downgrading the four columns.
+
 ## F118 knowledge-space unification
 
 Run from `src/backend` after the operator has stopped all business writers and

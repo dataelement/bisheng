@@ -38,6 +38,12 @@ async def create_mounted_tenant_with_coverage(*, tenant, department_id, departme
         tenant = await TenantCreationRepository().acreate_mounted(
             session, tenant=tenant, department_id=department_id, department_tenant_id=department_tenant_id
         )
+        from bisheng.department.application.business_scope import binding_cleanup_department_facts
+        from bisheng.user.application.policy_bindings import affected_policy_users, retire_invalid_policy_bindings
+
+        facts = await binding_cleanup_department_facts(department_id, session=session)
+        affected = await affected_policy_users(session=session, subtree_path=facts.path)
+        await retire_invalid_policy_bindings(affected, session=session, derive_primary_home=True)
         try:
             await _certify_created_tenant(
                 session,

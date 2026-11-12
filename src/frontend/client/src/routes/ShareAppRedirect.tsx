@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { NotificationSeverity } from '~/common';
 import { Spinner } from '~/components/svg';
+import { useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
 import { generateUUID } from '~/utils';
 
@@ -16,6 +17,7 @@ export default function ShareAppRedirect() {
   const { appSlug } = useParams<{ appSlug: string }>();
   const navigate = useNavigate();
   const { showToast } = useToastContext();
+  const localize = useLocalize();
 
   useEffect(() => {
     if (!appSlug) {
@@ -27,7 +29,7 @@ export default function ShareAppRedirect() {
     // flowType is the last segment after the last underscore
     const lastUnderscoreIdx = appSlug.lastIndexOf('_');
     if (lastUnderscoreIdx === -1) {
-      showToast?.({ message: '无效的分享链接', severity: NotificationSeverity.WARNING });
+      showToast?.({ message: localize('com_app_invalid_share_link'), severity: NotificationSeverity.WARNING });
       navigate('/apps', { replace: true });
       return;
     }
@@ -36,7 +38,7 @@ export default function ShareAppRedirect() {
     const flowType = appSlug.substring(lastUnderscoreIdx + 1);
 
     if (!applicationId || !flowType) {
-      showToast?.({ message: '无效的分享链接', severity: NotificationSeverity.WARNING });
+      showToast?.({ message: localize('com_app_invalid_share_link'), severity: NotificationSeverity.WARNING });
       navigate('/apps', { replace: true });
       return;
     }
@@ -44,7 +46,7 @@ export default function ShareAppRedirect() {
     // Create a new conversation and navigate — same as clicking a card
     const chatId = generateUUID(32);
     navigate(`/app/${chatId}/${applicationId}/${flowType}?from=share`, { replace: true });
-  }, [appSlug, navigate, showToast]);
+  }, [appSlug, navigate, showToast, localize]);
 
   // Show loading spinner during redirect
   return (

@@ -237,3 +237,19 @@ async def test_new_tenant_without_creation_certificate_invalidates_global_invent
             await repository.arequire_global_ready(
                 expected_epoch=before.coverage_epoch, expected_inventory_hash=before.tenant_inventory_hash
             )
+
+
+@pytest.mark.parametrize("count", [0, 1, True, -1, "1"])
+async def test_invalid_scope_counter_is_typed_and_part_of_closed_coverage(module, ledger, count):
+    cert = certificate(101)
+    proof = cert["proofs"]["assistant"]
+    proof["invalid_scope_count"] = count
+    proof["reference_count"] = 1 if count == 1 else 0
+    cert["certificate_digest"] = digest({key: value for key, value in cert.items() if key != "certificate_digest"})
+    await seed(ledger, 101, cert=cert)
+    async with AsyncSession(ledger) as session, session.begin():
+        if type(count) is int and count >= 0:
+            assert len(await module.production_coverage_factory(session).arequire_ready()) == 6
+        else:
+            with pytest.raises(ReferenceCoverageNotReadyError):
+                await module.production_coverage_factory(session).arequire_ready()

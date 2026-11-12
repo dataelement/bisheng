@@ -13,13 +13,16 @@ from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import ValidationError
+from starlette.requests import HTTPConnection
 from starlette.responses import Response
 
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.core.config.dsh import normalize_dsh_origin
+from bisheng.core.session_activity import record_authenticated_activity
 from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
 
 current_work_service: ContextVar[WorkCapabilitiesService] = ContextVar("current_work_service")
+current_work_connection: ContextVar[HTTPConnection | None] = ContextVar("current_work_connection", default=None)
 
 
 def work_transport_security(public_url: str | None) -> TransportSecuritySettings:
@@ -70,6 +73,36 @@ def create_work_mcp_runtime(security_settings=None):
                 isError=True, content=[types.TextContent(type="text", text="Enterprise tool execution failed")]
             )
 
+    sdk_tool_handler = server.request_handlers[types.CallToolRequest]
+
+    async def authenticated_tool_request(request: types.CallToolRequest):
+        # The SDK has checked transport security and parsed the RPC. Record before
+        # its tool-schema validation and the existing tool permission checks.
+        try:
+            await record_authenticated_activity(current_work_connection.get(), message={"method": "tools/call"})
+        except BaseErrorCode as error:
+            return types.ServerResult(
+                types.CallToolResult(
+                    isError=True,
+                    content=[
+                        types.TextContent(
+                            type="text",
+                            text=json.dumps({"code": error.code, "error": "Enterprise session is unavailable"}),
+                        )
+                    ],
+                )
+            )
+        except Exception:
+            logger.exception("Authenticated MCP session activity failed")
+            return types.ServerResult(
+                types.CallToolResult(
+                    isError=True, content=[types.TextContent(type="text", text="Enterprise session is unavailable")]
+                )
+            )
+        return await sdk_tool_handler(request)
+
+    server.request_handlers[types.CallToolRequest] = authenticated_tool_request
+
     @server.list_resources()
     async def list_resources():
         return [
@@ -107,10 +140,11 @@ def create_work_mcp_runtime(security_settings=None):
 
 
 class WorkMcpResponse(Response):
-    def __init__(self, manager, user):
+    def __init__(self, manager, user, *, connection: HTTPConnection | None = None):
         super().__init__()
         self.manager = manager
         self.user = user
+        self.connection = connection
 
     async def __call__(self, scope, receive, send):
         # Bound the ASGI body before the MCP SDK parses it, including chunked requests.
@@ -137,7 +171,9 @@ class WorkMcpResponse(Response):
             return await receive()
 
         token = current_work_service.set(WorkCapabilitiesService(self.user))
+        connection_token = current_work_connection.set(self.connection)
         try:
             await self.manager.handle_request(scope, bounded_receive, send)
         finally:
+            current_work_connection.reset(connection_token)
             current_work_service.reset(token)

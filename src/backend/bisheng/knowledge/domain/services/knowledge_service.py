@@ -947,7 +947,7 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
-    def _init_knowledge_indices_sync(cls, invoke_user_id: int, db_knowledge: Knowledge) -> None:
+    def _init_knowledge_indices_sync(cls, invoke_user_id: int, db_knowledge: Knowledge, raise_on_error=False) -> None:
         """Create the Milvus collection + ES index for a (non-QA) knowledge resource.
 
         Shared by knowledge creation and by clear (only_clear), where the prior
@@ -976,7 +976,9 @@ class KnowledgeService(KnowledgeUtils):
             )
             es_client._store._create_index_if_not_exists()
         except Exception:
-            logger.exception("init knowledge index error knowledge_id=%s", db_knowledge.id)
+            logger.exception("init knowledge index error knowledge_id={}", db_knowledge.id)
+            if raise_on_error:
+                raise
 
     @classmethod
     async def acreate_knowledge_base(
@@ -2863,103 +2865,75 @@ class KnowledgeService(KnowledgeUtils):
         knowledge: Knowledge,
         knowledge_name: str = None,
     ) -> Any:
-        from bisheng.worker.knowledge import file_worker
-
-        source_permission = await cls._load_library_permission_record(int(knowledge.id))
-        await KnowledgeDao.async_update_state(knowledge.id, KnowledgeState.COPYING, update_time=knowledge.update_time)
-        knowldge_dict = knowledge.model_dump()
-        knowldge_dict.pop("id")
-        knowldge_dict.pop("create_time")
-        knowldge_dict.pop("update_time", None)
-        knowldge_dict.pop("collection_name", None)
-        knowldge_dict.pop("index_name", None)
-        knowldge_dict["name"] = f"{knowledge.name} Copy"[:200] if not knowledge_name else knowledge_name[:200]
-
-        knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
-        knowledge_new = Knowledge(**knowldge_dict)
-
-        target_knowlege = await run_in_threadpool(
-            cls.create_knowledge_base,
-            request,
-            login_user,
-            knowledge_new,
-            True,
-        )
-        await cls._project_library_copy(
-            login_user,
-            source=source_permission,
-            target=target_knowlege,
-        )
-        await run_in_threadpool(
-            cls.audit_telemetry_service.audit_create_knowledge,
-            login_user,
-            request,
-            target_knowlege,
-        )
-        await run_in_threadpool(
-            cls.audit_telemetry_service.telemetry_new_knowledge,
-            login_user,
-            target_knowlege,
-        )
-
-        params = {
-            "source_knowledge_id": knowledge.id,
-            "target_id": target_knowlege.id,
-            "login_user_id": login_user.user_id,
-        }
-        file_worker.file_copy_celery.delay(params)
-        return target_knowlege
+        return await cls._reserve_and_dispatch_copy(request, login_user, knowledge, knowledge_name, qa=False)
 
     @classmethod
-    async def copy_qa_knowledge(
-        cls,
-        request,
-        login_user: UserPayload,
-        qa_knowledge: Knowledge,
-        knowledge_name: str = None,
-    ) -> Any:
-        source_permission = await cls._load_library_permission_record(int(qa_knowledge.id))
-        await KnowledgeDao.async_update_state(
-            qa_knowledge.id, KnowledgeState.COPYING, update_time=qa_knowledge.update_time
-        )
-        qa_knowldge_dict = qa_knowledge.model_dump()
-        qa_knowldge_dict.pop("id")
-        qa_knowldge_dict.pop("create_time")
-        qa_knowldge_dict.pop("update_time", None)
-        qa_knowldge_dict["user_id"] = login_user.user_id
-        qa_knowldge_dict["index_name"] = generate_knowledge_index_name()
-        qa_knowldge_dict["collection_name"] = qa_knowldge_dict["index_name"]
-        qa_knowldge_dict["name"] = f"{qa_knowledge.name} Copy"[:200] if not knowledge_name else knowledge_name[:200]
-        qa_knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
-        qa_knowledge_new = Knowledge(**qa_knowldge_dict)
-        target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
+    async def copy_qa_knowledge(cls, request, login_user, qa_knowledge, knowledge_name=None):
+        return await cls._reserve_and_dispatch_copy(request, login_user, qa_knowledge, knowledge_name, qa=True)
 
-        await cls._project_library_copy(
-            login_user,
-            source=source_permission,
-            target=target_qa_knowlege,
-        )
-        await run_in_threadpool(
-            cls.audit_telemetry_service.audit_create_knowledge,
-            login_user,
-            request,
-            target_qa_knowlege,
-        )
-        await run_in_threadpool(
-            cls.audit_telemetry_service.telemetry_new_knowledge,
-            login_user,
-            target_qa_knowlege,
-        )
+    @classmethod
+    async def _reserve_and_dispatch_copy(cls, request, login_user, source, name, *, qa):
+        from bisheng.common.errcode.knowledge import KnowledgeCPError
+        from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter, tenant_execution_scope
+        from bisheng.knowledge.domain.repositories.copy_repository import CopyRepository
 
-        from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
-
-        copy_qa_knowledge_celery.delay(
-            source_knowledge_id=qa_knowledge.id,
-            target_knowledge_id=target_qa_knowlege.id,
-            login_user_id=login_user.user_id,
+        tenant_id = int(source.tenant_id)
+        if get_current_tenant_id() != tenant_id:
+            raise KnowledgeCPError(msg="Copy source is outside the verified target tenant")
+        source_permission = await cls._load_library_permission_record(int(source.id))
+        values = source.model_dump(exclude={"id", "create_time", "update_time", "copy_source_id", "copy_target_id"})
+        values.update(
+            user_id=login_user.user_id,
+            tenant_id=tenant_id,
+            name=(name or f"{source.name} Copy")[:200],
+            index_name=generate_knowledge_index_name(),
         )
+        values["collection_name"] = values["index_name"]
+        target = await CopyRepository.reserve(source, Knowledge(**values))
+        try:
+            with tenant_execution_scope(tenant_id), strict_tenant_filter():
+                await cls._project_library_copy(login_user, source=source_permission, target=target)
+                if not qa:
+                    await run_in_threadpool(cls._init_knowledge_indices_sync, login_user.user_id, target, True)
+                await run_in_threadpool(cls.audit_telemetry_service.audit_create_knowledge, login_user, request, target)
+                await run_in_threadpool(cls.audit_telemetry_service.telemetry_new_knowledge, login_user, target)
+                if qa:
+                    from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
 
-        return target_qa_knowlege
+                    copy_qa_knowledge_celery.apply_async(
+                        kwargs={
+                            "source_knowledge_id": source.id,
+                            "target_knowledge_id": target.id,
+                            "login_user_id": login_user.user_id,
+                            "tenant_id": tenant_id,
+                        },
+                        headers={"tenant_id": tenant_id},
+                    )
+                else:
+                    from bisheng.worker.knowledge.file_worker import file_copy_celery
+
+                    file_copy_celery.apply_async(
+                        args=[
+                            {
+                                "source_knowledge_id": source.id,
+                                "target_id": target.id,
+                                "login_user_id": login_user.user_id,
+                                "tenant_id": tenant_id,
+                            }
+                        ],
+                        headers={"tenant_id": tenant_id},
+                    )
+        except Exception as exc:
+            logger.exception(
+                "Knowledge copy pending inspection source={} target={} tenant={}", source.id, target.id, tenant_id
+            )
+            raise KnowledgeCPError(
+                msg="Knowledge copy requires inspection",
+                source_id=source.id,
+                target_id=target.id,
+                state="PENDING_INSPECTION",
+            ) from exc
+        return target
 
     @classmethod
     def judge_qa_knowledge_write(cls, login_user: UserPayload, qa_knowledge_id: int) -> Knowledge:

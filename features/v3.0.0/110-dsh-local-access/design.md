@@ -30,7 +30,7 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 
 ### 决策 5：按设备业务活动滑动续期
 
-新登录采用 SLIDING_IDLE_V1，默认 14 天闲置期限固化在 idle_ttl_seconds；last_activity_at 使用服务端时间，expires_at 是权威截止时间，不再有原始 30 天上限。鉴权、刷新、cookie 换发/校验和目录轮询不续期。模型额度准入和工具准入后记录活动，内嵌工作区通过已验证 cookie 的私有回调绑定精确设备。锁后重新读取时间，避免排队跨过截止点后复活。拒绝按所有鉴权成功保活，因为后台轮询会导致永不过期。
+新登录采用 SLIDING_IDLE_V1，默认 14 天闲置期限固化在 idle_ttl_seconds；last_activity_at 使用服务端时间，expires_at 是权威截止时间，不再有原始 30 天上限。鉴权、刷新、cookie 换发/校验和目录轮询不续期。认证后的统一入口按服务端业务标记记录活动，权限或配额拒绝仍续期；内嵌工作区通过已验证 cookie 在连接 state 绑定精确设备，业务服务不持有续期回调。锁后重新读取时间，避免排队跨过截止点后复活。拒绝按所有鉴权成功保活，因为后台轮询会导致永不过期。
 
 历史 ABSOLUTE_V1 保留原截止时间，session_idle_migrate_existing 默认 false，开启后仅在有效业务活动时转换。撤销以设备会话状态统一阻断所有代数，不在退出事务中遍历历史。详细增量设计与验证见 [idle-sessions/design.md](./idle-sessions/design.md) 和 [idle-sessions/verification.md](./idle-sessions/verification.md)。客户端 1.3.0 优化尚未实施；未来需要强制绝对上限或不同活跃规则时重新评审。
 
