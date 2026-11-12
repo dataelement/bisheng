@@ -151,6 +151,8 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.dsh.domain.models.admin_operation",
     "bisheng.dsh.domain.models.monthly_usage",
     "bisheng.dsh.domain.models.model_call",
+    # F015 per-tenant credit settings.
+    "bisheng.dsh.domain.models.credit_setting",
     "bisheng.dsh.domain.models.subject_policy",
     "bisheng.dsh.domain.models.subject_grant",
     "bisheng.dsh.domain.models.model_audit_setting",
