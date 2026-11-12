@@ -3,7 +3,7 @@
 **状态**：✅ 已评审；spec 和技术设计已确认。按2026-11-10用户顺序先完成功能，再统一整体测试；当前整链交付见§15.11及[W6实施记录](./wave6-implementation-review.md)，历史日期段落只保留当时证据，不代表当前待办。\
 **目标版本 / 编号**：v3.1.0-beta1 / F118（暂定）\
 **日期**：2026-11-03\
-**需求**：[spec.md](./spec.md)（94 条 AC） · [版本契约草案](../release-contract.md)\
+**需求**：[spec.md](./spec.md)（当前117条AC，含已确认兼容/修复增量） · [版本契约草案](../release-contract.md)\
 **PRD**：[《3.1 beta1》§1.1–§1.8](https://dataelem.feishu.cn/wiki/RGvDwDbyDiNaRQk7DqfcqEPxnoh)\
 **调研基线**：本地 `feat/3.0.0`，`25e50eceeeb71989257e5ff38e35f5e011e59bae`。未查询线上数据、未验证远端部署；已有未提交的配置及 review 目录不属于本轮变更。
 
@@ -53,6 +53,8 @@
 上述六种是当前 Catalog 中 use 的作用类型，并非范围上限；所有其他权限模型、遗留 use/can_use/业务别名均须继续盘点。`visible` 是现有可见性能力，与具体动作 Catalog 的职责不同。
 
 ## 3. 关键方案选择
+
+2026-11-12最新增量：M2前显式备份准备、删除提交后派生清理及角色/队列职责收敛，见[本轮设计与实现](#2026-11-12-通用修复与历史准备ac-114117)和[执行/审查记录](../../../docs/reviews/f118-general-repairs-20261112.md)。原冻结Run不重建。
 
 ### D1：在现有资源上转类型，统一领域服务
 
@@ -995,6 +997,20 @@ Root全局RoleFact保持实际owner=1；只有此明确物理事实可编码到�
 ### 已冻结重复parent关系兼容
 
 F118PermissionTupleBuilder在目标端点guard前识别封闭重复父边：仅knowledge_space→folder/knowledge_file的parent，子对象属于原resources且不是destination；同IDknowledge_library→knowledge_space映射明确，原父边在实际before及expected_before中，目标边在expected_after且两schema均合法。该重复键从额外drift集合扣除，再由原after编译结果生成，因此既不新增已有目标键的写入，也不接受额外授权。其他unowned destination guard不变。此修正不改变ResourceRetirementPlan或baseline/plan字节、SQL命令、角色/主体/等级；同Run原SQL已提交前缀继续验证。
+
+### 2026-11-12 通用修复与历史准备（AC-114–117）
+
+方案选择：历史层级/派生修复采用独立、显式apply的M2前准备脚本，而非Alembic数据写入、隐式启动修复或改写已冻结计划。理由是修复后原业务事实必须重新形成正式基线；已冻结来源不能被准备脚本重新解释。若后续要将准备合并成一个命令，仍需保留独立计划、备份和明确冻结边界，不能在原Run中途插入。
+
+数据流与职责：`scripts/prepare_f118_history.py`只在运维停全服务/消费者后采集当前SQL父链、mode及有限所属派生记录；SQLSession关闭后一次流式扫描FGA，仅保留选中对象及父边。0600/O_EXCL备份完整选中原行、祖先/根事实、FGA键、原pin并验SHA256，apply重读SQL/pin/下游，沿相同计划原生投影清理后修SQL。KnowledgeDocument的tenant取自实际Knowledge父行，bulk UPDATE显式约束父库所属租户；不虚构文档tenant列。父路径不改变，不补缺失授权。历史硬删除资源通过脚本层组合各Owner模型核实全局不存在；permission仓库不导入业务ORM。
+
+删除接缝：`KnowledgeDeletionApplication.apurge_claimed`保留原fga→业务cutover顺序，cutover后调用permission.application.DeletedResourceCleanup。它验证原RESOURCE_DELETE的完整台账、操作者和pin，新增RESOURCE_DELETE_PURGE固化残留键，STAGE分批、COMMIT至多90条且使用真实原键。FGA核验空后，DeletedResourceRepository锁mode并校验当前operation/version/CURRENT，再在同事务删所属assignee、visible_source、Grant及mode；不删操作/tuple账本。SQL清理失败重放原计划，不按剩余图生成另一个请求。后续清理依赖已验证job/原回执，不对已删业务行重新做filter_owned；既有动作/个人范围准入已在cutover前完成。该应用只接在原确认删除的后续清理，不新增HTTP写入口，未把其他业务Owner删除流程整体改造。
+
+已知坑：旧process_retry_files曾在覆盖时写新path但不改level、文档或FGA父关系；当前真实helper整批先拒绝变父，重试保留目录。SQLModelSerializable.model_dump的时间是字符串，备份比较按canonical JSON进行；KnowledgeDocument不自带tenant列。清理早于业务事务的回执核验会导致删除永远无法完成；清理晚于cutover又不能重新查询已删行的个人归属。迟到失败标记采用原operation/版本CAS，逆向STAGE补偿先重验原围栏；这不代表此前owner专用补偿/无变化撤权等所有竞态已解决。
+
+职责收敛：新preflight只读迁移所需成员、部门与配额事实，不枚举/强校验Role/UserRole；旧冻结codec不删。正式CLI不接QueuedTaskInventoryReader/RedisBrokerInventoryReader；不读取或消费Celery/Kombu数据。原SQL删除prepared阶段与deleting tombstone仍验证，因其影响业务快照而非消费状态。索引/对象原绑定保留，第14项SQL/向量生命周期偏差不在本轮纠偏。对外部署依赖仅为已有DB/Redis及原pin FGA，不新增服务；OpenFGA索引变更由[独立交接](../../../docs/reviews/openfga-mysql-read-index-handoff-20261112.md)承接。
+
+修订：2026-11-12，按用户14、18、20/24、31、37及此前33决定同步实现与边界；范围和原生回归见[本轮修复记录](../../../docs/reviews/f118-general-repairs-20261112.md)。
 
 ### 现场保留策略与特殊类别抽检（用户已调整验证范围）
 

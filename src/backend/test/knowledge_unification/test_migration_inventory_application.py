@@ -304,7 +304,7 @@ async def test_actual_default_composition_freezes_all_tenants_and_private_baseli
     async with AsyncSession(complete.engine) as session, session.begin():
         result = await app.arun(session, **transport.inputs)
         assert result.tenant_ids == (1, 101, 202) and session.in_transaction()
-    assert await count_runs(complete.engine) == 3 and queued.calls == [(1, 101, 202)]
+    assert await count_runs(complete.engine) == 3 and queued.calls == []
     contents = [json.loads(content) for content in transport.objects.values()]
     records = [row for page in contents for row in page["records"]]
     assert all(len(page["records"]) <= 200 for page in contents)
@@ -322,7 +322,7 @@ async def test_actual_default_composition_freezes_all_tenants_and_private_baseli
     assert plan["records"][1]["baseline_ref"] == result.baseline_ref
 
 
-@pytest.mark.parametrize("port", ["physical_reader", "queued_task_reader", "broker_reader", "sharing_reader_factory"])
+@pytest.mark.parametrize("port", ["physical_reader", "sharing_reader_factory"])
 async def test_missing_required_real_port_fails_closed_without_run_writes(module, complete, transport, port):
     async with AsyncSession(complete.engine) as session, session.begin():
         with pytest.raises(ReferenceCoverageNotReadyError):
@@ -409,7 +409,7 @@ async def test_schema_material_cannot_be_used_as_backup_evidence(module, complet
     assert await count_runs(complete.engine) == 0
 
 
-async def test_global_orphan_keeps_original_claim_without_source_or_tenant_reassignment(module, complete, transport):
+async def test_new_inventory_does_not_inspect_queue_orphans(module, complete, transport):
     class WithOrphan(Queued):
         async def aiter_facts(self, *, tenant_ids):
             async for item in super().aiter_facts(tenant_ids=tenant_ids):
@@ -432,11 +432,11 @@ async def test_global_orphan_keeps_original_claim_without_source_or_tenant_reass
     async with AsyncSession(complete.engine) as session, session.begin():
         await application(module, transport, queued_task_reader=WithOrphan()).arun(session, **transport.inputs)
     pages = [json.loads(content) for content in transport.objects.values()]
-    orphan_page = next(
-        page for page in pages if any(row.get("record_type") == "queued_task_orphan" for row in page["records"])
+    assert not any(
+        row.get("record_type") in {"queued_task", "queued_task_orphan", "broker_task"}
+        for page in pages
+        for row in page["records"]
     )
-    assert orphan_page["records"][0]["scope"] == "global" and orphan_page["records"][0]["tenant_id"] is None
-    assert "tenant_id" not in orphan_page["records"][1] and orphan_page["records"][1]["payload_tenant_id"] == 202
 
 
 async def test_actual_401_resource_source_inventory_reuses_directories_and_bounded_pages(module, complete, transport):
@@ -456,7 +456,7 @@ async def test_actual_401_resource_source_inventory_reuses_directories_and_bound
     assert len(source_pages) >= 5 and all(len(page["records"]) <= 200 for page in source_pages)
 
 
-async def test_required_reader_cannot_smuggle_business_pending_into_ledger_flush(module, complete, transport):
+async def test_unused_queue_reader_cannot_touch_caller_session(module, complete, transport):
     async with AsyncSession(complete.engine) as session, session.begin():
 
         class Dirty(Queued):
@@ -465,11 +465,9 @@ async def test_required_reader_cannot_smuggle_business_pending_into_ledger_flush
                     yield item
                 session.add(raw.flow("unrelated-pending"))
 
-        with pytest.raises(KnowledgeOperationPlanConflictError):
-            await application(module, transport, queued_task_reader=Dirty()).arun(session, **transport.inputs)
-        assert session.new
-        await session.rollback()
-    assert await count_runs(complete.engine) == 0
+        await application(module, transport, queued_task_reader=Dirty()).arun(session, **transport.inputs)
+        assert not session.new
+    assert await count_runs(complete.engine) == 3
 
 
 async def test_actual_reader_must_be_bound_to_the_same_sql_catalog_pin(module, complete, transport):

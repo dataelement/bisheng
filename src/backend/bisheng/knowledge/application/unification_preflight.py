@@ -292,7 +292,6 @@ class UnificationPreflight:
         seen_creators = {}
         member_after = None
         spaces, files, departments = {}, {}, set()
-        role_keys, relationship_rows = set(), []
         storage_bytes = 0
 
         async def creator_facts(ids, *, permitted_missing=frozenset()):
@@ -456,20 +455,13 @@ class UnificationPreflight:
         for command in builder.finish():
             yield "conversion", record_from_row(command)
 
-        for method in ("memberships", "departments", "roles", "user_roles"):
+        # F118 changes knowledge resources, not role applicability or grants.
+        # Keep reading old frozen role records in the codec, but do not make
+        # unrelated role history a prerequisite for a new migration inventory.
+        for method in ("memberships", "departments"):
             async for rows in self._pages(self.controls, "alist_" + method, session):
                 for row in rows:
-                    if method == "roles":
-                        role_keys.add(row.id)
-                    elif method == "user_roles":
-                        relationship_rows.append(row)
                     yield "control", record_from_row(row)
-        other_roles = tuple(sorted({row.role_id for row in relationship_rows} - role_keys))
-        for offset in range(0, len(other_roles), 200):
-            for fact in await self.controls.ainspect_roles(session, role_ids=other_roles[offset : offset + 200]):
-                if not fact.exists:
-                    _blocked("role_parent_missing")
-                yield "control", record_from_row(fact)
 
         for method in ("resource_modes", "grants", "assignees", "visible_sources"):
             after = None

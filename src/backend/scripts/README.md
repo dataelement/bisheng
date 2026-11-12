@@ -1528,11 +1528,44 @@ From `src/backend/`: `python scripts/managed_tenant_preflight.py --tenant-id <T>
 
 ## F118 knowledge-space unification
 
+### Historical preparation before a new M2 freeze
+
+`prepare_f118_history.py` repairs valid SQL folder-depth counters and redundant
+parent edges, and cleans derived permission mirrors of globally hard-deleted
+resources after checking downstreams. It retains permission operation/tuple
+journals and business audit. It does not alter index bindings, MinIO, ES,
+Milvus, roles, Celery queues or messages. Operators stop every writer/consumer.
+
+```bash
+cd src/backend
+export config=config.yaml
+export PYTHONPATH=./
+python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json
+python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json --apply --operator-id 7
+```
+
+Preview saves a private, checksummed selected-row/FGA backup and plan using
+exclusive creation. Apply and retries read exactly that plan; never overwrite
+it with a new baseline. The adjacent `.events.jsonl` retains execution events.
+An active frozen Run is rejected. Missing/ambiguous parents, changed facts,
+unknown types or remaining downstreams are reported, never guessed away.
+Apply returns permission operation IDs; exit 2 means selected repairs completed
+but blocked items remain, and exit 3 means an error requiring the same plan to
+be inspected/resumed. Preview exit 0 does not certify migration readiness.
+This is selected-data evidence, not a full physical backup. See
+[scope and review](../../../docs/reviews/f118-general-repairs-20261112.md).
+
+### Formal stopped-service migration
+
 Run from `src/backend` after the operator has stopped all business writers and
 created the immutable backup/schema evidence artifacts. Use the same `config`
 as the service. The default preview validates an existing frozen graph and
 reports its scope without SQL/FGA/artifact writes; it does not freeze a fresh
 inventory or certify readiness.
+
+New inventories do not inspect Redis broker/queued-task contents or Role/UserRole
+integrity. They still reject uncommitted business delete cutovers/tombstones;
+these checks do not detect Celery consumption or whether services are stopped.
 
 ```bash
 python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production \
@@ -1555,8 +1588,8 @@ checks; a local component test is not that acceptance.
 F118 deliberately uses a narrow context assembly rather than the general
 `initialize_app_context` convention: the eager general initializer constructs
 `MinioStorage` and may initialize buckets/policies. The command registers the
-original DB/Redis managers from the live service settings and closes them with
-`close_app_context`; its existing owned raw MinIO/ES/Milvus and permission
+original DB/Redis managers from the live service settings and closes each owned
+manager explicitly; its existing owned raw MinIO/ES/Milvus and permission
 adapters never invoke the API startup, default seeds or bucket/policy writers.
 This feature-specific exception preserves the frozen read-only inventory
 contract and does not change general script initialization.

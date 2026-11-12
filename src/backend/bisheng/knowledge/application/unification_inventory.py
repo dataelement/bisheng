@@ -1,12 +1,11 @@
 """Formal M2 inventory entry; only the ledger is written in the caller's TX.
 
-Real physical/queue transports and a pinned reader factory are required inputs.
+Real physical transports and a pinned reader factory are required inputs.
 This entry never detects downtime, seeds permissions, binds references, changes
 business data or certifies Coverage. Backups remain an operational prerequisite.
 """
 
 from collections import defaultdict
-from contextlib import aclosing
 from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -236,8 +235,8 @@ class UnificationInventoryApplication:
         self.store = artifact_store
         self.reader_factory = sharing_reader_factory
         self.physical = physical_reader
-        self.queued = queued_task_reader
-        self.broker = broker_reader
+        # Accept legacy composition arguments for callers resuming old Runs;
+        # neither adapter is invoked by a new inventory or frozen replay.
         self.runs = KnowledgeUnificationRunRepository()
         self.raw = UnificationInventoryRepository()
         self.permissions = PermissionMigrationSnapshotRepository()
@@ -649,6 +648,7 @@ class UnificationInventoryApplication:
             await self.runs.aschema_precheck(session)
             from bisheng.knowledge.domain.repositories.unification_task_repository import UnificationTaskRepository
 
+            # Business cutover/tombstone consistency, not Celery consumption.
             await UnificationTaskRepository().avalidate_migration_idle(session)
             tenant_ids = await self.runs.alist_actual_tenant_ids(session)
             existing = await self.runs.aget_global_freeze(session, **identity, tenant_ids=tenant_ids)
@@ -659,10 +659,7 @@ class UnificationInventoryApplication:
                 return existing
             if (
                 not callable(self.reader_factory)
-                or any(
-                    not callable(getattr(port, "aiter_facts", None))
-                    for port in (self.physical, self.queued, self.broker)
-                )
+                or not callable(getattr(self.physical, "aiter_facts", None))
                 or not isinstance(self.store, UnificationArtifactStore)
             ):
                 raise ReferenceCoverageNotReadyError(reason="migration_required_native_ports_missing")
@@ -715,24 +712,9 @@ class UnificationInventoryApplication:
                             session, pages, source_inventory, permission_planner, tenant, identity, planned_at
                         )
                         await pages.finish()
-            async for record in self.queued.aiter_facts(tenant_ids=tenant_ids):
-                _section("tasks", record)
-                if record.record_type == "queued_task_orphan":
-                    await pages.add("tasks", None, record)
-                    continue
-                if record.data["tenant_id"] not in tenant_ids:
-                    _blocked("task_tenant")
-                await pages.add("tasks", record.data["tenant_id"], record)
-            async with aclosing(self.broker.aiter_facts(tenant_ids=tenant_ids)) as broker_stream:
-                async for record in broker_stream:
-                    current()
-                    _section("tasks", record)
-                    if record.record_type != "broker_task":
-                        _blocked("broker_record_type")
-                    tenant = record.data["tenant_id"]
-                    if tenant is not None and tenant not in tenant_ids:
-                        _blocked("broker_tenant")
-                    await pages.add("tasks", tenant, record)
+            # Operators stop all writers/consumers before M2. Migration does
+            # not infer downtime from Celery SQL statuses or inspect Redis
+            # broker/pidbox contents. Old frozen task pages remain readable.
             await pages.finish()
             common = {
                 "writer_contract_version": writer_contract_version,

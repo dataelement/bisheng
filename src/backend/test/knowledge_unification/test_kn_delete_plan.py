@@ -96,6 +96,7 @@ async def application(context, service, monkeypatch):
         purge_step=AsyncMock(),
     )
     app.user, app.permission_runtime = service.user, runtime
+    app.permission_cleanup = AsyncMock()
     return app
 
 

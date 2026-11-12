@@ -5,6 +5,8 @@ From src/backend with the service's config: python scripts/unify_knowledge_space
 --schema-ref '<descriptor JSON>'. Default preview writes no SQL, FGA or artifacts.
 Add --apply --operator-id 7 to freeze and execute; --apply --resume requires the
 same already-frozen Run. This script never stops, starts or probes services.
+For historical depth/orphan permission cleanup, run prepare_f118_history.py
+with its selected-row backup plan BEFORE the first M2 freeze, never mid-resume.
 """
 
 import argparse
@@ -64,11 +66,9 @@ async def _runtime(args):
     from bisheng.core.database import get_async_db_session
     from bisheng.core.database.manager import DatabaseManager
     from bisheng.knowledge.application.unification_artifacts import UnificationArtifactStore
-    from bisheng.knowledge.application.unification_broker import RedisBrokerInventoryReader
     from bisheng.knowledge.application.unification_inventory import UnificationInventoryApplication
     from bisheng.knowledge.application.unification_minio import UnificationMinio
     from bisheng.knowledge.application.unification_physical import PhysicalInventoryReader
-    from bisheng.knowledge.application.unification_tasks import QueuedTaskInventoryReader
     from bisheng.permission.application.migration_read import PinnedMigrationPermissionReader
 
     # F118's frozen read-only inventory contract is a deliberate exception to
@@ -103,8 +103,6 @@ async def _runtime(args):
                         artifact_store=store,
                         sharing_reader_factory=sharing,
                         physical_reader=physical,
-                        queued_task_reader=QueuedTaskInventoryReader(session),
-                        broker_reader=RedisBrokerInventoryReader(session),
                     )
 
             yield SimpleNamespace(store=store, sessions=get_async_db_session, inventory=inventory)

@@ -323,10 +323,10 @@ class UnificationControlRepository:
     async def avalidate_global_integrity(self, session: AsyncSession) -> None:
         tenant_id = _scope(session)
         transaction = TransactionIdentity.capture(session)
-        for model in (UserTenant, Department, Role, UserRole):
+        for model in (UserTenant, Department):
             source = model.__table__.alias("m2_control_row")
             tenant = Tenant.__table__.alias("m2_control_tenant")
-            keys = USER_ROLE_KEY if model is UserRole else ("id",)
+            keys = ("id",)
             _current(session, tenant_id, transaction)
             rows = await self._read(
                 session,
