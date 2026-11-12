@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔄 部分实测 | MySQL 与 Redis 已实测；达梦与全流程待执行 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 34 / 36（T04 暂缓、T26 不做；S6 管理后台、S7 网页、S8 桌面完成；剩 T32 联调） |
+| 实现 | 🔄 进行中 | 34 / 36（T04 暂缓、T26 不做；S6 管理后台、S7 网页、S8 桌面完成；本机联调完成，剩 T32 测试服务器验收） |
 
 ---
 
@@ -267,3 +267,7 @@
 - T31 测试：新增 `test/enterprise-model-label.test.mjs`（4 条：提示仓库只收当前账号、注册与释放、各类标签渲染、刷新后已挂载标签更新）；更新 `enterprise-contract`（合法 / 非法提示）、`enterprise-service`（登录 → 刷新 → 公开快照，且快照是副本）、`enterprise-package`（账号页倍率）、`enterprise-model-sync`（刷新结果交给调用方、卸载后不再回调；函数签名变化同步改了切片标记）、`enterprise-openai-adapter`（26176 分类）、`provider-error-patch`（两处补丁文案）。全量：`npm run build` 后 3,686 条，3,681 通过 / 0 失败 / 5 跳过；typecheck、`git diff --check` 通过。未做：真实 Harness 子进程与安装包里的 Work 下拉框 / 账号页目视验收（需要连接已升级的毕昇服务端）。
 - T26 不做、T27 改法：共享 Cascader 的选项 `label` 只接受纯文本，加 suffix 要改组件库（需设计 / 组件库负责人认可）。改为把倍率拼在模型名后面的标签文字里（「Qwen Max · 3.00x」「· 1.00x 基准」「· 免费」），不改 `packages/ui`；搜索也会匹配这段文字。以后组件库支持 suffix 时可以换成灰色小字。新增三语文案 `modelPicker.ratioBase / ratioFree`；`types/chat/config.ts` 增加 `ModelPricingHint`。
 - S7 检查：`AiModelSelect.test.tsx` 7 条通过（新增 1 条）；`src/components/Chat` + `modelRefresh` 共 200 条，190 通过 / 10 失败，失败在 `importFailureContract`、`ChatResourceMenu` 两个文件，在不含本次改动的干净副本上同样失败（与本特性无关）。本机 `canvas` 原生模块未编译导致 client jest 起不来，测试时用临时预加载脚本让 jsdom 视为未安装 canvas（不改仓库）。client typecheck、check-i18n 通过；改动文件 eslint 无问题，client 整体 lint 原本就因 `src/utils/failureInfo.ts` 失败。
+- 2026-11-12 合并上游 feat/3.1.0-beta1（6a9255e3a，领先 350 个提交）：基线 3254ab555 处在上游一个缺陷的引入（f173bc70d）与修复（8efc7e6e7）之间，开启企业客户端时网页工作台对话直接报错（`runtime.sessions` 不存在），本机联调无法进行，因此先合并。冲突 8 个文件，处理见合并提交说明；迁移父节点改为上游最新头 `v310b1_merge_tenant_identity`；`ModelConfig.tsx` 上游已涨到 646 行，合并后再抽两段校验到 `modelSavePayload.ts`，降到 598 行。
+- 2026-11-12 特性改号 015 → 016：上游已有 `015-knowledge-space-admin-ui`。目录、迁移 revision（`v310b1_f016_dsh_call_pricing`）、迁移文件与测试文件名、本特性新增内容里的编号一并改；上游 v2.5.1 的 F015（LDAP 校对）等引用不动。本地分支改名为 `feat/3.1.0-beta1-016-credit-pricing`。
+- 合并后补的测试：上游 F009 让对账恢复读取用户归属租户与主部门，价格恢复测试补建这些数据（并按外键顺序写入）；上游新增的「入口不碰数据库」测试补上价格与积分设置的读取替身。
+- 本机联调发现并修复三处界面问题（提交 030dd518a）：价格区在查到价格表前不显示状态；用户可选模型表最小宽度降到 1120；工作台与桌面 Work 下拉框里基准模型只显示「1.00x」。联调结果见 validation.md。
