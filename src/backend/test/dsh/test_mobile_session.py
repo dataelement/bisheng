@@ -42,6 +42,12 @@ class MemoryCurrentSession:
     async def put(self, user_id, token, ttl):
         self.values[user_id] = token
 
+    async def replace(self, user_id, expected, token, ttl):
+        if self.values.get(user_id) != expected:
+            return False
+        self.values[user_id] = token
+        return True
+
 
 @pytest.fixture
 def mobile(tmp_path):
@@ -246,6 +252,83 @@ async def test_single_login_cannot_be_taken_back_and_multi_login_can_refresh(mob
     mobile.current.values[7] = "another-device"
     followed = await mobile.service.refresh(refreshed["refresh_token"])
     assert mobile.current.values[7] == followed["access_token"]
+
+
+@pytest.mark.parametrize("missing", [False, True])
+async def test_refresh_cannot_overwrite_login_during_publication(mobile, missing):
+    opened = await mobile.service.open(7, 3, "alice")
+    if missing:
+        mobile.current.values.clear()
+    original_replace = mobile.current.replace
+    newer = {}
+
+    async def interleaved_replace(user_id, expected, token, ttl):
+        newer.update(await mobile.service.open(7, 3, "alice"))
+        return await original_replace(user_id, expected, token, ttl)
+
+    mobile.current.replace = interleaved_replace
+    with pytest.raises(DshMobileLoggedInElsewhereError):
+        await mobile.service.refresh(opened["refresh_token"])
+    assert mobile.current.values[7] == newer["access_token"]
+    assert _session_row(mobile.engine, opened["session_id"]).state == "REVOKED"
+    assert _session_row(mobile.engine, newer["session_id"]).state == "ACTIVE"
+    with pytest.raises(DshSessionRevokedError):
+        await mobile.service.refresh(opened["refresh_token"])
+
+
+async def test_redis_publication_failure_revokes_rotated_phone(mobile):
+    from redis.exceptions import RedisError
+
+    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError
+
+    opened = await mobile.service.open(7, 3, "alice")
+
+    async def unavailable(*args):
+        raise RedisError("publication unavailable")
+
+    mobile.current.replace = unavailable
+    with pytest.raises(DshAuthorizationUnavailableError):
+        await mobile.service.refresh(opened["refresh_token"])
+    assert _session_row(mobile.engine, opened["session_id"]).state == "REVOKED"
+    assert mobile.current.values[7] == opened["access_token"]
+
+
+async def test_missing_current_key_can_be_published_if_still_missing(mobile):
+    opened = await mobile.service.open(7, 3, "alice")
+    mobile.current.values.clear()
+    refreshed = await mobile.service.refresh(opened["refresh_token"])
+    assert mobile.current.values[7] == refreshed["access_token"]
+
+
+async def test_current_session_cas_uses_real_redis_cache_serialization(monkeypatch):
+    import importlib
+    import pickle
+    from unittest.mock import AsyncMock
+
+    import fakeredis.aioredis
+
+    from bisheng.dsh.domain.services.mobile_session import RedisCurrentSession
+    from bisheng.user.domain.const import USER_CURRENT_SESSION
+
+    redis = fakeredis.aioredis.FakeRedis()
+    wrapper = SimpleNamespace(async_connection=redis, acluster_nodes=AsyncMock())
+    redis_manager = importlib.import_module("bisheng.core.cache.redis_manager")
+    monkeypatch.setattr(redis_manager, "get_redis_client", AsyncMock(return_value=wrapper))
+    current = RedisCurrentSession()
+    key = USER_CURRENT_SESSION.format(7)
+    try:
+        assert await current.replace(7, None, "first", 100)
+        assert pickle.loads(await redis.get(key)) == "first"
+        assert 0 < await redis.ttl(key) <= 100
+        assert not await current.replace(7, None, "stale", 100)
+        assert not await current.replace(7, "other", "stale", 100)
+        assert await current.replace(7, "first", "second", 200)
+        assert pickle.loads(await redis.get(key)) == "second"
+        assert 100 < await redis.ttl(key) <= 200
+        await redis.delete(key)
+        assert not await current.replace(7, "second", "stale", 100)
+    finally:
+        await redis.aclose()
 
 
 def test_http_refresh_does_not_require_an_access_token(mobile):

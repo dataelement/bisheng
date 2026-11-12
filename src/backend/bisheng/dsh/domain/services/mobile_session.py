@@ -2,11 +2,14 @@
 
 import asyncio
 import hashlib
+import pickle
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+from loguru import logger
+from redis.exceptions import RedisError
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from bisheng.common.errcode.dsh import (
@@ -54,6 +57,18 @@ class MobileAccount:
         self.tenant_active = tenant_active
 
 
+_REPLACE_CURRENT_SESSION = """
+local current = redis.call('GET', KEYS[1])
+if ARGV[1] == 'missing' then
+    if current then return 0 end
+elseif current ~= ARGV[2] then
+    return 0
+end
+redis.call('SET', KEYS[1], ARGV[3], 'EX', tonumber(ARGV[4]))
+return 1
+"""
+
+
 class RedisCurrentSession:
     """The single-login Redis key stores the raw access token, never the refresh token."""
 
@@ -73,6 +88,25 @@ class RedisCurrentSession:
 
         redis = await get_redis_client()
         await redis.aset(USER_CURRENT_SESSION.format(user_id), token, expiration=ttl)
+
+    async def replace(self, user_id: int, expected: str | None, token: str, ttl: int) -> bool:
+        """Compare and publish atomically, using RedisCache's existing pickle format."""
+        from bisheng.core.cache.redis_manager import get_redis_client
+        from bisheng.user.domain.const import USER_CURRENT_SESSION
+
+        redis = await get_redis_client()
+        key = USER_CURRENT_SESSION.format(user_id)
+        await redis.acluster_nodes(key)
+        result = await redis.async_connection.eval(
+            _REPLACE_CURRENT_SESSION,
+            1,
+            key,
+            "missing" if expected is None else "present",
+            pickle.dumps(expected) if expected is not None else b"",
+            pickle.dumps(token),
+            ttl,
+        )
+        return bool(result)
 
 
 class MobileSessionService:
@@ -149,6 +183,7 @@ class MobileSessionService:
         account = await self.load_account(int(located["user_id"]), int(located["tenant_id"]), None)
         reject = self._reject_reason(account, int(located["token_version"] or 0))
         require_current = not await self._multi_login_allowed()
+        current = None
         current_hash = None
         if require_current and reject is None:
             current = await self.current_session.get(account.user_id)
@@ -175,7 +210,24 @@ class MobileSessionService:
             )
         if error:
             raise _REFRESH_ERRORS[error]()
-        await self.current_session.put(account.user_id, access, self.access_seconds + 3600)
+        if require_current:
+            try:
+                published = await self.current_session.replace(
+                    account.user_id, current, access, self.access_seconds + 3600
+                )
+            except RedisError as error:
+                logger.exception("mobile refresh publication failed user={}", account.user_id)
+                with principal_scope(principal):
+                    await self.run(lambda repository: repository.revoke_by_digest(self.digest(next_refresh)))
+                raise DshAuthorizationUnavailableError() from error
+            if not published:
+                # SQL rotation has committed; revoke only this old phone's grant.
+                # Never restore/delete Redis here: a newer login owns that key.
+                with principal_scope(principal):
+                    await self.run(lambda repository: repository.revoke_by_digest(self.digest(next_refresh)))
+                raise DshMobileLoggedInElsewhereError()
+        else:
+            await self.current_session.put(account.user_id, access, self.access_seconds + 3600)
         return self.payload(account, row, access, next_refresh)
 
     async def revoke(self, refresh: str | None) -> None:
