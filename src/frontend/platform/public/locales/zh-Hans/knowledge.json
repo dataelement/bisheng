@@ -692,5 +692,38 @@
         "upload_invalid": "文件格式、大小或媒体上传开关不符合当前规则。",
         "upload_unconfirmed": "无法确认新文件状态，请刷新列表核对。",
         "confirm_new_version": "确认关联为新版本"
+    },
+    "sidebar": {
+        "department": "部门知识空间",
+        "created": "我创建的",
+        "joined": "我加入的",
+        "navigation": "空间导航",
+        "square": "前往广场",
+        "expand": "展开",
+        "collapse": "收起",
+        "sort": "排序",
+        "sort_update_time": "最近更新",
+        "sort_create_time": "创建时间",
+        "sort_name": "名称",
+        "pin": "置顶",
+        "unpin": "取消置顶",
+        "loading": "正在加载…",
+        "load_failed": "加载失败",
+        "empty": "暂无空间",
+        "no_folders": "暂无文件夹",
+        "more_folders": "加载更多文件夹"
+    },
+    "workspace": {
+        "files": "空间文件",
+        "list_view": "列表视图",
+        "card_view": "卡片视图",
+        "sort": "排序",
+        "sort_name": "名称",
+        "sort_time": "更新时间",
+        "sort_size": "文件大小",
+        "sort_type": "文件类型",
+        "ascending": "升序",
+        "descending": "降序",
+        "select_all": "全选"
     }
 }

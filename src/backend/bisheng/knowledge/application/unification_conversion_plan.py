@@ -285,7 +285,7 @@ class ConversionPlanBuilder:
             self._add(
                 self._files,
                 row.id,
-                _values(row, ("knowledge_id", "file_type", "file_level_path", "level"))
+                _values(row, ("knowledge_id", "file_type", "file_level_path", "level", "status"))
                 | {"digest": safe["row_digest"]},
             )
 
@@ -377,11 +377,18 @@ class ConversionPlanBuilder:
         for ident, doc in self._documents.items():
             versions = by_doc.get(ident, ())
             primaries = [key for key, row in versions if row["is_primary"]]
+            # Preserve an existing SPACE's wholly failed, unpromoted chain.
+            # No command selects a primary, recreates V1, or changes these rows.
+            failed_unpromoted = (
+                self._resources[doc["knowledge_id"]]["type"] == 3
+                and doc["primary_version_id"] is None
+                and not primaries
+                and all(self._files[row["knowledge_file_id"]]["status"] == 3 for _, row in versions)
+            )
             if (
                 not versions
                 or len({row["version_no"] for _, row in versions}) != len(versions)
-                or len(primaries) != 1
-                or doc["primary_version_id"] != primaries[0]
+                or (not failed_unpromoted and (len(primaries) != 1 or doc["primary_version_id"] != primaries[0]))
             ):
                 _blocked("primary_chain")
         for ident, row in self._files.items():

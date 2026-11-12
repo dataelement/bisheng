@@ -70,6 +70,8 @@ class ReferenceSourceReadRuntime:
         if candidate != current:
             raise KnowledgeOperationPlanConflictError(reason="reference_read_index_changed")
         if purpose == "execute":
+            if snapshot.invalid_reason is not None:
+                raise ResourceReferenceInvalidError(reason=snapshot.invalid_reason)
             self._require_valid(facts)
         return SourceReferenceReadResult(snapshot, facts, current.source.source_revision, current.root.source_revision)
 
@@ -99,6 +101,8 @@ class ReferenceSourceReadRuntime:
         if candidate != current:
             raise KnowledgeOperationPlanConflictError(reason="reference_read_index_changed")
         if purpose == "execute":
+            if snapshot.invalid_reason is not None:
+                raise ResourceReferenceInvalidError(reason=snapshot.invalid_reason)
             self._require_valid(facts)
         return SourceReferenceReadResult(snapshot, facts, current.source.source_revision, current.root.source_revision)
 

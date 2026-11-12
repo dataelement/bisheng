@@ -1,0 +1,294 @@
+pageType: content
+background:
+  type: solid
+  color: '#111111'
+notes: Authored composition experiment using the parent pack palette and typography. All figures are fictional demonstration data; replace with actual evidence.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 26
+      - 820
+      - 20
+    content:
+      text: 07 / 活动叙事
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 11
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 57
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.5
+      color: '#F0ECE5'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 78
+      - 864
+      - 68
+    content:
+      text: 让活动按节奏推进
+      fontFamily: &ref_0
+        latin: Arial Black
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 37
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 159
+      - 261
+      - 95
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 72
+      color: '#E85D26'
+      lineHeight: 1.12
+      bold: true
+  - elementId: l5
+    elementType: line
+    bounds:
+      - 48
+      - 271
+      - 261
+      - 1
+    viewBox:
+      - 261
+      - 1
+    points: 0,0 261,0
+    border:
+      width: 0.7
+      color: '#6C6C64'
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 291
+      - 261
+      - 42
+    content:
+      text: 提出问题
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 48
+      - 351
+      - 261
+      - 84
+    content:
+      text: 为什么一个简单订单需要五次交接？
+      fontFamily: *ref_1
+      fontSize: 21
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 48
+      - 455
+      - 261
+      - 26
+    content:
+      text: 切入点 / 认知
+      fontFamily: *ref_1
+      fontSize: 13
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 344
+      - 159
+      - 261
+      - 95
+    content:
+      text: '02'
+      fontFamily: *ref_0
+      fontSize: 72
+      color: '#E85D26'
+      lineHeight: 1.12
+      bold: true
+  - elementId: l10
+    elementType: line
+    bounds:
+      - 344
+      - 271
+      - 261
+      - 1
+    viewBox:
+      - 261
+      - 1
+    points: 0,0 261,0
+    border:
+      width: 0.7
+      color: '#6C6C64'
+  - elementId: t11
+    elementType: text
+    bounds:
+      - 344
+      - 291
+      - 261
+      - 42
+    content:
+      text: 展示证据
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t12
+    elementType: text
+    bounds:
+      - 344
+      - 351
+      - 261
+      - 84
+    content:
+      text: 展示一个需求如何通过新的流程。
+      fontFamily: *ref_1
+      fontSize: 21
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t13
+    elementType: text
+    bounds:
+      - 344
+      - 455
+      - 261
+      - 26
+    content:
+      text: 演示 / 评估
+      fontFamily: *ref_1
+      fontSize: 13
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t14
+    elementType: text
+    bounds:
+      - 640
+      - 159
+      - 261
+      - 95
+    content:
+      text: '03'
+      fontFamily: *ref_0
+      fontSize: 72
+      color: '#E85D26'
+      lineHeight: 1.12
+      bold: true
+  - elementId: l15
+    elementType: line
+    bounds:
+      - 640
+      - 271
+      - 261
+      - 1
+    viewBox:
+      - 261
+      - 1
+    points: 0,0 261,0
+    border:
+      width: 0.7
+      color: '#6C6C64'
+  - elementId: t16
+    elementType: text
+    bounds:
+      - 640
+      - 291
+      - 261
+      - 42
+    content:
+      text: 给出行动
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t17
+    elementType: text
+    bounds:
+      - 640
+      - 351
+      - 261
+      - 84
+    content:
+      text: 邀请一个团队参与下一轮试点。
+      fontFamily: *ref_1
+      fontSize: 21
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t18
+    elementType: text
+    bounds:
+      - 640
+      - 455
+      - 261
+      - 26
+    content:
+      text: 试点 / 行动
+      fontFamily: *ref_1
+      fontSize: 13
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t19
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 760
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_1
+      fontSize: 9
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t20
+    elementType: text
+    bounds:
+      - 870
+      - 504
+      - 42
+      - 22
+    content:
+      text: '08'
+      fontFamily: *ref_1
+      fontSize: 11
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false

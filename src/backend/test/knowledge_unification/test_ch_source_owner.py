@@ -105,3 +105,23 @@ async def test_malformed_stored_folder_is_not_sanitized_to_space_root(source):
         )
         with pytest.raises(ResourceReferenceInvalidError):
             await owner.aresolve_source(session, SourceReadRequest("channel_sync", root.id), context.user)
+
+
+async def test_legacy_folder_snapshot_preserves_payload_and_requires_explicit_rebind(source):
+    context, root, owner, _ = source
+    async with context.sessions() as session, session.begin():
+        await session.execute(
+            sa.update(ChannelKnowledgeSync)
+            .where(ChannelKnowledgeSync.channel_id == root.id)
+            .values(folder_id="new-folder-1730000000000")
+        )
+        request = SourceReadRequest("channel_sync", root.id)
+        snapshot = await owner.aresolve_source(session, request, context.user)
+        assert json.loads(snapshot.payload_json)["sync"][0]["folder_id"] == "new-folder-1730000000000"
+        assert {(ref.slot_key, ref.target.target_id) for ref in snapshot.references} == {("main.space", "10")}
+        assert await owner.arevalidate_source(session, request, context.user, snapshot) == snapshot
+        await session.execute(
+            sa.update(ChannelKnowledgeSync).where(ChannelKnowledgeSync.channel_id == root.id).values(folder_id="30")
+        )
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await owner.arevalidate_source(session, request, context.user, snapshot)

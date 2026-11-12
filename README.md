@@ -155,8 +155,6 @@ docker compose logs -f backend backend_worker
 
 服务就绪后，在浏览器中访问 `http://服务器IP:3001` 并注册用户，默认第一个注册的用户会成为系统 admin。然后在系统中配置模型。
 
-默认不启用 Gateway；托管应用的运行环境需要额外配置。Gateway、托管应用、OnlyOffice、ARM 镜像及自定义部署配置见 [Docker 部署说明](docker/README.md)。
-
 如需启用全部功能（BISHENG 客户端、托管应用、微调等），请参见文档：[私有化部署](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
 
 ## 感谢

@@ -35,10 +35,12 @@ from bisheng.knowledge.domain.services.knowledge_reference_service import Knowle
 from bisheng.knowledge.domain.services.model_reference_extractor import KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION
 from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
 from bisheng.permission.application.business_authorization import (
+    PermissionActor,
     VerifiedPermissionTarget,
     batch_check_business_actions,
     require_business_action,
 )
+from bisheng.permission.application.deleted_resource_cleanup import DeletedResourceCleanup
 from bisheng.permission.application.identity import get_current_permission_actor
 from bisheng.permission.application.knowledge_delete_projection import (
     DeleteProjectionExpectation,
@@ -72,6 +74,7 @@ class KnowledgeDeletionApplication:
         runtime=None,
         reference_service=None,
         purge_step=None,
+        permission_cleanup=None,
     ):
         self.sessions, self.coverage_factory, self.runtime = session_factory, coverage_factory, runtime
         self.references = reference_service or KnowledgeReferenceService(
@@ -80,6 +83,12 @@ class KnowledgeDeletionApplication:
         self.execution, self.plans = KnowledgeDeletionExecutionRepository(), OperationPlanRepository()
         self.proofs = KnowledgeDeleteProjectionRepository()
         self.purge_step = purge_step
+        self.permission_cleanup = permission_cleanup or self._cleanup_permission
+
+    async def _cleanup_permission(self, *, actor, target, delete_idempotency_key):
+        await DeletedResourceCleanup(await get_f048_runtime(), session_factory=self.sessions).run(
+            actor=actor, target=target, delete_idempotency_key=delete_idempotency_key
+        )
 
     @staticmethod
     def _quiescent(session):
@@ -531,6 +540,19 @@ class KnowledgeDeletionApplication:
                 await self._finalize(job)
             if job.business_phase != "finalized":
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_phase_invalid")
+            # The business transaction above still needs the original mode and
+            # RESOURCE_DELETE receipt. Purge mirrors only after that cutover.
+            for raw in job.manifest["projection_targets"]:
+                await repository.advance(job)
+                target = VerifiedPermissionTarget.from_business_service(**raw)
+                # This is receipt-bound deletion cleanup, like physical purge.
+                # Personal ownership was checked before cutover: the deleted
+                # row cannot now satisfy a fresh live filter_owned query.
+                await self.permission_cleanup(
+                    actor=PermissionActor(user_id=job.applicant_user_id, current_tenant_id=job.tenant_id),
+                    target=target,
+                    delete_idempotency_key=delete_key(job.id, target),
+                )
             for step in DELETE_STEPS[1:]:
                 if step not in job.completed_steps:
                     await repository.advance(job)

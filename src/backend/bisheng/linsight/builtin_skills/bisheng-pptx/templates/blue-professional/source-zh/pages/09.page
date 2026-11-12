@@ -1,0 +1,282 @@
+pageType: content
+background:
+  type: solid
+  color: '#FDFAE7'
+notes: Authored composition experiment using the parent pack palette and typography. All figures are fictional demonstration data; replace with actual evidence.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 26
+      - 820
+      - 20
+    content:
+      text: 08 / 案例拆解
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 11
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 57
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.5
+      color: '#C9C8BC'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 78
+      - 864
+      - 68
+    content:
+      text: 区域试点：等待减少，复购提升
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 34
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 169
+      - 280
+      - 28
+    content:
+      text: 关键改变
+      fontFamily: *ref_0
+      fontSize: 12
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 48
+      - 220
+      - 285
+      - 122
+    content:
+      text: |-
+        统一队列。
+        责任到人。
+      fontFamily: *ref_1
+      fontSize: 32
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 371
+      - 282
+      - 78
+    content:
+      text: 在两个区域仓开展为期八周的试点。
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l7
+    elementType: line
+    bounds:
+      - 371
+      - 170
+      - 1
+      - 285
+    viewBox:
+      - 1
+      - 285
+    points: 0,0 0,285
+    border:
+      width: 0.7
+      color: '#C9C8BC'
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 413
+      - 173
+      - 493
+      - 28
+    content:
+      text: 报价等待 / 小时
+      fontFamily: *ref_1
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: s9
+    elementType: shape
+    bounds:
+      - 413
+      - 222
+      - 298.8
+      - 23
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#C1C2B7'
+    border:
+      width: 0
+      color: '#C1C2B7'
+  - elementId: s10
+    elementType: shape
+    bounds:
+      - 413
+      - 254
+      - 116.2
+      - 23
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#1E2BFA'
+    border:
+      width: 0
+      color: '#1E2BFA'
+  - elementId: t11
+    elementType: text
+    bounds:
+      - 763
+      - 223
+      - 149
+      - 45
+    content:
+      text: 18 → 7
+      fontFamily: *ref_0
+      fontSize: 25
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t12
+    elementType: text
+    bounds:
+      - 413
+      - 321
+      - 493
+      - 28
+    content:
+      text: 复购率 / %
+      fontFamily: *ref_1
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: s13
+    elementType: shape
+    bounds:
+      - 413
+      - 370
+      - 199.2
+      - 23
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#C1C2B7'
+    border:
+      width: 0
+      color: '#C1C2B7'
+  - elementId: s14
+    elementType: shape
+    bounds:
+      - 413
+      - 402
+      - 289.3142857142857
+      - 23
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#1E2BFA'
+    border:
+      width: 0
+      color: '#1E2BFA'
+  - elementId: t15
+    elementType: text
+    bounds:
+      - 763
+      - 371
+      - 149
+      - 45
+    content:
+      text: 42 → 61
+      fontFamily: *ref_0
+      fontSize: 25
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l16
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.4
+      color: '#C9C8BC'
+  - elementId: t17
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: 比较口径：试点前 / 后。模拟观察值不构成因果结论。
+      fontFamily: *ref_0
+      fontSize: 13
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t18
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 760
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t19
+    elementType: text
+    bounds:
+      - 870
+      - 504
+      - 42
+      - 22
+    content:
+      text: '09'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false

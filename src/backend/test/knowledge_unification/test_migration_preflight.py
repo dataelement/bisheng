@@ -317,7 +317,10 @@ async def test_explicit_missing_is_not_foreign_retired_or_existing_offline_and_n
     ]
     assert module.source_decision(rows[0], tenant_id=101).data["disposition"] == "existing_saved_slot"
     assert module.source_decision(rows[1], tenant_id=101).data["disposition"] == "initial_missing"
-    for row in rows[2:]:
+    assert module.source_decision(rows[2], tenant_id=101).data["disposition"] == "existing_invalid_scope"
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        module.source_decision(replace(rows[2], origin="resolved_name"), tenant_id=101)
+    for row in rows[3:]:
         with pytest.raises(KnowledgeOperationPlanConflictError):
             module.source_decision(row, tenant_id=101)
     with pytest.raises(KnowledgeOperationPlanConflictError):
@@ -367,9 +370,20 @@ async def test_original_global_role_and_revoked_root_numeric_model_are_not_new_a
         assert decision.data["disposition"] == "existing_saved_slot" and decision.data["exists"]
         assert "grant" not in decision.data and "new_binding_allowed" not in decision.data
         records = await collect(module, session)
-        role = next(item for _, item in records if item.record_type == "role_fact")
-        assert role.data["exists"] and role.data["tenant_id"] == 1
+        assert not any(item.record_type in {"role", "user_role", "role_fact"} for _, item in records)
         assert not session.new and not session.dirty
+
+
+async def test_unrelated_orphan_role_does_not_block_or_get_modified_by_knowledge_migration(module, native):
+    await native.insert(UserRole, [{"id": 8, "tenant_id": 101, "user_id": 7, "role_id": 99999}])
+    native.queries.clear()
+    async with AsyncSession(native.engine) as session, session.begin():
+        records = await collect(module, session)
+        assert not any(item.record_type in {"role", "user_role", "role_fact"} for _, item in records)
+        assert not session.new and not session.dirty and not session.deleted
+    assert not any("FROM role" in sql or "FROM user_role" in sql for sql, _ in native.queries)
+    async with AsyncSession(native.engine) as session:
+        assert (await session.get(UserRole, (7, 99999, 8))).role_id == 99999
 
 
 async def test_preflight_real_creation_projection_collision_blocks_before_plan_is_frozen(module, native):

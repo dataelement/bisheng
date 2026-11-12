@@ -181,6 +181,34 @@ def identify_type(item: dict) -> tuple[str | None, str]:
     return None, "unknown"
 
 
+def _positive_window(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+def _listed_context_window(item: dict) -> int | None:
+    """Total context window carried on one model-list row.
+
+    Deployed limits win over advertised ones, matching the runtime probe.
+    ``max_input_tokens`` is input-only; the advanced key ``context_window`` is a
+    total window, so that field is left for the runtime probe.
+    """
+    for key in ("max_model_len", "context_length", "context_window"):
+        window = _positive_window(item.get(key))
+        if window is not None:
+            return window
+    meta = item.get("meta")
+    if isinstance(meta, dict):
+        window = _positive_window(meta.get("n_ctx"))
+        if window is not None:
+            return window
+    info = item.get("model_info")
+    if isinstance(info, dict):
+        return _positive_window(info.get("context_window"))
+    return None
+
+
 def normalize_catalog(payload: dict, provider: str) -> list[dict]:
     raw = payload.get("models") if provider == "ollama" else payload.get("data")
     if provider == "xinference" and "data" not in payload:
@@ -190,6 +218,8 @@ def normalize_catalog(payload: dict, provider: str) -> list[dict]:
     if isinstance(raw, dict):
         raw = [{**value, "id": key} for key, value in raw.items() if isinstance(value, dict)]
     models = {}
+    listed_windows: dict[str, int] = {}
+    parents: dict[str, str] = {}
     for item in raw:
         if not isinstance(item, dict):
             continue
@@ -207,10 +237,23 @@ def normalize_catalog(payload: dict, provider: str) -> list[dict]:
             "model_type": kind,
             "type_source": source,
         }
+        window = _listed_context_window(item)
+        if window is not None:
+            listed_windows[model_id] = window
+        parent = item.get("parent")
+        if isinstance(parent, str) and parent.strip():
+            parents[model_id] = parent.strip()
         transports = _speech_transports(classified)
         if transports:
             row["_transports"] = transports
         models[model_id] = row
+    for model_id, row in models.items():
+        window = listed_windows.get(model_id)
+        if window is None:
+            parent = parents.get(model_id)
+            window = listed_windows.get(parent) if parent else None
+        if window is not None:
+            row["context_window"] = window
     return sorted(models.values(), key=lambda model: model["model_name"].lower())
 
 

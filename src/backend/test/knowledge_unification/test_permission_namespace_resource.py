@@ -93,12 +93,114 @@ def compile_resource(catalog, before, mode):
     return plans.build_resource_retirement_plan(catalog_plan=catalog, before=before, namespace_target=mode)
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        "retain",
+        "active_assignee_and_grant",
+        "active",
+        "fingerprint",
+        "future_version",
+        "missing_grant",
+        "deleted_assignee",
+    ],
+)
+def test_retired_reassignment_history_keeps_old_model_identity_without_restoring_authority(change):
+    catalog = legacy_catalog()
+    before = original_resource(catalog, retired=False)
+    active = next(row for row in before.assignees if row.state == "INACTIVE")
+    historical = replace(before.grants[0], id=12, model_key="pure-use", state="INACTIVE")
+    if change == "active_assignee_and_grant":
+        active = before.assignees[0]
+        historical = replace(historical, state="ACTIVE")
+    elif change == "deleted_assignee":
+        # An old identity can be deleted while a new identity for the same
+        # subject remains live. The retired contribution must never revive it.
+        active = replace(before.assignees[0], id=999)
+    old = plans._grants(
+        replace(before, grants=(historical,)),
+        {row.model_key: row for row in catalog.models},
+        {row.code: row.resource_types for row in catalog.actions},
+        {},
+    )[0]
+    record = VisibilityProjectionCompiler._compile_source(101, old, active.to_source_record()).model_copy(
+        update={"state": "RETIRED", "source_version": 2, "operation_id": 19}
+    )
+    if change == "active":
+        record = record.model_copy(update={"state": "ACTIVE"})
+    elif change == "fingerprint":
+        record = record.model_copy(update={"source_fingerprint": "f" * 64})
+    elif change == "future_version":
+        record = record.model_copy(update={"source_version": 4})
+    before = replace(
+        before,
+        grants=(*before.grants, historical) if change != "missing_grant" else before.grants,
+        visible_sources=(*before.visible_sources, plans.PermissionVisibleSourceBaseline(99, record)),
+    )
+    if change not in {"retain", "active_assignee_and_grant", "missing_grant", "deleted_assignee"}:
+        with pytest.raises(PermissionMigrationBlockedError):
+            compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
+        return
+    result = compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
+    retained = next(row for row in result.after.visible_sources if row.id == 99)
+    assert retained.source.state == "RETIRED" and retained.source.model_key == "pure-use"
+    assert result.after.assignees == before.assignees
+    ordinary = original_resource(catalog, retired=False)
+    expected = compile_resource(mapped(catalog), ordinary, target(ordinary, resource_type="knowledge_space"))
+    assert result.visibility_deltas == expected.visibility_deltas
+    assert verify.verify_resource_retirement(plan=result, actual=result.after).complete
+
+
 def test_original_unmapped_resource_keeps_its_fixed_prechange_checksum():
     catalog = legacy_catalog()
     before = original_resource(catalog)
     result = plans.build_resource_retirement_plan(catalog_plan=build(catalog), before=before)
     assert result.checksum == "918cb725064907eb35182d2ac84d0d7fc2477b58efa33a55d1f7f0185498126a"
     assert verify.verify_resource_retirement(plan=result, actual=before).complete
+
+
+@pytest.mark.parametrize(
+    "change", ["retain_empty", "retain_retired", "active_grant", "active_assignee", "active_visibility"]
+)
+def test_deleted_model_definition_is_only_retained_as_inert_grant_history(change):
+    catalog = legacy_catalog()
+    before = original_resource(catalog, retired=False)
+    grant = replace(before.grants[0], model_key="deleted-definition", state="INACTIVE")
+    assignee = next(row for row in before.assignees if row.state == "INACTIVE")
+    snapshot = plans.GrantSnapshot(
+        str(grant.id),
+        before.tenant_id,
+        before.resource_type,
+        before.resource_id,
+        plans.GrantModelSnapshot(grant.model_key, False, (), None, False),
+        False,
+        (assignee.to_source_record(),),
+        grant.version,
+    )
+    visible = VisibilityProjectionCompiler._compile_source(101, snapshot, assignee.to_source_record()).model_copy(
+        update={"state": "RETIRED"}
+    )
+    if change == "active_grant":
+        grant = replace(grant, state="ACTIVE")
+    if change == "active_assignee":
+        assignee = replace(assignee, state="ACTIVE")
+    if change == "active_visibility":
+        visible = visible.model_copy(update={"state": "ACTIVE"})
+    before = replace(
+        before,
+        grants=(grant,),
+        assignees=() if change == "retain_empty" else (assignee,),
+        visible_sources=() if change == "retain_empty" else (plans.PermissionVisibleSourceBaseline(99, visible),),
+    )
+    if change.startswith("active"):
+        with pytest.raises(PermissionMigrationBlockedError):
+            compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
+        return
+    result = compile_resource(mapped(catalog), before, target(before, resource_type="knowledge_space"))
+    assert result.after.grants[0].model_key == "deleted-definition" and result.after.grants[0].state == "INACTIVE"
+    assert not result.visible_subjects and not result.visibility_deltas
+    assert all(row.model_key != "deleted-definition" for row in result.catalog_plan.after_models)
+    assert verify.verify_resource_retirement(plan=result, actual=result.after).complete
 
 
 @pytest.fixture
@@ -212,7 +314,7 @@ def test_child_parent_namespace_changes_without_changing_its_own_identity_or_fil
 
 
 @pytest.mark.parametrize("inactive", [False, True])
-def test_existing_space_original_scope_hole_is_rejected_even_if_new_provenance_would_make_it_visible(inactive):
+def test_existing_space_requires_original_active_proof_before_accepting_visibility_provenance(inactive):
     before_catalog = legacy_catalog()
     # Old use covers Library but never SPACE. A legacy malformed active grant
     # with zero applicable old actions must not gain visibility from C4 metadata.
@@ -226,8 +328,16 @@ def test_existing_space_original_scope_hole_is_rejected_even_if_new_provenance_w
                 for row in before.visible_sources
             ),
         )
-    with pytest.raises(PermissionMigrationBlockedError):
-        compile_resource(mapped(before_catalog), before, before.mode)
+    if inactive:
+        plan = compile_resource(mapped(before_catalog), before, before.mode)
+        assert plan.after == before and not plan.visible_subjects and not plan.visibility_deltas
+    else:
+        plan = compile_resource(mapped(before_catalog), before, before.mode)
+        assert plan.after == before and not plan.visibility_deltas
+        assert plan.after_grants[0].model.action_codes == ()
+        assert plan.after_grants[0].model.derived_level == next(
+            m.derived_level for m in before_catalog.models if m.model_key == "pure-use"
+        )
 
 
 @pytest.mark.parametrize(
@@ -272,7 +382,7 @@ def test_parent_and_resource_reverse_or_owner_layer_changes_are_rejected(change)
         compile_resource(mapped(catalog), before, mode)
 
 
-@pytest.mark.parametrize("bad", ["tuple", "contribution", "missing-backing", "locator", "subject", "owner-key"])
+@pytest.mark.parametrize("bad", ["tuple", "contribution", "missing-active-backing", "locator", "subject", "owner-key"])
 async def test_active_and_retired_sources_require_exact_original_canonical_backing(original, bad):
     _, catalog, before = original
     retired = before.visible_sources[-1]
@@ -283,8 +393,8 @@ async def test_active_and_retired_sources_require_exact_original_canonical_backi
         "subject": {"projected_subject": "user:99"},
         "owner-key": {"source_owner_key": "grant_assignee:999"},
     }
-    if bad == "missing-backing":
-        before = replace(before, assignees=tuple(row for row in before.assignees if row.state != "INACTIVE"))
+    if bad == "missing-active-backing":
+        before = replace(before, assignees=tuple(row for row in before.assignees if row.id != 1))
     else:
         before = replace(
             before,

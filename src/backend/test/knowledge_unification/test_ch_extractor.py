@@ -64,3 +64,28 @@ def test_populated_invalid_folder_cannot_fall_back_to_root(folder):
 def test_invalid_rule_shape_is_not_reinterpreted_as_main():
     with pytest.raises((TypeError, ValueError)):
         extract_channel_sync_references([row(name=123)])
+
+
+def test_legacy_picker_placeholder_is_read_only_and_keeps_other_references():
+    legacy = row(folder="new-folder-1730000000000", enabled=False)
+    values = [legacy, row("11", folder="20")]
+    references = extract_channel_sync_references(values, skip_legacy_folders=True)
+    assert {(ref.slot_key, ref.target.target_id) for ref in references} == {
+        ("main.space", "10"),
+        ("main.space", "11"),
+        ("main.folder", "20"),
+    }
+    assert legacy["folder_id"] == "new-folder-1730000000000"
+    with pytest.raises(ValueError):
+        extract_channel_sync_references(values)
+
+
+@pytest.mark.parametrize("folder", ["missing", "new-folder-", "new-folder-x", "new-folder-123/4", "0", "-1", ""])
+def test_legacy_skip_does_not_accept_other_malformed_bindings(folder):
+    with pytest.raises(ValueError):
+        extract_channel_sync_references([row(folder=folder)], skip_legacy_folders=True)
+
+
+def test_legacy_folder_does_not_skip_invalid_parent_space():
+    with pytest.raises(ValueError):
+        extract_channel_sync_references([row("missing", folder="new-folder-123")], skip_legacy_folders=True)

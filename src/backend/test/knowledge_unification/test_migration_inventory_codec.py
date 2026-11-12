@@ -45,6 +45,28 @@ def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
+@pytest.mark.parametrize("owner,allowed", [(1, True), (101, True), (202, False)])
+def test_role_fact_keeps_real_global_owner_without_relabeling_it_as_local(codec, owner, allowed):
+    record = codec.record_from_values(
+        "role_fact",
+        id=5,
+        exists=True,
+        tenant_id=owner,
+        role_type="custom",
+        department_id=None,
+        knowledge_space_file_limit=None,
+        update_time=None,
+        quota_digest=DIGEST,
+        row_digest=DIGEST,
+    )
+    if allowed:
+        page = encode(codec, (record,), section="control")
+        assert decode(codec, page, section="control").records[0].data["tenant_id"] == owner
+    else:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            encode(codec, (record,), section="control")
+
+
 async def test_original_native_fields_include_private_payloads_that_cannot_be_artifacts(resource_native):
     await resource_native.insert(original.Knowledge, [original.resource(9000)])
     await resource_native.insert(original.KnowledgeFile, [original.file(1)])

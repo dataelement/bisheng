@@ -407,6 +407,11 @@ def encode_inventory_page(*, run_id, section, scope, tenant_id, page_index, reco
         actual_tenant = data.get("tenant_id")
         if record.record_type in {"visible_source", "namespace_after_visible_source"}:
             actual_tenant = data["source"]["tenant_id"]
+        if record.record_type == "role_fact" and data["exists"] is True and actual_tenant == 1:
+            # This is an exact referenced global Role observation, not a local
+            # role row. Keep its real owner=Root while routing the fact into
+            # the tenant that owns the UserRole association being inventoried.
+            actual_tenant = tenant_id
         if scope == "tenant" and actual_tenant is not None and actual_tenant != tenant_id:
             _invalid()
         facts.append({"record_type": record.record_type, **data})

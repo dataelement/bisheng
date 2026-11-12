@@ -585,3 +585,64 @@ async def test_foreign_saved_model_reaches_m4_without_faking_missing_or_granting
             await production_coverage_factory(session).arequire_global_ready()
         ).verified_tenant_ids == value.frozen.tenant_ids
     assert await app(value).arun_references(**value.input, operator_id=7) == result
+
+
+async def seed_foreign_saved_space(database):
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.database.models.assistant import Assistant, AssistantLink
+
+    async with AsyncSession(database.engine) as session, session.begin():
+        with bypass_tenant_filter():
+            session.add(
+                Assistant(id="foreign-space", tenant_id=202, user_id=7, name="retained", model_name="11", status=0)
+            )
+            session.add(AssistantLink(tenant_id=202, assistant_id="foreign-space", knowledge_id=9000))
+
+
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_foreign_saved_space}], indirect=True)
+async def test_saved_foreign_space_reaches_formal_m4_with_real_owner_and_no_legacy_missing(published_input):
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from bisheng.database.models.assistant import AssistantLink
+    from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+
+    value = published_input
+    result = await app(value).arun_references(**value.input, operator_id=7)
+    assert result.complete
+    with tenant_execution_scope(202):
+        async with value.sessions() as session, session.begin():
+            rows = (
+                (
+                    await session.execute(
+                        sa.select(BusinessResourceReference.__table__).where(
+                            BusinessResourceReference.source_id == "foreign-space",
+                            BusinessResourceReference.target_type == "knowledge_space",
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            assert len(rows) == 1
+            reference = rows[0]
+            assert (reference["target_id"], reference["target_tenant_id"], reference["target_space_id"]) == (
+                "9000",
+                101,
+                "9000",
+            )
+            assert all(
+                reference[field] is None for field in ("legacy_invalid_reason", "legacy_run_id", "legacy_evidence_key")
+            )
+            assert (
+                await session.execute(
+                    sa.select(AssistantLink.knowledge_id).where(AssistantLink.assistant_id == "foreign-space")
+                )
+            ).scalar_one() == 9000
+            row = (await session.execute(sa.select(Run.__table__).where(Run.tenant_id == 202))).mappings().one()
+            proof = row["verification_report"]["reference_coverage"]["proofs"]["assistant"]
+            assert proof["invalid_scope_count"] == 1 and proof["invalid_legacy_count"] == 0
+            assert (
+                await production_coverage_factory(session).arequire_global_ready()
+            ).verified_tenant_ids == value.frozen.tenant_ids
+    assert await app(value).arun_references(**value.input, operator_id=7) == result

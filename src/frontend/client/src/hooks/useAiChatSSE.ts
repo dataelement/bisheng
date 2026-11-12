@@ -70,7 +70,7 @@ export interface SSESubmission {
     onError: (
         error: string,
         errorCode?: number,
-        meta?: { errorType?: string; errorDetail?: string; failureInfo?: FailureInfo },
+        meta?: { errorType?: string; errorDetail?: string; referenceId?: string; failureInfo?: FailureInfo },
     ) => void;
     onStart: () => void;
     onEnd: () => void;
@@ -171,6 +171,12 @@ export function openChatStream(
     let endCalled = false;
     let expectedClose = false;
     let failureReported = false;
+    const handleOffline = () => {
+        if (endCalled || expectedClose || failureReported) return;
+        reportNetworkFailure();
+        sse.close();
+        safeEnd();
+    };
     const reportNetworkFailure = () => {
         if (endCalled || expectedClose || failureReported) return;
         failureReported = true;
@@ -179,6 +185,7 @@ export function openChatStream(
     const safeEnd = () => {
         if (endCalled) return;
         endCalled = true;
+        if (typeof window !== 'undefined') window.removeEventListener('offline', handleOffline);
         onEnd();
     };
 
@@ -483,7 +490,13 @@ export function openChatStream(
 
     sse.addEventListener("cancel", () => { expectedClose = true; safeEnd(); });
 
-    sse.stream();
+    // An open XHR may stay pending after the browser loses connectivity.
+    if (typeof window !== 'undefined') window.addEventListener('offline', handleOffline);
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        handleOffline();
+    } else {
+        sse.stream();
+    }
 
     return {
         close: () => {

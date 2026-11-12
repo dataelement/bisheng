@@ -720,6 +720,7 @@ function AssistantBubble({
                             failureInfo={message.failureInfo}
                             errorType={resolvedErrorType}
                             detail={message.errorDetail}
+                            referenceId={message.referenceId}
                             fallbackMessage={isPlainFailure ? undefined : message.errorText || regularContent}
                             description={isPlainFailure ? plainFailureText : undefined}
                             // Daily chat never shows the per-type "建议…" line: the

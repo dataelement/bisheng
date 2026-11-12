@@ -427,6 +427,48 @@ class UnificationResourceRepository:
     ) -> InventoryPage[FileRow]:
         return await self._page(session, KnowledgeFile, FILE_COLUMNS, FileRow, after_id, limit)
 
+    async def aload_retention_rows(self, session, *, resource_ids=(), file_ids=()):
+        tenant = _scope(session)
+        output = []
+        for model, ids, columns, row_type in (
+            (Knowledge, resource_ids, RESOURCE_COLUMNS, ResourceRow),
+            (KnowledgeFile, file_ids, FILE_COLUMNS, FileRow),
+        ):
+            if (
+                type(ids) is not tuple
+                or len(ids) > 199
+                or len(set(ids)) != len(ids)
+                or any(type(v) is not int or v <= 0 for v in ids)
+            ):
+                _blocked("invalid_retention_row_ids")
+            if not ids:
+                output.append(())
+                continue
+            selected = (*columns, *NEUTRAL_COLUMNS) if model is Knowledge else columns
+            rows = await self._read(
+                session,
+                select(*(getattr(model, name) for name in selected))
+                .where(model.tenant_id == tenant, model.id.in_(ids))
+                .order_by(model.id),
+            )
+            if {row["id"] for row in rows} != set(ids):
+                _blocked("retention_row_missing")
+            values = []
+            for row in rows:
+                raw = _values(row, columns)
+                if row_type is ResourceRow:
+                    values.append(
+                        ResourceRow(
+                            **raw,
+                            neutral=NeutralKnowledgeFacts(**_values(row, NEUTRAL_COLUMNS)),
+                            old_business_digest=hashlib.sha256(_canonical(raw)).hexdigest(),
+                        )
+                    )
+                else:
+                    values.append(FileRow(**raw))
+            output.append(tuple(values))
+        return tuple(output)
+
     async def acount_resource_files(self, session: AsyncSession, *, resource_ids: tuple[int, ...]):
         """Count every managed file/folder in one native tenant snapshot."""
         tenant = _scope(session)

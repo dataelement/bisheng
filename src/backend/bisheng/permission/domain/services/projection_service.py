@@ -774,6 +774,8 @@ class ProjectionService:
         )
         try:
             if inverse:
+                if not await self._scope_guard.is_expected_version(plan, int(operation.id)):
+                    raise PermissionVersionConflictError(msg="Projection scope changed before stage compensation")
                 await self._write(inverse)
             if applied and await self._classify(applied) != "BEFORE":
                 raise RuntimeError("stage compensation verification failed")

@@ -34,6 +34,37 @@ class AssistantSourceDisclosureRow:
 
 
 class AssistantReferenceSourceRepository:
+    async def ahas_legacy_name_retention(self, session, source_key, extractor_version):
+        from bisheng.resource_reference.application.contracts import SourceKey, SourceType
+        from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+
+        tenant = _resolve_tenant_id()
+        if (
+            type(source_key) is not SourceKey
+            or source_key.tenant_id != tenant
+            or source_key.source_type != SourceType.ASSISTANT
+            or source_key.source_version != "current"
+            or is_tenant_filter_bypassed()
+        ):
+            raise ReferenceCoverageNotReadyError(reason="assistant_legacy_name_scope")
+        model = BusinessReferenceSet
+        query = select(model.extractor_version, model.ready, model.effective, model.source_revision).where(
+            model.tenant_id == tenant,
+            model.source_type == "assistant",
+            model.source_id == source_key.source_id,
+            model.source_version == "current",
+            model.record_kind == "source",
+        )
+        with session.no_autoflush, strict_tenant_filter():
+            row = (await session.execute(query)).one_or_none()
+        return bool(
+            row
+            and row.extractor_version == extractor_version
+            and row.ready
+            and row.effective
+            and row.source_revision > 0
+        )
+
     """Column projections never attach an outside resource to the identity map."""
 
     @staticmethod

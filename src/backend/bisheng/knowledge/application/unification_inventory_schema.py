@@ -66,6 +66,12 @@ _SCHEMAS = {
     "role_fact": _spec(
         "id:positive exists:bool tenant_id:int? role_type:str? department_id:int? knowledge_space_file_limit:int? update_time:str? quota_digest:hash row_digest:hash"
     ),
+    "existing_space_creator_retention": _spec(
+        "tenant_id:positive space_id:positive creator_user_id:positive managed_file_count:nonnegative reason:str resource_digest:hash creator_digest:hash"
+    ),
+    "stranded_file_retention": _spec(
+        "tenant_id:positive space_id:positive file_id:positive missing_parent_id:positive sql_permission_count:nonnegative fga_tuple_count:nonnegative reason:str resource_digest:hash file_digest:hash ancestor_digest:hash"
+    ),
     "physical_index_retention": _spec(
         "tenant_id:positive space_id:positive reason:str managed_file_count:nonnegative resource_digest:hash physical_fact_digest:hash"
     ),

@@ -273,7 +273,7 @@ export default function MainLayout() {
                                     className={pendingNavClass("knowledge")}
                                 >
                                     <Outlined.Books className="h-4 w-4 my-4 mr-2 shrink-0" />
-                                    <span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">
+                                    <span className="mx-[14px] max-w-[56px] whitespace-nowrap text-[14px] leading-[48px]">
                                         {t("menu.knowledge")}
                                     </span>
                                 </NavLink>

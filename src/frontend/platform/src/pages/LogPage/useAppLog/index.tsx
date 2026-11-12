@@ -21,6 +21,7 @@ import type { OrgSelection } from "@/types/api/audit";
 import { AuditEmptyState } from "../components/AuditEmptyState";
 import { OrgFilter } from "../components/OrgFilter";
 import { orgLabel } from "../components/OrgFilter/orgLabel";
+import { OrgPathText } from "../components/OrgPathText";
 import { useTable } from "@/util/hook";
 import { exportCsv, formatDate } from "@/util/utils";
 import { useContext, useEffect, useMemo, useReducer, useState } from "react";
@@ -262,11 +263,11 @@ export default function AppUseLog() {
     };
 
 
-    return <div className="relative">
+    return <div className="relative flex min-h-0 flex-1 flex-col">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
         </div>}
-        <div className="flex h-[calc(100vh-128px-var(--license-banner-h,0px))] flex-col overflow-y-auto px-2 py-4 pb-20">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-4 pb-20">
             <div className="flex shrink-0 flex-wrap gap-4">
                 <OrgFilter value={filters.org} onChange={(org) => dispatch({ type: 'SET_FILTER', payload: { org } })} />
                 <Select
@@ -341,6 +342,9 @@ export default function AppUseLog() {
                 <div className="ml-auto mr-4 flex shrink-0 items-center gap-4">
                     <Button onClick={() => filterData(filters)} disabled={Boolean(dateError)}>{t('log.searchButton')}</Button>
                     <Button onClick={resetClick} variant="outlined" color="default">{t('log.resetButton')}</Button>
+                    <Button onClick={handleExport} loading={auditing} disabled={auditing || Boolean(dateError)}>
+                        {t('log.exportButton')}
+                    </Button>
                 </div>
             </div>
             <Table containerClassName="shrink-0">
@@ -370,7 +374,7 @@ export default function AppUseLog() {
                             <TableCell>{usageTypeOf(el, t)}</TableCell>
                             <TableCell>{el.user_name}</TableCell>
                             <TableCell className="max-w-[200px]">
-                                <div className="truncate-multiline break-all">{orgLabel(el.operator_dept_id, el.operator_dept_path, t)}</div>
+                                <OrgPathText text={orgLabel(el.operator_dept_id, el.operator_dept_path, t)} />
                             </TableCell>
                             <TableCell>{el.userGroupsString}</TableCell>
                             <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
@@ -424,11 +428,8 @@ export default function AppUseLog() {
             {loaded && !loading && processedData.length === 0 && <AuditEmptyState />}
         </div>
         <div className="bisheng-table-footer gap-4 px-6 bg-background-login">
-            <Button className="shrink-0" onClick={handleExport} loading={auditing} disabled={auditing || Boolean(dateError)}>
-                {t('log.exportButton')}
-            </Button>
             <Pagination locale={paginationLocale}
-                className="min-w-0"
+                className="ml-auto min-w-0"
                 current={page}
                 pageSize={pageSize}
                 total={total}

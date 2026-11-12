@@ -538,3 +538,28 @@ def test_task_mode_wrapper_unwraps_to_credit_exhausted():
         result = classify_for_event(wrapper)
 
     assert (result.error_type, result.error_code) == ("credit_exhausted", 26121)
+
+
+# --------------------------------------------------------------------------- #
+# Unknown failures are only reported as the LLM umbrella code when they come
+# from the model service. 116 test, 2026-11-12: an AttributeError in the quota
+# check was shown as "LLM 相关错误" (11090).
+# --------------------------------------------------------------------------- #
+
+
+def test_unknown_platform_exception_gets_task_execution_code():
+    try:
+        try:
+            raise AttributeError("'types.SimpleNamespace' object has no attribute 'sessions'")
+        except AttributeError as cause:
+            raise RuntimeError("Agent task execution failed") from cause
+    except RuntimeError as wrapper:
+        result = classify_for_event(wrapper)
+    assert result.error_type == ErrorType.UNKNOWN.value
+    assert result.error_code == 11091
+
+
+def test_unknown_model_sdk_exception_keeps_llm_code():
+    result = classify_for_event(make_exc(openai.BadRequestError, message="odd provider reply", status_code=400))
+    assert result.error_type == ErrorType.UNKNOWN.value
+    assert result.error_code == 11090

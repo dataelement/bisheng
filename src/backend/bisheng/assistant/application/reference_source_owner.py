@@ -10,6 +10,8 @@ from bisheng.assistant.domain.repositories.reference_source_repository import As
 from bisheng.assistant.domain.services.reference_extractor import (
     ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
     extract_assistant_references,
+    extract_legacy_assistant_knowledge_references,
+    legacy_assistant_name_version,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import AssistantNotExistsError
@@ -185,17 +187,23 @@ class AssistantReferenceSourceOwner:
         if request.inspect_token is None:
             await require_business_action(identity, resource_type="assistant", resource_id=row["id"], action="visible")
         try:
-            references = extract_assistant_references(
+            source_key = SourceKey(row["tenant_id"], SourceType.ASSISTANT, row["id"], "current")
+            legacy_version = legacy_assistant_name_version(row["model_name"])
+            retained = legacy_version is not None and await self.repository.ahas_legacy_name_retention(
+                session, source_key, legacy_version
+            )
+            references = (extract_legacy_assistant_knowledge_references if retained else extract_assistant_references)(
                 model_name=row["model_name"],
                 knowledge_ids=[link["knowledge_id"] for link in links if link["knowledge_id"]],
             )
             payload = canonical_payload_json(_json_value({"assistant": row, "links": links}))
             return AuthorizedSourceSnapshot(
-                SourceKey(row["tenant_id"], SourceType.ASSISTANT, row["id"], "current"),
+                source_key,
                 references,
-                ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
+                legacy_version if retained else ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
                 payload_digest(payload),
                 payload,
+                invalid_reason="assistant_legacy_model_name_unresolved" if retained else None,
             )
         except (TypeError, ValueError) as error:
             raise ResourceReferenceInvalidError(reason="assistant_source_configuration") from error

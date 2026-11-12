@@ -6,11 +6,14 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.database.models.assistant import Assistant
 from bisheng.llm.application import model_default_read as defaults
 from bisheng.llm.domain.models.llm_server import LLMModel
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig, TenantSystemModelConfigDao
@@ -148,6 +151,43 @@ async def test_workbench_management_raw_settings_preserves_invalid_asr_without_p
 async def test_strict_default_getter_does_not_accept_explicit_other_tenant(consumers):
     with pytest.raises(ResourceReferenceInvalidError):
         await service.LLMService.get_evaluation_llm(tenant_id=202)
+
+
+@pytest.mark.parametrize("initializer", ["init_llm", "init_auto_update_llm"])
+async def test_assistant_model_initialization_reuses_active_publication_transaction(
+    consumers, monkeypatch, initializer
+):
+    config = {
+        "llm_list": [{"model_id": 11, "default": True, "knowledge_max_content": 512}],
+        "auto_llm": {"model_id": 11},
+    }
+    with Session(consumers.engine) as session, session.begin():
+        native.seed_default(session, key="assistant_llm", payload=config)
+        session.execute(update(LLMModel).where(LLMModel.id == 11).values(online=True))
+
+    def refuse_second_connection():
+        # SQLite cannot model MySQL row-lock waits. Refuse the nested connection
+        # that would wait on model locks held by this publication transaction.
+        raise AssertionError("assistant initialization opened a second transaction while holding model locks")
+
+    monkeypatch.setattr(defaults, "get_async_db_session", refuse_second_connection)
+    model = object()
+    monkeypatch.setattr(service.LLMService, "get_bisheng_llm", AsyncMock(return_value=model))
+    user = UserPayload(user_id=7, user_name="publisher", tenant_id=101, user_role=[])
+    async with AsyncSession(consumers.async_engine) as session, session.begin():
+        await session.execute(select(LLMModel).where(LLMModel.id == 11).with_for_update())
+        agent = AssistantAgent(
+            Assistant(id="assistant-a", tenant_id=101, model_name="11", name="Publish regression"),
+            "",
+            user.user_id,
+            login_user=user,
+            reference_session=session,
+        )
+        await getattr(agent, initializer)()
+        assert agent.llm is model
+        assert session.in_transaction()
+        if initializer == "init_llm":
+            assert agent.knowledge_retriever["max_content"] == 512
 
 
 @pytest.mark.parametrize(

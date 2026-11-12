@@ -61,6 +61,29 @@ def _record(cls, row, **overrides):
 
 
 class PermissionMigrationSnapshotRepository:
+    async def acount_file_authorization_rows(self, session, *, file_ids):
+        tenant = self._scope(session)
+        if (
+            type(file_ids) is not tuple
+            or not 1 <= len(file_ids) <= 199
+            or len(set(file_ids)) != len(file_ids)
+            or any(type(v) is not int or v <= 0 for v in file_ids)
+        ):
+            _blocked("invalid_exact_file_ids")
+        counts = dict.fromkeys(file_ids, 0)
+        for model in (ResourcePermissionMode, PermissionGrant, PermissionVisibleSourceProjection):
+            rows = await self._read(
+                session,
+                select(model.resource_id).where(
+                    model.tenant_id == tenant,
+                    model.resource_type == "knowledge_file",
+                    model.resource_id.in_(tuple(map(str, file_ids))),
+                ),
+            )
+            for row in rows:
+                counts[int(row["resource_id"])] += 1
+        return counts
+
     async def avalidate_global_integrity(self, session):
         """One run-wide raw probe per original table, never per tenant."""
         self._scope(session)

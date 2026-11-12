@@ -1,6 +1,8 @@
 """Extract persisted assistant selections without resolving display names."""
 
+import re
 from collections.abc import Iterable
+from hashlib import sha256
 
 from bisheng.resource_reference.application.contracts import (
     ReferenceSpec,
@@ -10,6 +12,20 @@ from bisheng.resource_reference.application.contracts import (
 )
 
 ASSISTANT_REFERENCE_EXTRACTOR_VERSION = "assistant-v1"
+LEGACY_NAME_PREFIX = "assistant-v1.legacy-name."
+
+
+def legacy_assistant_name_version(model_name):
+    """An exact original name fingerprint, never a model ID or name lookup."""
+    if type(model_name) is str and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:/+\-]{0,254}", model_name):
+        return LEGACY_NAME_PREFIX + sha256(model_name.encode()).hexdigest()[:32]
+    return None
+
+
+def extract_legacy_assistant_knowledge_references(*, model_name, knowledge_ids):
+    if legacy_assistant_name_version(model_name) is None:
+        raise ValueError("an original unresolved assistant model name is required")
+    return extract_assistant_references(model_name="", knowledge_ids=knowledge_ids)
 
 
 def extract_assistant_references(*, model_name: str | None, knowledge_ids: Iterable[int]) -> tuple[ReferenceSpec, ...]:

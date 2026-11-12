@@ -1,6 +1,7 @@
 """Deterministic M2 checks over acquired facts; no binding/ready authority."""
 
 import re
+from dataclasses import asdict
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id
@@ -11,6 +12,7 @@ from bisheng.knowledge.application.unification_permission_namespace import (
     namespace_plan_records,
 )
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
+from bisheng.knowledge.application.unification_structural_retention import creator_retention, stranded_retention
 from bisheng.knowledge.domain.repositories.unification_control_repository import (
     CreatorFact,
     UnificationControlRepository,
@@ -76,14 +78,18 @@ def source_decision(record, *, tenant_id):
             disposition = "existing_saved_slot"
     else:
         if (
-            fact.target_tenant_id != tenant_id
-            or not fact.space_exists
-            or fact.space_tenant_id != tenant_id
+            not fact.space_exists
+            or fact.space_tenant_id != fact.target_tenant_id
             or fact.knowledge_type not in {0, 1, 3}
             or (fact.file_type is not None and fact.file_type not in {0, 1})
         ):
             _blocked("knowledge_physical_parent")
-        disposition = "existing_saved_slot"
+        if fact.target_tenant_id != tenant_id:
+            if record.origin != "explicit_id" or record.target.target_type.value != "knowledge_space":
+                _blocked("knowledge_physical_parent")
+            disposition = "existing_invalid_scope"
+        else:
+            disposition = "existing_saved_slot"
     original, direct, ancestors, legacy = (
         state[name] for name in ("original", "target_tombstones", "ancestor_tombstones", "legacy")
     )
@@ -286,18 +292,23 @@ class UnificationPreflight:
         seen_creators = {}
         member_after = None
         spaces, files, departments = {}, {}, set()
-        role_keys, relationship_rows = set(), []
         storage_bytes = 0
 
-        async def creator_facts(ids):
+        async def creator_facts(ids, *, permitted_missing=frozenset()):
             wanted = tuple(sorted(ids - seen_creators.keys()))
             for offset in range(0, len(wanted), 200):
                 facts = await self.controls.ainspect_users(session, user_ids=wanted[offset : offset + 200])
+                if any(type(fact) is not CreatorFact for fact in facts):
+                    _blocked("creator_fact_set")
+                if {fact.user_id for fact in facts} != set(wanted[offset : offset + 200]):
+                    _blocked("creator_fact_set")
                 for fact in facts:
-                    if type(fact) is not CreatorFact or fact.user_id not in wanted or fact.exists is not True:
+                    if type(fact) is not CreatorFact or fact.user_id not in wanted:
                         _blocked("creator_missing")
                     seen_creators[fact.user_id] = fact
                     yield record_from_row(fact)
+            if any(seen_creators[ident].exists is not True and ident not in permitted_missing for ident in ids):
+                _blocked("creator_missing")
 
         for method in (
             "resources",
@@ -313,8 +324,19 @@ class UnificationPreflight:
             async for rows in self._pages(self.resources, "alist_" + method, session):
                 if method == "resources":
                     headers, member_rows, member_after = await self._membership_batch(session, rows, member_after)
+                    existing = tuple(row.id for row in rows if row.type == 3)
+                    file_counts = {}
+                    for offset in range(0, len(existing), 199):
+                        file_counts.update(
+                            await self.resources.acount_resource_files(
+                                session, resource_ids=existing[offset : offset + 199]
+                            )
+                        )
+                    permitted_missing = frozenset(
+                        row.user_id for row in rows if row.type == 3 and file_counts[row.id] == 0
+                    )
                     wanted = {row.creator_user_id for row in headers if row.creator_user_id is not None}
-                    async for fact in creator_facts(wanted):
+                    async for fact in creator_facts(wanted, permitted_missing=permitted_missing):
                         yield "control", fact
                     membership_plans = []
                     for header in headers:
@@ -340,12 +362,20 @@ class UnificationPreflight:
                         if row.type == 0 and row.user_id is None:
                             _blocked("creator_missing")
                         spaces[row.id] = data
+                        creator = seen_creators.get(row.user_id)
+                        if creator is not None and creator.exists is False:
+                            yield (
+                                "control",
+                                creator_retention(
+                                    resource=data,
+                                    creator=record_from_row(creator).data,
+                                    managed_file_count=file_counts.get(row.id),
+                                ),
+                            )
                     elif method == "files":
                         if row.file_type not in {0, 1} or row.knowledge_id not in spaces:
                             _blocked("invalid_file_parent")
-                        files[row.id] = {
-                            name: data[name] for name in ("id", "knowledge_id", "file_type", "level", "file_level_path")
-                        }
+                        files[row.id] = {**data}
                         if row.file_source in {"channel", "space_upload"}:
                             storage_bytes += row.file_size or 0
                     elif method == "department_spaces":
@@ -366,7 +396,9 @@ class UnificationPreflight:
                         creators.add(creator)
                     namespace.observe(section="resources", tenant_id=tenant, record=record)
                     yield "resources", record
-                async for fact in creator_facts(creators):
+                async for fact in creator_facts(
+                    creators, permitted_missing=permitted_missing if method == "resources" else frozenset()
+                ):
                     yield "control", fact
             if method == "resources":
                 tail = await self.memberships.apage_headers(session, after_id=member_after, limit=1)
@@ -395,6 +427,19 @@ class UnificationPreflight:
             path = _path(item["file_level_path"])
             for index, ident in enumerate(path):
                 parent = facts[ident]
+                if not parent.exists and len(path) == 1:
+                    permissions = await self.permissions.acount_file_authorization_rows(session, file_ids=(item["id"],))
+                    yield (
+                        "control",
+                        stranded_retention(
+                            resource=spaces[item["knowledge_id"]],
+                            file=item,
+                            ancestor=asdict(parent),
+                            sql_permission_count=permissions[item["id"]],
+                            fga_tuple_count=0,
+                        ),
+                    )
+                    continue
                 if (
                     not parent.exists
                     or parent.tenant_id != tenant
@@ -410,20 +455,13 @@ class UnificationPreflight:
         for command in builder.finish():
             yield "conversion", record_from_row(command)
 
-        for method in ("memberships", "departments", "roles", "user_roles"):
+        # F118 changes knowledge resources, not role applicability or grants.
+        # Keep reading old frozen role records in the codec, but do not make
+        # unrelated role history a prerequisite for a new migration inventory.
+        for method in ("memberships", "departments"):
             async for rows in self._pages(self.controls, "alist_" + method, session):
                 for row in rows:
-                    if method == "roles":
-                        role_keys.add(row.id)
-                    elif method == "user_roles":
-                        relationship_rows.append(row)
                     yield "control", record_from_row(row)
-        other_roles = tuple(sorted({row.role_id for row in relationship_rows} - role_keys))
-        for offset in range(0, len(other_roles), 200):
-            for fact in await self.controls.ainspect_roles(session, role_ids=other_roles[offset : offset + 200]):
-                if not fact.exists:
-                    _blocked("role_parent_missing")
-                yield "control", record_from_row(fact)
 
         for method in ("resource_modes", "grants", "assignees", "visible_sources"):
             after = None
