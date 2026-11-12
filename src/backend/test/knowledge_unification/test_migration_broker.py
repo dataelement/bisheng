@@ -480,3 +480,11 @@ async def test_literal_redis_keyprefix_globs_find_queues_and_original_bindings_w
     with pytest.raises(KnowledgeOperationPlanConflictError) as failure:
         await read(module, original)
     assert failure.value.kwargs["reason"] == "migration_broker_invalid_envelope"
+
+
+async def test_control_reply_in_unbound_redis_list_preserves_raw_data_and_all_real_tasks(module, original):
+    original.redis.lists[P + "old-client.reply.celery.pidbox"] = [json.dumps(messages.pidbox_reply()).encode()]
+    before = original.redis.snapshot()
+    records = await read(module, original)
+    assert len(records) == 5 and all(row.record_type == "broker_task" for row in records)
+    assert original.redis.snapshot() == before

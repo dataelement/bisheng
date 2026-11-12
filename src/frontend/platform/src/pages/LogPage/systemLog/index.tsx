@@ -41,6 +41,7 @@ import {
     toAppOptions,
 } from "./auditRow";
 import { AuditEmptyState } from "../components/AuditEmptyState";
+import { OrgPathText } from "../components/OrgPathText";
 import { OrgFilter } from "../components/OrgFilter";
 import type { OrgSelection } from "@/types/api/audit";
 
@@ -320,7 +321,7 @@ export default function SystemLog() {
                                     <div className="max-w-[200px] break-all truncate-multiline">{operator.primary}</div>
                                     {operator.secondary && <div className="max-w-[200px] break-all text-xs text-muted-foreground">{operator.secondary}</div>}
                                 </TableCell>
-                                <TableCell><div className="max-w-[200px] break-all truncate-multiline">{renderOrg(log, t)}</div></TableCell>
+                                <TableCell className="max-w-[200px]"><OrgPathText text={renderOrg(log, t)} /></TableCell>
                                 <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{renderSystemId(log, t)}</TableCell>
                                 <TableCell>{renderEventType(log, t, actionToI18nKey)}</TableCell>

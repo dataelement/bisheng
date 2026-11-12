@@ -41,7 +41,7 @@ import { ExecutionLiveContext } from './executionLive';
 import { useReportTaskTurnLoadFailed } from './taskTurnLoad';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
-import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { ChatErrorCard, isTransientErrorType } from '~/components/ChatErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
 import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
@@ -66,13 +66,30 @@ interface TaskTurnPanelProps {
 
 export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
     const localize = useLocalize();
-    const { getLinsight, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
+    // Share routes supply the token for history hydration and cannot continue
+    // tasks, even when their carrier omits the explicit readOnly prop.
+    const { token: shareToken } = useParams<{ token?: string }>();
+    const retryReadOnly = readOnly || Boolean(shareToken);
+    const { getLinsight, continueConversation, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
     // WS pump — self-guards on status===Running, so mounting it for a completed
     // historical turn is a no-op (no connection opened).
-    const { sendInput, stop } = useLinsightWebSocket(versionId);
+    const { sendInput, stop, networkFailure } = useLinsightWebSocket(versionId);
 
     const linsight = getLinsight(versionId);
     const [loadFailed, setLoadFailedState] = useState(false);
+    const [retrying, setRetrying] = useState(false);
+    const retryPendingRef = useRef(false);
+    const handleRetry = async () => {
+        if (retryReadOnly || !linsight?.question || retryPendingRef.current) return;
+        retryPendingRef.current = true;
+        setRetrying(true);
+        try {
+            await continueConversation(versionId, linsight.question);
+        } finally {
+            retryPendingRef.current = false;
+            setRetrying(false);
+        }
+    };
     // Also tell the hosting ChatView, whose workspace panel would otherwise show
     // a failed load as an empty deliverable list.
     const reportLoadFailed = useReportTaskTurnLoadFailed();
@@ -83,12 +100,6 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         },
         [versionId, reportLoadFailed],
     );
-    // On a share page (/workspace/share/:token) the lazy-load hits the same
-    // workbench list/detail endpoints, which 403 a non-owner unless the share-token
-    // header is sent. Pull it from the route so the backend's header_share_token_parser
-    // authorizes the recipient (empty on normal chat routes → no header, as before).
-    const { token: shareToken } = useParams<{ token?: string }>();
-
     // HISTORY hydration: no store entry yet → lazy-load this SV's detail.
     const loadedRef = useRef(false);
     useEffect(() => {
@@ -233,6 +244,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
             )}
 
             {/* error / terminated banners */}
+            {networkFailure && <ChatErrorCard failureInfo={networkFailure} />}
             {linsight.taskError && (
                 <ChatErrorCard
                     errorCode={linsight?.taskErrorInfo?.error_code ?? linsight?.output_result?.error_code}
@@ -241,6 +253,9 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                     detail={linsight.taskErrorInfo?.detail ?? linsight?.output_result?.detail}
                     referenceId={linsight.taskErrorInfo?.reference_id ?? linsight?.output_result?.reference_id}
                     fallbackMessage={linsight.taskError}
+                    onRetry={retryReadOnly || !linsight.question || !isTransientErrorType(linsight.taskErrorInfo?.error_type)
+                        ? undefined : handleRetry}
+                    retrying={retrying}
                 />
             )}
             {stopped && !linsight.taskError && (

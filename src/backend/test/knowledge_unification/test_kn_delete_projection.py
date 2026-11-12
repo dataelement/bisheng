@@ -38,7 +38,10 @@ application, context, db, deletion_tenant, service = (
 )
 
 
-async def test_historical_file_delete_requires_real_projection_and_preserves_primary(application, context, monkeypatch):
+@pytest.mark.parametrize("residual_count", [0, 180])
+async def test_historical_file_delete_requires_real_projection_and_preserves_primary(
+    application, context, monkeypatch, residual_count
+):
     models = (
         PermissionProjectionOperation,
         PermissionProjectionTuple,
@@ -72,6 +75,51 @@ async def test_historical_file_delete_requires_real_projection_and_preserves_pri
                 projection_state="CURRENT",
             )
         )
+        if residual_count:
+            session.add(
+                PermissionGrant(
+                    id=1,
+                    tenant_id=101,
+                    resource_type="knowledge_file",
+                    resource_id="31",
+                    model_key="reader",
+                    state="ACTIVE",
+                    projection_state="CURRENT",
+                )
+            )
+            session.add(
+                PermissionGrantAssignee(
+                    id=1,
+                    tenant_id=101,
+                    grant_id=1,
+                    subject_type="user",
+                    subject_id="7",
+                    source_type="DIRECT",
+                    source_ref="old-direct",
+                    source_locator="old-direct",
+                    source_fingerprint="a" * 64,
+                    projected_subject="user:7",
+                    state="ACTIVE",
+                )
+            )
+            session.add(
+                PermissionVisibleSourceProjection(
+                    id=1,
+                    tenant_id=101,
+                    resource_type="knowledge_file",
+                    resource_id="31",
+                    visibility_class="ordinary",
+                    projected_subject="user:7",
+                    source_kind="GRANT",
+                    source_owner_key="old-direct",
+                    source_locator="old-direct",
+                    source_fingerprint="a" * 64,
+                    contribution_fingerprint="b" * 64,
+                    source_version=1,
+                    tuple_fingerprint="c" * 64,
+                    state="ACTIVE",
+                )
+            )
     monkeypatch.setattr(sql_runtime, "get_async_db_session", context.db.sessions)
     monkeypatch.setattr(control_state, "get_async_db_session", context.db.sessions)
     state = control_state.SqlPermissionControlState()
@@ -98,6 +146,40 @@ async def test_historical_file_delete_requires_real_projection_and_preserves_pri
         explain=None,
     )
     monkeypatch.setattr(module, "get_f048_runtime", AsyncMock(return_value=runtime))
+    application.permission_cleanup = application._cleanup_permission
+    original_narrow = module.admission.narrow
+
+    async def narrow_live_rows(resources):
+        # A personal data-scope ownership resolver cannot find deleted rows.
+        # The live admission must finish before business cutover; subsequent
+        # cleanup uses the original finalized receipt, not a new owner query.
+        async with context.db.sessions() as session:
+            for kind, ident in resources:
+                if kind == "knowledge_file":
+                    assert await session.get(KnowledgeFile, int(ident)) is not None
+        await original_narrow(resources)
+
+    monkeypatch.setattr(module.admission, "narrow", narrow_live_rows)
+    grant_key = "permission_grant:" + sql_runtime.stable_grant_key(
+        tenant_id=101, resource_type="knowledge_file", resource_id="31", model_key="reader"
+    )
+    if residual_count:
+        transport.present.update(
+            (f"user:{ident}", "visible", "knowledge_file:31") for ident in range(residual_count - 2)
+        )
+        transport.present.add(("permission_model:reader", "model", grant_key))
+        transport.present.add(("user:7", "ordinary_assignee", grant_key))
+
+    async def read_tuples(*, object, consistency):
+        assert object in {"knowledge_file:31", grant_key}
+        assert consistency == "HIGHER_CONSISTENCY"
+        return [
+            {"user": user, "relation": relation, "object": obj}
+            for user, relation, obj in transport.present
+            if obj == object
+        ]
+
+    runtime._client.read_tuples = read_tuples
     target = VerifiedPermissionTarget.from_business_service(
         tenant_id=101,
         resource_type="knowledge_file",
@@ -133,7 +215,8 @@ async def test_historical_file_delete_requires_real_projection_and_preserves_pri
         confirmation_id=review.confirmation_id, plan_digest=review.plan_digest, idempotency_key="historical-delete"
     )
     result = await application.aconfirm(identity=application.user, space_id=1, request=request)
-    assert result["state"] == "succeeded" and transport.writes == 1
+    expected_writes = 1 + (2 if residual_count else 0)
+    assert result["state"] == "succeeded" and transport.writes == expected_writes
     async with context.db.sessions() as session:
         assert await session.get(KnowledgeFile, 31) is None
         assert await session.get(KnowledgeFile, 30) is not None
@@ -148,7 +231,14 @@ async def test_historical_file_delete_requires_real_projection_and_preserves_pri
             .all()
         )
         assert [row.knowledge_file_id for row in versions] == [30]
-        journal = (await session.execute(sa.select(PermissionProjectionOperation))).scalar_one()
-        assert journal.status == "FINALIZED" and journal.operation_type == "RESOURCE_DELETE"
+        journals = (await session.execute(sa.select(PermissionProjectionOperation))).scalars().all()
+        assert {row.operation_type for row in journals} == (
+            {"RESOURCE_DELETE", "RESOURCE_DELETE_PURGE"} if residual_count else {"RESOURCE_DELETE"}
+        )
+        assert all(row.status == "FINALIZED" for row in journals)
+        assert await session.get(ResourcePermissionMode, 1) is None
+        for model in (PermissionGrant, PermissionGrantAssignee, PermissionVisibleSourceProjection):
+            assert (await session.execute(sa.select(sa.func.count()).select_from(model))).scalar_one() == 0
+    assert transport.present == {("tenant:101", "shared_with", "llm_server:1")}
     assert (await application.aconfirm(identity=application.user, space_id=1, request=request))["state"] == "succeeded"
-    assert transport.writes == 1
+    assert transport.writes == expected_writes

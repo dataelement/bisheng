@@ -1821,6 +1821,7 @@ async def _agent_stream_chat_completion(
         error_flag = False
         error_msg = ""
         error_metadata = {}
+        pending_error_sse = None
         citation_collector = CitationRegistryCollector()
         # F075: the model cites with [Sn] handles from the session table shared
         # with the task mode; answer text is converted before it is stored or sent.
@@ -2525,7 +2526,9 @@ async def _agent_stream_chat_completion(
             error_metadata = FailureContextAdapter.public_payload({**exc.kwargs, "error_code": exc.code}, exc=exc)
             if label_error(exc) == ErrorType.CREDIT_EXHAUSTED:
                 error_metadata["error_type"] = ErrorType.CREDIT_EXHAUSTED.value
-            yield FailureContextAdapter.public_sse_text(exc, data=error_metadata)
+            if exc.code == LLMRateLimitError.Code:
+                error_metadata["error_type"] = ErrorType.RATE_LIMIT.value
+            pending_error_sse = FailureContextAdapter.public_sse_text(exc, data=error_metadata)
         except Exception as exc:
             error_flag = True
             error_msg = FailureContextAdapter.safe_detail(exc)
@@ -2538,9 +2541,12 @@ async def _agent_stream_chat_completion(
                 exc=exc,
             )
             if error_type == ErrorType.RATE_LIMIT:
-                yield FailureContextAdapter.public_sse_text(LLMRateLimitError(), data=error_metadata, cause=exc)
+                error_metadata["error_code"] = LLMRateLimitError.Code
+                pending_error_sse = FailureContextAdapter.public_sse_text(
+                    LLMRateLimitError(), data=error_metadata, cause=exc
+                )
             else:
-                yield FailureContextAdapter.public_sse_text(ServerError(), data=error_metadata, cause=exc)
+                pending_error_sse = FailureContextAdapter.public_sse_text(ServerError(), data=error_metadata, cause=exc)
         except (asyncio.CancelledError, GeneratorExit):
             # The stream was torn down mid-flight — client navigated away, gateway
             # read timeout, worker restart. Neither is an `Exception`, so without
@@ -2611,6 +2617,11 @@ async def _agent_stream_chat_completion(
             yield f"data: {json.dumps({'final': True, 'conversation': {'conversationId': conversation_id}})}\n\n"
             return
 
+        # The frontend can close immediately on error. Commit the answer and
+        # its safe recovery metadata before exposing that terminal event.
+        if pending_error_sse is not None:
+            yield pending_error_sse
+
         yield _sse_resp(
             "agent_answer",
             "end",
@@ -2623,7 +2634,7 @@ async def _agent_stream_chat_completion(
 
         # Schedule BEFORE final: the client closes the stream on that event.
         # Retain the task so disconnecting cannot cancel conversation naming.
-        if is_new_conv or (conversation.name in (None, "", "New Chat")):
+        if not error_flag and (is_new_conv or conversation.name in (None, "", "New Chat")):
             title_task = asyncio.create_task(
                 gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
             )

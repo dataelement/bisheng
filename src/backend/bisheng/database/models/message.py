@@ -204,7 +204,9 @@ class ChatMessageDao(MessageBase):
                 return None
 
     @classmethod
-    def get_latest_message_by_chat_ids(cls, chat_ids: list[str], category: str = None, exclude_category: str = None):
+    def get_latest_message_by_chat_ids(
+        cls, chat_ids: list[str], category: str | None = None, exclude_category: str | None = None
+    ):
         """
         Get the most recent message content for each session
         """
@@ -223,7 +225,9 @@ class ChatMessageDao(MessageBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_messages_by_chat_id(cls, chat_id: str, category_list: list = None, limit: int = 10) -> list[ChatMessage]:
+    def get_messages_by_chat_id(
+        cls, chat_id: str, category_list: list | None = None, limit: int = 10
+    ) -> list[ChatMessage]:
         with get_sync_db_session() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
@@ -233,10 +237,10 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     async def aget_messages_by_chat_id(
-        cls, chat_id: str, category_list: list = None, limit: int = 10
+        cls, chat_id: str, category_list: list | None = None, limit: int = 10, offset: int = 0
     ) -> list[ChatMessage]:
         """Return the MOST RECENT `limit` messages for a chat, in chronological
-        order (oldest → newest).
+        order (oldest → newest). ``offset`` pages backward from the newest row.
 
         Previous implementation used ``ORDER BY create_time ASC LIMIT N`` which
         always returned the OLDEST N rows, so long conversations saw only the
@@ -255,7 +259,9 @@ class ChatMessageDao(MessageBase):
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
-            statement = statement.order_by(ChatMessage.create_time.desc(), ChatMessage.id.desc()).limit(limit)
+            statement = (
+                statement.order_by(ChatMessage.create_time.desc(), ChatMessage.id.desc()).limit(limit).offset(offset)
+            )
             result = await session.exec(statement)
             rows = list(result.all())
             rows.reverse()
@@ -456,7 +462,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     async def afilter_message_by_chat_id(
-        cls, chat_id: str, flow_id: str, message_id: int = None, page_size: int = 20
+        cls, chat_id: str, flow_id: str, message_id: int | None = None, page_size: int = 20
     ) -> list[ChatMessage]:
         statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).where(ChatMessage.flow_id == flow_id)
         if message_id:

@@ -83,7 +83,18 @@ class F118PermissionTupleBuilder:
             (new, self.target, self.expected_after),
         ):
             keys = [delta.key for delta in compile_existing_mode_tuples(actual.mode)]
-            self._add(output, (key for key in keys if permits(schema, key)))
+            self._add(
+                output,
+                (
+                    key
+                    for key in keys
+                    if permits(schema, key)
+                    and (
+                        key[1] not in {"permission_enabled", "custom_mode", "inherit_mode"}
+                        or (key[0], key[1], old_object) in self.before
+                    )
+                ),
+            )
         for actual, output in ((old, self.expected_before), (new, self.expected_after)):
             grants = []
             for grant in plan.after_grants:
@@ -148,12 +159,38 @@ class F118PermissionTupleBuilder:
         return False
 
     def finish(self, *, stage_tuples, before_release_key, after_release_key):
-        # Destination nodes have no original SQL owner in a valid before graph.
-        # Adopting dormant edges here would activate unsigned assignments when
-        # the new resource/grant links are published, even if the raw edge is
-        # legal under the schema. A Run intent is the only partial-stage proof.
+        # A duplicated parent can already name the destination while its exact
+        # old parent remains present and both are backed by the signed SQL plan.
+        # It adds nothing to the intended after graph. All other dormant
+        # destination edges remain unsigned, even when schema-legal.
         destinations = set(self.moves.values())
-        if any(user.partition("#")[0] in destinations or obj in destinations for user, _, obj in self.before):
+        destination_edges = {
+            key for key in self.before if key[0].partition("#")[0] in destinations or key[2] in destinations
+        }
+        duplicate_parents = set()
+        for key in destination_edges:
+            user, relation, obj = key
+            if (
+                relation != "parent"
+                or not user.startswith("knowledge_space:")
+                or "#" in user
+                or obj.partition(":")[0] not in {"folder", "knowledge_file"}
+                or obj not in self.resources
+                or obj in destinations
+            ):
+                continue
+            previous_user = "knowledge_library:" + user.partition(":")[2]
+            previous = (previous_user, relation, obj)
+            if (
+                self.moves.get(previous_user) == user
+                and previous in self.before
+                and previous in self.expected_before
+                and key in self.expected_after
+                and permits(self.source, key)
+                and permits(self.target, key)
+            ):
+                duplicate_parents.add(key)
+        if destination_edges - duplicate_parents:
             blocked("unowned_destination_endpoint")
         controlled = {"permission_enabled", "custom_mode", "inherit_mode", "parent", "grant", "visible"}
         owned = {
@@ -162,19 +199,34 @@ class F118PermissionTupleBuilder:
             if (key[2] in self.resources and key[1] in controlled)
             or (key[2] in self.grants and key[1] in {"model", "ordinary_assignee", "protected_assignee"})
         }
-        extras = owned - self.expected_before
+        extras = owned - self.expected_before - duplicate_parents
+        retained_extras = set()
         for key in extras:
-            if not self._extra(key) or not permits(self.source, key):
+            if self._extra(key) and permits(self.source, key):
+                continue
+            # Historical SQL/FGA differences on nodes whose identity does not
+            # change remain exact original facts. This is preservation, never
+            # a source for new assignments or destination-node adoption.
+            endpoints = {key[0].partition("#")[0], key[2]}
+            if (
+                not endpoints.intersection(self.moves)
+                and not endpoints.intersection(destinations)
+                and permits(self.source, key)
+                and permits(self.target, key)
+                and typed_relation(key) == key
+            ):
+                retained_extras.add(key)
+            else:
                 blocked("existing_graph_drift")
         if self.expected_before - owned:
             blocked("missing_existing_graph")
-        result = dict.fromkeys(key for key in self.before_order if key not in owned)
+        result = dict.fromkeys(key for key in self.before_order if key not in owned or key in retained_extras)
         for key in self.after_order:
             if not permits(self.target, key):
                 blocked("target_schema_mismatch")
             result[key] = None
         for key in self.before_order:
-            if key not in extras:
+            if key not in extras or key in retained_extras:
                 continue
             changed = (self.moves.get(key[0], key[0]), key[1], self.moves.get(key[2], key[2]))
             if typed_relation(changed) != changed or not permits(self.target, changed):

@@ -643,24 +643,37 @@ def _grants(resource, by_model, scopes, sources_by_grant):
     result = []
     for grant in resource.grants:
         if grant.model_key not in by_model:
-            _blocked("grant_model_missing")
-        model = by_model[grant.model_key]
-        snapshot = GrantModelSnapshot(
-            model.model_key,
-            model.active,
-            model.effective_action_codes,
-            model.derived_level,
-            model.allow_same_level,
-            model.visibility_only_resource_types,
-            model.visibility_level,
-        )
-        snapshot = model_snapshot_for_target(
-            snapshot,
-            resource_type=resource.resource_type,
-            applicable_action_codes=tuple(
-                code for code in model.effective_action_codes if resource.resource_type in scopes[code]
-            ),
-        )
+            if (
+                grant.state != "INACTIVE"
+                or any(source.active for source in sources_by_grant.get(grant.id, ()))
+                or any(
+                    row.source.model_key == grant.model_key and row.source.state == "ACTIVE"
+                    for row in resource.visible_sources
+                )
+            ):
+                _blocked("grant_model_missing")
+            # An inactive Grant may outlive its deleted Catalog definition.
+            # This is an inert comparison value, never a Catalog model or a
+            # reconstructed action/tier. Keep its real key and retired audit.
+            snapshot = GrantModelSnapshot(grant.model_key, False, (), None, False)
+        else:
+            model = by_model[grant.model_key]
+            snapshot = GrantModelSnapshot(
+                model.model_key,
+                model.active,
+                model.effective_action_codes,
+                model.derived_level,
+                model.allow_same_level,
+                model.visibility_only_resource_types,
+                model.visibility_level,
+            )
+            snapshot = model_snapshot_for_target(
+                snapshot,
+                resource_type=resource.resource_type,
+                applicable_action_codes=tuple(
+                    code for code in model.effective_action_codes if resource.resource_type in scopes[code]
+                ),
+            )
         result.append(
             GrantSnapshot(
                 str(grant.id),
@@ -784,6 +797,63 @@ def _namespace_visible(before, after, old_grants, new_grants, compiler):
         ):
             _blocked("namespace_source_metadata_invalid")
         key = row.source.contribution_fingerprint
+        if key not in canonical and row.source.state == "RETIRED":
+            # Audit rows outlive deleted/recreated assignees and old Grants.
+            # Their stored identity must be self-consistent, never reconstructed
+            # as current authority or activated. Live rows still need canonical
+            # current backing below and both ACTIVE compilations stay unchanged.
+            original = row.source
+            owner = re.fullmatch(r"grant_assignee:([1-9][0-9]*)", original.source_owner_key)
+            if (
+                original.source_kind != "GRANT_ASSIGNEE"
+                or owner is None
+                or original.visibility_class not in {"ordinary", "protected"}
+                or not original.model_key
+                or not original.source_locator
+                or any(
+                    "\0" in value for value in (original.model_key, original.source_locator, original.projected_subject)
+                )
+            ):
+                _blocked("namespace_retired_source_identity")
+            _digest(original.source_fingerprint)
+            contribution = sha256(
+                "\0".join(
+                    ("GRANT_ASSIGNEE", original.source_owner_key, original.source_fingerprint, original.model_key)
+                ).encode()
+            ).hexdigest()
+            tuple_before = sha256(
+                "\0".join(
+                    ("WRITE", original.projected_subject, "visible", f"{before.resource_type}:{before.resource_id}")
+                ).encode()
+            ).hexdigest()
+            if original.contribution_fingerprint != contribution or original.tuple_fingerprint != tuple_before:
+                _blocked("namespace_retired_source_fingerprint")
+            current_source = next((source for source in before.assignees if source.id == int(owner[1])), None)
+            if current_source is not None and (
+                original.source_version > current_source.version
+                or (
+                    original.source_locator,
+                    original.source_fingerprint,
+                    original.projected_subject,
+                    original.visibility_class,
+                )
+                != (
+                    current_source.source_locator,
+                    current_source.source_fingerprint,
+                    current_source.projected_subject,
+                    "protected" if current_source.protected else "ordinary",
+                )
+            ):
+                _blocked("namespace_retired_source_drift")
+            tuple_after = sha256(
+                "\0".join(
+                    ("WRITE", original.projected_subject, "visible", f"{after.resource_type}:{after.resource_id}")
+                ).encode()
+            ).hexdigest()
+            canonical[key] = (
+                original,
+                original.model_copy(update={"resource_type": after.resource_type, "tuple_fingerprint": tuple_after}),
+            )
         if key not in canonical or key in seen:
             _blocked("namespace_source_backing_missing_or_duplicate")
         seen.add(key)
@@ -810,13 +880,23 @@ def _build_resource_retirement_plan(context, before, namespace_target=None):
         sources_by_grant = {key: tuple(sources) for key, sources in sources_by_grant.items()}
         old = _grants(before, context.before_models, context.before_scopes, sources_by_grant)
         after = _grants(after_resource, context.after_models, context.after_scopes, sources_by_grant)
-        if (
-            mapped
+        scope_retention = tuple(
+            (previous, current)
+            for previous, current in zip(old, after, strict=True)
+            if mapped
             and before.resource_type == "knowledge_space"
-            and any(
-                not previous.model.action_codes and not previous.model.visibility_only and current.model.visibility_only
-                for previous, current in zip(old, after, strict=True)
-            )
+            and not previous.model.action_codes
+            and not previous.model.visibility_only
+            and current.model.visibility_only
+            and previous.active
+            and previous.model.active
+            and any(source.active for source in previous.sources)
+        )
+        if any(
+            (previous.model.model_key, previous.model.derived_level, previous.model.allow_same_level)
+            != (current.model.model_key, current.model.derived_level, current.model.allow_same_level)
+            or current.model.action_codes
+            for previous, current in scope_retention
         ):
             _blocked("existing_space_scope_hole")
         existing = tuple(row.source for row in before.visible_sources)

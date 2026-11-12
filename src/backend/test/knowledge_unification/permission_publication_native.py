@@ -14,15 +14,17 @@ import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.core.config.openfga import OpenFGAConf
-from bisheng.core.openfga.authorization_model_f048 import (
+from bisheng.permission.application import control_state, sql_runtime
+from bisheng.permission.application.catalog_api import (
     TECHNICAL_MARKER_SUBJECTS,
-    authorization_model_checksum,
-    build_authorization_model_f048,
+    OpenFGACatalogProjector,
     required_relations_checksum,
 )
-from bisheng.permission.application import control_state, sql_runtime
-from bisheng.permission.application.catalog_api import OpenFGACatalogProjector
-from bisheng.permission.application.migration_read import PinnedMigrationPermissionReader
+from bisheng.permission.application.migration_read import (
+    PinnedMigrationPermissionReader,
+    authorization_model_checksum,
+    build_authorization_model_f048,
+)
 from bisheng.permission.domain.models import (
     AuthorizationModelRelease,
     PermissionAction,
@@ -444,6 +446,8 @@ async def published_input(complete, transport, monkeypatch, request):
         )
     if options.get("raw_edge"):
         store.tuples.add(tuple(options["raw_edge"]))
+    for edge in options.get("remove_raw_edges", ()):
+        store.tuples.discard(tuple(edge))
     if getattr(request.node, "callspec", None) and request.node.callspec.params.get("corrupt") == "unknown_namespace":
         store.tuples.add(("user:7", "unknown_relation", "knowledge_library:9000"))
     original_client = httpx.AsyncClient
@@ -484,6 +488,11 @@ async def published_input(complete, transport, monkeypatch, request):
 
     if options.get("reference_seed") is not None:
         await options["reference_seed"](complete)
+    if options.get("existing_mode_graph_from_seed"):
+        async with sessions() as session, session.begin():
+            modes = await PermissionMigrationSnapshotRepository().alist_resource_modes(session)
+        for mode in modes:
+            store.tuples.update(delta.key for delta in compile_existing_mode_tuples(mode))
 
     app = m2.application(
         __import__("bisheng.knowledge.application.unification_inventory", fromlist=["UnificationInventoryApplication"]),

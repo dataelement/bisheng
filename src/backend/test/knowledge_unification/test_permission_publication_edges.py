@@ -320,3 +320,77 @@ async def test_unowned_frozen_destination_edges_cannot_gain_meaning_after_namesp
         request.method == "POST" and request.url.path.endswith("/authorization-models")
         for request in value.store.requests
     )
+
+
+@pytest.mark.parametrize(
+    "published_input",
+    [{"parent": True, "raw_edge": ("knowledge_space:9000", "parent", "knowledge_file:1")}],
+    indirect=True,
+)
+async def test_duplicate_parent_already_matches_both_signed_sql_namespaces_without_new_authority(published_input):
+    value = published_input
+    new = ("knowledge_space:9000", "parent", "knowledge_file:1")
+    old = ("knowledge_library:9000", "parent", "knowledge_file:1")
+    assert new in value.store.tuples and old in value.store.tuples
+    result = await app(value).arun_permissions(**value.input, operator_id=7)
+    assert result.complete and new in value.store.tuples and old not in value.store.tuples
+    for request in value.store.requests:
+        if request.method == "POST" and request.url.path.endswith("/write"):
+            writes = json.loads(request.content).get("writes", {}).get("tuple_keys", [])
+            assert not any((row["user"], row["relation"], row["object"]) == new for row in writes)
+    writes = value.store.writes
+    assert await app(value).arun_permissions(**value.input, operator_id=7) == result
+    assert value.store.writes == writes
+
+
+@pytest.mark.parametrize(
+    "published_input",
+    [
+        {"raw_edge": ("knowledge_space:9000", "parent", "knowledge_file:1")},
+        {"parent": True, "raw_edge": ("knowledge_space:9000", "parent", "knowledge_file:99")},
+    ],
+    indirect=True,
+)
+async def test_parent_alias_without_exact_old_sql_and_target_plan_proof_still_blocks(published_input):
+    value = published_input
+    with pytest.raises(BaseErrorCode):
+        await app(value).arun_permissions(**value.input, operator_id=7)
+    assert value.store.writes == 0
+
+
+@pytest.mark.parametrize(
+    "published_input",
+    [
+        {
+            "remove_raw_edges": [
+                ("user:*", "permission_enabled", "knowledge_library:9000"),
+                ("service_account:*", "permission_enabled", "knowledge_library:9000"),
+            ]
+        }
+    ],
+    indirect=True,
+)
+async def test_original_disabled_markers_stay_absent_after_namespace_publication(published_input):
+    value = published_input
+    assert (await app(value).arun_permissions(**value.input, operator_id=7)).complete
+    assert not any(key[1:] == ("permission_enabled", "knowledge_space:9000") for key in value.store.tuples)
+
+
+@pytest.mark.parametrize(
+    "published_input",
+    [
+        {"parent": True, "raw_edge": ("folder:older-parent", "parent", "knowledge_file:1")},
+        {"parent": True, "raw_edge": ("knowledge_space:9001", "parent", "knowledge_file:1")},
+    ],
+    indirect=True,
+)
+async def test_original_unmoved_parent_difference_is_preserved_without_becoming_a_new_write(published_input):
+    value = published_input
+    old = tuple(value.options["raw_edge"])
+    assert (await app(value).arun_permissions(**value.input, operator_id=7)).complete
+    assert old in value.store.tuples
+    assert ("knowledge_space:9000", "parent", "knowledge_file:1") in value.store.tuples
+    for request in value.store.requests:
+        if request.method == "POST" and request.url.path.endswith("/write"):
+            writes = json.loads(request.content).get("writes", {}).get("tuple_keys", [])
+            assert not any((row["user"], row["relation"], row["object"]) == old for row in writes)

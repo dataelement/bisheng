@@ -15,7 +15,11 @@ from bisheng.channel.application import automation_identity as identity_module
 from bisheng.channel.application.automation_identity import resolve_channel_automation_identity
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.core.context.tenant import current_tenant_id, get_current_tenant_id, set_current_tenant_id
+from bisheng.database.models.department import Department, UserDepartment
+from bisheng.database.models.role import Role
+from bisheng.database.models.role_access import RoleAccess
 from bisheng.database.models.tenant import Tenant, UserTenant
+from bisheng.department.domain.repositories import policy_scope_repository
 from bisheng.permission.application.identity import (
     get_current_permission_actor,
     reset_current_permission_actor,
@@ -23,9 +27,11 @@ from bisheng.permission.application.identity import (
 )
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.resource_reference.application import read_identity
+from bisheng.role.domain.repositories import effective_role_repository
 from bisheng.user.domain.models import user_role as role_module
 from bisheng.user.domain.models.user import User
 from bisheng.user.domain.models.user_role import UserRole
+from bisheng.user.domain.repositories import policy_binding_repository
 from bisheng.user.domain.repositories import runtime_identity as person_repository
 from bisheng.utils import http_middleware
 from test.knowledge_unification import test_ch_repository as fixtures
@@ -37,7 +43,7 @@ tenant = fixtures.tenant
 @pytest.fixture
 async def people(store, monkeypatch):
     metadata = sa.MetaData()
-    for model in (User, Tenant, UserTenant, UserRole):
+    for model in (User, Tenant, UserTenant, UserRole, Role, RoleAccess, Department, UserDepartment):
         sa.Table(
             model.__tablename__,
             metadata,
@@ -63,13 +69,22 @@ async def people(store, monkeypatch):
             yield session
 
     async with sessions() as session, session.begin():
-        session.add(User(user_id=7, user_name="actual", password="not-a-credential", token_version=12))
-        session.add(Tenant(id=101, tenant_code="t101", tenant_name="actual", status="active"))
-        session.add(Tenant(id=202, tenant_code="t202", tenant_name="other", status="active"))
+        session.add(User(user_id=7, user_name="actual", password="fixture", token_version=12))
+        session.add(Tenant(id=101, tenant_code="t101", tenant_name="actual", status="active", root_dept_id=1001))
+        session.add(Tenant(id=202, tenant_code="t202", tenant_name="other", status="active", root_dept_id=2001))
         session.add(UserTenant(user_id=7, tenant_id=101, is_active=1, status="active"))
-        session.add_all([UserRole(id=value, user_id=7, role_id=value) for value in (4, 6)])
+        session.add(Department(id=1001, dept_id="t101-root", name="actual", tenant_id=101, path="/1001/"))
+        session.add(Department(id=2001, dept_id="t202-root", name="other", tenant_id=202, path="/2001/"))
+        session.add(UserDepartment(id=1, user_id=7, department_id=1001, is_primary=1))
+        session.add_all(
+            [Role(id=value, role_name=f"role-{value}", role_type="tenant", tenant_id=101) for value in (4, 6)]
+        )
+        session.add_all([UserRole(id=value, user_id=7, role_id=value, tenant_id=101) for value in (4, 6)])
     monkeypatch.setattr(person_repository, "get_async_db_session", sessions)
     monkeypatch.setattr(role_module, "get_async_db_session", sessions)
+    # Use the current F009 policy reader against the same isolated identity facts.
+    for repository in (policy_binding_repository, policy_scope_repository, effective_role_repository):
+        monkeypatch.setattr(repository, "get_async_db_session", sessions)
     monkeypatch.setattr(http_middleware, "_check_is_global_super", AsyncMock(return_value=False))
     monkeypatch.setattr(
         read_identity,
@@ -146,6 +161,10 @@ async def test_current_user_membership_and_tenant_are_not_assumed_from_old_confi
                 else {"tenant_id": 202}
             )
             await session.execute(sa.update(UserTenant).where(UserTenant.user_id == 7).values(**values))
+            if bad == "moved_tenant":
+                await session.execute(
+                    sa.update(UserDepartment).where(UserDepartment.user_id == 7).values(department_id=2001)
+                )
     async with people() as session:
         with pytest.raises(PermissionDeniedError):
             await resolve_channel_automation_identity(session, "own", "own", tenant_id=101)

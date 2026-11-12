@@ -320,3 +320,66 @@ def test_real_kombu_unacked_tuple_decodes_without_reencoding_or_rehashing_the_en
     assert decoded.target_ids == (81,) and exchange == "" and routing == "knowledge_celery"
     assert decoded.raw_digest == fingerprint
     assert len(fingerprint) == 64
+
+
+def pidbox_reply():
+    from kombu.pidbox import Mailbox
+    from kombu.serialization import dumps
+    from kombu.transport.virtual.base import Base64
+
+    captured = {}
+
+    def publish(body, **options):
+        captured.update(body=body, **options)
+
+    Mailbox("celery", serializer="json")._publish_reply(
+        {"celery@worker": {"ok": "pong"}},
+        "reply.celery.pidbox",
+        "c2e34607-b4b0-3d6a-9556-14b36204c934",
+        "0954dd2b-9444-454c-a4dc-2aca00077865",
+        channel=object(),
+        producer=SimpleNamespace(publish=publish),
+    )
+    content, encoding, body = dumps(captured["body"], serializer="json")
+    return {
+        "body": Base64().encode(body),
+        "content-type": content,
+        "content-encoding": encoding,
+        "headers": captured["headers"],
+        "properties": {
+            "body_encoding": "base64",
+            "delivery_info": {"exchange": captured["exchange"].name, "routing_key": captured["routing_key"]},
+        },
+    }
+
+
+@pytest.mark.parametrize("required", [True, False])
+def test_actual_kombu_control_reply_is_proven_nonknowledge_without_consuming_it(codec, required):
+    assert codec.decode_broker_message(envelope_dumps(pidbox_reply()).encode(), required=required) is None
+
+
+@pytest.mark.parametrize("change", ["exchange", "clock", "ticket", "route", "unknown", "task_header"])
+def test_unknown_or_task_like_message_cannot_borrow_control_reply_classification(codec, change):
+    value = pidbox_reply()
+    if change == "exchange":
+        value["properties"]["delivery_info"]["exchange"] = "ordinary"
+    elif change == "clock":
+        value["headers"]["clock"] = True
+    elif change == "ticket":
+        del value["headers"]["ticket"]
+    elif change == "route":
+        value["properties"]["delivery_info"]["routing_key"] = "not-a-uuid"
+    elif change == "task_header":
+        value["headers"]["task"] = PREFIX + "file_worker.parse_knowledge_file_celery"
+    else:
+        value["body"] = base64.b64encode(json.dumps({"task": PREFIX + "unknown.task"}).encode()).decode()
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        codec.decode_broker_message(envelope_dumps(value).encode(), required=False)
+
+
+def test_protocol_one_knowledge_task_is_still_inventoried_with_control_like_transport_headers(codec):
+    value = pidbox_reply()
+    value["body"] = json.loads(message(protocol=1, args=[81]))["body"]
+    decoded = codec.decode_broker_message(envelope_dumps(value).encode(), required=False)
+    assert decoded.task_name == PREFIX + "file_worker.parse_knowledge_file_celery"
+    assert decoded.target_ids == (81,)

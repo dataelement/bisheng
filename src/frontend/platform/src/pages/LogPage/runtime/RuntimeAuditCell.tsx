@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { RuntimeAuditKind, RuntimeAuditRow } from '@/controllers/API/runtimeAudit'
 import { formatTimestamp } from '@/utils/displayTimestamp'
 import { orgLabel } from '../components/OrgFilter/orgLabel'
+import { OrgPathText } from '../components/OrgPathText'
 
 interface RuntimeAuditCellProps {
   kind: RuntimeAuditKind
@@ -48,6 +49,7 @@ export function RuntimeAuditCell({ kind, field, row }: RuntimeAuditCellProps) {
     label = String(row[field])
   }
   label ??= t('log.runtime.notRecorded')
+  if (field === 'operator_dept_path') return <OrgPathText text={label} />
   return identifier == null ? <>{label}</> : (
     <Tooltip content={t('log.runtime.identifier', { id: identifier })}>
       <span tabIndex={0}>{label}</span>

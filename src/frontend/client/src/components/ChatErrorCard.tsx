@@ -151,8 +151,8 @@ export function ChatErrorCard({
                     <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-text-3">{desc}</p>
                     {hint && <p className="mt-1.5 leading-relaxed text-text-3">{hint}</p>}
 
-                    <FailureInfoDetails failureInfo={failure} referenceId={referenceId} />
-                    <ErrorDetailDisclosure detail={rawDetail} />
+                    <FailureInfoDetails failureInfo={failure} referenceId={referenceId} detail={rawDetail} />
+                    {!failure && <ErrorDetailDisclosure detail={rawDetail} />}
                 </div>
             </div>
         </div>

@@ -21,6 +21,7 @@ import type { OrgSelection } from "@/types/api/audit";
 import { AuditEmptyState } from "../components/AuditEmptyState";
 import { OrgFilter } from "../components/OrgFilter";
 import { orgLabel } from "../components/OrgFilter/orgLabel";
+import { OrgPathText } from "../components/OrgPathText";
 import { useTable } from "@/util/hook";
 import { exportCsv, formatDate } from "@/util/utils";
 import { useContext, useEffect, useMemo, useReducer, useState } from "react";
@@ -373,7 +374,7 @@ export default function AppUseLog() {
                             <TableCell>{usageTypeOf(el, t)}</TableCell>
                             <TableCell>{el.user_name}</TableCell>
                             <TableCell className="max-w-[200px]">
-                                <div className="truncate-multiline break-all">{orgLabel(el.operator_dept_id, el.operator_dept_path, t)}</div>
+                                <OrgPathText text={orgLabel(el.operator_dept_id, el.operator_dept_path, t)} />
                             </TableCell>
                             <TableCell>{el.userGroupsString}</TableCell>
                             <TableCell>{el.create_time.replace('T', ' ')}</TableCell>

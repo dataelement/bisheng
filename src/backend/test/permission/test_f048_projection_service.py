@@ -655,6 +655,24 @@ async def test_definite_stage_failure_applies_inverse_compensation() -> None:
     assert scope.fenced is False
 
 
+async def test_late_stage_failure_never_compensates_into_a_newer_scope():
+    plan = _plan(_delta(1, phase="STAGE"), _delta(2, phase="STAGE"), _delta(3))
+    service, repository, _, scope, fga, _, _ = _service(plan)
+    original_write = fga.write_atomic
+
+    async def write(**kwargs):
+        if len(fga.calls) == 1:
+            scope.current = False  # a later durable intent now owns the fence
+        return await original_write(**kwargs)
+
+    fga.write_atomic = write
+    fga.fail_call = 2
+    with pytest.raises(PermissionProjectionFailedError):
+        await service.execute(plan)
+    assert len(fga.calls) == 2  # no inverse FGA write after losing the fence
+    assert repository.operation.status == ProjectionOperationStatus.FAILED_CLOSED
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("count", [50])
 async def test_change_item_limit_accepts_fifty(count: int) -> None:

@@ -149,6 +149,9 @@ async def assistant_business(tmp_path, assistant_tenant, monkeypatch):
     monkeypatch.setattr(assistant_module.telemetry_service, "log_event_sync", MagicMock())
     monkeypatch.setattr(AssistantService, "judge_name_repeat", MagicMock(return_value=False))
     monkeypatch.setattr(AssistantService, "create_assistant_hook_async", AsyncMock())
+    # Audit connection visibility is covered by test/assistant/test_creation_audit_visibility.py.
+    monkeypatch.setattr(assistant_module.AuditLogService, "create_build_assistant", MagicMock())
+    monkeypatch.setattr(AssistantService, "get_logo_share_link", MagicMock())
     monkeypatch.setattr(AssistantService, "update_assistant_hook", MagicMock(return_value=True))
     monkeypatch.setattr(AssistantService, "delete_assistant_hook", MagicMock(return_value=True))
     monkeypatch.setattr(AssistantService, "get_link_info", MagicMock(return_value=([], [], [])))

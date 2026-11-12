@@ -54,7 +54,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     const localize = useLocalize();
     const { getLinsight, continueConversation, updateLinsight } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
-    const { stop, sendInput } = useLinsightWebSocket(versionId);
+    const { stop, sendInput, networkFailure } = useLinsightWebSocket(versionId);
 
     const linsight = getLinsight(versionId);
     // On reload, session-level steps come back inside the "执行准备" pseudo-task;
@@ -223,6 +223,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     )}
 
                     {/* error / terminated banners */}
+                    {networkFailure && <ChatErrorCard failureInfo={networkFailure} />}
                     {linsight?.taskError && (
                         <ChatErrorCard
                     errorCode={linsight?.taskErrorInfo?.error_code ?? linsight?.output_result?.error_code}
