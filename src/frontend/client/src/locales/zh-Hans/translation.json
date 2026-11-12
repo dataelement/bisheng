@@ -2680,7 +2680,9 @@
   },
   "modelPicker": {
     "unknownProvider": "其他提供方",
-    "back": "返回"
+    "back": "返回",
+    "ratioBase": "基准",
+    "ratioFree": "免费"
   },
   "com_select": {
     "empty": "暂无数据",

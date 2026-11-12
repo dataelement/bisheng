@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔄 部分实测 | MySQL 与 Redis 已实测；达梦与全流程待执行 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 33 / 36（T04 暂缓；S6 管理后台、S8 桌面完成） |
+| 实现 | 🔄 进行中 | 34 / 36（T04 暂缓、T26 不做；S6 管理后台、S7 网页、S8 桌面完成；剩 T32 联调） |
 
 ---
 
@@ -214,8 +214,8 @@
 
 ### Wave 5 — 网页工作台与组件库（S7）
 
-- [ ] **T26**: Cascader 可选 suffix / footer — `packages/ui/src/components/Cascader/*` · 依赖: 无（需组件库负责人认可）
-- [ ] **T27**: 模型下拉框倍率 — `client/src/types/chat/config.ts`、`components/Chat/AiModelSelect.tsx` · 覆盖 AC: AC-13 · 依赖: T16, T26
+- [~] **T26**: Cascader 可选 suffix / footer — `packages/ui/src/components/Cascader/*` · 依赖: 无（需组件库负责人认可）
+- [x] **T27**: 模型下拉框倍率 — `client/src/types/chat/config.ts`、`components/Chat/AiModelSelect.tsx` · 覆盖 AC: AC-13 · 依赖: T16, T26
 
 ### Wave 6 — 桌面（S8，bisheng-desktop）
 
@@ -265,3 +265,5 @@
 - T30 偏离与风险：插槽是 single 类型，`priority: -1` 会遮住随包的 DeepSeek 1017 标签，仓库规范写明「不能为一个插件屏蔽其他贡献项」。为缩小影响，只在当前账号的模型目录带倍率提示时注册，未登录 / 旧服务端 / 没有企业模型时释放插槽；剩余代价是企业账号登录且同时用 DeepSeek 官方账号时 1017 标签不显示。已写入桌面仓库 `docs/patch-plugin-contract.md`，需在 PR 里请桌面负责人确认。倍率数据随现有前台目录刷新（启动、回到前台、账号变化）更新，不新增轮询。
 - AC-13 中「桌面 Chat 模型下拉框」就是内嵌的网页工作台，由 S7（T27）覆盖，桌面不单独改。
 - T31 测试：新增 `test/enterprise-model-label.test.mjs`（4 条：提示仓库只收当前账号、注册与释放、各类标签渲染、刷新后已挂载标签更新）；更新 `enterprise-contract`（合法 / 非法提示）、`enterprise-service`（登录 → 刷新 → 公开快照，且快照是副本）、`enterprise-package`（账号页倍率）、`enterprise-model-sync`（刷新结果交给调用方、卸载后不再回调；函数签名变化同步改了切片标记）、`enterprise-openai-adapter`（26176 分类）、`provider-error-patch`（两处补丁文案）。全量：`npm run build` 后 3,686 条，3,681 通过 / 0 失败 / 5 跳过；typecheck、`git diff --check` 通过。未做：真实 Harness 子进程与安装包里的 Work 下拉框 / 账号页目视验收（需要连接已升级的毕昇服务端）。
+- T26 不做、T27 改法：共享 Cascader 的选项 `label` 只接受纯文本，加 suffix 要改组件库（需设计 / 组件库负责人认可）。改为把倍率拼在模型名后面的标签文字里（「Qwen Max · 3.00x」「· 1.00x 基准」「· 免费」），不改 `packages/ui`；搜索也会匹配这段文字。以后组件库支持 suffix 时可以换成灰色小字。新增三语文案 `modelPicker.ratioBase / ratioFree`；`types/chat/config.ts` 增加 `ModelPricingHint`。
+- S7 检查：`AiModelSelect.test.tsx` 7 条通过（新增 1 条）；`src/components/Chat` + `modelRefresh` 共 200 条，190 通过 / 10 失败，失败在 `importFailureContract`、`ChatResourceMenu` 两个文件，在不含本次改动的干净副本上同样失败（与本特性无关）。本机 `canvas` 原生模块未编译导致 client jest 起不来，测试时用临时预加载脚本让 jsdom 视为未安装 canvas（不改仓库）。client typecheck、check-i18n 通过；改动文件 eslint 无问题，client 整体 lint 原本就因 `src/utils/failureInfo.ts` 失败。

@@ -2675,7 +2675,9 @@
   },
   "modelPicker": {
     "unknownProvider": "その他のプロバイダー",
-    "back": "戻る"
+    "back": "戻る",
+    "ratioBase": "基準",
+    "ratioFree": "無料"
   },
   "com_select": {
     "empty": "データがありません",

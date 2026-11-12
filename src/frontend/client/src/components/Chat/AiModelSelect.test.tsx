@@ -100,3 +100,25 @@ test('sizes the trigger from the selected label and keeps its sizing text while 
   await user.type(input, 'vision');
   expect(sizer).toHaveAttribute('data-label', 'Gamma');
 });
+
+test('F015: shows the server credit ratio after model names, including base and free models', async () => {
+  const priced = [
+    { ...options[0], pricing_hint: { ratio: '3.00', base: false, free: false } },
+    { ...options[1], pricing_hint: { ratio: '1.00', base: true, free: false } },
+    { ...options[2], pricing_hint: { ratio: null, base: false, free: true } },
+    { id: '4', key: 'd', name: 'delta', displayName: 'Delta', provider_id: '10', provider_name: 'Provider A', pricing_hint: { ratio: null, base: false, free: false } },
+    { id: '5', key: 'e', name: 'epsilon', displayName: 'Epsilon', provider_id: '10', provider_name: 'Provider A' },
+  ];
+  render(<AiModelSelect options={priced} value={1} disabled={false} onChange={jest.fn()} />);
+  const user = userEvent.setup();
+  const trigger = screen.getByRole('combobox', { name: 'com_ui_select_model' });
+  expect(trigger.parentElement).toHaveTextContent('Alpha · 3.00x');
+  await user.click(trigger);
+  await user.click(screen.getByRole('treeitem', { name: 'Provider A' }));
+  expect(screen.getByRole('treeitem', { name: 'Gamma · modelPicker.ratioFree' })).toBeInTheDocument();
+  // No ratio can be shown (unpriced base or older server): the plain name stays.
+  expect(screen.getByRole('treeitem', { name: 'Delta' })).toBeInTheDocument();
+  expect(screen.getByRole('treeitem', { name: 'Epsilon' })).toBeInTheDocument();
+  await user.click(screen.getByRole('treeitem', { name: 'Provider B' }));
+  expect(screen.getByRole('treeitem', { name: 'Beta · 1.00x modelPicker.ratioBase' })).toBeInTheDocument();
+});

@@ -2752,7 +2752,9 @@
   },
   "modelPicker": {
     "unknownProvider": "Other providers",
-    "back": "Back"
+    "back": "Back",
+    "ratioBase": "Base",
+    "ratioFree": "Free"
   },
   "com_select": {
     "empty": "No data",
