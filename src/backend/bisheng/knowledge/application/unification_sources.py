@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Literal
 from weakref import WeakSet
 
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
@@ -31,6 +32,7 @@ from bisheng.assistant.domain.services.reference_extractor import (
 from bisheng.channel.domain.services.reference_extractor import (
     CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
     extract_channel_sync_references,
+    is_legacy_channel_folder_id,
 )
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
@@ -423,7 +425,16 @@ class UnificationSourceInventory:
                     lifecycle = (row.is_released,)
                     configuration = {"syncs": links}
                     extractor = CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION
-                    references = extract_channel_sync_references(links)
+                    for link in links:
+                        if is_legacy_channel_folder_id(link["folder_id"]):
+                            logger.warning(
+                                "F118 retained legacy channel folder binding; manual rebind required: "
+                                "channel_id={} sync_id={} folder_id={}",
+                                row.id,
+                                link["id"],
+                                link["folder_id"],
+                            )
+                    references = extract_channel_sync_references(links, skip_legacy_folders=True)
                 digest = _digest(configuration)
                 revision = _digest({"root": asdict(row), "links": links})
                 if deleted:

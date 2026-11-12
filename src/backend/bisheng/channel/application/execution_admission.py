@@ -6,6 +6,7 @@ from datetime import datetime
 
 from bisheng.channel.application.automation_identity import assert_channel_automation_identity
 from bisheng.channel.domain.repositories.reference_source_repository import ChannelReferenceSourceRepository
+from bisheng.channel.domain.services.reference_extractor import is_legacy_channel_folder_id
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.core.context.tenant import get_current_tenant_id
@@ -55,6 +56,8 @@ class ChannelSyncExecutionAdmission:
                 or not config["is_enabled"]
             ):
                 raise ResourceReferenceInvalidError(reason="channel_delivery_configuration_invalid")
+            if is_legacy_channel_folder_id(config["folder_id"]):
+                raise ResourceReferenceInvalidError(reason="channel_legacy_folder_rebind_required")
             effective_at = max(
                 datetime.fromisoformat(config[key]).timestamp() for key in ("create_time", "update_time")
             )

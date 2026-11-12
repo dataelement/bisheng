@@ -70,7 +70,7 @@ class ReferenceAfterSources:
             revision = digest({"root": asdict(root), "links": links})
         elif kind == SourceType.CHANNEL_SYNC:
             lifecycle, configuration = (root.is_released,), {"syncs": links}
-            references = extract_channel_sync_references(links)
+            references = extract_channel_sync_references(links, skip_legacy_folders=True)
             revision = digest({"root": asdict(root), "links": links})
         elif kind == SourceType.KNOWLEDGE:
             if root.type not in {0, 1, 3}:

@@ -1528,6 +1528,13 @@ From `src/backend/`: `python scripts/managed_tenant_preflight.py --tenant-id <T>
 
 ## F118 knowledge-space unification
 
+Existing channel sync selections with the old picker's `new-folder-<digits>`
+folder ID retain their original SQL configuration. M2 logs the channel/sync IDs
+requiring manual rebind, skips only that invalid folder reference, and keeps
+space/other real references. The selected invalid sync item cannot deliver to
+the space root; users must remove or rebind it in the channel configuration.
+Other malformed IDs and explicitly saved new selections remain strict.
+
 ### Historical preparation before a new M2 freeze
 
 `prepare_f118_history.py` repairs valid SQL folder-depth counters and redundant

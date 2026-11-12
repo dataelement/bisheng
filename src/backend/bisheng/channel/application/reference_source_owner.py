@@ -152,7 +152,7 @@ class ChannelReferenceSourceOwner:
         channel, rows = facts
         await require_business_action(identity, resource_type="channel", resource_id=channel["id"], action="visible")
         try:
-            references = extract_channel_sync_references(rows)
+            references = extract_channel_sync_references(rows, skip_legacy_folders=True)
             payload = canonical_payload_json(_json({"channel": channel, "sync": rows}))
             return AuthorizedSourceSnapshot(
                 SourceKey(channel["tenant_id"], SourceType.CHANNEL_SYNC, channel["id"], "current"),
