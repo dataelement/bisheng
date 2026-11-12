@@ -2,6 +2,8 @@
 
 日期：2026-11-12。代码依据为本地发布线当前源码；历史材料依据116最终v6证据包；投影创建时间、OpenFGA二进制及数据库schema于本日重新只读核查。本文件是评审方案，尚未实施本轮新增清理、4757归属纠正或迁移行为调整；前一轮已经完成的数据处置继续按原执行记录认定。
 
+最新未决问题、防旧写覆盖和层级bug核查见[后续核查](f118-recovery-and-open-questions-20261112.md)。用户已确认迁移脚本不检查Celery队列/broker，以下原队列盘点解释只作历史记录，统一修复将移除；停服务由业务/运维保证。
+
 本文对应用户1–37项反馈；重复的空“18、”不另计问题。原编号及处置见[问题清单](f118-migration-blockers-and-fix-assessment-20261112.md)，现场全过程见[执行记录](environment-116-f118-upgrade-20261111.md)。
 
 ## 一、先纠正术语和已查明事实
@@ -306,7 +308,7 @@ flowchart TD
     recover --> recovered{"有效资源投影与操作是否已闭合"}
     recovered -->|"否"| holdBefore["保持维护，输出故障与恢复提案，不发布新模型解围"]
     holdBefore --> recover
-    recovered -->|"是"| inventory["M2正式盘点：资源、版本、权限、引用、物理数据及队列"]
+    recovered -->|"是"| inventory["M2正式盘点：资源、版本、权限、引用和物理数据"]
     inventory --> classify{"分类全部独立阻塞"}
     classify -->|"已核实需清理或修正"| backupSelected["备份精确数据与物理对象清单，建立处置账本"]
     backupSelected --> cleanup["独立执行孤儿清理、归属修正；物理清理逐项可恢复"]
