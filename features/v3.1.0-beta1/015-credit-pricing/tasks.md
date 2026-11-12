@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔄 部分实测 | MySQL 与 Redis 已实测；达梦与全流程待执行 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 29 / 36（T04 暂缓；S6 管理后台完成） |
+| 实现 | 🔄 进行中 | 33 / 36（T04 暂缓；S6 管理后台、S8 桌面完成） |
 
 ---
 
@@ -35,7 +35,8 @@
 | A（不连真实库） | test/dsh test/llm test/database test/workstation test/channel test/common | 3,358 通过 / 73 失败 / 60 报错 / 234 跳过（2 分 34 秒）；明细 `/tmp/f015-baseline-a.xml`（本机） |
 | B（真实库专项，Docker MySQL 8 + Redis 7） | test/dsh 中使用真实库的 12 个文件（`/tmp/f015-run-b.sh`，每次先重置库并预建 `user` 表） | 99 通过 / 52 失败 / 2 跳过；失败为 test_automatic_quota_recovery 44（该组在 A 组 sqlite 下通过）、test_model_quota 5（A 组同样失败）、test_policy_repository 2、test_migration_mysql 1（单独运行通过，混跑相互影响） |
 | 前端 platform | ModelPage + SystemPage/dsh；全量 vitest | 局部 423：420 通过 / 3 失败（ContentSafetyDetails ×2、ModelAccessDialog 1）；全量 15 个文件 40 个失败（approvalPage、hostedApp、dshRequestError 等，与本特性无关）；`pnpm lint` 原本就因 `ModelConfig.limit.test.tsx` 的中文字符串失败 |
-| 客户端 / 桌面 | client、packages/ui、desktop enterprise | 进入 S7 / S8 前补跑 |
+| 客户端 | client、packages/ui | 进入 S7 前补跑 |
+| 桌面（bisheng-desktop，origin/V1.3.0 9c410423） | `vitest run` 全量 | 未构建时 3,605 条：54 失败 + 3 个文件加载失败，均因缺少构建产物（PPT、Office、Word 模板）或需真实 Harness；`npm run build` 后全部通过 |
 
 ---
 
@@ -218,10 +219,10 @@
 
 ### Wave 6 — 桌面（S8，bisheng-desktop）
 
-- [ ] **T28**: 契约与错误文案 — `contract.js`、`contract.d.ts`、`enterprise-service.ts`、`error-copy.js` · 覆盖 AC: AC-13, AC-19, AC-22 · 依赖: T16
-- [ ] **T29**: 账号页倍率 — `client.js renderModelRow` · 覆盖 AC: AC-13 · 依赖: T28
-- [ ] **T30**: Work 下拉框插槽（priority −1） — `client.js` · 覆盖 AC: AC-13 · 依赖: T28
-- [ ] **T31**: 桌面测试 — `test/enterprise-contract.test.ts`、`test/enterprise-model-label.test.mjs`、`test/enterprise-model-sync.test.mjs` · 依赖: T28–T30
+- [x] **T28**: 契约与错误文案 — `contract.js`、`contract.d.ts`、`enterprise-service.ts`、`error-copy.js` · 覆盖 AC: AC-13, AC-19, AC-22 · 依赖: T16
+- [x] **T29**: 账号页倍率 — `client.js renderModelRow` · 覆盖 AC: AC-13 · 依赖: T28
+- [x] **T30**: Work 下拉框插槽（priority −1） — `client.js` · 覆盖 AC: AC-13 · 依赖: T28
+- [x] **T31**: 桌面测试 — `test/enterprise-contract.test.ts`、`test/enterprise-model-label.test.mjs`、`test/enterprise-model-sync.test.mjs` · 依赖: T28–T30
 
 ### Wave 7 — 联调验收（S9）
 
@@ -259,3 +260,8 @@
 - T24 切换计价币种时的「保持预算 / 保持数字」二选一做成币种下方的单选项，而不是弹窗（表单内选择不适合用二次确认弹窗，Modal 组件也未定稿）；默认保持预算，按当前汇率换算到 6 位小数。积分设置的版本冲突（26130）显示「设置已被他人修改」。
 - T25 删除 `ModelMultiplierInput` 及测试、`dshUnified` 的 `credit_multiplier` 字段与请求参数、三语文案 `dsh.unified.multiplier / multiplierHelp / multiplierInvalid / modelSettings`；`ModelAccessDialog` 本身未引用倍率，无需改动，只更新了它的测试。`ModelAccessDialog.test` 第一条用例改名后仍然失败，失败点与改动前相同（找不到 `subject.department` 按钮，界面已改为页签），不在本特性范围。
 - S6 回归：ModelPage + SystemPage/dsh 463 条，460 通过 / 3 失败（与基线同 3 条）；platform 全量 15 个文件 40 个失败，在干净的基线提交上逐条一致（仅改名的那条名称不同）；`pnpm typecheck` 通过；本次改动的 26 个文件 eslint 无问题；`pnpm check-i18n` 通过。页面未在真实环境中查看（本机后端不是本分支），留到 S9 联调。
+- S8 桌面在 bisheng-desktop 新 worktree `bisheng-desktop-f015/`、分支 `feat/v130-credit-pricing`（基于 origin/V1.3.0 9c410423，已去掉默认的上游跟踪以免误推集成分支），本地提交 85b6ab06，未推送。
+- T28 偏离：26176 不改 `error-copy.js`（那是账号页登录类错误的文案表，26176 只会出现在模型调用里）；改为 `openai.js` 把 `model_pricing_missing` 列为平台错误码，并在 `dsh-client-ui-chat`、`dsh-client-ui-trajectory` 已有的「平台错误码本地化」补丁里各加一条中英文提示（沿用现有逐码映射的做法）。本机代理访问不了 lockfile 里的 npmmirror 地址，`patch-package` 自带的重新生成失败；改为按 patch-package 的 git 参数用干净原始包手工生成（先验证未改动时生成结果与已提交补丁只差一行陈旧的 index 哈希），再用 `patch-package --reverse` + 重新应用验证可完整撤销和重放。
+- T30 偏离与风险：插槽是 single 类型，`priority: -1` 会遮住随包的 DeepSeek 1017 标签，仓库规范写明「不能为一个插件屏蔽其他贡献项」。为缩小影响，只在当前账号的模型目录带倍率提示时注册，未登录 / 旧服务端 / 没有企业模型时释放插槽；剩余代价是企业账号登录且同时用 DeepSeek 官方账号时 1017 标签不显示。已写入桌面仓库 `docs/patch-plugin-contract.md`，需在 PR 里请桌面负责人确认。倍率数据随现有前台目录刷新（启动、回到前台、账号变化）更新，不新增轮询。
+- AC-13 中「桌面 Chat 模型下拉框」就是内嵌的网页工作台，由 S7（T27）覆盖，桌面不单独改。
+- T31 测试：新增 `test/enterprise-model-label.test.mjs`（4 条：提示仓库只收当前账号、注册与释放、各类标签渲染、刷新后已挂载标签更新）；更新 `enterprise-contract`（合法 / 非法提示）、`enterprise-service`（登录 → 刷新 → 公开快照，且快照是副本）、`enterprise-package`（账号页倍率）、`enterprise-model-sync`（刷新结果交给调用方、卸载后不再回调；函数签名变化同步改了切片标记）、`enterprise-openai-adapter`（26176 分类）、`provider-error-patch`（两处补丁文案）。全量：`npm run build` 后 3,686 条，3,681 通过 / 0 失败 / 5 跳过；typecheck、`git diff --check` 通过。未做：真实 Harness 子进程与安装包里的 Work 下拉框 / 账号页目视验收（需要连接已升级的毕昇服务端）。
