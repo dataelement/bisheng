@@ -22,15 +22,18 @@ from bisheng.common.errcode.dsh import (
 )
 from bisheng.dsh.domain.schemas.chat import ChatCapabilities, DshChatRequest
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
+from bisheng.dsh.domain.schemas.pricing import CreditSettingState
 from bisheng.dsh.domain.schemas.responses import DshResponsesRequest
 from bisheng.dsh.domain.schemas.usage import INT64_MAX, UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
+from bisheng.dsh.domain.services.pricing import build_snapshot
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
 from bisheng.dsh.infrastructure.model_errors import model_failure_code
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.responses_adapter import DshResponsesAdapter
 from bisheng.dsh.infrastructure.telemetry import record_settlement, request_trace
+from bisheng.dsh.infrastructure.usage_contract import enforce_inclusive
 
 
 def error_response(error, request_id: str) -> dict:
@@ -75,6 +78,7 @@ class DshModelService:
         audit_factory=None,
         display_names_reader=None,
         activity_recorder=None,
+        credit_setting_reader=None,
     ):
         self.policy_reader, self.model_loader, self.llm_builder = policy_reader, model_loader, llm_builder
         self.capabilities_for, self.usage, self.now = capabilities_for, usage, now
@@ -85,6 +89,7 @@ class DshModelService:
         self.audit_factory = audit_factory
         self.display_names_reader = display_names_reader
         self.activity_recorder = activity_recorder
+        self.credit_setting_reader = credit_setting_reader
 
     async def list_models(self, principal: DshPrincipal) -> dict:
         with principal_scope(principal):
@@ -149,6 +154,9 @@ class DshModelService:
             model, server = await self.model_loader(request.model_id)
             if model.id != request.model_id:
                 raise DshModelNotAllowedError()
+            # F015: the loaded model is read uncached, so its prices are current; freeze them now.
+            setting = await self.credit_setting_reader() if self.credit_setting_reader else CreditSettingState()
+            pricing = build_snapshot((model.config or {}).get("pricing"), setting)
             try:
                 capabilities: ChatCapabilities | None = self.capabilities_for(model, server)
                 if isawaitable(capabilities):
@@ -177,7 +185,7 @@ class DshModelService:
                 user_id=int(principal.user_id),
                 session_id=principal.session_id,
                 model_id=request.model_id,
-                credit_rate=selected_policy.credit_rate,
+                pricing=pricing,
                 usage_month=started.astimezone(self.timezone).strftime("%Y-%m"),
                 billing_timezone=self.billing_timezone,
                 policy_version=selected_policy.version,
@@ -187,7 +195,11 @@ class DshModelService:
                 started_at=started,
             )
             try:
-                event = await self.usage.check_and_start(event, monthly_token_limit=policy.monthly_token_limit)
+                # Free models are recorded but never compared with the allowance (AC-11).
+                admission = {"mode": "unmetered"} if pricing.free else {}
+                event = await self.usage.check_and_start(
+                    event, monthly_token_limit=policy.monthly_token_limit, **admission
+                )
             except QuotaRejected as error:
                 if error.reason == "quota_exceeded":
                     raise DshMonthlyTokenLimitExceededError() from error
@@ -278,6 +290,8 @@ class DshModelService:
         """Settle the shared ledger for platform Chat and desktop model calls."""
         now = self.now()
         now = now.replace(tzinfo=UTC) if now.tzinfo is None else now
+        # F015: one token-usage contract for every source, applied to the call's totals.
+        usage = enforce_inclusive(usage, model_id=event.model_id, request_id=event.request_id)
         if usage.total_tokens is not None and _beyond_accounting_range(event, usage):
             # F015: a measurement too large to bill is settled like a missing one: nothing charged, flagged.
             logger.error("DSH usage outside the accounting range for request {}", event.request_id)

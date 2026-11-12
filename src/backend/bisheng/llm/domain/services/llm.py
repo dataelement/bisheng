@@ -610,6 +610,18 @@ class LLMService:
         )
 
     @classmethod
+    async def read_model_pricing(cls, model_id: int) -> dict | None:
+        """F015: uncached price config of an already-authorized model, read at call start."""
+        from bisheng.core.database import get_sync_db_session
+        from bisheng.llm.domain.repositories.model_pricing_repository import ModelPricingRepository
+
+        def read():
+            with get_sync_db_session() as session:
+                return ModelPricingRepository(session).read(model_id)
+
+        return await asyncio.to_thread(read)
+
+    @classmethod
     async def get_dsh_model_snapshot(cls, model_id: int) -> tuple[LLMModel, LLMServer]:
         """Read an online governed model/provider pair for one DSH invocation."""
         return await cls._get_governed_dsh_model_snapshot(model_id, online_required=True)

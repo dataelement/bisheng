@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔲 草稿 | 停服时长待演练实测 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 7 / 36 |
+| 实现 | 🔄 进行中 | 11 / 36 |
 
 ---
 
@@ -100,7 +100,7 @@
   **覆盖 AC**: AC-01, AC-04, AC-07
   **依赖**: T06
 
-- [ ] **T08**: 两个入口不经缓存取价
+- [x] **T08**: 两个入口不经缓存取价
   **文件**: `src/backend/bisheng/dsh/runtime.py`、`dsh/domain/services/chat_credits.py`、`dsh/domain/services/model.py`
   **逻辑**: `read_model_pricing`、`read_credit_setting` 按主键直读；替换 `chat_credits.py` 第 77 行与 `model.py` 第 175 行的 `credit_rate`；免费 → unmetered；`admit_round` 免费跳过 probe
   **测试**: `test/dsh/test_chat_credits.py`、`test/dsh/test_model_service.py` 补用例；`test/dsh/test_pricing_freshness.py`（约 4 个）
@@ -128,20 +128,20 @@
   **覆盖 AC**: AC-07, AC-20
   **依赖**: T00
 
-- [ ] **T12a**: 统一 token 口径
+- [x] **T12a**: 统一 token 口径
   **文件**: `src/backend/bisheng/dsh/infrastructure/usage_contract.py`、`chat_adapter.py`、`responses_adapter.py`
   **逻辑**: design §4.4 映射；两个适配器经它输出
   **测试**: `test/dsh/test_usage_contract.py`（逐来源夹具，普通与流式）
   **覆盖 AC**: AC-02, AC-03
   **依赖**: T00
 
-- [ ] **T12b**: Anthropic 分桶缓存写入
+- [x] **T12b**: Anthropic 分桶缓存写入
   **文件**: 同 T12a
   **测试**: 用 `langchain-anthropic` 1.4.7 生成的 `usage_metadata` 夹具
   **覆盖 AC**: AC-02
   **依赖**: T12a
 
-- [ ] **T12c**: 违反不变式的纠正与打点
+- [x] **T12c**: 违反不变式的纠正与打点
   **文件**: 同 T12a
   **逻辑**: 缓存 > 输入时按排他口径加回、打点并告警（边界规则待产品确认，确认结果不同时只改这一处）
   **覆盖 AC**: AC-02
@@ -238,4 +238,7 @@
 - T07 用量超出 int64 时在 `DshModelService.settle_usage` 结算为用量未知（`usage_out_of_range`），不让结算报错。
 - T11 降级（downgrade）拒绝执行而不是删列，与仓库 DSH 迁移惯例（f111）及 runbook「回滚靠备份恢复」一致 → design 决策 18。
 - 新增 26176 时补了共享文案包 `packages/locales/src/api_errors/*.json` 并用 `node scripts/build.mjs` 生成 platform、client 产物（由 `test_error_code_uniqueness` 强制）。
+- T08 桌面入口直接用 `model_loader` 加载的模型取价（该路径本就不经缓存），未另读价格；网页入口经 `LLMService.read_model_pricing` → `ModelPricingRepository` 直读。收费模型调用 `check_and_start` 时不传 `mode`，与原调用方式一致，只有免费模型传 `unmetered`。
+- T08 现有测试夹具的假模型补了与旧 1 倍等价的价格（`test/dsh/pricing_fixtures.py`），原断言不变；`test_work_admission_snapshots_model_multiplier` 改写为按价格快照断言（旧倍率被删除，AC-17）。
+- T12 口径校验放在结算时对整次调用的累计用量做一次（`enforce_inclusive`），字段映射在每条消息归一化时做，避免流式分片误判。
 - 发现仓库原有测试隔离缺陷（不在本特性范围，未改）：`test/dsh/test_policy_repository.py` 的 `sql_store` 夹具在 `[external]` 参数缺少真实库时于 setup 中途失败，留下「已初始化但只登记部分表」的租户过滤状态，导致之后混跑的租户隔离用例误报（基线中 `test_unified_policy_repository` 的失败即此原因）。`test_credit_settings` 夹具已显式登记所需表以免受影响。

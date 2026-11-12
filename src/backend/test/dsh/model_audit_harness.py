@@ -33,6 +33,7 @@ from bisheng.dsh.domain.services.model_audit_writer import DshModelAuditWriter
 from bisheng.dsh.infrastructure.model_audit_blocking import run_audit_blocking
 from bisheng.dsh.infrastructure.model_audit_queue import BoundedAuditQueue
 from test.dsh.model_audit_fixtures import audit_session
+from test.dsh.pricing_fixtures import PRICED_CONFIG
 
 
 class AuditHarness:
@@ -70,10 +71,18 @@ class AuditHarness:
             allowed_model_ids=[42],
             quota_epoch=1,
             monthly_token_limit=100000,
-            rows=[SimpleNamespace(model_id=42, credit_rate=100, version=1, quota_sync_state="READY", monthly_token_limit=100000)],
+            rows=[
+                SimpleNamespace(
+                    model_id=42, credit_rate=100, version=1, quota_sync_state="READY", monthly_token_limit=100000
+                )
+            ],
         )
         self.model = SimpleNamespace(
-            id=42, model_name="audit-fixture", name="audit-fixture", config={}, create_time=datetime.now(UTC)
+            id=42,
+            model_name="audit-fixture",
+            name="audit-fixture",
+            config=dict(PRICED_CONFIG),
+            create_time=datetime.now(UTC),
         )
         self.server = SimpleNamespace(name="Synthetic", type="openai")
         self.service = DshModelService(

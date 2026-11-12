@@ -48,8 +48,9 @@ async def start(model, *, mode: str = ""):
     from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
     from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
     from bisheng.dsh.domain.schemas.usage import UsageEvent
+    from bisheng.dsh.domain.services.pricing import build_snapshot
     from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
-    from bisheng.dsh.runtime import get_model_runtime, read_policy
+    from bisheng.dsh.runtime import get_model_runtime, read_credit_setting, read_model_pricing, read_policy
 
     tenant = get_current_tenant_id()
     if tenant is None:
@@ -62,10 +63,19 @@ async def start(model, *, mode: str = ""):
     model_id = model.model_info.id
     if model_id not in policy.allowed_model_ids:
         raise DshModelNotAllowedError()
+    # F015: read prices fresh (never from the cached model_info) and freeze them for this call.
+    # Missing prices raise DshModelPricingMissingError before anything is admitted.
+    pricing = build_snapshot(await read_model_pricing(model_id), await read_credit_setting())
     loop = asyncio.get_running_loop()
     runtime = _runtimes.setdefault(loop, SimpleNamespace(settings=settings.dsh))
     service = await get_model_runtime(runtime)
     await service.activate()
+    if pricing.free:
+        if mode == "probe":
+            # A free model never compares the allowance; nothing is written for a round probe.
+            return service.model, None, None
+        # Free calls are still recorded, just never compared with the allowance (AC-11).
+        mode = "unmetered"
     now = datetime.now(UTC)
     request_id = str(uuid4())
     event = UsageEvent(
@@ -75,7 +85,7 @@ async def start(model, *, mode: str = ""):
         user_id=model.user_id,
         session_id=request_id,
         model_id=model_id,
-        credit_rate=next(row.credit_rate for row in policy.rows if row.model_id == model_id),
+        pricing=pricing,
         usage_month=now.astimezone(ZoneInfo(settings.dsh.billing_timezone)).strftime("%Y-%m"),
         billing_timezone=settings.dsh.billing_timezone,
         policy_version=policy.version,
