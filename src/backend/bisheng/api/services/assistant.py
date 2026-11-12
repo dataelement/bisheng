@@ -608,6 +608,10 @@ class AssistantService(BaseService, AssistantUtils):
             await cls.create_assistant_hook_async(request, assistant, login_user)
             await session.commit()
 
+        # Audit reads through a separate connection, so the new root must be committed first.
+        AuditLogService.create_build_assistant(login_user, get_request_ip(request), assistant.id)
+        cls.get_logo_share_link(assistant.logo)
+
         # RecordTelemetryJournal
         await telemetry_service.log_event(
             user_id=login_user.user_id,
@@ -638,10 +642,7 @@ class AssistantService(BaseService, AssistantUtils):
     async def create_assistant_hook_async(
         cls, request: Request, assistant: Assistant, user_payload: UserPayload
     ) -> bool:
-        """
-        Async variant for async FastAPI handlers; avoids sync-to-async bridge usage
-        on the running event loop.
-        """
+        """Initialize permissions from the new root before the caller commits its SQL transaction."""
         record = cls._new_permission_record(assistant)
         adapter = await get_f048_resource_adapter("assistant")
         await adapter.authorize_created(
@@ -649,8 +650,6 @@ class AssistantService(BaseService, AssistantUtils):
             actor=await resolve_permission_actor(user_payload),
         )
 
-        AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id)
-        cls.get_logo_share_link(assistant.logo)
         return True
 
     # Delete Assistant
