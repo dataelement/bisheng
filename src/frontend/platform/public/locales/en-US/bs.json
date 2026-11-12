@@ -1514,7 +1514,8 @@
       "openApi": "Open API",
       "open_api": "Open API",
       "appFactory": "App factory",
-      "app": "App factory"
+      "app": "App factory",
+      "unknown": "Unknown module"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1678,7 +1679,8 @@
       "openApiPatRevokeHolder": "Revoke personal tokens by holder",
       "openApiPatTenantMigrate": "Revoke personal token when the account changes tenant",
       "openApiPatSettingsUpdate": "Change personal-token tenant policy",
-      "llmSystemConfigUpdate": "Change default and system model configuration"
+      "llmSystemConfigUpdate": "Change default and system model configuration",
+      "unknown": "Unknown action"
     },
     "objectTypeEnum": {
       "app": "Application",
@@ -1705,7 +1707,12 @@
       "approval_task": "Approval Task",
       "approval_exception": "Approval Exception",
       "approval_scenario": "Approval Scenario",
-      "approval_flow": "Approval Flow"
+      "approval_flow": "Approval Flow",
+      "linsight_skill": "Personal skill",
+      "knowledge_library": "Knowledge library",
+      "folder": "Folder",
+      "knowledge_file": "Knowledge file",
+      "unknown": "Unknown object type"
     },
     "appUsage": "App Usage",
     "systemOperations": "System Operations",
