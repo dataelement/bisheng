@@ -1,10 +1,20 @@
 """F015 price snapshots: model price config + tenant credit settings -> integer snapshot."""
 
+import asyncio
+from decimal import ROUND_HALF_UP, Decimal
+from typing import NamedTuple
+
 from loguru import logger
 from pydantic import ValidationError
 
 from bisheng.common.errcode.dsh import DshModelPricingMissingError
-from bisheng.dsh.domain.schemas.pricing import CreditSettingState, PricingSnapshot, ceil_div
+from bisheng.dsh.domain.schemas.pricing import (
+    CreditSettingInput,
+    CreditSettingState,
+    PricingSnapshot,
+    ceil_div,
+    format_micro,
+)
 from bisheng.llm.domain.pricing import MICRO, ModelPricing, price_to_micro
 
 
@@ -39,3 +49,164 @@ def build_snapshot(pricing_config, setting: CreditSettingState) -> PricingSnapsh
         output_micro=micro(pricing.output),
         usd_cny_rate_micro=rate if pricing.currency != setting.currency else None,
     )
+
+
+# --- Credit ratio hints (decision 8: computed by the server, fixed 3:1 input:output) ---------
+
+RATIO_STEP = Decimal("0.01")
+
+
+class HintContext(NamedTuple):
+    setting: CreditSettingState
+    base_model_id: int | None
+    base: PricingSnapshot | None  # None when the base model is missing, offline, unpriced or free
+
+
+def blended_micro(snapshot: PricingSnapshot) -> int:
+    return 3 * snapshot.input_micro + snapshot.output_micro
+
+
+def format_ratio(value: int, base: int) -> str:
+    ratio = Decimal(value) / Decimal(base)
+    if ratio < RATIO_STEP:
+        return "<0.01"
+    return str(ratio.quantize(RATIO_STEP, rounding=ROUND_HALF_UP))
+
+
+def pricing_hint(model_id: int, pricing_config, context: HintContext) -> dict:
+    """``{"ratio", "base", "free"}`` for one model; ratio is None when it cannot be shown."""
+    is_base = model_id == context.base_model_id
+    try:
+        snapshot = build_snapshot(pricing_config, context.setting)
+    except DshModelPricingMissingError:
+        return {"ratio": None, "base": is_base, "free": False}
+    if snapshot.free:
+        return {"ratio": None, "base": is_base, "free": True}
+    if context.base is None:
+        return {"ratio": None, "base": is_base, "free": False}
+    return {"ratio": format_ratio(blended_micro(snapshot), blended_micro(context.base)), "base": is_base, "free": False}
+
+
+async def default_base_model_id() -> int | None:
+    from bisheng.llm.domain.services.llm import LLMService
+
+    config = await LLMService.get_workbench_llm()
+    value = getattr(config, "chat_default_model_id", None) if config else None
+    try:
+        return int(value) if value else None
+    except (TypeError, ValueError):
+        return None
+
+
+async def read_hint_context() -> HintContext:
+    from bisheng.common.errcode.dsh import DshModelNotAllowedError
+    from bisheng.dsh.runtime import read_credit_setting
+    from bisheng.llm.domain.services.llm import LLMService
+
+    setting = await read_credit_setting()
+    base_id = setting.base_model_id or await default_base_model_id()
+    base = None
+    if base_id:
+        try:
+            model, _ = await LLMService.get_dsh_model_snapshot(base_id)  # online LLM of this tenant
+            snapshot = build_snapshot((model.config or {}).get("pricing"), setting)
+            base = None if snapshot.free else snapshot
+        except (DshModelNotAllowedError, DshModelPricingMissingError):
+            base = None
+    return HintContext(setting, base_id, base)
+
+
+async def workbench_pricing_hints(model_ids: list[str]) -> dict[str, dict]:
+    """Hints for the workbench model picker, keyed by the picker's string model ids."""
+    from bisheng.dsh.runtime import read_model_pricing
+
+    context = await read_hint_context()
+    hints = {}
+    for model_id in model_ids:
+        try:
+            numeric = int(model_id)
+        except (TypeError, ValueError):
+            continue
+        hints[model_id] = pricing_hint(numeric, await read_model_pricing(numeric), context)
+    return hints
+
+
+# --- Administrator views -----------------------------------------------------------------------
+
+
+async def credit_setting_transaction(callback):
+    def execute():
+        from bisheng.core.database import get_sync_db_session
+        from bisheng.dsh.domain.repositories.credit_setting import DshCreditSettingRepository
+
+        with get_sync_db_session() as session:
+            result = callback(DshCreditSettingRepository(session))
+            session.commit()
+            return result
+
+    return await asyncio.to_thread(execute)
+
+
+async def credit_settings_view() -> dict:
+    from bisheng.dsh.domain.repositories.credit_setting import DshCreditSettingRepository
+
+    state = await credit_setting_transaction(lambda repo: repo.effective())
+    return {
+        **DshCreditSettingRepository.payload(state),
+        "effective_base_model_id": state.base_model_id or await default_base_model_id(),
+    }
+
+
+async def save_credit_settings(actor: int, value: CreditSettingInput) -> dict:
+    if value.base_model_id is not None:
+        from bisheng.llm.domain.services.llm import LLMService
+
+        await LLMService.get_dsh_model_metadata_snapshot(value.base_model_id)  # an LLM of this tenant
+    await credit_setting_transaction(lambda repo: repo.save(actor, value))
+    return await credit_settings_view()
+
+
+def effective_prices(pricing: ModelPricing, setting: CreditSettingState) -> dict:
+    """Prices converted to the billing currency, as decimal strings per million tokens."""
+    rate = setting.usd_cny_rate_micro
+
+    def converted(price: str) -> str:
+        return format_micro(convert_micro(price_to_micro(price), pricing.currency, setting.currency, rate))
+
+    return {
+        "currency": setting.currency,
+        "input": converted(pricing.input),
+        "cache_read": converted(pricing.cache_read),
+        "cache_write": converted(pricing.effective_cache_write),
+        "output": converted(pricing.output),
+    }
+
+
+async def admin_model_pricing() -> list[dict]:
+    """Price summary and ratio of every online LLM model of the tenant (user-selectable table)."""
+    from bisheng.common.errcode.dsh import DshModelNotAllowedError
+    from bisheng.llm.domain.services.llm import LLMService
+
+    context = await read_hint_context()
+    rows = []
+    for model_id in await LLMService.get_dsh_model_ids():
+        try:
+            model, _ = await LLMService.get_dsh_model_metadata_snapshot(model_id)
+        except DshModelNotAllowedError:
+            continue
+        raw = (model.config or {}).get("pricing")
+        try:
+            stored = ModelPricing.model_validate(raw) if raw is not None else None
+        except ValidationError:
+            stored = None
+        rows.append(
+            {
+                "model_id": model_id,
+                "pricing": stored.model_dump() if stored else None,
+                "effective": effective_prices(stored, context.setting) if stored else None,
+                "edited": bool(stored and stored.source == "MANUAL"),
+                "missing": stored is None,
+                "hint": pricing_hint(model_id, raw, context),
+            }
+        )
+    return rows

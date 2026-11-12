@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔲 草稿 | 停服时长待演练实测 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 16 / 36 |
+| 实现 | 🔄 进行中 | 17 / 36 |
 
 ---
 
@@ -167,7 +167,7 @@
   **覆盖 AC**: AC-14, AC-15
   **依赖**: T08
 
-- [ ] **T16**: 倍率出口
+- [x] **T16**: 倍率出口
   **文件**: `dsh/domain/services/pricing.py`（`pricing_hints`）、`dsh/domain/services/model_catalog.py`、`dsh/domain/services/model.py`（`list_models`）、`workstation/api/endpoints/config.py`、`dsh/api/endpoints/credit_pricing.py`、`dsh/api/router.py`
   **测试**: `test/dsh/test_pricing_hints.py`（约 10 个）
   **覆盖 AC**: AC-12, AC-13, AC-19
@@ -244,4 +244,6 @@
 - T02 价格表在首次使用时加载并校验，随包文件的有效性由 `test_model_pricing_catalog` 保证，未在应用启动钩子里加载（避免改动 main.py）。智谱、MiniMax 只有国际站美元价，只映射 `openai_compatible`，不映射国内 `zhipu` / `minimax` 类型。
 - T03 新增错误码 10814（价格格式无效，已登记 release-contract）。revision 比较目前在服务层基于保存前读取的旧值做；事务内加锁复查随 T04 与 F118 的锁方案一起完成。
 - T15 偏离：`common/` 不能依赖领域层，所以免检标记不在 `process_source_document` 里设置，而是由工作台在 `chat_credits.unmetered()` 内创建溯源任务（任务继承上下文）。新增决策 20：溯源、看图模型标记 `admin_selected`，照常计费但不受员工可选模型范围限制 → design 决策 20、坑 16–17。
+- T16 基准模型取积分设置的 base_model_id，未设置时取工作台日常对话默认模型；基准不在线、被删除、缺价或免费时所有倍率为 null。桌面 `/dsh/models` 经注入的 `hint_context_reader` 计算倍率（测试中不注入时不返回该字段）。
+- 发现原有失败（不在本特性范围）：`test/api/test_route_path_naming.py` 在改动前即因 `/api/v2/workstation/config/knowledge` 失败。
 - 发现仓库原有测试隔离缺陷（不在本特性范围，未改）：`test/dsh/test_policy_repository.py` 的 `sql_store` 夹具在 `[external]` 参数缺少真实库时于 setup 中途失败，留下「已初始化但只登记部分表」的租户过滤状态，导致之后混跑的租户隔离用例误报（基线中 `test_unified_policy_repository` 的失败即此原因）。`test_credit_settings` 夹具已显式登记所需表以免受影响。

@@ -27,7 +27,7 @@ from bisheng.dsh.domain.schemas.responses import DshResponsesRequest
 from bisheng.dsh.domain.schemas.usage import INT64_MAX, UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
-from bisheng.dsh.domain.services.pricing import build_snapshot
+from bisheng.dsh.domain.services.pricing import build_snapshot, pricing_hint
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
 from bisheng.dsh.infrastructure.model_errors import model_failure_code
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
@@ -79,6 +79,7 @@ class DshModelService:
         display_names_reader=None,
         activity_recorder=None,
         credit_setting_reader=None,
+        hint_context_reader=None,
     ):
         self.policy_reader, self.model_loader, self.llm_builder = policy_reader, model_loader, llm_builder
         self.capabilities_for, self.usage, self.now = capabilities_for, usage, now
@@ -90,11 +91,13 @@ class DshModelService:
         self.display_names_reader = display_names_reader
         self.activity_recorder = activity_recorder
         self.credit_setting_reader = credit_setting_reader
+        self.hint_context_reader = hint_context_reader
 
     async def list_models(self, principal: DshPrincipal) -> dict:
         with principal_scope(principal):
             policy = await self.policy_reader(int(principal.user_id))
             names = await self.display_names_reader() if self.display_names_reader else {}
+            hint_context = await self.hint_context_reader() if self.hint_context_reader else None
             result = []
             for model_id in policy.allowed_model_ids if policy else []:
                 try:
@@ -124,6 +127,12 @@ class DshModelService:
                         "owned_by": "bisheng",
                         "display_name": model_display_name(model, server, names.get(str(model.id))),
                         "capabilities": capabilities.client_fields(),
+                        # F015: optional field; older desktop clients ignore unknown keys.
+                        **(
+                            {"pricing_hint": pricing_hint(model.id, (model.config or {}).get("pricing"), hint_context)}
+                            if hint_context
+                            else {}
+                        ),
                         **(
                             {"reasoning": capabilities.reasoning.model_dump(exclude_none=True)}
                             if capabilities.reasoning
