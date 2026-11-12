@@ -49,6 +49,8 @@ export interface TaskFailureMetadata {
     error_code?: number;
     error_type?: string;
     detail?: string;
+    /** support reference for a failure with no dependency failure_id (the task's log trace id) */
+    reference_id?: string;
     execution_id?: string;
     attempt_id?: string;
     recovery_subject_id?: string;
@@ -60,6 +62,8 @@ export interface TaskFailureMetadata {
 
 export interface DailyFailureMetadata {
     errorType?: string;
+    errorDetail?: string;
+    referenceId?: string;
     failureInfo?: FailureInfo;
     executionId?: string;
     attemptId?: string;
@@ -69,9 +73,14 @@ export interface DailyFailureMetadata {
     resumeMode?: string;
 }
 
+/** Task-mode umbrella codes: 11090 (model service) and 11091 (platform). They
+    say which side failed, not what to do, so the card keeps its per-type copy. */
+const UMBRELLA_FAILURE_CODES = new Set([11090, 11091]);
+
 /** Only a registered numeric translation can supply business failure copy. */
 export function localizedBusinessFailure(code: number | undefined, localize: (key: string, values?: Record<string, unknown>) => string, data?: unknown): string | undefined {
     if (!Number.isInteger(code) || code === undefined || code < 10000 || code > 99999 || code === 18106) return undefined;
+    if (UMBRELLA_FAILURE_CODES.has(code)) return undefined;
     const key = `api_errors.${code}`;
     const variables: Record<string, string | number> = {};
     for (const [name, value] of Object.entries(record(data) ?? {})) {
@@ -86,6 +95,8 @@ export function dailyFailureMetadata(value: unknown): DailyFailureMetadata {
     const raw = taskFailureMetadata(value);
     return {
         errorType: raw?.error_type,
+        ...(raw?.detail ? { errorDetail: raw.detail } : {}),
+        ...(raw?.reference_id ? { referenceId: raw.reference_id } : {}),
         failureInfo: raw?.failure_info,
         ...(raw?.execution_id ? { executionId: raw.execution_id } : {}),
         ...(raw?.attempt_id ? { attemptId: raw.attempt_id } : {}),
@@ -104,6 +115,7 @@ export function taskFailureMetadata(value: unknown): TaskFailureMetadata | undef
     for (const key of ['error_type', 'detail', 'execution_id', 'attempt_id', 'recovery_subject_id', 'resume_mode'] as const) {
         if (typeof raw[key] === 'string') result[key] = raw[key];
     }
+    if (typeof raw.reference_id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(raw.reference_id)) result.reference_id = raw.reference_id;
     if (typeof raw.error_code === 'number') result.error_code = raw.error_code;
     if (typeof raw.model_id === 'string' || typeof raw.model_id === 'number') result.model_id = raw.model_id;
     if (raw.rate_limit_state === 'recovering' || raw.rate_limit_state === 'busy' || raw.rate_limit_state === 'normal') result.rate_limit_state = raw.rate_limit_state;

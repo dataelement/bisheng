@@ -238,7 +238,8 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                     errorCode={linsight?.taskErrorInfo?.error_code ?? linsight?.output_result?.error_code}
                     failureInfo={linsight?.taskErrorInfo?.failure_info ?? linsight?.output_result?.failure_info}
                     errorType={linsight.taskErrorInfo?.error_type}
-                    detail={linsight.taskErrorInfo?.detail}
+                    detail={linsight.taskErrorInfo?.detail ?? linsight?.output_result?.detail}
+                    referenceId={linsight.taskErrorInfo?.reference_id ?? linsight?.output_result?.reference_id}
                     fallbackMessage={linsight.taskError}
                 />
             )}
