@@ -77,7 +77,6 @@ class DshModelService:
         billing_timezone: str = "Asia/Shanghai",
         audit_factory=None,
         display_names_reader=None,
-        activity_recorder=None,
         credit_setting_reader=None,
         hint_context_reader=None,
     ):
@@ -89,7 +88,6 @@ class DshModelService:
         self.responses_adapter = DshResponsesAdapter()
         self.audit_factory = audit_factory
         self.display_names_reader = display_names_reader
-        self.activity_recorder = activity_recorder
         self.credit_setting_reader = credit_setting_reader
         self.hint_context_reader = hint_context_reader
 
@@ -215,21 +213,6 @@ class DshModelService:
                 if error.reason == "model_not_allowed":
                     raise DshModelNotAllowedError() from error
                 raise DshQuotaUnavailableError() from error
-            if self.activity_recorder is not None:
-                try:
-                    await self.activity_recorder(principal)
-                except (Exception, asyncio.CancelledError):
-                    # No upstream call has started. Release quota admission with
-                    # known zero usage rather than leaving a running/unknown call.
-                    await asyncio.shield(
-                        self.settle_usage(
-                            event,
-                            DshTokenUsage(input_tokens=0, output_tokens=0, total_tokens=0),
-                            "FAILED",
-                            "session_activity_failed",
-                        )
-                    )
-                    raise
             if self.audit_factory is not None:
                 try:
                     execution.capture = await self.audit_factory(

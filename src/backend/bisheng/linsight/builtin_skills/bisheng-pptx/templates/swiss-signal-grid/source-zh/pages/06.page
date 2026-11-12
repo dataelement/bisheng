@@ -1,0 +1,493 @@
+pageType: process
+background:
+  type: solid
+  color: $paper
+elements:
+  - elementId: warehouse-index-field
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 52
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: warehouse-red-tab
+    elementType: shape
+    bounds:
+      - 52
+      - 0
+      - 10
+      - 116
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: warehouse-rule-top
+    elementType: line
+    bounds:
+      - 80
+      - 42
+      - 808
+      - 1
+    viewBox:
+      - 808
+      - 1
+    points: 0,0 808,0
+    border:
+      color: $black
+      width: 1.2
+  - elementId: warehouse-stat-field
+    elementType: shape
+    bounds:
+      - 692
+      - 158
+      - 196
+      - 104
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: warehouse-process-band
+    elementType: shape
+    bounds:
+      - 80
+      - 286
+      - 808
+      - 84
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: warehouse-sep-1
+    elementType: line
+    bounds:
+      - 214
+      - 298
+      - 1
+      - 60
+    viewBox:
+      - 1
+      - 60
+    points: 0,0 0,60
+    border:
+      color: $red
+      width: 1.2
+  - elementId: warehouse-sep-2
+    elementType: line
+    bounds:
+      - 348
+      - 298
+      - 1
+      - 60
+    viewBox:
+      - 1
+      - 60
+    points: 0,0 0,60
+    border:
+      color: $red
+      width: 1.2
+  - elementId: warehouse-sep-3
+    elementType: line
+    bounds:
+      - 482
+      - 298
+      - 1
+      - 60
+    viewBox:
+      - 1
+      - 60
+    points: 0,0 0,60
+    border:
+      color: $red
+      width: 1.2
+  - elementId: warehouse-sep-4
+    elementType: line
+    bounds:
+      - 616
+      - 298
+      - 1
+      - 60
+    viewBox:
+      - 1
+      - 60
+    points: 0,0 0,60
+    border:
+      color: $red
+      width: 1.2
+  - elementId: warehouse-sep-5
+    elementType: line
+    bounds:
+      - 750
+      - 298
+      - 1
+      - 60
+    viewBox:
+      - 1
+      - 60
+    points: 0,0 0,60
+    border:
+      color: $red
+      width: 1.2
+  - elementId: warehouse-effect-rule-1
+    elementType: line
+    bounds:
+      - 80
+      - 416
+      - 238
+      - 1
+    viewBox:
+      - 238
+      - 1
+    points: 0,0 238,0
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: warehouse-effect-rule-2
+    elementType: line
+    bounds:
+      - 365
+      - 416
+      - 238
+      - 1
+    viewBox:
+      - 238
+      - 1
+    points: 0,0 238,0
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: warehouse-effect-rule-3
+    elementType: line
+    bounds:
+      - 650
+      - 416
+      - 238
+      - 1
+    viewBox:
+      - 238
+      - 1
+    points: 0,0 238,0
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: warehouse-index
+    elementType: text
+    bounds:
+      - 10
+      - 428
+      - 32
+      - 82
+    rotation: 270
+    content:
+      text: 06 / LOCAL
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: warehouse-kicker
+    elementType: text
+    bounds:
+      - 80
+      - 54
+      - 500
+      - 18
+    content:
+      text: INFRASTRUCTURE / OVERSEAS WAREHOUSE
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $red
+  - elementId: warehouse-title
+    elementType: text
+    bounds:
+      - 80
+      - 78
+      - 808
+      - 42
+    content:
+      style: $title
+      text: 海外仓已从仓储节点升级为本地经营操作系统
+  - elementId: warehouse-lead
+    elementType: text
+    bounds:
+      - 80
+      - 126
+      - 808
+      - 24
+    content:
+      style: $lead
+      text: 履约、退换货、售后、库存资金与合规在同一条链路上联动
+  - elementId: warehouse-count
+    elementType: text
+    bounds:
+      - 80
+      - 168
+      - 234
+      - 62
+    content:
+      text: 2500+
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 52
+      bold: true
+      letterSpacing: -1.5
+      color: $black
+  - elementId: warehouse-count-note
+    elementType: text
+    bounds:
+      - 84
+      - 232
+      - 230
+      - 22
+    content:
+      text: 中国企业建设的海外仓
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      color: $black
+  - elementId: warehouse-area
+    elementType: text
+    bounds:
+      - 350
+      - 168
+      - 286
+      - 62
+    content:
+      text: 3000 万㎡+
+      fontFamily: *ref_1
+      fontSize: 40
+      bold: true
+      letterSpacing: -1
+      color: $black
+  - elementId: warehouse-area-note
+    elementType: text
+    bounds:
+      - 354
+      - 232
+      - 270
+      - 22
+    content:
+      text: 总面积；按下限约 1.2 万㎡+/仓
+      fontFamily: *ref_0
+      fontSize: 11.5
+      bold: true
+      color: $gray
+  - elementId: warehouse-mail
+    elementType: text
+    bounds:
+      - 708
+      - 172
+      - 164
+      - 48
+    content:
+      text: +29.3%
+      fontFamily: *ref_1
+      fontSize: 39
+      bold: true
+      color: $white
+  - elementId: warehouse-mail-note
+    elementType: text
+    bounds:
+      - 710
+      - 224
+      - 162
+      - 28
+    content:
+      text: 2024 国际货邮运输量
+      fontFamily: *ref_0
+      fontSize: 10.5
+      bold: true
+      color: $white
+  - elementId: warehouse-step-1
+    elementType: text
+    bounds:
+      - 90
+      - 309
+      - 114
+      - 28
+    content:
+      text: 仓储
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: warehouse-step-2
+    elementType: text
+    bounds:
+      - 224
+      - 309
+      - 114
+      - 28
+    content:
+      text: 分拣
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: warehouse-step-3
+    elementType: text
+    bounds:
+      - 358
+      - 309
+      - 114
+      - 28
+    content:
+      text: 配送
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: warehouse-step-4
+    elementType: text
+    bounds:
+      - 492
+      - 309
+      - 114
+      - 28
+    content:
+      text: 退换货
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: warehouse-step-5
+    elementType: text
+    bounds:
+      - 626
+      - 309
+      - 114
+      - 28
+    content:
+      text: 售后
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: warehouse-step-6
+    elementType: text
+    bounds:
+      - 760
+      - 309
+      - 114
+      - 28
+    content:
+      text: 合规
+      fontFamily: *ref_0
+      fontSize: 17
+      bold: true
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: warehouse-effect-1
+    elementType: text
+    bounds:
+      - 80
+      - 430
+      - 238
+      - 46
+    content:
+      text: '时效 → 转化<br><span style="color: #6E6D68; font-size: 11px">更短交付承诺，更稳定体验</span>'
+      fontFamily: *ref_0
+      fontSize: 14
+      bold: true
+      lineHeight: 1.25
+      color: $black
+  - elementId: warehouse-effect-2
+    elementType: text
+    bounds:
+      - 365
+      - 430
+      - 238
+      - 46
+    content:
+      text: '库存 → 资金<br><span style="color: #6E6D68; font-size: 11px">仓网协同决定周转与现金占用</span>'
+      fontFamily: *ref_0
+      fontSize: 14
+      bold: true
+      lineHeight: 1.25
+      color: $black
+  - elementId: warehouse-effect-3
+    elementType: text
+    bounds:
+      - 650
+      - 430
+      - 238
+      - 46
+    content:
+      text: '服务 → 信任<br><span style="color: #6E6D68; font-size: 11px">本地退换货与售后降低决策阻力</span>'
+      fontFamily: *ref_0
+      fontSize: 14
+      bold: true
+      lineHeight: 1.25
+      color: $black
+  - elementId: warehouse-source
+    elementType: text
+    bounds:
+      - 80
+      - 512
+      - 720
+      - 12
+    content:
+      text: 来源：商务部电子商务公共服务网转载公开数据；单仓平均面积仅按披露下限计算，作为数量级参考。
+      fontFamily: *ref_0
+      fontSize: 8.2
+      color: $gray
+  - elementId: warehouse-page
+    elementType: text
+    bounds:
+      - 856
+      - 510
+      - 32
+      - 12
+    content:
+      text: '06'
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $black
+      align:
+        - right
+        - bottom

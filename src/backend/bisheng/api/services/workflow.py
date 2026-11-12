@@ -45,6 +45,7 @@ from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.permission.domain.services.catalog_policy import ACTION_RESOURCE_SCOPES
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
+from bisheng.workflow.application.execution_admission import prepare_node_preview
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.graph.graph_state import GraphState
@@ -88,7 +89,10 @@ CHAT_ENTRY_EXCLUDED_FLOW_TYPES: frozenset[int] = frozenset({FlowType.HOSTED_APP.
 #: ``visible`` is answered by ``batch_check_visible``, a different FGA relation
 #: that is deliberately absent from ``REGISTERED_ACTION_CODES`` and therefore
 #: from ``ACTION_RESOURCE_SCOPES``.
-_ACTION_SCOPE_EXEMPT = frozenset({"visible"})
+# ``use`` survives only as a legacy request/response label. Let the sole
+# business-authorization facade normalize it to visibility before checking;
+# filtering it against the retired Catalog action would discard the request.
+_ACTION_SCOPE_EXEMPT = frozenset({"visible", "use"})
 # F048 visible-first: upper bound on the number of visible app ids OpenFGA may
 # return per resource type (workflow + assistant queried separately). Matches
 # the ceiling used for knowledge_library / knowledge_space / channel so all
@@ -706,11 +710,9 @@ class WorkFlowService(BaseService):
                     requested_actions,
                     actions_by_type=square_actions_by_type,
                 )
-                # Per row, not one action for the whole page: the hosted-application
-                # entry decides with ``use`` (F054), and asking the square with
-                # ``visible`` would produce the one state AC-06 forbids — a card the
-                # user can see and cannot open. ``visible`` and ``can_use`` are
-                # separate FGA relations, so "授了 editor 没授 use" makes them differ.
+                # The hosted bucket retains its legacy wire label. The facade
+                # checks visibility and maps the result back to that label, so
+                # existing list consumers and the entry make the same decision.
                 for item in batch:
                     item_id = str(item.get("id"))
                     if cls._square_visibility_action(item, action) in action_map.get(item_id, frozenset()):
@@ -1153,7 +1155,9 @@ class WorkFlowService(BaseService):
             action="edit",
         )
 
-        node_data = BaseNodeData(**node_data.get("data", {}))
+        prepared = await prepare_node_preview(login_user, workflow_id, node_data, node_input)
+        node_input = prepared.node_input
+        node_data = BaseNodeData(**prepared.node_data.get("data", {}))
 
         def _run_node():
             # Nodes are sync and some reach async services through run_async_safe
@@ -1234,16 +1238,32 @@ class WorkFlowService(BaseService):
         version_info = await FlowVersionDao.aget_version_by_id(version_id)
         if not version_info or version_info.flow_id != flow_id:
             raise NotFoundError()
-        if status == FlowStatus.ONLINE.value:
-            # workflowInitialization check for
-            try:
-                _ = Workflow(flow_id, db_flow.name, login_user.user_id, version_info.data, False, 10, 10, None)
-            except Exception as e:
-                raise WorkFlowInitError(msg=str(e))
+        from bisheng.api.services.flow import FlowService
 
-            await FlowVersionDao.change_current_version(flow_id, version_info)
-        db_flow.status = status
-        await FlowDao.aupdate_flow(db_flow)
+        def validate_version(root, version):
+            try:
+                Workflow(
+                    flow_id,
+                    root.name,
+                    login_user.user_id,
+                    version.data,
+                    False,
+                    10,
+                    10,
+                    None,
+                    tenant_id=root.tenant_id,
+                    flow_user_id=root.user_id,
+                )
+            except Exception as exc:
+                raise WorkFlowInitError(msg=str(exc)) from exc
+
+        await FlowService.transition_current_version(
+            login_user,
+            flow_id,
+            version_id,
+            status=status,
+            validate_version=validate_version if status == FlowStatus.ONLINE.value else None,
+        )
         await telemetry_service.log_event(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )

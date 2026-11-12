@@ -46,7 +46,7 @@ from bisheng.citation.domain.services.daily_citation_handles import (
 )
 from bisheng.citation.domain.services.daily_citation_scope import DailyCitationScope
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import (
@@ -83,7 +83,7 @@ from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.chat_attachment import promote_chat_attachments
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
-from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.department.domain.services.department_flow_service import (
     DepartmentFlowService,
     SlotOutcome,
@@ -112,6 +112,7 @@ from .content_safety import (
     blocked_answer_payload,
     build_blocked_answer_row,
     iter_blocked_sse,
+    mark_session_content_violation,
     workbench_tenant_id,
 )
 from .daily_citation import (
@@ -195,9 +196,7 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
             user_id=login_user.user_id,
         )
         if data.project_id is not None:
-            await ChatSessionService.create_owned_project_session(
-                new_session, login_user, data.project_id, data.project_request_id, data.project_creation_payload()
-            )
+            await ChatSessionService.create_owned_project_session(new_session, login_user, data.project_id)
         else:
             await MessageSessionDao.async_insert_one(new_session)
         await telemetry_service.log_event(
@@ -1457,9 +1456,7 @@ async def _agent_initialize_chat(
                 from bisheng.common.errcode.chat import ProjectInputError
 
                 raise ProjectInputError()
-            await ChatSessionService.create_owned_project_session(
-                new_session, login_user, data.project_id, data.project_request_id, data.project_creation_payload()
-            )
+            await ChatSessionService.create_owned_project_session(new_session, login_user, data.project_id)
         else:
             await MessageSessionDao.async_insert_one(new_session)
         await telemetry_service.log_event(
@@ -1511,10 +1508,11 @@ async def _agent_initialize_chat(
             ),
             category="question",
             source=0,
+            sensitive_status=SensitiveStatus.VIOLATIONS.value if skip_llm else SensitiveStatus.PASS.value,
         )
     )
-
     if skip_llm:
+        mark_session_content_violation(conversation_id)
         return ws_config, conversation, message, None, model_info, is_new_conversation
     bisheng_llm = await LLMService.get_bisheng_llm(
         model_id=data.model,
@@ -1731,6 +1729,7 @@ def _respond_blocked_workbench(conversation, message, model_info, data: APIChatC
             auto_reply=auto_reply,
         )
         resp = await ChatMessageDao.ainsert_one(row)
+        mark_session_content_violation(conversation.chat_id)
         for chunk in iter_blocked_sse(
             conversation_id=conversation.chat_id,
             user_message_id=message.id,
@@ -1798,8 +1797,6 @@ async def _agent_stream_chat_completion(
         )
         return _respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
 
-    await record_business_activity(login_user)
-
     async def _agent_event_stream_impl():
         # Single ordered event log — one entry per thinking segment or tool
         # call, in arrival order. The frontend renders this array directly;
@@ -1824,6 +1821,7 @@ async def _agent_stream_chat_completion(
         error_flag = False
         error_msg = ""
         error_metadata = {}
+        pending_error_sse = None
         citation_collector = CitationRegistryCollector()
         # F075: the model cites with [Sn] handles from the session table shared
         # with the task mode; answer text is converted before it is stored or sent.
@@ -1957,6 +1955,9 @@ async def _agent_stream_chat_completion(
             db_content = blocked_answer_payload(auto_reply)
             row = build_answer_row(db_content)
             row.extra = blocked_answer_extra()
+            message.sensitive_status = SensitiveStatus.VIOLATIONS.value
+            await ChatMessageDao.aupdate_message_model(message)
+            mark_session_content_violation(conversation_id)
             resp_msg = await ChatMessageDao.ainsert_one(row)
             yield _sse_resp(
                 "agent_answer",
@@ -2525,7 +2526,9 @@ async def _agent_stream_chat_completion(
             error_metadata = FailureContextAdapter.public_payload({**exc.kwargs, "error_code": exc.code}, exc=exc)
             if label_error(exc) == ErrorType.CREDIT_EXHAUSTED:
                 error_metadata["error_type"] = ErrorType.CREDIT_EXHAUSTED.value
-            yield FailureContextAdapter.public_sse_text(exc, data=error_metadata)
+            if exc.code == LLMRateLimitError.Code:
+                error_metadata["error_type"] = ErrorType.RATE_LIMIT.value
+            pending_error_sse = FailureContextAdapter.public_sse_text(exc, data=error_metadata)
         except Exception as exc:
             error_flag = True
             error_msg = FailureContextAdapter.safe_detail(exc)
@@ -2538,9 +2541,12 @@ async def _agent_stream_chat_completion(
                 exc=exc,
             )
             if error_type == ErrorType.RATE_LIMIT:
-                yield FailureContextAdapter.public_sse_text(LLMRateLimitError(), data=error_metadata, cause=exc)
+                error_metadata["error_code"] = LLMRateLimitError.Code
+                pending_error_sse = FailureContextAdapter.public_sse_text(
+                    LLMRateLimitError(), data=error_metadata, cause=exc
+                )
             else:
-                yield FailureContextAdapter.public_sse_text(ServerError(), data=error_metadata, cause=exc)
+                pending_error_sse = FailureContextAdapter.public_sse_text(ServerError(), data=error_metadata, cause=exc)
         except (asyncio.CancelledError, GeneratorExit):
             # The stream was torn down mid-flight — client navigated away, gateway
             # read timeout, worker restart. Neither is an `Exception`, so without
@@ -2611,6 +2617,11 @@ async def _agent_stream_chat_completion(
             yield f"data: {json.dumps({'final': True, 'conversation': {'conversationId': conversation_id}})}\n\n"
             return
 
+        # The frontend can close immediately on error. Commit the answer and
+        # its safe recovery metadata before exposing that terminal event.
+        if pending_error_sse is not None:
+            yield pending_error_sse
+
         yield _sse_resp(
             "agent_answer",
             "end",
@@ -2623,7 +2634,7 @@ async def _agent_stream_chat_completion(
 
         # Schedule BEFORE final: the client closes the stream on that event.
         # Retain the task so disconnecting cannot cancel conversation naming.
-        if is_new_conv or (conversation.name in (None, "", "New Chat")):
+        if not error_flag and (is_new_conv or conversation.name in (None, "", "New Chat")):
             title_task = asyncio.create_task(
                 gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
             )

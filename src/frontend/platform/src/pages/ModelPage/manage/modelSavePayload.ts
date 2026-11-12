@@ -22,6 +22,18 @@ export function findModelError(models: SavedModel[]): string | null {
     return badPrice ? "model:model.pricing.invalid" : null;
 }
 
+/** i18n key for an invalid provider name (bs namespace), or null when it is acceptable. */
+export function providerNameErrorKey(name: string): string | null {
+    if (!name) return "model.cannotBeEmpty";
+    return name.length > 100 ? "model.max100Characters" : null;
+}
+
+/** The server's own message for a failed save; null when only the generic fallback is available. */
+export function saveFailureMessage(error: unknown, generic: string): string | null {
+    const reported = error && typeof error === "object" ? (error as { message?: unknown }).message : undefined;
+    return typeof reported === "string" && reported.trim() && reported !== generic ? reported : null;
+}
+
 /** Prices as loaded from the server, keyed by model id. */
 export function loadedPricing(models: SavedModel[] | undefined): Map<string, ModelPricing> {
     const prices = new Map<string, ModelPricing>();

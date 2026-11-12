@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ModelPricing } from "@/controllers/API/modelPricing";
-import { findModelError, loadedPricing, withChangedPricing } from "./modelSavePayload";
+import { findModelError, loadedPricing, providerNameErrorKey, saveFailureMessage, withChangedPricing } from "./modelSavePayload";
 
 const saved: ModelPricing = {
     currency: "CNY", input: "12", cache_read: "1.2", cache_write: null, output: "36", source: "CATALOG", revision: 2,
@@ -30,5 +30,20 @@ describe("saving model prices", () => {
         expect(findModelError([{ ...llm(7, { ...saved, input: "-1" }), model_name: "" }])).toBe("model.modelNameEmpty");
         expect(findModelError([{ ...llm(9), model_type: "embedding", config: { pricing: { ...saved, input: "x" } } }])).toBeNull();
         expect(findModelError([llm(7, saved), llm(8)])).toBeNull();
+    });
+});
+
+describe("provider checks before saving", () => {
+    it("names the provider-name problem", () => {
+        expect(providerNameErrorKey("")).toBe("model.cannotBeEmpty");
+        expect(providerNameErrorKey("x".repeat(101))).toBe("model.max100Characters");
+        expect(providerNameErrorKey("OpenAI")).toBeNull();
+    });
+
+    it("shows the server message only when it says more than the generic fallback", () => {
+        expect(saveFailureMessage({ message: "Price changed by someone else" }, "Request failed")).toBe("Price changed by someone else");
+        expect(saveFailureMessage({ message: "Request failed" }, "Request failed")).toBeNull();
+        expect(saveFailureMessage({ message: " " }, "Request failed")).toBeNull();
+        expect(saveFailureMessage(null, "Request failed")).toBeNull();
     });
 });

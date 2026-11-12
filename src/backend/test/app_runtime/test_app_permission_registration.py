@@ -47,6 +47,7 @@ from bisheng.core.openfga.authorization_model_f048 import (
 from bisheng.core.openfga.authorization_model_f048 import (
     RESOURCE_ACTION_SCOPES,
     SYSTEM_SHARED_ACTION_TYPES,
+    get_authorization_model_f048,
 )
 from bisheng.permission.api.endpoints import grant_subjects
 from bisheng.permission.api.endpoints.grant_subjects import GRANT_SUBJECT_RESOURCE_TYPES
@@ -63,10 +64,9 @@ from bisheng.permission.domain.services.owner_service import SYSTEM_OWNED_RESOUR
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.permission.domain.services.resource_lifecycle_policy import FIXED_CUSTOM_TYPES
 
-#: The six actions a hosted app supports. **No new action code is introduced** —
-#: a new code would mean a new model relation, a full Catalog change and new
-#: frontend copy, for zero benefit (design D9 alternative B).
-APP_ACTIONS = ("use", "edit", "manage_permission", "delete", "publish", "unpublish")
+# Visibility is derived after F118; only the five ordinary actions are assignable.
+APP_ACTIONS = ("visible", "edit", "manage_permission", "delete", "publish", "unpublish")
+ASSIGNABLE_APP_ACTIONS = ("edit", "manage_permission", "delete", "publish", "unpublish")
 
 INTEGRATION = os.environ.get("F054_PERMISSION_INTEGRATION") == "1"
 integration = pytest.mark.skipif(
@@ -172,9 +172,9 @@ def test_both_migrated_resource_type_lists_carry_app() -> None:
     assert "app" in CATALOG_MIGRATED_TYPES
 
 
-@pytest.mark.parametrize("action", APP_ACTIONS)
+@pytest.mark.parametrize("action", ASSIGNABLE_APP_ACTIONS)
 def test_catalog_action_effective_for_app(action: str) -> None:
-    """Point 4: each of the six actions is scoped to ``app`` in the Catalog policy.
+    """Each of the five assignable actions is scoped to ``app`` in the Catalog policy.
 
     ``effective_action_codes`` is the pure predicate behind the SQL
     ``is_action_effective`` — an action is effective for a type only when it is
@@ -194,13 +194,20 @@ def test_catalog_action_effective_for_app(action: str) -> None:
     assert effective_action_codes([catalog_row], "app") == (action,)
 
 
-@pytest.mark.parametrize("action", APP_ACTIONS)
+@pytest.mark.parametrize("action", ASSIGNABLE_APP_ACTIONS)
 def test_authorization_model_scopes_mirror_the_catalog(action: str) -> None:
     """Point 2. ``RESOURCE_ACTION_SCOPES`` has no consumer today (design pit 5),
     so it is kept in sync purely so the two files do not disagree in review —
     a reviewer who reads only this one must not be told ``app`` is unsupported.
     """
     assert "app" in RESOURCE_ACTION_SCOPES[action]
+
+
+def test_visibility_is_derived_without_registering_a_replacement_assignable_action() -> None:
+    assert {"use", "visible"}.isdisjoint(ACTION_RESOURCE_SCOPES)
+    assert {"use", "visible"}.isdisjoint(RESOURCE_ACTION_SCOPES)
+    app = next(item for item in get_authorization_model_f048()["type_definitions"] if item["type"] == "app")
+    assert "visible" in app["relations"] and "use" not in app["relations"]
 
 
 def test_app_starts_in_custom_mode() -> None:
@@ -422,9 +429,14 @@ async def test_unknown_app_is_refused() -> None:
 
 
 async def test_super_admin_may_resolve_across_tenants() -> None:
-    """Consistent with every other adapter: the cross-tenant refusal exempts super admins."""
+    """The original trusted management scope selects the tenant; the actor stays home."""
+    from bisheng.core.context.tenant import management_tenant_scope
+
     adapter, _ = _adapter(_record(tenant_id=2))
-    target = await adapter.resolve_permission_target(resource_id="app-1", actor=_actor(super_admin=True), action="use")
+    with management_tenant_scope(2):
+        target = await adapter.resolve_permission_target(
+            resource_id="app-1", actor=_actor(super_admin=True), action="use"
+        )
     assert target.tenant_id == 2
 
 

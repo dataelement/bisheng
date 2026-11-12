@@ -1,0 +1,325 @@
+pageType: summary
+background:
+  type: solid
+  color: $paper
+elements:
+  - elementId: summary-index-field
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 52
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: summary-red-tab
+    elementType: shape
+    bounds:
+      - 52
+      - 424
+      - 10
+      - 116
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: summary-rule-top
+    elementType: line
+    bounds:
+      - 80
+      - 42
+      - 808
+      - 1
+    viewBox:
+      - 808
+      - 1
+    points: 0,0 808,0
+    border:
+      color: $black
+      width: 1.2
+  - elementId: summary-col-1
+    elementType: line
+    bounds:
+      - 344
+      - 176
+      - 1
+      - 182
+    viewBox:
+      - 1
+      - 182
+    points: 0,0 0,182
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: summary-col-2
+    elementType: line
+    bounds:
+      - 616
+      - 176
+      - 1
+      - 182
+    viewBox:
+      - 1
+      - 182
+    points: 0,0 0,182
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: summary-action-band
+    elementType: shape
+    bounds:
+      - 80
+      - 424
+      - 808
+      - 78
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: summary-index
+    elementType: text
+    bounds:
+      - 10
+      - 430
+      - 32
+      - 80
+    rotation: 270
+    content:
+      text: 02 / SIGNAL
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: summary-kicker
+    elementType: text
+    bounds:
+      - 80
+      - 54
+      - 500
+      - 18
+    content:
+      text: EXECUTIVE SUMMARY / THREE SIGNALS
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $red
+  - elementId: summary-title
+    elementType: text
+    bounds:
+      - 80
+      - 78
+      - 808
+      - 42
+    content:
+      style: $title
+      text: 增长确定性仍在，经营重心已经从获客移到履约与合规
+  - elementId: summary-lead
+    elementType: text
+    bounds:
+      - 80
+      - 126
+      - 808
+      - 26
+    content:
+      style: $lead
+      text: 管理层应同时看规模、出口结构与本地履约基础设施
+  - elementId: summary-value-1
+    elementType: text
+    bounds:
+      - 80
+      - 186
+      - 240
+      - 74
+    content:
+      text: '2.71'
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 62
+      bold: true
+      letterSpacing: -1.8
+      color: $black
+  - elementId: summary-unit-1
+    elementType: text
+    bounds:
+      - 84
+      - 264
+      - 220
+      - 24
+    content:
+      text: 万亿元 / 2024 进出口总额
+      fontFamily: *ref_0
+      fontSize: 13
+      bold: true
+      color: $black
+  - elementId: summary-note-1
+    elementType: text
+    bounds:
+      - 84
+      - 304
+      - 220
+      - 42
+    content:
+      text: 同比 +14.0%<br>较 2020 约 +67%
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.3
+      color: $gray
+  - elementId: summary-value-2
+    elementType: text
+    bounds:
+      - 376
+      - 186
+      - 212
+      - 74
+    content:
+      text: 79.3%
+      fontFamily: *ref_1
+      fontSize: 58
+      bold: true
+      letterSpacing: -1.6
+      color: $red
+  - elementId: summary-unit-2
+    elementType: text
+    bounds:
+      - 376
+      - 264
+      - 214
+      - 24
+    content:
+      text: 出口占跨境电商总额
+      fontFamily: *ref_0
+      fontSize: 13
+      bold: true
+      color: $black
+  - elementId: summary-note-2
+    elementType: text
+    bounds:
+      - 376
+      - 304
+      - 214
+      - 42
+    content:
+      text: 出口增速 +16.9%<br>约为进口 3.9 倍
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.3
+      color: $gray
+  - elementId: summary-value-3
+    elementType: text
+    bounds:
+      - 648
+      - 186
+      - 220
+      - 74
+    content:
+      text: 2500+
+      fontFamily: *ref_1
+      fontSize: 56
+      bold: true
+      letterSpacing: -1.5
+      color: $black
+  - elementId: summary-unit-3
+    elementType: text
+    bounds:
+      - 648
+      - 264
+      - 220
+      - 24
+    content:
+      text: 海外仓 / 3000 万㎡+
+      fontFamily: *ref_0
+      fontSize: 13
+      bold: true
+      color: $black
+  - elementId: summary-note-3
+    elementType: text
+    bounds:
+      - 648
+      - 304
+      - 220
+      - 42
+    content:
+      text: 国际货邮运输量 +29.3%<br>履约成为新增长底座
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.3
+      color: $gray
+  - elementId: summary-ticker
+    elementType: text
+    bounds:
+      - 80
+      - 378
+      - 808
+      - 20
+    content:
+      text: 165 个综试区   /   12 万+企业   /   3 万+海外商标   /   20 万+独立站
+      fontFamily: *ref_0
+      fontSize: 11.5
+      bold: true
+      color: $black
+  - elementId: summary-action-label
+    elementType: text
+    bounds:
+      - 96
+      - 438
+      - 126
+      - 16
+    content:
+      text: MANAGEMENT MOVE
+      fontFamily: *ref_0
+      fontSize: 8.5
+      bold: true
+      letterSpacing: 1.1
+      color: $red
+  - elementId: summary-action
+    elementType: text
+    bounds:
+      - 96
+      - 466
+      - 770
+      - 24
+    content:
+      text: 以本地履约支撑市场分散，以渠道与品牌资产改善利润质量。
+      fontFamily: *ref_0
+      fontSize: 15.5
+      bold: true
+      color: $white
+  - elementId: summary-page
+    elementType: text
+    bounds:
+      - 856
+      - 510
+      - 32
+      - 12
+    content:
+      text: '02'
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $black
+      align:
+        - right
+        - bottom

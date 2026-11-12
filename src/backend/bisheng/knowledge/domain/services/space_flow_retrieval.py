@@ -88,6 +88,7 @@ async def _aretrieve_one_space(
     sort_by_source_and_index: bool,
     version_repo: Any,
     request: Any,
+    retrieval_multipliers: tuple[int, ...] | None = None,
 ) -> list[Document]:
     """Retrieve view_file-filtered docs from a single knowledge space.
 
@@ -125,7 +126,11 @@ async def _aretrieve_one_space(
     base_es = _merge_es_clauses(index_filter.es_filter, extra_es_filter)
 
     conf = visibility._config()
-    multipliers = (conf.retrieval_initial_multiplier, conf.retrieval_expansion_multiplier)
+    multipliers = (
+        retrieval_multipliers
+        if retrieval_multipliers is not None
+        else (conf.retrieval_initial_multiplier, conf.retrieval_expansion_multiplier)
+    )
 
     survivors: list[Document] = []
     for attempt_idx, multiplier in enumerate(multipliers, start=1):
@@ -184,6 +189,7 @@ async def aretrieve_space_documents(
     version_repo: Any = None,
     request: Any = None,
     access_scope: str = "per_user",
+    retrieval_multipliers: tuple[int, ...] | None = None,
 ) -> list[Document]:
     """Retrieve view_file-filtered chunks across one or more knowledge spaces.
 
@@ -224,6 +230,7 @@ async def aretrieve_space_documents(
                 sort_by_source_and_index=sort_by_source_and_index,
                 version_repo=version_repo,
                 request=request,
+                **({"retrieval_multipliers": retrieval_multipliers} if retrieval_multipliers is not None else {}),
             )
         )
     # Stamp the access gate so the citation registry (T008) persists it per source.

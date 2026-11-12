@@ -19,10 +19,11 @@ import { getBrandAssetUrl } from "@/utils/brand";
 import { consumeLoginReturnTo } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
+import { getCaptchaApi, loginApi } from "../../controllers/API/user";
 import { showApiError } from "../../controllers/request";
 import LoginBridge from "./loginBridge";
-import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from "./utils";
+import { handleEncrypt, handleLdapEncrypt } from "./utils";
+import { RegistrationForm } from './RegistrationForm';
 
 interface LoginPageProps {
     // Backdoor entry: skip SSO auto-redirect and clear any stored third-party
@@ -39,9 +40,7 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     const isLoading = false;
 
     const personIdRef = useRef(null);
-    const userNameRef = useRef(null);
     const pwdRef = useRef(null);
-    const agenPwdRef = useRef(null);
 
     // login or register
     const [showLogin, setShowLogin] = useState(true);
@@ -192,51 +191,6 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
         fetchCaptchaData();
     };
 
-    const handleRegister = async () => {
-        const error = [];
-        const [personId, userName, pwd, apwd] = [
-            personIdRef.current.value,
-            userNameRef.current?.value,
-            pwdRef.current.value,
-            agenPwdRef.current.value,
-        ];
-        if (!personId) {
-            error.push(t("login.pleaseEnterPersonId"));
-        }
-        if (!userName) {
-            error.push(t("login.pleaseEnterUserName"));
-        }
-        if (personId.length < 2) {
-            error.push(t("login.personIdTooShort"));
-        }
-        if (!/.{8,}/.test(pwd)) {
-            error.push(t("login.passwordTooShort"));
-        }
-        if (!PWD_RULE.test(pwd)) {
-            error.push(t("login.passwordError"));
-        }
-        if (pwd !== apwd) {
-            error.push(t("login.passwordMismatch"));
-        }
-        if (captchaData.user_capthca && !captchaRef.current.value) {
-            error.push(t("login.pleaseEnterCaptcha"));
-        }
-        if (error.length) {
-            return toast.show({ type: "warning", message: [String(`${t("prompt")}`), error.filter(Boolean).join('\n')].filter(Boolean).join('\n') });
-        }
-        const encryptPwd = await handleEncrypt(pwd);
-        registerApi(userName, personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(
-                (res) => {
-                    // setSuccessData({ title: t('login.registrationSuccess') })
-                    toast.show({ type: "success", message: [String(`${t("prompt")}`), ([t("login.registrationSuccess")]).filter(Boolean).join('\n')].filter(Boolean).join('\n') });
-                    pwdRef.current.value = "";
-                    setShowLogin(true);
-                },
-            ).catch(showApiError);
-
-        fetchCaptchaData();
-    };
-
     // Show loading spinner while checking for third-party redirect
     if (oauthLoading) {
         return (
@@ -248,68 +202,57 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
 
     return (
         <div className="w-full min-h-screen bg-background-dark flex items-center justify-center sm:py-4 overflow-y-auto">
-            <div className="relative z-10 sm:w-[1280px] w-full sm:h-[720px] h-full sm:shrink-0 border rounded-lg shadow-xl overflow-hidden bg-background-login">
-                <div className="w-[420px] h-[704px] m-[8px] hidden sm:block relative z-20">
+            <div className={`relative z-10 sm:w-[1280px] w-full sm:shrink-0 border rounded-lg shadow-xl overflow-hidden bg-background-login ${showLogin ? 'sm:h-[720px] h-full' : 'min-h-[720px]'}`}>
+                <div className={`w-[420px] m-[8px] hidden sm:block z-20 ${showLogin ? 'h-[704px] relative' : 'absolute inset-y-0 left-0'}`}>
                     <img
                         src={getBrandAssetUrl("loginHeroLight", "/assets/bisheng/login-logo-big.png")}
                         alt="logo_picture"
-                        className="w-full h-full dark:hidden"
+                        className="w-full h-full object-cover dark:hidden"
                     />
                     <img
                         src={getBrandAssetUrl("loginHeroDark", "/assets/bisheng/login-logo-dark.png")}
                         alt="logo_picture"
-                        className="w-full h-full hidden dark:block"
+                        className="w-full h-full object-cover hidden dark:block"
                     />
                     {/* <iframe src={__APP_ENV__.BASE_URL + '/face.html'} className='w-full h-full'></iframe> */}
                 </div>
-                <div className="absolute w-full h-full z-10 flex justify-end top-0">
-                    <div className="w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative">
+                <div className={`w-full z-10 flex justify-end ${showLogin ? 'absolute h-full top-0' : 'relative min-h-[720px]'}`}>
+                    <div className={`w-full sm:w-[852px] px-[20px] sm:px-[266px] bg-background-login relative ${showLogin ? '' : 'pb-16'}`}>
                         <div>
                             <img
                                 src={getBrandAssetUrl("headerLogoLight", "/assets/bisheng/login-logo-small.png")}
-                                className="block w-[114px] h-[36px] m-auto mt-[96px] dark:w-[124px] dark:pr-[10px] dark:hidden"
+                                className={`block w-[114px] h-[36px] m-auto dark:w-[124px] dark:pr-[10px] dark:hidden ${showLogin ? 'mt-[96px]' : 'mt-[32px]'}`}
                                 alt=""
                             />
                             <img
                                 src={getBrandAssetUrl("headerLogoDark", "/assets/bisheng/logo-small-dark.png")}
-                                className="w-[114px] h-[36px] m-auto mt-[96px] dark:w-[124px] dark:pr-[10px] dark:block hidden"
+                                className={`w-[114px] h-[36px] m-auto dark:w-[124px] dark:pr-[10px] dark:block hidden ${showLogin ? 'mt-[96px]' : 'mt-[32px]'}`}
                                 alt=""
                             />
                             <span className="block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]">
                                 {t("login.slogen")}
                             </span>
                         </div>
-                        <div className="grid gap-[12px] mt-[68px]">
+                        <div className={`grid gap-[12px] ${showLogin ? 'mt-[68px]' : 'mt-[24px]'}`}>
+                            {showLogin ? <>
                             <div className="grid">
                                 <Input size="large" id="email" ref={personIdRef} placeholder={t("login.account")} type="text" autoCapitalize="none" autoComplete="username" autoCorrect="off" />
                             </div>
-                            {!showLogin && (
-                                <div className="grid">
-                                    <Input size="large" id="userName" ref={userNameRef} placeholder={t("login.userName")} />
-                                </div>
-                            )}
                             <div className="grid">
                                 <Input size="large" id="pwd" ref={pwdRef} placeholder={t("login.password")} type="password" onKeyDown={(e) => e.key === "Enter" && showLogin && handleLogin()} />
                             </div>
-                            {!showLogin && (
-                                <div className="grid">
-                                    <Input size="large" id="pwd" ref={agenPwdRef} placeholder={t("login.confirmPassword")} type="password" />
-                                </div>
-                            )}
                             {showCaptcha && (
                                 <div className="flex items-center gap-4">
                                     <Input size="large" type="text" ref={captchaRef} placeholder={t("login.pleaseEnterCaptcha")} />
                                     <img
-                                        src={"data:image/jpg;base64," + captchaData.captcha} // 这里应该是你的验证码图片的URL
+                                        src={"data:image/jpg;base64," + captchaData.captcha}
                                         alt="captcha"
-                                        onClick={fetchCaptchaData} // 这里应该是你的刷新验证码函数
+                                        onClick={fetchCaptchaData}
                                         className="cursor-pointer h-10 bg-gray-100 border border-gray-300"
-                                        style={{ width: "120px" }} // 根据需要调整宽度
+                                        style={{ width: "120px" }}
                                     />
                                 </div>
                             )}
-                            {showLogin ? (
-                                <>
                                     {enableDualLogin && (
                                         <label className="flex items-center gap-2 text-sm text-tx-color">
                                             <Checkbox
@@ -322,9 +265,9 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                                     <div className="text-center">
                                         {!shouldUseLdap && appConfig.register && (
                                             <a
-                                                href="javascript:;"
+                                                href="/login"
                                                 className=" text-blue-500 text-sm hover:underline"
-                                                onClick={() => setShowLogin(false)}
+                                                onClick={event => { event.preventDefault(); setShowLogin(false); }}
                                             >
                                                 {t("login.noAccountRegister")}
                                             </a>
@@ -333,23 +276,8 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                                     <Button size="large" className="mt-[32px]" disabled={isLoading} onClick={handleLogin}>
                                         {t("login.loginButton")}
                                     </Button>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="text-center">
-                                        <a
-                                            href="javascript:;"
-                                            className=" text-blue-500 text-sm hover:underline"
-                                            onClick={() => setShowLogin(true)}
-                                        >
-                                            {t("login.haveAccountLogin")}
-                                        </a>
-                                    </div>
-                                    <Button size="large" className="mt-[32px]" disabled={isLoading} onClick={handleRegister}>
-                                        {t("login.registerButton")}
-                                    </Button>
-                                </>
-                            )}
+                            </> : <RegistrationForm captcha={captchaData} onRefreshCaptcha={fetchCaptchaData}
+                                onLogin={() => setShowLogin(true)} onSuccess={() => setShowLogin(true)} />}
                             {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setHasLdap} />}
                         </div>
                         <div className=" absolute right-[16px] bottom-[16px] flex">

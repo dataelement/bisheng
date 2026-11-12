@@ -1,0 +1,72 @@
+{{- if not (empty .Values.execution.canaryPlans) }}{{ fail "canary plans are operator-owned; values may not seed or replace plans" }}{{ end -}}
+{{- include "runtime.defaults" . -}}
+{{- $profileImages := list -}}
+{{- range .Values.execution.canaryProfiles }}{{ $profileImages = append $profileImages .runtime_image }}{{ end -}}
+{{- range $suffix, $key := dict "runtime-diagnostics" "report.json" "runtime-canary-plans" "plans.json" -}}
+{{- $name := include "runtime.name" (list $ $suffix) -}}
+{{- $old := lookup "v1" "ConfigMap" $.Values.services.namespace $name -}}
+{{- if or $.Values.diagnostics.enabled $old -}}
+{{- if and $old (or (ne (get (default (dict) $old.metadata.annotations) "meta.helm.sh/release-name") $.Release.Name) (ne (get (default (dict) $old.metadata.annotations) "meta.helm.sh/release-namespace") $.Release.Namespace)) }}{{ fail "diagnostic ConfigMap belongs to another release" }}{{ end }}
+{{- if $old -}}
+{{- $meta := $old.metadata -}}
+{{- if or (ne $meta.name $name) (ne $meta.namespace $.Values.services.namespace) (ne (get (default (dict) $meta.labels) "app.kubernetes.io/managed-by") "Helm") (ne (get (default (dict) $meta.labels) "runtime.bisheng.io/installation") $.Values.execution.installationId) (not (regexMatch "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$" (default "" $meta.uid))) (empty $meta.resourceVersion) }}{{ fail "diagnostic ConfigMap identity mismatch" }}{{ end -}}
+{{- if eq $key "plans.json" -}}
+{{- $canary := $old -}}
+{{- $canaryData := "" -}}
+{{- if or (not (kindIs "map" $canary.data)) (ne (len $canary.data) 1) (not (kindIs "string" (get $canary.data "plans.json"))) }}
+{{- fail "existing canary data is invalid" }}
+{{- end }}
+{{- $canaryData = get $canary.data "plans.json" }}
+{{- $document := fromJson $canaryData }}
+{{- if or (gt (len $canaryData) 1048576) (ne (len $document) 3) (not (kindIs "float64" $document.schema_version)) (ne $document.schema_version 1.0) (not (kindIs "map" $document.plans)) (not (kindIs "slice" $document.profile_images)) }}
+{{- fail "existing canary document is invalid" }}
+{{- end }}
+{{- range $image := $document.profile_images }}
+{{- if or (not (kindIs "string" $image)) (not (regexMatch "^[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}$" $image)) }}
+{{- fail "existing canary profile image is invalid" }}
+{{- end }}
+{{- end }}
+{{- range $ref, $plan := $document.plans }}
+{{- if or (not (regexMatch "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$" $ref)) (not (kindIs "map" $plan)) }}
+{{- fail "existing canary plan identity is invalid" }}
+{{- end }}
+{{- if or (ne $plan.resource_ref $ref) (ne $plan.namespace $.Values.execution.namespace) (not (kindIs "string" $plan.name)) (not (hasPrefix "preflight-" $plan.name)) (not (has $plan.kind (list "Pod" "PersistentVolumeClaim"))) (not (has $plan.stop_state (list "held" "confirmed"))) (not (kindIs "float64" $plan.expires_at)) (le $plan.expires_at 0.0) }}
+{{- fail "existing canary plan scope is invalid" }}
+{{- end }}
+{{- range $flag := list "allow_create" "allow_update" "allow_delete" "cleanup_only" }}
+{{- if not (kindIs "bool" (get $plan $flag)) }}{{ fail "existing canary plan authority is invalid" }}{{ end }}
+{{- end }}
+{{- if or (and $plan.allow_create $plan.uid) (and (or $plan.uid $plan.allow_update $plan.allow_delete) (not (regexMatch "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$" (default "" $plan.uid)))) }}
+{{- fail "existing canary plan UID is invalid" }}
+{{- end }}
+{{- $template := default (dict) $plan.template }}
+{{- $meta := default (dict) $template.metadata }}
+{{- if or (ne $template.kind $plan.kind) (ne $meta.name $plan.name) (ne $meta.namespace $plan.namespace) (ne (get (default (dict) $meta.labels) "runtime.bisheng.io/resource") $ref) }}
+{{- fail "existing canary plan template scope is invalid" }}
+{{- end }}
+{{- end }}
+{{- end -}}
+{{- end -}}
+
+{{ print "\n---" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.services.namespace }}
+  labels: {runtime.bisheng.io/installation: {{ $.Values.execution.installationId }}, app.kubernetes.io/managed-by: Helm}
+{{- if $old }}
+  uid: {{ $old.metadata.uid | quote }}
+  resourceVersion: {{ $old.metadata.resourceVersion | quote }}
+{{- end }}
+  annotations: {helm.sh/resource-policy: keep}
+data:
+{{- if $old }}
+{{ toYaml (default (dict) $old.data) | nindent 2 }}
+{{- else if eq $key "plans.json" }}
+  plans.json: {{ dict "schema_version" 1 "plans" (dict) "profile_images" $profileImages | toJson | quote }}
+{{- else }}
+  {}
+{{- end }}
+{{- end }}
+{{- end }}

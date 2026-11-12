@@ -1,0 +1,93 @@
+version: v2
+title: 中国跨境电商｜北欧运营报告样稿
+size:
+  - 960
+  - 540
+theme:
+  colors:
+    paper: '#F3F0EA'
+    white: '#FFFFFF'
+    navy: '#002C43'
+    ink: '#0B2A3A'
+    cyan: '#42C7E7'
+    mist: '#D9E8ED'
+    clay: '#E8B8A8'
+    muted: '#657882'
+    rule: '#AFC2C9'
+  textStyles:
+    title:
+      fontFamily:
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 31
+      bold: true
+      color: $ink
+      lineHeight: 1.08
+      align:
+        - left
+        - top
+    lead:
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 15
+      bold: true
+      color: $ink
+      lineHeight: 1.22
+      align:
+        - left
+        - top
+    body:
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $ink
+      lineHeight: 1.35
+      align:
+        - left
+        - top
+    meta:
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $muted
+      lineHeight: 1.2
+      align:
+        - left
+        - top
+  tableStyles:
+    operating-matrix:
+      cellStyle:
+        fontFamily: *ref_0
+        fontSize: 9.2
+        color: $ink
+        fill:
+          type: solid
+          color: $paper
+        border:
+          color: $rule
+          width: 0.7
+      firstRowStyle:
+        bold: true
+        color: $white
+        fill:
+          type: solid
+          color: $navy
+pages:
+  - pages/01.page
+  - pages/02.page
+  - pages/03.page
+  - pages/04.page
+  - pages/05.page
+  - pages/06.page
+  - pages/07.page
+  - pages/08.page
+  - pages/09.page
+  - pages/10.page
+  - pages/11.page
+  - pages/12.page
+template:
+  id: nordic-operating-report
+  name: Nordic Operating Report

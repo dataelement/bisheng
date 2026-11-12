@@ -39,8 +39,8 @@ export const ModelSelect = ({
 }) => {
   const { t } = useTranslation();
   const selectLabels = useSelectLabels();
-  const cascaderOptions = useMemo(() => toModelCascaderOptions(options), [options]);
-  const cascaderValue = useMemo(() => toModelCascaderValue(value, options), [options, value]);
+  const cascaderOptions = useMemo(() => toModelCascaderOptions(options, value, t('references.unavailable')), [options, value, t]);
+  const cascaderValue = useMemo(() => toModelCascaderValue(value, options, true), [options, value]);
 
   return (
     <div className="min-w-0">

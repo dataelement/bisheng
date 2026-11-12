@@ -1,0 +1,415 @@
+pageType: comparison
+background:
+  type: solid
+  color: $paper
+notes: |
+  平台、独立站和本地履约分别解决需求验证、客户资产和体验兑现问题。三者是按阶段组合的工具，不是一次性的渠道选择。独立站超过 20 万个采用约 2023 年公开口径。
+  来源：https://dzswgf.mofcom.gov.cn/news/182/2025/4/1744004653888.html
+elements:
+  - elementId: p07-top-rule
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 960
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p07-kicker
+    elementType: text
+    bounds:
+      - 54
+      - 32
+      - 420
+      - 18
+    content:
+      style: $section
+      text: 05 / OPERATING MODE COMBINATION
+  - elementId: p07-title
+    elementType: text
+    bounds:
+      - 52
+      - 58
+      - 850
+      - 42
+    content:
+      style: $pageTitle
+      text: 平台、独立站、本地履约：按阶段组合，不做静态选择
+  - elementId: p07-route-01
+    elementType: line
+    bounds:
+      - 314
+      - 254
+      - 30
+      - 2
+    viewBox:
+      - 30
+      - 2
+    points: 0,1 30,1
+    border:
+      width: 3
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p07-route-02
+    elementType: line
+    bounds:
+      - 600
+      - 254
+      - 30
+      - 2
+    viewBox:
+      - 30
+      - 2
+    points: 0,1 30,1
+    border:
+      width: 3
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p07-platform
+    elementType: shape
+    bounds:
+      - 54
+      - 128
+      - 260
+      - 286
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.4
+  - elementId: p07-platform-head
+    elementType: shape
+    bounds:
+      - 54
+      - 128
+      - 260
+      - 42
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p07-platform-title
+    elementType: text
+    bounds:
+      - 70
+      - 140
+      - 226
+      - 20
+    content:
+      text: 01 / 平台
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 14
+      color: $white
+      bold: true
+  - elementId: p07-platform-role
+    elementType: shape
+    bounds:
+      - 70
+      - 188
+      - 96
+      - 28
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p07-platform-role-t
+    elementType: text
+    bounds:
+      - 80
+      - 195
+      - 76
+      - 14
+    content:
+      text: 验证需求
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p07-platform-body
+    elementType: text
+    bounds:
+      - 70
+      - 236
+      - 220
+      - 148
+    content:
+      text: |-
+        进入速度　快
+        客户资产　弱
+        固定投入　低到中
+        核心风险　抽佣、规则变化、单平台依赖
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      lineHeight: 1.55
+  - elementId: p07-independent
+    elementType: shape
+    bounds:
+      - 344
+      - 128
+      - 256
+      - 286
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.4
+  - elementId: p07-independent-head
+    elementType: shape
+    bounds:
+      - 344
+      - 128
+      - 256
+      - 42
+    shapeName: rect
+    fill:
+      type: solid
+      color: $steel
+    border:
+      color: $steel
+      width: 0
+  - elementId: p07-independent-title
+    elementType: text
+    bounds:
+      - 360
+      - 140
+      - 222
+      - 20
+    content:
+      text: 02 / 独立站
+      fontFamily: *ref_0
+      fontSize: 14
+      color: $graphite
+      bold: true
+  - elementId: p07-independent-role
+    elementType: shape
+    bounds:
+      - 360
+      - 188
+      - 110
+      - 28
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p07-independent-role-t
+    elementType: text
+    bounds:
+      - 370
+      - 195
+      - 90
+      - 14
+    content:
+      text: 沉淀客户资产
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p07-independent-body
+    elementType: text
+    bounds:
+      - 360
+      - 236
+      - 216
+      - 148
+    content:
+      text: |-
+        进入速度　中
+        客户资产　强
+        固定投入　中
+        核心风险　流量成本、转化效率、内容能力
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      lineHeight: 1.55
+  - elementId: p07-independent-stat
+    elementType: text
+    bounds:
+      - 360
+      - 378
+      - 216
+      - 18
+    content:
+      text: 独立站 20 万+｜约 2023 公开口径
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $slate
+      bold: true
+  - elementId: p07-fulfillment
+    elementType: shape
+    bounds:
+      - 630
+      - 128
+      - 276
+      - 286
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 1.4
+  - elementId: p07-fulfillment-head
+    elementType: shape
+    bounds:
+      - 630
+      - 128
+      - 276
+      - 42
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p07-fulfillment-title
+    elementType: text
+    bounds:
+      - 646
+      - 140
+      - 242
+      - 20
+    content:
+      text: 03 / 本地履约
+      fontFamily: *ref_0
+      fontSize: 14
+      color: $graphite
+      bold: true
+  - elementId: p07-fulfillment-role
+    elementType: shape
+    bounds:
+      - 646
+      - 188
+      - 118
+      - 28
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $surface
+      width: 0
+  - elementId: p07-fulfillment-role-t
+    elementType: text
+    bounds:
+      - 656
+      - 195
+      - 98
+      - 14
+    content:
+      text: 兑现体验与复购
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p07-fulfillment-body
+    elementType: text
+    bounds:
+      - 646
+      - 236
+      - 236
+      - 148
+    content:
+      text: |-
+        进入速度　慢
+        客户资产　增强体验与留存
+        固定投入　高
+        核心风险　库存、合规、现金占用
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $white
+      lineHeight: 1.55
+  - elementId: p07-principle
+    elementType: shape
+    bounds:
+      - 54
+      - 434
+      - 852
+      - 56
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $graphite
+      width: 2
+  - elementId: p07-principle-t
+    elementType: text
+    bounds:
+      - 76
+      - 446
+      - 808
+      - 30
+    content:
+      text: 组合路径｜平台先验证 → 独立站再沉淀 → 仓配随确定性投入；用阶段门控制不可逆成本。
+      fontFamily: *ref_0
+      fontSize: 14
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p07-footer
+    elementType: text
+    bounds:
+      - 54
+      - 506
+      - 704
+      - 14
+    content:
+      text: 来源：商务部公开资料｜独立站数量为约 2023 年公开口径
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $slate
+  - elementId: p07-page
+    elementType: text
+    bounds:
+      - 882
+      - 504
+      - 28
+      - 16
+    content:
+      text: '07'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - right
+        - top

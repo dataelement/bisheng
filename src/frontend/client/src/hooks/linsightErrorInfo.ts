@@ -6,6 +6,7 @@ interface PersistedFailure {
     error_code?: number;
     error_type?: string;
     detail?: string;
+    reference_id?: string;
     failure_info?: FailureInfo;
 }
 

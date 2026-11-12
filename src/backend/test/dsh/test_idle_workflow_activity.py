@@ -1,46 +1,71 @@
-"""AC-IDLE-02/03: live workflow status polling isn't admitted business input."""
+"""AC-IDLE-02/03: WS business messages renew before permission checks, polling does not."""
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
-from bisheng.common.chat.clients.workflow_client import WorkflowClient
-from bisheng.user.domain.services.auth import LoginUser
-from bisheng.workflow.common.workflow import WorkflowStatus
+import pytest
+from starlette.requests import HTTPConnection
+
+from bisheng.common.chat.manager import ChatManager
+from bisheng.core.session_activity import business_activity
+from bisheng.dsh.application.session_activity import DshSessionActivity
+from bisheng.dsh.domain.services.access import DshPrincipal
 
 
-async def test_workflow_polling_never_touches_activity_but_admitted_input_does(monkeypatch):
-    client = object.__new__(WorkflowClient)
-    user = client.login_user = LoginUser.model_construct(user_id=20, tenant_id=2)
-    activity = user._business_activity_recorder = AsyncMock()
-    client.client_id = "workflow"
-    client.execution_snapshot = None
-    client.check_status = AsyncMock()
-    client.ensure_workflow_available = AsyncMock(return_value=True)
-    client.get_execute_worker = AsyncMock(return_value="isolated-test")
-    client.workflow_run = AsyncMock()
-    client.send_response = AsyncMock()
-    monkeypatch.setattr(
-        "bisheng.common.chat.clients.workflow_client.ensure_client_execution_lease", AsyncMock(return_value="held")
+@business_activity(http=False, websocket_actions=("init_data", "input"))
+async def entrance():
+    pass
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+@pytest.mark.parametrize("action,expected", [("check_status", 0), ("init_data", 1), ("input", 1), ("stop", 0)])
+async def test_ws_activity_is_transport_owned_and_independent_of_business_permission(allowed, action, expected):
+    order = []
+    record = AsyncMock(side_effect=lambda _p: order.append("activity"))
+    conn = HTTPConnection({"type": "websocket", "endpoint": entrance, "path": "/workflow", "headers": []})
+    conn.state.authenticated_activity = DshSessionActivity(
+        SimpleNamespace(record_activity=record), DshPrincipal(tenant_id="2", user_id="20", session_id="verified")
     )
-    client.workflow = SimpleNamespace(
-        unique_id="run",
-        workflow_id="workflow",
-        chat_id="chat",
-        user_id=20,
-        async_get_workflow_status=AsyncMock(return_value={"status": WorkflowStatus.INPUT.value}),
-        async_set_user_input=AsyncMock(),
-        async_set_workflow_status=AsyncMock(),
+    manager = object.__new__(ChatManager)
+    manager._has_use_action = AsyncMock(side_effect=lambda *_: (order.append("permission"), allowed)[1])
+    client = SimpleNamespace(handle_message=AsyncMock(side_effect=lambda *_: order.append("business")))
+    result = await manager._dispatch_message(
+        client, {"action": action}, login_user=object(), work_type=object(), client_id="workflow", connection=conn
     )
-    enqueue = Mock()
-    monkeypatch.setattr("bisheng.common.chat.clients.workflow_client.continue_workflow.apply_async", enqueue)
-    for _ in range(3):
-        await client._handle_message({"action": "check_status"})
-    activity.assert_not_awaited()
-    await client._handle_message({"action": "input", "data": {"node": {"data": {"answer": "hi"}}}})
-    activity.assert_awaited_once()
-    client.workflow.async_set_user_input.assert_awaited_once()
-    enqueue.assert_called_once()
-    activity.reset_mock()
-    client.ensure_workflow_available.return_value = False
-    await client._handle_message({"action": "input", "data": {"node": {"data": {"answer": "hi"}}}})
-    activity.assert_not_awaited()
+    assert result is allowed
+    assert record.await_count == expected
+    assert order == (["activity"] if expected else []) + ["permission"] + (["business"] if allowed else [])
+
+
+async def test_ws_activity_precedes_release_message_admission_rejection():
+    order = []
+    record = AsyncMock(side_effect=lambda _p: order.append("activity"))
+    conn = HTTPConnection({"type": "websocket", "endpoint": entrance, "path": "/workflow", "headers": []})
+    conn.state.authenticated_activity = DshSessionActivity(
+        SimpleNamespace(record_activity=record), DshPrincipal(tenant_id="2", user_id="20", session_id="verified")
+    )
+    manager = object.__new__(ChatManager)
+    manager._has_use_action = AsyncMock()
+    client = SimpleNamespace(handle_message=AsyncMock())
+
+    @asynccontextmanager
+    async def reject():
+        order.append("admission")
+        raise PermissionError("business request rejected")
+        yield
+
+    with pytest.raises(PermissionError, match="business request rejected"):
+        await manager._dispatch_message(
+            client,
+            {"action": "input"},
+            login_user=object(),
+            work_type=object(),
+            client_id="workflow",
+            connection=conn,
+            message_admission=reject,
+        )
+    assert order == ["activity", "admission"]
+    record.assert_awaited_once()
+    manager._has_use_action.assert_not_awaited()
+    client.handle_message.assert_not_awaited()

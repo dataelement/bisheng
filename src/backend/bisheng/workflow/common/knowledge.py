@@ -1,7 +1,9 @@
+from copy import deepcopy
 from datetime import datetime
 from typing import Any, Literal
 
 from langchain_core.documents import Document
+from langchain_core.vectorstores import VectorStore
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -17,6 +19,30 @@ from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.workflow.common.condition import ComparisonType
 from bisheng.workflow.common.retrieval_question import normalize_retrieval_question
 from bisheng.workflow.nodes.base import BaseNode
+
+
+class _ScopedKnowledgeVector(VectorStore):
+    """Filter real score pairs before the original global fusion and cap."""
+
+    def __init__(self, native, postfilter):
+        self.native, self.postfilter = native, postfilter
+
+    def similarity_search_with_relevance_scores(self, query, **kwargs):
+        from bisheng.utils.async_utils import run_async_safe
+
+        rows = self.native.similarity_search_with_relevance_scores(query, **deepcopy(kwargs))
+        return run_async_safe(self.postfilter(rows), timeout=120)
+
+    async def asimilarity_search_with_relevance_scores(self, query, **kwargs):
+        rows = await self.native.asimilarity_search_with_relevance_scores(query, **deepcopy(kwargs))
+        return await self.postfilter(rows)
+
+    def similarity_search(self, query, k=4, **kwargs):
+        return [row for row, _score in self.similarity_search_with_relevance_scores(query, k=k, **kwargs)]
+
+    @classmethod
+    def from_texts(cls, texts, embedding, metadatas=None, **kwargs):
+        raise NotImplementedError("Retrieval-only forwarding adapter")
 
 
 class ConditionOne(BaseModel):
@@ -289,7 +315,7 @@ class RagUtils(BaseNode):
         finally_docs = knowledge_retriever_tool._run(question)
         if self._knowledge_type not in ("knowledge", "space"):
             self.backfill_temp_source_paths(finally_docs, self._temp_source_by_document_id)
-        all_file_id = set([one.metadata.get("document_id") for one in finally_docs])
+        all_file_id = {one.metadata.get("document_id") for one in finally_docs}
         file_map = {}
         if finally_docs:
             if self._knowledge_type == "knowledge":
@@ -328,6 +354,9 @@ class RagUtils(BaseNode):
 
     def init_multi_retriever(self):
         if self._knowledge_type == "knowledge":
+            from bisheng.utils.async_utils import run_async_safe
+
+            run_async_safe(self._aprepare_legacy_space_filters(), timeout=120)
             self.init_knowledge_retriever()
         elif self._knowledge_type == "space":
             # F041: knowledge spaces build their own retriever per-space inside
@@ -336,6 +365,80 @@ class RagUtils(BaseNode):
             pass
         else:
             self.init_file_retriever()
+
+    async def _aprepare_legacy_space_filters(self):
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.retrieval_file_repository import KnowledgeRetrievalFileRepository
+        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+            IndexFilter,
+            KnowledgeFileVisibilityService,
+        )
+        from bisheng.knowledge.domain.services.space_flow_retrieval import abuild_scoped_login_user
+
+        repository = KnowledgeRetrievalFileRepository()
+        async with get_async_db_session() as session:
+            types = await repository.aload_actual_types(session, knowledge_ids=self._knowledge_value)
+        ids = {int(raw) for raw in self._knowledge_value}
+        if set(types) != ids or any(kind not in {0, 1, 3} for kind in types.values()):
+            raise ValueError("Knowledge source is unavailable")
+        self._legacy_space_filters, self._legacy_space_identity = {}, None
+        spaces = [ident for ident, kind in types.items() if kind == 3]
+        if spaces and self._knowledge_auth:
+            # Legacy knowledge OFF never meant config-author sharing (F041 is
+            # specific to the literal space selector). Preserve the runtime user.
+            self._legacy_space_identity = await abuild_scoped_login_user(self.user_id, self.tenant_id)
+        for ident in spaces:
+            if self._knowledge_auth:
+                if self._legacy_space_identity is None:
+                    index = IndexFilter(strategy="empty")
+                else:
+                    index = await KnowledgeFileVisibilityService(
+                        None, self._legacy_space_identity
+                    ).build_index_prefilter(ident, None)
+            else:
+                from bisheng.common.services.config_service import settings
+                from bisheng.core.config.settings import KnowledgeQAFilterConf
+
+                async with get_async_db_session() as session:
+                    eligible = await repository.alist_successful_files(session, space_id=ident)
+                threshold = (
+                    getattr(settings, "knowledge_qa_filter", None) or KnowledgeQAFilterConf()
+                ).index_filter_threshold
+                if not eligible:
+                    index = IndexFilter(strategy="empty", accessible_size=0)
+                elif len(eligible) <= threshold:
+                    selected = sorted(eligible)
+                    index = IndexFilter(
+                        strategy="in",
+                        milvus_expr=f"document_id in {selected}",
+                        es_filter=[{"terms": {"metadata.document_id": selected}}],
+                        accessible_size=len(eligible),
+                    )
+                else:
+                    index = IndexFilter(strategy="none", accessible_size=len(eligible))
+            self._legacy_space_filters[ident] = index
+
+    async def _apostfilter_legacy_space_scores(self, ident, rows):
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.repositories.retrieval_file_repository import KnowledgeRetrievalFileRepository
+        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import KnowledgeFileVisibilityService
+
+        pairs = []
+        for document, score in rows:
+            raw = document.metadata.get("document_id")
+            if type(raw) in {int, str} and str(raw).isdecimal() and 0 < int(raw) <= 2**63 - 1:
+                pairs.append((document, score, int(raw)))
+        ids = {ident for _document, _score, ident in pairs}
+        if self._knowledge_auth:
+            permitted = await KnowledgeFileVisibilityService(
+                None, self._legacy_space_identity
+            ).post_filter_retrievable_files(ident, ids)
+        else:
+            async with get_async_db_session() as session:
+                permitted = await KnowledgeRetrievalFileRepository().alist_successful_files(
+                    session, space_id=ident, file_ids=ids
+                )
+        return [(document, score) for document, score, file_id in pairs if file_id in permitted]
 
     def _space_metadata_filter(self, space: Knowledge):
         """Per-space metadata filter (AC-08, built-in fields) → (milvus_expr, es_clauses).
@@ -441,10 +544,10 @@ class RagUtils(BaseNode):
         self._multi_milvus_retriever = None
         self._multi_es_retriever = None
 
-        # Bulk-fetch non-primary file ids once for all knowledges in the retriever.
-        # Applying the union to every knowledge's filter is correct — each collection
-        # only contains its own files, so cross-knowledge ids are no-ops.
-        knowledge_ids = list(self._knowledge_vector_list.keys())
+        # Legacy libraries/QA retain the original union; actual SPACE roots have
+        # their own positive qualification and must not expand this negative list.
+        scoped_spaces = getattr(self, "_legacy_space_filters", {})
+        knowledge_ids = [key for key in self._knowledge_vector_list if int(key) not in scoped_spaces]
         excluded_file_ids = self._fetch_non_primary_file_ids(knowledge_ids)
 
         for knowledge_id, knowledge_info in self._knowledge_vector_list.items():
@@ -456,6 +559,24 @@ class RagUtils(BaseNode):
             )
             if milvus_filter_str is None and es_filter is None:
                 continue
+            scoped = getattr(self, "_legacy_space_filters", {}).get(int(knowledge_id))
+            if scoped is not None:
+                if scoped.is_empty:
+                    continue
+                if scoped.milvus_expr:
+                    milvus_filter_str = " and ".join(
+                        f"({part})" for part in (milvus_filter_str, scoped.milvus_expr) if part
+                    )
+                es_filter = deepcopy(es_filter) if es_filter else {}
+                es_filter["filter"] = [*es_filter.get("filter", []), *(scoped.es_filter or [])]
+
+                async def postfilter(rows, ident=int(knowledge_id)):
+                    return await self._apostfilter_legacy_space_scores(ident, rows)
+
+                if milvus_vector is not None:
+                    milvus_vector = _ScopedKnowledgeVector(milvus_vector, postfilter)
+                if es_vector is not None:
+                    es_vector = _ScopedKnowledgeVector(es_vector, postfilter)
 
             # Combine metadata filter with primary-only version filter.
             # build_primary_only_filter expects:
@@ -463,7 +584,7 @@ class RagUtils(BaseNode):
             #   base_es_filter: List[dict] | None  (the list under the "filter" key)
             base_es_list = es_filter.get("filter") if es_filter else None
             combined_milvus_expr, combined_es_list = build_primary_only_filter(
-                excluded_file_ids,
+                excluded_file_ids if scoped is None else [],
                 base_milvus_expr=milvus_filter_str or None,
                 base_es_filter=base_es_list,
             )

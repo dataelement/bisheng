@@ -32,10 +32,10 @@ interface AvatarNameProps extends React.HTMLAttributes<HTMLDivElement> {
 const AvatarName = React.forwardRef<HTMLDivElement, AvatarNameProps>(
   ({ className, name, ...props }, ref) => {
 
-    // 与频道/知识空间成员管理一致：仅取首字符（拉丁字母大写）
+    // Read one Unicode code point, preserving supplementary CJK characters.
     const getInitials = (str?: string) => {
       const trimmed = (str || "").trim();
-      return (trimmed[0] || "?").toUpperCase();
+      return (Array.from(trimmed)[0] || "?").toUpperCase();
     };
 
     // 默认灰底白字，与频道/知识空间成员管理列表一致（避免与 bg-primary 蓝色兜底混用）

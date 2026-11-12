@@ -29,7 +29,6 @@ service_setup = model_tests.service_setup
 def http_idle(idle, service_setup, monkeypatch):
     runtime, engine, clock = idle
     model, llm, ledger, _policy, _state = service_setup
-    model.activity_recorder = runtime.sessions.record_activity
     # Quota and supplier are external boundaries; lifecycle/SQL/PKCE remain real.
     ledger.check_and_start = AsyncMock(side_effect=lambda event, **_kwargs: event)
     model_runtime = SimpleNamespace(model=model, complete=model.complete)

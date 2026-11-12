@@ -173,7 +173,7 @@ export function KnowledgePickerDialog({
           <p role="status" className="py-10 text-center text-text-3">
             {localize(copy.loading)}
           </p>
-        ) : groups.length === 0 ? (
+        ) : groups.length === 0 && !hasMore ? (
           <p role="status" className="py-10 text-center text-text-3">
             {localize(keyword.trim() ? copy.noMatch : copy.empty)}
           </p>
@@ -230,6 +230,9 @@ export function KnowledgePickerDialog({
           </p>
         )}
       </div>
+      {hasMore && !isError && <Button color="default" variant="outlined" loading={isFetching} onClick={onLoadMore}>
+        {localize("dshChat.loadMoreKnowledge")}
+      </Button>}
       {access.message && <p role="status" className="text-body-sm text-danger">{access.message}</p>}
       {available.length >= MAX_SELECTED && (
         <p role="status" className="text-body-sm text-text-3">

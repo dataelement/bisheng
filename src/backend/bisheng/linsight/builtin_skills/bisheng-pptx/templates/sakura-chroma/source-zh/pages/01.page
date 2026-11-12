@@ -1,0 +1,173 @@
+pageType: cover
+background:
+  type: solid
+  color: '#F1E6CB'
+notes: Native PPTD adaptation of Zara Zhang / Sakura Chroma. MIT. Example figures are illustrative.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 38
+      - 500
+      - 28
+    content:
+      text: 彩带系列 / 研究手记
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 12
+      color: '#3A2516'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s2
+    elementType: shape
+    bounds:
+      - 520
+      - 150
+      - 380
+      - 32
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E54489'
+    border:
+      width: 0
+      color: '#3A2516'
+    rotation: -14
+  - elementId: s3
+    elementType: shape
+    bounds:
+      - 520
+      - 186
+      - 380
+      - 32
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#F09131'
+    border:
+      width: 0
+      color: '#3A2516'
+    rotation: -14
+  - elementId: s4
+    elementType: shape
+    bounds:
+      - 520
+      - 222
+      - 380
+      - 32
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#F0BC2A'
+    border:
+      width: 0
+      color: '#3A2516'
+    rotation: -14
+  - elementId: s5
+    elementType: shape
+    bounds:
+      - 520
+      - 258
+      - 380
+      - 32
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#3D9F47'
+    border:
+      width: 0
+      color: '#3A2516'
+    rotation: -14
+  - elementId: s6
+    elementType: shape
+    bounds:
+      - 520
+      - 294
+      - 380
+      - 32
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#3F8BC4'
+    border:
+      width: 0
+      color: '#3A2516'
+    rotation: -14
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 48
+      - 140
+      - 445
+      - 170
+    content:
+      text: T—26
+      fontFamily: &ref_0
+        latin: Arial Narrow
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 99
+      color: '#3A2516'
+      lineHeight: 1.12
+      bold: true
+  - elementId: s8
+    elementType: shape
+    bounds:
+      - 48
+      - 382
+      - 412
+      - 65
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E54489'
+    border:
+      width: 0
+      color: '#3A2516'
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 62
+      - 390
+      - 382
+      - 51
+    content:
+      text: 超级目录
+      fontFamily: *ref_0
+      fontSize: 36
+      color: '#F1E6CB'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t10
+    elementType: text
+    bounds:
+      - 48
+      - 506
+      - 760
+      - 16
+    content:
+      text: 自编示例
+      fontFamily: *ref_1
+      fontSize: 9
+      color: '#3A2516'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t11
+    elementType: text
+    bounds:
+      - 870
+      - 503
+      - 40
+      - 20
+    content:
+      text: '01'
+      fontFamily: *ref_1
+      fontSize: 11
+      color: '#3A2516'
+      lineHeight: 1.12
+      bold: false

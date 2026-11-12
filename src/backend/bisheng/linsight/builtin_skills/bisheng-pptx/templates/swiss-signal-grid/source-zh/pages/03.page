@@ -1,0 +1,511 @@
+pageType: evidence
+background:
+  type: solid
+  color: $paper
+elements:
+  - elementId: scale-index-field
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 52
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: scale-red-tab
+    elementType: shape
+    bounds:
+      - 52
+      - 0
+      - 10
+      - 116
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: scale-rule-top
+    elementType: line
+    bounds:
+      - 80
+      - 42
+      - 808
+      - 1
+    viewBox:
+      - 808
+      - 1
+    points: 0,0 808,0
+    border:
+      color: $black
+      width: 1.2
+  - elementId: scale-baseline
+    elementType: line
+    bounds:
+      - 100
+      - 418
+      - 566
+      - 1
+    viewBox:
+      - 566
+      - 1
+    points: 0,0 566,0
+    border:
+      color: $black
+      width: 1.1
+  - elementId: scale-bar-2020
+    elementType: shape
+    bounds:
+      - 116
+      - 278
+      - 76
+      - 140
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: scale-bar-2021
+    elementType: shape
+    bounds:
+      - 224
+      - 238
+      - 76
+      - 180
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#FFFFFF00'
+    border:
+      color: $red
+      width: 1
+      style: dash
+  - elementId: scale-bar-2022
+    elementType: shape
+    bounds:
+      - 332
+      - 236
+      - 76
+      - 182
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: scale-bar-2023
+    elementType: shape
+    bounds:
+      - 440
+      - 212
+      - 76
+      - 206
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: scale-bar-2024
+    elementType: shape
+    bounds:
+      - 548
+      - 184
+      - 76
+      - 234
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: scale-growth-rule
+    elementType: line
+    bounds:
+      - 700
+      - 190
+      - 162
+      - 1
+    viewBox:
+      - 162
+      - 1
+    points: 0,0 162,0
+    border:
+      color: $red
+      width: 2
+  - elementId: scale-index
+    elementType: text
+    bounds:
+      - 10
+      - 432
+      - 32
+      - 78
+    rotation: 270
+    content:
+      text: 03 / SCALE
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: scale-kicker
+    elementType: text
+    bounds:
+      - 80
+      - 54
+      - 500
+      - 18
+    content:
+      text: SCALE / 2020—2024
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $red
+  - elementId: scale-title
+    elementType: text
+    bounds:
+      - 80
+      - 78
+      - 808
+      - 42
+    content:
+      style: $title
+      text: 四年增长约 67%，规模曲线进入稳健扩张段
+  - elementId: scale-lead
+    elementType: text
+    bounds:
+      - 80
+      - 126
+      - 808
+      - 24
+    content:
+      style: $lead
+      text: 2024 年更新统计为 2.71 万亿元，同比增长 14.0%
+  - elementId: scale-value-2020
+    elementType: text
+    bounds:
+      - 112
+      - 244
+      - 84
+      - 26
+    content:
+      text: '1.62'
+      fontFamily: *ref_0
+      fontSize: 22
+      bold: true
+      color: $black
+      align:
+        - center
+        - bottom
+  - elementId: scale-value-2021
+    elementType: text
+    bounds:
+      - 220
+      - 194
+      - 84
+      - 32
+    content:
+      text: —
+      fontFamily: *ref_0
+      fontSize: 26
+      bold: true
+      color: $red
+      align:
+        - center
+        - bottom
+  - elementId: scale-value-2022
+    elementType: text
+    bounds:
+      - 328
+      - 202
+      - 84
+      - 26
+    content:
+      text: '2.11'
+      fontFamily: *ref_0
+      fontSize: 22
+      bold: true
+      color: $black
+      align:
+        - center
+        - bottom
+  - elementId: scale-value-2023
+    elementType: text
+    bounds:
+      - 436
+      - 178
+      - 84
+      - 26
+    content:
+      text: '2.38'
+      fontFamily: *ref_0
+      fontSize: 22
+      bold: true
+      color: $black
+      align:
+        - center
+        - bottom
+  - elementId: scale-value-2024
+    elementType: text
+    bounds:
+      - 544
+      - 150
+      - 84
+      - 26
+    content:
+      text: '2.71'
+      fontFamily: *ref_0
+      fontSize: 22
+      bold: true
+      color: $red
+      align:
+        - center
+        - bottom
+  - elementId: scale-year-2020
+    elementType: text
+    bounds:
+      - 112
+      - 430
+      - 84
+      - 18
+    content:
+      text: '2020'
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      color: $black
+      align:
+        - center
+        - top
+  - elementId: scale-year-2021
+    elementType: text
+    bounds:
+      - 220
+      - 430
+      - 84
+      - 18
+    content:
+      text: '2021'
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      color: $red
+      align:
+        - center
+        - top
+  - elementId: scale-year-2022
+    elementType: text
+    bounds:
+      - 328
+      - 430
+      - 84
+      - 18
+    content:
+      text: '2022'
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      color: $black
+      align:
+        - center
+        - top
+  - elementId: scale-year-2023
+    elementType: text
+    bounds:
+      - 436
+      - 430
+      - 84
+      - 18
+    content:
+      text: '2023'
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      color: $black
+      align:
+        - center
+        - top
+  - elementId: scale-year-2024
+    elementType: text
+    bounds:
+      - 544
+      - 430
+      - 84
+      - 18
+    content:
+      text: '2024'
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      color: $red
+      align:
+        - center
+        - top
+  - elementId: scale-yoy-2020
+    elementType: text
+    bounds:
+      - 112
+      - 452
+      - 84
+      - 16
+    content:
+      text: +25.7%
+      fontFamily: *ref_0
+      fontSize: 9.5
+      color: $gray
+      align:
+        - center
+        - top
+  - elementId: scale-yoy-2021
+    elementType: text
+    bounds:
+      - 208
+      - 452
+      - 108
+      - 30
+    content:
+      text: 口径冲突<br>不展示
+      fontFamily: *ref_0
+      fontSize: 8.5
+      lineHeight: 1.1
+      color: $red
+      align:
+        - center
+        - top
+  - elementId: scale-yoy-2022
+    elementType: text
+    bounds:
+      - 328
+      - 452
+      - 84
+      - 16
+    content:
+      text: +9.8%
+      fontFamily: *ref_0
+      fontSize: 9.5
+      color: $gray
+      align:
+        - center
+        - top
+  - elementId: scale-yoy-2023
+    elementType: text
+    bounds:
+      - 436
+      - 452
+      - 84
+      - 16
+    content:
+      text: +15.6%
+      fontFamily: *ref_0
+      fontSize: 9.5
+      color: $gray
+      align:
+        - center
+        - top
+  - elementId: scale-yoy-2024
+    elementType: text
+    bounds:
+      - 544
+      - 452
+      - 84
+      - 16
+    content:
+      text: +14.0%
+      fontFamily: *ref_0
+      fontSize: 9.5
+      color: $red
+      align:
+        - center
+        - top
+  - elementId: scale-growth
+    elementType: text
+    bounds:
+      - 700
+      - 202
+      - 164
+      - 84
+    content:
+      text: 67%
+      fontFamily:
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 66
+      bold: true
+      letterSpacing: -1.8
+      color: $red
+  - elementId: scale-growth-note
+    elementType: text
+    bounds:
+      - 704
+      - 292
+      - 158
+      - 54
+    content:
+      text: 2024 较 2020<br>规模增幅（约）
+      fontFamily: *ref_0
+      fontSize: 13
+      bold: true
+      lineHeight: 1.25
+      color: $black
+  - elementId: scale-judgment
+    elementType: text
+    bounds:
+      - 704
+      - 370
+      - 160
+      - 56
+    content:
+      text: 管理判断<br>行业仍处扩张期，增长质量开始取代单纯增量。
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.28
+      color: $gray
+  - elementId: scale-source
+    elementType: text
+    bounds:
+      - 80
+      - 512
+      - 720
+      - 12
+    content:
+      text: 来源：商务部《中国电子商务报告 2022》及 2023、2024 年公开统计；2021 因 1.92 与修订后 1.98 口径冲突留空。
+      fontFamily: *ref_0
+      fontSize: 8.2
+      color: $gray
+  - elementId: scale-page
+    elementType: text
+    bounds:
+      - 856
+      - 510
+      - 32
+      - 12
+    content:
+      text: '03'
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $black
+      align:
+        - right
+        - bottom

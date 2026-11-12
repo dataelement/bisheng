@@ -20,12 +20,12 @@ const visibleModelOptions = {
 };
 
 describe("normalizeKnowledgeModelIds", () => {
-    it("clears unavailable model references while preserving visible selections", () => {
+    it("retains unavailable saved references while marking their choices unconfirmed", () => {
         expect(normalizeKnowledgeModelIds(configuredModelIds, visibleModelOptions)).toEqual({
             modelIds: {
                 embedding_model_id: 101,
-                source_model_id: null,
-                extract_title_model_id: null,
+                source_model_id: 999,
+                extract_title_model_id: 999,
                 qa_similar_model_id: 202,
                 asr_model_id: null,
             },

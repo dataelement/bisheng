@@ -98,6 +98,71 @@ __KB_RESEARCH_LINE__
 __CITATION_HANDOFF_LINE__
 请全程使用与任务描述一致的语言（默认简体中文）——这**包括你的思考与推理过程（thinking）**、调研旁白与最终回传，绝不允许“用英文思考、再用中文回传”。"""
 
+# F013: the data-analyst subagent (NL2SQL). Assembled IFF bisheng_code_interpreter
+# is bound — the executor is the only way it can reach a database. Connection
+# details live in a skill's SKILL.md; the MAIN graph (which sees the mounted skill
+# list) names that path in the task description, so this subagent mounts no skills
+# middleware of its own. __CODE_INTERPRETER_RULES__ is the main prompt's executor
+# section (_CODE_INTERPRETER_RULES_ZH), so the two never drift.
+_DATA_ANALYST_NAME = "data-analyst"
+_DATA_ANALYST_PROMPT_TEMPLATE_ZH = """你是数据分析子代理（data-analyst）。你的职责是按主智能体派发的**单一**数据问题，连接业务数据库查询、统计和出图，并把结论交回主智能体。
+
+工作约定：
+- 先用 read_file 读 description 指定的 SKILL.md（传 limit=1000 一次读完），按其中的连接方式、库表说明和业务口径工作。description 没有给出连接方式的来源时，不要猜测或编造连接信息，直接在最后一条消息说明缺少连接方式。
+- 凭据文件：技能把口令等凭据放在它的 secrets/ 目录下（SKILL.md 会写明文件名）。这个目录文件工具读不到，只能在 bisheng_code_interpreter 的代码里用 open("skills/<技能名>/secrets/<文件>") 读取，读出后直接用于建立连接。
+- 只读：只执行 SELECT，以及 SHOW / DESCRIBE / EXPLAIN 这类只读语句；禁止 INSERT / UPDATE / DELETE / REPLACE / MERGE / CREATE / ALTER / DROP / TRUNCATE / GRANT 等任何写操作或结构变更。
+- 先探结构再写查询：先列出相关的表、字段和几行样例，确认字段含义和口径后再写 SQL。表名和字段名一律以实际查到的结构为准，不要臆造。
+- 每条 SQL 执行前先自查：表和字段是否存在，JOIN 条件、过滤条件、时间范围是否符合口径，聚合与分组是否一致；大表先聚合或加 LIMIT。执行报错时按报错修正后重试；同一个查询连续失败 3 次就停止，在最后一条消息里说明失败原因。
+- 用 bisheng_code_interpreter 里的 Python 连接数据库（pymysql、sqlalchemy、pandas 可用）。
+- 文件位置：中间产物（查询结果、探索输出、草图）一律写到 description 指定的 scratch/<目录>/ 下，代码里写出完整相对路径（如 scratch/sales/q1.csv）。写到工作目录顶层的新文件会被自动当成交付物，不要这样写。只有确定进入最终报告的图表才写到 output/ 下，数量要节制。
+- 大结果：查询结果写成 CSV 文件，代码只 print 行数、列名和前若干行；需要细看时用 read_file 分段读 CSV。不要把同一个查询重新执行一遍。
+- 歧义：能用合理默认口径补齐的，直接采用，并在结论里写明假设。只有靠查库和读技能都无法消除、且只有用户知道的歧义（例如两个同名指标口径不同、时间范围会决定结论方向），才停止查询，最后一条消息只写如下格式，每个问题给 2-4 个候选项：
+  NEED_CLARIFICATION:
+  1. <问题>（候选：<选项A> / <选项B>）
+- 你**没有** ask_user 工具，也不得以任何其它方式向用户提问。
+- 最终交付物的撰写与拼装由主智能体负责，你只交回数据与结论。
+- 调用方（主智能体）只能看到你的**最后一条消息**。最后一条消息必须包含：结论与关键数字、执行过的关键 SQL（放在代码块里）、所有产出文件的路径（scratch/ 与 output/ 分开列出）、所做的假设。不要在最后一条消息里粘贴大段原始数据。
+- 口令、密钥等凭据只在代码里使用：不要写进最后一条消息、笔记文件、print 输出或 SQL 注释。
+
+__CODE_INTERPRETER_RULES__请全程使用与任务描述一致的语言（默认简体中文）——这**包括你的思考与推理过程（thinking）**、分析旁白与最终回传，绝不允许“用英文思考、再用中文回传”。"""
+
+# Main-prompt lines for the data-analyst, resolved IFF it is assembled (lockstep).
+# The NEED_CLARIFICATION handling differs for unattended runs, which have no
+# ask_user: the unattended variant must not mention it at all.
+_DATA_ANALYST_EXEC_HEAD_ZH = (
+    '   - 【查业务数据库】问题需要查询业务数据库时，用 task 委派给 "data-analyst" 子代理：'
+    "它只读连接数据库，在代码执行器里执行 SELECT、统计和出图，交回结论、关键数字、执行过的 SQL 和文件路径。"
+    "{source}description 必须写明：要回答的问题、{source_field}、已知口径（时间范围、指标定义、用户已经给出的答案）、"
+    "允许查询的范围与是否需要出图，以及该子代理的中间产物目录 scratch/<子任务短名>/。"
+    "找不到连接方式时不要委派，也不要猜测连接信息。"
+    "description 只写连接方式所在的路径，不要把口令、密钥等凭据抄进 description、待办或回复——这些文字会显示在任务步骤里；"
+    "技能 secrets/ 目录下的凭据文件由子代理在代码里读取，你不要打开它。"
+    "它交回的图表要进入交付物时，直接引用它给出的 output/ 路径。\n"
+)
+_DATA_ANALYST_SOURCE_SKILLS_ZH = (
+    "委派前先在“可用技能”里找出写有该数据库连接方式的技能。",
+    "该技能的路径 /skills/<技能名>/SKILL.md",
+)
+_DATA_ANALYST_SOURCE_PLAIN_ZH = (
+    "委派前先确认连接方式写在哪里（例如用户上传的说明文件）。",
+    "写有连接方式的文件路径",
+)
+_DATA_ANALYST_CLARIFY_ZH = (
+    "     · 子代理返回以 NEED_CLARIFICATION: 开头的问题时，按第 0 步「何时提问」的原则判断："
+    "确有必要就把这些问题转成 ask_user 的 questions 问用户，拿到答案后写进新的 description 重新委派；"
+    "没有必要问就选定最合理的假设，写进新的 description 重新委派，并在交付物里写明假设。"
+    "不要把 NEED_CLARIFICATION 当作最终结果。\n"
+)
+_DATA_ANALYST_CLARIFY_UNATTENDED_ZH = (
+    "     · 子代理返回以 NEED_CLARIFICATION: 开头的问题时，不得停下等待：选择最合理的候选项作为假设，"
+    "写进新的 description 重新委派，并在最终回复的「所做假设」中写明。"
+    "不要把 NEED_CLARIFICATION 当作最终结果。\n"
+)
+_DATA_ANALYST_TOOL_LINE_ZH = (
+    '- task(description, subagent_type="data-analyst")：把查询业务数据库的子任务委派给只读的数据分析子代理；'
+    "description 的写法见第 2 步「查业务数据库」。\n"
+)
+
 # Chinese system prompt for the Linsight task-mode agent (design §2.4). Kept
 # inline so it stays co-located with the factory. No call_reason schema is
 # injected — step titles come from deepagents' native tool output (the frontend
@@ -126,15 +191,15 @@ _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH = """你是深度研究任务智能体，负
    - 同一轮内不要调用任何其它工具（连 write_todos 也不行）；
    - 待 ask_user 返回用户答案后，再进入第 1 步，并据此设定任务范围与做法。
    能用下方“默认假设”合理补齐的不要问——只问“只有用户知道、且不问就会做错”的关键缺口。
-   【整个会话最多澄清一轮】：用户回答后若仍有个别字段不明确，直接采用“默认假设”推进，绝不第二次调用 ask_user。
-   ask_user 必须由你本人（主智能体）在主流程中直接调用；所有澄清必须在创建任何子任务（task）之前一次性问完，严禁通过 task 工具/子代理调用 ask_user（子代理没有 ask_user，无法向用户提问）。
+   【何时提问】提问不限次数，但只在确有必要时打扰用户：缺的信息只有用户知道，而且按默认假设大概率会做错、或做错后返工代价大，才调用 ask_user；能用默认假设补齐、能从上下文或数据推断、或者做错代价小的，直接采用假设推进，并在交付物里写明所做假设。同一时刻有多个缺口时合并成一次提问；用户已经回答过的问题不要再问，回答后仍有个别细节不明确时按默认假设推进。
+   ask_user 必须由你本人（主智能体）直接调用，严禁通过 task 工具/子代理调用 ask_user（子代理没有 ask_user，无法向用户提问）。开工前就能确定的缺口，在第 0 步一次问完；执行中才暴露的缺口，按上面的原则判断后可以在执行中提问。
 
 1. 【规划】调用 write_todos 写出有编号的待办清单（通常 3-6 项，含一个“产出交付物”收尾项）。
 
 2. 【执行】按清单逐项推进，选用合适工具：
 __SKILL_EXEC_LINE____KB_EXEC_LINE__
    - 对“独立、需多轮检索/阅读、产出可蒸馏为一段摘要”的子任务，可用 task 委派给 "general-purpose" 子代理做隔离调研（它在独立上下文检索/阅读，只把蒸馏后的有出处摘要回传给你）。
-   - 【多份资料按份委派】当资料（上传文件、知识库文档或调研对象）有 3 份及以上、每份都需要多轮阅读、且各份结论彼此独立、最后才汇总时，优先按份委派：一份资料对应一个 task。资料篇幅短，或者必须交叉比对才能得出结论时，由你自己阅读，不委派。
+__DATA_ANALYST_EXEC_LINE__   - 【多份资料按份委派】当资料（上传文件、知识库文档或调研对象）有 3 份及以上、每份都需要多轮阅读、且各份结论彼此独立、最后才汇总时，优先按份委派：一份资料对应一个 task。资料篇幅短，或者必须交叉比对才能得出结论时，由你自己阅读，不委派。
      · 同一轮最多同时发出 5 个 task；资料更多时，等这一批返回后再发下一批。
      · 每个 description 写明：资料路径或标识、要提取的字段或要回答的问题、返回格式，以及该子代理的笔记目录 scratch/<子任务短名>/；各子代理的笔记目录不得重名。
      · 汇总时先根据各子代理交回的摘要撰写交付物；需要细节时用 read_file 读对应笔记，不要回头重读原始资料。
@@ -151,7 +216,7 @@ __SKILL_DELIVERABLE_LINE__   - 3a__MD_DELIVERABLE_CONDITION__：write_file 写 o
 
 4. 【收尾】用 1-2 句话概括交付物的核心内容或结论（例如“已梳理出近一年的市场变化并给出三条关键建议”）；不要复述文件名、工作区路径（如 output/…）或“已完成”之类的状态字样——完成状态与可下载的文件由界面单独呈现，正文里无需重复。
 
-# 如何填写 ask_user（仅第 0 步触发时）
+# 如何填写 ask_user
 
 - reason：一句话说明为何需要先确认，使用与用户输入一致的语言。
 - questions：数量由实际缺口决定（**不能为空数组**）——有几个“只有用户知道、且不问就会做错”的缺口就问几个，不设固定数目：需求清楚时问 1 个即可，待确认项多时就多问几个，不要为凑数而问，也不要因为怕问多而漏掉关键缺口。按“对结果影响最大”优先排序（任务范围/目标 > 输出格式/形态 > 其它细节）。questions 是一个对象数组，每个对象有三个字段：question（字符串，完整问题文本）、options（字符串数组，预设选项）、multiple（布尔值，true 为多选）。
@@ -172,14 +237,14 @@ __SKILL_DELIVERABLE_LINE__   - 3a__MD_DELIVERABLE_CONDITION__：write_file 写 o
 
 # 你可用的工具
 
-- ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。
+- ask_user(reason, questions)：向用户澄清；只在确有必要时调用，不限次数（判断原则见第 0 步「何时提问」）。
 - write_todos(todos)：维护有编号的待办清单；只翻转 status，不改写已有文案。
 __KB_TOOL_LINE__- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。read_file 支持 offset/limit 分块读取大文件；grep 可在整个工作区按关键字定位内容，按字面匹配、不支持正则；要同时搜几个关键词，用 | 分隔写在同一次 grep 里（如 "营业收入|售电收入"，任一命中即返回）。修改已写好的文件用 edit_file 做局部替换：old_string 取能唯一定位的最短片段，不要把整页、整节作为 old_string / new_string 重写；统一调整字号、间距等样式时改 <style> 里的 CSS 规则，不要逐页改 HTML 正文。
 - export_docx(source_path, dest_path)：把 output/ 下的 markdown 转 Word(.docx)，必须在对应 .md 写好之后。
 - export_pdf(source_path, dest_path)：把 output/ 下的 markdown 转 PDF，必须在对应 .md 写好之后。
 - check_html(path)：检查 output/ 下的 html 能否在离线环境和预览框里正常显示，写完 html 后调用。
 - task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理。description 必须自包含——子代理看不到你的对话历史与上下文，只能读到 description，因此完成该子任务所需的全部背景、目标、约束与必要标识都要写进去；按份委派时还要指定该子代理在 scratch/ 下的笔记目录；不得委派最终交付物撰写，也不得委派“问用户/澄清”。
-
+__DATA_ANALYST_TOOL_LINE__
 # 超大工具结果
 
 某次工具结果过大时，系统会把它存入 /large_tool_results/<tool_call_id>，只在回复里保留开头片段。
@@ -303,9 +368,11 @@ class _CitationTailMiddleware(_LanguageTailMiddleware):
 # them fails loudly in tests instead of silently leaving ask_user advertised.
 _CLARIFY_STEP_START = "0. 【先澄清，再动手】"
 _CLARIFY_STEP_END = "1. 【规划】"
-_ASK_USER_RULES_START = "# 如何填写 ask_user（仅第 0 步触发时）"
+_ASK_USER_RULES_START = "# 如何填写 ask_user"
 _ASK_USER_RULES_END = "# 默认假设（无需追问，缺失时直接采用）"
-_ASK_USER_TOOL_LINE = "- ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。\n"
+_ASK_USER_TOOL_LINE = (
+    "- ask_user(reason, questions)：向用户澄清；只在确有必要时调用，不限次数（判断原则见第 0 步「何时提问」）。\n"
+)
 _CLARIFIED_FORMAT_PHRASE = "按用户在澄清时选择的输出格式产出"
 _CLARIFY_WORTH_LINE = "- 仅当信息“只有用户本人才知道、且影响结果正确性”时才值得澄清。\n"
 _UNATTENDED_STEP_ZH = (
@@ -352,6 +419,47 @@ def _with_caller_instructions(prompt: str, instructions: str | None) -> str:
     )
 
 
+# Code-interpreter usage rules, shared by the main prompt and the data-analyst
+# subagent (both bind bisheng_code_interpreter). One constant so the two never
+# drift; each caller still gates it on the executor actually being bound.
+_CODE_INTERPRETER_RULES_ZH = (
+    "# 工作区路径（同一份文件的两种写法）\n\n"
+    "- 文件工具（ls / read_file / write_file / edit_file / export_*）用**带前导斜杠**的工作区路径："
+    "/output/x.md、/scratch/x.png、/uploads/x.xlsx、/skills/<name>/SKILL.md；不带斜杠的相对写法等价。\n"
+    "- bisheng_code_interpreter 的**当前工作目录就是工作区根**，代码里一律用**去掉前导斜杠**的相对路径："
+    'open("skills/<name>/assets/t.html")、plt.savefig("output/chart.png")。'
+    '写成 open("/skills/…") / open("/output/…") 会落到容器根目录——读必然 FileNotFoundError，'
+    "写会被丢弃、进不了交付。\n"
+    "- 反向同理：**不要**把代码里看到的宿主机绝对路径（形如 /root/.cache/…/<8位任务号>/output/a.png）"
+    "传给 read_file / edit_file，去掉前缀只传 output/a.png。\n"
+    "- 执行器写完会把本轮产出同步到工作区，随后 ls / glob 一般就能看到它们。"
+    "exitcode 0 且 file_list 出现目标文件代表文件已产出，接下来按用户要求验收内容与功能。"
+    "Excel 的公式、计算结果和格式，Word/PPT 的可编辑结构与排版，均以实际文件检查为准。"
+    "用户要求的公式应保留并重算缓存值；验收脚本报告 ERROR 时先修复再检查。"
+    "最终使用 file_list 返回的 /output/ 路径引用交付文件，由平台提供预览和下载。\n"
+    "- 调用技能中的辅助函数前先读取对应定义或检查函数签名，按真实参数调用。"
+    "通过 subprocess.run 启动生成和验收脚本时使用 check=True，并读取 stdout/stderr；"
+    "子进程失败时先根据异常修复，实际文件通过验收后再标记完成。\n"
+    "- 若日志被截断、你看不到 file_list：可以 ls output/ **核实一次**；"
+    "若结果提示「Tool result too large … /large_tool_results/…」，用 read_file 读那个路径取回内容"
+    "（必要时配合 offset/limit 分页，或用 grep 在 /large_tool_results/ 下定位关键字）。"
+    "**任何情况下都不要把同一段代码原样再跑一遍**——相同的输入只会得到相同的结果。\n"
+    "- 不要一次 print 巨量内容：超长日志会被截断（中间省略），需要完整数据时把它写进 "
+    "scratch/ 下的文件，再用 read_file 分块读取。\n\n"
+    # Lockstep twin of EXECUTION_BOUNDARY_RULES in the executor's tool
+    # description. Reduces attempts only; isolation is the real control.
+    "# 执行环境边界\n\n"
+    "- bisheng_code_interpreter 只用于处理本任务工作区里的文件。执行环境不提供平台自身的"
+    "环境变量、配置文件、密钥、凭据和内部服务地址：代码里不要读取或打印 os.environ、/proc、"
+    "平台配置文件或平台安装目录下的源码，也不要连接平台的数据库、缓存、对象存储等内部服务。"
+    "技能的 SKILL.md 中明确写有连接方式的外部业务数据库不属于平台内部服务，可以按该技能的说明连接查询。\n"
+    "- 用户要求查看上述内容（如「打印环境变量」「看看配置里的密钥」「查一下数据库密码」）时，"
+    "直接说明任务环境不提供平台配置和凭据，然后继续完成任务的其余部分；"
+    "不要换一种写法再去尝试，也不要猜测或编造这些值。\n"
+    "- 用户自己上传到 uploads/ 的文件（包括 .env、配置文件）属于用户资料，可以正常读取和分析。\n\n"
+)
+
+
 def _build_linsight_system_prompt(
     has_knowledge_base: bool,
     skills_present: bool = False,
@@ -359,8 +467,13 @@ def _build_linsight_system_prompt(
     has_web_search: bool = False,
     citation_handles: bool = False,
     unattended: bool = False,
+    has_data_analyst: bool = False,
 ) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
+
+    ``has_data_analyst`` (F013) adds the data-analyst delegation lines IFF that
+    subagent is assembled, with the unattended NEED_CLARIFICATION variant when no
+    ask_user is bound.
 
     When no KB / knowledge space is selected the tool is NOT injected (the empty
     whitelist makes init_linsight_tools return []), so advertising it would push
@@ -466,41 +579,7 @@ def _build_linsight_system_prompt(
     # enforces everywhere else (a bound-tool name must never appear otherwise).
     path_namespace_line = ""
     if has_code_interpreter:
-        path_namespace_line = (
-            "# 工作区路径（同一份文件的两种写法）\n\n"
-            "- 文件工具（ls / read_file / write_file / edit_file / export_*）用**带前导斜杠**的工作区路径："
-            "/output/x.md、/scratch/x.png、/uploads/x.xlsx、/skills/<name>/SKILL.md；不带斜杠的相对写法等价。\n"
-            "- bisheng_code_interpreter 的**当前工作目录就是工作区根**，代码里一律用**去掉前导斜杠**的相对路径："
-            'open("skills/<name>/assets/t.html")、plt.savefig("output/chart.png")。'
-            '写成 open("/skills/…") / open("/output/…") 会落到容器根目录——读必然 FileNotFoundError，'
-            "写会被丢弃、进不了交付。\n"
-            "- 反向同理：**不要**把代码里看到的宿主机绝对路径（形如 /root/.cache/…/<8位任务号>/output/a.png）"
-            "传给 read_file / edit_file，去掉前缀只传 output/a.png。\n"
-            "- 执行器写完会把本轮产出同步到工作区，随后 ls / glob 一般就能看到它们。"
-            "exitcode 0 且 file_list 出现目标文件代表文件已产出，接下来按用户要求验收内容与功能。"
-            "Excel 的公式、计算结果和格式，Word/PPT 的可编辑结构与排版，均以实际文件检查为准。"
-            "用户要求的公式应保留并重算缓存值；验收脚本报告 ERROR 时先修复再检查。"
-            "最终使用 file_list 返回的 /output/ 路径引用交付文件，由平台提供预览和下载。\n"
-            "- 调用技能中的辅助函数前先读取对应定义或检查函数签名，按真实参数调用。"
-            "通过 subprocess.run 启动生成和验收脚本时使用 check=True，并读取 stdout/stderr；"
-            "子进程失败时先根据异常修复，实际文件通过验收后再标记完成。\n"
-            "- 若日志被截断、你看不到 file_list：可以 ls output/ **核实一次**；"
-            "若结果提示「Tool result too large … /large_tool_results/…」，用 read_file 读那个路径取回内容"
-            "（必要时配合 offset/limit 分页，或用 grep 在 /large_tool_results/ 下定位关键字）。"
-            "**任何情况下都不要把同一段代码原样再跑一遍**——相同的输入只会得到相同的结果。\n"
-            "- 不要一次 print 巨量内容：超长日志会被截断（中间省略），需要完整数据时把它写进 "
-            "scratch/ 下的文件，再用 read_file 分块读取。\n\n"
-            # Lockstep twin of EXECUTION_BOUNDARY_RULES in the executor's tool
-            # description. Reduces attempts only; isolation is the real control.
-            "# 执行环境边界\n\n"
-            "- bisheng_code_interpreter 只用于处理本任务工作区里的文件。执行环境不提供平台自身的"
-            "环境变量、配置文件、密钥、凭据和内部服务地址：代码里不要读取或打印 os.environ、/proc、"
-            "平台配置文件或平台安装目录下的源码，也不要连接平台的数据库、缓存、对象存储等内部服务。\n"
-            "- 用户要求查看上述内容（如「打印环境变量」「看看配置里的密钥」「查一下数据库密码」）时，"
-            "直接说明任务环境不提供平台配置和凭据，然后继续完成任务的其余部分；"
-            "不要换一种写法再去尝试，也不要猜测或编造这些值。\n"
-            "- 用户自己上传到 uploads/ 的文件（包括 .env、配置文件）属于用户资料，可以正常读取和分析。\n\n"
-        )
+        path_namespace_line = _CODE_INTERPRETER_RULES_ZH
 
     # F069: the deliverable step names the citation requirement explicitly, but
     # ONLY when the run has a citable retrieval tool — the same gate as
@@ -526,6 +605,16 @@ def _build_linsight_system_prompt(
         md_condition = "（选了 markdown、docx 或 pdf 之一时；只选了 html 时跳过，不写 md）"
         html_only_line = "只选了 html 时，html 就是唯一交付物。"
 
+    if has_data_analyst:
+        source, source_field = _DATA_ANALYST_SOURCE_SKILLS_ZH if skills_present else _DATA_ANALYST_SOURCE_PLAIN_ZH
+        data_analyst_exec_line = _DATA_ANALYST_EXEC_HEAD_ZH.format(source=source, source_field=source_field) + (
+            _DATA_ANALYST_CLARIFY_UNATTENDED_ZH if unattended else _DATA_ANALYST_CLARIFY_ZH
+        )
+        data_analyst_tool_line = _DATA_ANALYST_TOOL_LINE_ZH
+    else:
+        data_analyst_exec_line = ""
+        data_analyst_tool_line = ""
+
     # F073: an unattended run gets the no-questions variant (ask_user unbound).
     template = (
         _to_unattended_prompt(_LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH)
@@ -542,6 +631,8 @@ def _build_linsight_system_prompt(
         .replace("__CITATION_DELIVERABLE_LINE__", citation_deliverable_line)
         .replace("__MD_DELIVERABLE_CONDITION__", md_condition)
         .replace("__HTML_ONLY_LINE__", html_only_line)
+        .replace("__DATA_ANALYST_EXEC_LINE__", data_analyst_exec_line)
+        .replace("__DATA_ANALYST_TOOL_LINE__", data_analyst_tool_line)
     )
 
 
@@ -1200,6 +1291,43 @@ def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool
     }
 
 
+def _data_analyst_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
+    """ALLOW-list for the data-analyst: the code interpreter only.
+
+    Unlike the researcher's deny-list, retrieval / web / MCP tools would only
+    distract a database task. The framework file tools (ls / read_file /
+    write_file / edit_file / glob / grep) and write_todos still come from the
+    subagent's own middleware stack, as for the researcher.
+    """
+    return [t for t in tools if getattr(t, "name", None) == CODE_INTERPRETER_TOOL]
+
+
+def _build_data_analyst_subagent(tools: Sequence[BaseTool]) -> dict | None:
+    """F013: the read-only data-analyst subagent spec, or None without an executor.
+
+    Same safety basis as the researcher: explicit ``tools`` (never ask_user), no
+    ``model`` / ``permissions`` / ``interrupt_on`` keys, so it has no interrupt
+    source. Without bisheng_code_interpreter it cannot reach a database at all,
+    so it is not assembled and the main prompt does not mention it.
+    """
+    sub_tools = _data_analyst_tools(tools)
+    if not sub_tools:
+        return None
+    return {
+        "name": _DATA_ANALYST_NAME,
+        "description": (
+            "用于查询业务数据库的数据分析子任务：读取调用方指定的 SKILL.md 获取连接方式与口径，"
+            "在代码执行器中只读执行 SELECT、统计与出图，返回结论、关键数字、执行过的 SQL 和文件路径。"
+            "调用方必须在描述中写明问题、技能路径、口径与 scratch 目录。"
+            "它不能向用户提问，遇到只有用户知道的歧义时返回 NEED_CLARIFICATION；也不负责最终交付物。"
+        ),
+        "system_prompt": _DATA_ANALYST_PROMPT_TEMPLATE_ZH.replace(
+            "__CODE_INTERPRETER_RULES__", _CODE_INTERPRETER_RULES_ZH
+        ),
+        "tools": sub_tools,
+    }
+
+
 # Appended to a 可用技能 row. Not written into SKILL.md.
 SKILL_SELECTED_NOTE = "用户选中了这个技能"
 SKILL_TOOL_UNAVAILABLE_NOTE = "该技能需要的工具当前不可用"
@@ -1486,9 +1614,10 @@ async def create_linsight_agent(
     # because the citation tail middleware below needs the same gate.
     has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
     has_web = any(_is_web_citation_tool(t) for t in tools)
-    # Built here (not with the rest of the researcher stack below) because the
+    # Built here (not with the rest of the subagent stacks below) because the
     # main graph's subagent-overflow handler draws from its degrade allowance.
-    researcher_resilience = build_resilience_middleware(linsight_conf, is_subagent=True)
+    # One instance shared by every subagent (researcher, data-analyst).
+    subagent_resilience = build_resilience_middleware(linsight_conf, is_subagent=True)
     middlewares: list = [
         # F087 P1: BiSheng summarization replaces the framework's (design decision
         # 7). FIRST in the list = outermost, so it wraps resilience the way the
@@ -1500,7 +1629,7 @@ async def create_linsight_agent(
         LinsightBasePromptMiddleware(),
         # F087: a `task` call whose subagent stayed over the context window after
         # compression comes back as a tool result instead of failing the task.
-        SubagentContextOverflowMiddleware(researcher_resilience, context_window),
+        SubagentContextOverflowMiddleware(subagent_resilience, context_window),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
         # F087 P1: one tool result <= 10% of the usable input (known windows only).
@@ -1607,34 +1736,41 @@ async def create_linsight_agent(
     researcher = _build_researcher_subagent(tools, citation_handles=citation_handles)
     researcher_tools = researcher.get("tools") or []
     researcher_citable = any(t.name == _KB_TOOL_NAME or _is_web_citation_tool(t) for t in researcher_tools)
-    researcher["middleware"] = [
-        # Same summarization (own instance) outermost on the subagent's graph.
-        *_summarization(model, backend, context_window),
-        researcher_resilience,
-        # Same tool-loop breaker on the subagent's own graph (its tool calls run in
-        # a separate subgraph the main-graph middleware never wraps).
-        build_tool_loop_breaker_middleware(linsight_conf, is_subagent=True),
-        # The researcher owns read_file too, and its subgraph is likewise outside
-        # the main-graph middleware — without its own pair of guards a subagent
-        # reading an original would fail the whole task. It sees the same code
-        # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
-        # carries over; revisit if it is ever added to that deny list.
-        *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
-        # Same per-result budget on the subagent's graph, at the same depth as the main graph's.
-        *_result_budget(backend, context_window),
-        # F069 P1: the researcher gets the source table too (no nudge — it does
-        # not write deliverables).
-        *(_researcher_source_middleware(citation_scope) if (citation_handles and researcher_citable) else []),
-        # F069: same citation tail on the researcher's own stack, same gate.
-        *([_CitationTailMiddleware(citation_tail_text)] if researcher_citable else []),
-        # Same tail language directive on the subagent's own stack (last -> after
-        # its TodoList/Filesystem framework prompts), so the researcher also
-        # reasons in the user's language.
-        _LanguageTailMiddleware(_LINSIGHT_LANGUAGE_DIRECTIVE_ZH),
-        # Same invalid-call repair on the subagent's own graph (see the main-graph
-        # note above for why it goes last).
-        build_invalid_tool_call_repair_middleware(tools=researcher.get("tools"), is_subagent=True),
-    ]
+    researcher["middleware"] = _subagent_middleware(
+        model=model,
+        backend=backend,
+        context_window=context_window,
+        resilience=subagent_resilience,
+        linsight_conf=linsight_conf,
+        has_code_interpreter=has_code_interpreter,
+        supports_vision=supports_vision,
+        tools=researcher.get("tools"),
+        # F069 P1: the researcher gets the source table (no nudge — it does not
+        # write deliverables) and the citation tail, both gated on a citable tool.
+        citation=[
+            *(_researcher_source_middleware(citation_scope) if (citation_handles and researcher_citable) else []),
+            *([_CitationTailMiddleware(citation_tail_text)] if researcher_citable else []),
+        ],
+    )
+    subagents = [researcher]
+    # F013: the data-analyst, IFF a code interpreter is bound. Same stack and the
+    # same resilience instance as the researcher (one shared degrade allowance,
+    # which the main graph's subagent-overflow handler also draws from); no
+    # citation layers — query results carry no source handles.
+    data_analyst = _build_data_analyst_subagent(tools)
+    if data_analyst is not None:
+        data_analyst["middleware"] = _subagent_middleware(
+            model=model,
+            backend=backend,
+            context_window=context_window,
+            resilience=subagent_resilience,
+            linsight_conf=linsight_conf,
+            has_code_interpreter=has_code_interpreter,
+            supports_vision=supports_vision,
+            tools=data_analyst.get("tools"),
+            citation=[],
+        )
+        subagents.append(data_analyst)
 
     # Same lockstep for skills: the skill-priority lines are advertised IFF
     # SkillsMiddleware was actually attached above (``skills_advertised``), so the
@@ -1658,6 +1794,7 @@ async def create_linsight_agent(
                         has_web_search=has_web,
                         citation_handles=citation_handles,
                         unattended=unattended,
+                        has_data_analyst=data_analyst is not None,
                     ),
                     has_kb or has_web,
                     handles=citation_handles,
@@ -1665,7 +1802,7 @@ async def create_linsight_agent(
                 caller_instructions(session_model),
             ),
             middleware=middlewares,
-            subagents=[researcher],
+            subagents=subagents,
             # The main graph already defaults to DeepAgentState, but deepagents only
             # forwards an explicit state_schema to subagents. Without it the researcher
             # falls back to create_agent's AgentState, whose messages channel is not a
@@ -1690,6 +1827,46 @@ def _summarization(model, backend, context_window: dict) -> list:
     if not get_model_provider(model):
         return []
     return [BishengSummarizationMiddleware(model, backend, context_window.get("usable_input"))]
+
+
+def _subagent_middleware(
+    *,
+    model,
+    backend,
+    context_window: dict,
+    resilience,
+    linsight_conf,
+    has_code_interpreter: bool,
+    supports_vision: bool,
+    tools,
+    citation: list,
+) -> list:
+    """One subagent graph's middleware stack (researcher and data-analyst share it).
+
+    A subagent is a separate subgraph: the main-graph middleware does NOT wrap its
+    internal model or tool calls, so each layer is repeated on its own graph:
+
+    - summarization (own instance) outermost, as on the main graph;
+    - resilience (``is_subagent=True``) DEGRADES a content-filter / exhausted
+      transient step to a synthetic reply so the parent task continues;
+    - its own tool-loop breaker;
+    - binary guards — it owns read_file, and an original read without them would
+      fail the whole task; it sees the same code interpreter as the main graph;
+    - the per-result budget at the same depth as the main graph's;
+    - ``citation`` layers (researcher only), then the language tail (last prompt
+      appender, so the subagent also reasons in the user's language);
+    - invalid-call repair LAST: after_model hooks run in reverse order.
+    """
+    return [
+        *_summarization(model, backend, context_window),
+        resilience,
+        build_tool_loop_breaker_middleware(linsight_conf, is_subagent=True),
+        *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
+        *_result_budget(backend, context_window),
+        *citation,
+        _LanguageTailMiddleware(_LINSIGHT_LANGUAGE_DIRECTIVE_ZH),
+        build_invalid_tool_call_repair_middleware(tools=tools, is_subagent=True),
+    ]
 
 
 def _result_budget(backend, context_window: dict) -> list:

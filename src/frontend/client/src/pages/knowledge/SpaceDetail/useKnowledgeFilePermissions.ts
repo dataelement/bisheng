@@ -7,6 +7,7 @@ export function useKnowledgeFilePermissions({
   space,
   currentFolderId,
 }: UseKnowledgeFilePermissionsOptions) {
+  const [moveEntryIds, setMoveEntryIds] = useState<Set<string>>(new Set());
   const [canCreateFolder, setCanCreateFolder] = useState(false);
   const [canUploadFile, setCanUploadFile] = useState(false);
   // The current target must accept uploaded content. Each source is checked
@@ -77,6 +78,7 @@ export function useKnowledgeFilePermissions({
   useEffect(() => {
     checkedFileIdsRef.current = new Set();
     setPermissionEntryIds(new Set());
+    setMoveEntryIds(new Set());
     setRenameEntryIds(new Set());
     setDownloadEntryIds(new Set());
     setDeleteEntryIds(new Set());
@@ -104,6 +106,7 @@ export function useKnowledgeFilePermissions({
         }
       };
       grant("manage_permission", setPermissionEntryIds);
+      grant("move", setMoveEntryIds);
       grant("rename", setRenameEntryIds);
       grant("download", setDownloadEntryIds);
       grant("delete", setDeleteEntryIds);
@@ -120,6 +123,7 @@ export function useKnowledgeFilePermissions({
   }, []);
 
   return {
+    moveEntryIds,
     canCreateFolder,
     canUploadFile,
     canMoveFile,

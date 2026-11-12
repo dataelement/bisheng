@@ -60,6 +60,10 @@ async def _authorized_scope(
     """
 
     actor = await resolve_permission_actor(login_user)
+    from bisheng.permission.api.dependencies import get_permission_resource_normalizer
+
+    owner = await get_permission_resource_normalizer()
+    resource_type = await owner.anormalize_permission_resource(resource_type, resource_id)
     registry = await get_f048_resource_registry()
     target = await registry.resolve(
         resource_type=resource_type,

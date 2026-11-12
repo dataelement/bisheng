@@ -1,44 +1,57 @@
 """The first LLM a platform adds becomes its conversation-title model."""
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.llm.domain.schemas import WorkbenchModelConfig, WSModel
+from bisheng.llm.domain.services import llm as module
 from bisheng.llm.domain.services.llm import LLMService
+from test.knowledge_unification.test_ref_repo import tenant
 
 
 @pytest.fixture
 def config_store(monkeypatch):
-    store = {"workbench": WorkbenchModelConfig(), "saved": None}
+    actor = UserPayload(user_id=7, user_name="admin", tenant_id=101, user_role=[])
+    store = {"workbench": WorkbenchModelConfig(), "saved": None, "actor": actor}
 
-    async def get_workbench():
-        return store["workbench"]
+    @asynccontextmanager
+    async def sessions():
+        yield object()
 
-    async def update(_user, workbench, _tasks):
+    async def resolve(_repository, _session, key):
+        payloads = {
+            "knowledge_llm": '{"extract_title_model_id":11,"source_model_id":11,"qa_similar_model_id":11}',
+            "evaluation_llm": '{"model_id":11}',
+            "assistant_llm": '{"auto_llm":{"model_id":11},"llm_list":[{"model_id":11}]}',
+            "linsight_llm": store["workbench"].model_dump_json(),
+        }
+        return SimpleNamespace(inherited_from_root=False, own=SimpleNamespace(payload_json=payloads[key]))
+
+    async def update(_user, workbench, _tasks, *, login_user):
+        assert login_user is actor
         store["saved"] = workbench
 
-    monkeypatch.setattr(LLMService, "get_workbench_llm", get_workbench)
+    authorize = AsyncMock()
+    monkeypatch.setattr(module, "get_async_db_session", sessions)
+    monkeypatch.setattr(module.ModelDefaultRepository, "aresolve", resolve)
+    monkeypatch.setattr(module.ModelDefaultApplication, "_authorize", authorize)
     monkeypatch.setattr(LLMService, "update_workbench_llm", update)
-    # The LLM branch also seeds the knowledge, evaluation and assistant slots.
-    monkeypatch.setattr(
-        LLMService,
-        "aget_knowledge_llm",
-        AsyncMock(return_value=SimpleNamespace(extract_title_model_id=1, source_model_id=1, qa_similar_model_id=1)),
-    )
-    monkeypatch.setattr(LLMService, "get_evaluation_llm", AsyncMock(return_value=SimpleNamespace(model_id=1)))
-    monkeypatch.setattr(
-        LLMService, "get_assistant_llm", AsyncMock(return_value=SimpleNamespace(auto_llm=1, llm_list=[1]))
-    )
-    return store
+    with tenant(101):
+        yield store
+    authorize.assert_awaited_once_with(actor, 101)
 
 
 @pytest.mark.parametrize("empty_slot", [None, WSModel(id="")])
 async def test_first_llm_fills_an_empty_title_slot(config_store, empty_slot):
     config_store["workbench"].chat_title_llm = empty_slot
 
-    await LLMService.set_default_model(SimpleNamespace(id=30, model_type="llm", model_name="dsv4"))
+    await LLMService.set_default_model(
+        SimpleNamespace(id=30, model_type="llm", model_name="dsv4"), login_user=config_store["actor"]
+    )
 
     assert config_store["saved"].chat_title_llm.id == "30"
 
@@ -46,7 +59,9 @@ async def test_first_llm_fills_an_empty_title_slot(config_store, empty_slot):
 async def test_a_chosen_title_model_is_kept(config_store):
     config_store["workbench"].chat_title_llm = WSModel(id="7")
 
-    await LLMService.set_default_model(SimpleNamespace(id=30, model_type="llm", model_name="dsv4"))
+    await LLMService.set_default_model(
+        SimpleNamespace(id=30, model_type="llm", model_name="dsv4"), login_user=config_store["actor"]
+    )
 
     assert config_store["saved"] is None
 

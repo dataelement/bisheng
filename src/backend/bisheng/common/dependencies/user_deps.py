@@ -5,12 +5,6 @@ from fastapi import Depends
 from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 
 
-async def record_business_activity(user: object) -> None:
-    """Only an authenticated identity can carry a verified desktop activity hook."""
-    if isinstance(user, LoginUser):
-        await user.record_business_activity()
-
-
 class UserPayload(LoginUser):
     """Auth-injected user identity used by FastAPI endpoints."""
 

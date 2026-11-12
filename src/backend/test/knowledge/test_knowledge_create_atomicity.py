@@ -1,145 +1,80 @@
-"""A knowledge base must not outlive a failure to build its permission mirror.
+"""Permission projection failure rolls back the actual SQL/R2 create transaction.
 
-The business row and the permission mirror live in different places and cannot
-share a transaction, so the row used to be committed first and the mirror built
-afterwards. When the mirror could not be built the create call failed, but the
-row stayed, and what it left behind could not be used or removed: every
-permission question about it answered "Resource permission projection is not
-current", and deleting also asks the permission layer first.
-
-A live tenant collected seven of these in one afternoon while the permission
-runtime refused to start after an authorization-model change. Creating a
-knowledge base looked like it failed each time; seven rows stayed.
+The original regression was an orphan resource after a failed permission mirror.
+The create now leaves Knowledge and bindings uncommitted until projection succeeds;
+no compensating DAO transaction is needed. Index transports remain isolated.
 """
 
-from __future__ import annotations
-
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import Mock
 
 import pytest
 
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from test.knowledge_unification import test_kn_model_bindings as bindings
+from test.knowledge_unification import test_kn_model_creation as fixtures
 
-KNOWLEDGE_ID = 4274
-
-
-def _login_user() -> SimpleNamespace:
-    return SimpleNamespace(user_id=3, tenant_id=1)
-
-
-def _inserted() -> Knowledge:
-    # QA skips vector and search index creation, which this test is not about.
-    return Knowledge(
-        id=KNOWLEDGE_ID,
-        name="123123123",
-        type=KnowledgeTypeEnum.QA.value,
-        user_id=3,
-        tenant_id=1,
-    )
+store = fixtures.store
+tenant = fixtures.tenant
+business = fixtures.business
+creation = fixtures.creation
 
 
-async def test_a_failed_permission_mirror_takes_the_row_back_out() -> None:
-    deleted = AsyncMock()
-
-    with (
-        patch.object(KnowledgeDao, "async_insert_one", AsyncMock(return_value=_inserted())),
-        patch.object(KnowledgeDao, "async_delete_knowledge", deleted),
-        patch.object(
-            KnowledgeService,
-            "_project_library_created",
-            AsyncMock(side_effect=RuntimeError("authorization_model_migration_required")),
-        ),
-    ):
-        with pytest.raises(RuntimeError):
-            await KnowledgeService.acreate_knowledge_base(
-                MagicMock(),
-                _login_user(),
-                _inserted(),
-            )
-
-    deleted.assert_awaited_once_with(KNOWLEDGE_ID)
+def _new(*, kind=KnowledgeTypeEnum.QA.value):
+    return Knowledge(name="123123123", type=kind, model="11")
 
 
-async def test_a_successful_create_keeps_the_row() -> None:
-    deleted = AsyncMock()
-
-    with (
-        patch.object(KnowledgeDao, "async_insert_one", AsyncMock(return_value=_inserted())),
-        patch.object(KnowledgeDao, "async_delete_knowledge", deleted),
-        patch.object(KnowledgeService, "_project_library_created", AsyncMock()),
-        patch.object(KnowledgeService, "audit_telemetry_service", MagicMock()),
-    ):
-        created = await KnowledgeService.acreate_knowledge_base(
-            MagicMock(),
-            _login_user(),
-            _inserted(),
-        )
-
-    assert created.id == KNOWLEDGE_ID
-    deleted.assert_not_awaited()
+async def test_a_failed_permission_mirror_takes_the_row_back_out(creation) -> None:
+    context, projection = creation
+    before = bindings.state(context)
+    projection.side_effect = RuntimeError("authorization_model_migration_required")
+    with pytest.raises(RuntimeError, match="authorization_model_migration_required"):
+        await KnowledgeService.acreate_knowledge_base(None, context.user, _new())
+    assert bindings.state(context) == before
+    KnowledgeService._init_knowledge_indices_sync.assert_not_called()
+    fixtures.module.KnowledgeRag.init_knowledge_milvus_vectorstore.assert_not_called()
 
 
-async def test_the_mirror_is_built_before_any_external_store() -> None:
-    """Ordering is the point: an undone create must leave nothing behind.
+async def test_a_successful_create_keeps_the_row(creation) -> None:
+    context, projection = creation
+    created = await KnowledgeService.acreate_knowledge_base(None, context.user, _new())
+    facts = bindings.state(context)
+    assert any(row["id"] == created.id for row in facts["knowledge"])
+    assert any(row["source_id"] == str(created.id) for row in facts["business_resource_reference"])
+    projection.assert_awaited_once_with(context.user, created)
 
-    Index creation is best-effort and swallows its own errors, so a mirror
-    failure after it would leak a vector collection and a search index for a
-    row that no longer exists. This one uses a normal knowledge base, not QA,
-    precisely so the index path really runs.
-    """
 
-    order: list[str] = []
+async def test_the_mirror_is_built_before_any_external_store(creation) -> None:
+    """A failed or uncommitted create must never provision external indices."""
+    context, projection = creation
+    order = []
 
-    async def _project(*_args, **_kwargs):
+    async def project(*args, **kwargs):
         order.append("mirror")
 
-    async def _milvus(*_args, **_kwargs):
+    async def milvus(*args, **kwargs):
+        assert order == ["mirror"]
+        assert any(row["id"] == kwargs["knowledge"].id for row in bindings.state(context)["knowledge"])
         order.append("milvus")
-        return MagicMock()
+        return Mock()
 
-    async def _es(*_args, **_kwargs):
+    async def es(*args, **kwargs):
         order.append("es")
-        return MagicMock()
+        return Mock()
 
-    normal = _inserted()
-    normal.type = KnowledgeTypeEnum.NORMAL.value
-
-    with (
-        patch.object(KnowledgeDao, "async_insert_one", AsyncMock(return_value=normal)),
-        patch.object(KnowledgeService, "_project_library_created", _project),
-        patch.object(KnowledgeService, "ensure_milvus_schema_ready", MagicMock()),
-        patch.object(KnowledgeService, "audit_telemetry_service", MagicMock()),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
-            _milvus,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_service.KnowledgeRag.init_knowledge_es_vectorstore",
-            _es,
-        ),
-    ):
-        await KnowledgeService.acreate_knowledge_base(MagicMock(), _login_user(), normal)
-
-    assert order and order[0] == "mirror", order
-    assert "milvus" in order, order
+    projection.side_effect = project
+    fixtures.module.KnowledgeRag.init_knowledge_milvus_vectorstore.side_effect = milvus
+    fixtures.module.KnowledgeRag.init_knowledge_es_vectorstore.side_effect = es
+    await KnowledgeService.acreate_knowledge_base(None, context.user, _new(kind=KnowledgeTypeEnum.NORMAL.value))
+    assert order == ["mirror", "milvus", "es"]
 
 
-async def test_skip_hook_still_skips_the_mirror() -> None:
-    """The caller that opts out of the hook owns the mirror itself."""
-
-    project = AsyncMock()
-
-    with (
-        patch.object(KnowledgeDao, "async_insert_one", AsyncMock(return_value=_inserted())),
-        patch.object(KnowledgeService, "_project_library_created", project),
-    ):
-        await KnowledgeService.acreate_knowledge_base(
-            MagicMock(),
-            _login_user(),
-            _inserted(),
-            skip_hook=True,
-        )
-
-    project.assert_not_awaited()
+async def test_skip_hook_still_skips_the_mirror(creation) -> None:
+    """An internal projection owner can opt out; SQL/R2 remains mandatory."""
+    context, projection = creation
+    projection.reset_mock()
+    created = await KnowledgeService.acreate_knowledge_base(None, context.user, _new(), skip_hook=True)
+    projection.assert_not_awaited()
+    facts = bindings.state(context)
+    assert any(row["id"] == created.id for row in facts["knowledge"])
+    assert any(row["source_id"] == str(created.id) for row in facts["business_resource_reference"])

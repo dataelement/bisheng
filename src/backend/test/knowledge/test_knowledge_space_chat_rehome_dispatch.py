@@ -1,10 +1,18 @@
-import asyncio
-import inspect
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+import pytest
+import sqlalchemy as sa
+
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from test.knowledge_unification import test_kn_space_reference_lifecycle as deletion_native
+from test.knowledge_unification import test_move_processing_owner as move_native
+
+store, tenant, business = deletion_native.store, deletion_native.tenant, deletion_native.business
+consumer, deletion_consumer = deletion_native.consumer, deletion_native.deletion_consumer
+moving, accepted, application = move_native.moving, move_native.accepted, move_native.application
 
 
 def _service() -> KnowledgeSpaceService:
@@ -39,57 +47,44 @@ async def test_batch_delete_normalization_removes_duplicates_and_covered_descend
     assert folder_ids == [10]
 
 
-async def test_clear_space_dispatches_after_delete_commit_before_index_recreate():
-    service = _service()
-    events: list[str] = []
-    space = SimpleNamespace(id=1, type=KnowledgeTypeEnum.SPACE.value)
-    service._require_action = AsyncMock()
-    service._list_space_child_resources = AsyncMock(return_value=[("folder", 10), ("knowledge_file", 20)])
-    service._load_resource_permission_records = AsyncMock(return_value=[])
-    service._project_resource_deletes = AsyncMock()
-    service._dispatch_knowledge_chat_rehome = MagicMock(side_effect=lambda **kwargs: events.append("dispatch"))
+async def test_clear_space_dispatches_after_durable_finalize_and_cleanup(deletion_consumer, monkeypatch):
+    context, service, _ = deletion_consumer
+    await deletion_native.seed(context)
+    events = []
+    before = deletion_native.state(context)
+    original = context.deletion._finalize
 
-    async def fake_to_thread(function, *args):
-        return function(*args)
+    async def finalized(job):
+        await original(job)
+        # Independent native SQL observes the committed business clear.
+        with context.sync.connect() as connection:
+            assert (
+                connection.scalar(
+                    sa.select(sa.func.count()).select_from(KnowledgeFile).where(KnowledgeFile.knowledge_id == 40)
+                )
+                == 0
+            )
+        events.append("delete_commit")
 
-    with (
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
-            new_callable=AsyncMock,
-            return_value=space,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_delete_knowledge",
-            new_callable=AsyncMock,
-            side_effect=lambda **kwargs: events.append("delete_commit"),
-        ),
-        patch.object(
-            asyncio,
-            "to_thread",
-            new=fake_to_thread,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "KnowledgeService.delete_knowledge_file_in_vector",
-            side_effect=lambda *args: events.append("vector_delete"),
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.delete_knowledge_file_in_minio",
-            side_effect=lambda *args: events.append("minio_delete"),
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService._init_knowledge_indices_sync",
-            side_effect=lambda *args: events.append("index_recreate"),
-        ),
-    ):
-        await service.clear_space(1)
+    def dispatch(**kwargs):
+        deletion_native.assert_completed(context, {"folder:501", "knowledge_file:503"})
+        assert context.order[-3:] == [("purge", "minio"), ("purge", "es"), ("purge", "milvus")]
+        events.append("dispatch")
 
-    assert events.index("delete_commit") < events.index("dispatch") < events.index("index_recreate")
+    monkeypatch.setattr(context.deletion, "_finalize", finalized)
+    service._dispatch_knowledge_chat_rehome = MagicMock(side_effect=dispatch)
+    await service.clear_space(40)
+    assert events == ["delete_commit", "dispatch"]
     service._dispatch_knowledge_chat_rehome.assert_called_once_with(
-        source_space_id=1,
-        resources=[("folder", 10), ("knowledge_file", 20)],
+        source_space_id=40,
+        resources=[("folder", 501), ("knowledge_file", 503)],
         reason="clear_space",
     )
+    after = deletion_native.state(context)
+    old = next(row for row in before["knowledge"] if row["id"] == 40)
+    current = next(row for row in after["knowledge"] if row["id"] == 40)
+    assert all(current[key] == old[key] for key in ("model", "index_name", "collection_name"))
+    deletion_native.KnowledgeService._init_knowledge_indices_sync.assert_not_called()
 
 
 async def test_delete_file_dispatches_only_after_hard_delete_commit():
@@ -140,13 +135,38 @@ async def test_delete_file_dispatches_only_after_hard_delete_commit():
     )
 
 
-def test_cross_space_move_dispatch_is_after_commit_before_other_side_effects():
-    source = inspect.getsource(KnowledgeSpaceService.move_items)
+@pytest.mark.parametrize("fail_after_ready", [False, True])
+async def test_cross_space_move_dispatch_is_after_actual_commit_and_absent_on_failure(
+    application, monkeypatch, fail_after_ready
+):
+    app = application
+    events = []
+    ready = app.owner.jobs.amark_move_ready
+    rehome = app.owner.chat_rehome
 
-    commit_position = source.index("await session.commit()")
-    dispatch_position = source.index("self._dispatch_knowledge_chat_rehome(")
-    permission_position = source.index("await self._replace_resource_parent_tuple(")
+    async def marked(*args, **kwargs):
+        result = await ready(*args, **kwargs)
+        events.append("ready_sql")
+        if fail_after_ready:
+            raise RuntimeError("actual ready tail failure")
+        return result
 
-    assert commit_position < dispatch_position < permission_position
-    assert "if cross_space:" in source[:dispatch_position]
-    assert "direct_move_resources" in source
+    def dispatched(**kwargs):
+        # The original native fixture independently reads actual File/Job state
+        # and rejects any session still holding a transaction at this point.
+        rehome(**kwargs)
+        events.append("dispatch")
+
+    monkeypatch.setattr(app.owner.jobs, "amark_move_ready", marked)
+    app.owner.chat_rehome = dispatched
+    if fail_after_ready:
+        with pytest.raises(RuntimeError, match="actual ready tail failure"):
+            await app.owner.aensure_logical(app.built.lease)
+        assert events == ["ready_sql"] and not app.chat
+    else:
+        assert (await app.owner.aensure_logical(app.built.lease)).state == "running"
+        assert events == ["ready_sql", "dispatch"] and len(app.chat) == 1
+    async with app.built.sessions() as session:
+        assert (await session.get(KnowledgeFile, 81)).knowledge_id == (10 if fail_after_ready else 11)
+        marker = (await session.get(KnowledgeProcessingJob, app.built.job_id)).move_logical_marker
+        assert (marker is None) == fail_after_ready

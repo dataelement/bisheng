@@ -61,9 +61,7 @@ const DEFAULT_LOCALE: PaginationLocale = {
   nav: 'Pagination',
 };
 
-export interface PaginationProps {
-  /** Total number of records. Pass 0 for an empty list — the pager still shows (§6.2). */
-  total: number;
+interface PaginationOptions {
   current?: number;
   defaultCurrent?: number;
   pageSize?: number;
@@ -91,6 +89,19 @@ export interface PaginationProps {
   /** Layout only. The row right-aligns itself (§2). */
   className?: string;
 }
+
+export type PaginationProps = PaginationOptions & (
+  | {
+    /** Total number of records. Pass 0 for an empty list — the pager still shows (§6.2). */
+    total: number;
+    hasNextPage?: never;
+  }
+  | {
+    /** Unknown total. Show the current page with previous and next controls only. */
+    total: null;
+    hasNextPage: boolean;
+  }
+);
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -157,6 +168,7 @@ function useControllable<T>(value: T | undefined, defaultValue: T) {
 
 export function Pagination({
   total,
+  hasNextPage,
   current: currentProp,
   defaultCurrent = 1,
   pageSize: pageSizeProp,
@@ -177,14 +189,15 @@ export function Pagination({
   const [rawCurrent, setCurrent] = useControllable(currentProp, defaultCurrent);
   const [pageSize, setPageSize] = useControllable(pageSizeProp, defaultPageSize);
 
-  const totalPages = Math.max(1, Math.ceil(Math.max(0, total) / pageSize));
-  const current = Math.min(Math.max(1, rawCurrent), totalPages);
+  const totalPages = total === null ? null : Math.max(1, Math.ceil(Math.max(0, total) / pageSize));
+  const current = Math.min(Math.max(1, rawCurrent), totalPages ?? Infinity);
+  const lastReachablePage = totalPages ?? (hasNextPage ? current + 1 : current);
 
   // §8 — a phone gets the simple type, and small grows to medium there.
   const simple = simpleProp ?? phone;
   const size: PaginationSize = phone && sizeProp === 'small' ? 'medium' : sizeProp;
-  const jumperVisible = !simple && (showQuickJumper ?? totalPages > JUMPER_THRESHOLD);
-  const sizeChangerVisible = !simple && showSizeChanger;
+  const jumperVisible = totalPages !== null && !simple && (showQuickJumper ?? totalPages > JUMPER_THRESHOLD);
+  const sizeChangerVisible = totalPages !== null && !simple && showSizeChanger;
 
   // §7 — the last row of the last page was deleted: step back to the new last
   // page instead of sitting on a blank one. Only with data left — an empty
@@ -192,14 +205,14 @@ export function Pagination({
   const onChangeRef = React.useRef(onChange);
   onChangeRef.current = onChange;
   React.useEffect(() => {
-    if (total > 0 && rawCurrent > totalPages) {
+    if ((total ?? 0) > 0 && totalPages !== null && rawCurrent > totalPages) {
       setCurrent(totalPages);
       onChangeRef.current?.(totalPages, pageSize);
     }
   }, [total, rawCurrent, totalPages, pageSize, setCurrent]);
 
   const goTo = (page: number) => {
-    if (disabled || page === current || page < 1 || page > totalPages) return;
+    if (disabled || page === current || page < 1 || page > lastReachablePage) return;
     setCurrent(page);
     onChange?.(page, pageSize);
   };
@@ -221,7 +234,7 @@ export function Pagination({
         type="button"
         aria-label={isPrev ? locale.prev : locale.next}
         // §6.1 — disabled, never hidden: a vanishing arrow shifts the row.
-        disabled={disabled || (isPrev ? current <= 1 : current >= totalPages)}
+        disabled={disabled || (isPrev ? current <= 1 : current >= lastReachablePage)}
         onClick={() => goTo(isPrev ? current - 1 : current + 1)}
         className={itemClass(size, true)}
       >
@@ -239,7 +252,7 @@ export function Pagination({
         className,
       )}
     >
-      {showTotal && (
+      {showTotal && total !== null && (
         // §5.1 — background information: secondary gray, number not colored.
         <span className={cn('shrink-0 whitespace-nowrap', disabled ? 'text-text-4' : 'text-text-2')}>
           {locale.total(Math.max(0, total).toLocaleString())}
@@ -248,15 +261,16 @@ export function Pagination({
 
       <span className="flex shrink-0 items-center gap-1">
         {arrow('prev')}
-        {simple ? (
+        {simple || totalPages === null ? (
           // §3 — display only; paging is done by the arrows.
           <span
+            aria-current={totalPages === null ? 'page' : undefined}
             className={cn(
               'whitespace-nowrap px-2 tabular-nums',
               disabled ? 'text-text-4' : 'text-text-2',
             )}
           >
-            {current} / {totalPages}
+            {totalPages === null ? current : `${current} / ${totalPages}`}
           </span>
         ) : (
           getPageItems(current, totalPages).map((item) =>

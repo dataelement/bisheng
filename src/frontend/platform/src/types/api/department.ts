@@ -51,7 +51,7 @@ export interface DepartmentMember {
   external_id?: string | null
   user_id: number
   user_name: string
-  /** 本地人员 ID（external_id），用于重名展示；非展示字段 */
+  /** Raw account alias returned by the department API. */
   person_id?: string | null
   department_id: number
   is_primary: number

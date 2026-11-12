@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copy the template, optionally configure Gateway, then let Compose deploy.
+# Copy the template, configure optional services, then let Compose deploy.
 set -euo pipefail
 umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,19 +7,22 @@ ENV_FILE="${SCRIPT_DIR}/.env"
 source "${SCRIPT_DIR}/lib/install-env.sh"
 die() { printf '部署停止：%s\n' "$*" >&2; exit 1; }
 
-GATEWAY_CHOICE=""; LICENSE_FILE=""; PUBLIC_URL=""; PREPARE_ONLY=false
+GATEWAY_CHOICE=""; FT_CHOICE=""; LICENSE_FILE=""; PUBLIC_URL=""; PREPARE_ONLY=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --gateway) GATEWAY_CHOICE=true; shift ;;
     --no-gateway) GATEWAY_CHOICE=false; shift ;;
+    --ft) FT_CHOICE=true; shift ;;
+    --no-ft) FT_CHOICE=false; shift ;;
     --prepare-only) PREPARE_ONLY=true; shift ;;
     --license-file|--public-url)
       [[ $# -ge 2 && -n "$2" ]] || die "$1 需要参数"
       if [[ "$1" = --license-file ]]; then LICENSE_FILE="$2"; else PUBLIC_URL="$2"; fi
       shift 2 ;;
     -h|--help)
-      printf '%s\n' '用法：bash docker/install.sh [--gateway | --no-gateway] [--prepare-only]' \
-        '首次无参数部署不启用 Gateway；已有 .env 按原配置继续。' \
+      printf '%s\n' '用法：bash docker/install.sh [--gateway | --no-gateway] [--ft | --no-ft] [--prepare-only]' \
+        '首次无参数部署不启用 Gateway 和 FT；已有 .env 按原配置继续。' \
+        'FT 需要 NVIDIA GPU 和 NVIDIA Container Toolkit；--no-ft 不停止已运行容器。' \
         'Gateway 必须提供 license 文件路径：--license-file <文件> --public-url <平台地址>'
       exit 0 ;;
     *) die "未知参数：$1" ;;
@@ -90,6 +93,10 @@ if [[ -n "$GATEWAY_CHOICE" ]]; then
     volume="$(env_get "$ENV_FILE" DOCKER_VOLUME_DIRECTORY)"; volume="${volume:-.}"
     env_set "$ENV_FILE" BISHENG_NGINX_CONF_DIR "${volume%/}/nginx/conf.d"
   fi
+fi
+if [[ -n "$FT_CHOICE" ]]; then
+  profiles="$(env_get "$ENV_FILE" COMPOSE_PROFILES)"
+  env_set "$ENV_FILE" COMPOSE_PROFILES "$(set_optional_profile "$profiles" "$FT_CHOICE" ft)"
 fi
 compose config --quiet
 if [[ "$PREPARE_ONLY" = true ]]; then printf '配置已生成并通过 Compose 校验。\n'; exit 0; fi

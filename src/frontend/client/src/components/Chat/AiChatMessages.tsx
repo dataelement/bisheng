@@ -486,7 +486,7 @@ export default function AiChatMessages({
                         className="flex items-center h-8 justify-center gap-2 rounded-md border border-border-base bg-white/80 px-2.5 text-sm leading-5 text-neutral-800 hover:bg-white/90 transition-colors"
                     >
                         <ArrowDownIcon size={16} />
-                        <span className="text-sm">回到底部</span>
+                        <span className="text-sm">{localize("com_ui.scroll_to_bottom")}</span>
                     </button>
                 </div>
             )}

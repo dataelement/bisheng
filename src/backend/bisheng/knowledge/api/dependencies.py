@@ -5,6 +5,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.application.knowledge_version_mutation import KnowledgeVersionMutationApplication
+from bisheng.knowledge.application.metadata_legacy import build_legacy_metadata_service
+from bisheng.knowledge.application.space_upload import SpaceUploadApplication
 from bisheng.knowledge.domain.repositories.implementations.knowledge_chat_session_repository_impl import (
     KnowledgeChatSessionRepositoryImpl,
 )
@@ -80,7 +84,7 @@ async def get_knowledge_metadata_service(
     knowledge_file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
     permission_service: KnowledgePermissionService = Depends(KnowledgePermissionService),
 ) -> KnowledgeMetadataService:
-    return KnowledgeMetadataService(
+    return build_legacy_metadata_service(
         knowledge_repository=knowledge_repository,
         knowledge_file_repository=knowledge_file_repository,
         permission_service=permission_service,
@@ -111,11 +115,13 @@ async def get_knowledge_file_service(
     knowledge_file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
 ) -> "KnowledgeFileService":
     """DapatkanKnowledgeFileServiceInstance Dependencies"""
+    from bisheng.knowledge.application.knowledge_index_edit import get_knowledge_index_editor
     from bisheng.knowledge.domain.services.knowledge_file_service import KnowledgeFileService as _KnowledgeFileService
 
     return _KnowledgeFileService(
         knowledge_repository=knowledge_repository,
         knowledge_file_repository=knowledge_file_repository,
+        metadata_value_writer=get_knowledge_index_editor(),
     )
 
 
@@ -153,6 +159,25 @@ async def get_knowledge_space_service(
     service.message_service = message_service
     service.version_repo = version_repo
     service.doc_repo = doc_repo
+    service.upload_application_factory = lambda: SpaceUploadApplication(
+        login_user=login_user,
+        session_factory=get_async_db_session,
+        admit_upload=service._require_action,
+        make_permission_record=service._new_file_permission_record,
+        actor_provider=service._permission_actor,
+    )
+    from bisheng.knowledge.application.move_application import get_move_application
+
+    service.move_application_factory = get_move_application
+    from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
+
+    service.deletion_application_factory = get_deletion_application
+    from bisheng.knowledge.application.knowledge_batch import get_batch_application
+
+    service.batch_application_factory = get_batch_application
+    from bisheng.knowledge.application.legacy_retry import get_legacy_retry_application
+
+    service.legacy_retry_factory = get_legacy_retry_application
     return service
 
 
@@ -188,20 +213,39 @@ async def get_knowledge_file_visibility_service(
     return service
 
 
+async def get_knowledge_version_read_service(
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    from bisheng.knowledge.domain.services.knowledge_version_read_service import KnowledgeVersionReadService
+
+    return KnowledgeVersionReadService(request, login_user)
+
+
 async def get_knowledge_version_service(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
     knowledge_file_repo: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+    read_service=Depends(get_knowledge_version_read_service),
 ) -> "KnowledgeVersionService":
     """Get KnowledgeVersionService instance, bound to the current request and login user."""
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
-    return KnowledgeVersionService(
+    service = KnowledgeVersionService(
         request=request,
         login_user=login_user,
         doc_repo=doc_repo,
         version_repo=version_repo,
         knowledge_file_repo=knowledge_file_repo,
+        version_read_service=read_service,
     )
+    service.version_mutation_application = KnowledgeVersionMutationApplication(
+        session_factory=get_async_db_session,
+        require_version_management_enabled=service._require_version_management_enabled,
+    )
+    from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
+
+    service.deletion_application_factory = get_deletion_application
+    return service

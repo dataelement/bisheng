@@ -1,0 +1,307 @@
+pageType: evidence
+background:
+  type: solid
+  color: $paper
+notes: |
+  2020 至 2024 年，中国跨境电商进出口规模由 1.62 万亿元增至 2.71 万亿元，增幅约 67%。2021 年公开材料存在 1.92 万亿元与修订后 1.98 万亿元两种口径，因此留空。
+  来源：商务部《中国电子商务报告 2022》、商务部电子商务公共服务网 2023 与海关总署 2024 更新统计。
+elements:
+  - elementId: scale-cyan-rail
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 10
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: scale-title-rule
+    elementType: line
+    bounds:
+      - 46
+      - 118
+      - 868
+      - 1
+    viewBox:
+      - 868
+      - 1
+    points: 0,0 868,0
+    border:
+      color: $rule
+      width: 0.9
+  - elementId: scale-left-rule
+    elementType: line
+    bounds:
+      - 354
+      - 146
+      - 1
+      - 278
+    viewBox:
+      - 1
+      - 278
+    points: 0,0 0,278
+    border:
+      color: $rule
+      width: 0.8
+  - elementId: scale-gap-field
+    elementType: shape
+    bounds:
+      - 46
+      - 388
+      - 270
+      - 72
+    shapeName: rect
+    fill:
+      type: solid
+      color: $clay
+    border:
+      color: $clay
+      width: 0
+  - elementId: scale-kicker
+    elementType: text
+    bounds:
+      - 46
+      - 24
+      - 500
+      - 16
+    content:
+      text: SCALE TRAJECTORY / 2020—2024
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 8
+      bold: true
+      letterSpacing: 1.05
+      color: $muted
+  - elementId: scale-title
+    elementType: text
+    bounds:
+      - 46
+      - 52
+      - 850
+      - 42
+    content:
+      style: $title
+      text: 四年规模增长约 67%，行业仍处于扩张区间
+  - elementId: scale-big
+    elementType: text
+    bounds:
+      - 46
+      - 152
+      - 270
+      - 76
+    content:
+      text: +67%
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 62
+      bold: true
+      letterSpacing: -1.8
+      color: $navy
+  - elementId: scale-big-label
+    elementType: text
+    bounds:
+      - 50
+      - 230
+      - 250
+      - 38
+    content:
+      text: 2024 较 2020<br>根据海关披露数据计算
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      lineHeight: 1.35
+      color: $ink
+  - elementId: scale-current
+    elementType: text
+    bounds:
+      - 48
+      - 302
+      - 126
+      - 40
+    content:
+      text: '2.71'
+      fontFamily: *ref_1
+      fontSize: 32
+      bold: true
+      color: $cyan
+  - elementId: scale-current-label
+    elementType: text
+    bounds:
+      - 168
+      - 307
+      - 144
+      - 34
+    content:
+      text: 万亿元<br>2024 更新统计
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      lineHeight: 1.3
+      color: $ink
+  - elementId: scale-gap-label
+    elementType: text
+    bounds:
+      - 60
+      - 400
+      - 240
+      - 50
+    content:
+      text: '2021 / 口径留空<br><span style="font-size: 8.5px">1.92 与修订后 1.98 两种公开口径，不拼成连续序列。</span>'
+      fontFamily: *ref_0
+      fontSize: 10.5
+      bold: true
+      lineHeight: 1.35
+      color: $ink
+  - elementId: scale-chart
+    elementType: chart
+    bounds:
+      - 390
+      - 156
+      - 510
+      - 262
+    data:
+      cols:
+        - year
+        - value
+      rows:
+        - - '2020'
+          - 1.62
+        - - '2022'
+          - 2.11
+        - - '2023'
+          - 2.38
+        - - 2024 更新
+          - 2.71
+    series:
+      - type: line
+        name: 进出口规模
+        encode:
+          x: year
+          'y': value
+        lineColor: $navy
+        width: 2.5
+        marker:
+          shape: circle
+          size: 7
+          fill: $cyan
+          lineColor: $navy
+        dataLabels:
+          show: false
+    xAxis:
+      label:
+        fontSize: 8.5
+        color: $muted
+      gridLine: false
+    yAxis:
+      min: 1.4
+      max: 3
+      label:
+        fontSize: 8
+        color: $muted
+      gridLine:
+        color: $rule
+        style: dot
+    legend:
+      show: false
+    fontFamily: *ref_0
+    fill:
+      type: solid
+      color: '#F3F0EA00'
+    border:
+      color: '#F3F0EA00'
+      width: 0
+  - elementId: scale-chart-label
+    elementType: text
+    bounds:
+      - 390
+      - 134
+      - 350
+      - 16
+    content:
+      text: 进出口额 / 万亿元
+      fontFamily: *ref_0
+      fontSize: 8.5
+      bold: true
+      color: $ink
+  - elementId: scale-chart-note
+    elementType: text
+    bounds:
+      - 742
+      - 134
+      - 158
+      - 16
+    content:
+      text: 2024 同比 +14.0%
+      fontFamily: *ref_0
+      fontSize: 8.5
+      bold: true
+      color: $navy
+      align:
+        - right
+        - top
+  - elementId: scale-insight-rule
+    elementType: line
+    bounds:
+      - 390
+      - 446
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      color: $navy
+      width: 1.2
+  - elementId: scale-insight
+    elementType: text
+    bounds:
+      - 390
+      - 458
+      - 510
+      - 30
+    content:
+      text: 管理判断｜规模仍在增长，下一阶段必须把增量转化为可持续的本地利润。
+      fontFamily: *ref_0
+      fontSize: 11.5
+      bold: true
+      color: $ink
+  - elementId: scale-source
+    elementType: text
+    bounds:
+      - 46
+      - 506
+      - 790
+      - 14
+    content:
+      text: 来源：商务部《中国电子商务报告 2022》及 2023、2024 公开统计｜2024 为海关总署更新统计。
+      fontFamily: *ref_0
+      fontSize: 7.6
+      color: $muted
+  - elementId: scale-page
+    elementType: text
+    bounds:
+      - 868
+      - 506
+      - 46
+      - 14
+    content:
+      text: 16—03
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $ink
+      align:
+        - right
+        - bottom

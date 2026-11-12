@@ -53,6 +53,15 @@ def _user_tenant(user_id, tenant_id):
 @pytest.fixture()
 def patches(monkeypatch):
     """One fixture wires up every collaborator the service touches."""
+    from bisheng.user.application import policy_bindings
+
+    monkeypatch.setattr(policy_bindings, "terminate_policy_for_relocation", AsyncMock())
+    monkeypatch.setattr(policy_bindings, "verify_resolved_policy_home", AsyncMock())
+    monkeypatch.setattr(policy_bindings, "initial_account_default_binding", AsyncMock(return_value=False))
+    monkeypatch.setattr(policy_bindings, "retire_current_policy_bindings", AsyncMock())
+    monkeypatch.setattr(policy_bindings, "seed_policy_defaults", AsyncMock())
+    monkeypatch.setattr(policy_bindings, "policy_membership_ids", AsyncMock(return_value=set()))
+
     resolver_mock = AsyncMock(name="resolve_user_leaf_tenant")
     active_mock = AsyncMock(name="aget_active_user_tenant")
     activate_mock = AsyncMock(name="aactivate_user_tenant")
@@ -364,18 +373,16 @@ class TestFirstTimeSync:
 
 
 class TestPermissionTolerance:
-    def test_permission_exception_does_not_abort_sync(self, patches, monkeypatch):
+    def test_permission_exception_reports_incomplete_sync(self, patches, monkeypatch):
         _set_enforce(monkeypatch, False)
         patches.resolve.return_value = _tenant(7)
         patches.get_active.return_value = _user_tenant(400, 5)
         patches.count_owned.return_value = 0
         patches.apply_changes.side_effect = RuntimeError("permission backend down")
 
-        # Should NOT raise — fail-open behaviour per spec.
-        result = asyncio.run(UserTenantSyncService.sync_user(400))
-        assert result.id == 7
-
-        # DB swap + token bump + audit still completed.
+        # The SQL swap already committed, but identity projection did not finish.
+        with pytest.raises(RuntimeError, match="permission backend down"):
+            asyncio.run(UserTenantSyncService.sync_user(400))
         patches.activate.assert_awaited_once()
         patches.increment.assert_awaited_once()
-        patches.audit.assert_awaited_once()
+        patches.audit.assert_not_awaited()

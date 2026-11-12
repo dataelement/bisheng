@@ -1,3 +1,4 @@
+import { KnowledgeDeletionDialog } from "./SpaceDetail/KnowledgeDeletionDialog";
 import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { knowledgePathWithTab } from "./knowledgeListNavigation";
 import { ApiRequestFailure } from "~/components/ApiRequestFailure";
@@ -151,6 +152,7 @@ export function KnowledgePageContent({ model }: KnowledgePageContentProps) {
 
   return (
     <div className="relative flex h-full min-h-0">
+      <KnowledgeDeletionDialog operation={model.spaceDeletion} />
       {/* Drag and Drop Overlay. Frosted glass here is the sanctioned exception
                 (single full-screen overlay, only while dragging) and is gated by the
                 global FROSTED_GLASS_ENABLED switch — see ~/utils/frostedGlass. */}

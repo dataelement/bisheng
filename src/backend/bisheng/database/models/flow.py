@@ -116,6 +116,9 @@ class FlowBase(SQLModelSerializable):
 
 
 class Flow(FlowBase, table=True):
+    creation_state: str = Field(
+        default="READY", sa_column=Column(String(16), nullable=False, server_default=text("'READY'"))
+    )
     is_delete: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
     id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
     data: dict | None = Field(default=None, sa_column=Column(JsonType))
@@ -169,6 +172,14 @@ class FlowUpdate(SQLModelSerializable):
     guide_word: str | None = None
 
 
+def assert_workflow_ready(row):
+    from bisheng.common.errcode.flow import WorkflowCreationPendingError
+
+    if row is not None and row.flow_type == FlowType.WORKFLOW.value and row.creation_state != "READY":
+        raise WorkflowCreationPendingError(resource_id=row.id)
+    return row
+
+
 class FlowDao(FlowBase):
     @classmethod
     def create_flow(cls, flow_info: Flow, flow_type: int | None) -> Flow:
@@ -185,6 +196,7 @@ class FlowDao(FlowBase):
                 create_time=datetime.now(),
                 user_id=flow_info.user_id,
                 flow_type=flow_type,
+                tenant_id=flow_info.tenant_id,
             )
             session.add(flow_version)
             session.commit()
@@ -234,19 +246,24 @@ class FlowDao(FlowBase):
     def get_flow_by_id(cls, flow_id: str) -> Flow | None:
         with get_sync_db_session() as session:
             statement = select(Flow).where(Flow.is_delete == 0).where(Flow.id == flow_id)
-            return session.exec(statement).first()
+            return assert_workflow_ready(session.exec(statement).first())
 
     @classmethod
     async def aget_flow_by_id(cls, flow_id: str) -> Flow | None:
         async with get_async_db_session() as session:
             statement = select(Flow).where(Flow.is_delete == 0).where(Flow.id == flow_id)
             result = await session.exec(statement)
-            return result.first()
+            return assert_workflow_ready(result.first())
 
     @classmethod
     def get_flow_by_idstr(cls, flow_id: str) -> Flow | None:
         with get_sync_db_session() as session:
-            statement = select(Flow).where(Flow.is_delete == 0).where(Flow.id == flow_id)
+            statement = (
+                select(Flow)
+                .where(Flow.is_delete == 0)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(Flow.id == flow_id)
+            )
             return session.exec(statement).first()
 
     @classmethod
@@ -254,7 +271,12 @@ class FlowDao(FlowBase):
         if not flow_ids:
             return []
         with get_sync_db_session() as session:
-            statement = select(Flow).where(Flow.is_delete == 0).where(Flow.id.in_(flow_ids))
+            statement = (
+                select(Flow)
+                .where(Flow.is_delete == 0)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(Flow.id.in_(flow_ids))
+            )
             return session.exec(statement).all()
 
     @classmethod
@@ -262,26 +284,46 @@ class FlowDao(FlowBase):
         if not flow_ids:
             return []
         async with get_async_db_session() as session:
-            statement = select(Flow).where(Flow.is_delete == 0).where(col(Flow.id).in_(flow_ids))
+            statement = (
+                select(Flow)
+                .where(Flow.is_delete == 0)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(col(Flow.id).in_(flow_ids))
+            )
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
     def get_flow_by_user(cls, user_id: int) -> list[Flow]:
         with get_sync_db_session() as session:
-            statement = select(Flow).where(Flow.is_delete == 0).where(Flow.user_id == user_id)
+            statement = (
+                select(Flow)
+                .where(Flow.is_delete == 0)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(Flow.user_id == user_id)
+            )
             return session.exec(statement).all()
 
     @classmethod
     def get_flow_by_name(cls, user_id: int, name: str) -> Flow | None:
         with get_sync_db_session() as session:
-            statement = select(Flow).where(Flow.is_delete == 0).where(Flow.user_id == user_id, Flow.name == name)
+            statement = (
+                select(Flow)
+                .where(Flow.is_delete == 0)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(Flow.user_id == user_id, Flow.name == name)
+            )
             return session.exec(statement).first()
 
     @classmethod
     def get_flow_list_by_name(cls, name: str) -> list[Flow]:
         with get_sync_db_session() as session:
-            statement = select(Flow).where(Flow.is_delete == 0).where(Flow.name.like(f"%{name}%"))
+            statement = (
+                select(Flow)
+                .where(Flow.is_delete == 0)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(Flow.name.like(f"%{name}%"))
+            )
             return session.exec(statement).all()
 
     @classmethod
@@ -291,6 +333,7 @@ class FlowDao(FlowBase):
         statment = (
             select(Flow, RoleAccess)
             .where(Flow.is_delete == 0)
+            .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
             .join(
                 RoleAccess,
                 and_(
@@ -319,7 +362,11 @@ class FlowDao(FlowBase):
     @classmethod
     def get_count_by_filters(cls, filters) -> int:
         with get_sync_db_session() as session:
-            count_statement = session.query(func.count(Flow.id)).where(Flow.is_delete == 0)
+            count_statement = (
+                session.query(func.count(Flow.id))
+                .where(Flow.is_delete == 0)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+            )
             return session.exec(count_statement.where(*filters)).scalar()
 
     @classmethod
@@ -347,7 +394,7 @@ class FlowDao(FlowBase):
                 Flow.description,
                 Flow.guide_word,
                 Flow.flow_type,
-            ).where(Flow.is_delete == 0)
+            ).where(Flow.is_delete == 0, or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
             if extra_ids and isinstance(extra_ids, list):
                 statement = statement.where(or_(Flow.id.in_(extra_ids), Flow.user_id == user_id))
             elif not extra_ids:
@@ -378,7 +425,11 @@ class FlowDao(FlowBase):
         flow_type: int | None = None,
     ) -> int:
         with get_sync_db_session() as session:
-            count_statement = session.query(func.count(Flow.id)).where(Flow.is_delete == 0)
+            count_statement = (
+                session.query(func.count(Flow.id))
+                .where(Flow.is_delete == 0)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+            )
             if extra_ids and isinstance(extra_ids, list):
                 count_statement = count_statement.filter(or_(Flow.id.in_(extra_ids), Flow.user_id == user_id))
             elif not extra_ids:
@@ -416,8 +467,10 @@ class FlowDao(FlowBase):
             Flow.update_time,
             Flow.description,
             Flow.guide_word,
-        ).where(Flow.is_delete == 0)
-        count_statement = select(func.count(Flow.id)).where(Flow.is_delete == 0, Flow.flow_type == flow_type)
+        ).where(Flow.is_delete == 0, or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+        count_statement = select(func.count(Flow.id)).where(
+            Flow.is_delete == 0, Flow.flow_type == flow_type,
+            or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
         if flow_ids:
             statement = statement.where(Flow.id.in_(flow_ids))
             count_statement = count_statement.where(Flow.id.in_(flow_ids))
@@ -795,7 +848,7 @@ class FlowDao(FlowBase):
             Flow.create_time,
             Flow.update_time,
             type_coerce(null(), String(16)).label("app_state"),
-        ).where(Flow.is_delete == 0)
+        ).where(Flow.is_delete == 0, or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
         assistant_select = select(
             Assistant.id,
             Assistant.name,
@@ -895,6 +948,7 @@ class FlowDao(FlowBase):
                 Flow.update_time,
             )
             .where(Flow.is_delete == 0)
+            .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
             .where(Flow.id == flow_id)
         )
         async with get_async_db_session() as session:
@@ -932,6 +986,7 @@ class FlowDao(FlowBase):
                 Flow.update_time,
             )
             .where(Flow.is_delete == 0)
+            .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
             .where(Flow.id == flow_id)
         )
         with get_sync_db_session() as session:

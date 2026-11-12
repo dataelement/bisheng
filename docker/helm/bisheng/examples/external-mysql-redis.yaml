@@ -1,0 +1,22 @@
+# Existing Secrets must be present in the release namespace. Provision dedicated
+# schemas/accounts with database-level grants before installation. No root given.
+mysql:
+  enabled: false
+database:
+  host: mysql.infra.svc.cluster.local
+  name: bisheng
+  username: bisheng
+  auth: {existingSecret: platform-db, passwordKey: password}
+redis:
+  enabled: false
+  external: {host: redis.infra.svc.cluster.local, port: 6379}
+  auth: {existingSecret: platform-redis, passwordKey: password}
+  cacheDb: 10
+  celeryDb: 11
+  gatewayDb: 12
+openfga:
+  database:
+    host: mysql.infra.svc.cluster.local
+    name: bisheng_openfga
+    username: bisheng_openfga
+    auth: {existingSecret: openfga-db, passwordKey: password}

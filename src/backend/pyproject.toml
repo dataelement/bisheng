@@ -81,6 +81,7 @@ dependencies = [
     "qdrant-client>=1.15.1",
     "rapidfuzz>=3.14.3",
     "redis>=7.0.1",
+    "regex>=2025.11.3",
     "scipy>=1.15.3",
     "shapely>=2.1.2",
     "sqlmodel>=0.0.27",

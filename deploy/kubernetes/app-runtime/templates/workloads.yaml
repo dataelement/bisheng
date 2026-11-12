@@ -1,33 +1,45 @@
-{{- $storage := dict "class" .Values.storage.className "size_mb" .Values.storage.sizeMi "scratch_size_mb" .Values.storage.scratchSizeMi "filesystem" .Values.storage.filesystem "sqlite_compatible" .Values.storage.sqliteCompatible "node_local" .Values.storage.nodeLocal "static_pool" (not (empty .Values.storage.volumes)) }}
-{{- $capabilities := dict "pod_cidrs" .Values.network.podCidrs "service_cidrs" .Values.network.serviceCidrs }}
-{{- $descriptor := dict "schema_version" 1 "cluster_id" .Values.execution.clusterId "installation_id" .Values.execution.installationId "namespace" .Values.execution.namespace "platform" (printf "linux/%s" .Values.execution.architecture) "memory_budget_mb" .Values.execution.memoryBudgetMi "cpu_budget_millicores" .Values.execution.cpuBudgetMillicores "temporary_storage_mb" .Values.execution.temporaryStorageMi "status_policy_revision" .Values.execution.statusPolicyRevision "cni_username" .Values.execution.cniUsername "storage_controller_usernames" .Values.execution.storageControllerUsernames "helper_image" .Values.images.helper "assembler_image" .Values.images.assembler "storage" $storage "capabilities" $capabilities "pod_cidrs" .Values.network.podCidrs "service_cidrs" .Values.network.serviceCidrs "runtime_class" .Values.execution.runtimeClass "pull_secret" .Values.execution.pullSecret "control_pull_secret" .Values.services.pullSecret "data_public_keys_configmap" .Values.execution.dataKeyConfigMap "package_endpoints" .Values.offline.packageEndpoints "image_repository" .Values.offline.imageRepository "image_registry_endpoints" .Values.offline.imageRegistryEndpoints "registry_secret" .Values.offline.registrySecret "insecure_registry" .Values.offline.insecureRegistry "offline" .Values.offline.enabled "sandbox" (dict "requested" .Values.execution.sandbox "runtime_classes" .Values.execution.runtimeClasses) "canary_profiles" .Values.execution.canaryProfiles "probe_report" .Values.execution.probeReport }}
+{{- include "runtime.defaults" . -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: runtime-deployment-descriptor
+  name: {{ include "runtime.name" (list . "runtime-deployment-descriptor") }}
   namespace: {{ .Values.services.namespace }}
 data:
-  descriptor.json: {{ $descriptor | toJson | quote }}
+  descriptor.json: {{ include "runtime.policy" . | quote }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: runtime-manager
+  name: {{ include "runtime.name" (list . "runtime-manager") }}
   namespace: {{ .Values.services.namespace }}
 spec:
   replicas: {{ .Values.services.managerReplicas }}
   strategy: {type: Recreate}
-  selector: {matchLabels: {app: runtime-manager}}
+  selector: {matchLabels: {app: {{ include "runtime.name" (list . "runtime-manager") }}}}
   template:
     metadata:
-      labels: {app: runtime-manager}
+      annotations:
+        checksum/deployment-policy: {{ include "runtime.policy" . | sha256sum }}
+        deployment.bisheng.io/config-revision: {{ default "" (get (default (dict) .Values.global) "configRevision") | quote }}
+      labels: {app: {{ include "runtime.name" (list . "runtime-manager") }}}
     spec:
       automountServiceAccountToken: false
       nodeSelector:
         kubernetes.io/os: linux
         kubernetes.io/arch: {{ .Values.execution.architecture }}
-{{- if .Values.services.pullSecret }}
-      imagePullSecrets: [{name: {{ .Values.services.pullSecret }}}]
+{{- with .Values.services.placement.nodeSelector }}
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.services.placement.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.services.placement.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- $pull := default (list) (get (default (dict) .Values.global) "imagePullSecrets") }}
+{{- if .Values.services.pullSecret }}{{ $pull = append $pull (dict "name" .Values.services.pullSecret) }}{{ end }}
+{{- with $pull }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
 {{- end }}
       serviceAccountName: {{ .Values.services.managerAccount }}
       securityContext:
@@ -39,18 +51,17 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       terminationGracePeriodSeconds: 30
       containers:
-        - name: runtime-manager
+        - name: {{ include "runtime.name" (list . "runtime-manager") }}
           image: {{ .Values.images.manager | quote }}
           imagePullPolicy: IfNotPresent
-          command: [python, -m, uvicorn, "runtime_manager.main:app", --host, 0.0.0.0, --port, "8091", --no-access-log]
+          command: [python, -m, runtime_manager.k8s_boot]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
           ports: [{name: service, containerPort: 8091}]
           resources:
-            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi}
-            limits: {cpu: "1", memory: 512Mi, ephemeral-storage: 512Mi}
+{{ toYaml (default (dict "requests" (dict "cpu" "100m" "memory" "128Mi" "ephemeral-storage" "64Mi") "limits" (dict "cpu" "1" "memory" "512Mi" "ephemeral-storage" "512Mi")) .Values.services.resources.manager) | nindent 12 }}
           env:
             - name: RTM_HOST
               value: 0.0.0.0
@@ -80,8 +91,12 @@ spec:
               value: {{ .Values.execution.namespace | quote }}
             - name: RTM_K8S_CLUSTER_ID
               value: {{ .Values.execution.clusterId | quote }}
+            - name: RTM_K8S_DIAGNOSTIC_FILE
+              value: /run/diagnostics/report.json
             - name: RTM_K8S_DEPLOYMENT_DESCRIPTOR
               value: /run/deployment/descriptor.json
+            - {name: RTM_K8S_REQUEST_TIMEOUT_SECONDS, value: {{ .Values.services.apiTimeoutSeconds | quote }}}
+            - {name: RTM_EGRESS_DNS_TIMEOUT, value: {{ .Values.services.dnsTimeoutSeconds | quote }}}
             - name: RTM_K8S_API_SERVER
               value: {{ .Values.network.apiServer | quote }}
             - name: RTM_K8S_TOKEN_FILE
@@ -89,7 +104,7 @@ spec:
             - name: RTM_K8S_CA_FILE
               value: /run/kubernetes/ca.crt
             - name: RTM_EGRESS_PROXY
-              value: {{ printf "%s:3128" .Values.services.egressClusterIP | quote }}
+              value: {{ printf "%s.%s.svc:3128" (include "runtime.name" (list . "egress-proxy")) .Values.services.namespace | quote }}
             - name: RTM_BUILD_INDEX_URL
               value: {{ .Values.offline.packageIndex | quote }}
             - name: RTM_BUILD_EXTRA_INDEX_URL
@@ -104,21 +119,21 @@ spec:
               value: {{ .Values.platform.origin | quote }}
             - name: RTM_PLATFORM_CA_FILE
               value: /run/platform-ca/ca.crt
+          startupProbe:
+            httpGet: {path: /healthz, port: service}
+{{ toYaml .Values.services.probes.startup | nindent 12 }}
           readinessProbe:
             httpGet: {path: /healthz, port: service}
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 6
+{{ toYaml .Values.services.probes.readiness | nindent 12 }}
           livenessProbe:
             httpGet: {path: /healthz, port: service}
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 6
+{{ toYaml .Values.services.probes.liveness | nindent 12 }}
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
             - {name: platform-ca, mountPath: /run/platform-ca, readOnly: true}
             - {name: kubernetes, mountPath: /run/kubernetes, readOnly: true}
             - {name: descriptor, mountPath: /run/deployment, readOnly: true}
+            - {name: diagnostics, mountPath: /run/diagnostics, readOnly: true}
             - {name: material-issuer, mountPath: /run/material-issuer, readOnly: true}
       volumes:
         - name: tmp
@@ -136,9 +151,13 @@ spec:
               - configMap:
                   name: kube-root-ca.crt
                   items: [{key: ca.crt, path: ca.crt}]
+        - name: diagnostics
+          configMap:
+            name: {{ include "runtime.name" (list . "runtime-diagnostics") }}
+            optional: true
         - name: descriptor
           configMap:
-            name: runtime-deployment-descriptor
+            name: {{ include "runtime.name" (list . "runtime-deployment-descriptor") }}
             defaultMode: 0444
         - name: material-issuer
           secret:
@@ -149,22 +168,36 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: app-proxy
+  name: {{ include "runtime.name" (list . "app-proxy") }}
   namespace: {{ .Values.services.namespace }}
 spec:
   replicas: {{ .Values.services.entryReplicas }}
   strategy: {type: Recreate}
-  selector: {matchLabels: {app: app-proxy}}
+  selector: {matchLabels: {app: {{ include "runtime.name" (list . "app-proxy") }}}}
   template:
     metadata:
-      labels: {app: app-proxy}
+      annotations:
+        checksum/deployment-policy: {{ include "runtime.policy" . | sha256sum }}
+        deployment.bisheng.io/config-revision: {{ default "" (get (default (dict) .Values.global) "configRevision") | quote }}
+      labels: {app: {{ include "runtime.name" (list . "app-proxy") }}}
     spec:
       automountServiceAccountToken: false
       nodeSelector:
         kubernetes.io/os: linux
         kubernetes.io/arch: {{ .Values.execution.architecture }}
-{{- if .Values.services.pullSecret }}
-      imagePullSecrets: [{name: {{ .Values.services.pullSecret }}}]
+{{- with .Values.services.placement.nodeSelector }}
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.services.placement.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.services.placement.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- $pull := default (list) (get (default (dict) .Values.global) "imagePullSecrets") }}
+{{- if .Values.services.pullSecret }}{{ $pull = append $pull (dict "name" .Values.services.pullSecret) }}{{ end }}
+{{- with $pull }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
 {{- end }}
       securityContext:
         runAsNonRoot: true
@@ -175,7 +208,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       terminationGracePeriodSeconds: 30
       containers:
-        - name: app-proxy
+        - name: {{ include "runtime.name" (list . "app-proxy") }}
           image: {{ .Values.images.entry | quote }}
           imagePullPolicy: IfNotPresent
           command: [python, -m, uvicorn, "app_proxy.main:app", --host, 0.0.0.0, --port, "8080", --no-access-log]
@@ -185,8 +218,7 @@ spec:
             capabilities: {drop: [ALL]}
           ports: [{name: service, containerPort: 8080}]
           resources:
-            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi}
-            limits: {cpu: "1", memory: 512Mi, ephemeral-storage: 512Mi}
+{{ toYaml (default (dict "requests" (dict "cpu" "100m" "memory" "128Mi" "ephemeral-storage" "64Mi") "limits" (dict "cpu" "1" "memory" "512Mi" "ephemeral-storage" "512Mi")) .Values.services.resources.entry) | nindent 12 }}
           env:
             - name: APP_PROXY_HOST
               value: 0.0.0.0
@@ -197,7 +229,9 @@ spec:
             - name: APP_PROXY_BACKEND_BASE
               value: {{ .Values.platform.backendBase | quote }}
             - name: APP_PROXY_MANAGER_BASE
-              value: {{ printf "http://runtime-manager.%s.svc:8091" .Values.services.namespace | quote }}
+              value: {{ printf "http://%s.%s.svc:8091" (include "runtime.name" (list . "runtime-manager")) .Values.services.namespace | quote }}
+            - name: SSL_CERT_FILE
+              value: /run/platform-ca/ca.crt
             - name: APP_PROXY_BACKEND_SECRET
               valueFrom:
                 secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: authz-secret}
@@ -209,41 +243,57 @@ spec:
             - name: APP_PROXY_ROUTE_SECRET
               valueFrom:
                 secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: entry-secret}
+          startupProbe:
+            httpGet: {path: /healthz, port: service}
+{{ toYaml .Values.services.probes.startup | nindent 12 }}
           readinessProbe:
             httpGet: {path: /healthz, port: service}
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 6
+{{ toYaml .Values.services.probes.readiness | nindent 12 }}
           livenessProbe:
             httpGet: {path: /healthz, port: service}
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 6
+{{ toYaml .Values.services.probes.liveness | nindent 12 }}
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
+            - {name: platform-ca, mountPath: /run/platform-ca, readOnly: true}
       volumes:
+        - name: platform-ca
+          configMap: {name: {{ .Values.platform.caConfigMap }}}
         - name: tmp
           emptyDir: {sizeLimit: 512Mi}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: egress-proxy
+  name: {{ include "runtime.name" (list . "egress-proxy") }}
   namespace: {{ .Values.services.namespace }}
 spec:
   replicas: {{ .Values.services.egressReplicas }}
   strategy: {type: Recreate}
-  selector: {matchLabels: {app: egress-proxy}}
+  selector: {matchLabels: {app: {{ include "runtime.name" (list . "egress-proxy") }}}}
   template:
     metadata:
-      labels: {app: egress-proxy}
+      annotations:
+        checksum/deployment-policy: {{ include "runtime.policy" . | sha256sum }}
+        deployment.bisheng.io/config-revision: {{ default "" (get (default (dict) .Values.global) "configRevision") | quote }}
+      labels: {app: {{ include "runtime.name" (list . "egress-proxy") }}}
     spec:
       automountServiceAccountToken: false
       nodeSelector:
         kubernetes.io/os: linux
         kubernetes.io/arch: {{ .Values.execution.architecture }}
-{{- if .Values.services.pullSecret }}
-      imagePullSecrets: [{name: {{ .Values.services.pullSecret }}}]
+{{- with .Values.services.placement.nodeSelector }}
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.services.placement.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.services.placement.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- $pull := default (list) (get (default (dict) .Values.global) "imagePullSecrets") }}
+{{- if .Values.services.pullSecret }}{{ $pull = append $pull (dict "name" .Values.services.pullSecret) }}{{ end }}
+{{- with $pull }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
 {{- end }}
       securityContext:
         runAsNonRoot: true
@@ -254,7 +304,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       terminationGracePeriodSeconds: 30
       containers:
-        - name: egress-proxy
+        - name: {{ include "runtime.name" (list . "egress-proxy") }}
           image: {{ .Values.images.egress | quote }}
           imagePullPolicy: IfNotPresent
           command: [python, -m, runtime_manager.egress_proxy]
@@ -264,8 +314,7 @@ spec:
             capabilities: {drop: [ALL]}
           ports: [{name: service, containerPort: 3128}]
           resources:
-            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi}
-            limits: {cpu: "1", memory: 512Mi, ephemeral-storage: 512Mi}
+{{ toYaml (default (dict "requests" (dict "cpu" "100m" "memory" "128Mi" "ephemeral-storage" "64Mi") "limits" (dict "cpu" "1" "memory" "512Mi" "ephemeral-storage" "512Mi")) .Values.services.resources.egress) | nindent 12 }}
           env:
             - name: RTM_EXECUTOR
               value: docker
@@ -274,7 +323,7 @@ spec:
             - name: RTM_EGRESS_LISTEN
               value: 0.0.0.0:3128
             - name: RTM_EGRESS_PROXY
-              value: {{ printf "%s:3128" .Values.services.egressClusterIP | quote }}
+              value: {{ printf "%s.%s.svc:3128" (include "runtime.name" (list . "egress-proxy")) .Values.services.namespace | quote }}
             - name: RTM_PLATFORM_KEY_ID
               valueFrom:
                 secretKeyRef: {name: {{ .Values.services.credentialsSecret }}, key: egress-key-id}
@@ -291,14 +340,10 @@ spec:
               value: /run/platform-ca/ca.crt
           readinessProbe:
             tcpSocket: {port: service}
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 6
+{{ toYaml .Values.services.probes.liveness | nindent 12 }}
           livenessProbe:
             tcpSocket: {port: service}
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 6
+{{ toYaml .Values.services.probes.liveness | nindent 12 }}
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
             - {name: platform-ca, mountPath: /run/platform-ca, readOnly: true}
@@ -314,22 +359,36 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: runtime-admission
+  name: {{ include "runtime.name" (list . "runtime-admission") }}
   namespace: {{ .Values.services.namespace }}
 spec:
   replicas: {{ .Values.services.admissionReplicas }}
   strategy: {type: Recreate}
-  selector: {matchLabels: {app: runtime-admission}}
+  selector: {matchLabels: {app: {{ include "runtime.name" (list . "runtime-admission") }}}}
   template:
     metadata:
-      labels: {app: runtime-admission}
+      annotations:
+        checksum/deployment-policy: {{ include "runtime.policy" . | sha256sum }}
+        deployment.bisheng.io/config-revision: {{ default "" (get (default (dict) .Values.global) "configRevision") | quote }}
+      labels: {app: {{ include "runtime.name" (list . "runtime-admission") }}}
     spec:
       automountServiceAccountToken: false
       nodeSelector:
         kubernetes.io/os: linux
         kubernetes.io/arch: {{ .Values.execution.architecture }}
-{{- if .Values.services.pullSecret }}
-      imagePullSecrets: [{name: {{ .Values.services.pullSecret }}}]
+{{- with .Values.services.placement.nodeSelector }}
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.services.placement.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.services.placement.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- $pull := default (list) (get (default (dict) .Values.global) "imagePullSecrets") }}
+{{- if .Values.services.pullSecret }}{{ $pull = append $pull (dict "name" .Values.services.pullSecret) }}{{ end }}
+{{- with $pull }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
 {{- end }}
       securityContext:
         runAsNonRoot: true
@@ -340,7 +399,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       terminationGracePeriodSeconds: 30
       containers:
-        - name: runtime-admission
+        - name: {{ include "runtime.name" (list . "runtime-admission") }}
           image: {{ .Values.images.admission | quote }}
           imagePullPolicy: IfNotPresent
           command: [python, -m, runtime_manager.k8s_admission]
@@ -350,8 +409,7 @@ spec:
             capabilities: {drop: [ALL]}
           ports: [{name: service, containerPort: 8443}]
           resources:
-            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 64Mi}
-            limits: {cpu: "1", memory: 512Mi, ephemeral-storage: 512Mi}
+{{ toYaml (default (dict "requests" (dict "cpu" "100m" "memory" "128Mi" "ephemeral-storage" "64Mi") "limits" (dict "cpu" "1" "memory" "512Mi" "ephemeral-storage" "512Mi")) .Values.services.resources.admission) | nindent 12 }}
           env:
             - name: RTM_ADMISSION_PLATFORM_URL
               value: {{ .Values.platform.origin | quote }}
@@ -380,18 +438,19 @@ spec:
               value: /run/admission-tls/tls.key
             - name: RTM_ADMISSION_HELPER_IMAGE
               value: {{ .Values.images.helper | quote }}
+            - name: RTM_ADMISSION_IMAGE_CHECK_MAX_SECONDS
+              value: "1800"
             - name: RTM_ADMISSION_CANARY_PLANS_FILE
               value: /run/preflight/plans.json
+          startupProbe:
+            httpGet: {path: /health, port: service, scheme: HTTPS}
+{{ toYaml .Values.services.probes.startup | nindent 12 }}
           readinessProbe:
             httpGet: {path: /health, port: service, scheme: HTTPS}
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 6
+{{ toYaml .Values.services.probes.readiness | nindent 12 }}
           livenessProbe:
             httpGet: {path: /health, port: service, scheme: HTTPS}
-            periodSeconds: 10
-            timeoutSeconds: 2
-            failureThreshold: 6
+{{ toYaml .Values.services.probes.liveness | nindent 12 }}
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
             - {name: platform-ca, mountPath: /run/platform-ca, readOnly: true}
@@ -418,5 +477,6 @@ spec:
             items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]
         - name: canary-plans
           configMap:
-            name: runtime-canary-plans
+            name: {{ include "runtime.name" (list . "runtime-canary-plans") }}
+            optional: true
             defaultMode: 0444

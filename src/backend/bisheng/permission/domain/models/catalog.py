@@ -21,7 +21,7 @@ from sqlalchemy import (
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
 
 class CatalogReleaseStatus(StrEnum):
@@ -244,6 +244,20 @@ class PermissionModel(SQLModelSerializable, table=True):
     )
     derived_level: int | None = Field(
         default=None,
+        sa_column=Column(Integer, nullable=True),
+    )
+    visibility_only_resource_types: list[str] | None = Field(
+        default=None,
+        sa_column=Column(JsonType, nullable=True),
+    )
+    visibility_level: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True),
+    )
+    retired_use_level_floor: int | None = Field(
+        default=None,
+        exclude=True,
+        repr=False,
         sa_column=Column(Integer, nullable=True),
     )
     active: bool = Field(

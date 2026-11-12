@@ -163,16 +163,12 @@ class BundlePreparer:
                 if self.config.build_npm_registry:
                     online["npm_config_registry"] = self.config.build_npm_registry
                 if self.config.egress_enabled:
-                    from runtime_manager.egress import egress_env
+                    from runtime_manager.egress import build_package_sources, egress_env
 
                     credentials = self.platform.egress(
                         opid,
                         "build",
-                        package_sources=[
-                            self.config.build_index_url,
-                            self.config.build_extra_index_url,
-                            self.config.build_npm_registry,
-                        ],
+                        package_sources=build_package_sources(self.config),
                     )
                     online.update(egress_env(self.config, **credentials))
                 self.runner.run(

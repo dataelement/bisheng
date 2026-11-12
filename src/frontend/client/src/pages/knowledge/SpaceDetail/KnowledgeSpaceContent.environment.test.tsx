@@ -14,6 +14,7 @@ jest.mock("recoil", () => ({
 jest.mock("../selectionStore", () => ({ knowledgeSelectedFilesState: {} }));
 jest.mock("~/pages/appChat/store/atoms", () => ({ bishengConfState: {} }));
 jest.mock("~/hooks", () => ({
+  useAuthContext: () => ({ user: { id: "test-user", role: "member" } }),
   useLocalize: () => (key: string) => key,
   usePrefersMobileLayout: () => mockNarrow,
   useScrollRevealRef: () => mockNoop,

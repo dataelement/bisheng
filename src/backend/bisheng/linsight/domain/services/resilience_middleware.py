@@ -41,6 +41,7 @@ from loguru import logger
 
 from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.services.llm_error_classifier import Behavior, classify_behavior
+from bisheng.llm.domain.llm.response_validation import IncompleteStreamError, has_completion_marker
 
 # Synthetic reply substituted for a degraded subagent step. Read by the PARENT
 # planner as a control note ("this leg failed — continue with what you have"),
@@ -142,16 +143,6 @@ class ModelOutputTruncatedError(RuntimeError):
 #     over), so it is neither silent nor worth re-sending a six-figure-token
 #     request over.
 # ---------------------------------------------------------------------------
-
-
-class IncompleteStreamError(ConnectionError):
-    """The provider closed the response stream before the model finished its turn.
-
-    Subclasses ``ConnectionError`` deliberately — that IS what happened at the
-    transport layer, and it makes ``classify_behavior`` bucket this as RETRYABLE and
-    ``label_error`` render the network-timeout card, without teaching the shared
-    classifier about a Linsight-only exception type.
-    """
 
 
 # Retries for an incomplete stream. Deliberately small and SEPARATE from both the
@@ -335,7 +326,7 @@ def _is_incomplete_stream_response(response: object) -> bool:
     # first chunk, so a real stream — finished or cut off — always carries something.
     if not meta:
         return False
-    if meta.get("finish_reason") or meta.get("stop_reason"):
+    if has_completion_marker(meta):
         return False
     if getattr(ai, "tool_calls", None) or getattr(ai, "invalid_tool_calls", None):
         return False
@@ -662,6 +653,9 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
             self._budget_sink["soft_landing"] = True
 
     def _degrade_or_raise(self, exc: Exception) -> AIMessage:
+        if isinstance(exc, IncompleteStreamError):
+            # The fallback response guard runs outside BishengLLM's boundary.
+            FailureContextAdapter.capture(exc, category="model_service", service="llm", operation="invoke_model")
         # Main graph: a no-tool-call synthetic message would just end the main
         # loop mid-reasoning; re-raise for a clean, classified task-level failure.
         if not self.is_subagent:
@@ -709,6 +703,22 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         while True:
             try:
                 response = await handler(current)
+            except IncompleteStreamError as exc:
+                # Boundary validation shares the existing EOF allowance, independent
+                # of transient exceptions and truncation retries.
+                if incomplete_attempts < _INCOMPLETE_STREAM_RETRY_LIMIT:
+                    delay = self._delay(incomplete_attempts)
+                    incomplete_attempts += 1
+                    logger.warning(
+                        "[linsight-resilience] incomplete provider stream (retry {}/{}); sleeping {:.1f}s",
+                        incomplete_attempts,
+                        _INCOMPLETE_STREAM_RETRY_LIMIT,
+                        delay,
+                    )
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+                    continue
+                return self._degrade_or_raise(exc)
             except Exception as exc:
                 FailureContextAdapter.from_error(exc)
                 behavior = classify_behavior(exc)
@@ -806,6 +816,14 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         while True:
             try:
                 response = handler(current)
+            except IncompleteStreamError as exc:
+                if incomplete_attempts < _INCOMPLETE_STREAM_RETRY_LIMIT:
+                    delay = self._delay(incomplete_attempts)
+                    incomplete_attempts += 1
+                    if delay > 0:
+                        time.sleep(delay)
+                    continue
+                return self._degrade_or_raise(exc)
             except Exception as exc:
                 FailureContextAdapter.from_error(exc)
                 behavior = classify_behavior(exc)

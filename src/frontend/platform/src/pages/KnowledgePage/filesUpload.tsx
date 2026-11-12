@@ -1,451 +1,134 @@
-// @ts-strict-ignore
-import { Button, toast } from '@bisheng/ui';
-import { Outlined } from "bisheng-icons";
-
-
-import StepProgress from "@/components/bs-ui/step";
-
-import { retryKnowledgeFileApi,subUploadLibFile } from "@/controllers/API";
-import { checkResourceActionApi } from "@/controllers/API/permission";
-import { showApiError } from "@/controllers/request";
-
-import { useEffect,useRef,useState } from "react";
+import { Button } from "@bisheng/ui";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useId } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate,useParams } from "react-router-dom";
-import { DialogWithRepeatFiles } from "./components/DuplicateFileDialog";
-import FileUploadStep1 from "./components/FileUploadStep1";
-import FileUploadStep2,{ Step2PersistState } from "./components/FileUploadStep2";
-import FileUploadStep4 from "./components/FileUploadStep4";
-import PreviewResult from "./components/PreviewResult";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
+import {
+  knowledgeQueryKeys,
+  type KnowledgeQueryScope,
+} from "@/controllers/hooks/knowledge";
+import { showApiError } from "@/controllers/request";
+import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { SpaceFileUploadPanel } from "./components/SpaceFileUploadPanel";
 
-// Normal mode fixed step labels (4 steps)
-const getNormalStepLabels = (t) => [
-  t('uploadFile'),
-  t('segmentStrategy'),
-  t('textComparison'),
-  t('dataProcessing')
-];
-
-const repeatFileI18nRmark = (files, t) => files.map(file => {
-  try {
-    const { new_name, old_name } = JSON.parse(file.remark);
-    return {
-      ...file,
-      remarkExt: t('fileExists', { name1: new_name, name2: old_name })
-    }
-  } catch (e) {
-    return file;
-  }
-});
-
-export default function FilesUpload() {
-  const { t } = useTranslation('knowledge');
+const parseId = (value: string | null | undefined): number | null => {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+};
+interface UploadTargetProps {
+  scope: KnowledgeQueryScope;
+  spaceId: number;
+  parentId: number | null;
+}
+function UploadTarget({ scope, spaceId, parentId }: UploadTargetProps) {
+  const { t } = useTranslation("knowledge");
   const navigate = useNavigate();
-  const { id: knowledgeId } = useParams(); // Get knowledge base ID from route
-
-  const [permissionChecked, setPermissionChecked] = useState(false);
-  const [hasEditPermission, setHasEditPermission] = useState(false);
-
-  // Normal mode exclusive states (no adjustment mode related logic)
-  const [currentStep, setCurrentStep] = useState(1); // Initial step: 1 (upload file)
-  const [resultFiles, setResultFiles] = useState([]); // Uploaded file list
-  const [segmentRules, setSegmentRules] = useState(null); // Segmentation strategy config
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isNextDisabled, setIsNextDisabled] = useState(false);
-  const [repeatFiles, setRepeatFiles] = useState([]); // Duplicate file reminder
-  const [retryLoad, setRetryLoad] = useState(false);
-
-  // Key addition: Manage Step2's persistent state
-  const [step2PersistState, setStep2PersistState] = useState<Step2PersistState | undefined>();
-
-  // Ref management
-  const fileUploadStep2Ref = useRef(null); // Step2 (segmentation strategy) component reference
-  const _tempConfigRef = useRef({}); // Temporary storage of API config
-  const submittingRef = useRef(false); // Prevent duplicate submission
-  const repeatCallBackRef = useRef(() => setCurrentStep(4)); // Jump to step after duplicate file handling (4: data processing)
-  const isNextBtnClickRef = useRef(false); // Determine whether the next button is clicked
-  // Key addition: Receive Step2's state update, save to parent component
-  const handleStep2StateChange = (state: Step2PersistState) => {
-    setStep2PersistState(state);
-  };
-
+  const [params] = useSearchParams();
+  const instance = useId();
+  const permissions = useQuery({
+    queryKey: [
+      ...knowledgeQueryKeys.space(scope, spaceId),
+      "upload-target",
+      instance,
+      parentId,
+    ],
+    queryFn: () =>
+      getMyResourcePermissionsApi(
+        parentId === null ? "knowledge_space" : "folder",
+        String(parentId ?? spaceId),
+      ),
+    retry: false,
+    cacheTime: 0,
+  });
   useEffect(() => {
-    const guardByPermission = async () => {
-      if (!knowledgeId) {
-        setPermissionChecked(true);
-        setHasEditPermission(false);
-        return;
-      }
-      const result = await checkResourceActionApi({ resource_type: 'knowledge_library', resource_id: String(knowledgeId), action: 'edit' });
-      const allowed = !!result?.allowed;
-      setHasEditPermission(allowed);
-      setPermissionChecked(true);
-      if (!allowed) {
-        toast.show({ type: 'warning', message: String(t('noOperationPermission') ?? '') });
-        navigate(`/filelib/${knowledgeId}`);
-      }
-    };
-    void guardByPermission().catch(showApiError).finally(() => setPermissionChecked(true));
-  }, [knowledgeId]);
-
-  // Step 1: File upload completed, jump to step 2
-  const handleStep1Next = async (files) => {
-    isNextBtnClickRef.current = true;
-
-    setResultFiles(files);
-
-    const _repeatFiles = files.filter(e => e.repeat);
-
-    if (_repeatFiles.length) {
-      setRepeatFiles(_repeatFiles.map(file => ({
-        ...file,
-        file_name: file.fileName,
-        remarkExt: t('fileExists', { name1: file.fileName, name2: file.fileName })
-      })));
-    } else {
-      setCurrentStep(2);
-    }
-  };
-
-  // Step 2: Segmentation strategy completed, receive config and jump to step 3
-  const handleStep2Next = (step, config) => {
-    if (config) {
-      setSegmentRules(config);
-    }
-    setCurrentStep(3); // Fixed jump to step 3 (original text comparison)
-  };
-
-  // Step 3: Original text comparison callback, control next button disabled state
-  const handlePreviewResult = (isSuccess) => {
-    if (currentStep === 3) {
-      setIsNextDisabled(!isSuccess);
-    }
-  };
-
-  // Next: Jump based on current step
-  const handleNext = () => {
-    switch (currentStep) {
-      case 2: // Step 2 → Step 3 (segment → compare)
-        if (fileUploadStep2Ref.current) {
-          fileUploadStep2Ref.current.handleNext();
-        }
-        break;
-      case 3: // Step 3 → Step 4 (compare → process)
-        if (segmentRules) {
-          handleSave(segmentRules); // Save config
-        } else {
-          setCurrentStep(4);
-        }
-        break;
-      default:
-        break;
-    }
-  };
-
-  // Previous: Rollback based on current step
-  const handleBack = () => {
-    switch (currentStep) {
-      case 1:
-        navigate(-1); // Step 1 rollback: return to knowledge base list
-        break;
-      case 2:
-        setCurrentStep(1); // Step 2 → Step 1
-        break;
-      case 3:
-        setCurrentStep(2); // Step 3 → Step 2
-        break;
-      case 4:
-        setCurrentStep(3); // Step 4 → Step 3
-        break;
-      default:
-        break;
-    }
-  };
-
-  // API: Save segmentation strategy config (normal mode exclusive)
-  const handleSave = (_config) => {
-    if (submittingRef.current) return setCurrentStep(4);
-    submittingRef.current = true;
-    setIsSubmitting(true);
-
-    /**
-     * Convert UI-visible newline escape sequences ("\\n") back to real newlines ("\n")
-     */
-    const normalizeSeparators = (arr) =>
-      (arr || []).map((s) =>
-        typeof s === 'string' ? s.replace(/\\n/g, '\n') : s
-      );
-
-    // Normal mode API parameter format
-    const apiConfig = {
-      knowledge_id: Number(_config.rules.knowledgeId || knowledgeId),
-      separator: normalizeSeparators(_config.rules.separator),
-      separator_rule: _config.rules.separatorRule,
-      chunk_size: Number(_config.rules.chunkSize),
-      chunk_overlap: Number(_config.rules.chunkOverlap),
-      file_list: _config.rules.fileList.map(item => ({
-        file_path: item.filePath,
-        excel_rule: _config.applyEachCell ? item.excelRule : _config.cellGeneralConfig
-      })),
-      retain_images: _config.rules.retainImages,
-      enable_formula: _config.rules.enableFormula,
-      force_ocr: _config.rules.forceOcr,
-      filter_page_header_footer: _config.rules.pageHeaderFooter ? 1 : 0,
-      split_mode: _config.rules.splitMode,
-      hierarchy_level: Number(_config.rules.hierarchyLevel),
-      append_title: _config.rules.appendTitle,
-      max_chunk_size: Number(_config.rules.maxChunkSize)
-    };
-
-    subUploadLibFile(apiConfig).then(res => {
-      const repeatFilesRes = res.filter(e => e.status === 3);
-      if (repeatFilesRes.length) {
-        const newRepeatFiles = repeatFilesRes.filter(file =>
-          // Same timestamp, no overwrite
-          !resultFiles.some(item => item.fileName === file.file_name && item.time && item.time === file.update_time))
-        setRepeatFiles(repeatFileI18nRmark(newRepeatFiles, t));
-        if (!newRepeatFiles.length) {
-          handleRetry(repeatFilesRes)
-        }
-      } else {
-        toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
-      }
-
-      // Update file ID
-      setResultFiles(files => files.map((file, index) => ({
-        ...file,
-        fileId: res[index]?.id,
-        resultId: res[index]?.id
-      })));
-      setCurrentStep(4)
-    }).catch(showApiError).finally(() => {
-      submittingRef.current = false;
-      setIsSubmitting(false);
-    });
-
-    _tempConfigRef.current = apiConfig;
-  };
-
-  // API: Save directly with default config in step 1 (normal mode exclusive)
-  const handleSaveByDefaultConfig = async (_config) => {
-    isNextBtnClickRef.current = false;
-
-    await subUploadLibFile(_config).then(res => {
-      const _repeatFiles = res.filter(e => e.status === 3);
-      if (_repeatFiles.length) {
-        setRepeatFiles(repeatFileI18nRmark(_repeatFiles, t));
-        repeatCallBackRef.current = () => navigate(-1);
-      } else {
-        toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
-        navigate(-1);
-      }
-    });
-  };
-
-  function dedupeWithRemovedPaths(objs) {
-    const seenMap = new Map()
-    const removedPaths = {}
-
-    for (const item of objs) {
-      if (seenMap.has(item.id)) {
-        removedPaths[item.file_path] = true
-      } else {
-        seenMap.set(item.id, item)
-      }
-    }
-
-    return {
-      uniqueObjs: Array.from(seenMap.values()),
-      removedPaths,
-    }
-  }
-
-  // API: Retry duplicate files (overwrite upload)
-  const handleRetry = (objs) => {
-    if (currentStep === 1 && isNextBtnClickRef.current) {
-      setRepeatFiles([]);
-      return setCurrentStep(2);
-    }
-    setRetryLoad(true);
-    const { uniqueObjs, removedPaths } = dedupeWithRemovedPaths(objs)
-    const newResultFiles = resultFiles.filter(file => !removedPaths[file.file_path])
-    const newUniqueObjs = uniqueObjs.map(item => {
-      const file = newResultFiles.find(f => item.id === f.fileId || item.file_name === f.fileName)
-      return {
-        ...item,
-        file_path: file?.file_path,
-        file_name: file?.fileName,
-      }
-    })
-
-    const params = {
-      knowledge_id: Number(_tempConfigRef.current.knowledge_id),
-      separator: _tempConfigRef.current.separator,
-      separator_rule: _tempConfigRef.current.separator_rule,
-      chunk_size: _tempConfigRef.current.chunk_size,
-      chunk_overlap: _tempConfigRef.current.chunk_overlap,
-      file_objs: newUniqueObjs,
-    };
-
-    // When multiple identical files are uploaded, the files are deduplicated.
-    if (uniqueObjs.length !== objs.length) {
-      setResultFiles(newResultFiles);
-    }
-
-    retryKnowledgeFileApi(params).then(res => {
-      setRepeatFiles([]);
-      setRetryLoad(false);
-      toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
-      repeatCallBackRef.current();
-    }).catch(showApiError).finally(() => {
-      setRetryLoad(false);
-    });
-  };
-
-  const handleUnRetry = () => {
-    const files = resultFiles.filter((item) => {
-      return repeatFiles.every((repeatItem) => {
-        return repeatItem.file_path !== item.file_path;
-      });
-    })
-    setResultFiles(files)
-
-    if (currentStep === 1) {
-      if (files.length === 0) {
-        return navigate(-1);
-      }
-      setRepeatFiles([]);
-      return setCurrentStep(2);
-    }
-    setTimeout(() => {
-      setRepeatFiles([]);
-      repeatCallBackRef.current();
-    }, 100);
-  }
+    if (permissions.error) showApiError(permissions.error);
+  }, [permissions.error]);
   return (
-    <div className="relative h-full flex flex-col">
-      {!permissionChecked && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60">
-          <Outlined.Loading  className="size-4 animate-spin"/>
-        </div>
+    <div className="space-y-4 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">{t("uploadFile")}</h1>
+        <Button
+          variant="link"
+          onClick={() =>
+            navigate({
+              pathname: `/filelib/${spaceId}`,
+              search: params.toString(),
+            })
+          }
+        >
+          {t("back")}
+        </Button>
+      </div>
+      {permissions.isInitialLoading ? (
+        <div role="status">{t("f118.loading_directory")}</div>
+      ) : permissions.isError ? (
+        <Button
+          variant="outlined"
+          onClick={() => {
+            void permissions.refetch();
+          }}
+        >
+          {t("retry")}
+        </Button>
+      ) : permissions.data?.actions.includes("upload_file") ? (
+        <SpaceFileUploadPanel
+          scope={scope}
+          spaceId={spaceId}
+          parentId={parentId}
+        />
+      ) : (
+        <div role="status">{t("noOperationPermission")}</div>
       )}
-      <div className="relative px-4 pt-4">
-        <div className="absolute left-4 top-1/2 z-10 -translate-y-1/4">
-          <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
-            <Button variant="outlined" size="medium" className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background" onClick={() => navigate(-1)} color="default" iconOnly>
-              <Outlined.Left className="size-4" />
-            </Button>
-            <span className="text-sm font-medium text-[#0f172a]">{t('backToKnowledge')}</span>
-          </div>
-        </div>
-        <div className="mx-auto max-w-[1180px]">
-          <div className="min-w-0 overflow-hidden">
-            <StepProgress
-              align="center"
-              currentStep={currentStep}
-              labels={getNormalStepLabels(t)}
-              className="my-0 min-w-0 px-0"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-1 overflow-hidden px-4 pb-4 pt-3">
-        {currentStep === 2 ? (
-          // Step 2: bounded-height layout so inner left/right panels can scroll independently
-          <div className="mx-auto flex w-full max-w-[1180px] flex-col overflow-hidden rounded-[14px] bg-white px-6">
-            <div className="flex min-h-0 flex-1 flex-col">
-              <FileUploadStep2
-                ref={fileUploadStep2Ref}
-                step={currentStep}
-                resultFiles={resultFiles}
-                isSubmitting={isSubmitting}
-                onNext={handleStep2Next}
-                onPrev={handleBack}
-                kId={knowledgeId}
-                persistState={step2PersistState} // Added: Pass saved state
-                onPersistStateChange={setStep2PersistState} // Added: Pass state update callback
-              />
-            </div>
-          </div>
-        ) : (
-          // Steps 1 / 3 / 4: original outer scroll behavior (whole content scrolls together)
-          <div className="mx-auto w-full max-w-[1180px] overflow-y-auto rounded-[14px] bg-white px-6">
-            <div className="h-full">
-              {/* Step 1: File upload (normal mode exclusive) */}
-              {currentStep === 1 && (
-                hasEditPermission &&
-                <FileUploadStep1
-                  onNext={handleStep1Next}
-                  onSave={handleSaveByDefaultConfig}
-                  kId={knowledgeId} // Pass knowledge base ID
-                  initialFiles={resultFiles}
-                />
-              )}
-
-              {/* Step 3: Original text comparison */}
-              {currentStep === 3 && segmentRules && (
-                <div className="block h-full pb-16"> {/* pb-16 clears the fixed prev/next footer; step 2 stays mounted but hidden */}
-                  <PreviewResult
-                    rules={segmentRules.rules}
-                    resultFiles={resultFiles}
-                    handlePreviewResult={handlePreviewResult}
-                    onPrev={handleBack}
-                    onNext={() => {
-                      handleSave(segmentRules);
-                    }}
-                    onDeleteFile={(filePath) => {
-                      setSegmentRules(prev => (
-                        {
-                          ...prev,
-                          rules: {
-                            ...prev.rules,
-                            fileList: prev.rules.fileList.filter(file => file.filePath !== filePath)
-                          }
-                        }
-                      ))
-                      setResultFiles(prev => (
-                        prev.filter(file => file.file_path !== filePath)
-                      ))
-                    }}
-                    step={currentStep}
-                    previewCount={0}
-                    applyEachCell={segmentRules.applyEachCell}
-                    cellGeneralConfig={segmentRules.cellGeneralConfig}
-                    kId={knowledgeId}
-                    showPreview={true}
-                  />
-
-                  <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
-                    <Button variant="outlined" onClick={handleBack} color="default">
-                      {t('previousStep')}
-                    </Button>
-                    <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting || resultFiles.length === 0}>
-                      {isSubmitting ? <Outlined.Loading className="animate-spin h-4 w-4 mr-1" /> : null}
-                      {t('nextStep')}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-
-              {/* Step 4: Data processing */}
-              {currentStep === 4 && (
-                <FileUploadStep4 data={resultFiles} hasRepeat={repeatFiles.length > 0} />
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Duplicate file reminder dialog (shared for normal mode) */}
-      <DialogWithRepeatFiles
-        repeatFiles={repeatFiles}
-        unRetry={handleUnRetry}
-        onRetry={handleRetry}
-        retryLoad={retryLoad}
-        t={t}
-      />
     </div>
   );
 }
+
+export function FilesUpload() {
+  const { t } = useTranslation("knowledge");
+  const { id } = useParams();
+  const [params] = useSearchParams();
+  const { scopes, isLoading, retry } = useKnowledgePageScope();
+  const spaceId = parseId(id);
+  const parents = params.getAll("parent_id");
+  const parentId = parents.length === 1 ? parseId(parents[0]) : null;
+  if (
+    spaceId === null ||
+    (parents.length > 0 && (parents.length !== 1 || parentId === null))
+  )
+    return <div role="status">{t("f118.scope_unavailable")}</div>;
+  if (isLoading) return <div role="status">{t("f118.loading_directory")}</div>;
+  if (!scopes)
+    return (
+      <div>
+        <div role="status">{t("f118.scope_unavailable")}</div>
+        <Button
+          variant="outlined"
+          onClick={() => {
+            void retry();
+          }}
+        >
+          {t("retry")}
+        </Button>
+      </div>
+    );
+  const scope = scopes.ordinary;
+  return (
+    <UploadTarget
+      key={JSON.stringify([
+        scope.identityKey,
+        scope.tenantId,
+        scope.managementTenantId,
+        scope.view,
+        spaceId,
+        parentId,
+      ])}
+      scope={scope}
+      spaceId={spaceId}
+      parentId={parentId}
+    />
+  );
+}
+
+export default FilesUpload;

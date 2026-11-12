@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { getActionsApi, getActionsByModuleApi } from "@/controllers/API/log";
+import { getActionsApi, getActionsByModuleApi, getModulesApi } from "@/controllers/API/log";
 import auditCopy from "./fixtures/auditCopy.json";
 
 const ADDED = [
@@ -23,6 +23,34 @@ describe("audit module → action map", () => {
     expect(await values("system")).toEqual(
       expect.arrayContaining(["add_tool", "update_tool", "delete_tool", "update_sandbox_conf", "user_login"]),
     );
+  });
+
+  it("files personal skills under system and does not offer a linsight module", async () => {
+    expect(await values("system")).toEqual(
+      expect.arrayContaining([
+        "personal_skill_create",
+        "personal_skill_status",
+        "personal_skill_delete",
+        "personal_skill_overwrite",
+      ]),
+    );
+    const modules = (await getModulesApi()).data.map((module) => module.value);
+    expect(modules).not.toContain("linsight");
+  });
+
+  it("has captions for grant object types and a fallback that is not an i18n key", () => {
+    const keys = ["linsight_skill", "knowledge_library", "folder", "knowledge_file", "unknown"] as const;
+    for (const locale of ["zh-Hans", "en-US", "ja"]) {
+      const bs = JSON.parse(readFileSync(resolve(__dirname, `../../public/locales/${locale}/bs.json`), "utf-8"));
+      for (const key of keys) {
+        const caption = bs.log.objectTypeEnum[key];
+        expect(caption, `${locale} ${key}`).toBeTruthy();
+        expect(caption).not.toContain("log.");
+      }
+      expect(bs.log.systemIdEnum.unknown).toBeTruthy();
+      expect(bs.log.systemIdEnum.unknown).not.toContain("log.");
+      expect(bs.log.eventTypeEnum.unknown).toBeTruthy();
+    }
   });
 
   it("puts the four file-version actions under knowledge, without knowledge-space ones", async () => {

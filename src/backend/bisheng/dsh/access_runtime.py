@@ -64,10 +64,13 @@ async def build_runtime(config: DshSettings) -> DshRuntime:
     """Compose the same session validator for HTTP requests and queued work."""
     from bisheng.core.cache.redis_manager import get_redis_client
     from bisheng.dsh.operations_runtime import repository_scope
+    from bisheng.user.domain.services.dsh_avatar import read_dsh_avatar
 
     redis = (await get_redis_client()).async_connection
     authorizations = DshAuthorizationService(redis, config.platform_public_url)
-    identity = IdentityService(TicketRepository(redis), CurrentIdentityRecords(), authorizations)
+    identity = IdentityService(
+        TicketRepository(redis), CurrentIdentityRecords(), authorizations, avatar_reader=read_dsh_avatar
+    )
     keys = LocalTokenKeys()
     sessions = DshLocalSessionService(
         lambda: repository_scope(DshSessionRepository),

@@ -50,6 +50,9 @@
       "empty": "ファイルは空です",
       "unsupported": "このファイル形式はプレビューできません",
       "fileExpired": "ファイルが無効です。新しいファイルをアップロードして再試行してください。"
+    },
+    "selection": {
+      "loadMore": "さらに読み込む"
     }
   },
   "hostedApp": {

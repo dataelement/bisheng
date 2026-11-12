@@ -16,6 +16,9 @@ import { useAuthContext, useLocalize } from "~/hooks";
 import store from "~/store";
 import type { SelectedAgentTool } from "~/store/modeltype";
 import { cn } from "~/utils";
+import { applyToolDefaults, isToolGroupEnabled, selectedToolGroup } from "./agentToolDefaults";
+
+export { applyToolDefaults, isToolGroupEnabled };
 
 // Shape of a leaf tool inside a parent group's `children[]`.
 interface ChildTool {
@@ -60,29 +63,20 @@ function labelForGroup(group: AvailableToolGroup, localize: (key: string) => str
   return group.name;
 }
 
-export function isToolGroupEnabled(group: AvailableToolGroup) {
-  return !group.children?.length || group.children.some(child => child.enabled !== false);
-}
-
-function selectedToolGroup(group: AvailableToolGroup): SelectedAgentTool {
-  return {
-    id: group.id,
-    name: group.name,
-    description: group.description,
-    children: (group.children || []).filter(child => child.enabled !== false).map(child => ({
-      id: child.id,
-      tool_key: child.tool_key,
-      name: child.name,
-      desc: child.desc || child.description,
-    })),
-  };
-}
-
 export interface AgentToolSelection {
   /** At least one tool group is switched on. */
   isActive: boolean;
   isChecked: (id: number) => boolean;
   toggle: (group: AvailableToolGroup) => void;
+}
+
+function readStoredArray<T>(key: string): T[] | undefined {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) ?? 'null');
+    return Array.isArray(value) ? value : undefined;
+  } catch {
+    return undefined; // Invalid or unavailable storage resolves from the configured defaults.
+  }
 }
 
 /**
@@ -97,19 +91,18 @@ export function useAgentToolPreferences(availableTools?: AvailableToolGroup[]) {
   const restoring = useRef<{ userId: string; value: typeof selected }>();
   const hydratedUser = useRef<string>();
   useEffect(() => {
-    if (!userId || hydratedUser.current === userId) return;
-    let restored: typeof selected | undefined;
-    try {
-      const value = JSON.parse(localStorage.getItem(`bs:${userId}:selectedAgentTools`) ?? 'null');
-      if (Array.isArray(value)) restored = value;
-    } catch { /* Invalid snapshots resolve from the configured defaults. */ }
-    if (restored === undefined) {
-      if (!availableTools) return;
-      restored = availableTools.filter(group => group.default_checked && isToolGroupEnabled(group)).map(selectedToolGroup);
-    }
-    restoring.current = { userId, value: restored };
+    // Wait for the catalog: defaults can only be applied against it.
+    if (!userId || hydratedUser.current === userId || !availableTools) return;
+    const { selection, applied } = applyToolDefaults(
+      readStoredArray<SelectedAgentTool>(`bs:${userId}:selectedAgentTools`),
+      readStoredArray<number>(`bs:${userId}:agentToolDefaultsApplied`),
+      availableTools,
+    );
+    try { localStorage.setItem(`bs:${userId}:agentToolDefaultsApplied`, JSON.stringify(applied)); }
+    catch { /* Without storage the defaults are applied again next session; harmless. */ }
+    restoring.current = { userId, value: selection };
     hydratedUser.current = userId;
-    setSelected(restored);
+    setSelected(selection);
   }, [userId, availableTools, setSelected]);
   useEffect(() => {
     if (!userId || hydratedUser.current !== userId) return;
@@ -130,7 +123,9 @@ export function useAgentToolSelection(availableTools: AvailableToolGroup[] | und
     const byId = new Map(availableTools.filter(isToolGroupEnabled).map(group => [group.id, group]));
     const pruned = selected.flatMap(group => {
       const current = byId.get(group.id);
-      return current ? [selectedToolGroup(current)] : [];
+      if (!current) return [];
+      const refreshed = selectedToolGroup(current);
+      return [group.auto ? { ...refreshed, auto: true } : refreshed];
     });
     if (JSON.stringify(pruned) !== JSON.stringify(selected)) setSelected(pruned);
   }, [availableTools, selected, setSelected]);

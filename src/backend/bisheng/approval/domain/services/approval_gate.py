@@ -43,36 +43,23 @@ async def _get_user_role_labels(user_id: int, tenant_id: int) -> frozenset[str]:
 
     PRD section 4.3: applicants may hold several labels; matching uses membership.
     """
-    labels: set[str] = {"regular_user"}
+    from bisheng.common.errcode.role import RolePolicyUnavailableError
+    from bisheng.database.models.department import DepartmentDao
+    from bisheng.role.application.effective_roles import load_effective_roles
+    from bisheng.tenant.domain.services.tenant_service import TenantService
+
+    policy = await load_effective_roles(user_id, expected_home_tenant_id=tenant_id)
+    labels = {"regular_user", *(f"role_{rid}" for rid in policy.role_ids)}
+    if policy.is_identity_admin:
+        labels.add("admin")
     try:
-        from bisheng.database.constants import AdminRole
-        from bisheng.user.domain.models.user_role import UserRoleDao
-
-        user_roles = await UserRoleDao.aget_user_roles(user_id)
-        for ur in user_roles:
-            if ur.role_id == AdminRole:
-                labels.add("admin")
-            else:
-                labels.add(f"role_{ur.role_id}")
-    except Exception:
-        pass
-
-    try:
-        from bisheng.database.models.department import DepartmentDao
-
-        dept_admins = await DepartmentDao.aget_user_admin_departments(user_id)
-        if dept_admins:
+        if await DepartmentDao.aget_user_admin_departments(user_id):
             labels.add("dept_admin")
-    except Exception:
-        pass
-
-    try:
-        from bisheng.tenant.domain.services.tenant_service import TenantService
-
         if await TenantService._is_tenant_admin(user_id, tenant_id):
             labels.add("tenant_admin")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("Unable to resolve approval identity labels for user={}", user_id)
+        raise RolePolicyUnavailableError() from exc
 
     return frozenset(labels)
 

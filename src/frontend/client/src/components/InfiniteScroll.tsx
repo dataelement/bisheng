@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
+import { useLocalize } from "~/hooks";
 
 interface InfiniteScrollProps {
     children: React.ReactNode;
@@ -20,6 +21,7 @@ export function InfiniteScroll({
     rootMargin = "200px",
     emptyText = "",
 }: InfiniteScrollProps) {
+    const localize = useLocalize();
     const sentinelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -53,7 +55,7 @@ export function InfiniteScroll({
                 {isLoading && (
                     <div className="flex items-center gap-2 text-text-3 text-sm">
                         <Loader2 className="size-4 animate-spin" />
-                        正在加载...
+                        {localize("com_ui_loading")}
                     </div>
                 )}
                 {!hasMore && !isLoading && (

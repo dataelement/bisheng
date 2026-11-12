@@ -6,6 +6,7 @@ from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstra
 from sqlmodel import Field, Text, col, or_, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 from bisheng.utils import generate_uuid, md5_hash
@@ -102,6 +103,9 @@ class GptsTools(GptsToolsBase, table=True):
 
 
 class GptsToolsType(GptsToolsTypeBase, table=True):
+    creation_state: str = Field(
+        default="READY", sa_column=Column(String(16), nullable=False, server_default=text("'READY'"))
+    )
     __tablename__ = "t_gpts_tools_type"
     openapi_schema: str = Field(
         default="",
@@ -140,6 +144,14 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
 
 class GptsToolsRead(GptsToolsBase):
     id: int
+
+
+def assert_tool_ready(row):
+    from bisheng.common.errcode.tool import ToolCreationPendingError
+
+    if row is not None and row.is_preset != ToolPresetType.PRESET.value and row.creation_state != "READY":
+        raise ToolCreationPendingError(resource_id=row.id)
+    return row
 
 
 class GptsToolsDao(GptsToolsBase):
@@ -312,7 +324,10 @@ class GptsToolsDao(GptsToolsBase):
         """
         Get the value of all tool categories visible to the userstatement
         """
-        statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
+        statement = select(GptsToolsType).where(
+            GptsToolsType.is_delete == 0,
+            or_(GptsToolsType.is_preset == ToolPresetType.PRESET.value, GptsToolsType.creation_state == "READY"),
+        )
         filters = []
         if extra_tool_type_ids:
             filters.append(or_(GptsToolsType.id.in_(extra_tool_type_ids), GptsToolsType.user_id == user_id))
@@ -377,6 +392,7 @@ class GptsToolsDao(GptsToolsBase):
         statement = select(GptsToolsType).where(
             GptsToolsType.is_delete == 0,
             GptsToolsType.tenant_id == tenant_id,
+            or_(GptsToolsType.is_preset == ToolPresetType.PRESET.value, GptsToolsType.creation_state == "READY"),
         )
         if tool_type_ids is not None:
             id_condition = col(GptsToolsType.id).in_(tool_type_ids) if tool_type_ids else false()
@@ -410,8 +426,14 @@ class GptsToolsDao(GptsToolsBase):
         """
         By Tool CategoryidFilter Category
         """
-        statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
-        count_statement = select(func.count(GptsToolsType.id)).where(GptsToolsType.is_delete == 0)
+        statement = select(GptsToolsType).where(
+            GptsToolsType.is_delete == 0,
+            or_(GptsToolsType.is_preset == ToolPresetType.PRESET.value, GptsToolsType.creation_state == "READY"),
+        )
+        count_statement = select(func.count(GptsToolsType.id)).where(
+            GptsToolsType.is_delete == 0,
+            or_(GptsToolsType.is_preset == ToolPresetType.PRESET.value, GptsToolsType.creation_state == "READY"),
+        )
         if not include_preset:
             statement = statement.where(GptsToolsType.is_preset != ToolPresetType.PRESET.value)
             count_statement = count_statement.where(GptsToolsType.is_preset != ToolPresetType.PRESET.value)
@@ -439,7 +461,7 @@ class GptsToolsDao(GptsToolsBase):
         """
         with get_sync_db_session() as session:
             statement = select(GptsToolsType).where(GptsToolsType.id == tool_type_id)
-            return session.exec(statement).first()
+            return assert_tool_ready(session.exec(statement).first())
 
     @classmethod
     async def aget_one_tool_type(cls, tool_type_id: int) -> GptsToolsType:
@@ -449,7 +471,7 @@ class GptsToolsDao(GptsToolsBase):
         statement = select(GptsToolsType).where(GptsToolsType.id == tool_type_id)
         async with get_async_db_session() as session:
             result = await session.exec(statement)
-            return result.first()
+            return assert_tool_ready(result.first())
 
     @classmethod
     async def get_one_tool_type_by_name(cls, user_id: int, tool_type_name: str) -> GptsToolsType:
@@ -471,19 +493,20 @@ class GptsToolsDao(GptsToolsBase):
         Add Tool Category and the corresponding list of tools
         """
         children = data.children
-        gpts_tool_type = GptsToolsType(**data.model_dump(exclude={"children"}))
+        gpts_tool_type = GptsToolsType(**data.model_dump(exclude={"children"}), creation_state="PENDING")
         # Insert Tool Category
         async with get_async_db_session() as session:
             session.add(gpts_tool_type)
-            await session.commit()
-            await session.refresh(gpts_tool_type)
+            await session.flush()
             if children:
                 # Insert Tools List
                 for one in children:
+                    one.tenant_id = gpts_tool_type.tenant_id
                     one.type = gpts_tool_type.id
                     one.tool_key = cls.get_tool_key(gpts_tool_type.id, one)
                 session.add_all(children)
-                await session.commit()
+            await session.commit()
+            await session.refresh(gpts_tool_type)
         res = GptsToolsTypeRead(**gpts_tool_type.model_dump(), children=children)
         return res
 
@@ -503,24 +526,29 @@ class GptsToolsDao(GptsToolsBase):
         param update_tool_list: List of tools that need to be updated
         """
         finally_children = []
-        async with get_async_db_session() as session:
-            # Update tool category data
-            session.add(data)
-            # Delete a list of tools that don't exist
-            delete_old_tools = update(GptsTools).where(GptsTools.id.in_(del_tool_ids)).values(is_delete=1)
-            await session.exec(delete_old_tools)
-            # Add Tool List
-            for one in add_tool_list:
-                one.type = data.id
-                one.tool_key = cls.get_tool_key(data.id, one)
-                session.add(one)
-                finally_children.append(one)
-            # Update Tool List
-            for one in update_tool_list:
-                session.add(one)
-                finally_children.append(one)
-            await session.commit()
-            await session.refresh(data)
+        with tenant_execution_scope(int(data.tenant_id)), strict_tenant_filter():
+            async with get_async_db_session() as session:
+                # Update tool category data
+                session.add(data)
+                # Delete a list of tools that don't exist
+                delete_old_tools = update(GptsTools).where(GptsTools.tenant_id == data.tenant_id, GptsTools.type == data.id, GptsTools.id.in_(del_tool_ids)).values(is_delete=1)
+                await session.exec(delete_old_tools)
+                # Add Tool List
+                for one in add_tool_list:
+                    one.tenant_id = data.tenant_id
+                    one.type = data.id
+                    one.tool_key = cls.get_tool_key(data.id, one)
+                    session.add(one)
+                    finally_children.append(one)
+                # Update Tool List
+                for one in update_tool_list:
+                    if one.type != data.id or one.tenant_id != data.tenant_id:
+                        raise ValueError("Tool child does not belong to the verified parent")
+                    session.add(one)
+                    finally_children.append(one)
+                await session.commit()
+                await session.refresh(data)
+
 
     @classmethod
     async def aset_tool_type_is_shared(cls, tool_type_id: int, is_shared: bool) -> None:

@@ -13,3 +13,9 @@
 交付前远端从84ef06b50更新到24c02859e（新增应用市场入口），迁移最终重放到该最新基线。
 
 架构检查发现被改端点既有跨模块API导入违反RULE-5；将原共享令牌依赖原样移到share_link领域服务，API文件仅保留同对象重导出。迁移前后函数体逐字相同，依赖和授权逻辑未改变。
+
+## 修订（2026-11-12，对应 spec AC-04/07/08）
+
+`FailureContextAdapter.public_payload(exc=...)` 增加两个字段。`detail` 由 `public_detail` 生成：取异常链首尾两层的「类型: 消息」，用 `_redact` 替换 URL、IP、host:port 和凭据值，截断到 500 字符。`reference_id` 由 `reference` 生成：没有依赖 failure_id 且链上没有业务错误码时，取当前日志 trace id（深度研究即 session_version_id），没有 trace 时生成 uuid；该值写在异常对象上并打一条 `Unclassified failure reference=...` 日志。`safe_detail` 的兜底文案随之带上 reference。
+
+`classify_for_event` 对 unknown 异常检查异常链：来自 openai/anthropic/langchain/httpx 等模型 SDK，或 failure_info 类目为 model_service 时保留 11090，否则用 11091。前端 `localizedBusinessFailure` 跳过 11090/11091；`ChatErrorCard` 与 `ServiceBusyNotice` 恢复「查看详情」（共用 `ErrorDetailDisclosure`），`FailureInfoDetails` 在没有 failure_info 时显示 reference_id。任务模式从 `taskErrorInfo` 或持久化的 `output_result` 读取 detail 与 reference_id；日常模式经 `dailyFailureMetadata` 读取。

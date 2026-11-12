@@ -8,6 +8,7 @@ See features/v3.0.0-beta1/044-model-status-manual-verify/design.md §3 decision 
 """
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,6 +19,19 @@ from bisheng.llm.domain.services.llm import LLMService
 
 STATUS_NORMAL = 0
 STATUS_ABNORMAL = 1
+
+
+@pytest.fixture(autouse=True)
+def original_probe_unit_composition(monkeypatch):
+    # These cache/probe unit cases already replace the business DAO. Native
+    # provider fencing and removal are exercised by the model deletion tests.
+    from bisheng.llm.application import model_deletion
+
+    application = SimpleNamespace(
+        areplay_completed_update=AsyncMock(return_value=None),
+        arequire_idle=AsyncMock(),
+    )
+    monkeypatch.setattr(model_deletion, "get_model_deletion_application", AsyncMock(return_value=application))
 
 
 def _model(model_type=LLMModelType.LLM.value):

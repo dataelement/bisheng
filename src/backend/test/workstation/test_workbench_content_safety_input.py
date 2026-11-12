@@ -81,7 +81,9 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(chat_service.ChatMessageDao, "insert_one", MagicMock(side_effect=_record))
     monkeypatch.setattr(chat_service.ChatMessageDao, "ainsert_one", AsyncMock(side_effect=_record))
-    return SimpleNamespace(inserted=inserted, init=chat_service._agent_initialize_chat)
+    marked = MagicMock()
+    monkeypatch.setattr(chat_service, "mark_session_content_violation", marked)
+    return SimpleNamespace(inserted=inserted, init=chat_service._agent_initialize_chat, marked=marked)
 
 
 async def _drain(response) -> list[str]:
@@ -111,6 +113,7 @@ async def test_input_hit_skips_llm_and_emits_auto_reply(stream_env, monkeypatch)
     body = json.loads(rows[0].message)
     assert body["msg"] == AUTO_REPLY
     assert body["events"] == [{"type": "text", "content": AUTO_REPLY}]
+    stream_env.marked.assert_called_with("chat-1")
 
 
 async def test_files_only_does_not_block_on_filename(stream_env, monkeypatch):

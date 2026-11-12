@@ -2,13 +2,10 @@ import type { GetKnowledgeBatchActionsOptions } from "./knowledgeSpaceTypes";
 import { Outlined } from "bisheng-icons";
 export function getKnowledgeBatchActions({
   selectedFiles,
-  isAdmin,
   canManageMembers,
   versionManagementEnabled,
   handleProcessSimilar,
   handleManagePermission,
-  hasFailedFiles,
-  hasFoldersSelected,
   canBatchMove,
   canBatchDelete,
   canBatchDownload,
@@ -35,26 +32,23 @@ export function getKnowledgeBatchActions({
       key: "download",
       label: localize("com_knowledge.download"),
       Icon: Outlined.Download,
-      // A single selected file uses the single-file download (no zip); multiple → batch zip.
       onClick: () =>
         selectedFiles.size === 1
           ? handleSingleDownload(Array.from(selectedFiles)[0])
           : handleBatchDownload(),
     },
-    isAdmin &&
-      !hasFoldersSelected && {
-        key: "tag",
-        label: localize("com_knowledge.batch_add_tags"),
-        Icon: Outlined.Tag,
-        onClick: handleBatchTag,
-      },
-    isAdmin &&
-      hasFailedFiles && {
-        key: "retry",
-        label: localize("com_knowledge.retry"),
-        Icon: Outlined.Refresh,
-        onClick: handleBatchRetry,
-      },
+    selectedFiles.size > 0 && {
+      key: "tag",
+      label: localize("com_knowledge.batch_add_tags"),
+      Icon: Outlined.Tag,
+      onClick: handleBatchTag,
+    },
+    selectedFiles.size > 0 && {
+      key: "retry",
+      label: localize("com_knowledge.retry"),
+      Icon: Outlined.Refresh,
+      onClick: handleBatchRetry,
+    },
     versionManagementEnabled &&
       canManageMembers &&
       hasSimilarSelected && {
@@ -86,9 +80,7 @@ export function getKnowledgeBatchActions({
 
   const MAX_INLINE = 3;
   const hasOverflow = batchActions.length > MAX_INLINE;
-  const inlineActions = hasOverflow
-    ? batchActions.slice(0, MAX_INLINE - 1)
-    : batchActions;
+  const inlineActions = hasOverflow ? batchActions.slice(0, MAX_INLINE - 1) : batchActions;
   const overflowActions = hasOverflow ? batchActions.slice(MAX_INLINE - 1) : [];
 
   return { batchActions, inlineActions, overflowActions };

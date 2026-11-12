@@ -1,0 +1,102 @@
+pageType: closing
+background:
+  type: solid
+  color: $red
+elements:
+- elementId: close-deep
+  elementType: shape
+  bounds:
+  - 0
+  - 380
+  - 960
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $deepred
+  border:
+    color: $deepred
+    width: 0
+- elementId: close-gold-top
+  elementType: shape
+  bounds:
+  - 330
+  - 170
+  - 300
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: close-title
+  elementType: text
+  bounds:
+  - 120
+  - 190
+  - 720
+  - 64
+  content:
+    text: 汇报完毕  敬请指正
+    style: $title
+    fontSize: 40
+    color: $white
+    align:
+    - center
+    - top
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: close-gold-bottom
+  elementType: shape
+  bounds:
+  - 330
+  - 270
+  - 300
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: close-org
+  elementType: text
+  bounds:
+  - 120
+  - 420
+  - 720
+  - 24
+  content:
+    text: 示例集团有限公司 党委
+    style: $lead
+    fontSize: 16
+    color: $white
+    bold: false
+    align:
+    - center
+    - top
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: close-date
+  elementType: text
+  bounds:
+  - 120
+  - 450
+  - 720
+  - 20
+  content:
+    text: 2026 年 12 月
+    style: $label
+    fontSize: 14
+    color: $lightgold
+    align:
+    - center
+    - top
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei

@@ -17,7 +17,7 @@ from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsType
 from bisheng.user.domain.models.user import User
 
 
-async def init_default_data():
+async def init_default_data(*, reference_bootstrap=None):
     """Initialize Database"""
     redis_client = await get_redis_client()
     if await redis_client.asetNx("init_default_data", "1"):
@@ -94,7 +94,7 @@ async def init_default_data():
                     )
                     await session.commit()
                 # Initialize default tenant (F001)
-                await _init_default_tenant(session)
+                await _init_default_tenant(session, reference_bootstrap=reference_bootstrap)
                 # Initialize default root department (F002)
                 await _init_default_root_department(session)
 
@@ -210,7 +210,7 @@ def read_from_conf(file_path: str) -> str:
     return content
 
 
-async def _init_default_tenant(session):
+async def _init_default_tenant(session, *, reference_bootstrap=None):
     """Idempotently create the default tenant (id=1).
 
     Called during init_default_data() to keep startup lean: it only guarantees
@@ -238,6 +238,8 @@ async def _init_default_tenant(session):
                 status="active",
             )
             session.add(tenant)
+            if reference_bootstrap is not None:
+                await reference_bootstrap(session, tenant)
             await session.commit()
 
     logger.info(f"Default tenant ready (id={DEFAULT_TENANT_ID})")

@@ -13,6 +13,8 @@ from bisheng.permission.domain.schemas import VisibleSourceProjectionDTO
 from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
+    is_visibility_only_model,
+    requires_existing_visibility_evidence,
 )
 from bisheng.permission.domain.services.projection_plan import ProjectionTupleDelta
 
@@ -99,6 +101,29 @@ class VisibilityProjectionCompiler:
             raise ValueError("visibility projection cannot mix tenants")
         if any(source.tenant_id != tenant_id for source in existing_sources):
             raise ValueError("visibility projection cannot mix existing tenants")
+        legacy_evidence: dict[str, list[VisibleSourceProjectionDTO]] | None = None
+        for grant in grants:
+            if (
+                not grant.active
+                or grant.model.action_codes
+                or is_visibility_only_model(grant.model, grant.resource_type)
+            ):
+                continue
+            for source in grant.sources:
+                if not source.active:
+                    continue
+                if not requires_existing_visibility_evidence(grant.model):
+                    raise ValueError("visibility projection requires a valid permission model")
+                if legacy_evidence is None:
+                    legacy_evidence = {}
+                    for previous in existing_sources:
+                        if previous.state == "ACTIVE":
+                            legacy_evidence.setdefault(previous.contribution_fingerprint, []).append(previous)
+                expected = self._compile_source(tenant_id, grant, source)
+                evidence = legacy_evidence.get(expected.contribution_fingerprint, ())
+                if len(evidence) != 1 or evidence[0].source_version != source.version:
+                    raise ValueError("empty target model requires its existing visibility source")
+                self._assert_same_canonical_source(evidence[0], expected)
 
         desired = tuple(
             sorted(

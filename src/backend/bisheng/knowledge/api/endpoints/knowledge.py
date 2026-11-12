@@ -26,15 +26,12 @@ from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuth
 from bisheng.common.errcode.knowledge import (
     KnowledgeCPEmptyError,
     KnowledgeCPError,
-    KnowledgeNoEmbeddingError,
     KnowledgeNotExistError,
     KnowledgeNotQAError,
     KnowledgePreviewError,
     KnowledgeQAError,
-    KnowledgeRebuildingError,
-    KnowledgeSpaceListNotSupportedError,
+    KnowledgeTypeNotSupportedError,
 )
-from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200, resp_500
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
@@ -43,8 +40,10 @@ from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_s
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_file_service, get_knowledge_service
+from bisheng.knowledge.application.knowledge_batch import get_batch_application
+from bisheng.knowledge.application.knowledge_processing_commands import KnowledgeProcessingCommands
+from bisheng.knowledge.application.legacy_retry import get_legacy_retry_application
 from bisheng.knowledge.domain.models.knowledge import (
-    KnowledgeCreate,
     KnowledgeDao,
     KnowledgeState,
     KnowledgeTypeEnum,
@@ -65,12 +64,10 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
     UpdateFileTagsReq,
     UpdateKnowledgeMetadataFieldsReq,
 )
+from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequest
 from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
-from bisheng.llm.domain import LLMService
-from bisheng.llm.domain.const import LLMModelType
-from bisheng.llm.domain.models import LLMDao
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService, require_quota
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import calc_data_sha256, generate_uuid
@@ -289,7 +286,9 @@ async def rebuild_knowledge_file(
 ):
     """Reprocessing Knowledge Base Files"""
 
-    res = await KnowledgeService.rebuild_knowledge_file(request, login_user, req_data)
+    res = await KnowledgeService.rebuild_knowledge_file(
+        request, login_user, req_data, processing_commands=KnowledgeProcessingCommands()
+    )
     return resp_200(res)
 
 
@@ -298,11 +297,23 @@ async def create_knowledge(
     *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), knowledge: KnowledgeWebCreate
 ):
     """Create Knowledge Base."""
+    if knowledge.type == KnowledgeTypeEnum.PRIVATE.value:
+        raise KnowledgeTypeNotSupportedError()
     context = await KnowledgeCreationPolicy.prepare(login_user, expected_tenant_id=knowledge.expected_tenant_id)
     with tenant_execution_scope(context.tenant_id), strict_tenant_filter():
-        db_knowledge = await KnowledgeService.acreate_knowledge(
-            request, login_user, knowledge, web_creation_context=context
-        )
+        if knowledge.type in {KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.SPACE.value}:
+            from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+            db_knowledge = await LegacyDocumentsApplication().acreate(
+                request=request,
+                identity=login_user,
+                command=knowledge,
+                web_creation_context=context,
+            )
+        else:
+            db_knowledge = await KnowledgeService.acreate_knowledge(
+                request, login_user, knowledge, web_creation_context=context
+            )
     return resp_200(db_knowledge)
 
 
@@ -320,6 +331,25 @@ async def copy_knowledge(
     if not knowledge:
         return KnowledgeNotExistError.return_resp()
 
+    if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+        from uuid import uuid4
+
+        from bisheng.knowledge.application.space_copy import SpaceCopyApplication
+
+        app = SpaceCopyApplication()
+        plan = await app.aprecheck(
+            knowledge_id, name=knowledge_name or f"{knowledge.name} Copy"[:200], identity=login_user
+        )
+        result = await app.aconfirm(
+            knowledge_id,
+            ProcessingCreateRequest(
+                confirmation_id=plan.confirmation_id, plan_digest=plan.plan_digest, idempotency_key=str(uuid4())
+            ),
+            identity=login_user,
+        )
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        return resp_200(LegacyDocumentsApplication.view(result["knowledge"]))
     await UserPayload.assert_effective_web_menu_contains(login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
     try:
         await KnowledgeService.permission_service.ensure_knowledge_read_async(
@@ -426,14 +456,6 @@ async def get_knowledge(
     infinite-scroll loading on the client.
     """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
-    # Knowledge spaces have their own dedicated list endpoints; this handler
-    # covers document/QA libraries only. Rejecting SPACE here keeps the
-    # response uniform across identities — the previous behaviour returned an
-    # empty page for regular users and the full set for super admins because
-    # the resource-type mismatch was only detected inside F048 target
-    # resolution, which super_admin bypasses.
-    if knowledge_type is KnowledgeTypeEnum.SPACE:
-        raise KnowledgeSpaceListNotSupportedError.http_exception()
     pinned: list[int] | None = None
     if preferred_ids:
         parsed: list[int] = []
@@ -446,6 +468,20 @@ async def get_knowledge(
             except ValueError:
                 continue
         pinned = parsed or None
+    if knowledge_type in {KnowledgeTypeEnum.NORMAL, KnowledgeTypeEnum.SPACE}:
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        result = await LegacyDocumentsApplication().alist(
+            identity=login_user,
+            name=name,
+            sort_by=sort_by,
+            cursor=cursor,
+            page_size=page_size,
+            preferred_ids=pinned,
+            has_abnormal=has_abnormal,
+            legacy_view=knowledge_type is KnowledgeTypeEnum.NORMAL,
+        )
+        return resp_200(data=result)
     result = await KnowledgeService.get_knowledge(
         request,
         login_user,
@@ -470,7 +506,9 @@ def get_knowledge_info(
 ):
     """Based on Knowledge BaseIDRead Knowledge Base Information."""
     res = KnowledgeService.get_knowledge_info(request, login_user, knowledge_id)
-    return resp_200(data=res)
+    from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+    return resp_200(data=[LegacyDocumentsApplication.view(row) for row in res])
 
 
 @router.put("/", status_code=200)
@@ -478,11 +516,13 @@ def update_knowledge(
     *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), knowledge: KnowledgeUpdate
 ):
     res = KnowledgeService.update_knowledge(request, login_user, knowledge)
-    return resp_200(data=res)
+    from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+    return resp_200(data=LegacyDocumentsApplication.view(res))
 
 
 @router.delete("/", status_code=200)
-def delete_knowledge(
+async def delete_knowledge(
     *,
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -490,28 +530,17 @@ def delete_knowledge(
 ):
     """Delete Knowledge Base Information."""
 
-    KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
+    from bisheng.knowledge.application.deletion_compatibility import delete_legacy_resource
+
+    await delete_legacy_resource(request=request, identity=login_user, knowledge_id=knowledge_id)
     return resp_200(message="Delete successful")
 
 
 # Personal Knowledge Base Information Acquisition
 @router.get("/personal_knowledge_info", status_code=200)
 def get_personal_knowledge_info(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """Get personal knowledge base information."""
-    knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None, KnowledgeTypeEnum.PRIVATE)
-
-    if not knowledge:
-        model = LLMService.get_knowledge_llm()
-        knowledgeCreate = KnowledgeCreate(
-            name="Personal Knowledge Base",
-            type=KnowledgeTypeEnum.PRIVATE.value,
-            user_id=login_user.user_id,
-            model=model.embedding_model_id,
-        )
-
-        knowledge = [KnowledgeService.create_knowledge(request, login_user, knowledgeCreate)]
-
-    return resp_200(data=knowledge)
+    """Keep the legacy response without reviving retired personal knowledge."""
+    return resp_200(data=[])
 
 
 @router.get("/file_list/{knowledge_id}", status_code=200)
@@ -587,18 +616,28 @@ async def get_QA_list(
 
 
 @router.post("/retry", status_code=200)
-async def retry(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: dict):
+async def retry(
+    *,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    req_data: dict,
+    retry_application=Depends(get_legacy_retry_application),
+):
     """Failed Retry"""
-    await KnowledgeService.retry_files(request, login_user, req_data)
-    return resp_200()
+    from bisheng.knowledge.domain.schemas.processing_job import JobAccepted
+
+    result = await KnowledgeService.retry_files(request, login_user, req_data, retry_application=retry_application)
+    return resp_200(result) if isinstance(result, JobAccepted) else resp_200()
 
 
 @router.delete("/file/{file_id}", status_code=200)
-def delete_knowledge_file(
+async def delete_knowledge_file(
     *, request: Request, file_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)
 ):
     """Delete Knowledge File Information"""
-    KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
+    from bisheng.knowledge.application.deletion_compatibility import delete_legacy_files
+
+    await delete_legacy_files(request=request, identity=login_user, file_ids=[file_id])
     return resp_200(message="Delete successful")
 
 
@@ -1008,37 +1047,7 @@ def post_import_file(
 
 @router.get("/status", status_code=200)
 def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """
-    View Knowledge Base Status Interface
-    Receive:
-    1. According UsersidFirst determine if the user has a personal knowledge base and does not return directly200
-    2. If you have a knowledge base, depending on the useridView the state of your knowledge base, if the state of your personal knowledge base isREBUILDING 3 or FAILED 4 Jam
-       Return "Personal Knowledge BaseembeddingThe model has been replaced, rebuilding the knowledge base, please try again later" State Code 502
-    """
-    # Query a user's personal knowledge base
-    user_private_knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None, KnowledgeTypeEnum.PRIVATE)
-
-    # If the user does not have a personal knowledge base, go directly back to200
-    if not user_private_knowledge:
-        return resp_200({"status": "success"})
-
-    # Get the first personal knowledge base (usually users have only one personal knowledge base)
-    private_knowledge = user_private_knowledge[0]
-
-    # Check Knowledge Base Status
-
-    if private_knowledge.state == KnowledgeState.REBUILDING.value:
-        # Return502Status codes and corresponding prompts
-        raise KnowledgeRebuildingError()
-    if private_knowledge.state == KnowledgeState.FAILED.value:
-        # Delay imports to avoid looping imports
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-
-        rebuild_knowledge_celery.delay(private_knowledge.id, int(private_knowledge.model), login_user.user_id)
-        # Return502Status codes and corresponding prompts
-        raise KnowledgeRebuildingError()
-
-    # Knowledge base status is OK, go back200
+    """Retired personal-space state is no longer a dependency of chat."""
     return resp_200({"status": "success"})
 
 
@@ -1046,76 +1055,26 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(UserPayload.get_lo
 def update_knowledge_model(
     *, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: UpdateKnowledgeReq
 ):
-    """
-    Update Knowledge Base Interface
-    Update embedding Rebuild Knowledge Base on Model
-    Receive:
-    1. According to the incoming from the front-endmodel_id, model_type, let's first determine ifembeddingModels
-    2. If not, go backresp501("Is notembeddingModels") If so, place theknowledgeAll in the tabletypeare2DatastatusChange to...3，modelChange to Incomingmodel_id
-    3. everyknowledge_idBoth initiate asynchronous tasks to rebuild the knowledge base
-    """
-    # 1. Verify that isembeddingModels
-    # Cross-tenant references surface as "not found" via the tenant_filter
-    # event layer; raise the dedicated 19802 so the UI renders the
-    # "model not accessible" toast instead of "model config missing".
-    model_info = LLMDao.get_model_by_id(req_data.model_id)
-    if not model_info:
-        return LLMModelNotAccessibleError.return_resp()
-
-    # If the front-end does not passmodel_type, using themodel_type
-    model_type = req_data.model_type if req_data.model_type else model_info.model_type
-
-    if model_type != LLMModelType.EMBEDDING.value:
-        return KnowledgeNoEmbeddingError.return_resp()
-
-    # Process the specified knowledge base
-    knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-    if not knowledge:
-        return KnowledgeNotExistError.return_resp()
-
-    try:
-        KnowledgeService.permission_service.ensure_knowledge_write_sync(
-            login_user=login_user,
-            owner_user_id=knowledge.user_id,
-            knowledge_id=knowledge.id,
+    """Save actual model configuration and references before task dispatch."""
+    confirmation = (
+        ProcessingCreateRequest(
+            confirmation_id=req_data.confirmation_id,
+            plan_digest=req_data.plan_digest,
+            idempotency_key=req_data.idempotency_key,
         )
-    except UnAuthorizedError:
-        return UnAuthorizedError.return_resp()
-
-    old_model_id = knowledge.model
-
-    # Update Knowledge Base Status and Models
-    knowledge.model = str(req_data.model_id)
-    knowledge.name = req_data.knowledge_name
-    knowledge.description = req_data.description
-
-    if int(old_model_id) == int(req_data.model_id):
-        # If the model does not change, there is no need to rebuild
-        KnowledgeDao.update_one(knowledge)
-        return resp_200()
-    if knowledge.state == KnowledgeState.REBUILDING.value:
-        return KnowledgeRebuildingError.return_resp()
-
-    knowledge.state = KnowledgeState.REBUILDING.value
-    KnowledgeDao.update_one(knowledge)
-
-    # Start asynchronous task
-
-    if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
-        # Delay imports to avoid looping imports
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
-
-        rebuild_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
-
-    elif knowledge.type == KnowledgeTypeEnum.QA.value:
-        # Delay imports to avoid looping imports
-        from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery
-
-        rebuild_qa_knowledge_celery.delay(knowledge.id, req_data.model_id, login_user.user_id)
-
-    logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
-
-    return resp_200()
+        if all((req_data.confirmation_id, req_data.plan_digest, req_data.idempotency_key))
+        else None
+    )
+    result = KnowledgeService.update_knowledge_model(
+        login_user=login_user,
+        knowledge_id=req_data.knowledge_id,
+        model_id=req_data.model_id,
+        name=req_data.knowledge_name,
+        description=req_data.description,
+        confirmation=confirmation,
+        processing_commands=KnowledgeProcessingCommands(),
+    )
+    return resp_200(result if confirmation is not None else None)
 
 
 @router.post(
@@ -1124,6 +1083,7 @@ def update_knowledge_model(
 async def batch_download_knowledge_files(
     *,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
+    batch_application=Depends(get_batch_application),
     knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
     file_ids: list[int] = Body(..., embed=True, description="List of file IDs to download"),
 ):
@@ -1139,6 +1099,7 @@ async def batch_download_knowledge_files(
         login_user=login_user,
         knowledge_id=knowledge_id,
         file_ids=file_ids,
+        batch_application=batch_application,
     )
     return resp_200(data={"url": download_url})
 
@@ -1210,9 +1171,12 @@ async def update_file_tags(
 async def batch_add_file_tags(
     *,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
+    batch_application=Depends(get_batch_application),
     req_data: BatchAddFileTagsReq,
 ):
-    await KnowledgeService.batch_add_file_tags(login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids)
+    await KnowledgeService.batch_add_file_tags(
+        login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids, batch_application=batch_application
+    )
     return resp_200()
 
 

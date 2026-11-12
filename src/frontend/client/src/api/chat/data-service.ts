@@ -172,6 +172,7 @@ export function getUser(): Promise<t.TUser> {
       tenant_id: res.data.leaf_tenant_id ?? res.data.tenant_id ?? 1,
       "name": user_name,
       "username": user_name,
+      external_id: res.data.external_id ?? null,
       "email": user_name,
       "emailVerified": true,
       // Backend avatar is usually a path like "/bisheng/avatar/..jpg?...".

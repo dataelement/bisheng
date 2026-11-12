@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({ templates: vi.fn(), saveTemplate: vi.fn() }));
 vi.mock('@/contexts/userContext', async () => ({
   userContext: (await import('react')).createContext({ user: { is_child_admin: true } }),
 }));
+vi.mock('@/components/bs-comp/selectComponent/useKnowledgeCandidates', () => ({ useKnowledgeCandidates: () => ({ items: [], loaded: false, scopeKey: 'sorting', error: null, loading: false, hasMore: false, search: () => {} }) }));
 vi.mock('@/controllers/API', () => ({
   readFileLibDatabase: vi.fn(async () => ({ data: [] })),
   readTempsDatabase: api.templates,

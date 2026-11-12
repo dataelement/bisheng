@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Installer verification: read-only by default; --live creates scoped canaries.
+"""Optional runtime diagnostics: read-only by default; --live creates scoped canaries.
 
 The installer impersonates the manager for namespaced resource operations.
 Only its own preflight resources are removed, with fresh UID/RV stop evidence.
@@ -542,7 +542,9 @@ class InstallationVerifier:
     def __init__(self, api, *, options, timeout=180):
         self.api, self.options, self.timeout = api, options, timeout
         self.cm = api.get(
-            "configmap", "runtime-deployment-descriptor", namespace=api.control
+            "configmap",
+            self.resource("runtime-deployment-descriptor"),
+            namespace=api.control,
         )
         self.document = json.loads(self.cm["data"]["descriptor.json"])
         self.namespace = api.execution
@@ -550,12 +552,24 @@ class InstallationVerifier:
             self.document.get("helper_image", "")
         ):
             raise ValueError("descriptor_scope_or_digest_invalid")
+        self.raw_policy = self.cm["data"]["descriptor.json"]
         self.created, self.control_created, self.idle = [], [], None
         self.unconfirmed_writer_plans = {}
 
+    def resource(self, name):
+        value = getattr(self, "options", {}).get("resource_names", {}).get(name, name)
+        if not isinstance(value, str) or not _NAME.fullmatch(value):
+            raise ValueError("diagnostic_resource_name_invalid")
+        return value
+
+    def policy_digest(self):
+        if self.document.get("schema_version") == 2:
+            return hashlib.sha256(self.raw_policy.encode()).hexdigest()
+        return descriptor_digest(self.document)
+
     def baseline(self):
         namespace = self.api.get("namespace", self.namespace)
-        quota = self.api.get("resourcequota", "runtime-budget")
+        quota = self.api.get("resourcequota", self.resource("runtime-budget"))
         webhooks = self.api.get(
             "validatingwebhookconfiguration", self.options["webhook_name"]
         )
@@ -563,7 +577,7 @@ class InstallationVerifier:
             "namespace_uid": namespace["metadata"]["uid"],
             "quota_uid": quota["metadata"]["uid"],
             "webhook_uid": webhooks["metadata"]["uid"],
-            "descriptor_digest": descriptor_digest(self.document),
+            "descriptor_digest": self.policy_digest(),
             "images": {
                 key: self.document[key]
                 for key in ("helper_image", "assembler_image")
@@ -605,7 +619,9 @@ class InstallationVerifier:
 
     def _plans(self, ref, plan=None, *, remove=False):
         cm = self.api.get(
-            "configmap", "runtime-canary-plans", namespace=self.api.control
+            "configmap",
+            self.resource("runtime-canary-plans"),
+            namespace=self.api.control,
         )
         document = json.loads(cm["data"]["plans.json"])
         if (
@@ -620,7 +636,7 @@ class InstallationVerifier:
         try:
             original = cm["metadata"]
             if (
-                original["name"] != "runtime-canary-plans"
+                original["name"] != self.resource("runtime-canary-plans")
                 or original["namespace"] != self.api.control
                 or str(UUID(original["uid"])) != original["uid"]
                 or not isinstance(original["resourceVersion"], str)
@@ -637,7 +653,7 @@ class InstallationVerifier:
             saved = json.loads(response.stdout)
             original, observed = cm["metadata"], saved["metadata"]
             if (
-                original["name"] != "runtime-canary-plans"
+                original["name"] != self.resource("runtime-canary-plans")
                 or original["namespace"] != self.api.control
                 or observed["name"] != original["name"]
                 or observed["namespace"] != original["namespace"]
@@ -661,7 +677,8 @@ class InstallationVerifier:
         if (
             self.api.control == self.namespace
             or metadata.get("namespace") != self.api.control
-            or metadata.get("labels", {}).get("app") != "runtime-admission"
+            or metadata.get("labels", {}).get("app")
+            != self.resource("runtime-admission")
             or metadata.get("deletionTimestamp")
             or not _NAME.fullmatch(metadata.get("name", ""))
             or pod.get("status", {}).get("phase") != "Running"
@@ -684,7 +701,7 @@ class InstallationVerifier:
                 for source in volume.get("projected", {}).get("sources", [])
             ]
             if any(
-                reference.get("name") == "runtime-canary-plans"
+                reference.get("name") == self.resource("runtime-canary-plans")
                 for reference in references
             ):
                 volumes.add(volume.get("name"))
@@ -695,7 +712,7 @@ class InstallationVerifier:
             and not mount.get("subPath")
             and not mount.get("subPathExpr")
             for container in pod.get("spec", {}).get("containers", [])
-            if container.get("name") == "runtime-admission"
+            if container.get("name") == self.resource("runtime-admission")
             for mount in container.get("volumeMounts", [])
         )
         if not mounted:
@@ -715,7 +732,7 @@ class InstallationVerifier:
                     "-n",
                     self.api.control,
                     "-l",
-                    "app=runtime-admission",
+                    "app=" + self.resource("runtime-admission"),
                     "-o",
                     "json",
                 ]
@@ -967,7 +984,9 @@ class InstallationVerifier:
             != self.options["installation_id"]
         ):
             raise ProbeError("namespace_ownership_unconfirmed")
-        hard = self.api.get("resourcequota", "runtime-budget")["spec"]["hard"]
+        hard = self.api.get("resourcequota", self.resource("runtime-budget"))["spec"][
+            "hard"
+        ]
         if (
             hard.get("services.nodeports") != "0"
             or hard.get("services.loadbalancers") != "0"
@@ -1366,7 +1385,9 @@ class InstallationVerifier:
 
     def _image(self):
         result = self._image_one(self.image_probe, self.document["helper_image"])
-        profiles = self.document.get("canary_profiles", [])
+        profiles = self.options.get(
+            "canary_profiles", self.document.get("canary_profiles", [])
+        )
         if not profiles:
             raise ProbeError("runtime_profiles_not_verified")
         for profile in profiles:
@@ -1459,7 +1480,7 @@ class InstallationVerifier:
                 raise ProbeError("dns_denial_target_invalid")
         else:
             service = self.api.get(
-                "service", "egress-proxy", namespace=self.api.control
+                "service", self.resource("egress-proxy"), namespace=self.api.control
             )
             if not targets or any(
                 row.get("expected") != "allowed"
@@ -1488,7 +1509,9 @@ class InstallationVerifier:
         }:
             raise ProbeError("control_probe_role_invalid")
         if role != "preflight-untrusted":
-            service = self.api.get("service", role, namespace=self.api.control)
+            service = self.api.get(
+                "service", self.resource(role), namespace=self.api.control
+            )
             if (
                 service.get("spec", {}).get("publishNotReadyAddresses", False)
                 is not False
@@ -1528,7 +1551,7 @@ class InstallationVerifier:
         ]
         pod["metadata"]["name"] = "preflight-" + uuid4().hex[:20]
         pod["metadata"]["labels"] = {
-            "app": role,
+            "app": self.resource(role),
             "runtime.bisheng.io/preflight-installation": self.options[
                 "installation_id"
             ],
@@ -1941,7 +1964,9 @@ class InstallationVerifier:
 
     def recover_expired(self):
         cm = self.api.get(
-            "configmap", "runtime-canary-plans", namespace=self.api.control
+            "configmap",
+            self.resource("runtime-canary-plans"),
+            namespace=self.api.control,
         )
         document = json.loads(cm["data"]["plans.json"])
         if not isinstance(document, dict) or not isinstance(
@@ -2036,7 +2061,9 @@ class InstallationVerifier:
         from runtime_manager.oci_assembler import registry_origins
 
         try:
-            profiles = self.document.get("canary_profiles", [])
+            profiles = self.options.get(
+                "canary_profiles", self.document.get("canary_profiles", [])
+            )
             if not isinstance(profiles, list) or len(profiles) > 32:
                 raise ValueError()
             bases = [
@@ -2131,16 +2158,47 @@ class InstallationVerifier:
 
     def publish(self, report):
         cm = self.api.get(
-            "configmap", "runtime-deployment-descriptor", namespace=self.api.control
+            "configmap",
+            self.resource("runtime-deployment-descriptor"),
+            namespace=self.api.control,
         )
-        document = json.loads(cm["data"]["descriptor.json"])
-        if descriptor_digest(document) != report["descriptor_digest"]:
+        raw = cm["data"]["descriptor.json"]
+        document = json.loads(raw)
+        digest = (
+            hashlib.sha256(raw.encode()).hexdigest()
+            if document.get("schema_version") == 2
+            else descriptor_digest(document)
+        )
+        if digest != report["descriptor_digest"]:
             raise ProbeError("descriptor_changed_during_probe")
-        document["probe_report"] = report
-        cm["data"]["descriptor.json"] = json.dumps(
-            document, sort_keys=True, separators=(",", ":")
-        )
-        self.api.call(["replace", "-f", "-"], document=cm)
+        if document.get("schema_version") == 2:
+            # Diagnostics never edit deployment policy or grant admission authority.
+            target = self.api.get(
+                "configmap",
+                self.resource("runtime-diagnostics"),
+                namespace=self.api.control,
+            )
+            labels = target.get("metadata", {}).get("labels", {})
+            if (
+                labels.get("runtime.bisheng.io/installation")
+                != document["installation_id"]
+            ):
+                raise ProbeError("namespace_ownership_unconfirmed")
+            target["data"] = {
+                "report.json": json.dumps(
+                    {**report, "policy_digest": digest},
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            }
+            self.api.call(["replace", "-f", "-"], document=target)
+        else:
+            # Legacy manual tool support; not a standard Chart migration path.
+            document["probe_report"] = report
+            cm["data"]["descriptor.json"] = json.dumps(
+                document, sort_keys=True, separators=(",", ":")
+            )
+            self.api.call(["replace", "-f", "-"], document=cm)
 
 
 def main(argv=None):
@@ -2160,10 +2218,10 @@ def main(argv=None):
     if args.write_report and not args.live:
         parser.error("--write-report requires --live")
     if args.repeat_seconds and (
-        not args.live or not args.write_report or args.repeat_seconds != 21600
+        not args.live or not args.write_report or args.repeat_seconds < 1
     ):
         parser.error(
-            "periodic refresh requires --live --write-report --repeat-seconds 21600"
+            "optional repetition requires --live --write-report and a positive interval"
         )
     options = json.loads(args.probe_plan.read_text())
     api = Kubectl(
@@ -2190,7 +2248,11 @@ def main(argv=None):
                 "source": "cluster-probe",
                 "failures": failures,
                 "observed_at": time.time(),
-                "descriptor_digest": descriptor_digest(verifier.document),
+                "descriptor_digest": (
+                    hashlib.sha256(verifier.raw_policy.encode()).hexdigest()
+                    if verifier.document.get("schema_version") == 2
+                    else descriptor_digest(verifier.document)
+                ),
                 "checks": [
                     {"name": name, "ok": False, **summary, "evidence": {}}
                     for name in sorted(REQUIRED_CHECKS)

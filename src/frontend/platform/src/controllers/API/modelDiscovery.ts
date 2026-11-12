@@ -6,6 +6,8 @@ export interface DiscoveredModel {
   display_name: string;
   model_type: ModelType | null;
   type_source: "metadata" | "registry" | "unknown" | "unsupported" | "speech";
+  // Present when the vendor model list published a total context window.
+  context_window?: number;
 }
 export type DiscoverySource = "auto" | "live" | "preset";
 export interface DiscoveryResult {

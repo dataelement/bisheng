@@ -11,7 +11,7 @@ from bisheng.core.database.alembic_helpers.online import column_exists, table_ex
 from bisheng.core.database.dialect_helpers import JsonType
 
 revision = "v310b1_f015_dsh_call_pricing"
-down_revision = "v310b1_merge_work130_heads"
+down_revision = "v310b1_merge_tenant_identity"
 branch_labels = None
 depends_on = None
 

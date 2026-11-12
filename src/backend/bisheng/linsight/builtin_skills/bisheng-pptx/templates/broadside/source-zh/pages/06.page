@@ -1,0 +1,420 @@
+pageType: content
+background:
+  type: solid
+  color: '#111111'
+notes: Authored composition experiment using the parent pack palette and typography. All figures are fictional demonstration data; replace with actual evidence.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 26
+      - 820
+      - 20
+    content:
+      text: 05 / 转化
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 11
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 57
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.5
+      color: '#F0ECE5'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 78
+      - 864
+      - 68
+    content:
+      text: 用户在哪一步离开
+      fontFamily: &ref_1
+        latin: Arial Black
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 37
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 153
+      - 556
+      - 23
+    content:
+      text: A / 群体指数 · 首阶段 = 100
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s5
+    elementType: shape
+    bounds:
+      - 48
+      - 188
+      - 470
+      - 42
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E85D26'
+    border:
+      width: 0
+      color: '#E85D26'
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 61
+      - 197
+      - 180
+      - 28
+    content:
+      text: 访问
+      fontFamily: *ref_1
+      fontSize: 16
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 554
+      - 190
+      - 79
+      - 39
+    content:
+      text: '100'
+      fontFamily: *ref_1
+      fontSize: 27
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 48
+      - 234
+      - 243
+      - 25
+    content:
+      text: 68% 继续
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#B4B4A9'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s9
+    elementType: shape
+    bounds:
+      - 48
+      - 259
+      - 319.6
+      - 42
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#C9653E'
+    border:
+      width: 0
+      color: '#C9653E'
+  - elementId: t10
+    elementType: text
+    bounds:
+      - 61
+      - 268
+      - 180
+      - 28
+    content:
+      text: 开始
+      fontFamily: *ref_1
+      fontSize: 16
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t11
+    elementType: text
+    bounds:
+      - 554
+      - 261
+      - 79
+      - 39
+    content:
+      text: '68'
+      fontFamily: *ref_1
+      fontSize: 27
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t12
+    elementType: text
+    bounds:
+      - 48
+      - 305
+      - 243
+      - 25
+    content:
+      text: 60% 继续
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#B4B4A9'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s13
+    elementType: shape
+    bounds:
+      - 48
+      - 330
+      - 192.7
+      - 42
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#995E46'
+    border:
+      width: 0
+      color: '#995E46'
+  - elementId: t14
+    elementType: text
+    bounds:
+      - 61
+      - 339
+      - 180
+      - 28
+    content:
+      text: 完成
+      fontFamily: *ref_1
+      fontSize: 16
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t15
+    elementType: text
+    bounds:
+      - 554
+      - 332
+      - 79
+      - 39
+    content:
+      text: '41'
+      fontFamily: *ref_1
+      fontSize: 27
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t16
+    elementType: text
+    bounds:
+      - 48
+      - 376
+      - 243
+      - 25
+    content:
+      text: 71% 继续
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#B4B4A9'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s17
+    elementType: shape
+    bounds:
+      - 48
+      - 401
+      - 136.3
+      - 42
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#6F5144'
+    border:
+      width: 0
+      color: '#6F5144'
+  - elementId: t18
+    elementType: text
+    bounds:
+      - 61
+      - 410
+      - 180
+      - 28
+    content:
+      text: 返回
+      fontFamily: *ref_1
+      fontSize: 16
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t19
+    elementType: text
+    bounds:
+      - 554
+      - 403
+      - 79
+      - 39
+    content:
+      text: '29'
+      fontFamily: *ref_1
+      fontSize: 27
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: true
+  - elementId: l20
+    elementType: line
+    bounds:
+      - 675
+      - 182
+      - 1
+      - 268
+    viewBox:
+      - 1
+      - 268
+    points: 0,0 0,268
+    border:
+      width: 0.7
+      color: '#5E5E56'
+  - elementId: t21
+    elementType: text
+    bounds:
+      - 706
+      - 166
+      - 206
+      - 27
+    content:
+      text: B / 瓶颈
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t22
+    elementType: text
+    bounds:
+      - 706
+      - 208
+      - 206
+      - 92
+    content:
+      text: '27'
+      fontFamily: *ref_1
+      fontSize: 70
+      color: '#E85D26'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t23
+    elementType: text
+    bounds:
+      - 706
+      - 309
+      - 206
+      - 88
+    content:
+      text: 完成前流失的百分点
+      fontFamily: *ref_0
+      fontSize: 23
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l24
+    elementType: line
+    bounds:
+      - 706
+      - 411
+      - 206
+      - 1
+    viewBox:
+      - 206
+      - 1
+    points: 0,0 206,0
+    border:
+      width: 0.7
+      color: '#5E5E56'
+  - elementId: t25
+    elementType: text
+    bounds:
+      - 706
+      - 427
+      - 206
+      - 28
+    content:
+      text: 68 − 41 = 27
+      fontFamily: *ref_0
+      fontSize: 16
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l26
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.4
+      color: '#F0ECE5'
+  - elementId: t27
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: 开始后完成的比例约为 60%；增加流量前，先改善这一环节。
+      fontFamily: *ref_0
+      fontSize: 13
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t28
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 760
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t29
+    elementType: text
+    bounds:
+      - 870
+      - 504
+      - 42
+      - 22
+    content:
+      text: '06'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false

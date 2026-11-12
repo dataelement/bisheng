@@ -105,6 +105,20 @@ class State:
         grants = self.library_grants if target.resource_type == "knowledge_library" else self.file_grants
         return tuple(grant for grant in grants if grant.model.model_key in keys)
 
+    async def permission_snapshots(self, resources):
+        return {
+            key: await self.mode_for_target(SimpleNamespace(tenant_id=key[0], resource_type=key[1], resource_id=key[2]))
+            for key in dict.fromkeys(resources)
+        }
+
+    async def load_grants_batch(self, *, targets, models):
+        return {
+            (target.tenant_id, target.resource_type, target.resource_id): await self.load_grants(
+                target=target, models=models
+            )
+            for target in targets
+        }
+
     async def inherited_grant_set(self, *, target, models):
         keys = {model.model_key for model in models}
         return InheritedGrantSet(

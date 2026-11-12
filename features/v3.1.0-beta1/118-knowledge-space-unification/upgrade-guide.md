@@ -1,0 +1,288 @@
+# 升级说明：知识空间统一与全平台 use 动作退役
+
+**状态（2026-11-10）**：功能开发已收齐，修正样本后的backup2及clone2完整还原/中性DDL通过；隔离clone2已正式M2冻结并同run apply/replay ready。原项目也已完成正式冻结及同run apply/replay ready，并部署新版API/Worker/frontend；API19原run n10api1在71dd已失败结束（19 tests/12 failures/6 errors/0 skipped，exit1、suite_complete=false），不可相减推算通过数；两项生产修复已合流但新candidate未部署复测，UI21未启动。当前仍为演练说明，不据此开放生产升级；SDK无本次代码改动，全托管SDK场景单列未执行。最新入口见§3.1，后文日期章节保留历史证据边界。\
+**日期**：2026-11-03\
+**关联**：[spec.md](./spec.md)（AC-63、AC-85、AC-89、AC-91、AC-92、AC-93、AC-94） · [design.md](./design.md) §7。
+
+## 1. 执行前提与职责
+
+**正式迁移脚本必须在停服期间执行。** 停服、任务收尾、备份和恢复由升级运维流程负责；迁移脚本不检测是否停服，不探测端口/健康检查/进程/Worker 心跳，不要求停服标记或停服确认参数，也不替运维启停服务或恢复队列。
+
+正式顺序为：维护准备 → 停派发/任务收尾/停服及一致备份 → 停服后正式盘点/预检/冻结基线与计划 → 转换 → 全租户验证 → 恢复业务。
+
+脚本在运维已停服并备份后，负责正式盘点、数据与版本/权限合同预检、正式基线和转换计划冻结、持久账本、幂等转换、业务绑定回填/对账、结果校验、检查点恢复及报告。停服检测不属于脚本的校验项；这不取消脚本对数据完整性、Catalog/model/checksum、幂等键等内容的检查。
+
+## 2. 运维停服准备
+
+1. 确定维护窗口预算和执行负责人，准备维护入口、备份/恢复方案与回退材料。停服前只做维护准备和工期估算，不产出正式盘点清单、失效分类或冻结基线；正式盘点在旧服务停止后进行。
+2. 暂停本次迁移影响范围内的新请求/写入、新任务派发及启动；覆盖 Beat、定时派发和相关队列消费者，保留已有排队消息及必要 broker 数据。
+3. 等待已经运行的受影响任务自然完成。确认旧 Worker 不再有活跃写入后，停止旧 API、Worker、Beat 等应用进程；迁移要连接的数据库、OpenFGA、ES/Milvus、MinIO、Redis 等必要存储/中间件仍需可用。
+4. 如果超过维护窗口预算仍有任务未完成，保持维护并交人工处置，不自动强杀任务，也不继续数据转换。后续如何结束任务或调整窗口由现场人员处理，不由迁移脚本判断。
+5. 在旧服务已停止后完成可恢复的一致备份与对象/索引清单，明确 SQL、FGA、索引及必要变更对象的同一恢复点，再进入 §3 正式盘点。不要清空未执行任务来获得“空队列”。
+
+## 3. 停服期间执行迁移
+
+1. 运维完成停服及一致备份后，先执行中性DDL，再运行§3.1已实现的正式迁移入口；脚本本身不检查停服状态。
+2. 首次执行先在停服期间按租户正式盘点资源/创建者、文件/版本、标签/元数据、模型/索引、SQL 授权/FGA、业务引用、任务记录及配额，再预检数据关联与发布合同。全平台权限迁移也在此时盘点标准/自定义/预设/系统权限模型、Grant/Source、系统标记、原可见集合及非 use 动作效果（含 rename），并冻结移除 use 后按资源类型退化为纯可见的模型、原 model_key/管理等级及 Grant/Source 摘要；不使用维护前授权快照。在任何转换写入前，将权限盘点事实和权限子计划一并纳入同一正式基线、run 和转换计划/hash，包含原引用目标存在性、来源/版本、配置修订、Catalog/model/checksum 与证据。原 ID 明确且该基线已证明目标不存在的关系登记为存量失效。预检或冻结未完成时保持维护，不进入转换；续跑读取同一原基线/run/计划和检查点，不对已转换的数据重新盘点冻结，不将脚本错误重新归为存量失效。
+3. 按已确认规则进行全平台 use 退役与文档库→空间转换，保留主体/可见范围/其他动作、资源及文件 ID、原模型和索引位置；不扩展文件 edit 的适用范围；文件及文件夹重命名仍用 rename，原高级处理按其既有容器 edit 等映射执行。纯可见模型按 design §7.3.2 标记原资源类型并保留原管理等级、model_key、Source 及撤销链，不添加其他动作或新的 visible 动作；不默认重切分/重建全部向量。
+4. 文件/版本及旧 ID 规范化完成后，用各业务同版本提取器按 Spec §3.15.1 / design §6.4.1 回填已保存配置及需保留版本的绑定明细和来源集合：含暂不能运行草稿、未删非当前工作流版本、仍可管理预览的托管应用历史版本、暂停频道同步和生效默认槽位；零引用来源也须标记已提取，任务不回填。同时核对删除标记及失效引用，禁止回填清除失效绑定、自动改写业务配置或复活目标。按来源修订/摘要和全量覆盖对账；合法强删失效及原冻结基线证明的存量失效均保留并分别标记，不伪造强删记录；已知存量失效且完整对账后可升级。其他未解释的目标异常、名称歧义、非法跨租户关系或覆盖缺口报告失败，未就绪不能启用按绑定表的删除保护。
+5. 以停服后、转换写入前冻结的同一正式基线，核对每资源、每租户的 SQL 与 FGA、文件/版本/标签/元数据、配额和业务绑定，输出迁移报告。原已可见但无 use 的资格变化属于预期变化，其他非预期变化须处理。
+6. 任一步骤失败时不开放业务：运维继续保持停服，按原计划检查点修复重跑；必要时恢复完整一致备份。脚本不自动重启服务，也不只改回 type=0 冒充回退。
+
+### 3.1 已实现的执行入口（2026-11-10）
+
+从本版本的 `src/backend/` 运行，使用API/Worker同一配置、已安装依赖和环境凭据。先保持业务停止，执行 `python -m alembic upgrade head`；当前单一head为 `f118_knowledge_delete_execution`，仅准备结构，不进行正式业务盘点或回填。该DDL已在隔离完整还原clone验证；clone2进一步完成正式M2冻结及同run apply/replay ready，原项目也已独立完成正式冻结、同run apply/replay ready及部署；各环境证据分别保留，不把schema/ready或sanity当完整API/UI验收。
+
+正式入口为 `scripts/unify_knowledge_spaces.py`。下面所有环境名、run、操作人及描述符必须替换为实际值；`object_key/sha256`必须指向同一维护窗口中已持久保存并验证的真实备份、结构证据，不是随意生成的占位hash。
+
+```bash
+cd src/backend/
+export config=/absolute/path/to/service-config.yaml
+export PYTHONPATH=./
+python scripts/unify_knowledge_spaces.py \
+  --run-id maintenance-1 --environment production \
+  --backup-ref '{"object_key":"f118/unification/maintenance-1/verification/<backup-hash>.json","sha256":"<backup-hash>"}' \
+  --schema-ref '{"object_key":"f118/unification/maintenance-1/verification/<schema-hash>.json","sha256":"<schema-hash>"}' \
+  --apply --operator-id 7
+```
+
+`--apply`实际执行停服后的M2盘点/冻结、M3原SQL转换和权限发布、M4六来源回填/完整对账及持久Coverage签证。中断后使用完全相同参数加 `--resume`，只允许沿已有冻结run续跑；不对已转换数据重新冻结。默认不带 `--apply` 的预览只读已有冻结图，不创建首次M2、不签ready；没有冻结run时不能当正式盘点报告。
+
+输出包括run/hash、实际租户、六来源证明及包含失效槽清单的不可变plan描述符；非零退出保检查点且不得开放业务。脚本只初始化原配置中的必要DB/Redis及已审查存储适配器，避免通用启动初始化创建bucket/policy；不启动API、不执行默认数据seed。它不检测停服，也不自动重启、恢复备份或重新投递旧消息。恢复入口仍是同run续跑或运维完整一致备份恢复。
+
+## 4. 升级校验与恢复
+
+1. 全部租户的数据/权限及业务绑定覆盖校验通过后部署匹配的新版本；存量失效按原基线核对并保留修复清单，不要求自动恢复这些配置的可执行性，不能让旧 Worker 继续连接升级后的数据或权限模型。
+2. 在外部入口和自动派发继续受控时，校验新旧调用、预览下载、抽样检索及管理员范围；对照停服后冻结的原权限基线，核对文件及文件夹的 rename 独立动作效果：原仅 rename 授权仍可重命名，只有 edit 不因本次映射变更取得 rename，继承/自定义按统一规则处理，不新增 knowledge_file.edit/folder.edit 范围，原高级容器 edit 及文件重试 rename 等映射保持。验证纯可见授权：动作可为空但模型有效、原管理等级/model_key/Source 保留；有管理权限者可从原入口移除一个来源，其他合法来源不受影响，不因空动作或模型停用挡住既存来源的撤销，受保护来源限制仍保留。核对保留排队任务的资源归属、版本、原冻结解析/切分配置与新类型/权限语义是否可解释；相关模型配置/索引已被后续操作替换的旧任务应标记过期，不按当前新模型续做旧任务失败项。空间名称/说明等无关修改不构成过期。模型通过所属业务资源/有效版本和适用默认配置读取，任务携带的历史模型 ID 不构成独立绑定或回退来源。
+3. 排队任务校验通过后再恢复执行。无合法业务模型配置的任务明确失败，不因任务参数仍含模型 ID 而恢复调用。其他无法安全解释的任务保留并人工处置，不静默丢弃、不按最新默认重建历史任务，也不盲目交给旧版本消费。
+4. 由运维按部署方案恢复 Worker/Beat/入口，核对实际任务结果与业务状态；保留备份、迁移来源、报告与检查点。
+
+## 5. 实施后需补齐的环境材料
+
+- 实际服务/队列清单、停新派发与停止旧服务的部署命令。
+- 运行任务完成与旧 Worker 无写入的运维检查方法。
+- 备份、恢复工具与完整恢复演练证据。
+- 归档§3.1正式入口的实际参数、产物位置及成功报告；执行本轮升级与同run恢复演练。
+- 排队任务兼容校验、恢复顺序、维护窗口实测和责任人。
+
+以上是运维手册落地项，不是迁移脚本自动探测停服的需求。当前未执行停服、迁移或部署；Q-04-2 已确认模型删除只按有效业务/版本/默认配置判断，任务不独立绑定或阻止删除；本轮待确认业务问题均已闭合。
+
+## 6. Q-05 强制删除后的升级核对
+
+强删保留引用方原 ID/版本/绑定及目标删除标记。升级备份和恢复必须包含绑定明细、来源集合、删除标记与删除操作账本；完整性对账将合法强删标记或原冻结预检的存量失效证据对应的关系识别为预期状态，保留待人工修复；两者均无依据的缺失目标仍属异常。应用恢复后验证失效提示、运行报错及无静默模型回退；不因升级自动清除业务配置。任务不建立模型绑定，停服职责仍按 §1–§4。
+
+## 7. 2026-11-04 引用范围与修复校验
+
+按具体业务而非通用“退役”标签核对：工作流所有未删除保存版本均回填，助手下线不清关系，托管应用历史版本仍可管理预览时保留，频道关闭同步开关但目标列表仍保存时保留。解除仅对应实际业务删除、工作流版本成功删除、知识源/节点/同步目标移除或模型槽位改绑。评测任务/报告不单独回填模型绑定，评测默认模型配置仍回填。修复失效引用可逐项保存原来源/版本，剩余项继续展示失效并拒绝执行/发布；不可变托管应用旧版本不改写。
+
+## 8. 存量失效引用与单独内容删除（本轮已确认）
+
+- 仅对停服后正式盘点/预检、转换写入前冻结的基线中已证明目标缺失且原 ID 明确的引用登记 invalid_legacy，保留原配置/版本/关系及该原预检证据，不伪造强删 tombstone。正常转换保持 ID；脚本错误沿既有失败恢复流程处理。模型仅暂不可调用、名称歧义、非法跨租户或坏版本不按此规则静默放行。
+- 回填后按有效关系、存量失效和强删失效分别核对完整覆盖；已登记存量失效不单独阻断升级。恢复后验证失效提示及受影响执行的明确失败，其他正常业务继续使用；手动修复仍按原来源事务，不自动改写历史内容。
+- 现有文件/文件夹及旧批量删除接口须完成 AC-94 接线核对：有实际删除范围直接引用则拒绝；只有空间整体绑定时允许普通内容删除；文件夹整项阻断，批量确认跳过；force 参数不放行，不能自动清频道等来源配置。同时核对删除顺序：复用空间现有 F048 prepare/execute，全部目标投影成功后才 SQL/绑定 finalize，再异步清理对象和索引；投影失败保留业务行，SQL 或清理失败按同一任务/计划续跑。FGA 不再作为 SQL 删除后补做的 purge 步骤。此项是业务接口验收，不是迁移脚本代为删文件或解除关系。
+
+## 9. 本轮技术设计口径（2026-11-05）
+
+- 仅退役独立 use，不扩展文件 edit，不改变其他动作及其适用范围。
+- 纯可见授权沿原权限管理入口保留且可撤销；M2 基线、M3 发布和 M4 核验包含纯可见资源类型标记及原管理等级，管理校验不把合法空动作模型一律当成不可用。
+- 文件/文件夹删除复用知识空间现有的先权限投影、后业务删除顺序，保留精确 manifest、引用保护和持久清理恢复；迁移脚本职责仍仅数据转换和校验。
+- Worker 在途异步请求迟到与用户后续修改的竞态一致性暂不治理，不作为本次升级放行检查或验收阻断；任务幂等、配置/索引过期检查和正常重建冲突限制仍核验。本文不声称已经具备跨 SQL/ES/Milvus 的原子写入或 attempt 隔离。
+
+## 10. 开发进度与发行限制（2026-11-05）
+
+W0/W1阶段历史交付为86/273项、本地组合424项通过；W2继续接入WF/AS保存与删除，W2结束时342项的任务完成情况及组合验证见[W2集成记录](./wave2-implementation-review.md)。Alembic结构修订不包含业务数据迁移，不能替代本手册M2正式盘点/冻结与M3转换回填。正式脚本、六类写端接入、覆盖适配、真实环境演练和发布验收完成前，不据此文档执行生产升级。基线/合同及逐项验证见[实施任务](./tasks.md)和[集成评审](./implementation-review.md)。
+
+业务引用写入使用Verifier实际调用Owner后的同事务收据；删除中目标冻结其引用写入，删除完成后的原失效槽继续允许逐项修复。此规则维护可恢复删除计划的一致性，不增加脚本停服探测。任务重试用本次持久收据恢复有效主体，配置/索引过期状态需提交后报错，不能从历史模型参数或已撤凭据回退。
+
+
+## 11. W2冻结证据与盘点接口
+
+实际legacy Reader已实现，但不自动生成任何旧来源索引或覆盖ready。后续M2脚本必须在运维已停旧服务并取得一致备份后正式盘点、冻结同一run的baseline/plan；账本artifact格式为`{object_key, sha256}`，object_key为持久对象键，SHA256与账本hash列一致。preparing/failed不可作为冻结证据，baseline_frozen及后续正常阶段才可供原来源精确核验。首次冻结仍在所有转换写入前，重跑保留原run/基线/计划，不重新归类脚本导致的缺失。
+
+回填核对须包含真实业务版本、零引用来源、全部来源集合及全部原始引用明细，不能只盘已有集合反推全集。整根删除发现无set残raw/未知来源/终态残raw会明确10994，不自动清理；正式脚本需解释和核对这类不一致。旧已删除业务且无set、无raw不需伪造来源集合。当前保存端缺index明确拒绝，不会在线自愈既有数据。
+
+模型共享撤销后的原槽可保留或手动修复，但不能执行或新增借用；原ID及引用不按目标删除或存量失效伪造记录。该资格是实时派生事实，不要求新增列迁移。正式脚本、Coverage adapter、所有来源写端及真实环境演练仍待完成；脚本不检测或控制是否停服。
+
+
+## 12. W3运行准入接线与升级前置
+
+WF/AS保存版本/当前配置的运行、Info及评测已接真实来源Reader，API和worker都注册实际Owner/Target/legacy适配。已保存来源缺索引/覆盖或摘要漂移明确10994，不回退到任意画布/旧DAO读取，也不在线自动回填；非法身份10996，候选后变化10998。只有模型真实共享关系或默认继承授予模型读取，不自动扩大来源业务可见范围。
+
+临时预览只在原edit下核完整targets、真实root/edit/current及canonical输入，不读取或要求来源index/coverage/legacy；它不替代保存版回填或生成来源。
+
+本波没有新增DDL、迁移脚本或实际运行数据转换。Reader及本地测试不代表存量ready；发行必须等其余来源写端、正式脚本、Coverage适配和全量对账完成。M2仍由运维先停服/停写并取得一致备份，再正式盘点和冻结baseline/plan（含全平台权限）；脚本不判断或控制停服。首轮冻结在转换前，重跑沿原run证据，不重分失效类别。
+
+升级后应验证：真实凭据/管理pin及共享撤销收窄；WF正确版本与临时preview边界；AS失效原ID/状态及手动修复；10994/10996/10998明确失败且无执行副作用；缓存更新、评测每题准入和公共会话绑定。原 ACTIVE 分享链接生成授权 T404/T405 已按用户决定移出本次升级验收，见[独立待办](../../../docs/backlog/share-link-issuance-authorization.md)；本次仅验证既有链接调用兼容和来源边界，不改变签发、撤销联动或有效期，也不声称已修复签发端。
+
+W3结束时248/421任务完成、1199 passed、6 subtests passed（46个pytest路径），仅本地SQLite/SQL形状及Port测试。真实MySQL/DM8/FGA、Redis/Celery、ES/Milvus、模型服务、E2E、迁移演练、CI与部署均未运行；详见[W3集成复查](./wave3-implementation-review.md)。
+
+## 13. W4剩余来源接线与离线迁移检查（2026-11-06）
+
+APP 保存版本、频道当前配置、知识自身模型与五个系统默认 key 已进入实际来源写/读链；实现合同及受测固定提交见 [W4 集成复查](./wave4-implementation-review.md)。部署前仍必须完成六类来源全量回填、覆盖持久适配、目标删除协调、处理框架及完整环境验证。不能因为新版本 Reader 存在就在线开放缺 index/coverage 的旧资源；10994 是明确的未就绪结果。
+
+M2 正式盘点应覆盖全部 AppVersion.id UUID（包括历史保存版，暂停/停止不解除）、频道完整当前配置（包括 disabled）、Knowledge.model 和有定义的 pending 槽、五个实际默认 key/current，以及此前 WF/AS 来源。Root 继承不复制 Child 来源；恢复继承只移除 Child override。存量失效 ID 与引用继续保留并标记；清空知识保留模型配置/出向引用，真实资源删除才解除出向，入向失效关系仍供业务手动修复。
+
+API 启动不再执行 linsight_default_model_backfill/chat_default_model_backfill 在线 JSON 转换。这两项若需转换，必须纳入未来正式 M3：运维停服/停写和一致备份后，正式盘点并冻结同一 run 的引用及全平台权限 baseline/plan，再受控转换、回填和核对。迁移脚本不检查或控制停服，重跑沿原 run/冻结证据，不重新归类脚本造成的差异。
+
+升级后验收至少核对：APP 冻结模型与最终 alias/ID/server 一致及失效管理展示；频道自动化真实主体与上传前拒绝；默认覆盖/继承/恢复只改变默认来源、创建时复制当前默认、已建空间模型与引用保持不变；同 ID 知识元数据修改不触发重建；worker 由当前业务配置选模型并拒过期 operation/revision/generation；清理不因已失效模型失败。默认设置不派发空间重建。显式修改空间模型在提交后才派发任务，派发故障不能记录为配置已回滚。先查询持久资源 operation/revision，再由运维按原操作处置，不通过重复改模型制造新版本。
+
+API、Celery 和独立 Linsight 子进程的原生共享读取依赖 F048 runtime 显式 READY，准备失败明确阻止接收该业务。旧已删应用的持久 destroy/purge intent 仍保留清理诊断和操作 ID；本波不提供自动 destroy 恢复或 Docker/K8s 实机证明。MySQL/DM8 锁竞争、真实 FGA/队列/检索/模型、浏览器 E2E、CI、停服迁移和部署证据仍需单独收集；本地 SQLite/Port 通过数不能替代这些检查。
+
+M2 还须单独盘点旧 rebuild 消息：只有 knowledge_id/modelHint/auditUser、没有 operation/config_revision/index_generation，或 Knowledge 已无 transition 的旧消息，升级后会在外部 IO 前明确拒绝并保留诊断，不从当前值补造原操作证明。队列保留不等于该类旧重建消息可原样执行；正式 M3 受控转换或运维按新业务操作恢复的方案仍须实现/演练，未完成前不得升级放行。该限制只针对缺合法重建操作事实的消息，不概括为全部存量任务失效。
+
+APP知识检索保持原0/3支持类型；历史QA声明保原ID并标unsupported，完整APP来源不能因通用Knowledge目标有效而绕过该业务能力限制。单租户内部模型读取和清理沿C3合法默认tenant=1，多租户缺context仍明确拒绝。重建受控逐文件部分失败完成正常步骤后finalize；整体异常/过期/准入失败保当前stage诊断，不无条件发布为成功。完整恢复处置仍待Processing及升级演练闭合。
+
+升级核对须确认Space.info和旧个人库status查询不再自动生成退休三参数重建消息；两查询保原可见/状态与错误提示。显式改模和合法恢复应由各自操作入口承担原7字段命令，不从GET或旧消息补造操作证明。
+
+W4本地受测d4d02e48b7d724c9ffe31d9650b75951eeb94e14：81路径2390 passed/6subtests，438/597卡；完整证据见W4记录。本结果不解除上述迁移、Coverage、恢复或真实环境升级限制。
+
+### 默认 Embedding 与 APP 性能验收补充（2026-11-06）
+
+更换/清空工作台默认 Embedding 不查询或批量改写已有空间，不为旧空间新增 pending 槽、修订或任务；创建后空间独立绑定模型，新增空间采用新默认。升级不借默认保存重建或修复存量空间。已有空间模型失效仍由用户显式修复，模型共享资格不因此放宽。
+
+APP 候选与锁后复核各执行一次完整模型目录/共享验证，逐声明使用该阶段的整批解析结果；禁止跨阶段缓存验证。验收覆盖多声明查询次数不随槽数重复，以及两阶段之间共享撤销、模型下线、重命名仍明确失败。正式迁移/回填、Coverage、双库及完整 E2E 仍为发行前待办，见 [剩余任务清单](./pending-tasks.md)。
+
+### 本次任务范围复核
+
+当前 F118 待办157项，分享签发加固2项独立记录，不作为本次前置。全平台 use 适配不放宽 publish/share/owner/管理等原条件；QA、SDK/MCP 及知识任务只做本次兼容与引用维护；迁移仅运维 CLI、不顺带治理退休个人库数据。逐项依据见 [范围复核](./scope-review.md)。历史 W3/W4 任务数字仅表示当时快照。
+
+### W5消费面升级后核对
+
+工具/Skill/DSH、AS及频道原use准入应按visible解释；旧HTTP显式use保持兼容。系统创建不得再签出use。Skill disabled不可运行但仍按原资格管理；APP visible-only不获得管理、publish/share或重建按钮，重建仍需edit+publish。仅有动作语义变化，不新增模型任务绑定或分享签发加固；旧配置、正式回填和Coverage仍按停服计划另行执行。
+
+W5本地100路径2852测试/15子测试通过，当前137待办；平台typecheck及扩大旧回归的基线失败已单列，不据此宣称全验收。见[W5完整验证](./wave5-implementation-review.md)。
+
+## W6持续实施（2026-11-07）
+
+W6持续实施；原137队列已完成44项、剩93项。见[当前清单](./pending-tasks.md)及[W6记录](./wave6-implementation-review.md)；按业务入口至E2E闭环验收，完整特性未验收。本轮真实原凭据、整版本精确JOIN、bounded列表、模型Owner影响核心、MIG同run/checkpoint及mock辅助已合；模型强删公开协调/SourceReader、全来源正式回填/Coverage等仍待推进。详情见[W6记录](./wave6-implementation-review.md)与[冻结合同](./wave6-completion-contract.md)。
+
+109:3005由用户撤回后保持不动；109新独立项目已启动标准旧版本API/worker和真实中间件，真实注册/登录并准备隔离租户和mock模型，尚未执行F118迁移。用户选mock模型/ETL并免除本轮DM8实测；不免C2静态，也不以此代替MySQL事务、索引、投影和升级恢复演练。
+
+
+原授权pin只读实测已在独立MySQL/OpenFGA执行：CURRENT SQL pin与原Store/模型checksum相符，tenant2/3完整shared_with流均读到原Root服务1；SQL两次读取且无写/FGA变更。证据为独立环境evidence/permission-original-pin-smoke.json。这是迁移读取adapter证明，尚未执行正式停服盘点、冻结、转换或恢复。新版源不能替换运行中的旧API并据健康检查宣称升级完成。统一列表旧异常能力按W6§23保留，正式升级后还须真实接口和两端页面验证。
+
+
+## 停服后结构准备与正式基线
+
+旧版缺少F118新私有列与账本表，正式M2实际仓储读取前须在已停服且一致备份后执行中性DDL结构升级。顺序为：旧任务收尾/停所有写端→一致备份及原schema记录→仅中性DDL→正式原业务盘点/预检→全租户正式基线和计划freeze→业务转换/回填/新权限投影。DDL不做任何业务转换、seed或在线runtime启动；原业务事实摘要不把新列默认算成原业务变化，并记录备份/原新schema与DDL摘要。失败保持维护；脚本不检测/控制停服。详细边界见[W6§26](./wave6-completion-contract.md#26-停服维护中的中性结构准备顺序已冻结)。正式迁移命令尚未全部存在，当前不发布猜测命令。
+
+
+## 独立MySQL克隆的中性DDL准备演练（2026-11-07）
+
+仅在109独立F118项目的`bisheng_f118_probe_20261107`克隆库，以临时只读文件系统容器执行真实Alembic upgrade head；不启动API/worker、不做业务DML、不改原运行库或109:3005。运行时SQL守卫拒绝其他库、GRANT/数据库切换及除alembic_version外DML；配置只在临时目录以600权限保存，不回显凭据。候选archive 3ef4f26a1的Model/Alembic与受核主树6e90bf5bb相同，SHA256为`a9f15fe7b000fa04efd8a816f2e555d0c52c0826fd56d126d84f35eb30d45fbf`；此处只验证结构，不将其旧application代码当最新部署。
+
+实际从`v310b1_f004_workflow_soft_delete`升级到`f118_finalize_retry`，180张旧业务表共1617行的原列计数及确定摘要前后完全相同，8张新增账本表均为0行。正式证据在独立项目`evidence/preparatory-clone-neutral-ddl.json`，SHA256 `c10677f9c6d610e53514f5e34b083de1cff93b3f1b45a6a21989585839af31ad`；无凭据的执行脚本同目录`preparatory-clone-neutral-ddl-probe.py`。原后端仍是旧标准镜像，启动时间2026-11-06T12:16:13.795554937Z，未重启。
+
+这是准备阶段克隆演练，不是停服一致备份、正式M2冻结、M3转换/回填、恢复或新版E2E；T161–T174、T202/T203继续待办。正式维护仍按§26停服后重新备份、盘点并冻结，不复用本次克隆摘要作正式基线。
+
+
+## M2只读端口联装状态（2026-11-07）
+
+主树44712aff4已接原Store tuple、原生ES/Milvus/object stat和受限artifact、SQL与fair scheduler Redis原任务事实；M2拒identifier_compatible=False、全部tenant同TX冻结、相同proof重入可保合法不同阶段且零写。本地3582项通过仅说明联装；真实Celery broker盘点、完整精确M3转换计划/初始引用回填、CLI与实际维护演练尚未完成，当前不发布可执行正式迁移命令、不启动新版线上runtime。正式停服/排空/一致备份、中性DDL、重新盘点并freeze顺序保持；DM8免实测，C2静态及MySQL/恢复验证保留。
+
+
+## 原生物理/任务端口准备实测（2026-11-07）
+
+以已提交候选95f1279be归档（SHA256 `6b418fca86a1698af2d62002800315f551df22b2cc5d4b1232c68413dde94c0b`）在109独立项目临时只读容器执行，不替换原API/worker。仅SQL克隆库bisheng_f118_probe_20261107，SQL守卫拒DML/DDL/其他库；13条SQL读取3个实际租户、2个统一目标及5个文件。原生ES/Milvus分别回读空间1计数16/49、空间3计数5/6，标识schema兼容均true；8个原文件对象均存在。两种索引原有计数不同按各自原事实保留，不伪造相等或以此误阻迁移。正式前后对账应分别比较对应索引的原摘要/计数。
+
+新版受限MinIO adapter写/回读准备盘点artifact SHA256 `8e7366b92b94ec511e5426a4571a9598da6da09d8c5b2423e93eb34d46b24d81`；无建桶、授权策略、模型或解析IO。真实SQL/fair Redis任务reader返回0项（这是该环境当时事实，不代表已盘点Celery broker）；knowledge_unification_run/processing_job/processing_item仍0行。证据`evidence/preparatory-native-ports.json` SHA256 `72981605007d6e3e2e4b8831dbbc35a663f3aaf24c3964fcced7badcabcf000f`，无凭据脚本同目录`preparatory-native-ports-probe.py`。这不是M1停服一致备份/正式M2 freeze/M3转换/恢复/E2E，3005保持不动。
+
+
+## 联合namespace权限计划的AC-80已确认口径
+
+实现前实际SSOT审计发现：同一权限模型从旧library目标改为SPACE目标时，全局非use selected/effective动作和等级可完全不变，但目标可适用动作发生变化。默认editor由旧库{use,edit}变为{edit,create_folder,upload_file}；manager/owner另适用原share；custom{use,upload_file}变为{upload_file}，不新增edit/rename/download。仅use模型继续只有原可见与撤销，不加其他动作。真实Catalog/ModelSnapshot/GrantService两例验证等级/allow_same与管理边界不变。
+
+2026-11-09已收到用户最终确认：沿用同一模型在知识空间现有的动作范围，并登记预期变化。该适用变化来自文档库转SPACE的资源类型统一；全平台单独移除use不改变其他资源的动作范围。保原model_key、非use动作选择、管理等级、主体/Grant/Source/可见集合，标准模型按既有SPACE规则派生动作；自定义不补未选动作，纯use仅保可见与撤销，rename不并edit且文件edit不扩展。正式停服后逐模型冻结前后适用动作与差异原因，只有上述适用变化和可见代use属于允许差异；其他差异阻断切换。联合namespace/Catalog计划可按此口径继续冻结开发，尚未执行正式发布或迁移。
+
+
+## Celery broker只读端口已联装（2026-11-07）
+
+候选主树c4f911d0db7a2f42c3b292d03ee595ada8033383已独立复查并通过八路径230项。正式盘点同时要求原SQL/fair scheduler与实际Celery raw broker，不能互相替代；依据运行worker真实生效配置读取，遇未知driver/格式/ACL/归属矛盾明确失败。只读端口不ACK、重投、清理队列或检测停服。LRANGE逐条、目标批查≤200；HSCAN响应接收后64MiB检查不等于分配前硬限制。109实际端口读取另录准备证据；当前CLI与联合权限计划尚未完整，不发布正式执行命令。
+
+
+## M3时间保留的静态数据库前置
+
+新V1时间在正式M2统一为可表示UTC整秒（§50），禁止M3临时改冻结计划或旧业务时间。DM实库验证按用户要求免除；当前连接层managed updater无条件更新update_time，正式停服维护时须在中性DDL之后、M3事务之外，保存涉及表对应managed trigger的原定义摘要/启用状态，仅临时禁用需保留旧时间的updater，最后逐项恢复原状态并核验；原disabled/absent保持，不触FK/其他trigger，不再bootstrap/Alembic。DDL存在隐式提交，禁止在业务事务中操作；失败保持维护，不能据事务rollback声称trigger已恢复。具体白名单随最终M3命令冻结，尚不提供猜测DDL命令。依据[DM官方触发器](https://eco.dameng.com/document/dm/zh-cn/pm/trigger)、[DM事务管理](https://eco.dameng.com/document/dm/zh-cn/pm/management-affairs.html)；MySQL原DateTime精度见[官方小数秒说明](https://dev.mysql.com/doc/refman/8.0/en/fractional-seconds.html)。
+
+
+## 原生Celery broker准备实测（2026-11-07）
+
+候选5ea9f9251只读临时容器沿原worker真实broker配置，在3租户克隆范围读Redis DB2；当时0消息，SQL4及只读SCAN2/SSCAN5/TYPE32，owned客户端关闭、三账本仍0，未替换/重启原API。证据evidence/preparatory-native-broker.json SHA256 f86ca4a28cd1f19862c35708ebaa7e2216b80e03df8a8194171dde4ec9dc9433，源码archive摘要见W6记录。空broker只证明真实配置可读，正式停服排空/一致备份之后必须重新盘点，不复用这份证据当正式冻结；M3/恢复与E2E仍待执行，3005不操作。
+
+
+M3原子性按W6§53：每批保存点覆盖业务与游标，失败只回滚该保存点，原事务仍由维护App拥有；禁止靠上层必抛异常保证原子性。批次进入前拒caller pending，防begin_nested自动flush；DM采用其官方支持保存点语法，未声称macOS实际DM dialect已执行。具体M3/CLI仍待完整接线后发布执行命令。
+
+
+## 真实SQL迁移入口及初始上传事务前置（2026-11-07）
+
+[W6§57/58](./wave6-completion-contract.md#57-冻结产物到真实sql执行入口-v1已冻结)已冻结：M3 App先完整校验正式baseline/plan图和全部叶，再按真实tenant、≤199命令/新事务执行并同TX写checkpoint；已提交前缀每次恢复只线性核一次，commit失联停止等持久事实恢复。SQL子步完成不代表namespace/Catalog/初始引用回填/Coverage或完整升级完成，AC80口径已确认，联合权限计划待实际实施。正式停服、备份、盘点基线时序不变。
+
+初始上传先补仅flush的File/Doc/V1原子注册Repo，后继再接现有入口；保原upload_file、scheduler及effective快照，无新增edit门槛。原版本link已确认自commit可能在失败后留下两个primary，需后继同事务重链；首注册组件不能代替整个上传/文件夹/网页/历史版本验收。主树d50401825本地选集4166绿、7原占位skip，未执行本轮正式升级/恢复或完整E2E。
+
+
+W6§59继续抽取原上传准备段，effective规则只保留原唯一生产者，SQL注册/外部IO协调另接。109克隆MySQL已以固定44f5候选验证0→3/两个首版本注册同事务及强制回滚：11表逐列摘要相等、File全列不变、Run0；MySQL自增计数器仍会推进，不宣称物理状态逐位还原。这是组件准备证明（evidence/preparatory-native-sql.json），不是正式artifact App、停服升级/恢复或E2E。
+
+
+共享冻结图读取及精确SQL命令反解已合入，并以主树七路径178项验证；真实执行App仍依§57后继。上传准备只提取原唯一resolver，主树54项通过，SPACE实际SQL/FGA协调未完成。模型bind原证据匹配已按§60由M×B候选扫描改为一次分组及同ID候选，root243项及非作者独立边界通过；完整权限、证据冲突、SQL和锁序保持。上述组件交付不等于正式M3、Coverage或E2E。
+
+
+上传格式时序按现有前台保留：FileExtensionMap在原解析阶段识别unsupported，失败保留原失败File及完整版本链，不新造前置格式名单或审批。注册前仅按原限额核实际大小/配额；“无残留”限定孤立版本/半链。初始上传保原scheduler并读保存的effective快照，不借统一任务要求增空间edit；后续高级重处理按其原J1用例。
+
+
+真实冻结产物SQL执行App与初始上传注册组件已合主d014e8dde7，本地选集4314 passed/7原占位skip；SQL仅子步完成，namespace/Catalog、初始引用回填/M4/Coverage和正式升级仍待实施。后继上传按W6§61短TX提交ACK后释放Session再Blob/FGA；错误补偿先原投影回滚、SQL删除commit确认后再删本次对象，unknown/链漂移保对象。实际Root idle在注册TX内读取并复用原guard，不扩大文件edit、格式名单或worker竞态范围。
+
+初始上传commit收据组件已在独立MySQL克隆库验证真实提交回调/私有重绑定/SQL回收，11表完整行前后一致，自增各推进2；只5e模块+44f等价依赖，不是完整部署或升级验证。完整固定摘要及环境边界见[W6记录](./wave6-implementation-review.md)，原Service/DI按[§66](./wave6-completion-contract.md#66-原space普通上传入口与实际di接线-v1已冻结)实施中。
+
+当前实施增量：普通上传已通过实际v1/v2/MCP工厂消费原子File/Doc/V1应用，版本link/merge/set-primary已改为单短事务且保原资格/响应/审计，入口独立复核中。新File物化采用实际数据库更新时间，兼容现有无条件updater；不影响迁移M3保旧时间。固定4fba完整4554绿/7原占位skip，后继版本入口189项组合绿；这两快照不相加，完整记录见[W6](./wave6-implementation-review.md)。目录/网页整链、移动/删除、namespace/回填/Coverage和完整E2E仍待实现。
+
+
+网页初始上传已复用同一短事务注册和私有提交收据，Markdown/HTML实际key及metadata与File/Doc/V1一起提交；释放Session后才对象/FGA，预派发失败按收据核链并逆序清理。网页覆写保原FileID/完整DocV关系及原对象覆盖失败语义，只先核现完整链并使用实际空间规则/预览缓存指纹；不承诺Blob覆盖自动恢复。目录整批统一派发及初始上传后端已独立复核，真实迁移/恢复和完整E2E仍待实施。证据见W6记录。
+
+
+移动任务主体前置已合入：原FrozenReference解析和两Model可空标量只记录主体事实，审计用户不代替S/D主体；原四kind允许NULL。中性DDL f118_move_actor_subject（parent f118_finalize_retry）仅四nullable列与一Retry索引，无JSON解析/回填。固定211663本地完整选集4890 passed/7旧占位skip，独立TCP mock39绿；实际move闭集/Owner/worker仍待装配。独立109克隆MySQL的Folder/Web八组件例全部通过，11表原数据摘要与容器配置不变、自增仍推进；运输隔离且未测JWT/HTTP/queue，不计正式升级或E2E。固定源码、摘要及边界见[W6记录](./wave6-implementation-review.md)。
+
+
+### 中性DDL后的移动主体启用前检查
+
+正式维护顺序仍为停服/排空/一致备份→中性DDL→只读盘点并冻结正式基线。启用move前，按实际库盘点move Job及其相关Retry主体字段为NULL/非法、原frozen reference与标量不一致或无法证明原主体的trial记录；实际reader及检查命令随J1/最终升级入口冻结。本次旧a1b源码无Processing表、现service未开放move仅是源码事实，不能代实际库COUNT。存在无法确认主体的试用数据时保持维护并failclosed，由运维按备份/试用数据处置流程判断；不按actor_user_id猜主体、不做在线JSON回填。普通四kind历史NULL不因该检查被阻断。DM8实测依用户决定免除，SQLModel/Repository/DDL的C2静态兼容继续执行；MySQL正式升级、恢复演练和E2E不免除。
+
+
+目录移动覆盖历史File时按AC19迁整Doc：原Doc逻辑路径在选中目录内则保原relative；显式File选择沿原目的目录。仅逻辑路径在外时，从实际被所选目录覆盖的版本路径一次汇总目的归属，唯一候选承载全部历史；多个不同候选须在预检明确冲突，不能任取一条。原Web覆写合法产生历史File与主版本不同目录，不能据此把历史漏出闭集；详见W6§83，已完成仓储修正和原独立反例复验；实际Owner/worker/入口仍待装配。
+
+
+2026-11-09 中性结构实现：permission_model.retired_use_level_floor为私有nullable Integer，knowledge_processing_job.move_logical_marker为私有nullable JsonType；DDL幂等且不回填、不猜历史ready、不签权限。旧NULL值保持，正式停服备份后先中性DDL再盘点冻结。MySQL JsonType的JSON null和SQL NULL经应用均为None；后继不得只用IS NULL判断ready。存储/typed携带及只读删除引用组件已有本地验证，完整签发/发布/迁移/ready与E2E仍按未完成卡推进。后继合同见W6§96/97。
+
+
+2026-11-09 当前组件状态：原mixed-use等级受控签发及Catalog/CURRENT携带已本地验证，普通可见性不提级；移动逻辑ready持久封口已完成，两批量UPDATE显式tenant条件经独立原生SQL复验。成员只读盘点保显式空集/完整source字段，主树与ready组合188项通过；模型影响保原v2摘要的有界读取组合261项通过。namespace资源权限计划、成员转换写及移动retry/Owner/worker入口继续按冻结合同推进，正式停服升级/恢复/E2E仍未完成。
+
+
+2026-11-09实施合同补充：原Member没有tenant，正式盘点前通过[W6§106](./wave6-completion-contract.md#106-原member全局完整性实际前置-a已冻结)全局SPACE PK分页与canonical ID、indexed Root/Tenant精确核验，alias/orphan阻断，合法QA/type2历史成员原样保留。移动部分P1断点按[§107](./wave6-completion-contract.md#107-p1精确操作者候选读取与原move断点分类已冻结)只恢复本job原ledger，全部P1与业务logical/ready提交成功后才处理index；新主体仍须真实当前move准入。两项是现有范围的实际接线，不改变动作范围，不把内部组件通过当升级验收。
+
+
+2026-11-09验证快照：源码f8ee86f116的原完整本地选集5690通过/7原中间件占位skip/0失败，之前四项回归已闭合；47个本轮Python改动静态通过。证据和适用范围见[W6完整复验](./wave6-implementation-review.md)。正式停服盘点、转换/恢复和真实接口E2E尚未执行。
+
+
+2026-11-09成员盘点实施：正式Command签入原创建者成员七字段；原preflight真实读取Header/全部Member/Creator并生成insert或keep计划，原fresh freeze、既有freeze重验和M3写前完整耗尽均检查闭集，不兼容缺字段的旧artifact。全部迁移本地选集1384通过，独立3 native+244组合通过。实际Root+Member原子写按[W6§111](./wave6-completion-contract.md#111-原m3-root与创建者member原子写已冻结)完成本地集成，Writer阶段全部迁移选集1428通过，作者外3 native+358组合通过；实际PK及完整after成员集合进入原Outcome，insert/keep原子回滚和恢复已验。正式namespace转换与升级/E2E仍待执行。
+
+
+2026-11-09后继集成：模型inspection在原目标锁前固定native事务，关键await及最终Coverage/身份核同tenant/TX；原4项独审及274组合通过。移动内核与[W6§119](./wave6-completion-contract.md#119-移动逻辑切换的原直接file引用归属维护已冻结)直接File引用target_space_id维护已集成，保全部来源配置/版本/失效证据；实际MoveOwner/worker/HTTP仍按依赖实施。正式权限namespace完整target/after明细及fresh、frozen、M3写前语义门已闭合，全部迁移1527项通过。固定0c746ab294的完整本地选集6308通过、7项原中间件占位跳过；此快照不含后继新ModelDeletePlan模块，该模块另经175项集成和尾部pending ORM独立探针通过。Catalog DRAFT精确写入已集成，保ACTIVE复用/STAGED分支和完整provenance，正式资源SQL、FGA发布、CURRENT切换、停服升级与环境E2E仍待执行。
+
+2026-11-09公共检索补正：SPACE3以真实File→唯一Version→Document主指针正向证明成功主版本，未登记、错归属或坏指针不回退旧索引；原子项visible、原IN/NOTIN/none结果层防线及历史delivery不变，NORMAL0/QA1保持原规则。固定0fdda0e87c与精确旧fixture补正c9ad73cb6e的14调用方142项本地通过；401/10001候选各3/51 SELECT、max208参数，无版本表全扫。此非数据转换或环境E2E证据。
+
+整链实施合同补充（2026-11-09）：原M3权限发布按W6§125通过原Run走完整Store对账、资源SQL、固定pin差集及最后CURRENT切换；移动按§126接原EXECUTE_TASK与新明确确认/查询链，P1长批次以原compact lease续租，禁止每项全Scope。模型删除按§127使用原KnowledgeOperationPlan新增3个可NULL执行字段及provider围栏索引（先中性DDL），内部provider分享/prepare reservation与删除消费同表原子handoff，FGA期间SQL关闭；原确认hash不变，PUT恢复重交原DTO且hash一致，绝不保存credentials。代码实现及环境验收仍进行中，不能将合同冻结计为业务完成。
+
+## 2026-11-10功能收齐后的统一演练
+
+范围内功能已合入730e226776，进入整体测试和升级恢复演练；最后8张开发卡闭合，余14张验收卡见pending-tasks。此状态不是迁移或升级已通过。演练继续使用109的独立标准mock环境与独立数据，禁止使用中粮3005；DM8实测按用户决定免除，C2规范保留。
+
+最终77f737fe3c后端完整单轮8208 passed、34 failed、23 skipped、0 errors，另8 subtests passed，27分35秒；34失败均与共同祖先旧红相等、未归因0，23均为相同Redis依赖跳过。此为本地回归，不是全绿或升级E2E。升级后Move仍须实测：预检及确认锁前先核原move/目标upload_file并分类，仅有效根检查源/目标idle；无权或缺失项分类不被忙态覆盖，锁后仍重验忙态，拒绝时Plan/File/Job/chat零副作用。2bb10ce9df不改变原动作范围。
+
+前端22f修复真实类型错误后，锁依赖类型及两端Vite构建通过，新树339831ed64e7c19da3af69c3b326565a2fff3458已取代旧ca37581树；后端77f仅为历史快照；当前实际部署backend/Worker固定71dd镜像（SHA256前缀162f）及22f前端镜像e0b7…，原cmd/queue/mount保持、mock正常。`31818:3001`及`frontend:3001`两SPA/API proxy sanity通过，但不算E2E。摘要见[W6记录](./wave6-implementation-review.md#统一测试进行中2026-11-10)。现有测试工具镜像内Chromium无网络/无凭据launch/data HTML/close验证通过，只证工具可用；镜像摘要见W6，不是UI验收。原API19 run `n10api1`显式5 suites在71dd已结束：pytest_exit1，tests19/failures12/errors6/skipped0、suite_complete=false；含同case teardownerror，不相减推过关数。12 failures均native文件POST业务10996，已定位SA Child owner误调super-only scope的26022和CAS纯可见actions断言错误；21项UI未执行，T200–T213的14张验收卡仍待完成。本次未改SDK，不为测试新增SDK/扩托管运行时；既有SDK双凭据全托管场景缺真实运行材料单列未执行，v2/MCP协议验证不冒称SDK通过，也不新增runtime功能依赖。
+
+Root独立只读探针发现知识deletejob为3成功/3 prepared-pending、attempt0，两条精确既有任务due无lease且当时表lock wait为0；真实MySQL相关列精度0、探针连接无`TIME_TRUNCATE_FRACTIONAL`，临时表INSERT `.900000`向上舍入下一秒，初次claim跳过/实际舍入/秒向下取整后立即eligible三个固定布尔均1。会话临时表已drop、业务表未改；初次claim精度02fa及管理上传准入f826两生产修复已Root合流fa49aa、独立65项本地测试通过，新candidate尚未部署/现场复测，不能写成任务已恢复或API19通过。F118专用SA fixture仅改用Child owner原合法上下文；CAS按原动作空语义，保可见读取/权限检查及edit/delete拒绝，现场reader只读结果与之相符。本地相关合同24通过、原19 collect，不替代远端复测，不改通用helper/生产权限/SDK。详情见W6当前记录。
+
+backup1完成（manifest SHA256 `2e8bb87fae241b3e777b0c9aba5dbb03acc8609aa8a8bbf5873f0dee04169552`，旧镜像8.447GB保存），隔离full restore的7检查全true，含187表/798 tuple/67对象版本/4 ES/3 Milvus及22逻辑向量、原schema head；clone中性DDL通过，180张原business表原列不变、8张新表为空。这是backup1的组件恢复证据，后续clone2及原项目正式run另见下文，不替代完整验收。CLI收尾、原FGA null格式及内置user0哨兵窄修仅为定点证据，未重跑8208整轮，详见W6。
+
+M2此前正确拒绝本次synthetic AppVersion的display/vendor名称混淆（26511）：旧/新resolver均要求`f118-chat`，fixture误写`e2e-f118-chat`。Root已用旧镜像a1b通过fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；保留旧code，其他SQL/FGA/模型默认/文件/WF核对不变，不UPDATE真实历史版本、不走Runtime删除、不添加fallback或伪invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目`prep/revision2/fixture-reset.json`私密原文留服务器；保backup1/failed clone。backup2于2026-11-10 06:58:24 UTC完成，manifest SHA256 `fd7dd63b37ba45d6503d02f1d5de01cf078a38182832f8aed1635f9bf60e9630`：24 files、187张SQL表/798条FGA/68个MinIO对象版本，旧镜像归档8447341568 bytes以同旧inode硬链接保存。retained broker及其他SQL/FGA不变，仅上述synthetic版本及唯一新code改变；Root独立核summary固定字段，未取私密原文。该停服备份阶段已结束；原项目现已升级部署，原停服及旧schema证据仍保留。隔离clone2位于独立项目`restore-check/e2e-f118-20261110-prep2/.restore2`：backup2完整还原7项全true（187 SQL/798 FGA/68对象版本/4 ES/3 Milvus/22逻辑向量），新中性DDL保180张原表旧列不变、8张新表空。其实际材料覆盖3租户，正式M2 frozen后，同run `e2e-f118-20261110-prep2-restore` CLI apply和replay均ready `[1,2,3]`，两次JSON证据SHA256均为`5b9c51a2fea64f1c285b772e52c532dcb7de9293c1ba4bc24adbb3984542a76f`。clone2与原项目证据分别保留：原七store启动后Native7比对backup2全true，原中性DDL保180原表旧列/8新表空，正式M2冻结3租户，同run `e2e-f118-20261110-prep2-upgrade` apply/replay均ready `[1,2,3]`，结果SHA256均为`fa19a571fdedfe61c4d67ed807c9ebcb1c42fa75108f3af75675eceae274be34`。原项目及clone2迁移后、撤销测试前独立只读审计均PASS：429引用完全等冻结集合且组合无重复；5 File/2 Doc/3 Version/QA1、旧0→3/QA1、WF206 missing911800001原配置/invalid_legacy、Grant61/74主体等级、App d58 caps保持，六kind×3租户及global ready，无Embedding重建。两环境`reference_identity_set`同为`c31065a8655d13f7274e7d53b987eb776e21ea61417a835681415cc85ec0233f`。原Grant74/Source3181446261062334809已真实HTTP验证迁移visible/use别名true且其他space动作false；正规REMOVE后全部false、children18040，owner原Source343… DTO不变，安全报告为Root原环境证据目录`originalEV/pure-visible-revoke.json`。PUBLIC/APPROVAL preview仍actions=[]按原业务规则保留，不修产品迎合错误Oracle；临时str ID断言仅测试修正。原API19已失败结束、修复后现场复测待执行，UI21未启动，14卡仍pending，部署及sanity不算完整E2E。oneoff短/完整容器ID及只读rootfs缓存路径已窄适配，`XDG_CACHE_HOME=/tmp/f118-cache`下真实broker只读检查通过、旧失败留证，不是产品/SDK新增修复，不扩RTM。Milvus原生1800秒超时exit1无OOM/外部kill单列保留，3005保持不动。
+
+旧重复文件覆盖/重试保原File/Doc/Version和目录，原处理版本是来源快照，更新空间默认不重算旧文件；正式升级后需用原ID及存量快照核对这一兼容路径。整批WAITING提交与原worker派发均需实测，未知ACK不作为成功证据。仍按停服/排空/一致备份→中性DDL→停服后正式盘点冻结→同run转换/权限发布→六来源回填/对账/Coverage→校验后恢复的原顺序，不由迁移脚本判断停服。

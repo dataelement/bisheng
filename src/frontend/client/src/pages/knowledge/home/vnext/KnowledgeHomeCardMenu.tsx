@@ -2,7 +2,6 @@ import { Button, Dropdown, DropdownItem, Tooltip } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import { showApiError } from '~/api/request';
 import { useLocalize } from '~/hooks';
-import { useConfirm } from '~/Providers';
 import type { KnowledgeSpaceAction } from '../../hooks/useKnowledgeSpacePermissions';
 import styles from './KnowledgeHomeCard.module.css';
 
@@ -19,18 +18,13 @@ export function KnowledgeHomeCardMenu({
   disabled, permissions, permissionsLoading, onOpen, onEdit, onDelete,
 }: KnowledgeHomeCardMenuProps) {
   const localize = useLocalize();
-  const confirm = useConfirm();
   const canEdit = permissions.includes('edit') || permissions.includes('manage_permission');
   const canDelete = permissions.includes('delete');
   const moreLabel = localize('com_knowledge.home_next.more');
 
   const handleDelete = async () => {
     if (!canDelete || disabled) return;
-    const confirmed = await confirm({
-      description: `${localize('com_knowledge.confirm_delete_space')}${localize('com_knowledge.delete_irreversible_warning')}`,
-      variant: 'destructive',
-    });
-    if (confirmed) onDelete();
+    onDelete();
   };
 
   const menu = permissionsLoading ? (

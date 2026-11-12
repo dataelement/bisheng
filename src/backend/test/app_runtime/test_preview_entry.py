@@ -35,11 +35,41 @@ OTHER_USER_ID = 91202
 
 
 @pytest.fixture(autouse=True)
-def _runtime_layer_on(monkeypatch):
+async def _runtime_layer_on(monkeypatch, app_db):
+    import sqlalchemy as sa
+
+    from bisheng.app_publish.domain.repositories import preview_runtime_repository
     from bisheng.common.services.config_service import settings
+    from bisheng.database.models.user_role import UserRole
+    from bisheng.user.domain.models import user_role
+    from bisheng.user.domain.repositories import runtime_identity
 
     monkeypatch.setattr(settings.app_runtime, "enabled", True)
+    monkeypatch.setattr(settings.app_runtime, "runtime_protocol_version", 1)
     monkeypatch.setattr(settings.app_runtime, "obo_secret", "preview-obo-secret-not-the-jwt-one")
+    monkeypatch.setattr(preview_runtime_repository, "get_async_db_session", app_db)
+    monkeypatch.setattr(runtime_identity, "get_async_db_session", app_db)
+    monkeypatch.setattr(user_role, "get_async_db_session", app_db)
+    metadata = sa.MetaData()
+    sa.Table(
+        UserRole.__tablename__,
+        metadata,
+        *[
+            sa.Column(
+                col.name,
+                col.type.copy(),
+                primary_key=col.primary_key,
+                nullable=col.nullable,
+                server_default=sa.text("CURRENT_TIMESTAMP")
+                if col.name in {"create_time", "update_time"}
+                else col.server_default,
+            )
+            for col in UserRole.__table__.columns
+        ],
+    )
+    async with app_db() as session:
+        await (await session.connection()).run_sync(metadata.create_all)
+        await session.commit()
 
 
 @pytest.fixture()
@@ -82,13 +112,49 @@ async def session_token(monkeypatch):
 
 
 @pytest.fixture()
-async def preview_session(app_db, app_factory, approver):
+async def preview_session(app_db, app_factory, approver, monkeypatch):
     """``await preview_session(approver_user_id=…, expired=…)`` → (app, version, row)."""
+    from types import SimpleNamespace
+
     from bisheng.app_publish.domain.models.app_preview_session import (
         PREVIEW_STATUS_RUNNING,
         AppPreviewSession,
         AppPreviewSessionDao,
     )
+    from bisheng.app_publish.domain.services import preview_access_service
+    from bisheng.app_runtime.application import preview_operations
+
+    known = {}
+
+    async def execution(row):
+        original = known.get(row.session_id)
+        return original is not None and (row.app_id, row.version_id, row.operation_id) == (
+            original.app_id,
+            original.version_id,
+            original.operation_id,
+        )
+
+    async def credential(credential_id, tenant_id, app_id):
+        return any(
+            (row.credential_id, row.tenant_id, row.app_id) == (credential_id, tenant_id, app_id)
+            for row in known.values()
+        )
+
+    async def pending(viewer_id, app_id, versions):
+        return [
+            SimpleNamespace(
+                tenant_id=row.tenant_id,
+                version_id=row.version_id,
+                instance_id=row.approval_instance_id,
+                task_id=row.approval_task_id,
+            )
+            for row in known.values()
+            if (row.approver_user_id, row.app_id) == (viewer_id, app_id) and row.version_id in versions
+        ]
+
+    monkeypatch.setattr(preview_operations, "verify_preview_execution", execution)
+    monkeypatch.setattr(preview_access_service, "preview_credential_is_live", credential)
+    monkeypatch.setattr(preview_access_service, "pending_app_reviews", pending)
 
     async def _make(*, approver_user_id: int = APPROVER_USER_ID, expired: bool = False, state: str = "draft"):
         app, version = await app_factory(state=state, with_version=True)
@@ -97,12 +163,26 @@ async def preview_session(app_db, app_factory, approver):
             app_id=app.id,
             version_id=version.id,
             approver_user_id=approver_user_id,
+            purpose="approval",
+            approval_instance_id=1,
+            approval_task_id=2,
+            credential_id=1000 + len(known),
             status=PREVIEW_STATUS_RUNNING,
             expires_at=datetime.now() + (timedelta(days=-1) if expired else timedelta(days=7)),
         )
+        row.operation_id = f"preview:{row.id}"
+        known[row.id] = row
         async with app_db() as session:
+            from bisheng.database.models.tenant import Tenant
+
+            if await session.get(Tenant, ROOT_TENANT_ID) is None:
+                session.add(Tenant(id=ROOT_TENANT_ID, tenant_code="root", tenant_name="Root"))
             await AppPreviewSessionDao.acreate(session, row)
             await session.commit()
+        if not expired:
+            from bisheng.app_publish.application.preview_access import resolve_preview_context
+
+            await resolve_preview_context(session_id=row.id)
         return app, version, row
 
     return _make

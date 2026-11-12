@@ -203,6 +203,7 @@ class F048ResourcePermissionApi:
                 "name": names.get(model.model_key, model.model_key),
                 "level": model.derived_level,
                 "active": model.active,
+                "visibility_only": getattr(model, "visibility_only", False),
             }
             for model in models
         ]
@@ -486,6 +487,14 @@ class F048ResourcePermissionApi:
         parent_names = await self._subjects.resource_display_names(parents) if parents else {}
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
         model_states = {item.snapshot.model_key: item.snapshot.active for item in catalog.models}
+        target_models = {
+            item.snapshot.model_key: (
+                catalog.model_for_target(item.snapshot, resource_type=target.resource_type)
+                if callable(getattr(catalog, "model_for_target", None))
+                else item.snapshot
+            )
+            for item in catalog.models
+        }
         if any(row.model_key not in model_states for row in selected):
             raise PermissionVersionConflictError(msg="Permission Catalog changed while reading sources")
         data = [
@@ -503,8 +512,9 @@ class F048ResourcePermissionApi:
                         row.model_key,
                         row.model_key,
                     ),
-                    "level": row.model_level,
+                    "level": getattr(target_models[row.model_key], "derived_level", row.model_level),
                     "active": model_states[row.model_key],
+                    "visibility_only": getattr(target_models[row.model_key], "visibility_only", False),
                 },
                 "source": {
                     "type": row.source_type,
@@ -677,6 +687,7 @@ class F048ResourcePermissionApi:
                     "name": grant.model.model_key,
                     "level": grant.model.derived_level,
                     "active": grant.model.active,
+                    "visibility_only": getattr(grant.model, "visibility_only", False),
                 },
                 "source": {
                     "type": source.source_type,

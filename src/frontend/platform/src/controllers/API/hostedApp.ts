@@ -33,7 +33,7 @@ export type HostedAppPhase =
   | "stopped"
   | "failed"
 
-export type HostedAppAction = 'use' | 'edit' | 'manage_permission' | 'delete' | 'publish' | 'unpublish'
+export type HostedAppAction = 'visible' | 'edit' | 'manage_permission' | 'delete' | 'publish' | 'unpublish'
 
 export interface HostedAppDetail {
   allowed_actions?: HostedAppAction[]

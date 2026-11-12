@@ -2,7 +2,6 @@
 
 import secrets
 import time
-from functools import partial
 
 import jwt
 
@@ -62,8 +61,10 @@ async def validate_web_session(connection, subject: dict) -> None:
     principal = await runtime.access.authenticate(authorization)
     if (int(principal.user_id), int(principal.tenant_id)) != (subject["user_id"], subject["tenant_id"]):
         raise DshInvalidAccessTokenError()
-    # Authentication itself is read-only. Business services opt in after
-    # admission, using the exact grant checked above rather than a client header.
+    # Authentication only binds the exact device. The shared entrance hook
+    # records explicitly marked business requests after identity validation.
     state = getattr(connection, "state", None)
     if state is not None:
-        state.dsh_activity_recorder = partial(runtime.sessions.record_activity, principal)
+        from bisheng.dsh.application.session_activity import DshSessionActivity
+
+        state.authenticated_activity = DshSessionActivity(runtime.sessions, principal)

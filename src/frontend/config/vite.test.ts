@@ -163,6 +163,7 @@ it('loads both real Vite configs with separate API, license and object-storage r
   vi.stubEnv('VITE_MINIO_PROXY_TARGET', 'http://objects.example:9000');
   vi.stubEnv('VITE_GATEWAY_PROXY_TARGET', 'http://gateway.example:8180');
   vi.stubEnv('VITE_APP_PROXY_TARGET', 'http://app-entry.example:3001');
+  vi.stubEnv('VITE_WORKSPACE_PROXY_TARGET', 'http://workspace.example:4001');
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});
   try {
     const platform = (await loadConfigFromFile(
@@ -182,6 +183,16 @@ it('loads both real Vite configs with separate API, license and object-storage r
     });
     expect(platform.server!.proxy!['/api/license']).toMatchObject({
       target: 'http://gateway.example:8180',
+    });
+    expect(platform.server!.proxy!['/api/v1/dsh/work/mcp']).toMatchObject({
+      target: 'http://api.example:7860',
+      changeOrigin: false,
+    });
+    const platformRoutes = Object.keys(platform.server!.proxy!);
+    expect(platformRoutes.indexOf('/api/v1/dsh/work/mcp')).toBeLessThan(platformRoutes.indexOf('/api/'));
+    expect(platform.server!.proxy!['/workspace']).toMatchObject({
+      target: 'http://workspace.example:4001',
+      ws: true,
     });
     expect(platform.server!.proxy!['/bisheng']).toMatchObject({
       target: 'http://objects.example:9000/',

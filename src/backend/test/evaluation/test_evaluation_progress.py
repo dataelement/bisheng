@@ -5,8 +5,19 @@ from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.evaluation.domain.models.evaluation import Evaluation, EvaluationTaskStatus, ExecType
 from bisheng.evaluation.domain.services import evaluation_service as service
+
+
+@pytest.fixture(autouse=True)
+def current_evaluation_tenant():
+    token = set_current_tenant_id(1)
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(token)
 
 
 def _task(monkeypatch, exec_type, question_count=3, fail_at=None):
@@ -18,6 +29,7 @@ def _task(monkeypatch, exec_type, question_count=3, fail_at=None):
         version=4,
         exec_type=exec_type.value,
     )
+    user = UserPayload(user_id=7, user_name="Test user", tenant_id=1, user_role=[])
     rows = [{"question": f"question-{i}", "ground_truth": f"truth-{i}"} for i in range(question_count)]
     cache = {}
     redis = SimpleNamespace(
@@ -27,7 +39,10 @@ def _task(monkeypatch, exec_type, question_count=3, fail_at=None):
         delete=Mock(side_effect=lambda key: cache.pop(key, None)),
     )
     monkeypatch.setattr(service, "get_redis_client_sync", lambda: redis)
-    monkeypatch.setattr(service.EvaluationRepository, "get_one_evaluation", Mock(return_value=evaluation))
+    monkeypatch.setattr(service.EvaluationRepository, "get_user_one_evaluation", Mock(return_value=evaluation))
+    monkeypatch.setattr(
+        service.EvaluationRepository, "get_one_evaluation", Mock(side_effect=AssertionError("bare creator lookup"))
+    )
     monkeypatch.setattr(service.EvaluationRepository, "get_my_evaluations", Mock(return_value=([evaluation], 1)))
     update = Mock()
     monkeypatch.setattr(service.EvaluationRepository, "update_evaluation", update)
@@ -38,7 +53,12 @@ def _task(monkeypatch, exec_type, question_count=3, fail_at=None):
         service.EvaluationService, "upload_result_file", Mock(return_value="evaluation/result/test.csv")
     )
     version = SimpleNamespace(id=4, flow_id="app-id", name="Published")
-    monkeypatch.setattr(service.FlowVersionDao, "get_version_by_id", Mock(return_value=version))
+    monkeypatch.setattr(
+        service.FlowVersionDao, "get_version_by_id", Mock(side_effect=AssertionError("independent version DAO read"))
+    )
+    monkeypatch.setattr(
+        service, "prepare_saved", AsyncMock(return_value=SimpleNamespace(graph={"nodes": [], "edges": []}))
+    )
     monkeypatch.setattr(service.FlowVersionDao, "get_list_by_ids", Mock(return_value=[version]))
     monkeypatch.setattr(
         service.FlowDao, "get_flow_by_ids", Mock(return_value=[SimpleNamespace(id="app-id", name="App")])
@@ -50,7 +70,7 @@ def _task(monkeypatch, exec_type, question_count=3, fail_at=None):
     monkeypatch.setattr(service.LLMService, "get_evaluation_llm_object", AsyncMock(return_value=object()))
 
     def progress():
-        result = service.EvaluationService.get_evaluation(SimpleNamespace(user_id=7))
+        result = service.EvaluationService.get_evaluation(user)
         return result.data["data"][0]["progress"]
 
     before_answers = []
@@ -62,12 +82,21 @@ def _task(monkeypatch, exec_type, question_count=3, fail_at=None):
             raise RuntimeError("workflow failed")
         return f"answer-{index}"
 
-    monkeypatch.setattr(service, "execute_workflow_get_answer", lambda workflow, evaluation, question: answer(question))
+    def workflow_answer(graph, evaluation, question, *, login_user):
+        assert login_user is user
+        return answer(question)
+
+    monkeypatch.setattr(service, "execute_workflow_get_answer", workflow_answer)
     agent = SimpleNamespace(
         init_assistant=AsyncMock(),
         run=AsyncMock(side_effect=lambda question: [SimpleNamespace(content=answer(question))]),
     )
-    monkeypatch.setattr(service, "AssistantAgent", Mock(return_value=agent))
+
+    def make_agent(*args, **kwargs):
+        assert kwargs["login_user"] is user
+        return agent
+
+    monkeypatch.setattr(service, "AssistantAgent", Mock(side_effect=make_agent))
     scoring_progress = []
 
     def score(llm, questions, answers, ground_truths, prompt):
@@ -88,6 +117,7 @@ def _task(monkeypatch, exec_type, question_count=3, fail_at=None):
     monkeypatch.setattr(service, "compute_answer_correctness", scorer)
     return SimpleNamespace(
         evaluation=evaluation,
+        user=user,
         redis=redis,
         before_answers=before_answers,
         scoring_progress=scoring_progress,
@@ -102,7 +132,7 @@ def _task(monkeypatch, exec_type, question_count=3, fail_at=None):
 async def test_completed_questions_advance_list_progress_and_finish_at_100(monkeypatch, exec_type, question_count):
     task = _task(monkeypatch, exec_type, question_count)
 
-    await service.add_evaluation_task(task.evaluation.id)
+    await service.add_evaluation_task(task.evaluation.id, login_user=task.user)
 
     key = service.EvaluationService.get_redis_key(task.evaluation.id)
     expected = [round((index + 1) * 80 / question_count) for index in range(question_count)]
@@ -121,7 +151,7 @@ async def test_completed_questions_advance_list_progress_and_finish_at_100(monke
 async def test_failed_workflow_only_counts_completed_questions_and_cleans_progress(monkeypatch, fail_at):
     task = _task(monkeypatch, ExecType.WORKFLOW, fail_at=fail_at)
 
-    await service.add_evaluation_task(task.evaluation.id)
+    await service.add_evaluation_task(task.evaluation.id, login_user=task.user)
 
     key = service.EvaluationService.get_redis_key(task.evaluation.id)
     assert task.redis.set.call_args_list == [call(key, round((index + 1) * 80 / 3)) for index in range(fail_at)]

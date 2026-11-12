@@ -22,6 +22,7 @@ from test.dsh.test_model_service import principal, service_setup  # noqa: F401
 def app_setup(monkeypatch, service_setup):  # noqa: F811
     service, llm, ledger, _policy, _state = service_setup
     runtime = SimpleNamespace(
+        sessions=SimpleNamespace(record_activity=AsyncMock()),
         settings=SimpleNamespace(billing_timezone="Asia/Shanghai"),
         access=SimpleNamespace(authenticate=AsyncMock(return_value=principal())),
     )

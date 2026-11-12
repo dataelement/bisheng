@@ -101,9 +101,9 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                         createNewChat();
                       }}
                       type="button"
-                      className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                      className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md whitespace-nowrap text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
                     >
-                      {localize('com_knowledge_start_new_chat')}
+                      <span className="truncate" title={localize('com_knowledge_start_new_chat')}>{localize('com_knowledge_start_new_chat')}</span>
                     </button>
                   </div>
                 </div></HoverCardTrigger><HoverCardPortal><HoverCardContent side="right" align="start" sideOffset={isGuest ? 8 : 0} className={cn(
@@ -184,9 +184,9 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                   createNewChat();
                 }}
                 type="button"
-                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md whitespace-nowrap text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
               >
-                {localize('com_knowledge_start_new_chat')}
+                <span className="truncate" title={localize('com_knowledge_start_new_chat')}>{localize('com_knowledge_start_new_chat')}</span>
               </button>
             </div>
           </div>

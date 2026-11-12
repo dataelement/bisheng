@@ -1,320 +1,294 @@
-// @ts-strict-ignore
-import { notification } from '@bisheng/ui';
-import { departmentDisplayPath } from "@/components/bs-comp/department/departmentDisplayName";
-import { MemberTableView } from "./MemberTableView";
-
+import { notification } from "@bisheng/ui";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { useTranslation } from "react-i18next";
 import { useResizableColumns } from "@/components/bs-ui/table/useResizableColumns";
-
 import { userContext } from "@/contexts/userContext";
 import {
   getDepartmentAdminsApi,
   getDepartmentMembersApi,
   getDepartmentPathTreeApi,
-  searchGlobalMembersApi,
-  type GlobalMemberSearchRow,
 } from "@/controllers/API/department";
 import { disableUserApi } from "@/controllers/API/user";
 import { showApiError } from "@/controllers/request";
 import type {
   DepartmentAdmin,
   DepartmentMember,
-  DepartmentSearchResult,
   DepartmentTreeNode,
 } from "@/types/api/department";
 import { buildMemberDisplayNameMap } from "@/utils/userDisplayName";
+import { MemberTableView } from "./MemberTableView";
 
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+export interface MemberLocationRequest {
+  userId: number | null;
+  deptId: string;
+  page: number;
+  requestId: number;
+}
 
 interface MemberTableProps {
   deptId: string;
   deptName: string;
-  dept?: DepartmentTreeNode | null;
+  dept: DepartmentTreeNode;
   isArchived?: boolean;
   onChanged: () => void;
-  /** 父级在部门设置等变更后递增，用于在不切换部门时强制重新拉取成员（如部门管理员 FGA 更新后刷新「角色」列） */
   membersRefreshSignal?: number;
-  /** 全组织搜索定位后高亮该用户行 */
-  highlightUserId?: number | null;
-  onHighlightConsumed?: () => void;
-  /** 点击全组织搜索结果时，通知父级切换部门并滚动左侧树 */
-  onRequestLocateMember?: (payload: { primaryDeptDeptId: string; userId: number }) => void;
+  location?: MemberLocationRequest;
+  isPrimaryFilter: string;
+  onFilterChange: (value: string) => void;
+  toolbarActions?: ReactNode;
 }
 
 export function useMemberTableController({
   deptId,
   deptName,
-  dept = null,
+  dept,
   isArchived = false,
   onChanged,
   membersRefreshSignal = 0,
-  highlightUserId = null,
-  onHighlightConsumed,
-  onRequestLocateMember,
+  location,
+  isPrimaryFilter,
+  onFilterChange,
+  toolbarActions,
 }: MemberTableProps) {
   const { t } = useTranslation();
   const { user } = useContext(userContext);
-  const userPwdModalRef = useRef<{ open: (userId: string | number) => void } | null>(null);
+  const userPwdModalRef = useRef<{
+    open: (userId: string | number) => void;
+  } | null>(null);
   const [members, setMembers] = useState<DepartmentMember[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [keyword, setKeyword] = useState("");
-  const [isPrimaryFilter, setIsPrimaryFilter] = useState<string>("all");
+  const pageRef = useRef(1);
+  const requestRef = useRef<object | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const memberKeywordRef = useRef('');
+  const searchDepartmentRef = useRef(deptId);
+  const [highlightUserId, setHighlightUserId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editMember, setEditMember] = useState<DepartmentMember | null>(null);
-  const [memberScope, setMemberScope] = useState<"dept" | "org">("dept");
-  const [globalRows, setGlobalRows] = useState<GlobalMemberSearchRow[]>([]);
-  const [globalTotal, setGlobalTotal] = useState(0);
-  const [globalPage, setGlobalPage] = useState(1);
-  const [globalLoading, setGlobalLoading] = useState(false);
   const [directAdmins, setDirectAdmins] = useState<DepartmentAdmin[]>([]);
-  const [inheritedAdmins, setInheritedAdmins] = useState<(DepartmentAdmin & { sourceDeptName: string })[]>([]);
-  const pageRef = useRef(page);
-  pageRef.current = page;
+  const [inheritedAdmins, setInheritedAdmins] = useState<
+    (DepartmentAdmin & { sourceDeptName: string })[]
+  >([]);
+  const memberDisplayNames = useMemo(
+    () => buildMemberDisplayNameMap(members),
+    [members]
+  );
 
-  useEffect(() => {
-    setMemberScope("dept");
-    setGlobalPage(1);
-    setGlobalRows([]);
-    setGlobalTotal(0);
-  }, [deptId]);
-
-  const memberDisplayNames = useMemo(() => buildMemberDisplayNameMap(members), [members]);
-
-  // F038: ancestors (for inherited-admin lookup) come from a path-tree fetch
-  // instead of walking a full tree that's no longer passed in. The chain is
-  // root→self; everything but the leaf is an ancestor (order doesn't matter —
-  // loadAdminSummary flattens + dedups).
-  const [ancestorDepartments, setAncestorDepartments] = useState<DepartmentTreeNode[]>([]);
-  useEffect(() => {
-    const internalId = dept?.id;
-    if (internalId == null) {
-      setAncestorDepartments([]);
-      return;
-    }
-    let cancelled = false;
-    getDepartmentPathTreeApi(internalId).then((res) => {
-      if (cancelled) return;
-      const pruned = (res as DepartmentSearchResult | null) ?? null;
-      const chain: DepartmentTreeNode[] = [];
-      let cur = pruned?.roots?.[0];
-      while (cur) {
-        chain.push(cur);
-        cur = cur.children?.[0];
+  const loadMembers = useCallback(
+    async (requestedPage = pageRef.current) => {
+      const requestId = {};
+      requestRef.current = requestId;
+      setLoading(true);
+      try {
+        const result = await getDepartmentMembersApi(deptId, {
+          page: requestedPage,
+          limit: 20,
+          ...(memberKeywordRef.current ? { keyword: memberKeywordRef.current } : {}),
+          is_primary:
+            isPrimaryFilter === "all" ? undefined : Number(isPrimaryFilter),
+        });
+        if (requestId !== requestRef.current) return;
+        setMembers(result.data);
+        setTotal(result.total);
+      } finally {
+        if (requestId === requestRef.current) setLoading(false);
       }
-      setAncestorDepartments(chain.slice(0, -1));
-    }).catch(showApiError);
-    return () => {
-      cancelled = true;
-    };
-  }, [dept?.id]);
-
-  const rootDepartment = dept?.dept_id === "BS@root" ? dept : ancestorDepartments.find(node => node.dept_id === "BS@root");
-  const displayGlobalRows = useMemo(() => globalRows.map(row => ({
-    ...row,
-    primary_department_path: departmentDisplayPath(row.primary_department_path, rootDepartment, t("bs:department.defaultOrganization")),
-  })), [globalRows, rootDepartment, t]);
-
-  const loadAdminSummary = useCallback(() => {
-    let cancelled = false;
-    const run = async () => {
-      const direct = await getDepartmentAdminsApi(deptId);
-      if (cancelled) return;
-      const directRows = Array.isArray(direct) ? direct : [];
-      const directUserIds = new Set(directRows.map((a) => Number(a.user_id)));
-      const inheritedResults = await Promise.all(
-        ancestorDepartments.map(async (ancestor) => {
-          try {
-            const rows = await getDepartmentAdminsApi(ancestor.dept_id);
-            return (rows || []).map((row) => ({
-              ...row,
-              sourceDeptName: ancestor.name,
-            }));
-          } catch {
-            return [];
-          }
-        }),
-      );
-      if (cancelled) return;
-      const seenInherited = new Set<number>();
-      const inheritedRows = inheritedResults.flat().filter((row) => {
-        const uid = Number(row.user_id);
-        if (directUserIds.has(uid) || seenInherited.has(uid)) return false;
-        seenInherited.add(uid);
-        return true;
-      });
-      setDirectAdmins(directRows);
-      setInheritedAdmins(inheritedRows);
-    };
-    void run().catch(showApiError);
-    return () => {
-      cancelled = true;
-    };
-  }, [ancestorDepartments, deptId]);
-
-  const loadMembers = useCallback(() => {
-    if (memberScope !== "dept") return;
-    const params: Record<string, string | number> = {
-      page: pageRef.current,
-      limit: 20,
-      keyword,
-    };
-    if (isPrimaryFilter !== "all") {
-      params.is_primary = parseInt(isPrimaryFilter, 10);
-    }
-    getDepartmentMembersApi(deptId, params).then((res) => {
-      if (res) {
-        setMembers(res.data);
-        setTotal(res.total);
-      }
-    }).catch(showApiError);
-  }, [deptId, keyword, isPrimaryFilter, memberScope]);
+    },
+    [deptId, isPrimaryFilter]
+  );
 
   useEffect(() => {
-    if (memberScope !== "dept") return;
+    if (searchDepartmentRef.current !== deptId) {
+      searchDepartmentRef.current = deptId;
+      memberKeywordRef.current = '';
+      setMemberSearch('');
+    }
+    const freshLocation = location?.deptId === deptId && !memberKeywordRef.current;
+    const nextPage = freshLocation && location ? location.page : 1;
+    setHighlightUserId(freshLocation && location ? location.userId : null);
+    setMembers([]);
+    setPage(nextPage);
+    pageRef.current = nextPage;
+    void loadMembers(nextPage).catch(showApiError);
+    return () => {
+      requestRef.current = null;
+    };
+  }, [deptId, isPrimaryFilter, location, loadMembers]);
+
+  const handleMemberSearch = (value: string) => {
+    memberKeywordRef.current = value;
+    setMemberSearch(value);
     setPage(1);
     pageRef.current = 1;
-    loadMembers();
-  }, [deptId, keyword, isPrimaryFilter, memberScope, loadMembers]);
+    setHighlightUserId(null);
+    void loadMembers(1).catch(showApiError);
+  };
 
   useEffect(() => {
-    if (membersRefreshSignal === 0) return;
-    if (memberScope !== "dept") return;
-    loadMembers();
-  }, [membersRefreshSignal, loadMembers, memberScope]);
+    if (membersRefreshSignal) void loadMembers().catch(showApiError);
+  }, [membersRefreshSignal, loadMembers]);
 
-  useEffect(() => loadAdminSummary(), [loadAdminSummary, membersRefreshSignal]);
-
-  const loadGlobalMembers = useCallback(() => {
-    const kw = keyword.trim();
-    if (!kw) {
-      setGlobalRows([]);
-      setGlobalTotal(0);
-      setGlobalLoading(false);
-      return;
-    }
-    setGlobalLoading(true);
-    searchGlobalMembersApi({ keyword: kw, page: globalPage, limit: 20 }).then((res) => {
-      if (res) {
-        setGlobalRows(res.data);
-        setGlobalTotal(res.total);
+  useEffect(() => {
+    let cancelled = false;
+    setDirectAdmins([]);
+    setInheritedAdmins([]);
+    const load = async () => {
+      const [direct, path] = await Promise.all([
+        getDepartmentAdminsApi(deptId),
+        getDepartmentPathTreeApi(dept.id, isArchived),
+      ]);
+      const ancestors: DepartmentTreeNode[] = [];
+      let node: DepartmentTreeNode | undefined = path.roots[0];
+      while (node && node.id !== dept.id) {
+        ancestors.push(node);
+        node = node.children[0];
       }
-    }).catch(showApiError).finally(() => setGlobalLoading(false));
-  }, [keyword, globalPage]);
+      const inherited = await Promise.all(
+        ancestors.map(async (ancestor) =>
+          (await getDepartmentAdminsApi(ancestor.dept_id)).map((admin) => ({
+            ...admin,
+            sourceDeptName: ancestor.name,
+          }))
+        )
+      );
+      if (cancelled) return;
+      const seen = new Set(direct.map((admin) => admin.user_id));
+      setDirectAdmins(direct);
+      setInheritedAdmins(
+        inherited.flat().filter((admin) => {
+          if (seen.has(admin.user_id)) return false;
+          seen.add(admin.user_id);
+          return true;
+        })
+      );
+    };
+    void load().catch((error) => {
+      if (!cancelled) showApiError(error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dept.id, deptId, isArchived, membersRefreshSignal]);
 
   useEffect(() => {
-    if (memberScope !== "org") return;
-    setGlobalPage(1);
-  }, [keyword, memberScope]);
-
-  useEffect(() => {
-    if (memberScope !== "org") return;
-    const t = window.setTimeout(() => void loadGlobalMembers(), 280);
-    return () => window.clearTimeout(t);
-  }, [memberScope, keyword, globalPage, loadGlobalMembers]);
-
-  useEffect(() => {
-    if (memberScope !== "dept" || highlightUserId == null) return;
-    const hit = members.some((m) => m.user_id === highlightUserId);
-    if (!hit) return;
-    const t = window.setTimeout(() => {
-      const el = document.querySelector(`[data-member-row="${highlightUserId}"]`);
-      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      onHighlightConsumed?.();
-    }, 120);
-    return () => window.clearTimeout(t);
-  }, [members, highlightUserId, memberScope, onHighlightConsumed]);
+    if (
+      loading ||
+      highlightUserId == null ||
+      !members.some((member) => member.user_id === highlightUserId)
+    )
+      return;
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .querySelector('[data-member-row="' + highlightUserId + '"]')
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    const timer = window.setTimeout(() => setHighlightUserId(null), 5000);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [members, loading, highlightUserId]);
 
   const handlePageChange = useCallback(
-    (p: number) => {
-      setPage(p);
-      pageRef.current = p;
-      loadMembers();
+    (nextPage: number) => {
+      setHighlightUserId(null);
+      setPage(nextPage);
+      pageRef.current = nextPage;
+      void loadMembers(nextPage).catch(showApiError);
     },
-    [loadMembers],
+    [loadMembers]
   );
-
-  const handleGlobalPageChange = useCallback((p: number) => {
-    setGlobalPage(p);
-  }, []);
 
   const handleToggleEnabled = useCallback(
-    (m: DepartmentMember, enabled: boolean) => {
+    (member: DepartmentMember, enabled: boolean) => {
       if (isArchived) return;
-      setMembers((list) => list.map((x) => (x.user_id === m.user_id ? { ...x, enabled } : x)));
-      disableUserApi(m.user_id, enabled ? 0 : 1).then(() => {
-          notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t(enabled ? "bs:department.accountEnabledToast" : "bs:department.accountDisabledToast") ?? '') });
+      setMembers((list) =>
+        list.map((row) =>
+          row.user_id === member.user_id ? { ...row, enabled } : row
+        )
+      );
+      void disableUserApi(member.user_id, enabled ? 0 : 1)
+        .then(() => {
+          notification.open({
+            type: "success",
+            title: t("prompt"),
+            description: t(
+              enabled
+                ? "bs:department.accountEnabledToast"
+                : "bs:department.accountDisabledToast"
+            ),
+          });
           onChanged();
-        }).catch(error => {
-        setMembers(list => list.map(x => x.user_id === m.user_id ? { ...x, enabled: m.enabled } : x));
-        showApiError(error);
-      });
+        })
+        .catch((error) => {
+          setMembers((list) =>
+            list.map((row) =>
+              row.user_id === member.user_id
+                ? { ...row, enabled: member.enabled }
+                : row
+            )
+          );
+          showApiError(error);
+        });
     },
-    [isArchived, onChanged, t],
+    [isArchived, onChanged, t]
   );
 
-  const handleAdded = useCallback(() => {
+  const handleAdded = () => {
     setAddOpen(false);
-    loadMembers();
+    void loadMembers().catch(showApiError);
     onChanged();
-  }, [loadMembers, onChanged]);
-
-  const handleEditUser = useCallback(
-    (m: DepartmentMember) => {
-      if (isArchived) return;
-      setEditMember(m);
-    },
-    [isArchived],
-  );
-
-  const handleEditClose = useCallback(() => {
+  };
+  const handleEditUser = (member: DepartmentMember) => {
+    if (!isArchived) setEditMember(member);
+  };
+  const handleEditClose = () => setEditMember(null);
+  const handleEditSaved = () => {
     setEditMember(null);
-  }, []);
-
-  const handleEditSaved = useCallback(() => {
-    setEditMember(null);
-    loadMembers();
+    void loadMembers().catch(showApiError);
     onChanged();
-  }, [loadMembers, onChanged]);
-
-  const fmtTime = (v?: string | Date | null) => (v ? String(v).replace("T", " ").slice(0, 19) : "-");
-
+  };
+  const fmtTime = (value?: string | Date | null) =>
+    value ? String(value).replace("T", " ").slice(0, 19) : "-";
   const memberCols = useMemo(
     () => [
+      { defaultWidth: 140, minWidth: 100 },
+      { defaultWidth: 200, minWidth: 140 },
+      { defaultWidth: 100, minWidth: 88 },
       { defaultWidth: 160, minWidth: 120 },
-      { defaultWidth: 120, minWidth: 96 },
-      { defaultWidth: 180, minWidth: 120 },
-      { defaultWidth: 180, minWidth: 120 },
+      { defaultWidth: 140, minWidth: 100 },
       { defaultWidth: 160, minWidth: 120 },
-      { defaultWidth: 88, minWidth: 72 },
-      { defaultWidth: 168, minWidth: 120 },
+      { defaultWidth: 72, minWidth: 64 },
+      { defaultWidth: 144, minWidth: 120 },
     ],
-    [],
+    []
   );
   const mrc = useResizableColumns(memberCols);
-  const memberLastCol = memberCols.length - 1;
-
   return {
-    memberLastCol,
-    memberScope,
-    setMemberScope,
+    memberLastCol: memberCols.length - 1,
     t,
-    keyword,
-    setKeyword,
     isPrimaryFilter,
-    setIsPrimaryFilter,
+    setIsPrimaryFilter: onFilterChange,
     isArchived,
     setAddOpen,
     directAdmins,
     inheritedAdmins,
-    globalLoading,
-    globalRows: displayGlobalRows,
-    onRequestLocateMember,
-    globalPage,
-    globalTotal,
-    handleGlobalPageChange,
     mrc,
     members,
+    memberSearch,
+    setMemberSearch,
+    handleMemberSearch,
+    loading,
     highlightUserId,
     memberDisplayNames,
     fmtTime,
@@ -332,8 +306,10 @@ export function useMemberTableController({
     editMember,
     handleEditClose,
     handleEditSaved,
+    toolbarActions,
   };
 }
+
 export function MemberTable(props: MemberTableProps) {
   return <MemberTableView controller={useMemberTableController(props)} />;
 }

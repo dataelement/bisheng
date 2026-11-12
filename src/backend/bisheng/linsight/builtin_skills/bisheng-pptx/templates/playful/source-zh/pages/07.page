@@ -1,0 +1,519 @@
+pageType: content
+background:
+  type: solid
+  color: '#F0C8A0'
+notes: Authored funnel composition. All new example statements and figures are illustrative, not reported facts. Replace them with user evidence. A single cohort with explicit conversion counts and an overall rate
+elements:
+  - elementId: s1
+    elementType: shape
+    bounds:
+      - 868
+      - 23
+      - 28
+      - 28
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#1A1A1A'
+    border:
+      width: 0
+      color: '#1A1A1A'
+  - elementId: s2
+    elementType: shape
+    bounds:
+      - 908
+      - 29
+      - 16
+      - 16
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#1A1A1A'
+    border:
+      width: 0
+      color: '#1A1A1A'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 27
+      - 665
+      - 20
+    content:
+      text: PLAYFUL
+      fontFamily: &ref_0
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: l4
+    elementType: line
+    bounds:
+      - 48
+      - 59
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#b09478'
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 48
+      - 76
+      - 864
+      - 64
+    content:
+      text: 沿漏斗追踪同一群体
+      fontFamily: &ref_1
+        latin: Arial Black
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: true
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 754
+      - 46
+      - 158
+      - 13
+    content:
+      text: 图示 06
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#5a4e42'
+      bold: false
+      align: right
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 48
+      - 152
+      - 850
+      - 25
+    content:
+      text: 转化 / 同一初始群体，共 1,000 人
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: s8
+    elementType: shape
+    bounds:
+      - 48
+      - 181
+      - 151
+      - 285
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E8B88E'
+    border:
+      width: 0
+      color: '#E8B88E'
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 60
+      - 197
+      - 128
+      - 56
+    content:
+      text: '1000'
+      fontFamily: *ref_1
+      fontSize: 36
+      lineHeight: 1.1
+      color: '#181915'
+      bold: true
+  - elementId: t10
+    elementType: text
+    bounds:
+      - 56
+      - 401
+      - 135
+      - 54
+    content:
+      text: 发现
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+  - elementId: l11
+    elementType: line
+    bounds:
+      - 201
+      - 205
+      - 13
+      - 1
+    viewBox:
+      - 13
+      - 1
+    points: 0,0 13,0
+    border:
+      width: 1.2
+      color: '#1A1A1A'
+  - elementId: l12
+    elementType: line
+    bounds:
+      - 208.03232834558347
+      - 205
+      - 5.9676716544165345
+      - 3.6588106025146203
+    viewBox:
+      - 5.9676716544165345
+      - 3.6588106025146203
+    points: 0,3.6588106025146203 5.9676716544165345,0
+    border:
+      width: 1.2
+      color: '#1A1A1A'
+  - elementId: l13
+    elementType: line
+    bounds:
+      - 208.03232834558347
+      - 201.34118939748538
+      - 5.9676716544165345
+      - 3.6588106025146203
+    viewBox:
+      - 5.9676716544165345
+      - 3.6588106025146203
+    points: 0,0 5.9676716544165345,3.6588106025146203
+    border:
+      width: 1.2
+      color: '#1A1A1A'
+  - elementId: s14
+    elementType: shape
+    bounds:
+      - 216
+      - 229
+      - 151
+      - 237
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E8B88E'
+    border:
+      width: 0
+      color: '#E8B88E'
+  - elementId: t15
+    elementType: text
+    bounds:
+      - 228
+      - 245
+      - 128
+      - 56
+    content:
+      text: '640'
+      fontFamily: *ref_1
+      fontSize: 36
+      lineHeight: 1.1
+      color: '#181915'
+      bold: true
+  - elementId: t16
+    elementType: text
+    bounds:
+      - 224
+      - 401
+      - 135
+      - 54
+    content:
+      text: 体验
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+  - elementId: l17
+    elementType: line
+    bounds:
+      - 369
+      - 253
+      - 13
+      - 1
+    viewBox:
+      - 13
+      - 1
+    points: 0,0 13,0
+    border:
+      width: 1.2
+      color: '#1A1A1A'
+  - elementId: l18
+    elementType: line
+    bounds:
+      - 376.03232834558344
+      - 253
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,3.6588106025146203 5.967671654416563,0
+    border:
+      width: 1.2
+      color: '#1A1A1A'
+  - elementId: l19
+    elementType: line
+    bounds:
+      - 376.03232834558344
+      - 249.34118939748538
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,0 5.967671654416563,3.6588106025146203
+    border:
+      width: 1.2
+      color: '#1A1A1A'
+  - elementId: s20
+    elementType: shape
+    bounds:
+      - 384
+      - 277
+      - 151
+      - 189
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#1A1A1A'
+    border:
+      width: 0
+      color: '#1A1A1A'
+  - elementId: t21
+    elementType: text
+    bounds:
+      - 396
+      - 293
+      - 128
+      - 56
+    content:
+      text: '360'
+      fontFamily: *ref_1
+      fontSize: 36
+      lineHeight: 1.1
+      color: '#F8F6EE'
+      bold: true
+  - elementId: t22
+    elementType: text
+    bounds:
+      - 392
+      - 401
+      - 135
+      - 54
+    content:
+      text: 创作
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#F8F6EE'
+      bold: false
+  - elementId: l23
+    elementType: line
+    bounds:
+      - 537
+      - 301
+      - 13
+      - 1
+    viewBox:
+      - 13
+      - 1
+    points: 0,0 13,0
+    border:
+      width: 1.2
+      color: '#1A1A1A'
+  - elementId: l24
+    elementType: line
+    bounds:
+      - 544.0323283455834
+      - 301
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,3.6588106025146203 5.967671654416563,0
+    border:
+      width: 1.2
+      color: '#1A1A1A'
+  - elementId: l25
+    elementType: line
+    bounds:
+      - 544.0323283455834
+      - 297.3411893974854
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,0 5.967671654416563,3.6588106025146203
+    border:
+      width: 1.2
+      color: '#1A1A1A'
+  - elementId: s26
+    elementType: shape
+    bounds:
+      - 552
+      - 325
+      - 151
+      - 141
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E8B88E'
+    border:
+      width: 0
+      color: '#E8B88E'
+  - elementId: t27
+    elementType: text
+    bounds:
+      - 564
+      - 341
+      - 128
+      - 56
+    content:
+      text: '216'
+      fontFamily: *ref_1
+      fontSize: 36
+      lineHeight: 1.1
+      color: '#181915'
+      bold: true
+  - elementId: t28
+    elementType: text
+    bounds:
+      - 560
+      - 401
+      - 135
+      - 54
+    content:
+      text: 分享
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+  - elementId: l29
+    elementType: line
+    bounds:
+      - 741
+      - 180
+      - 1
+      - 261
+    viewBox:
+      - 1
+      - 261
+    points: 0,0 0,261
+    border:
+      width: 0.6
+      color: '#b09478'
+  - elementId: t30
+    elementType: text
+    bounds:
+      - 770
+      - 196
+      - 144
+      - 69
+    content:
+      text: 21.6%
+      fontFamily: *ref_1
+      fontSize: 33
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: true
+  - elementId: t31
+    elementType: text
+    bounds:
+      - 770
+      - 292
+      - 142
+      - 77
+    content:
+      text: 全流程转化率
+      fontFamily: *ref_0
+      fontSize: 20
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: t32
+    elementType: text
+    bounds:
+      - 770
+      - 405
+      - 142
+      - 25
+    content:
+      text: 216 / 1,000
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: l33
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#c1a283'
+  - elementId: t34
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: 阶梯高度仅示意群体规模；具体数值以标注为准。
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: t35
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 783
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: t36
+    elementType: text
+    bounds:
+      - 871
+      - 504
+      - 41
+      - 22
+    content:
+      text: '07'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false

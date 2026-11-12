@@ -211,7 +211,8 @@
     "inheritedFrom": "継承元",
     "parentFolder": "上位フォルダー",
     "parentKnowledgeSpace": "上位ナレッジスペース",
-    "parentResource": "上位リソース"
+    "parentResource": "上位リソース",
+    "visibility_only": "表示のみ（コンテンツ操作は含みません）"
   },
   "scope": {
     "local": "ローカル",

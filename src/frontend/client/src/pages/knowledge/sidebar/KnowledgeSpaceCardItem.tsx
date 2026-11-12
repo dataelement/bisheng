@@ -90,21 +90,15 @@ export default function KnowledgeSpaceCardItem({
             danger
             icon={isDeleteAction ? <Outlined.Delete /> : <Outlined.LogOut />}
             onSelect={async () => {
-              // Delete-space uses the destructive variant (matches file-delete).
-              // Exit-space keeps the default prompt — it's not destructive.
-              const ok = isDeleteAction
-                ? await confirm({
-                    description: `${localize("com_knowledge.confirm_delete_space")}${localize("com_knowledge.delete_irreversible_warning")}`,
-                    variant: "destructive",
-                  })
-                : await confirm({
+              if (isDeleteAction) { onDelete(space.id); return; }
+              const ok = await confirm({
                     title: localize("com_knowledge.prompt"),
                     description: localize("com_knowledge.confirm_exit_space"),
                     confirmText: localize("com_knowledge.exit"),
                     cancelText: localize("com_knowledge.cancel"),
                   });
               if (ok) {
-                isDeleteAction ? onDelete(space.id) : onLeave(space.id);
+                onLeave(space.id);
               }
             }}
           >

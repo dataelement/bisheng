@@ -120,6 +120,8 @@ export interface ChatMessage {
     /** raw upstream text (provider message, parser error, offending filename) kept
         behind the card's "view details" disclosure. */
     errorDetail?: string;
+    /** support reference when the failure has no dependency failure_id */
+    referenceId?: string;
     failureInfo?: FailureInfo;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
@@ -229,7 +231,17 @@ export async function getAgentMessages(
     const headers = shareToken ? { 'share-token': shareToken } : undefined;
     const res = await http.get(API.agentMessages(conversationId), headers ? { headers } : undefined);
     const rows: any[] = res?.data ?? res ?? [];
-    return rows.map(mapAgentResponseItem);
+    // Linear agent history has no persisted parent IDs. Rebuild the links the
+    // retry action uses to find the original question after a history reload.
+    let previousMessageId = "";
+    let questionMessageId = "";
+    return rows.map((row) => {
+        const message = mapAgentResponseItem(row);
+        message.parentMessageId = message.isCreatedByUser ? previousMessageId : questionMessageId;
+        if (message.isCreatedByUser) questionMessageId = message.messageId;
+        previousMessageId = message.messageId;
+        return message;
+    });
 }
 
 /**

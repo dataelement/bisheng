@@ -8,6 +8,7 @@ from loguru import logger
 
 from bisheng.app_publish.application.preview_access import qualified_scope, resolve_preview_context
 from bisheng.app_publish.application.preview_runtime import by_reference
+from bisheng.app_publish.application.reference_access import get_hosted_app_user_reference_runtime
 from bisheng.app_publish.domain.repositories.preview_runtime_repository import PreviewBinding, PreviewRuntimeRepository
 from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
 from bisheng.app_publish.domain.services.version_service import VersionService
@@ -18,6 +19,9 @@ from bisheng.common.errcode.app_publish import (
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
+from bisheng.core.database import get_async_db_session
+from bisheng.resource_reference.application.contracts import SourceType
+from bisheng.resource_reference.application.source_contracts import SourceReadRequest
 
 _DEFAULT_HEALTH = {"path": "/", "interval": 10, "timeout": 3, "retries": 3, "start_period": 20}
 
@@ -49,6 +53,12 @@ class PreviewInstanceService:
             version = await cls._load_version(app_id, version_id)
             if q.purpose == "approval" and version.terminal_state:
                 raise AppPreviewNotRunnableError(reason="settled")
+            runtime = await get_hosted_app_user_reference_runtime(q)
+            async with get_async_db_session() as sql, sql.begin():
+                scope = await runtime.verifier.aissue_scope(
+                    sql, SourceReadRequest(SourceType.HOSTED_APP_VERSION, app_id, version_id), actor
+                )
+                await runtime.arequire_source_valid(sql, scope, actor)
             session_id = await start_preview(q, actor=actor, payload_factory=cls._start_payload)
             row = await by_reference(session_id=session_id)
             return cls._payload(row, runnable_reason=None, purpose=q.purpose)

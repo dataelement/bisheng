@@ -15,7 +15,7 @@ export function DshDesktopPane() {
   }
   return (
     <div className="flex flex-col gap-4">
-      <DshDesktopPanel active downloadUrl={downloadUrl} launchUrl={launchUrl} />
+      <DshDesktopPanel downloadUrl={downloadUrl} launchUrl={launchUrl} />
     </div>
   );
 }

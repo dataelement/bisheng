@@ -50,6 +50,9 @@
       "empty": "文件为空",
       "unsupported": "此文件类型不支持预览",
       "fileExpired": "文件已失效，请上传新文件后重试"
+    },
+    "selection": {
+      "loadMore": "加载更多"
     }
   },
   "hostedApp": {

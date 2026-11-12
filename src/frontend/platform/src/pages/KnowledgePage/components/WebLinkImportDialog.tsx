@@ -1,206 +1,267 @@
-// @ts-strict-ignore
-import { Button, Input, toast } from '@bisheng/ui';
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-
-import { Dialog,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
-
-
-import { importKnowledgeWebLinkApi } from "@/controllers/API";
-import { useState } from "react";
+import { Button, Input, toast } from "@bisheng/ui";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/bs-ui/dialog";
+import { importKnowledgeWebLinkApi } from "@/controllers/API";
 
 const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
 
 const WEB_LINK_ERROR_KEY_MAP: Record<string, string> = {
-    "web link redirect location is missing": "webLinkRequestFailed",
-    "web link content type is not supported": "webLinkContentTypeUnsupported",
-    "web link content is too large": "webLinkContentTooLarge",
-    "web link redirects too many times": "webLinkRedirectsTooMany",
-    "web link content is empty": "webLinkContentEmpty",
-    "web link url is empty": "webLinkUrlRequired",
-    "only http/https web links are supported": "webLinkHttpOnly",
-    "web link host is missing": "webLinkInvalid",
-    "this web link host is not allowed": "webLinkHostNotAllowed",
-    "this web link address is not allowed": "webLinkAddressNotAllowed",
-    "web link host cannot be resolved": "webLinkHostUnresolved",
-    "target site refused server-side access": "webLinkAccessRefused",
-    "target site requires authentication": "webLinkAuthRequired",
-    "target site rate limited server-side access": "webLinkRateLimited",
-    "media file does not exist": "mediaFileMissing",
-    "asr returned empty text": "mediaAsrEmpty",
-    "no recognizable audio detected": "mediaNoRecognizableAudio",
-    "asr api key is missing": "mediaAsrApiKeyMissing",
-    "ffmpeg is not installed": "mediaFfmpegMissing",
-    "media audio extraction failed": "mediaAudioExtractionFailed",
+  "web link redirect location is missing": "webLinkRequestFailed",
+  "web link content type is not supported": "webLinkContentTypeUnsupported",
+  "web link content is too large": "webLinkContentTooLarge",
+  "web link redirects too many times": "webLinkRedirectsTooMany",
+  "web link content is empty": "webLinkContentEmpty",
+  "web link url is empty": "webLinkUrlRequired",
+  "only http/https web links are supported": "webLinkHttpOnly",
+  "web link host is missing": "webLinkInvalid",
+  "this web link host is not allowed": "webLinkHostNotAllowed",
+  "this web link address is not allowed": "webLinkAddressNotAllowed",
+  "web link host cannot be resolved": "webLinkHostUnresolved",
+  "target site refused server-side access": "webLinkAccessRefused",
+  "target site requires authentication": "webLinkAuthRequired",
+  "target site rate limited server-side access": "webLinkRateLimited",
+  "media file does not exist": "mediaFileMissing",
+  "asr returned empty text": "mediaAsrEmpty",
+  "no recognizable audio detected": "mediaNoRecognizableAudio",
+  "asr api key is missing": "mediaAsrApiKeyMissing",
+  "ffmpeg is not installed": "mediaFfmpegMissing",
+  "media audio extraction failed": "mediaAudioExtractionFailed",
 };
 
 function normalizeWebLinkTitle(title: string): string | undefined {
-    const trimmed = title.trim();
-    if (!trimmed) return undefined;
-    return /\.html$/i.test(trimmed) ? trimmed : `${trimmed}.html`;
+  const trimmed = title.trim();
+  if (!trimmed) return undefined;
+  return /\.html$/i.test(trimmed) ? trimmed : `${trimmed}.html`;
 }
 
 interface WebLinkImportDialogProps {
-    knowledgeId?: string;
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    onImported?: () => void;
+  knowledgeId?: string;
+  parentId?: number | null;
+  scopeKey?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onImported?: () => void;
 }
-
-export default function WebLinkImportDialog({
-    knowledgeId,
-    open,
-    onOpenChange,
-    onImported,
+type WebError = {
+  status_code?: unknown;
+  statusCode?: unknown;
+  status_message?: unknown;
+  message?: unknown;
+  data?: Record<string, unknown>;
+};
+const errorFacts = (cause: unknown): WebError =>
+  cause && typeof cause === "object" ? (cause as WebError) : {};
+export default function WebLinkImportDialog(props: WebLinkImportDialogProps) {
+  return props.open ? (
+    <WebLinkOpening
+      key={JSON.stringify([props.scopeKey, props.knowledgeId, props.parentId])}
+      {...props}
+    />
+  ) : null;
+}
+function WebLinkOpening({
+  knowledgeId,
+  parentId,
+  onOpenChange,
+  onImported,
 }: WebLinkImportDialogProps) {
-    const { t } = useTranslation("knowledge");
-
-    const [webLinkUrl, setWebLinkUrl] = useState("");
-    const [webLinkTitle, setWebLinkTitle] = useState("");
-    const [webLinkLoading, setWebLinkLoading] = useState(false);
-
-    const isDuplicateError = (error: any) => WEB_LINK_DUPLICATE_ERROR_CODES.has(Number(error?.status_code));
-    const resolveErrorMessage = (error: any, fallbackKey: string, fallbackValue: string) => {
-        const statusCode = error?.status_code ?? error?.statusCode;
-        const statusMessage = (
-            typeof error?.status_message === "string" && error.status_message
-                ? error.status_message
-                : typeof error?.message === "string"
-                    ? error.message
-                    : ""
-        ).trim();
-
-        const normalizedStatusMessage = statusMessage.toLowerCase();
-        const mappedKey = WEB_LINK_ERROR_KEY_MAP[normalizedStatusMessage]
-            ?? (normalizedStatusMessage.startsWith("web link request failed")
-                ? "webLinkRequestFailed"
-                : normalizedStatusMessage.startsWith("knowledge media transcription only supports aliyun/qwen asr")
-                    || normalizedStatusMessage.startsWith("knowledge media transcription does not support asr provider")
-                    ? "mediaAsrProviderUnsupported"
-                    : normalizedStatusMessage.startsWith("asr request failed")
-                        ? "mediaAsrRequestFailed"
-                        : undefined);
-        if (mappedKey) {
-            const translated = t(mappedKey, { defaultValue: "" });
-            if (translated) return translated;
-        }
-
-        if (statusCode !== undefined && statusCode !== null) {
-            const translated = t(`api_errors:${statusCode}`, { ...(error?.data || {}), defaultValue: "" });
-            if (translated) return translated;
-        }
-
-        return t(fallbackKey, { defaultValue: fallbackValue });
+  const { t } = useTranslation("knowledge");
+  const [url, setUrl] = useState("");
+  const [title, setTitle] = useState("");
+  const [loading, setLoading] = useState(false);
+  const lifetime = useRef<{ active: boolean; controller: AbortController }>({
+    active: true,
+    controller: new AbortController(),
+  });
+  useEffect(() => {
+    const opening = lifetime.current.controller.signal.aborted
+      ? { active: true, controller: new AbortController() }
+      : lifetime.current;
+    lifetime.current = opening;
+    return () => {
+      opening.active = false;
+      opening.controller.abort();
     };
-
-    const importWebLink = async (normalizedUrl: string, overwrite = false) => {
-        const normalizedTitle = normalizeWebLinkTitle(webLinkTitle);
-        await importKnowledgeWebLinkApi(knowledgeId!, {
-            url: normalizedUrl,
-            title: normalizedTitle,
-            ...(overwrite ? { overwrite: true } : {}),
-        });
-        toast.show({ type: "success", message: String(t("webLinkImportStarted", { defaultValue: "网页链接已开始导入" }) ?? '') });
-        setWebLinkUrl("");
-        setWebLinkTitle("");
-        onOpenChange(false);
+  }, []);
+  const live = () => lifetime.current.active;
+  const resolveErrorMessage = (cause: unknown, fallback: string) => {
+    const error = errorFacts(cause);
+    const code = error.status_code ?? error.statusCode;
+    const message =
+      typeof error.status_message === "string"
+        ? error.status_message.toLowerCase()
+        : typeof error.message === "string"
+          ? error.message.toLowerCase()
+          : "";
+    const mapped =
+      WEB_LINK_ERROR_KEY_MAP[message] ??
+      (message.startsWith("web link request failed")
+        ? "webLinkRequestFailed"
+        : message.startsWith("knowledge media transcription only supports aliyun/qwen asr") ||
+            message.startsWith("knowledge media transcription does not support asr provider")
+          ? "mediaAsrProviderUnsupported"
+          : message.startsWith("asr request failed")
+            ? "mediaAsrRequestFailed"
+            : undefined);
+    if (mapped) return t(mapped);
+    if (code != null) {
+      const translated = t(`api_errors:${code}`, {
+        ...error.data,
+        defaultValue: "",
+      });
+      if (translated) return translated;
+    }
+    return t(fallback);
+  };
+  const submit = async () => {
+    if (loading || !live()) return;
+    const normalized = url.trim();
+    if (!knowledgeId) {
+      toast.show({ type: "warning", message: t("knowledgeIdMissing") });
+      return;
+    }
+    if (!normalized) {
+      toast.show({ type: "warning", message: t("webLinkUrlRequired") });
+      return;
+    }
+    try {
+      if (!["http:", "https:"].includes(new URL(normalized).protocol)) {
+        toast.show({ type: "warning", message: t("webLinkHttpOnly") });
+        return;
+      }
+    } catch {
+      toast.show({ type: "warning", message: t("webLinkInvalid") });
+      return;
+    }
+    const command = {
+      url: normalized,
+      title: normalizeWebLinkTitle(title),
+      ...(parentId === undefined ? {} : { parent_id: parentId }),
+    };
+    const perform = async (overwrite = false) => {
+      if (!live()) return;
+      setLoading(true);
+      try {
+        await importKnowledgeWebLinkApi(
+          knowledgeId,
+          { ...command, ...(overwrite ? { overwrite: true } : {}) },
+          lifetime.current.controller.signal,
+        );
+        if (!live()) return;
+        toast.show({ type: "success", message: t("webLinkImportStarted") });
         onImported?.();
+        onOpenChange(false);
+      } finally {
+        if (live()) setLoading(false);
+      }
     };
-
-    const handleImportWebLink = async () => {
-        const normalizedUrl = webLinkUrl.trim();
-        if (!knowledgeId) {
-            toast.show({ type: "warning", message: String(t("knowledgeIdMissing", { defaultValue: "知识库不存在" }) ?? '') });
-            return;
-        }
-        if (!normalizedUrl) {
-            toast.show({ type: "warning", message: String(t("webLinkUrlRequired", { defaultValue: "请输入网页链接" }) ?? '') });
-            return;
-        }
-        try {
-            const parsed = new URL(normalizedUrl);
-            if (!["http:", "https:"].includes(parsed.protocol)) {
-                toast.show({ type: "warning", message: String(t("webLinkHttpOnly", { defaultValue: "仅支持 http 或 https 链接" }) ?? '') });
-                return;
+    try {
+      await perform();
+    } catch (error) {
+      if (!live()) return;
+      if (WEB_LINK_DUPLICATE_ERROR_CODES.has(Number(errorFacts(error).status_code))) {
+        bsConfirm({
+          title: t("duplicateWebLinkTitle"),
+          desc: command.title || command.url,
+          signal: lifetime.current.controller.signal,
+          canelTxt: t("cancel"),
+          okTxt: t("overwrite"),
+          onCancel: () => {
+            if (live()) onOpenChange(false);
+          },
+          onOk: async (close) => {
+            if (!live()) {
+              close();
+              return;
             }
-        } catch (error) {
-            toast.show({ type: "warning", message: String(t("webLinkInvalid", { defaultValue: "请输入有效的网页链接" }) ?? '') });
-            return;
-        }
-
-        setWebLinkLoading(true);
-        try {
-            await importWebLink(normalizedUrl);
-        } catch (error: any) {
-            if (isDuplicateError(error)) {
-                bsConfirm({
-                    title: t("duplicateWebLinkTitle", { defaultValue: "发现重复网页链接" }),
-                    desc: normalizeWebLinkTitle(webLinkTitle) || normalizedUrl,
-                    canelTxt: t("cancel", { defaultValue: "取消" }),
-                    okTxt: t("overwrite", { defaultValue: "覆盖" }),
-                    onCancel: () => {
-                        setWebLinkUrl("");
-                        setWebLinkTitle("");
-                        onOpenChange(false);
-                    },
-                    onOk: async (close) => {
-                        close();
-                        onOpenChange(false);
-                        try {
-                            await importWebLink(normalizedUrl, true);
-                        } catch (overwriteError: any) {
-                            toast.show({ type: "error", message: String(resolveErrorMessage(
-                                    overwriteError,
-                                    "webLinkOverwriteFailed",
-                                    "网页链接覆盖失败",
-                                ) ?? '') });
-                        }
-                    },
+            try {
+              await perform(true);
+              if (live()) close();
+            } catch (cause) {
+              if (live())
+                toast.show({
+                  type: "error",
+                  message: resolveErrorMessage(cause, "webLinkOverwriteFailed"),
                 });
-                return;
             }
-            toast.show({ type: "error", message: String(resolveErrorMessage(error, "webLinkImportFailed", "网页链接导入失败") ?? '') });
-        } finally {
-            setWebLinkLoading(false);
-        }
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={(nextOpen) => !webLinkLoading && onOpenChange(nextOpen)}>
-            <DialogContent className="max-w-[520px]">
-                <DialogHeader>
-                    <DialogTitle>{t("webLink", { defaultValue: "网页链接" })}</DialogTitle>
-                </DialogHeader>
-                <form
-                    className="space-y-4"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        if (webLinkLoading) return;
-                        void handleImportWebLink();
-                    }}
-                >
-                    <label className="block space-y-2 text-sm text-[#1d2129]">
-                        <span className="font-medium">{t("webLinkUrl", { defaultValue: "链接地址" })}</span>
-                        <Input value={webLinkUrl} onChange={(event) => setWebLinkUrl(event.currentTarget.value)} placeholder="https://example.com/page" disabled={webLinkLoading} />
-                    </label>
-                    <label className="block space-y-2 text-sm text-[#1d2129]">
-                        <span className="font-medium">{t("webLinkTitle", { defaultValue: "显示名称" })}</span>
-                        <Input value={webLinkTitle} onChange={(event) => setWebLinkTitle(event.currentTarget.value)} placeholder={t("webLinkTitlePlaceholder", {
-                                defaultValue: "留空则自动读取网页标题",
-                            })} disabled={webLinkLoading} />
-                    </label>
-                    <DialogFooter>
-                        <Button type="button" variant="outlined" onClick={() => onOpenChange(false)} disabled={webLinkLoading} color="default">
-                            {t("cancel", { defaultValue: "取消" })}
-                        </Button>
-                        <Button type="submit" disabled={webLinkLoading}>
-                            {webLinkLoading
-                                ? t("importing", { defaultValue: "导入中..." })
-                                : t("import", { defaultValue: "导入" })}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    );
+          },
+        });
+      } else
+        toast.show({
+          type: "error",
+          message: resolveErrorMessage(error, "webLinkImportFailed"),
+        });
+    }
+  };
+  return (
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next && !loading) onOpenChange(false);
+      }}
+    >
+      <DialogContent
+        className="max-w-[520px]"
+        aria-describedby={undefined}
+        onEscapeKeyDown={(event) => {
+          if (loading) event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          if (loading) event.preventDefault();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{t("webLink")}</DialogTitle>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <label className="block space-y-2 text-body-sm text-text-1">
+            <span className="font-medium">{t("webLinkUrl")}</span>
+            <Input
+              value={url}
+              onChange={(event) => setUrl(event.currentTarget.value)}
+              placeholder="https://example.com/page"
+              disabled={loading}
+            />
+          </label>
+          <label className="block space-y-2 text-body-sm text-text-1">
+            <span className="font-medium">{t("webLinkTitle")}</span>
+            <Input
+              value={title}
+              onChange={(event) => setTitle(event.currentTarget.value)}
+              placeholder={t("webLinkTitlePlaceholder")}
+              disabled={loading}
+            />
+          </label>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outlined"
+              onClick={() => onOpenChange(false)}
+              disabled={loading}
+              color="default"
+            >
+              {t("cancel")}
+            </Button>
+            <Button type="submit" loading={loading}>
+              {t("import")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }

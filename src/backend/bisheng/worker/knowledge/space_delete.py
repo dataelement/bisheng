@@ -2,6 +2,7 @@
 
 from loguru import logger
 
+from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
 from bisheng.knowledge.domain.services.knowledge_space_direct_delete_service import (
     KnowledgeSpaceDirectDeleteService,
     dispatch_delete_job,
@@ -16,7 +17,11 @@ SCAN_TASK = "bisheng.worker.knowledge.space_delete.dispatch_pending_deletes"
 @bisheng_celery.task(bind=True, name=PURGE_TASK, acks_late=True, max_retries=3)
 def purge_space_delete(self, *, job_id: str):
     try:
-        return run_async_task(lambda: KnowledgeSpaceDirectDeleteService().purge(job_id))
+        return run_async_task(
+            lambda: KnowledgeSpaceDirectDeleteService(execution_application_factory=get_deletion_application).purge(
+                job_id
+            )
+        )
     except Exception as exc:
         logger.exception("Knowledge delete cleanup failed job={}", job_id)
         raise self.retry(exc=exc, countdown=60)

@@ -70,12 +70,12 @@ LEGACY_SHAREABLE_TYPES: set[str] = SUPPORTED_SHAREABLE_TYPES | {
 
 F048_SHARED_ACTIONS: dict[str, frozenset[str]] = {
     "knowledge_space": frozenset({"visible", "download"}),
-    "knowledge_library": frozenset({"visible", "use"}),
+    "knowledge_library": frozenset({"visible"}),
     "folder": frozenset({"visible", "download"}),
     "knowledge_file": frozenset({"visible", "download"}),
-    "workflow": frozenset({"visible", "use"}),
-    "assistant": frozenset({"visible", "use"}),
-    "tool": frozenset({"visible", "use"}),
+    "workflow": frozenset({"visible"}),
+    "assistant": frozenset({"visible"}),
+    "tool": frozenset({"visible"}),
     "channel": frozenset({"visible"}),
 }
 
@@ -174,6 +174,8 @@ class ResourceShareService:
         object_type: str,
         object_id: str,
         root_tenant_id: int = ROOT_TENANT_ID,
+        *,
+        operator=None,
     ) -> list[int]:
         """Write ``{object_type}:{object_id}#shared_with → tenant:{child}`` for
         each active Child. Returns the list of child_ids that received the
@@ -182,6 +184,13 @@ class ResourceShareService:
         Raises ValueError for unsupported resource types.
         """
         cls._validate_type(object_type)
+        if object_type == "llm_server":
+            from bisheng.llm.application.model_sharing import get_model_sharing_application
+
+            if operator is None or root_tenant_id != ROOT_TENANT_ID:
+                raise ValueError("LLM sharing requires the original authorized operator")
+            application = await get_model_sharing_application()
+            return await application.aset_sharing(identity=operator, server_id=int(object_id), enabled=True)
         permissions = await get_permission_relation_api()
 
         child_ids = await TenantDao.aget_children_ids_active(root_tenant_id)
@@ -225,6 +234,8 @@ class ResourceShareService:
         object_type: str,
         object_id: str,
         root_tenant_id: int = ROOT_TENANT_ID,
+        *,
+        operator=None,
     ) -> list[int]:
         """Delete all ``{object_type}:{object_id}#shared_with → tenant:*`` tuples.
 
@@ -233,6 +244,13 @@ class ResourceShareService:
         Children were added mid-flight).
         """
         cls._validate_type(object_type, legacy=True)
+        if object_type == "llm_server":
+            from bisheng.llm.application.model_sharing import get_model_sharing_application
+
+            if operator is None or root_tenant_id != ROOT_TENANT_ID:
+                raise ValueError("LLM sharing requires the original authorized operator")
+            application = await get_model_sharing_application()
+            return await application.aset_sharing(identity=operator, server_id=int(object_id), enabled=False)
         permissions = await get_permission_relation_api()
 
         resource = PermissionObject(object_type, str(object_id))

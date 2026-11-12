@@ -25,7 +25,10 @@ def principal():
 def http_setup():
     app = FastAPI()
     app.include_router(tools.router, prefix="/api/v1")
-    runtime = SimpleNamespace(access=SimpleNamespace(authenticate=AsyncMock(return_value=principal())))
+    runtime = SimpleNamespace(
+        sessions=SimpleNamespace(record_activity=AsyncMock()),
+        access=SimpleNamespace(authenticate=AsyncMock(return_value=principal())),
+    )
     service = SimpleNamespace(
         limits=ToolLimits(),
         invoke=AsyncMock(return_value={"tool": "bs_web_search", "result": {"results": [], "truncated": False}}),

@@ -119,6 +119,24 @@ class TestUnrestricted:
         assert await _operators(_user(admin=True), selection=selection) == [31]
 
 
+class TestTenantAdmin:
+    async def test_rbac_admin_cannot_read_unrecorded_rows(self, org, monkeypatch):
+        async def _tenant_admin(user_id, tenant_id):
+            return tenant_id == TENANT
+
+        async def _roots(tenant_scope):
+            assert tenant_scope == TENANT
+            return ["/1/"]
+
+        monkeypatch.setattr("bisheng.common.permission_identity.check_tenant_admin", _tenant_admin)
+        monkeypatch.setattr(
+            "bisheng.department.domain.services.audit_dept_scope.AuditDeptRepository.root_paths",
+            _roots,
+        )
+        assert await _operators(_user(admin=True)) == [31, 32, 33, 34]
+        assert await _export_operators(_user(admin=True)) == [31, 32, 33, 34]
+
+
 class TestDepartmentAdmin:
     async def test_closure_includes_archived_and_excludes_sentinels(self, org, audit_identity):
         _dept_admin(audit_identity, "/1/2/")

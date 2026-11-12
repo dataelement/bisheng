@@ -165,7 +165,6 @@ async def get_model_runtime(runtime) -> ModelRuntime:
         billing_timezone=config.billing_timezone,
         audit_factory=audit.capture,
         display_names_reader=read_display_names,
-        activity_recorder=runtime.sessions.record_activity,
         credit_setting_reader=read_credit_setting,
         hint_context_reader=read_hint_context,
     )

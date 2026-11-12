@@ -6,7 +6,8 @@ import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
 import { hasDesktopLoginReturnTo } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import i18next from "i18next";
-import { ReactNode, createContext, useLayoutEffect, useState } from "react";
+import { ReactNode, createContext, useCallback, useLayoutEffect, useState } from "react";
+import { useCurrentIdentityRefresh, type CurrentIdentity } from '@/hooks/useCurrentIdentityRefresh';
 import { delComponentApi, getComponents, overridComponent, saveComponent } from "../controllers/API";
 import { getUserInfo, logoutApi } from "../controllers/API/user";
 import { markSessionKickAck, requestInterceptor } from "../controllers/request";
@@ -36,6 +37,14 @@ export const userContext = createContext<userContextType>(initialValue);
 export function UserProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<any>(initialValue.user);
     const [savedComponents, setSavedComponents] = useState([]);
+    const handleIdentityRefresh = useCallback((identity: CurrentIdentity) => {
+        setUser((previous: Partial<User> | null) => {
+            if (previous?.user_id !== identity.user_id) return previous;
+            if (previous.user_name === identity.user_name && previous.external_id === identity.external_id) return previous;
+            return { ...previous, user_name: identity.user_name, external_id: identity.external_id };
+        });
+    }, []);
+    useCurrentIdentityRefresh(user, handleIdentityRefresh);
 
     const loadComponents = async () => {
         const res = await getComponents()

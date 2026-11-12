@@ -1,3 +1,4 @@
+import { KnowledgeDeletionDialog } from "./SpaceDetail/KnowledgeDeletionDialog";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { Button as ProductButton, Tabs } from '@bisheng/ui';
@@ -165,6 +166,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
               </div>}
         </div>
       </div>
+      <KnowledgeDeletionDialog operation={actions.deletion} />
     </section>
   );
 }

@@ -116,7 +116,7 @@ export function ModelItem({
 
   const handleDelClick = () => {
     bsConfirm({
-      desc: t("model.deleteModelConfirmation"),
+      desc: tModel("model.removalDraftOnly"),
       onOk(next) {
         onDelete();
         next();

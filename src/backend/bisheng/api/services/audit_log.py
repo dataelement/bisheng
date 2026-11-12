@@ -409,6 +409,23 @@ class AuditLogService:
         )
 
     @classmethod
+    async def get_audit_scope(cls, login_user: UserPayload) -> dict:
+        """The tenant and departments this caller is allowed to read.
+
+        The same resolution as the list. A later organisation or tenant
+        filter can only narrow it, so the page can keep this sentence up
+        while the filters change.
+        """
+        tenant_scope = cls._get_audit_tenant_scope(login_user)
+        dept_scope = await cls._resolve_dept_scope(login_user, tenant_scope)
+        tenant_name = None
+        if tenant_scope is not None:
+            tenants = await TenantDao.aget_by_ids([tenant_scope])
+            tenant_name = tenants[0].tenant_name if tenants else None
+        described = await AuditDeptScopeService.describe(dept_scope)
+        return {"tenant_id": tenant_scope, "tenant_name": tenant_name, **described}
+
+    @classmethod
     async def get_all_operators(cls, login_user: UserPayload) -> list[dict]:
         """Operator candidates, limited to the rows the caller may list (AC-18)."""
         tenant_scope = cls._get_audit_tenant_scope(login_user)
@@ -418,12 +435,37 @@ class AuditLogService:
             tenant_scope=tenant_scope,
             dept_predicate=build_dept_predicate(AuditLog.operator_dept_id, dept_scope),
         )
+        # One option per operator. The DAO lists every historical name, most
+        # frequent first, so a later alias (an old email, a one-off label)
+        # cannot replace the name the account's rows actually show.
         res = {}
-        for one in data:
-            if not one[1]:
+        for operator_id, operator_name in data:
+            if not operator_name or operator_id in res:
                 continue
-            res[one[0]] = {"user_id": one[0], "user_name": one[1]}
+            res[operator_id] = {"user_id": operator_id, "user_name": operator_name}
+        await cls._apply_live_operator_names(res)
         return list(res.values())
+
+    @classmethod
+    async def _apply_live_operator_names(cls, options: dict) -> None:
+        """Label each option with the account's current name when it still exists.
+
+        Audit rows keep the name from the moment they were written. After a
+        rename, the most common historical name can belong to a different
+        person than the account the operator is looking for. The user row is
+        the name they type into the filter.
+        """
+        ids = [operator_id for operator_id in options if isinstance(operator_id, int) and operator_id > 0]
+        if not ids:
+            return
+        try:
+            users = await UserDao.aget_user_by_ids(ids)
+        except Exception:
+            logger.warning("audit operator name lookup failed for {} ids", len(ids))
+            return
+        for user in users or []:
+            if user.user_id in options and user.user_name:
+                options[user.user_id]["user_name"] = user.user_name
 
     @classmethod
     def _chat_log(

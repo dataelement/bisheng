@@ -28,6 +28,7 @@ from bisheng.permission.domain.models import (
     PermissionCatalogRelease,
     PermissionGrant,
     PermissionGrantAssignee,
+    PermissionProjectionOperation,
     PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
@@ -310,7 +311,7 @@ class RedisConsistencyMarker:
                     resource_id=None,
                 ),
             )
-        elif plan.scope_type in {"department", "tenant", "user_group"}:
+        elif plan.scope_type in {"department", "tenant", "user_group", "llm_model_deletion"}:
             keys = (self._tenant_key(plan.tenant_id),)
         else:
             raise ValueError(f"unsupported permission marker scope: {plan.scope_type}")
@@ -580,6 +581,18 @@ class SqlProjectionScopeGuard:
                         ResourcePermissionMode.tenant_id == plan.tenant_id,
                         ResourcePermissionMode.resource_type == resource_type,
                         ResourcePermissionMode.resource_id == resource_id,
+                        ResourcePermissionMode.operation_id.in_(
+                            select(PermissionProjectionOperation.id).where(
+                                PermissionProjectionOperation.tenant_id == plan.tenant_id,
+                                PermissionProjectionOperation.idempotency_key == plan.idempotency_key,
+                                PermissionProjectionOperation.scope_type == plan.scope_type,
+                                PermissionProjectionOperation.scope_key == plan.scope_key,
+                                PermissionProjectionOperation.expected_version == plan.expected_version,
+                                PermissionProjectionOperation.target_version == plan.target_version,
+                                PermissionProjectionOperation.status == "FAILED_CLOSED",
+                            )
+                        ),
+                        ResourcePermissionMode.version.in_((plan.expected_version, plan.target_version)),
                     )
                     .values(
                         projection_state="FAILED_CLOSED",
