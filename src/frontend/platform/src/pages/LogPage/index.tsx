@@ -17,9 +17,9 @@ export function LogPage() {
 
     return <div id="model-scroll" className="flex min-h-0 w-full h-full flex-col px-2 pt-4 overflow-hidden">
         <AuditScopeNotice />
-        <Tabs defaultActiveKey="app" className="flex min-h-0 flex-1 flex-col w-full [&>div:first-child]:mx-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1 [&>[role=tabpanel]]:overflow-hidden" items={[
-            { key: 'app', label: t('log.appUsage'), icon: <Outlined.Application aria-hidden="true" />, children: <div className="pt-2"><AppUseLog /></div> },
-            { key: 'system', label: t('log.systemOperations'), icon: <Outlined.History aria-hidden="true" />, children: <div className="pt-2"><SystemLog /></div> },
+        <Tabs defaultActiveKey="app" className="flex min-h-0 flex-1 flex-col w-full [&>div:first-child]:mx-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel][data-state=active]]:flex [&>[role=tabpanel][data-state=active]]:min-h-0 [&>[role=tabpanel][data-state=active]]:flex-1 [&>[role=tabpanel][data-state=active]]:flex-col [&>[role=tabpanel][data-state=active]]:overflow-hidden" items={[
+            { key: 'app', label: t('log.appUsage'), icon: <Outlined.Application aria-hidden="true" />, children: <div className="flex min-h-0 flex-1 flex-col pt-2"><AppUseLog /></div> },
+            { key: 'system', label: t('log.systemOperations'), icon: <Outlined.History aria-hidden="true" />, children: <div className="flex min-h-0 flex-1 flex-col pt-2"><SystemLog /></div> },
             ...(showRuntime ? [{ key: "runtime", label: t("log.runtime.title"), icon: <Outlined.DeviceDesktopExchange aria-hidden="true" />, children: <RuntimeAuditPanel /> }] : []),
         ]} />
     </div>

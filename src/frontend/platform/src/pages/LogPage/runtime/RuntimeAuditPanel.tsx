@@ -150,6 +150,7 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
         <div className="ml-auto mr-4 flex shrink-0 items-center gap-4">
           <Button onClick={handleSearch} disabled={range === 'custom' && Boolean(dateError)}>{t('log.runtime.apply')}</Button>
           <Button onClick={handleReset} variant="outlined" color="default">{t('log.resetButton')}</Button>
+          <Button variant="outlined" color="default" disabled={busy || !query.data || query.isError} onClick={handleExport}>{t('log.runtime.export')}</Button>
         </div>
       </div>
       {range === 'custom' && rangeError && <p role="alert">{t('log.runtime.invalidRange')}</p>}
@@ -171,7 +172,6 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
           </>}
     </div>
     <div className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-x-4 px-4">
-      <Button disabled={busy || !query.data || query.isError} onClick={handleExport}>{t('log.runtime.export')}</Button>
       <Pagination
         className="ml-auto w-auto max-w-full"
         total={null}
@@ -202,7 +202,7 @@ export function RuntimeAuditPanel() {
   const effectiveTenant = scope.scope_tenant_id ?? tenantId
   const scopeKey = JSON.stringify([user?.user_id, scope.scope_tenant_id, effectiveTenant])
   if (loading) return <p role="status">{t('log.runtime.loading')}</p>
-  return <div className="flex h-full min-h-0 flex-col gap-4 px-2 pt-4">
+  return <div className="flex h-full min-h-0 flex-1 flex-col gap-4 px-2 pt-4">
     <div className="flex shrink-0 flex-wrap items-center gap-4">
       <Segmented
         aria-label={t('log.runtime.title')}
