@@ -151,6 +151,35 @@ def test_masked_key_requires_saved_connection_resolution():
         providers.connection("openai", {"openai_api_key": "********"})
 
 
+def test_model_list_context_window_is_kept_for_advanced_config():
+    rows = catalog.normalize_catalog(
+        {
+            "data": [
+                {"id": "deepseek-chat", "context_window": 128000},
+                {"id": "kimi", "context_length": 131072},
+                {"id": "local", "max_model_len": 133120, "context_length": 200000},
+                {"id": "adapter", "max_model_len": None, "parent": "local"},
+                {"id": "llama", "meta": {"n_ctx": 4096}},
+                {"id": "qwen-plus", "model_info": {"context_window": 1000000, "max_input_tokens": 995904}},
+                {"id": "claude", "max_input_tokens": 200000},
+                {"id": "gpt-4o", "context_window": 0},
+                {"id": "bad", "context_window": True},
+            ]
+        },
+        "openai",
+    )
+    by_name = {row["model_name"]: row.get("context_window") for row in rows}
+    assert by_name["deepseek-chat"] == 128000
+    assert by_name["kimi"] == 131072
+    assert by_name["local"] == 133120
+    assert by_name["adapter"] == 133120
+    assert by_name["llama"] == 4096
+    assert by_name["qwen-plus"] == 1000000
+    assert "context_window" not in next(row for row in rows if row["model_name"] == "claude")
+    assert "context_window" not in next(row for row in rows if row["model_name"] == "gpt-4o")
+    assert "context_window" not in next(row for row in rows if row["model_name"] == "bad")
+
+
 def test_native_and_compatible_shapes_and_deduplication():
     result = catalog.normalize_catalog({"data": [{"id": "gpt-4o"}, {"id": "gpt-4o"}, {"id": "whisper-1"}]}, "openai")
     assert [item["model_name"] for item in result] == ["gpt-4o", "whisper-1"]

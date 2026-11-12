@@ -62,3 +62,23 @@ export function importableModels(
     return [{ ...model, model_type: type }];
   });
 }
+
+export function discoveredModelConfig(
+  provider: string,
+  model: DiscoveredModel,
+): { user_kwargs?: string } {
+  const window = model.context_window;
+  if (
+    model.model_type !== "llm" ||
+    typeof window !== "number" ||
+    !Number.isInteger(window) ||
+    window <= 0
+  )
+    return {};
+  // Ollama's advanced "context length" is num_ctx. Every other provider stores
+  // the total window under context_window, which task mode reads and strips
+  // before the provider request.
+  const params =
+    provider === "ollama" ? { num_ctx: window } : { context_window: window };
+  return { user_kwargs: JSON.stringify(params) };
+}

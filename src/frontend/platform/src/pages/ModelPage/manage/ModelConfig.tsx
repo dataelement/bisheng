@@ -29,6 +29,7 @@ import i18next from "i18next";
 import { useTranslation } from "react-i18next";
 import { CustomForm } from "./CustomForm";
 import { ModelDiscovery } from "./ModelDiscovery";
+import { discoveredModelConfig } from "./modelDiscoveryState";
 import { ModelItem } from "./ModelItem";
 import {
   hasDuplicateModelName,
@@ -512,7 +513,7 @@ export default function ModelConfig({
                           name: model.display_name,
                           model_name: model.model_name,
                           model_type: model.model_type,
-                          config: {},
+                          config: discoveredModelConfig(previous.type, model),
                           voice: "",
                         }));
                       return {
