@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔄 部分实测 | MySQL 与 Redis 已实测；达梦与全流程待执行 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 21 / 36 |
+| 实现 | 🔄 进行中 | 22 / 36（T04 暂缓） |
 
 ---
 
@@ -70,7 +70,7 @@
   **覆盖 AC**: AC-08, AC-09, AC-10
   **依赖**: T02
 
-- [ ] **T04**: 改价入口与三个接口（单一写入边界）
+- [ ] **T04**: 改价入口与三个接口（单一写入边界）【暂缓，见偏差记录】
   **文件**: `src/backend/bisheng/llm/api/pricing.py`、llm 路由注册；`llm/domain/services/llm.py`（`update_model_pricing`）；`llm/domain/repositories/model_pricing_repository.py`；`common/errcode/llm.py`（10813 价格冲突）
   **逻辑**: Root 只读（19801）→ 提供方行锁与空闲检查（优先复用 F118 `alock_provider` / `arequire_idle`；F118 未合入时对 `llm_model` 行 `with_for_update()`）→ 租户校验 → revision 比较交换，只改 `config.pricing` → 提交后清本进程缓存、写审计
   **测试**: `test/llm/test_price_catalog_api.py`（约 10 个）
@@ -190,7 +190,7 @@
   **文件**: 本目录 `runbook.md`
   **依赖**: T18
 
-- [ ] **T18b**: 迁移演练脚本与 MySQL 演练
+- [x] **T18b**: 迁移演练脚本与 MySQL 演练（达梦部分改由发版前统一回归覆盖）
   **文件**: `src/backend/scripts/rehearse_dsh_call_pricing_migration.py`
   **逻辑**: 造 100 万 / 1,000 万行 → 迁移计时 → JSON 往返 → 降级再升级；MySQL 本机执行，达梦请同事执行（PR-1 合并前置）
   **覆盖 AC**: AC-20
@@ -247,5 +247,7 @@
 - T16 基准模型取积分设置的 base_model_id，未设置时取工作台日常对话默认模型；基准不在线、被删除、缺价或免费时所有倍率为 null。桌面 `/dsh/models` 经注入的 `hint_context_reader` 计算倍率（测试中不注入时不返回该字段）。
 - T17 偏离：`DshModelPolicyState.credit_rate` 保留（它随策略快照进入对账恢复载荷，改结构有风险），计费已不读取；可见范围接口不再返回、不再写入旧倍率，`credit_multiplier` 入参照收但忽略（老后台兼容）。数据库列与 f062 迁移保留。
 - T18b MySQL 部分完成（见 validation.md），达梦部分待同事环境，任务保持未勾选。
+- 2026-11-12 Callum 决定：T04（价格弹框内直接改价）暂缓，不等 F118；价格继续通过「编辑模型提供方」修改（T03），前端价格弹框先做成只读并提供跳转。AC-10 中「在价格弹框里改价」一项待 T04 恢复后补齐。
+- 2026-11-12 Callum 决定（同事确认仓库惯例）：不做本特性单独的达梦演练，达梦兼容由发版前统一回归覆盖；PR 合并不再以达梦演练为前置。
 - 发现原有失败（不在本特性范围）：`test/api/test_route_path_naming.py` 在改动前即因 `/api/v2/workstation/config/knowledge` 失败。
 - 发现仓库原有测试隔离缺陷（不在本特性范围，未改）：`test/dsh/test_policy_repository.py` 的 `sql_store` 夹具在 `[external]` 参数缺少真实库时于 setup 中途失败，留下「已初始化但只登记部分表」的租户过滤状态，导致之后混跑的租户隔离用例误报（基线中 `test_unified_policy_repository` 的失败即此原因）。`test_credit_settings` 夹具已显式登记所需表以免受影响。
