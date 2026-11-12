@@ -152,6 +152,24 @@ failed.
 
 ## Model Configuration Upgrade
 
+### `backfill_model_pricing.py`
+
+F015 upgrade step: gives every existing LLM model a price (`llm_model.config.pricing`) with the
+same rule as saving a model in the admin UI — the built-in catalog price when the provider type and
+model name match, otherwise 0 (free) — then gates the upgrade. Existing prices are never touched.
+Run it after `alembic upgrade head` while the service is still stopped; the full sequence is in
+`features/v3.1.0-beta1/015-credit-pricing/runbook.md`.
+
+```bash
+cd src/backend/
+bash scripts/backfill_model_pricing.sh          # dry run: list what each model would get
+bash scripts/backfill_model_pricing.sh apply    # write prices for models that have none
+bash scripts/backfill_model_pricing.sh check    # gate: exit 0 passed, 2 something is missing
+```
+
+Models marked `default 0 (free)` in the dry run include paid cloud models whose names the catalog
+does not know (for example Volcengine Ark endpoint IDs); they stay free until an admin sets a price.
+
 ### `migrate_model_token_configs.py`
 
 Convert legacy LLM `config.max_tokens` into advanced `config.user_kwargs` while
