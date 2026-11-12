@@ -170,7 +170,7 @@ async def process_source_document(source_document: list[Document], chat_id, mess
     message_info = await ChatMessageDao.aget_message_by_id(message_id)
     if not message_info:
         return
-    # F015: the workbench passes daily_chat so traceability is billed; workflows keep the default.
+    # F016: the workbench passes daily_chat so traceability is billed; workflows keep the default.
     extra = {"app_type": app_type} if app_type is not None else {}
     llm = await LLMService.get_knowledge_source_llm_async(message_info.user_id, **extra)
 

@@ -10,7 +10,7 @@ export interface ModelItemConfig {
   enable_web_search?: boolean;
   max_tokens?: number;
   user_kwargs?: string | Record<string, unknown>;
-  // F015: prices per million tokens; the server fills it on save when absent.
+  // F016: prices per million tokens; the server fills it on save when absent.
   pricing?: ModelPricing;
 }
 

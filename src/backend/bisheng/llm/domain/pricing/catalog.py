@@ -1,4 +1,4 @@
-"""F015 built-in model price catalog, bundled with each release (never fetched online).
+"""F016 built-in model price catalog, bundled with each release (never fetched online).
 
 Matching is exact on the provider type plus the normalized model name; dated
 snapshot names are listed explicitly instead of being stripped, because a

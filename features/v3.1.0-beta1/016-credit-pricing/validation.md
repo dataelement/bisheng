@@ -1,6 +1,6 @@
-# F015 验证记录
+# F016 验证记录
 
-## 本地自动化（bisheng `feat/3.1.0-beta1-015-credit-pricing`）
+## 本地自动化（bisheng `feat/3.1.0-beta1-016-credit-pricing`）
 
 | 日期 | 范围 | 结果 |
 |---|---|---|

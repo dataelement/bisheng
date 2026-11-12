@@ -30,7 +30,7 @@ class PolicySubject(BaseModel):
 class ModelVisibilityInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     version: int = Field(ge=0)
-    # F015: the per-model multiplier was removed; older admin pages still send it on every save,
+    # F016: the per-model multiplier was removed; older admin pages still send it on every save,
     # so it is accepted and ignored instead of being rejected by extra="forbid".
     credit_multiplier: str | None = Field(default=None, max_length=16)
     everyone: bool = False

@@ -1,6 +1,6 @@
 import request from '@/controllers/request'
 
-// F015: model prices per million tokens, as decimal strings (never floats).
+// F016: model prices per million tokens, as decimal strings (never floats).
 export type PricingCurrency = 'CNY' | 'USD'
 export type PricingSource = 'CATALOG' | 'MANUAL' | 'DEFAULT'
 

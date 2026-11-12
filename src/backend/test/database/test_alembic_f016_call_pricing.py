@@ -1,4 +1,4 @@
-"""F015 migration: additive, repeatable, matches the model, refuses destructive downgrade."""
+"""F016 migration: additive, repeatable, matches the model, refuses destructive downgrade."""
 
 from unittest.mock import Mock
 
@@ -8,11 +8,11 @@ from test.database.test_alembic_single_head import _script_directory
 
 
 def _revision():
-    return _script_directory().get_revision("v310b1_f015_dsh_call_pricing").module
+    return _script_directory().get_revision("v310b1_f016_dsh_call_pricing").module
 
 
-def test_single_head_is_f015():
-    assert _script_directory().get_heads() == ["v310b1_f015_dsh_call_pricing"]
+def test_single_head_is_f016():
+    assert _script_directory().get_heads() == ["v310b1_f016_dsh_call_pricing"]
 
 
 def test_columns_match_the_model_on_mysql():

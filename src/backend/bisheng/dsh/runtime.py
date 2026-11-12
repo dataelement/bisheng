@@ -29,14 +29,14 @@ async def read_policy(user_id: int):
 
 
 async def read_model_pricing(model_id: int) -> dict | None:
-    """F015: price config of an already-authorized model, read without any cache."""
+    """F016: price config of an already-authorized model, read without any cache."""
     from bisheng.llm.domain.services.llm import LLMService
 
     return await LLMService.read_model_pricing(model_id)
 
 
 async def read_credit_setting():
-    """F015: current tenant's credit settings; defaults when the tenant has none."""
+    """F016: current tenant's credit settings; defaults when the tenant has none."""
 
     def read():
         from bisheng.core.database import get_sync_db_session

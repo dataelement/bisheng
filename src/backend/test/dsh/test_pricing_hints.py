@@ -1,4 +1,4 @@
-"""F015 credit ratio hints (3:1 against the base model) and the admin pricing endpoints."""
+"""F016 credit ratio hints (3:1 against the base model) and the admin pricing endpoints."""
 
 from datetime import datetime
 from types import SimpleNamespace

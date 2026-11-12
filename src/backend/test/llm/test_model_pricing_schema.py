@@ -1,4 +1,4 @@
-"""F015 model price structure stored in llm_model.config["pricing"]."""
+"""F016 model price structure stored in llm_model.config["pricing"]."""
 
 import pytest
 from pydantic import ValidationError

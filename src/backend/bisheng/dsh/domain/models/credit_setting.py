@@ -1,4 +1,4 @@
-"""Tenant credit settings: billing currency, credit value, exchange rate, base model (F015)."""
+"""Tenant credit settings: billing currency, credit value, exchange rate, base model (F016)."""
 
 from datetime import datetime
 

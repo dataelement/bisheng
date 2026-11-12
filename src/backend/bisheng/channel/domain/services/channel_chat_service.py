@@ -161,7 +161,7 @@ class ChannelChatService:
         article_content, registry = cls._apply_image_anchors(article_content, visual)
         user_prompt = user_prompt_template.format(article_content=article_content, question=question)
         inputs = [SystemMessage(content=system_prompt), *history_messages, HumanMessage(content=user_prompt)]
-        # F015: channel image view is billed and counted as daily chat, not knowledge space.
+        # F016: channel image view is billed and counted as daily chat, not knowledge space.
         async for chunk in run_react_vision_stream(
             llm, inputs, registry, visual=visual, user_id=user_id, app_type=ApplicationTypeEnum.DAILY_CHAT
         ):

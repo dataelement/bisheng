@@ -1,7 +1,7 @@
 # Design: 积分按模型真实价格扣除
 
 **关联**：[spec.md](./spec.md) · [tasks.md](./tasks.md) · [runbook.md](./runbook.md) · [request.md](./request.md)
-**版本**：v3.1.0-beta1（F015-credit-pricing）
+**版本**：v3.1.0-beta1（F016-credit-pricing）
 **最后更新**：2026-11-12（初版，待用户确认；技术评审 v2.0 的 8 个阻塞项已纳入）
 **核查基线**：Bisheng `feat/3.1.0-beta1@3254ab555`；在途分支对比 `feat/3.1.0-beta1-014-pptd-deck`；Desktop `V1.3.0@e9a5ca6b`。
 

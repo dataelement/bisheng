@@ -21,7 +21,7 @@ _round_admitted: ContextVar[bool] = ContextVar("dsh_round_admitted", default=Fal
 def governed(model) -> bool:
     from bisheng.common.services.config_service import settings
 
-    # F015: knowledge-space Q&A (main chat and image view) is billed as well. rag_traceability
+    # F016: knowledge-space Q&A (main chat and image view) is billed as well. rag_traceability
     # stays out because workflows use it too; the workbench passes daily_chat instead.
     return settings.dsh.enabled and model.app_type in {"daily_chat", "linsight", "knowledge_space"}
 
@@ -68,7 +68,7 @@ async def start(model, *, mode: str = ""):
     # user's selectable models; the user's own conversation model always is.
     if model_id not in policy.allowed_model_ids and not getattr(model, "admin_selected", False):
         raise DshModelNotAllowedError()
-    # F015: read prices fresh (never from the cached model_info) and freeze them for this call.
+    # F016: read prices fresh (never from the cached model_info) and freeze them for this call.
     # Missing prices raise DshModelPricingMissingError before anything is admitted.
     pricing = build_snapshot(await read_model_pricing(model_id), await read_credit_setting())
     loop = asyncio.get_running_loop()

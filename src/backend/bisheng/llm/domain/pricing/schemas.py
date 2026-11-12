@@ -1,4 +1,4 @@
-"""Per-model token prices stored in ``llm_model.config["pricing"]`` (F015).
+"""Per-model token prices stored in ``llm_model.config["pricing"]`` (F016).
 
 Prices are decimal strings per million tokens in the price's own currency, so
 storage never round-trips through floats. Billing converts them to integer

@@ -1,6 +1,6 @@
-"""F015: per-call price snapshot, spend and billing currency on dsh_model_call.
+"""F016: per-call price snapshot, spend and billing currency on dsh_model_call.
 
-Nullable, additive columns only. Pre-F015 rows keep NULL and are still billed by
+Nullable, additive columns only. Pre-F016 rows keep NULL and are still billed by
 their legacy multiplier on replay; nothing is backfilled here.
 """
 
@@ -10,7 +10,7 @@ from alembic import op
 from bisheng.core.database.alembic_helpers.online import column_exists, table_exists
 from bisheng.core.database.dialect_helpers import JsonType
 
-revision = "v310b1_f015_dsh_call_pricing"
+revision = "v310b1_f016_dsh_call_pricing"
 down_revision = "v310b1_merge_tenant_identity"
 branch_labels = None
 depends_on = None
@@ -37,5 +37,5 @@ def upgrade():
 
 def downgrade():
     raise RuntimeError(
-        "Call price evidence must be retained; roll back by restoring the pre-upgrade backup (F015 runbook)"
+        "Call price evidence must be retained; roll back by restoring the pre-upgrade backup (F016 runbook)"
     )

@@ -1,4 +1,4 @@
-"""F015 credit settings and per-call price snapshots (integer micro-units)."""
+"""F016 credit settings and per-call price snapshots (integer micro-units)."""
 
 from decimal import Decimal
 from typing import Annotated, Literal, NamedTuple

@@ -46,14 +46,14 @@ class ModelDiscoveryError(BaseErrorCode):
 
 
 class ModelPricingConflictError(BaseErrorCode):
-    """F015: the price was changed by someone else since this editor loaded it."""
+    """F016: the price was changed by someone else since this editor loaded it."""
 
     Code: int = 10813
     Msg: str = "The model price was changed by someone else. Refresh and try again."
 
 
 class ModelPricingInvalidError(BaseErrorCode):
-    """F015: a submitted model price is malformed."""
+    """F016: a submitted model price is malformed."""
 
     Code: int = 10814
     Msg: str = "Invalid model price."

@@ -101,7 +101,7 @@ def test_credit_input_accepts_smallest_allowance_increment():
 
 @pytest.mark.parametrize("multiplier", ["1", "1.25", "0", "1000.01", None])
 def test_removed_model_multiplier_is_accepted_and_ignored(multiplier):
-    # F015: older admin pages still send it; it no longer affects billing.
+    # F016: older admin pages still send it; it no longer affects billing.
     value = ModelVisibilityInput(version=0, credit_multiplier=multiplier)
     assert not hasattr(value, "credit_rate")
 

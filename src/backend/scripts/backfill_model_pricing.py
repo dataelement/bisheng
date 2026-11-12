@@ -1,7 +1,7 @@
-"""F015 upgrade step: give every existing LLM model a price, then gate the opening of service.
+"""F016 upgrade step: give every existing LLM model a price, then gate the opening of service.
 
 Run from src/backend/ after `alembic upgrade head`, while the service is still stopped
-(features/v3.1.0-beta1/015-credit-pricing/runbook.md):
+(features/v3.1.0-beta1/016-credit-pricing/runbook.md):
 
     python scripts/backfill_model_pricing.py            # dry run: list what each model would get
     python scripts/backfill_model_pricing.py --apply    # write prices for models that have none
@@ -120,7 +120,7 @@ def _print_plan(lines: list[dict]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="F015: fill missing LLM model prices and gate the upgrade.")
+    parser = argparse.ArgumentParser(description="F016: fill missing LLM model prices and gate the upgrade.")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true", help="write prices for models that have none")
     mode.add_argument("--check", action="store_true", help="exit 2 when any upgrade step is incomplete")

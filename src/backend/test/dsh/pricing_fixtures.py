@@ -1,4 +1,4 @@
-"""F015 test prices. Every LLM model has a price after the upgrade, so fakes need one too."""
+"""F016 test prices. Every LLM model has a price after the upgrade, so fakes need one too."""
 
 # 0.01 per million tokens on every token class with the default 0.01 credit value bills
 # exactly one microcredit per token, i.e. the same as the removed 1x multiplier.

@@ -1,4 +1,4 @@
-"""F015 billing scope: knowledge space, channel image view, answer traceability; others unchanged."""
+"""F016 billing scope: knowledge space, channel image view, answer traceability; others unchanged."""
 
 import asyncio
 from types import SimpleNamespace
@@ -25,7 +25,7 @@ def dsh_enabled(monkeypatch):
     [
         ("daily_chat", True),
         ("linsight", True),
-        ("knowledge_space", True),  # F015
+        ("knowledge_space", True),  # F016
         ("rag_traceability", False),  # workflows use it too; the workbench passes daily_chat
         ("workflow", False),
         ("assistant", False),

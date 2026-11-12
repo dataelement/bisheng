@@ -101,7 +101,7 @@ test('sizes the trigger from the selected label and keeps its sizing text while 
   expect(sizer).toHaveAttribute('data-label', 'Gamma');
 });
 
-test('F015: shows the server credit ratio after model names, including base and free models', async () => {
+test('F016: shows the server credit ratio after model names, including base and free models', async () => {
   const priced = [
     { ...options[0], pricing_hint: { ratio: '3.00', base: false, free: false } },
     { ...options[1], pricing_hint: { ratio: '1.00', base: true, free: false } },

@@ -387,7 +387,7 @@ DEEPSEEK = {"currency": "CNY", "input": "9", "cache_read": "0.3", "output": "27"
 
 async def test_work_admission_snapshots_model_price_not_the_legacy_multiplier(service_setup):
     service, llm, ledger, policy, _state = service_setup
-    policy.rows[0].credit_rate = 125  # F015: the removed multiplier must have no effect
+    policy.rows[0].credit_rate = 125  # F016: the removed multiplier must have no effect
     model, _ = await service.model_loader(42)
     model.config["pricing"] = dict(DEEPSEEK)
     llm.measured = lambda: {"input_tokens": 30, "output_tokens": 50, "total_tokens": 80}

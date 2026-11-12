@@ -157,7 +157,7 @@ async def test_chat_admission_uses_loaded_model_id(monkeypatch, requested_id):
         SimpleNamespace(user_id=2, model_id=requested_id, model_info=SimpleNamespace(id=7)),
     )
     assert event.model_id == 7
-    # F015: the legacy multiplier no longer applies; prices come from the uncached read of model 7.
+    # F016: the legacy multiplier no longer applies; prices come from the uncached read of model 7.
     assert event.credit_rate == 100
     pricing_reader.assert_awaited_once_with(7)
     assert event.pricing == build_snapshot(LEGACY_EQUIVALENT_PRICING, CreditSettingState())

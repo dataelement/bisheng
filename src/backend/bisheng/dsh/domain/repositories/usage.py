@@ -94,7 +94,7 @@ class DshUsageRepository:
                     )
                     if any(getattr(current, k) != getattr(event, k) for k in immutable):
                         raise ValueError("Request identity and admission ownership are immutable")
-                    # F015: the frozen prices are immutable too. Compare normalized JSON because the
+                    # F016: the frozen prices are immutable too. Compare normalized JSON because the
                     # column round-trips through JSON (a CLOB on DM8), never the Python object.
                     if _pricing_json(current.pricing) != _pricing_json(event.pricing):
                         raise ValueError("Request price snapshot is immutable")
@@ -216,7 +216,7 @@ class DshUsageRepository:
             )
             data["operation_id"] = row.reconciliation_operation_id if row.usage_source == "RECONCILED" else None
             event = UsageEvent.model_validate_json(json.dumps(data))
-            # Rebuild through the event so F015 price snapshots and pre-F015 multipliers both apply.
+            # Rebuild through the event so F016 price snapshots and pre-F016 multipliers both apply.
             if event.billed_tokens is not None:
                 key = (row.usage_month, row.model_id)
                 calculated[key] = calculated.get(key, 0) + event.billed_tokens

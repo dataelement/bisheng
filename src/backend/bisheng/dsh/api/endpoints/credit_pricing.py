@@ -1,4 +1,4 @@
-"""F015 tenant credit settings and the price summary of user-selectable models."""
+"""F016 tenant credit settings and the price summary of user-selectable models."""
 
 from fastapi import APIRouter, Depends
 

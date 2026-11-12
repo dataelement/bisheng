@@ -1,4 +1,4 @@
-"""F015 read-only access to the built-in model price catalog (admin add-model form)."""
+"""F016 read-only access to the built-in model price catalog (admin add-model form)."""
 
 from fastapi import APIRouter, Depends, Query
 

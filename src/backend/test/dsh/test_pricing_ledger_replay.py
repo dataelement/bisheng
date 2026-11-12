@@ -1,4 +1,4 @@
-"""F015 ledger events with price snapshots: billing, legacy replay, identity hashes, overflow."""
+"""F016 ledger events with price snapshots: billing, legacy replay, identity hashes, overflow."""
 
 import json
 from datetime import UTC, datetime
@@ -105,7 +105,7 @@ def test_billing_overflow_is_rejected():
 
 
 def test_identity_hash_of_unpriced_events_is_unchanged():
-    # Golden values computed on the pre-F015 tree (3254ab555); in-flight events must keep their hash.
+    # Golden values computed on the pre-F016 tree (3254ab555); in-flight events must keep their hash.
     assert QuotaRedis._identity(event()) == "01d3c0828337f364fce71f8dde687304055571b7e0a2baa4261f39e0bbfe55f3"
     assert (
         QuotaRedis._identity(event(credit_rate=150))

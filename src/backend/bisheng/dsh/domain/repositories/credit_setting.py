@@ -1,4 +1,4 @@
-"""Tenant credit settings within the current tenant (F015)."""
+"""Tenant credit settings within the current tenant (F016)."""
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select

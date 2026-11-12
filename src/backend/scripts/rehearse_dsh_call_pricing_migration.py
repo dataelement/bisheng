@@ -1,13 +1,13 @@
-"""F015 migration rehearsal: time `v310b1_f015_dsh_call_pricing` on a large dsh_model_call table.
+"""F016 migration rehearsal: time `v310b1_f016_dsh_call_pricing` on a large dsh_model_call table.
 
-Builds dsh_model_call in its pre-F015 shape inside a DEDICATED rehearsal database, fills it with
+Builds dsh_model_call in its pre-F016 shape inside a DEDICATED rehearsal database, fills it with
 synthetic call rows, runs the real migration, verifies a price snapshot round-trips through the
 new JSON column (MySQL JSON / DM8 CLOB), and prints the timings used to size the stop-the-world
-upgrade window (features/v3.1.0-beta1/015-credit-pricing/runbook.md).
+upgrade window (features/v3.1.0-beta1/016-credit-pricing/runbook.md).
 
     cd src/backend/
-    python scripts/rehearse_dsh_call_pricing_migration.py --url 'mysql+pymysql://user@host:3306/rehearsal_f015' --rows 1000000
-    python scripts/rehearse_dsh_call_pricing_migration.py --url 'dm+dmPython://user@host:5236/?schema=REHEARSAL_F015' --rows 1000000
+    python scripts/rehearse_dsh_call_pricing_migration.py --url 'mysql+pymysql://user@host:3306/rehearsal_f016' --rows 1000000
+    python scripts/rehearse_dsh_call_pricing_migration.py --url 'dm+dmPython://user@host:5236/?schema=REHEARSAL_F016' --rows 1000000
 
 The database (or DM schema) name must start with ``rehearsal_``; the script refuses anything else
 and drops the table it created when it finishes (``--keep`` leaves it for inspection). It never
@@ -38,7 +38,7 @@ from bisheng.dsh.domain.models.model_call import DshModelCall  # noqa: E402
 
 TABLE = "dsh_model_call"
 NEW_COLUMNS = ("pricing", "cost_micro", "currency")
-REVISION = os.path.join(_BACKEND_ROOT, "bisheng/core/database/alembic/versions/v3_1_0b1_f015_dsh_call_pricing.py")
+REVISION = os.path.join(_BACKEND_ROOT, "bisheng/core/database/alembic/versions/v3_1_0b1_f016_dsh_call_pricing.py")
 SNAPSHOT = {
     "currency": "CNY",
     "credit_value_micro": 10000,
@@ -54,13 +54,13 @@ def target_name(url) -> str:
 
 
 def load_revision():
-    spec = importlib.util.spec_from_file_location("f015_call_pricing", REVISION)
+    spec = importlib.util.spec_from_file_location("f016_call_pricing", REVISION)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def create_pre_f015_table(engine) -> None:
+def create_pre_f016_table(engine) -> None:
     DshModelCall.__table__.create(engine)
     with engine.begin() as connection:
         operations = Operations(MigrationContext.configure(connection))
@@ -146,7 +146,7 @@ def verify(engine) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="F015: rehearse the dsh_model_call pricing migration.")
+    parser = argparse.ArgumentParser(description="F016: rehearse the dsh_model_call pricing migration.")
     parser.add_argument("--url", required=True, help="SQLAlchemy URL of a dedicated rehearsal_* database")
     parser.add_argument("--rows", type=int, default=1_000_000)
     parser.add_argument("--batch", type=int, default=10_000)
@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     revision = load_revision()
     try:
-        create_pre_f015_table(engine)
+        create_pre_f016_table(engine)
         fill_seconds = fill(engine, args.rows, args.batch)
         print(f"dialect={engine.dialect.name} rows={args.rows} fill_seconds={fill_seconds:.1f}")
         upgrade_seconds = migrate(engine, revision)

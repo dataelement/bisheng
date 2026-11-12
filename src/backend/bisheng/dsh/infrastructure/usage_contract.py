@@ -1,4 +1,4 @@
-"""F015 token-usage contract shared by every DSH adapter (design §4.4).
+"""F016 token-usage contract shared by every DSH adapter (design §4.4).
 
 After normalization ``input_tokens`` counts every input token including cache
 reads and cache writes, ``cache_creation_tokens`` sums every cache-write bucket,

@@ -468,7 +468,7 @@ class LLMService:
 
     @classmethod
     async def read_model_pricing(cls, model_id: int) -> dict | None:
-        """F015: uncached price config of an already-authorized model, read at call start."""
+        """F016: uncached price config of an already-authorized model, read at call start."""
         from bisheng.core.database import get_sync_db_session
         from bisheng.llm.domain.repositories.model_pricing_repository import ModelPricingRepository
 
@@ -644,7 +644,7 @@ class LLMService:
                 model_dict[one.model_name] = LLMModel(**one.model_dump(), user_id=login_user.user_id)
             else:
                 raise ModelNameRepeatError.http_exception()
-        # F015: every LLM model is saved with a price (catalog match, or 0 = free).
+        # F016: every LLM model is saved with a price (catalog match, or 0 = free).
         apply_pricing_on_save(server.type, model_dict.values(), {})
 
         db_server = LLMServer(**server.model_dump(exclude={"models", "share_to_children"}))
@@ -965,7 +965,7 @@ class LLMService:
                     model_dict[one.model_name].server_id = exist_server.id
             else:
                 raise ModelNameRepeatError.http_exception()
-        # F015: the form replaces each config wholesale; an omitted price keeps the stored one.
+        # F016: the form replaces each config wholesale; an omitted price keeps the stored one.
         apply_pricing_on_save(server.type, model_dict.values(), old_model_dict)
 
         retained_ids = tuple(one.id for one in server.models if one.id)
@@ -1183,7 +1183,7 @@ class LLMService:
             app_name=app_type.value,
             app_type=app_type,
             user_id=invoke_user_id,
-            # F015: the workbench bills traceability as daily chat on this admin-chosen model.
+            # F016: the workbench bills traceability as daily chat on this admin-chosen model.
             admin_selected=True,
         )
 
@@ -1205,7 +1205,7 @@ class LLMService:
             app_name=app_type.value,
             app_type=app_type,
             user_id=invoke_user_id,
-            # F015: the workbench bills traceability as daily chat on this admin-chosen model.
+            # F016: the workbench bills traceability as daily chat on this admin-chosen model.
             admin_selected=True,
         )
 

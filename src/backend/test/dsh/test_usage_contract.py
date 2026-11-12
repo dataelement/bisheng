@@ -1,4 +1,4 @@
-"""F015 token-usage contract: every source maps to input-including-cache (design §4.4)."""
+"""F016 token-usage contract: every source maps to input-including-cache (design §4.4)."""
 
 import pytest
 from anthropic.types import Usage

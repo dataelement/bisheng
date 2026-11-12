@@ -113,7 +113,7 @@ def test_legacy_import_exact_sum_and_idempotence(store, limits, credits, total):
 
 
 def test_removed_multiplier_is_neither_stored_nor_returned(store):
-    # F015: billing uses model prices; a multiplier sent by an older admin page is ignored.
+    # F016: billing uses model prices; a multiplier sent by an older admin page is ignored.
     with Session(store) as session, session.begin():
         repo = UnifiedPolicyRepository(session)
         repo.save_visibility(7, 20, ModelVisibilityInput(version=0, everyone=True, credit_multiplier="1.25"))

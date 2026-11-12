@@ -1,4 +1,4 @@
-"""F015 price snapshots: model price config + tenant credit settings -> integer snapshot."""
+"""F016 price snapshots: model price config + tenant credit settings -> integer snapshot."""
 
 import asyncio
 from decimal import ROUND_HALF_UP, Decimal

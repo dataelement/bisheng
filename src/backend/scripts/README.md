@@ -154,11 +154,11 @@ failed.
 
 ### `backfill_model_pricing.py`
 
-F015 upgrade step: gives every existing LLM model a price (`llm_model.config.pricing`) with the
+F016 upgrade step: gives every existing LLM model a price (`llm_model.config.pricing`) with the
 same rule as saving a model in the admin UI — the built-in catalog price when the provider type and
 model name match, otherwise 0 (free) — then gates the upgrade. Existing prices are never touched.
 Run it after `alembic upgrade head` while the service is still stopped; the full sequence is in
-`features/v3.1.0-beta1/015-credit-pricing/runbook.md`.
+`features/v3.1.0-beta1/016-credit-pricing/runbook.md`.
 
 ```bash
 cd src/backend/

@@ -1,4 +1,4 @@
-"""F015 price decisions when LLM models are saved (the single price write path, decision 17).
+"""F016 price decisions when LLM models are saved (the single price write path, decision 17).
 
 Every LLM model ends up with ``config["pricing"]``: a submitted price is validated
 and its source judged by the server; an omitted price keeps the stored one (the

@@ -34,7 +34,7 @@ async def get_config(request: Request, login_user=LoginUserDep):
     if bisheng_settings.dsh.enabled and ret.get("models"):
         from bisheng.dsh.domain.services.pricing import workbench_pricing_hints
 
-        # F015: response-only field; WSModel is also the stored config, so it never carries it.
+        # F016: response-only field; WSModel is also the stored config, so it never carries it.
         hints = await workbench_pricing_hints([str(item.get("id")) for item in ret["models"]])
         for item in ret["models"]:
             item["pricing_hint"] = hints.get(str(item.get("id")))

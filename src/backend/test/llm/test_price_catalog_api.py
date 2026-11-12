@@ -1,4 +1,4 @@
-"""F015 read-only price catalog endpoints."""
+"""F016 read-only price catalog endpoints."""
 
 import httpx
 from fastapi import FastAPI

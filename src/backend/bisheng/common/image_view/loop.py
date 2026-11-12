@@ -449,7 +449,7 @@ async def resolve_image_view_llm(
         app_name=app.value,
         app_type=app,
         user_id=user_id,
-        # F015: the image-reading model is configured by administrators, not picked by the user.
+        # F016: the image-reading model is configured by administrators, not picked by the user.
         admin_selected=True,
     )
 

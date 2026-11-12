@@ -1,4 +1,4 @@
-"""F015 model price storage inside ``llm_model.config["pricing"]``."""
+"""F016 model price storage inside ``llm_model.config["pricing"]``."""
 
 from sqlmodel import Session, select
 

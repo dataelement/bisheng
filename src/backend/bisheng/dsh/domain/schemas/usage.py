@@ -20,9 +20,9 @@ class UsageEvent(DshTokenUsage):
     session_id: str = Field(min_length=1, max_length=36)
     grant_version: int | None = Field(default=None, gt=0)
     model_id: int = Field(gt=0)
-    # Legacy multiplier: only events without a price snapshot (pre-F015) are billed by it.
+    # Legacy multiplier: only events without a price snapshot (pre-F016) are billed by it.
     credit_rate: int = Field(default=100, ge=1, le=100000, strict=True)
-    # F015: prices frozen when the call started; None only on pre-F015 events.
+    # F016: prices frozen when the call started; None only on pre-F016 events.
     pricing: PricingSnapshot | None = None
     usage_month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     billing_timezone: str = Field(min_length=1, max_length=64)
@@ -48,7 +48,7 @@ class UsageEvent(DshTokenUsage):
         if self.total_tokens is None:
             return None
         if self.pricing is None:
-            # Pre-F015 events keep their original rule so recovery can still rebuild their month.
+            # Pre-F016 events keep their original rule so recovery can still rebuild their month.
             return (self.total_tokens * self.credit_rate + 99) // 100
         return price_usage(self, self.pricing).billed
 

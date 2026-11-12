@@ -1,4 +1,4 @@
-"""F015 tenant credit settings: defaults, validation, optimistic locking, audit and isolation."""
+"""F016 tenant credit settings: defaults, validation, optimistic locking, audit and isolation."""
 
 import pytest
 from pydantic import ValidationError

@@ -6,7 +6,7 @@
 
 - 已确认规格：[spec.md](./spec.md)，用户 2026-11-12 确认；AC-22 与「缓存数大于输入」「总公司共享模型定价」两条边界待产品确认。
 - 设计复查：[design.md](./design.md) 初版（2026-11-12），用于入口、权限、造数与观察方法。
-- 目标版本与构建：v3.1.0-beta1 / `feat/3.1.0-beta1-015-credit-pricing`，尚无构建，待实现。
+- 目标版本与构建：v3.1.0-beta1 / `feat/3.1.0-beta1-016-credit-pricing`，尚无构建，待实现。
 - 其他依据：《积分体系升级-需求文档 v1.0》验收标准、《技术方案与实施计划 v2.1》联调验收清单（仓库外）。
 - 代码核对：`feat/3.1.0-beta1@3254ab555`，核对了 `dsh/domain/services/chat_credits.py`、`dsh/domain/services/model.py`、`dsh/domain/repositories/usage.py`、`llm/domain/services/llm.py`、`workstation/api/endpoints/config.py`；新增入口按设计拟实现，未在代码中存在。
 - 覆盖范围：扣费正确性、价格来源与修改、免费与缺价、计费范围补齐与范围外不变、倍率展示、积分设置与租户隔离、升级与旧客户端兼容。不覆盖达梦迁移耗时（由演练记录）。

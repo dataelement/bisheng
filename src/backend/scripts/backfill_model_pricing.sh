@@ -1,6 +1,6 @@
 #!/bin/bash
-# F015: give every existing LLM model a price, then gate the upgrade (run AFTER `alembic upgrade head`,
-# while the service is still stopped; see features/v3.1.0-beta1/015-credit-pricing/runbook.md).
+# F016: give every existing LLM model a price, then gate the upgrade (run AFTER `alembic upgrade head`,
+# while the service is still stopped; see features/v3.1.0-beta1/016-credit-pricing/runbook.md).
 #
 # Usage (run from src/backend/):
 #   bash scripts/backfill_model_pricing.sh           # dry run (default, no writes)

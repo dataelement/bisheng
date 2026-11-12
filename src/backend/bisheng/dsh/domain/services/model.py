@@ -125,7 +125,7 @@ class DshModelService:
                         "owned_by": "bisheng",
                         "display_name": model_display_name(model, server, names.get(str(model.id))),
                         "capabilities": capabilities.client_fields(),
-                        # F015: optional field; older desktop clients ignore unknown keys.
+                        # F016: optional field; older desktop clients ignore unknown keys.
                         **(
                             {"pricing_hint": pricing_hint(model.id, (model.config or {}).get("pricing"), hint_context)}
                             if hint_context
@@ -161,7 +161,7 @@ class DshModelService:
             model, server = await self.model_loader(request.model_id)
             if model.id != request.model_id:
                 raise DshModelNotAllowedError()
-            # F015: the loaded model is read uncached, so its prices are current; freeze them now.
+            # F016: the loaded model is read uncached, so its prices are current; freeze them now.
             setting = await self.credit_setting_reader() if self.credit_setting_reader else CreditSettingState()
             pricing = build_snapshot((model.config or {}).get("pricing"), setting)
             try:
@@ -282,10 +282,10 @@ class DshModelService:
         """Settle the shared ledger for platform Chat and desktop model calls."""
         now = self.now()
         now = now.replace(tzinfo=UTC) if now.tzinfo is None else now
-        # F015: one token-usage contract for every source, applied to the call's totals.
+        # F016: one token-usage contract for every source, applied to the call's totals.
         usage = enforce_inclusive(usage, model_id=event.model_id, request_id=event.request_id)
         if usage.total_tokens is not None and _beyond_accounting_range(event, usage):
-            # F015: a measurement too large to bill is settled like a missing one: nothing charged, flagged.
+            # F016: a measurement too large to bill is settled like a missing one: nothing charged, flagged.
             logger.error("DSH usage outside the accounting range for request {}", event.request_id)
             usage, error_code = DshTokenUsage(), "usage_out_of_range"
         terminal = UsageEvent.model_validate(

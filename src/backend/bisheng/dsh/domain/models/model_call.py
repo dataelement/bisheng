@@ -58,7 +58,7 @@ class DshModelCall(SQLModelSerializable, table=True):
     billed_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     cache_read_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     cache_creation_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
-    # F015: frozen billing prices, spend and billing currency; NULL on pre-F015 calls.
+    # F016: frozen billing prices, spend and billing currency; NULL on pre-F016 calls.
     pricing: dict | None = Field(default=None, sa_column=Column(JsonType, nullable=True))
     cost_micro: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     currency: str | None = Field(default=None, sa_column=Column(String(3), nullable=True))
