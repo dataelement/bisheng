@@ -105,6 +105,7 @@ F118已在既有knowledge/knowledge_space码段核对并分配10994–10999、18
 | 2026-11-11 | 标准 Helm 合并最新发版线，因 F008 错误反馈已占号顺延 F009；合并迁移双 head，825 项定向回归通过，按用户授权准备测试 tag；未部署 | F009-standard-helm-delivery |
 | 2026-11-11 | 登记深度研究数据分析子代理（NL2SQL）与按需澄清，规格已确认，开始实现 | F013-taskmode-data-analyst |
 | 2026-11-11 | 因 F009 已由标准 Helm 占用（本地原 009）顺延 F013；实现、114 E2E 与 code review（PASS）完成，合入发版线；未部署 | F013-taskmode-data-analyst |
+| 2026-11-12 | 用户要求错误卡恢复「查看详情」：detail 改为脱敏后公开；无依赖 failure_id 的失败给 reference_id（日志 trace id）；新增 linsight 段 11091（任务执行内部错误），未识别且非模型来源的任务失败不再报 11090；已核对 11091 未占用并补三语文案 | F008-chat-failure-feedback |
 
 | 2026-11-04 | 在独立功能分支登记知识库与知识空间统一合同增量，保留其他特性登记 | F118-knowledge-space-unification |
 

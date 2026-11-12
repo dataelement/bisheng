@@ -228,7 +228,8 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     errorCode={linsight?.taskErrorInfo?.error_code ?? linsight?.output_result?.error_code}
                     failureInfo={linsight?.taskErrorInfo?.failure_info ?? linsight?.output_result?.failure_info}
                             errorType={linsight.taskErrorInfo?.error_type}
-                            detail={linsight.taskErrorInfo?.detail}
+                            detail={linsight.taskErrorInfo?.detail ?? linsight?.output_result?.detail}
+                            referenceId={linsight.taskErrorInfo?.reference_id ?? linsight?.output_result?.reference_id}
                             fallbackMessage={linsight.taskError}
                             // Transient errors show a Retry — re-run this round via the
                             // same continueConversation path as the follow-up input

@@ -306,3 +306,34 @@ def test_public_sse_preserves_registered_business_message():
     payload = json.loads(FailureContextAdapter.public_sse_event(error)["data"])
     assert payload["status_message"] == error.message
     assert "failure_info" not in payload["data"]
+
+
+def test_unclassified_failure_gets_stable_reference_and_redacted_detail():
+    root = AttributeError("'types.SimpleNamespace' object has no attribute 'sessions'")
+    wrapper = RuntimeError("connect to http://10.0.0.5:8080/v1 failed, api_key=sk-abcdefghijkl, redis:6379")
+    wrapper.__cause__ = root
+    payload = FailureContextAdapter.public_payload({"error_message": "raw", "error_code": 11091}, exc=wrapper)
+    assert "failure_info" not in payload
+    reference = payload["reference_id"]
+    assert FailureContextAdapter.reference(wrapper) == reference
+    assert reference in payload["error_message"]
+    detail = payload["detail"]
+    assert detail.startswith("RuntimeError: ")
+    assert "AttributeError: 'types.SimpleNamespace' object has no attribute 'sessions'" in detail
+    for leaked in ("10.0.0.5", "http://", "sk-abcdefghijkl", "redis:6379"):
+        assert leaked not in detail
+
+
+def test_dependency_failure_keeps_failure_id_without_extra_reference():
+    error = sdk_error("redis.exceptions", "ConnectionError")
+    payload = FailureContextAdapter.public_payload({"error": "x"}, exc=error)
+    assert "reference_id" not in payload
+    assert payload["failure_info"]["failure_id"] in payload["error"]
+    assert "secret" not in payload["detail"] and "internal.invalid" not in payload["detail"]
+
+
+def test_business_error_needs_no_reference():
+    from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
+
+    payload = FailureContextAdapter.public_payload({}, exc=DepartmentDailyChatConcurrentLimitError())
+    assert "reference_id" not in payload

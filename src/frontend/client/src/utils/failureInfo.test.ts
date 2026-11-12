@@ -43,6 +43,16 @@ describe('business and recovery projection', () => {
         expect(localizedBusinessFailure(99999, localize)).toBeUndefined();
         expect(localizedBusinessFailure(18106, localize)).toBeUndefined();
     });
+    it('leaves the task-mode umbrella codes to the per-type copy', () => {
+        const localize = (key: string) => key.startsWith('api_errors.1109') ? 'umbrella' : key;
+        expect(localizedBusinessFailure(11090, localize)).toBeUndefined();
+        expect(localizedBusinessFailure(11091, localize)).toBeUndefined();
+    });
+    it('carries the support reference and detail for persisted and daily failures', () => {
+        expect(taskFailureMetadata({ reference_id: 'e5edb6dc', detail: 'AttributeError: x' })).toMatchObject({ reference_id: 'e5edb6dc', detail: 'AttributeError: x' });
+        expect(taskFailureMetadata({ reference_id: 'bad id!' })?.reference_id).toBeUndefined();
+        expect(dailyFailureMetadata({ reference_id: 'r1', detail: 'd' })).toMatchObject({ referenceId: 'r1', errorDetail: 'd' });
+    });
     it('keeps every live recovery identity next to the same failure metadata', () => {
         expect(dailyFailureMetadata({failure_info: failure, execution_id:'e', attempt_id:'a', recovery_subject_id:'s', model_id:7, rate_limit_state:'busy', resume_mode:'retry'})).toMatchObject({
             failureInfo:failure,executionId:'e',attemptId:'a',recoverySubjectId:'s',modelId:7,rateLimitState:'busy',resumeMode:'retry',

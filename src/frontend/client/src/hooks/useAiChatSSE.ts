@@ -70,7 +70,7 @@ export interface SSESubmission {
     onError: (
         error: string,
         errorCode?: number,
-        meta?: { errorType?: string; errorDetail?: string; failureInfo?: FailureInfo },
+        meta?: { errorType?: string; errorDetail?: string; referenceId?: string; failureInfo?: FailureInfo },
     ) => void;
     onStart: () => void;
     onEnd: () => void;

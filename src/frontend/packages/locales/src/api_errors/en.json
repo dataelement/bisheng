@@ -203,6 +203,7 @@
   "11079": "Gitee API rate limit exceeded, please retry later",
   "11080": "Failed to initialize workspace tools",
   "11090": "$t(bisheng) LLM error",
+  "11091": "The task failed with an internal error",
   "11100": "Failed to generate SOP content",
   "11110": "Failed to modify SOP content",
   "11111": "The application has been deleted",

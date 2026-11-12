@@ -120,6 +120,8 @@ export interface ChatMessage {
     /** raw upstream text (provider message, parser error, offending filename) kept
         behind the card's "view details" disclosure. */
     errorDetail?: string;
+    /** support reference when the failure has no dependency failure_id */
+    referenceId?: string;
     failureInfo?: FailureInfo;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
