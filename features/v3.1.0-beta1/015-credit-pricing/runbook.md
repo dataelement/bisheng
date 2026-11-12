@@ -2,14 +2,14 @@
 
 **适用**：从不含 F015 的版本升级到含 F015 的版本。
 **原则**：必须停服升级；开放使用前完成冒烟；开放使用后只做前向修复（原因见 [design.md](./design.md) 决策 18）。
-**状态**：草稿。停服时长待 MySQL / 达梦演练（tasks T18b）与测试服务器全流程（tasks S9）实测后补入。
+**状态**：草稿。MySQL 迁移已在本机实测（见文末演练记录）；达梦演练与测试服务器全流程待执行，停服时长待全流程实测后补入。
 
 以 docker compose 部署为例，服务名取自 `docker/docker-compose.yml`。其他部署方式按同样顺序执行。
 
 ## 0. 升级前检查
 
 1. 确认新镜像已拉取；记录当前镜像版本，用于开服前回滚。
-2. **额度 Redis 容量**：读取 `redis-cli INFO memory` 的 `used_memory` 与 `maxmemory`，以及 `dsh.quota_memory_budget_bytes`（默认 512 MB）、`dsh.quota_memory_headroom_bytes`（默认 64 MB）。升级后每次调用在 Redis 多占约 0.8 KB、保留 30 天：预计增量 ≈ 日调用量 × 30 × 0.8 KB。若「当前用量 + 增量」接近「预算 − 余量」，先调大预算和 Redis `maxmemory`。
+2. **额度 Redis 容量**：读取 `redis-cli INFO memory` 的 `used_memory` 与 `maxmemory`，以及 `dsh.quota_memory_budget_bytes`（默认 512 MB）、`dsh.quota_memory_headroom_bytes`（默认 64 MB）。升级后每次调用在 Redis 多占约 0.6 KB（本机实测 5.2 KB → 5.8 KB）、保留 30 天：预计增量 ≈ 日调用量 × 30 × 0.6 KB。若「当前用量 + 增量」接近「预算 − 余量」，先调大预算和 Redis `maxmemory`。
 3. 通知用户停服时间。
 
 ## 1. 停服
@@ -79,7 +79,7 @@ docker compose up -d
 
 | 演练 | 环境 | 数据量 | 结果 |
 |---|---|---|---|
-| MySQL 迁移 | 本机 Docker MySQL 8 | 100 万 / 1,000 万行 | 待执行（T18b） |
-| 达梦迁移 | 同事提供的 Linux + DM8 | 待定 | 待执行（T18b） |
-| Redis 容量 | 本机 Docker Redis 7 | 2 万次调用 | 2026-11-12 模拟：每次约 5.3 KB → 精简快照后约 6.1 KB（+15%）；真实流程复测待执行（T18c） |
+| MySQL 迁移 | 本机 Docker MySQL 8.0.46 | 100 万行 | 2026-11-12：加 3 列 0.40 秒，重复执行 0.01 秒（空操作），价格快照写入 JSON 列读回一致，通过。命令：`python scripts/rehearse_dsh_call_pricing_migration.py --url <rehearsal_ 开头的库> --rows 1000000` |
+| 达梦迁移 | 同事提供的 Linux + DM8 | 待定 | 待执行，同一脚本，`--url` 换成达梦（schema 名以 `rehearsal_` 开头） |
+| Redis 容量 | 本机 Docker Redis 7 | 1,000 / 3,000 次调用 | 2026-11-12：真实准入、结算、投影确认流程，逐 key `MEMORY USAGE` 统计：每次调用 5,203 B → 5,792 B（+11%）；默认预算 512 MB、余量 64 MB、保留 30 天时，可持续日调用量约 3,009 → 约 2,704 次 |
 | 全流程 | 测试服务器 | — | 待执行（S9，需 Callum 同意） |

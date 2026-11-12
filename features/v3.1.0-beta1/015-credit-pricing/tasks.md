@@ -13,9 +13,9 @@
 | spec.md | ✅ 已评审 | 用户 2026-11-12 确认；AC-22 与两条边界仍待产品确认，先按推荐实现 |
 | design.md | ✅ 已评审 | 用户 2026-11-12 确认；决策 4、6、16、18 的产品确认项先按推荐实现 |
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
-| runbook.md | 🔲 草稿 | 停服时长待演练实测 |
+| runbook.md | 🔄 部分实测 | MySQL 与 Redis 已实测；达梦与全流程待执行 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 18 / 36 |
+| 实现 | 🔄 进行中 | 21 / 36 |
 
 ---
 
@@ -179,14 +179,14 @@
   **覆盖 AC**: AC-17
   **依赖**: T08
 
-- [ ] **T18**: 升级脚本与门禁
+- [x] **T18**: 升级脚本与门禁
   **文件**: `src/backend/scripts/backfill_model_pricing.py`、`.sh`
   **逻辑**: 预检 / `--apply` / `--check`；遍历全部租户；幂等
   **测试**: `test/llm/test_backfill_model_pricing.py`（约 8 个）
   **覆盖 AC**: AC-18
   **依赖**: T03, T11
 
-- [ ] **T18a**: 升级手册与发版说明
+- [x] **T18a**: 升级手册与发版说明
   **文件**: 本目录 `runbook.md`
   **依赖**: T18
 
@@ -196,7 +196,7 @@
   **覆盖 AC**: AC-20
   **依赖**: T11
 
-- [ ] **T18c**: Redis 容量复测
+- [x] **T18c**: Redis 容量复测
   **逻辑**: 真实准入、结算、投影确认流程测每次调用占用，替换 runbook 的模拟数字
   **依赖**: T10
 
@@ -246,5 +246,6 @@
 - T15 偏离：`common/` 不能依赖领域层，所以免检标记不在 `process_source_document` 里设置，而是由工作台在 `chat_credits.unmetered()` 内创建溯源任务（任务继承上下文）。新增决策 20：溯源、看图模型标记 `admin_selected`，照常计费但不受员工可选模型范围限制 → design 决策 20、坑 16–17。
 - T16 基准模型取积分设置的 base_model_id，未设置时取工作台日常对话默认模型；基准不在线、被删除、缺价或免费时所有倍率为 null。桌面 `/dsh/models` 经注入的 `hint_context_reader` 计算倍率（测试中不注入时不返回该字段）。
 - T17 偏离：`DshModelPolicyState.credit_rate` 保留（它随策略快照进入对账恢复载荷，改结构有风险），计费已不读取；可见范围接口不再返回、不再写入旧倍率，`credit_multiplier` 入参照收但忽略（老后台兼容）。数据库列与 f062 迁移保留。
+- T18b MySQL 部分完成（见 validation.md），达梦部分待同事环境，任务保持未勾选。
 - 发现原有失败（不在本特性范围）：`test/api/test_route_path_naming.py` 在改动前即因 `/api/v2/workstation/config/knowledge` 失败。
 - 发现仓库原有测试隔离缺陷（不在本特性范围，未改）：`test/dsh/test_policy_repository.py` 的 `sql_store` 夹具在 `[external]` 参数缺少真实库时于 setup 中途失败，留下「已初始化但只登记部分表」的租户过滤状态，导致之后混跑的租户隔离用例误报（基线中 `test_unified_policy_repository` 的失败即此原因）。`test_credit_settings` 夹具已显式登记所需表以免受影响。
