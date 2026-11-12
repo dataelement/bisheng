@@ -70,6 +70,9 @@ interface AiChatMessagesProps {
     /** F035: preview a task-turn document in the inline workspace panel (ChatView
         owns it) — a conversation doc link opens the file directly, no drawer. */
     onPreviewFile?: (file: ArtifactFile) => void;
+    /** Current input selection used when retrying a failed task turn. */
+    taskRetryModelId?: string | number;
+    onTaskModelChange?: (modelId: string, modelName: string) => void;
 }
 
 /**
@@ -88,6 +91,8 @@ function MessageTreeNode({
     onOpenCitationPanel,
     activeCitationMessageId,
     onPreviewFile,
+    taskRetryModelId,
+    onTaskModelChange,
 }: {
     siblings: ChatMessage[];
     isStreaming?: boolean;
@@ -95,6 +100,9 @@ function MessageTreeNode({
     currentIndex: number;
     onRegenerate?: (parentMessageId: string) => void;
     onPreviewFile?: (file: ArtifactFile) => void;
+    /** Current input selection used when retrying a failed task turn. */
+    taskRetryModelId?: string | number;
+    onTaskModelChange?: (modelId: string, modelName: string) => void;
     knowledgeChatLayout?: boolean;
     allowExport?: boolean;
     allowFeedback?: boolean;
@@ -147,6 +155,8 @@ function MessageTreeNode({
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
                 onPreviewFile={onPreviewFile}
+                taskRetryModelId={taskRetryModelId}
+                onTaskModelChange={onTaskModelChange}
             />
             {/* Recursively render children */}
             {children.length > 0 && (
@@ -162,6 +172,8 @@ function MessageTreeNode({
                     onOpenCitationPanel={onOpenCitationPanel}
                     activeCitationMessageId={activeCitationMessageId}
                     onPreviewFile={onPreviewFile}
+                    taskRetryModelId={taskRetryModelId}
+                    onTaskModelChange={onTaskModelChange}
                 />
             )}
         </>
@@ -193,6 +205,8 @@ export default function AiChatMessages({
     workspaceOpen = false,
     hideEmptyState = false,
     onPreviewFile,
+    taskRetryModelId,
+    onTaskModelChange,
 }: AiChatMessagesProps) {
     const localize = useLocalize();
     const isNarrowViewport = usePrefersMobileLayout();
@@ -443,6 +457,8 @@ export default function AiChatMessages({
                                     onOpenCitationPanel={onOpenCitationPanel}
                                     activeCitationMessageId={activeCitationMessageId}
                                     onPreviewFile={onPreviewFile}
+                                    taskRetryModelId={taskRetryModelId}
+                                    onTaskModelChange={onTaskModelChange}
                                 />
                             );
                         })
@@ -461,6 +477,8 @@ export default function AiChatMessages({
                                 onOpenCitationPanel={onOpenCitationPanel}
                                 activeCitationMessageId={activeCitationMessageId}
                                 onPreviewFile={onPreviewFile}
+                                taskRetryModelId={taskRetryModelId}
+                                onTaskModelChange={onTaskModelChange}
                             />
                         )
                     )}

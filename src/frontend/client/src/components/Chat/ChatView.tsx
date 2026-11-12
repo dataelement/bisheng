@@ -75,6 +75,14 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const { data: bsConfig } = useGetBsConfig();
   const { user } = useAuthContext();
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
+  const handleTaskModelChange = useCallback((modelId: string, modelName: string) => {
+    setChatModel({
+      id: Number(modelId),
+      name: modelName,
+      manual: true,
+      mode: taskMode ? 'task' : 'daily',
+    });
+  }, [setChatModel, taskMode]);
   const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
   const [selectedAgentTools, setSelectedAgentTools] = useRecoilState(store.selectedAgentTools);
   const [agentToolsInitialized, setAgentToolsInitialized] = useRecoilState(store.agentToolsInitialized);
@@ -749,6 +757,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           allowExport
                           contentWidthClassName="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full"
                           onRegenerate={regenerate}
+                          taskRetryModelId={chatModel.manual ? chatModel.id || undefined : undefined}
+                          onTaskModelChange={handleTaskModelChange}
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
                           onOpenWorkspace={taskArtifacts.openWorkspace}
@@ -1159,7 +1169,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
   return (
     <div className="relative z-10 w-full pb-24">
       <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4">
-        <h2 className="text-sm text-gray-400">推荐应用</h2>
+        <h2 className="text-sm text-gray-400">{t('com_app.recommended_apps')}</h2>
       </div>
       <div className="relative max-w-[800px] mx-auto px-4">
         <div className="pr-1">
@@ -1196,7 +1206,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
                       ))}
                     </div>
                     <div className="absolute inset-x-0 bottom-0 top-1 flex items-center justify-center bg-blue-500 rounded-md text-white text-[13px] font-medium opacity-0 fine-pointer:group-hover:opacity-100 transform translate-y-2 fine-pointer:group-hover:translate-y-0 transition-all duration-300 coarse-pointer:opacity-100 coarse-pointer:translate-y-0">
-                      开始对话
+                      {t('com_app_start_chat')}
                     </div>
                   </div>
                 </CardContent>

@@ -2321,5 +2321,8 @@ class LinsightWorkflowTask:
                 exc=error,
                 extra_payload=extra_payload,
             )
-        except Exception as e:
-            logger.error(f"Processing execution error failed: session_version_id={self.session_version_id}, error={e}")
+        except Exception:
+            logger.exception("Processing execution error failed: session_version_id={}", self.session_version_id)
+            # Let the worker's existing stranded-session safety net finish the
+            # terminal write rather than treating a swallowed failure as success.
+            raise

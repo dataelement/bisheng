@@ -37,6 +37,8 @@ interface AssistantBubbleProps {
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
     onPreviewFile?: (file: ArtifactFile) => void;
+    taskRetryModelId?: string | number;
+    onTaskModelChange?: (modelId: string, modelName: string) => void;
 }
 
 export function AssistantBubble({
@@ -53,6 +55,8 @@ export function AssistantBubble({
     onOpenCitationPanel,
     activeCitationMessageId,
     onPreviewFile,
+    taskRetryModelId,
+    onTaskModelChange,
 }: AssistantBubbleProps) {
     const localize = useLocalize();
 
@@ -188,6 +192,8 @@ export function AssistantBubble({
                         conversationId={message.conversationId}
                         answer={message.text}
                         onPreviewFile={onPreviewFile}
+                        retryModelId={taskRetryModelId}
+                        onModelChange={onTaskModelChange}
                     />
                 </div>
             </div>

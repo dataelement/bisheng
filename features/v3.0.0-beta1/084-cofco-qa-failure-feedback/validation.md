@@ -36,3 +36,25 @@
 推送时发现远端已更新到 52472e0c6。仅将尚未发布的本地提交 rebase 到同名 1111 分支，自动完成，无冲突；range-diff 确认本次补丁等价。客户配置、授权模型保持不变，三语 translation.json 无重复 key。
 
 同步后重新运行原 121 项定向回归，全部通过；另验证远端新加入的模型输出截断保护，11 项通过。该新增测试直接收集会因缺少 BS_MILVUS_CONNECTION_ARGS 而中止；隔离验证仅从生产 AST 加载 TaskExecutionError 类，实际 middleware/classifier 与测试逻辑保持原样，避免加载完整应用配置。完整后端/中间件联调仍未执行。
+
+## 任务手动重试卡住热修（2026-11-12）
+
+- 分支基线：`feat/cofco-1111-3.0.0-beta1` / `ffc0b67228`。105 两个指定会话的只读排查均确认“缺少重试租户 → worker 拒绝 → 失败回写被吞 → 状态留在执行中”，另确认输入框选择未传给任务重试。
+- 新增 `test_continue_tenant_delivery.py` 的 9 项回归；实施前其中 8 项按预期失败，实施后全部通过。真实队列编解码与租户恢复未 mock，外部 DB/Redis/模型请求隔离。
+- 最终相关后端回归 **81 passed / 4 deselected**，覆盖队列、继续执行、worker 兜底、通知、任务提交、附件处理和租户校验。4 项排除用例均已用原 HEAD 的两个生产模块在独立进程复现：两项附件错误原文断言与两项旧权限提示正则；未修改这些既有断言。另修正已有恢复测试缺少 `tenant_id/output_result` 及配置 mock 方法签名的夹具。
+- 两个 Python 测试文件 Ruff 通过；生产文件 Ruff 与基线分别保持 58 / 23 项既有问题，新增 0；没有加入忽略规则或修改旧提示内容。
+- 前端新增选择正常模型后重试、防重复提交、分享路由只读、接受换模后再重试和拒绝换模不改变选择的回归。遵循用户约定，未执行前端测试、lint、typecheck、安装或构建；等待 CI/镜像验证。修改到的输入页两处旧硬编码文案按 `i18n-localizer` 规则复用/补齐三语键，没有视觉修改。
+- 独立静态审查发现的换模后输入选择不同步问题已修正并复核，无未解决问题。
+- 未在 105 部署本次修复，也未修改那两条遗留任务数据；已卡住的旧版本需在部署后确认无后台执行，再定向恢复为失败并同步缓存/任务行，不能当成仍在执行或直接重复入队。
+
+最终命令（`src/backend/`，既有 Python 环境及独立 SQLite 配置）：
+
+```sh
+python -m pytest test/linsight/test_continue_tenant_delivery.py \
+  test/linsight/test_rate_limit_recovery.py test/linsight/test_worker_stranded_session.py \
+  test/linsight/test_hitl_worker.py test/linsight/test_task_submit_server_side_enqueue.py \
+  test/linsight/test_deferred_ingest_worker.py test/linsight/test_announce_stranded_failure.py \
+  test/permission/test_f048_linsight_runtime.py \
+  -k 'not rejects_old_role_or_unhealthy_runtime and not one_unreadable_attachment_does_not_fail_the_session and not a_systemic_ingest_failure_fails_the_run_instead_of_answering_blind' \
+  --confcutdir=test -p no:cacheprovider -q
+```

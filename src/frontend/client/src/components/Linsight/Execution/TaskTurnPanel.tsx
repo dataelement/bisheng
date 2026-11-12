@@ -69,9 +69,11 @@ interface TaskTurnPanelProps {
     onPreviewFile?: (file: ArtifactFile) => void;
     /** Keep the shared task input model in sync after a switch is accepted. */
     onModelChange?: (modelId: string, modelName: string) => void;
+    /** The hosting input's current model; omitted by standalone/history viewers. */
+    retryModelId?: string | number;
 }
 
-export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversationId, answer, readOnly = false, onPreviewFile, onModelChange }: TaskTurnPanelProps) {
+export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversationId, answer, readOnly = false, onPreviewFile, onModelChange, retryModelId }: TaskTurnPanelProps) {
     const localize = useLocalize();
     const isMobile = usePrefersMobileLayout();
     const { showToast } = useToastContext();
@@ -88,6 +90,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     // header is sent. Pull it from the route so the backend's header_share_token_parser
     // authorizes the recipient (empty on normal chat routes → no header, as before).
     const { token: shareToken } = useParams<{ token?: string }>();
+    const recoveryReadOnly = readOnly || Boolean(shareToken);
 
     // HISTORY hydration: no store entry yet → lazy-load this SV's detail.
     const loadedRef = useRef(false);
@@ -137,11 +140,15 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     const recoveryPendingRef = useRef(false);
 
     const handleRetry = async () => {
-        if (!linsight?.question || recoveryPendingRef.current) return;
+        if (recoveryReadOnly || !linsight?.question || recoveryPendingRef.current) return;
         recoveryPendingRef.current = true;
         setRetrying(true);
         try {
-            await continueConversation(versionId, linsight.question);
+            if (retryModelId != null && retryModelId !== '') {
+                await continueConversation(versionId, linsight.question, String(retryModelId));
+            } else {
+                await continueConversation(versionId, linsight.question);
+            }
         } finally {
             recoveryPendingRef.current = false;
             setRetrying(false);
@@ -149,7 +156,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     };
 
     const handleSwitchModel = async (targetModelId: string) => {
-        if (!linsight?.question || recoveryPendingRef.current) return;
+        if (recoveryReadOnly || !linsight?.question || recoveryPendingRef.current) return;
         recoveryPendingRef.current = true;
         setRetrying(true);
         try {
@@ -272,7 +279,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                     detail={linsight.taskErrorInfo?.detail}
                     fallbackMessage={linsight.taskError}
                     onRetry={
-                        readOnly
+                        recoveryReadOnly
                         || !isTransientErrorType(linsight.taskErrorInfo?.error_type)
                         || !linsight.question
                             ? undefined
@@ -285,7 +292,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
                             : undefined
                     }
                     onSwitchModel={
-                        readOnly || rateLimitInfo?.error_type !== 'rate_limit'
+                        recoveryReadOnly || rateLimitInfo?.error_type !== 'rate_limit'
                             ? undefined
                             : handleSwitchModel
                     }

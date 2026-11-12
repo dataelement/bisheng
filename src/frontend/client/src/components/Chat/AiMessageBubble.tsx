@@ -74,6 +74,8 @@ interface AiMessageBubbleProps {
     /** F035: preview a task-turn document in the inline workspace panel (ChatView
         owns it) — a conversation doc link opens the file directly, no drawer. */
     onPreviewFile?: (file: ArtifactFile) => void;
+    taskRetryModelId?: string | number;
+    onTaskModelChange?: (modelId: string, modelName: string) => void;
 }
 
 /**
@@ -117,6 +119,8 @@ const AiMessageBubble = memo(
         onOpenCitationPanel,
         activeCitationMessageId,
         onPreviewFile,
+        taskRetryModelId,
+        onTaskModelChange,
     }: AiMessageBubbleProps) => {
         const isUser = message.isCreatedByUser;
 
@@ -146,6 +150,8 @@ const AiMessageBubble = memo(
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
                 onPreviewFile={onPreviewFile}
+                taskRetryModelId={taskRetryModelId}
+                onTaskModelChange={onTaskModelChange}
             />
         );
     }

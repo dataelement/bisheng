@@ -109,12 +109,12 @@ async def test_rate_limit_failure_uses_existing_task_failure_lifecycle(monkeypat
     async def terminate_unfinished_tasks():
         terminated.append(True)
 
-    async def get_all_config():
+    async def get_all_config(_self):
         return {}
 
     monkeypatch.setattr(
         "bisheng.linsight.domain.task_exec.LinsightSessionVersionDao.get_by_id",
-        AsyncMock(return_value=SimpleNamespace(id="session-1", tenant_id=2, user_id=7, model="18")),
+        AsyncMock(return_value=SimpleNamespace(id="session-1", tenant_id=2, user_id=7, model="18", output_result=None)),
     )
     monkeypatch.setattr(
         "bisheng.linsight.domain.task_exec.linsight_execute_utils.persist_task_turn_message",
@@ -150,7 +150,7 @@ async def test_rate_limit_failure_uses_existing_task_failure_lifecycle(monkeypat
 
 async def test_rate_limit_retry_uses_only_existing_continue_workflow(monkeypatch) -> None:
     continued = []
-    session = SimpleNamespace(id="session-1", tenant_id=2, user_id=7, model="18")
+    session = SimpleNamespace(id="session-1", tenant_id=2, user_id=7, model="18", output_result=None)
 
     class UnexpectedRateLimitService:
         def __init__(self):
@@ -192,6 +192,7 @@ async def test_continue_without_model_keeps_existing_queue_contract(monkeypatch)
         session_id="chat-1",
         user_id=7,
         status=SessionVersionStatusEnum.FAILED,
+        tenant_id=7,
         model="18",
     )
     update_status = AsyncMock()
@@ -225,7 +226,7 @@ async def test_continue_without_model_keeps_existing_queue_contract(monkeypatch)
         ["session-1"],
         SessionVersionStatusEnum.IN_PROGRESS,
     )
-    enqueue.assert_awaited_once_with("session-1", "retry the original question")
+    enqueue.assert_awaited_once_with("session-1", "retry the original question", tenant_id=7)
 
 
 async def test_continue_with_model_updates_existing_session_and_keeps_queue_payload(monkeypatch) -> None:
@@ -234,6 +235,7 @@ async def test_continue_with_model_updates_existing_session_and_keeps_queue_payl
         session_id="chat-1",
         user_id=7,
         status=SessionVersionStatusEnum.FAILED,
+        tenant_id=7,
         model="18",
     )
     update_status = AsyncMock()
@@ -269,7 +271,7 @@ async def test_continue_with_model_updates_existing_session_and_keeps_queue_payl
         SessionVersionStatusEnum.IN_PROGRESS,
         model="22",
     )
-    enqueue.assert_awaited_once_with("session-1", "retry the original question")
+    enqueue.assert_awaited_once_with("session-1", "retry the original question", tenant_id=7)
 
 
 async def test_continue_rejects_invalid_target_before_mutation(monkeypatch) -> None:
@@ -278,6 +280,7 @@ async def test_continue_rejects_invalid_target_before_mutation(monkeypatch) -> N
         session_id="chat-1",
         user_id=7,
         status=SessionVersionStatusEnum.FAILED,
+        tenant_id=7,
         model="18",
     )
     update_status = AsyncMock()
@@ -321,6 +324,7 @@ async def test_continue_enqueue_failure_restores_original_status_and_model(monke
         session_id="chat-1",
         user_id=7,
         status=original_status,
+        tenant_id=7,
         model="18",
     )
     update_status = AsyncMock()
@@ -383,7 +387,7 @@ async def test_continue_endpoint_forwards_optional_model(monkeypatch) -> None:
 
 
 async def test_non_rate_limit_failure_does_not_inherit_existing_busy_projection(monkeypatch) -> None:
-    session = SimpleNamespace(id="session-1", tenant_id=2, user_id=7, model="18")
+    session = SimpleNamespace(id="session-1", tenant_id=2, user_id=7, model="18", output_result=None)
     handled = AsyncMock()
 
     class UnexpectedRateLimitService:

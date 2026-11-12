@@ -212,13 +212,13 @@ class LinsightWorkbenchImpl:
         )
 
     @classmethod
-    async def _enqueue_continue(cls, session_version_id: str, question: str) -> None:
+    async def _enqueue_continue(cls, session_version_id: str, question: str, *, tenant_id: int) -> None:
         """Keep the existing worker queue contract for both retry variants."""
         from bisheng.linsight.worker import LinsightQueue, encode_queue_item
 
         redis_client = await get_redis_client()
         queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
-        await queue.put(data=encode_queue_item(session_version_id, continue_question=question))
+        await queue.put(data=encode_queue_item(session_version_id, continue_question=question, tenant_id=tenant_id))
 
     @classmethod
     async def continue_conversation(
@@ -240,6 +240,12 @@ class LinsightWorkbenchImpl:
         }:
             raise LinsightSessionVersionRunningError()
 
+        # Validate before entering IN_PROGRESS: the worker rejects unscoped
+        # payloads and cannot persist its normal failure without that context.
+        tenant_id = session_version.tenant_id
+        if isinstance(tenant_id, bool) or not isinstance(tenant_id, int) or tenant_id <= 0:
+            raise LinsightStartTaskError(exception=ValueError("Linsight task tenant_id must be a positive integer"))
+
         target_model_id = str(model_id) if model_id is not None else None
         if target_model_id is not None:
             await cls._validate_continue_model(session_version, target_model_id)
@@ -256,7 +262,7 @@ class LinsightWorkbenchImpl:
         )
 
         try:
-            await cls._enqueue_continue(session_version_id, question)
+            await cls._enqueue_continue(session_version_id, question, tenant_id=tenant_id)
         except Exception as exc:
             logger.exception("Failed to enqueue Linsight continuation for session_version={}", session_version_id)
             rollback_kwargs = {"model": original_model} if target_model_id is not None else {}
