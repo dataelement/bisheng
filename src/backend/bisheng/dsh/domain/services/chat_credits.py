@@ -1,6 +1,7 @@
 """Account for every Chat agent model invocation in the shared Work ledger."""
 
 import asyncio
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from functools import wraps
@@ -20,7 +21,9 @@ _round_admitted: ContextVar[bool] = ContextVar("dsh_round_admitted", default=Fal
 def governed(model) -> bool:
     from bisheng.common.services.config_service import settings
 
-    return settings.dsh.enabled and model.app_type in {"daily_chat", "linsight"}
+    # F015: knowledge-space Q&A (main chat and image view) is billed as well. rag_traceability
+    # stays out because workflows use it too; the workbench passes daily_chat instead.
+    return settings.dsh.enabled and model.app_type in {"daily_chat", "linsight", "knowledge_space"}
 
 
 async def admit_round(model) -> None:
@@ -61,7 +64,9 @@ async def start(model, *, mode: str = ""):
     policy = await read_policy(model.user_id)
     # Chat accepts string IDs; the loaded record provides the canonical ledger ID.
     model_id = model.model_info.id
-    if model_id not in policy.allowed_model_ids:
+    # Helper models chosen by administrators (traceability, image view) are not limited to the
+    # user's selectable models; the user's own conversation model always is.
+    if model_id not in policy.allowed_model_ids and not getattr(model, "admin_selected", False):
         raise DshModelNotAllowedError()
     # F015: read prices fresh (never from the cached model_info) and freeze them for this call.
     # Missing prices raise DshModelPricingMissingError before anything is admitted.
@@ -121,6 +126,21 @@ async def finish(state, succeeded: bool):
         None if succeeded else "chat_call_interrupted",
         provider_request_id=execution.provider_request_id,
     )
+
+
+@contextmanager
+def unmetered():
+    """Record calls made inside without comparing them with the monthly allowance.
+
+    For work that runs after the user already got an answer (answer traceability):
+    failing it on the allowance would only break an answer that was already sent.
+    A task created inside inherits the flag (asyncio copies the context).
+    """
+    token = _round_admitted.set(True)
+    try:
+        yield
+    finally:
+        _round_admitted.reset(token)
 
 
 def _call_mode() -> str:

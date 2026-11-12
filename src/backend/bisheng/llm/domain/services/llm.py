@@ -1227,6 +1227,7 @@ class LLMService:
         cls,
         invoke_user_id: int,
         tenant_id: int | None = None,
+        app_type: ApplicationTypeEnum = ApplicationTypeEnum.RAG_TRACEABILITY,
     ) -> BaseChatModel | None:
         """Get the default model configuration for Knowledge Base Traceability"""
         knowledge_llm = cls.get_knowledge_llm(tenant_id=tenant_id)
@@ -1235,10 +1236,12 @@ class LLMService:
             return None
         return cls.get_bisheng_llm_sync(
             model_id=knowledge_llm.source_model_id,
-            app_id=ApplicationTypeEnum.RAG_TRACEABILITY.value,
-            app_name=ApplicationTypeEnum.RAG_TRACEABILITY.value,
-            app_type=ApplicationTypeEnum.RAG_TRACEABILITY,
+            app_id=app_type.value,
+            app_name=app_type.value,
+            app_type=app_type,
             user_id=invoke_user_id,
+            # F015: the workbench bills traceability as daily chat on this admin-chosen model.
+            admin_selected=True,
         )
 
     @classmethod
@@ -1246,6 +1249,7 @@ class LLMService:
         cls,
         invoke_user_id: int,
         tenant_id: int | None = None,
+        app_type: ApplicationTypeEnum = ApplicationTypeEnum.RAG_TRACEABILITY,
     ) -> BaseChatModel | None:
         """Get the default model configuration for Knowledge Base Traceability"""
         knowledge_llm = await cls.aget_knowledge_llm(tenant_id=tenant_id)
@@ -1254,10 +1258,12 @@ class LLMService:
             return None
         return await cls.get_bisheng_llm(
             model_id=knowledge_llm.source_model_id,
-            app_id=ApplicationTypeEnum.RAG_TRACEABILITY.value,
-            app_name=ApplicationTypeEnum.RAG_TRACEABILITY.value,
-            app_type=ApplicationTypeEnum.RAG_TRACEABILITY,
+            app_id=app_type.value,
+            app_name=app_type.value,
+            app_type=app_type,
             user_id=invoke_user_id,
+            # F015: the workbench bills traceability as daily chat on this admin-chosen model.
+            admin_selected=True,
         )
 
     @classmethod

@@ -24,6 +24,9 @@ class BishengBase(BaseModel):
     app_type: ApplicationTypeEnum = Field(..., description="application type")
     app_name: str = Field(..., description="application name")
     user_id: int = Field(..., description="invoke user id")
+    # F015: a model administrators chose for an internal step (answer traceability, image view).
+    # It is billed to the invoking user without checking the user's selectable models.
+    admin_selected: bool = Field(default=False, description="administrator-chosen helper model")
 
     # bishengStrongly related business parameters
     model_info: LLMModel | None = Field(default=None, description="Model Configuration Information")

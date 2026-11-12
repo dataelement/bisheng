@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔲 草稿 | 停服时长待演练实测 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 13 / 36 |
+| 实现 | 🔄 进行中 | 16 / 36 |
 
 ---
 
@@ -149,19 +149,19 @@
 
 ### Wave 3 — 范围、出口、删旧、升级（S4）
 
-- [ ] **T13**: 知识空间问答计费
+- [x] **T13**: 知识空间问答计费
   **文件**: `src/backend/bisheng/dsh/domain/services/chat_credits.py`（`governed`）
   **测试**: `test/dsh/test_billing_scope.py`
   **覆盖 AC**: AC-14, AC-21
   **依赖**: T08
 
-- [ ] **T14**: 频道问答看图
+- [x] **T14**: 频道问答看图
   **文件**: `src/backend/bisheng/channel/domain/services/channel_chat_service.py`（第 164 行）
   **测试**: `test/dsh/test_billing_scope.py`
   **覆盖 AC**: AC-14
   **依赖**: T13
 
-- [ ] **T15**: 回答溯源扣但不拦
+- [x] **T15**: 回答溯源扣但不拦
   **文件**: `chat_credits.py`（公开 `unmetered()`）、`llm/domain/services/llm.py`（`get_knowledge_source_llm(_async)` 加 `app_type`）、`common/chat/utils.py`、`workstation/domain/services/chat_helpers.py`（第 92 行）
   **测试**: `test/dsh/test_billing_scope.py`、`test/dsh/test_chat_credits_unmetered.py`
   **覆盖 AC**: AC-14, AC-15
@@ -243,4 +243,5 @@
 - T12 口径校验放在结算时对整次调用的累计用量做一次（`enforce_inclusive`），字段映射在每条消息归一化时做，避免流式分片误判。
 - T02 价格表在首次使用时加载并校验，随包文件的有效性由 `test_model_pricing_catalog` 保证，未在应用启动钩子里加载（避免改动 main.py）。智谱、MiniMax 只有国际站美元价，只映射 `openai_compatible`，不映射国内 `zhipu` / `minimax` 类型。
 - T03 新增错误码 10814（价格格式无效，已登记 release-contract）。revision 比较目前在服务层基于保存前读取的旧值做；事务内加锁复查随 T04 与 F118 的锁方案一起完成。
+- T15 偏离：`common/` 不能依赖领域层，所以免检标记不在 `process_source_document` 里设置，而是由工作台在 `chat_credits.unmetered()` 内创建溯源任务（任务继承上下文）。新增决策 20：溯源、看图模型标记 `admin_selected`，照常计费但不受员工可选模型范围限制 → design 决策 20、坑 16–17。
 - 发现仓库原有测试隔离缺陷（不在本特性范围，未改）：`test/dsh/test_policy_repository.py` 的 `sql_store` 夹具在 `[external]` 参数缺少真实库时于 setup 中途失败，留下「已初始化但只登记部分表」的租户过滤状态，导致之后混跑的租户隔离用例误报（基线中 `test_unified_policy_repository` 的失败即此原因）。`test_credit_settings` 夹具已显式登记所需表以免受影响。
