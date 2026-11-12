@@ -247,6 +247,7 @@
 - T16 基准模型取积分设置的 base_model_id，未设置时取工作台日常对话默认模型；基准不在线、被删除、缺价或免费时所有倍率为 null。桌面 `/dsh/models` 经注入的 `hint_context_reader` 计算倍率（测试中不注入时不返回该字段）。
 - T17 偏离：`DshModelPolicyState.credit_rate` 保留（它随策略快照进入对账恢复载荷，改结构有风险），计费已不读取；可见范围接口不再返回、不再写入旧倍率，`credit_multiplier` 入参照收但忽略（老后台兼容）。数据库列与 f062 迁移保留。
 - T18b MySQL 部分完成（见 validation.md），达梦部分待同事环境，任务保持未勾选。
+- T04 中两个只读接口 `GET /api/v1/llm/price-catalog`、`GET /api/v1/llm/price-catalog/match` 已实现（不涉及写入锁，添加模型时预填需要）；只有写入接口 `PUT /api/v1/llm/models/{id}/pricing` 暂缓。
 - 2026-11-12 Callum 决定：T04（价格弹框内直接改价）暂缓，不等 F118；价格继续通过「编辑模型提供方」修改（T03），前端价格弹框先做成只读并提供跳转。AC-10 中「在价格弹框里改价」一项待 T04 恢复后补齐。
 - 2026-11-12 Callum 决定（同事确认仓库惯例）：不做本特性单独的达梦演练，达梦兼容由发版前统一回归覆盖；PR 合并不再以达梦演练为前置。
 - 发现原有失败（不在本特性范围）：`test/api/test_route_path_naming.py` 在改动前即因 `/api/v2/workstation/config/knowledge` 失败。

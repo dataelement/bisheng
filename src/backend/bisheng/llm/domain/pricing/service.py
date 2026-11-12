@@ -101,3 +101,24 @@ def apply_pricing_on_save(server_type: str, models, old_models: dict) -> None:
             server_type, model.model_name, incoming=config.get("pricing"), existing=existing
         )
         model.config = config
+
+
+def catalog_view() -> dict:
+    """The built-in price catalog for the admin "pick a reference price" list."""
+    from bisheng.llm.domain.pricing.catalog import load_catalog
+
+    catalog = load_catalog()
+    return {"version": catalog.version, "entries": [entry.model_dump() for entry in catalog.entries]}
+
+
+def match_view(server_type: str, model_name: str) -> dict:
+    """Catalog match for the add-model form prefill; ``via_name`` asks the admin to verify."""
+    from bisheng.llm.domain.pricing.catalog import load_catalog
+
+    found = match(server_type, model_name)
+    return {
+        "matched": found is not None,
+        "via_name": bool(found and found.via_name),
+        "catalog_version": load_catalog().version,
+        "entry": found.entry.model_dump() if found else None,
+    }
