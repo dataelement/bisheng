@@ -42,6 +42,7 @@ _EXCLUDED_TABLES: set[str] = {"user_tenant", "channel_info_source"}
 _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.dsh.domain.models.content_safety_event",
     "bisheng.dsh.domain.models.local_session",
+    "bisheng.dsh.domain.models.mobile_session",
     "bisheng.dsh.domain.models.model_audit_conversation",
     "bisheng.dsh.domain.models.model_audit_feedback",
     "bisheng.dsh.domain.models.model_audit_title",

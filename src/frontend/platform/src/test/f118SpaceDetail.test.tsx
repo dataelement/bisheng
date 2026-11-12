@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
   children: vi.fn(),
   parents: vi.fn(),
   permissions: vi.fn(),
-  legacyPermission: vi.fn(),
+  containerEdit: vi.fn(),
   legacy: vi.fn(),
   management: vi.fn(),
   error: vi.fn(),
@@ -39,7 +39,7 @@ vi.mock("@/controllers/request", () => ({
 }));
 vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: mocks.permissions,
-  checkResourceActionApi: mocks.legacyPermission,
+  checkResourceActionApi: mocks.containerEdit,
 }));
 vi.mock("@/controllers/API", () => ({ updateKnowledgeApi: mocks.legacy }));
 vi.mock("@/contexts/userContext", async () => ({
@@ -165,7 +165,7 @@ beforeEach(() => {
     refresh: vi.fn().mockResolvedValue(undefined),
   };
   mocks.management.mockImplementation(() => management);
-  mocks.legacyPermission.mockResolvedValue({ allowed: true });
+  mocks.containerEdit.mockResolvedValue({ allowed: true });
   mocks.permissions.mockResolvedValue(permission());
   mocks.info.mockImplementation(async (id: number) => ({
     id,
@@ -219,7 +219,7 @@ it.each([false, true])(
     user = { ...user, is_global_super: superAdmin };
     const view = mount();
     expect(await screen.findByText("Server 7")).toBeInTheDocument();
-    expect(screen.getByText("Description 7")).toBeInTheDocument();
+    expect(screen.getByText("ID: 7 · Description 7")).toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "report.pdf" }),
     ).toBeInTheDocument();
@@ -230,7 +230,7 @@ it.each([false, true])(
     expect(JSON.stringify(key)).toContain(superAdmin ? "202" : "101");
     expect(JSON.stringify(key)).toContain("ordinary");
     expect(user?.tenant_id).toBe(1);
-    expect(mocks.legacyPermission).not.toHaveBeenCalled();
+    expect(mocks.containerEdit).toHaveBeenCalledWith({ resource_type: "knowledge_space", resource_id: "7", action: "edit" });
     expect(
       screen.queryByText("Unscoped private title"),
     ).not.toBeInTheDocument();
@@ -243,6 +243,7 @@ it.each([false, true])(
 it("mounts visible-only child content when root info fails and never enters legacy chunks", async () => {
   const error = { status_code: 19000, marker: "original error" };
   mocks.info.mockRejectedValue(error);
+  mocks.containerEdit.mockResolvedValue({ allowed: false });
   mount();
   fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
   expect(await screen.findByTestId("original-preview")).toBeInTheDocument();
@@ -251,9 +252,10 @@ it("mounts visible-only child content when root info fails and never enters lega
     mocks.get.mock.calls.every(([url]) => !String(url).endsWith("/download")),
   ).toBe(true);
   expect(screen.queryByTestId("legacy-chunks")).not.toBeInTheDocument();
-  expect(mocks.legacyPermission).not.toHaveBeenCalled();
+  expect(mocks.containerEdit).toHaveBeenCalledWith({ resource_type: "knowledge_space", resource_id: "7", action: "edit" });
 });
 it("direct child admission uses current folder facts without a root info or visible precondition", async () => {
+  mocks.containerEdit.mockResolvedValue({ allowed: false });
   mount("/filelib/7?parent_id=9");
   expect(
     await screen.findByRole("button", { name: "report.pdf" }),
@@ -265,9 +267,9 @@ it("direct child admission uses current folder facts without a root info or visi
     expect.objectContaining({ parent_id: 9 }),
   );
   expect(mocks.permissions).toHaveBeenCalledWith("folder", "9");
-  expect(mocks.permissions).not.toHaveBeenCalledWith("knowledge_space", "7");
+  expect(screen.queryByRole("tab", { name: "detail.settings" })).toBeNull();
   expect(mocks.info).not.toHaveBeenCalled();
-  expect(mocks.legacyPermission).not.toHaveBeenCalled();
+  expect(mocks.containerEdit).toHaveBeenCalledWith({ resource_type: "knowledge_space", resource_id: "7", action: "edit" });
 });
 it("updates only parent_id for folder and breadcrumb navigation and keeps the old status filter", async () => {
   mount("/filelib/7?fileStatus=abnormal");
@@ -311,7 +313,7 @@ it.each([
   expect(await screen.findByText("f118.scope_unavailable")).toBeInTheDocument();
   expect(mocks.get).not.toHaveBeenCalled();
   expect(mocks.permissions).not.toHaveBeenCalled();
-  expect(mocks.legacyPermission).not.toHaveBeenCalled();
+  expect(mocks.containerEdit).not.toHaveBeenCalled();
 });
 it("waits for a trusted super management tenant before issuing any resource request", async () => {
   user = { ...user, is_global_super: true };

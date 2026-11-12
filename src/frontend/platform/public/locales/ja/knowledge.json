@@ -705,7 +705,10 @@
         "load_failed": "読み込みに失敗しました",
         "empty": "スペースがありません",
         "no_folders": "フォルダーがありません",
-        "more_folders": "フォルダーをさらに読み込む"
+        "more_folders": "フォルダーをさらに読み込む",
+        "all_spaces": "すべてのスペース",
+        "collapse_navigation": "スペースナビゲーションを折りたたむ",
+        "expand_navigation": "スペースナビゲーションを展開"
     },
     "workspace": {
         "files": "スペースのファイル",
@@ -719,5 +722,20 @@
         "ascending": "昇順",
         "descending": "降順",
         "select_all": "すべて選択"
+    },
+    "detail": {
+        "files": "ファイル管理",
+        "defaults": "解析と分割",
+        "metadata": "メタデータ",
+        "embedding": "モデルとインデックス",
+        "jobs": "処理タスク",
+        "settings": "スペース設定",
+        "members": "メンバーと権限",
+        "batch": "一括操作",
+        "add": "追加",
+        "saved": "保存しました",
+        "no_metadata": "メタデータ項目がありません",
+        "no_jobs": "処理タスクがありません",
+        "back_to_jobs": "タスク一覧に戻る"
     }
 }

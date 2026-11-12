@@ -24,6 +24,7 @@ import { SpaceDirectoryView, type DirectorySortField, type DirectoryViewMode } f
 import { useWorkspaceViewMode } from "./useWorkspaceViewMode";
 export { StatusIndicator } from "./KnowledgeFileStatus";
 export interface FilesProps {
+  toolbarTarget?: HTMLDivElement | null;
   presentation?: "workspace";
   scope?: KnowledgeQueryScope;
   spaceId?: number;
@@ -83,7 +84,7 @@ export default function Files(props: FilesProps) {
     />
   );
 }
-function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, presentation }: DirectoryProps) {
+function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, presentation, toolbarTarget }: DirectoryProps) {
   const { t } = useTranslation("knowledge");
   const client = useQueryClient();
   const instance = useId(),
@@ -438,6 +439,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
       {move && <MoveDialog scope={scope} spaceId={spaceId} parentId={parentId} items={move.items} mode={move.mode} onClose={() => setMove(null)} />}
       {selectionError === epoch && <p role="alert">{t("deletion.reason_no_permission")}</p>}
       <SpaceDirectoryToolbar
+        toolbarTarget={toolbarTarget}
         compact={presentation === "workspace"}
         spaceId={spaceId}
         parentId={parentId}

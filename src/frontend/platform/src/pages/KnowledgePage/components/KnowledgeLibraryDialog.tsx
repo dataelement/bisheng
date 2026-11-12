@@ -1,4 +1,4 @@
-import { Button, Input, Textarea, notification } from "@bisheng/ui";
+import { Button, Input, Textarea, notification, toast } from "@bisheng/ui";
 import {
   useQuery,
   useQueryClient,
@@ -15,13 +15,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog";
+import { Dialog } from "@/components/bs-ui/dialog";
+import { SpacePanelFrame } from "./SpacePanelFrame";
 import { getModelListApi } from "@/controllers/API/finetune";
 import {
   knowledgeSpaceApi,
@@ -136,6 +131,7 @@ interface FrameProps {
   onCancel: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  presentation?: "page";
 }
 function FormFrame({
   title,
@@ -143,35 +139,32 @@ function FormFrame({
   onCancel,
   children,
   footer,
+  presentation,
 }: FrameProps) {
   const { t } = useTranslation("knowledge");
   return (
-    <DialogContent
-      close={!busy}
-      className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
-      onEscapeKeyDown={(event) => {
-        if (busy) event.preventDefault();
-      }}
-      onPointerDownOutside={(event) => {
-        if (busy) event.preventDefault();
-      }}
+    <SpacePanelFrame
+      title={title}
+      busy={busy}
+      presentation={presentation}
+      footer={
+        <>
+          {presentation !== "page" && (
+            <Button
+              variant="outlined"
+              color="default"
+              disabled={busy}
+              onClick={onCancel}
+            >
+              {t("cancel")}
+            </Button>
+          )}
+          {footer}
+        </>
+      }
     >
-      <DialogHeader>
-        <DialogTitle>{title}</DialogTitle>
-      </DialogHeader>
       {children}
-      <DialogFooter>
-        <Button
-          variant="outlined"
-          color="default"
-          disabled={busy}
-          onClick={onCancel}
-        >
-          {t("cancel")}
-        </Button>
-        {footer}
-      </DialogFooter>
-    </DialogContent>
+    </SpacePanelFrame>
   );
 }
 interface BasicFieldsProps {
@@ -407,7 +400,8 @@ function EditSpaceForm({
   onOpenChange,
   onLoadEnd,
   spaceId,
-}: ContentProps & { spaceId: number }) {
+  presentation,
+}: ContentProps & { spaceId: number; presentation?: "page" }) {
   const { t } = useTranslation("knowledge"),
     client = useQueryClient();
   const read = useOpeningRead(
@@ -453,7 +447,11 @@ function EditSpaceForm({
       ]);
       if (!read.current.current) return;
       await onLoadEnd();
-      if (read.current.current) onOpenChange(false);
+      if (read.current.current) {
+        if (presentation === "page")
+          toast.show({ type: "success", message: t("detail.saved") });
+        else onOpenChange(false);
+      }
     } catch (error) {
       if (read.current.current) reportError(error, t("f118.scope_changed"));
     } finally {
@@ -463,6 +461,7 @@ function EditSpaceForm({
   return (
     <FormFrame
       title={t("f118.edit_space")}
+      presentation={presentation}
       busy={busy}
       onCancel={() => onOpenChange(false)}
       footer={
@@ -507,6 +506,29 @@ function EditSpaceForm({
         <p role="status">{t("f118.loading_space")}</p>
       )}
     </FormFrame>
+  );
+}
+
+interface KnowledgeSpaceSettingsPanelProps {
+  scope: KnowledgeQueryScope;
+  spaceId: number;
+  onSaved: () => void | Promise<void>;
+}
+export function KnowledgeSpaceSettingsPanel({
+  scope,
+  spaceId,
+  onSaved,
+}: KnowledgeSpaceSettingsPanelProps) {
+  return (
+    <EditSpaceForm
+      key={JSON.stringify([scope, spaceId])}
+      scope={scope}
+      spaceId={spaceId}
+      api={knowledgeSpaceApi}
+      presentation="page"
+      onOpenChange={() => undefined}
+      onLoadEnd={onSaved}
+    />
   );
 }
 

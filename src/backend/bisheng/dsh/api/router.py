@@ -8,6 +8,7 @@ from bisheng.dsh.api.endpoints.capabilities import router as capability_router
 from bisheng.dsh.api.endpoints.content_safety_events import router as content_safety_router
 from bisheng.dsh.api.endpoints.identity import router as identity_router
 from bisheng.dsh.api.endpoints.local_auth import router as local_auth_router
+from bisheng.dsh.api.endpoints.mobile import router as mobile_router
 from bisheng.dsh.api.endpoints.model_audit_admin import router as model_audit_router
 from bisheng.dsh.api.endpoints.model_audit_feedback import router as model_audit_feedback_router
 from bisheng.dsh.api.endpoints.model_audit_title import router as model_audit_title_router
@@ -40,5 +41,5 @@ router.include_router(model_audit_router)
 router.include_router(model_audit_title_router)
 router.include_router(model_audit_feedback_router)
 router.include_router(tool_router)
-
+router.include_router(mobile_router)
 router.include_router(apps_router)

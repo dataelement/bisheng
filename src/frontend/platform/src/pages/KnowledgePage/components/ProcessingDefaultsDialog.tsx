@@ -1,14 +1,9 @@
-import { Button } from "@bisheng/ui";
+import { Button, toast } from "@bisheng/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog";
+import { Dialog } from "@/components/bs-ui/dialog";
+import { SpacePanelFrame } from "./SpacePanelFrame";
 import {
   knowledgeSpaceApi,
   type KnowledgeSpaceApi,
@@ -35,7 +30,21 @@ interface ProcessingDefaultsDialogProps {
   onSaved?: (settings: ProcessingSettingsRead) => void;
   api?: KnowledgeSpaceApi;
 }
-type ContentProps = Omit<ProcessingDefaultsDialogProps, "open">;
+type ContentProps = Omit<ProcessingDefaultsDialogProps, "open"> & {
+  presentation?: "page";
+};
+
+export function ProcessingDefaultsPanel(
+  props: Omit<ProcessingDefaultsDialogProps, "open" | "onOpenChange">,
+) {
+  return (
+    <ProcessingDefaultsContent
+      {...props}
+      presentation="page"
+      onOpenChange={() => undefined}
+    />
+  );
+}
 
 export function ProcessingDefaultsDialog(props: ProcessingDefaultsDialogProps) {
   return (
@@ -50,6 +59,7 @@ function ProcessingDefaultsContent({
   onOpenChange,
   onSaved,
   api = knowledgeSpaceApi,
+  presentation,
 }: ContentProps) {
   const { t } = useTranslation("knowledge");
   const client = useQueryClient();
@@ -144,7 +154,16 @@ function ProcessingDefaultsContent({
       });
       if (current.current !== epoch) return;
       onSaved?.(result);
-      if (current.current === epoch) onOpenChange(false);
+      if (current.current === epoch) {
+        if (presentation === "page") {
+          setLoaded({
+            epoch,
+            version: result.config_version,
+            draft: processingDefaultsToDraft(result.effective_defaults),
+          });
+          toast.show({ type: "success", message: t("detail.saved") });
+        } else onOpenChange(false);
+      }
     } catch (error) {
       if (current.current === epoch) showApiError(error);
     } finally {
@@ -152,19 +171,33 @@ function ProcessingDefaultsContent({
     }
   };
   return (
-    <DialogContent
-      close={!pending}
-      className="sm:max-w-3xl max-h-[90vh] overflow-y-auto"
-      onEscapeKeyDown={(event) => {
-        if (pending) event.preventDefault();
-      }}
-      onPointerDownOutside={(event) => {
-        if (pending) event.preventDefault();
-      }}
+    <SpacePanelFrame
+      title={t("f118.defaults_title")}
+      presentation={presentation}
+      busy={pending}
+      footer={
+        <>
+          {presentation !== "page" && (
+            <Button
+              variant="outlined"
+              color="default"
+              disabled={pending}
+              onClick={() => onOpenChange(false)}
+            >
+              {t("cancel")}
+            </Button>
+          )}
+          <Button
+            disabled={pending || !validation?.ok}
+            onClick={() => {
+              void handleSave();
+            }}
+          >
+            {t("save")}
+          </Button>
+        </>
+      }
     >
-      <DialogHeader>
-        <DialogTitle>{t("f118.defaults_title")}</DialogTitle>
-      </DialogHeader>
       <p className="text-sm text-text-2">{t("f118.future_uploads_only")}</p>
       {active ? (
         <ProcessingDefaultsEditor
@@ -186,24 +219,6 @@ function ProcessingDefaultsContent({
       ) : (
         <p role="status">{t("f118.loading_defaults")}</p>
       )}
-      <DialogFooter>
-        <Button
-          variant="outlined"
-          color="default"
-          disabled={pending}
-          onClick={() => onOpenChange(false)}
-        >
-          {t("cancel")}
-        </Button>
-        <Button
-          disabled={pending || !validation?.ok}
-          onClick={() => {
-            void handleSave();
-          }}
-        >
-          {t("save")}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
+    </SpacePanelFrame>
   );
 }

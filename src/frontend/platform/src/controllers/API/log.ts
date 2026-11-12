@@ -357,9 +357,8 @@ export const V2_ACTIONS: string[] = [
     'approval.scenario.create',
     'approval.exception.skip_node',
     'approval.menu_access.revoke_grant',
-    // F049 open API auth. The grant / share_link / ws families get their first
-    // writers in later waves; registered in one go so the filter is touched
-    // exactly once per feature.
+    // F049 open API auth. Only actions with a writer are listed; an action
+    // without one would be a filter option that can never match.
     'open_api.service_account.create',
     'open_api.service_account.update',
     'open_api.service_account.enable',
@@ -368,18 +367,6 @@ export const V2_ACTIONS: string[] = [
     'open_api.api_key.issue',
     'open_api.api_key.update',
     'open_api.api_key.revoke',
-    'open_api.api_key.revoke_all',
-    'open_api.api_key.expire',
-    'open_api.api_key.invalidate_by_subject',
-    'open_api.grant.add',
-    'open_api.grant.update',
-    'open_api.grant.remove',
-    'open_api.grant.remove_all',
-    'open_api.share_link.revoke',
-    'open_api.share_link.expire',
-    'open_api.ws.connect',
-    // F052 MCP face: one row per tools/call, plus door refusals.
-    'open_api.mcp.tool_call',
     // F054 hosted applications — the state machine, meta updates and the
     // data-tab row edit / export.
     'app.publish',

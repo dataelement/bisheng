@@ -711,7 +711,10 @@
         "load_failed": "加载失败",
         "empty": "暂无空间",
         "no_folders": "暂无文件夹",
-        "more_folders": "加载更多文件夹"
+        "more_folders": "加载更多文件夹",
+        "all_spaces": "全部空间",
+        "collapse_navigation": "收起空间导航",
+        "expand_navigation": "展开空间导航"
     },
     "workspace": {
         "files": "空间文件",
@@ -725,5 +728,20 @@
         "ascending": "升序",
         "descending": "降序",
         "select_all": "全选"
+    },
+    "detail": {
+        "files": "文件管理",
+        "defaults": "解析与切分",
+        "metadata": "元数据",
+        "embedding": "模型与索引",
+        "jobs": "处理任务",
+        "settings": "空间设置",
+        "members": "成员与权限",
+        "batch": "批量操作",
+        "add": "新增",
+        "saved": "已保存",
+        "no_metadata": "暂无元数据字段",
+        "no_jobs": "暂无处理任务",
+        "back_to_jobs": "返回任务列表"
     }
 }

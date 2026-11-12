@@ -1,7 +1,7 @@
-import { Button, Dropdown, DropdownItem } from "@bisheng/ui";
+import { Button, Dropdown, DropdownItem, Tooltip } from "@bisheng/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { knowledgeFilesApi } from "@/controllers/API/knowledgeFiles";
 import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
@@ -144,6 +144,8 @@ function SpaceSectionList({ section, path, ...props }: SectionProps) {
 
 function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
   const { t } = useTranslation("knowledge");
+  const [collapsed, setCollapsed] = useState(false);
+  const navigationId = useId();
   const { spaceId, parentId, scope } = props;
   const client = useQueryClient();
   const { identityKey, tenantId, managementTenantId, view } = scope;
@@ -169,14 +171,20 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
   }, [parents.error]);
   const path = parents.data?.map((folder) => folder.id) ?? [];
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-r border-border-base bg-bg-page" aria-label={t("f118.spaces")}>
-      <h2 className="px-4 pb-5 pt-6 text-heading-sm font-medium text-text-1">
-        {props.onOverview ? <button type="button" className="text-left" onClick={props.onOverview}>{t("f118.spaces")}</button> : t("f118.spaces")}
-      </h2>
-      <nav className="min-h-0 flex-1 overflow-y-auto px-3" aria-label={t("sidebar.navigation")}>
+    <aside className={`flex h-full shrink-0 flex-col border-r border-border-base bg-bg-page ${collapsed ? "w-10" : "w-72"}`} aria-label={t("f118.spaces")}>
+      <div className={`flex items-center py-2 ${collapsed ? "justify-center" : "justify-between px-2"}`}>
+        {!collapsed && props.onOverview && <Tooltip content={t("sidebar.all_spaces")}>
+          <Button variant="text" color="default" iconOnly size="small" aria-label={t("sidebar.all_spaces")} onClick={props.onOverview}><Outlined.List /></Button>
+        </Tooltip>}
+        <Tooltip content={t(collapsed ? "sidebar.expand_navigation" : "sidebar.collapse_navigation")}>
+          <Button variant="text" color="default" iconOnly size="small" aria-controls={navigationId} aria-expanded={!collapsed}
+            aria-label={t(collapsed ? "sidebar.expand_navigation" : "sidebar.collapse_navigation")} onClick={() => setCollapsed((value) => !value)}><Outlined.SidebarMenu /></Button>
+        </Tooltip>
+      </div>
+      <nav id={navigationId} hidden={collapsed} className="min-h-0 flex-1 overflow-y-auto px-3" aria-label={t("sidebar.navigation")}>
         {sections.map((section) => <SpaceSectionList key={section} {...props} section={section} path={path} />)}
       </nav>
-      <div className="shrink-0 p-3">
+      <div hidden={collapsed} className="shrink-0 p-3">
         <Button variant="outlined" color="default" className="w-full" icon={<Outlined.BlocksAndArrows />} onClick={props.onSquare}>{t("sidebar.square")}</Button>
       </div>
     </aside>

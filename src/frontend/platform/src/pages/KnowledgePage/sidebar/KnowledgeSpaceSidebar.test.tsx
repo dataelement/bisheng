@@ -17,6 +17,7 @@ vi.mock("@/controllers/hooks/knowledge", () => ({
   },
 }));
 vi.mock("@bisheng/ui", () => ({
+  Tooltip: ({ children }: { children: ReactNode }) => children,
   Button: ({ children, onClick, disabled, "aria-label": label }: ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" onClick={onClick} disabled={disabled} aria-label={label}>{children}</button>,
   Dropdown: ({ children, menu }: { children: ReactNode; menu: ReactNode }) => {
     const [open, setOpen] = useState(false);
@@ -75,6 +76,22 @@ it("advances an empty cursor page and does not truncate the folder tree", async 
   fireEvent.click(await screen.findByRole("button", { name: "sidebar.more_folders" }));
   await screen.findByRole("button", { name: "Later folder" });
   expect(mocks.children).toHaveBeenLastCalledWith(7, { parent_id: null, file_type: 0, page_size: 100, cursor: "opaque/+==" });
+});
+
+it("collapses the sidebar without losing expanded folders or fetching them again", async () => {
+  mocks.children.mockResolvedValue(page([folder(9, "Root folder")]));
+  const f = setup();
+  render(f.draw());
+  fireEvent.click(await screen.findByRole("button", { name: "sidebar.expand My space" }));
+  await screen.findByRole("button", { name: "Root folder" });
+  expect(screen.queryByRole("heading", { name: "f118.spaces" })).toBeNull();
+  const reads = mocks.children.mock.calls.length;
+  fireEvent.click(screen.getByRole("button", { name: "sidebar.collapse_navigation" }));
+  expect(screen.queryByRole("button", { name: "Root folder" })).toBeNull();
+  expect(screen.getByRole("complementary")).toHaveClass("w-10");
+  fireEvent.click(screen.getByRole("button", { name: "sidebar.expand_navigation" }));
+  expect(screen.getByRole("button", { name: "Root folder" })).toBeVisible();
+  expect(mocks.children).toHaveBeenCalledTimes(reads);
 });
 
 it("restores a deep-linked folder through paginated ancestors", async () => {
