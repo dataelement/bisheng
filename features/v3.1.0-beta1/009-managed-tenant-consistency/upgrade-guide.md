@@ -14,3 +14,5 @@
 复制全过程自动续传、HTTP意图幂等、逐项manifest、未知外部写自动回收和跨系统强收敛均按scope-revision延期。正常失败保留可定位状态，人工处置应走原授权/删除流程，不能直接放行半成品。
 
 2026-11-11推送前补充：已同步454a411d25的账号/组织等更新，空合并版本v310b1_merge_tenant_identity再连接远端账号迁移，当前升级到该唯一末端；不修改四列修复本体。原迁移历史与初次合并验证保留，最新结果见push-validation.json。
+
+2026-11-12：频道/空间订阅配额查询已复用StrJoinKey，修复MySQL CAST与成员business_id排序规则不一致，不改数据库设置或计数范围。旧Root角色绑定导致10609的一次性归属修正仍为待评审方案，本次不修改角色数据、登录闸或现有只读preflight；详见[配额修复及角色升级提案](../../../docs/reviews/f009-quota-collation-and-legacy-role-bindings-20261112.md)。
