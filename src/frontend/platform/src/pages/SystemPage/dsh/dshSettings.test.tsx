@@ -11,6 +11,7 @@ vi.mock('@/controllers/API/dshSettings', () => ({ getDshBrowserConfig: vi.fn(), 
 vi.mock('@/controllers/API/finetune', () => ({ getModelListApi: vi.fn() }))
 vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: { role: 'admin' } }) }))
 vi.mock('./CreditRulesView', () => ({ CreditRulesView: () => <p>credit-content</p> }))
+vi.mock('./CreditSettingsPanel', () => ({ CreditSettingsPanel: () => <p>credit-settings</p> }))
 vi.mock('./PolicyView', () => ({ PolicyView: () => <p>usage-content</p> }))
 vi.mock('./OperationStatus', () => ({ OperationStatus: () => null }))
 vi.mock('@/pages/ModelPage/manage/tabs/WorkbenchModel', () => ({ default: () => <p>model-content</p> }))

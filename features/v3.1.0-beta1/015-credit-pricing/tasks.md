@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔄 部分实测 | MySQL 与 Redis 已实测；达梦与全流程待执行 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 22 / 36（T04 暂缓） |
+| 实现 | 🔄 进行中 | 29 / 36（T04 暂缓；S6 管理后台完成） |
 
 ---
 
@@ -34,7 +34,8 @@
 |---|---|---|
 | A（不连真实库） | test/dsh test/llm test/database test/workstation test/channel test/common | 3,358 通过 / 73 失败 / 60 报错 / 234 跳过（2 分 34 秒）；明细 `/tmp/f015-baseline-a.xml`（本机） |
 | B（真实库专项，Docker MySQL 8 + Redis 7） | test/dsh 中使用真实库的 12 个文件（`/tmp/f015-run-b.sh`，每次先重置库并预建 `user` 表） | 99 通过 / 52 失败 / 2 跳过；失败为 test_automatic_quota_recovery 44（该组在 A 组 sqlite 下通过）、test_model_quota 5（A 组同样失败）、test_policy_repository 2、test_migration_mysql 1（单独运行通过，混跑相互影响） |
-| 前端 / 桌面 | platform、client、packages/ui、desktop enterprise | 进入 S6 / S8 前补跑 |
+| 前端 platform | ModelPage + SystemPage/dsh；全量 vitest | 局部 423：420 通过 / 3 失败（ContentSafetyDetails ×2、ModelAccessDialog 1）；全量 15 个文件 40 个失败（approvalPage、hostedApp、dshRequestError 等，与本特性无关）；`pnpm lint` 原本就因 `ModelConfig.limit.test.tsx` 的中文字符串失败 |
+| 客户端 / 桌面 | client、packages/ui、desktop enterprise | 进入 S7 / S8 前补跑 |
 
 ---
 
@@ -202,13 +203,13 @@
 
 ### Wave 4 — 管理后台（S6）
 
-- [ ] **T19**: 类型与接口层 — `types/dsh.ts`、`controllers/API/modelPricing.ts`、`dshUnified.ts` · 覆盖 AC: AC-10, AC-17 · 依赖: T16
-- [ ] **T20**: 价格区组件 — `ModelPriceFields.tsx`、`modelPricing.ts` · 覆盖 AC: AC-08, AC-09 · 依赖: T19
-- [ ] **T21**: 添加 / 编辑模型接入价格区 — `ModelItem.tsx` · 覆盖 AC: AC-08, AC-09 · 依赖: T20
-- [ ] **T22**: 保存 — `modelSavePayload.ts`、`ModelConfig.tsx`（降到 600 行内；只在价格改过时提交，带 revision） · 覆盖 AC: AC-10 · 依赖: T21
-- [ ] **T23**: 用户可选模型表 — `UserSelectableModels.tsx`、`dsh/ModelPriceDialog.tsx`、`dsh/BaseModelPicker.tsx` · 覆盖 AC: AC-10, AC-12, AC-13, AC-22 · 依赖: T19
-- [ ] **T24**: 积分设置 — `SystemPage/dsh/CreditSettingsPanel.tsx`、`SystemPage/dsh/index.tsx` · 覆盖 AC: AC-05, AC-16 · 依赖: T19
-- [ ] **T25**: 删除旧倍率输入与文案 — `dsh/ModelMultiplierInput.tsx`（删）、`ModelAccessDialog.tsx`、三语文案 · 覆盖 AC: AC-17 · 依赖: T23
+- [x] **T19**: 类型与接口层 — `types/dsh.ts`、`controllers/API/modelPricing.ts`、`dshUnified.ts` · 覆盖 AC: AC-10, AC-17 · 依赖: T16
+- [x] **T20**: 价格区组件 — `ModelPriceFields.tsx`、`modelPricing.ts` · 覆盖 AC: AC-08, AC-09 · 依赖: T19
+- [x] **T21**: 添加 / 编辑模型接入价格区 — `ModelItem.tsx` · 覆盖 AC: AC-08, AC-09 · 依赖: T20
+- [x] **T22**: 保存 — `modelSavePayload.ts`、`ModelConfig.tsx`（降到 600 行内；只在价格改过时提交，带 revision） · 覆盖 AC: AC-10 · 依赖: T21
+- [x] **T23**: 用户可选模型表 — `UserSelectableModels.tsx`、`dsh/ModelPriceDialog.tsx`、`dsh/BaseModelPicker.tsx` · 覆盖 AC: AC-10, AC-12, AC-13, AC-22 · 依赖: T19
+- [x] **T24**: 积分设置 — `SystemPage/dsh/CreditSettingsPanel.tsx`、`SystemPage/dsh/index.tsx` · 覆盖 AC: AC-05, AC-16 · 依赖: T19
+- [x] **T25**: 删除旧倍率输入与文案 — `dsh/ModelMultiplierInput.tsx`（删）、`ModelAccessDialog.tsx`、三语文案 · 覆盖 AC: AC-17 · 依赖: T23
 
 ### Wave 5 — 网页工作台与组件库（S7）
 
@@ -252,3 +253,9 @@
 - 2026-11-12 Callum 决定（同事确认仓库惯例）：不做本特性单独的达梦演练，达梦兼容由发版前统一回归覆盖；PR 合并不再以达梦演练为前置。
 - 发现原有失败（不在本特性范围）：`test/api/test_route_path_naming.py` 在改动前即因 `/api/v2/workstation/config/knowledge` 失败。
 - 发现仓库原有测试隔离缺陷（不在本特性范围，未改）：`test/dsh/test_policy_repository.py` 的 `sql_store` 夹具在 `[external]` 参数缺少真实库时于 setup 中途失败，留下「已初始化但只登记部分表」的租户过滤状态，导致之后混跑的租户隔离用例误报（基线中 `test_unified_policy_repository` 的失败即此原因）。`test_credit_settings` 夹具已显式登记所需表以免受影响。
+- T19 类型放在 `controllers/API/modelPricing.ts`（与接口函数同文件，平台惯例），未新建 `types/dsh.ts`。四个价格接口都带 `silent: true`，失败由页面就地提示，不弹全局错误。
+- T22 保存时只提交改过的价格（与加载时的价格逐项比较，币种也比），没改的价格不随请求发送，服务端保留原值；这样修改模型名称、密钥等不会因为别人刚改过价格而报 10813 冲突。`ModelConfig.tsx` 由 617 行降到 587 行（校验逻辑移到 `modelSavePayload.ts`）。
+- T23 价格弹框只读，按偏差记录中的决定实现；「去模型配置修改」做成弹框内的文字指引而不是直接跳转：用户可选模型表所在的「系统模型设置」页有未保存的显示名称等编辑，直接跳到服务提供方编辑页会丢失这些编辑，且跳转需要穿过三层组件传参。弹框在模型原价币种与计价币种不同时额外显示原价（新增文案 `dsh.pricing.originalPrice`）。
+- T24 切换计价币种时的「保持预算 / 保持数字」二选一做成币种下方的单选项，而不是弹窗（表单内选择不适合用二次确认弹窗，Modal 组件也未定稿）；默认保持预算，按当前汇率换算到 6 位小数。积分设置的版本冲突（26130）显示「设置已被他人修改」。
+- T25 删除 `ModelMultiplierInput` 及测试、`dshUnified` 的 `credit_multiplier` 字段与请求参数、三语文案 `dsh.unified.multiplier / multiplierHelp / multiplierInvalid / modelSettings`；`ModelAccessDialog` 本身未引用倍率，无需改动，只更新了它的测试。`ModelAccessDialog.test` 第一条用例改名后仍然失败，失败点与改动前相同（找不到 `subject.department` 按钮，界面已改为页签），不在本特性范围。
+- S6 回归：ModelPage + SystemPage/dsh 463 条，460 通过 / 3 失败（与基线同 3 条）；platform 全量 15 个文件 40 个失败，在干净的基线提交上逐条一致（仅改名的那条名称不同）；`pnpm typecheck` 通过；本次改动的 26 个文件 eslint 无问题；`pnpm check-i18n` 通过。页面未在真实环境中查看（本机后端不是本分支），留到 S9 联调。

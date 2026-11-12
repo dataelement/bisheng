@@ -20,6 +20,7 @@ import { ChevronDown, ChevronUp, Settings, Trash2Icon } from "lucide-react";
 import { ChangeEvent, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { availableModelTypes } from "./modelDiscoveryState";
+import { ModelPriceFields } from "./ModelPriceFields";
 
 import {
   ModelItemConfig,
@@ -391,6 +392,14 @@ export function ModelItem({
               </div>
             </div>
           </div>
+          {model.model_type === "llm" && (
+            <ModelPriceFields
+              value={model.config?.pricing}
+              providerType={type}
+              modelName={model.model_name}
+              onChange={(pricing) => onConfig({ ...model.config, pricing })}
+            />
+          )}
           {model.model_type === "tts" && (
             <div className="sm:max-w-sm">
               <Label className="bisheng-label inline-flex items-center">

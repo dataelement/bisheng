@@ -36,10 +36,8 @@ import { CustomForm } from "./CustomForm";
 import { ModelDiscovery } from "./ModelDiscovery";
 import { ModelItem } from "./ModelItem";
 import { bishengModelProvider, matchesProviderSearch, modelProvider, providerSelectOptions } from "./modelProviders";
-import {
-  hasDuplicateModelName,
-  trimModelNames,
-} from "./modelNameTrim";
+import { trimModelNames } from "./modelNameTrim";
+import { findModelError, loadedPricing, withChangedPricing } from "./modelSavePayload";
 import { canShareToChildren, isGlobalSuperUser } from "./permissions";
 import { useLinsightConfig } from "./tabs/WorkbenchModel";
 import { useModelProviderInfo } from "./useLink";
@@ -106,15 +104,20 @@ export default function ModelConfig({
     scopeTenantId: adminScope.scope_tenant_id,
   });
 
+  // Prices as loaded; unchanged ones are left out of the save (see withChangedPricing).
+  const pricingBaseline = useRef(loadedPricing([]));
   useEffect(() => {
     let active = true;
     setDetailError(null);
     setFormData({ ...defaultForm });
     setDetailLoading(id !== -1);
+    pricingBaseline.current = loadedPricing([]);
     if (id === -1) return;
     void getLLmServerDetail(id)
       .then((res) => {
-        if (active) setFormData(res);
+        if (!active) return;
+        pricingBaseline.current = loadedPricing(res.models);
+        setFormData(res);
       })
       .catch((error) => {
         if (!active) return;
@@ -226,47 +229,14 @@ export default function ModelConfig({
 
       const normalizedModels = trimModelNames(formData.models);
       setFormData({ ...formData, models: normalizedModels });
-      const hasTTSVoiceError = normalizedModels.some(
-        (model) => model.model_type === "tts" && !model.config?.voice,
-      );
-      const blankName = normalizedModels.some((model) => !model.model_name);
-      const longName = normalizedModels.some(
-        (model) => (model.model_name ?? "").length > 100,
-      );
-      if (blankName) {
-        return toast.show({
-          type: "warning",
-          message: t("model.modelNameEmpty"),
-        });
-      }
-      if (longName) {
-        return toast.show({
-          type: "warning",
-          message: t("model.modelNameLength"),
-        });
-      }
-      if (normalizedModels.some((model) => !model.model_type)) {
-        return toast.show({
-          type: "warning",
-          message: t("model.modelNameValidation"),
-        });
-      }
-      if (hasDuplicateModelName(normalizedModels)) {
-        return toast.show({
-          type: "warning",
-          message: t("model.modelDuplicate"),
-        });
-      }
-      if (hasTTSVoiceError) {
-        return toast.show({
-          type: "warning",
-          message: t("model.voiceTypeRequired"),
-        });
+      const modelError = findModelError(normalizedModels);
+      if (modelError) {
+        return toast.show({ type: "warning", message: t(modelError) });
       }
 
       const saveData = {
         ...formData,
-        models: normalizedModels,
+        models: withChangedPricing(normalizedModels, pricingBaseline.current),
         config,
       };
 

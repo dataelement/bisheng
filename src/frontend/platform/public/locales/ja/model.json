@@ -225,7 +225,27 @@
     "otherModelSettings": "その他のモデル設定",
     "visibilityScope": "表示範囲",
     "configureVisibility": "表示範囲を設定",
-    "displayName": "表示名"
+    "displayName": "表示名",
+    "pricing": {
+      "title": "価格（100 万トークンあたり）",
+      "currency": "価格の通貨",
+      "currencyCNY": "人民元",
+      "currencyUSD": "米ドル",
+      "input": "入力（キャッシュ未ヒット）",
+      "cacheRead": "キャッシュヒット",
+      "cacheWrite": "キャッシュ書き込み",
+      "cacheWritePlaceholder": "入力と同じ",
+      "output": "出力",
+      "invalid": "0～999999.999999 の数値を、小数点以下 6 桁までで入力してください。",
+      "statusCatalog": "価格表から入力しました：{{vendor}} {{label}}（{{date}} 時点の公式価格）",
+      "statusReview": "モデル名で価格表の「{{label}}」に一致しました。同じモデルか確認してください。",
+      "statusEdited": "変更済み。価格表の価格：入力 {{input}} / キャッシュヒット {{cacheRead}} / キャッシュ書き込み {{cacheWrite}} / 出力 {{output}}（{{currency}}）",
+      "restore": "価格表の価格に戻す",
+      "defaultTag": "既定 0",
+      "statusDefault": "このモデルは価格表にないため、無料として扱い、クレジットを消費しません。有料モデルの場合は価格を入力してください。",
+      "statusManual": "手動で入力した価格です。",
+      "help": "呼び出しごとに、プロバイダーが返す使用量に基づき、トークンの種類ごとに価格を掛けて課金します。キャッシュ書き込みが空欄の場合は入力価格を使います。"
+    }
   },
   "finetune": {
     "rtServiceManagement": "FTサービス管理",
