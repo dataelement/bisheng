@@ -335,9 +335,10 @@ class ToolServices(BaseModel):
                 from bisheng.api.utils import get_url_content
 
                 file_content = await get_url_content(download_url)
-            except Exception as e:
-                logger.exception(f"file {download_url} download error")
-                raise ToolSchemaDownloadError(exception=e)
+            except Exception as exc:
+                # URLs and transport exceptions can contain query credentials.
+                logger.warning("Tool schema download failed ({})", type(exc).__name__)
+                raise ToolSchemaDownloadError() from None
         if not file_content:
             raise ToolSchemaEmptyError()
         # Depending on the content of the document, is it possible to`{`At the beginning, what analytical method is used to determine

@@ -91,3 +91,23 @@ class ToolMcpUrlError(BaseErrorCode):
 class ToolMcpRequestError(BaseErrorCode):
     Code: int = 15032
     Msg: str = "Failed to retrieve MCP tools. Check the service status and configuration."
+
+
+class ToolDestinationDeniedError(BaseErrorCode):
+    Code: int = 15033
+    Msg: str = "Tool request destination is not permitted. Contact an administrator."
+
+
+class ToolRequestFailedError(BaseErrorCode):
+    Code: int = 15034
+    Msg: str = "Tool request failed. Check the service status and configuration."
+
+
+class ToolResponseTooLargeError(BaseErrorCode):
+    Code: int = 15035
+    Msg: str = "Tool response exceeds the size limit. Reduce the response and try again."
+
+
+class ToolRequestTimeoutError(BaseErrorCode):
+    Code: int = 15036
+    Msg: str = "Tool request timed out. Try again later."

@@ -93,7 +93,12 @@ def api(monkeypatch):
         "load_by_name",
         AsyncMock(side_effect=lambda tenant, name: (tool, state.category) if name == tool.name else (None, None)),
     )
+    monkeypatch.setattr(GptsToolsDao, "aget_one_tool", AsyncMock(return_value=tool))
     monkeypatch.setattr(GptsToolsDao, "aget_one_tool_type", AsyncMock(return_value=category))
+    # Current execution rechecks permission and account availability against storage.
+    from bisheng.tool.domain.repositories.user_availability import UserToolAvailabilityRepository
+
+    monkeypatch.setattr(UserToolAvailabilityRepository, "disabled_ids", AsyncMock(return_value=set()))
     monkeypatch.setattr(executor.telemetry_service, "log_event", AsyncMock())
     state.leases = SimpleNamespace(acquire=AsyncMock(return_value="owner"), release=AsyncMock())
     service = ToolInvocationService(SavedToolService(), state.leases)
@@ -129,7 +134,7 @@ async def test_api_executes_existing_tool(api, field, scalar, value):
     assert response.status_code == 200
     assert response.json() == {"tool": "bs_web_search", "result": {"converted": 6}}
     assert api.received == [("/convert", {field: value})]
-    api.permission.assert_awaited_once()
+    assert api.permission.await_count == 2  # Initialization and execution-time permission recheck.
     api.leases.release.assert_awaited_once_with(2, "bs_web_search", "owner")
 
 
@@ -253,7 +258,7 @@ async def test_api_forwards_nested_arguments_without_transformation(api):
     assert response.status_code == 200
     assert response.json() == {"tool": TOOL_NAME, "result": {"converted": 6}}
     assert api.received == [("/convert", arguments)]
-    api.permission.assert_awaited_once()
+    assert api.permission.await_count == 2  # Initialization and execution-time permission recheck.
 
 
 @pytest.mark.parametrize("operations", [[], [{"text": "x", "limit": True}], [{"text": "x", "limit": 1, "extra": 2}]])
