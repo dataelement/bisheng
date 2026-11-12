@@ -281,8 +281,11 @@ billed_tokens = ⌈raw ÷ credit_value_micro⌉
 | `GET /api/v1/workstation/config`：`models[].pricing_hint`（企业客户端开启时） | HTTP（扩展） | 网页工作台、桌面 Chat |
 | `GET /api/v1/dsh/models`：`data[].pricing_hint` | HTTP（扩展） | 桌面 |
 | `PUT /api/v1/dsh/admin/models/{id}/visibility`：`credit_multiplier` 仍接受、忽略 | HTTP（兼容） | 老管理后台 |
-| 错误码 26176「模型价格未配置」；10813「模型价格修改冲突」 | 错误码（新，已登记 release-contract，实施前再核对） | 网页、桌面 |
+| 错误码 26176「模型价格未配置」（HTTP 503）；10813「模型价格修改冲突」；10814「模型价格格式无效」 | 错误码（新，已登记 release-contract，三语文案在 `packages/locales`） | 网页、桌面 |
 | `chat_credits.unmetered()` | 内部 Python API | 回答溯源 |
+| `BishengBase.admin_selected`（默认 False） | 内部字段 | 溯源、看图模型；为 True 时计费入口跳过员工可选模型检查（决策 20） |
+| `LLMService.read_model_pricing(model_id)` | 内部 Python API（不经缓存） | 网页计费入口、工作台倍率 |
+| `scripts/backfill_model_pricing.py`（预检 / `--apply` / `--check`）、`scripts/rehearse_dsh_call_pricing_migration.py` | 运维脚本 | 升级手册 |
 
 ### 6.2 依赖别人的
 
@@ -322,3 +325,4 @@ billed_tokens = ⌈raw ÷ credit_value_micro⌉
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-11-12 | 初版 | 需求定稿 + 技术评审 v2.0 意见 |
+| 2026-11-12 | 后端实现：新增决策 20（管理员配置的辅助模型）；坑 16、17；Redis 与 MySQL 实测数字；错误码 10814 | 实施中发现与本地演练 |

@@ -98,10 +98,6 @@ def match(server_type: str, model_name: str) -> CatalogMatch | None:
     return None
 
 
-def find_entry(key: str) -> CatalogEntry | None:
-    return next((entry for entry in load_catalog().entries if entry.key == key), None)
-
-
 def catalog_pricing(entry: CatalogEntry) -> ModelPricing:
     """Catalog prices as a model price record (source CATALOG)."""
     return ModelPricing(
