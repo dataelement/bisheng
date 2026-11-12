@@ -18,6 +18,7 @@ import {
 import { showApiError } from "@/controllers/request";
 import Files from "./components/Files";
 import Header from "./components/Header";
+import { SpaceManagementView } from "./components/SpaceManagementView";
 
 export const parseKnowledgeId = (value: string | null | undefined): number | null => {
   if (!value || !/^\d+$/.test(value)) return null;
@@ -70,18 +71,8 @@ export function SpaceDetail({
       ? (info?.name ?? "")
       : String(parents[parents.length - 1]?.file_name ?? "");
 
-  return (
-    <div className={presentation === "workspace" ? "relative min-h-full min-w-0" : "relative size-full bg-background-login px-2"}>
-      <div className="pt-4">
-        <Header
-          fileTitle
-          title={title}
-          description={parentId === null ? (info?.description ?? "") : ""}
-          presentation={presentation}
-          showBackButton={presentation !== "workspace"}
-          onBack={() => navigate("/filelib")}
-        />
-      </div>
+  const directory = (toolbarTarget?: HTMLDivElement | null) => (
+    <>
       {parentId !== null && parents.length > 0 && (
         <Breadcrumb
           ariaLabel={t("f118.current_folder")}
@@ -120,7 +111,17 @@ export function SpaceDetail({
         parentId={parentId}
         onOpenFolder={onOpenFolder}
         presentation={presentation}
+        toolbarTarget={toolbarTarget}
       />
-    </div>
+    </>
   );
+  if (presentation === "workspace") return (
+    <SpaceManagementView scope={scope} spaceId={spaceId} parentId={parentId} title={title} description={parentId === null ? info?.description ?? "" : ""}>
+      {(toolbarTarget) => directory(toolbarTarget)}
+    </SpaceManagementView>
+  );
+  return <div className="relative size-full bg-background-login px-2">
+    <div className="pt-4"><Header fileTitle title={title} description={info?.description ?? ""} onBack={() => navigate("/filelib")} /></div>
+    {directory()}
+  </div>;
 }

@@ -489,7 +489,7 @@ it("advances an empty ordinary cursor page without inventing a total and resets 
   ).toBeNull();
 });
 
-it("loads SPACE actions lazily, mounts the real defaults dialog and leaves copy/delete unavailable", async () => {
+it("loads SPACE actions lazily, routes defaults into its tab and leaves copy/delete unavailable", async () => {
   const f = setup({ is_child_admin: true }),
     view = render(f.draw());
   await screen.findByText("Space");
@@ -500,8 +500,8 @@ it("loads SPACE actions lazily, mounts the real defaults dialog and leaves copy/
   expect(screen.queryByRole("button", { name: "delete" })).toBeNull();
   expect(screen.queryByRole("button", { name: "lib.copy" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "f118.defaults_title" }));
-  await screen.findByRole("spinbutton", { name: "splitLength" });
-  expect(mocks.settings).toHaveBeenCalledWith(7);
+  expect(mocks.navigate).toHaveBeenCalledWith("/filelib/7?tab=defaults");
+  expect(mocks.settings).not.toHaveBeenCalled();
   view.rerender(f.draw({ ...f.user, user_id: f.user.user_id + 1000 }));
   await screen.findByText("Space");
   expect(screen.queryByRole("dialog")).toBeNull();
