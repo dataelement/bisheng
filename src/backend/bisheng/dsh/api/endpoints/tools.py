@@ -7,6 +7,7 @@ from loguru import logger
 from starlette.requests import ClientDisconnect
 
 from bisheng.common.errcode.dsh import DshToolArgumentsInvalidError, DshToolExecutionTimeoutError
+from bisheng.core.session_activity import business_activity
 from bisheng.dsh.api.dependencies import desktop_principal
 from bisheng.dsh.api.responses import ToolInvocationRoute
 from bisheng.dsh.api.tool_bodies import read_tool_body
@@ -50,6 +51,7 @@ async def _run_until_disconnect(request, coro):
         }
     },
 )
+@business_activity()
 async def invoke(
     toolCode: ToolCode,
     request: Request,

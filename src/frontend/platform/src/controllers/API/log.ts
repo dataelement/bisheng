@@ -34,6 +34,23 @@ export const toDeptParams = (selection: OrgSelection | undefined, style: 'repeat
     }
 }
 
+export interface AuditScopeOrganization {
+    name: string
+    includes_descendants: boolean
+}
+
+export interface AuditScope {
+    tenant_id: number | null
+    tenant_name: string | null
+    unrestricted_organization: boolean
+    organizations: AuditScopeOrganization[]
+}
+
+/** Authorization boundary of the audit page. Filters can only narrow it. */
+export async function getAuditScopeApi(): Promise<AuditScope> {
+    return await axios.get('/api/v1/audit/scope')
+}
+
 // F003: organisation candidates inside the caller's audit scope.
 export async function getAuditDepartmentsApi(params: {
     parentId?: number

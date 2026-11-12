@@ -44,6 +44,7 @@ class ReferenceState(StrEnum):
     DELETING = "deleting"
     INVALID_DELETED = "invalid_deleted"
     INVALID_LEGACY = "invalid_legacy"
+    INVALID_SCOPE = "invalid_scope"
 
 
 class ReferenceSetKind(StrEnum):
@@ -161,6 +162,49 @@ class ReferenceSpec:
             raise TypeError("reference target must be a TargetKey")
 
 
+def is_preserved_foreign_model_reference(original, *, source_key, target, target_tenant_id):
+    """Recognize one saved foreign model identity, never new-binding authority.
+
+    Callers acquire the original row through their native source verifier. The
+    live model and its server must still be verified separately by their Owner.
+    """
+    return (
+        isinstance(source_key, SourceKey)
+        and isinstance(target, TargetKey)
+        and target.target_type == TargetType.MODEL
+        and type(target_tenant_id) is int
+        and target_tenant_id > 0
+        and target_tenant_id not in {source_key.tenant_id, 1}
+        and original is not None
+        and (
+            original.tenant_id,
+            original.source_type,
+            original.source_id,
+            original.source_version,
+            original.target_type,
+            original.target_id,
+            original.target_tenant_id,
+            original.target_space_id,
+            original.legacy_invalid_reason,
+            original.legacy_run_id,
+            original.legacy_evidence_key,
+        )
+        == (
+            source_key.tenant_id,
+            source_key.source_type.value,
+            source_key.source_id,
+            source_key.source_version,
+            target.target_type.value,
+            target.target_id,
+            target_tenant_id,
+            None,
+            None,
+            None,
+            None,
+        )
+    )
+
+
 def normalize_references(references: tuple[ReferenceSpec, ...]) -> tuple[ReferenceSpec, ...]:
     if any(not isinstance(reference, ReferenceSpec) for reference in references):
         raise TypeError("references must contain only ReferenceSpec values")
@@ -250,9 +294,18 @@ class VerifiedReferenceTarget:
         if type(self.new_binding_allowed) is not bool:
             raise ValueError("new binding eligibility must be a boolean")
         if not self.new_binding_allowed and (
-            self.key.target_type != TargetType.MODEL or self.state != ReferenceState.VALID
+            self.key.target_type != TargetType.MODEL
+            or self.state not in {ReferenceState.VALID, ReferenceState.INVALID_SCOPE}
         ):
             raise ValueError("only a live model may be restricted to its existing bindings")
+        if self.state == ReferenceState.INVALID_SCOPE and (
+            self.key.target_type != TargetType.MODEL
+            or self.target_tenant_id is None
+            or self.model_server_id is None
+            or self.evidence is not None
+            or self.new_binding_allowed
+        ):
+            raise ValueError("invalid scope requires an existing model without new binding authority")
         _text(self.target_revision, "target revision", 64)
         if self.target_tenant_id is None:
             if self.state != ReferenceState.INVALID_LEGACY or not isinstance(self.evidence, LegacyEvidence):

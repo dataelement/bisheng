@@ -489,27 +489,7 @@ class ChannelService:
                 created=False,
             )
 
-        # Check if the user has reached the role-configurable channel creation quota
-        # (F005 quota: `channel`, default 10; admins/-1 = unlimited). effective already
-        # folds in the tenant-chain cap, so this enforces both role and tenant limits.
-        effective = await QuotaService.get_effective_quota(
-            login_user.user_id, QuotaResourceType.CHANNEL, login_user.tenant_id, login_user=login_user
-        )
-        if effective != -1:
-            # Count only channels that STILL EXIST. find_channel_memberships reads
-            # space_channel_member without joining `channel`, so a stale creator membership
-            # left behind by an already-deleted channel (orphan row) would inflate the count
-            # and reject creation one slot early (configured 14 -> only 13 usable). Intersecting
-            # the membership business_ids with find_channels_by_ids mirrors what the "created
-            # channels" list (get_my_channels) and the front-end pre-check count, keeping all
-            # three in lock-step.
-            memberships = await self.space_channel_member_repository.find_channel_memberships(
-                user_id=login_user.user_id, roles=[UserRoleEnum.CREATOR], statuses=[MembershipStatusEnum.ACTIVE]
-            )
-            channel_ids = [m.business_id for m in memberships]
-            existing_channels = await self.channel_repository.find_channels_by_ids(channel_ids) if channel_ids else []
-            if len(existing_channels) >= effective:
-                raise ChannelCreateLimitExceededError(quota=effective)
+        await self._assert_channel_creation_quota(login_user)
 
         if channel_data.source_list:
             # Role/tenant quota on deduped subscribed info sources (`info_source_subscribe`,
@@ -756,25 +736,20 @@ class ChannelService:
             department_id=department_id,
         )
 
+    async def _assert_channel_creation_quota(self, login_user: UserPayload) -> None:
+        from bisheng.common.errcode.tenant_quota import TenantRoleQuotaExceededError
+
+        try:
+            await QuotaService.check_quota(
+                login_user.user_id, QuotaResourceType.CHANNEL, login_user.tenant_id, login_user=login_user
+            )
+        except TenantRoleQuotaExceededError as exc:
+            raise ChannelCreateLimitExceededError(quota=exc.kwargs.get("quota")) from exc
+
     async def _prospective_creation_access(self, login_user: UserPayload):
         if self.prospective_grant_application is None:
             raise RuntimeError("F050 Prospective Grant application is not configured")
-        effective = await QuotaService.get_effective_quota(
-            login_user.user_id,
-            QuotaResourceType.CHANNEL,
-            login_user.tenant_id,
-            login_user=login_user,
-        )
-        if effective != -1:
-            memberships = await self.space_channel_member_repository.find_channel_memberships(
-                user_id=login_user.user_id,
-                roles=[UserRoleEnum.CREATOR],
-                statuses=[MembershipStatusEnum.ACTIVE],
-            )
-            channel_ids = [membership.business_id for membership in memberships]
-            existing_channels = await self.channel_repository.find_channels_by_ids(channel_ids) if channel_ids else []
-            if len(existing_channels) >= effective:
-                raise ChannelCreateLimitExceededError(quota=effective)
+        await self._assert_channel_creation_quota(login_user)
         return (
             self.prospective_grant_application,
             await resolve_permission_actor(login_user),

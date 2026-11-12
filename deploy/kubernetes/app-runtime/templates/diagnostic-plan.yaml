@@ -1,0 +1,14 @@
+{{- include "runtime.defaults" . -}}
+{{- if .Values.diagnostics.enabled -}}
+{{- $names := dict -}}
+{{- range $suffix := list "runtime-deployment-descriptor" "runtime-canary-plans" "runtime-diagnostics" "runtime-budget" "runtime-admission" "runtime-manager" "app-proxy" "egress-proxy" -}}
+{{- $_ := set $names $suffix (include "runtime.name" (list $ $suffix)) -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "runtime.name" (list . "diagnostic-plan") }}
+  namespace: {{ .Values.services.namespace }}
+data:
+  plan.json: {{ dict "installation_id" .Values.execution.installationId "node_id" .Values.execution.nodeId "webhook_name" (printf "%s-runtime" .Values.execution.installationId) "platform_origin" .Values.platform.origin "platform_ca_file" "./ca.crt" "resource_names" $names "canary_profiles" .Values.execution.canaryProfiles "network_targets" (dict) | toJson | quote }}
+{{- end }}

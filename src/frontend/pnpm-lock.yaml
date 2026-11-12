@@ -253,6 +253,9 @@ importers:
       '@bisheng/file-viewers':
         specifier: workspace:*
         version: link:../packages/file-viewers
+      '@bisheng/identity':
+        specifier: workspace:*
+        version: link:../packages/identity
       '@bisheng/ui':
         specifier: workspace:*
         version: link:../packages/ui
@@ -842,6 +845,15 @@ importers:
         specifier: 'catalog:'
         version: 3.2.7(@types/debug@4.1.13)(@types/node@20.19.43)(jiti@2.7.0)(jsdom@25.0.1(canvas@2.11.2))(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.49.0)
 
+  packages/identity:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@20.19.43)(jiti@2.7.0)(jsdom@25.0.1(canvas@2.11.2))(sass-embedded@1.100.0)(sass@1.100.0)(terser@5.49.0)
+
   packages/locales: {}
 
   packages/ui:
@@ -888,6 +900,9 @@ importers:
       qrcode.react:
         specifier: 'catalog:'
         version: 4.2.0(react@18.3.1)
+      react-day-picker:
+        specifier: ^9.13.0
+        version: 9.14.0(react@18.3.1)
       react-dom:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
@@ -925,6 +940,9 @@ importers:
       '@bisheng/file-viewers':
         specifier: workspace:*
         version: link:../packages/file-viewers
+      '@bisheng/identity':
+        specifier: workspace:*
+        version: link:../packages/identity
       '@bisheng/ui':
         specifier: workspace:*
         version: link:../packages/ui

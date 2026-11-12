@@ -29,6 +29,7 @@ from bisheng.resource_reference.application.contracts import (
     TargetKey,
     TargetType,
     TransactionIdentity,
+    is_preserved_foreign_model_reference,
 )
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
@@ -316,6 +317,20 @@ class ModelReferenceTargetRepository:
                 originals.extend((yield self._original_statement(source, keys), False))
         ids = {int(key.target_id) for key in keys}
         owners = (tenant_id, ROOT_TENANT_ID) if operation == "bind" else (tenant_id,)
+        if operation == "bind":
+            preserved_owners = set()
+            for row in originals:
+                if row.target_tenant_id not in (*owners, None):
+                    if not any(
+                        is_preserved_foreign_model_reference(
+                            row, source_key=source, target=key, target_tenant_id=row.target_tenant_id
+                        )
+                        for source in sources
+                        for key in keys
+                    ):
+                        raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
+                    preserved_owners.add(row.target_tenant_id)
+            owners = tuple(sorted(set(owners) | preserved_owners))
         candidates = yield self._business_statement(LLMModel, ids, owners, lock=False), True
         needs_sharing = any(row.tenant_id != tenant_id for row in candidates)
         candidate_topology, candidate_configs = {}, []
@@ -415,6 +430,9 @@ class ModelReferenceTargetRepository:
                 or (
                     row.tenant_id != tenant_id
                     and (row.tenant_id != ROOT_TENANT_ID or not self._child(topology, tenant_id))
+                    and not is_preserved_foreign_model_reference(
+                        original, source_key=source_key, target=key, target_tenant_id=row.tenant_id
+                    )
                 )
             ):
                 raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")

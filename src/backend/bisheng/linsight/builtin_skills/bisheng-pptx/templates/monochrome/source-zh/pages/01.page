@@ -1,0 +1,86 @@
+pageType: cover
+background:
+  type: solid
+  color: '#FAFADF'
+notes: Native PPTD adaptation of Zara Zhang / Monochrome. MIT. Example figures are illustrative.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 35
+      - 850
+      - 24
+    content:
+      text: 用户研究 / 现场观察
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 11
+      color: '#1A1A16'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t2
+    elementType: text
+    bounds:
+      - 48
+      - 243
+      - 850
+      - 178
+    content:
+      text: |-
+        用户研究
+        洞察综述
+      fontFamily:
+        latin: Helvetica Neue
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 65
+      color: '#1A1A16'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l3
+    elementType: line
+    bounds:
+      - 48
+      - 460
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      color: '#1A1A16'
+      width: 0.7
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 506
+      - 760
+      - 16
+    content:
+      text: 自编示例
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#1A1A16'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 870
+      - 503
+      - 40
+      - 20
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#1A1A16'
+      lineHeight: 1.12
+      bold: false

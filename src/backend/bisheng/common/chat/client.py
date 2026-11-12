@@ -23,7 +23,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
 )
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.assistant import AssistantDeletedError, AssistantNotOnlineError, AssistantOtherError
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
@@ -406,7 +406,6 @@ class ChatClient:
             await self.init_gpts_agent()
 
             # Write user issue to database
-            await record_business_activity(self.login_user)
             question_saved = True
             await self.add_message("human", json.dumps(inputs, ensure_ascii=False), "question")
             await self.send_response("processing", "begin", "")

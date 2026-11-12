@@ -1,0 +1,139 @@
+pageType: cover
+background:
+  type: solid
+  color: $red
+elements:
+- elementId: cover-deep
+  elementType: shape
+  bounds:
+  - 0
+  - 380
+  - 960
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $deepred
+  border:
+    color: $deepred
+    width: 0
+- elementId: cover-gold-top
+  elementType: shape
+  bounds:
+  - 48
+  - 64
+  - 864
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: cover-gold-top2
+  elementType: shape
+  bounds:
+  - 48
+  - 70
+  - 864
+  - 0.8
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: cover-kicker
+  elementType: text
+  bounds:
+  - 48
+  - 104
+  - 700
+  - 20
+  content:
+    text: 示例 · 2026 年度工作汇报
+    style: $kicker
+    fontSize: 13
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: cover-title
+  elementType: text
+  bounds:
+  - 48
+  - 136
+  - 864
+  - 122
+  content:
+    text: '坚持稳中求进
+
+      推动高质量发展取得新成效'
+    style: $title
+    fontSize: 48
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: cover-sub
+  elementType: text
+  bounds:
+  - 48
+  - 270
+  - 864
+  - 48
+  content:
+    text: 2026 年度工作总结与 2027 年重点工作安排
+    style: $lead
+    fontSize: 20
+    color: $lightgold
+    bold: false
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: cover-gold-bottom
+  elementType: shape
+  bounds:
+  - 48
+  - 404
+  - 120
+  - 3
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: cover-org
+  elementType: text
+  bounds:
+  - 48
+  - 420
+  - 600
+  - 24
+  content:
+    text: 示例集团有限公司 党委
+    style: $lead
+    fontSize: 16
+    color: $white
+    bold: false
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: cover-date
+  elementType: text
+  bounds:
+  - 48
+  - 450
+  - 400
+  - 20
+  content:
+    text: 2026 年 12 月
+    style: $label
+    fontSize: 14
+    color: $lightgold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei

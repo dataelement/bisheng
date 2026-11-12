@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta
+from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from uuid import UUID
 
-from sqlmodel import select
+from sqlmodel import func, select
 
 from bisheng.app_runtime.domain.models.runtime_delivery import (
     RuntimeAssignment,
@@ -22,6 +23,40 @@ from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import 
     RuntimeDeliveryRepository,
     check_scope,
 )
+from bisheng.core.context.tenant import bypass_tenant_filter
+
+
+def pod_request(template):
+    """Kubernetes effective Pod request: max(regular sum, largest init)."""
+
+    def resources(container):
+        result = []
+        values = container.get("resources", {})
+        for key, scale in (("memory", Decimal(1024**2)), ("cpu", Decimal("0.001"))):
+            pair = []
+            for side in ("requests", "limits"):
+                raw = str(values.get(side, {}).get(key, "0"))
+                if len(raw) > 64:
+                    raise RuntimeConflict("resource_quantity_invalid")
+                try:
+                    factors = {"Ki": 1024, "Mi": 1024**2, "Gi": 1024**3, "m": Decimal("0.001")}
+                    number = next((Decimal(raw[: -len(s)]) * f for s, f in factors.items() if raw.endswith(s)), None)
+                    number = Decimal(raw) if number is None else number
+                    if not number.is_finite() or not 0 < number <= 2**63 - 1:
+                        raise ValueError()
+                    pair.append(number / scale)
+                except (InvalidOperation, ValueError):
+                    raise RuntimeConflict("resource_quantity_invalid") from None
+            if pair[0] != pair[1]:
+                raise RuntimeConflict("execution_requests_limits_must_match")
+            result.append(int(pair[0].to_integral_value(rounding=ROUND_CEILING)))
+        return result
+
+    spec = template.get("spec", {})
+    regular = [resources(c) for c in spec.get("containers", [])]
+    initial = [resources(c) for c in spec.get("initContainers", [])]
+    return tuple(max(sum(row[i] for row in regular), max((row[i] for row in initial), default=0)) for i in (0, 1))
+
 
 _PRODUCTION = {"serve", "migrate", "restore", "data", "purge"}
 _INTENT_FIELDS = (
@@ -162,6 +197,35 @@ class RuntimeKubernetesRepository(RuntimeDeliveryRepository):
                 reservations = await self.find(RuntimeCapacityReservation, operation_id=row.operation_id, lock=True)
                 if not reservations or reservations[0].state == "released":
                     raise RuntimeConflict("resource_capacity_not_held")
+                if op.payload.get("execution_policy_json"):
+                    active = await self.find(RuntimeExecutionResource, operation_id=op.id, kind="Pod", lock=True)
+                    budgets = [
+                        pod_request(resource.approved_template)
+                        for resource in active
+                        if resource.stop_state != "confirmed"
+                    ]
+                    budgets.append(pod_request(row.approved_template))
+                    reservation = reservations[0]
+                    memory = max(reservation.memory_mb, sum(value[0] for value in budgets))
+                    cpu = max(reservation.cpu_millicores, sum(value[1] for value in budgets))
+                    with bypass_tenant_filter():
+                        used = (
+                            await session.exec(
+                                select(
+                                    func.coalesce(func.sum(RuntimeCapacityReservation.memory_mb), 0),
+                                    func.coalesce(func.sum(RuntimeCapacityReservation.cpu_millicores), 0),
+                                ).where(
+                                    RuntimeCapacityReservation.node_id == node.id,
+                                    RuntimeCapacityReservation.state != "released",
+                                )
+                            )
+                        ).one()
+                    if (
+                        int(used[0]) - reservation.memory_mb + memory > node.memory_budget_mb
+                        or int(used[1]) - reservation.cpu_millicores + cpu > node.cpu_budget_millicores
+                    ):
+                        raise RuntimeConflict("capacity_exhausted")
+                    reservation.memory_mb, reservation.cpu_millicores = memory, cpu
             if row.kind == "Pod" and row.purpose in _PRODUCTION:
                 statement = (
                     select(RuntimeExecutionResource)

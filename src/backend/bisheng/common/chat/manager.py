@@ -27,6 +27,7 @@ from bisheng.core.cache.flow import InMemoryCache
 from bisheng.core.cache.manager import Subject, cache_manager
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
+from bisheng.core.session_activity import record_authenticated_activity
 from bisheng.permission.application.business_authorization import (
     check_business_action,
 )
@@ -216,8 +217,11 @@ class ChatManager:
         login_user,
         work_type,
         client_id,
+        connection: WebSocket | None = None,
         message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
     ) -> bool:
+        await record_authenticated_activity(connection, message=payload)
+
         async def deliver(execution=None):
             operator = execution.operator if execution is not None else login_user
             if not await self._has_use_action(operator, work_type, client_id):
@@ -301,6 +305,7 @@ class ChatManager:
                         login_user=login_user,
                         work_type=work_type,
                         client_id=client_id,
+                        connection=websocket,
                         message_admission=message_admission,
                     ):
                         logger.warning(

@@ -419,7 +419,7 @@ async def test_retired_root_and_version_cleanup_is_exact_and_resume_stable(publi
 @pytest.mark.parametrize("occupied", [False, True])
 async def test_real_mounted_tenant_creation_never_fakes_empty_source_proof(published_input, monkeypatch, occupied):
     from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
-    from bisheng.database.models.department import Department
+    from bisheng.database.models.department import Department, UserDepartment
     from bisheng.database.models.tenant import Tenant
     from bisheng.knowledge.domain.models.knowledge import Knowledge
     from bisheng.tenant.application import tenant_creation
@@ -428,8 +428,14 @@ async def test_real_mounted_tenant_creation_never_fakes_empty_source_proof(publi
     before = await app(value).arun_references(**value.input, operator_id=7)
     async with value.database.engine.begin() as connection:
         await connection.run_sync(lambda conn: Department.__table__.create(conn, checkfirst=True))
+        await connection.run_sync(lambda conn: UserDepartment.__table__.create(conn, checkfirst=True))
     async with value.sessions() as session, session.begin():
         next_id = (await session.execute(sa.select(sa.func.max(Tenant.id)))).scalar_one() + 1
+        await session.execute(
+            sa.insert(Department.__table__).values(
+                id=1, dept_id="native-root", name="Root", parent_id=None, tenant_id=1, path="/1/"
+            )
+        )
         await session.execute(
             sa.insert(Department.__table__).values(
                 id=700, dept_id="native-mount", name="Mount", parent_id=1, tenant_id=1, path="/1/700/"
@@ -522,3 +528,60 @@ async def test_real_commit_ack_unknown_replays_actual_prefix_without_duplicate_i
             ).scalars()
         )
         assert before == after
+
+
+async def seed_foreign_saved_model(database):
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.database.models.assistant import Assistant
+    from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
+
+    async with AsyncSession(database.engine) as session, session.begin():
+        with bypass_tenant_filter():
+            session.add(LLMServer(id=33, tenant_id=202, name="foreign", type="openai"))
+            session.add(
+                LLMModel(id=33, server_id=33, tenant_id=202, name="foreign", model_name="foreign", model_type="llm")
+            )
+            session.add(
+                Assistant(id="foreign-saved", tenant_id=101, user_id=7, name="retained", model_name="33", status=0)
+            )
+
+
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_foreign_saved_model}], indirect=True)
+async def test_foreign_saved_model_reaches_m4_without_faking_missing_or_granting_use(published_input):
+    from bisheng.database.models.assistant import Assistant
+    from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+
+    value = published_input
+    result = await app(value).arun_references(**value.input, operator_id=7)
+    assert result.complete
+    async with value.sessions() as session, session.begin():
+        reference = (
+            (
+                await session.execute(
+                    sa.select(BusinessResourceReference.__table__).where(
+                        BusinessResourceReference.source_id == "foreign-saved"
+                    )
+                )
+            )
+            .mappings()
+            .one()
+        )
+        assert reference["target_id"] == "33" and reference["target_tenant_id"] == 202
+        assert all(
+            reference[field] is None for field in ("legacy_invalid_reason", "legacy_run_id", "legacy_evidence_key")
+        )
+        assistant = (
+            (await session.execute(sa.select(Assistant.__table__).where(Assistant.id == "foreign-saved")))
+            .mappings()
+            .one()
+        )
+        assert assistant["model_name"] == "33"
+        row = (await session.execute(sa.select(Run.__table__).where(Run.tenant_id == 101))).mappings().one()
+        proof = row["verification_report"]["reference_coverage"]["proofs"]["assistant"]
+        assert proof["invalid_scope_count"] == 1 and proof["valid_count"] == 0 and proof["invalid_legacy_count"] == 0
+        assert (
+            await production_coverage_factory(session).arequire_global_ready()
+        ).verified_tenant_ids == value.frozen.tenant_ids
+    assert await app(value).arun_references(**value.input, operator_id=7) == result

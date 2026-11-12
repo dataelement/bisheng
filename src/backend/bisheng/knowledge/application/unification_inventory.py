@@ -25,6 +25,10 @@ from bisheng.knowledge.application.unification_inventory_codec import (
 )
 from bisheng.knowledge.application.unification_permission_inventory import PermissionInventoryVerifier
 from bisheng.knowledge.application.unification_permission_namespace import catalog_namespace_records
+from bisheng.knowledge.application.unification_physical_retention import (
+    PhysicalRetentionInventoryVerifier,
+    retention_record,
+)
 from bisheng.knowledge.application.unification_preflight import UnificationPreflight, source_decision
 from bisheng.knowledge.application.unification_source_codec import decode_source_page, encode_source_page
 from bisheng.knowledge.application.unification_sources import (
@@ -86,7 +90,7 @@ _SECTIONS = {
         "namespace_after_visible_source",
     },
     "catalog": {"catalog_release", "authorization", "catalog_action", "permission_model"},
-    "physical": {"physical_index", "physical_object"},
+    "physical": {"physical_index", "physical_object", "physical_index_retention"},
     "tasks": {"queued_task", "queued_task_orphan", "broker_task"},
     "fga": {"fga_tuple"},
     "conversion": {
@@ -292,6 +296,7 @@ class UnificationInventoryApplication:
             _blocked("invalid_frozen_input")
         memberships = MembershipInventoryVerifier()
         tenants = frozenset(result.tenant_ids)
+        physical = PhysicalRetentionInventoryVerifier()
         current = current if current is not None else lambda: None
         backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
         baseline, plan = _descriptor(result.baseline_ref), _descriptor(result.plan_ref)
@@ -372,6 +377,7 @@ class UnificationInventoryApplication:
                             _section(section, record)
                             memberships.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
                             permissions.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
+                            physical.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
                     key = (kind, section, scope, tenant_id)
                     if page_index != indices.get(key, 0):
                         _blocked("manifest_page_order")
@@ -426,6 +432,7 @@ class UnificationInventoryApplication:
                 yield leaf
         memberships.finish()
         permissions.finish()
+        physical.finish()
         await self._materials(
             run_id=result.run_id,
             writer_contract_version=result.writer_contract_version,
@@ -436,8 +443,9 @@ class UnificationInventoryApplication:
             current=current,
         )
 
-    async def _physical_batch(self, pages, tenant, resources, files):
+    async def _physical_batch(self, pages, tenant, resources, files, *, session):
         expected_indices = {row.data["id"]: row.data for row in resources}
+        file_counts = None
         expected_objects = {
             (tenant, row.data["knowledge_id"], row.data["id"], kind, row.data[field])
             for row in files
@@ -450,8 +458,6 @@ class UnificationInventoryApplication:
             if value["tenant_id"] != tenant:
                 _blocked("physical_tenant")
             if record.record_type == "physical_index":
-                if value["identifier_compatible"] is not True:
-                    _blocked("incompatible_physical_identifiers")
                 original = expected_indices.pop(value["space_id"], None)
                 if (
                     original is None
@@ -459,6 +465,17 @@ class UnificationInventoryApplication:
                     or value["collection_name"] != original["collection_name"]
                 ):
                     _blocked("physical_index_identity")
+                if value["identifier_compatible"] is not True:
+                    if file_counts is None:
+                        file_counts = await self.preflight.resources.acount_resource_files(
+                            session, resource_ids=tuple(row.data["id"] for row in resources)
+                        )
+                    proof = retention_record(
+                        resource=original,
+                        physical=value,
+                        managed_file_count=file_counts[value["space_id"]],
+                    )
+                    await pages.add("physical", tenant, proof, kind="plan")
             else:
                 key = (
                     value["tenant_id"],
@@ -495,11 +512,11 @@ class UnificationInventoryApplication:
             elif record.record_type == "file" and spaces.get(record.data["knowledge_id"]) in {0, 3}:
                 object_requests.append(record)
             if len(resource_requests) == 199 or len(object_requests) == 199:
-                await self._physical_batch(pages, tenant, resource_requests, object_requests)
+                await self._physical_batch(pages, tenant, resource_requests, object_requests, session=session)
                 resource_requests, object_requests = [], []
         memberships.finish()
         if resource_requests or object_requests:
-            await self._physical_batch(pages, tenant, resource_requests, object_requests)
+            await self._physical_batch(pages, tenant, resource_requests, object_requests, session=session)
         header, refs = None, []
         creators = set()
         batch = []

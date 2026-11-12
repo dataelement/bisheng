@@ -53,6 +53,9 @@ async def native(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "get_sync_db_session", sync_session)
     monkeypatch.setattr(module, "get_async_db_session", async_session)
     monkeypatch.setattr(database, "get_async_db_session", async_session)
+    from bisheng.role.domain.repositories import quota_repository
+
+    monkeypatch.setattr(quota_repository, "get_async_db_session", async_session)
     rows = [
         original.resource(ident, tenant=tenant, type=kind, user_id=user, migration_origin=origin)
         for ident, tenant, kind, user, origin in (
@@ -113,10 +116,10 @@ async def test_real_sync_and_async_creation_counters_exclude_only_migration_orig
         assert await KnowledgeDao.async_count_spaces_by_user(user, exclude_department_spaces=exclude) == expected
 
 
-@pytest.mark.parametrize("tenant,user,expected", [(101, 7, 3), (202, 7, 3), (101, 8, 1)])
-async def test_quota_display_preserves_original_global_per_user_scope(native, tenant, user, expected):
+@pytest.mark.parametrize("tenant,user,expected", [(101, 7, 2), (202, 7, 1), (101, 8, 1)])
+async def test_quota_display_counts_same_tenant_and_preserves_origin_exemption(native, tenant, user, expected):
     with tenant_execution_scope(tenant):
-        assert await QuotaService.get_user_resource_count(user, "knowledge_space") == expected
+        assert await QuotaService.get_user_resource_count(user, "knowledge_space", tenant_id=tenant) == expected
 
 
 async def test_origin_survives_fresh_sessions_and_owner_change(native):
@@ -125,7 +128,7 @@ async def test_origin_survives_fresh_sessions_and_owner_change(native):
     with tenant_execution_scope(101):
         assert KnowledgeDao.count_spaces_by_user(7, True) == 2
         assert await KnowledgeDao.async_count_spaces_by_user(8, True) == 1
-        assert await QuotaService.get_user_resource_count(8, "knowledge_space") == 1
+        assert await QuotaService.get_user_resource_count(8, "knowledge_space", tenant_id=101) == 1
         assert {row.id for row in KnowledgeDao.get_spaces_by_user(8)} == {2, 11, 12}
 
 
@@ -135,23 +138,24 @@ async def test_tenant_total_keeps_all_migrated_and_department_spaces(native, ten
         assert await QuotaService.get_tenant_resource_count(tenant, "knowledge_space") == expected
 
 
-async def test_storage_keeps_original_sources_failed_files_and_global_user_scope(native):
+async def test_storage_keeps_original_sources_and_failed_files_in_resource_tenant(native):
     with tenant_execution_scope(101):
-        assert await QuotaService.get_user_resource_count(7, "knowledge_space_file") == 1300 / 1024**3
+        assert await QuotaService.get_user_resource_count(7, "knowledge_space_file", tenant_id=101) == 700 / 1024**3
         assert await QuotaService.get_tenant_resource_count(101, "knowledge_space_file") == 700 / 1024**3
 
 
 async def test_real_creation_gate_uses_same_count_without_changing_role_rules(native, monkeypatch):
     service = object.__new__(KnowledgeSpaceService)
-    service.login_user = SimpleNamespace(user_id=7, tenant_id=101)
-    effective = AsyncMock(return_value=3)
-    monkeypatch.setattr(QuotaService, "get_effective_quota", effective)
+    service.login_user = SimpleNamespace(user_id=7, tenant_id=101, is_admin=lambda: False)
+    role = SimpleNamespace(quota_config={"knowledge_space": 3})
+    monkeypatch.setattr(QuotaService, "_budget_policy", AsyncMock(return_value=SimpleNamespace(roles=[role])))
+    monkeypatch.setattr(QuotaService, "_apply_tenant_chain_cap", AsyncMock(return_value=(-1, None)))
     with tenant_execution_scope(101):
         assert await service._assert_space_creation_quota() is None
-        effective.return_value = 2
+        role.quota_config = {"knowledge_space": 2}
         with pytest.raises(SpaceLimitError):
             await service._assert_space_creation_quota()
-        effective.return_value = -1
+        role.quota_config = {"knowledge_space": -1}
         assert await service._assert_space_creation_quota() is None
 
 

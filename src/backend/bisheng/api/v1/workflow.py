@@ -20,6 +20,7 @@ from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuth
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.logger import trace_id_var
+from bisheng.core.session_activity import business_activity
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowCreate, FlowDao, FlowStatus, FlowType, FlowUpdate
@@ -377,6 +378,7 @@ async def run_once(
 
 
 @router.websocket("/chat/{workflow_id}")
+@business_activity(http=False, websocket_actions=("init_data", "input"))
 async def workflow_ws(
     *,
     workflow_id: str,

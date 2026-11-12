@@ -46,7 +46,7 @@ from bisheng.citation.domain.services.daily_citation_handles import (
 )
 from bisheng.citation.domain.services.daily_citation_scope import DailyCitationScope
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import (
@@ -196,9 +196,7 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
             user_id=login_user.user_id,
         )
         if data.project_id is not None:
-            await ChatSessionService.create_owned_project_session(
-                new_session, login_user, data.project_id, data.project_request_id, data.project_creation_payload()
-            )
+            await ChatSessionService.create_owned_project_session(new_session, login_user, data.project_id)
         else:
             await MessageSessionDao.async_insert_one(new_session)
         await telemetry_service.log_event(
@@ -1458,9 +1456,7 @@ async def _agent_initialize_chat(
                 from bisheng.common.errcode.chat import ProjectInputError
 
                 raise ProjectInputError()
-            await ChatSessionService.create_owned_project_session(
-                new_session, login_user, data.project_id, data.project_request_id, data.project_creation_payload()
-            )
+            await ChatSessionService.create_owned_project_session(new_session, login_user, data.project_id)
         else:
             await MessageSessionDao.async_insert_one(new_session)
         await telemetry_service.log_event(
@@ -1800,8 +1796,6 @@ async def _agent_stream_chat_completion(
             conversation.chat_id,
         )
         return _respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
-
-    await record_business_activity(login_user)
 
     async def _agent_event_stream_impl():
         # Single ordered event log — one entry per thinking segment or tool

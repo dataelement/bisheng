@@ -1,0 +1,234 @@
+pageType: agenda
+background:
+  type: solid
+  color: $white
+elements:
+- elementId: agenda-panel
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 320
+  - 540
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: agenda-gold
+  elementType: shape
+  bounds:
+  - 320
+  - 0
+  - 4
+  - 540
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: agenda-title
+  elementType: text
+  bounds:
+  - 48
+  - 190
+  - 240
+  - 56
+  content:
+    text: 目  录
+    style: $title
+    fontSize: 40
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: agenda-en
+  elementType: text
+  bounds:
+  - 48
+  - 254
+  - 240
+  - 20
+  content:
+    text: CONTENTS
+    style: $kicker
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: agenda-no-1
+  elementType: text
+  bounds:
+  - 380
+  - 120
+  - 70
+  - 44
+  content:
+    text: '01'
+    style: $title
+    fontSize: 32
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: agenda-item-1
+  elementType: text
+  bounds:
+  - 460
+  - 126
+  - 420
+  - 32
+  content:
+    text: 年度工作总体情况
+    style: $lead
+    fontSize: 20
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: agenda-rule-1
+  elementType: line
+  bounds:
+  - 380
+  - 176
+  - 520
+  - 1
+  viewBox:
+  - 520
+  - 1
+  points: 0,0 520,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: agenda-no-2
+  elementType: text
+  bounds:
+  - 380
+  - 204
+  - 70
+  - 44
+  content:
+    text: '02'
+    style: $title
+    fontSize: 32
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: agenda-item-2
+  elementType: text
+  bounds:
+  - 460
+  - 210
+  - 420
+  - 32
+  content:
+    text: 重点任务完成情况
+    style: $lead
+    fontSize: 20
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: agenda-rule-2
+  elementType: line
+  bounds:
+  - 380
+  - 260
+  - 520
+  - 1
+  viewBox:
+  - 520
+  - 1
+  points: 0,0 520,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: agenda-no-3
+  elementType: text
+  bounds:
+  - 380
+  - 288
+  - 70
+  - 44
+  content:
+    text: '03'
+    style: $title
+    fontSize: 32
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: agenda-item-3
+  elementType: text
+  bounds:
+  - 460
+  - 294
+  - 420
+  - 32
+  content:
+    text: 存在的问题与不足
+    style: $lead
+    fontSize: 20
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: agenda-rule-3
+  elementType: line
+  bounds:
+  - 380
+  - 344
+  - 520
+  - 1
+  viewBox:
+  - 520
+  - 1
+  points: 0,0 520,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: agenda-no-4
+  elementType: text
+  bounds:
+  - 380
+  - 372
+  - 70
+  - 44
+  content:
+    text: '04'
+    style: $title
+    fontSize: 32
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: agenda-item-4
+  elementType: text
+  bounds:
+  - 460
+  - 378
+  - 420
+  - 32
+  content:
+    text: 2027 年工作安排
+    style: $lead
+    fontSize: 20
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: agenda-rule-4
+  elementType: line
+  bounds:
+  - 380
+  - 428
+  - 520
+  - 1
+  viewBox:
+  - 520
+  - 1
+  points: 0,0 520,0
+  border:
+    color: $rule
+    width: 0.8

@@ -29,6 +29,7 @@ from bisheng.permission.domain.models import (
     PermissionGrantAssignee,
     PermissionModel,
     PermissionModelAction,
+    PermissionProjectionOperation,
     PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
@@ -48,6 +49,7 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSourceRecord,
     GrantSourceService,
     model_snapshot_for_target,
+    requires_existing_visibility_evidence,
 )
 from bisheng.permission.domain.services.mode_service import (
     ModeContext,
@@ -63,6 +65,7 @@ from bisheng.permission.domain.services.permission_explain_service import (
 from bisheng.permission.domain.services.projection_plan import ProjectionOutcome
 from bisheng.permission.domain.services.visibility_projection_service import (
     VisibilityProjectionCompilation,
+    VisibilityProjectionCompiler,
 )
 
 
@@ -719,6 +722,14 @@ class SqlPermissionControlState:
                 limit=fetch_limit,
                 protected_only=normalized_mode == "INHERIT",
             )
+            await self._validate_evidence_only_source_rows(
+                session,
+                rows=local_rows,
+                models=model_by_key,
+                tenant_id=target.tenant_id,
+                resource_type=target.resource_type,
+                resource_id=target.resource_id,
+            )
             inherited_rows = []
             if normalized_mode == "INHERIT" and target.parent_type is not None and target.parent_id is not None:
                 inherited_mode = await self._nearest_custom_ancestor_mode(
@@ -741,6 +752,14 @@ class SqlPermissionControlState:
                 # has its own protected creator row, and the inherited copy only
                 # showed up as a second, identical entry that cannot be acted on.
                 inherited_rows = [(row, model_key) for row, model_key in inherited_rows if row.source_type != "CREATOR"]
+                await self._validate_evidence_only_source_rows(
+                    session,
+                    rows=inherited_rows,
+                    models=model_by_key,
+                    tenant_id=target.tenant_id,
+                    resource_type=inherited_mode.resource_type,
+                    resource_id=inherited_mode.resource_id,
+                )
         combined = sorted(
             (
                 *((row, model_key, "LOCAL") for row, model_key in local_rows),
@@ -773,6 +792,55 @@ class SqlPermissionControlState:
             ),
             len(combined) > limit,
         )
+
+    async def _validate_evidence_only_source_rows(
+        self,
+        session,
+        *,
+        rows,
+        models,
+        tenant_id: int,
+        resource_type: str,
+        resource_id: str,
+    ) -> None:
+        """A legacy empty model may describe only an already projected source.
+
+        Keep the original cursor query and reject inconsistent evidence rather
+        than filtering after LIMIT (which would silently truncate pagination).
+        """
+        selected = [(row, key) for row, key in rows if requires_existing_visibility_evidence(models[key])]
+        if not selected:
+            return
+        owners = tuple(f"grant_assignee:{row.id}" for row, _ in selected)
+        evidence = []
+        for offset in range(0, len(owners), 200):
+            result = await session.execute(
+                select(PermissionVisibleSourceProjection).where(
+                    PermissionVisibleSourceProjection.tenant_id == tenant_id,
+                    PermissionVisibleSourceProjection.resource_type == resource_type,
+                    PermissionVisibleSourceProjection.resource_id == resource_id,
+                    PermissionVisibleSourceProjection.source_owner_key.in_(owners[offset : offset + 200]),
+                    PermissionVisibleSourceProjection.state == "ACTIVE",
+                )
+            )
+            evidence.extend(self._visible_source_snapshot(row) for row in result.scalars())
+        grouped = {}
+        for row, key in selected:
+            grouped.setdefault((row.grant_id, key), []).append(self._source_snapshot(row))
+        snapshots = tuple(
+            GrantSnapshot(str(grant_id), tenant_id, resource_type, resource_id, models[key], True, tuple(sources))
+            for (grant_id, key), sources in grouped.items()
+        )
+        try:
+            compiled = VisibilityProjectionCompiler().compile(
+                tenant_id=tenant_id,
+                grants=snapshots,
+                existing_sources=tuple(evidence),
+            )
+            if compiled.deltas or compiled.retired_sources:
+                raise ValueError("legacy visibility evidence does not match its source rows")
+        except ValueError as error:
+            raise PermissionPublishNotReadyError(reason="legacy_visibility_source_unavailable") from error
 
     @staticmethod
     async def _source_rows(
@@ -977,6 +1045,29 @@ class SqlPermissionControlState:
         del error
         async with get_async_db_session() as session:
             async with session.begin():
+                if context.target.resource_type in {"tool", "workflow"}:
+                    mode_row = (
+                        (
+                            await session.execute(
+                                select(ResourcePermissionMode).where(
+                                    ResourcePermissionMode.tenant_id == context.target.tenant_id,
+                                    ResourcePermissionMode.resource_type == context.target.resource_type,
+                                    ResourcePermissionMode.resource_id == context.target.resource_id,
+                                )
+                            )
+                        )
+                        .scalars()
+                        .first()
+                    )
+                    operation = (
+                        await session.get(PermissionProjectionOperation, mode_row.operation_id)
+                        if mode_row and mode_row.operation_id
+                        else None
+                    )
+                    if operation is None:
+                        raise PermissionVersionConflictError(msg="Creation projection fence is missing")
+                    if str(operation.status) != "FAILED_CLOSED":
+                        return  # The durable ledger retains the exact uncertainty; do not relabel it terminal.
                 await session.execute(
                     update(ResourcePermissionMode)
                     .where(

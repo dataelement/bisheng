@@ -58,8 +58,32 @@ class RuntimeOperationService:
         self.app_loader = app_loader or self.repo.get_application
         self.clock = clock
 
+    def _recovery_retry_metadata(self, op, phase, detail):
+        context = op.payload.get("authorization_context") or {}
+        attempt = int(op.payload.get("recovery_attempt", 0))
+        if (
+            context.get("origin_kind") != "system_recovery"
+            or phase not in {"failed", "timed_out"}
+            or not detail.get("cleanup_complete")
+        ):
+            return {}
+        common = {"recovery_attempt": attempt, "recovery_budget": 3}
+        if attempt >= 3:
+            return {**common, "recovery_retry_status": "exhausted"}
+        return {
+            **common,
+            "recovery_retry_status": "scheduled",
+            "recovery_retry_at": (self.clock() + timedelta(seconds=15 * (2 ** max(0, attempt - 1)))).isoformat(),
+        }
+
     async def create(self, request):
-        if {"sealed_env", "runtime_env", "build_env"} & request.payload.keys():
+        if {
+            "sealed_env",
+            "runtime_env",
+            "build_env",
+            "execution_policy_json",
+            "execution_policy_digest",
+        } & request.payload.keys():
             raise RuntimeConflict("caller_environment_refused")
         app = await self.app_loader(request.app_id)
         if app is None or app.state == "deleted":
@@ -84,6 +108,12 @@ class RuntimeOperationService:
             raise AppOrchestratorUnavailableError(reason="runtime_prerequisites_blocked")
         assignments = await self.repo.find(RuntimeAssignment, app_id=app.id)
         generation = max(request.generation, assignments[0].generation + 1 if assignments else 1)
+        frozen_policy = {}
+        if node and node.executor_kind == "kubernetes" and (node.capabilities or {}).get("configuration"):
+            from bisheng.app_runtime.domain.services.runtime_deployment_policy import expected_policy, policy_digest
+
+            raw, _ = expected_policy(node.id)
+            frozen_policy = {"execution_policy_json": raw, "execution_policy_digest": policy_digest(raw)}
         op = RuntimeOperation(
             tenant_id=app.tenant_id,
             app_id=app.id,
@@ -95,7 +125,7 @@ class RuntimeOperationService:
             generation=generation,
             owner_epoch=request.owner_epoch,
             deadline=datetime.utcnow() + timedelta(seconds=settings.app_runtime.runtime_task_timeout_seconds),
-            payload={**request.payload, "tenant_id": app.tenant_id},
+            payload={**request.payload, **frozen_policy, "tenant_id": app.tenant_id},
             diagnostics_until=datetime.utcnow() + timedelta(days=settings.app_runtime.runtime_diagnostic_days),
             version_id=request.version_id,
             deployment_id=request.deployment_id,
@@ -174,6 +204,10 @@ class RuntimeOperationService:
             raise RuntimeConflict("node_execution_domain_invalid")
         if (capabilities.get("cluster_id"), capabilities.get("namespace")) != tuple(parts):
             raise RuntimeConflict("node_execution_domain_invalid")
+        if capabilities.get("configuration"):
+            from bisheng.app_runtime.domain.services.runtime_deployment_policy import matches_heartbeat
+
+            return matches_heartbeat(body, capabilities.get("node_id"))
         cidrs = capabilities.get("service_cidrs", [])
         if not isinstance(cidrs, list) or len(cidrs) > 32:
             raise RuntimeConflict("node_service_cidrs_invalid")
@@ -206,6 +240,46 @@ class RuntimeOperationService:
     def _protection_update(node, body):
         capabilities = copy.deepcopy(body.capabilities)
         previous = node.capabilities or {}
+        if capabilities.get("configuration") or previous.get("configuration"):
+            from bisheng.app_runtime.domain.services.runtime_deployment_policy import (
+                expected_policy,
+                matches_heartbeat,
+                protection_digest,
+            )
+
+            valid = matches_heartbeat(body, node.id)
+            previous_digest = previous.get("protection_baseline_digest")
+            changed = False
+            baseline = previous_digest
+            try:
+                _, expected = expected_policy(node.id)
+                baseline = protection_digest(expected)
+                changed = bool(previous_digest and previous_digest != baseline)
+            except RuntimeConflict:
+                pass
+            if previous:
+                observed = (capabilities.get("configuration") or {}).get("protection_baseline_digest")
+                changed = changed or bool(
+                    previous.get("status_policy_revision") != capabilities.get("status_policy_revision")
+                    or previous.get("cluster_id") != capabilities.get("cluster_id")
+                    or previous.get("namespace") != capabilities.get("namespace")
+                    or (
+                        previous_digest
+                        and isinstance(observed, str)
+                        and re.fullmatch(r"[a-f0-9]{64}", observed)
+                        and observed != previous_digest
+                    )
+                )
+            # Ordinary API/config unavailability removes current stop authority,
+            # but does not fabricate a confirmed break in historical protection.
+            capabilities["protection_contract_version"] = 2
+            capabilities["protection_baseline_digest"] = baseline
+            capabilities["serving_protection_valid"] = bool(
+                not changed and (valid or previous.get("serving_protection_valid") is True)
+            )
+            if not valid:
+                capabilities["status_protection"] = capabilities["binding_protection"] = False
+            return capabilities, changed, changed, not valid
         # These markers are server-owned and survive malformed/downgraded input.
         capabilities.pop("protection_contract_version", None)
         capabilities.pop("protection_baseline_digest", None)
@@ -273,6 +347,12 @@ class RuntimeOperationService:
     async def heartbeat(self, identity, body):
         if not identity.node_id or (body.executor_kind == "kubernetes" and set(identity.roles) != {"manager"}):
             raise RuntimeConflict("node_identity_required")
+        if identity.node_id in settings.app_runtime.runtime_kubernetes_nodes and not body.capabilities.get(
+            "configuration"
+        ):
+            raise RuntimeConflict("deployment_policy_heartbeat_required")
+        if body.capabilities.get("configuration") and body.capabilities.get("node_id") != identity.node_id:
+            raise RuntimeConflict("node_identity_mismatch")
         ready = self._node_report(body)
         async with self.repo.transaction() as session:
             node = await self.repo.get(RuntimeNode, identity.node_id, lock=True)
@@ -308,6 +388,11 @@ class RuntimeOperationService:
                             if binding_gap:
                                 resource.binding_policy_verified = False
                             await self.repo.save(resource)
+                        # A confirmed protection change invalidates existing routes
+                        # durably. A later valid heartbeat cannot repair old UIDs.
+                        for route in await self.repo.find(RuntimeRoute, node_id=node.id, status="serving", lock=True):
+                            route.status = "unhealthy"
+                            await self.repo.save(route)
             else:
                 from bisheng.app_runtime.domain.repositories.host_isolation_repository import HostIsolationRepository
 
@@ -542,11 +627,18 @@ class RuntimeOperationService:
         routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True)
         route = routes[0] if routes else None
         before = RuntimeAuthorizationService.route_snapshot(route)
-        if op.payload.get("purpose") == "config_restart":
+        context = op.payload.get("authorization_context") or {}
+        inherits_maintenance = (context.get("retry") or {}).get("maintenance_inherited") is True
+        if inherits_maintenance:
+            before = await RuntimeProjectionService(self.repo).preserve_recovery_maintenance(op)
+        elif op.payload.get("purpose") == "config_restart":
             await RuntimeProjectionService(self.repo).verify_config_restart_origin(op)
-        await RuntimeProjectionService(self.repo).block(op.app_id, "maintenance")
-        routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True)
-        after = RuntimeAuthorizationService.route_snapshot(routes[0] if routes else None)
+        if inherits_maintenance:
+            after = before
+        else:
+            await RuntimeProjectionService(self.repo).block(op.app_id, "maintenance")
+            routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}", lock=True)
+            after = RuntimeAuthorizationService.route_snapshot(routes[0] if routes else None)
         op.payload = {
             **op.payload,
             "maintenance_transition": {
@@ -718,6 +810,7 @@ class RuntimeOperationService:
                     if body.phase != "completed"
                     else {}
                 )
+                op.failure = {**op.failure, **self._recovery_retry_metadata(op, body.phase, body.detail)}
                 await self.repo.save(op)
                 if body.detail.get("stopped"):
                     await self.repo.release(op.id, stopped=True)
@@ -756,6 +849,51 @@ class RuntimeOperationService:
             operations = await self.repo.node_operations(identity.node_id)
             assignments = await self.repo.find(RuntimeAssignment, node_id=identity.node_id, limit=10000)
             active = {x.active_operation_id for x in assignments}
+            retried = False
+            for op in operations:
+                retry_at = (op.failure or {}).get("recovery_retry_at")
+                if (
+                    op.id not in active
+                    or op.status not in {"failed", "timed_out"}
+                    or op.cleanup_status != "complete"
+                    or (op.failure or {}).get("recovery_retry_status") != "scheduled"
+                    or not retry_at
+                ):
+                    continue
+                try:
+                    due = datetime.fromisoformat(retry_at)
+                except (TypeError, ValueError):
+                    continue
+                if due > self.clock():
+                    continue
+                app = await self.app_loader(op.app_id)
+                routes = await self.repo.find(RuntimeRoute, route_key=f"app:{op.app_id}")
+                if app is None or not routes:
+                    continue
+                try:
+                    with tenant_execution_scope(op.tenant_id):
+                        from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import (
+                            RuntimeDeliveryCoordinator,
+                        )
+
+                        await RuntimeDeliveryCoordinator(self.repo).recover(
+                            app,
+                            routes[0],
+                            running=False,
+                            retry_from=op,
+                        )
+                except Exception:
+                    # Retry dispatch is best-effort inside the manager's read loop;
+                    # the durable scheduled marker makes the next poll try again.
+                    from loguru import logger
+
+                    logger.exception("runtime recovery retry dispatch failed for operation {}", op.id)
+                    continue
+                retried = True
+            if retried:
+                operations = await self.repo.node_operations(identity.node_id)
+                assignments = await self.repo.find(RuntimeAssignment, node_id=identity.node_id, limit=10000)
+                active = {x.active_operation_id for x in assignments}
             result = []
             for op in operations:
                 if op.payload.get("environment_required") and not op.payload.get("sealed_env"):
@@ -779,8 +917,13 @@ class RuntimeOperationService:
             node = await self.repo.get(RuntimeNode, route.node_id)
         if node is None:
             return {"decision": "transition", "phase": "node_unavailable"}
-        if node.executor_kind == "kubernetes" and node.status != "ready":
-            return {"decision": "transition", "phase": "unhealthy"}
+        if node.executor_kind == "kubernetes":
+            capabilities = node.capabilities or {}
+            if capabilities.get("configuration"):
+                if capabilities.get("serving_protection_valid") is not True:
+                    return {"decision": "transition", "phase": "unhealthy"}
+            elif node.status != "ready":
+                return {"decision": "transition", "phase": "unhealthy"}
         if node and node.executor_kind == "docker":
             try:
                 await self.repo.require_host_isolation(node.id)

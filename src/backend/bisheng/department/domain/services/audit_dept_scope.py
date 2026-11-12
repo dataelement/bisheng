@@ -20,6 +20,11 @@ def _path_ids(path: str | None) -> list[int]:
     return [int(part) for part in (path or "").strip("/").split("/") if part.isdigit()]
 
 
+def _path_leaf(path: str) -> int | None:
+    ids = _path_ids(path)
+    return ids[-1] if ids else None
+
+
 def _node(dept, names: dict[int, str], has_children: bool) -> dict:
     return {
         "id": dept.id,
@@ -107,6 +112,24 @@ class AuditDeptScopeService:
             "show_none": scope.unrestricted,
             "show_unrecorded": scope.unrestricted,
         }
+
+    @classmethod
+    async def describe(cls, scope: AuditDeptScope) -> dict:
+        """Names the departments ``scope`` allows, for the audit page banner.
+
+        ``admin_paths`` include every department under that node. ``exact_ids``
+        are one department and nothing beneath it. An unrestricted scope has
+        no department list.
+        """
+        if scope.unrestricted:
+            return {"organizations": [], "unrestricted_organization": True}
+        leaves = [leaf for path in scope.admin_paths if (leaf := _path_leaf(path)) is not None]
+        names = await AuditDeptRepository.names_by_id([*leaves, *scope.exact_ids])
+        organizations = [{"name": names.get(leaf) or str(leaf), "includes_descendants": True} for leaf in leaves]
+        organizations.extend(
+            {"name": names.get(dept_id) or str(dept_id), "includes_descendants": False} for dept_id in scope.exact_ids
+        )
+        return {"organizations": organizations, "unrestricted_organization": False}
 
     @classmethod
     async def is_audit_admin(cls, login_user: UserPayload, _tenant_id: int | None) -> bool:

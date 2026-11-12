@@ -16,11 +16,11 @@ from bisheng.approval.domain.services.user_menu_access_service import UserMenuAc
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+from bisheng.core.session_activity import record_authenticated_activity
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.group import GroupDao
-from bisheng.database.models.role import RoleDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao, WebMenuResource
 from bisheng.database.models.user_group import UserGroupDao
 
@@ -199,14 +199,8 @@ class AuthJwt:
 
 
 class LoginUser(BaseModel):
+    _role_policy: object = PrivateAttr(default=None)
     _runtime_credential_reference: dict | None = PrivateAttr(default=None)
-    _business_activity_recorder: Any = PrivateAttr(default=None)
-
-    async def record_business_activity(self) -> None:
-        """Only a verified desktop-cookie grant attaches this request-local hook."""
-        if self._business_activity_recorder is not None:
-            await self._business_activity_recorder()
-
     user_id: int
     user_name: str = Field(default="")
     user_role: list[int] = Field(default_factory=list, description="Users GroupsIDVertical")
@@ -540,31 +534,21 @@ class LoginUser(BaseModel):
         token_version: int = 0,
         role_ids: Iterable[int] | None = None,
     ) -> Self:
-        # Pre-resolve global-super so downstream gates (mount/unmount/
-        # migrate, also serialised to /user/info & login response) read
-        # one cached value instead of re-querying FGA per call. Helper
-        # already has Redis caching + RBAC fallback + fail-closed.
-        # bypass_tenant_filter: aget_user_roles needs to see the user's
-        # roles across all tenants (login-time pre-tenant-context). Without
-        # this, hotfix-3's tenant-aware UserRole table trips
-        # NoTenantContextError before tenant resolution finishes.
-        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.role.application.effective_roles import load_effective_roles
         from bisheng.utils.http_middleware import _check_is_global_super
 
-        resolved_role_ids = list(role_ids) if role_ids is not None else None
-        with bypass_tenant_filter():
-            if resolved_role_ids is None:
-                user_roles = await UserRoleDao.aget_user_roles(user_id)
-                resolved_role_ids = [user_role.role_id for user_role in user_roles]
-            is_global_super = await _check_is_global_super(user_id, role_ids=resolved_role_ids)
+        policy = await load_effective_roles(user_id, expected_home_tenant_id=tenant_id)
+        resolved_role_ids = ([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids)
+        is_global_super = await _check_is_global_super(user_id, role_ids=resolved_role_ids)
         login_user = cls(
             user_id=user_id,
             user_name=user_name,
             user_role=resolved_role_ids,
-            tenant_id=tenant_id or DEFAULT_TENANT_ID,
+            tenant_id=policy.home_tenant_id,
             token_version=token_version,
             is_global_super=is_global_super,
         )
+        login_user._role_policy = policy
         return login_user
 
     @classmethod
@@ -575,20 +559,17 @@ class LoginUser(BaseModel):
         tenant_id: int | None = None,
         token_version: int = 0,
     ) -> Self:
-        # See ``init_login_user`` — bypass is required because UserRole is
-        # tenant-aware and login-time has no tenant context yet.
-        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.role.application.effective_roles import load_effective_roles_sync
 
-        with bypass_tenant_filter():
-            user_roles = UserRoleDao.get_user_roles(user_id)
-        role_ids = [user_role.role_id for user_role in user_roles]
+        policy = load_effective_roles_sync(user_id, expected_home_tenant_id=tenant_id)
         login_user = cls(
             user_id=user_id,
             user_name=user_name,
-            user_role=role_ids,
-            tenant_id=tenant_id or DEFAULT_TENANT_ID,
+            user_role=([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids),
+            tenant_id=policy.home_tenant_id,
             token_version=token_version,
         )
+        login_user._role_policy = policy
         return login_user
 
     @classmethod
@@ -601,12 +582,6 @@ class LoginUser(BaseModel):
             token_version=int(subject.get("token_version", 0) or 0),
         )
         request = getattr(auth_jwt, "req", None)
-        if request is not None and "dsh_web_session" in subject:
-            user._business_activity_recorder = getattr(
-                getattr(request, "state", None),
-                "dsh_activity_recorder",
-                None,
-            )
         if request is not None:
             token = request.cookies.get(auth_jwt._access_cookie_key)
             claims = jwt.decode(
@@ -619,6 +594,7 @@ class LoginUser(BaseModel):
                 "token_version": user.token_version,
                 "expires_at": datetime.fromtimestamp(claims["exp"], UTC).replace(tzinfo=None).isoformat(),
             }
+        await record_authenticated_activity(request)
         return user
 
     @classmethod
@@ -666,12 +642,6 @@ class LoginUser(BaseModel):
             tenant_id=subject.get("tenant_id", DEFAULT_TENANT_ID),
             token_version=int(subject.get("token_version", 0) or 0),
         )
-        if "dsh_web_session" in subject:
-            user._business_activity_recorder = getattr(
-                getattr(websocket, "state", None),
-                "dsh_activity_recorder",
-                None,
-            )
         return user
 
     @classmethod
@@ -690,6 +660,7 @@ class LoginUser(BaseModel):
         *,
         is_department_admin: bool = False,
         role_ids: Iterable[int] | None = None,
+        policy=None,
     ) -> (list[int] | str, list[str]):
         """Resolve role key(s) and web_menu.
 
@@ -699,11 +670,10 @@ class LoginUser(BaseModel):
         - ``system_config`` is only granted via super-admin or department-admin; it is
           stripped for other users even if legacy role_access rows exist.
         """
-        if role_ids is None:
-            db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
-            resolved_role_ids = [user_role.role_id for user_role in db_user_role]
-        else:
-            resolved_role_ids = list(role_ids)
+        from bisheng.role.application.effective_roles import load_effective_roles
+
+        policy = policy or await load_effective_roles(user.user_id)
+        resolved_role_ids = ([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids)
         role = ""
         non_admin_role_ids = []
         for role_id in resolved_role_ids:
@@ -713,13 +683,13 @@ class LoginUser(BaseModel):
                 non_admin_role_ids.append(role_id)
         if role != "admin":
             role = non_admin_role_ids
-            # AC-13: union of all roles' menu permissions
-            web_menu = await RoleAccessDao.aget_role_access(non_admin_role_ids, AccessType.WEB_MENU)
-            web_menu = list({one.third_id for one in web_menu})
-            personal_menu = await UserMenuAccessService.list_effective_menu_grants(
-                get_current_tenant_id() or DEFAULT_TENANT_ID,
-                user.user_id,
-            )
+            from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+
+            web_menu = list(policy.web_menu)
+            with tenant_execution_scope(policy.home_tenant_id), strict_tenant_filter():
+                personal_menu = await UserMenuAccessService.list_effective_menu_grants(
+                    policy.home_tenant_id, user.user_id
+                )
             web_menu = list(set(web_menu) | set(personal_menu))
             if is_department_admin:
                 web_menu = list(set(web_menu) | set(_DEPARTMENT_ADMIN_WEB_MENU_SYSTEM))
@@ -738,13 +708,13 @@ class LoginUser(BaseModel):
         *,
         role_ids: Iterable[int] | None = None,
         is_department_admin: bool | None = None,
+        policy=None,
     ) -> tuple[bool, bool]:
         """Effective (has_workbench, has_admin_console) after orphan strip and dept-admin merge."""
-        if role_ids is None:
-            db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
-            resolved_role_ids = [user_role.role_id for user_role in db_user_role]
-        else:
-            resolved_role_ids = list(role_ids)
+        from bisheng.role.application.effective_roles import load_effective_roles
+
+        policy = policy or await load_effective_roles(user.user_id)
+        resolved_role_ids = ([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids)
         if AdminRole in resolved_role_ids:
             return True, True
         if is_department_admin is None:
@@ -753,6 +723,7 @@ class LoginUser(BaseModel):
             user,
             is_department_admin=is_department_admin,
             role_ids=resolved_role_ids,
+            policy=policy,
         )
         wm = set(web_menu)
         has_wb = bool(wm & _WEB_MENU_WORKBENCH_ALL)
@@ -800,18 +771,19 @@ class LoginUser(BaseModel):
         *,
         role_ids: Iterable[int] | None = None,
         is_department_admin: bool | None = None,
+        policy=None,
     ) -> dict:
-        if role_ids is None:
-            db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
-            resolved_role_ids = [user_role.role_id for user_role in db_user_role]
-        else:
-            resolved_role_ids = list(role_ids)
+        from bisheng.role.application.effective_roles import load_effective_roles
+
+        policy = policy or await load_effective_roles(user.user_id)
+        resolved_role_ids = ([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids)
         is_super = AdminRole in resolved_role_ids
         if not is_super and is_department_admin is None:
             is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
         hw, ha = await cls.effective_workbench_admin_flags(
             user,
             role_ids=resolved_role_ids,
+            policy=policy,
             is_department_admin=is_department_admin,
         )
         # Regular users (neither super-admin nor department admin) prefer 工作台
@@ -831,6 +803,7 @@ class LoginUser(BaseModel):
         user: User,
         *,
         role_ids: Iterable[int] | None = None,
+        policy=None,
     ) -> tuple[bool, bool]:
         """Per-area "show unauthorized menus (apply)" flags: ``(workbench, admin)``.
 
@@ -840,15 +813,10 @@ class LoginUser(BaseModel):
         ``menu_approval_mode``; reads fall back to the legacy key so existing
         roles keep their current behavior until re-saved.
         """
-        if role_ids is None:
-            db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
-            resolved_role_ids = [user_role.role_id for user_role in db_user_role]
-        else:
-            resolved_role_ids = list(role_ids)
-        non_admin_role_ids = [role_id for role_id in resolved_role_ids if role_id != AdminRole]
-        if not non_admin_role_ids:
-            return False, False
-        roles = await RoleDao.aget_role_by_ids(non_admin_role_ids)
+        from bisheng.role.application.effective_roles import load_effective_roles
+
+        policy = policy or await load_effective_roles(user.user_id)
+        roles = policy.roles
 
         def _truthy(v: object) -> bool:
             return v is True or v == 1 or str(v).lower() in ("true", "1")
