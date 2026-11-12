@@ -7,10 +7,12 @@ from sqlmodel import select
 from bisheng.api.services.office_callback import afetch_office_document
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.report import Report
+from bisheng.permission.application.business_authorization import check_business_action
 from bisheng.utils import generate_uuid
 
 # build router
@@ -76,7 +78,15 @@ async def callback(data: dict):
 
 
 @router.get("/report_temp")
-async def get_template(*, flow_id: str):
+async def get_template(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """Return the report template only to a user who can view that workflow.
+
+    The handler used to carry no login dependency, and CustomMiddleware only
+    authenticates requests that bring a token, so an anonymous GET could read
+    any flow's presigned report URL and mint a new ``newversion_key``.
+    """
+    if not await check_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="visible"):
+        raise UnAuthorizedError()
     with get_sync_db_session() as session:
         db_report = session.exec(
             select(Report).where(Report.flow_id == flow_id, Report.del_yn == 0).order_by(Report.update_time.desc())

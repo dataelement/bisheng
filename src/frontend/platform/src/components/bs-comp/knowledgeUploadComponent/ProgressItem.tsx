@@ -34,12 +34,12 @@ export default function ProgressItem({ analysis = false, knowledgeId = '', item,
                 setProgress(progress)
             },
             onFinish: (res) => {
-                console.log('上传结果 :>> ', item.fileName, res);
                 setProgress(100)
                 onResulte(item.id, {
                     id: item.id,
                     fileName: item.fileName,
                     file_path: res.file_path,
+                    preview_upload_ref: res.preview_upload_ref,
                     repeat: res.repeat,
                     time: res.repeat_update_time
                 })

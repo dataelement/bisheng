@@ -106,6 +106,22 @@ async def test_builds_nested_tree_and_groups_files(fake_dao):
     assert perm_calls[deep.id] == ("folder", sub.id)
 
 
+async def test_nested_folder_grouping_preserves_trusted_sources(fake_dao):
+    svc = _svc()
+    svc._get_folder_for_action = AsyncMock(return_value=MagicMock(id=9, level=0, file_level_path=""))
+    items = _items("Root/a.pdf", "Root/Sub/b.pdf", "Root/c.pdf")
+    sources = [object(), object(), object()]
+
+    await svc.upload_folder_items(5, items, parent_id=9, trusted_sources=sources)
+
+    svc._require_action.assert_awaited_once_with("folder", 9, "upload_file")
+    calls = {tuple(call.args[1]): call.kwargs["trusted_sources"] for call in svc.add_file.await_args_list}
+    assert calls == {
+        ("minio://tmp/0.bin", "minio://tmp/2.bin"): [sources[0], sources[2]],
+        ("minio://tmp/1.bin",): [sources[1]],
+    }
+
+
 async def test_upload_under_existing_parent_folder(fake_dao):
     svc = _svc()
     parent = MagicMock(id=9, level=2, file_level_path="/7/8")

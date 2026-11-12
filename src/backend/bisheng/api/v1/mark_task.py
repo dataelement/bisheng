@@ -6,6 +6,7 @@ from loguru import logger
 from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from bisheng.database.models.mark_task import MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
 from bisheng.database.models.message import ChatMessageDao
@@ -14,39 +15,46 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.linked_list import DoubleLinkList
 
-router = APIRouter(prefix='/mark', tags=['Mark'])
+router = APIRouter(prefix="/mark", tags=["Mark"])
 
 
 def _parse_process_user_ids(process_users: str, task_id: int) -> list[int]:
     user_ids = []
-    for raw_user_id in (process_users or '').split(','):
+    for raw_user_id in (process_users or "").split(","):
         raw_user_id = raw_user_id.strip()
         if not raw_user_id:
             continue
         try:
             user_ids.append(int(raw_user_id))
         except ValueError:
-            logger.warning('Skipping invalid mark task process user: task_id={} user_id={}', task_id, raw_user_id)
+            logger.warning("Skipping invalid mark task process user: task_id={} user_id={}", task_id, raw_user_id)
     return user_ids
 
 
-@router.get('/list')
-def list(request: Request,
-         status: int | None = None,
-         page_size: int = 10,
-         page_num: int = 1,
-         login_user: UserPayload = Depends(UserPayload.get_login_user)):
+@router.get("/list")
+def list(
+    request: Request,
+    status: int | None = None,
+    page_size: int = 10,
+    page_num: int = 1,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     """
     Nonadmin Can only see their own marked and unlabeled
     """
     groups = UserGroupDao.get_user_admin_group(login_user.user_id)
     if login_user.is_admin():
-        task_list, count = MarkTaskDao.get_task_list(page_size=page_size, page_num=page_num, status=status,
-                                                     create_id=None, user_id=None)
+        task_list, count = MarkTaskDao.get_task_list(
+            page_size=page_size, page_num=page_num, status=status, create_id=None, user_id=None
+        )
     else:
-        task_list, count = MarkTaskDao.get_task_list(page_size=page_size, page_num=page_num, status=status,
-                                                     create_id=login_user.user_id if groups else None,
-                                                     user_id=login_user.user_id)
+        task_list, count = MarkTaskDao.get_task_list(
+            page_size=page_size,
+            page_num=page_num,
+            status=status,
+            create_id=login_user.user_id if groups else None,
+            user_id=login_user.user_id,
+        )
 
     result_list = []
     for task in task_list:
@@ -57,7 +65,7 @@ def list(request: Request,
         for user_id in _parse_process_user_ids(task.process_users, task.id):
             user = UserDao.get_user(user_id)
             if not user:
-                logger.warning('Skipping missing mark task process user: task_id={} user_id={}', task.id, user_id)
+                logger.warning("Skipping missing mark task process user: task_id={} user_id={}", task.id, user_id)
                 continue
             process_count = f"{user.user_name}:0"
             user_count[user_id] = process_count
@@ -75,9 +83,8 @@ def list(request: Request,
     return resp_200(data=result)
 
 
-@router.get('/get_status')
-async def get_status(task_id: int, chat_id: str,
-                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
+@router.get("/get_status")
+async def get_status(task_id: int, chat_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     record = MarkRecordDao.get_record(task_id, chat_id)
     if not record:
         return resp_200(data={"status": ""})
@@ -90,22 +97,23 @@ async def get_status(task_id: int, chat_id: str,
     return resp_200(result)
 
 
-@router.post('/create_task')
+@router.post("/create_task")
 async def create(task_create: MarkTaskCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     Apps and users are in a many-to-many relationship, relying on one director record
     """
 
-    task = MarkTask(create_id=login_user.user_id,
-                    create_user=login_user.user_name,
-                    app_id=",".join(task_create.app_list),
-                    process_users=",".join(str(user_id) for user_id in task_create.user_list)
-                    )
+    task = MarkTask(
+        create_id=login_user.user_id,
+        create_user=login_user.user_name,
+        app_id=",".join(task_create.app_list),
+        process_users=",".join(str(user_id) for user_id in task_create.user_list),
+    )
     MarkTaskDao.create_task_with_assignments(task, task_create.app_list, task_create.user_list)
     return resp_200(data="ok")
 
 
-@router.get('/get_user')
+@router.get("/get_user")
 async def get_user(task_id: int):
     """
     Query under this app All Users.
@@ -128,9 +136,8 @@ async def get_user(task_id: int):
     return resp_200(data=user_list)
 
 
-@router.post('/mark')
-async def mark(data: MarkData,
-               login_user: UserPayload = Depends(UserPayload.get_login_user)):
+@router.post("/mark")
+async def mark(data: MarkData, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
     Flag task as current user and cannot be overwritten by others
     flow_type flow assistant
@@ -155,9 +162,14 @@ async def mark(data: MarkData,
         # Not marked No data recorded
         if data.status == MarkTaskStatus.DEFAULT.value:
             return resp_200(data="ok")
-        record_info = MarkRecord(create_user=login_user.user_name, create_id=login_user.user_id,
-                                 session_id=data.session_id, task_id=data.task_id, status=data.status,
-                                 flow_type=data.flow_type)
+        record_info = MarkRecord(
+            create_user=login_user.user_name,
+            create_id=login_user.user_id,
+            session_id=data.session_id,
+            task_id=data.task_id,
+            status=data.status,
+            flow_type=data.flow_type,
+        )
         # Create an article User callout record
         MarkRecordDao.create_record(record_info)
 
@@ -184,15 +196,16 @@ async def mark(data: MarkData,
     return resp_200(data="ok")
 
 
-@router.get('/get_record')
+@router.get("/get_record")
 async def get_record(chat_id: str, task_id: int):
     record = MarkRecordDao.get_record(task_id, chat_id)
     return resp_200(data=record)
 
 
 @router.get("/next")
-async def pre_or_next(chat_id: str, action: str, task_id: int,
-                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def pre_or_next(
+    chat_id: str, action: str, task_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
     """
     prev or next
     """
@@ -251,11 +264,11 @@ async def pre_or_next(chat_id: str, action: str, task_id: int,
 
             result["chat_id"] = cur.chat_id
             result["flow_id"] = cur.flow_id
-            result['flow_type'] = cur.flow_type
+            result["flow_type"] = cur.flow_type
             return resp_200(data=result)
         else:
             cur = k_list[linked.head().data]
-            result['flow_type'] = cur.flow_type
+            result["flow_type"] = cur.flow_type
             result["chat_id"] = cur.chat_id
             result["flow_id"] = cur.flow_id
             return resp_200(data=result)
@@ -263,11 +276,19 @@ async def pre_or_next(chat_id: str, action: str, task_id: int,
     return resp_200()
 
 
-@router.delete('/del')
+@router.delete("/del")
 def del_task(request: Request, task_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    Nonadmin Can only see their own marked and unlabeled
+    Admins, the task creator and its assignees may delete; nobody else.
     """
+    task = MarkTaskDao.get_task_byid(task_id)
+    if not task:
+        raise NotFoundError()
+    allowed = login_user.is_admin() or task.create_id == login_user.user_id
+    if not allowed:
+        allowed = login_user.user_id in _parse_process_user_ids(task.process_users, task_id)
+    if not allowed:
+        raise UnAuthorizedError()
 
     MarkTaskDao.delete_task(task_id)
     MarkRecordDao.del_record(task_id)

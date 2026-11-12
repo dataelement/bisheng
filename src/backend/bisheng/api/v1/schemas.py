@@ -233,6 +233,7 @@ class UploadFileResponse(BaseModel):
     flowId: str | None = None
     file_path: str
     relative_path: str | None = None  # minioRelative path, i.e.object_name
+    preview_upload_ref: str | None = None
     file_name: str | None = None
     repeat: bool = False  # Duplicate in Knowledge Base
     repeat_file_name: str | None = None  # Returns the file name of a duplicate file if it is a duplicate
@@ -654,6 +655,9 @@ class UpdatePreviewFileChunk(BaseModel):
 
 class KnowledgeFileOne(BaseModel):
     file_path: str = Field(..., description="FilePath")
+    preview_upload_ref: str | None = None
+    preview_file_id: int | None = Field(default=None, gt=0)
+    preview_source: Literal["original", "converted"] = "original"
     excel_rule: ExcelRule | None = Field(default=None, description="Excel rules")
 
 

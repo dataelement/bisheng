@@ -185,6 +185,7 @@ export default function FilesUpload() {
       chunk_overlap: Number(_config.rules.chunkOverlap),
       file_list: _config.rules.fileList.map(item => ({
         file_path: item.filePath,
+        ...(item.previewUploadRef ? { preview_upload_ref: item.previewUploadRef } : {}),
         excel_rule: _config.applyEachCell ? item.excelRule : _config.cellGeneralConfig
       })),
       retain_images: _config.rules.retainImages,

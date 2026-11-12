@@ -15,11 +15,13 @@ const mockCalls: { url?: string; tenant?: string; body: unknown }[] = [];
 let scopeStatus: number;
 let uploadStatus: number;
 let scopeHeader: string | undefined;
+let previewRef: string | undefined;
 beforeEach(() => {
   mockCalls.length = 0;
   scopeStatus = 200;
   uploadStatus = 200;
   scopeHeader = '3';
+  previewRef = 'upload-ref';
   transport.defaults.adapter = async (config: { url?: string; headers: Record<string, string>; data: unknown }) => {
     mockCalls.push({ url: config.url, tenant: config.headers['X-Management-Tenant'], body: config.data });
     const reading = config.url?.endsWith('/info');
@@ -27,7 +29,7 @@ beforeEach(() => {
       headers: reading && scopeHeader !== undefined ? { 'x-management-tenant': scopeHeader } : {},
       data: reading
         ? { status_code: scopeStatus, data: { id: 4322 } }
-        : { status_code: uploadStatus, data: { file_path: '/tmp/notes.txt' } },
+        : { status_code: uploadStatus, data: { file_path: '/tmp/notes.txt', preview_upload_ref: previewRef } },
     };
   };
 });
@@ -60,6 +62,11 @@ it('does not replay an upload if the management scope changes', async () => {
 it('retains compatibility with backends that do not send a management tenant header', async () => {
   scopeHeader = undefined;
   await expect(uploadFileToServerApi('4322', new File(['notes'], 'notes.txt'))).resolves.toMatchObject({ file_path: '/tmp/notes.txt' });
+});
+
+it('rejects uploads without a preview reference', async () => {
+  previewRef = undefined;
+  await expect(uploadFileToServerApi('4322', new File(['notes'], 'notes.txt'))).rejects.toThrow('preview reference');
 });
 
 it('preserves caller headers on multipart requests', async () => {

@@ -27,7 +27,30 @@ const makeError = (kind: string) => {
   return error;
 };
 const mount = (knownFiles: Parameters<typeof useFileUpload>[0]['files'] = []) => renderHook(() => useFileUpload({ activeSpace: { id: '1' } as Parameters<typeof useFileUpload>[0]['activeSpace'], currentFolderId: undefined, currentPath: [], files: knownFiles, setFiles: mockSetFiles, setTotal: jest.fn(), loadFiles: mockLoadFiles, currentPage: 1, markPendingDeletion: jest.fn(), clearPendingDeletion: mockClearPending }));
-beforeEach(() => { jest.clearAllMocks(); (uploadFileToServerApi as jest.Mock).mockReset().mockResolvedValue({ file_path: '/upload/one.txt' }); (addFilesApi as jest.Mock).mockReset().mockResolvedValue([]); (uploadFolderApi as jest.Mock).mockReset().mockResolvedValue([]); (listKnowledgeFolders as jest.Mock).mockReset().mockResolvedValue({ items: [] }); });
+beforeEach(() => { jest.clearAllMocks(); (uploadFileToServerApi as jest.Mock).mockReset().mockResolvedValue({ file_path: '/upload/one.txt', preview_upload_ref: 'ref-one' }); (addFilesApi as jest.Mock).mockReset().mockResolvedValue([]); (uploadFolderApi as jest.Mock).mockReset().mockResolvedValue([]); (listKnowledgeFolders as jest.Mock).mockReset().mockResolvedValue({ items: [] }); });
+it('registers ordered path and reference pairs after a failed upload', async () => {
+  (uploadFileToServerApi as jest.Mock).mockResolvedValueOnce({ file_path: '/a', preview_upload_ref: 'ref-a' }).mockRejectedValueOnce(new Error('failed')).mockResolvedValueOnce({ file_path: '/c', preview_upload_ref: 'ref-c' });
+  const { result } = mount();
+  await act(async () => { await result.current.handleUploadFile([...files, new File(['c'], 'three.txt')]); });
+  expect(addFilesApi).toHaveBeenCalledWith('1', { file_path: ['/a', '/c'], preview_upload_refs: ['ref-a', 'ref-c'], parent_id: null });
+});
+it.each(['file', 'folder'])('does not register a %s upload without its reference', async surface => {
+  (uploadFileToServerApi as jest.Mock).mockResolvedValue({ file_path: '/untrusted' });
+  const { result } = mount();
+  await act(async () => { if (surface === 'file') await result.current.handleUploadFile([files[0]]); else await result.current.handleUploadFolder([folderFiles[0]], { allowedExtensions: ['txt'], maxSizeMB: 10 }); });
+  expect(addFilesApi).not.toHaveBeenCalled();
+  expect(uploadFolderApi).not.toHaveBeenCalled();
+  expect(mockToast).toHaveBeenCalled();
+});
+it('keeps each folder entry paired with its upload reference', async () => {
+  (uploadFileToServerApi as jest.Mock).mockResolvedValueOnce({ file_path: '/a', preview_upload_ref: 'ref-a' }).mockResolvedValueOnce({ file_path: '/b', preview_upload_ref: 'ref-b' });
+  const { result } = mount();
+  await act(async () => { await result.current.handleUploadFolder(folderFiles, { allowedExtensions: ['txt'], maxSizeMB: 10 }); });
+  expect(uploadFolderApi).toHaveBeenCalledWith('1', { parent_id: null, items: [
+    { file_path: '/a', preview_upload_ref: 'ref-a', relative_path: 'Docs/one.txt', size: 1 },
+    { file_path: '/b', preview_upload_ref: 'ref-b', relative_path: 'Docs/two.txt', size: 1 },
+  ] });
+});
 it.each(['global', 'canceled'])('immediately rejects the same %s upload error without continuing the batch', async kind => {
   const error = makeError(kind);
   (uploadFileToServerApi as jest.Mock).mockRejectedValueOnce(error);
@@ -45,7 +68,7 @@ it('keeps full ordinary error evidence and the named quota summary', async () =>
 describe.each(['file', 'folder'])('%s upload UI cleanup', surface => {
   it.each(['global', 'canceled'])('consumes %s errors, clears its placeholder, and allows the next batch', async kind => {
     const error = makeError(kind);
-    (uploadFileToServerApi as jest.Mock).mockResolvedValueOnce({ file_path: '/partial' }).mockRejectedValueOnce(error);
+    (uploadFileToServerApi as jest.Mock).mockResolvedValueOnce({ file_path: '/partial', preview_upload_ref: 'partial-ref' }).mockRejectedValueOnce(error);
     const { result } = mount();
     const run = () => surface === 'file' ? result.current.handleUploadFile(files) : result.current.handleUploadFolder(folderFiles, { allowedExtensions: ['txt'], maxSizeMB: 10 });
     await act(async () => { await run(); });
