@@ -131,6 +131,7 @@ class KunlianLoginService:
         allow_multi_login: bool = True,
         clock=None,
         timeout_seconds=15,
+        onboarding=None,
     ):
         self.repository = repository
         self.config = config
@@ -144,6 +145,7 @@ class KunlianLoginService:
         self.allow_multi_login = allow_multi_login
         self.clock = clock or repository.clock
         self.timeout_seconds = timeout_seconds
+        self.onboarding = onboarding
 
     async def _login_qualification(self, identity):
         from bisheng.common.errcode.sso_sync import (
@@ -165,10 +167,11 @@ class KunlianLoginService:
         if (
             facts.binding.admission_status != "ACTIVE"
             or facts.binding.local_override
-            or facts.mapping is None
-            or not facts.mapping.enabled
+            or (facts.mapping is not None and not facts.mapping.enabled)
         ):
             raise KunlianIdentityUnavailableError()
+        if facts.mapping is None:
+            raise KunlianDirectoryNotReadyError()
         batch = facts.published_batch
         if (
             batch is None
@@ -182,9 +185,12 @@ class KunlianLoginService:
             or facts.binding.projected_revision != facts.binding.source_revision
         ):
             raise KunlianDirectoryNotReadyError()
-        current = await self.user_owner.read_current_qualification(
-            facts.binding.local_user_id, identity_key=facts.binding.identity_key
-        )
+        if self.onboarding is not None:
+            current = await self.onboarding.current_qualification(facts.binding)
+        else:
+            current = await self.user_owner.read_current_qualification(
+                facts.binding.local_user_id, identity_key=facts.binding.identity_key
+            )
         mapping = KunlianTenantMapping(
             connection_id=facts.mapping.connection_id,
             external_tenant_id=facts.mapping.external_tenant_id,
@@ -259,8 +265,7 @@ class KunlianLoginService:
                 if (
                     identity.issuer != self.config.issuer
                     or identity.client_id != self.config.client_id
-                    or identity.tenant_id != self.config.allowed_tenant_id
-                    or identity.workspace_id not in self.config.allowed_workspace_ids
+                    or not self.config.allows_scope(identity.tenant_id, identity.workspace_id)
                 ):
                     raise KunlianLoginInvalidError()
                 now = int(self.clock().replace(tzinfo=UTC).timestamp())

@@ -2,7 +2,7 @@
 
 - **Feature ID**：`F130`
 - **Version**：`v3.0.0`
-- **Updated**：2026-11-11
+- **Updated**：2026-11-12
 - **关联**：[spec.md](./spec.md) · [design.md](./design.md) · [verification.md](./verification.md)
 
 ## 状态
@@ -12,11 +12,11 @@
 | spec.md | 已确认 | 用户确认自动开通与只授予 Workflow 专属创建能力。 |
 | design.md | 已确认 | 用户已确认 create_workflow、三张领域状态表及完整修订设计。 |
 | tasks.md | 已确认 | 用户回复“确认 继续”，按本表分批实施。 |
-| 实现 | 进行中 | 12 / 42；T001–T012 已本地验证并经后续授权部署，其余未勾选，真实联合验收另记。 |
+| 实现 | 进行中 | 32 / 42；相关运行代码已按后续授权部署到 104；真实同步及试点 SSO 通过，完整联合验收仍未完成。 |
 
 ## 实施与验收约定
 
-- Mock 优先；设计及任务已确认。本轮完成 T001–T012，不将整个特性标为完成。若源文件已有并发修改，先合并核对，不覆盖用户工作。
+- Mock 优先；设计及任务已确认。前批 T001–T024 已完成；本轮仅实施 T025–T032，不将整个特性标为完成。若源文件已有并发修改，先合并核对，不覆盖用户工作。
 - 实施前核对工作树、分支及依赖提交；保持未提交联调修复，不自动暂存、提交、切换或清理用户工作。隔离分支遵循项目发版线规则，依赖未齐时先说明，不自动扩展到其他功能。
 - 批次 A 完成后先做 B，尽早证明“可建 Workflow、不可建其他类型”，再接 C／D 的自动开通；E 证明完整链路。
 - 权限、持久状态、并发及事务任务测试先行，先记录预期失败，再实现通过。基础声明不强制逐项红灯；同一批定向证据可复用，不每个任务重跑全套。
@@ -155,7 +155,7 @@
 
 ### 批次 C：原领域自动开通与撤销保护
 
-- [ ] **T013**：测试：租户与锚点开通
+- [x] **T013**：测试：租户与锚点开通
   - **文件**：`src/backend/test/tenant/test_kunlian_external_provision.py`、`src/backend/test/department/test_external_tenant_anchor.py`。
   - **内容**：覆盖两个有效租户、重名／更名、原人工映射、来源冲突、结构创建回执丢失、事务回滚和旧操作被栅栏拒绝；无管理员任命、无默认 Root 共享。
   - **覆盖 AC**：AC-01, AC-02, AC-10, AC-11, AC-13。
@@ -165,7 +165,7 @@
   - _Depends: T003_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T014**：实现：部门锚点事务适配
+- [x] **T014**：实现：部门锚点事务适配
   - **文件**：`src/backend/bisheng/department/application/external_tenant_anchor.py`、`src/backend/bisheng/department/domain/repositories/external_tenant_anchor.py`。
   - **内容**：提供经验证 Root 父节点下的新本地挂载锚点端口，参与租户专用结构 UoW；不移动旧部门或假造昆联组织树，不分配组织管理员。
   - **覆盖 AC**：AC-01, AC-10, AC-11。
@@ -175,7 +175,7 @@
   - _Depends: T013_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T015**：实现：租户来源仓储与回执
+- [x] **T015**：实现：租户来源仓储与回执
   - **文件**：`src/backend/bisheng/tenant/domain/repositories/external_provision.py`。
   - **内容**：实现唯一来源预留、实际结构写入与回执同事务、当前操作核验及阻断 CAS；对手工映射只记录经过核验的已有目标，禁止按名称认领与重绑。
   - **覆盖 AC**：AC-01, AC-02, AC-09, AC-10, AC-11。
@@ -185,7 +185,7 @@
   - _Depends: T014_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T016**：实现：租户领域开通协议
+- [x] **T016**：实现：租户领域开通协议
   - **文件**：`src/backend/bisheng/tenant/domain/services/external_provision.py`、`src/backend/bisheng/tenant/application/external_provision.py`。
   - **内容**：暴露 reserve／ensure／read_receipt 与来源政策；协调锚点及必要权限 application 的原投影账本，保持无默认分发。失败保留结构并查回，不伪造管理员主体。
   - **覆盖 AC**：AC-01, AC-02, AC-09, AC-10, AC-11, AC-13。
@@ -195,7 +195,7 @@
   - _Depends: T015_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T017**：测试：基础角色模板
+- [x] **T017**：测试：基础角色模板
   - **文件**：`src/backend/test/role/test_external_basic_role.py`。
   - **内容**：验证固定 admin/build/create_workflow、不含 create_app 和资源 Grant；暂停、删除墓碑、显式恢复、并发模板修改和角色名碰撞均不能扩权或自动认领。
   - **覆盖 AC**：AC-03, AC-04, AC-09, AC-10, AC-11。
@@ -205,7 +205,7 @@
   - _Depends: T003, T004_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T018**：实现：角色模板仓储与服务
+- [x] **T018**：实现：角色模板仓储与服务
   - **文件**：`src/backend/bisheng/role/domain/repositories/external_basic_role.py`、`src/backend/bisheng/role/domain/services/external_basic_role.py`。
   - **内容**：实现模板操作栅栏、创建回执及事务锁；停用实际清除模板菜单，删除保留来源墓碑；显式恢复只恢复新固定三键。保护原角色租户与其他角色。
   - **覆盖 AC**：AC-03, AC-04, AC-09, AC-10, AC-11。
@@ -215,7 +215,7 @@
   - _Depends: T017_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T019**：实现：角色 application 协议
+- [x] **T019**：实现：角色 application 协议
   - **文件**：`src/backend/bisheng/role/application/external_basic_role.py`。
   - **内容**：导出模板 ensure/read、政策与受限事务锁适配；返回值对象，不让用户领域直接查询角色来源表或调用权限基础设施。
   - **覆盖 AC**：AC-03, AC-04, AC-09, AC-10。
@@ -225,7 +225,7 @@
   - _Depends: T018_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T020**：测试：用户基础资格与撤销
+- [x] **T020**：测试：用户基础资格与撤销
   - **文件**：`src/backend/test/user/test_external_basic_access.py`、`src/backend/test/user/test_external_basic_access_races.py`。
   - **内容**：覆盖 UserRole 与来源回执原子提交、晚到操作、撤销／提交竞争、保留人工角色、缺失关联不自动补回、来源与本地用户不匹配。
   - **覆盖 AC**：AC-02, AC-03, AC-04, AC-08, AC-09, AC-10, AC-11。
@@ -235,7 +235,7 @@
   - _Depends: T003, T019_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T021**：实现：用户资格仓储与服务
+- [x] **T021**：实现：用户资格仓储与服务
   - **文件**：`src/backend/bisheng/user/domain/repositories/external_basic_access.py`、`src/backend/bisheng/user/domain/services/external_basic_access.py`。
   - **内容**：按设计锁顺序核验模板和用户 Owner 原回执，持久操作与实际角色变更同事务；只追加指定自动关系，撤销提高栅栏并留墓碑，显式设置目标租户。
   - **覆盖 AC**：AC-02, AC-03, AC-04, AC-08, AC-09, AC-10, AC-11。
@@ -245,7 +245,7 @@
   - _Depends: T020_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T022**：实现：用户资格 application 协议
+- [x] **T022**：实现：用户资格 application 协议
   - **文件**：`src/backend/bisheng/user/application/external_basic_access.py`。
   - **内容**：导出 ensure/set/read 及有效资格检查，合并独立人工菜单的现有结果；不以来源标识冒充管理员，不回传令牌，不接管用户资料投影。
   - **覆盖 AC**：AC-02, AC-03, AC-04, AC-08, AC-09, AC-10。
@@ -255,7 +255,7 @@
   - _Depends: T021_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T023**：测试：受管角色全部写入口
+- [x] **T023**：测试：受管角色全部写入口
   - **文件**：`src/backend/test/user/test_external_basic_access_mutations.py`、`src/backend/test/role/test_external_basic_role_mutations.py`。
   - **内容**：覆盖 user_addrole、角色服务及旧兼容修改／删除路径；先提交撤销和标记再重试自动任务，确认不复活；非受管人工角色保持原值和授权检查。
   - **覆盖 AC**：AC-04, AC-09, AC-13。
@@ -265,7 +265,7 @@
   - _Depends: T019, T022_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T024**：实现：受管写入口收口
+- [x] **T024**：实现：受管写入口收口
   - **文件**：`src/backend/bisheng/user/api/user.py`、`src/backend/bisheng/role/domain/services/role_service.py`。
   - **内容**：受管分支交给原领域 application 的同事务变更；旧兼容角色写入同样经过模板保护。保留原操作者范围检查，禁止只在删除之后异步补标记。
   - **覆盖 AC**：AC-04, AC-09, AC-13。
@@ -277,7 +277,7 @@
 
 ### 批次 D：目录、SSO 与 Worker 衔接
 
-- [ ] **T025**：测试：目录到自动开通编排
+- [x] **T025**：测试：目录到自动开通编排
   - **文件**：`src/backend/test/sso/test_kunlian_tenant_onboarding.py`、`src/backend/test/sso/test_kunlian_onboarding_directory.py`。
   - **内容**：覆盖完整发布后开通、失败分页不创建、当前批次补绑定、过期回执拒绝、已成功用户仍补资格、一个租户失败不阻塞其他就绪租户。
   - **覆盖 AC**：AC-01, AC-02, AC-07, AC-10, AC-11, AC-12。
@@ -287,7 +287,7 @@
   - _Depends: T016, T022_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T026**：实现：开通编排与成员补绑定
+- [x] **T026**：实现：开通编排与成员补绑定
   - **文件**：`src/backend/bisheng/sso_sync/domain/services/kunlian_onboarding.py`、`src/backend/bisheng/sso_sync/domain/repositories/kunlian.py`、`src/backend/bisheng/sso_sync/application/runtime.py`。
   - **内容**：按设计从当前有效完整批次协调 Owner、映射及成员；提取原成员协调，增加独立基础资格扫描；基础资格状态与用户资料投影分开。Runtime 只先装配新编排。
   - **覆盖 AC**：AC-01, AC-02, AC-03, AC-07, AC-10, AC-11, AC-12。
@@ -297,7 +297,7 @@
   - _Depends: T025, T024_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T027**：测试：双端范围与已有会话
+- [x] **T027**：测试：双端范围与已有会话
   - **文件**：`src/backend/test/sso/test_kunlian_onboarding_scope.py`、`src/backend/test/sso/test_kunlian_onboarding_login.py`、`src/backend/test/sso/test_kunlian_onboarding_admission.py`。
   - **内容**：验证 A/WA、B/WB 允许而 A/WB 拒绝，缺开通结果触发受控恢复并重登；内省往返中停用／撤销，HTTP 和 WebSocket 新动作拒绝；原 fixed 模式兼容。
   - **覆盖 AC**：AC-05, AC-06, AC-07, AC-08, AC-09, AC-13。
@@ -307,7 +307,7 @@
   - _Depends: T001, T026_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T028**：实现：后端令牌、登录与会话准入
+- [x] **T028**：实现：后端令牌、登录与会话准入
   - **文件**：`src/backend/bisheng/sso_sync/domain/clients/kunlian.py`、`src/backend/bisheng/sso_sync/domain/services/kunlian_login.py`、`src/backend/bisheng/sso_sync/domain/services/kunlian_session.py`。
   - **内容**：全部固定范围检查改为配置组合 helper；增加来源政策与资格核验，内省后重读角色／模板及阻断，保留原身份、签名、会话、重放和退出规则。
   - **覆盖 AC**：AC-05, AC-06, AC-07, AC-08, AC-09, AC-13。
@@ -317,7 +317,7 @@
   - _Depends: T027_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T029**：测试：网关组合模式
+- [x] **T029**：测试：网关组合模式
   - **文件**：`../bisheng-gateway/src/test/java/com/dataelem/gateway/config/KunlianSsoPropertiesTest.java`、`../bisheng-gateway/src/test/java/com/dataelem/gateway/sso/kunlian/KunlianOidcClientTest.java`、`src/backend/test/sso/test_kunlian_scope_policy.py`。
   - **内容**：与后端共享同组组合输入及预期，覆盖空／错误模式和旧 fixed 配置；保留签名、audience、nonce、时间和一次性事务验证，不使用真实令牌。
   - **覆盖 AC**：AC-05, AC-06, AC-13。
@@ -327,7 +327,7 @@
   - _Depends: T005_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T030**：实现：网关令牌范围
+- [x] **T030**：实现：网关令牌范围
   - **文件**：`../bisheng-gateway/src/main/java/com/dataelem/gateway/sso/kunlian/KunlianOidcClient.java`、`../bisheng-gateway/src/main/java/com/dataelem/gateway/config/KunlianSsoProperties.java`、`src/backend/bisheng/core/config/sso_sync.py`。
   - **内容**：使用组合 helper 统一身份范围检查；双端令牌与会话接入均完成后，同步解除两端 SCOPE_RUNTIME_NOT_READY，并按模式条件化旧固定字段必填。不开通真实范围；不改 HMAC 交接字段，不给网关目录 Key，不在真实失败后回落 Mock。
   - **覆盖 AC**：AC-05, AC-06, AC-13。
@@ -337,7 +337,7 @@
   - _Depends: T028, T029_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T031**：测试：恢复调度与漏投
+- [x] **T031**：测试：恢复调度与漏投
   - **文件**：`src/backend/test/sso/test_kunlian_onboarding_worker.py`。
   - **内容**：覆盖先持久后投递、阶段独立游标、已扫描键之前新任务、Beat 重扫、Worker 退出及旧失败回执；验证 tenant_id=1 的控制面头必需。
   - **覆盖 AC**：AC-01, AC-07, AC-10, AC-11, AC-12。
@@ -347,7 +347,7 @@
   - _Depends: T026_
   - _Boundary: 只执行本任务列出的本地开发／Mock 范围；不部署_
 
-- [ ] **T032**：实现：Worker 恢复衔接
+- [x] **T032**：实现：Worker 恢复衔接
   - **文件**：`src/backend/bisheng/worker/sso_sync/tasks.py`、`src/backend/bisheng/sso_sync/application/runtime.py`。
   - **内容**：复用恢复入口，按有界阶段扫描并续投；Celery headers tenant_id=1 经 ContextVar 进入 Root 控制面，Owner 按已验证映射切目标租户；不新增调度服务。Runtime 在既有编排装配上追加 Worker 协议。
   - **覆盖 AC**：AC-01, AC-07, AC-10, AC-11, AC-12。
@@ -465,13 +465,13 @@
 
 | 阶段 | 任务范围 | 状态 |
 | --- | --- | --- |
-| 基础设施 | T001–T005 | 本地完成并后续部署；MySQL 三张空表已创建，组合模式保持拒绝启用 |
+| 基础设施 | T001–T005 | 已部署；源码已支持组合模式，实际配置仍 fixed |
 | 专属创建 | T006–T012 | 本地 API／组件与相关回归通过；完整浏览器另由 T038 验证 |
-| 领域开通 | T013–T024 | 未开始 |
-| SSO／恢复 | T025–T032 | 未开始 |
+| 领域开通 | T013–T024 | 已部署；真实 10 个有效租户、15 个有效成员及基础资格通过 |
+| SSO／恢复 | T025–T032 | 已部署；真实目录及 fixed 试点登录／刷新／退出通过；故障矩阵待验 |
 | 控制面与 Mock | T033–T038 | 未开始 |
 | 文档与审查 | T039–T041 | 未开始 |
-| 真实环境 | T042 | `NOT_RUN`，待双方条件及环境操作授权 |
+| 真实环境 | T042 | `PARTIAL`；本次专项联调通过，不勾选完整联合验收 |
 
 ## 实际偏差记录
 
@@ -481,3 +481,30 @@
 - 集成夹具：模型过滤事件会影响同进程旧测试；新模型过滤验证改用独立解释器，旧登记夹具显式进入租户 7 严格上下文，不关闭过滤器。
 - 分批保护：新组合配置先声明、暂拒绝启动登录；在既有 T030 内按 T028/T029 依赖解除双端阶段门禁，未新增业务范围或持久对象。
 - L1 审查与证据：见 [verification.md](./verification.md) E-006–E-011。其余任务保持未勾选，真实环境保持 NOT_RUN。
+
+### 领域开通批次记录（2026-11-12，T013–T024）
+
+- 当前隔离工作树：`/Users/wenruli/code/project/bisheng/bisheng-kunlian-tenant-onboarding`，分支 `feat/v3.0.0/118-kunlian-integration`，基线 `2ed971aed7`。主工作区已在其他发版分支且有未提交修改，本轮没有覆盖或切换它。
+- T013–T024 采用现有三张状态模型，新增部门／租户／角色／用户领域适配及 application；不增加第四张表，不迁移历史数据，不配置真实环境。
+- 配套测试落点：`src/backend/test/fixtures/kunlian_onboarding.py` 为这些任务共用的临时 SQLite／网络阻断夹具；`test/role/test_role_service.py` 给原普通角色桩补齐新 application 边界，受管路径另用真实 SQL 验证；`test/role/test_role_api.py` 只修正源码断言对引号形式的依赖。
+- 按当前 QA 模板补充 [test-cases.md](./test-cases.md)，九条人工参考用例均保留“待执行”，不以开发脚本结果冒充人工验收。
+- 当前有效证据见 verification.md E-013–E-017 与 [本轮源码校验记录](./evidence-local-20261112-c.json)。早期测试误用了另一工作区指向 116 的配置，影响尚未确认，详见 E-013；纠正后全部使用隔离配置和 TCP 阻断。用户指定的真实环境为 104，本轮不部署。
+- 截至该批次，T025–T042 尚未完成；后续实施进度见下节，原领域串联证据不冒充全链路验收。
+
+### 目录、登录与恢复批次（2026-11-12，T025–T032）
+
+- 本批沿用已确认计划与上一批隔离工作树；网关在 `../bisheng-gateway` 的 `feat/kunlian-integration` 上实现，原基线 `bab8dd72`，没有暂存、提交、推送或部署。
+- T026 复用 `_reconcile_members` 支持当前已发布批次补绑定；来源快照带批次、政策、映射修订，旧回执不能写入新目录。三阶段独立分页，同步已成功的用户仍单独补基础资格；无新增表、运行配置或默认开关变化。
+- 必要配套落点：tenant application／repository 追加只读来源状态值对象；原 user application／repository 追加当前已应用投影回执读取；`kunlian_projection.py` 增加可选当前政策校验，沿用原连接锁。它们属于已确认领域端口的最小衔接，不变更原用户资料投影和固定模式合同。
+- T028／T030 同步接入后端客户端初始化、RS256、内省、登录和会话，以及网关令牌；移除源码中的阶段门禁，按模式校验必填字段。真实配置仍未启用新模式；不得只复制 Mock 的 A／WA、B／WB 配置上线。
+- 配套测试修改 `test/sso/test_kunlian_admission.py` 的资格读取次数为网络前后各一次；`test_kunlian_scope_policy.py` 和网关 `KunlianScopePolicyTest.java` 将旧临时门禁断言改为已接入语义。
+- 当前证据见 verification.md E-018–E-022 及 [本批源码校验记录](./evidence-local-20261112-d.json)。后端相关回归 378 项通过，后续仅测试增强的三个文件 12 项通过；网关 77 项通过。不同命令不相加为一次全量执行。
+- T033–T042 保持未勾选：控制面、完整 Mock 浏览器、真实数据库竞争和联合验收等仍需后续完成。104 未更新；真实租户／Workspace 范围、账号和 OpenFGA 验证仍待执行。
+
+### 后续授权的 104 部署与专项联调（2026-11-12）
+
+- 用户明确要求部署 104 并调通用户同步／SSO。本次授权覆盖已实现运行代码、后端自动开通启用及真实验证；没有开启未登记的多租户 OIDC 范围。
+- 发布 `20261112-f130-sso`：24 个后端文件及网关 JAR，目录映射不变；仅开启自动开通和策略修订 3。代码未暂存、提交或推送。
+- 实测目录 13 租户／18 成员，10 个有效租户及 15 名有效成员完成开通；3 个暂停租户及对应成员未开通，原人工授权保留。试点账号真实登录、刷新、新建表单打开／取消、退出回调与再次登录通过。
+- 原本地批次“不部署”描述保留历史含义；当前部署事实与证据见 verification.md E-023／E-024 和 [部署联调记录](./deployment-20261112-sso.md)。
+- T033–T041 仍待后续开发／验收；T042 已执行上述真实子集，状态 PARTIAL，完整权限／多租户范围／故障／DM8 等未验，不因此次部署勾选整项。

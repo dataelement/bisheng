@@ -11,6 +11,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def ordinary_role_owner_boundary(monkeypatch):
+    # 本文件使用普通角色桩; 受管角色由 F130 独立 SQL 用例验证。
+    monkeypatch.setattr('bisheng.role.application.external_basic_role.mutate_managed_role',
+                        AsyncMock(return_value=False))
+
+
 @pytest.fixture
 def mock_admin_user():
     user = MagicMock()

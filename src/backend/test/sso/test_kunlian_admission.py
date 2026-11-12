@@ -109,7 +109,7 @@ async def test_each_new_http_or_ws_action_introspects_without_allow_cache(admiss
         principal = await service.admit_kunlian_session(issued.reference, action(i, transport))
         assert principal.user_id == 101 and principal.tenant_id == 2
     assert idp.introspect.await_count == 3
-    assert user_owner.read_current_qualification.await_count == 3
+    assert user_owner.read_current_qualification.await_count == 6
     for call in idp.introspect.await_args_list:
         expected = call.kwargs["expected"]
         assert (expected.subject, expected.client_id, expected.sid, expected.workspace_id) == (

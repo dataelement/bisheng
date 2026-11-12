@@ -126,7 +126,7 @@ class TestRoleEndpoints:
         ).read_text(encoding='utf-8')
 
         catalog_lookup = source.index('visible_roles = await RoleService.list_roles')
-        permission_reject = source.index("raise HTTPException(status_code=500, detail=f'No permission to add roles")
+        permission_reject = source.index("No permission to add roles")
 
         assert 'include_global_for_binding=True' in source
         assert 'admin_roles.update(one.id for one in visible_roles' in source

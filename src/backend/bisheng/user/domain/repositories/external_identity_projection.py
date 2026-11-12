@@ -287,6 +287,22 @@ class UserExternalIdentityProjectionRepository:
                 )
             )
 
+    async def read_current_projection_receipt(self, identity_key, user_id):
+        async with self._session() as session:
+            row = await self._state(session, identity_key)
+            if (
+                row is None
+                or row.user_id != user_id
+                or not row.applied_operation_id
+                or row.operation_id != row.applied_operation_id
+                or row.fence != row.applied_fence
+                or row.source_revision != row.applied_source_revision
+            ):
+                raise KunlianBindingConflictError()
+            return ExternalShadowReceipt(
+                row.user_id, row.applied_operation_id, row.applied_fence, row.applied_source_revision
+            )
+
     async def read_control_plane_actor_roles(self, user_id: int) -> tuple[int, ...]:
         async with self._session() as session:
             user = await session.get(User, user_id)

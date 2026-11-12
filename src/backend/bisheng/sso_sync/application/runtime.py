@@ -11,6 +11,7 @@ from cryptography.fernet import Fernet
 from pydantic import SecretStr
 
 from bisheng.common.errcode.sso_sync import KunlianDependencyUnavailableError
+from bisheng.role.application.external_basic_role import ExternalBasicRoleApplication, RoleExternalBasicRoleRepository
 from bisheng.sso_sync.application.browser import KunlianBrowserApplication
 from bisheng.sso_sync.application.kunlian import (
     KunlianApiBindings,
@@ -29,11 +30,20 @@ from bisheng.sso_sync.domain.services.kunlian_login import (
     reserve_internal_nonce,
 )
 from bisheng.sso_sync.domain.services.kunlian_logout import KunlianLogoutService
+from bisheng.sso_sync.domain.services.kunlian_onboarding import KunlianOnboardingService
 from bisheng.sso_sync.domain.services.kunlian_projection import KunlianProjectionService
 from bisheng.sso_sync.domain.services.kunlian_session import KunlianSessionService
 from bisheng.tenant.application.external_membership import (
     ExternalMembershipRepository,
     KunlianExternalMembershipApplication,
+)
+from bisheng.tenant.application.external_provision import (
+    KunlianExternalTenantApplication,
+    TenantExternalProvisionRepository,
+)
+from bisheng.user.application.external_basic_access import (
+    ExternalBasicAccessApplication,
+    UserExternalBasicAccessRepository,
 )
 from bisheng.user.application.external_identity import (
     KunlianExternalIdentityApplication,
@@ -56,6 +66,7 @@ class KunlianWorkerServices:
     config: object
     directory: KunlianDirectoryService
     projection: KunlianProjectionService
+    onboarding: KunlianOnboardingService | None = None
 
 
 class KunlianRuntimeProvider:
@@ -125,6 +136,18 @@ class KunlianRuntimeProvider:
             repository = KunlianDirectoryRepository(encrypt_value=encrypt, decrypt_value=decrypt, key_version=version)
             user_owner = KunlianExternalIdentityApplication(UserExternalIdentityProjectionRepository())
             tenant_owner = KunlianExternalMembershipApplication(ExternalMembershipRepository())
+            projection = KunlianProjectionService(repository, user_owner=user_owner, tenant_owner=tenant_owner)
+            role_owner = ExternalBasicRoleApplication(RoleExternalBasicRoleRepository())
+            onboarding = KunlianOnboardingService(
+                repository,
+                config,
+                tenants=KunlianExternalTenantApplication(TenantExternalProvisionRepository()),
+                users=user_owner,
+                roles=role_owner,
+                access=ExternalBasicAccessApplication(UserExternalBasicAccessRepository(role_port=role_owner)),
+                projection=projection,
+                multi_tenant_enabled=multi_tenant_enabled,
+            )
 
             def directory_credential(reference):
                 if cipher_secret is None:
@@ -213,6 +236,7 @@ class KunlianRuntimeProvider:
                         tenant_owner=tenant_owner,
                         multi_tenant_enabled=multi_tenant_enabled,
                         csrf_secret=secrets["csrf_secret_reference"],
+                        onboarding=onboarding,
                     )
                 )
                 trust = KunlianInternalTrust(
@@ -232,13 +256,15 @@ class KunlianRuntimeProvider:
                         signer_factory=AuthJwt,
                         multi_tenant_enabled=multi_tenant_enabled,
                         allow_multi_login=allow_multi_login is True,
+                        onboarding=onboarding,
                     )
                 )
             self.directory_service = directory
             self._worker_services = KunlianWorkerServices(
                 config,
                 directory,
-                KunlianProjectionService(repository, user_owner=user_owner, tenant_owner=tenant_owner),
+                projection,
+                onboarding,
             )
             self._browser = KunlianBrowserApplication(
                 config=config, repository=repository, user_owner=user_owner, sessions=sessions, protocol=protocol

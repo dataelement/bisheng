@@ -46,6 +46,20 @@ class KunlianConf(BaseModel):
     page_size: int = Field(default=20, ge=1, le=100)
     sync_interval_seconds: int = Field(default=300, gt=0)
 
+    def allows_scope(self, tenant_id, workspace_id) -> bool:
+        if not isinstance(tenant_id, str) or not isinstance(workspace_id, str):
+            return False
+        try:
+            pairs = resolve_scope_pairs(
+                self.login_scope_mode,
+                self.allowed_tenant_id,
+                self.allowed_workspace_ids,
+                self.tenant_workspace_allowlist,
+            )
+        except ValueError:
+            return False
+        return workspace_id in pairs.get(tenant_id, ())
+
     def readiness_reasons(self, *, multi_tenant_enabled: bool) -> tuple[str, ...]:
         """只评估配置前置条件。完整目录和投影就绪由应用服务检查。"""
         reasons = []
@@ -66,10 +80,9 @@ class KunlianConf(BaseModel):
             )
         except ValueError:
             reasons.append("SCOPE_POLICY_INVALID")
-        if self.login_scope_mode != "fixed":
-            # 本批只声明新模式; T028/T030 完成双端令牌及会话检查前保持拒绝。
-            reasons.append("SCOPE_RUNTIME_NOT_READY")
-        if not self.allowed_workspace_ids or any(not value.strip() for value in self.allowed_workspace_ids):
+        if self.login_scope_mode == "fixed" and (
+            not self.allowed_workspace_ids or any(not value.strip() for value in self.allowed_workspace_ids)
+        ):
             reasons.append("WORKSPACE_POLICY_MISSING")
         if not self.state_semantics_revision.strip():
             reasons.append("STATE_SEMANTICS_MISSING")
@@ -77,7 +90,6 @@ class KunlianConf(BaseModel):
             "connection_id",
             "issuer",
             "client_id",
-            "allowed_tenant_id",
             "public_origin",
             "redirect_uri",
             "logout_redirect_uri",
@@ -88,7 +100,9 @@ class KunlianConf(BaseModel):
             "csrf_secret_reference",
             "encryption_secret_reference",
         )
-        if any(not getattr(self, name).strip() for name in required):
+        if any(not getattr(self, name).strip() for name in required) or (
+            self.login_scope_mode == "fixed" and not self.allowed_tenant_id.strip()
+        ):
             reasons.append("REGISTRATION_INCOMPLETE")
         if not self.endpoint_allowlist:
             reasons.append("ENDPOINT_ALLOWLIST_MISSING")

@@ -291,8 +291,20 @@ class KunlianOidcClient:
         from urllib.parse import quote_plus
 
         from bisheng.common.errcode.sso_sync import KunlianLoginInvalidError
+        from bisheng.core.config.kunlian_scope import resolve_scope_pairs
 
         self._config = config.model_copy(deep=True)
+        try:
+            scope_valid = bool(
+                resolve_scope_pairs(
+                    config.login_scope_mode,
+                    config.allowed_tenant_id,
+                    config.allowed_workspace_ids,
+                    config.tenant_workspace_allowlist,
+                )
+            )
+        except ValueError:
+            scope_valid = False
         origin = urlsplit(config.issuer)
         if (
             not origin.hostname
@@ -304,8 +316,7 @@ class KunlianOidcClient:
             or config.issuer.endswith("/")
             or not config.client_id
             or not client_secret.get_secret_value()
-            or not config.allowed_tenant_id
-            or not config.allowed_workspace_ids
+            or not scope_valid
             or (
                 origin.scheme != "https"
                 and not (origin.scheme == "http" and f"http://{origin.netloc}" in config.approved_test_origins)
@@ -491,8 +502,7 @@ class KunlianOidcClient:
             if (
                 not isinstance(claims["nonce"], str)
                 or not compare_digest(claims["nonce"].encode(), expected_nonce.encode())
-                or claims["tenant_id"] != self._config.allowed_tenant_id
-                or claims["workspace_id"] not in self._config.allowed_workspace_ids
+                or not self._config.allows_scope(claims["tenant_id"], claims["workspace_id"])
                 or any(
                     not isinstance(claims[name], str) or not 1 <= len(claims[name]) <= size
                     for name, size in (("sub", 128), ("sid", 256), ("workspace_id", 128))
@@ -533,8 +543,7 @@ class KunlianOidcClient:
             body.get("active") is not True
             or expected.client_id != self._config.client_id
             or expected.issuer != self._config.issuer
-            or expected.tenant_id != self._config.allowed_tenant_id
-            or expected.workspace_id not in self._config.allowed_workspace_ids
+            or not self._config.allows_scope(expected.tenant_id, expected.workspace_id)
             or any(body.get(name) != value for name, value in comparisons.items())
             or type(body.get("exp")) is not int
         ):

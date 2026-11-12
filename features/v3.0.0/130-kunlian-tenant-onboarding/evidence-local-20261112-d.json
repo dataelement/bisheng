@@ -1,0 +1,367 @@
+{
+  "date": "2026-11-12",
+  "worktree": "/Users/wenruli/code/project/bisheng/bisheng-kunlian-tenant-onboarding",
+  "branch": "feat/v3.0.0/118-kunlian-integration",
+  "baseline": "2ed971aed740a488d41aa0972b76ead454f1209d",
+  "batch": "T025-T032",
+  "completed_tasks": 32,
+  "total_tasks": 42,
+  "deployed": false,
+  "committed": false,
+  "real_environment": "NOT_RUN",
+  "intended_server": "192.168.106.104; unchanged this batch",
+  "prior_environment_incident": "E-013 remains UNKNOWN; no further access to 116",
+  "backend": {
+    "command": "verification.md E-019",
+    "regression_exit": 0,
+    "regression_log": "........................................................................ [ 19%]\n........................................................................ [ 38%]\n........................................................................ [ 57%]\n........................................................................ [ 76%]\n........................................................................ [ 95%]\n..................                                                       [100%]\n378 passed, 22 warnings in 26.66s\nsys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute\n",
+    "supplement_exit": 0,
+    "supplement_log": "............                                                             [100%]\n12 passed, 7 warnings in 1.02s\n",
+    "note": "Only three test files enhanced after 378-test run; production sources unchanged; totals are separate commands",
+    "environment_reference": "evidence-local-20261112-c.json pytest.environment"
+  },
+  "gateway": {
+    "worktree": "/Users/wenruli/code/project/bisheng/bisheng-gateway",
+    "baseline": "bab8dd72d2c20323cbb896c88e4d2c65433e0652",
+    "command": "JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home mvn -o -q '-Dtest=Kunlian*Test' test",
+    "exit": 0,
+    "suites": [
+      {
+        "class": "com.dataelem.gateway.config.KunlianSecurityConfigurationTest",
+        "tests": 2,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.dataelem.gateway.config.KunlianSsoPropertiesTest",
+        "tests": 8,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.dataelem.gateway.controller.KunlianSsoControllerTest",
+        "tests": 12,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.dataelem.gateway.sdk.KunlianIdentityClientTest",
+        "tests": 4,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.dataelem.gateway.sso.kunlian.KunlianLoginTransactionStoreTest",
+        "tests": 24,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.dataelem.gateway.sso.kunlian.KunlianOidcClientTest",
+        "tests": 22,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.dataelem.gateway.sso.kunlian.KunlianScopePolicyTest",
+        "tests": 3,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "class": "com.dataelem.gateway.utils.KunlianRequestSignerTest",
+        "tests": 2,
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0
+      }
+    ],
+    "source_sha256": {
+      "src/main/java/com/dataelem/gateway/config/KunlianSsoProperties.java": "b5755a003f831707da8136edbdd93ad0e6ca087e4e4ad617f1873e1f418d7db9",
+      "src/main/java/com/dataelem/gateway/sso/kunlian/KunlianOidcClient.java": "01fc36b35ea5a201d0ca0affb3374f0a8d5a176d8bc05b77bea6f3cb092b422d",
+      "src/test/java/com/dataelem/gateway/config/KunlianSsoPropertiesTest.java": "7f8c6a623ca77eebf80038e614927c874e17b9e6d98773ef078b53fece9f0930",
+      "src/test/java/com/dataelem/gateway/sso/kunlian/KunlianOidcClientTest.java": "af468aab8d2d1a1a1da0f4b0514a0f7c44342e9d037ee4630040d0cdf0755566",
+      "src/test/java/com/dataelem/gateway/sso/kunlian/KunlianScopePolicyTest.java": "a1f72bbfd8da2a756034137aa31741b18462657f378af9ce6fade70ce2b0b8f7"
+    }
+  },
+  "static": {
+    "ruff_comparison": {
+      "src/backend/bisheng/core/config/sso_sync.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/role/domain/services/role_service.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/sso_sync/application/runtime.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/sso_sync/domain/clients/kunlian.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/sso_sync/domain/repositories/kunlian.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/sso_sync/domain/services/kunlian_login.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/sso_sync/domain/services/kunlian_projection.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/sso_sync/domain/services/kunlian_session.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/user/api/user.py": {
+        "current": 60,
+        "baseline": 60,
+        "added": 0
+      },
+      "src/backend/bisheng/user/application/external_identity.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/user/domain/repositories/external_identity_projection.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/worker/sso_sync/tasks.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/role/test_role_api.py": {
+        "current": 2,
+        "baseline": 2,
+        "added": 0
+      },
+      "src/backend/test/role/test_role_service.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/sso/test_kunlian_admission.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/sso/test_kunlian_scope_policy.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/department/application/external_tenant_anchor.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/department/domain/repositories/external_tenant_anchor.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/role/application/external_basic_role.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/role/domain/repositories/external_basic_role.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/role/domain/services/external_basic_role.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/sso_sync/domain/services/kunlian_onboarding.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/tenant/application/external_provision.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/tenant/domain/repositories/external_provision.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/tenant/domain/services/external_provision.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/user/application/external_basic_access.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/user/domain/repositories/external_basic_access.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/user/domain/services/external_basic_access.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/department/test_external_tenant_anchor.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/fixtures/kunlian_onboarding.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/role/test_external_basic_role.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/role/test_external_basic_role_mutations.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/sso/test_kunlian_onboarding_admission.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/sso/test_kunlian_onboarding_directory.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/sso/test_kunlian_onboarding_login.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/sso/test_kunlian_onboarding_scope.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/sso/test_kunlian_onboarding_worker.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/sso/test_kunlian_tenant_onboarding.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/tenant/test_kunlian_external_provision.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/user/test_external_basic_access.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/user/test_external_basic_access_mutations.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/user/test_external_basic_access_races.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      }
+    },
+    "arch_guard_files": 42,
+    "arch_guard_violations": 0,
+    "format": "26 files already formatted",
+    "task_check": "32/42",
+    "qa_cases": 14,
+    "qa_columns": 8,
+    "qa_status": "NOT_RUN",
+    "links_and_whitespace": "PASS"
+  },
+  "source_sha256": {
+    "src/backend/bisheng/core/config/sso_sync.py": "b029820d12d8a946a7ab1cb00e46e036d6e89012beb5c23057a036da47fc689d",
+    "src/backend/bisheng/role/domain/services/role_service.py": "78686bea1d4be9c03b347e97c4919296ac345747d4896b158a53b6d4277f4e87",
+    "src/backend/bisheng/sso_sync/application/runtime.py": "9b5d4dbce889a5c81fcfff4418e292476f25437d7f13ebf263409e9d978ad84b",
+    "src/backend/bisheng/sso_sync/domain/clients/kunlian.py": "a2607ba6c9e2f99ef220df84274055cc8aa1fbbc77b613b25475c7b9c26b6814",
+    "src/backend/bisheng/sso_sync/domain/repositories/kunlian.py": "c6c9ca2e1563b7905533aa55944b56dffb1a5ee6c62489dc3449a564d00c1840",
+    "src/backend/bisheng/sso_sync/domain/services/kunlian_login.py": "fa51b725e5fb698542872975a256c1ce8d85f00ba4f564e1b93e3faec624f681",
+    "src/backend/bisheng/sso_sync/domain/services/kunlian_projection.py": "50544ed868588550896b47a3f51954f94836d765844cc29116bb8736a7edf4e4",
+    "src/backend/bisheng/sso_sync/domain/services/kunlian_session.py": "c109715f551a4c20f64adacf2a1ed2f0fe8d2e5b6f48bd7580cc8090d1cd3687",
+    "src/backend/bisheng/user/api/user.py": "df87afe17d34d783443607938b026980489e2be0da83354621df7b92fda715ac",
+    "src/backend/bisheng/user/application/external_identity.py": "1b5bad932574071a38043899f55055ec53c920a96fa81e5e3ce5a55740f6e4ac",
+    "src/backend/bisheng/user/domain/repositories/external_identity_projection.py": "23748067ee6471e0ecf5dc8d1b53e3ac9025f4df81cac4be4a40ad48a19c703c",
+    "src/backend/bisheng/worker/sso_sync/tasks.py": "f35b634ce85d948b0e68838034ba19e4eb3dec6065c8e01cf93404d839f406c3",
+    "src/backend/test/role/test_role_api.py": "d3131bd5ea48db6c92d75c88529cb6d3a8091e6637de9c8c840b4a958dd6726b",
+    "src/backend/test/role/test_role_service.py": "76a2546229070c50111180c0077e82a2955fb723cdcfb4b233e982425255ed35",
+    "src/backend/test/sso/test_kunlian_admission.py": "fad92031aab7b43249c720d8096bbf5dce8a0e7ce1e3249380566a1377aa7326",
+    "src/backend/test/sso/test_kunlian_scope_policy.py": "7ccc289c6c2eb758276e440b1ddb2055af10ef85296652046f78ac6044c9413b",
+    "src/backend/bisheng/department/application/external_tenant_anchor.py": "31a0978ab293110947ba6c6dad8680d8be0cb8c63b9a6c14dfbfe07c4c5740f9",
+    "src/backend/bisheng/department/domain/repositories/external_tenant_anchor.py": "a487af036410702c7c8a97d615c7eefc953d19f9f506bbcef275d74361d835d4",
+    "src/backend/bisheng/role/application/external_basic_role.py": "404283232004ee828ac83dcf51c2afc65e0c23d446e5506f1f42f9d40f2bfdce",
+    "src/backend/bisheng/role/domain/repositories/external_basic_role.py": "14ea5fcc8a8e5e151085a795f0905962aaf13afad883c008cd0f7d6ade1adb10",
+    "src/backend/bisheng/role/domain/services/external_basic_role.py": "f83e1c97cca995ffbbd364e7f6b091bdce76ff6f30b31aecd8aba652e9f3cadd",
+    "src/backend/bisheng/sso_sync/domain/services/kunlian_onboarding.py": "5bec6048f74e7a0158b50be55b30d2df2df90244a8e6b9463184786a6a9f1bc1",
+    "src/backend/bisheng/tenant/application/external_provision.py": "8f2cf706dfb43aa86d999420a38bd7870d01c2ac920757366a1873d12e15f029",
+    "src/backend/bisheng/tenant/domain/repositories/external_provision.py": "cdd22a6d2155e9becef4c0a96edaa6c10b5a16f731ef39044fcc35405271d435",
+    "src/backend/bisheng/tenant/domain/services/external_provision.py": "496031949269033823b1b95c9da27899dcf4e1f87e5e83d4c83d09756ea0cdfd",
+    "src/backend/bisheng/user/application/external_basic_access.py": "7ba9f9f84a42cf31a3d59a5d1b58da4d4703ef04b9f0c7342cca5c5533e55766",
+    "src/backend/bisheng/user/domain/repositories/external_basic_access.py": "07c4f1e8652f8d7592a924ef06528518aec790b8a6842047c45a7aeab6e1f0c1",
+    "src/backend/bisheng/user/domain/services/external_basic_access.py": "6f0502f560fd99dd89f27738935cc15cd71af6d71b721432d323c6cdd7d646d4",
+    "src/backend/test/department/test_external_tenant_anchor.py": "1ebbf81c09392ec7d38fb4d465e7f0b9bc1a68603678ee071454b78d21d359e2",
+    "src/backend/test/fixtures/kunlian_onboarding.py": "b266166c50b0a639a050c9c6def72a546866e91029b4af52a1f40f1ad8b6f259",
+    "src/backend/test/role/test_external_basic_role.py": "2a1983e3131df36ed8d1649b47c905e7c8f0d706b3bc09d8c08b334e61432084",
+    "src/backend/test/role/test_external_basic_role_mutations.py": "1b08412b272bdaf7c3a00b8955de3877275bec4c82c6fc98062cc1cc2432ac50",
+    "src/backend/test/sso/test_kunlian_onboarding_admission.py": "15c9a1a2bc055d4a58e56f96b90713fbf8c993555ef0c0183c93d798d35350c7",
+    "src/backend/test/sso/test_kunlian_onboarding_directory.py": "0c490893ab3fb46fc239ce235a89d33bf61d6724a5fe3189ff1dca147805414f",
+    "src/backend/test/sso/test_kunlian_onboarding_login.py": "c6d12f6dce5f67bcf2cf44f250b411e9e5555930117b2b8ab62ef67d58e771b8",
+    "src/backend/test/sso/test_kunlian_onboarding_scope.py": "c55b858f8246abe6b5e2d84ea4f9950fc0aad185a6db79ce30672c5e6084d7ed",
+    "src/backend/test/sso/test_kunlian_onboarding_worker.py": "49584bc3ade609b167ee1b8b7c5c4368d92d4315442ae93bc25a9274b6f2cc55",
+    "src/backend/test/sso/test_kunlian_tenant_onboarding.py": "f53aa8fb9ff7f3bb051093f1fcecee53a3992f26f18d05e1f712151a3fa84d8c",
+    "src/backend/test/tenant/test_kunlian_external_provision.py": "a72b289a7d39432fa44b9a19eded81e63ba35899d14bcbd0d1ef94e9707c904b",
+    "src/backend/test/user/test_external_basic_access.py": "6b021f76d7d42eeabd2df20b1aa7e4643131ef4a1a2419703e69ce97ce0fa746",
+    "src/backend/test/user/test_external_basic_access_mutations.py": "d53898841d8a37920bf46d9c7a6fbe2b568fd53db3033b76295ffc7ed32f1cea",
+    "src/backend/test/user/test_external_basic_access_races.py": "cdbf5bff3bdcc72b5704a5cd8506566d520f229a49a1e49517efb69c45e26cdf"
+  },
+  "document_sha256": {
+    "spec.md": "969f5288a7a66779b4be8b5b17c283bde7f83d431cc63482d7816a547d24bd5d",
+    "design.md": "828274cf48410da81dda0c03267763a52fb2724e8f78becb2b242250d5beac5d",
+    "tasks.md": "8487d51068de26a3e7231b61a220cddcceb520d91c0d0f17fb12d393ad935e23",
+    "verification.md": "73b3b5b7bae3952967945802e6025721aba832eb908b69cb6133ffaf09e04f7f",
+    "test-cases.md": "94d525332a3a520aaf3e7ca74ef4f5a4e0fbd5ab72eec4bae3a57719e698cd1c"
+  }
+}

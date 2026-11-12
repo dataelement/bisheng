@@ -1,0 +1,373 @@
+{
+  "date": "2026-11-12",
+  "release": "20261112-f130-sso",
+  "server": "192.168.106.104",
+  "switched_at": "2026-11-12T18:47:34+0800",
+  "authorization": "用户要求部署到104并调通用户同步与SSO登录",
+  "code": {
+    "backend_baseline": "2ed971aed740a488d41aa0972b76ead454f1209d",
+    "gateway_baseline": "bab8dd72d2c20323cbb896c88e4d2c65433e0652",
+    "uncommitted_worktree_deployed": true,
+    "source_files": [
+      {
+        "target": "backend/bisheng/core/config/sso_sync.py",
+        "old_sha256": "766479775e8d54847f0d4d00115ce44982a2bea80b326497cd16df9e3067dd3a",
+        "new_sha256": "b029820d12d8a946a7ab1cb00e46e036d6e89012beb5c23057a036da47fc689d"
+      },
+      {
+        "target": "backend/bisheng/role/domain/services/role_service.py",
+        "old_sha256": "a2daa21cd9b4fcb0ac90f7fe40563b4538d076b0b64e03e3d13e770fe3d739ca",
+        "new_sha256": "78686bea1d4be9c03b347e97c4919296ac345747d4896b158a53b6d4277f4e87"
+      },
+      {
+        "target": "backend/bisheng/sso_sync/application/runtime.py",
+        "old_sha256": "af2d110742d505dfd792a106317bc46b04843033939dba8c7e2f61d7dbea4a3c",
+        "new_sha256": "9b5d4dbce889a5c81fcfff4418e292476f25437d7f13ebf263409e9d978ad84b"
+      },
+      {
+        "target": "backend/bisheng/sso_sync/domain/clients/kunlian.py",
+        "old_sha256": "4b00b7f3b0c6dd99475b61d1e73c62faa27410348000fc1a9e5f3e3127a90813",
+        "new_sha256": "a2607ba6c9e2f99ef220df84274055cc8aa1fbbc77b613b25475c7b9c26b6814"
+      },
+      {
+        "target": "backend/bisheng/sso_sync/domain/repositories/kunlian.py",
+        "old_sha256": "0cc43459ebc6a2b4de692d004a6da55928f38de5d540e37bd03f9d98ecf079e9",
+        "new_sha256": "c6c9ca2e1563b7905533aa55944b56dffb1a5ee6c62489dc3449a564d00c1840"
+      },
+      {
+        "target": "backend/bisheng/sso_sync/domain/services/kunlian_login.py",
+        "old_sha256": "ed34924f4a29863cd94fbace64f302fbe67053026a1d43e13dafaad7ed3b7897",
+        "new_sha256": "fa51b725e5fb698542872975a256c1ce8d85f00ba4f564e1b93e3faec624f681"
+      },
+      {
+        "target": "backend/bisheng/sso_sync/domain/services/kunlian_projection.py",
+        "old_sha256": "ba192fba0f440ec22eb1bd07e8a4ec0c23ae9cb02f8168f5ec349c2b6ab124bc",
+        "new_sha256": "50544ed868588550896b47a3f51954f94836d765844cc29116bb8736a7edf4e4"
+      },
+      {
+        "target": "backend/bisheng/sso_sync/domain/services/kunlian_session.py",
+        "old_sha256": "6b978b3e281e1199d2764b3bed236d482e9f2982d6bf2aff0ce5b6316afe3d95",
+        "new_sha256": "c109715f551a4c20f64adacf2a1ed2f0fe8d2e5b6f48bd7580cc8090d1cd3687"
+      },
+      {
+        "target": "backend/bisheng/user/api/user.py",
+        "old_sha256": "3060ae55aed071fa5c495aa9b1e9ea91686f6d5260bd9744694661ace18a2ce9",
+        "new_sha256": "df87afe17d34d783443607938b026980489e2be0da83354621df7b92fda715ac"
+      },
+      {
+        "target": "backend/bisheng/user/application/external_identity.py",
+        "old_sha256": "9608e088c5de1668013564545f8016ae76291c625fbaa738146b4191f131f0ed",
+        "new_sha256": "1b5bad932574071a38043899f55055ec53c920a96fa81e5e3ce5a55740f6e4ac"
+      },
+      {
+        "target": "backend/bisheng/user/domain/repositories/external_identity_projection.py",
+        "old_sha256": "c1d606575270e45e1696ed29f3c9e6b063194f30766843bd8761aab1501ebe9c",
+        "new_sha256": "23748067ee6471e0ecf5dc8d1b53e3ac9025f4df81cac4be4a40ad48a19c703c"
+      },
+      {
+        "target": "backend/bisheng/worker/sso_sync/tasks.py",
+        "old_sha256": "9dd0f055cadee4e8f2a831668b5923ff29345abee6f9a24f1e8eb688fb4ee10b",
+        "new_sha256": "f35b634ce85d948b0e68838034ba19e4eb3dec6065c8e01cf93404d839f406c3"
+      },
+      {
+        "target": "backend/bisheng/department/application/external_tenant_anchor.py",
+        "old_sha256": null,
+        "new_sha256": "31a0978ab293110947ba6c6dad8680d8be0cb8c63b9a6c14dfbfe07c4c5740f9"
+      },
+      {
+        "target": "backend/bisheng/department/domain/repositories/external_tenant_anchor.py",
+        "old_sha256": null,
+        "new_sha256": "a487af036410702c7c8a97d615c7eefc953d19f9f506bbcef275d74361d835d4"
+      },
+      {
+        "target": "backend/bisheng/role/application/external_basic_role.py",
+        "old_sha256": null,
+        "new_sha256": "404283232004ee828ac83dcf51c2afc65e0c23d446e5506f1f42f9d40f2bfdce"
+      },
+      {
+        "target": "backend/bisheng/role/domain/repositories/external_basic_role.py",
+        "old_sha256": null,
+        "new_sha256": "14ea5fcc8a8e5e151085a795f0905962aaf13afad883c008cd0f7d6ade1adb10"
+      },
+      {
+        "target": "backend/bisheng/role/domain/services/external_basic_role.py",
+        "old_sha256": null,
+        "new_sha256": "f83e1c97cca995ffbbd364e7f6b091bdce76ff6f30b31aecd8aba652e9f3cadd"
+      },
+      {
+        "target": "backend/bisheng/sso_sync/domain/services/kunlian_onboarding.py",
+        "old_sha256": null,
+        "new_sha256": "5bec6048f74e7a0158b50be55b30d2df2df90244a8e6b9463184786a6a9f1bc1"
+      },
+      {
+        "target": "backend/bisheng/tenant/application/external_provision.py",
+        "old_sha256": null,
+        "new_sha256": "8f2cf706dfb43aa86d999420a38bd7870d01c2ac920757366a1873d12e15f029"
+      },
+      {
+        "target": "backend/bisheng/tenant/domain/repositories/external_provision.py",
+        "old_sha256": null,
+        "new_sha256": "cdd22a6d2155e9becef4c0a96edaa6c10b5a16f731ef39044fcc35405271d435"
+      },
+      {
+        "target": "backend/bisheng/tenant/domain/services/external_provision.py",
+        "old_sha256": null,
+        "new_sha256": "496031949269033823b1b95c9da27899dcf4e1f87e5e83d4c83d09756ea0cdfd"
+      },
+      {
+        "target": "backend/bisheng/user/application/external_basic_access.py",
+        "old_sha256": null,
+        "new_sha256": "7ba9f9f84a42cf31a3d59a5d1b58da4d4703ef04b9f0c7342cca5c5533e55766"
+      },
+      {
+        "target": "backend/bisheng/user/domain/repositories/external_basic_access.py",
+        "old_sha256": null,
+        "new_sha256": "07c4f1e8652f8d7592a924ef06528518aec790b8a6842047c45a7aeab6e1f0c1"
+      },
+      {
+        "target": "backend/bisheng/user/domain/services/external_basic_access.py",
+        "old_sha256": null,
+        "new_sha256": "6f0502f560fd99dd89f27738935cc15cd71af6d71b721432d323c6cdd7d646d4"
+      }
+    ],
+    "gateway_sha256": "3f820320a1e84ff386393eda7ed274d9fca9fa1df5bf342182fbd9fb263ba2bf",
+    "committed": false,
+    "pushed": false
+  },
+  "infrastructure": {
+    "containers_preserved": 3,
+    "images_environment_mounts_networks": "PASS",
+    "gateway_ip": "172.19.0.12",
+    "backend_configuration_only_changes": [
+      "auto_onboarding_enabled",
+      "policy_revision"
+    ],
+    "backup_bytes": 10507132,
+    "switched_at": "2026-11-12T18:47:34+0800",
+    "rollback_script_syntax": "PASS"
+  },
+  "mysql_backup_sha256": "a32632bf5cc51d2e292f0fc676c20eedcd6a99313d32427154168985f4788b8d",
+  "runtime_audit": {
+    "configuration": {
+      "connection_id": "kunlian-workflow-test",
+      "issuer": "http://ai-idp.comlansh.com:30001",
+      "client_id": "bisheng-workflow-test",
+      "allowed_tenant_id": "ce767a2d-e46a-4e11-bd1d-50c8ea4ef4b7",
+      "allowed_workspace_ids": [
+        "94b78176-c34d-4ef1-9b8f-1722210910f3"
+      ],
+      "public_origin": "http://110.16.193.170:50055",
+      "redirect_uri": "http://110.16.193.170:50055/api/kunlian/callback",
+      "logout_redirect_uri": "http://110.16.193.170:50055/api/kunlian/logout/callback",
+      "policy_revision": 3,
+      "login_scope_mode": "fixed",
+      "auto_onboarding_enabled": true,
+      "login_enabled": true,
+      "directory_enabled": true,
+      "max_directory_age_seconds": 600
+    },
+    "db": {
+      "host": "mysql",
+      "database": "bisheng"
+    },
+    "multi_tenant": true,
+    "secrets_present": {
+      "client_secret_reference": true,
+      "sync_key_reference": true,
+      "internal_secret_reference": true,
+      "csrf_secret_reference": true,
+      "encryption_secret_reference": true
+    },
+    "connection": [
+      {
+        "connection_id": "kunlian-workflow-test",
+        "enabled": 1,
+        "policy_revision": 3,
+        "sync_requested_version": 303,
+        "sync_completed_version": 303,
+        "active_batch_id": "d790fe6b-1214-473e-a848-f8cc6afa5b7f"
+      }
+    ],
+    "counts": {
+      "tenant": 11,
+      "user": 16,
+      "role": 13,
+      "userrole": 17,
+      "kunlian_tenant_binding": 10,
+      "kunlian_identity_binding": 15,
+      "tenant_external_provision": 10,
+      "role_external_basic_role": 10,
+      "user_external_basic_access": 15
+    },
+    "identity_states": [
+      {
+        "admission_status": "ACTIVE",
+        "projection_status": "SUCCEEDED",
+        "count": 15
+      }
+    ],
+    "directory": [
+      {
+        "status": "PUBLISHED",
+        "completed_at": "2026-11-12 10:52:28",
+        "fence": 303,
+        "tenants": 13,
+        "members": 18
+      }
+    ],
+    "directory_tenant_status": [
+      {
+        "status": "ACTIVE",
+        "count": 10
+      },
+      {
+        "status": "SUSPENDED",
+        "count": 3
+      }
+    ],
+    "directory_member_status": [
+      {
+        "status": "ACTIVE",
+        "deleted": 0,
+        "tenant_status": "ACTIVE",
+        "count": 15
+      },
+      {
+        "status": "ACTIVE",
+        "deleted": 0,
+        "tenant_status": "SUSPENDED",
+        "count": 3
+      }
+    ],
+    "automatic_actual_members": 15,
+    "automatic_menu_keys": [
+      {
+        "third_id": "admin",
+        "count": 10
+      },
+      {
+        "third_id": "build",
+        "count": 10
+      },
+      {
+        "third_id": "create_workflow",
+        "count": 10
+      }
+    ],
+    "automatic_non_menu_grants": 0,
+    "manual_role_relations": [
+      {
+        "user_id": 1,
+        "role_id": 1,
+        "tenant_id": 1
+      },
+      {
+        "user_id": 2,
+        "role_id": 3,
+        "tenant_id": 2
+      }
+    ],
+    "sso_sessions": [
+      {
+        "state": "EXPIRED",
+        "local_user_id": 2,
+        "local_tenant_id": 2,
+        "client_id": "bisheng-workflow-test",
+        "workspace_id": "94b78176-c34d-4ef1-9b8f-1722210910f3",
+        "count": 2
+      },
+      {
+        "state": "REVOKED",
+        "local_user_id": 2,
+        "local_tenant_id": 2,
+        "client_id": "bisheng-workflow-test",
+        "workspace_id": "94b78176-c34d-4ef1-9b8f-1722210910f3",
+        "count": 1
+      },
+      {
+        "state": "ACTIVE",
+        "local_user_id": 2,
+        "local_tenant_id": 2,
+        "client_id": "bisheng-workflow-test",
+        "workspace_id": "94b78176-c34d-4ef1-9b8f-1722210910f3",
+        "count": 1
+      }
+    ]
+  },
+  "http_checks": [
+    {
+      "name": "management",
+      "status": 200,
+      "expected": 200,
+      "seconds": 0.5953,
+      "pass": true
+    },
+    {
+      "name": "anonymous_user",
+      "status": 401,
+      "expected": 401,
+      "seconds": 0.2936,
+      "pass": true
+    },
+    {
+      "name": "anonymous_create",
+      "status": 401,
+      "expected": 401,
+      "seconds": 0.6216,
+      "pass": true
+    },
+    {
+      "name": "registered_sso",
+      "status": 303,
+      "expected": 303,
+      "seconds": 0.9456,
+      "pass": true
+    },
+    {
+      "name": "unregistered_internal_sso",
+      "status": 403,
+      "expected": 403,
+      "seconds": 0.6114,
+      "pass": true
+    }
+  ],
+  "browser": {
+    "account": "bisheng-workflow-tenant",
+    "local_user_id": 2,
+    "local_tenant_id": 2,
+    "sign_in_callback_management": "PASS",
+    "refresh_session": "PASS",
+    "workflow_create_form_open_cancel": "PASS",
+    "workflow_created_or_published": false,
+    "logout_callback": "LOGOUT_CALLBACK_RECEIVED",
+    "logout_sql_states": {
+      "EXPIRED": 2,
+      "REVOKED": 1,
+      "ACTIVE": 0
+    },
+    "subsequent_login_requires_authentication": "PASS",
+    "second_sign_in_callback_management": "PASS",
+    "final_tab_retained": true,
+    "screenshots": {
+      "sso-workflows-20261112.jpg": "025eb5223560e6a597d8cd00aecaea3676430baae2aeaac0c695731c5ea96202",
+      "sso-logout-20261112.jpg": "9b850454c3d5129e3b21d65a99ef88afe981208bf37ebf488418d77593185ab1"
+    }
+  },
+  "scope": {
+    "current_login_mode": "fixed",
+    "allowed_client_tenants": 1,
+    "directory_tenants": 13,
+    "directory_members": 18,
+    "active_tenants_provisioned": 10,
+    "active_members_qualified": 15,
+    "suspended_tenants_not_provisioned": 3,
+    "members_in_suspended_tenants_not_provisioned": 3,
+    "multi_tenant_sso": "NOT_RUN; client registration currently fixed",
+    "full_concurrency_fault_matrix_dm8": "NOT_RUN",
+    "rollback_execution": "NOT_RUN",
+    "rollback_preflight": "PASS"
+  },
+  "remote_ops": "/dataelem/bisheng-kunlian/source/ops/20261112-f130-sso",
+  "private_backup": "/dataelem/bisheng-kunlian/source/backups/20261112-f130-sso",
+  "prior_116_incident": "Not audited or accessed during this deployment; remains tracked in E-013"
+}

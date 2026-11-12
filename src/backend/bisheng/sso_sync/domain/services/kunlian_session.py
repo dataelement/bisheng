@@ -42,6 +42,7 @@ class KunlianSessionService:
         multi_tenant_enabled: bool,
         csrf_secret: SecretStr | None = None,
         clock=None,
+        onboarding=None,
     ):
         self.repository = repository
         self.config = config
@@ -51,6 +52,7 @@ class KunlianSessionService:
         self.multi_tenant_enabled = multi_tenant_enabled
         self.csrf_secret = csrf_secret
         self.clock = clock or repository.clock
+        self.onboarding = onboarding
 
     def _policy(self, facts):
         if self.config.readiness_reasons(multi_tenant_enabled=self.multi_tenant_enabled):
@@ -71,9 +73,8 @@ class KunlianSessionService:
             raise KunlianDirectoryNotReadyError()
         if (
             facts.binding.issuer != self.config.issuer
-            or facts.binding.external_tenant_id != self.config.allowed_tenant_id
             or facts.session.client_id != self.config.client_id
-            or facts.session.workspace_id not in self.config.allowed_workspace_ids
+            or not self.config.allows_scope(facts.binding.external_tenant_id, facts.session.workspace_id)
             or facts.mapping is None
             or not facts.mapping.materialized
         ):
@@ -89,9 +90,7 @@ class KunlianSessionService:
             with tenant_execution_scope(1):
                 facts = await self.repository.load_admission_facts(reference)
                 self._policy(facts)
-                user = await self.user_owner.read_current_qualification(
-                    facts.binding.local_user_id, identity_key=facts.binding.identity_key
-                )
+                user = await self._current_user(facts)
                 version = facts.signing_context.get("token_version")
                 if (
                     type(version) is not int
@@ -131,6 +130,20 @@ class KunlianSessionService:
                     facts.binding.auth_epoch,
                 ):
                     raise KunlianDirectoryNotReadyError()
+                user = await self._current_user(latest)
+                if user.token_version != version or latest.signing_context != facts.signing_context:
+                    raise KunlianSessionExpiredError()
+                with tenant_execution_scope(mapping.local_tenant_id):
+                    current_tenant = await self.tenant_owner.read_current_tenant(user.user_id, mapping)
+                if current_tenant != tenant_id:
+                    raise KunlianIdentityUnavailableError()
+                if self.onboarding is not None:
+                    from bisheng.common.errcode.user import UserNoRoleForLoginError, UserNoWebMenuForLoginError
+
+                    try:
+                        await self.user_owner.require_login_access(user, local_tenant_id=tenant_id)
+                    except (UserNoRoleForLoginError, UserNoWebMenuForLoginError):
+                        raise KunlianIdentityUnavailableError() from None
                 principal = await self.user_owner.build_admitted_payload(user, local_tenant_id=tenant_id)
                 raw_reference = reference.get_secret_value() if isinstance(reference, SecretStr) else reference
                 principal._runtime_credential_reference = {
@@ -158,6 +171,13 @@ class KunlianSessionService:
             raise
         except (SQLAlchemyError, BaseErrorCode):
             raise KunlianDependencyUnavailableError() from None
+
+    async def _current_user(self, facts):
+        if self.onboarding is not None:
+            return await self.onboarding.current_qualification(facts.binding)
+        return await self.user_owner.read_current_qualification(
+            facts.binding.local_user_id, identity_key=facts.binding.identity_key
+        )
 
     async def _store_transition(self, operation, *args, **kwargs):
         try:

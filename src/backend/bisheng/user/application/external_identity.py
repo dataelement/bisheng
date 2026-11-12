@@ -66,6 +66,9 @@ class KunlianExternalIdentityApplication:
     async def read_current_qualification(self, user_id: int, *, identity_key: str) -> CurrentExternalAccount:
         return await self.repository.read_current_qualification(user_id, identity_key=identity_key)
 
+    async def read_current_projection_receipt(self, identity_key, user_id):
+        return await self.repository.read_current_projection_receipt(identity_key, user_id)
+
     async def build_admitted_payload(self, facts: CurrentExternalAccount, *, local_tenant_id: int) -> UserPayload:
         is_global_super = await self.global_super_checker(facts.user_id, facts.role_ids)
         return KunlianUserPayload(

@@ -387,6 +387,12 @@ class RoleService:
             await cls._validate_department(req.department_id)
 
         # Apply updates
+        from bisheng.role.application.external_basic_role import mutate_managed_role
+
+        fields = {k: v for k, v in req.model_dump(exclude_unset=True, exclude={'menu_ids'}).items()
+                  if v is not None or k == 'department_id'}
+        if await mutate_managed_role(role_id, fields=fields):
+            return await RoleDao.aget_role_by_id(role_id)
         if req.role_name is not None:
             role.role_name = req.role_name
         if req.quota_config is not None:
@@ -435,6 +441,12 @@ class RoleService:
 
         menu_ids = cls._normalize_menu_ids(req.menu_ids or [])
 
+        from bisheng.role.application.external_basic_role import mutate_managed_role
+
+        fields = {k: v for k, v in req.model_dump(exclude_unset=True, exclude={'menu_ids'}).items()
+                  if v is not None or k == 'department_id'}
+        if await mutate_managed_role(role_id, fields=fields, menus=menu_ids):
+            return await RoleDao.aget_role_by_id(role_id)
         async with get_async_db_session() as session:
             result = await session.exec(select(Role).where(Role.id == role_id))
             db_role = result.first()
@@ -487,6 +499,10 @@ class RoleService:
 
         await LegacyRBACSyncService.sync_role_deleted(role_id)
 
+        from bisheng.role.application.external_basic_role import mutate_managed_role
+
+        if await mutate_managed_role(role_id, remove=True):
+            return role
         # AC-08: Cascade delete (UserRole + RoleAccess handled in DAO)
         await RoleDao.adelete_role(role_id)
         return role
@@ -512,6 +528,10 @@ class RoleService:
         await cls._ensure_role_mutation_access(role, login_user)
 
         normalized = cls._normalize_menu_ids(menu_ids)
+        from bisheng.role.application.external_basic_role import mutate_managed_role
+
+        if await mutate_managed_role(role_id, menus=normalized):
+            return
         async with get_async_db_session() as session:
             result = await session.exec(select(Role).where(Role.id == role_id))
             db_role = result.first()

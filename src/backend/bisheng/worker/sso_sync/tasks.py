@@ -23,7 +23,7 @@ def _require_control_header(task):
         raise KunlianTrustRejectedError()
 
 
-async def run_control_operation(operation: str, *, connection_id: str | None = None, after_key=""):
+async def run_control_operation(operation: str, *, connection_id: str | None = None, after_key="", stage=None):
     from bisheng.common.services.config_service import settings
 
     config = settings.sso_sync.kunlian
@@ -61,12 +61,22 @@ async def run_control_operation(operation: str, *, connection_id: str | None = N
                     }
                 if operation == "recover":
                     async with asyncio.timeout(300):
-                        result = await services.projection.project_pending(
-                            config.connection_id, after_key=after_key, limit=25
-                        )
+                        if services.config.auto_onboarding_enabled:
+                            if services.onboarding is None:
+                                raise KunlianDependencyUnavailableError()
+                            result = await services.onboarding.recover(
+                                config.connection_id, stage=stage or "tenants", after_key=after_key, limit=25
+                            )
+                        else:
+                            result = await services.projection.project_pending(
+                                config.connection_id, after_key=after_key, limit=25
+                            )
                     if result["has_more"]:
+                        args = [config.connection_id, result["next_after_key"]]
+                        if services.config.auto_onboarding_enabled:
+                            args.append(result["next_stage"])
                         recover_projection.apply_async(
-                            args=[config.connection_id, result["next_after_key"]],
+                            args=args,
                             headers={"tenant_id": 1},
                             queue="celery",
                         )
@@ -94,9 +104,11 @@ def sync_directory(self, connection_id: str):
 
 
 @bisheng_celery.task(bind=True, acks_late=True, soft_time_limit=330, time_limit=360)
-def recover_projection(self, connection_id: str, after_key: str = ""):
+def recover_projection(self, connection_id: str, after_key: str = "", stage: str | None = None):
     _require_control_header(self)
-    return run_async_task(lambda: run_control_operation("recover", connection_id=connection_id, after_key=after_key))
+    return run_async_task(
+        lambda: run_control_operation("recover", connection_id=connection_id, after_key=after_key, stage=stage)
+    )
 
 
 async def run_expiry_operation():

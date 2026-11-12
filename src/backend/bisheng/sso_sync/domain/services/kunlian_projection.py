@@ -32,12 +32,17 @@ class KunlianProjectionService:
             # 主路径仍然失败。诊断修复不能覆盖新发布或冒充投影成功。
             logger.warning("Kunlian projection failure record unavailable identity={}", facts.identity_key)
 
-    async def project_identity(self, identity_key: str) -> int:
+    async def project_identity(self, identity_key: str, *, onboarding_policy=None) -> int:
         facts = None
         try:
             async with asyncio.timeout(self.timeout_seconds):
-                await self.repository.freeze_projection_mapping(identity_key)
-                async with self.repository.projection_scope(identity_key) as (facts, assert_current, complete):
+                policy_args = {"onboarding_policy": onboarding_policy} if onboarding_policy is not None else {}
+                await self.repository.freeze_projection_mapping(identity_key, **policy_args)
+                async with self.repository.projection_scope(identity_key, **policy_args) as (
+                    facts,
+                    assert_current,
+                    complete,
+                ):
                     if facts.already_projected:
                         return facts.local_user_id
                     display_name = facts.member_summary.get("display_name")

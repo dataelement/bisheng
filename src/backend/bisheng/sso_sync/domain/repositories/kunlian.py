@@ -101,6 +101,24 @@ class KunlianLoginFacts:
     published_batch: KunlianSyncBatch | None
 
 
+@dataclass(frozen=True)
+class KunlianOnboardingTenant:
+    connection_id: str
+    issuer: str
+    external_tenant_id: str
+    display_name: str
+    batch_id: str
+    source_revision: str
+    policy_revision: int
+    max_age_seconds: int
+    manual_tenant_id: int | None
+    mapping_revision: int | None
+
+    @property
+    def source_key(self):
+        return KunlianDirectoryRepository._digest(["kunlian", self.issuer, self.external_tenant_id])
+
+
 class KunlianDirectoryRepository:
     def __init__(
         self,
@@ -604,6 +622,95 @@ class KunlianDirectoryRepository:
             await self._locked_lease(session, lease, statuses=("VALIDATING",))
             await self._validate_staged_batch(session, lease)
 
+    async def _reconcile_members(self, session, connection_id, issuer, tenants, members, mappings, *, only_tenant=None):
+        bindings = (
+            await session.exec(
+                select(KunlianIdentityBinding)
+                .where(
+                    KunlianIdentityBinding.connection_id == connection_id,
+                    KunlianIdentityBinding.external_tenant_id == only_tenant if only_tenant else True,
+                )
+                .order_by(KunlianIdentityBinding.identity_key)
+                .with_for_update()
+            )
+        ).all()
+        by_key = {b.identity_key: b for b in bindings}
+        by_member = {(b.external_tenant_id, b.member_id): b for b in bindings}
+        incoming = {}
+        for member in members:
+            mapping = mappings.get(member.external_tenant_id)
+            if mapping is None:
+                continue
+            key = self._digest(["kunlian", issuer, member.external_tenant_id, member.subject])
+            old = by_key.get(key)
+            old_member = by_member.get((member.external_tenant_id, member.member_id))
+            if (
+                old is not None
+                and (old.issuer, old.subject, old.external_tenant_id, old.member_id)
+                != (issuer, member.subject, member.external_tenant_id, member.member_id)
+            ) or (old_member is not None and old_member.identity_key != key):
+                raise KunlianBindingConflictError()
+            # 同一自然身份不能跨连接认领已有绑定。
+            if old is None and await session.get(KunlianIdentityBinding, key) is not None:
+                raise KunlianBindingConflictError()
+            tenant = tenants[member.external_tenant_id]
+            if not mapping.enabled:
+                admission = "MAPPING_DISABLED"
+            elif tenant.status != "ACTIVE":
+                admission = "TENANT_UNAVAILABLE"
+            elif member.deleted:
+                admission = "DELETED"
+            elif member.status == "ACTIVE":
+                admission = "ACTIVE"
+            elif member.status in ("INVITED", "DISABLED", "LEFT"):
+                admission = member.status
+            else:
+                admission = "UNKNOWN"
+            fingerprint = self._digest(
+                {
+                    "member": member.model_dump(exclude={"batch_id", "tenant_id", "create_time", "update_time"}),
+                    "tenant": tenant.model_dump(exclude={"batch_id", "tenant_id", "create_time", "update_time"}),
+                    "mapping": [mapping.local_tenant_id, mapping.revision, mapping.enabled],
+                }
+            )
+            if old is None:
+                old = KunlianIdentityBinding(
+                    identity_key=key,
+                    connection_id=connection_id,
+                    issuer=issuer,
+                    subject=member.subject,
+                    external_tenant_id=member.external_tenant_id,
+                    member_id=member.member_id,
+                    source_revision=fingerprint,
+                    admission_status=admission,
+                )
+                bindings.append(old)
+            incoming[key] = (admission, fingerprint)
+        for binding in bindings:
+            admission, fingerprint = incoming.get(
+                binding.identity_key,
+                (
+                    "UNKNOWN",
+                    self._digest(
+                        [
+                            "missing",
+                            binding.identity_key,
+                            mappings.get(binding.external_tenant_id).revision
+                            if binding.external_tenant_id in mappings
+                            else None,
+                        ]
+                    ),
+                ),
+            )
+            if binding.admission_status == "ACTIVE" and admission != "ACTIVE":
+                binding.auth_epoch += 1
+            if binding.source_revision != fingerprint:
+                binding.source_revision = fingerprint
+                binding.projection_status = "PENDING"
+            binding.admission_status = admission
+            binding.update_time = self.clock()
+            session.add(binding)
+
     async def publish_directory(self, lease: DirectoryLease, *, issuer: str) -> str:
         if not issuer:
             raise KunlianDirectorySyncError()
@@ -618,90 +725,7 @@ class KunlianDirectoryRepository:
                     )
                 ).all()
             }
-            bindings = (
-                await session.exec(
-                    select(KunlianIdentityBinding)
-                    .where(KunlianIdentityBinding.connection_id == lease.connection_id)
-                    .order_by(KunlianIdentityBinding.identity_key)
-                    .with_for_update()
-                )
-            ).all()
-            by_key = {b.identity_key: b for b in bindings}
-            by_member = {(b.external_tenant_id, b.member_id): b for b in bindings}
-            incoming = {}
-            for member in members:
-                mapping = mappings.get(member.external_tenant_id)
-                if mapping is None:
-                    continue
-                key = self._digest(["kunlian", issuer, member.external_tenant_id, member.subject])
-                old = by_key.get(key)
-                old_member = by_member.get((member.external_tenant_id, member.member_id))
-                if (
-                    old is not None
-                    and (old.issuer, old.subject, old.external_tenant_id, old.member_id)
-                    != (issuer, member.subject, member.external_tenant_id, member.member_id)
-                ) or (old_member is not None and old_member.identity_key != key):
-                    raise KunlianBindingConflictError()
-                # 同一自然身份不能跨连接认领已有绑定。
-                if old is None and await session.get(KunlianIdentityBinding, key) is not None:
-                    raise KunlianBindingConflictError()
-                tenant = tenants[member.external_tenant_id]
-                if not mapping.enabled:
-                    admission = "MAPPING_DISABLED"
-                elif tenant.status != "ACTIVE":
-                    admission = "TENANT_UNAVAILABLE"
-                elif member.deleted:
-                    admission = "DELETED"
-                elif member.status == "ACTIVE":
-                    admission = "ACTIVE"
-                elif member.status in ("INVITED", "DISABLED", "LEFT"):
-                    admission = member.status
-                else:
-                    admission = "UNKNOWN"
-                fingerprint = self._digest(
-                    {
-                        "member": member.model_dump(exclude={"batch_id", "tenant_id", "create_time", "update_time"}),
-                        "tenant": tenant.model_dump(exclude={"batch_id", "tenant_id", "create_time", "update_time"}),
-                        "mapping": [mapping.local_tenant_id, mapping.revision, mapping.enabled],
-                    }
-                )
-                if old is None:
-                    old = KunlianIdentityBinding(
-                        identity_key=key,
-                        connection_id=lease.connection_id,
-                        issuer=issuer,
-                        subject=member.subject,
-                        external_tenant_id=member.external_tenant_id,
-                        member_id=member.member_id,
-                        source_revision=fingerprint,
-                        admission_status=admission,
-                    )
-                    bindings.append(old)
-                incoming[key] = (admission, fingerprint)
-            for binding in bindings:
-                admission, fingerprint = incoming.get(
-                    binding.identity_key,
-                    (
-                        "UNKNOWN",
-                        self._digest(
-                            [
-                                "missing",
-                                binding.identity_key,
-                                mappings.get(binding.external_tenant_id).revision
-                                if binding.external_tenant_id in mappings
-                                else None,
-                            ]
-                        ),
-                    ),
-                )
-                if binding.admission_status == "ACTIVE" and admission != "ACTIVE":
-                    binding.auth_epoch += 1
-                if binding.source_revision != fingerprint:
-                    binding.source_revision = fingerprint
-                    binding.projection_status = "PENDING"
-                binding.admission_status = admission
-                binding.update_time = self.clock()
-                session.add(binding)
+            await self._reconcile_members(session, lease.connection_id, issuer, tenants, members, mappings)
             # 长事务结束前再次核对租约。任何不满足均回滚完整发布。
             if state.lease_until <= self.clock():
                 raise KunlianSyncConflictError()
@@ -1301,10 +1325,12 @@ class KunlianDirectoryRepository:
             raise KunlianBindingConflictError()
         return row
 
-    async def freeze_projection_mapping(self, identity_key: str) -> None:
+    async def freeze_projection_mapping(self, identity_key: str, *, onboarding_policy=None) -> None:
         # 此事务必须先于任何账号物化提交。后续失败也不解除冻结。
         async with self._session() as session:
             row = await self._projection_binding(session, identity_key)
+            if onboarding_policy is not None:
+                await self._check_onboarding_identity(session, row, onboarding_policy)
             mapping = await session.get(KunlianTenantBinding, (row.connection_id, row.external_tenant_id))
             if mapping is None or mapping.local_tenant_id <= 0:
                 raise KunlianDirectoryNotReadyError()
@@ -1316,11 +1342,13 @@ class KunlianDirectoryRepository:
                 session.add(mapping)
 
     @asynccontextmanager
-    async def projection_scope(self, identity_key: str):
+    async def projection_scope(self, identity_key: str, *, onboarding_policy=None):
         from bisheng.sso_sync.domain.schemas.kunlian import KunlianTenantMapping
 
         async with self._session() as session:
             row = await self._projection_binding(session, identity_key)
+            if onboarding_policy is not None:
+                await self._check_onboarding_identity(session, row, onboarding_policy)
             mapping = await session.get(KunlianTenantBinding, (row.connection_id, row.external_tenant_id))
             if mapping is None or not mapping.materialized:
                 raise KunlianDirectoryNotReadyError()
@@ -1432,6 +1460,161 @@ class KunlianDirectoryRepository:
                                 KunlianIdentityBinding.projected_revision.is_(None),
                                 KunlianIdentityBinding.projected_revision != KunlianIdentityBinding.source_revision,
                             ),
+                        )
+                        .order_by(KunlianIdentityBinding.identity_key)
+                        .limit(limit)
+                    )
+                ).all()
+            )
+
+    async def _onboarding_batch(self, session, connection_id, policy_revision, max_age_seconds):
+        state = await self._connection(session, connection_id)
+        batch = await session.get(KunlianSyncBatch, state.active_batch_id) if state.active_batch_id else None
+        if (
+            not state.enabled
+            or state.policy_revision != policy_revision
+            or batch is None
+            or batch.connection_id != connection_id
+            or batch.status != "PUBLISHED"
+            or batch.completed_at is None
+            or batch.completed_at > self.clock()
+            or max_age_seconds is None
+            or max_age_seconds <= 0
+            or (self.clock() - batch.completed_at).total_seconds() > max_age_seconds
+        ):
+            raise KunlianDirectoryNotReadyError()
+        return batch
+
+    async def _check_onboarding_identity(self, session, binding, policy):
+        if binding.connection_id != policy.connection_id or binding.issuer != policy.issuer:
+            raise KunlianBindingConflictError()
+        await self._onboarding_batch(
+            session, policy.connection_id, policy.policy_revision, policy.max_directory_age_seconds
+        )
+
+    def _onboarding_tenant(self, tenant, mapping, *, connection_id, issuer, policy_revision, max_age_seconds):
+        return KunlianOnboardingTenant(
+            connection_id,
+            issuer,
+            tenant.external_tenant_id,
+            tenant.summary.get("name") or tenant.external_tenant_id,
+            tenant.batch_id,
+            self._digest(tenant.model_dump(exclude={"create_time", "update_time"})),
+            policy_revision,
+            max_age_seconds,
+            mapping.local_tenant_id if mapping else None,
+            mapping.revision if mapping else None,
+        )
+
+    async def list_onboarding_tenants(
+        self, connection_id, *, issuer, policy_revision, max_age_seconds, after_key="", limit=25
+    ):
+        if not 1 <= limit <= 100 or not isinstance(after_key, str) or len(after_key) > 64:
+            raise KunlianSyncConflictError()
+        async with self._session() as session:
+            batch = await self._onboarding_batch(session, connection_id, policy_revision, max_age_seconds)
+            tenants = (
+                await session.exec(
+                    select(KunlianDirectoryTenant)
+                    .where(
+                        KunlianDirectoryTenant.batch_id == batch.batch_id,
+                        KunlianDirectoryTenant.status == "ACTIVE",
+                        KunlianDirectoryTenant.external_tenant_id > after_key,
+                    )
+                    .order_by(KunlianDirectoryTenant.external_tenant_id)
+                    .limit(limit)
+                )
+            ).all()
+            # 禁用映射作为独立失败处理; 不能因此跳过其后的其他租户。
+            return [
+                self._onboarding_tenant(
+                    t,
+                    await session.get(KunlianTenantBinding, (connection_id, t.external_tenant_id)),
+                    connection_id=connection_id,
+                    issuer=issuer,
+                    policy_revision=policy_revision,
+                    max_age_seconds=max_age_seconds,
+                )
+                for t in tenants
+            ]
+
+    async def assert_onboarding_tenant(self, facts):
+        async with self._session() as session:
+            await self._current_onboarding_tenant(session, facts)
+
+    async def _current_onboarding_tenant(self, session, facts):
+        batch = await self._onboarding_batch(session, facts.connection_id, facts.policy_revision, facts.max_age_seconds)
+        tenant = await session.get(KunlianDirectoryTenant, (batch.batch_id, facts.external_tenant_id))
+        if (
+            batch.batch_id != facts.batch_id
+            or tenant is None
+            or tenant.status != "ACTIVE"
+            or self._digest(tenant.model_dump(exclude={"create_time", "update_time"})) != facts.source_revision
+        ):
+            raise KunlianSyncConflictError()
+        mapping = await session.get(KunlianTenantBinding, (facts.connection_id, facts.external_tenant_id))
+        if (mapping.revision if mapping else None) != facts.mapping_revision:
+            raise KunlianSyncConflictError()
+        if mapping is not None and (
+            not mapping.enabled
+            or (facts.manual_tenant_id is not None and facts.manual_tenant_id != mapping.local_tenant_id)
+        ):
+            raise KunlianIdentityUnavailableError()
+        return tenant, mapping
+
+    async def bind_onboarded_tenant(self, facts, receipt):
+        if receipt.state != "READY" or receipt.source_key != facts.source_key or receipt.local_tenant_id <= 1:
+            raise KunlianBindingConflictError()
+        try:
+            async with self._session() as session:
+                tenant, mapping = await self._current_onboarding_tenant(session, facts)
+                if mapping is None:
+                    mapping = KunlianTenantBinding(
+                        connection_id=facts.connection_id,
+                        external_tenant_id=facts.external_tenant_id,
+                        local_tenant_id=receipt.local_tenant_id,
+                    )
+                    session.add(mapping)
+                    await session.flush()
+                elif mapping.local_tenant_id != receipt.local_tenant_id:
+                    raise KunlianBindingConflictError()
+                members = (
+                    await session.exec(
+                        select(KunlianDirectoryMember).where(
+                            KunlianDirectoryMember.batch_id == facts.batch_id,
+                            KunlianDirectoryMember.external_tenant_id == facts.external_tenant_id,
+                        )
+                    )
+                ).all()
+                await self._reconcile_members(
+                    session,
+                    facts.connection_id,
+                    facts.issuer,
+                    {facts.external_tenant_id: tenant},
+                    members,
+                    {facts.external_tenant_id: mapping},
+                    only_tenant=facts.external_tenant_id,
+                )
+        except IntegrityError:
+            raise KunlianBindingConflictError() from None
+
+    async def list_onboarding_members(self, connection_id, *, policy_revision, max_age_seconds, after_key="", limit=25):
+        if not 1 <= limit <= 100 or not isinstance(after_key, str) or len(after_key) > 64:
+            raise KunlianSyncConflictError()
+        async with self._session() as session:
+            await self._onboarding_batch(session, connection_id, policy_revision, max_age_seconds)
+            return list(
+                (
+                    await session.exec(
+                        select(KunlianIdentityBinding.identity_key)
+                        .where(
+                            KunlianIdentityBinding.connection_id == connection_id,
+                            KunlianIdentityBinding.identity_key > after_key,
+                            KunlianIdentityBinding.admission_status == "ACTIVE",
+                            KunlianIdentityBinding.local_override.is_(False),
+                            KunlianIdentityBinding.projection_status == "SUCCEEDED",
+                            KunlianIdentityBinding.projected_revision == KunlianIdentityBinding.source_revision,
+                            KunlianIdentityBinding.local_user_id.is_not(None),
                         )
                         .order_by(KunlianIdentityBinding.identity_key)
                         .limit(limit)

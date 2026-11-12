@@ -1,0 +1,196 @@
+{
+  "date": "2026-11-12",
+  "worktree": "/Users/wenruli/code/project/bisheng/bisheng-kunlian-tenant-onboarding",
+  "branch": "feat/v3.0.0/118-kunlian-integration",
+  "baseline": "2ed971aed740a488d41aa0972b76ead454f1209d",
+  "tasks_completed": 24,
+  "tasks_total": 42,
+  "authorized_batch": "T013-T024",
+  "deployed": false,
+  "committed": false,
+  "real_environment": "NOT_RUN",
+  "environment_incident": {
+    "early_wrong_database": "192.168.106.116/langflow",
+    "role_id": 91,
+    "impact": "UNKNOWN; controlled audit pending",
+    "subsequent_verification": "temporary SQLite with process-wide TCP block",
+    "intended_joint_environment": "192.168.106.104; not updated this batch"
+  },
+  "pytest": {
+    "result": "150 passed, 22 warnings in 8.55s",
+    "exit_code": 0,
+    "log": "........................................................................ [ 48%]\n........................................................................ [ 96%]\n......                                                                   [100%]\n150 passed, 22 warnings in 8.55s\nsys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute\n",
+    "command_scope": "verification.md E-015",
+    "environment": {
+      "config.yaml": {
+        "contents": "{\"database_url\": \"sqlite+aiosqlite:////var/folders/06/935ggv0j2259kmb0t_3nvhpc0000gn/T/kunlian-f130-c-tests-bcibvvx4/fallback.sqlite\", \"redis_url\": \"redis://127.0.0.1:1/0\", \"celery_redis_url\": \"redis://127.0.0.1:1/0\", \"logger_conf\": {\"level\": \"ERROR\"}}",
+        "sha256": "d52990a55df022ef4669af589996c019d3790fb56a3c765741cdf8adee313440"
+      },
+      "pytest-offline.py": {
+        "contents": "import socket,sys,pytest\noriginal=socket.socket.connect\noriginal_ex=socket.socket.connect_ex\ndef deny(self,*a,**k):\n if self.family in (socket.AF_INET,socket.AF_INET6): raise AssertionError(\"F130 local verification blocks TCP connections\")\n return original(self,*a,**k)\ndef deny_ex(self,*a,**k):\n if self.family in (socket.AF_INET,socket.AF_INET6): raise AssertionError(\"F130 local verification blocks TCP connections\")\n return original_ex(self,*a,**k)\nsocket.socket.connect=deny\nsocket.socket.connect_ex=deny_ex\nsys.exit(pytest.main(sys.argv[1:]))\n",
+        "sha256": "25079576c5cd911781de4bdf813a39fe4372ff41a9596883c7d06d76e25b3d73"
+      }
+    }
+  },
+  "static": {
+    "ruff_comparison": {
+      "src/backend/bisheng/role/domain/services/role_service.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/user/api/user.py": {
+        "current": 60,
+        "baseline": 60,
+        "added": 0
+      },
+      "src/backend/test/role/test_role_api.py": {
+        "current": 2,
+        "baseline": 2,
+        "added": 0
+      },
+      "src/backend/test/role/test_role_service.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/department/application/external_tenant_anchor.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/department/domain/repositories/external_tenant_anchor.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/role/application/external_basic_role.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/role/domain/repositories/external_basic_role.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/role/domain/services/external_basic_role.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/tenant/application/external_provision.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/tenant/domain/repositories/external_provision.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/tenant/domain/services/external_provision.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/user/application/external_basic_access.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/user/domain/repositories/external_basic_access.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/bisheng/user/domain/services/external_basic_access.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/department/test_external_tenant_anchor.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/fixtures/kunlian_onboarding.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/role/test_external_basic_role.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/role/test_external_basic_role_mutations.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/tenant/test_kunlian_external_provision.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/user/test_external_basic_access.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/user/test_external_basic_access_mutations.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      },
+      "src/backend/test/user/test_external_basic_access_races.py": {
+        "current": 0,
+        "baseline": 0,
+        "added": 0
+      }
+    },
+    "added_lint_errors": 0,
+    "unchanged_baseline_lint_errors": 62,
+    "new_files_format": "19 files already formatted",
+    "arch_guard_checked_files": 23,
+    "arch_guard_violations": 0,
+    "git_diff_check": 0,
+    "qa_cases": 9,
+    "qa_status": "NOT_RUN",
+    "qa_columns": 8,
+    "markdown_links": "PASS"
+  },
+  "sources": {
+    "src/backend/bisheng/role/domain/services/role_service.py": "78686bea1d4be9c03b347e97c4919296ac345747d4896b158a53b6d4277f4e87",
+    "src/backend/bisheng/user/api/user.py": "df87afe17d34d783443607938b026980489e2be0da83354621df7b92fda715ac",
+    "src/backend/test/role/test_role_api.py": "d3131bd5ea48db6c92d75c88529cb6d3a8091e6637de9c8c840b4a958dd6726b",
+    "src/backend/test/role/test_role_service.py": "76a2546229070c50111180c0077e82a2955fb723cdcfb4b233e982425255ed35",
+    "src/backend/bisheng/department/application/external_tenant_anchor.py": "31a0978ab293110947ba6c6dad8680d8be0cb8c63b9a6c14dfbfe07c4c5740f9",
+    "src/backend/bisheng/department/domain/repositories/external_tenant_anchor.py": "a487af036410702c7c8a97d615c7eefc953d19f9f506bbcef275d74361d835d4",
+    "src/backend/bisheng/role/application/external_basic_role.py": "404283232004ee828ac83dcf51c2afc65e0c23d446e5506f1f42f9d40f2bfdce",
+    "src/backend/bisheng/role/domain/repositories/external_basic_role.py": "14ea5fcc8a8e5e151085a795f0905962aaf13afad883c008cd0f7d6ade1adb10",
+    "src/backend/bisheng/role/domain/services/external_basic_role.py": "f83e1c97cca995ffbbd364e7f6b091bdce76ff6f30b31aecd8aba652e9f3cadd",
+    "src/backend/bisheng/tenant/application/external_provision.py": "604edeb6ef4cea5924b96d439843238ed39a9cea48ede2c392b2057d6e1d1449",
+    "src/backend/bisheng/tenant/domain/repositories/external_provision.py": "0f79749258c172e124f82aaa81c8aee77a5d1374b10cfe7d3da4c599681c0beb",
+    "src/backend/bisheng/tenant/domain/services/external_provision.py": "496031949269033823b1b95c9da27899dcf4e1f87e5e83d4c83d09756ea0cdfd",
+    "src/backend/bisheng/user/application/external_basic_access.py": "7ba9f9f84a42cf31a3d59a5d1b58da4d4703ef04b9f0c7342cca5c5533e55766",
+    "src/backend/bisheng/user/domain/repositories/external_basic_access.py": "07c4f1e8652f8d7592a924ef06528518aec790b8a6842047c45a7aeab6e1f0c1",
+    "src/backend/bisheng/user/domain/services/external_basic_access.py": "6f0502f560fd99dd89f27738935cc15cd71af6d71b721432d323c6cdd7d646d4",
+    "src/backend/test/department/test_external_tenant_anchor.py": "1ebbf81c09392ec7d38fb4d465e7f0b9bc1a68603678ee071454b78d21d359e2",
+    "src/backend/test/fixtures/kunlian_onboarding.py": "b266166c50b0a639a050c9c6def72a546866e91029b4af52a1f40f1ad8b6f259",
+    "src/backend/test/role/test_external_basic_role.py": "2a1983e3131df36ed8d1649b47c905e7c8f0d706b3bc09d8c08b334e61432084",
+    "src/backend/test/role/test_external_basic_role_mutations.py": "1b08412b272bdaf7c3a00b8955de3877275bec4c82c6fc98062cc1cc2432ac50",
+    "src/backend/test/tenant/test_kunlian_external_provision.py": "a72b289a7d39432fa44b9a19eded81e63ba35899d14bcbd0d1ef94e9707c904b",
+    "src/backend/test/user/test_external_basic_access.py": "6b021f76d7d42eeabd2df20b1aa7e4643131ef4a1a2419703e69ce97ce0fa746",
+    "src/backend/test/user/test_external_basic_access_mutations.py": "d53898841d8a37920bf46d9c7a6fbe2b568fd53db3033b76295ffc7ed32f1cea",
+    "src/backend/test/user/test_external_basic_access_races.py": "cdbf5bff3bdcc72b5704a5cd8506566d520f229a49a1e49517efb69c45e26cdf"
+  },
+  "documents": {
+    "spec.md": "c0e296405181bf017f3e53861cbcbc8090b513d57a0d96b375bae023914bcd1e",
+    "design.md": "9dc677ab7030184bdba5e9915d0da49359589fc4ec36df10e0e568be54b4d35b",
+    "tasks.md": "0defc30231e8f0ee0b60b126c0519f52661380009ba1a6f3cc10c0dd53709a97",
+    "verification.md": "4b64be853e2487289d4db5e2cb2a5950c34e85d6a93d2ffc6c8cbfeda2faf88e",
+    "test-cases.md": "54f6b697f1a032303efa9307ee6bd2640a951442e47a8ebbe2a1b7fc8aa558cb"
+  }
+}

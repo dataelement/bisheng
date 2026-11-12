@@ -841,6 +841,16 @@ async def update_role(
     if not await login_user.async_check_group_admin(db_role.group_id):
         return UnAuthorizedError()
 
+    from bisheng.role.application.external_basic_role import mutate_managed_role
+
+    managed_fields = {k: v for k, v in {
+        'role_name': role.role_name, 'remark': role.remark,
+        'knowledge_space_file_limit': role.knowledge_space_file_limit,
+    }.items() if v}
+    if await mutate_managed_role(role_id, fields=managed_fields):
+        db_role = await RoleDao.aget_role_by_id(role_id)
+        update_role_hook(request, login_user, db_role)
+        return resp_200(db_role)
     if role.role_name:
         db_role.role_name = role.role_name
     if role.remark:
@@ -905,7 +915,10 @@ async def delete_role(*, request: Request, role_id: int, login_user: LoginUser =
 
     if db_role.group_id and login_user.check_group_admin(db_role.group_id):
         await LegacyRBACSyncService.sync_role_deleted(role_id)
-        RoleDao.delete_role(role_id)
+        from bisheng.role.application.external_basic_role import mutate_managed_role
+
+        if not await mutate_managed_role(role_id, remove=True):
+            RoleDao.delete_role(role_id)
         AuditLogService.delete_role(login_user, get_request_ip(request), db_role)
         return resp_200()
 
@@ -993,12 +1006,18 @@ async def user_addrole(
         else:
             # All that remains is the list of roles that need to be deleted
             need_delete_role.remove(one)
-    if need_add_role:
-        UserRoleDao.add_user_roles(user_role.user_id, need_add_role)
-    if need_delete_role:
-        # Delete the corresponding role list
-        UserRoleDao.delete_user_roles(user_role.user_id, need_delete_role)
-    new_roles = [one.role_id for one in UserRoleDao.get_user_roles(user_role.user_id)]
+    from bisheng.user.application.external_basic_access import apply_managed_role_changes
+
+    managed_change = await apply_managed_role_changes(user_role.user_id, add_ids=need_add_role,
+                                                     delete_ids=need_delete_role, actor=login_user)
+    if managed_change is None:
+        if need_add_role:
+            UserRoleDao.add_user_roles(user_role.user_id, need_add_role)
+        if need_delete_role:
+            UserRoleDao.delete_user_roles(user_role.user_id, need_delete_role)
+        new_roles = [one.role_id for one in UserRoleDao.get_user_roles(user_role.user_id)]
+    else:
+        new_roles = list(managed_change.after_roles)
     await LegacyRBACSyncService.sync_user_role_change(
         user_role.user_id,
         all_old_roles,

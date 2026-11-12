@@ -20,11 +20,11 @@ def test_malformed_scope_policy_is_rejected_as_a_whole(pairs):
         resolve_scope_pairs("tenant_workspace_map", "old", ["old-workspace"], pairs)
 
 
-def test_fixed_defaults_remain_usable_and_map_mode_stays_gated_until_token_paths_are_integrated():
+def test_fixed_defaults_remain_usable_and_integrated_map_mode_is_ready():
     conf = config()
     assert not conf.auto_onboarding_enabled
     assert conf.login_scope_mode == "fixed"
     assert not conf.readiness_reasons(multi_tenant_enabled=True)
     conf.login_scope_mode = "tenant_workspace_map"
     conf.tenant_workspace_allowlist = {"A": ["WA"], "B": ["WB"]}
-    assert "SCOPE_RUNTIME_NOT_READY" in conf.readiness_reasons(multi_tenant_enabled=True)
+    assert not conf.readiness_reasons(multi_tenant_enabled=True)
