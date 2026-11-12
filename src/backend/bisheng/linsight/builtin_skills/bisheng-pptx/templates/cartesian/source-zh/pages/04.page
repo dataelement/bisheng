@@ -1,0 +1,479 @@
+pageType: content
+background:
+  type: solid
+  color: '#EDE8E0'
+notes: Authored evidence composition. All new example statements and figures are illustrative, not reported facts. Replace them with user evidence. Interview excerpt, observation, competing explanation and next check
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 27
+      - 665
+      - 20
+    content:
+      text: CARTESIAN
+      fontFamily: &ref_0
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 59
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#aeaaa5'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 76
+      - 864
+      - 64
+    content:
+      text: 把记录与解释分开
+      fontFamily: &ref_1
+        latin: Georgia
+        mac: Songti SC
+        win: SimSun
+        ea: Noto Serif CJK SC
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 754
+      - 46
+      - 158
+      - 13
+    content:
+      text: 图示 03
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#595855'
+      bold: false
+      align: right
+  - elementId: s5
+    elementType: shape
+    bounds:
+      - 48
+      - 176
+      - 277
+      - 274
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E2DBD1'
+    border:
+      width: 0
+      color: '#E2DBD1'
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 69
+      - 190
+      - 235
+      - 23
+    content:
+      text: 现场笔记 / 03
+      fontFamily: *ref_0
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 69
+      - 238
+      - 232
+      - 130
+    content:
+      text: |-
+        第一步很清楚
+        交接时却不确定
+      fontFamily: *ref_1
+      fontSize: 28
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+  - elementId: l8
+    elementType: line
+    bounds:
+      - 69
+      - 390
+      - 235
+      - 1
+    viewBox:
+      - 235
+      - 1
+    points: 0,0 235,0
+    border:
+      width: 0.6
+      color: '#9b978f'
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 69
+      - 410
+      - 234
+      - 27
+    content:
+      text: 自编访谈示例
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+  - elementId: t10
+    elementType: text
+    bounds:
+      - 362
+      - 166
+      - 190
+      - 68
+    content:
+      text: 3 / 8
+      fontFamily: *ref_1
+      fontSize: 48
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: t11
+    elementType: text
+    bounds:
+      - 555
+      - 176
+      - 347
+      - 48
+    content:
+      text: 个案例在交接时停顿
+      fontFamily: *ref_1
+      fontSize: 22
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: s12
+    elementType: shape
+    bounds:
+      - 364
+      - 241
+      - 14
+      - 14
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#1A1A1A'
+    border:
+      width: 0
+      color: '#1A1A1A'
+  - elementId: s13
+    elementType: shape
+    bounds:
+      - 386
+      - 241
+      - 14
+      - 14
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#1A1A1A'
+    border:
+      width: 0
+      color: '#1A1A1A'
+  - elementId: s14
+    elementType: shape
+    bounds:
+      - 408
+      - 241
+      - 14
+      - 14
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#1A1A1A'
+    border:
+      width: 0
+      color: '#1A1A1A'
+  - elementId: s15
+    elementType: shape
+    bounds:
+      - 430
+      - 241
+      - 14
+      - 14
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#c7c3bc'
+    border:
+      width: 0
+      color: '#c7c3bc'
+  - elementId: s16
+    elementType: shape
+    bounds:
+      - 452
+      - 241
+      - 14
+      - 14
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#c7c3bc'
+    border:
+      width: 0
+      color: '#c7c3bc'
+  - elementId: s17
+    elementType: shape
+    bounds:
+      - 474
+      - 241
+      - 14
+      - 14
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#c7c3bc'
+    border:
+      width: 0
+      color: '#c7c3bc'
+  - elementId: s18
+    elementType: shape
+    bounds:
+      - 496
+      - 241
+      - 14
+      - 14
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#c7c3bc'
+    border:
+      width: 0
+      color: '#c7c3bc'
+  - elementId: s19
+    elementType: shape
+    bounds:
+      - 518
+      - 241
+      - 14
+      - 14
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#c7c3bc'
+    border:
+      width: 0
+      color: '#c7c3bc'
+  - elementId: t20
+    elementType: text
+    bounds:
+      - 561
+      - 238
+      - 351
+      - 25
+    content:
+      text: 模拟观察
+      fontFamily: *ref_0
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#595855'
+      bold: false
+  - elementId: l21
+    elementType: line
+    bounds:
+      - 362
+      - 282
+      - 550
+      - 1
+    viewBox:
+      - 550
+      - 1
+    points: 0,0 550,0
+    border:
+      width: 0.6
+      color: '#bfbbb4'
+  - elementId: t22
+    elementType: text
+    bounds:
+      - 362
+      - 293
+      - 175
+      - 34
+    content:
+      text: 01 / 解读
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: true
+  - elementId: t23
+    elementType: text
+    bounds:
+      - 556
+      - 292
+      - 352
+      - 47
+    content:
+      text: 下一位负责人未明确显示。
+      fontFamily: *ref_0
+      fontSize: 17
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: l24
+    elementType: line
+    bounds:
+      - 362
+      - 339
+      - 550
+      - 1
+    viewBox:
+      - 550
+      - 1
+    points: 0,0 550,0
+    border:
+      width: 0.6
+      color: '#bfbbb4'
+  - elementId: t25
+    elementType: text
+    bounds:
+      - 362
+      - 350
+      - 175
+      - 34
+    content:
+      text: 02 / 另一种解释
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: true
+  - elementId: t26
+    elementType: text
+    bounds:
+      - 556
+      - 349
+      - 352
+      - 47
+    content:
+      text: 也可能是任务本身不够熟悉。
+      fontFamily: *ref_0
+      fontSize: 17
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: l27
+    elementType: line
+    bounds:
+      - 362
+      - 396
+      - 550
+      - 1
+    viewBox:
+      - 550
+      - 1
+    points: 0,0 550,0
+    border:
+      width: 0.6
+      color: '#bfbbb4'
+  - elementId: t28
+    elementType: text
+    bounds:
+      - 362
+      - 407
+      - 175
+      - 34
+    content:
+      text: 03 / 下一次验证
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: true
+  - elementId: t29
+    elementType: text
+    bounds:
+      - 556
+      - 406
+      - 352
+      - 47
+    content:
+      text: 明确负责人，再次执行相同任务。
+      fontFamily: *ref_0
+      fontSize: 17
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: l30
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#bfbbb4'
+  - elementId: t31
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: 区分观察、其他可能的解释，以及下一步验证。
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: t32
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 783
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false
+  - elementId: t33
+    elementType: text
+    bounds:
+      - 871
+      - 504
+      - 41
+      - 22
+    content:
+      text: '04'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#1A1A1A'
+      bold: false

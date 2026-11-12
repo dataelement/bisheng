@@ -142,6 +142,43 @@ async def test_async_provider_unification_error_is_not_laundered_as_provider_una
     module.MilvusFactory.init_vectorstore.assert_not_called()
 
 
+async def test_assistant_knowledge_initialization_reuses_publication_transaction(rag, monkeypatch):
+    from langchain_core.tools import Tool
+
+    from bisheng.api.services.assistant_agent import AssistantAgent
+    from bisheng.database.models.assistant import Assistant, AssistantLink
+    from bisheng.knowledge.application import model_reference_read
+    from bisheng.tool.domain.services.executor import ToolExecutor
+
+    context, _stale = rag
+    async with context.sessions() as session, session.begin():
+        await session.execute(sa.update(Knowledge).where(Knowledge.id == 40).values(type=1))
+        knowledge = await session.get(Knowledge, 40)
+
+    monkeypatch.setattr(module.KnowledgeDao, "get_list_by_ids", Mock(return_value=[knowledge]))
+    monkeypatch.setattr(module.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=knowledge))
+
+    def refuse_second_connection():
+        raise AssertionError("knowledge initialization opened a second transaction while publication holds locks")
+
+    monkeypatch.setattr(model_reference_read, "get_async_db_session", refuse_second_connection)
+    tool = Tool(name="knowledge_40", description="Knowledge retrieval", func=lambda value: value)
+    monkeypatch.setattr(ToolExecutor, "_init_knowledge_rag_tool", Mock(return_value=tool))
+    async with context.sessions() as session, session.begin():
+        await session.execute(sa.select(Knowledge).where(Knowledge.id == 40).with_for_update())
+        agent = AssistantAgent(
+            Assistant(id="assistant-a", tenant_id=101, knowledge_auth=False),
+            "",
+            context.user.user_id,
+            login_user=context.user,
+            reference_session=session,
+        )
+        agent._source_links = (AssistantLink(assistant_id="assistant-a", knowledge_id=40),)
+        await agent.init_tools()
+        assert [item.name for item in agent.tools] == ["knowledge_40"]
+        assert session.in_transaction()
+
+
 @pytest.mark.parametrize("native", [False, True])
 async def test_original_knowledge_auth_filter_still_excludes_unauthorized_targets(rag, native, monkeypatch):
     check = Mock(return_value=[]) if native else AsyncMock(return_value=[])

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { EMPTY_ORG_SELECTION, getAuditAppListApi } from '@/controllers/API/log'
@@ -9,6 +9,7 @@ const mock = vi.hoisted(() => {
         { id: 1, flow_type: 5, flow_name: 'Assistant', flow_id: 'app-1', chat_id: 'chat-1', usage_type: 'assistant', user_groups: [{ name: 'Group' }], create_time: '2026-10-20T10:00:00', sensitive_status: 1 },
         { id: 2, flow_type: 15, chat_id: 'daily-1', usage_type: 'daily', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 2, operator_dept_id: 3, operator_dept_path: 'Root/Sales' },
         { id: 3, flow_type: 20, flow_name: 'Space QA', chat_id: 'space-1', usage_type: 'workflow', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 1, operator_dept_id: -1 },
+        { id: 4, flow_type: 25, flow_name: 'Research', chat_id: 'task-1', usage_type: 'task', user_groups: [], create_time: '2026-10-20T10:00:00', sensitive_status: 1 },
     ]
     return { filter: vi.fn(), page: vi.fn(), exportApi: vi.fn(), csv: vi.fn(), message: vi.fn(), rows, initialRows: rows }
 })
@@ -42,7 +43,7 @@ beforeEach(() => { mock.exportApi.mockResolvedValue({ data: [{ chat_id: 'chat-1'
 it('preserves assistant/daily detail links, applied filters and reset', () => {
     render(<MemoryRouter><AppUseLog /></MemoryRouter>)
     expect(screen.getAllByRole('button')[0]).toHaveAccessibleName('log.org.placeholder')
-    expect(screen.getAllByRole('link', { name: 'lib.details' }).map(link => link.getAttribute('href'))).toEqual(['/log/chatlog/app-1/chat-1/5', '/log/chatlog/daily-1', '/log/chatlog/space-1'])
+    expect(screen.getAllByRole('link', { name: 'lib.details' }).map(link => link.getAttribute('href'))).toEqual(['/log/chatlog/app-1/chat-1/5', '/log/chatlog/daily-1', '/log/chatlog/space-1', '/log/chatlog/task-1'])
     expect(screen.getAllByText('log.sensitivePass')[0]).toBeVisible()
     expect(screen.getByText('log.sensitiveViolation')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Pick app' }))
@@ -107,7 +108,8 @@ it('shows the organisation column and applies usage type and organisation only o
     render(<MemoryRouter><AppUseLog /></MemoryRouter>)
     expect(screen.getByText('Root/Sales')).toBeVisible()
     expect(screen.getByText('log.org.notApplicable')).toBeVisible()
-    expect(screen.getByText('Space QA')).toBeVisible()
+    const appNames = screen.getAllByRole('row').slice(1).map(row => within(row).getAllByRole('cell')[0].textContent)
+    expect(appNames).toEqual(['Assistant', '--', 'Space QA', '--'])
     expect(screen.getAllByText('log.usageType.label').length).toBeGreaterThan(0)
     expect(screen.getByText('log.usageType.assistant')).toBeVisible()
     expect(screen.getByText('log.usageType.daily')).toBeVisible()

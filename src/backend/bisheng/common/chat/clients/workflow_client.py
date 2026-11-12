@@ -9,7 +9,7 @@ from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.common.chat.clients.base import BaseClient, ensure_client_execution_lease
 from bisheng.common.chat.types import WorkType
-from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.chat import WorkflowOfflineError
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
@@ -215,7 +215,6 @@ class WorkflowClient(BaseClient):
                 )
                 return
             # Start a new workflow
-            await record_business_activity(self.login_user)
             self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, self.user_id)
             await self.workflow.async_set_workflow_data(workflow_data)
             await self.workflow.async_set_workflow_status(WorkflowStatus.WAITING.value)
@@ -325,7 +324,6 @@ class WorkflowClient(BaseClient):
                 # ``dialog_files_content``, this is what the message keeps.
                 new_files = node_info.get("files")
                 break
-            await record_business_activity(self.login_user)
             await self.workflow.async_set_user_input(
                 user_input, message_id=message_id, message_content=new_message, files=new_files
             )

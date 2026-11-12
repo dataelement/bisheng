@@ -8,7 +8,7 @@ jest.mock('~/api/user', () => ({ updateNicknameApi: jest.fn() }));
 const saved: NicknameProfile = { user_id: 7, user_name: 'New', external_id: 'Case01' };
 const api = jest.mocked(updateNicknameApi);
 const input = () => screen.getByLabelText('accountIdentity.nickname') as HTMLInputElement;
-const save = () => screen.getByRole('button', { name: 'accountIdentity.saveNickname' });
+const save = () => screen.getByRole('button', { name: 'com_ui_save' });
 
 function editor(nickname = 'Old') {
     const callbacks = { onCancel: jest.fn(), onSaved: jest.fn() };
@@ -18,13 +18,13 @@ function editor(nickname = 'Old') {
 
 beforeEach(() => api.mockResolvedValue(saved));
 
-it('filters whitespace, displays the rule and system-wide effect', () => {
+it('filters whitespace and displays the character count without static descriptions', () => {
     editor();
     fireEvent.change(input(), { target: { value: 'N ew\u3000\t' } });
     expect(input()).toHaveValue('New');
     expect(screen.getByText('3/32')).toBeInTheDocument();
-    expect(screen.getByText('accountIdentity.nicknameRules')).toBeInTheDocument();
-    expect(screen.getByText('accountIdentity.nicknameEffectSelf')).toBeInTheDocument();
+    expect(screen.queryByText('accountIdentity.nicknameRules')).not.toBeInTheDocument();
+    expect(screen.queryByText('accountIdentity.nicknameEffectSelf')).not.toBeInTheDocument();
 });
 
 it('counts code points and blocks a 33-character change', () => {
@@ -36,7 +36,21 @@ it('counts code points and blocks a 33-character change', () => {
     expect(input()).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('accountIdentity.errors.nicknameLength')).toBeInTheDocument();
     expect(save()).toBeDisabled();
+    fireEvent.keyDown(input(), { key: 'Enter' });
     expect(api).not.toHaveBeenCalled();
+});
+
+it('saves on Enter after input method composition finishes', async () => {
+    const callbacks = editor();
+    fireEvent.change(input(), { target: { value: saved.user_name } });
+    fireEvent.keyDown(input(), { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input(), { key: 'Enter', keyCode: 229 });
+    expect(api).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(api).toHaveBeenCalledTimes(1);
+    expect(api).toHaveBeenCalledWith(saved.user_name);
+    await waitFor(() => expect(callbacks.onSaved).toHaveBeenCalledWith(saved));
 });
 
 it('keeps historical original values unchanged and supports Escape', () => {

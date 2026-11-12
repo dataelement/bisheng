@@ -197,13 +197,13 @@ export default function SystemLog() {
         loadUsers()
     }, [])
 
-    return <div className="relative">
+    return <div className="relative flex min-h-0 flex-1 flex-col">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>
         )}
-        <div className="flex h-[calc(100vh-128px-var(--license-banner-h,0px))] flex-col overflow-y-auto px-2 py-4 pb-10">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-4 pb-20">
             <div className="flex shrink-0 flex-wrap gap-4">
                 <OrgFilter value={keys.org} tenantId={keys.tenantId ? Number(keys.tenantId) : null}
                     onChange={org => setKeys({ ...keys, org })} />
@@ -288,6 +288,9 @@ export default function SystemLog() {
                     <Button size="medium" variant="outlined" onClick={handleReset} color="default">
                         {t('log.resetButton')}
                     </Button>
+                    <Button size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
+                        {t('log.exportButton')}
+                    </Button>
                 </div>
             </div>
             <Table className="mb-[50px]" containerClassName="shrink-0">
@@ -341,11 +344,8 @@ export default function SystemLog() {
         {/* Pagination */}
 
         <div className="bisheng-table-footer gap-4 px-6 bg-background-login">
-            <Button className="shrink-0" size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
-                {t('log.exportButton')}
-            </Button>
             <Pagination locale={paginationLocale}
-                className="min-w-0"
+                className="ml-auto min-w-0"
                 current={page}
                 pageSize={pageSize}
                 total={total}

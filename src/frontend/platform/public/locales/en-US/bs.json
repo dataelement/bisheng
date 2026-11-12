@@ -1986,6 +1986,17 @@
       "collapse": "Collapse {{name}}",
       "tenantGroup": "Tenant {{id}}"
     },
+    "scope": {
+      "summary": "Current scope: {{tenant}}, {{organization}}",
+      "allTenants": "all tenants",
+      "tenant": "tenant “{{name}}”",
+      "allOrganizations": "all organizations",
+      "subtree": "{{name}} and its sub-departments",
+      "exact": "only “{{name}}”",
+      "noOrganization": "no visible organization",
+      "separator": ", ",
+      "loadFailed": "The current scope could not be loaded. The list still follows your permissions"
+    },
     "usageType": {
       "label": "Usage type",
       "all": "All usage types",

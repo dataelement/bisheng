@@ -2581,14 +2581,20 @@ class LinsightWorkflowTask:
             )
         session_model.status = SessionVersionStatusEnum.FAILED
         public_error = FailureContextAdapter.safe_detail(exc) if exc is not None else "Task execution failed."
-        session_model.output_result = FailureContextAdapter.public_payload(
-            {
-                **(session_model.output_result or {}),
-                "error_message": public_error,
-                "error_code": classified.error_code,
-                "error_type": classified.error_type,
-            },
-            exc=exc,
+        # With an exception, public_payload adds the redacted detail; a message-only
+        # failure (e.g. the agent reported one) carries its redacted message instead.
+        message_detail = {} if exc is not None else {"detail": FailureContextAdapter.public_text(error_msg)}
+        session_model.output_result = (
+            FailureContextAdapter.public_payload(
+                {
+                    **(session_model.output_result or {}),
+                    "error_message": public_error,
+                    "error_code": classified.error_code,
+                    "error_type": classified.error_type,
+                },
+                exc=exc,
+            )
+            | message_detail
         )
         await self._state_manager.set_session_version_info(session_model)
         # F035 Track J: still land a (failed) task turn in the unified stream so the
@@ -2611,7 +2617,8 @@ class LinsightWorkflowTask:
                         "error_type": classified.error_type,
                     },
                     exc=exc,
-                ),
+                )
+                | message_detail,
             )
         )
         system_config = await settings.aget_all_config()

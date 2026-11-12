@@ -1931,6 +1931,17 @@
       "collapse": "收起 {{name}}",
       "tenantGroup": "租户 {{id}}"
     },
+    "scope": {
+      "summary": "当前范围：{{tenant}}，{{organization}}",
+      "allTenants": "全部租户",
+      "tenant": "租户「{{name}}」",
+      "allOrganizations": "全部组织",
+      "subtree": "{{name}}及其下级",
+      "exact": "仅「{{name}}」",
+      "noOrganization": "没有可查看的组织",
+      "separator": "、",
+      "loadFailed": "当前范围加载失败，列表仍按您的权限显示"
+    },
     "usageType": {
       "label": "使用类型",
       "all": "全部使用类型",

@@ -1,0 +1,480 @@
+pageType: content
+background:
+  type: solid
+  color: '#F0ECE5'
+notes: Authored composition experiment using the parent pack palette and typography. All figures are fictional demonstration data; replace with actual evidence.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 26
+      - 820
+      - 20
+    content:
+      text: 06 / 优先级地图
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 11
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 57
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.5
+      color: '#111111'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 78
+      - 864
+      - 68
+    content:
+      text: 优先做高影响的事
+      fontFamily: &ref_0
+        latin: Arial Black
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 37
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: s4
+    elementType: shape
+    bounds:
+      - 75
+      - 174
+      - 503
+      - 273
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E4DFD5'
+    border:
+      width: 0
+      color: '#E4DFD5'
+  - elementId: s5
+    elementType: shape
+    bounds:
+      - 75
+      - 174
+      - 251
+      - 136
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#EFC3B1'
+    border:
+      width: 0
+      color: '#EFC3B1'
+  - elementId: l6
+    elementType: line
+    bounds:
+      - 326
+      - 174
+      - 1
+      - 273
+    viewBox:
+      - 1
+      - 273
+    points: 0,0 0,273
+    border:
+      width: 0.7
+      color: '#96958B'
+  - elementId: l7
+    elementType: line
+    bounds:
+      - 75
+      - 310
+      - 503
+      - 1
+    viewBox:
+      - 503
+      - 1
+    points: 0,0 503,0
+    border:
+      width: 0.7
+      color: '#96958B'
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 92
+      - 186
+      - 212
+      - 26
+    content:
+      text: 马上做
+      fontFamily: *ref_0
+      fontSize: 14
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 345
+      - 186
+      - 210
+      - 26
+    content:
+      text: 排期做
+      fontFamily: *ref_0
+      fontSize: 14
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: s10
+    elementType: shape
+    bounds:
+      - 147
+      - 230
+      - 34
+      - 34
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#E85D26'
+    border:
+      width: 0
+      color: '#E85D26'
+  - elementId: t11
+    elementType: text
+    bounds:
+      - 152
+      - 234
+      - 24
+      - 30
+    content:
+      text: A
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+      align: center
+  - elementId: s12
+    elementType: shape
+    bounds:
+      - 221
+      - 261
+      - 34
+      - 34
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#E85D26'
+    border:
+      width: 0
+      color: '#E85D26'
+  - elementId: t13
+    elementType: text
+    bounds:
+      - 226
+      - 265
+      - 24
+      - 30
+    content:
+      text: B
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+      align: center
+  - elementId: s14
+    elementType: shape
+    bounds:
+      - 428
+      - 239
+      - 34
+      - 34
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#E85D26'
+    border:
+      width: 0
+      color: '#E85D26'
+  - elementId: t15
+    elementType: text
+    bounds:
+      - 433
+      - 243
+      - 24
+      - 30
+    content:
+      text: C
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+      align: center
+  - elementId: s16
+    elementType: shape
+    bounds:
+      - 373
+      - 355
+      - 34
+      - 34
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#E85D26'
+    border:
+      width: 0
+      color: '#E85D26'
+  - elementId: t17
+    elementType: text
+    bounds:
+      - 378
+      - 359
+      - 24
+      - 30
+    content:
+      text: D
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+      align: center
+  - elementId: t18
+    elementType: text
+    bounds:
+      - 75
+      - 455
+      - 501
+      - 27
+    content:
+      text: 投入：低 → 高
+      fontFamily: *ref_1
+      fontSize: 14
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t19
+    elementType: text
+    bounds:
+      - 75
+      - 147
+      - 501
+      - 22
+    content:
+      text: 越靠上：影响越大
+      fontFamily: *ref_1
+      fontSize: 12
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t20
+    elementType: text
+    bounds:
+      - 624
+      - 181
+      - 44
+      - 30
+    content:
+      text: A
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#B34016'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t21
+    elementType: text
+    bounds:
+      - 681
+      - 181
+      - 231
+      - 51
+    content:
+      text: 改善首次回复
+      fontFamily: *ref_1
+      fontSize: 20
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l22
+    elementType: line
+    bounds:
+      - 624
+      - 234
+      - 288
+      - 1
+    viewBox:
+      - 288
+      - 1
+    points: 0,0 288,0
+    border:
+      width: 0.7
+      color: '#B2B0A6'
+  - elementId: t23
+    elementType: text
+    bounds:
+      - 624
+      - 249
+      - 44
+      - 30
+    content:
+      text: B
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#B34016'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t24
+    elementType: text
+    bounds:
+      - 681
+      - 249
+      - 231
+      - 51
+    content:
+      text: 明确负责人
+      fontFamily: *ref_1
+      fontSize: 20
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l25
+    elementType: line
+    bounds:
+      - 624
+      - 302
+      - 288
+      - 1
+    viewBox:
+      - 288
+      - 1
+    points: 0,0 288,0
+    border:
+      width: 0.7
+      color: '#B2B0A6'
+  - elementId: t26
+    elementType: text
+    bounds:
+      - 624
+      - 317
+      - 44
+      - 30
+    content:
+      text: C
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#B34016'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t27
+    elementType: text
+    bounds:
+      - 681
+      - 317
+      - 231
+      - 51
+    content:
+      text: 重建调度
+      fontFamily: *ref_1
+      fontSize: 20
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l28
+    elementType: line
+    bounds:
+      - 624
+      - 370
+      - 288
+      - 1
+    viewBox:
+      - 288
+      - 1
+    points: 0,0 288,0
+    border:
+      width: 0.7
+      color: '#B2B0A6'
+  - elementId: t29
+    elementType: text
+    bounds:
+      - 624
+      - 385
+      - 44
+      - 30
+    content:
+      text: D
+      fontFamily: *ref_0
+      fontSize: 20
+      color: '#B34016'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t30
+    elementType: text
+    bounds:
+      - 681
+      - 385
+      - 231
+      - 51
+    content:
+      text: 增加报表
+      fontFamily: *ref_1
+      fontSize: 20
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l31
+    elementType: line
+    bounds:
+      - 624
+      - 438
+      - 288
+      - 1
+    viewBox:
+      - 288
+      - 1
+    points: 0,0 288,0
+    border:
+      width: 0.7
+      color: '#B2B0A6'
+  - elementId: t32
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 760
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_1
+      fontSize: 9
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t33
+    elementType: text
+    bounds:
+      - 870
+      - 504
+      - 42
+      - 22
+    content:
+      text: '07'
+      fontFamily: *ref_1
+      fontSize: 11
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false

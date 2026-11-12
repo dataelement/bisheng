@@ -1,0 +1,142 @@
+pageType: cover
+background:
+  type: solid
+  color: '#F7F4EB'
+notes: 'Authored layout: 课程封面. All content is illustrative. Replace with user facts.'
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 24
+      - 700
+      - 18
+    content:
+      text: LEARNING JOURNAL
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 10
+      color: '#70766B'
+      lineHeight: 1.2
+      letterSpacing: 1.2
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 50
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      color: '#70766B'
+      width: 0.6
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 68
+      - 864
+      - 64
+    content:
+      text: 把一个新方法，练成可用的能力
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 31
+      color: '#243F35'
+      lineHeight: 1.2
+      bold: true
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 505
+      - 760
+      - 16
+    content:
+      text: 自编示例，非外部事实
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#70766B'
+      lineHeight: 1.2
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 860
+      - 504
+      - 48
+      - 18
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#243F35'
+      lineHeight: 1.2
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 172
+      - 630
+      - 172
+    content:
+      text: |-
+        从理解，
+        走向独立完成。
+      fontFamily: *ref_1
+      fontSize: 64
+      color: '#243F35'
+      lineHeight: 1.2
+      bold: true
+  - elementId: s7
+    elementType: shape
+    bounds:
+      - 716
+      - 172
+      - 196
+      - 230
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E5EBDD'
+    border:
+      color: '#70766B'
+      width: 0
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 740
+      - 206
+      - 152
+      - 157
+    content:
+      text: |-
+        READ
+        TRY
+        REVIEW
+      fontFamily: *ref_0
+      fontSize: 25
+      color: '#243F35'
+      lineHeight: 1.2
+      bold: true
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 52
+      - 389
+      - 620
+      - 42
+    content:
+      text: 工作坊 / 示例课程 / 45 分钟
+      fontFamily: *ref_0
+      fontSize: 19
+      color: '#70766B'
+      lineHeight: 1.2

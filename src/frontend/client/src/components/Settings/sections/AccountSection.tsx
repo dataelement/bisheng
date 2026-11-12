@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera } from "lucide-react";
 import { Outlined } from 'bisheng-icons';
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Input, Tooltip } from '@bisheng/ui';
+import { Button, Tooltip } from '@bisheng/ui';
 import { uploadUserAvatarFileApi, type NicknameProfile } from "~/api/user";
 import { NotificationSeverity } from "~/common";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
@@ -18,6 +18,10 @@ import { PasswordForm } from "./PasswordForm";
 import { NicknameEditor } from './NicknameEditor';
 import { copyText } from '~/utils';
 
+const accountFieldLabelClassName = 'mb-1 text-[14px] text-[#86909c]';
+// Offset the small button's 5px icon inset to keep 8px of visual spacing.
+const inlineActionClassName = '-ms-[0.3125rem] shrink-0 text-text-3';
+
 export interface AccountSectionProps {
     username: string;
     account?: string | null;
@@ -28,6 +32,8 @@ export interface AccountSectionProps {
 /** Basic info (avatar + username) and security settings (password), formerly AccountInfoDialog. */
 export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }: AccountSectionProps) {
     const localize = useLocalize();
+    const editNicknameLabel = localize('accountIdentity.editNickname');
+    const copyAccountLabel = localize('accountIdentity.copyAccount');
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
     const setUser = useSetRecoilState(store.user);
@@ -132,10 +138,7 @@ export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }
             />
 
             <section className="flex flex-col gap-4">
-                <h3 className="text-[14px] font-semibold leading-5 text-[#212121]">
-                    {localize("com_account_info_basic_info")}
-                </h3>
-                <div className="flex items-center gap-4 border-b border-border pb-4">
+                <div className="flex items-start gap-4 pb-4">
                     <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
@@ -149,36 +152,71 @@ export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }
                             <Camera className="size-6 text-white" aria-hidden />
                         </div>
                     </button>
-                    <div className="min-w-0 flex-1 text-body text-text-1">
-                        <p className="text-caption text-text-3">{localize('accountIdentity.nickname')}</p>
-                        <p className="truncate" title={currentNickname}>{currentNickname}</p>
-                    </div>
-                    {!isEditingNickname && <Button type="button" variant="text" color="primary" onClick={() => setIsEditingNickname(true)}>
-                        {localize('accountIdentity.editNickname')}
-                    </Button>}
+                    <dl className="min-w-0 flex-1 pt-1">
+                        <dt className={accountFieldLabelClassName}>{localize('accountIdentity.nickname')}</dt>
+                        <dd className="grid grid-cols-1">
+                            {/* Reserve the editor's height even when its actions wrap onto another line. */}
+                            <div className="col-start-1 row-start-1 aria-hidden:invisible" aria-hidden={!isEditingNickname}>
+                                <NicknameEditor
+                                    key={isEditingNickname ? 'editing' : 'display'}
+                                    nickname={currentNickname}
+                                    autoFocus={isEditingNickname}
+                                    onCancel={() => setIsEditingNickname(false)}
+                                    onSaved={handleNicknameSaved}
+                                />
+                            </div>
+                            {!isEditingNickname && (
+                                <div className="col-start-1 row-start-1 flex min-h-8 items-center gap-2 self-start">
+                                    <span className="min-w-0 truncate text-body text-text-1" title={currentNickname}>{currentNickname}</span>
+                                    <Tooltip content={editNicknameLabel}>
+                                        <Button
+                                            type="button"
+                                            size="small"
+                                            variant="text"
+                                            color="default"
+                                            iconOnly
+                                            aria-label={editNicknameLabel}
+                                            className={inlineActionClassName}
+                                            onClick={() => setIsEditingNickname(true)}
+                                        >
+                                            <Outlined.Edit aria-hidden />
+                                        </Button>
+                                    </Tooltip>
+                                </div>
+                            )}
+                        </dd>
+                    </dl>
                 </div>
-                {isEditingNickname && <NicknameEditor nickname={currentNickname} onCancel={() => setIsEditingNickname(false)} onSaved={handleNicknameSaved} />}
-                <div className="grid gap-2 border-b border-border pb-5">
-                    <label htmlFor="profile-account" className="text-body text-text-1">{localize('accountIdentity.account')}</label>
-                    <Input id="profile-account" size="medium" readOnly value={account ?? ''} title={account ?? ''}
-                        placeholder={localize('accountIdentity.noAccount')}
-                        suffix={<Tooltip content={localize('accountIdentity.copyAccount')}><Button type="button" size="small" variant="text" color="default" iconOnly disabled={!account}
-                            aria-label={localize('accountIdentity.copyAccount')} onClick={() => void handleCopyAccount()}>
-                            <Outlined.Copy aria-hidden />
-                        </Button></Tooltip>} />
-                    <p className="text-caption text-text-3">{localize('accountIdentity.accountPurpose')}</p>
-                </div>
+                <dl className="min-w-0 pb-5">
+                    <dt className={accountFieldLabelClassName}>{localize('accountIdentity.account')}</dt>
+                    <dd className="flex items-center gap-2">
+                        <span className="min-w-0 whitespace-pre-wrap break-words text-body text-text-1">
+                            {account || localize('accountIdentity.noAccount')}
+                        </span>
+                        <Tooltip content={copyAccountLabel}>
+                            <Button
+                                type="button"
+                                size="small"
+                                variant="text"
+                                color="default"
+                                iconOnly
+                                disabled={!account}
+                                aria-label={copyAccountLabel}
+                                className={inlineActionClassName}
+                                onClick={() => void handleCopyAccount()}
+                            >
+                                <Outlined.Copy aria-hidden />
+                            </Button>
+                        </Tooltip>
+                    </dd>
+                </dl>
             </section>
 
             <section className="flex flex-col gap-4">
-                <h3 className="text-[14px] font-semibold leading-5 text-[#1d2129]">
-                    {localize("com_account_info_security_settings")}
-                </h3>
-
                 {!isEditing ? (
                     <div className="flex items-center justify-between gap-4">
                         <div className="min-w-0">
-                            <div className="mb-1 text-[14px] text-[#86909c]">{localize("com_auth_password")}</div>
+                            <div className={accountFieldLabelClassName}>{localize("com_auth_password")}</div>
                             <div className="text-[14px] tracking-[0.12em] text-[#1d2129]">
                                 ••••••••••••••••
                             </div>

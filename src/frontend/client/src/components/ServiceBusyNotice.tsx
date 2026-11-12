@@ -8,7 +8,7 @@
  * by the Linsight task-mode failure card and the daily-mode chat error bubble so
  * both surfaces read identically.
  */
-import { FailureInfoDetails } from '~/components/FailureInfoDetails';
+import { ErrorDetailDisclosure, FailureInfoDetails } from '~/components/FailureInfoDetails';
 import { parseFailureInfo } from '~/utils/failureInfo';
 import { Outlined } from 'bisheng-icons';
 import { useLocalize } from '~/hooks';
@@ -70,8 +70,10 @@ interface ServiceBusyNoticeProps {
     desc?: string;
     /** optional localized title, e.g. "模型服务繁忙" (task mode shows it; daily chat omits it) */
     title?: string;
-    /** raw provider text kept behind a "view details" disclosure (task mode) */
+    /** redacted exception text kept behind a "view details" disclosure (task mode) */
     detail?: string;
+    /** support reference when the failure has no dependency failure_id */
+    referenceId?: string;
     /** when provided, a low-key Retry button re-runs the request */
     onRetry?: () => void;
     /** disables the retry button + spins its icon while a retry is in flight */
@@ -86,6 +88,8 @@ export function ServiceBusyNotice({
     desc,
     title,
     failureInfo,
+    detail,
+    referenceId,
     onRetry,
     retrying,
     icon = 'gauge',
@@ -146,7 +150,8 @@ export function ServiceBusyNotice({
                         {actions}
                     </div>
 
-                    <FailureInfoDetails failureInfo={failure} />
+                    <FailureInfoDetails failureInfo={failure} referenceId={referenceId} />
+                    <ErrorDetailDisclosure detail={detail} />
 
                 </div>
             </div>

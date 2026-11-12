@@ -13,6 +13,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.session_activity import business_activity
 from bisheng.database.models.assistant import Assistant
 from bisheng.permission.application.business_authorization import (
     require_business_action,
@@ -242,6 +243,7 @@ async def update_tool_list(
 
 # Assistant Dialogue'swebsocketCONNECT
 @router.websocket("/chat/{assistant_id}")
+@business_activity(http=False, websocket_actions=("input",))
 async def chat(
     *,
     assistant_id: str,

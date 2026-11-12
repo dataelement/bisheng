@@ -1,0 +1,467 @@
+pageType: action
+background:
+  type: solid
+  color: $white
+elements:
+- elementId: top-band
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 960
+  - 8
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: top-gold
+  elementType: shape
+  bounds:
+  - 0
+  - 8
+  - 960
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: kicker
+  elementType: text
+  bounds:
+  - 48
+  - 28
+  - 600
+  - 16
+  content:
+    text: 四、2027 年工作安排
+    style: $kicker
+- elementId: title
+  elementType: text
+  bounds:
+  - 48
+  - 46
+  - 864
+  - 36
+  content:
+    text: 2027 年：稳增长、提质量、补短板
+    style: $title
+- elementId: title-mark
+  elementType: shape
+  bounds:
+  - 48
+  - 88
+  - 56
+  - 3
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: footer-rule
+  elementType: line
+  bounds:
+  - 48
+  - 502
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: footer-org
+  elementType: text
+  bounds:
+  - 48
+  - 508
+  - 500
+  - 16
+  content:
+    text: 示例单位 · 2026 年度工作汇报
+    style: $meta
+- elementId: footer-no
+  elementType: text
+  bounds:
+  - 852
+  - 508
+  - 60
+  - 16
+  content:
+    text: '11'
+    style: $meta
+    align:
+    - right
+    - top
+- elementId: goal-card-1
+  elementType: shape
+  bounds:
+  - 48.0
+  - 114
+  - 277.3333333333333
+  - 128
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: goal-label-1
+  elementType: text
+  bounds:
+  - 68.0
+  - 126
+  - 237.33333333333331
+  - 20
+  content:
+    text: 营业收入
+    style: $label
+    fontSize: 13
+    color: $lightgold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-num-1
+  elementType: text
+  bounds:
+  - 68.0
+  - 150
+  - 187.33333333333331
+  - 50
+  content:
+    text: ≥ 415
+    style: $title
+    fontSize: 34
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-unit-1
+  elementType: text
+  bounds:
+  - 255.33333333333331
+  - 168
+  - 50
+  - 24
+  content:
+    text: 亿元
+    style: $label
+    fontSize: 14
+    color: $lightgold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-note-1
+  elementType: text
+  bounds:
+  - 68.0
+  - 208
+  - 237.33333333333331
+  - 22
+  content:
+    text: 增长 7.5% 以上
+    style: $label
+    fontSize: 12
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-card-2
+  elementType: shape
+  bounds:
+  - 341.3333333333333
+  - 114
+  - 277.3333333333333
+  - 128
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: goal-label-2
+  elementType: text
+  bounds:
+  - 361.3333333333333
+  - 126
+  - 237.33333333333331
+  - 20
+  content:
+    text: 利润总额
+    style: $label
+    fontSize: 13
+    color: $lightgold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-num-2
+  elementType: text
+  bounds:
+  - 361.3333333333333
+  - 150
+  - 187.33333333333331
+  - 50
+  content:
+    text: ≥ 46
+    style: $title
+    fontSize: 34
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-unit-2
+  elementType: text
+  bounds:
+  - 548.6666666666666
+  - 168
+  - 50
+  - 24
+  content:
+    text: 亿元
+    style: $label
+    fontSize: 14
+    color: $lightgold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-note-2
+  elementType: text
+  bounds:
+  - 361.3333333333333
+  - 208
+  - 237.33333333333331
+  - 22
+  content:
+    text: 增长 8% 以上
+    style: $label
+    fontSize: 12
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-card-3
+  elementType: shape
+  bounds:
+  - 634.6666666666666
+  - 114
+  - 277.3333333333333
+  - 128
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: goal-label-3
+  elementType: text
+  bounds:
+  - 654.6666666666666
+  - 126
+  - 237.33333333333331
+  - 20
+  content:
+    text: 研发投入强度
+    style: $label
+    fontSize: 13
+    color: $lightgold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-num-3
+  elementType: text
+  bounds:
+  - 654.6666666666666
+  - 150
+  - 187.33333333333331
+  - 50
+  content:
+    text: ≥ 3.8
+    style: $title
+    fontSize: 34
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-unit-3
+  elementType: text
+  bounds:
+  - 842.0
+  - 168
+  - 50
+  - 24
+  content:
+    text: '%'
+    style: $label
+    fontSize: 14
+    color: $lightgold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: goal-note-3
+  elementType: text
+  bounds:
+  - 654.6666666666666
+  - 208
+  - 237.33333333333331
+  - 22
+  content:
+    text: 提高 0.4 个百分点
+    style: $label
+    fontSize: 12
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: plan-head
+  elementType: text
+  bounds:
+  - 48
+  - 262
+  - 400
+  - 24
+  content:
+    text: 重点任务
+    style: $lead
+    fontSize: 17
+    color: $red
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: plan-dot-1
+  elementType: shape
+  bounds:
+  - 48
+  - 304
+  - 10
+  - 10
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: plan-task-1
+  elementType: text
+  bounds:
+  - 72
+  - 298
+  - 840
+  - 44
+  content:
+    text: 深入推进改革深化提升行动，完成剩余 2 项改革任务
+    style: $body
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: plan-rule-1
+  elementType: line
+  bounds:
+  - 48
+  - 348
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: plan-dot-2
+  elementType: shape
+  bounds:
+  - 48
+  - 366
+  - 10
+  - 10
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: plan-task-2
+  elementType: text
+  bounds:
+  - 72
+  - 360
+  - 840
+  - 44
+  content:
+    text: 一季度完成供应链模块上线，年内实现数据贯通
+    style: $body
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: plan-rule-2
+  elementType: line
+  bounds:
+  - 48
+  - 410
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: plan-dot-3
+  elementType: shape
+  bounds:
+  - 48
+  - 428
+  - 10
+  - 10
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: plan-task-3
+  elementType: text
+  bounds:
+  - 72
+  - 422
+  - 840
+  - 44
+  content:
+    text: 新兴业务毛利率提升 2 个百分点，培育 2 个十亿级业务
+    style: $body
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: plan-rule-3
+  elementType: line
+  bounds:
+  - 48
+  - 472
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8

@@ -1,0 +1,177 @@
+pageType: evidence
+background:
+  type: solid
+  color: $white
+elements:
+- elementId: top-band
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 960
+  - 8
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: top-gold
+  elementType: shape
+  bounds:
+  - 0
+  - 8
+  - 960
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: kicker
+  elementType: text
+  bounds:
+  - 48
+  - 28
+  - 600
+  - 16
+  content:
+    text: 二、重点任务完成情况
+    style: $kicker
+- elementId: title
+  elementType: text
+  bounds:
+  - 48
+  - 46
+  - 864
+  - 36
+  content:
+    text: 五项重点任务四项完成，数字化转型一个模块延期
+    style: $title
+- elementId: title-mark
+  elementType: shape
+  bounds:
+  - 48
+  - 88
+  - 56
+  - 3
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: footer-rule
+  elementType: line
+  bounds:
+  - 48
+  - 502
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: footer-org
+  elementType: text
+  bounds:
+  - 48
+  - 508
+  - 500
+  - 16
+  content:
+    text: 示例单位 · 2026 年度工作汇报
+    style: $meta
+- elementId: footer-no
+  elementType: text
+  bounds:
+  - 852
+  - 508
+  - 60
+  - 16
+  content:
+    text: '06'
+    style: $meta
+    align:
+    - right
+    - top
+- elementId: task-table
+  elementType: table
+  bounds:
+  - 48
+  - 112
+  - 864
+  - 316
+  style: $gov-table
+  columnWidths:
+  - 0.24
+  - 0.2
+  - 0.42
+  - 0.14
+  rowHeights:
+  - 0.14
+  - 0.172
+  - 0.172
+  - 0.172
+  - 0.172
+  - 0.172
+  rows:
+  - - text: 重点任务
+    - text: 年度目标
+    - text: 完成情况
+    - text: 状态
+  - - text: 国企改革深化提升行动
+    - text: 完成 3 项改革任务
+    - text: 3 项全部完成，经验在系统内推广
+    - text: 已完成
+  - - text: 科技创新平台建设
+    - text: 新增 2 个省级平台
+    - text: 新增省级研发中心 2 个、实验室 1 个
+    - text: 超额完成
+  - - text: 数字化转型
+    - text: 核心业务系统上线
+    - text: 主体上线，供应链模块延期至一季度
+    - text: 基本完成
+  - - text: 安全生产专项整治
+    - text: 隐患整改率 100%
+    - text: 排查隐患 1,286 项，整改 1,286 项
+    - text: 已完成
+  - - text: 人才队伍建设
+    - text: 引进高层次人才 30 名
+    - text: 引进 34 名，培养青年骨干 120 名
+    - text: 超额完成
+- elementId: task-note-mark
+  elementType: shape
+  bounds:
+  - 48
+  - 444
+  - 4
+  - 40
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: task-note
+  elementType: text
+  bounds:
+  - 64
+  - 444
+  - 848
+  - 40
+  content:
+    text: 延期原因：供应链模块需与上游供应商系统对接，接口标准年内未统一；已明确 2027 年一季度上线。
+    style: $body
+    fontSize: 12
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei

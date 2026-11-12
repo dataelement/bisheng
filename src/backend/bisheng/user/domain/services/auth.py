@@ -17,6 +17,7 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+from bisheng.core.session_activity import record_authenticated_activity
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.group import GroupDao
@@ -200,13 +201,6 @@ class AuthJwt:
 class LoginUser(BaseModel):
     _role_policy: object = PrivateAttr(default=None)
     _runtime_credential_reference: dict | None = PrivateAttr(default=None)
-    _business_activity_recorder: Any = PrivateAttr(default=None)
-
-    async def record_business_activity(self) -> None:
-        """Only a verified desktop-cookie grant attaches this request-local hook."""
-        if self._business_activity_recorder is not None:
-            await self._business_activity_recorder()
-
     user_id: int
     user_name: str = Field(default="")
     user_role: list[int] = Field(default_factory=list, description="Users GroupsIDVertical")
@@ -588,12 +582,6 @@ class LoginUser(BaseModel):
             token_version=int(subject.get("token_version", 0) or 0),
         )
         request = getattr(auth_jwt, "req", None)
-        if request is not None and "dsh_web_session" in subject:
-            user._business_activity_recorder = getattr(
-                getattr(request, "state", None),
-                "dsh_activity_recorder",
-                None,
-            )
         if request is not None:
             token = request.cookies.get(auth_jwt._access_cookie_key)
             claims = jwt.decode(
@@ -606,6 +594,7 @@ class LoginUser(BaseModel):
                 "token_version": user.token_version,
                 "expires_at": datetime.fromtimestamp(claims["exp"], UTC).replace(tzinfo=None).isoformat(),
             }
+        await record_authenticated_activity(request)
         return user
 
     @classmethod
@@ -653,12 +642,6 @@ class LoginUser(BaseModel):
             tenant_id=subject.get("tenant_id", DEFAULT_TENANT_ID),
             token_version=int(subject.get("token_version", 0) or 0),
         )
-        if "dsh_web_session" in subject:
-            user._business_activity_recorder = getattr(
-                getattr(websocket, "state", None),
-                "dsh_activity_recorder",
-                None,
-            )
         return user
 
     @classmethod

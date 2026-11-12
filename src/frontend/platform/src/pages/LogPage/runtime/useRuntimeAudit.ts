@@ -36,10 +36,14 @@ export function useRuntimeAudit(kind: RuntimeAuditKind, filters: RuntimeAuditFil
       searchSequence += 1
       setSearchVersion(searchSequence)
     },
-    next: () => {
-      if (!query.data?.next_cursor) return
-      setPaging({ selection, cursors: [...current.cursors.slice(0, current.index + 1), query.data.next_cursor], index: current.index + 1 })
+    setPage: (page: number) => {
+      if (query.isFetching) return
+      const index = page - 1
+      if (index === current.index + 1 && query.data?.next_cursor) {
+        setPaging({ selection, cursors: [...current.cursors.slice(0, index), query.data.next_cursor], index })
+      } else if (index === current.index - 1 && index >= 0) {
+        setPaging({ ...current, index })
+      }
     },
-    previous: () => setPaging({ ...current, index: Math.max(0, current.index - 1) }),
   }
 }

@@ -12,7 +12,7 @@ because a script that merely "works when I run it" can still fail invisibly in t
 
 ## Script contract
 
-- **Every script must end with `sys.exit(0)` and report its findings on stdout.** The code interpreter is either/or: a non-zero exit returns stderr and throws stdout away, a zero exit returns stdout only. A script that exits non-zero to signal "check failed" therefore deletes its own report and the model sees nothing. Existing scripts already document this at the exit site (`bisheng-pptx/scripts/probe_template.py`, `inspect_deck.py`) — keep doing it. When a script shells out and inspects the result, print stdout and stderr on **separate lines**: `print(r.stdout or r.stderr)` silently drops stderr whenever stdout is non-empty.
+- **Every script must end with `sys.exit(0)` and report its findings on stdout.** The code interpreter is either/or: a non-zero exit returns stderr and throws stdout away, a zero exit returns stdout only. A script that exits non-zero to signal "check failed" therefore deletes its own report and the model sees nothing. Existing scripts already document this at the exit site (`bisheng-xlsx/scripts/inspect_workbook.py`, `bisheng-pptx/scripts/pptd.py`) — keep doing it. When a script shells out and inspects the result, print stdout and stderr on **separate lines**: `print(r.stdout or r.stderr)` silently drops stderr whenever stdout is non-empty.
 
 - **Call subprocesses through `sys.executable`, not `python`.** `infer_lang` treats code beginning with `python ` or `pip` as shell, and `python` on PATH is not necessarily the backend's venv interpreter.
 
@@ -61,3 +61,11 @@ Three things always need changing, and none of them are dependencies:
 - **Whenever a prompt teaches the model to call a tool a particular way, call it that way yourself first.** A phrase teaching a specific glob spelling sat in the tree for a long time while that spelling matched nothing — the prompt had promoted an existing bug straight to the user. Unit tests do not catch this, because nothing feeds the prompt's literal wording to the tool.
 
 - **Reject an over-limit batch as a whole instead of truncating it.** A truncated batch hands the user a workspace that looks complete and is not. Filter first (hidden files, unsupported types), then apply the limit, so entries like `.DS_Store` do not consume quota.
+
+---
+
+## External runtimes
+
+- **A pack that drives a non-Python runtime finds it at a fixed default path; an environment variable may only override it for local development.** The local-isolation child gets an allowlisted environment (`local_isolation.child_env`), so a variable set on the worker never reaches the script; `/root` is mode 550, so a runtime under `/root` (nvm, pipx) is unreachable for the unprivileged uid. `bisheng-pptx` runs the PPTD engine from `/opt/pptd-runtime` (base image + `pptd_runtime/install.sh`, see `pptd_runtime/README.md`); verified on 114 as `nobody` under `prlimit --as=2147483648`.
+- **When the runtime is missing, say so and stop — no fallback generator.** A second generation path lets the model route around engine errors and hides the real defect (`bisheng-pptx` deliberately dropped its python-pptx path, F014).
+

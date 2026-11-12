@@ -1931,6 +1931,17 @@
       "collapse": "{{name}} を折りたたむ",
       "tenantGroup": "テナント {{id}}"
     },
+    "scope": {
+      "summary": "現在の範囲：{{tenant}}、{{organization}}",
+      "allTenants": "すべてのテナント",
+      "tenant": "テナント「{{name}}」",
+      "allOrganizations": "すべての組織",
+      "subtree": "{{name}}とその下位部門",
+      "exact": "「{{name}}」のみ",
+      "noOrganization": "表示できる組織がありません",
+      "separator": "、",
+      "loadFailed": "現在の範囲を読み込めませんでした。一覧は権限に従って表示されます"
+    },
     "usageType": {
       "label": "利用タイプ",
       "all": "すべての利用タイプ",

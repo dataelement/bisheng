@@ -1,0 +1,512 @@
+pageType: matrix
+background:
+  type: solid
+  color: $white
+elements:
+- elementId: top-band
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 960
+  - 8
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: top-gold
+  elementType: shape
+  bounds:
+  - 0
+  - 8
+  - 960
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: kicker
+  elementType: text
+  bounds:
+  - 48
+  - 28
+  - 600
+  - 16
+  content:
+    text: 二、重点任务完成情况
+    style: $kicker
+- elementId: title
+  elementType: text
+  bounds:
+  - 48
+  - 46
+  - 864
+  - 36
+  content:
+    text: 六个方面协同发力，形成全年工作合力
+    style: $title
+- elementId: title-mark
+  elementType: shape
+  bounds:
+  - 48
+  - 88
+  - 56
+  - 3
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: footer-rule
+  elementType: line
+  bounds:
+  - 48
+  - 502
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: footer-org
+  elementType: text
+  bounds:
+  - 48
+  - 508
+  - 500
+  - 16
+  content:
+    text: 示例单位 · 2026 年度工作汇报
+    style: $meta
+- elementId: footer-no
+  elementType: text
+  bounds:
+  - 852
+  - 508
+  - 60
+  - 16
+  content:
+    text: '08'
+    style: $meta
+    align:
+    - right
+    - top
+- elementId: mx-card-1
+  elementType: shape
+  bounds:
+  - 48.0
+  - 116
+  - 277.3333333333333
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: mx-mark-1
+  elementType: shape
+  bounds:
+  - 48.0
+  - 116
+  - 4
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: mx-no-1
+  elementType: text
+  bounds:
+  - 68.0
+  - 132
+  - 60
+  - 30
+  content:
+    text: '01'
+    style: $title
+    fontSize: 22
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-h-1
+  elementType: text
+  bounds:
+  - 68.0
+  - 168
+  - 237.33333333333331
+  - 26
+  content:
+    text: 党的建设
+    style: $lead
+    fontSize: 17
+    color: $red
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-d-1
+  elementType: text
+  bounds:
+  - 68.0
+  - 200
+  - 237.33333333333331
+  - 64
+  content:
+    text: 开展主题教育 48 场，基层党支部全部达标
+    style: $body
+- elementId: mx-card-2
+  elementType: shape
+  bounds:
+  - 341.3333333333333
+  - 116
+  - 277.3333333333333
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: mx-mark-2
+  elementType: shape
+  bounds:
+  - 341.3333333333333
+  - 116
+  - 4
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: mx-no-2
+  elementType: text
+  bounds:
+  - 361.3333333333333
+  - 132
+  - 60
+  - 30
+  content:
+    text: '02'
+    style: $title
+    fontSize: 22
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-h-2
+  elementType: text
+  bounds:
+  - 361.3333333333333
+  - 168
+  - 237.33333333333331
+  - 26
+  content:
+    text: 深化改革
+    style: $lead
+    fontSize: 17
+    color: $red
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-d-2
+  elementType: text
+  bounds:
+  - 361.3333333333333
+  - 200
+  - 237.33333333333331
+  - 64
+  content:
+    text: 完成三项制度改革，任期制和契约化管理全覆盖
+    style: $body
+- elementId: mx-card-3
+  elementType: shape
+  bounds:
+  - 634.6666666666666
+  - 116
+  - 277.3333333333333
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: mx-mark-3
+  elementType: shape
+  bounds:
+  - 634.6666666666666
+  - 116
+  - 4
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: mx-no-3
+  elementType: text
+  bounds:
+  - 654.6666666666666
+  - 132
+  - 60
+  - 30
+  content:
+    text: '03'
+    style: $title
+    fontSize: 22
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-h-3
+  elementType: text
+  bounds:
+  - 654.6666666666666
+  - 168
+  - 237.33333333333331
+  - 26
+  content:
+    text: 科技创新
+    style: $lead
+    fontSize: 17
+    color: $red
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-d-3
+  elementType: text
+  bounds:
+  - 654.6666666666666
+  - 200
+  - 237.33333333333331
+  - 64
+  content:
+    text: 新增发明专利 86 件，研发投入 13.1 亿元
+    style: $body
+- elementId: mx-card-4
+  elementType: shape
+  bounds:
+  - 48.0
+  - 292
+  - 277.3333333333333
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: mx-mark-4
+  elementType: shape
+  bounds:
+  - 48.0
+  - 292
+  - 4
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: mx-no-4
+  elementType: text
+  bounds:
+  - 68.0
+  - 308
+  - 60
+  - 30
+  content:
+    text: '04'
+    style: $title
+    fontSize: 22
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-h-4
+  elementType: text
+  bounds:
+  - 68.0
+  - 344
+  - 237.33333333333331
+  - 26
+  content:
+    text: 安全环保
+    style: $lead
+    fontSize: 17
+    color: $red
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-d-4
+  elementType: text
+  bounds:
+  - 68.0
+  - 376
+  - 237.33333333333331
+  - 64
+  content:
+    text: 单位产值能耗下降 4.2%，零较大事故
+    style: $body
+- elementId: mx-card-5
+  elementType: shape
+  bounds:
+  - 341.3333333333333
+  - 292
+  - 277.3333333333333
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: mx-mark-5
+  elementType: shape
+  bounds:
+  - 341.3333333333333
+  - 292
+  - 4
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: mx-no-5
+  elementType: text
+  bounds:
+  - 361.3333333333333
+  - 308
+  - 60
+  - 30
+  content:
+    text: '05'
+    style: $title
+    fontSize: 22
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-h-5
+  elementType: text
+  bounds:
+  - 361.3333333333333
+  - 344
+  - 237.33333333333331
+  - 26
+  content:
+    text: 人才建设
+    style: $lead
+    fontSize: 17
+    color: $red
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-d-5
+  elementType: text
+  bounds:
+  - 361.3333333333333
+  - 376
+  - 237.33333333333331
+  - 64
+  content:
+    text: 引进高层次人才 34 名，培养青年骨干 120 名
+    style: $body
+- elementId: mx-card-6
+  elementType: shape
+  bounds:
+  - 634.6666666666666
+  - 292
+  - 277.3333333333333
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: mx-mark-6
+  elementType: shape
+  bounds:
+  - 634.6666666666666
+  - 292
+  - 4
+  - 160
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: mx-no-6
+  elementType: text
+  bounds:
+  - 654.6666666666666
+  - 308
+  - 60
+  - 30
+  content:
+    text: '06'
+    style: $title
+    fontSize: 22
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-h-6
+  elementType: text
+  bounds:
+  - 654.6666666666666
+  - 344
+  - 237.33333333333331
+  - 26
+  content:
+    text: 民生保障
+    style: $lead
+    fontSize: 17
+    color: $red
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: mx-d-6
+  elementType: text
+  bounds:
+  - 654.6666666666666
+  - 376
+  - 237.33333333333331
+  - 64
+  content:
+    text: 职工收入增长 6.5%，办实事项目 26 项
+    style: $body

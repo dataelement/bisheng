@@ -1186,6 +1186,7 @@ export default function useAiChat(
                                 errorCode,
                                 errorType: meta?.errorType,
                                 errorDetail: meta?.errorDetail,
+                                referenceId: meta?.referenceId,
                                 failureInfo: meta?.failureInfo,
                             };
                         }
@@ -1403,6 +1404,7 @@ export default function useAiChat(
                                 errorCode,
                                 errorType: meta?.errorType,
                                 errorDetail: meta?.errorDetail,
+                                referenceId: meta?.referenceId,
                                 failureInfo: meta?.failureInfo,
                             };
                         }

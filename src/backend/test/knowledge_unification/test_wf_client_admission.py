@@ -27,9 +27,6 @@ def client(monkeypatch):
     value.user_id = 7
     value.login_user = UserPayload(user_id=7, user_name="u", tenant_id=101, user_role=[])
     value.test_order = []
-    # Keep the authenticated-identity adapter real; only its request-local
-    # desktop activity transport is replaced, without contacting Redis.
-    value.login_user._business_activity_recorder = AsyncMock(side_effect=lambda: value.test_order.append("activity"))
     value.execution_snapshot = None
     value.session_subject = None
     value.latest_history = None
@@ -87,8 +84,7 @@ async def test_admitted_graph_is_used_and_port_precedes_session_lookup(client):
     value.execution_port.prepare_initial.side_effect = prepare
     value.check_status.side_effect = status
     await value.init_workflow({"data": raw, "chat_id": "chat", "version_id": 3})
-    assert order == ["admit", "session", "lease", "activity", "redis", "data", "waiting", "queue", "run"]
-    value.login_user._business_activity_recorder.assert_awaited_once_with()
+    assert order == ["admit", "session", "lease", "redis", "data", "waiting", "queue", "run"]
     redis.async_set_workflow_data.assert_awaited_once_with(admitted)
     assert queue.call_args.args[0][1] == value.client_id
     factory.assert_called_once()
@@ -102,7 +98,6 @@ async def test_business_rejection_keeps_code_and_has_zero_execution_effects(clie
     value.execution_port.prepare_initial.side_effect = error
     await value.init_workflow({"flow_id": value.client_id, "data": {"nodes": [], "edges": []}})
     value.check_status.assert_not_awaited()
-    value.login_user._business_activity_recorder.assert_not_awaited()
     factory.assert_not_called()
     redis.async_set_workflow_data.assert_not_awaited()
     queue.assert_not_called()
@@ -117,7 +112,6 @@ async def test_bound_root_rejection_precedes_every_common_side_effect(client):
     value.execution_port = BoundWorkflowExecutionPort(value.client_id, user)
     await value.init_workflow({"flow_id": "another-workflow", "data": {"nodes": [], "edges": []}})
     value.check_status.assert_not_awaited()
-    value.login_user._business_activity_recorder.assert_not_awaited()
     factory.assert_not_called()
     queue.assert_not_called()
     assert value.websocket.send_json.await_args.args[0]["message"]["status_code"] == 10996
@@ -128,7 +122,6 @@ async def test_missing_port_is_not_a_legacy_execution_fallback(client):
     value.execution_port = None
     await value.init_workflow({"data": {"nodes": [], "edges": []}})
     value.check_status.assert_not_awaited()
-    value.login_user._business_activity_recorder.assert_not_awaited()
     factory.assert_not_called()
     queue.assert_not_called()
     assert value.websocket.send_json.await_args.args[0]["message"]["status_code"] == 10994
@@ -138,7 +131,6 @@ async def test_status_action_cannot_pivot_the_endpoint_bound_root(client):
     value, factory, _, queue = client
     await value._handle_message({"action": "check_status", "flow_id": "another-workflow", "chat_id": "other-chat"})
     value.check_status.assert_not_awaited()
-    value.login_user._business_activity_recorder.assert_not_awaited()
     factory.assert_not_called()
     queue.assert_not_called()
     assert value.chat_id == "chat" and value.workflow is None
@@ -150,7 +142,6 @@ async def test_direct_status_check_rejects_root_claim_before_mutating_client(cli
     with pytest.raises(ResourceReferenceInvalidError):
         await WorkflowClient.check_status(value, {"flow_id": "another-workflow", "chat_id": "other-chat"})
     assert value.chat_id == "chat" and value.workflow is None
-    value.login_user._business_activity_recorder.assert_not_awaited()
     factory.assert_not_called()
 
 
