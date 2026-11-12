@@ -99,13 +99,15 @@ def test_credit_input_accepts_smallest_allowance_increment():
     assert CreditRuleInput(version=0, monthly_credits="0.1").monthly_token_limit == 100_000
 
 
-@pytest.mark.parametrize("multiplier,rate", [("1", 100), ("1.1", 110), ("1.25", 125), ("0.01", 1), ("1000", 100000)])
-def test_model_multiplier_uses_exact_fixed_point(multiplier, rate):
-    assert ModelVisibilityInput(version=0, credit_multiplier=multiplier).credit_rate == rate
+@pytest.mark.parametrize("multiplier", ["1", "1.25", "0", "1000.01", None])
+def test_removed_model_multiplier_is_accepted_and_ignored(multiplier):
+    # F015: older admin pages still send it; it no longer affects billing.
+    value = ModelVisibilityInput(version=0, credit_multiplier=multiplier)
+    assert not hasattr(value, "credit_rate")
 
 
-@pytest.mark.parametrize("multiplier", ["0", "-1", "1000.01", "1.001", "NaN", "1e2", True, 1.25])
-def test_invalid_model_multiplier_is_rejected(multiplier):
+@pytest.mark.parametrize("multiplier", [True, 1.25, "1" * 17])
+def test_removed_model_multiplier_must_still_be_a_short_string(multiplier):
     with pytest.raises(ValidationError):
         ModelVisibilityInput(version=0, credit_multiplier=multiplier)
 

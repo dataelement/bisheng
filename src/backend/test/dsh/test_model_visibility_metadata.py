@@ -159,13 +159,13 @@ async def test_admin_can_make_an_offline_model_private_before_online_and_cas_is_
         "version": initial["version"],
         "everyone": False,
         "subjects": [{"kind": "USER", "id": 21}],
-        "credit_multiplier": initial["credit_multiplier"],
+        "credit_multiplier": "1",  # older admin pages still send it; it is ignored
     }
     response = await management.client.put(management.path, json=desired)
     assert response.status_code == 200 and response.json()["data"]["version"] == 2
     after = (await management.client.get(management.path)).json()["data"]
     assert after["everyone"] is False and after["subjects"] == [{"kind": "USER", "id": 21}]
-    assert after["credit_multiplier"] == initial["credit_multiplier"]
+    assert "credit_multiplier" not in after
     assert governed.model.online is False
     with pytest.raises(DshModelNotAllowedError):
         await governed.service.get_dsh_model_snapshot(42)

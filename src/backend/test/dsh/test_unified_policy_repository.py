@@ -112,18 +112,17 @@ def test_legacy_import_exact_sum_and_idempotence(store, limits, credits, total):
         assert migrate_legacy_credits(session, actor_id=20, apply=True)["state"] == "already_applied"
 
 
-def test_rate_edit_updates_new_policy_and_audit(store):
+def test_removed_multiplier_is_neither_stored_nor_returned(store):
+    # F015: billing uses model prices; a multiplier sent by an older admin page is ignored.
     with Session(store) as session, session.begin():
         repo = UnifiedPolicyRepository(session)
         repo.save_visibility(7, 20, ModelVisibilityInput(version=0, everyone=True, credit_multiplier="1.25"))
-        original = repo.effective(20)
-        assert original.rows[0].credit_rate == 125
+        assert session.exec(select(ModelVisibility)).one().credit_rate == 100
         value = repo.visibility(7)
-        assert value["credit_multiplier"] == "1.25"
+        assert "credit_multiplier" not in value
         repo.save_visibility(
             7, 20, ModelVisibilityInput(version=value["version"], everyone=True, credit_multiplier="1.1")
         )
-        assert repo.effective(20).rows[0].credit_rate == 110
-        assert original.rows[0].credit_rate == 125
+        assert session.exec(select(ModelVisibility)).one().credit_rate == 100
         audits = session.exec(select(UnifiedPolicyAudit).order_by(UnifiedPolicyAudit.id)).all()
-        assert audits[-1].after_values["credit_multiplier"] == "1.1"
+        assert "credit_multiplier" not in audits[-1].after_values

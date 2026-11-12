@@ -1,7 +1,5 @@
 """Transactional visibility and credit policy storage within the current tenant."""
 
-from decimal import Decimal
-
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -49,7 +47,6 @@ class UnifiedPolicyRepository:
         return {
             "version": row.version if row else 0,
             "everyone": row.everyone if row else False,
-            "credit_multiplier": format(Decimal(row.credit_rate if row else 100) / 100, "f"),
             "subjects": row.subjects if row else [],
         }
 
@@ -137,7 +134,6 @@ class UnifiedPolicyRepository:
             raise DshOperationConflictError()
         if row is None:
             row = ModelVisibility(tenant_id=tenant, model_id=model_id, updated_by=actor)
-        row.credit_rate = value.credit_rate
         row.everyone = value.everyone
         row.subjects = [item.model_dump() for item in sorted(value.subjects, key=lambda item: (item.kind, item.id))]
         row.version = value.version + 1

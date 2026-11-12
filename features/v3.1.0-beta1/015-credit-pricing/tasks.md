@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔲 草稿 | 停服时长待演练实测 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 17 / 36 |
+| 实现 | 🔄 进行中 | 18 / 36 |
 
 ---
 
@@ -173,7 +173,7 @@
   **覆盖 AC**: AC-12, AC-13, AC-19
   **依赖**: T05, T06
 
-- [ ] **T17**: 删除旧倍率
+- [x] **T17**: 删除旧倍率
   **文件**: `dsh/domain/schemas/unified_policy.py`、`dsh/domain/repositories/unified_policy.py`、`dsh/domain/schemas/model_policy.py` 及约 7 个已有测试
   **逻辑**: `credit_multiplier` 入参接受并忽略；不再读写 `credit_rate`；列与 f062 迁移保留
   **覆盖 AC**: AC-17
@@ -245,5 +245,6 @@
 - T03 新增错误码 10814（价格格式无效，已登记 release-contract）。revision 比较目前在服务层基于保存前读取的旧值做；事务内加锁复查随 T04 与 F118 的锁方案一起完成。
 - T15 偏离：`common/` 不能依赖领域层，所以免检标记不在 `process_source_document` 里设置，而是由工作台在 `chat_credits.unmetered()` 内创建溯源任务（任务继承上下文）。新增决策 20：溯源、看图模型标记 `admin_selected`，照常计费但不受员工可选模型范围限制 → design 决策 20、坑 16–17。
 - T16 基准模型取积分设置的 base_model_id，未设置时取工作台日常对话默认模型；基准不在线、被删除、缺价或免费时所有倍率为 null。桌面 `/dsh/models` 经注入的 `hint_context_reader` 计算倍率（测试中不注入时不返回该字段）。
+- T17 偏离：`DshModelPolicyState.credit_rate` 保留（它随策略快照进入对账恢复载荷，改结构有风险），计费已不读取；可见范围接口不再返回、不再写入旧倍率，`credit_multiplier` 入参照收但忽略（老后台兼容）。数据库列与 f062 迁移保留。
 - 发现原有失败（不在本特性范围）：`test/api/test_route_path_naming.py` 在改动前即因 `/api/v2/workstation/config/knowledge` 失败。
 - 发现仓库原有测试隔离缺陷（不在本特性范围，未改）：`test/dsh/test_policy_repository.py` 的 `sql_store` 夹具在 `[external]` 参数缺少真实库时于 setup 中途失败，留下「已初始化但只登记部分表」的租户过滤状态，导致之后混跑的租户隔离用例误报（基线中 `test_unified_policy_repository` 的失败即此原因）。`test_credit_settings` 夹具已显式登记所需表以免受影响。
