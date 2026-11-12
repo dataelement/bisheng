@@ -20,6 +20,10 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
   const danger = consent.plan === plan && consent.danger;
   const impact = view.result?.impact ?? view.inspection;
   const complete = view.result?.check_complete ?? view.inspection?.check_complete;
+  const hasReferences =
+    Object.values(impact?.source_counts ?? {}).some((count) => count > 0) ||
+    Object.values(impact?.restricted_counts ?? {}).some((count) => count > 0) ||
+    !!view.page?.data.length || !!view.page?.has_more;
   const locked = view.busy || view.dispatched;
   const needsSkip = !!view.result?.requires_skip_confirmation;
   const executable =
@@ -139,7 +143,7 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
               )}
             </>
           )}
-          {impact && (
+          {hasReferences && impact && (
             <>
               <div>
                 <p>{tr("source_counts")}</p>
@@ -149,14 +153,14 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
                   </p>
                 ))}
               </div>
-              <div>
+              {Object.values(impact.restricted_counts).some((count) => count > 0) && <div>
                 <p>{tr("restricted")}</p>
                 {Object.entries(impact.restricted_counts).map(([kind, count]) => (
                   <p key={kind}>
                     {kindLabel(kind)}: {count}
                   </p>
                 ))}
-              </div>
+              </div>}
               {view.readonly && view.inspection && (
                 <div>
                   <p>{tr("slot_counts")}</p>
