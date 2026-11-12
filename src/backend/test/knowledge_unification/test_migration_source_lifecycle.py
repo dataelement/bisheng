@@ -247,7 +247,10 @@ async def real_channel_create_delete(database):
             "resolve_permission_actor",
             AsyncMock(return_value=PermissionActor(tenant_id=101, user_id=7)),
         )
-        mp.setattr(channel_module.QuotaService, "get_effective_quota", AsyncMock(return_value=-1))
+        # This test owns source lifecycle/M2/M4. Keep the current public quota
+        # boundary isolated too; the former get_effective_quota hook is no
+        # longer the creation admission and leaked into the live DB factory.
+        mp.setattr(channel_module.QuotaService, "check_quota", AsyncMock())
         mp.setattr(channel_module.QuotaService, "check_info_source_subscribe_limit", AsyncMock())
         async with sessions() as legacy:
             service = ChannelService(

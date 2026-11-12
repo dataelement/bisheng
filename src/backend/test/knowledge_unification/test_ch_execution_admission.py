@@ -18,6 +18,7 @@ from bisheng.channel.application.automation_identity import resolve_channel_auto
 from bisheng.channel.application.execution_admission import ChannelSyncExecutionAdmission
 from bisheng.channel.application.reference_source_owner import ChannelReferenceSourceOwner
 from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSync
+from bisheng.channel.domain.schemas.channel_manager_schema import UpdateChannelRequest
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.errcode.permission import PermissionDeniedError
@@ -87,6 +88,38 @@ async def test_real_full_runtime_preserves_identity_and_borrows_the_active_trans
         admission_module.require_business_action.assert_awaited_once_with(
             value.identity, resource_type="folder", resource_id=30, action="upload_file"
         )
+
+
+async def test_legacy_folder_requires_rebind_without_blocking_other_saved_options(admitted):
+    value = admitted
+    await value.context.service.update_channel(
+        value.root.id, UpdateChannelRequest(knowledge_sync=fixtures.config(10, 20)), value.context.user
+    )
+    async with value.context.sessions() as session, session.begin():
+        rows = (
+            await session.execute(
+                sa.select(ChannelKnowledgeSync.id, ChannelKnowledgeSync.knowledge_space_id).where(
+                    ChannelKnowledgeSync.channel_id == value.root.id
+                )
+            )
+        ).all()
+        ids = {row.knowledge_space_id: row.id for row in rows}
+        await session.execute(
+            sa.update(ChannelKnowledgeSync)
+            .where(ChannelKnowledgeSync.id == ids["10"])
+            .values(folder_id="new-folder-1730000000000")
+        )
+        identities = {
+            space: await resolve_channel_automation_identity(session, value.root.id, config_id, tenant_id=101)
+            for space, config_id in ids.items()
+        }
+    with pytest.raises(ResourceReferenceInvalidError) as error:
+        await ChannelSyncExecutionAdmission.prepare(identities["10"], value.root.id, ids["10"], value.detected_at)
+    assert error.value.kwargs["reason"] == "channel_legacy_folder_rebind_required"
+    prepared = await ChannelSyncExecutionAdmission.prepare(
+        identities["20"], value.root.id, ids["20"], value.detected_at
+    )
+    assert prepared.config["knowledge_space_id"] == "20" and prepared.config["folder_id"] is None
 
 
 async def test_one_invalid_option_blocks_the_whole_channel_even_for_another_selected_config(admitted):

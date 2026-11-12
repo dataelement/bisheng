@@ -118,7 +118,12 @@ class UnificationTaskRepository:
             )
 
     async def avalidate_migration_idle(self, session):
-        """MIG-only barrier; ordinary cleanup and online readiness are unchanged."""
+        """Check committed business deletion phases/tombstones, never a queue.
+
+        Stopping all services does not finalize a prepared SQL deletion. These
+        facts prevent migration of half-completed business cutovers; they say
+        nothing about Celery workers, message counts or consumption activity.
+        """
         from sqlalchemy import and_, or_
 
         from bisheng.knowledge.domain.repositories.knowledge_deletion_execution_repository import OPERATIONS

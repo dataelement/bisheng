@@ -1,7 +1,6 @@
-import { SpaceProcessingPanel } from "./SpaceProcessingPanel";
+import { SpaceProcessingStatus } from "./SpaceProcessingStatus";
 import { BatchOperationDialog } from "./BatchOperationDialog";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
-import { Button } from "@bisheng/ui";
 import { Fragment } from "react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { FolderPlus, Link2 } from "lucide-react";
@@ -96,27 +95,9 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
       onDrop={handleDrop}
     >
       <KnowledgeSpaceToolbar model={model} />
-      <SpaceProcessingPanel spaceId={space.id} canEdit={model.canEditSpace} state={space.state} />
+      <SpaceProcessingStatus state={space.state} />
       <KnowledgeDeletionDialog operation={model.deletion} />
       <BatchOperationDialog operation={model.batch} />
-      {(model.canDeleteSpace || (model.selectedFiles.size > 0 && model.canBatchDelete)) && (
-        <div className="flex shrink-0 justify-end gap-2 px-4 py-2">
-          <Button variant="text" onClick={model.handleReferences}>
-            {localize("com_knowledge.deletion.references")}
-          </Button>
-          {model.canDeleteSpace && (
-            <Button
-              variant="text"
-              color="danger"
-              onClick={() => {
-                void model.handleClearSpace();
-              }}
-            >
-              {localize("com_knowledge.deletion.clear")}
-            </Button>
-          )}
-        </div>
-      )}
       {/* The content scrolls while narrow-layout pagination stays below it. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div

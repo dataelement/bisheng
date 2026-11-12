@@ -3,7 +3,7 @@
 **状态**：✅ 已评审；spec 和技术设计已确认。按2026-11-10用户顺序先完成功能，再统一整体测试；当前整链交付见§15.11及[W6实施记录](./wave6-implementation-review.md)，历史日期段落只保留当时证据，不代表当前待办。\
 **目标版本 / 编号**：v3.1.0-beta1 / F118（暂定）\
 **日期**：2026-11-03\
-**需求**：[spec.md](./spec.md)（94 条 AC） · [版本契约草案](../release-contract.md)\
+**需求**：[spec.md](./spec.md)（当前117条AC，含已确认兼容/修复增量） · [版本契约草案](../release-contract.md)\
 **PRD**：[《3.1 beta1》§1.1–§1.8](https://dataelem.feishu.cn/wiki/RGvDwDbyDiNaRQk7DqfcqEPxnoh)\
 **调研基线**：本地 `feat/3.0.0`，`25e50eceeeb71989257e5ff38e35f5e011e59bae`。未查询线上数据、未验证远端部署；已有未提交的配置及 review 目录不属于本轮变更。
 
@@ -53,6 +53,8 @@
 上述六种是当前 Catalog 中 use 的作用类型，并非范围上限；所有其他权限模型、遗留 use/can_use/业务别名均须继续盘点。`visible` 是现有可见性能力，与具体动作 Catalog 的职责不同。
 
 ## 3. 关键方案选择
+
+2026-11-12最新增量：M2前显式备份准备、删除提交后派生清理及角色/队列职责收敛，见[本轮设计与实现](#2026-11-12-通用修复与历史准备ac-114117)和[执行/审查记录](../../../docs/reviews/f118-general-repairs-20261112.md)。原冻结Run不重建。
 
 ### D1：在现有资源上转类型，统一领域服务
 
@@ -948,3 +950,80 @@ W6§59继续抽取原上传准备段，effective规则只保留原唯一生产�
 用户明确确认：保留原配置、标记跨租户失效并继续升级。M2 仅接受已保存显式数字 ID，真实模型和服务商必须存在且同属实际外租户；冻结真实目标归属、配置摘要、原来源/版本/槽位以及完整原绑定/删除/legacy 证据。M3 回填原绑定、实际 target_tenant_id，legacy 字段保持 NULL；不得伪装 target_missing 或制造强删历史。覆盖证明新增 invalid_scope_count，单独计数参与闭合。验证器兼容未带该字段的原封闭证明，按 0 计算但不修改旧证书摘要；新计数仍须为非负整数。
 
 Owner 的同步和异步读取只在可信来源验证器读取的原绑定精确匹配来源、版本、目标和实际归属时读取该外租户模型/服务商的身份投影，输出 invalid_scope / is_valid=false，不加载或披露目标配置。运行和发布继续经过 require_source_valid 拒绝。修改端仅为该原绑定取得保留/移除收据，new_binding_allowed=false；新增槽位、复制/导入/新版本和 owner_query 不借用原证据。外租户服务商不参与 Root shared_with 查询，无法通过共享结果转为有效。真实归属漂移、模型/服务商父归属不一致和 legacy/删除证据冲突仍失败。SQL 模型和表约束不变，无新增 DDL 或授权写入口。
+
+### 2026-11-11 已确认增量：结构原值保留（AC-100–102）
+
+M2冻结两类封闭control计划记录：existing_space_creator_retention绑定原type3资源摘要、真实creator.exists=false事实与SQL零文件数；stranded_file_retention绑定原FAILED space_upload文件完整摘要、既有type3父空间、唯一缺失目录事实及SQL/FGA授权计数0。原CreatorFalse仍如实记录，不伪造用户；所有其他来源使用该缺失创建者均拒绝。原FAILED文件仍参与通常V1元数据登记，原文件行/路径不变；不初始化权限，不把缺失目录重建为根目录，也不将直接引用这种文件的配置认定可用。
+
+M2原生SQL检查和原pin定点HIGHER_CONSISTENCY读取发生在正式盘点事务内；完整冻结图对照所有原资源/文件、creator事实、权限记录、原Store完整tuple流及六类来源，逐项验证例外闭合。文件自身或作为userset主体出现任何原FGA边均拒绝；丢失证明、改摘要、重复/错scope、成功文件、父目录出现和新直接引用均拒绝。
+
+M3读取完整已验证冻结图后，在任何租户业务写入前重读例外的原资源/文件、用户存在性、零文件计数、缺失目录和SQL授权计数。FGA外部IO使用关闭SQLSession后的原pin读取，再开新原生事务重验SQL事实与Catalog/pin未变；续跑相同，不能在SQL事务中等待M3外部IO。对原type3资源不生成owner/成员初始化命令，只有正常type0沿原创建者规则转换。
+
+现有空间空动作到纯可见的闸门保留：先验证原ACTIVE来源的完整canonical证明、原等级及allow_same_level，再要求前后编译无来源补齐、无退休/可见差异、相同贡献和主体。只有实际已生效的原授权获得兼容；有效关系无证据或等级改变仍拒绝；INACTIVE历史仅在双编译及Store证明零效果时原状态保留。空间3426的原Grant14827/Source19883/可见投影9763和等级2按此核验，保留原效果，无自动新分配或提级。
+
+
+### 2026-11-11 续办兼容：原失效链和退役来源
+
+ConversionPlanBuilder只对已有type3、primary_version_id=NULL、零主标志、全文件FAILED的非空且编号唯一的已有链允许无转换命令通过；原链所有文件已登记，不生成V1，不选择/提升主版本，也不修正业务数据。普通type0及可用文件坏链仍拒绝。
+
+_namespace_visible对未匹配且RETIRED的原行，按AC-104核对原scope、来源身份及自洽贡献/tuple指纹；同ID现存来源继续核对身份与版本上界，原Grant/assignee已删除的审计历史不重建为授权。只变既定namespace和tuple指纹，历史状态/行ID/操作号等保持；ACTIVE投影前后编译与原Store全图仍执行，不将历史行加入有效授权。
+
+跨租户知识空间使用原始明确ID的existing_invalid_scope分类，回填实际owner和parent空间ID，legacy字段全部NULL。Target Owner只对原来源/版本的原space绑定查询确切ID+owner，Root和普通目标按统一数值顺序加锁，再锁文件。读Owner只查标量事实，返回invalid_scope/is_valid=false；新增、复制、预览及执行保持拒绝，原槽位可保留/移除，owner_query不扩大范围。跨租户文件不纳入兼容。M4对目标的已签名0→3变化按实际目标owner查冻结命令，不按来源tenant猜测；其余物理事实变化仍拒绝。
+
+退役历史补充（17:51现场修订）：旧Grant/assignee可能已删除或重建。RETIRED行只作审计，校验原scope、GRANT_ASSIGNEE正整数身份及自洽贡献/tuple指纹；同ID来源仍存在时核对身份及版本上界。仅转换namespace和tuple指纹，原ID、状态、来源版本和操作记录保留；不重建或激活授权。ACTIVE来源仍必须有完整当前canonical backing，前后有效编译、完整Store和冻结后原生重读继续闭合。
+
+
+### 已确认续办：工作流历史和错误归属来源（AC-105–107）
+
+原运行时WorkflowReferenceSourceRepository.aget_version按实际父Flow.type10及版本/父租户确认，不要求历史version.flow_type=10；盘点对同租户type1旧标记采用同一口径。工作流版本SQL范围为父type10或版本type10/NULL，其他type1领域保持原样。活孤儿、错误父类型仍拒绝。
+
+新增纯unification_workflow_retention事实编译：全局明确父ID不存在且原版本is_delete=1，或父真实存在但属于其他租户，生成带deleted_parent/foreign_parent原因的RetiredInventoryRecord。此容器只作迁移失效来源清单，不改业务is_delete、不假装父已删除；伪根不计入真实root_count或有效来源。原Root及版本摘要、生命周期、真实owner均冻结；M4精确原生重读并比较，源恢复/载荷变化拒绝。仅原索引根/来源头和引用均空时接纳，不能借兼容清除既有登记；M4完整SQL来源/版本census仍包含这些版本。既有Source Owner所有权与运行拒绝保持，无新HTTP状态或权限入口。
+
+
+### 已确认续办：旧名称失效标记和惰性授权历史
+
+旧名称不做模型目录搜索。正式M2只对原持久助手产生assistant-v1.legacy-name.<原名称SHA256前32位>提取器标记，保留原配置摘要，提取全部知识ID；若原来源已有明确模型绑定，拒绝而不丢弃。M4原生核对原名称指纹/完整配置并保留ready/effective来源及知识引用保护。标签存于现有BusinessReferenceSet.extractor_version，无DDL、无假TargetKey、无模型/服务商复制。
+
+读Owner只在同一来源/版本实际ready+effective索引具有精确名称标记时接受原旧名称，返回不可变Snapshot.invalid_reason及原知识引用；通用SourceRead运行闸对失效源拒绝，不能到Agent默认模型。检查接口保留配置并提供source_invalid_reason，跨租户invalid_scope也进入AssistantReferenceView枚举。未变原项可保存，显式模型ID可修复并恢复普通提取器；新增名称/无标记来源不接受。原创建者不存在的这类已失效助手以原Root/header身份、生命周期及两摘要闭合保留，不补用户/creator；有效普通来源缺创建者仍拒绝。
+
+缺定义的Grant只生成不活跃、空动作的内部比较值，不创建PermissionModel或猜测原tier；原Grant/assignee/历史来源原行保留，有任何ACTIVE贡献则拒绝。已有空间INACTIVE空动作Grant不参与“原有效授权兼容”，由原/目标编译的零效果及原Store闭合保证不激活；原有效空间贡献仍须AC-102完整证据和同tier。
+
+Root全局RoleFact保持实际owner=1；只有此明确物理事实可编码到原关联所属子租户，普通Role行或其他子租户owner均不放宽。
+
+### Redis控制回复分类修复
+
+现场Redis存在已无binding的客户端pidbox回复列表。原生Kombu Mailbox._publish_reply使用ticket/clock头、reply.celery.pidbox exchange和UUID路由；它没有Celery任务身份。decoder在JSON/base64和体解析后，只对无task头且原生协议闭合的回复字典返回既有非知识分类None。任务保留字段出现、错误exchange/UUID/clock等仍拒绝；protocol1知识任务即使带控制类transport头仍完整盘点。队列读范围/Redis原文/任务校验与执行授权不变，无DDL或清队列。
+
+### 已冻结重复parent关系兼容
+
+F118PermissionTupleBuilder在目标端点guard前识别封闭重复父边：仅knowledge_space→folder/knowledge_file的parent，子对象属于原resources且不是destination；同IDknowledge_library→knowledge_space映射明确，原父边在实际before及expected_before中，目标边在expected_after且两schema均合法。该重复键从额外drift集合扣除，再由原after编译结果生成，因此既不新增已有目标键的写入，也不接受额外授权。其他unowned destination guard不变。此修正不改变ResourceRetirementPlan或baseline/plan字节、SQL命令、角色/主体/等级；同Run原SQL已提交前缀继续验证。
+
+### 2026-11-12 通用修复与历史准备（AC-114–117）
+
+方案选择：历史层级/派生修复采用独立、显式apply的M2前准备脚本，而非Alembic数据写入、隐式启动修复或改写已冻结计划。理由是修复后原业务事实必须重新形成正式基线；已冻结来源不能被准备脚本重新解释。若后续要将准备合并成一个命令，仍需保留独立计划、备份和明确冻结边界，不能在原Run中途插入。
+
+数据流与职责：`scripts/prepare_f118_history.py`只在运维停全服务/消费者后采集当前SQL父链、mode及有限所属派生记录；SQLSession关闭后一次流式扫描FGA，仅保留选中对象及父边。0600/O_EXCL备份完整选中原行、祖先/根事实、FGA键、原pin并验SHA256，apply重读SQL/pin/下游，沿相同计划原生投影清理后修SQL。KnowledgeDocument的tenant取自实际Knowledge父行，bulk UPDATE显式约束父库所属租户；不虚构文档tenant列。父路径不改变，不补缺失授权。历史硬删除资源通过脚本层组合各Owner模型核实全局不存在；permission仓库不导入业务ORM。
+
+删除接缝：`KnowledgeDeletionApplication.apurge_claimed`保留原fga→业务cutover顺序，cutover后调用permission.application.DeletedResourceCleanup。它验证原RESOURCE_DELETE的完整台账、操作者和pin，新增RESOURCE_DELETE_PURGE固化残留键，STAGE分批、COMMIT至多90条且使用真实原键。FGA核验空后，DeletedResourceRepository锁mode并校验当前operation/version/CURRENT，再在同事务删所属assignee、visible_source、Grant及mode；不删操作/tuple账本。SQL清理失败重放原计划，不按剩余图生成另一个请求。后续清理依赖已验证job/原回执，不对已删业务行重新做filter_owned；既有动作/个人范围准入已在cutover前完成。该应用只接在原确认删除的后续清理，不新增HTTP写入口，未把其他业务Owner删除流程整体改造。
+
+已知坑：旧process_retry_files曾在覆盖时写新path但不改level、文档或FGA父关系；当前真实helper整批先拒绝变父，重试保留目录。SQLModelSerializable.model_dump的时间是字符串，备份比较按canonical JSON进行；KnowledgeDocument不自带tenant列。清理早于业务事务的回执核验会导致删除永远无法完成；清理晚于cutover又不能重新查询已删行的个人归属。迟到失败标记采用原operation/版本CAS，逆向STAGE补偿先重验原围栏；这不代表此前owner专用补偿/无变化撤权等所有竞态已解决。
+
+职责收敛：新preflight只读迁移所需成员、部门与配额事实，不枚举/强校验Role/UserRole；旧冻结codec不删。正式CLI不接QueuedTaskInventoryReader/RedisBrokerInventoryReader；不读取或消费Celery/Kombu数据。原SQL删除prepared阶段与deleting tombstone仍验证，因其影响业务快照而非消费状态。索引/对象原绑定保留，第14项SQL/向量生命周期偏差不在本轮纠偏。对外部署依赖仅为已有DB/Redis及原pin FGA，不新增服务；OpenFGA索引变更由[独立交接](../../../docs/reviews/openfga-mysql-read-index-handoff-20261112.md)承接。
+
+修订：2026-11-12，按用户14、18、20/24、31、37及此前33决定同步实现与边界；范围和原生回归见[本轮修复记录](../../../docs/reviews/f118-general-repairs-20261112.md)。
+
+### 现场保留策略与特殊类别抽检（用户已调整验证范围）
+
+Mode编译只迁移原before已存在的技术标记，permission_enabled/custom_mode/inherit_mode缺失不自动生成；显式禁用或历史缺标记的事实保持。对于owned但不在SQL canonical编译中的原关系，仅在subject/object都不是namespace移动源/目标、源及目标schema合法、typed身份不变时原样透传。该类键不新增写入、不从FGA反向注册SQL授权，也不据此允许新引用或新分配。
+
+原2条父关系和停用授权投影因此作为历史SQL/FGA偏差保留，另行记录给用户评估，不在升级中顺手纠偏；69条原工具公开可见关系按原既有规则保留。17条目的namespace重复父边仍按AC-112的双canonical证明处理。新目的节点上的未授权赋权、需变化namespace的未知关系仍拒绝。该策略变更只改变原FGA事实的保留/技术标记处理，不改冻结资源计划字节、SQL命令、索引绑定或对象文件。业务权限有效性验证按用户要求采用特殊情况抽检，原发布/ACK/续跑/Store完整性流程保持。
+
+### 2026-11-12 历史频道目录占位值（AC-118）
+
+**决策与边界**：按用户确认，对原 `new-folder-[0-9]{1,20}` 目录关联保留配置、跳过目录引用、由用户重新绑定。它不是实际文件夹类型；真实文件夹可能已经创建，不能猜其ID或按名称重绑，也不能将占位值清成根目录。仅该旧格式兼容，其他无效ID维持原失败规则。以后若提供可靠的旧请求到真实文件夹ID映射，再单独评审数据修复；本次不增加映射或迁移DDL。
+
+**数据流与职责**：channel域提取器增加默认关闭的 `skip_legacy_folders`；M2盘点、M4原配置重读及已保存SourceOwner读取显式开启。保留原payload、configuration/business revision摘要及空间引用，跳过的目录不构造TargetKey或注册引用；因此现有 `channel-sync-v1` 对正常配置的结果不变，旧冻结Run不能据此接受配置漂移。M2日志记录channel/sync/folder ID供运维定位。频道保存对旧集合兼容读取、对显式新集合严格验证，允许用户删除或换绑；纯属性修改保留原错误集合。配置详情返回原ID及 `invalid_legacy`、`is_valid=false` 的目录状态。投递准入仅对实际选中的错误同步项报 `channel_legacy_folder_rebind_required`，不使用空间根目录；正常选项仍经过原完整引用集合、身份及目标权限检查。
+
+**已知坑与验证**：目录选择器先生成页面占位ID，创建接口返回真实ID前确认可能误存占位值；不能因真实文件夹已落库而认为频道绑定正确。读、保存、迁移重读和投递必须共用格式识别，否则会出现迁移通过但配置打不开、无法手动修复或投递到根目录。原生SQLite/隔离传输覆盖M2至M4、续跑、配置原值、空间删除保护、配置读取和手动换绑、新写拒绝及错误项/正常项投递；真实环境验收沿用T1036。
+
+**前端入口补齐（AC-119）**：`useAddToKnowledge`独占目录命名、创建中状态和进行中的创建请求；同一请求的回车/失焦只提交一次。只有选中真实节点、无命名编辑/创建/提交时，Modal确认按钮才可用；创建中使用现有Button的loading属性。`handleConfirm`本身也拒绝占位选择与进行中的创建，不依赖按钮防护。成功后替换成接口返回ID；失败清除失效选择。关闭及受控open变化使旧创建请求的UI结果失效，重开后即使占位时间戳相同，也不接受旧响应覆盖新请求。目录创建仍使用空间的同一个API，无新状态库、接口、样式或i18n键。

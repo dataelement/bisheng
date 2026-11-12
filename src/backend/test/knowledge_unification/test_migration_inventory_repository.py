@@ -367,6 +367,16 @@ async def test_workflow_version_bad_real_parent_is_not_hidden_by_join_filtering(
             )
         )
         await session.flush()
+        if broken == "foreign":
+            rows = await repo.alist_workflow_versions(session)
+            assert len(rows.items) == 1  # Retained invalid source, never an active source receipt.
+            from bisheng.resource_reference.application.contracts import SourceKey
+
+            parent, version = await repo.aload_invalid_workflow_version(
+                session, source_key=SourceKey(101, "workflow_version", "parent", "1")
+            )
+            assert parent.tenant_id == 202 and version.tenant_id == 101
+            return
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await repo.alist_workflow_versions(session)
 

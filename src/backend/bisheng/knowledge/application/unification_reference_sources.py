@@ -5,7 +5,12 @@ from dataclasses import asdict, replace
 
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
 from bisheng.app_publish.domain.services.reference_extractor import extract_app_references
-from bisheng.assistant.domain.services.reference_extractor import extract_assistant_references
+from bisheng.assistant.domain.services.reference_extractor import (
+    LEGACY_NAME_PREFIX,
+    extract_assistant_references,
+    extract_legacy_assistant_knowledge_references,
+    legacy_assistant_name_version,
+)
 from bisheng.channel.domain.services.reference_extractor import extract_channel_sync_references
 from bisheng.knowledge.application.unification_reference_state import (
     PHYSICAL_ROOT_ABSENT,
@@ -55,14 +60,17 @@ class ReferenceAfterSources:
                 blocked("source_retired_after_freeze")
             lifecycle = root.status, root.is_delete
             configuration = {"model_name": root.model_name, "links": links}
-            references = extract_assistant_references(
+            legacy = header.extractor_version.startswith(LEGACY_NAME_PREFIX)
+            if legacy and legacy_assistant_name_version(root.model_name) != header.extractor_version:
+                blocked("legacy_assistant_name_changed")
+            references = (extract_legacy_assistant_knowledge_references if legacy else extract_assistant_references)(
                 model_name=root.model_name,
                 knowledge_ids=tuple(child.knowledge_id for child in children if child.knowledge_id is not None),
             )
             revision = digest({"root": asdict(root), "links": links})
         elif kind == SourceType.CHANNEL_SYNC:
             lifecycle, configuration = (root.is_released,), {"syncs": links}
-            references = extract_channel_sync_references(links)
+            references = extract_channel_sync_references(links, skip_legacy_folders=True)
             revision = digest({"root": asdict(root), "links": links})
         elif kind == SourceType.KNOWLEDGE:
             if root.type not in {0, 1, 3}:
@@ -129,7 +137,32 @@ class ReferenceAfterSources:
         ), tuple((ref, original[(ref.slot_key, ref.target)]) for ref in references)
 
     async def averify_retired(self, session, *, header):
+        from bisheng.knowledge.application.unification_workflow_retention import (
+            invalid_root,
+            invalid_version,
+            invalid_workflow_root,
+            invalid_workflow_version,
+        )
         from bisheng.resource_reference.application.contracts import SourceKey
+
+        if invalid_root(header):
+            parent = await self.repository.aload_invalid_workflow_parent(session, root_key=header.root_key)
+            actual = invalid_workflow_root(header.root_key, parent)
+        elif invalid_version(header):
+            parent, version = await self.repository.aload_invalid_workflow_version(
+                session, source_key=header.source_key
+            )
+            actual = invalid_workflow_version(header.source_key, parent, version)
+        else:
+            actual = None
+        if actual is not None:
+            if (actual.lifecycle, actual.configuration_digest, actual.business_revision_digest) != (
+                header.lifecycle,
+                header.configuration_digest,
+                header.business_revision_digest,
+            ):
+                blocked("invalid_workflow_source_changed")
+            return
 
         if header.lifecycle == PHYSICAL_ROOT_ABSENT:
             validate_inventory_fact(header)
@@ -183,6 +216,8 @@ class ReferenceAfterSources:
             blocked("retired_business_changed")
 
     async def acensus(self, session, *, plan, tenant, reference_repository):
+        from bisheng.knowledge.application.unification_workflow_retention import invalid_root
+
         actual_roots, actual_sources, actual_versions = await self.repository.acensus_reference_sources(session)
         expected_sources = frozenset(
             entry.header.source_key for entry in plan.sources if entry.header.source_key.tenant_id == tenant
@@ -194,6 +229,7 @@ class ReferenceAfterSources:
             if row.header.root_key.tenant_id == tenant
             and row.header.source_key is None
             and row.header.lifecycle != PHYSICAL_ROOT_ABSENT
+            and not invalid_root(row.header)
         )
         expected_versions = {
             key

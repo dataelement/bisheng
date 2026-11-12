@@ -86,6 +86,8 @@ async def business(store, monkeypatch):
     monkeypatch.setattr(service_module, "get_reference_binding_runtime", AsyncMock(return_value=runtime), raising=False)
     monkeypatch.setattr(service_module, "get_f048_resource_adapter", AsyncMock(return_value=adapter))
     monkeypatch.setattr(service_module, "require_business_action", AsyncMock())
+    # F009 policy loading is upstream of these native reference transactions.
+    monkeypatch.setattr(ChannelService, "_assert_channel_creation_quota", AsyncMock())
     monkeypatch.setattr(
         service_module, "resolve_permission_actor", AsyncMock(return_value=PermissionActor(tenant_id=101, user_id=7))
     )
@@ -180,6 +182,31 @@ async def test_zero_source_is_indexed_and_missing_existing_index_is_not_bootstra
     )
     with pytest.raises(ReferenceCoverageNotReadyError):
         await business.service.update_channel("own", UpdateChannelRequest(name="cannot bootstrap"), business.user)
+
+
+async def test_existing_legacy_placeholder_can_be_manually_rebound_without_accepting_new_ones(business):
+    root = await create(business, sync=config(10))
+    async with business.sessions() as session, session.begin():
+        await session.execute(
+            sa.update(ChannelKnowledgeSync)
+            .where(ChannelKnowledgeSync.channel_id == root.id)
+            .values(folder_id="new-folder-1730000000000")
+        )
+    before = await state(business)
+    with pytest.raises(ResourceReferenceInvalidError):
+        await business.service.update_channel(
+            root.id, UpdateChannelRequest(knowledge_sync=config(10, folder="new-folder-1730000000000")), business.user
+        )
+    assert await state(business) == before
+    with pytest.raises(ResourceReferenceInvalidError):
+        await create(business, sync=config(10, folder="new-folder-1730000000001"))
+    assert await state(business) == before
+    await business.service.update_channel(
+        root.id, UpdateChannelRequest(knowledge_sync=config(10, folder="30")), business.user
+    )
+    changed = [row for row in (await state(business))["channel_knowledge_sync"] if row["channel_id"] == root.id]
+    assert len(changed) == 1 and changed[0]["folder_id"] == "30"
+    assert {row.target_id for row in await source_rows(business, root.id)} == {"10", "30"}
 
 
 async def test_pause_retains_targets_and_replacement_uuids_do_not_duplicate_refs(business):

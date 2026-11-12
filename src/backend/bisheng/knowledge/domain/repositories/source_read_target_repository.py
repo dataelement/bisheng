@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.core.context.tenant import bypass_tenant_filter
@@ -12,7 +12,12 @@ from bisheng.knowledge.domain.repositories.reference_target_repository import (
     KnowledgeReferenceTargetRepository,
     original_for,
 )
-from bisheng.resource_reference.application.contracts import DeletionEvidence, TargetKey, TargetType
+from bisheng.resource_reference.application.contracts import (
+    DeletionEvidence,
+    TargetKey,
+    TargetType,
+    is_preserved_foreign_space_reference,
+)
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.resource_reference.domain.repositories.source_read_repository import SourceReadRepository
 
@@ -38,7 +43,7 @@ class KnowledgeSourceReadTargetRepository:
         with session.no_autoflush, bypass_tenant_filter():
             return tuple(await session.execute(statement))
 
-    async def _business(self, session, model, ids, tenant_id, *, lock):
+    async def _business(self, session, model, ids, tenant_id, *, lock, foreign=None):
         columns = (
             (model.id, model.tenant_id, model.type)
             if model is Knowledge
@@ -46,11 +51,13 @@ class KnowledgeSourceReadTargetRepository:
         )
         ordered, found = sorted(ids), {}
         for start in range(0, len(ordered), 200):
-            statement = (
-                select(*columns)
-                .where(model.tenant_id == tenant_id, model.id.in_(ordered[start : start + 200]))
-                .order_by(model.id)
-            )
+            batch = ordered[start : start + 200]
+            owners = [model.tenant_id == tenant_id]
+            for owner, original_ids in sorted((foreign or {}).items()):
+                selected = sorted(set(batch) & original_ids)
+                if selected:
+                    owners.append(and_(model.tenant_id == owner, model.id.in_(selected)))
+            statement = select(*columns).where(or_(*owners), model.id.in_(batch)).order_by(model.id)
             rows = await self._rows(session, statement.with_for_update() if lock else statement)
             found.update((row.id, row) for row in rows)
         return found
@@ -72,15 +79,24 @@ class KnowledgeSourceReadTargetRepository:
         originals_by_key = {}
         for original in originals:
             originals_by_key.setdefault((original.target_type, original.target_id), []).append(original)
-        if any(row.target_tenant_id not in (None, tenant_id) for row in originals):
-            raise ResourceReferenceInvalidError(reason="knowledge_reference_target_unavailable")
+        foreign = {}
+        for original in originals:
+            if original.target_tenant_id not in (None, tenant_id):
+                key = TargetKey(original.target_type, original.target_id)
+                if transient or not is_preserved_foreign_space_reference(
+                    original, source_key=snapshot.source_key, target=key, target_tenant_id=original.target_tenant_id
+                ):
+                    raise ResourceReferenceInvalidError(reason="knowledge_reference_target_unavailable")
+                foreign.setdefault(original.target_tenant_id, set()).add(int(original.target_id))
         file_ids = {int(key.target_id) for key in keys if key.target_type == TargetType.KNOWLEDGE_FILE}
         candidates = await self._business(session, KnowledgeFile, file_ids, tenant_id, lock=False)
         mapping = {row.id: row.knowledge_id for row in candidates.values()}
         space_ids = {int(key.target_id) for key in keys if key.target_type == TargetType.KNOWLEDGE_SPACE}
         space_ids.update(mapping.values())
         space_ids.update(int(row.target_space_id) for row in originals if row.target_space_id is not None)
-        spaces = await self._business(session, Knowledge, space_ids, tenant_id, lock=True)
+        # Exact saved identities only; a foreign row is read to report invalid
+        # scope, never to authorize lookup, preview or a new binding.
+        spaces = await self._business(session, Knowledge, space_ids, tenant_id, lock=True, foreign=foreign)
         files = await self._business(session, KnowledgeFile, file_ids, tenant_id, lock=True)
         if {row.id: row.knowledge_id for row in files.values()} != mapping:
             raise KnowledgeOperationPlanConflictError(reason="reference_read_target_plan_changed")
@@ -98,6 +114,14 @@ class KnowledgeSourceReadTargetRepository:
                 else None
             )
             parent = spaces.get(int(space_id)) if space_id is not None else None
+            if (
+                row is not None
+                and row.tenant_id != tenant_id
+                and not is_preserved_foreign_space_reference(
+                    original, source_key=snapshot.source_key, target=key, target_tenant_id=row.tenant_id
+                )
+            ):
+                raise ResourceReferenceInvalidError(reason="knowledge_reference_target_unavailable")
             if row is not None and (
                 (key.target_type == TargetType.KNOWLEDGE_SPACE and row.type not in {0, 1, 3})
                 or (key.target_type == TargetType.KNOWLEDGE_FILE and (parent is None or parent.type not in {0, 1, 3}))

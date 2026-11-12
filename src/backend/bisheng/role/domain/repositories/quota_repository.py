@@ -4,12 +4,13 @@ from contextlib import nullcontext
 from datetime import datetime
 
 from loguru import logger
-from sqlalchemy import String, cast, func
+from sqlalchemy import func
 from sqlmodel import select
 
 from bisheng.common.errcode.tenant_quota import QuotaUsageUnavailableError
 from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
+from bisheng.core.database.dialect_helpers import StrJoinKey
 
 
 def usage_statement(resource_type: str, tenant_id: int, user_id: int | None = None):
@@ -61,7 +62,7 @@ def usage_statement(resource_type: str, tenant_id: int, user_id: int | None = No
         parent = Channel if resource_type == "channel_subscribe" else Knowledge
         statement = (
             select(func.count(SpaceChannelMember.id))
-            .join(parent, cast(parent.id, String(36)) == SpaceChannelMember.business_id)
+            .join(parent, StrJoinKey(parent.id) == SpaceChannelMember.business_id)
             .where(
                 # A Root subscription is still an account subscription for a
                 # child, not a newly created child resource. Other children

@@ -1,0 +1,354 @@
+pageType: cover
+background:
+  type: solid
+  color: '#F5F4EF'
+notes: Native PPTD adaptation of Zara Zhang / Neo-Grid Bold. MIT. Example figures are illustrative.
+elements:
+  - elementId: s1
+    elementType: shape
+    bounds:
+      - 24
+      - 24
+      - 205
+      - 452
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0A0A0A'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s2
+    elementType: shape
+    bounds:
+      - 238
+      - 24
+      - 454
+      - 255
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s3
+    elementType: shape
+    bounds:
+      - 701
+      - 24
+      - 235
+      - 255
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0A0A0A'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s4
+    elementType: shape
+    bounds:
+      - 238
+      - 288
+      - 454
+      - 188
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s5
+    elementType: shape
+    bounds:
+      - 253
+      - 40
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0A0A0A'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s6
+    elementType: shape
+    bounds:
+      - 270
+      - 40
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s7
+    elementType: shape
+    bounds:
+      - 287
+      - 40
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0A0A0A'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s8
+    elementType: shape
+    bounds:
+      - 304
+      - 40
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s9
+    elementType: shape
+    bounds:
+      - 253
+      - 57
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s10
+    elementType: shape
+    bounds:
+      - 270
+      - 57
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0A0A0A'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s11
+    elementType: shape
+    bounds:
+      - 287
+      - 57
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s12
+    elementType: shape
+    bounds:
+      - 304
+      - 57
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0A0A0A'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s13
+    elementType: shape
+    bounds:
+      - 253
+      - 74
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0A0A0A'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s14
+    elementType: shape
+    bounds:
+      - 270
+      - 74
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s15
+    elementType: shape
+    bounds:
+      - 287
+      - 74
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0A0A0A'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s16
+    elementType: shape
+    bounds:
+      - 304
+      - 74
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s17
+    elementType: shape
+    bounds:
+      - 253
+      - 91
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s18
+    elementType: shape
+    bounds:
+      - 270
+      - 91
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0A0A0A'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s19
+    elementType: shape
+    bounds:
+      - 287
+      - 91
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: s20
+    elementType: shape
+    bounds:
+      - 304
+      - 91
+      - 17
+      - 17
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0A0A0A'
+    border:
+      width: 0
+      color: '#0A0A0A'
+  - elementId: t21
+    elementType: text
+    bounds:
+      - 254
+      - 301
+      - 422
+      - 166
+    content:
+      text: |-
+        下一轮
+        增长
+      fontFamily:
+        latin: Arial Black
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 42
+      color: '#0A0A0A'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t22
+    elementType: text
+    bounds:
+      - 715
+      - 395
+      - 198
+      - 64
+    content:
+      text: |-
+        研究简报
+        2026 / 01
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 13
+      color: '#0A0A0A'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t23
+    elementType: text
+    bounds:
+      - 48
+      - 506
+      - 760
+      - 16
+    content:
+      text: 自编示例
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#0A0A0A'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t24
+    elementType: text
+    bounds:
+      - 870
+      - 503
+      - 40
+      - 20
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#0A0A0A'
+      lineHeight: 1.12
+      bold: false

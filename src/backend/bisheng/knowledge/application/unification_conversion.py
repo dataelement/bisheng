@@ -57,11 +57,12 @@ class _Member:
 
 
 class UnificationSQLConversionApplication:
-    def __init__(self, *, artifact_store, session_factory, sql_service=None):
+    def __init__(self, *, artifact_store, session_factory, sql_service=None, structural_reader_factory=None):
         if not isinstance(artifact_store, UnificationArtifactStore) or not callable(session_factory):
             _blocked("native_ports_required")
         if sql_service is not None and not isinstance(sql_service, UnificationConversionService):
             _blocked("actual_sql_service_required")
+        self.structural_reader_factory = structural_reader_factory
         self.store, self.sessions = artifact_store, session_factory
         self.sql = sql_service or UnificationConversionService()
         self.runs = KnowledgeUnificationRunRepository()
@@ -124,11 +125,27 @@ class UnificationSQLConversionApplication:
         members = {tenant: [] for tenant in frozen.tenant_ids}
         totals, deferred = dict.fromkeys(frozen.tenant_ids, 0), dict.fromkeys(frozen.tenant_ids, 0)
         physical, retained = {}, {tenant: [] for tenant in frozen.tenant_ids}
+        structural = {tenant: [] for tenant in frozen.tenant_ids}
         # Exhaust the entire verified graph, including late non-SQL leaves and
         # backup/schema materials, before opening any business-write transaction.
         async for page in self.reader.aiter_frozen_pages(
             frozen, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref
         ):
+            if page.kind == "plan" and page.section == "control":
+                from bisheng.knowledge.application.unification_structural_retention import RETENTIONS
+
+                decoded = decode_inventory_page(
+                    page.content,
+                    run_id=frozen.run_id,
+                    section=page.section,
+                    scope=page.scope,
+                    tenant_id=page.tenant_id,
+                    page_index=page.page_index,
+                    kind=page.kind,
+                )
+                structural[page.tenant_id].extend(
+                    record.data for record in decoded.records if record.record_type in RETENTIONS
+                )
             if page.section == "physical":
                 decoded = decode_inventory_page(
                     page.content,
@@ -169,6 +186,7 @@ class UnificationSQLConversionApplication:
             totals,
             deferred,
             {tenant: tuple(physical[key] for key in keys) for tenant, keys in retained.items() if keys},
+            {tenant: tuple(values) for tenant, values in structural.items() if values},
         )
 
     async def _verify_retained_indexes(self, frozen, retained):
@@ -178,6 +196,53 @@ class UnificationSQLConversionApplication:
                 async with self._session() as session, session.begin():
                     await self._scope_run(session, frozen)
                     await UnificationResourceRepository().avalidate_retained_index_bindings(session, bindings=bindings)
+
+    async def _verify_structural_retentions(self, frozen, structural, *, environment):
+        if not structural:
+            return
+        from bisheng.common.services.config_service import settings
+        from bisheng.knowledge.application.unification_structural_retention import validate_native_retentions
+        from bisheng.knowledge.domain.repositories.unification_control_repository import UnificationControlRepository
+        from bisheng.permission.application.migration_read import PinnedMigrationPermissionReader
+        from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
+            PermissionMigrationSnapshotRepository,
+        )
+
+        permissions = PermissionMigrationSnapshotRepository()
+        factory = self.structural_reader_factory or (
+            lambda catalog: PinnedMigrationPermissionReader(settings.openfga, catalog)
+        )
+        for tenant, proofs in structural.items():
+            with tenant_execution_scope(tenant):
+                async with self._session() as session, session.begin():
+                    await self._scope_run(session, frozen)
+                    catalog = await permissions.aload_catalog_baseline(session, environment=environment)
+                    await validate_native_retentions(
+                        session,
+                        proofs,
+                        resources=UnificationResourceRepository(),
+                        controls=UnificationControlRepository(),
+                        permissions=permissions,
+                    )
+                files = tuple(sorted({p["file_id"] for p in proofs if "file_id" in p}))
+                if not files:
+                    continue
+                # External I/O never holds an M3 native SQL Session open.
+                async with factory(catalog) as reader:
+                    for offset in range(0, len(files), 199):
+                        await reader.aassert_no_file_objects(tenant, file_ids=files[offset : offset + 199])
+                async with self._session() as session, session.begin():
+                    await self._scope_run(session, frozen)
+                    current = await permissions.aload_catalog_baseline(session, environment=environment)
+                    if current != catalog:
+                        _blocked("structural_permission_pin_changed")
+                    await validate_native_retentions(
+                        session,
+                        proofs,
+                        resources=UnificationResourceRepository(),
+                        controls=UnificationControlRepository(),
+                        permissions=permissions,
+                    )
 
     async def _page(self, frozen, member):
         content = await self.store.aload_canonical(member.descriptor, run_id=frozen.run_id, kind="plan")
@@ -341,10 +406,11 @@ class UnificationSQLConversionApplication:
             self.runs._identity(run_id, writer_contract_version)
             state["run_id"] = run_id
             frozen = await self._admit(run_id, writer_contract_version)
-            members, totals, deferred, retained = await self._plan(
+            members, totals, deferred, retained, structural = await self._plan(
                 frozen, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref
             )
             await self._verify_retained_indexes(frozen, retained)
+            await self._verify_structural_retentions(frozen, structural, environment=environment)
             result = []
             for tenant in frozen.tenant_ids:
                 with tenant_execution_scope(tenant):

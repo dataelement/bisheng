@@ -473,12 +473,24 @@ class ToolExecutor(BaseTool):
         )
 
     @classmethod
-    async def init_knowledge_tool(cls, invoke_user_id: int, knowledge_id: int, **kwargs) -> BaseTool:
+    async def init_knowledge_tool(
+        cls,
+        invoke_user_id: int,
+        knowledge_id: int,
+        *,
+        login_user: UserPayload | None = None,
+        reference_session=None,
+        **kwargs,
+    ) -> BaseTool:
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id=knowledge_id)
         if not knowledge:
             raise ValueError(f"Knowledge with id {knowledge_id} not found.")
-        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge)
-        es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge)
+        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(
+            invoke_user_id, knowledge, login_user=login_user, reference_session=reference_session
+        )
+        es_client = await KnowledgeRag.init_knowledge_es_vectorstore(
+            knowledge, login_user=login_user, reference_session=reference_session
+        )
         return cls._init_knowledge_rag_tool(
             knowledge=knowledge,
             vector_retriever=vector_client.as_retriever(),

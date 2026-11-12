@@ -158,6 +158,35 @@ class PinnedMigrationPermissionReader:
         except Exception as error:
             raise _blocked("complete_original_tuple_stream_required") from error
 
+    async def aassert_no_file_objects(self, tenant_id, *, file_ids):
+        self._tuple_scope()
+        if (
+            type(tenant_id) is not int
+            or tenant_id <= 0
+            or get_current_tenant_id() != tenant_id
+            or is_tenant_filter_bypassed()
+        ):
+            raise _blocked("concrete_native_tenant_required")
+        if (
+            type(file_ids) is not tuple
+            or len(file_ids) > 199
+            or len(set(file_ids)) != len(file_ids)
+            or any(type(v) is not int or v <= 0 for v in file_ids)
+        ):
+            raise _blocked("invalid_absent_file_ids")
+        for ident in file_ids:
+            rows = await self._client.read_tuples(object=f"knowledge_file:{ident}", consistency="HIGHER_CONSISTENCY")
+            self._tuple_scope()
+            if get_current_tenant_id() != tenant_id or is_tenant_filter_bypassed():
+                raise _blocked("concrete_native_tenant_required")
+            if rows:
+                raise _blocked("stranded_file_authorization_present")
+
+    async def aassert_no_file_tuples(self, session, tenant_id, *, file_ids):
+        self._scope(session, tenant_id)
+        await self.aassert_no_file_objects(tenant_id, file_ids=file_ids)
+        self._scope(session, tenant_id)
+
     async def aget_shared_server_ids(self, session, tenant_id) -> frozenset[int]:
         self._scope(session, tenant_id)
         if tenant_id == 1:

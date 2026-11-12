@@ -63,7 +63,9 @@ from bisheng.channel.domain.services.f048_channel_permission import (
 )
 from bisheng.channel.domain.services.reference_extractor import (
     CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
+    channel_sync_scope,
     extract_channel_sync_references,
+    is_legacy_channel_folder_id,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -1959,8 +1961,10 @@ class ChannelService:
         return rows
 
     @staticmethod
-    def _sync_references(rows):
-        return extract_channel_sync_references(tuple(row.model_dump() for row in rows))
+    def _sync_references(rows, *, skip_legacy_folders=False):
+        return extract_channel_sync_references(
+            tuple(row.model_dump() for row in rows), skip_legacy_folders=skip_legacy_folders
+        )
 
     @staticmethod
     def _configuration_fingerprint(channel, rows):
@@ -2002,12 +2006,12 @@ class ChannelService:
             old_rows = await repository.alist_sync_rows(session, channel_id)
             fingerprint = self._configuration_fingerprint(candidate, old_rows)
             try:
-                old_references = self._sync_references(old_rows)
+                old_references = self._sync_references(old_rows, skip_legacy_folders=True)
             except (ValueError, TypeError, KeyError) as error:
                 raise ReferenceCoverageNotReadyError(reason="channel_source_configuration_invalid") from error
             final_rows = self._sync_rows(channel_id, sync_cfg, login_user.user_id) if sync_cfg is not None else old_rows
             try:
-                references = () if deleting else self._sync_references(final_rows)
+                references = () if deleting else self._sync_references(final_rows, skip_legacy_folders=sync_cfg is None)
             except (ValueError, TypeError, KeyError) as error:
                 raise ResourceReferenceInvalidError(reason="channel_selection_invalid") from error
             locked = None
@@ -2042,7 +2046,11 @@ class ChannelService:
             facts = {receipt.target.key: receipt.target for receipt in prepared.verified.context.receipts}
             if any(facts[ref.target].state != ReferenceState.VALID for ref in added):
                 raise ResourceReferenceInvalidError(reason="new_invalid_reference")
-            selected = [row.model_dump() for row in final_rows if added.intersection(self._sync_references((row,)))]
+            selected = [
+                row.model_dump()
+                for row in final_rows
+                if added.intersection(self._sync_references((row,), skip_legacy_folders=True))
+            ]
             await repository.acheck_new_selections(session, locked, user_id=login_user.user_id, rows=selected)
             if is_new:
                 adapter = await get_f048_resource_adapter("channel")
@@ -2206,7 +2214,7 @@ class ChannelService:
         main, subs = [], {}
         for row in sorted(rows, key=lambda value: (value["create_time"], value["id"])):
             states = []
-            for reference in extract_channel_sync_references((row,)):
+            for reference in extract_channel_sync_references((row,), skip_legacy_folders=True):
                 fact = facts[reference.target]
                 states.append(
                     KnowledgeSyncReferenceState(
@@ -2215,6 +2223,16 @@ class ChannelService:
                         target_id=reference.target.target_id,
                         state=fact.state.value,
                         is_valid=fact.is_valid,
+                    )
+                )
+            if is_legacy_channel_folder_id(row["folder_id"]):
+                states.append(
+                    KnowledgeSyncReferenceState(
+                        slot_key=f"{channel_sync_scope(row['sub_channel_name'])}.folder",
+                        target_type="knowledge_file",
+                        target_id=row["folder_id"],
+                        state=ReferenceState.INVALID_LEGACY.value,
+                        is_valid=False,
                     )
                 )
             item = KnowledgeSyncSpaceItem(

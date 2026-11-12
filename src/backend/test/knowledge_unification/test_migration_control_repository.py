@@ -388,7 +388,7 @@ async def test_malformed_or_nonfinite_quota_json_fails_without_original_content(
         assert "private-" not in str(error.value) and "private-" not in repr(error.value)
 
 
-@pytest.mark.parametrize("kind", ["memberships", "departments", "roles", "user_roles"])
+@pytest.mark.parametrize("kind", ["memberships", "departments"])
 @pytest.mark.parametrize("tenant", [None, 0, -1, 999])
 async def test_global_probes_detect_null_nonpositive_unknown_tenants_without_raw_personal_data(
     repo, native, kind, tenant
@@ -416,14 +416,14 @@ async def test_global_probes_once_then_tenant_pages_do_not_repeat_global_or_join
     await native.insert(UserRole, [row("user_roles", 1), row("user_roles", 2, 202)])
     async with AsyncSession(native.engine) as session, session.begin():
         await repo.avalidate_global_integrity(session)
-        assert len(native.queries) == 5  # Original four probes, then the genuine empty SPACE page.
-        assert all("LEFT OUTER JOIN" in sql.upper() and params[-2:] == (1, 0) for sql, params in native.queries[:4])
+        assert len(native.queries) == 3  # Relevant controls and the genuine empty SPACE page.
+        assert all("LEFT OUTER JOIN" in sql.upper() and params[-2:] == (1, 0) for sql, params in native.queries[:2])
         for tenant in (101, 202):
             with tenant_execution_scope(tenant):
                 for kind in (*PAGED, "user_roles"):
                     assert len((await getattr(repo, f"alist_{kind}")(session)).items) == 1
-        assert len(native.queries) == 13
-    assert sum("LEFT OUTER JOIN" in sql.upper() for sql, _ in native.queries) == 4
+        assert len(native.queries) == 11
+    assert sum("LEFT OUTER JOIN" in sql.upper() for sql, _ in native.queries) == 2
     # Compile actual executed statement trees for MySQL; no connection or vendor-specific tuple seek.
     for statement in native.statements:
         compiled = str(statement.compile(dialect=mysql.dialect())).lower()

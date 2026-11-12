@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Literal
 from weakref import WeakSet
 
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
@@ -25,10 +26,13 @@ from bisheng.app_runtime.domain.constants import AppState
 from bisheng.assistant.domain.services.reference_extractor import (
     ASSISTANT_REFERENCE_EXTRACTOR_VERSION,
     extract_assistant_references,
+    extract_legacy_assistant_knowledge_references,
+    legacy_assistant_name_version,
 )
 from bisheng.channel.domain.services.reference_extractor import (
     CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
     extract_channel_sync_references,
+    is_legacy_channel_folder_id,
 )
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed
@@ -244,6 +248,12 @@ class UnificationSourceInventory:
                 yield entry
                 continue
             key, extractor, configuration, references, lifecycle, origins, revision = entry
+            from bisheng.assistant.domain.services.reference_extractor import LEGACY_NAME_PREFIX
+
+            if extractor.startswith(LEGACY_NAME_PREFIX) and any(
+                row["target_type"] == "model" for row in snapshots[key][2]
+            ):
+                _blocked("legacy_assistant_existing_model_binding")
             frozen_index, states = await self.original_state.acapture(
                 session,
                 source_key=key,
@@ -292,12 +302,32 @@ class UnificationSourceInventory:
                 roots[row.id] = (key, creator, lifecycle, _digest(asdict(row)), deleted)
                 counts[row.id] = 0
         cache[2].update(row[0] for row in roots.values() if row[4])
+        invalid_roots = set()
         async for page in self._pages(session, f"alist_{prefix}_versions"):
             entries = []
             for row in page:
                 parent = row.flow_id if workflow else row.app_id
                 if parent not in roots:
-                    _blocked("missing_version_parent")
+                    if not workflow:
+                        _blocked("missing_version_parent")
+                    from bisheng.knowledge.application.unification_workflow_retention import (
+                        invalid_workflow_root,
+                        invalid_workflow_version,
+                    )
+
+                    key = SourceKey(tenant, kind, parent, str(row.id))
+                    actual_parent, actual_version = await self.repository.aload_invalid_workflow_version(
+                        session, source_key=key
+                    )
+                    if actual_version != row:
+                        _blocked("invalid_workflow_version_drift")
+                    root_key = SourceRootKey(tenant, kind, parent)
+                    if root_key not in invalid_roots:
+                        yield invalid_workflow_root(root_key, actual_parent)
+                        invalid_roots.add(root_key)
+                        cache[2].add(root_key)
+                    entries.append(invalid_workflow_version(key, actual_parent, row))
+                    continue
                 root, _, _, _, root_deleted = roots[parent]
                 revision = _digest({"root": roots[parent][3], "version": asdict(row)})
                 key = SourceKey(tenant, kind, parent, str(row.id))
@@ -373,10 +403,17 @@ class UnificationSourceInventory:
                     lifecycle = (row.status, row.is_delete)
                     configuration = {"model_name": row.model_name, "links": links}
                     extractor = ASSISTANT_REFERENCE_EXTRACTOR_VERSION
+                    legacy_version = legacy_assistant_name_version(row.model_name)
+                    if not deleted and legacy_version is not None:
+                        extractor = legacy_version
                     references = (
                         ()
                         if deleted
-                        else extract_assistant_references(
+                        else (
+                            extract_legacy_assistant_knowledge_references
+                            if legacy_version
+                            else extract_assistant_references
+                        )(
                             model_name=row.model_name,
                             knowledge_ids=tuple(
                                 child.knowledge_id for child in children[row.id] if child.knowledge_id is not None
@@ -388,7 +425,16 @@ class UnificationSourceInventory:
                     lifecycle = (row.is_released,)
                     configuration = {"syncs": links}
                     extractor = CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION
-                    references = extract_channel_sync_references(links)
+                    for link in links:
+                        if is_legacy_channel_folder_id(link["folder_id"]):
+                            logger.warning(
+                                "F118 retained legacy channel folder binding; manual rebind required: "
+                                "channel_id={} sync_id={} folder_id={}",
+                                row.id,
+                                link["id"],
+                                link["folder_id"],
+                            )
+                    references = extract_channel_sync_references(links, skip_legacy_folders=True)
                 digest = _digest(configuration)
                 revision = _digest({"root": asdict(row), "links": links})
                 if deleted:
@@ -593,6 +639,14 @@ class UnificationSourceInventory:
                     source_key=record.source_key,
                 )
                 current()
+                from bisheng.knowledge.application.unification_workflow_retention import invalid_root
+
+                if invalid_root(record):
+                    from bisheng.knowledge.application.unification_reference_state import parse_retired
+
+                    proof = parse_retired(state)
+                    if proof["root_head"] is not None or proof["source_heads"] or proof["raw_count"] or proof["legacy"]:
+                        _blocked("invalid_workflow_source_has_index")
                 return replace(record, frozen_index=state)
             return record
 

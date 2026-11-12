@@ -11,6 +11,7 @@ follow-up daily turn is aware of what the task produced.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 import pytest
@@ -38,11 +39,13 @@ def _task_turn(answer: str = "任务最终答案") -> ChatMessage:
 
 @pytest.fixture
 def patch_messages(monkeypatch: pytest.MonkeyPatch):
-    state: dict = {"categories": None, "rows": []}
+    state: dict = {"categories": None, "rows": [], "page_sizes": []}
 
-    async def _fake(_cls, chat_id, categories=None, size=4):
+    async def _fake(_cls, chat_id, categories=None, size=4, offset=0):
         state["categories"] = categories
-        return list(state["rows"])
+        state["page_sizes"].append(size)
+        end = len(state["rows"]) - offset
+        return list(state["rows"][max(0, end - size) : end])
 
     monkeypatch.setattr(ChatMessageDao, "aget_messages_by_chat_id", classmethod(_fake))
     return state
@@ -57,3 +60,38 @@ async def test_daily_history_includes_task_turn_as_ai_message(patch_messages):
     assert "task" in patch_messages["categories"]
     ai_msgs = [m for m in history if isinstance(m, AIMessage)]
     assert any("任务最终答案" in str(m.content) for m in ai_msgs)
+
+
+@pytest.mark.parametrize("partial", ["", "Partial answer"])
+async def test_rate_limit_cards_do_not_consume_history_window(patch_messages, partial):
+    question = _task_turn()
+    question.category = "question"
+    question.message = json.dumps({"query": "Original question"})
+    failure = _task_turn()
+    failure.category = "agent_answer"
+    failure.message = json.dumps({"msg": partial, "events": []})
+    failure.extra = json.dumps({"error": True, "error_type": "rate_limit"})
+    patch_messages["rows"] = [*[_task_turn(f"Earlier {i}") for i in range(12)], question, *([failure] * 23)]
+
+    history = await WorkStationService.get_chat_history("chat-1", size=10)
+
+    assert [message.content for message in history] == [*[f"Earlier {i}" for i in range(3, 12)], "Original question"]
+    assert all(size <= 10 for size in patch_messages["page_sizes"])
+
+
+async def test_other_error_partial_answers_and_malformed_metadata_remain_in_history(patch_messages):
+    rows = []
+    for extra in ['{"error":true,"error_type":"network"}', "broken", "[]"]:
+        row = _task_turn()
+        row.category = "agent_answer"
+        row.message = json.dumps({"msg": "Kept partial answer"})
+        row.extra = extra
+        rows.append(row)
+    patch_messages["rows"] = rows
+    history = await WorkStationService.get_chat_history("chat-1", size=3)
+    assert [message.content for message in history] == ["Kept partial answer"] * 3
+
+
+async def test_zero_history_size_does_not_query(patch_messages):
+    assert await WorkStationService.get_chat_history("chat-1", size=0) == []
+    assert patch_messages["page_sizes"] == []

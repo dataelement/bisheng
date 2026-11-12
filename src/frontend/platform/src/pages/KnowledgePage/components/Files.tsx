@@ -10,20 +10,21 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { knowledgeSpaceApi, type KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
 import { knowledgeFilesApi, type SpaceFilePreview } from "@/controllers/API/knowledgeFiles";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
-import { FileStatusFilter } from "./FileStatusFilter";
 import { SpaceDirectoryOverlays } from "./SpaceDirectoryOverlays";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { useDirectoryDeletion } from "../hooks/useDirectoryDeletion";
 import { SpaceDirectoryRow } from "./SpaceDirectoryRow";
 import { SpaceDirectoryToolbar } from "./SpaceDirectoryToolbar";
+import { SpaceDirectoryView, type DirectorySortField, type DirectoryViewMode } from "./SpaceDirectoryView";
+import { useWorkspaceViewMode } from "./useWorkspaceViewMode";
 export { StatusIndicator } from "./KnowledgeFileStatus";
 export interface FilesProps {
+  presentation?: "workspace";
   scope?: KnowledgeQueryScope;
   spaceId?: number;
   parentId?: number | null;
@@ -74,6 +75,7 @@ export default function Files(props: FilesProps) {
         scope.view,
         spaceId,
         parentId ?? null,
+        props.presentation,
       ])}
       {...props}
       scope={scope}
@@ -81,7 +83,7 @@ export default function Files(props: FilesProps) {
     />
   );
 }
-function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: DirectoryProps) {
+function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, presentation }: DirectoryProps) {
   const { t } = useTranslation("knowledge");
   const client = useQueryClient();
   const instance = useId(),
@@ -90,6 +92,9 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
   const [parentId, setParentId] = useState(initialParent ?? null);
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
+  const [viewMode, setViewMode] = useWorkspaceViewMode(scope, presentation === "workspace");
+  const [sortField, setSortField] = useState<DirectorySortField>("update_time");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [statuses, setStatuses] = useState<number[]>(() =>
     searchParams.get("fileStatus") === "abnormal" ? [3, 6, 7] : [],
   );
@@ -111,9 +116,11 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         keyword,
         statuses,
         page,
+        sortField,
+        sortDirection,
       ],
     }),
-    [base, instance, parentId, keyword, statuses, page],
+    [base, instance, parentId, keyword, statuses, page, sortField, sortDirection],
   );
   const current = useRef<Epoch | null>(epoch);
   current.current = epoch;
@@ -139,6 +146,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
     [epoch],
   );
   const filters = statuses.length ? { file_status: statuses } : {};
+  const sorting = presentation === "workspace" ? { order_field: sortField, order_sort: sortDirection } : {};
   const ordinary = useInfiniteQuery({
     queryKey: [...epoch.prefix, "children"],
     queryFn: ({ pageParam }) =>
@@ -146,6 +154,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         parent_id: parentId,
         page_size: 40,
         ...filters,
+        ...sorting,
         ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
       }),
     getNextPageParam: (result) => (result.has_more ? (result.next_cursor ?? undefined) : undefined),
@@ -162,6 +171,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         page,
         page_size: 40,
         ...filters,
+        ...sorting,
       }),
     enabled: !!keyword,
     keepPreviousData: false,
@@ -283,7 +293,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         await knowledgeFilesApi.renameSpaceFolder(spaceId, token.item.id, body);
       else await knowledgeFilesApi.renameSpaceFile(spaceId, token.item.id, body);
       if (editToken.current !== token || !isCurrent(token)) return;
-      await client.invalidateQueries({ queryKey: token.epoch.prefix });
+      await client.invalidateQueries({ queryKey: base });
       if (editToken.current === token && isCurrent(token)) closeEdit();
     } catch (error) {
       if (editToken.current === token && isCurrent(token)) showApiError(error);
@@ -346,7 +356,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
   } = useDirectoryDeletion({
     spaceId,
     epoch,
-    scopeKey: JSON.stringify([...base, parentId, keyword, statuses, page]),
+    scopeKey: JSON.stringify([...base, parentId, keyword, statuses, page, sortField, sortDirection]),
     rows,
     isCurrent: () => current.current === epoch,
     onDeleted: () => client.invalidateQueries({ queryKey: base }),
@@ -375,11 +385,60 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
       await client.invalidateQueries({ queryKey: base });
   };
   const containerActions = container?.epoch === epoch ? container.actions : [];
+  const renderRow = (item: KnowledgeSpaceChild, layout?: DirectoryViewMode) => {
+    const itemMenu =
+      menu && menu.token.epoch === epoch && menu.token.item.id === item.id ? menu : null;
+    return (
+      <SpaceDirectoryRow
+        key={item.id}
+        layout={layout}
+        scope={scope}
+        spaceId={spaceId}
+        parentId={parentId}
+        item={item}
+        open={!!itemMenu}
+        actions={itemMenu?.actions ?? []}
+        loading={itemMenu?.loading ?? false}
+        error={itemMenu?.error ?? false}
+        onMenu={(open) => {
+          void handleMenu(item, open);
+        }}
+        selected={selectedKeys.includes(rowKey(item))}
+        onSelect={(checked) => {
+          void handleSelection(item, checked);
+        }}
+        onDelete={() => {
+          if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
+            void remove([item]);
+        }}
+        onReferences={() => {
+          if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
+            references([item]);
+        }}
+        onRename={() => handleEdit(item)}
+        onDownload={() => {
+          void handleDownload(item);
+        }}
+        onOpen={() => {
+          if (onOpenFolder) onOpenFolder(item.id);
+          else {
+            setParentId(item.id);
+            setKeyword("");
+            setPage(1);
+          }
+        }}
+        onPreview={() => {
+          void handlePreview(item);
+        }}
+      />
+    );
+  };
   return (
     <div className="relative space-y-4">
       {move && <MoveDialog scope={scope} spaceId={spaceId} parentId={parentId} items={move.items} mode={move.mode} onClose={() => setMove(null)} />}
       {selectionError === epoch && <p role="alert">{t("deletion.reason_no_permission")}</p>}
       <SpaceDirectoryToolbar
+        compact={presentation === "workspace"}
         spaceId={spaceId}
         parentId={parentId}
         keyword={keyword}
@@ -406,87 +465,35 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         }}
         onReferences={selectedRows.length ? () => references(selectedRows) : undefined}
       />
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("fileName")}</TableHead>
-            <TableHead>{t("updateTime")}</TableHead>
-            <TableHead>
-              <span className="inline-flex items-center gap-1">
-                {t("status")}
-                <FileStatusFilter
-                  open={filterOpen}
-                  onOpenChange={setFilterOpen}
-                  selected={statuses}
-                  draft={draftStatuses}
-                  onDraftChange={setDraftStatuses}
-                  onApply={() => {
-                    setStatuses([...draftStatuses]);
-                    setPage(1);
-                    setFilterOpen(false);
-                  }}
-                  onReset={() => {
-                    setStatuses([]);
-                    setDraftStatuses([]);
-                    setPage(1);
-                    setFilterOpen(false);
-                  }}
-                />
-              </span>
-            </TableHead>
-            <TableHead className="text-right">{t("operations")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((item) => {
-            const itemMenu =
-              menu && menu.token.epoch === epoch && menu.token.item.id === item.id ? menu : null;
-            return (
-              <SpaceDirectoryRow
-                key={item.id}
-                scope={scope}
-                spaceId={spaceId}
-                parentId={parentId}
-                item={item}
-                open={!!itemMenu}
-                actions={itemMenu?.actions ?? []}
-                loading={itemMenu?.loading ?? false}
-                error={itemMenu?.error ?? false}
-                onMenu={(open) => {
-                  void handleMenu(item, open);
-                }}
-                selected={selectedKeys.includes(rowKey(item))}
-                onSelect={(checked) => {
-                  void handleSelection(item, checked);
-                }}
-                onDelete={() => {
-                  if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
-                    void remove([item]);
-                }}
-                onReferences={() => {
-                  if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
-                    references([item]);
-                }}
-                onRename={() => handleEdit(item)}
-                onDownload={() => {
-                  void handleDownload(item);
-                }}
-                onOpen={() => {
-                  if (onOpenFolder) onOpenFolder(item.id);
-                  else {
-                    setParentId(item.id);
-                    setKeyword("");
-                    setPage(1);
-                  }
-                }}
-                onPreview={() => {
-                  void handlePreview(item);
-                }}
-              />
-            );
-          })}
-        </TableBody>
-      </Table>
+      <SpaceDirectoryView
+        workspace={presentation === "workspace"}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        sortField={sortField}
+        sortDirection={sortDirection}
+        onSort={field => {
+          setSortDirection(field === sortField ? (sortDirection === "asc" ? "desc" : "asc") : field === "file_name" ? "asc" : "desc");
+          setSortField(field);
+          setPage(1);
+        }}
+        keyword={keyword}
+        onKeywordChange={value => { setKeyword(value); setPage(1); }}
+        allSelected={rows.some(item => item.file_type === 0 || item.file_type === 1) && rows.every(item => (item.file_type !== 0 && item.file_type !== 1) || selectedKeys.includes(rowKey(item)))}
+        someSelected={selectedKeys.length > 0}
+        canSelect={rows.some(item => item.file_type === 0 || item.file_type === 1)}
+        onSelectAll={checked => rows.filter(item => item.file_type === 0 || item.file_type === 1).forEach(item => handleSelection(item, checked))}
+        filter={{
+          open: filterOpen,
+          onOpenChange: setFilterOpen,
+          selected: statuses,
+          draft: draftStatuses,
+          onDraftChange: setDraftStatuses,
+          onApply: () => { setStatuses([...draftStatuses]); setPage(1); setFilterOpen(false); },
+          onReset: () => { setStatuses([]); setDraftStatuses([]); setPage(1); setFilterOpen(false); },
+        }}
+        rows={rows}
+        renderRow={renderRow}
+      />
       {active.isInitialLoading && <p role="status">{t("f118.loading_directory")}</p>}
       {!active.isInitialLoading && !active.error && !rows.length && !hasMore && (
         <p>{t("f118.directory_empty")}</p>

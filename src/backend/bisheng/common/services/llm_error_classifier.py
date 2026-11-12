@@ -38,6 +38,7 @@ from bisheng.common.errcode.linsight import (
     LinsightBishengLLMError,
     LinsightContextCompressFailedError,
     LinsightContextOverflowError,
+    LinsightTaskExecutionError,
 )
 
 
@@ -503,11 +504,41 @@ def classify_for_event(error: BaseException | str) -> ClassifiedError:
             detail=error,
         )
     error_type = label_error(unwrap(error))
+    umbrella = LinsightBishengLLMError.Code
+    if error_type is ErrorType.UNKNOWN and not _from_model_service(error):
+        umbrella = LinsightTaskExecutionError.Code
     return ClassifiedError(
         error_type=error_type.value,
-        error_code=_ERROR_CODES.get(error_type, LinsightBishengLLMError.Code),
+        error_code=_ERROR_CODES.get(error_type, umbrella),
         detail=str(error),
     )
+
+
+_MODEL_SDK_MODULES = ("openai", "anthropic", "langchain", "dashscope", "google.genai", "httpx", "httpcore")
+
+
+def _from_model_service(error: BaseException) -> bool:
+    """Does any exception in the cause chain come from a model SDK or a model call?
+
+    An unrecognised failure keeps the umbrella LLM code 11090 only when it does;
+    otherwise it is a platform failure (e.g. an AttributeError in quota code) and
+    gets 11091.
+    """
+    from bisheng.common.services.failure_context import FailureContextAdapter
+
+    seen: set[int] = set()
+    pending = [error]
+    while pending and len(seen) < 64:
+        current = pending.pop()
+        if not isinstance(current, BaseException) or id(current) in seen:
+            continue
+        seen.add(id(current))
+        module = type(current).__module__ or ""
+        if module.startswith(_MODEL_SDK_MODULES) or isinstance(current, LinsightBishengLLMError):
+            return True
+        pending.extend(getattr(current, key, None) for key in ("__cause__", "__context__"))
+    info = FailureContextAdapter.from_error(error)
+    return bool(info and info.get("category") == "model_service")
 
 
 _ERROR_CODES: dict[ErrorType, int] = {

@@ -1,12 +1,11 @@
 """Formal M2 inventory entry; only the ledger is written in the caller's TX.
 
-Real physical/queue transports and a pinned reader factory are required inputs.
+Real physical transports and a pinned reader factory are required inputs.
 This entry never detects downtime, seeds permissions, binds references, changes
 business data or certifies Coverage. Backups remain an operational prerequisite.
 """
 
 from collections import defaultdict
-from contextlib import aclosing
 from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +37,12 @@ from bisheng.knowledge.application.unification_sources import (
     UnificationSourceInventory,
 )
 from bisheng.knowledge.application.unification_space_membership_inventory import MembershipInventoryVerifier
+from bisheng.knowledge.application.unification_structural_retention import (
+    CREATOR_RETENTION,
+    FILE_RETENTION,
+    RETENTIONS,
+    StructuralRetentionInventoryVerifier,
+)
 from bisheng.knowledge.domain.models.knowledge_unification_run import unification_now
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
 from bisheng.knowledge.domain.repositories.unification_run_repository import (
@@ -79,6 +84,8 @@ _SECTIONS = {
         "quota_usage",
         "space_membership_header",
         "space_member",
+        "existing_space_creator_retention",
+        "stranded_file_retention",
     },
     "permission": {"resource_mode", "grant", "assignee", "visible_source"},
     "permission_namespace": {
@@ -228,8 +235,8 @@ class UnificationInventoryApplication:
         self.store = artifact_store
         self.reader_factory = sharing_reader_factory
         self.physical = physical_reader
-        self.queued = queued_task_reader
-        self.broker = broker_reader
+        # Accept legacy composition arguments for callers resuming old Runs;
+        # neither adapter is invoked by a new inventory or frozen replay.
         self.runs = KnowledgeUnificationRunRepository()
         self.raw = UnificationInventoryRepository()
         self.permissions = PermissionMigrationSnapshotRepository()
@@ -297,6 +304,7 @@ class UnificationInventoryApplication:
         memberships = MembershipInventoryVerifier()
         tenants = frozenset(result.tenant_ids)
         physical = PhysicalRetentionInventoryVerifier()
+        structural = StructuralRetentionInventoryVerifier()
         current = current if current is not None else lambda: None
         backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
         baseline, plan = _descriptor(result.baseline_ref), _descriptor(result.plan_ref)
@@ -359,6 +367,7 @@ class UnificationInventoryApplication:
 
                     for record in page.records:
                         validate_inventory_fact(record)
+                        structural.observe_source(record)
                 else:
                     page = decode_inventory_page(
                         content,
@@ -378,6 +387,7 @@ class UnificationInventoryApplication:
                             memberships.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
                             permissions.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
                             physical.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
+                            structural.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
                     key = (kind, section, scope, tenant_id)
                     if page_index != indices.get(key, 0):
                         _blocked("manifest_page_order")
@@ -433,6 +443,7 @@ class UnificationInventoryApplication:
         memberships.finish()
         permissions.finish()
         physical.finish()
+        structural.finish()
         await self._materials(
             run_id=result.run_id,
             writer_contract_version=result.writer_contract_version,
@@ -498,10 +509,21 @@ class UnificationInventoryApplication:
         resource_requests, object_requests = [], []
         spaces = {}
         memberships = MembershipInventoryVerifier()
+        retained_creators = {}
         async for section, record in self.preflight.aiter_tenant(
             session, permission_planner=permission_planner, planned_at=planned_at
         ):
-            kind = "plan" if section in {"conversion", "permission_namespace"} else "baseline"
+            kind = (
+                "plan"
+                if section in {"conversion", "permission_namespace"} or record.record_type in RETENTIONS
+                else "baseline"
+            )
+            if record.record_type == CREATOR_RETENTION:
+                retained_creators[record.data["space_id"]] = record.data["creator_user_id"]
+            elif record.record_type == FILE_RETENTION:
+                await source_inventory.sharing_reader.aassert_no_file_tuples(
+                    session, tenant, file_ids=(record.data["file_id"],)
+                )
             memberships.observe(kind=kind, section=section, tenant_id=tenant, record=record)
             await pages.add(section, tenant, record, kind=kind)
             if record.record_type == "resource":
@@ -518,7 +540,9 @@ class UnificationInventoryApplication:
         if resource_requests or object_requests:
             await self._physical_batch(pages, tenant, resource_requests, object_requests, session=session)
         header, refs = None, []
-        creators = set()
+        creators = {}
+        source_headers = {}
+        pending_creators = {}
         batch = []
 
         def finish_source():
@@ -527,25 +551,63 @@ class UnificationInventoryApplication:
             ):
                 _blocked("source_reference_set")
 
+        def retained(row):
+            from bisheng.knowledge.application.unification_structural_retention import (
+                retained_invalid_assistant_creator,
+            )
+
+            if type(row) is RootInventoryRecord and retained_invalid_assistant_creator(
+                row, source_headers.get(row.root_key)
+            ):
+                return True
+            return (
+                type(row) is RootInventoryRecord
+                and row.root_key.source_type.value == "knowledge"
+                and row.root_key.source_id.isdecimal()
+                and retained_creators.get(int(row.root_key.source_id)) == row.creator_id
+            )
+
         async def consume(items):
             wanted = tuple(
                 sorted(
                     {row.creator_id for row in items if type(row) is RootInventoryRecord and row.creator_id is not None}
-                    - creators
+                    - creators.keys()
                 )
             )
             for offset in range(0, len(wanted), 200):
                 for fact in await self.preflight.controls.ainspect_users(
                     session, user_ids=wanted[offset : offset + 200]
                 ):
-                    if not fact.exists:
-                        _blocked("source_creator_missing")
-                    creators.add(fact.user_id)
+                    creators[fact.user_id] = fact.exists
                     await pages.add("control", tenant, record_from_row(fact))
             for row in items:
+                if type(row) is RootInventoryRecord and row.creator_id is not None:
+                    if row.creator_id not in creators:
+                        _blocked("source_creator_fact_missing")
+                    if not creators[row.creator_id] and not retained(row):
+                        if (
+                            row.root_key.source_type.value == "assistant"
+                            and row.retained_version_count == 1
+                            and row.root_key not in source_headers
+                        ):
+                            # Linked-source pages emit their roots before their
+                            # source headers. Defer only until that exact header.
+                            pending_creators[row.root_key] = row
+                        else:
+                            _blocked("source_creator_missing")
                 await pages.add("sources", tenant, row)
 
         async for row in source_inventory.aiter_tenant_source_records(session, **identity, context=context):
+            if type(row) is SourceInventoryRecord:
+                from bisheng.resource_reference.application.contracts import SourceRootKey
+
+                key = row.source_key
+                root_key = SourceRootKey(key.tenant_id, key.source_type, key.source_id)
+                source_headers[root_key] = row
+                if root_key in pending_creators:
+                    if not retained(pending_creators[root_key]):
+                        _blocked("source_creator_missing")
+                    del pending_creators[root_key]
             if type(row) is ReferenceInventoryRecord:
                 if header is None or row.source_key != header.source_key:
                     _blocked("source_header_missing")
@@ -561,6 +623,8 @@ class UnificationInventoryApplication:
         finish_source()
         if batch:
             await consume(batch)
+        if pending_creators:
+            _blocked("source_creator_missing")
 
     async def arun(
         self, session: AsyncSession, *, run_id, writer_contract_version, environment, backup_ref, schema_ref
@@ -584,6 +648,7 @@ class UnificationInventoryApplication:
             await self.runs.aschema_precheck(session)
             from bisheng.knowledge.domain.repositories.unification_task_repository import UnificationTaskRepository
 
+            # Business cutover/tombstone consistency, not Celery consumption.
             await UnificationTaskRepository().avalidate_migration_idle(session)
             tenant_ids = await self.runs.alist_actual_tenant_ids(session)
             existing = await self.runs.aget_global_freeze(session, **identity, tenant_ids=tenant_ids)
@@ -594,10 +659,7 @@ class UnificationInventoryApplication:
                 return existing
             if (
                 not callable(self.reader_factory)
-                or any(
-                    not callable(getattr(port, "aiter_facts", None))
-                    for port in (self.physical, self.queued, self.broker)
-                )
+                or not callable(getattr(self.physical, "aiter_facts", None))
                 or not isinstance(self.store, UnificationArtifactStore)
             ):
                 raise ReferenceCoverageNotReadyError(reason="migration_required_native_ports_missing")
@@ -650,24 +712,9 @@ class UnificationInventoryApplication:
                             session, pages, source_inventory, permission_planner, tenant, identity, planned_at
                         )
                         await pages.finish()
-            async for record in self.queued.aiter_facts(tenant_ids=tenant_ids):
-                _section("tasks", record)
-                if record.record_type == "queued_task_orphan":
-                    await pages.add("tasks", None, record)
-                    continue
-                if record.data["tenant_id"] not in tenant_ids:
-                    _blocked("task_tenant")
-                await pages.add("tasks", record.data["tenant_id"], record)
-            async with aclosing(self.broker.aiter_facts(tenant_ids=tenant_ids)) as broker_stream:
-                async for record in broker_stream:
-                    current()
-                    _section("tasks", record)
-                    if record.record_type != "broker_task":
-                        _blocked("broker_record_type")
-                    tenant = record.data["tenant_id"]
-                    if tenant is not None and tenant not in tenant_ids:
-                        _blocked("broker_tenant")
-                    await pages.add("tasks", tenant, record)
+            # Operators stop all writers/consumers before M2. Migration does
+            # not infer downtime from Celery SQL statuses or inspect Redis
+            # broker/pidbox contents. Old frozen task pages remain readable.
             await pages.finish()
             common = {
                 "writer_contract_version": writer_contract_version,

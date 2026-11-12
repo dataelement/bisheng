@@ -25,6 +25,31 @@ _SERVICE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _PRIVATE = re.compile(
     r"https?://|[\r\n]|(?:password|secret|api[_ -]?key|access[_ -]?token|authorization|cookie|bearer)\s*[:= ]", re.I
 )
+_REFERENCE = "_bisheng_failure_reference"
+_UMBRELLA_CODES = frozenset({11090, 11091})
+_REDACTIONS = (
+    (re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.I), "<url>"),
+    (
+        re.compile(
+            r"\b(password|passwd|pwd|secret|api[_ -]?key|access[_ -]?key|access[_ -]?token|token|authorization|"
+            r"cookie)(['\"]?\s*[:=]\s*)(?:(?:bearer|basic)\s+)?(\"[^\"]*\"|'[^']*'|[^\s,;)]+)",
+            re.I,
+        ),
+        r"\1\2***",
+    ),
+    (re.compile(r"\b(bearer|basic)\s+[^\s,;)]+", re.I), r"\1 ***"),
+    (re.compile(r"\b(?:sk|ak|pk)-[A-Za-z0-9_-]{8,}"), "***"),
+    (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b"), "<host>"),
+    (re.compile(r"\b(?=[\w.-]*[A-Za-z])[\w.-]+:\d{2,5}\b"), "<host>"),
+)
+
+
+def _redact(text: str) -> str:
+    for pattern, replacement in _REDACTIONS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
 _OPERATIONS = frozenset(
     {
         "search",
@@ -348,6 +373,7 @@ class FailureContextAdapter:
         """Preserve recovery/answer fields while excluding raw diagnostic text."""
         clean = dict(payload) if isinstance(payload, dict) else {}
         info = (cls.from_error(exc) if exc is not None else None) or cls.validate(clean.get("failure_info"))
+        business = False
         if exc is not None:
             for cause in reversed(list(_chain(exc))):
                 code = getattr(cause, "code", None)
@@ -357,6 +383,8 @@ class FailureContextAdapter:
                     and 10000 <= code <= 99999
                 ):
                     clean["error_code"] = code
+                    # 11090/11091 are the task-mode umbrella codes, not business outcomes.
+                    business = code not in _UMBRELLA_CODES
                     break
         clean.pop("failure_info", None)
         for key in ("exception", "detail"):
@@ -369,6 +397,13 @@ class FailureContextAdapter:
                 clean[key] = cls.safe_detail(exc) if exc is not None else "Request failed."
         if info:
             clean["failure_info"] = info
+        if exc is not None:
+            # Redacted type + message for the card's "view details"; without a
+            # dependency failure_id the card shows reference_id for support.
+            clean["detail"] = cls.public_detail(exc)
+            # A registered business error code already tells the user what to do.
+            if not info and not business:
+                clean["reference_id"] = cls.reference(exc)
         return clean
 
     @classmethod
@@ -512,4 +547,53 @@ class FailureContextAdapter:
         info = cls.from_error(exc)
         if info:
             return f"Service request failed ({info['category']}); reference {info['failure_id']}."
-        return "Request failed. Please provide the diagnostic reference to support."
+        return f"Request failed; reference {cls.reference(exc)}."
+
+    @classmethod
+    def reference(cls, exc: BaseException) -> str:
+        """Return the identifier support uses to find this failure in the logs.
+
+        A dependency failure already has its ``failure_id``. Any other failure
+        gets the current log trace id (every log line of the request or task
+        carries it), or a fresh id when no trace is bound. The id is stored on
+        the exception and logged once, so repeated calls return the same value.
+        """
+        info = cls.from_error(exc)
+        if info:
+            return info["failure_id"]
+        for error in _chain(exc):
+            existing = getattr(error, _REFERENCE, None)
+            if isinstance(existing, str):
+                return existing
+        logger_module = sys.modules.get("bisheng.core.logger")
+        trace_var = getattr(logger_module, "trace_id_var", None)
+        trace_id = trace_var.get() if trace_var is not None else None
+        reference = trace_id if isinstance(trace_id, str) and _IDENTIFIER.fullmatch(trace_id) else uuid4().hex
+        try:
+            vars(exc)[_REFERENCE] = reference
+        except (AttributeError, TypeError):
+            pass
+        logger.warning("Unclassified failure reference={} exception_type={}", reference, type(exc).__name__)
+        return reference
+
+    @classmethod
+    def public_detail(cls, exc: BaseException) -> str:
+        """Exception type and message for the card's "view details" disclosure.
+
+        Shows the raised exception and, when different, its root cause. URLs,
+        IP addresses, host:port pairs and credential values are masked, and the
+        text is capped at 500 characters. Stack traces stay in the server logs.
+        """
+        chain = list(_chain(exc))
+        parts = []
+        for error in (chain[0], chain[-1]) if len(chain) > 1 else chain:
+            message = " ".join(str(error).split())
+            part = f"{type(error).__name__}: {message}" if message else type(error).__name__
+            if part not in parts:
+                parts.append(part)
+        return cls.public_text(" <- ".join(parts))
+
+    @staticmethod
+    def public_text(text: str) -> str:
+        """Mask URLs, hosts and credential values in a failure message; cap at 500 chars."""
+        return _redact(" ".join(str(text).split()))[:500]

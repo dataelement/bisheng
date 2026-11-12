@@ -1497,7 +1497,8 @@
       "openApi": "开放 API",
       "open_api": "开放 API",
       "appFactory": "应用工场",
-      "app": "应用工场"
+      "app": "应用工场",
+      "unknown": "未知模块"
     },
     "eventTypeEnum": {
       "createChat": "新建会话",
@@ -1661,7 +1662,8 @@
       "openApiPatRevokeHolder": "按持有人撤销个人令牌",
       "openApiPatTenantMigrate": "账号迁租户时撤销个人令牌",
       "openApiPatSettingsUpdate": "修改个人令牌租户策略",
-      "llmSystemConfigUpdate": "修改默认及系统模型配置"
+      "llmSystemConfigUpdate": "修改默认及系统模型配置",
+      "unknown": "未知操作"
     },
     "objectTypeEnum": {
       "app": "应用",
@@ -1688,7 +1690,12 @@
       "approval_task": "审批任务",
       "approval_exception": "审批异常",
       "approval_scenario": "审批场景",
-      "approval_flow": "审批流程"
+      "approval_flow": "审批流程",
+      "linsight_skill": "个人 Skill",
+      "knowledge_library": "知识库",
+      "folder": "文件夹",
+      "knowledge_file": "知识文件",
+      "unknown": "未知对象类型"
     },
     "appUsage": "应用使用",
     "systemOperations": "系统操作",
@@ -1930,6 +1937,17 @@
       "expand": "展开 {{name}}",
       "collapse": "收起 {{name}}",
       "tenantGroup": "租户 {{id}}"
+    },
+    "scope": {
+      "summary": "当前范围：{{tenant}}，{{organization}}",
+      "allTenants": "全部租户",
+      "tenant": "租户「{{name}}」",
+      "allOrganizations": "全部组织",
+      "subtree": "{{name}}及其下级",
+      "exact": "仅「{{name}}」",
+      "noOrganization": "没有可查看的组织",
+      "separator": "、",
+      "loadFailed": "当前范围加载失败，列表仍按您的权限显示"
     },
     "usageType": {
       "label": "使用类型",

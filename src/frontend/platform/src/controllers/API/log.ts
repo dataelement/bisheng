@@ -34,6 +34,23 @@ export const toDeptParams = (selection: OrgSelection | undefined, style: 'repeat
     }
 }
 
+export interface AuditScopeOrganization {
+    name: string
+    includes_descendants: boolean
+}
+
+export interface AuditScope {
+    tenant_id: number | null
+    tenant_name: string | null
+    unrestricted_organization: boolean
+    organizations: AuditScopeOrganization[]
+}
+
+/** Authorization boundary of the audit page. Filters can only narrow it. */
+export async function getAuditScopeApi(): Promise<AuditScope> {
+    return await axios.get('/api/v1/audit/scope')
+}
+
 // F003: organisation candidates inside the caller's audit scope.
 export async function getAuditDepartmentsApi(params: {
     parentId?: number
@@ -266,7 +283,10 @@ const legacyActions = [
  * Module → legacy actions, written out instead of matched by substring: a
  * substring rule put `knowledge_space` actions under 知识库 and left the tool
  * and sandbox actions out of 系统. Must agree with the `system_id` each
- * backend writer records (api/services/audit_log.py).
+ * backend writer records (api/services/audit_log.py). Personal Skill actions
+ * stay under `system`: older rows were stored as `system_id=linsight`, and
+ * the list query folds those four event types back in. There is no linsight
+ * module to pick.
  */
 const LEGACY_MODULE_ACTIONS: Record<string, string[]> = {
     chat: ['create_chat', 'delete_chat'],

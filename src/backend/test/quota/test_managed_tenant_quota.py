@@ -126,3 +126,32 @@ async def test_subscription_count_keeps_root_and_excludes_foreign_child(quota_db
             await session.commit()
     assert await QuotaService.get_user_resource_count(77, "channel_subscribe", tenant_id=2) == 2
     assert await QuotaService.get_tenant_resource_count(2, "channel_subscribe") == 1
+
+
+async def test_space_subscription_count_keeps_root_and_excludes_foreign_child(quota_db):
+    from bisheng.common.models.space_channel_member import (
+        BusinessTypeEnum,
+        MembershipStatusEnum,
+        SpaceChannelMember,
+        UserRoleEnum,
+    )
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+
+    await quota_db.create(Knowledge, SpaceChannelMember)
+    with bypass_tenant_filter():
+        async with quota_db.sessions() as session:
+            for space_id, tenant_id in ((10, 1), (20, 2), (30, 3)):
+                session.add(Knowledge(id=space_id, tenant_id=tenant_id, user_id=77, name=f"space-{space_id}", type=3))
+                session.add(
+                    SpaceChannelMember(
+                        id=space_id,
+                        business_id=str(space_id),
+                        business_type=BusinessTypeEnum.SPACE,
+                        user_id=77,
+                        user_role=UserRoleEnum.MEMBER,
+                        status=MembershipStatusEnum.ACTIVE,
+                    )
+                )
+            await session.commit()
+    assert await QuotaService.get_user_resource_count(77, "knowledge_space_subscribe", tenant_id=2) == 2
+    assert await QuotaService.get_tenant_resource_count(2, "knowledge_space_subscribe") == 1

@@ -1534,8 +1534,8 @@ class WorkStationService(BaseService):
         legacy plain-text messages and v2.5 JSON-formatted messages.
 
         Two-stage trimming:
-          1. DB returns the MOST RECENT ``size`` rows in chronological order
-             (see aget_messages_by_chat_id — fixed to DESC LIMIT + reverse).
+          1. Read bounded DB pages until the MOST RECENT ``size`` usable rows
+             are collected, skipping rate-limit display cards.
           2. If the combined token count exceeds ``max_tokens``, drop oldest
              entries one at a time until the remainder fits. Token counting
              uses tiktoken (cl100k_base) with a char-based fallback — see
@@ -1570,7 +1570,28 @@ class WorkStationService(BaseService):
             # so the daily chain must see them too (D2 — both directions feed model).
             MessageCategory.TASK.value,
         ]
-        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id, categories, size)
+        messages = []
+        offset = 0
+        while len(messages) < size:
+            page_options = {"offset": offset} if offset else {}
+            page = await ChatMessageDao.aget_messages_by_chat_id(chat_id, categories, size, **page_options)
+            usable = []
+            for one in page:
+                if one.category == MessageCategory.AGENT_ANSWER.value:
+                    try:
+                        extra = json.loads(one.extra) if one.extra else {}
+                    except (json.JSONDecodeError, TypeError):
+                        extra = {}
+                    # Keep UI failure cards without changing the model's context
+                    # or making a recovery request repeat the pending question.
+                    if isinstance(extra, dict) and extra.get("error_type") == "rate_limit":
+                        continue
+                usable.append(one)
+            messages = usable + messages
+            if len(page) < size:
+                break
+            offset += len(page)
+        messages = messages[-size:] if size > 0 else []
 
         for one in messages:
             raw = one.message or ""

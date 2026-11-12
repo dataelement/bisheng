@@ -1,0 +1,567 @@
+pageType: decision
+background:
+  type: solid
+  color: $paper
+notes: |
+  新市场进入的核心取舍是：本地控制和体验提升，通常伴随更高的固定投入与不可逆性。建议用平台跨境先买信息，在客户资产和单品经济成立后逐步增加独立站、本地仓和本地组织投入。
+elements:
+  - elementId: p09-top-rule
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 960
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p09-kicker
+    elementType: text
+    bounds:
+      - 54
+      - 32
+      - 420
+      - 18
+    content:
+      style: $section
+      text: 07 / NEW-MARKET ENTRY
+  - elementId: p09-title
+    elementType: text
+    bounds:
+      - 52
+      - 58
+      - 850
+      - 42
+    content:
+      style: $pageTitle
+      text: 新市场进入：用可逆成本买信息，再用固定投入买体验
+  - elementId: p09-matrix-panel
+    elementType: shape
+    bounds:
+      - 54
+      - 132
+      - 596
+      - 342
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p09-matrix-code
+    elementType: text
+    bounds:
+      - 72
+      - 148
+      - 330
+      - 18
+    content:
+      text: ENTRY OPTION MATRIX / 定性判断
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      color: $slate
+      bold: true
+      letterSpacing: 0.8
+  - elementId: p09-axis-y
+    elementType: line
+    bounds:
+      - 118
+      - 184
+      - 1
+      - 232
+    viewBox:
+      - 1
+      - 232
+    points: 0,232 0,0
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p09-axis-x
+    elementType: line
+    bounds:
+      - 118
+      - 416
+      - 486
+      - 1
+    viewBox:
+      - 486
+      - 1
+    points: 0,0 486,0
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p09-grid-v
+    elementType: line
+    bounds:
+      - 360
+      - 184
+      - 1
+      - 232
+    viewBox:
+      - 1
+      - 232
+    points: 0,0 0,232
+    border:
+      width: 0.8
+      color: $grid
+      style: dash
+  - elementId: p09-grid-h
+    elementType: line
+    bounds:
+      - 118
+      - 300
+      - 486
+      - 1
+    viewBox:
+      - 486
+      - 1
+    points: 0,0 486,0
+    border:
+      width: 0.8
+      color: $grid
+      style: dash
+  - elementId: p09-y-label
+    elementType: text
+    bounds:
+      - 68
+      - 196
+      - 38
+      - 190
+    rotation: 270
+    content:
+      text: 本地控制与体验　低 → 高
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p09-x-label
+    elementType: text
+    bounds:
+      - 206
+      - 430
+      - 324
+      - 18
+    content:
+      text: 固定投入与不可逆性　低 → 高
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p09-option-platform
+    elementType: shape
+    bounds:
+      - 154
+      - 332
+      - 134
+      - 58
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p09-option-platform-tag
+    elementType: shape
+    bounds:
+      - 154
+      - 332
+      - 24
+      - 58
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p09-option-platform-t
+    elementType: text
+    bounds:
+      - 188
+      - 344
+      - 88
+      - 34
+    content:
+      text: |-
+        01 平台跨境
+        先验证需求
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p09-option-site
+    elementType: shape
+    bounds:
+      - 270
+      - 266
+      - 154
+      - 62
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p09-option-site-tag
+    elementType: shape
+    bounds:
+      - 270
+      - 266
+      - 26
+      - 62
+    shapeName: rect
+    fill:
+      type: solid
+      color: $steel
+    border:
+      color: $steel
+      width: 0
+  - elementId: p09-option-site-t
+    elementType: text
+    bounds:
+      - 306
+      - 278
+      - 106
+      - 38
+    content:
+      text: |-
+        02 独立站
+        + 跨境配送
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p09-option-warehouse
+    elementType: shape
+    bounds:
+      - 398
+      - 226
+      - 148
+      - 62
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $graphite
+      width: 1.5
+  - elementId: p09-option-warehouse-t
+    elementType: text
+    bounds:
+      - 412
+      - 238
+      - 120
+      - 38
+    content:
+      text: |-
+        03 海外仓
+        兑现时效与退换
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p09-option-local
+    elementType: shape
+    bounds:
+      - 486
+      - 174
+      - 136
+      - 64
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p09-option-local-t
+    elementType: text
+    bounds:
+      - 500
+      - 186
+      - 108
+      - 40
+    content:
+      text: |-
+        04 本地组织
+        品牌与规模复制
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $white
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p09-path-01
+    elementType: line
+    bounds:
+      - 286
+      - 326
+      - 24
+      - 16
+    viewBox:
+      - 24
+      - 16
+    points: 0,16 24,0
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p09-path-02
+    elementType: line
+    bounds:
+      - 424
+      - 272
+      - 22
+      - 12
+    viewBox:
+      - 22
+      - 12
+    points: 0,12 22,0
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p09-path-03
+    elementType: line
+    bounds:
+      - 536
+      - 218
+      - 18
+      - 14
+    viewBox:
+      - 18
+      - 14
+    points: 0,14 18,0
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p09-gates-panel
+    elementType: shape
+    bounds:
+      - 678
+      - 132
+      - 228
+      - 342
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p09-gates-title
+    elementType: text
+    bounds:
+      - 698
+      - 150
+      - 188
+      - 22
+    content:
+      text: CAPITAL GATES / 阶段门
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $yellow
+      bold: true
+  - elementId: p09-gate-01
+    elementType: shape
+    bounds:
+      - 698
+      - 190
+      - 188
+      - 52
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $surface
+      width: 0
+  - elementId: p09-gate-01-t
+    elementType: text
+    bounds:
+      - 712
+      - 201
+      - 160
+      - 30
+    content:
+      text: G0｜市场容量 + 集中度风险
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p09-gate-02
+    elementType: shape
+    bounds:
+      - 698
+      - 252
+      - 188
+      - 52
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $surface
+      width: 0
+  - elementId: p09-gate-02-t
+    elementType: text
+    bounds:
+      - 712
+      - 263
+      - 160
+      - 30
+    content:
+      text: G1｜单品毛利 + 退货率
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p09-gate-03
+    elementType: shape
+    bounds:
+      - 698
+      - 314
+      - 188
+      - 52
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $surface
+      width: 0
+  - elementId: p09-gate-03-t
+    elementType: text
+    bounds:
+      - 712
+      - 325
+      - 160
+      - 30
+    content:
+      text: G2｜合规阈值 + 责任归属
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p09-gate-04
+    elementType: shape
+    bounds:
+      - 698
+      - 376
+      - 188
+      - 52
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p09-gate-04-t
+    elementType: text
+    bounds:
+      - 712
+      - 387
+      - 160
+      - 30
+    content:
+      text: G3｜销量确定性 + 现金安全垫
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p09-gates-note
+    elementType: text
+    bounds:
+      - 698
+      - 440
+      - 188
+      - 18
+    content:
+      text: 判断对象：国家 × 品类 × 履约组合
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $steel
+      align:
+        - center
+        - middle
+  - elementId: p09-footer
+    elementType: text
+    bounds:
+      - 54
+      - 506
+      - 704
+      - 14
+    content:
+      text: 管理判断框架｜投入每上一个台阶，都要由新信息和更高确定性解锁。
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $slate
+  - elementId: p09-page
+    elementType: text
+    bounds:
+      - 882
+      - 504
+      - 28
+      - 16
+    content:
+      text: '09'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - right
+        - top

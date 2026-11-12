@@ -18,7 +18,7 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
 import type { User } from "@/types/api/user";
-import FilesPage from "@/pages/KnowledgePage/detail";
+import KnowledgePage from "@/pages/KnowledgePage";
 import Header from "@/pages/KnowledgePage/components/Header";
 
 const mocks = vi.hoisted(() => ({
@@ -46,6 +46,10 @@ vi.mock("@/contexts/userContext", async () => ({
   userContext: (await import("react")).createContext({ user: null }),
 }));
 vi.mock("@/hooks/useAdminScope", () => ({ useAdminScope: mocks.management }));
+vi.mock("@/pages/KnowledgePage/sidebar/KnowledgeSpaceSidebar", () => ({ KnowledgeSpaceSidebar: () => null }));
+vi.mock("@/pages/KnowledgePage/KnowledgeFile", () => ({ default: () => null }));
+vi.mock("@/pages/KnowledgePage/KnowledgeQa", () => ({ default: () => null }));
+vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({ KnowledgeLibraryDialog: () => null }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -126,7 +130,7 @@ function mount(path = "/filelib/7") {
         <MemoryRouter initialEntries={[path]}>
           <Navigation />
           <Routes>
-            <Route path="/filelib/:id" element={<FilesPage />} />
+            <Route path="/filelib/:id" element={<KnowledgePage />} />
             <Route path="/filelib" element={<p>space-list</p>} />
           </Routes>
         </MemoryRouter>
