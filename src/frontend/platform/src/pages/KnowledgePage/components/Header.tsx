@@ -10,6 +10,7 @@ interface HeaderProps {
   showBackButton?: boolean;
   title?: string;
   description?: string;
+  presentation?: "workspace";
 }
 
 export function Header({
@@ -18,6 +19,7 @@ export function Header({
   showBackButton = true,
   title,
   description,
+  presentation,
 }: HeaderProps) {
   const { t } = useTranslation("knowledge");
   const navigate = useNavigate();
@@ -59,11 +61,11 @@ export function Header({
       )}
       {fileTitle && (
         <div>
-          <span className="max-w-80 truncate pl-4 text-sm font-black text-foreground">
+          <span className={presentation === "workspace" ? "block max-w-full truncate text-base font-medium text-text-1" : "max-w-80 truncate pl-4 text-sm font-black text-foreground"}>
             {controlled ? (title ?? "") : legacyTitle}
           </span>
           {controlled && description && (
-            <p className="text-hint max-w-80 truncate pl-4 text-xs">
+            <p className={presentation === "workspace" ? "mt-1 max-w-full truncate text-xs text-text-3" : "text-hint max-w-80 truncate pl-4 text-xs"}>
               {description}
             </p>
           )}

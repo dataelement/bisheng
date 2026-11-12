@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 interface SpaceDirectoryToolbarProps {
+  compact?: boolean;
   spaceId: number;
   parentId: number | null;
   keyword: string;
@@ -23,6 +24,7 @@ interface SpaceDirectoryToolbarProps {
 }
 
 export function SpaceDirectoryToolbar({
+  compact = false,
   spaceId,
   parentId,
   keyword,
@@ -54,10 +56,12 @@ export function SpaceDirectoryToolbar({
     });
   };
   return (
-    <div className="flex items-center justify-end gap-3">
+    <div className="flex flex-wrap items-center justify-end gap-3">
       {selectedCount > 0 && (
         <>
-          <Button variant="outlined" onClick={onMove}>{t("move.title")}</Button>
+          <Button variant="outlined" onClick={onMove}>
+            {t("move.title")}
+          </Button>
           <Button variant="outlined" onClick={onBatchDownload}>
             {t("batch.download")}
           </Button>
@@ -69,7 +73,11 @@ export function SpaceDirectoryToolbar({
           </Button>
         </>
       )}
-      {onMoveJobs && <Button variant="outlined" onClick={onMoveJobs}>{t("move.jobs")}</Button>}
+      {onMoveJobs && (
+        <Button variant="outlined" onClick={onMoveJobs}>
+          {t("move.jobs")}
+        </Button>
+      )}
       {selectedCount > 0 && (
         <Button color="danger" variant="outlined" onClick={onDeleteSelected}>
           {t("deletion.selected")} ({selectedCount})
@@ -80,14 +88,22 @@ export function SpaceDirectoryToolbar({
           {t("deletion.references")}
         </Button>
       )}
-      <SearchInput
-        aria-label={t("searchFileName")}
-        placeholder={t("searchFileName")}
-        value={keyword}
-        onChange={(event) => onKeywordChange(event.target.value)}
-      />
-      {canCreateFolder && <Button onClick={onCreateFolder}>{t("f118.create_folder")}</Button>}
-      {canUpload && knowledgeUploadCapabilities.webLink && onWebLink && <Button variant="link" onClick={onWebLink}>{t("webLink")}</Button>}
+      {!compact && (
+        <SearchInput
+          aria-label={t("searchFileName")}
+          placeholder={t("searchFileName")}
+          value={keyword}
+          onChange={(event) => onKeywordChange(event.target.value)}
+        />
+      )}
+      {canCreateFolder && (
+        <Button onClick={onCreateFolder}>{t("f118.create_folder")}</Button>
+      )}
+      {canUpload && knowledgeUploadCapabilities.webLink && onWebLink && (
+        <Button variant="link" onClick={onWebLink}>
+          {t("webLink")}
+        </Button>
+      )}
       {canUpload && (
         <Button variant="link" onClick={handleUpload}>
           {t("uploadFile")}

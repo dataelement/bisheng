@@ -692,5 +692,38 @@
         "upload_invalid": "The file format, size or media-upload setting does not meet the current rules.",
         "upload_unconfirmed": "The new file’s status could not be confirmed. Refresh the list to check.",
         "confirm_new_version": "Confirm new version"
+    },
+    "sidebar": {
+        "department": "Department spaces",
+        "created": "Created by me",
+        "joined": "Joined",
+        "navigation": "Space navigation",
+        "square": "Go to square",
+        "expand": "Expand",
+        "collapse": "Collapse",
+        "sort": "Sort",
+        "sort_update_time": "Recently updated",
+        "sort_create_time": "Creation time",
+        "sort_name": "Name",
+        "pin": "Pin",
+        "unpin": "Unpin",
+        "loading": "Loading…",
+        "load_failed": "Failed to load",
+        "empty": "No spaces",
+        "no_folders": "No folders",
+        "more_folders": "Load more folders"
+    },
+    "workspace": {
+        "files": "Space files",
+        "list_view": "List view",
+        "card_view": "Card view",
+        "sort": "Sort",
+        "sort_name": "Name",
+        "sort_time": "Updated time",
+        "sort_size": "File size",
+        "sort_type": "File type",
+        "ascending": "Ascending",
+        "descending": "Descending",
+        "select_all": "Select all"
     }
 }
