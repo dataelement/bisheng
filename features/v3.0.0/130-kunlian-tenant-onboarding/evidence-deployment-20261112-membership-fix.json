@@ -1,0 +1,213 @@
+{
+  "date": "2026-11-12",
+  "release": "20261112-membership-fix",
+  "status": "PASS",
+  "server": "192.168.106.104",
+  "switched_at": "2026-11-12T19:38:53+0800",
+  "source_files": [
+    {
+      "path": "bisheng/department/domain/services/department_service.py",
+      "before_sha256": "a2e891d74530500226f0b15efc9d1c01b8b6566caf2732fa71de4fb202df9dc1",
+      "after_sha256": "61002e54a8e42e9c0645ed649e72b1a71078d00931229539a5b52bdb8449b4c9"
+    },
+    {
+      "path": "bisheng/sso_sync/domain/services/kunlian_onboarding.py",
+      "before_sha256": "5bec6048f74e7a0158b50be55b30d2df2df90244a8e6b9463184786a6a9f1bc1",
+      "after_sha256": "03dae7b897101eaa62318812d7e9719802ed6e419efd21c722b88ee5a7b0363e"
+    },
+    {
+      "path": "bisheng/sso_sync/domain/services/kunlian_projection.py",
+      "before_sha256": "50544ed868588550896b47a3f51954f94836d765844cc29116bb8736a7edf4e4",
+      "after_sha256": "e33428644b61f5b8331bea15bb0b28b0ffed93546112bfe16cdebac8de863cdf"
+    },
+    {
+      "path": "bisheng/tenant/application/external_membership.py",
+      "before_sha256": "5c06ea41e2e8027a91de16af5d178d96156202ae0450465969356e3afc33b37a",
+      "after_sha256": "a194cd239c2661af5bc333a416ffa9ecc1231c1fbccbbe26f64ee7461c530536"
+    },
+    {
+      "path": "bisheng/department/application/external_membership.py",
+      "before_sha256": null,
+      "after_sha256": "85273488d130d00fb2d55abc593f758f71aff467e8fe77455b99b999d9a7f35a"
+    },
+    {
+      "path": "bisheng/department/domain/repositories/external_membership.py",
+      "before_sha256": null,
+      "after_sha256": "280661db3b94da781a2bddf3a8c55eb8f06684fec51840f78755522fdd49ff00"
+    }
+  ],
+  "source_preservation": {
+    "success": true,
+    "exit_code": 0,
+    "stdout": "{\"verify\": \"PASS\", \"files\": 6, \"preserved_files\": 14}\n/bisheng-kunlian-backend running 0\n/bisheng-kunlian-backend-worker running 0\n/bisheng-gateway running 0\n",
+    "stderr": ""
+  },
+  "containers": {
+    "success": true,
+    "exit_code": 0,
+    "stdout": "{\"containers_preserved\": 3, \"fields\": [\"Id\", \"Image\", \"Config\", \"HostConfig\", \"Mounts keyed by Destination\"]}\n",
+    "stderr": ""
+  },
+  "repair": [
+    {
+      "before": {
+        "users": 16,
+        "tenants": 11,
+        "roles": 13,
+        "user_roles": 17,
+        "external_department_members": 15,
+        "missing_department": 0,
+        "wrong_root_membership": 0,
+        "pending_department_projections": 0
+      }
+    },
+    {
+      "directory": {
+        "requested": 315,
+        "status": "PUBLISHED"
+      }
+    },
+    {
+      "sweep": 1,
+      "recovery": {
+        "succeeded": 10,
+        "failed": 0,
+        "stage": "tenants",
+        "next_stage": "projection",
+        "next_after_key": "",
+        "has_more": true
+      }
+    },
+    {
+      "sweep": 1,
+      "recovery": {
+        "succeeded": 0,
+        "failed": 0,
+        "stage": "projection",
+        "next_stage": "basic_access",
+        "next_after_key": "",
+        "has_more": true
+      }
+    },
+    {
+      "sweep": 1,
+      "recovery": {
+        "succeeded": 15,
+        "failed": 0,
+        "stage": "basic_access",
+        "next_stage": null,
+        "next_after_key": "",
+        "has_more": false
+      }
+    },
+    {
+      "sweep": 1,
+      "failed": 0,
+      "counts": {
+        "users": 16,
+        "tenants": 11,
+        "roles": 13,
+        "user_roles": 17,
+        "external_department_members": 15,
+        "missing_department": 0,
+        "wrong_root_membership": 0,
+        "pending_department_projections": 0
+      }
+    },
+    {
+      "sweep": 2,
+      "recovery": {
+        "succeeded": 10,
+        "failed": 0,
+        "stage": "tenants",
+        "next_stage": "projection",
+        "next_after_key": "",
+        "has_more": true
+      }
+    },
+    {
+      "sweep": 2,
+      "recovery": {
+        "succeeded": 0,
+        "failed": 0,
+        "stage": "projection",
+        "next_stage": "basic_access",
+        "next_after_key": "",
+        "has_more": true
+      }
+    },
+    {
+      "sweep": 2,
+      "recovery": {
+        "succeeded": 15,
+        "failed": 0,
+        "stage": "basic_access",
+        "next_stage": null,
+        "next_after_key": "",
+        "has_more": false
+      }
+    },
+    {
+      "sweep": 2,
+      "failed": 0,
+      "counts": {
+        "users": 16,
+        "tenants": 11,
+        "roles": 13,
+        "user_roles": 17,
+        "external_department_members": 15,
+        "missing_department": 0,
+        "wrong_root_membership": 0,
+        "pending_department_projections": 0
+      }
+    },
+    {
+      "result": "PASS",
+      "idempotent": true
+    }
+  ],
+  "permission_audit": [
+    {
+      "department_permissions_checked": 15,
+      "result": "PASS",
+      "counts": {
+        "users": 16,
+        "tenants": 11,
+        "roles": 13,
+        "user_roles": 17,
+        "external_department_members": 15,
+        "missing_department": 0,
+        "wrong_root_membership": 0,
+        "pending_department_projections": 0
+      }
+    }
+  ],
+  "final_sql": "members\t2\t3\t1\nmembers\t3\t4\t1\nmembers\t4\t5\t3\nmembers\t5\t6\t1\nmembers\t6\t7\t1\nmembers\t7\t8\t1\nmembers\t8\t9\t1\nmembers\t9\t10\t4\nmembers\t10\t11\t1\nmembers\t11\t12\t1\nsso\tEXPIRED\t2\t2\t2\nsso\tACTIVE\t2\t2\t1\nsso\tREVOKED\t2\t2\t2\nmanual_role\t1\t1\t1\nmanual_role\t2\t3\t2\n",
+  "backup": {
+    "path": "/dataelem/bisheng-kunlian/source/backups/20261112-membership-fix",
+    "database_bytes": 10706938,
+    "database_sha256": "077134870a3fd3123b0c4ec49f76784086dc37305bc929fb7f556f6ac69786ca",
+    "rollback_check": "PASS; actual rollback not executed"
+  },
+  "browser": {
+    "member_page": "PASS; pilot tenant shows one user; screenshot membership-fixed-20261112.jpg",
+    "sso": "PASS; fresh login with delivered pilot account returned /build/workflows; local user2 tenant2 ACTIVE session",
+    "workflow_created": false
+  },
+  "http": {
+    "backend_health": 200,
+    "public_management": 200,
+    "anonymous_user": 401
+  },
+  "limitations": [
+    "MySQL concurrent fault injection and DM8 remain not run",
+    "other tenants real SSO remains limited by partner client registration",
+    "full feature QA remains incomplete"
+  ],
+  "operational_notes": [
+    "Standalone probe initially lacked PYTHONPATH and then permission runtime registration; corrected to the existing Worker lifecycle before successful validation",
+    "successful repair probe saw 15 existing department rows before its sweep; do not attribute those writes to the manual probe",
+    "standalone probe emitted aiohttp unclosed-client warning on exit; process exited 0 and production services remained healthy",
+    "container mount list order changed on restart; compared by Destination and all mount definitions were preserved"
+  ]
+}

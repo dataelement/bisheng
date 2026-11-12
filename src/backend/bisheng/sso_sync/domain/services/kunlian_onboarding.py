@@ -115,6 +115,10 @@ class KunlianOnboardingService:
             projection = await self.users.read_current_projection_receipt(identity_key, facts.local_user_id)
             if projection.source_revision != facts.source_revision:
                 raise KunlianBindingConflictError()
+            await assert_current()
+            # 原资料已成功的历史成员不再进入投影候选, 在资格扫描中补齐组织关联。
+            await self.projection.ensure_current_membership(facts)
+            await assert_current()
             template = await self.roles.ensure_external_basic_role(
                 await self.roles.reserve_external_basic_role(facts.connection_id, facts.mapping.local_tenant_id)
             )

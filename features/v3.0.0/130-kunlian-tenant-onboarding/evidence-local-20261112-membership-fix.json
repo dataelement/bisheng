@@ -1,0 +1,169 @@
+{
+  "red": {
+    "path": "/tmp/kunlian-f130-member-red.log",
+    "sha256": "c2386e2271c73250dd0dfd8521cdcd233b1e5c276fd265c225fe64f26dd0a228",
+    "output": "FFF                                                                      [100%]\n=================================== FAILURES ===================================\n_ test_existing_successful_user_recovers_visible_membership_once[regular_scan] _\ntest/department/test_kunlian_external_membership.py:42: in test_existing_successful_user_recovers_visible_membership_once\n    assert total == 1, \"已有账号必须通过原部门成员查询可见\"\nE   AssertionError: 已有账号必须通过原部门成员查询可见\nE   assert 0 == 1\n_ test_existing_successful_user_recovers_visible_membership_once[projected_receipt] _\ntest/department/test_kunlian_external_membership.py:42: in test_existing_successful_user_recovers_visible_membership_once\n    assert total == 1, \"已有账号必须通过原部门成员查询可见\"\nE   AssertionError: 已有账号必须通过原部门成员查询可见\nE   assert 0 == 1\n__________________ test_new_user_is_visible_after_first_round __________________\ntest/department/test_kunlian_external_membership.py:59: in test_new_user_is_visible_after_first_round\n    assert row is not None, \"首次同步必须创建部门成员关系\"\nE   AssertionError: 首次同步必须创建部门成员关系\nE   assert None is not None\n=========================== short test summary info ============================\nFAILED test/department/test_kunlian_external_membership.py::test_existing_successful_user_recovers_visible_membership_once[regular_scan]\nFAILED test/department/test_kunlian_external_membership.py::test_existing_successful_user_recovers_visible_membership_once[projected_receipt]\nFAILED test/department/test_kunlian_external_membership.py::test_new_user_is_visible_after_first_round\n3 failed, 7 warnings in 1.09s\n"
+  },
+  "focused": {
+    "path": "/tmp/kunlian-f130-member-focused.log",
+    "sha256": "ac363c9b78aaef815b0fd820314aaca4bafd67142d02c180344d02a3a1d3b810",
+    "output": ".........................                                                [100%]\n25 passed, 9 warnings in 2.33s\nsys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute\n"
+  },
+  "baseline": {
+    "path": "/tmp/kunlian-f130-member-baseline-final.log",
+    "sha256": "c9f2dcd1eb1bfe4712ba60e3036cad787b33442695de7a7188308d3394ff667a",
+    "output": "........................................................................ [ 18%]\n........................................................................ [ 36%]\n........................................................................ [ 54%]\n........................................................................ [ 72%]\n........................................................................ [ 90%]\n.........FFFF.......................                                     [100%]\n=================================== FAILURES ===================================\n_________________ test_aadd_members_secondary_path_skips_sync __________________\ntest/department/test_dept_member_add_sync.py:127: in test_aadd_members_secondary_path_skips_sync\n    asyncio.run(\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:190: in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:118: in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/base_events.py:654: in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\nbisheng/department/domain/services/department_service.py:1777: in aadd_members\n    resumed_projection = await _resume_department_projection_if_needed(\nbisheng/department/domain/services/department_service.py:553: in _resume_department_projection_if_needed\n    or department.permission_projection_state != \"PROJECTING\"\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   AttributeError: 'types.SimpleNamespace' object has no attribute 'permission_projection_state'\n___________ test_aadd_members_primary_path_routes_to_change_primary ____________\ntest/department/test_dept_member_add_sync.py:150: in test_aadd_members_primary_path_routes_to_change_primary\n    asyncio.run(\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:190: in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:118: in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/base_events.py:654: in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\nbisheng/department/domain/services/department_service.py:1777: in aadd_members\n    resumed_projection = await _resume_department_projection_if_needed(\nbisheng/department/domain/services/department_service.py:553: in _resume_department_projection_if_needed\n    or department.permission_projection_state != \"PROJECTING\"\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   AttributeError: 'types.SimpleNamespace' object has no attribute 'permission_projection_state'\n____________ test_aadd_members_primary_propagates_relocate_blocked _____________\ntest/department/test_dept_member_add_sync.py:183: in test_aadd_members_primary_propagates_relocate_blocked\n    asyncio.run(\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:190: in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:118: in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/base_events.py:654: in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\nbisheng/department/domain/services/department_service.py:1777: in aadd_members\n    resumed_projection = await _resume_department_projection_if_needed(\nbisheng/department/domain/services/department_service.py:553: in _resume_department_projection_if_needed\n    or department.permission_projection_state != \"PROJECTING\"\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   AttributeError: 'types.SimpleNamespace' object has no attribute 'permission_projection_state'\n_____________ test_acreate_local_member_triggers_sync_for_new_user _____________\ntest/department/test_dept_member_add_sync.py:305: in test_acreate_local_member_triggers_sync_for_new_user\n    asyncio.run(\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:190: in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:118: in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/base_events.py:654: in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\nbisheng/department/domain/services/department_service.py:2519: in acreate_local_member\n    projection = await _prepare_department_projection(\nbisheng/department/domain/services/department_service.py:475: in _prepare_department_projection\n    if department.id is None or department.tenant_id is None:\n                                ^^^^^^^^^^^^^^^^^^^^\nE   AttributeError: 'types.SimpleNamespace' object has no attribute 'tenant_id'\n=========================== short test summary info ============================\nFAILED test/department/test_dept_member_add_sync.py::test_aadd_members_secondary_path_skips_sync\nFAILED test/department/test_dept_member_add_sync.py::test_aadd_members_primary_path_routes_to_change_primary\nFAILED test/department/test_dept_member_add_sync.py::test_aadd_members_primary_propagates_relocate_blocked\nFAILED test/department/test_dept_member_add_sync.py::test_acreate_local_member_triggers_sync_for_new_user\n4 failed, 392 passed, 42 warnings in 27.97s\nsys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute\n"
+  },
+  "current": {
+    "path": "/tmp/kunlian-f130-member-regression-final.log",
+    "sha256": "b2c01b4f7aa7a24da8ea0b2d937afc9740370c01cc1d6d106b1da9b788e9cb99",
+    "output": "........................................................................ [ 17%]\n........................................................................ [ 35%]\n........................................................................ [ 53%]\n........................................................................ [ 70%]\n........................................................................ [ 88%]\n....................FFFF.......................                          [100%]\n=================================== FAILURES ===================================\n_________________ test_aadd_members_secondary_path_skips_sync __________________\ntest/department/test_dept_member_add_sync.py:127: in test_aadd_members_secondary_path_skips_sync\n    asyncio.run(\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:190: in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:118: in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/base_events.py:654: in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\nbisheng/department/domain/services/department_service.py:1787: in aadd_members\n    resumed_projection = await _resume_department_projection_if_needed(\nbisheng/department/domain/services/department_service.py:553: in _resume_department_projection_if_needed\n    or department.permission_projection_state != \"PROJECTING\"\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   AttributeError: 'types.SimpleNamespace' object has no attribute 'permission_projection_state'\n___________ test_aadd_members_primary_path_routes_to_change_primary ____________\ntest/department/test_dept_member_add_sync.py:150: in test_aadd_members_primary_path_routes_to_change_primary\n    asyncio.run(\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:190: in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:118: in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/base_events.py:654: in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\nbisheng/department/domain/services/department_service.py:1787: in aadd_members\n    resumed_projection = await _resume_department_projection_if_needed(\nbisheng/department/domain/services/department_service.py:553: in _resume_department_projection_if_needed\n    or department.permission_projection_state != \"PROJECTING\"\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   AttributeError: 'types.SimpleNamespace' object has no attribute 'permission_projection_state'\n____________ test_aadd_members_primary_propagates_relocate_blocked _____________\ntest/department/test_dept_member_add_sync.py:183: in test_aadd_members_primary_propagates_relocate_blocked\n    asyncio.run(\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:190: in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:118: in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/base_events.py:654: in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\nbisheng/department/domain/services/department_service.py:1787: in aadd_members\n    resumed_projection = await _resume_department_projection_if_needed(\nbisheng/department/domain/services/department_service.py:553: in _resume_department_projection_if_needed\n    or department.permission_projection_state != \"PROJECTING\"\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   AttributeError: 'types.SimpleNamespace' object has no attribute 'permission_projection_state'\n_____________ test_acreate_local_member_triggers_sync_for_new_user _____________\ntest/department/test_dept_member_add_sync.py:305: in test_acreate_local_member_triggers_sync_for_new_user\n    asyncio.run(\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:190: in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/runners.py:118: in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n/Users/wenruli/.local/share/uv/python/cpython-3.11.14-macos-aarch64-none/lib/python3.11/asyncio/base_events.py:654: in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\nbisheng/department/domain/services/department_service.py:2529: in acreate_local_member\n    projection = await _prepare_department_projection(\nbisheng/department/domain/services/department_service.py:475: in _prepare_department_projection\n    if department.id is None or department.tenant_id is None:\n                                ^^^^^^^^^^^^^^^^^^^^\nE   AttributeError: 'types.SimpleNamespace' object has no attribute 'tenant_id'\n=========================== short test summary info ============================\nFAILED test/department/test_dept_member_add_sync.py::test_aadd_members_secondary_path_skips_sync\nFAILED test/department/test_dept_member_add_sync.py::test_aadd_members_primary_path_routes_to_change_primary\nFAILED test/department/test_dept_member_add_sync.py::test_aadd_members_primary_propagates_relocate_blocked\nFAILED test/department/test_dept_member_add_sync.py::test_acreate_local_member_triggers_sync_for_new_user\n4 failed, 403 passed, 44 warnings in 30.07s\nsys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute\n"
+  },
+  "meta": {
+    "feature": "F130",
+    "requirements": [
+      "REQ-08"
+    ],
+    "acceptance": [
+      "AC-15",
+      "AC-16"
+    ],
+    "date": "2026-11-12",
+    "baseline": "164917c721d1049d8e1e0de9a5ab1d2be7bf9bff",
+    "runtime_bundle": {
+      "baseline": "164917c721d1049d8e1e0de9a5ab1d2be7bf9bff",
+      "server": "192.168.106.104",
+      "status": "PREPARATION_SNAPSHOT; deployment now verified separately",
+      "runtime_files": [
+        {
+          "path": "bisheng/department/domain/services/department_service.py",
+          "before_sha256": "a2e891d74530500226f0b15efc9d1c01b8b6566caf2732fa71de4fb202df9dc1",
+          "after_sha256": "61002e54a8e42e9c0645ed649e72b1a71078d00931229539a5b52bdb8449b4c9"
+        },
+        {
+          "path": "bisheng/sso_sync/domain/services/kunlian_onboarding.py",
+          "before_sha256": "5bec6048f74e7a0158b50be55b30d2df2df90244a8e6b9463184786a6a9f1bc1",
+          "after_sha256": "03dae7b897101eaa62318812d7e9719802ed6e419efd21c722b88ee5a7b0363e"
+        },
+        {
+          "path": "bisheng/sso_sync/domain/services/kunlian_projection.py",
+          "before_sha256": "50544ed868588550896b47a3f51954f94836d765844cc29116bb8736a7edf4e4",
+          "after_sha256": "e33428644b61f5b8331bea15bb0b28b0ffed93546112bfe16cdebac8de863cdf"
+        },
+        {
+          "path": "bisheng/tenant/application/external_membership.py",
+          "before_sha256": "5c06ea41e2e8027a91de16af5d178d96156202ae0450465969356e3afc33b37a",
+          "after_sha256": "a194cd239c2661af5bc333a416ffa9ecc1231c1fbccbbe26f64ee7461c530536"
+        },
+        {
+          "path": "bisheng/department/application/external_membership.py",
+          "before_sha256": null,
+          "after_sha256": "85273488d130d00fb2d55abc593f758f71aff467e8fe77455b99b999d9a7f35a"
+        },
+        {
+          "path": "bisheng/department/domain/repositories/external_membership.py",
+          "before_sha256": null,
+          "after_sha256": "280661db3b94da781a2bddf3a8c55eb8f06684fec51840f78755522fdd49ff00"
+        }
+      ],
+      "expected_existing_users_to_backfill": 15,
+      "gateway_changed": false,
+      "schema_changed": false,
+      "config_changed": false
+    },
+    "local_tests_network": "TCP_BLOCKED; temporary SQLite; external permission port Mock",
+    "comparison": "PASS: no additional failed tests",
+    "module_test_exit": 1,
+    "deployed": true,
+    "deployment_status": "PASS; see evidence-deployment-20261112-membership-fix.json",
+    "source_sha256": {
+      "src/backend/bisheng/department/domain/services/department_service.py": "61002e54a8e42e9c0645ed649e72b1a71078d00931229539a5b52bdb8449b4c9",
+      "src/backend/bisheng/sso_sync/domain/services/kunlian_onboarding.py": "03dae7b897101eaa62318812d7e9719802ed6e419efd21c722b88ee5a7b0363e",
+      "src/backend/bisheng/sso_sync/domain/services/kunlian_projection.py": "e33428644b61f5b8331bea15bb0b28b0ffed93546112bfe16cdebac8de863cdf",
+      "src/backend/bisheng/tenant/application/external_membership.py": "a194cd239c2661af5bc333a416ffa9ecc1231c1fbccbbe26f64ee7461c530536",
+      "src/backend/test/fixtures/kunlian_onboarding.py": "03e603a5717d3bf509cb3f9f1a02804abf06189515e77320704dbba25e135226",
+      "src/backend/test/sso/test_kunlian_projection.py": "7c35144933698a5327d87cf205b61633d7d0977610bd0c42214ea55263afb2bb",
+      "src/backend/test/tenant/test_kunlian_external_membership.py": "a8939a16a41ac7216c378bb52565f2c0788579ee29e7e037ade691ea5ab42f86",
+      "src/backend/bisheng/department/application/external_membership.py": "85273488d130d00fb2d55abc593f758f71aff467e8fe77455b99b999d9a7f35a",
+      "src/backend/bisheng/department/domain/repositories/external_membership.py": "280661db3b94da781a2bddf3a8c55eb8f06684fec51840f78755522fdd49ff00",
+      "src/backend/test/department/test_kunlian_external_membership.py": "b61898e9bb26d1d6eb801b6c9f1670b2811ea0469af4e504a1a10330b047657b"
+    }
+  },
+  "static": [
+    {
+      "path": "src/backend/bisheng/department/domain/services/department_service.py",
+      "baseline_lint": 89,
+      "current_lint": 89,
+      "new_lint": 0,
+      "new_arch_messages": []
+    },
+    {
+      "path": "src/backend/bisheng/sso_sync/domain/services/kunlian_onboarding.py",
+      "baseline_lint": 0,
+      "current_lint": 0,
+      "new_lint": 0,
+      "new_arch_messages": []
+    },
+    {
+      "path": "src/backend/bisheng/sso_sync/domain/services/kunlian_projection.py",
+      "baseline_lint": 0,
+      "current_lint": 0,
+      "new_lint": 0,
+      "new_arch_messages": []
+    },
+    {
+      "path": "src/backend/bisheng/tenant/application/external_membership.py",
+      "baseline_lint": 0,
+      "current_lint": 0,
+      "new_lint": 0,
+      "new_arch_messages": []
+    },
+    {
+      "path": "src/backend/test/fixtures/kunlian_onboarding.py",
+      "baseline_lint": 0,
+      "current_lint": 0,
+      "new_lint": 0,
+      "new_arch_messages": []
+    },
+    {
+      "path": "src/backend/test/sso/test_kunlian_projection.py",
+      "baseline_lint": 0,
+      "current_lint": 0,
+      "new_lint": 0,
+      "new_arch_messages": []
+    },
+    {
+      "path": "src/backend/test/tenant/test_kunlian_external_membership.py",
+      "baseline_lint": 0,
+      "current_lint": 0,
+      "new_lint": 0,
+      "new_arch_messages": []
+    },
+    {
+      "path": "src/backend/bisheng/department/application/external_membership.py",
+      "baseline_lint": 0,
+      "current_lint": 0,
+      "new_lint": 0,
+      "new_arch_messages": []
+    },
+    {
+      "path": "src/backend/bisheng/department/domain/repositories/external_membership.py",
+      "baseline_lint": 0,
+      "current_lint": 0,
+      "new_lint": 0,
+      "new_arch_messages": []
+    },
+    {
+      "path": "src/backend/test/department/test_kunlian_external_membership.py",
+      "baseline_lint": 0,
+      "current_lint": 0,
+      "new_lint": 0,
+      "new_arch_messages": []
+    }
+  ],
+  "command_source": "verification.md E-019 selection plus tenant external membership, department membership, department legacy sync and F048 department scope files; baseline omits newly added department test only",
+  "commands": {
+    "current": "config=/var/folders/06/935ggv0j2259kmb0t_3nvhpc0000gn/T/kunlian-f130-c-tests-bcibvvx4/config.yaml PYTHONPATH=. /Users/wenruli/code/project/bisheng/bisheng-kunlian-sso-planning/src/backend/.venv/bin/python /var/folders/06/935ggv0j2259kmb0t_3nvhpc0000gn/T/kunlian-f130-c-tests-bcibvvx4/pytest-offline.py test/sso/test_kunlian*.py test/role/test_role_service.py test/role/test_role_api.py test/role/test_external_basic_role.py test/role/test_external_basic_role_mutations.py test/user/test_kunlian_external_identity.py test/user/test_external_basic_access*.py test/user/test_menu_approval_scope.py test/tenant/test_kunlian_external_provision.py test/tenant/test_kunlian_external_membership.py test/department/test_external_tenant_anchor.py test/department/test_kunlian_external_membership.py test/department/test_dept_member_add_sync.py test/permission/test_f048_department_scope_runtime.py test/database/test_kunlian_onboarding_metadata.py test/workflow/test_kunlian_workflow_management.py test/workflow/test_kunlian_workflow_registration_e2e.py -q --tb=short --disable-warnings",
+    "baseline": "config=/var/folders/06/935ggv0j2259kmb0t_3nvhpc0000gn/T/kunlian-f130-c-tests-bcibvvx4/config.yaml PYTHONPATH=. /Users/wenruli/code/project/bisheng/bisheng-kunlian-sso-planning/src/backend/.venv/bin/python /var/folders/06/935ggv0j2259kmb0t_3nvhpc0000gn/T/kunlian-f130-c-tests-bcibvvx4/pytest-offline.py test/sso/test_kunlian*.py test/role/test_role_service.py test/role/test_role_api.py test/role/test_external_basic_role.py test/role/test_external_basic_role_mutations.py test/user/test_kunlian_external_identity.py test/user/test_external_basic_access*.py test/user/test_menu_approval_scope.py test/tenant/test_kunlian_external_provision.py test/tenant/test_kunlian_external_membership.py test/department/test_external_tenant_anchor.py  test/department/test_dept_member_add_sync.py test/permission/test_f048_department_scope_runtime.py test/database/test_kunlian_onboarding_metadata.py test/workflow/test_kunlian_workflow_management.py test/workflow/test_kunlian_workflow_registration_e2e.py -q --tb=short --disable-warnings"
+  }
+}

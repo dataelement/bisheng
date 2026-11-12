@@ -38,6 +38,7 @@ async def membership(owner):
     app = app_module.KunlianExternalMembershipApplication(
         app_module.ExternalMembershipRepository(sessions),
         project_membership=projector,
+        ensure_department_membership=AsyncMock(),
     )
     return app, sessions, projector, uid
 

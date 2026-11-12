@@ -3,6 +3,7 @@
 import socket
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -21,7 +22,7 @@ from bisheng.tenant.domain.models.external_provision import TenantExternalProvis
 from bisheng.user.domain.models.external_basic_access import UserExternalBasicAccess
 from bisheng.user.domain.models.external_identity_projection import UserExternalIdentityProjection
 from bisheng.user.domain.models.user import User
-from test.fixtures.table_definitions import TABLE_USER_ROLE
+from test.fixtures.table_definitions import TABLE_USER_DEPARTMENT, TABLE_USER_ROLE
 
 
 @pytest.fixture
@@ -63,6 +64,7 @@ async def onboarding_store(tmp_path, monkeypatch):
                 )
             )
         )
+        await connection.execute(text(TABLE_USER_DEPARTMENT))
 
     @asynccontextmanager
     async def sessions():
@@ -77,14 +79,19 @@ async def onboarding_store(tmp_path, monkeypatch):
         with Session(sync_engine, expire_on_commit=False) as session:
             yield session
 
-    from bisheng.database.models import role, role_access
+    from bisheng.database.models import department, role, role_access
+    from bisheng.department.domain.services import department_service
     from bisheng.role.domain.services import role_service
     from bisheng.user.domain.models import user_role
 
-    for module in (role_service, role, role_access, user_role):
+    for module in (role_service, role, role_access, user_role, department, department_service):
         monkeypatch.setattr(module, "get_async_db_session", sessions)
         if hasattr(module, "get_sync_db_session"):
             monkeypatch.setattr(module, "get_sync_db_session", sync_sessions)
+
+    # SQL 与成员查询走真实隔离库; 权限外部端口单独 Mock, 不访问 OpenFGA。
+    monkeypatch.setattr(department_service, "_uses_f048_department_projection", lambda: False)
+    monkeypatch.setattr(department_service.DepartmentChangeHandler, "execute_async", AsyncMock())
 
     with tenant_execution_scope(1), strict_tenant_filter():
         async with sessions() as session:

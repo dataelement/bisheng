@@ -579,6 +579,7 @@ class DepartmentMembershipProjectionService:
         is_primary: int,
         source: str,
         operator_id: int = 0,
+        external_tenant_id: int | None = None,
     ) -> bool:
         projection = None
         business_committed = False
@@ -587,6 +588,15 @@ class DepartmentMembershipProjectionService:
                 department = (await session.exec(select(Department).where(Department.id == department_id))).first()
                 if department is None or department.status != "active":
                     raise DepartmentNotFoundError()
+                if external_tenant_id is not None:
+                    from bisheng.department.domain.repositories.external_membership import (
+                        ExternalDepartmentMembershipRepository,
+                    )
+
+                    if not await ExternalDepartmentMembershipRepository.should_add(
+                        session, department=department, user_id=user_id, local_tenant_id=external_tenant_id
+                    ):
+                        return False
                 await _resume_department_projection_if_needed(department)
                 existing = (
                     await session.exec(

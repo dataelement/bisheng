@@ -3,6 +3,7 @@
 import asyncio
 
 from bisheng.common.errcode.sso_sync import KunlianDependencyUnavailableError
+from bisheng.department.application.external_membership import ensure_external_department_membership
 from bisheng.permission.application import (
     PermissionObject,
     PermissionRelation,
@@ -44,9 +45,16 @@ async def project_tenant_membership(user_id: int, local_tenant_id: int):
 
 
 class KunlianExternalMembershipApplication:
-    def __init__(self, repository: ExternalMembershipRepository, *, project_membership=project_tenant_membership):
+    def __init__(
+        self,
+        repository: ExternalMembershipRepository,
+        *,
+        project_membership=project_tenant_membership,
+        ensure_department_membership=ensure_external_department_membership,
+    ):
         self.repository = repository
         self.project_membership = project_membership
+        self.ensure_department_membership = ensure_department_membership
 
     async def validate_external_mapping_target(self, local_tenant_id: int) -> int:
         from bisheng.core.context.tenant import tenant_execution_scope
@@ -56,8 +64,11 @@ class KunlianExternalMembershipApplication:
 
     async def ensure_external_membership(self, user_id: int, verified_mapping: KunlianTenantMapping) -> None:
         try:
-            async with asyncio.timeout(10), self.repository.membership_scope(user_id, verified_mapping):
-                await self.project_membership(user_id, verified_mapping.local_tenant_id)
+            async with asyncio.timeout(10):
+                async with self.repository.membership_scope(user_id, verified_mapping):
+                    await self.project_membership(user_id, verified_mapping.local_tenant_id)
+                tenant = await self.repository.read_current_tenant(user_id, verified_mapping)
+                await self.ensure_department_membership(user_id, tenant.id, tenant.root_dept_id)
         except TimeoutError:
             raise KunlianDependencyUnavailableError() from None
 

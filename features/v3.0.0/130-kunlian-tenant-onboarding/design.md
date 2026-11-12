@@ -363,6 +363,16 @@ F118 的身份源仍是准入权威。Owner 操作前后均需验证当前策略
 - 原 `recover_projection` 任务追加可选阶段参数，旧二参数调用兼容。自动开关关闭时仍执行旧投影路径；开启时按 tenants／projection／basic_access 独立游标续投。单候选最多 30 秒，阶段 240 秒软预算，原任务 300 秒业务预算保持；未扫完返回已处理键，漏投和 Worker 退出由下一次 Beat 从根游标重扫。
 - Mock、SQLite、FastAPI／WebSocket 边界和本机网关测试结果见 E-018–E-022。正式范围、真实身份、MySQL／DM8 行锁、OpenFGA 及浏览器联合验收均未由这些证据替代。
 
+## 成员列表缺失的最小修复（REQ-08）
+
+根因是外部成员只写 `UserTenant`，而组织成员页从 `UserDepartment` 查询；成功投影短路和投影候选过滤又让历史用户无法自然补齐。
+
+1. 租户 application 在原租户成员事务成功后，读取当前租户的根部门 ID，调用部门 application。部门新增受控校验仓储，核验账号来源、有效租户关联、根部门挂载和已有主部门；挂载节点属于 Root 管理组织，因此只在该专用入口进入 Root 执行上下文，显式核验目标，不能把业务租户当作挂载节点的存储租户。
+2. 复用 `DepartmentMembershipProjectionService.aadd_member` 及其已有持久权限投影、恢复机制；在同一部门写事务内校验目标并锁定租户及用户，防止并发重复和归属变化。无主部门时新建根部门主关联；已有合法主部门保留，跨租户归属冲突拒绝；不授予管理员或新建业务对象授权。部门 SQL 已提交但权限投影未完成时，原恢复入口重读并恢复同一投影。
+3. 原资料投影的成功短路先补齐当前有效成员关系；自动开通的基础资格阶段也在原来源锁和当前批次断言内调用成员确保，覆盖已成功、不再进入投影候选的历史用户。停用投影不新增部门关系；补齐不重写原资料修订或基础角色墓碑。
+4. 文件落点：部门 `application/external_membership.py`、`domain/repositories/external_membership.py`、原 `department_service.py`；租户 `application/external_membership.py`；SSO 原 `kunlian_projection.py`、`kunlian_onboarding.py`。不新增表、公共接口、运行配置或网关改动。
+5. 验证先复现空成员，再验证新增、成功回执补齐、幂等、保留主部门、错误目标及权限失败恢复。104 部署前保存源码和数据基线；使用原恢复任务补齐，不直接批量修改用户表。回退源码不删除已合法建立的成员关系，不迁移账号或改变角色。
+
 ## 修订历史
 
 | 日期 | 改动 | 触发原因 |

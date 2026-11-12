@@ -49,7 +49,9 @@ async def projection(owner, directory_store):
         session.add(Tenant(id=8, tenant_code="eight", tenant_name="Eight"))
         await session.commit()
     projector = AsyncMock()
-    tenant_app = KunlianExternalMembershipApplication(ExternalMembershipRepository(users), project_membership=projector)
+    tenant_app = KunlianExternalMembershipApplication(
+        ExternalMembershipRepository(users), project_membership=projector, ensure_department_membership=AsyncMock()
+    )
     await repo.bind_tenant("fixture", "external-a", verified_local_tenant_id=7, expected_revision=None)
     await directory_tests.publish(repo, members=[member()])
     key = repo.identity_key(directory_tests.ISSUER, "external-a", "subject-1")

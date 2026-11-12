@@ -32,6 +32,11 @@ class KunlianProjectionService:
             # 主路径仍然失败。诊断修复不能覆盖新发布或冒充投影成功。
             logger.warning("Kunlian projection failure record unavailable identity={}", facts.identity_key)
 
+    async def ensure_current_membership(self, facts):
+        if facts.active:
+            with tenant_execution_scope(facts.mapping.local_tenant_id):
+                await self.tenant_owner.ensure_external_membership(facts.local_user_id, facts.mapping)
+
     async def project_identity(self, identity_key: str, *, onboarding_policy=None) -> int:
         facts = None
         try:
@@ -44,6 +49,9 @@ class KunlianProjectionService:
                     complete,
                 ):
                     if facts.already_projected:
+                        await assert_current()
+                        await self.ensure_current_membership(facts)
+                        await assert_current()
                         return facts.local_user_id
                     display_name = facts.member_summary.get("display_name")
                     if display_name is None or display_name == "":
