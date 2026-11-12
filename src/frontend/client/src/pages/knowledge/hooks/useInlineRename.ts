@@ -50,17 +50,10 @@ export function useInlineRename({
     useEffect(() => {
         if (isRenaming && inputRef.current) {
             const input = inputRef.current;
-            // Focus MUST be synchronous to immediately capture focus and prevent onBlur
-            // from being accidentally triggered by surrounding UI interactions (like Radix dropdown).
-            input.focus();
-
-            // Text selection is delayed to ensure the browser doesn't clear it immediately after focus
+            // Let the closing menu restore its trigger's focus before focusing
+            // the input. Focusing synchronously lets that restore trigger blur,
+            // which submits a new folder's default name before the user can edit.
             const timerId = setTimeout(() => {
-                // Rename is entered from a Radix dropdown item, and Radix restores
-                // focus to the menu trigger as it unmounts — after the synchronous
-                // focus above. Re-assert focus here, once that restore has run:
-                // an input that never held focus never fires blur, which is why
-                // clicking outside used to leave the field open and unsaved.
                 input.focus();
                 // Select text before extension for files, or select all for folders
                 const dotIndex = fileName.lastIndexOf(".");

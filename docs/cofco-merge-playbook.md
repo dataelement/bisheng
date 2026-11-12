@@ -265,6 +265,10 @@ for lang in ('en','ja','zh-Hans'):
 **⑤ 推送前先 `git fetch`**:主线可能已经有人合过同一批内容。如果远程的合并提交和
 本地的内容完全一致,直接用远程的,不要再做一个重复的合并提交。
 
+涉及列表内新建文件夹或重命名时，保留菜单关闭后的延迟聚焦与名称选择，避免同步聚焦
+被菜单恢复焦点触发失焦提交。回归场景位于 `client/src/pages/knowledge/hooks/useInlineRename.test.tsx`；
+按第③步约定交由镜像构建阶段验证，不把本地未执行的用例记为通过。
+
 涉及日常问答的消息 ID、历史加载或重试时，保留问题从临时 ID 更新为正式 ID 后的回复关联，
 以及线性历史加载时的问题/回复关联恢复；重试回复自身更新为正式 ID 后也须继续接收流式内容。
 这三类行为由 `client/src/hooks/useAiChat.test.ts` 和 `client/src/api/chatFailureMetadata.test.ts`

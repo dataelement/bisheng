@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useInlineRename } from "./useInlineRename";
 
 const mockShowToast = jest.fn();
@@ -15,10 +15,11 @@ interface HarnessProps {
   fileName: string;
   onRename: (newName: string) => void;
   onValidateName?: (newName: string) => string | null;
+  isCreating?: boolean;
 }
 
 /** Mirrors how FileRow / FileCard wire the hook to their rename input. */
-function Harness({ fileName, onRename, onValidateName }: HarnessProps) {
+function Harness({ fileName, onRename, onValidateName, isCreating = false }: HarnessProps) {
   const {
     isRenaming,
     renameValue,
@@ -29,8 +30,8 @@ function Harness({ fileName, onRename, onValidateName }: HarnessProps) {
     startRenaming,
   } = useInlineRename({
     fileName,
-    isFolder: false,
-    isCreating: false,
+    isFolder: isCreating,
+    isCreating,
     onRename,
     onValidateName,
   });
@@ -67,6 +68,33 @@ function pointerDownOutside() {
 }
 
 describe("useInlineRename", () => {
+  it("keeps a new folder editable when the closing menu restores focus to its trigger", () => {
+    jest.useFakeTimers();
+    try {
+      const onRename = jest.fn();
+      render(<Harness fileName="New folder" isCreating onRename={onRename} />);
+      const input = screen.getByTestId("rename-input") as HTMLInputElement;
+
+      // Radix restores focus in a task after the create placeholder mounts.
+      act(() => {
+        setTimeout(() => screen.getByText("rename").focus(), 0);
+        jest.advanceTimersByTime(10);
+      });
+
+      expect(onRename).not.toHaveBeenCalled();
+      expect(input).toHaveFocus();
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe("New folder".length);
+
+      fireEvent.change(input, { target: { value: "My folder" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onRename).toHaveBeenCalledTimes(1);
+      expect(onRename).toHaveBeenCalledWith("My folder");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("commits on a click outside the input", () => {
     const { onRename, input } = startRenaming();
 
