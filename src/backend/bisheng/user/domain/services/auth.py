@@ -176,7 +176,7 @@ class AuthJwt:
         """decode jwt token"""
         if auth_from == "request":
             if not token:
-                token = self.req.cookies.get(self._access_cookie_key)
+                token = self.request_access_token()
         elif auth_from == "websocket":
             if websocket:
                 token = websocket.cookies.get(self._access_cookie_key)
@@ -186,6 +186,18 @@ class AuthJwt:
         else:
             raise ValueError("unsupported auth_from value")
         return self.decode_jwt_token(token)
+
+    def request_access_token(self) -> str | None:
+        """Cookie first, then Bearer. Phone clients only send the header."""
+        if self.req is None:
+            return None
+        token = self.req.cookies.get(self._access_cookie_key)
+        if token:
+            return token
+        authorization = (self.req.headers.get("Authorization") or "").strip()
+        if authorization.lower().startswith("bearer "):
+            return authorization[7:].strip() or None
+        return None
 
     def decode_jwt_token(self, token: str) -> dict:
         """decode jwt token"""
@@ -582,8 +594,9 @@ class LoginUser(BaseModel):
             token_version=int(subject.get("token_version", 0) or 0),
         )
         request = getattr(auth_jwt, "req", None)
-        if request is not None:
-            token = request.cookies.get(auth_jwt._access_cookie_key)
+        # Cookie first, then Bearer. Phone clients only send the header.
+        token = auth_jwt.request_access_token()
+        if token:
             claims = jwt.decode(
                 token, auth_jwt.jwt_secret, issuer=auth_jwt.cookie_conf.jwt_iss, algorithms=auth_jwt._decode_algorithms
             )

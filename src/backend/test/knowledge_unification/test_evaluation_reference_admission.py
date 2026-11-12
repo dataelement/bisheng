@@ -375,14 +375,16 @@ async def web_session_user(evaluation_context, monkeypatch):
         "iss": "evaluation-test",
     }
     token = jwt.encode(claims, secret, algorithm="HS256")
+    request = SimpleNamespace(cookies={"access": token})
     auth = SimpleNamespace(
         get_subject=lambda: claims,
-        req=SimpleNamespace(cookies={"access": token}),
+        req=request,
         _access_cookie_key="access",
         jwt_secret=secret,
         cookie_conf=SimpleNamespace(jwt_iss="evaluation-test"),
         _decode_algorithms=["HS256"],
     )
+    auth.request_access_token = lambda: request.cookies.get(auth._access_cookie_key)
     monkeypatch.setattr(UserPayload, "init_login_user", AsyncMock(return_value=user))
     original = await UserPayload.get_login_user(auth)
     assert original is user and original._runtime_credential_reference["kind"] == "web_session"
