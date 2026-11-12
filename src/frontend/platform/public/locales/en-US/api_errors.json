@@ -111,6 +111,8 @@
   "10810": "Please configure the workbench embedding model.",
   "10811": "The daily mode default model must be one of the configured workbench chat models. Please select again.",
   "10812": "Model discovery failed. Check the connection settings and retry, or configure models manually.",
+  "10813": "The model price was changed by someone else. Refresh and try again.",
+  "10814": "The model price is invalid. Check it and try again.",
   "10900": "Knowledge base name already exists",
   "10901": "Embedding model required",
   "10902": "Summary model invalid. Reconfigure in system model settings.",

@@ -52,6 +52,7 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeSta
 from bisheng.llm.domain.const import LLMModelStatus, LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfigDao
+from bisheng.llm.domain.pricing.service import apply_pricing_on_save
 from bisheng.llm.domain.schemas import (
     AssistantLLMConfig,
     AssistantLLMItem,
@@ -787,6 +788,8 @@ class LLMService:
                 model_dict[one.model_name] = LLMModel(**one.model_dump(), user_id=login_user.user_id)
             else:
                 raise ModelNameRepeatError.http_exception()
+        # F015: every LLM model is saved with a price (catalog match, or 0 = free).
+        apply_pricing_on_save(server.type, model_dict.values(), {})
 
         db_server = LLMServer(**server.model_dump(exclude={"models", "share_to_children"}))
         db_server.config = cls.strip_config_whitespace(db_server.config)
@@ -1069,6 +1072,8 @@ class LLMService:
                     model_dict[one.model_name].server_id = exist_server.id
             else:
                 raise ModelNameRepeatError.http_exception()
+        # F015: the form replaces each config wholesale; an omitted price keeps the stored one.
+        apply_pricing_on_save(server.type, model_dict.values(), old_model_dict)
 
         mask_maker = JsonFieldMasker()
         merged_config = cls.strip_config_whitespace(

@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔲 草稿 | 停服时长待演练实测 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 11 / 36 |
+| 实现 | 🔄 进行中 | 13 / 36 |
 
 ---
 
@@ -56,14 +56,14 @@
   **覆盖 AC**: AC-08, AC-09
   **依赖**: T00
 
-- [ ] **T02**: 内置价格表与精确匹配
+- [x] **T02**: 内置价格表与精确匹配
   **文件**: `src/backend/bisheng/llm/domain/pricing/catalog.py`、`catalog.json`
   **逻辑**: 加载时校验 key 重复、同提供方别名重复、价格格式；normalize 只去空格转小写，不去日期后缀；`openai_compatible` 按名称匹配并返回 `via_name`；条目无分时段 / 分档字段，带 `source_url`、`verified_at`
   **测试**: `test/llm/test_model_pricing_catalog.py`（约 18 个）
   **覆盖 AC**: AC-08, AC-09
   **依赖**: T01
 
-- [ ] **T03**: 保存时补价与 revision 比较交换
+- [x] **T03**: 保存时补价与 revision 比较交换
   **文件**: `src/backend/bisheng/llm/domain/pricing/service.py`；`llm/domain/services/llm.py`（add / update 各一处调用）；`llm/domain/models/llm_server.py`（`update_server_with_models` 事务内校验 revision）
   **逻辑**: 新模型无价 → 匹配或 0（DEFAULT）；带价 → 服务端判定来源；已有模型无价 → 保留；已有模型带价 → revision 相等才写并 +1，否则冲突（design 决策 17）
   **测试**: `test/llm/test_model_pricing_save.py`（约 16 个，含并发保存、非 LLM 不受影响、`model_token_config_upgrade.py` 保留 pricing）
@@ -241,4 +241,6 @@
 - T08 桌面入口直接用 `model_loader` 加载的模型取价（该路径本就不经缓存），未另读价格；网页入口经 `LLMService.read_model_pricing` → `ModelPricingRepository` 直读。收费模型调用 `check_and_start` 时不传 `mode`，与原调用方式一致，只有免费模型传 `unmetered`。
 - T08 现有测试夹具的假模型补了与旧 1 倍等价的价格（`test/dsh/pricing_fixtures.py`），原断言不变；`test_work_admission_snapshots_model_multiplier` 改写为按价格快照断言（旧倍率被删除，AC-17）。
 - T12 口径校验放在结算时对整次调用的累计用量做一次（`enforce_inclusive`），字段映射在每条消息归一化时做，避免流式分片误判。
+- T02 价格表在首次使用时加载并校验，随包文件的有效性由 `test_model_pricing_catalog` 保证，未在应用启动钩子里加载（避免改动 main.py）。智谱、MiniMax 只有国际站美元价，只映射 `openai_compatible`，不映射国内 `zhipu` / `minimax` 类型。
+- T03 新增错误码 10814（价格格式无效，已登记 release-contract）。revision 比较目前在服务层基于保存前读取的旧值做；事务内加锁复查随 T04 与 F118 的锁方案一起完成。
 - 发现仓库原有测试隔离缺陷（不在本特性范围，未改）：`test/dsh/test_policy_repository.py` 的 `sql_store` 夹具在 `[external]` 参数缺少真实库时于 setup 中途失败，留下「已初始化但只登记部分表」的租户过滤状态，导致之后混跑的租户隔离用例误报（基线中 `test_unified_policy_repository` 的失败即此原因）。`test_credit_settings` 夹具已显式登记所需表以免受影响。
