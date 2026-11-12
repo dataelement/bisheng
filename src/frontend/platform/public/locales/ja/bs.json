@@ -1497,7 +1497,8 @@
       "openApi": "オープン API",
       "open_api": "オープン API",
       "appFactory": "アプリ工場",
-      "app": "アプリ工場"
+      "app": "アプリ工場",
+      "unknown": "不明なモジュール"
     },
     "eventTypeEnum": {
       "createChat": "新規チャット作成",
@@ -1661,7 +1662,8 @@
       "openApiPatRevokeHolder": "保有者単位で個人トークンを失効",
       "openApiPatTenantMigrate": "アカウントのテナント移行時に個人トークンを失効",
       "openApiPatSettingsUpdate": "個人トークンのテナント方針を変更",
-      "llmSystemConfigUpdate": "デフォルトおよびシステムモデル設定を変更"
+      "llmSystemConfigUpdate": "デフォルトおよびシステムモデル設定を変更",
+      "unknown": "不明な操作"
     },
     "objectTypeEnum": {
       "app": "アプリ",
@@ -1688,7 +1690,12 @@
       "approval_task": "審査タスク",
       "approval_exception": "審査例外",
       "approval_scenario": "審査シナリオ",
-      "approval_flow": "審査フロー"
+      "approval_flow": "審査フロー",
+      "linsight_skill": "個人スキル",
+      "knowledge_library": "ナレッジベース",
+      "folder": "フォルダ",
+      "knowledge_file": "ナレッジファイル",
+      "unknown": "不明な対象タイプ"
     },
     "appUsage": "アプリ利用状況",
     "systemOperations": "システム操作",

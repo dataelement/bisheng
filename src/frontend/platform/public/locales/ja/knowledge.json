@@ -686,5 +686,38 @@
         "upload_invalid": "ファイル形式・サイズ・メディアアップロード設定が現在のルールに適合していません。",
         "upload_unconfirmed": "新しいファイルの状態を確認できません。一覧を更新して確認してください。",
         "confirm_new_version": "新バージョンとしての関連付けを確認"
+    },
+    "sidebar": {
+        "department": "部門ナレッジスペース",
+        "created": "自分が作成",
+        "joined": "参加中",
+        "navigation": "スペースナビゲーション",
+        "square": "広場へ",
+        "expand": "展開",
+        "collapse": "折りたたむ",
+        "sort": "並べ替え",
+        "sort_update_time": "更新日時",
+        "sort_create_time": "作成日時",
+        "sort_name": "名前",
+        "pin": "ピン留め",
+        "unpin": "ピン留めを解除",
+        "loading": "読み込み中…",
+        "load_failed": "読み込みに失敗しました",
+        "empty": "スペースがありません",
+        "no_folders": "フォルダーがありません",
+        "more_folders": "フォルダーをさらに読み込む"
+    },
+    "workspace": {
+        "files": "スペースのファイル",
+        "list_view": "リスト表示",
+        "card_view": "カード表示",
+        "sort": "並べ替え",
+        "sort_name": "名前",
+        "sort_time": "更新日時",
+        "sort_size": "ファイルサイズ",
+        "sort_type": "ファイルの種類",
+        "ascending": "昇順",
+        "descending": "降順",
+        "select_all": "すべて選択"
     }
 }

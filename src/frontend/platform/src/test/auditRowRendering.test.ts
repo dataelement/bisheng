@@ -11,8 +11,11 @@ import { actionToI18nKey, exportSystemLogDataApi, getAuditAppsApi, getLogsApi } 
 import {
   AuditRow,
   buildAuditCsv,
+  renderEventType,
   renderObjectName,
+  renderObjectType,
   renderOperator,
+  renderSystemId,
   toAppOptions,
 } from "@/pages/LogPage/systemLog/auditRow";
 import { beforeEach, vi } from "vitest";
@@ -103,6 +106,37 @@ describe("application selector options", () => {
       { label: "Alpha (alpha)", value: "a1" },
       { label: "Beta (beta) · log.deletedSuffix", value: "a2" },
     ]);
+  });
+});
+
+describe("module and object captions", () => {
+  const dictionary = (messages: Record<string, string>) => (key: string, opts?: Record<string, unknown>) =>
+    Object.prototype.hasOwnProperty.call(messages, key)
+      ? messages[key]
+      : String(opts?.defaultValue ?? key);
+
+  const captions = dictionary({
+    "log.systemIdEnum.system": "System",
+    "log.systemIdEnum.unknown": "Unknown module",
+    "log.objectTypeEnum.work_flow": "Workflow",
+    "log.objectTypeEnum.linsight_skill": "Personal skill",
+    "log.objectTypeEnum.knowledge_library": "Knowledge library",
+    "log.objectTypeEnum.unknown": "Unknown object type",
+    "log.eventTypeEnum.unknown": "Unknown action",
+  });
+
+  it("folds historical aliases onto the existing captions", () => {
+    expect(renderSystemId({ ...base, system_id: "linsight" }, captions)).toBe("System");
+    expect(renderObjectType({ ...base, object_type: "workflow" }, captions)).toBe("Workflow");
+    expect(renderObjectType({ ...base, target_type: "workflow" }, captions)).toBe("Workflow");
+    expect(renderObjectType({ ...base, object_type: "linsight_skill" }, captions)).toBe("Personal skill");
+    expect(renderObjectType({ ...base, object_type: "knowledge_library" }, captions)).toBe("Knowledge library");
+  });
+
+  it("uses the unknown caption instead of an i18n key", () => {
+    expect(renderSystemId({ ...base, system_id: "not_a_module" }, captions)).toBe("Unknown module");
+    expect(renderObjectType({ ...base, object_type: "mystery" }, captions)).toBe("Unknown object type");
+    expect(renderEventType({ ...base, event_type: "not_an_action" }, captions, (action) => action)).toBe("Unknown action");
   });
 });
 

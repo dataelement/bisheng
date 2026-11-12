@@ -2,15 +2,19 @@ import { Button, Tabs } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
 import KnowledgeFile from "./KnowledgeFile";
 import KnowledgeQa from "./KnowledgeQa";
+import { KnowledgeSpaceWorkspace } from "./KnowledgeSpaceWorkspace";
 
 const pageWindow = window as Window & { LibPage?: { type: string } };
 
 export default function KnowledgePage() {
   const { t } = useTranslation("knowledge");
+  const { id } = useParams();
+  const navigate = useNavigate();
   const { scopes, isLoading, canManage, retry } = useKnowledgePageScope();
   const [toolbarTarget, setToolbarTarget] = useState<HTMLDivElement | null>(
     null,
@@ -19,7 +23,7 @@ export default function KnowledgePage() {
     () => pageWindow.LibPage?.type || "file",
   );
   const activeKey =
-    active === "qa" || (active === "admin" && canManage) ? active : "file";
+    id === undefined && (active === "qa" || (active === "admin" && canManage)) ? active : "file";
   useEffect(() => {
     delete pageWindow.LibPage;
   }, []);
@@ -36,13 +40,13 @@ export default function KnowledgePage() {
       </Button>
     </div>
   );
-  const content = (scope: KnowledgeQueryScope | undefined) =>
+  const content = (scope: KnowledgeQueryScope | undefined, tree = false) =>
     scope ? (
-      <KnowledgeFile
-        key={JSON.stringify(scope)}
-        scope={scope}
-        toolbarTarget={toolbarTarget}
-      />
+      tree ? (
+        <KnowledgeSpaceWorkspace key={JSON.stringify(scope)} scope={scope} routeId={id}>
+          <KnowledgeFile scope={scope} toolbarTarget={toolbarTarget} />
+        </KnowledgeSpaceWorkspace>
+      ) : <KnowledgeFile key={JSON.stringify(scope)} scope={scope} toolbarTarget={toolbarTarget} />
     ) : (
       unavailable
     );
@@ -50,7 +54,10 @@ export default function KnowledgePage() {
     <div className="relative h-full w-full px-2 pt-4">
       <Tabs
         activeKey={activeKey}
-        onChange={setActive}
+        onChange={(key) => {
+          setActive(key);
+          if (id !== undefined) navigate("/filelib");
+        }}
         extra={<div ref={setToolbarTarget} />}
         className="mb-10 w-full [&>div:first-child]:mx-2 [&>div:first-child]:mb-2"
         items={[
@@ -58,7 +65,7 @@ export default function KnowledgePage() {
             key: "file",
             label: t("f118.spaces"),
             icon: <Outlined.Books aria-hidden="true" />,
-            children: content(scopes?.ordinary),
+            children: content(scopes?.ordinary, true),
           },
           {
             key: "qa",

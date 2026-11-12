@@ -364,6 +364,27 @@ _V2_NAMESPACE_TO_ACTION_PREFIX: dict[str, str] = {
     "app": "app.",
 }
 
+# Rows written before the personal-skill writer moved to ``system`` stored
+# ``system_id='linsight'``. The audit page files those four actions under the
+# system module and has no linsight module, so a system-module filter (list,
+# count and export share this query) has to see them. New rows are written
+# with ``system_id='system'``.
+_LEGACY_MODULE_EVENT_TYPES: dict[str, tuple[tuple[str, frozenset[str]], ...]] = {
+    "system": (
+        (
+            "linsight",
+            frozenset(
+                {
+                    EventType.PERSONAL_SKILL_CREATE.value,
+                    EventType.PERSONAL_SKILL_STATUS.value,
+                    EventType.PERSONAL_SKILL_DELETE.value,
+                    EventType.PERSONAL_SKILL_OVERWRITE.value,
+                }
+            ),
+        ),
+    ),
+}
+
 
 class AuditLogDao(AuditLogBase):
     @classmethod
@@ -510,6 +531,14 @@ class AuditLogDao(AuditLogBase):
                 module_predicate = col(AuditLog.action).like(f"{prefix}%")
             else:
                 module_predicate = AuditLog.system_id == system_id
+                for legacy_system_id, event_types in _LEGACY_MODULE_EVENT_TYPES.get(system_id, ()):
+                    module_predicate = or_(
+                        module_predicate,
+                        and_(
+                            AuditLog.system_id == legacy_system_id,
+                            col(AuditLog.event_type).in_(event_types),
+                        ),
+                    )
             statement = statement.where(module_predicate)
             count_statement = count_statement.where(module_predicate)
         if event_type:
