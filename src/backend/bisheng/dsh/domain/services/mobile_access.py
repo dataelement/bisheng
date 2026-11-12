@@ -29,7 +29,7 @@ class MobileResult:
 class MobileAccessRuntime:
     def __init__(self):
         self.attachments = 0
-        self.pending: dict[str, set[str]] = {}
+        self.pending: dict[str, dict[str, float]] = {}
         self.lock = asyncio.Lock()
 
 
@@ -43,6 +43,7 @@ class MobileAccessService:
         blpop_timeout: float = 5,
         online_ttl: int = 60,
         max_attach: int = 32,
+        max_pending: int = 128,
     ):
         self.store = store
         self.runtime = runtime or MobileAccessRuntime()
@@ -50,6 +51,7 @@ class MobileAccessService:
         self.blpop_timeout = blpop_timeout
         self.online_ttl = online_ttl
         self.max_attach = max_attach
+        self.max_pending = max_pending
 
     async def bind(self, user, body: dict) -> MobileResult:
         parsed = parse_bind(body)
@@ -192,7 +194,7 @@ class MobileAccessService:
                 return
             if previous:
                 await self.store.push_request(desktop_id, previous, {"kind": "disconnect"})
-            self.runtime.pending[connection_id] = set()
+            self.runtime.pending[connection_id] = {}
             await self._relay(socket, desktop_id, connection_id)
         except RedisError:
             logger.exception("mobile attach failed desktop={}", desktop_id)
@@ -240,7 +242,13 @@ class MobileAccessService:
     async def _dispatch(self, socket, desktop_id: str, connection_id: str) -> None:
         try:
             while True:
-                message = await self.store.pop_request(desktop_id, connection_id, self.blpop_timeout)
+                pending = self.runtime.pending.setdefault(connection_id, {})
+                now = time.time()
+                for request_id, deadline in list(pending.items()):
+                    if deadline <= now:
+                        pending.pop(request_id, None)
+                # Wake even on an idle connection so unanswered RPCs cannot accumulate.
+                message = await self.store.pop_request(desktop_id, connection_id, min(self.blpop_timeout, 1))
                 if message is None:
                     if await self.store.current_connection(desktop_id) != connection_id:
                         return
@@ -251,13 +259,25 @@ class MobileAccessService:
                     continue
                 deadline = message.get("deadline")
                 request_id = message.get("id")
-                if not isinstance(deadline, (int, float)) or deadline < time.time() or not isinstance(request_id, str):
+                if not isinstance(deadline, (int, float)) or deadline <= time.time() or not isinstance(request_id, str):
                     logger.info("drop expired mobile rpc desktop={}", desktop_id)
                     continue
                 if await self.store.current_connection(desktop_id) != connection_id:
                     logger.info("drop stale mobile rpc desktop={}", desktop_id)
                     continue
-                self.runtime.pending.setdefault(connection_id, set()).add(request_id)
+                # The blocking pop may have outlived another pending request.
+                now = time.time()
+                for pending_id, pending_deadline in list(pending.items()):
+                    if pending_deadline <= now:
+                        pending.pop(pending_id, None)
+                if len(pending) >= self.max_pending:
+                    await self.store.push_response(
+                        desktop_id,
+                        request_id,
+                        {"status": 503, "body": '{"error":"busy"}', "contentType": "application/json"},
+                    )
+                    continue
+                pending[request_id] = deadline
                 await socket.send_json(
                     {
                         "type": "request",
@@ -279,11 +299,11 @@ class MobileAccessService:
     async def _accept_response(self, socket, desktop_id: str, connection_id: str, frame: dict) -> None:
         del socket
         request_id = frame.get("id")
-        pending = self.runtime.pending.get(connection_id, set())
-        if not isinstance(request_id, str) or request_id not in pending:
+        pending = self.runtime.pending.get(connection_id, {})
+        deadline = pending.pop(request_id, None) if isinstance(request_id, str) else None
+        if deadline is None or deadline <= time.time():
             logger.info("ignore mobile response desktop={}", desktop_id)
             return
-        pending.remove(request_id)
         status = frame.get("status")
         if type(status) is not int or not 100 <= status <= 599:
             status = 502

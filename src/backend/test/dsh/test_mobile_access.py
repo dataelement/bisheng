@@ -325,6 +325,110 @@ async def test_relay_failures_are_logged():
     assert any("mobile attach relay ended" in message for message in messages)
 
 
+async def test_cross_service_timeout_clears_pending_on_idle_attached_connection(monkeypatch):
+    holder, caller, store = service_pair(rpc_timeout=30, blpop_timeout=5)
+    clock = [time.time()]
+    monkeypatch.setattr("bisheng.dsh.domain.services.mobile_access.time", SimpleNamespace(time=lambda: clock[0]))
+    idle = asyncio.Event()
+    wake = asyncio.Event()
+    cleaned = asyncio.Event()
+    delivered = asyncio.Event()
+    original_pop = store.pop_request
+    pop_count = 0
+
+    async def controlled_pop(desktop_id, connection_id, timeout):
+        nonlocal pop_count
+        assert 0 < timeout <= 1
+        pop_count += 1
+        if pop_count == 1:
+            return await original_pop(desktop_id, connection_id, timeout)
+        if pop_count == 2:
+            idle.set()
+            await wake.wait()
+            return None
+        cleaned.set()
+        await asyncio.Event().wait()
+
+    async def timeout_response(desktop_id, request_id, timeout):
+        await delivered.wait()
+        clock[0] += 31
+        return None
+
+    monkeypatch.setattr(store, "pop_request", controlled_pop)
+    monkeypatch.setattr(store, "pop_response", timeout_response)
+    assert (await bind(holder)).status == 200
+    socket, task = await connect(holder)
+    call = None
+    try:
+        connection_id = await wait_online(store)
+        call = asyncio.create_task(caller.rpc(user(), DESKTOP_ID, {"method": "session.list"}))
+        frame = await asyncio.wait_for(socket.sent.get(), timeout=2)
+        await asyncio.wait_for(idle.wait(), timeout=1)
+        assert holder.runtime.pending[connection_id] == {frame["id"]: clock[0] + 30}
+        assert caller.runtime.pending == {}
+        delivered.set()
+        result = await asyncio.wait_for(call, timeout=1)
+        assert result.status == 503
+        assert result.body == {"error": "offline"}
+        wake.set()
+        await asyncio.wait_for(cleaned.wait(), timeout=1)
+        assert holder.runtime.pending[connection_id] == {}
+        assert not task.done()
+        assert await store.current_connection(DESKTOP_ID) == connection_id
+    finally:
+        if call is not None:
+            await stop(call)
+        await socket.incoming.put(None)
+        await asyncio.wait_for(task, timeout=1)
+    assert holder.runtime.pending == {}
+
+
+@pytest.mark.parametrize("already_cleaned", [False, True])
+async def test_late_response_does_not_create_a_response_queue(monkeypatch, already_cleaned):
+    holder, _, store = service_pair()
+    monkeypatch.setattr("bisheng.dsh.domain.services.mobile_access.time", SimpleNamespace(time=lambda: 100))
+    holder.runtime.pending["connection"] = {} if already_cleaned else {"expired": 100}
+    await holder._accept_response(
+        FakeSocket(), DESKTOP_ID, "connection", {"id": "expired", "status": 200, "body": "late"}
+    )
+    assert holder.runtime.pending["connection"] == {}
+    assert not await store.redis.exists(store.response_key(DESKTOP_ID, "expired"))
+
+
+async def test_pending_capacity_returns_busy_across_services_without_dispatching():
+    holder, caller, store = service_pair(rpc_timeout=5, blpop_timeout=0.05, max_pending=1)
+    assert (await bind(holder)).status == 200
+    socket, task = await connect(holder)
+    first_call = None
+    next_call = None
+    try:
+        connection_id = await wait_online(store)
+        first_call = asyncio.create_task(caller.rpc(user(), DESKTOP_ID, {"method": "session.list"}))
+        first_frame = await asyncio.wait_for(socket.sent.get(), timeout=2)
+        assert len(holder.runtime.pending[connection_id]) == 1
+        busy = await asyncio.wait_for(caller.rpc(user(), DESKTOP_ID, {"method": "session.list"}), timeout=2)
+        assert busy.status == 503
+        assert busy.raw is True
+        assert busy.media_type == "application/json"
+        assert busy.body == '{"error":"busy"}'
+        assert socket.sent.empty()
+        assert list(holder.runtime.pending[connection_id]) == [first_frame["id"]]
+        await socket.incoming.put({"type": "response", "id": first_frame["id"], "status": 200, "body": "first"})
+        assert (await asyncio.wait_for(first_call, timeout=2)).body == "first"
+        assert holder.runtime.pending[connection_id] == {}
+        next_call = asyncio.create_task(caller.rpc(user(), DESKTOP_ID, {"method": "session.list"}))
+        next_frame = await asyncio.wait_for(socket.sent.get(), timeout=2)
+        await socket.incoming.put({"type": "response", "id": next_frame["id"], "status": 200, "body": "next"})
+        assert (await asyncio.wait_for(next_call, timeout=2)).body == "next"
+        assert holder.runtime.pending[connection_id] == {}
+    finally:
+        for call in (first_call, next_call):
+            if call is not None:
+                await stop(call)
+        await socket.incoming.put(None)
+        await asyncio.wait_for(task, timeout=1)
+
+
 class _FailingDispatchStore(MobileAccessStore):
     async def pop_request(self, desktop_id: str, connection_id: str, timeout: float) -> dict | None:
         del desktop_id, connection_id, timeout
