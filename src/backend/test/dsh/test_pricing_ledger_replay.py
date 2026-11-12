@@ -191,9 +191,11 @@ def test_recovery_rebuilds_a_month_mixing_legacy_and_priced_calls(usage_db):
 
     SQLModel.metadata.create_all(usage_db, tables=[User.__table__, UserTenant.__table__])
     with Session(usage_db) as session, session.begin():
+        # Parents first: MySQL enforces the foreign keys that SQLite ignores.
         session.add(User(user_id=20, user_name="usage-user", password="unused"))
-        session.add(UserTenant(user_id=20, tenant_id=2, is_default=1, is_active=1, status="active"))
         session.add(Department(id=10, dept_id="root", name="usage-root", tenant_id=2, path="/10/"))
+        session.flush()
+        session.add(UserTenant(user_id=20, tenant_id=2, is_default=1, is_active=1, status="active"))
         session.add(UserDepartment(id=1, user_id=20, department_id=10, is_primary=1))
     legacy = repo_event(credit_rate=150, **SETTLED)
     priced = repo_event(pricing=build_snapshot(DEEPSEEK, CreditSettingState()), **SETTLED)
