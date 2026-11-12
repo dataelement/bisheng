@@ -23,7 +23,7 @@ from bisheng.common.errcode.dsh import (
 from bisheng.dsh.domain.schemas.chat import ChatCapabilities, DshChatRequest
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
 from bisheng.dsh.domain.schemas.responses import DshResponsesRequest
-from bisheng.dsh.domain.schemas.usage import UsageEvent
+from bisheng.dsh.domain.schemas.usage import INT64_MAX, UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
@@ -54,6 +54,11 @@ def usage_response(usage: DshTokenUsage) -> dict:
 
 def sse(data: dict) -> str:
     return "data: " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n\n"
+
+
+def _beyond_accounting_range(event: UsageEvent, usage: DshTokenUsage) -> bool:
+    candidate = event.model_copy(update=usage.model_dump())
+    return any(value is not None and value > INT64_MAX for value in (candidate.billed_tokens, candidate.cost_micro))
 
 
 class DshModelService:
@@ -273,6 +278,10 @@ class DshModelService:
         """Settle the shared ledger for platform Chat and desktop model calls."""
         now = self.now()
         now = now.replace(tzinfo=UTC) if now.tzinfo is None else now
+        if usage.total_tokens is not None and _beyond_accounting_range(event, usage):
+            # F015: a measurement too large to bill is settled like a missing one: nothing charged, flagged.
+            logger.error("DSH usage outside the accounting range for request {}", event.request_id)
+            usage, error_code = DshTokenUsage(), "usage_out_of_range"
         terminal = UsageEvent.model_validate(
             event.model_copy(
                 update={

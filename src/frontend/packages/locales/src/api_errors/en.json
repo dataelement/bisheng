@@ -698,6 +698,7 @@
   "26173": "The check record is older than the retained reporting range and cannot be accepted again.",
   "26174": "The check record receiving service is temporarily unavailable. Try again later.",
   "26175": "The check record exceeds the size or item limit and cannot be accepted.",
+  "26176": "This model has no price configured yet and cannot be used. Please contact your administrator.",
   "28010": "The deep research code executor configuration is invalid. Contact your administrator to check the local, container, or e2b configuration, then try again.",
   "appStartNoApprovedVersion": "This app has no approved version. Submit a release with bisheng deploy and complete approval first.",
   "appStartApprovalPending": "This release is awaiting approval and cannot go online yet.",

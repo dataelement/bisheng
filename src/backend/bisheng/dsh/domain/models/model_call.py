@@ -6,7 +6,7 @@ from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, Index, Str
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
 
 class DshModelCall(SQLModelSerializable, table=True):
@@ -58,6 +58,10 @@ class DshModelCall(SQLModelSerializable, table=True):
     billed_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     cache_read_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     cache_creation_tokens: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
+    # F015: frozen billing prices, spend and billing currency; NULL on pre-F015 calls.
+    pricing: dict | None = Field(default=None, sa_column=Column(JsonType, nullable=True))
+    cost_micro: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
+    currency: str | None = Field(default=None, sa_column=Column(String(3), nullable=True))
     status: str = Field(
         default="RUNNING", sa_column=Column(String(24), nullable=False, server_default=text("'RUNNING'"))
     )

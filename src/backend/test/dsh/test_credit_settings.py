@@ -21,12 +21,19 @@ from test.dsh.test_subject_policy import subject_store as subject_store
 
 
 @pytest.fixture
-def store(subject_store):
+def store(subject_store, monkeypatch):
     for model in (DshCreditSetting, UnifiedPolicyAudit):
         model.__table__.create(subject_store)
-    from bisheng.core.database.tenant_filter import register_tenant_filter_events
+    from bisheng.core.database import tenant_filter
 
-    register_tenant_filter_events()
+    tenant_filter.register_tenant_filter_events()
+    # Another fixture can leave the filter initialized with a partial table set when its
+    # external variant fails during setup; pin the tables this test relies on.
+    monkeypatch.setattr(
+        tenant_filter,
+        "_tenant_aware_tables",
+        tenant_filter._tenant_aware_tables | {"dsh_credit_setting", "dsh_unified_policy_audit"},
+    )
     return subject_store
 
 

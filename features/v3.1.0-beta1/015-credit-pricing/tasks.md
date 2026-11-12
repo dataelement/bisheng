@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔲 草稿 | 停服时长待演练实测 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔲 未开始 | 0 / 36 |
+| 实现 | 🔄 进行中 | 7 / 36 |
 
 ---
 
@@ -49,7 +49,7 @@
 
 ### Wave 1 — 模型价格（S2，llm 模块）
 
-- [ ] **T01**: 价格结构 ModelPricing
+- [x] **T01**: 价格结构 ModelPricing
   **文件**: `src/backend/bisheng/llm/domain/pricing/schemas.py`、`__init__.py`
   **逻辑**: 十进制字符串校验（≤ 6 位小数、上限 999999.999999）、`extra="forbid"`、`cache_write` 可空、`revision ≥ 1`（design §4.2）
   **测试**: `test/llm/test_model_pricing_catalog.py`（结构部分）
@@ -79,21 +79,21 @@
 
 ### Wave 2 — 计费核心与口径（S3，dsh 模块）
 
-- [ ] **T05**: 积分设置表、仓储、租户登记
+- [x] **T05**: 积分设置表、仓储、租户登记
   **文件**: `src/backend/bisheng/dsh/domain/models/credit_setting.py`、`dsh/domain/repositories/credit_setting.py`、`core/database/tenant_filter.py`
   **逻辑**: 无行返回默认值、不缓存；PUT 带 version，冲突 `DshOperationConflictError`；审计 `UnifiedPolicyAudit(resource="credit-settings")`；登记 `_TENANT_AWARE_MODEL_MODULES`
   **测试**: `test/dsh/test_credit_settings.py`（约 14 个）、`test/database/test_tenant_aware_credit_setting.py`（约 3 个）
   **覆盖 AC**: AC-05, AC-16, AC-20
   **依赖**: T00
 
-- [ ] **T06**: 快照与算价
+- [x] **T06**: 快照与算价
   **文件**: `src/backend/bisheng/dsh/domain/schemas/pricing.py`、`dsh/domain/services/pricing.py`；`common/errcode/dsh.py`（26176）
   **逻辑**: 精简快照（design 决策 19）；缺失 → 26176；换算向上取整；`price_usage` 两个结果 ≤ 2⁶³−1
   **测试**: `test/dsh/test_pricing_snapshot.py`（约 24 个，含 AC-01 原例逐位）
   **覆盖 AC**: AC-01, AC-02, AC-05, AC-22
   **依赖**: T01, T05
 
-- [ ] **T07**: UsageEvent 带快照
+- [x] **T07**: UsageEvent 带快照
   **文件**: `src/backend/bisheng/dsh/domain/schemas/usage.py`
   **逻辑**: `pricing` 可选；`billed_tokens` 有快照按新算法、无快照按旧公式；`cost_micro`、`currency`；溢出按用量异常处理
   **测试**: `test/dsh/test_pricing_ledger_replay.py`（部分）
@@ -107,21 +107,21 @@
   **覆盖 AC**: AC-06, AC-10, AC-11, AC-22
   **依赖**: T06, T07
 
-- [ ] **T09**: 事件身份哈希
+- [x] **T09**: 事件身份哈希
   **文件**: `src/backend/bisheng/dsh/infrastructure/quota_redis.py`
   **逻辑**: 有快照才加入哈希；历史事件向量哈希不变
   **测试**: `test/dsh/test_pricing_ledger_replay.py`
   **覆盖 AC**: AC-07
   **依赖**: T07
 
-- [ ] **T10**: 落库与对账恢复
+- [x] **T10**: 落库与对账恢复
   **文件**: `src/backend/bisheng/dsh/domain/models/model_call.py`、`dsh/domain/repositories/usage.py`
   **逻辑**: 三列（pricing 用 `JsonType`）；`project_batch` 快照不可变（规范化比较）、写花费与币种；`recovery_snapshot` 第 201 行改为由事件重算
   **测试**: `test/dsh/test_pricing_ledger_replay.py`（约 12 个）；`test_usage_repository.py`、`test_unified_credit_ledger.py` 补用例
   **覆盖 AC**: AC-04, AC-07
   **依赖**: T07, T11
 
-- [ ] **T11**: Alembic 迁移
+- [x] **T11**: Alembic 迁移
   **文件**: `src/backend/bisheng/core/database/alembic/versions/v3_1_0b1_f015_dsh_call_pricing.py`
   **逻辑**: `down_revision` 取 `uv run alembic heads` 唯一结果；三列可空，守卫同 `v3_0_0_f111_matched_words.py`
   **测试**: `test/database/test_alembic_f015_call_pricing.py`（sqlite + MySQL）；`test_alembic_single_head.py`
@@ -233,4 +233,9 @@
 
 ## 实际偏差记录
 
-（暂无）
+- T01 测试放在 `test/llm/test_model_pricing_schema.py`（与价格表测试分开），不影响 AC 追溯。
+- T06 错误码 26176 定为 HTTP 503 / `service_unavailable_error`：未升级的旧桌面按通用「暂不可用」展示（AC-19），见 design §6.1。
+- T07 用量超出 int64 时在 `DshModelService.settle_usage` 结算为用量未知（`usage_out_of_range`），不让结算报错。
+- T11 降级（downgrade）拒绝执行而不是删列，与仓库 DSH 迁移惯例（f111）及 runbook「回滚靠备份恢复」一致 → design 决策 18。
+- 新增 26176 时补了共享文案包 `packages/locales/src/api_errors/*.json` 并用 `node scripts/build.mjs` 生成 platform、client 产物（由 `test_error_code_uniqueness` 强制）。
+- 发现仓库原有测试隔离缺陷（不在本特性范围，未改）：`test/dsh/test_policy_repository.py` 的 `sql_store` 夹具在 `[external]` 参数缺少真实库时于 setup 中途失败，留下「已初始化但只登记部分表」的租户过滤状态，导致之后混跑的租户隔离用例误报（基线中 `test_unified_policy_repository` 的失败即此原因）。`test_credit_settings` 夹具已显式登记所需表以免受影响。
