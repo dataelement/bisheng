@@ -197,8 +197,10 @@ class FlowService(BaseService):
             # transition to empty terminal sets; older terminal sets stay put.
             await WorkflowVersionRepository.asoft_delete_workflow(session, root)
             await batch.aapply_source_batch(session, prepared)
-            await cls.project_flow_delete(user, root)
+            deletion = await cls.project_flow_delete(user, root)
             await session.commit()
+        adapter, record, actor = deletion
+        await adapter.cleanup_deleted(record=record, actor=actor)
         await telemetry_service.log_event(
             user_id=user.user_id, event_type=BaseTelemetryTypeEnum.DELETE_APPLICATION, trace_id=trace_id_var.get()
         )
@@ -747,7 +749,7 @@ class FlowService(BaseService):
         cls,
         login_user: UserPayload,
         flow_info: Flow,
-    ) -> None:
+    ) -> tuple:
         await require_business_action(
             login_user,
             resource_type="workflow",
@@ -765,6 +767,7 @@ class FlowService(BaseService):
             record=record,
             actor=await resolve_permission_actor(login_user),
         )
+        return adapter, record, await resolve_permission_actor(login_user)
 
     @classmethod
     def delete_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:

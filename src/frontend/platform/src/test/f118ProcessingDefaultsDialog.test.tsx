@@ -34,6 +34,7 @@ vi.mock("react-i18next", () => ({
 }));
 vi.mock("@/pages/KnowledgePage/components/FileUploadSplitStrategy", () => ({
   default: () => null,
+  ruleI18nMap: {},
 }));
 vi.mock("@/pages/KnowledgePage/components/KnowledgeTooltip", () => ({
   KnowledgeHint: () => null,
@@ -52,7 +53,7 @@ const settings: ProcessingSettingsRead = {
   effective_defaults: {
     schema_version: 1,
     document: {
-      split_mode: "auto",
+      split_mode: "custom",
       separator: ["\\n", ""],
       separator_rule: ["after", "after"],
       chunk_size: 300,
@@ -424,3 +425,15 @@ it.each(["scope", "close", "unmount"])(
     expect(invalidate).not.toHaveBeenCalled();
   },
 );
+
+
+it("keeps automatic settings unchanged when the legacy UI hides custom parameters", async () => {
+  const f = setup();
+  const automatic = { ...settings, effective_defaults: { ...settings.effective_defaults, document: { ...settings.effective_defaults.document, split_mode: "auto" as const, chunk_overlap: 0 } } };
+  f.api.getProcessingSettings.mockResolvedValue(automatic);
+  render(f.draw());
+  expect(await screen.findByRole("radio", { name: /autoSplit/ })).toHaveAttribute("aria-checked", "true");
+  expect(screen.queryByRole("spinbutton", { name: "splitLength" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "save" }));
+  await waitFor(() => expect(f.api.updateProcessingSettings).toHaveBeenCalledWith(7, { expected_config_version: 4, defaults: automatic.effective_defaults }));
+});

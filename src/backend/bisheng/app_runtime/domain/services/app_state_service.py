@@ -330,6 +330,10 @@ class AppStateService:
             # Existing durable FGA ledger/projection succeeds before SQL finalize.
             await cls._project_delete(adapter, permission_record, app, actor)
             await repository.aset_deleted(session, locked_root)
+        if permission_record is not None:
+            await adapter.cleanup_deleted(
+                record=permission_record, actor=await AppAuthorizationService.resolve_actor(actor)
+            )
         reason = "deleted by authorized operator"
         logger.bind(
             event=EVENT_STATE_TRANSITION,

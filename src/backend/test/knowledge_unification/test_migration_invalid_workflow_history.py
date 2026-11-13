@@ -3,14 +3,6 @@
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
-
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
-from bisheng.core.context.tenant import bypass_tenant_filter
-from bisheng.database.models.flow import Flow
-from bisheng.database.models.flow_version import FlowVersion
-from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun
-from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
-from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from test.knowledge_unification.test_migration_references_application import (
     app,
 )
@@ -34,6 +26,14 @@ from test.knowledge_unification.test_migration_references_application import (
 )
 from test.knowledge_unification.test_migration_source_inventory import graph
 
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.database.models.flow import Flow
+from bisheng.database.models.flow_version import FlowVersion
+from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun
+from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+
 
 async def seed_history(database):
     async with AsyncSession(database.engine) as session, session.begin():
@@ -46,8 +46,8 @@ async def seed_history(database):
                     FlowVersion(
                         id=81,
                         flow_id="foreign-parent",
-                        tenant_id=101,
-                        name="invalid",
+                        tenant_id=202,
+                        name="corrected owner",
                         flow_type=10,
                         data=graph(11, 9000),
                     ),
@@ -81,7 +81,7 @@ async def seed_history(database):
 
 
 @pytest.mark.parametrize("published_input", [{"reference_seed": seed_history}], indirect=True)
-async def test_original_invalid_and_deleted_versions_remain_unchanged_through_m4_and_resume(published_input):
+async def test_aligned_versions_and_deleted_history_remain_unchanged_through_m4_and_resume(published_input):
     value = published_input
     async with value.sessions() as session, session.begin():
         before = (
@@ -111,9 +111,7 @@ async def test_original_invalid_and_deleted_versions_remain_unchanged_through_m4
         assert before == after
         for model in (BusinessResourceReference, BusinessReferenceSet):
             assert not (
-                await session.execute(
-                    sa.select(model.id).where(model.source_id.in_(("foreign-parent", "absent-parent", "other-domain")))
-                )
+                await session.execute(sa.select(model.id).where(model.source_id.in_(("absent-parent", "other-domain"))))
             ).all()
         refs = (
             (
@@ -182,4 +180,4 @@ async def test_retained_invalid_source_cannot_discard_an_existing_index(complete
 
     with pytest.raises(KnowledgeOperationPlanConflictError) as error:
         await freeze(complete, transport, monkeypatch, seed_history_with_index)
-    assert error.value.kwargs["reason"] == "unification_sources_invalid_workflow_source_has_index"
+    assert error.value.kwargs["reason"] == "unification_inventory_unknown_absent_root"

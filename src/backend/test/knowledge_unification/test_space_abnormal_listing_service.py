@@ -24,6 +24,9 @@ concrete_tenant = fixtures.concrete_tenant
 
 @pytest.fixture
 def listing(store, monkeypatch):
+    from bisheng.knowledge.domain.services.knowledge_space_service import DepartmentKnowledgeSpaceDao
+
+    monkeypatch.setattr(DepartmentKnowledgeSpaceDao, "aget_by_space_ids", AsyncMock(return_value=[]))
     allowed, checked = set(), []
 
     async def snapshots(keys):
@@ -165,3 +168,18 @@ async def test_anomaly_flag_does_not_expand_admin_gate(listing):
     with management_tenant_scope(101), pytest.raises(PermissionDeniedError):
         await listing.service.list_admin_spaces(has_abnormal=True)
     assert listing.store.facts.selects == []
+
+
+async def test_admin_navigation_classifies_only_returned_bindings_in_one_batch(listing, monkeypatch):
+    from bisheng.knowledge.domain.services.knowledge_space_service import DepartmentKnowledgeSpaceDao
+
+    await listing.store.seed(space(1), space(2), space(3))
+    listing.service._permission_actor.return_value = PermissionActor(user_id=7, current_tenant_id=101, super_admin=True)
+    bindings = AsyncMock(return_value=[SimpleNamespace(space_id=2), SimpleNamespace(space_id=999)])
+    monkeypatch.setattr(DepartmentKnowledgeSpaceDao, "aget_by_space_ids", bindings)
+    with management_tenant_scope(101):
+        page = await listing.service.list_admin_spaces(page_size=2)
+    assert [(row.id, row.space_kind) for row in page.data] == [(3, "normal"), (2, "department")]
+    assert page.total == 3
+    bindings.assert_awaited_once_with([3, 2])
+    assert listing.checked == []

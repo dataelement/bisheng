@@ -4,11 +4,27 @@ import { Atom } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 
 import { useTranslation } from 'react-i18next';
-import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { useMemo, useState, type ComponentPropsWithoutRef } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm'
+import { renderGeneratedFileLink, type GeneratedFile } from './DailyGeneratedFiles';
 
-export const MessageContent = ({ text }: { text: string }) => {
+interface MessageContentProps {
+    text: string;
+    /** Conversation the answer belongs to; with `files`, lets a link naming a generated file download it. */
+    chatId?: string;
+    files?: GeneratedFile[];
+}
+
+export const MessageContent = ({ text, chatId, files }: MessageContentProps) => {
+    const components = useMemo<Components | undefined>(() => {
+        if (!chatId) return undefined;
+        return {
+            a: ({ href, title, children }: ComponentPropsWithoutRef<'a'>) =>
+                <>{renderGeneratedFileLink(chatId, files ?? [], href, children) ?? <a href={href} title={title}>{children}</a>}</>,
+        };
+    }, [chatId, files]);
+
     const thinkingMatch = text.match(/^:::thinking\s+([\s\S]*?)\s+:::\s*([\s\S]*)$/);
     text = text.replace(/^:::web\s+([\s\S]*?)\s+:::\s*([\s\S]*)$/, '$2').replace(/\[citation:\d+\]/g, '');
 
@@ -19,7 +35,7 @@ export const MessageContent = ({ text }: { text: string }) => {
         return (
             <>
                 <ThinkingBlock content={thinkingContent} />
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
                     {mainContent}
                 </ReactMarkdown>
             </>
@@ -27,7 +43,7 @@ export const MessageContent = ({ text }: { text: string }) => {
     }
 
     return (
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
             {text}
         </ReactMarkdown>
     );

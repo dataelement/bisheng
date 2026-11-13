@@ -504,6 +504,13 @@ export async function updateMarkStatusApi(data: { session_id: string, task_id: n
     return await axios.post('/api/v1/mark/mark', data)
 }
 
+/** Fresh link to a file the code interpreter attached to an answer, for an auditor in scope. */
+export async function getAuditChatFileUrlApi(chatId: string, fileId: string): Promise<{ url: string }> {
+    return await axios.get(
+        `/api/v1/session/chat/${encodeURIComponent(chatId)}/files/${encodeURIComponent(fileId)}/url`,
+    )
+}
+
 // 获取下一个标注会话
 export async function getNextMarkChatApi({ action, chat_id, task_id }) {
     return await axios.get('/api/v1/mark/next', {

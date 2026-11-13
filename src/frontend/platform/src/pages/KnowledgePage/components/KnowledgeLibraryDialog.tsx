@@ -1,4 +1,5 @@
 import { Button, Input, Textarea, notification, toast } from "@bisheng/ui";
+import { SpaceSettingsEditor } from "./SpaceSettingsEditor";
 import {
   useQuery,
   useQueryClient,
@@ -295,7 +296,7 @@ function CreateSpaceForm({
       await onLoadEnd();
       if (!alive()) return;
       navigate(
-        importing ? `/filelib/upload/${result.id}` : `/filelib/${result.id}`,
+        `${importing ? `/filelib/upload/${result.id}` : `/filelib/${result.id}`}${scope.view === "admin" ? "?view=admin" : ""}`,
       );
       if (alive()) onOpenChange(false);
     } catch (error) {
@@ -520,15 +521,7 @@ export function KnowledgeSpaceSettingsPanel({
   onSaved,
 }: KnowledgeSpaceSettingsPanelProps) {
   return (
-    <EditSpaceForm
-      key={JSON.stringify([scope, spaceId])}
-      scope={scope}
-      spaceId={spaceId}
-      api={knowledgeSpaceApi}
-      presentation="page"
-      onOpenChange={() => undefined}
-      onLoadEnd={onSaved}
-    />
+    <SpaceSettingsEditor scope={scope} spaceId={spaceId} onSaved={onSaved} />
   );
 }
 

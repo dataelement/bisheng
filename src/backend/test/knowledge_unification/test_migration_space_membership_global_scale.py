@@ -5,11 +5,11 @@ import re
 
 import pytest
 from sqlalchemy.dialects import mysql
-
-from bisheng.knowledge.domain.models.knowledge import Knowledge
 from test.knowledge_unification.test_migration_space_membership_global import Member, member, run
 from test.knowledge_unification.test_migration_space_membership_global import control_native as control_native
 from test.knowledge_unification.test_migration_space_membership_global import native as native
+
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 
 
 @pytest.mark.parametrize("count", [401, 10001])
@@ -29,7 +29,7 @@ async def test_global_space_cost_is_two_indexed_queries_per_member_page(native, 
     members = [(sql, params) for sql, params in native.queries if "FROM space_channel_member" in sql]
     roots = [(sql, params) for sql, params in native.queries if "FROM knowledge" in sql]
     assert len(members) == len(roots) == pages
-    assert len(native.queries) == 4 + 2 * pages
+    assert len(native.queries) == 2 + 2 * pages
     assert all("LIMIT" in sql and params[-2:] == (201, 0) for sql, params in members)
     assert all("LEFT OUTER JOIN tenant" in sql and "space_channel_member" not in sql for sql, _ in roots)
     assert all(1 <= len(params) <= 200 and all(type(value) is int for value in params) for _, params in roots)

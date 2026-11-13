@@ -18,6 +18,7 @@ from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_service,
 )
 from bisheng.knowledge.application.creation_settings import get_space_creation_settings
+from bisheng.knowledge.application.upload_registration import register_owned_upload
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileOrderField, SpaceFileOrderSort
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
     KnowledgeDocumentVersionRepository,
@@ -522,6 +523,8 @@ async def upload_folder(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     """F034 §5.5: register a whole client-side folder (nested) in one batch."""
+    if req.upload_context is not None:
+        return resp_200(await register_owned_upload(svc, space_id, req, folder=True))
     files = await svc.upload_folder_items(
         knowledge_id=space_id,
         items=req.items,
@@ -571,6 +574,8 @@ async def add_file(
     req: FileCreateReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
+    if req.upload_context is not None:
+        return resp_200(await register_owned_upload(svc, space_id, req))
     file_record = await svc.add_file(
         knowledge_id=space_id,
         file_path=req.file_path,

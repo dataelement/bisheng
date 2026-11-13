@@ -1003,6 +1003,13 @@ class SqlPermissionControlState:
             return
         async with get_async_db_session() as session:
             async with session.begin():
+                mode = await self._owner_fence(session, context)
+                if (
+                    mode.operation_id != outcome.operation_id
+                    or mode.version != outcome.target_version
+                    or mode.projection_state != "CURRENT"
+                ):
+                    raise PermissionVersionConflictError(msg="Owner operation was superseded before finalize")
                 for projection_grant in projection_grants:
                     grant_row = await self._grant_row(
                         session,
@@ -1013,9 +1020,17 @@ class SqlPermissionControlState:
                     )
                     if grant_row is None or grant_row.id is None:
                         raise PermissionVersionConflictError(msg=("Owner/copy Grant disappeared before finalize"))
+                    if grant_row.projection_state == "CURRENT":
+                        # The generic durable finalizer already completed this
+                        # Grant. Do not re-activate a later inactive row.
+                        continue
                     await session.execute(
                         update(PermissionGrant)
-                        .where(PermissionGrant.id == grant_row.id)
+                        .where(
+                            PermissionGrant.id == grant_row.id,
+                            PermissionGrant.state == "PENDING",
+                            PermissionGrant.projection_state.in_(("PROJECTING", "FAILED_CLOSED")),
+                        )
                         .values(
                             state="ACTIVE",
                             projection_state="CURRENT",
@@ -1045,35 +1060,21 @@ class SqlPermissionControlState:
         del error
         async with get_async_db_session() as session:
             async with session.begin():
-                if context.target.resource_type in {"tool", "workflow"}:
-                    mode_row = (
-                        (
-                            await session.execute(
-                                select(ResourcePermissionMode).where(
-                                    ResourcePermissionMode.tenant_id == context.target.tenant_id,
-                                    ResourcePermissionMode.resource_type == context.target.resource_type,
-                                    ResourcePermissionMode.resource_id == context.target.resource_id,
-                                )
-                            )
-                        )
-                        .scalars()
-                        .first()
-                    )
-                    operation = (
-                        await session.get(PermissionProjectionOperation, mode_row.operation_id)
-                        if mode_row and mode_row.operation_id
-                        else None
-                    )
-                    if operation is None:
-                        raise PermissionVersionConflictError(msg="Creation projection fence is missing")
-                    if str(operation.status) != "FAILED_CLOSED":
-                        return  # The durable ledger retains the exact uncertainty; do not relabel it terminal.
+                mode_row = await self._owner_fence(session, context)
+                operation = await session.get(PermissionProjectionOperation, mode_row.operation_id)
+                if str(operation.status) != "FAILED_CLOSED" or mode_row.version not in {
+                    operation.expected_version,
+                    operation.target_version,
+                }:
+                    return  # Preserve the durable ledger's exact uncertainty.
                 await session.execute(
                     update(ResourcePermissionMode)
                     .where(
                         ResourcePermissionMode.tenant_id == context.target.tenant_id,
                         ResourcePermissionMode.resource_type == context.target.resource_type,
                         ResourcePermissionMode.resource_id == context.target.resource_id,
+                        ResourcePermissionMode.operation_id == operation.id,
+                        ResourcePermissionMode.version == mode_row.version,
                     )
                     .values(projection_state="FAILED_CLOSED")
                 )
@@ -1083,9 +1084,39 @@ class SqlPermissionControlState:
                         PermissionGrant.tenant_id == context.target.tenant_id,
                         PermissionGrant.resource_type == context.target.resource_type,
                         PermissionGrant.resource_id == context.target.resource_id,
+                        PermissionGrant.projection_state == "PROJECTING",
                     )
                     .values(projection_state="FAILED_CLOSED")
                 )
+
+    @staticmethod
+    async def _owner_fence(session, context):
+        row = (
+            await session.exec(
+                select(ResourcePermissionMode)
+                .where(
+                    ResourcePermissionMode.tenant_id == context.target.tenant_id,
+                    ResourcePermissionMode.resource_type == context.target.resource_type,
+                    ResourcePermissionMode.resource_id == context.target.resource_id,
+                )
+                .with_for_update()
+            )
+        ).first()
+        operation = (
+            await session.get(PermissionProjectionOperation, row.operation_id) if row and row.operation_id else None
+        )
+        if (
+            operation is None
+            or operation.idempotency_key != context.idempotency_key
+            or operation.tenant_id != context.target.tenant_id
+            or operation.scope_key != f"{context.target.resource_type}:{context.target.resource_id}"
+            or operation.expected_version != context.target.resource_version
+            or operation.operation_type != context.operation_type
+            or operation.store_id != context.store_id
+            or operation.model_id != context.model_id
+        ):
+            raise PermissionVersionConflictError(msg="Owner operation no longer owns this scope")
+        return row
 
     async def prepare_grants(
         self,
@@ -1157,6 +1188,23 @@ class SqlPermissionControlState:
     ) -> None:
         async with get_async_db_session() as session:
             async with session.begin():
+                mode = (
+                    await session.exec(
+                        select(ResourcePermissionMode)
+                        .where(
+                            ResourcePermissionMode.tenant_id == context.target.tenant_id,
+                            ResourcePermissionMode.resource_type == context.target.resource_type,
+                            ResourcePermissionMode.resource_id == context.target.resource_id,
+                        )
+                        .with_for_update()
+                    )
+                ).first()
+                if mode is None or (mode.operation_id, mode.version, mode.projection_state) != (
+                    outcome.operation_id,
+                    outcome.target_version,
+                    "CURRENT",
+                ):
+                    raise PermissionVersionConflictError(msg="Grant operation was superseded before finalize")
                 for grant in grants:
                     row = await self._grant_row(
                         session,

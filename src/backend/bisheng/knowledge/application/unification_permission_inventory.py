@@ -183,6 +183,10 @@ class PermissionInventoryVerifier:
             self._global_plan(section, tenant, record)
             return
         if tag == "permission_plan":
+            if (self._baseline_metadata or {}).get(
+                "preparation_policy_version", 1
+            ) == 2 and "restore_missing_markers" not in data:
+                _blocked("missing_business_marker_policy")
             mode_id = data["mode_id"]
             expected = self._summaries.get(mode_id)
             if (
@@ -190,7 +194,7 @@ class PermissionInventoryVerifier:
                 or mode_id in self._header_seen
                 or expected is None
                 or tenant != expected["tenant_id"]
-                or data != expected
+                or {key: value for key, value in data.items() if key != "restore_missing_markers"} != expected
             ):
                 _blocked("permission_summary_changed")
             self._header_seen.add(mode_id)

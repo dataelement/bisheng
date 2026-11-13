@@ -1,5 +1,6 @@
 import {
   Button,
+  Checkbox,
   Pagination,
   Select,
   SearchInput,
@@ -12,6 +13,7 @@ import {
 import { Outlined } from 'bisheng-icons';
 import { copyText } from '@/utils';
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
+import { departmentDisplayName } from "@/components/bs-comp/department/departmentDisplayName";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import {
   Table,
@@ -24,6 +26,7 @@ import {
 import { ColumnResizeHandle } from "@/components/bs-ui/table/useResizableColumns";
 import { cname } from "@/components/bs-ui/utils";
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
+import type { DepartmentMember } from "@/types/api/department";
 import { CreateLocalMemberDialog } from "./CreateLocalMemberDialog";
 import type { useMemberTableController } from "./MemberTable";
 import { OrganizationMemberEditDialog } from "./OrganizationMemberEditDialog";
@@ -56,9 +59,13 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
     userPwdModalRef,
     page,
     total,
+    directTotal,
+    directOnly,
+    onDirectOnlyChange,
     handlePageChange,
     addOpen,
     deptId,
+    departmentId,
     deptName,
     handleAdded,
     editMember,
@@ -68,13 +75,22 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
   } = controller;
   const paginationLocale = usePaginationLocale();
   const selectLabels = useSelectLabels();
+  const isArchivedMember = (member: DepartmentMember) =>
+    isArchived || member.department?.status === "archived";
   return (
     <div className="min-w-0">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-base font-semibold">
-          {deptName}
-          {isArchived && t("bs:department.archivedTag")}
-        </h3>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h3 className="text-base font-semibold">
+            {deptName}
+            {isArchived && t("bs:department.archivedTag")}
+          </h3>
+          <Checkbox
+            checked={directOnly}
+            onCheckedChange={(checked) => onDirectOnlyChange?.(checked === true)}
+            label={t("bs:organization.directMemberCount", { count: directTotal })}
+          />
+        </div>
         {(directAdmins.length > 0 || inheritedAdmins.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <span>{t("bs:department.admins")}:</span>
@@ -105,9 +121,6 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
           aria-label={t('accountIdentity.search')} placeholder={t('accountIdentity.search')}
           clearLabel={t('sharedUi.clear')} onChange={event => setMemberSearch(event.target.value)}
           onSearch={handleMemberSearch} onClear={() => handleMemberSearch('')} />
-        <span className="rounded-md border px-3 py-1.5 text-sm">
-          {t("bs:organization.directMemberCount", { count: total })}
-        </span>
         <Select
           {...selectLabels}
           className="w-[140px]"
@@ -219,17 +232,18 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
               ) : (
                 members.map((m) => (
                   <TableRow
-                    key={m.user_id}
+                    key={`${m.department_id}:${m.user_id}`}
                     data-member-row={m.user_id}
+                    data-member-department={m.department_id ?? departmentId}
                     onClick={event => {
                       const target = event.target;
                       if (target instanceof Element && target.closest('button,a,input,textarea,select,[role="switch"],[role="checkbox"]')) return;
                       if (window.getSelection()?.toString()) return;
-                      if (!isArchived && m.enabled && user?.user_id !== m.user_id && !m.roles.some(role => role.id === 1)) handleEditUser(m);
+                      if (!isArchivedMember(m) && m.enabled && user?.user_id !== m.user_id && !m.roles.some(role => role.id === 1)) handleEditUser(m);
                     }}
                     className={cname(
-                      !isArchived && m.enabled && user?.user_id !== m.user_id && !m.roles.some(role => role.id === 1) ? 'cursor-pointer' : '',
-                      highlightUserId != null && m.user_id === highlightUserId
+                      !isArchivedMember(m) && m.enabled && user?.user_id !== m.user_id && !m.roles.some(role => role.id === 1) ? 'cursor-pointer' : '',
+                      highlightUserId === m.user_id && (m.department_id ?? departmentId) === departmentId
                         ? "bg-primary/10"
                         : ""
                     )}
@@ -266,6 +280,11 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                           ? t("bs:department.primary")
                           : t("bs:department.secondary")}
                       </Tag>
+                      {m.department && (
+                        <span className="mt-1 block truncate text-xs text-muted-foreground" title={m.department.name}>
+                          {departmentDisplayName(m.department, t("bs:department.defaultOrganization"))}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell {...mrc.getTdProps(3)}>
                       {(() => {
@@ -308,7 +327,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                       <Switch
                         checked={m.enabled}
                         disabled={
-                          isArchived ||
+                          isArchivedMember(m) ||
                           (!m.enabled &&
                             !!m.disable_source &&
                             user?.role !== "admin")
@@ -335,7 +354,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                                 variant="link"
                                 size="small"
                                 disabled={
-                                  isArchived ||
+                                  isArchivedMember(m) ||
                                   user.user_id === m.user_id ||
                                   !m.enabled
                                 }
@@ -348,9 +367,9 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                               <Button
                                 variant="link"
                                 size="small"
-                                disabled={isArchived}
+                                disabled={isArchivedMember(m)}
                                 onClick={() =>
-                                  !isArchived &&
+                                  !isArchivedMember(m) &&
                                   userPwdModalRef.current?.open(m.user_id)
                                 }
                               >
@@ -391,7 +410,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
 
       <OrganizationMemberEditDialog
         open={Boolean(editMember)}
-        deptId={deptId}
+        deptId={editMember?.department?.dept_id ?? deptId}
         member={editMember}
         onClose={handleEditClose}
         onSaved={handleEditSaved}

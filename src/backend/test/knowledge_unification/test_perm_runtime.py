@@ -56,6 +56,7 @@ async def test_legacy_use_keeps_tenant_and_narrowed_token_denials(monkeypatch):
 
 
 async def test_business_single_and_batch_adapt_before_target_resolution(monkeypatch):
+    monkeypatch.setattr(business, "_require_creation_ready", AsyncMock())
     actor = PermissionActor(subject_type="service_account", subject_id=42, tenant_id=101)
     registry = SimpleNamespace(resolve=AsyncMock(return_value=target()))
     runtime = SimpleNamespace(

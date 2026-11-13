@@ -79,8 +79,8 @@ it('emits recommended app IDs in the dragged order after details load', async ()
 
 it('preserves split rule regex, position and ID after sorting', async () => {
   const rules = [
-    { id: 'a', regex: '\\n', position: 'after', rule: 'Newline' },
-    { id: 'b', regex: 'HEADER', position: 'before', rule: 'Heading' },
+    { id: 'a', regex: '\\n', position: 'after' as const, rule: 'Newline' },
+    { id: 'b', regex: 'HEADER', position: 'before' as const, rule: 'Heading' },
   ];
   const onChange = vi.fn();
   render(<StrictMode><FileUploadSplitStrategy data={rules} onChange={onChange} /></StrictMode>);
@@ -92,8 +92,8 @@ it('preserves split rule regex, position and ID after sorting', async () => {
 it('does not persist a split rule order when dropped in place', async () => {
   const onChange = vi.fn();
   render(<StrictMode><FileUploadSplitStrategy data={[
-    { id: 'a', regex: '\\n', position: 'after', rule: 'Newline' },
-    { id: 'b', regex: 'HEADER', position: 'before', rule: 'Heading' },
+    { id: 'a', regex: '\\n', position: 'after' as const, rule: 'Newline' },
+    { id: 'b', regex: 'HEADER', position: 'before' as const, rule: 'Heading' },
   ]} onChange={onChange} /></StrictMode>);
   await keyboardDrag(0, false, false);
   expect(onChange).not.toHaveBeenCalled();

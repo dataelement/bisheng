@@ -29,7 +29,7 @@ from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
 from bisheng.dsh.domain.services.pricing import build_snapshot, pricing_hint
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
-from bisheng.dsh.infrastructure.model_errors import model_failure_code
+from bisheng.dsh.infrastructure.model_errors import is_context_length_error, model_failure_code
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.responses_adapter import DshResponsesAdapter
 from bisheng.dsh.infrastructure.telemetry import record_settlement, request_trace
@@ -260,7 +260,7 @@ class DshModelService:
             return error
         if isinstance(error, TimeoutError):
             return DshUpstreamTimeoutError()
-        if getattr(error, "code", None) == "context_length_exceeded":
+        if is_context_length_error(error):
             return DshContextLengthExceededError()
         return DshUpstreamErrorError()
 

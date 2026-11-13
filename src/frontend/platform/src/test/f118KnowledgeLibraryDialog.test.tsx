@@ -302,11 +302,11 @@ it("reads creation defaults and scoped model metadata only while open", async ()
   expect(screen.queryByRole("option", { name: "Chat" })).toBeNull();
 });
 
-it.each([false, true])(
-  "creates an actual SPACE with both rules and follows the original import=%s route",
-  async (importing) => {
+it.each([[false, "ordinary"], [true, "ordinary"], [false, "admin"], [true, "admin"]] as const)(
+  "creates an actual SPACE with both rules and follows the import=%s route in the %s view",
+  async (importing, view) => {
     const f = setup();
-    render(f.draw());
+    render(f.draw({ ...scope, view }));
     await ready();
     fillName();
     fireEvent.change(
@@ -331,7 +331,7 @@ it.each([false, true])(
     );
     await waitFor(() =>
       expect(mocks.navigate).toHaveBeenCalledWith(
-        importing ? "/filelib/upload/8" : "/filelib/8",
+        `${importing ? "/filelib/upload/8" : "/filelib/8"}${view === "admin" ? "?view=admin" : ""}`,
       ),
     );
     expect(f.api.createSpace).toHaveBeenCalledWith(

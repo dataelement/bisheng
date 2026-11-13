@@ -12,7 +12,7 @@ from bisheng.database.models.org_snapshot import AuditDeptScope
 @pytest.mark.parametrize(
     "admin,expected",
     [
-        (True, AuditDeptScope.restricted(admin_paths=["/95/313/"])),
+        (True, AuditDeptScope.restricted(admin_paths=["/95/313/"], unattributed=True)),
         (False, AuditDeptScope.restricted()),
     ],
 )

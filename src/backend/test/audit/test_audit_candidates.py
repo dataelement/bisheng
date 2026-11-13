@@ -135,14 +135,14 @@ class TestTopLevel:
         data = await _departments(_user(admin=True, global_super=True))
         assert [(node["id"], node["tenant_id"]) for node in data["active"]] == [(1, 1), (70, 1), (50, 5)]
 
-    async def test_rbac_super_tenant_admin_hides_unrecorded(self, db, monkeypatch):
+    async def test_rbac_super_tenant_admin_offers_none_but_not_unrecorded(self, db, monkeypatch):
         async def _tenant_admin(user_id, tenant_id):
             return tenant_id == 9
 
         monkeypatch.setattr("bisheng.common.permission_identity.check_tenant_admin", _tenant_admin)
         data = await _departments(_user(admin=True, global_super=True), tenant=9, admin_scope=9)
         assert _ids(data["active"]) == [70]
-        assert (data["show_none"], data["show_unrecorded"]) == (False, False)
+        assert (data["show_none"], data["show_unrecorded"]) == (True, False)
 
     async def test_tenant_admin_sees_root_dept_subtree_without_mount_flag(self, db, monkeypatch):
         async def _tenant_admin(user_id, tenant_id):
@@ -152,7 +152,7 @@ class TestTopLevel:
         data = await _departments(_user(admin=True, global_super=True), tenant=11, admin_scope=11)
         assert _ids(data["active"]) == [80]
         assert data["active"][0]["has_children"] is True
-        assert (data["show_none"], data["show_unrecorded"]) == (False, False)
+        assert (data["show_none"], data["show_unrecorded"]) == (True, False)
         children = await _departments(_user(admin=True, global_super=True), tenant=11, admin_scope=11, parent_id=80)
         assert _ids(children["active"]) == [81]
 
@@ -163,7 +163,7 @@ class TestTopLevel:
         monkeypatch.setattr("bisheng.common.permission_identity.check_tenant_admin", _tenant_admin)
         data = await _departments(_user(), tenant=9)
         assert _ids(data["active"]) == [70]
-        assert (data["show_none"], data["show_unrecorded"]) == (False, False)
+        assert (data["show_none"], data["show_unrecorded"]) == (True, False)
         children = await _departments(_user(), tenant=9, parent_id=70)
         assert _ids(children["active"]) == [71]
 

@@ -1,7 +1,7 @@
 import { KnowledgeDeletionDialog } from "./SpaceDetail/KnowledgeDeletionDialog";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
-import { Button as ProductButton, Tabs } from '@bisheng/ui';
+import { Button as ProductButton, Tabs, TooltipProvider } from '@bisheng/ui';
 import { MODULE_HOME_BODY, MODULE_HOME_COLUMN, MODULE_HOME_FRAME, MODULE_HOME_TOOLBAR, ModuleHomeHeader } from '~/components/ModuleHome';
 import cn from '~/utils/cn';
 import { USE_PRODUCT_COMPONENTS } from './home/vnext/componentMode';
@@ -10,11 +10,12 @@ import { SpaceSortType, type KnowledgeSpace } from '~/api/knowledge';
 import { showApiError } from '~/api/request';
 import { useLocalize, useWorkbenchMenuNames } from '~/hooks';
 import { useKnowledgeSpaceLists } from './hooks/useKnowledgeSpaceLists';
-import { useKnowledgeSpaceActions } from './hooks/useKnowledgeSpacePermissions';
+import { useKnowledgeSpaceActions, type KnowledgeSpaceAction } from './hooks/useKnowledgeSpacePermissions';
 import { useSpaceActions } from './hooks/useSpaceActions';
 import { KnowledgeHomeSort } from './home/vnext/KnowledgeHomeSort';
 import { KnowledgeHomeCard } from './home/vnext/KnowledgeHomeCard';
 import { KnowledgeHomeEmptyState } from './home/vnext/KnowledgeHomeEmptyState';
+import { KNOWLEDGE_HOME_BATCH_SIZE, KnowledgeHomeGrid } from './home/vnext/KnowledgeHomeGrid';
 import { useKnowledgeHomeSort } from './home/vnext/useKnowledgeHomeSort';
 import { groupHomeSpaces, mergePinnedOrder, sortHomeSpaces, type HomeCategory, type HomeSpace } from './home/vnext/homeSpaces';
 import tokens from './home/vnext/tokens.module.css';
@@ -32,15 +33,20 @@ interface KnowledgeHomePageProps {
 
 const categories: HomeCategory[] = ['all', 'department', 'created', 'joined'];
 const categoryIcons = { department: Filled.Departure, created: Filled.Person, joined: Filled.Tag };
+const EMPTY_ACTIONS: KnowledgeSpaceAction[] = [];
 
 export function KnowledgeHomePage({ enabled = true, category: controlledCategory, onCategoryChange, onSpaceSelect, onCreateSpace, onSpaceSettings, onKnowledgeSquare }: KnowledgeHomePageProps) {
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [localCategory, setLocalCategory] = useState<HomeCategory>('all');
   const category = controlledCategory ?? localCategory;
-  const setCategory = (next: HomeCategory) => { setLocalCategory(next); onCategoryChange?.(next); };
+  const setCategory = (next: HomeCategory) => {
+    if (controlledCategory === undefined) setLocalCategory(next);
+    onCategoryChange?.(next);
+  };
   useLayoutEffect(() => {
     // The shared tab strip generates trigger IDs; link the external scroll panel to them.
     const tab = tabsRef.current?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]');
@@ -63,8 +69,14 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
   const stablePinOrder = useMemo(() => mergePinnedOrder(pinOrder, pinnedIds), [pinOrder, pinnedIds]);
   useEffect(() => { setPinOrder((previous) => mergePinnedOrder(previous, pinnedIds)); }, [pinnedIds]);
   const visible = useMemo(() => sortHomeSpaces(groups[category], sort, stablePinOrder), [groups, category, sort, stablePinOrder]);
-  const layoutOrder = visible.map(({ space }) => space.id).join('|');
   const reduceMotion = useReducedMotion();
+  // Layout animations measure each card before and after a reorder. Keep that
+  // work bounded even when switching between a small category and All.
+  const animateLayout = !reduceMotion && groups.all.length <= KNOWLEDGE_HOME_BATCH_SIZE;
+  const layoutOrder = useMemo(
+    () => animateLayout ? visible.map(({ space }) => space.id).join('|') : undefined,
+    [animateLayout, visible],
+  );
   const [movingSpaceId, setMovingSpaceId] = useState<string | null>(null);
   useEffect(() => {
     if (!movingSpaceId) return;
@@ -98,7 +110,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
         // Retain ranks on unpin so a failed optimistic unpin returns to its original place.
         // A new pin intent always leads, including when re-pinning a previously unpinned item.
         if (!space.isPinned) setPinOrder((previous) => [space.id, ...mergePinnedOrder(previous, pinnedIds).filter((id) => id !== space.id)]);
-        setMovingSpaceId(space.id);
+        if (animateLayout) setMovingSpaceId(space.id);
         await actions.handlePinSpace(space.id, !space.isPinned, source);
       }
       else await actions.handleDeleteSpace(space.id);
@@ -106,6 +118,24 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
       pendingRef.current.delete(space.id);
       setPending(new Set(pendingRef.current));
     }
+  };
+
+  const renderCard = (item: HomeSpace, index: number) => {
+    const id = item.space.id;
+    const allowed = permissions.actions[id] ?? EMPTY_ACTIONS;
+    const isPending = pending.has(id);
+    const moving = movingSpaceId === id;
+    return <KnowledgeHomeCard key={id} item={item} moving={moving} layoutOrder={layoutOrder}
+      layoutDelay={animateLayout && !moving ? Math.min(index * .02, .12) : 0}
+      pending={isPending} permissions={allowed} permissionsLoading={permissions.isSpaceActionsPending(id)}
+      onMenuOpen={() => { void permissions.ensureSpaceActions(id); }}
+      onSelect={onSpaceSelect}
+      onEdit={() => {
+        if (!pendingRef.current.has(id) && (allowed.includes('edit') || allowed.includes('manage_permission'))) {
+          onSpaceSettings(item.space);
+        }
+      }}
+      onAction={(action) => { void handleAction(item, action).catch(showApiError); }} />;
   };
 
   return (
@@ -137,7 +167,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
         </div>
         <KnowledgeHomeSort value={sort} onValueChange={setSort} />
       </div>
-      <div className={cn(MODULE_HOME_BODY, 'scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto')}>
+      <div ref={scrollRef} className={cn(MODULE_HOME_BODY, 'scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto')}>
         <div ref={panelRef} role="tabpanel" tabIndex={0}
           aria-busy={loading || refreshing} className={cn(MODULE_HOME_COLUMN, styles.panel, empty && styles.emptyPanel)}>
           {lists.error ? (
@@ -149,21 +179,9 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
             : empty ? <KnowledgeHomeEmptyState category={category}
               onCreate={enabled ? onCreateSpace : undefined}
               onOpenSquare={enabled ? onKnowledgeSquare : undefined} />
-              : <div className={styles.grid}>
-                {visible.map((item, index) => <KnowledgeHomeCard key={item.space.id} item={item}
-                  animateLayout={!reduceMotion} moving={movingSpaceId === item.space.id}
-                  layoutOrder={layoutOrder}
-                  layoutDelay={movingSpaceId === item.space.id ? 0 : Math.min(index * .02, .12)}
-                  pending={pending.has(item.space.id)} permissions={permissions.actions[item.space.id] ?? []}
-                  permissionsLoading={permissions.isSpaceActionsPending(item.space.id)}
-                  onMenuOpen={() => void permissions.ensureSpaceActions(item.space.id)}
-                  onSelect={onSpaceSelect}
-                  onEdit={() => {
-                    const allowed = permissions.actions[item.space.id] ?? [];
-                    if (!pending.has(item.space.id) && (allowed.includes('edit') || allowed.includes('manage_permission'))) onSpaceSettings(item.space);
-                  }}
-                  onAction={(action) => { void handleAction(item, action).catch(showApiError); }} />)}
-              </div>}
+              : groups.all.length > KNOWLEDGE_HOME_BATCH_SIZE
+                ? <KnowledgeHomeGrid key={`${category}:${sort}`} items={visible} renderCard={renderCard} scrollRef={scrollRef} />
+                : <TooltipProvider><div className={styles.grid}>{visible.map(renderCard)}</div></TooltipProvider>}
         </div>
       </div>
       <KnowledgeDeletionDialog operation={actions.deletion} />

@@ -7,6 +7,13 @@ from unittest.mock import AsyncMock
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
+from test.knowledge_unification.permission_publication_native import complete as complete
+from test.knowledge_unification.permission_publication_native import native as native
+from test.knowledge_unification.permission_publication_native import published_input as published_factory
+from test.knowledge_unification.permission_publication_native import raw_resource_native as raw_resource_native
+from test.knowledge_unification.permission_publication_native import resource_native as resource_native
+from test.knowledge_unification.permission_publication_native import transport as transport
+from test.knowledge_unification.test_permission_publication_application import app
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
@@ -21,13 +28,6 @@ from bisheng.resource_reference.application.write_runtime import ReferenceBindin
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
-from test.knowledge_unification.permission_publication_native import complete as complete
-from test.knowledge_unification.permission_publication_native import native as native
-from test.knowledge_unification.permission_publication_native import published_input as published_factory
-from test.knowledge_unification.permission_publication_native import raw_resource_native as raw_resource_native
-from test.knowledge_unification.permission_publication_native import resource_native as resource_native
-from test.knowledge_unification.permission_publication_native import transport as transport
-from test.knowledge_unification.test_permission_publication_application import app
 
 
 @pytest.fixture(autouse=True)
@@ -210,6 +210,8 @@ async def real_channel_create_delete(database):
     from contextlib import asynccontextmanager
     from unittest.mock import MagicMock
 
+    from test.knowledge_unification.test_ch_bindings import config
+
     from bisheng.channel.domain.models import channel_knowledge_sync as sync_module
     from bisheng.channel.domain.repositories.implementations.channel_repository_impl import ChannelRepositoryImpl
     from bisheng.channel.domain.schemas.channel_manager_schema import CreateChannelRequest
@@ -220,7 +222,6 @@ async def real_channel_create_delete(database):
         SpaceChannelMemberRepositoryImpl,
     )
     from bisheng.knowledge.application.reference_target_owner import KnowledgeReferenceTargetOwner
-    from test.knowledge_unification.test_ch_bindings import config
 
     @asynccontextmanager
     async def sessions():
@@ -235,6 +236,7 @@ async def real_channel_create_delete(database):
         authorize_created=AsyncMock(),
         load_permission_record=AsyncMock(return_value=object()),
         project_delete=AsyncMock(),
+        cleanup_deleted=AsyncMock(),
     )
     with pytest.MonkeyPatch.context() as mp:
         for module in (channel_module, sync_module, member_module):
@@ -305,8 +307,9 @@ async def test_fresh_and_existing_freeze_both_check_actual_prepared_tasks(comple
 async def test_existing_frozen_entry_cannot_borrow_an_old_task_free_snapshot(complete, transport, monkeypatch):
     value = await freeze(complete, transport, monkeypatch)
     await insert_prepared(complete)
-    from bisheng.knowledge.application import unification_inventory
     from test.knowledge_unification import test_migration_inventory_application as m2
+
+    from bisheng.knowledge.application import unification_inventory
 
     current = m2.application(unification_inventory, transport)
     async with value.sessions() as session, session.begin():

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { EMPTY_ORG_SELECTION, getAuditAppListApi } from '@/controllers/API/log'
 import AppUseLog from './index'
 
@@ -43,7 +44,8 @@ beforeEach(() => { mock.exportApi.mockResolvedValue({ data: [{ chat_id: 'chat-1'
 it('preserves assistant/daily detail links, applied filters and reset', () => {
     render(<MemoryRouter><AppUseLog /></MemoryRouter>)
     expect(screen.getAllByRole('button')[0]).toHaveAccessibleName('log.org.placeholder')
-    expect(screen.getAllByRole('link', { name: 'lib.details' }).map(link => link.getAttribute('href'))).toEqual(['/log/chatlog/app-1/chat-1/5', '/log/chatlog/daily-1', '/log/chatlog/space-1', '/log/chatlog/task-1'])
+    expect(screen.queryByRole('columnheader', { name: 'operations' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /^lib\.details/ }).map(link => link.getAttribute('href'))).toEqual(['/log/chatlog/app-1/chat-1/5', '/log/chatlog/daily-1', '/log/chatlog/space-1', '/log/chatlog/task-1'])
     expect(screen.getAllByText('log.sensitivePass')[0]).toBeVisible()
     expect(screen.getByText('log.sensitiveViolation')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Pick app' }))
@@ -52,6 +54,34 @@ it('preserves assistant/daily detail links, applied filters and reset', () => {
     fireEvent.click(screen.getByRole('button', { name: 'log.resetButton' }))
     expect(mock.filter).toHaveBeenLastCalledWith(expect.objectContaining({ appName: [], feedback: '' }))
 })
+
+it('opens details from another cell or the keyboard and caches the current page', async () => {
+    const user = userEvent.setup()
+    function Detail() {
+        return <div>{useLocation().pathname}</div>
+    }
+    const renderList = () => render(<MemoryRouter initialEntries={['/log']}><Routes>
+        <Route path="/log" element={<AppUseLog />} />
+        <Route path="/log/chatlog/*" element={<Detail />} />
+    </Routes></MemoryRouter>)
+
+    const view = renderList()
+    try {
+        await user.click(screen.getByText('Root/Sales'))
+        expect(screen.getByText('/log/chatlog/daily-1')).toBeVisible()
+
+        view.unmount()
+        mock.page.mockClear()
+        renderList()
+        expect(mock.page).toHaveBeenCalledWith(2)
+        screen.getByRole('link', { name: /^lib\.details · Assistant/ }).focus()
+        await user.keyboard('{Enter}')
+        expect(screen.getByText('/log/chatlog/app-1/chat-1/5')).toBeVisible()
+    } finally {
+        Reflect.deleteProperty(window, 'LogPage')
+    }
+})
+
 it('keeps the export loading state, default 60-day request and CSV formula protection', async () => {
     let resolveExport!: (value: unknown) => void
     mock.exportApi.mockReturnValueOnce(new Promise(resolve => { resolveExport = resolve }))

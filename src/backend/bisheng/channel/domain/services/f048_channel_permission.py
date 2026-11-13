@@ -145,6 +145,8 @@ class ChannelPermissionPort(Protocol):
 
     async def project_delete(self, **kwargs): ...
 
+    async def cleanup_deleted(self, **kwargs): ...
+
     async def sync_business_source_model(self, **kwargs): ...
 
     async def remove_ordinary_sources(self, **kwargs): ...
@@ -236,6 +238,11 @@ class F048ChannelPermissionAdapter:
         return await self._permission.project_delete(
             actor=actor,
             target=self._target(record, record.resource_id, actor),
+        )
+
+    async def cleanup_deleted(self, *, record, actor):
+        return await self._permission.cleanup_deleted(
+            actor=actor, target=self._target(record, record.resource_id, actor)
         )
 
     async def sync_membership(

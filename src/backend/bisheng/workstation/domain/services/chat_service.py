@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 import threading
 import time
 from datetime import datetime
@@ -80,7 +81,7 @@ from bisheng.common.utils.message_content import extract_message_reasoning, extr
 from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
-from bisheng.core.storage.chat_attachment import promote_chat_attachments
+from bisheng.core.storage.chat_attachment import promote_chat_attachments, promote_chat_attachments_sync
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
@@ -464,6 +465,14 @@ def _stop_code_executors(tools: list[BaseTool]) -> None:
             threading.Thread(target=_close_quietly, args=(executor,), name="code-executor-stop", daemon=True).start()
 
 
+def _release_code_sandboxes(tools: list[BaseTool]) -> None:
+    """Close the sandboxes a turn kept alive (E2B ``keep_sandbox``) without blocking the loop."""
+    for tool in tools:
+        executor = _code_executor_of(tool)
+        if getattr(executor, "keep_sandbox", False) and getattr(executor, "sandbox", None) is not None:
+            threading.Thread(target=_close_quietly, args=(executor,), name="code-sandbox-release", daemon=True).start()
+
+
 def _attach_kb_image_stage(tool: BaseTool, stage: KbImageStage) -> None:
     """Give a code-interpreter tool access to this request's retrieved knowledge images."""
     inner = getattr(tool, "tool_instance", tool)
@@ -479,6 +488,92 @@ def _attach_kb_image_stage(tool: BaseTool, stage: KbImageStage) -> None:
     inner.description = description
     if inner is not tool:
         tool.description = description
+
+
+GENERATED_FILES_LIMIT = 50
+GENERATED_FILE_SOURCE = "code_interpreter"
+_DELIVERABLE_HINT = (
+    "Files you save under output/ are attached to your reply automatically and shown to the user as "
+    "download cards. Do not write download links, URLs or output/ paths in your reply; mention a file "
+    "by its file name only."
+)
+
+
+def _code_executor_of(tool: BaseTool):
+    return getattr(getattr(tool, "tool_instance", tool), "executor", None)
+
+
+def _enable_deliverable_collection(tool: BaseTool) -> None:
+    """Have a code-interpreter tool record its output/ files so the answer can carry them."""
+    inner = getattr(tool, "tool_instance", tool)
+    executor = getattr(inner, "executor", None)
+    if executor is None or not hasattr(executor, "collect_deliverables"):
+        return
+    executor.collect_deliverables = True
+    if hasattr(executor, "keep_sandbox"):
+        # One E2B sandbox per turn, so a later call can read what an earlier one wrote;
+        # _release_code_sandboxes closes it when the turn ends.
+        executor.keep_sandbox = True
+    description = f"{inner.description}\n\n{_DELIVERABLE_HINT}"
+    inner.description = description
+    if inner is not tool:
+        tool.description = description
+
+
+def _collect_generated_files(tools: list[BaseTool]) -> list[dict]:
+    """Attachment items for the files this turn's code runs left under output/.
+
+    A path written twice keeps its last version; only the last
+    GENERATED_FILES_LIMIT files are kept.
+    """
+    latest: dict[str, dict] = {}
+    for tool in tools or []:
+        entries = getattr(_code_executor_of(tool), "published_deliverables", None)
+        if not isinstance(entries, list):
+            continue
+        for entry in list(entries):
+            latest.pop(entry["path"], None)
+            latest[entry["path"]] = entry
+    return [
+        {
+            "file_id": uuid4().hex,
+            "file_name": entry["name"],
+            "path": entry["path"],
+            "type": mimetypes.guess_type(entry["name"])[0] or "",
+            "size": entry["size"],
+            "source": GENERATED_FILE_SOURCE,
+            "filepath": entry["url"],
+        }
+        for entry in list(latest.values())[-GENERATED_FILES_LIMIT:]
+    ]
+
+
+async def _promote_generated_files(
+    tools: list[BaseTool], chat_id: str, user_id: int, storage_partition: str | None
+) -> list[dict]:
+    files = _collect_generated_files(tools)
+    if files:
+        await promote_chat_attachments(files, user_id, storage_partition=storage_partition)
+        _log_generated_files(chat_id, files)
+    return files
+
+
+def _promote_generated_files_sync(tools: list[BaseTool], chat_id: str, storage_partition: str) -> list[dict]:
+    """Twin for the stream teardown path, where an await would be cancelled."""
+    files = _collect_generated_files(tools)
+    if files:
+        promote_chat_attachments_sync(files, storage_partition)
+        _log_generated_files(chat_id, files)
+    return files
+
+
+def _log_generated_files(chat_id: str, files: list[dict]) -> None:
+    logger.info(
+        "daily chat generated files chat_id={} count={} promoted={}",
+        chat_id,
+        len(files),
+        sum(1 for f in files if f.get("object_name")),
+    )
 
 
 def _wrap_daily_chat_citation_tool(
@@ -1342,6 +1437,8 @@ async def _prepare_tools(
         if t is not None:
             if kb_image_stage is not None:
                 _attach_kb_image_stage(t, kb_image_stage)
+            if tool_key == CODE_INTERPRETER_TOOL_KEY:
+                _enable_deliverable_collection(t)
             tools.append(
                 _wrap_daily_chat_citation_tool(
                     t,
@@ -1797,6 +1894,9 @@ async def _agent_stream_chat_completion(
         )
         return _respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
 
+    # The tools of this turn, for event_stream's teardown to release their sandboxes.
+    turn_tools: list[BaseTool] = []
+
     async def _agent_event_stream_impl():
         # Single ordered event log — one entry per thinking segment or tool
         # call, in arrival order. The frontend renders this array directly;
@@ -1879,6 +1979,11 @@ async def _agent_stream_chat_completion(
         # True once the answer row has been written, so the interrupt path can't
         # double-insert a turn the normal path already saved.
         persisted = False
+        # Read by the teardown path too, which can run before the tools are built.
+        langchain_tools: list[BaseTool] = []
+        storage_partition = (
+            session_subject.storage_partition if session_subject is not None else str(login_user.user_id)
+        )
         scanner = None
         if SensitiveWordPolicyService.is_workbench_content_safety_active(tenant_id):
             from bisheng.sensitive_word.domain.services.stream_scanner import StreamContentSafetyScanner
@@ -1925,8 +2030,9 @@ async def _agent_stream_chat_completion(
                 events.append({"type": "text", "content": text})
             return _sse_resp("agent_answer", "stream", {"msg": text}, conversation_id)
 
-        def build_answer_row(db_content: dict) -> ChatMessage:
+        def build_answer_row(db_content: dict, files: list[dict] | None = None) -> ChatMessage:
             return ChatMessage(
+                files=json.dumps(files, ensure_ascii=False) if files else None,
                 user_id=conversation.user_id,
                 chat_id=conversation_id,
                 flow_id="",
@@ -2006,7 +2112,8 @@ async def _agent_stream_chat_completion(
                     stats=stream_converter.stats,
                     cited=citation_items,
                 )
-                resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}))
+                files = _promote_generated_files_sync(langchain_tools, conversation_id, storage_partition)
+                resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}, files))
                 save_message_citations_sync(
                     message_id=resp.id,
                     items=citation_items,
@@ -2032,7 +2139,6 @@ async def _agent_stream_chat_completion(
             is_bot=False,
         )
 
-        langchain_tools: list[BaseTool] = []
         try:
             # ---- Step 1: resolve user-selected KBs ----
             knowledge_bases_info = await _resolve_user_kb_selection(data)
@@ -2058,6 +2164,7 @@ async def _agent_stream_chat_completion(
                 citation_scope=citation_scope,
                 kb_image_stage=kb_image_stage,
             )
+            turn_tools[:] = langchain_tools
 
             # Surface init failures as synthetic tool_call events so the user
             # sees *something* (e.g. "联网搜索 失败: 未配置服务商") rather than
@@ -2600,9 +2707,16 @@ async def _agent_stream_chat_completion(
         )
         db_content: dict = {"msg": final_msg, "events": events}
 
+        # Before `persisted`: a stop during the copy must still leave the teardown path to save the turn.
+        generated_files = await _promote_generated_files(
+            langchain_tools,
+            conversation_id,
+            login_user.user_id,
+            session_subject.storage_partition if session_subject is not None else None,
+        )
         persisted = True
         try:
-            resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))
+            resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content, generated_files))
             await save_message_citations(
                 message_id=resp_msg.id,
                 items=citation_items,
@@ -2625,7 +2739,7 @@ async def _agent_stream_chat_completion(
         yield _sse_resp(
             "agent_answer",
             "end",
-            db_content,
+            {**db_content, "files": generated_files},
             conversation_id,
             message_id=resp_msg.id,
             citations=citation_items,
@@ -2686,6 +2800,7 @@ async def _agent_stream_chat_completion(
                 yield chunk
         finally:
             await impl.aclose()
+            _release_code_sandboxes(turn_tools)
             if execution_task is not None or execution_lease is not None:
                 await DepartmentFlowService.stop_renewal(execution_task, execution_lease)
 

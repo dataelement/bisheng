@@ -15,14 +15,12 @@ vi.mock("react-i18next", () => ({
     i18n: { resolvedLanguage: "en" },
   }),
 }));
-vi.mock("@/pages/KnowledgePage/components/FileUploadSplitStrategy", () => ({
-  default: () => null,
-}));
 vi.mock("@/pages/KnowledgePage/components/KnowledgeTooltip", () => ({
   KnowledgeHint: () => null,
   KnowledgeTooltip: ({ children }: { children: React.ReactNode }) => children,
 }));
-afterEach(cleanup);
+import { installDragDimensions, keyboardDrag } from "./keyboardDrag";
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const defaults: ProcessingDefaults = {
   schema_version: 1,
   document: {
@@ -188,12 +186,7 @@ it("requires unadded input to be added or cleared and preserves rule ordering an
     "",
     " (?<=prefix) ",
   ]);
-  fireEvent.click(screen.getAllByRole("button", { name: "f118.move_down" })[0]);
-  expect(draft().document.separator.slice(0, 2)).toEqual(["\n", "\\n"]);
-  expect(draft().document.separator_rule.slice(0, 2)).toEqual([
-    "after",
-    "before",
-  ]);
+
   const result = validateProcessingDefaultsDraft(draft());
   expect(result.ok).toBe(true);
   if (result.ok) {
@@ -205,4 +198,15 @@ it("requires unadded input to be added or cleared and preserves rule ordering an
     expect(result.value.document.separator[2]).toBe("");
     expect(JSON.stringify(result.value)).not.toContain("pendingPattern");
   }
+});
+
+
+it("uses the legacy drag interaction while preserving literal tokens, positions and inactive settings", async () => {
+  installDragDimensions();
+  render(<Harness />);
+  await keyboardDrag();
+  expect(draft().document.separator).toEqual(["\n", "\\n", ""]);
+  expect(draft().document.separator_rule).toEqual(["after", "before", "after"]);
+  expect(draft().document.hierarchy_level).toBe(6);
+  expect(draft().table).toEqual(defaults.table);
 });

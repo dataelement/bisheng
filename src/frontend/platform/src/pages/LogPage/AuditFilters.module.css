@@ -1,0 +1,57 @@
+.filterContainer {
+  container: audit-filters / inline-size;
+}
+
+.filterGrid {
+  --filter-columns: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--filter-columns), minmax(0, 1fr));
+  gap: 12px;
+}
+
+.filterContainer .filterGrid > * {
+  min-width: 0;
+  width: 100%;
+}
+
+.filterActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  align-self: start;
+  grid-column: -2 / -1;
+}
+
+@container audit-filters (min-width: 336px) {
+  .filterGrid {
+    --filter-columns: 2;
+  }
+
+  .dateRange {
+    grid-column: span 2;
+  }
+}
+
+@container audit-filters (min-width: 512px) {
+  .filterGrid {
+    --filter-columns: 3;
+  }
+}
+
+@container audit-filters (min-width: 688px) {
+  .filterGrid {
+    --filter-columns: 4;
+  }
+}
+
+@container audit-filters (min-width: 864px) {
+  .filterGrid {
+    --filter-columns: 5;
+  }
+
+  /* Keep the buttons on the second row when a view has four filters or fewer. */
+  .filterActions:nth-child(-n + 5) {
+    grid-row: 2;
+  }
+}

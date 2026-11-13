@@ -104,7 +104,7 @@ function props() {
 }
 beforeEach(() => { mockSetSkills.mockClear(); mockAvailableSkills = mockSkills; mockUseRealUploader = false; });
 
-test('new chat offers setup, established chat hides setup while preserving context', () => {
+test('established chat keeps the setup entries and the selected context', () => {
   const input = props();
   const view = render(<AiChatInput {...input} />);
   for (const label of ['skills', 'tools', 'research', 'spaces']) {
@@ -113,9 +113,8 @@ test('new chat offers setup, established chat hides setup while preserving conte
   expect(screen.getByText('Reference')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'tools' }).closest('.dsh-chat-composer')).toBeTruthy();
   view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
-  for (const label of ['tools']) {
-    expect(screen.queryByRole('button', { name: label })).toBeNull();
-  }
+  // Tools travel with each request, so a follow-up turn can still add one.
+  expect(screen.getByRole('button', { name: 'tools' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'research' })).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', { name: 'research' }));
   expect(input.onToggleTaskMode).toHaveBeenCalledTimes(1);

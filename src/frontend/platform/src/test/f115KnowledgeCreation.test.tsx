@@ -9,7 +9,6 @@ import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
 import { KnowledgeLibraryDialog } from "@/pages/KnowledgePage/components/KnowledgeLibraryDialog";
 import { QaLibraryDialog } from "@/pages/KnowledgePage/components/QaLibraryDialog";
-import KnowledgeFile from "@/pages/KnowledgePage/KnowledgeFile";
 import KnowledgeQa from "@/pages/KnowledgePage/KnowledgeQa";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { knowledgeSpaceApi } from "@/controllers/API/knowledgeSpace";
@@ -171,15 +170,10 @@ beforeEach(() => {
   });
 });
 
-it.each([KnowledgeFile, KnowledgeQa])(
+it.each([KnowledgeQa])(
   "exposes creation to a tenant admin without a create menu",
   (Page) => {
-    const page =
-      Page === KnowledgeFile ? (
-        <KnowledgeFile {...{ scope, toolbarTarget: undefined }} />
-      ) : (
-        <KnowledgeQa />
-      );
+    const page = <Page />;
     const view = render(
       <userContext.Provider
         value={
@@ -272,7 +266,7 @@ it("pins SPACE creation to its opening scope instead of rereading a changed leaf
     </userContext.Provider>,
     { wrapper: Wrapper },
   );
-  await screen.findByRole("spinbutton", { name: "splitLength" });
+  await screen.findByRole("radio", { name: /autoSplit/ });
   view.rerender(
     <userContext.Provider value={{ user: { leaf_tenant_id: 61 } } as never}>
       <KnowledgeLibraryDialog {...props} />

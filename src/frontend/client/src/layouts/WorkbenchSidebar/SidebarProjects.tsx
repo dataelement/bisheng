@@ -12,7 +12,7 @@ import { ProjectConversations } from './ProjectConversations';
 import { ProjectSyncStatus } from './ProjectSyncStatus';
 import { useSidebarProjects } from './useSidebarProjects';
 
-const ROW = 'flex w-full items-center rounded-lg py-[5px] pr-2 text-left text-body text-text-1 transition-colors coarse-pointer:min-h-11 coarse-pointer:py-0';
+const ROW = 'flex w-full items-center rounded-lg py-[5px] pr-2 text-left text-body text-text-1 transition-colors coarse-pointer:min-h-8 coarse-pointer:py-0';
 const PROJECT_ACTION_BUTTON = cn(
   ICON_BUTTON,
   'opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100 group-has-[[data-menu-open]]/project:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
@@ -63,7 +63,7 @@ export function SidebarProjects({ openIds, onOpenIdsChange, onNavigate, onStartC
     <section className="flex w-full shrink-0 flex-col gap-1 pb-4">
       <ProjectSyncStatus />
       {actionFailed && <p role="alert" className="px-2 text-caption text-danger">{localize('project_sync.save_failed')}</p>}
-      <div className="flex w-full shrink-0 items-center justify-between px-2 py-[5px]">
+      <div className="flex w-full shrink-0 items-center justify-between px-2 py-[5px] coarse-pointer:py-[3px]">
         <span className="truncate text-caption text-text-3">{localize('com_workbench_sidebar.projects')}</span>
         <Tooltip content={localize('com_workbench_sidebar.project_new')}>
           <button
@@ -97,7 +97,7 @@ export function SidebarProjects({ openIds, onOpenIdsChange, onNavigate, onStartC
                 type="button"
                 aria-expanded={open}
                 onClick={() => handleToggle(project.id)}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left coarse-pointer:min-h-11"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left coarse-pointer:min-h-8"
               >
                 {open ? (
                   <Outlined.FolderOpen className="size-4 shrink-0" />

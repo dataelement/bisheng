@@ -8,13 +8,18 @@ interface IdentityRuleHintProps {
     expanded: boolean;
     controls: string;
     onToggle: () => void;
+    label?: string;
+    content?: string;
+    disabled?: boolean;
 }
 
-export function IdentityRuleHint({ field, expanded, controls, onToggle }: IdentityRuleHintProps) {
+export function IdentityRuleHint({ field, expanded, controls, onToggle, label, content, disabled }: IdentityRuleHintProps) {
     const { t } = useTranslation();
-    return <Tooltip content={t(`accountIdentity.${field}Rules`)}>
+    return <Tooltip content={content ?? t(`accountIdentity.${field}Rules`)}>
+        {/* Offset the square button's extra inset so its icon aligns with the password toggle. */}
         <Button type="button" variant="text" color="default" size="small" iconOnly
-            aria-label={t(`accountIdentity.${field}RulesLabel`)}
+            className="-mr-[4px] text-text-3 hover:text-text-2"
+            aria-label={label ?? t(`accountIdentity.${field}RulesLabel`)} disabled={disabled}
             aria-expanded={expanded} aria-controls={controls} onClick={onToggle}>
             <Outlined.Question aria-hidden />
         </Button>

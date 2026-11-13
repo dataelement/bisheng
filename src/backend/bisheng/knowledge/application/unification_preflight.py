@@ -1,7 +1,6 @@
 """Deterministic M2 checks over acquired facts; no binding/ready authority."""
 
 import re
-from dataclasses import asdict
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id
@@ -12,7 +11,7 @@ from bisheng.knowledge.application.unification_permission_namespace import (
     namespace_plan_records,
 )
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
-from bisheng.knowledge.application.unification_structural_retention import creator_retention, stranded_retention
+from bisheng.knowledge.application.unification_structural_retention import creator_retention
 from bisheng.knowledge.domain.repositories.unification_control_repository import (
     CreatorFact,
     UnificationControlRepository,
@@ -427,19 +426,8 @@ class UnificationPreflight:
             path = _path(item["file_level_path"])
             for index, ident in enumerate(path):
                 parent = facts[ident]
-                if not parent.exists and len(path) == 1:
-                    permissions = await self.permissions.acount_file_authorization_rows(session, file_ids=(item["id"],))
-                    yield (
-                        "control",
-                        stranded_retention(
-                            resource=spaces[item["knowledge_id"]],
-                            file=item,
-                            ancestor=asdict(parent),
-                            sql_permission_count=permissions[item["id"]],
-                            fga_tuple_count=0,
-                        ),
-                    )
-                    continue
+                if not parent.exists:
+                    _blocked("orphan_file_requires_history_preparation")
                 if (
                     not parent.exists
                     or parent.tenant_id != tenant

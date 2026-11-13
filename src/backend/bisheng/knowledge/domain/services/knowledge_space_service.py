@@ -106,6 +106,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     InitialPermissionApplyResult,
     InitialPermissionsRequest,
+    KnowledgeSpaceAdminListItemResp,
     KnowledgeSpaceCreateResp,
     KnowledgeSpaceFileResponse,
     KnowledgeSpaceInfoResp,
@@ -117,6 +118,7 @@ from bisheng.knowledge.domain.schemas.processing_settings import (
     ProcessingDefaults,
     ProcessingOverrides,
 )
+from bisheng.knowledge.domain.schemas.upload_preview import PreparedUpload
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
     KnowledgeAuditTelemetryService,
 )
@@ -1075,11 +1077,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         del lineage
         return set()
 
-    async def require_upload_container(self, space_id: int, parent_id: int | None = None) -> None:
+    async def require_upload_container(self, space_id: int, parent_id: int | None = None) -> Knowledge:
         """Read upload rules with the same target action as the actual upload."""
         await self._require_action("folder" if parent_id else "knowledge_space", parent_id or space_id, "upload_file")
         space, _ = await self._load_space_listing_scope(space_id, parent_id)
         self._ensure_space_async_task_tenant_consistency(space, "read_upload_settings")
+        return space
 
     async def can_write_space_container(self, space_id: int, parent_id: int | None = None) -> bool:
         """F030: best-effort boolean — can the acting user upload into this container?
@@ -2091,7 +2094,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def list_admin_spaces(
         self, *, keyword: str | None = None, page: int = 1, page_size: int = 20, has_abnormal: bool | None = None
-    ) -> "PageData[KnowledgeSpaceListItemResp]":
+    ) -> "PageData[KnowledgeSpaceAdminListItemResp]":
         """List one trusted management tenant without ordinary visibility filters."""
         from bisheng.common.schemas.api import PageData
 
@@ -2115,10 +2118,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if any(row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value for row in rows):
             raise SpaceNotFoundError()
         abnormal = await self.space_listing_repository.aexists_abnormal_files(space_ids=[row.id for row in rows])
-        return PageData[KnowledgeSpaceListItemResp](
+        bindings = await DepartmentKnowledgeSpaceDao.aget_by_space_ids([row.id for row in rows]) if rows else []
+        department_ids = {binding.space_id for binding in bindings}
+        return PageData[KnowledgeSpaceAdminListItemResp](
             data=[
-                KnowledgeSpaceListItemResp.model_validate(row).model_copy(
-                    update={"has_abnormal_files": row.id in abnormal}
+                KnowledgeSpaceAdminListItemResp.model_validate(row).model_copy(
+                    update={
+                        "has_abnormal_files": row.id in abnormal,
+                        "space_kind": "department" if row.id in department_ids else "normal",
+                    }
                 )
                 for row in rows
             ],
@@ -4032,6 +4040,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         _legacy_request: FileProcessBase | None = None,
         _application=None,
         _deferred: _UploadDispatchBatch | None = None,
+        _upload_entries: dict[str, PreparedUpload] | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         if (_legacy_inputs is None) != (_legacy_request is None):
             raise ValueError("Legacy inputs and request must be paired")
@@ -4084,6 +4093,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 legacy_request=_legacy_request,
                 application=_application,
                 deferred=_deferred,
+                **({"_upload_entries": _upload_entries} if _upload_entries is not None else {}),
             )
 
     @contextmanager
@@ -4125,6 +4135,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         legacy_request: FileProcessBase | None = None,
         application=None,
         deferred: _UploadDispatchBatch | None = None,
+        _upload_entries: dict[str, PreparedUpload] | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         knowledge_id = db_knowledge.id
         file_level_path = ""
@@ -4191,6 +4202,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         try:
             for index, one in enumerate(file_path):
+                selected_upload = _upload_entries.get(one) if _upload_entries is not None else None
+                if _upload_entries is not None and not isinstance(selected_upload, PreparedUpload):
+                    raise ValueError("Missing verified upload preparation")
+                if selected_upload is not None:
+                    explicit = selected_upload.overrides.model_dump(mode="json", exclude_none=True)
+                    file_split_rule = FileProcessBase(
+                        knowledge_id=knowledge_id,
+                        **explicit.get("document", {}),
+                        **({"excel_rule": explicit["table"]} if explicit.get("table") else {}),
+                    )
                 if self._upload_execution_guard is not None:
                     await self._upload_execution_guard()
                 prepared = KnowledgeService.prepare_one_file(
@@ -4239,7 +4260,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         one,
                         json.loads(db_file.split_rule),
                     )
-                    preview_cache_keys.append(cache_key)
+                    preview_cache_keys.append(selected_upload.cache_key if selected_upload is not None else cache_key)
                     process_files.append(db_file)
                     current_user_total += db_file.file_size
                     current_tenant_total_bytes += db_file.file_size
@@ -4251,6 +4272,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     failed_file.file_level_path = db_file.file_level_path
                     failed_files.append(
                         {**failed_file.model_dump(), "file_path": one} if legacy_inputs is not None else failed_file
+                    )
+                if selected_upload is not None:
+                    selected_upload.rows.append(
+                        KnowledgeSpaceFileResponse(**db_file.model_dump()).model_dump(mode="json")
                     )
         except BaseException:
             if deferred is None:
@@ -4310,6 +4335,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_id: int | None = None,
         *,
         processing_overrides: ProcessingOverrides | None = None,
+        _upload_entries: dict[str, PreparedUpload] | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         """F034 §5.5 folder upload: rebuild the client-side directory tree, then
         register every file through the regular add_file pipeline.
@@ -4340,7 +4366,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         with self._upload_execution_scope(db_knowledge):
             return await self._upload_folder_items_in_execution_scope(
-                db_knowledge, items, parent_id, processing_overrides=processing_overrides
+                db_knowledge, items, parent_id, processing_overrides=processing_overrides,
+                **({"_upload_entries": _upload_entries} if _upload_entries is not None else {}),
             )
 
     async def _upload_folder_items_in_execution_scope(
@@ -4350,6 +4377,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_id: int | None,
         *,
         processing_overrides: ProcessingOverrides | None = None,
+        _upload_entries: dict[str, PreparedUpload] | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         knowledge_id = db_knowledge.id
         base_path = ""
@@ -4442,6 +4470,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         processing_overrides=processing_overrides,
                         _application=application,
                         _deferred=batch,
+                        **({"_upload_entries": _upload_entries} if _upload_entries is not None else {}),
                     )
                 )
         except BaseException:

@@ -41,6 +41,9 @@ interface MemberTableProps {
   onChanged: () => void;
   membersRefreshSignal?: number;
   location?: MemberLocationRequest;
+  directOnly?: boolean;
+  includeArchived?: boolean;
+  onDirectOnlyChange?: (checked: boolean) => void;
   isPrimaryFilter: string;
   onFilterChange: (value: string) => void;
   toolbarActions?: ReactNode;
@@ -54,6 +57,9 @@ export function useMemberTableController({
   onChanged,
   membersRefreshSignal = 0,
   location,
+  directOnly = true,
+  includeArchived = false,
+  onDirectOnlyChange,
   isPrimaryFilter,
   onFilterChange,
   toolbarActions,
@@ -65,6 +71,7 @@ export function useMemberTableController({
   } | null>(null);
   const [members, setMembers] = useState<DepartmentMember[]>([]);
   const [total, setTotal] = useState(0);
+  const [directTotal, setDirectTotal] = useState(0);
   const [page, setPage] = useState(1);
   const pageRef = useRef(1);
   const requestRef = useRef<object | null>(null);
@@ -83,6 +90,7 @@ export function useMemberTableController({
     () => buildMemberDisplayNameMap(members),
     [members]
   );
+  const showArchivedDescendants = !directOnly && includeArchived;
 
   const loadMembers = useCallback(
     async (requestedPage = pageRef.current) => {
@@ -96,15 +104,20 @@ export function useMemberTableController({
           ...(memberKeywordRef.current ? { keyword: memberKeywordRef.current } : {}),
           is_primary:
             isPrimaryFilter === "all" ? undefined : Number(isPrimaryFilter),
+          ...(!directOnly && {
+            include_descendants: true,
+            include_archived: showArchivedDescendants,
+          }),
         });
         if (requestId !== requestRef.current) return;
         setMembers(result.data);
         setTotal(result.total);
+        setDirectTotal(result.direct_total ?? result.total);
       } finally {
         if (requestId === requestRef.current) setLoading(false);
       }
     },
-    [deptId, isPrimaryFilter]
+    [deptId, isPrimaryFilter, directOnly, showArchivedDescendants]
   );
 
   useEffect(() => {
@@ -184,12 +197,18 @@ export function useMemberTableController({
     if (
       loading ||
       highlightUserId == null ||
-      !members.some((member) => member.user_id === highlightUserId)
+      !members.some(
+        (member) =>
+          member.user_id === highlightUserId &&
+          (member.department_id ?? dept.id) === dept.id
+      )
     )
       return;
     const frame = window.requestAnimationFrame(() => {
       document
-        .querySelector('[data-member-row="' + highlightUserId + '"]')
+        .querySelector(
+          `[data-member-row="${highlightUserId}"][data-member-department="${dept.id}"]`
+        )
         ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     });
     const timer = window.setTimeout(() => setHighlightUserId(null), 5000);
@@ -197,7 +216,7 @@ export function useMemberTableController({
       window.cancelAnimationFrame(frame);
       window.clearTimeout(timer);
     };
-  }, [members, loading, highlightUserId]);
+  }, [dept.id, members, loading, highlightUserId]);
 
   const handlePageChange = useCallback(
     (nextPage: number) => {
@@ -211,7 +230,7 @@ export function useMemberTableController({
 
   const handleToggleEnabled = useCallback(
     (member: DepartmentMember, enabled: boolean) => {
-      if (isArchived) return;
+      if (isArchived || member.department?.status === "archived") return;
       setMembers((list) =>
         list.map((row) =>
           row.user_id === member.user_id ? { ...row, enabled } : row
@@ -250,7 +269,7 @@ export function useMemberTableController({
     onChanged();
   };
   const handleEditUser = (member: DepartmentMember) => {
-    if (!isArchived) setEditMember(member);
+    if (!isArchived && member.department?.status !== "archived") setEditMember(member);
   };
   const handleEditClose = () => setEditMember(null);
   const handleEditSaved = () => {
@@ -298,9 +317,13 @@ export function useMemberTableController({
     userPwdModalRef,
     page,
     total,
+    directTotal,
+    directOnly,
+    onDirectOnlyChange,
     handlePageChange,
     addOpen,
     deptId,
+    departmentId: dept.id,
     deptName,
     handleAdded,
     editMember,

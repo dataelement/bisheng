@@ -17,6 +17,7 @@ import { cn } from "~/utils";
 import { NotificationSeverity } from "~/common";
 
 function ConvoOptions({
+  compact = false,
   conversationId,
   title,
   retainView,
@@ -25,6 +26,7 @@ function ConvoOptions({
   setIsPopoverActive,
   onMenuExit,
 }: {
+  compact?: boolean;
   conversationId: string | null;
   title: string | null;
   retainView: () => void;
@@ -142,6 +144,7 @@ function ConvoOptions({
             aria-label={localize("com_nav_convo_menu_options")}
             className={cn(
               SIDEBAR_ICON_BUTTON_CLASS_NAME,
+              !compact && "coarse-pointer:size-11",
               "opacity-0 focus-visible:opacity-100 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100",
             )}
           >

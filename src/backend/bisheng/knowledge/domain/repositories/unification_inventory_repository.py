@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, fields
 from datetime import datetime
 from typing import Generic, TypeVar
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.channel.domain.models.channel import Channel
@@ -232,6 +232,111 @@ def _row(row_type, row):
 
 
 class UnificationInventoryRepository:
+    async def ainspect_permission_resource_liveness(self, session, *, resources, operations=None):
+        """Freeze business liveness; CURRENT mode alone is not existence proof."""
+        _scope(session)
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+        from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
+        from bisheng.telemetry_search.domain.models.dashboard import Dashboard
+        from bisheng.tool.domain.models.gpts_tools import GptsToolsType
+
+        owners = {
+            "knowledge_library": (Knowledge, int),
+            "knowledge_space": (Knowledge, int),
+            "knowledge_file": (KnowledgeFile, int),
+            "folder": (KnowledgeFile, int),
+            "workflow": (Flow, str),
+            "assistant": (Assistant, str),
+            "app": (App, str),
+            "channel": (Channel, str),
+            "tool": (GptsToolsType, int),
+            "dashboard": (Dashboard, int),
+            "linsight_skill": (LinsightSkill, int),
+            "llm_model": (LLMModel, int),
+            "llm_server": (LLMServer, int),
+        }
+        if type(resources) is not tuple or len(resources) > 200:
+            _blocked("business_liveness_batch_invalid")
+        result = dict.fromkeys(resources, False)
+        for kind in dict.fromkeys(kind for kind, _ in resources):
+            owner = owners.get(kind)
+            if owner is None:
+                continue
+            model, parser = owner
+            identities = {}
+            for requested_kind, ident in resources:
+                if requested_kind != kind:
+                    continue
+                try:
+                    identities[parser(ident)] = ident
+                except (ValueError, TypeError):
+                    continue
+            if not identities:
+                continue
+            columns = [
+                model.__table__.c[name]
+                for name in ("id", "is_delete", "deleted", "state", "flow_type", "type")
+                if name in model.__table__.c
+            ]
+            rows = await self._read(
+                session, select(*columns).where(model.id.in_(identities), model.tenant_id == _scope(session))
+            )
+            for row in rows:
+                result[kind, identities[row["id"]]] = (
+                    not row.get("is_delete")
+                    and not row.get("deleted")
+                    and not (kind == "app" and row.get("state") == "deleted")
+                    and not (kind == "workflow" and row.get("flow_type") != 10)
+                    and not (kind in {"knowledge_library", "knowledge_space"} and row.get("type") == 2)
+                )
+        if operations:
+            from bisheng.permission.domain.models import PermissionProjectionOperation
+
+            ids = {value[0] for value in operations.values()}
+            if set(operations) - set(resources) or len(ids) > 200:
+                _blocked("business_liveness_operation_batch_invalid")
+            rows = await self._read(
+                session,
+                select(
+                    PermissionProjectionOperation.id,
+                    PermissionProjectionOperation.status,
+                    PermissionProjectionOperation.operation_type,
+                    PermissionProjectionOperation.scope_key,
+                    PermissionProjectionOperation.target_version,
+                ).where(
+                    PermissionProjectionOperation.id.in_(ids),
+                    PermissionProjectionOperation.tenant_id == _scope(session),
+                ),
+            )
+            by_id = {row["id"]: row for row in rows}
+            for key, (ident, version) in operations.items():
+                operation = by_id.get(ident)
+                if (
+                    operation is None
+                    or operation["status"] != "FINALIZED"
+                    or operation["scope_key"] != f"{key[0]}:{key[1]}"
+                    or operation["target_version"] != version
+                ):
+                    _blocked("business_marker_operation_not_finalized")
+                if operation["operation_type"] in {"RESOURCE_DELETE", "RESOURCE_DELETE_PURGE"} and result[key]:
+                    _blocked("business_delete_not_committed")
+        return result
+
+    async def avalidate_history_prepared(self, session):
+        """Fresh M2 only; old frozen facts/verification retain their codec."""
+        from bisheng.core.context.tenant import bypass_tenant_filter
+
+        _scope(session)
+        with session.no_autoflush, bypass_tenant_filter():
+            mismatch = await session.execute(
+                select(FlowVersion.id)
+                .join(Flow, Flow.id == FlowVersion.flow_id)
+                .where(Flow.flow_type == 10, FlowVersion.tenant_id != Flow.tenant_id)
+                .limit(1)
+            )
+            if mismatch.first() is not None:
+                _blocked("workflow_owner_requires_history_preparation")
+
     async def ainspect_hard_deleted_roots(self, session, *, root_keys):
         """Exact global PK absence; a foreign physical row is never absence."""
         from bisheng.core.context.tenant import bypass_tenant_filter
@@ -318,10 +423,13 @@ class UnificationInventoryRepository:
             )
             .outerjoin(parent, parent.c.id == FlowVersion.flow_id)
             .where(
-                or_(
-                    parent.c.flow_type == FlowType.WORKFLOW.value,
-                    FlowVersion.flow_type == FlowType.WORKFLOW.value,
-                    FlowVersion.flow_type.is_(None),
+                and_(
+                    or_(parent.c.id.is_(None), parent.c.flow_type != 1),
+                    or_(
+                        parent.c.flow_type == FlowType.WORKFLOW.value,
+                        FlowVersion.flow_type == FlowType.WORKFLOW.value,
+                        FlowVersion.flow_type.is_(None),
+                    ),
                 )
             )
         )

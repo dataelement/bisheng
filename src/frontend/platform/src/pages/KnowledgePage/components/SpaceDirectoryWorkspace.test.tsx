@@ -23,7 +23,6 @@ vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: mocks.permissions,
 }));
 vi.mock("@/controllers/API", () => ({ getKnowledgeDetailApi: vi.fn() }));
-vi.mock("./SpaceFileTools", () => ({ SpaceFileTools: () => null }));
 vi.mock("./SpaceVersionHistorySheet", () => ({
   SpaceVersionHistorySheet: () => null,
 }));
@@ -289,4 +288,19 @@ it("sends sort changes to the directory and search APIs and resets the cursor", 
       }),
     ),
   );
+});
+
+it.each([
+  ["list", "Folder"],
+  ["list", "report.pdf"],
+  ["card", "Folder"],
+  ["card", "report.pdf"],
+])("labels the %s row deletion as Delete for %s", async (layout, name) => {
+  mocks.permissions.mockResolvedValue({ actions: ["visible", "delete"] });
+  mount();
+  await screen.findByRole("button", { name: "report.pdf" });
+  if (layout === "card") fireEvent.click(screen.getByRole("button", { name: "workspace.card_view" }));
+  fireEvent.keyDown(screen.getByRole("button", { name: `more ${name}` }), { key: "ArrowDown" });
+  expect(await screen.findByRole("menuitem", { name: "delete" })).toBeVisible();
+  expect(screen.queryByRole("menuitem", { name: "deletion.delete_items" })).toBeNull();
 });

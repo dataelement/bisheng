@@ -287,6 +287,7 @@ async def test_delete_endpoint_preserves_auth_order_and_final_state(store, monke
     async def project_existing(*args):
         events.append("project")
         assert FlowDao.get_flow_by_id("live") is not None
+        return SimpleNamespace(cleanup_deleted=AsyncMock()), object(), object()
 
     def cleanup_committed(*args):
         events.append("cleanup")

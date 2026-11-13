@@ -2,7 +2,7 @@
 
 ## 1. 当前状态
 
-目标发版线 feat/3.1.0-beta1，起始提交 cd02c8344c8c71eaa7eaad082a674dde8706aacc。现有成员搜索只按主属部门投影，且搜索共享人员编号匹配；原定位只检查已经加载的一页。真实页面入口为 SystemPage/components/OrganizationAndMembers.tsx → Departments.tsx。
+目标发版线 feat/3.1.0-beta1，真实页面入口为 SystemPage/components/OrganizationAndMembers.tsx → Departments.tsx。左侧搜索可定位任一可见归属，右侧成员列表可在直属与当前部门子树之间切换。
 
 ## 2. 约束
 
@@ -17,6 +17,7 @@
 5. 设置与流量状态提升到设置弹窗，内容切换时保留挂载；基本设置与流量依次保存，成功模块更新本地基线，失败模块保留编辑内容并明确反馈，避免错误宣称原子保存。
 6. 定位期间隐藏旧分页器，待新部门的总数与目标页同时到达后再展示，避免旧总数将目标页纠正回第一页。树展开完成后从最新控制器读取节点，避免异步加载后的旧闭包。
 7. 部门移动成功后立即更新父部门基线；后续设置失败时保留其他修改，重试不重复移动。保存期间锁住编辑区；离开有部分已提交的弹窗时刷新页面。
+8. 部门标题旁默认勾选直属成员。展开范围使用一次服务端分页查询，避免前端逐部门拉取后合并造成分页、筛选和总数错位。列表按所属关系保留多部门行，直属行排在所有下级行之前并沿用原顺序，因此左侧定位接口计算的页码在两个范围下都有效。归档可见性跟随组织树，编辑按行对应部门执行。若未来改为每人只显示一次或增加列表排序，须同时调整归属投影和定位规则。
 
 重新评估条件：人员选择器也需要统一搜索规则时再合并搜索契约；部门数据量导致包含查询明显变慢时再评估索引或专用检索；成员列表增加排序选项时必须同步定位排序；服务端提供跨基本设置与流量的事务接口后再考虑单次原子保存。
 
@@ -32,6 +33,7 @@ OrganizationSearchPanel → controllers/API/organization → organization_search
 - 部门行：id/dept_id/name/status/parent_path。
 - 成员行：user_id/user_name/person_id/enabled/is_primary/department；department 仅为可见的实际定位部门，含 id/dept_id/name/status/path。
 - GET /api/v1/departments/{dept_id}/members/locate：user_id、limit、is_primary、include_archived；返回 page/is_primary_filter/filter_adjusted。沿用部门 21000/21008/21009 错误。
+- GET /api/v1/departments/{dept_id}/members：`include_descendants=true` 时通过 `DepartmentMemberRepository` 分页查询管理范围与部门子树的交集。`include_archived` 控制展开模式的归档范围。响应追加直属数量 `direct_total` 和行所属部门 `department`（dept_id/name/status）；直属请求沿用原响应。
 
 ### 4.3 模块职责
 
@@ -51,10 +53,11 @@ Departments 负责选中部门、树展开、定位请求与弹窗入口；Membe
 | reveal 加载尚未展开的深层分支 | 原闭包内 getNode 找不到刚加载的节点 | Departments 使用 treeRef 读取最新控制器，下一帧后再定位 |
 | 移动成功、基本设置更新失败 | 重试再次移动，退出后页面仍是旧路径 | DepartmentSettings 即时更新父部门基线，Dialog 记录部分成功并刷新 |
 | 请求保存期间继续编辑 | 请求使用旧值，成功关闭时带走新输入 | DepartmentSettingsDialog 锁住编辑区并阻止关闭 |
+| 展开范围后一人有多条归属 | 按人员 ID 定位会高亮到下级兼职行，按当前部门编辑可能打开错误的归属 | MemberTable 用人员与部门标识精确定位，编辑弹窗接收实际行部门 |
 
 ## 6. 契约与验证
 
-Incoming：组织树可见范围、现有成员关系、管理视图请求隔离。Outgoing：仅新增上述只读接口；既有搜索、成员增删、权限、归档与流量计算契约继续有效。
+Incoming：组织树可见范围、现有成员关系、管理视图请求隔离。Outgoing：组织页只读搜索、定位与可选的子树分页；人员选择器沿用直属成员接口的默认行为。
 
 已完成 SQLite 真实 SQL 回归、HTTP endpoint/service/repository 链路、前端组件交互与真实浏览器场景。HTTP 测试替换登录与外部权限范围依赖；浏览器使用实际页面源码与模拟 API，未验证真实部署的登录、网关和 OpenFGA。MySQL/DM8 真实数据库与完整中间件集成按仓库约定交由 CI/目标环境，本次未运行方言编译或真实双数据库联调。命令与结果见 verification.md。
 
@@ -63,3 +66,5 @@ Incoming：组织树可见范围、现有成员关系、管理视图请求隔离
 2026-11-10：按用户已确认截图与聊天方案实现组织搜索、定位与弹窗；实际测试结果另记 verification.md。
 
 2026-11-10：浏览器回归发现并修复旧总数导致跨页定位回退、深层展开闭包过期；补齐移动部分成功与保存中编辑保护，完成本地验证。
+
+2026-11-12：按聊天确认增加标题旁的直属范围复选框和子树成员分页，创建部门入口保留在组织树。

@@ -140,12 +140,26 @@ async def reconcile_system_owned_resources(
     normalized = _normalize_resources(resources)
     before = await inspect_system_owned_resources(normalized)
     blocked = tuple(item for item in before if item.state == "NON_CURRENT")
-    if blocked:
-        scopes = ", ".join(item.resource.object_key for item in blocked)
-        raise PermissionPublishNotReadyError(msg=f"System-owned resources have non-current projection state: {scopes}")
+    # Validate all non-current rows before any recovery. Only the original
+    # system bootstrap ledger may resume; normal later edits stay blocked.
+    for item in blocked:
+        resource = item.resource
+        with tenant_execution_scope(resource.tenant_id):
+            await runtime.resume_system_owned(
+                actor=PermissionActor(user_id=operator_id, current_tenant_id=resource.tenant_id),
+                target=VerifiedPermissionTarget.from_business_service(
+                    tenant_id=resource.tenant_id,
+                    resource_type=resource.resource_type,
+                    resource_id=resource.resource_id,
+                    resource_version=0,
+                    context_version=resource.context_version,
+                ),
+                idempotency_key=f"f048:system-bootstrap:{resource.tenant_id}:{resource.resource_type}:{resource.resource_id}",
+                apply=False,
+            )
     if apply:
         for item in before:
-            if item.state != "MISSING":
+            if item.state == "CURRENT":
                 continue
             resource = item.resource
             with tenant_execution_scope(resource.tenant_id):
@@ -153,7 +167,9 @@ async def reconcile_system_owned_resources(
                     user_id=operator_id,
                     current_tenant_id=resource.tenant_id,
                 )
-                await runtime.authorize_system_owned(
+                method = runtime.resume_system_owned if item.state == "NON_CURRENT" else runtime.authorize_system_owned
+                kwargs = {} if item.state == "NON_CURRENT" else {"action_codes": resource.action_codes}
+                await method(
                     actor=actor,
                     target=VerifiedPermissionTarget.from_business_service(
                         tenant_id=resource.tenant_id,
@@ -162,7 +178,7 @@ async def reconcile_system_owned_resources(
                         resource_version=0,
                         context_version=resource.context_version,
                     ),
-                    action_codes=resource.action_codes,
+                    **kwargs,
                     idempotency_key=(
                         f"f048:system-bootstrap:{resource.tenant_id}:{resource.resource_type}:{resource.resource_id}"
                     ),

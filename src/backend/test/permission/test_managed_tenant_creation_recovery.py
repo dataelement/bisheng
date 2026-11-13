@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bisheng.common.errcode.permission import PermissionInvalidResourceError, PermissionPublishNotReadyError
+from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.permission.application.runtime import F048PermissionRuntime, _idempotency_key
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
@@ -68,13 +68,23 @@ async def test_unknown_commit_resumes_exact_operation_and_owner_finalize(recover
     runtime.authorize_created.assert_not_awaited()
 
 
-async def test_failed_closed_does_not_replay_or_generate_new_key(recovery):
+async def test_failed_closed_uses_original_fenced_recovery_without_generating_new_key(recovery):
     runtime, repo, projection, op, target = recovery
     op.status = "FAILED_CLOSED"
-    with pytest.raises(PermissionPublishNotReadyError):
+    projection.inspect_failed_closed_recovery = AsyncMock(
+        return_value=SimpleNamespace(confirmation_checksum="frozen-confirmation")
+    )
+    projection.recover_failed_closed_operation = AsyncMock(return_value="outcome")
+    assert (
         await runtime.resume_created(actor=PermissionActor(user_id=7, tenant_id=2), target=target, owner_user_id=7)
+        == "outcome"
+    )
+    projection.inspect_failed_closed_recovery.assert_awaited_once_with(op.id)
+    projection.recover_failed_closed_operation.assert_awaited_once_with(
+        op.id, confirmation_checksum="frozen-confirmation"
+    )
     projection.reconcile_operation.assert_not_awaited()
-    repo.finalize_creation.assert_not_awaited()
+    repo.finalize_creation.assert_awaited_once_with(target, op.id, 7)
     runtime.authorize_created.assert_not_awaited()
 
 

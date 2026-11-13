@@ -5,6 +5,7 @@ Part of F002-department-tree.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from dataclasses import dataclass
@@ -36,7 +37,7 @@ from bisheng.common.errcode.department import (
 )
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.common.services.config_service import settings
-from bisheng.common.subject_search import escape_like, normalize_keyword
+from bisheng.common.subject_search import normalize_keyword
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import (
     Department,
@@ -49,6 +50,7 @@ from bisheng.database.models.department_admin_grant import (
     DepartmentAdminGrantDao,
 )
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.department.domain.repositories.department_member_repository import DepartmentMemberRepository
 from bisheng.department.domain.repositories.management_search_repository import ManagementSearchRepository
 from bisheng.department.domain.schemas.department_schema import (
     DepartmentCreate,
@@ -2199,6 +2201,9 @@ class DepartmentService:
         keyword: str,
         login_user,
         is_primary: int | None = None,
+        *,
+        include_descendants: bool = False,
+        include_archived: bool = False,
     ) -> dict:
 
         # Cap pagination params
@@ -2207,44 +2212,26 @@ class DepartmentService:
 
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-
-            from bisheng.user.domain.models.user import User
-
-            base = (
-                select(
-                    UserDepartment.user_id,
-                    User.user_name,
-                    User.external_id.label("user_external_id"),
-                    UserDepartment.department_id,
-                    UserDepartment.is_primary,
-                    UserDepartment.source,
-                    UserDepartment.create_time.label("member_join_time"),
-                    User.create_time.label("user_create_time"),
-                    User.update_time.label("user_update_time"),
-                    User.delete.label("user_deleted"),
-                    User.disable_source.label("user_disable_source"),
-                )
-                .join(User, User.user_id == UserDepartment.user_id)
-                .where(
-                    UserDepartment.department_id == dept.id,
-                )
+            visible_paths = None
+            if include_descendants:
+                is_admin, admin_paths = await _aget_user_scope(login_user)
+                if not _path_in_scope(dept.path, is_admin, admin_paths):
+                    raise DepartmentPermissionDeniedError()
+                visible_paths = None if is_admin else admin_paths
+            rows, total, direct_total = await DepartmentMemberRepository.page(
+                session,
+                dept.id,
+                page,
+                limit,
+                keyword,
+                is_primary,
+                subtree=dept if include_descendants else None,
+                visible_paths=visible_paths,
+                include_archived=include_archived,
             )
-            if keyword:
-                pattern = f"%{escape_like(keyword)}%"
-                base = base.where(
-                    or_(User.user_name.like(pattern, escape="/"), User.external_id.like(pattern, escape="/"))
-                )
-            if is_primary is not None:
-                base = base.where(UserDepartment.is_primary == is_primary)
-
-            total_result = await session.exec(select(func.count()).select_from(base.subquery()))
-            total = total_result.one()
-
-            rows_result = await session.exec(base.order_by(UserDepartment.id).offset((page - 1) * limit).limit(limit))
-            rows = rows_result.all()
 
         # Batch enrich: user_groups and roles
-        user_ids = [r.user_id for r in rows]
+        user_ids = {r.user_id for r in rows}
         user_groups_map: dict = {}
         roles_map: dict = {}
 
@@ -2318,7 +2305,11 @@ class DepartmentService:
                         {"id": rid, "role_name": rname},
                     )
 
-        admin_uids = await cls._aget_department_admin_user_ids(dept.id)
+        department_ids = sorted({r.department_id for r in rows})
+        admin_user_ids = await asyncio.gather(
+            *(cls._aget_department_admin_user_ids(department_id) for department_id in department_ids)
+        )
+        admins_by_department = dict(zip(department_ids, admin_user_ids, strict=True))
 
         def _last_modified(row) -> object:
             """成员行「修改时间」：取加入部门、用户创建、用户最近更新中的最晚时刻。"""
@@ -2350,11 +2341,25 @@ class DepartmentService:
                 "disable_source": getattr(r, "user_disable_source", None),
                 "user_groups": user_groups_map.get(r.user_id, []),
                 "roles": roles_map.get(r.user_id, []),
-                "is_department_admin": r.user_id in admin_uids,
+                "is_department_admin": r.user_id in admins_by_department[r.department_id],
+                **(
+                    {
+                        "department": {
+                            "dept_id": r.department_dept_id,
+                            "name": r.department_name,
+                            "status": r.department_status,
+                        },
+                    }
+                    if include_descendants
+                    else {}
+                ),
             }
             for r in rows
         ]
-        return {"data": data, "total": total}
+        result = {"data": data, "total": total}
+        if include_descendants:
+            result["direct_total"] = direct_total
+        return result
 
     @classmethod
     async def aget_global_members_search(

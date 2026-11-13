@@ -154,12 +154,77 @@ class LegacyPhysical(original.Physical):
                 yield fact
 
 
-async def freeze_empty(module, complete, transport):
+async def freeze_empty(module, complete, transport, *, legacy=True):
     async with complete.engine.begin() as connection:
         await connection.execute(sa.delete(resources.KnowledgeFile))
     app = original.application(module, transport, physical_reader=LegacyPhysical())
     async with AsyncSession(complete.engine) as session, session.begin():
         frozen = await app.arun(session, **transport.inputs)
+    if legacy:
+        # Recreate a pre-policy frozen artifact graph. Production must only
+        # READ this old shape; new Runs never synthesize physical facts.
+        from dataclasses import replace
+
+        pages = module._Pages(transport.store, frozen.run_id, lambda: None)
+        root = None
+        async for page in app.aiter_frozen_pages(
+            frozen,
+            environment=transport.inputs["environment"],
+            backup_ref=transport.inputs["backup_ref"],
+            schema_ref=transport.inputs["schema_ref"],
+        ):
+            pages.entries[page.kind].append(
+                record_from_values(
+                    "manifest_entry",
+                    section=page.section,
+                    scope=page.scope,
+                    tenant_id=page.tenant_id,
+                    page_index=page.page_index,
+                    record_count=page.record_count,
+                    descriptor=page.descriptor,
+                    level=0,
+                )
+            )
+            if page.kind == "baseline" and page.section == "resources":
+                decoded = decode_inventory_page(
+                    page.content,
+                    run_id=frozen.run_id,
+                    section=page.section,
+                    scope=page.scope,
+                    tenant_id=page.tenant_id,
+                    page_index=page.page_index,
+                    kind=page.kind,
+                )
+                for row in decoded.records:
+                    if row.record_type == "resource" and row.data["id"] == 9000:
+                        root = row
+        fact = physical()
+        await pages.add("physical", 101, fact)
+        await pages.add(
+            "physical", 101, retention_record(resource=root.data, physical=fact.data, managed_file_count=0), kind="plan"
+        )
+        await pages.finish()
+
+        def metadata(ref, kind):
+            import json
+
+            body = json.loads(transport.objects[ref["object_key"]])
+            value = next(row for row in body["records"] if row["record_type"] == "run")
+            return {k: v for k, v in value.items() if k not in {"record_type", "physical_inventory_policy"}}
+
+        baseline = await pages.manifest(
+            "baseline", record_from_values("run", **metadata(frozen.baseline_ref, "baseline"))
+        )
+        plan_data = metadata(frozen.plan_ref, "plan")
+        plan_data["baseline_ref"] = baseline
+        plan = await pages.manifest("plan", record_from_values("run", **plan_data))
+        async with complete.engine.begin() as connection:
+            await connection.execute(
+                sa.update(original.KnowledgeUnificationRun.__table__).values(
+                    baseline_ref=baseline, plan_ref=plan, baseline_hash=baseline["sha256"], plan_hash=plan["sha256"]
+                )
+            )
+        frozen = replace(frozen, baseline_ref=baseline, plan_ref=plan)
     return app, frozen
 
 
@@ -238,8 +303,9 @@ async def test_native_retained_binding_guard_rejects_drift_before_sql_conversion
     assert phases == {"baseline_frozen"} and kind == 0
 
 
-async def test_original_sql_conversion_and_resume_preserve_existing_index_bindings(module, complete, transport):
-    await freeze_empty(module, complete, transport)
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_original_sql_conversion_and_resume_preserve_existing_index_bindings(module, complete, transport, legacy):
+    await freeze_empty(module, complete, transport, legacy=legacy)
 
     @asynccontextmanager
     async def sessions():

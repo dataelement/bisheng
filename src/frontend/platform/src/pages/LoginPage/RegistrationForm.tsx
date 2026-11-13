@@ -1,8 +1,9 @@
-import { Button, Input, PasswordInput, Tooltip, toast } from '@bisheng/ui';
+import { Button, Input, PasswordInput, toast } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import { isApiError } from '@bisheng/api-client';
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { IdentityRuleHint } from '@/components/bs-comp/identity/identityInput';
 import { registerApi } from '@/controllers/API/user';
 import { showApiError } from '@/controllers/request';
 import { handleEncrypt } from './utils';
@@ -26,10 +27,12 @@ interface RequirementCheckProps {
 
 function RequirementCheck({ label, state, name }: RequirementCheckProps) {
     const { t } = useTranslation();
-    const color = state === 'pass' ? 'text-blue-500' : 'text-text-3';
+    const passed = state === 'pass';
     return (
-        <li className={`flex items-baseline gap-2 ${color}`} data-rule={name} data-state={state}>
-            <span className="size-1 shrink-0 self-start rounded-full bg-current mt-2" aria-hidden />
+        <li className={`flex items-start gap-2 ${passed ? 'text-success' : 'text-text-3'}`} data-rule={name} data-state={state}>
+            <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center" aria-hidden>
+                {passed ? <Outlined.Check className="size-3.5" /> : <span className="size-1 rounded-full bg-current" />}
+            </span>
             <span>{label}</span>
             <span className="sr-only">{t(`login.registration.states.${state}`)}</span>
         </li>
@@ -115,7 +118,7 @@ export function RegistrationForm({ captcha, onRefreshCaptcha, onLogin, onSuccess
         return (
             <div className="grid gap-1.5">
                 <Input
-                    size="medium" id={`registration-${field}`} aria-label={label}
+                    size="large" id={`registration-${field}`} aria-label={label}
                     ref={input => { fieldRefs.current[field] = input; }}
                     value={values[field]} onChange={event => handleIdentityInput(field, event)}
                     onCompositionEnd={event => handleIdentityChange(field, event.currentTarget)}
@@ -130,14 +133,9 @@ export function RegistrationForm({ captcha, onRefreshCaptcha, onLogin, onSuccess
                     autoCapitalize="none" autoCorrect="off" spellCheck={false}
                     autoComplete={field === 'account' ? 'username' : 'nickname'}
                     suffix={
-                        <Tooltip content={t(`login.registration.${field}Rules`)}>
-                            <Button type="button" variant="text" color="default" size="small" iconOnly
-                                aria-label={t(`login.registration.${field}RulesLabel`)} disabled={loading}
-                                aria-expanded={expandedRule === field} aria-controls={`registration-${field}-rules`}
-                                onClick={() => setExpandedRule(previous => previous === field ? null : field)}>
-                                <Outlined.Question aria-hidden />
-                            </Button>
-                        </Tooltip>
+                        <IdentityRuleHint field={field} expanded={expandedRule === field} controls={`registration-${field}-rules`}
+                            content={t(`login.registration.${field}Rules`)} label={t(`login.registration.${field}RulesLabel`)}
+                            disabled={loading} onToggle={() => setExpandedRule(previous => previous === field ? null : field)} />
                     }
                 />
                 {error && <p id={`registration-${field}-error`} className="text-caption text-danger" aria-live="polite">{t(error)}</p>}
@@ -149,7 +147,7 @@ export function RegistrationForm({ captcha, onRefreshCaptcha, onLogin, onSuccess
     };
 
     return (
-        <form className="grid gap-3" onSubmit={handleSubmit} noValidate onKeyDown={event => {
+        <form className="grid grid-cols-1 gap-3" onSubmit={handleSubmit} noValidate onKeyDown={event => {
             if (event.key === 'Escape' && expandedRule) {
                 setExpandedRule(null);
                 event.stopPropagation();
@@ -158,7 +156,7 @@ export function RegistrationForm({ captcha, onRefreshCaptcha, onLogin, onSuccess
             {renderIdentityField('account')}
             {renderIdentityField('nickname')}
             <div className="grid gap-1.5">
-                <PasswordInput size="medium" id="registration-password" aria-label={t('login.password')}
+                <PasswordInput size="large" id="registration-password" aria-label={t('login.password')}
                     ref={input => { fieldRefs.current.password = input; }}
                     value={values.password} onChange={event => {
                         setValues(previous => ({ ...previous, password: event.target.value }));
@@ -171,7 +169,7 @@ export function RegistrationForm({ captcha, onRefreshCaptcha, onLogin, onSuccess
                     aria-invalid={Boolean(visibleError('password'))} aria-describedby="registration-password-checks" />
                 <div id="registration-password-checks" className="text-caption" aria-live="polite">
                     <p className="text-text-2">{t('login.registration.passwordStrength')}</p>
-                    <ul className="mt-1 grid gap-0.5 pl-1">
+                    <ul className="mt-1 grid gap-0.5">
                         <RequirementCheck name="length" label={t('login.registration.passwordChecks.length')}
                             state={passwordChecks.length} />
                         <RequirementCheck name="composition" label={t('login.registration.passwordChecks.composition')}
@@ -182,7 +180,7 @@ export function RegistrationForm({ captcha, onRefreshCaptcha, onLogin, onSuccess
                     <p className="text-caption text-danger" aria-live="polite">{t(visibleError('password')!)}</p>}
             </div>
             <div className="grid gap-1.5">
-                <PasswordInput size="medium" id="registration-confirmation" aria-label={t('login.confirmPassword')}
+                <PasswordInput size="large" id="registration-confirmation" aria-label={t('login.confirmPassword')}
                     ref={input => { fieldRefs.current.confirmation = input; }}
                     value={values.confirmation} onChange={event => setValues(previous => ({ ...previous, confirmation: event.target.value }))}
                     onBlur={() => markTouched('confirmation')} disabled={loading}
@@ -197,20 +195,20 @@ export function RegistrationForm({ captcha, onRefreshCaptcha, onLogin, onSuccess
             </div>
             {captcha.user_capthca && (
                 <div className="flex items-center gap-4">
-                    <Input size="medium" ref={captchaRef} aria-label={t('login.pleaseEnterCaptcha')}
+                    <Input size="medium" ref={captchaRef} className="min-w-0 flex-1" aria-label={t('login.pleaseEnterCaptcha')}
                         placeholder={t('login.pleaseEnterCaptcha')} disabled={loading} />
-                    <button type="button" aria-label={t('login.registration.refreshCaptcha')} onClick={onRefreshCaptcha} disabled={loading}>
+                    <button type="button" className="shrink-0" aria-label={t('login.registration.refreshCaptcha')} onClick={onRefreshCaptcha} disabled={loading}>
                         <img src={`data:image/jpg;base64,${captcha.captcha}`} alt={t('login.pleaseEnterCaptcha')}
                             className="h-8 w-[120px] object-contain border border-border-base bg-fill-1" />
                     </button>
                 </div>
             )}
+            <Button type="submit" size="large" className="mt-2" loading={loading}>{t('login.registerButton')}</Button>
             <div className="text-center">
                 <Button type="button" color="primary" variant="link" size="small" onClick={onLogin} disabled={loading}>
                     {t('login.haveAccountLogin')}
                 </Button>
             </div>
-            <Button type="submit" size="large" className="mt-2" loading={loading}>{t('login.registerButton')}</Button>
         </form>
     );
 }

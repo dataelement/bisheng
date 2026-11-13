@@ -14,11 +14,14 @@ import { KnowledgeHomeCardMenu } from './KnowledgeHomeCardMenu';
 import { useKnowledgeHomeCardCreator } from './useKnowledgeHomeCardCreator';
 import styles from './KnowledgeHomeCard.module.css';
 
+const updatedDateFormatter = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
 interface KnowledgeHomeCardProps {
-  animateLayout: boolean;
   moving: boolean;
   layoutDelay: number;
-  layoutOrder: string;
+  layoutOrder: string | undefined;
   item: HomeSpace;
   pending: boolean;
   permissions: KnowledgeSpaceAction[];
@@ -30,7 +33,7 @@ interface KnowledgeHomeCardProps {
 }
 
 export function KnowledgeHomeCard({
-  animateLayout, moving, layoutDelay, layoutOrder, item, pending,
+  moving, layoutDelay, layoutOrder, item, pending,
   permissions, permissionsLoading, onMenuOpen, onSelect, onAction, onEdit,
 }: KnowledgeHomeCardProps) {
   const localize = useLocalize();
@@ -56,11 +59,8 @@ export function KnowledgeHomeCard({
     onSelect(space);
   };
 
-  return (
-    <motion.article ref={cardRef} className={styles.card} aria-busy={pending}
-      layout={animateLayout ? 'position' : false} layoutDependency={layoutOrder}
-      initial={false} style={{ zIndex: moving ? 2 : 0 }}
-      transition={{ layout: { duration: .6, delay: layoutDelay, ease: [.22, 1, .36, 1] } }}>
+  const content = (
+    <>
       <Link className={styles.cardLink} to={to} aria-labelledby={titleId} onClick={handleSelect}>
         <div className={styles.cardHeading}>
           <KnowledgeSpaceCategoryIcon source={source} className={styles.spaceIcon} size={36} />
@@ -76,9 +76,7 @@ export function KnowledgeHomeCard({
           {updated && (
             <time dateTime={updated.toISOString()} className={styles.updated}>
               {localize('com_knowledge.home_next.updated_at', {
-                date: new Intl.DateTimeFormat(undefined, {
-                  year: 'numeric', month: '2-digit', day: '2-digit',
-                }).format(updated),
+                date: updatedDateFormatter.format(updated),
               })}
             </time>
           )}
@@ -94,6 +92,18 @@ export function KnowledgeHomeCard({
       <KnowledgeHomeCardMenu disabled={disabled} permissions={permissions}
         permissionsLoading={permissionsLoading} onOpen={onMenuOpen} onEdit={onEdit}
         onDelete={() => onAction('delete')} />
+    </>
+  );
+
+  if (layoutOrder === undefined) {
+    return <article ref={cardRef} className={styles.card} aria-busy={pending}>{content}</article>;
+  }
+  return (
+    <motion.article ref={cardRef} className={styles.card} aria-busy={pending}
+      layout="position" layoutDependency={layoutOrder}
+      initial={false} style={{ zIndex: moving ? 2 : 0 }}
+      transition={{ layout: { duration: .6, delay: layoutDelay, ease: [.22, 1, .36, 1] } }}>
+      {content}
     </motion.article>
   );
 }

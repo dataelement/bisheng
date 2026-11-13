@@ -460,7 +460,9 @@ class ToolServices(BaseModel):
         return tool_type
 
     @classmethod
-    async def _update_gpts_tools(cls, exist_tool_type: GptsToolsType, req: GptsToolsTypeRead, login_user=None) -> GptsToolsTypeRead:
+    async def _update_gpts_tools(
+        cls, exist_tool_type: GptsToolsType, req: GptsToolsTypeRead, login_user=None
+    ) -> GptsToolsTypeRead:
         exist_tool_type.name = req.name
         exist_tool_type.logo = req.logo
         exist_tool_type.description = req.description
@@ -532,8 +534,9 @@ class ToolServices(BaseModel):
             return
         if policy.home_tenant_id != parent.tenant_id:
             raise QuotaResponsibilityChangedError()
-        await QuotaService.check_quota(parent.user_id, "tool", parent.tenant_id, login_user,
-            delta=owner_delta, tenant_delta=tenant_delta)
+        await QuotaService.check_quota(
+            parent.user_id, "tool", parent.tenant_id, login_user, delta=owner_delta, tenant_delta=tenant_delta
+        )
 
     async def update_tools(self, req: GptsToolsTypeRead) -> GptsToolsTypeRead:
         """
@@ -596,6 +599,7 @@ class ToolServices(BaseModel):
         )
 
         await GptsToolsDao.delete_tool_type(tool_type_id)
+        await adapter.cleanup_deleted(record=record, actor=await resolve_permission_actor(self.login_user))
         await self.delete_tool_hook(self.request, self.login_user, exist_tool_type)
         return True
 

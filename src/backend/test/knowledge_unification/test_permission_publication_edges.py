@@ -4,13 +4,6 @@ import json
 
 import pytest
 import sqlalchemy as sa
-
-from bisheng.common.errcode.base import BaseErrorCode
-from bisheng.core.context.tenant import current_tenant_id
-from bisheng.knowledge.application.unification_permissions import PermissionPublicationApplication
-from bisheng.permission.application.sql_runtime import stable_grant_key
-from bisheng.permission.domain.models import PermissionGrantAssignee, ResourcePermissionMode
-from bisheng.permission.domain.repositories.f118_resource_write_repository import F118ResourceWriteRepository
 from test.knowledge_unification.test_permission_publication_application import (
     app,
 )
@@ -32,6 +25,13 @@ from test.knowledge_unification.test_permission_publication_application import (
 from test.knowledge_unification.test_permission_publication_application import (
     transport as transport,
 )
+
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.core.context.tenant import current_tenant_id
+from bisheng.knowledge.application.unification_permissions import PermissionPublicationApplication
+from bisheng.permission.application.sql_runtime import stable_grant_key
+from bisheng.permission.domain.models import PermissionGrantAssignee, ResourcePermissionMode
+from bisheng.permission.domain.repositories.f118_resource_write_repository import F118ResourceWriteRepository
 
 
 @pytest.mark.parametrize("published_input", [{"parent": True, "contexts": True}], indirect=True)
@@ -370,10 +370,10 @@ async def test_parent_alias_without_exact_old_sql_and_target_plan_proof_still_bl
     ],
     indirect=True,
 )
-async def test_original_disabled_markers_stay_absent_after_namespace_publication(published_input):
+async def test_live_current_resource_restores_missing_markers_after_namespace_publication(published_input):
     value = published_input
     assert (await app(value).arun_permissions(**value.input, operator_id=7)).complete
-    assert not any(key[1:] == ("permission_enabled", "knowledge_space:9000") for key in value.store.tuples)
+    assert any(key[1:] == ("permission_enabled", "knowledge_space:9000") for key in value.store.tuples)
 
 
 @pytest.mark.parametrize(
@@ -384,13 +384,64 @@ async def test_original_disabled_markers_stay_absent_after_namespace_publication
     ],
     indirect=True,
 )
-async def test_original_unmoved_parent_difference_is_preserved_without_becoming_a_new_write(published_input):
+async def test_proven_extra_parent_is_removed_without_regranting(published_input):
     value = published_input
     old = tuple(value.options["raw_edge"])
     assert (await app(value).arun_permissions(**value.input, operator_id=7)).complete
-    assert old in value.store.tuples
+    assert old not in value.store.tuples
     assert ("knowledge_space:9000", "parent", "knowledge_file:1") in value.store.tuples
     for request in value.store.requests:
         if request.method == "POST" and request.url.path.endswith("/write"):
             writes = json.loads(request.content).get("writes", {}).get("tuple_keys", [])
             assert not any((row["user"], row["relation"], row["object"]) == old for row in writes)
+
+
+@pytest.mark.parametrize(
+    "published_input",
+    [
+        {
+            "legacy_frozen_policy": True,
+            "parent": True,
+            "raw_edge": ("folder:old-parent", "parent", "knowledge_file:1"),
+            "remove_raw_edges": [
+                ("user:*", "permission_enabled", "knowledge_library:9000"),
+                ("service_account:*", "permission_enabled", "knowledge_library:9000"),
+            ],
+        }
+    ],
+    indirect=True,
+)
+async def test_old_frozen_metadata_keeps_original_marker_and_extra_edge_policy(published_input):
+    value = published_input
+    assert (await app(value).arun_permissions(**value.input, operator_id=7)).complete
+    assert ("folder:old-parent", "parent", "knowledge_file:1") in value.store.tuples
+    assert not any(key[1:] == ("permission_enabled", "knowledge_space:9000") for key in value.store.tuples)
+
+
+async def deleted_context(database):
+    from bisheng.database.models.flow import Flow
+
+    await database.insert(
+        Flow,
+        [{"id": "context-flow", "tenant_id": 101, "user_id": 7, "name": "deleted", "flow_type": 10, "is_delete": 1}],
+    )
+
+
+@pytest.mark.parametrize(
+    "published_input",
+    [
+        {
+            "contexts": True,
+            "reference_seed": deleted_context,
+            "remove_raw_edges": [
+                ("user:*", "permission_enabled", "workflow:context-flow"),
+                ("service_account:*", "permission_enabled", "workflow:context-flow"),
+            ],
+        }
+    ],
+    indirect=True,
+)
+async def test_deleted_business_owner_is_not_revived_by_current_mode(published_input):
+    value = published_input
+    assert (await app(value).arun_permissions(**value.input, operator_id=7)).complete
+    assert not any(key[1:] == ("permission_enabled", "workflow:context-flow") for key in value.store.tuples)

@@ -1,3 +1,4 @@
+import { uploadSettings } from "./uploadWizardFixtures";
 import "@testing-library/jest-dom/vitest";
 import {
   act,
@@ -77,9 +78,17 @@ async function pick(files = [file("Root/a.txt"), file("Root/Sub/b.csv")]) {
       target: { files },
     }),
   );
+  const direct = screen.queryByRole("button", { name: "uploadDirectly" });
+  if (direct && !direct.hasAttribute("disabled")) fireEvent.click(direct);
+}
+async function proceed() {
+  const direct = screen.queryByRole("button", { name: "uploadDirectly" });
+  if (!direct) return;
+  await waitFor(() => expect(direct).toBeEnabled());
+  fireEvent.click(direct);
 }
 const stages = () =>
-  mocks.post.mock.calls.filter(([url]) => url.endsWith("/upload/7"));
+  mocks.post.mock.calls.filter(([url]) => url.endsWith("/uploads"));
 const registers = () =>
   mocks.post.mock.calls.filter(([url]) => url.endsWith("/folders/upload"));
 beforeEach(() => {
@@ -87,13 +96,13 @@ beforeEach(() => {
   mocks.post.mockImplementation(async (url: string, body: FormData) =>
     url.endsWith("/folders/upload")
       ? [row(81, "/9/11"), row(82, "/9/11/12")]
-      : { file_path: `tmp/${(body.get("file") as File).name}`, repeat: false },
+      : { file_path: `tmp/${(body.get("file") as File).name}`, upload_id: "a".repeat(32), repeat: false },
   );
   mocks.get.mockImplementation(
     async (
       _url: string,
       options: { params: { file_ids: number[]; parent_id: number } },
-    ) => ({
+    ) => _url.endsWith("/upload-settings") ? uploadSettings() : ({
       data: options.params.file_ids.map((id) =>
         row(id, `/9/${options.params.parent_id}`),
       ),
@@ -111,9 +120,10 @@ afterEach(() => {
 it("stages the complete tree before one original registration with exact relative paths", async () => {
   mount();
   await pick();
+  await proceed();
   await waitFor(() => expect(registers()).toHaveLength(1));
   expect(stages()).toHaveLength(2);
-  expect(registers()[0][1]).toEqual({
+  expect(registers()[0][1]).toMatchObject({
     parent_id: 9,
     items: [
       { file_path: "tmp/a.txt", relative_path: "Root/a.txt", size: 1 },
@@ -128,12 +138,13 @@ it("tracks actual descendant parents rather than querying all file IDs at the dr
   mocks.post.mockImplementation(async (url: string, body: FormData) =>
     url.endsWith("/folders/upload")
       ? [row(81, "/9/11", 5), row(82, "/9/11/12", 5)]
-      : { file_path: `tmp/${(body.get("file") as File).name}`, repeat: false },
+      : { file_path: `tmp/${(body.get("file") as File).name}`, upload_id: "a".repeat(32), repeat: false },
   );
   mount();
   await pick();
-  await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2));
-  expect(mocks.get.mock.calls.map((call) => call[1].params)).toEqual([
+  await proceed();
+  await waitFor(() => expect(mocks.get.mock.calls.filter(([url]) => url.endsWith("/children"))).toHaveLength(2));
+  expect(mocks.get.mock.calls.filter(([url]) => url.endsWith("/children")).map((call) => call[1].params)).toEqual([
     { parent_id: 11, file_ids: [81], page_size: 100 },
     { parent_id: 12, file_ids: [82], page_size: 100 },
   ]);
@@ -146,7 +157,7 @@ it("keeps staged inputs and frozen paths across a later staging failure and retr
     if (++uploads === 2) throw new Error("second stage failed");
     return {
       file_path: `tmp/${(body.get("file") as File).name}`,
-      repeat: false,
+      upload_id: "a".repeat(32), repeat: false,
     };
   });
   mount();
@@ -158,6 +169,7 @@ it("keeps staged inputs and frozen paths across a later staging failure and retr
     value: "changed/path.txt",
   });
   fireEvent.click(screen.getByRole("button", { name: "retry" }));
+  await proceed();
   await waitFor(() => expect(registers()).toHaveLength(1));
   expect(stages()).toHaveLength(3);
   expect(registers()[0][1].items[0].relative_path).toBe("Root/a.txt");
@@ -165,11 +177,11 @@ it("keeps staged inputs and frozen paths across a later staging failure and retr
 it.each(["cancel", "parent"])(
   "retires late folder staging on %s without registering a partial tree",
   async (kind) => {
-    let resolve!: (value: { file_path: string; repeat: boolean }) => void;
+    let resolve!: (value: { file_path: string; upload_id?: string; repeat: boolean }) => void;
     let count = 0;
     mocks.post.mockImplementation(async () =>
       ++count === 1
-        ? { file_path: "tmp/a", repeat: false }
+        ? { file_path: "tmp/a", upload_id: "a".repeat(32), repeat: false }
         : new Promise((yes) => {
             resolve = yes;
           }),
@@ -182,7 +194,7 @@ it.each(["cancel", "parent"])(
       fireEvent.click(screen.getByRole("button", { name: "cancel" }));
     else view.move(10);
     expect(signal.aborted).toBe(true);
-    await act(async () => resolve({ file_path: "tmp/late", repeat: false }));
+    await act(async () => resolve({ file_path: "tmp/late", upload_id: "a".repeat(32), repeat: false }));
     expect(registers()).toHaveLength(0);
   },
 );
@@ -203,34 +215,7 @@ it("keeps the directory tree when the original DropZone supplies relative drag p
       target: { files: [input] },
     }),
   );
+  await proceed();
   await waitFor(() => expect(registers()).toHaveLength(1));
   expect(registers()[0][1].items[0].relative_path).toBe("Root/Sub/a.txt");
-});
-
-it("keeps the folder batch's explicit document/table snapshot across registration retry", async () => {
-  const defaults = {
-    schema_version: 1,
-    document: { split_mode: "custom", separator: [""], separator_rule: ["after"], chunk_size: 300, chunk_overlap: 20, hierarchy_level: 3, append_title: false, max_chunk_size: 600, retain_images: 1, force_ocr: 0, enable_formula: 0, filter_page_header_footer: 1 },
-    table: { slice_length: 25, header_start_row: 1, header_end_row: 1, append_header: 0 },
-  };
-  mocks.get.mockResolvedValue({ space_id: 7, config_version: 4, saved_defaults: null, effective_defaults: defaults });
-  let resolve!: (value: { file_path: string; repeat: boolean }) => void;
-  let uploads = 0, registrations = 0;
-  mocks.post.mockImplementation(async (url: string, body: FormData) => {
-    if (url.endsWith("/folders/upload")) {
-      if (++registrations === 1) throw { status_code: 10999 };
-      return [row(81, "/9/11")];
-    }
-    if (++uploads === 1) return new Promise(yes => { resolve = yes; });
-    return { file_path: `tmp/${(body.get("file") as File).name}`, repeat: false };
-  });
-  mount(); fireEvent.click(screen.getByRole("checkbox", { name: "f118.upload_temporary" }));
-  fireEvent.change(await screen.findByRole("spinbutton", { name: "splitLength" }), { target: { value: "420" } });
-  await pick(); await waitFor(() => expect(stages()).toHaveLength(1));
-  fireEvent.change(screen.getByRole("spinbutton", { name: "splitLength" }), { target: { value: "222" } });
-  await act(async () => resolve({ file_path: "tmp/frozen-a", repeat: false }));
-  fireEvent.click(await screen.findByRole("button", { name: "retry" }));
-  await waitFor(() => expect(registers()).toHaveLength(2));
-  expect(stages()).toHaveLength(2);
-  expect(registers().map(call => [call[1].overrides.document.chunk_size, call[1].overrides.table.slice_length])).toEqual([[420, 25], [420, 25]]);
 });

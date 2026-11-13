@@ -353,6 +353,15 @@ async def test_invalid_parent_batches_and_missing_or_foreign_roots_are_explicit_
                 await getattr(repo, method)(session, **{parameter: value})
 
 
+@pytest.mark.parametrize("version_type", [1, 10, None])
+async def test_retired_skill_parent_is_excluded_regardless_of_child_type(repo, storage, version_type):
+    async with AsyncSession(storage) as session, session.begin():
+        session.add(Flow(id="old-skill", tenant_id=101, name="retired", flow_type=1))
+        session.add(FlowVersion(id=1, tenant_id=101, flow_id="old-skill", name="v", flow_type=version_type))
+        await session.flush()
+        assert not (await repo.alist_workflow_versions(session)).items
+
+
 @pytest.mark.parametrize("broken", ["missing", "foreign", "wrong_type", "version_type"])
 async def test_workflow_version_bad_real_parent_is_not_hidden_by_join_filtering(repo, storage, broken):
     async with AsyncSession(storage) as session, session.begin():
@@ -550,3 +559,23 @@ async def test_every_entry_requires_native_session_and_existing_concrete_transac
                 await repo.alist_tenants(session)
     finally:
         current_tenant_id.reset(token)
+
+
+async def test_marker_liveness_uses_real_current_tenant_and_soft_delete_state(repo, storage):
+    async with AsyncSession(storage) as session, session.begin():
+        with bypass_tenant_filter():
+            session.add_all(
+                [
+                    Flow(id="live-marker", tenant_id=101, user_id=7, name="live", flow_type=10),
+                    Flow(id="deleted-marker", tenant_id=101, user_id=7, name="deleted", flow_type=10, is_delete=1),
+                    Flow(id="foreign-marker", tenant_id=202, user_id=7, name="foreign", flow_type=10),
+                    Flow(id="old-skill-marker", tenant_id=101, user_id=7, name="skill", flow_type=1),
+                ]
+            )
+    async with AsyncSession(storage) as session, session.begin():
+        keys = tuple(
+            ("workflow", key)
+            for key in ("live-marker", "deleted-marker", "foreign-marker", "old-skill-marker", "absent-marker")
+        )
+        result = await repo.ainspect_permission_resource_liveness(session, resources=keys)
+        assert result == {key: key[1] == "live-marker" for key in keys}

@@ -14,7 +14,8 @@ import {
 import { showApiError } from "@/controllers/request";
 import { KnowledgeSpaceSettingsPanel } from "./KnowledgeLibraryDialog";
 import { ProcessingDefaultsPanel } from "./ProcessingDefaultsDialog";
-import { SpaceProcessingPanel } from "./SpaceProcessingDialog";
+import { SpaceMetadataPanel } from "./SpaceMetadataPanel";
+import { SpaceModelIndexPanel } from "./SpaceModelIndexPanel";
 
 interface SpaceManagementViewProps {
   scope: KnowledgeQueryScope;
@@ -95,10 +96,9 @@ export function SpaceManagementView({
             key: "metadata",
             label: t("detail.metadata"),
             children: (
-              <SpaceProcessingPanel
+              <SpaceMetadataPanel
                 scope={scope}
                 spaceId={spaceId}
-                mode="schema"
                 onSaved={() => {
                   void handleSaved();
                 }}
@@ -109,25 +109,7 @@ export function SpaceManagementView({
             key: "embedding",
             label: t("detail.embedding"),
             children: (
-              <SpaceProcessingPanel
-                scope={scope}
-                spaceId={spaceId}
-                mode="embedding"
-                onSaved={() => {
-                  void handleSaved();
-                }}
-              />
-            ),
-          },
-          {
-            key: "jobs",
-            label: t("detail.jobs"),
-            children: (
-              <SpaceProcessingPanel
-                scope={scope}
-                spaceId={spaceId}
-                mode="jobs"
-              />
+              <SpaceModelIndexPanel scope={scope} spaceId={spaceId} onSaved={() => { void handleSaved(); }} />
             ),
           },
           {
@@ -144,25 +126,34 @@ export function SpaceManagementView({
         ]
       : []),
   ];
-  const requested = params.get("tab") ?? "files";
+  const requested = params.get("tab") === "jobs" ? "embedding" : params.get("tab") ?? "files";
+  useEffect(() => {
+    if (params.get("tab") !== "jobs") return;
+    const next = new URLSearchParams(params);
+    next.set("tab", "embedding");
+    setParams(next, { replace: true });
+  }, [params, setParams]);
   const active = items.some((item) => item.key === requested)
     ? requested
     : "files";
+  const showBackButton = parentId != null;
   return (
     <div className="min-h-full min-w-0 space-y-4 pt-4">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-2">
-          <Tooltip content={t("back")}>
-            <Button
-              variant="text"
-              color="default"
-              iconOnly
-              aria-label={t("back")}
-              onClick={() => navigate("/filelib")}
-            >
-              <Outlined.ArrowLeft />
-            </Button>
-          </Tooltip>
+          {showBackButton && (
+            <Tooltip content={t("back")}>
+              <Button
+                variant="text"
+                color="default"
+                iconOnly
+                aria-label={t("back")}
+                onClick={() => navigate(scope.view === "admin" ? "/filelib?view=admin" : "/filelib")}
+              >
+                <Outlined.ArrowLeft />
+              </Button>
+            </Tooltip>
+          )}
           <div className="min-w-0">
             <h1 className="truncate text-heading-sm font-medium text-text-1">
               {spaceTitle}

@@ -3,6 +3,8 @@
 From src/backend with the service's config: python scripts/unify_knowledge_spaces.py
 --run-id maintenance-1 --environment production --backup-ref '<descriptor JSON>'
 --schema-ref '<descriptor JSON>'. Default preview writes no SQL, FGA or artifacts.
+For a new Run it performs the complete current inventory preflight; for an
+existing Run it validates that Run's original frozen reference plan.
 Add --apply --operator-id 7 to freeze and execute; --apply --resume requires the
 same already-frozen Run. This script never stops, starts or probes services.
 For historical depth/orphan permission cleanup, run prepare_f118_history.py
@@ -68,7 +70,6 @@ async def _runtime(args):
     from bisheng.knowledge.application.unification_artifacts import UnificationArtifactStore
     from bisheng.knowledge.application.unification_inventory import UnificationInventoryApplication
     from bisheng.knowledge.application.unification_minio import UnificationMinio
-    from bisheng.knowledge.application.unification_physical import PhysicalInventoryReader
     from bisheng.permission.application.migration_read import PinnedMigrationPermissionReader
 
     # F118's frozen read-only inventory contract is a deliberate exception to
@@ -98,12 +99,9 @@ async def _runtime(args):
 
             @asynccontextmanager
             async def inventory(session):
-                async with PhysicalInventoryReader.aopen(settings.get_vectors_conf(), storage=storage) as physical:
-                    yield UnificationInventoryApplication(
-                        artifact_store=store,
-                        sharing_reader_factory=sharing,
-                        physical_reader=physical,
-                    )
+                # Migration preserves SQL index bindings. ES/Milvus health,
+                # schema and counts belong to the separate storage diagnosis.
+                yield UnificationInventoryApplication(artifact_store=store, sharing_reader_factory=sharing)
 
             yield SimpleNamespace(store=store, sessions=get_async_db_session, inventory=inventory)
     finally:
@@ -149,6 +147,15 @@ async def arun(args, *, runtime_factory=_runtime):
                     await reader.aprepare(
                         frozen, **{name: inputs[name] for name in ("environment", "backup_ref", "schema_ref")}
                     )
+                else:
+                    if not callable(runtime.inventory):
+                        raise KnowledgeOperationPlanConflictError(
+                            reason="migration_cli_native_inventory_ports_required"
+                        )
+                    async with runtime.sessions() as session, session.begin():
+                        async with runtime.inventory(session) as inventory:
+                            scanned = await inventory.arun(session, **inputs, freeze=False)
+                    tenants = scanned.tenant_ids
                 return {
                     "mode": "preview",
                     "run_id": inputs["run_id"],
@@ -157,6 +164,8 @@ async def arun(args, *, runtime_factory=_runtime):
                     "baseline_ref": frozen.baseline_ref if frozen else None,
                     "plan_ref": frozen.plan_ref if frozen else None,
                     "frozen": frozen is not None,
+                    "validation_scope": "frozen_run" if frozen is not None else "current_inventory",
+                    "preflight_complete": frozen is None,
                     "ready": False,
                 }
             if frozen is None:
