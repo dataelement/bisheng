@@ -1,0 +1,25 @@
+{
+  "id": "single-conclusion",
+  "acs": [
+    "AC-13"
+  ],
+  "turns": [
+    {
+      "user": "记住两件事：我用 Mac 办公；我偏好中文回答",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "我平时用什么电脑办公？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "Mac"
+    ]
+  },
+  "notes": "应拆成两条条目",
+  "requires_consolidation": false
+}

@@ -1,0 +1,26 @@
+{
+  "id": "explicit-remember-role",
+  "acs": [
+    "AC-29",
+    "AC-31"
+  ],
+  "turns": [
+    {
+      "user": "请记一下，我现在负责华东区的售前方案，汇报给方案总监",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "我负责哪个区域？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "华东"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

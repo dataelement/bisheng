@@ -1,0 +1,27 @@
+{
+  "id": "no-fabrication-2",
+  "acs": [
+    "AC-64"
+  ],
+  "turns": [
+    {
+      "user": "记住我用 Mac",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "我的车牌号是多少？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "没有",
+      "不知道",
+      "未"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

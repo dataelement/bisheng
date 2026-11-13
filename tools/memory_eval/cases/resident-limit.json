@@ -1,0 +1,35 @@
+{
+  "id": "resident-limit",
+  "acs": [
+    "AC-63"
+  ],
+  "turns": [
+    {
+      "user": "记住我偏好中文",
+      "new_session": false,
+      "expect_write": true
+    },
+    {
+      "user": "记住我偏好表格",
+      "new_session": false,
+      "expect_write": true
+    },
+    {
+      "user": "记住我偏好先给结论",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "给我比较一下三种部署方式",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "|"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": true
+}

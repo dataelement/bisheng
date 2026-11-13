@@ -1,0 +1,26 @@
+{
+  "id": "ephemeral-not-remembered",
+  "acs": [
+    "AC-17",
+    "AC-36"
+  ],
+  "turns": [
+    {
+      "user": "把这个 Excel 的第三列求和，然后记住这个结果",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "你记得我的哪些长期信息？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "第三列"
+    ]
+  },
+  "notes": "一次性任务结果不应写入",
+  "requires_consolidation": false
+}

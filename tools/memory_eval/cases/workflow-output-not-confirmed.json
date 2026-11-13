@@ -1,0 +1,25 @@
+{
+  "id": "workflow-output-not-confirmed",
+  "acs": [
+    "AC-49"
+  ],
+  "turns": [
+    {
+      "user": "（在开启记忆的报销工作流里）帮我生成本月报销单",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "你记得我本月的报销单号吗？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "BX-"
+    ]
+  },
+  "notes": "工作流输出未经用户认可不应成为记忆",
+  "requires_consolidation": true
+}
