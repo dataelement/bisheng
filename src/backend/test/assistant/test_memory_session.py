@@ -94,6 +94,8 @@ def sqlite_messages(wired, monkeypatch):  # noqa: F811
     monkeypatch.setattr(callback_module.ChatMessageDao, "insert_one", staticmethod(insert_one))
     monkeypatch.setattr(client_module.ChatMessageDao, "get_messages_by_chat_id", staticmethod(lambda *a, **k: []))
     monkeypatch.setattr(client_module, "save_message_citations", AsyncMock())
+    # ChatClient reads the "gpts" config in its constructor; keep it off the real config store.
+    monkeypatch.setattr(client_module, "settings", SimpleNamespace(get_from_db=lambda key: {}))
     return wired
 
 
@@ -154,7 +156,8 @@ async def _switch(client, chat_id):
     await client.handle_gpts_message({"inputs": {"data": {"id": ASSISTANT_ID, "chatId": chat_id}}})
 
 
-async def test_ac10_logged_in_connection_registers_on_chat_id_and_on_switch(wired, tenant_ctx, monkeypatch):  # noqa: F811
+async def test_ac10_logged_in_connection_registers_on_chat_id_and_on_switch(sqlite_messages, tenant_ctx, monkeypatch):
+    wired = sqlite_messages  # history loads after a switch stay off the real database
     """AC-10 (R2): the logged-in endpoint injects a register callable; the client calls it
     when the chat id is known and again after switching to another chat."""
     tenant_ctx(TENANT_A)
@@ -181,7 +184,8 @@ async def test_ac10_logged_in_register_refuses_other_users_chat(wired, tenant_ct
     assert _cursor(wired.db, "chat-of-2") is None
 
 
-async def test_ac10_guest_connection_never_registers(wired, tenant_ctx, monkeypatch):  # noqa: F811
+async def test_ac10_guest_connection_never_registers(sqlite_messages, tenant_ctx, monkeypatch):
+    wired = sqlite_messages  # history loads after a switch stay off the real database
     """AC-10: the guest (public link) endpoint injects nothing; switching never registers."""
     from bisheng.public_endpoints.api.endpoints import assistant as public_api
 
@@ -208,7 +212,8 @@ async def test_ac10_guest_connection_never_registers(wired, tenant_ctx, monkeypa
     assert _cursors(wired.db) == []
 
 
-async def test_ac10_open_api_connection_never_registers(wired, tenant_ctx, monkeypatch):  # noqa: F811
+async def test_ac10_open_api_connection_never_registers(sqlite_messages, tenant_ctx, monkeypatch):
+    wired = sqlite_messages  # history loads after a switch stay off the real database
     """AC-10: the open API endpoint injects nothing either."""
     from bisheng.open_endpoints.api.endpoints import assistant as open_api
 
@@ -415,15 +420,15 @@ async def test_ac69_editor_can_switch_memory_on_and_off(update_env, monkeypatch)
     login = SimpleNamespace(user_id=1)
 
     info = await AssistantService.update_assistant(
-        MagicMock(), login, AssistantUpdateReq(id=ASSISTANT_ID, memory_enabled=True)
+        MagicMock(), login, AssistantUpdateReq(id=ASSISTANT_ID, temperature=0.5, memory_enabled=True)
     )
     assert update_env.row.memory_enabled is True and info.memory_enabled is True and update_env.saved
 
-    info = await AssistantService.update_assistant(MagicMock(), login, AssistantUpdateReq(id=ASSISTANT_ID))
+    info = await AssistantService.update_assistant(MagicMock(), login, AssistantUpdateReq(id=ASSISTANT_ID, temperature=0.5))
     assert info.memory_enabled is True  # absent = untouched
 
     await AssistantService.update_assistant(
-        MagicMock(), login, AssistantUpdateReq(id=ASSISTANT_ID, memory_enabled=False)
+        MagicMock(), login, AssistantUpdateReq(id=ASSISTANT_ID, temperature=0.5, memory_enabled=False)
     )
     assert update_env.row.memory_enabled is False
 
@@ -433,7 +438,7 @@ async def test_ac69_non_editor_cannot_change_memory_switch(update_env, monkeypat
     monkeypatch.setattr(AssistantService, "check_update_permission_async", AsyncMock(side_effect=UnAuthorizedError()))
     with pytest.raises(UnAuthorizedError):
         await AssistantService.update_assistant(
-            MagicMock(), SimpleNamespace(user_id=USER_2), AssistantUpdateReq(id=ASSISTANT_ID, memory_enabled=True)
+            MagicMock(), SimpleNamespace(user_id=USER_2), AssistantUpdateReq(id=ASSISTANT_ID, temperature=0.5, memory_enabled=True)
         )
     assert update_env.row.memory_enabled is False and update_env.saved == []
 

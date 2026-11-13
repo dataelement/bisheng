@@ -619,6 +619,12 @@ class AssistantAgent(AssistantUtils):
 
         return result
 
+    async def after_answer_persisted(self, message_id: int | None, interrupted: bool = False) -> None:
+        """Called by the chat client once the turn's answer row is written (normal or stopped),
+        or with ``None`` when the turn failed without an answer (decision 15, R2)."""
+        turn, self.memory_turn = self.memory_turn, None
+        await assistant_memory.end_turn(self.chat_id, turn, message_id)
+
     async def begin_memory_turn(self, callback: Callbacks = None):
         """Re-read the memory switch and rebuild the agent when the tool set changes (decision 11)."""
         if self.author_tools is None:
