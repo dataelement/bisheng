@@ -19,14 +19,17 @@ from loguru import logger
 
 from bisheng.memory.domain.ports import SCENE_DAILY, MemoryContext
 from bisheng.memory.domain.services import metrics as m
+from bisheng.memory.domain.services.activity import MemoryActivity
 from bisheng.memory.domain.services.factory import get_metrics, get_resident_service
 from bisheng.memory.domain.services.gate import MemoryGate
-from bisheng.memory.domain.services.redaction import split_reserved_tools
+from bisheng.memory.domain.services.redaction import is_memory_tool, redact_tool_event, split_reserved_tools
 from bisheng.memory.domain.services.resident import SCENE_CLASS_CHAT, ResidentBlock
 from bisheng.memory.domain.services.tools import build_memory_tools
 from bisheng.memory.domain.services.turn_record import TurnRecordService
 
 MemoryRegister = Callable[[str], Awaitable[None]]
+
+MEMORY_TOOL_ERROR = "记忆操作失败"
 
 
 async def register_session(memory_register: MemoryRegister | None, chat_id: str | None) -> None:
@@ -46,6 +49,25 @@ def with_resident(sys_prompt: str | None, resident_text: str) -> str | None:
     return f"{sys_prompt}\n\n{resident_text}" if sys_prompt else resident_text
 
 
+# ---- tool event redaction (decision 10): by tool name, whatever the turn's state ----
+def redact_args(tool_name: str | None, args):
+    return redact_tool_event(tool_name, args) if is_memory_tool(tool_name) else args
+
+
+def redact_results(tool_name: str | None, raw_output, parse: Callable):
+    """``parse`` is the normal result parser, used for every non-memory tool."""
+    if is_memory_tool(tool_name):
+        return redact_tool_event(tool_name, raw_output)
+    return parse(raw_output, tool_name)
+
+
+def redact_error(tool_name: str | None, error: str | None) -> str | None:
+    """Error texts of memory tools may echo the arguments; replace them with a fixed text."""
+    if error is not None and is_memory_tool(tool_name):
+        return MEMORY_TOOL_ERROR
+    return error
+
+
 class DailyMemoryTurn:
     """Memory state of one daily-mode turn; disabled unless ``start`` resolves a context."""
 
@@ -55,6 +77,7 @@ class DailyMemoryTurn:
         self.block: ResidentBlock | None = None
         # True on the login-state path (the endpoint passed memory_register).
         self.registered = False
+        self._last_signal: dict | None = None
 
     @property
     def enabled(self) -> bool:
@@ -110,3 +133,62 @@ class DailyMemoryTurn:
             return tools
         kept, _dropped = split_reserved_tools(tools)
         return [*kept, *memory_tools]
+
+    # ---- stream signal (decision 15): flags only, never item text --------------------
+    @property
+    def has_write(self) -> bool:
+        return bool(self.ctx and self.ctx.extra.get("memory_written"))
+
+    @property
+    def has_attribution(self) -> bool:
+        """This turn injected a non-empty resident block or retrieved items."""
+        if not self.ctx:
+            return False
+        return bool(self.block and self.block.text) or bool(self.ctx.extra.get("memory_retrieved"))
+
+    def _flags(self) -> dict:
+        return {"turn_id": self.ctx.turn_id, "has_write": self.has_write, "has_attribution": self.has_attribution}
+
+    def pending_signal(self) -> dict | None:
+        """Flags to stream now: set, and changed since the last signal; otherwise None."""
+        if not self.enabled or not (self.has_write or self.has_attribution):
+            return None
+        flags = self._flags()
+        if flags == self._last_signal:
+            return None
+        self._last_signal = flags
+        return flags
+
+    def final_signal(self) -> dict | None:
+        """Flags sent once more just before the answer ends, alongside the answer's message id."""
+        if not self.enabled or not (self.has_write or self.has_attribution):
+            return None
+        self._last_signal = self._flags()
+        return self._last_signal
+
+    # ---- end of turn (decisions 7 and 15) ---------------------------------------------
+    async def finish(self, message_id: int | None) -> None:
+        """Bind the turn's records to the answer row and record the end of the turn.
+
+        Only the login-state path touches the session row; a disabled turn there
+        advances the watermark past itself (AC-41).
+        """
+        if not self.registered:
+            return
+        try:
+            if self.enabled:
+                await TurnRecordService.bind_turn(self.ctx, message_id)
+            await MemoryActivity.end_turn(self.chat_id, message_id, self.enabled)
+        except Exception:
+            logger.exception("memory: ending daily turn failed for chat {}", self.chat_id)
+
+    def finish_sync(self, message_id: int | None) -> None:
+        """Interrupt path: the task is being cancelled, so no ``await`` (design pitfall 24)."""
+        if not self.registered:
+            return
+        try:
+            if self.enabled:
+                TurnRecordService.bind_turn_sync(self.ctx, message_id)
+            MemoryActivity.end_turn_sync(self.chat_id, message_id, self.enabled)
+        except Exception:
+            logger.exception("memory: ending interrupted daily turn failed for chat {}", self.chat_id)

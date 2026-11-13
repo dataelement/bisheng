@@ -55,7 +55,7 @@ async def test_ac21_write_emits_memory_signal_without_item_text(memory, stream_e
     # The last signal precedes the answer's end event and names the answer row.
     answer_id = answer_rows(stream_env.inserted)[0].id
     assert signals[-1]["message_id"] == answer_id
-    order = [b["category"] + "/" + b["type"] for b in sse_events(chunks)]
+    order = [f"{b.get('category')}/{b.get('type')}" for b in sse_events(chunks)]
     assert order.index("memory/" + signals[-1]["type"]) < order.index("agent_answer/end")
 
 

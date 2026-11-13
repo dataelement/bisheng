@@ -96,6 +96,7 @@ from .chat_helpers import (
     # insert a placeholder entry in the sidebar conversation list
     # the moment a new chat is created (title updated later via
     # gen_title). Must be emitted *before* any category event.
+    _memory_sse,  # F132 long-term memory signal
     _sse_resp,  # v2.5 Agent-mode SSE builder
     gen_title,
     read_image_as_data_url,
@@ -117,7 +118,15 @@ from .daily_citation import (
     select_cited_items_sync,
     strip_ids_for_sync_path,
 )
-from .daily_memory import DailyMemoryTurn, MemoryRegister, register_session, with_resident
+from .daily_memory import (
+    DailyMemoryTurn,
+    MemoryRegister,
+    redact_args,
+    redact_error,
+    redact_results,
+    register_session,
+    with_resident,
+)
 from .workstation_service import WorkStationService
 
 # Handed to the model in place of a transcript when an audio/video attachment
@@ -1931,6 +1940,11 @@ async def _agent_stream_chat_completion(
             row = build_answer_row(db_content)
             row.extra = blocked_answer_extra()
             resp_msg = await ChatMessageDao.ainsert_one(row)
+            # F132: memory writes made before the replacement still happened.
+            await memory_turn.finish(resp_msg.id)
+            memory_signal = memory_turn.final_signal()
+            if memory_signal:
+                yield _memory_sse(memory_signal, conversation_id, message_id=resp_msg.id)
             yield _sse_resp(
                 "agent_answer",
                 "end",
@@ -1979,6 +1993,8 @@ async def _agent_stream_chat_completion(
                     cited=citation_items,
                 )
                 resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}))
+                # F132: synchronous bind and end of turn (an await would be cancelled).
+                memory_turn.finish_sync(resp.id)
                 save_message_citations_sync(
                     message_id=resp.id,
                     items=citation_items,
@@ -2332,7 +2348,9 @@ async def _agent_stream_chat_completion(
                             "tool_name": tool_name,
                             "display_name": meta["display_name"],
                             "tool_type": meta["tool_type"],
-                            "args": (ev.get("data") or {}).get("input", {}),
+                            # F132 decision 10: memory tool inputs are redacted
+                            # before they reach `events` or the stream (AC-09).
+                            "args": redact_args(tool_name, (ev.get("data") or {}).get("input", {})),
                             "started_at": int(time.time() * 1000),
                         }
                         events.append(tool_event)
@@ -2359,16 +2377,17 @@ async def _agent_stream_chat_completion(
                         ended_ms = int(time.time() * 1000)
                         if idx is not None:
                             tool_event = events[idx]
-                            results = _parse_tool_results(raw_output, tool_event.get("tool_name"))
+                            ended_tool = tool_event.get("tool_name")
+                            results = redact_results(ended_tool, raw_output, _parse_tool_results)
                             tool_event["results"] = results
-                            tool_event["error"] = _extract_tool_error(raw_output)
+                            tool_event["error"] = redact_error(ended_tool, _extract_tool_error(raw_output))
                             tool_event["ended_at"] = ended_ms
                             if tool_event.get("started_at") is not None:
                                 tool_event["duration_ms"] = max(0, ended_ms - tool_event["started_at"])
                             payload = {k: v for k, v in tool_event.items() if k != "type"}
                         else:
                             # Edge case: tool_end without a matching start. Synthesise one.
-                            results = _parse_tool_results(raw_output, name)
+                            results = redact_results(name, raw_output, _parse_tool_results)
                             tool_event = {
                                 "type": "tool_call",
                                 "tool_call_id": tc_id,
@@ -2377,7 +2396,7 @@ async def _agent_stream_chat_completion(
                                 "tool_type": "tool",
                                 "args": {},
                                 "results": results,
-                                "error": _extract_tool_error(raw_output),
+                                "error": redact_error(name, _extract_tool_error(raw_output)),
                                 "started_at": ended_ms,
                                 "ended_at": ended_ms,
                                 "duration_ms": 0,
@@ -2385,6 +2404,10 @@ async def _agent_stream_chat_completion(
                             events.append(tool_event)
                             payload = {k: v for k, v in tool_event.items() if k != "type"}
                         yield _sse_resp("agent_tool_call", "end", payload, conversation_id)
+                        # F132: tell the client as soon as a memory write lands (AC-21).
+                        memory_signal = memory_turn.pending_signal()
+                        if memory_signal:
+                            yield _memory_sse(memory_signal, conversation_id)
                     elif et == "on_tool_error":
                         tc_id = str(ev.get("run_id") or "")
                         if tc_id in ignored_tool_run_ids:
@@ -2398,6 +2421,7 @@ async def _agent_stream_chat_completion(
                         err = (ev.get("data") or {}).get("error")
                         err_msg = str(err) if err is not None else "tool execution failed"
                         if idx is not None:
+                            err_msg = redact_error(events[idx].get("tool_name"), err_msg)
                             tool_event = events[idx]
                             tool_event["results"] = []
                             tool_event["error"] = err_msg
@@ -2412,9 +2436,9 @@ async def _agent_stream_chat_completion(
                                 "tool_name": name,
                                 "display_name": name,
                                 "tool_type": "tool",
-                                "args": (ev.get("data") or {}).get("input", {}),
+                                "args": redact_args(name, (ev.get("data") or {}).get("input", {})),
                                 "results": [],
-                                "error": err_msg,
+                                "error": redact_error(name, err_msg),
                                 "started_at": ended_ms,
                                 "ended_at": ended_ms,
                                 "duration_ms": 0,
@@ -2583,6 +2607,12 @@ async def _agent_stream_chat_completion(
             chat_id=conversation_id,
             flow_id="",
         )
+        # F132: bind this turn's memory records to the answer and end the turn;
+        # the flags go out before the answer's end event (AC-21, AC-87).
+        await memory_turn.finish(resp_msg.id)
+        memory_signal = memory_turn.final_signal()
+        if memory_signal:
+            yield _memory_sse(memory_signal, conversation_id, message_id=resp_msg.id)
 
         yield _sse_resp(
             "agent_answer",
