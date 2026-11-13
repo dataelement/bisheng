@@ -241,7 +241,16 @@ def memory(memory_db):
         resident=ResidentService(kv=kv, metrics=metrics),
     )
     seed_user(memory_db)
+    # Pin the tenant: registration reads the current tenant, and other suites can
+    # leave a different tenant ContextVar behind in the same process.
+    from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+
+    token = set_current_tenant_id(TENANT_A)
     yield SimpleNamespace(db=memory_db, kv=kv, index=index, service=service, metrics=metrics)
+    try:
+        current_tenant_id.reset(token)
+    except ValueError:
+        pass  # reset from a different context copy; the test's copy is gone anyway
     factory.reset()
 
 
