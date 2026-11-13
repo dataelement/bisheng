@@ -612,6 +612,7 @@ class AssistantAgent(AssistantUtils):
         # Drop the injected resident message and redact memory tool messages before
         # the caller slices and persists the result.
         result = assistant_memory.finalize_result(result)
+        await assistant_memory.finish_turn(turn, callback)
 
         # Record Chat History
         await self.record_chat_history([one.to_json() for one in result])
