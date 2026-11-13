@@ -712,7 +712,6 @@
         "empty": "暂无空间",
         "no_folders": "暂无文件夹",
         "more_folders": "加载更多文件夹",
-        "all_spaces": "全部空间",
         "collapse_navigation": "收起空间导航",
         "expand_navigation": "展开空间导航"
     },
@@ -730,6 +729,9 @@
         "select_all": "全选"
     },
     "detail": {
+        "save_failed": "修改尚未保存，请重试",
+        "file_title": "文件 {{id}}",
+        "file_editor": "文件分块详情",
         "files": "文件管理",
         "defaults": "解析与切分",
         "metadata": "元数据",

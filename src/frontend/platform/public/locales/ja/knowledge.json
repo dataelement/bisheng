@@ -706,7 +706,6 @@
         "empty": "スペースがありません",
         "no_folders": "フォルダーがありません",
         "more_folders": "フォルダーをさらに読み込む",
-        "all_spaces": "すべてのスペース",
         "collapse_navigation": "スペースナビゲーションを折りたたむ",
         "expand_navigation": "スペースナビゲーションを展開"
     },
@@ -724,6 +723,9 @@
         "select_all": "すべて選択"
     },
     "detail": {
+        "save_failed": "変更を保存できませんでした。再試行してください。",
+        "file_title": "ファイル {{id}}",
+        "file_editor": "ファイルのチャンク",
         "files": "ファイル管理",
         "defaults": "解析と分割",
         "metadata": "メタデータ",

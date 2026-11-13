@@ -43,9 +43,7 @@ export default function KnowledgePage() {
   const content = (scope: KnowledgeQueryScope | undefined, tree = false) =>
     scope ? (
       tree ? (
-        <KnowledgeSpaceWorkspace key={JSON.stringify(scope)} scope={scope} routeId={id}>
-          <KnowledgeFile scope={scope} toolbarTarget={toolbarTarget} />
-        </KnowledgeSpaceWorkspace>
+        <KnowledgeSpaceWorkspace key={JSON.stringify(scope)} scope={scope} routeId={id} active={activeKey === "file"} />
       ) : <KnowledgeFile key={JSON.stringify(scope)} scope={scope} toolbarTarget={toolbarTarget} />
     ) : (
       unavailable
@@ -56,7 +54,10 @@ export default function KnowledgePage() {
         activeKey={activeKey}
         onChange={(key) => {
           setActive(key);
-          if (id !== undefined) navigate("/filelib");
+          if (id !== undefined) {
+            pageWindow.LibPage = { type: key };
+            navigate("/filelib");
+          }
         }}
         extra={<div ref={setToolbarTarget} />}
         className="mb-10 w-full [&>div:first-child]:mx-2 [&>div:first-child]:mb-2"

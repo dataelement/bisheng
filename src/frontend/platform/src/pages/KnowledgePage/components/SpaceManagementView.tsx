@@ -15,6 +15,7 @@ import { showApiError } from "@/controllers/request";
 import { KnowledgeSpaceSettingsPanel } from "./KnowledgeLibraryDialog";
 import { ProcessingDefaultsPanel } from "./ProcessingDefaultsDialog";
 import { SpaceProcessingPanel } from "./SpaceProcessingDialog";
+import { SpaceModelIndexPanel } from "./SpaceModelIndexPanel";
 
 interface SpaceManagementViewProps {
   scope: KnowledgeQueryScope;
@@ -109,25 +110,7 @@ export function SpaceManagementView({
             key: "embedding",
             label: t("detail.embedding"),
             children: (
-              <SpaceProcessingPanel
-                scope={scope}
-                spaceId={spaceId}
-                mode="embedding"
-                onSaved={() => {
-                  void handleSaved();
-                }}
-              />
-            ),
-          },
-          {
-            key: "jobs",
-            label: t("detail.jobs"),
-            children: (
-              <SpaceProcessingPanel
-                scope={scope}
-                spaceId={spaceId}
-                mode="jobs"
-              />
+              <SpaceModelIndexPanel scope={scope} spaceId={spaceId} onSaved={() => { void handleSaved(); }} />
             ),
           },
           {
@@ -144,7 +127,13 @@ export function SpaceManagementView({
         ]
       : []),
   ];
-  const requested = params.get("tab") ?? "files";
+  const requested = params.get("tab") === "jobs" ? "embedding" : params.get("tab") ?? "files";
+  useEffect(() => {
+    if (params.get("tab") !== "jobs") return;
+    const next = new URLSearchParams(params);
+    next.set("tab", "embedding");
+    setParams(next, { replace: true });
+  }, [params, setParams]);
   const active = items.some((item) => item.key === requested)
     ? requested
     : "files";

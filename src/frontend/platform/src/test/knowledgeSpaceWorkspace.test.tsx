@@ -41,14 +41,14 @@ afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear(
 it("keeps the expanded tree and routes selected folders into the workspace file presentation", async () => {
   mount("/filelib?fileStatus=abnormal&keep=1");
   const tree = screen.getByRole("complementary");
-  fireEvent.click(await within(tree).findByRole("button", { name: "sidebar.expand Reports" }));
+  await screen.findByTestId("files");
   fireEvent.click(await within(tree).findByRole("button", { name: "Finance" }));
   await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"parent":9'));
   expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?fileStatus=abnormal&keep=1&parent_id=9");
   expect(screen.getByTestId("files")).toHaveTextContent('"presentation":"workspace"');
   expect(within(screen.getByRole("complementary")).getByRole("button", { name: "Finance" })).toHaveAttribute("aria-current", "page");
-  fireEvent.click(within(screen.getByRole("complementary")).getByRole("button", { name: "sidebar.all_spaces" }));
-  expect(await screen.findByText("ordinary-list")).toBeVisible();
+  expect(screen.queryByText("ordinary-list")).toBeNull();
+  expect(screen.queryByRole("button", { name: "sidebar.all_spaces" })).toBeNull();
 });
 
 it("opens deep folder links while preserving the independent QA and management tabs", async () => {
@@ -77,4 +77,45 @@ it("selects file content from a configuration deep link while retaining director
   fireEvent.click(await within(tree).findByRole("button", { name: "Finance" }));
   await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?fileStatus=abnormal&keep=1&parent_id=9"));
   expect(screen.getByTestId("location")).not.toHaveTextContent("tab=");
+});
+
+it("automatically opens the first sidebar space instead of rendering the ordinary space list", async () => {
+  mount();
+  expect(await screen.findByTestId("files")).toHaveTextContent('"id":7');
+  expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7");
+  expect(screen.queryByText("ordinary-list")).toBeNull();
+});
+
+it("waits for earlier navigation groups before selecting the first space", async () => {
+  let finish!: (rows: { id: number; name: string; tenant_id: number }[]) => void;
+  const pending = new Promise<{ id: number; name: string; tenant_id: number }[]>((resolve) => { finish = resolve; });
+  const fallback = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation((url: string, options?: unknown) => url.endsWith("/department") ? pending : fallback(url, options));
+  mount();
+  await screen.findByRole("button", { name: "Reports" });
+  expect(screen.queryByTestId("files")).toBeNull();
+  finish([{ id: 8, name: "Department first", tenant_id: 60 }]);
+  await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"id":8'));
+});
+
+it("shows an empty workspace when no navigation or child-only space exists", async () => {
+  mock.get.mockResolvedValue([]);
+  mock.get.mockImplementation(async (url: string) => url.endsWith("/list") ? { data: [], has_more: false, next_cursor: null } : []);
+  mount();
+  await waitFor(() => expect(mock.get).toHaveBeenCalledWith("/api/v1/knowledge/space/list", { params: { page_size: 1 } }));
+  expect(screen.queryByTestId("files")).toBeNull();
+  expect(screen.queryByText("ordinary-list")).toBeNull();
+});
+
+it("advances a child-only visible-space cursor without showing a space list", async () => {
+  const fallback = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation(async (url: string, options?: { params?: { cursor?: string } }) => {
+    if (url.endsWith("/mine") || url.endsWith("/department") || url.endsWith("/joined")) return [];
+    if (url.endsWith("/list")) return options?.params?.cursor ? { data: [{ id: 12, name: "Child grant", tenant_id: 60 }], has_more: false } : { data: [], has_more: true, next_cursor: "opaque/+==" };
+    return fallback(url, options);
+  });
+  mount();
+  await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"id":12'));
+  expect(mock.get).toHaveBeenCalledWith("/api/v1/knowledge/space/list", { params: { page_size: 1, cursor: "opaque/+==" } });
+  expect(screen.queryByText("ordinary-list")).toBeNull();
 });

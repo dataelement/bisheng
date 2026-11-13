@@ -30,6 +30,7 @@ export interface FilesProps {
   spaceId?: number;
   parentId?: number | null;
   onOpenFolder?: (id: number) => void;
+  onOpenFile?: (item: KnowledgeSpaceChild) => void;
   // The old route is migrated separately; its flags never authorize SPACE rows.
   onPreview?: (id: string) => void;
   canEditKb?: boolean;
@@ -84,7 +85,7 @@ export default function Files(props: FilesProps) {
     />
   );
 }
-function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, presentation, toolbarTarget }: DirectoryProps) {
+function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, presentation, toolbarTarget, onOpenFile }: DirectoryProps) {
   const { t } = useTranslation("knowledge");
   const client = useQueryClient();
   const instance = useId(),
@@ -307,6 +308,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     setPreview(null);
   };
   const handlePreview = async (item: KnowledgeSpaceChild) => {
+    if (onOpenFile) { onOpenFile(item); return; }
     const rowLifetime = rowLifetimes.current.get(rowKey(item));
     if (!rowLifetime || current.current !== epoch) return;
     const token = { epoch, item, rowLifetime };

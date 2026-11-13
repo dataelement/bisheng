@@ -323,13 +323,6 @@ export default function KnowledgeFile({
             </DropdownItem>
             <DropdownItem
               onSelect={() => {
-                handleConfiguration(row, "jobs");
-              }}
-            >
-              {t("f118.processing_title_jobs")}
-            </DropdownItem>
-            <DropdownItem
-              onSelect={() => {
                 handleConfiguration(row, "defaults");
               }}
             >

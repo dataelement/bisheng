@@ -41,6 +41,11 @@ vi.mock("react-router-dom", () => ({
   useParams: () => ({}),
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
+// Isolate list authorization/pagination; the real default workspace is tested separately.
+vi.mock("@/pages/KnowledgePage/KnowledgeSpaceWorkspace", async () => {
+  const { default: KnowledgeFile } = await import("@/pages/KnowledgePage/KnowledgeFile");
+  return { KnowledgeSpaceWorkspace: ({ scope }: { scope: import("@/controllers/hooks/knowledge").KnowledgeQueryScope }) => <KnowledgeFile scope={scope} /> };
+});
 vi.mock("@/pages/KnowledgePage/sidebar/KnowledgeSpaceSidebar", () => ({
   KnowledgeSpaceSidebar: () => <aside data-testid="knowledge-space-tree" />,
 }));
@@ -355,7 +360,7 @@ it.each(["ordinary", "admin"])(
   },
 );
 
-it("uses ordinary SPACE listing, preserves the create menu and keeps QA as its own tab", async () => {
+it("preserves isolated list authorization, the create menu and the independent QA tab", async () => {
   const f = setup();
   render(f.draw());
   await screen.findByText("Space");

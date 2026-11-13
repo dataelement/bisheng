@@ -1,11 +1,12 @@
 import { Breadcrumb, Button } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useId } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   knowledgeSpaceApi,
   type KnowledgeSpaceInfo,
+  type KnowledgeSpaceChild,
 } from "@/controllers/API/knowledgeSpace";
 import {
   knowledgeFilesApi,
@@ -19,6 +20,7 @@ import { showApiError } from "@/controllers/request";
 import Files from "./components/Files";
 import Header from "./components/Header";
 import { SpaceManagementView } from "./components/SpaceManagementView";
+import { SpaceFileDetail } from "./components/SpaceFileDetail";
 
 export const parseKnowledgeId = (value: string | null | undefined): number | null => {
   if (!value || !/^\d+$/.test(value)) return null;
@@ -43,7 +45,10 @@ export function SpaceDetail({
 }: SpaceDetailProps) {
   const { t } = useTranslation("knowledge");
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const fileParams = searchParams.getAll("file_id");
+  const fileId = fileParams.length === 1 ? parseKnowledgeId(fileParams[0]) : null;
+  const [openedFile, setOpenedFile] = useState<KnowledgeSpaceChild | undefined>();
   const fileStatus =
     searchParams.get("fileStatus") === "abnormal" ? "abnormal" : "all";
   const instance = useId();
@@ -58,6 +63,7 @@ export function SpaceDetail({
       parentId === null
         ? knowledgeSpaceApi.getSpaceInfo(spaceId)
         : knowledgeFilesApi.listSpaceFolderParents(spaceId, parentId),
+    enabled: fileParams.length === 0,
     keepPreviousData: false,
     cacheTime: 0,
   });
@@ -112,9 +118,21 @@ export function SpaceDetail({
         onOpenFolder={onOpenFolder}
         presentation={presentation}
         toolbarTarget={toolbarTarget}
+        onOpenFile={presentation === "workspace" ? (item) => {
+          setOpenedFile(item);
+          const next = new URLSearchParams(searchParams);
+          next.set("file_id", String(item.id));
+          setSearchParams(next);
+        } : undefined}
       />
     </>
   );
+  if (fileParams.length > 0 && fileId === null) return <p role="status">{t("f118.scope_unavailable")}</p>;
+  if (presentation === "workspace" && fileId !== null) return <SpaceFileDetail
+    key={JSON.stringify([scope, spaceId, fileId])} scope={scope} spaceId={spaceId} fileId={fileId}
+    initialFile={openedFile?.id === fileId ? openedFile : undefined}
+    onBack={() => { const next = new URLSearchParams(searchParams); next.delete("file_id"); setSearchParams(next); }}
+  />;
   if (presentation === "workspace") return (
     <SpaceManagementView scope={scope} spaceId={spaceId} parentId={parentId} title={title} description={parentId === null ? info?.description ?? "" : ""}>
       {(toolbarTarget) => directory(toolbarTarget)}

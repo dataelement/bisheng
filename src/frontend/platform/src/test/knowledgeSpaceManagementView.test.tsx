@@ -116,11 +116,11 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
 });
 
-it("offers six authorized panels and preserves directory parameters when returning to files", async () => {
+it("offers five authorized panels and preserves directory parameters when returning to files", async () => {
   const f = setup();
   render(f.draw());
   const tabs = await screen.findByRole("tablist");
-  expect(within(tabs).getAllByRole("tab")).toHaveLength(6);
+  expect(within(tabs).getAllByRole("tab")).toHaveLength(5);
   expect(
     await screen.findByRole("heading", { name: "Root space" }),
   ).toBeVisible();
@@ -134,8 +134,8 @@ it("offers six authorized panels and preserves directory parameters when returni
   expect(await screen.findByText("schema-form")).toBeVisible();
   tab("detail.embedding");
   expect(await screen.findByText("embedding-form")).toBeVisible();
-  tab("detail.jobs");
   expect(await screen.findByText("jobs-form")).toBeVisible();
+  expect(screen.queryByRole("tab", { name: "detail.jobs" })).toBeNull();
   tab("detail.settings");
   expect(await screen.findByText("settings-form")).toBeVisible();
   tab("detail.files");
@@ -210,4 +210,14 @@ it("retires the old tenant's permissions and open member dialog", async () => {
   expect(screen.queryByRole("tab", { name: "detail.settings" })).toBeNull();
   await act(async () => resolve({ actions: [] }));
   expect(screen.getByText("directory-files")).toBeVisible();
+});
+
+it("redirects a saved task-tab link into model and index while preserving the directory", async () => {
+  const f = setup("/filelib/7?parent_id=9&tab=jobs&keep=1");
+  render(f.draw());
+  expect(await screen.findByRole("tab", { name: "detail.embedding" })).toHaveAttribute("data-state", "active");
+  expect(await screen.findByText("embedding-form")).toBeVisible();
+  expect(screen.getByText("jobs-form")).toBeVisible();
+  expect(screen.getByTestId("location")).toHaveTextContent("tab=embedding");
+  expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9");
 });
