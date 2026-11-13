@@ -1,4 +1,4 @@
-import { Button, Input, Pagination, Select } from "@bisheng/ui";
+import { Button, Pagination } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,10 +13,7 @@ import {
   type ProcessingTargetInput,
 } from "@/controllers/API/knowledgeSpace";
 import {
-  precheckSpaceCopy,
-  confirmSpaceCopy,
   readProcessingTarget,
-  readMetadataSchema,
 } from "@/controllers/API/knowledgeProcessing";
 import {
   useKnowledgeProcessingActions,
@@ -25,7 +22,6 @@ import {
   knowledgeQueryKeys,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
-import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { createDshOperationId as createOperationId } from "@/util/dshOperationId";
 import { showApiError } from "@/controllers/request";
@@ -44,7 +40,7 @@ import { SpaceProcessingActions } from "./SpaceProcessingActions";
 interface SpaceProcessingDialogProps {
   scope: KnowledgeQueryScope;
   spaceId: number;
-  mode: "copy" | "embedding" | "file" | "jobs" | "schema";
+  mode: "embedding" | "file" | "jobs";
   target?: ProcessingTargetInput;
   fileId?: number;
   includeCopies?: boolean;
@@ -108,17 +104,6 @@ function Content({
   });
   const [jobsPage, setJobsPage] = useState(1);
   const paginationLocale = usePaginationLocale();
-  const selectLabels = useSelectLabels();
-  const [schemaOperation, setSchemaOperation] = useState<"add" | "rename" | "delete">("add");
-  const [fieldName, setFieldName] = useState(""),
-    [newFieldName, setNewFieldName] = useState("");
-  const [fieldType, setFieldType] = useState<"string" | "number" | "time">("string");
-  const schema = useQuery({
-    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "metadata-schema"],
-    queryFn: () => readMetadataSchema(spaceId),
-    enabled: mode === "schema" && Boolean(scope.identityKey),
-    cacheTime: 0,
-  });
   const settings = useKnowledgeProcessingSettings(
     mode === "file" ? scope : { ...scope, identityKey: "" },
     spaceId,
@@ -142,8 +127,7 @@ function Content({
     spaceId,
     { page: jobsPage, page_size: 20, kind: "space_copy" },
   );
-  const [name, setName] = useState(""),
-    [model, setModel] = useState("");
+  const [model, setModel] = useState("");
   const modelInitialized = useRef(false);
   useEffect(() => {
     if (!modelInitialized.current && configured.data) {
@@ -180,18 +164,16 @@ function Content({
       models.error ||
       jobs.error ||
       copies.error ||
-      schema.error ||
       configured.error;
     if (error) showApiError(error);
-  }, [settings.error, models.error, jobs.error, copies.error, schema.error, configured.error]);
+  }, [settings.error, models.error, jobs.error, copies.error, configured.error]);
   const validation = draft ? validateProcessingDefaultsDraft(draft) : null;
   const handleReview = async () => {
     if (busy || (mode === "embedding" && !configured.isSuccess)) return;
     setBusy(true);
     try {
       let result: OperationPrecheck;
-      if (mode === "copy") result = await precheckSpaceCopy(spaceId, name);
-      else {
+      {
         let request: ProcessingPrecheckRequest;
         if (mode === "embedding")
           request = {
@@ -203,30 +185,7 @@ function Content({
                   : null,
             },
           };
-        else if (mode === "schema") {
-          if (!schema.data || !fieldName.trim()) return;
-          const change =
-            schemaOperation === "add"
-              ? {
-                  operation: "add" as const,
-                  field_name: fieldName,
-                  field_type: fieldType,
-                }
-              : schemaOperation === "rename"
-                ? {
-                    operation: "rename" as const,
-                    field_name: fieldName,
-                    new_field_name: newFieldName,
-                  }
-                : { operation: "delete" as const, field_name: fieldName };
-          request = {
-            kind: "metadata_schema_change",
-            parameters: {
-              expected_schema_revision: schema.data.revision,
-              changes: [change],
-            },
-          };
-        } else {
+        else {
           if (!validation?.ok) return;
           const actualTarget =
             target ?? (fileId ? await readProcessingTarget(spaceId, fileId) : null);
@@ -260,22 +219,10 @@ function Content({
       idempotency_key: plan.key,
     };
     try {
-      if (mode === "copy") {
-        const result = await confirmSpaceCopy(spaceId, request);
-        if (!alive.current) return;
-        if (result.processing_job)
-          setJob({
-            id: result.processing_job.job_id,
-            space: result.knowledge.id,
-            kind: "space_copy",
-          });
-        else setCompleted(result.completed);
-      } else {
-        const result = await actions.createJob(request);
-        if (!alive.current) return;
-        if ("completed" in result) setCompleted(result.completed);
-        else setJob({ id: result.job_id, space: spaceId });
-      }
+      const result = await actions.createJob(request);
+      if (!alive.current) return;
+      if ("completed" in result) setCompleted(result.completed);
+      else setJob({ id: result.job_id, space: spaceId });
       onSaved?.();
     } catch (error) {
       if (alive.current) showApiError(error);
@@ -296,12 +243,7 @@ function Content({
           reviewDisabled={
             busy ||
             (mode === "embedding" && !configured.isSuccess) ||
-            (mode === "copy" && !name.trim()) ||
-            (mode === "file" && !validation?.ok) ||
-            (mode === "schema" &&
-              (!schema.data ||
-                !fieldName.trim() ||
-                (schemaOperation === "rename" && !newFieldName.trim())))
+            (mode === "file" && !validation?.ok)
           }
           hasPlan={Boolean(plan)}
           canExecute={Boolean(plan?.result.can_execute && plan.result.check_complete)}
@@ -321,11 +263,7 @@ function Content({
           {t(
             mode === "file"
               ? "f118.processing_overwrite_warning"
-              : mode === "copy"
-                ? "f118.processing_copy_notice"
-                : mode === "schema"
-                  ? "f118.processing_schema_notice"
-                  : "f118.processing_rebuild_notice",
+              : "f118.processing_rebuild_notice",
           )}
         </p>
       )}
@@ -384,13 +322,6 @@ function Content({
       ) : (
         <>
           <fieldset disabled={busy || Boolean(plan)} className="space-y-4">
-            {mode === "copy" && (
-              <Input
-                aria-label={t("f118.space_name")}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            )}
             {mode === "embedding" && (
               <>
                 <ModelSelect
@@ -417,84 +348,6 @@ function Content({
                   </div>
                 )}
               </>
-            )}
-            {mode === "schema" && (
-              <section className="space-y-3">
-                {schema.isInitialLoading && <p role="status">{t("f118.loading_space")}</p>}
-                {schema.isError && (
-                  <div role="alert">
-                    <p>{t("f118.load_failed")}</p>
-                    <Button
-                      onClick={() => {
-                        void schema.refetch();
-                      }}
-                    >
-                      {t("retry")}
-                    </Button>
-                  </div>
-                )}
-                {presentation === "page" && (
-                  <div className="space-y-2 border-b border-border-base pb-4">
-                    {(schema.data?.fields ?? []).map((field) => (
-                      <p key={field.field_name} className="text-body text-text-2">
-                        {field.field_name} · {t(`f118.processing_field_${field.field_type}`)}
-                      </p>
-                    ))}
-                    {schema.isSuccess && !schema.data.fields.length && (
-                      <p className="text-body text-text-3">{t("detail.no_metadata")}</p>
-                    )}
-                  </div>
-                )}
-                <Select
-                  {...selectLabels}
-                  value={schemaOperation}
-                  options={["add", "rename", "delete"].map((value) => ({
-                    value,
-                    label: t(`f118.processing_schema_${value}`),
-                  }))}
-                  onChange={(value) => {
-                    setSchemaOperation(value as typeof schemaOperation);
-                    setFieldName("");
-                  }}
-                />
-                {schemaOperation === "add" ? (
-                  <Input
-                    aria-label={t("f118.processing_field_name")}
-                    value={fieldName}
-                    onChange={(event) => setFieldName(event.target.value)}
-                  />
-                ) : (
-                  <Select
-                    {...selectLabels}
-                    value={fieldName || undefined}
-                    options={(schema.data?.fields ?? [])
-                      .filter((row) => row.field_name?.trim())
-                      .map((row) => ({
-                        value: row.field_name,
-                        label: row.field_name,
-                      }))}
-                    onChange={(value) => setFieldName(String(value))}
-                  />
-                )}
-                {schemaOperation === "rename" && (
-                  <Input
-                    aria-label={t("f118.processing_field_name")}
-                    value={newFieldName}
-                    onChange={(event) => setNewFieldName(event.target.value)}
-                  />
-                )}
-                {schemaOperation === "add" && (
-                  <Select
-                    {...selectLabels}
-                    value={fieldType}
-                    options={["string", "number", "time"].map((value) => ({
-                      value,
-                      label: t(`f118.processing_field_${value}`),
-                    }))}
-                    onChange={(value) => setFieldType(value as typeof fieldType)}
-                  />
-                )}
-              </section>
             )}
             {mode === "file" && (
               <>

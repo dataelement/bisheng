@@ -35,6 +35,9 @@ vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({
 vi.mock("@/pages/KnowledgePage/components/ProcessingDefaultsDialog", () => ({
   ProcessingDefaultsPanel: () => <p>defaults-form</p>,
 }));
+vi.mock("@/pages/KnowledgePage/components/SpaceMetadataPanel", () => ({
+  SpaceMetadataPanel: () => <p>schema-form</p>,
+}));
 vi.mock("@/pages/KnowledgePage/components/SpaceProcessingDialog", () => ({
   SpaceProcessingPanel: ({ mode }: { mode: string }) => <p>{mode}-form</p>,
 }));

@@ -745,5 +745,19 @@
         "no_metadata": "暂无元数据字段",
         "no_jobs": "暂无处理任务",
         "back_to_jobs": "返回任务列表"
+    },
+    "settings_ext": {
+        "auto_tag": "自动标签生成",
+        "library": "公共标签库",
+        "custom": "自定义标签",
+        "custom_tags": "自定义标签（每行一个，最多 200 个）",
+        "upload_txt": "上传 TXT",
+        "access": "访问与分享",
+        "private": "私密",
+        "shared": "分享",
+        "review": "审核加入",
+        "publish": "发布到广场",
+        "private_notice": "改为私密后，其他用户将无法主动订阅，已有成员和订阅关系也会被调整。确认改为私密？",
+        "department_notice": "部门知识空间不能设为私密。"
     }
 }

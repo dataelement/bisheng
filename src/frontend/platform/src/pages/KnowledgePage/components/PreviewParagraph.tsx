@@ -144,7 +144,7 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
                 try {
                     vditorRef.current.destroy(); // 仅在安全状态下执行销毁
                 } catch (error) {
-                    console.warn('Vditor销毁时发生异常:', error); // 捕获异常避免阻断流程
+                    console.warn('Vditor cleanup failed:', error); // 捕获异常避免阻断流程
                 }
             }
             // 2. 清空引用，释放内存
@@ -156,7 +156,7 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
     return <div ref={domRef} className={`${hidden ? 'hidden' : ''} overflow-y-auto border-none file-vditor`}></div>;
 });
 
-const EditMarkdown = ({ data, active, oneLeft, fileSuffix, edit = false, canDelete = false, onClick, onDel, onChange, onPositionClick }) => {
+const EditMarkdown = ({ data, active, oneLeft, fileSuffix, edit = false, canDelete = false, onClick, onDel, onChange, onPositionClick, immediateSave = false }) => {
     const { t } = useTranslation('knowledge');
 
     const [showSourceEdit, setShowSourceEdit] = useState(false); // 编辑原始格式
@@ -239,17 +239,17 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, edit = false, canDele
 
         {/* 所见即所得Markdown编辑器 */}
         {edit ? (
-            <VditorEditor ref={vditorRef} hidden={showSourceEdit} defalutValue={value} onChange={setDebounceValue} onBlur={handleBlurDebounced} />
+            <VditorEditor ref={vditorRef} hidden={showSourceEdit} defalutValue={value} onChange={immediateSave ? setValue : setDebounceValue} onBlur={immediateSave ? handleBlur : handleBlurDebounced} />
         ) : (
             <MessageMarkDown message={value} />
         )}
         {/* 普通Markdown编辑器 */}
-        {edit && <AceEditorCom hidden={!showSourceEdit} markdown={value} onChange={setDebounceValue} onBlur={handleBlurDebounced} />}
+        {edit && <AceEditorCom hidden={!showSourceEdit} markdown={value} onChange={immediateSave ? setValue : setDebounceValue} onBlur={immediateSave ? handleBlur : handleBlurDebounced} />}
     </div>
 }
 
 // 分段结果列表
-export default function PreviewParagraph({ fileId, page = 1, previewCount, edit, canDelete = false, fileSuffix, loading, chunks, className, onDel, onChange }) {
+export default function PreviewParagraph({ fileId, page = 1, previewCount, edit, canDelete = false, fileSuffix, loading, chunks, className, onDel, onChange, immediateSave = false }) {
     const { t } = useTranslation('knowledge');
 
     const containerRef = useRef(null);
@@ -320,6 +320,7 @@ export default function PreviewParagraph({ fileId, page = 1, previewCount, edit,
                             oneLeft={chunks.length === 1}
                             onDel={onDel}
                             onChange={onChange}
+                            immediateSave={immediateSave}
                         />
                         : <MarkdownView key={fileId + previewCount + chunk.chunkIndex} data={chunk} />
                 ))}

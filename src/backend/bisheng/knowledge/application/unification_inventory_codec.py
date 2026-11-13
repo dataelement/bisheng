@@ -126,6 +126,10 @@ def _validate(tag, data):
         schema = {**schema, "preparation_policy_version": "positive"}
         if type(data["preparation_policy_version"]) is not int or data["preparation_policy_version"] != 2:
             _invalid()
+    if tag == "run" and type(data) is dict and "physical_inventory_policy" in data:
+        schema = {**schema, "physical_inventory_policy": "str"}
+        if data["physical_inventory_policy"] != "bindings_only":
+            _invalid()
     if tag == "permission_plan" and type(data) is dict and "restore_missing_markers" in data:
         schema = {**schema, "restore_missing_markers": "bool"}
     if schema is None or type(data) is not dict or set(data) != set(schema):

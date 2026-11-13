@@ -224,8 +224,8 @@
     "registration": {
       "account": "账号",
       "nickname": "昵称",
-      "accountPlaceholder": "账号用于登录，创建后不可修改",
-      "nicknamePlaceholder": "昵称用于系统内展示",
+      "accountPlaceholder": "账号（创建后不可修改）",
+      "nicknamePlaceholder": "昵称",
       "accountRules": "1–64 个字符，以英文字母或数字开头，区分大小写，可使用符号，不支持空格和空白字符。",
       "nicknameRules": "1–32 个字符，不支持空格和空白字符。",
       "accountRulesLabel": "账号填写规则",

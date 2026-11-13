@@ -41,7 +41,10 @@ def retention_record(*, resource, physical, managed_file_count):
 class PhysicalRetentionInventoryVerifier:
     """Validate the same closed proof on freeze, resume and M3 consumption."""
 
-    def __init__(self):
+    def __init__(self, *, policy="legacy_physical"):
+        if policy not in {"legacy_physical", "bindings_only"}:
+            _blocked("unknown_policy")
+        self.policy = policy
         self.resources = {}
         self.files = Counter()
         self.physical = {}
@@ -54,6 +57,8 @@ class PhysicalRetentionInventoryVerifier:
         rows[key] = value
 
     def observe(self, *, kind, section, tenant_id, record):
+        if section == "physical" and self.policy == "bindings_only":
+            _blocked("unexpected_physical_inventory")
         tag = record.record_type
         if tag not in {"resource", "file", "physical_index", "physical_index_retention"}:
             return
@@ -79,6 +84,8 @@ class PhysicalRetentionInventoryVerifier:
     def finish(self):
         if set(self.files) - self.resources.keys():
             _blocked("file_resource_scope_changed")
+        if self.policy == "bindings_only":
+            return
         expected = {key for key, value in self.resources.items() if value["type"] in {0, 3}}
         if set(self.physical) != expected:
             _blocked("physical_resource_set_changed")

@@ -125,6 +125,13 @@
 - **已知坑**：只用在线 canonicalizer 校验旧迁移来源会阻断合法历史记录；只检查空模型形状会错误允许新贡献。分别由 F118 来源协议检查与共享投影证明检查处理。
 - **重审条件**：若产品要允许向无等级模型新增授权或赋予管理等级，须另行确认权限语义；本修复不承担该变化。不新增 API、字段、表或系统依赖。
 
+### D10：普通迁移与物理诊断解耦，全量预检不冻结（2026-11-13）
+
+- **备选**：继续强制全库ES/Milvus盘点；遇存储异常临时忽略；按已确认边界仅迁移SQL/权限/引用并独立诊断物理偏差。
+- **选定**：采用最后一种。新图用独立bindings_only策略保留SQL索引绑定，不生成未读取的物理事实；旧图保留原物理证据校验。新Run preview复用完整M2校验，临时页不成为持久Run或续跑凭据。孤儿精确物理备份/删除仍是单独已授权的历史准备流程。
+- **理由**：未改底层数据不应推导出“其健康必须先通过”；SQL/向量生命周期治理已明确暂缓。原preview无Run时直接返回会虚报检查范围，需要区分当前全扫描与旧图复核。
+- **重审条件**：后续单独立项物理数据迁移或SQL/向量治理时再定义专项准入、恢复和证据，不在普通迁移中恢复全库可读性门槛。细节见§7.2与AC-122/123。
+
 ## 4. 目标模块与数据流（拟议）
 
 ```mermaid
@@ -527,8 +534,11 @@ flowchart TD
 - 只把存量 NORMAL 转为 SPACE，原 `knowledge.id`、file ID、owner、tenant、model、collection_name、index_name 和文件对象地址不改；已有 SPACE 保持。
 - 缺少逻辑文档/版本的文件补 V1 主版本，建立前先按 file 查已有版本关联；重复 run 命中已有映射。损坏或多重关联先进入异常，不能简单重复插入。
 - 标签业务类型与关联归属按已有空间体系转换，保留标签内容；实际枚举和值在执行前 inventory，避免假设库文件 tag 与空间文件 tag 完全一致。
-- 资源转换不调用解析/embedding。已有索引不改物理位置；类型适配及版本过滤须证明旧索引里的 file/document 标识能正确解读。
-- **116历史物理残留的保留（2026-11-11，按原方案修复）**：当原ES/Milvus结构不支持当前标识，且同一原生租户事务中完整SQL盘点证明该资源没有任何file/folder行时，保留原绑定、原schema/count事实及`identifier_compatible=false`，单列`physical_index_retention`计划证明，不把旧结构伪装成兼容。证明绑定原资源摘要、实际物理事实摘要及SQL计数0；冻结/续跑/M3消费同时核对完整资源、文件及物理集合，M3业务写入前再次确认SQL计数0、原索引名未变。任何有效文件/目录、名字/结构摘要漂移、缺失或重复证明仍阻断。物理残留不据此恢复为有效文件、不生成新权限或调用解析/embedding，也不承诺旧结构可处理未来上传；运行期原有鉴权、模型/索引合法性检查继续执行。
+- 资源转换不调用解析/embedding，不重写正常资源ES/Milvus数据或替换索引绑定。新M2以SQL业务事实、权限和引用为迁移依据；普通资源不查询ES/Milvus的存在性、结构或数量，也不对正常文件逐个MinIO stat。底层检索服务健康与SQL/向量生命周期差异由独立诊断处理，不作为本轮迁移门槛。对象存储仍承载正式迁移证据及备份/schema材料。
+- **新旧物理盘点合同**：新baseline/plan metadata均显式写`physical_inventory_policy=bindings_only`，资源记录仍冻结原`index_name/collection_name`并由SQL转换重验；不生成虚假的physical事实或“已验证底层一致”证明。解码时两根策略必须一致，新策略拒绝任何physical叶页（包括空页）。旧metadata无该字段时沿原完整physical记录及`physical_index_retention`合同校验，不重写原基线、不要求重连底层存储；原旧索引零SQL文件证明仍在M3消费前核对。
+- **历史孤儿精确清理独立保留**：M2前准备脚本仅在已有可靠原绑定、无有效或不明下游且选中清理的文件集合非空时，备份并精确删除对象与索引切片；无法证明范围仍阻断，不删除整个共享索引/集合。取消正常资源全库盘点不等于跳过该删除范围校验。
+- **真正的只读预检**：新Run默认preview调用与正式M2相同的业务/权限/引用盘点和完整分页图验证；临时页使用0700本地一次性目录、0600文件和原canonical/hash校验，结束或失败即删除，不写MinIO页、不冻结SQL Run、不写FGA。成功输出`validation_scope=current_inventory/preflight_complete=true/frozen=false/ready=false`，不暴露临时descriptor。备份/schema材料仍必须与当次环境、writer和当前租户集合一致；预览与正式执行之间必须重新扫描，不能把临时页作为apply或resume的凭据。
+- 已有冻结Run的preview仍读取原不可变图，输出`validation_scope=frozen_run/preflight_complete=false`；迁移中的原租户集合一致规则不放宽。fresh扫描第二事务若发现同名Run已被并发冻结，明确拒绝，不将历史复核冒充当前全扫描。116当前已迁移，现状扫描不能替代旧版快照的转换演练。
 - `is_released=false`，不新增全员可见，不调用会删除授权的普通 `clear_space_authorization_for_private`。`auth_type` 的目标值根据实际授权计划决定，不能仅写 PRIVATE 即认为完成权限迁移。
 
 ### 7.3 SQL 授权与 FGA 的同步转换
@@ -635,6 +645,9 @@ flowchart TD
 
 | 风险 / 已观察事实 | 后果 | 设计护栏 |
 | --- | --- | --- |
+| 无Run的preview原先仅列租户；旧Run复核不等于当前全扫描 | 无数据校验也可能被误报为升级预检通过 | CLI明确scope/preflight_complete；fresh执行完整M2只读盘点；并发出现同名冻结Run时拒绝，成功不颁发READY |
+| 取消物理盘点后混用新旧证据或夹带空physical页 | 旧合同被降级，或伪造底层已核实的事实 | 独立物理策略，两root必须一致；缺字段走legacy完整集校验，新策略在section层禁止任何physical页 |
+
 | Q-01 已确认全平台 use 退役 | 只改知识空间或只隐藏 UI 会遗留不同使用规则 | 所有模型与调用切换可见性；保留可见集合，预期使用资格变化单列，不额外授其他动作 |
 | 仅 use 的自定义/全员授权模型 | 删动作后空模型可能丢失有效授权或引发等级/委托校验问题 | 按 §7.3.2 标记纯可见资源类型、保留原管理等级/model_key/Source，授予和撤销协议识别合法空动作；不添加其他动作凑数 |
 | 资源 state 与授权 target 状态耦合 | 重建使目录/预览/下载全部失效 | 处理态独立，明确只读动作可用 |
@@ -1044,3 +1057,12 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 已采用RESOURCE_DELETE的非知识Owner在业务提交后调用cleanup_deleted，沿原删除回执的持久journal清FGA及mode/Grant/assignee/visible_source，保留operation/tuple审计。失败向调用者报告，可使用原操作/历史prepare续办；这不等于建立全平台所有模型Owner的后台垃圾回收器。
 
 完整流程与验证边界见docs/reviews/f118-confirmed-rules-implementation-20261113.md。
+
+
+## 2026-11-13 正常索引盘点退出迁移门槛
+
+按本聊天用户确认及AC-122/123同步§7.2。新独立physical_inventory_policy不改变preparation policy 2的marker合同；缺字段的旧Run继续原验证，不通过重写基线解决新增租户。新增unification_preview_artifacts仅承载单次只读扫描的临时私有分页，不写入SQL或共享对象，不是持久恢复源；CLI明确输出当前扫描和旧图复核两个scope。
+
+反直觉边界：旧代码无Run时preview只列租户，不能当全量预检；新Run初查后被另一进程冻结也不能回退旧图并宣称当前扫描完成。新策略在叶页section层拒绝physical，包括空页，不能仅靠逐记录观察。
+
+何时重审：若后续独立立项SQL/向量生命周期治理或需要迁移物理内容，重新定义专项范围与验证；不能在本轮普通迁移中重新引入全库可读性门槛。孤儿切片清理仍沿原授权范围。变更、回归与剩余现场范围见[收敛修复记录](../../../docs/reviews/f118-migration-scope-fix-20261113.md)及[当前完整流程](../../../docs/reviews/f118-migration-current-flow-20261113.md)。

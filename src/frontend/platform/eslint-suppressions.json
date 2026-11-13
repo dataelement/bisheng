@@ -1953,9 +1953,6 @@
   "src/pages/KnowledgePage/components/MetadataManagementDialog.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 3
     }
   },
   "src/pages/KnowledgePage/components/ParagraphEdit.tsx": {
@@ -2008,9 +2005,6 @@
       "count": 1
     },
     "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {

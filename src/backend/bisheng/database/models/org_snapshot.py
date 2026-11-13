@@ -127,8 +127,8 @@ async def astamp(rows: Iterable[Any], subject_of: SubjectOf) -> None:
 
 
 def audit_log_subject(row: Any) -> int | None:
-    """System triggers and service accounts are both written as operator 0."""
-    return row.operator_id or None
+    """System triggers and service accounts are written as operator 0, some system writers as -1."""
+    return row.operator_id if (row.operator_id or 0) > 0 else None
 
 
 def session_subject(row: Any) -> int | None:
@@ -167,26 +167,36 @@ class AuditDeptScope:
     Otherwise the closure is every department under one of ``admin_paths``
     (any status) plus ``exact_ids``; an empty closure means nothing is visible.
     Rows whose department is NULL / 0 / -1 are never in a closure.
+    ``unattributed`` adds the 0 / -1 rows back for a tenant administrator; the
+    query is already pinned to that tenant. NULL rows stay hidden.
     """
 
     unrestricted: bool = True
     admin_paths: tuple[str, ...] = ()
     exact_ids: tuple[int, ...] = ()
+    unattributed: bool = False
 
     @classmethod
     def unlimited(cls) -> AuditDeptScope:
         return cls()
 
     @classmethod
-    def restricted(cls, *, admin_paths: Iterable[str] = (), exact_ids: Iterable[int] = ()) -> AuditDeptScope:
+    def restricted(
+        cls, *, admin_paths: Iterable[str] = (), exact_ids: Iterable[int] = (), unattributed: bool = False
+    ) -> AuditDeptScope:
         return cls(
             unrestricted=False,
             admin_paths=tuple(sorted({p for p in admin_paths if p})),
             exact_ids=tuple(sorted({int(i) for i in exact_ids})),
+            unattributed=unattributed,
         )
 
+    @property
+    def shows_none(self) -> bool:
+        return self.unrestricted or self.unattributed
+
     def digest_parts(self) -> list:
-        return [self.unrestricted, list(self.admin_paths), list(self.exact_ids)]
+        return [self.unrestricted, list(self.admin_paths), list(self.exact_ids), self.unattributed]
 
 
 @dataclass(frozen=True)
@@ -225,6 +235,8 @@ def _closure(column, scope: AuditDeptScope):
         parts.append(column.in_(select(Department.id).where(under_paths)))
     if scope.exact_ids:
         parts.append(column.in_(scope.exact_ids))
+    if scope.unattributed:
+        parts.append(column.in_([DEPT_NONE, DEPT_NOT_APPLICABLE]))
     return or_(*parts) if parts else false()
 
 
@@ -259,13 +271,15 @@ def _selection_clause(column, selection: DeptSelection):
 def build_dept_predicate(column, scope: AuditDeptScope, selection: DeptSelection | None = None):
     """``WHERE`` clause for ``column`` (an ``operator_dept_id``), or ``None``.
 
-    The selection only narrows the scope: for a restricted caller the two
-    unattributed options are dropped before anything else, and the result is
-    always intersected with the closure.
+    The selection only narrows the scope: for a restricted caller the
+    unattributed options it may not see are dropped before anything else, and
+    the result is always intersected with the closure.
     """
     selection = selection or DeptSelection()
     if not scope.unrestricted:
-        selection = replace(selection, include_none=False, include_unrecorded=False)
+        selection = replace(
+            selection, include_none=selection.include_none and scope.unattributed, include_unrecorded=False
+        )
     chosen = _selection_clause(column, selection)
     if scope.unrestricted:
         return chosen

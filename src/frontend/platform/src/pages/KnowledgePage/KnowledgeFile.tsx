@@ -39,16 +39,13 @@ import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import type { User } from "@/types/api/user";
 import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
 import { KnowledgeTooltip } from "./components/KnowledgeTooltip";
-import { SpaceProcessingDialog } from "./components/SpaceProcessingDialog";
 import { KnowledgeDeletionDialog } from "./components/KnowledgeDeletionDialog";
 import { useKnowledgeDeletion } from "./hooks/useKnowledgeDeletion";
 import { FileAbnormalStatusCell } from "./components/FileAbnormalStatusCell";
 
 const ROW_ACTIONS = [
   "visible",
-  "edit",
   "manage_permission",
-  "upload_file",
   "delete",
 ];
 interface KnowledgeFileProps {
@@ -126,10 +123,6 @@ export default function KnowledgeFile({
     user?.is_global_super === true ||
     user?.is_child_admin === true ||
     user?.web_menu?.includes("create_knowledge") === true;
-  const [processing, setProcessing] = useState<{
-    row: KnowledgeSpaceInfo;
-    mode: "copy";
-  } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [permissionTarget, setPermissionTarget] =
     useState<KnowledgeSpaceInfo | null>(null);
@@ -149,7 +142,6 @@ export default function KnowledgeFile({
     client.removeQueries({ queryKey: incoming, exact: true, type: "inactive" });
     setOpenId(null);
     setPermissionTarget(null);
-    setProcessing(null);
     setOnlyAbnormal(next);
     setPage(1);
   };
@@ -202,10 +194,6 @@ export default function KnowledgeFile({
     if (!allowed || live.current !== epoch) return;
     navigate(`/filelib/${row.id}`);
   };
-  const handleConfiguration = (row: KnowledgeSpaceInfo, tab: string) => {
-    setOpenId(null);
-    navigate(`/filelib/${row.id}?tab=${tab}${isAdmin ? "&view=admin" : ""}`);
-  };
   const handleRefresh = async () => {
     try {
       await refetch();
@@ -214,15 +202,11 @@ export default function KnowledgeFile({
     }
   };
   const deletion = useKnowledgeDeletion(JSON.stringify([stableScope, epoch]));
-  const handleDeletion = async (
-    row: KnowledgeSpaceInfo,
-    kind: "delete" | "clear",
-    readonly = false,
-  ) => {
+  const handleDeletion = async (row: KnowledgeSpaceInfo) => {
     if (live.current !== epoch || !hasAction(row, "delete")) return;
     setOpenId(null);
     const owned = epoch;
-    if (await deletion.open({ spaceId: row.id, kind }, readonly)) {
+    if (await deletion.open({ spaceId: row.id, kind: "delete" })) {
       if (live.current === owned)
         await client.invalidateQueries({
           queryKey: knowledgeQueryKeys.space(stableScope, row.id),
@@ -238,7 +222,6 @@ export default function KnowledgeFile({
         </DropdownItem>
       );
     if (
-      !hasAction(row, "edit") &&
       !hasAction(row, "manage_permission") &&
       !hasAction(row, "delete")
     )
@@ -249,44 +232,15 @@ export default function KnowledgeFile({
       );
     return (
       <>
-        {canCreate &&
-          user?.user_id === row.user_id &&
-          hasAction(row, "upload_file") && (
-            <DropdownItem
-              onSelect={() => {
-                setOpenId(null);
-                setProcessing({ row, mode: "copy" });
-              }}
-            >
-              {t("f118.processing_title_copy")}
-            </DropdownItem>
-          )}
         {hasAction(row, "delete") && (
-          <>
-            <DropdownItem
-              onSelect={() => {
-                void handleDeletion(row, "delete", true);
-              }}
-            >
-              {t("deletion.references")}
-            </DropdownItem>
-            <DropdownItem
-              danger
-              onSelect={() => {
-                void handleDeletion(row, "clear");
-              }}
-            >
-              {t("deletion.clear")}
-            </DropdownItem>
-            <DropdownItem
-              danger
-              onSelect={() => {
-                void handleDeletion(row, "delete");
-              }}
-            >
-              {t("deletion.delete_space")}
-            </DropdownItem>
-          </>
+          <DropdownItem
+            danger
+            onSelect={() => {
+              void handleDeletion(row);
+            }}
+          >
+            {t("deletion.delete_space")}
+          </DropdownItem>
         )}
         {hasAction(row, "manage_permission") && (
           <DropdownItem
@@ -298,38 +252,6 @@ export default function KnowledgeFile({
           >
             {t("managePermission", { ns: "permission" })}
           </DropdownItem>
-        )}
-        {hasAction(row, "edit") && (
-          <>
-            <DropdownItem
-              onSelect={() => {
-                handleConfiguration(row, "settings");
-              }}
-            >
-              {t("settings")}
-            </DropdownItem>
-            <DropdownItem
-              onSelect={() => {
-                handleConfiguration(row, "metadata");
-              }}
-            >
-              {t("f118.processing_title_schema")}
-            </DropdownItem>
-            <DropdownItem
-              onSelect={() => {
-                handleConfiguration(row, "embedding");
-              }}
-            >
-              {t("f118.processing_title_embedding")}
-            </DropdownItem>
-            <DropdownItem
-              onSelect={() => {
-                handleConfiguration(row, "defaults");
-              }}
-            >
-              {t("f118.defaults_title")}
-            </DropdownItem>
-          </>
         )}
       </>
     );
@@ -353,22 +275,6 @@ export default function KnowledgeFile({
   );
   return (
     <div className="relative">
-      {processing && (
-        <SpaceProcessingDialog
-          key={JSON.stringify([scope, processing.row.id, processing.mode])}
-          scope={scope}
-          spaceId={processing.row.id}
-          mode={processing.mode}
-          includeCopies={user?.user_id === processing.row.user_id}
-          open
-          onOpenChange={(open) => {
-            if (!open) setProcessing(null);
-          }}
-          onSaved={() => {
-            void handleRefresh();
-          }}
-        />
-      )}
       {toolbarTarget
         ? createPortal(toolbar, toolbarTarget)
         : toolbarTarget === undefined
