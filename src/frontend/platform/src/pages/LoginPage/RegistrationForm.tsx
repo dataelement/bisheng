@@ -1,8 +1,9 @@
-import { Button, Input, PasswordInput, Tooltip, toast } from '@bisheng/ui';
+import { Button, Input, PasswordInput, toast } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import { isApiError } from '@bisheng/api-client';
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { IdentityRuleHint } from '@/components/bs-comp/identity/identityInput';
 import { registerApi } from '@/controllers/API/user';
 import { showApiError } from '@/controllers/request';
 import { handleEncrypt } from './utils';
@@ -130,14 +131,9 @@ export function RegistrationForm({ captcha, onRefreshCaptcha, onLogin, onSuccess
                     autoCapitalize="none" autoCorrect="off" spellCheck={false}
                     autoComplete={field === 'account' ? 'username' : 'nickname'}
                     suffix={
-                        <Tooltip content={t(`login.registration.${field}Rules`)}>
-                            <Button type="button" variant="text" color="default" size="small" iconOnly
-                                aria-label={t(`login.registration.${field}RulesLabel`)} disabled={loading}
-                                aria-expanded={expandedRule === field} aria-controls={`registration-${field}-rules`}
-                                onClick={() => setExpandedRule(previous => previous === field ? null : field)}>
-                                <Outlined.Question aria-hidden />
-                            </Button>
-                        </Tooltip>
+                        <IdentityRuleHint field={field} expanded={expandedRule === field} controls={`registration-${field}-rules`}
+                            content={t(`login.registration.${field}Rules`)} label={t(`login.registration.${field}RulesLabel`)}
+                            disabled={loading} onToggle={() => setExpandedRule(previous => previous === field ? null : field)} />
                     }
                 />
                 {error && <p id={`registration-${field}-error`} className="text-caption text-danger" aria-live="polite">{t(error)}</p>}
