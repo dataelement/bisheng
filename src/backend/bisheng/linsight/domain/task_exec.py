@@ -808,7 +808,10 @@ class LinsightWorkflowTask:
         return self._memory
 
     async def _begin_memory_round(self, session_model: LinsightSessionVersion, **kwargs) -> None:
-        await self._memory_round().begin(session_model, **kwargs)
+        await self._memory_round().begin(session_model, push=self._push_memory_signal, **kwargs)
+
+    async def _push_memory_signal(self, data: dict) -> None:
+        await self._state_manager.push_message(MessageData(event_type=MessageEventType.MEMORY, data=data))
 
     async def _end_memory_round(self) -> None:
         await self._memory_round().end(getattr(self, "_waiting_for_input", False))
@@ -1125,9 +1128,12 @@ class LinsightWorkflowTask:
         """Resolve authorized task infrastructure and the selected optional tools."""
         await self._sync_workspace_originals(session_model)
 
-        return await LinsightWorkbenchImpl.init_linsight_config_tools(
+        tools = await LinsightWorkbenchImpl.init_linsight_config_tools(
             session_version=session_model, llm=self.llm, need_upload=True, file_dir=self.file_dir
         )
+        # F132: memory_write / memory_search for this round (one place covers the
+        # fresh, continue and resume paths); empty when memory is off.
+        return [*tools, *self._memory_round().tools()]
 
     async def _provision_session_skills(self, session_model: LinsightSessionVersion):
         """Copy task-candidate bundles, then record which row owns each directory.
@@ -1226,6 +1232,7 @@ class LinsightWorkflowTask:
             turn_budget_sink=self._turn_budget,
             context_window_sink=self._context_window,
             citation_scope=citation_scope,
+            memory_prompt=self._memory_round().prompt(),
         )
 
     async def _push_skill_load_failure(self, svid: str, names: list[str]) -> None:

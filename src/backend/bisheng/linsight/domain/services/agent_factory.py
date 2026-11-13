@@ -74,6 +74,8 @@ _SUBAGENT_TOOL_DENY = frozenset(
         "export_docx",  # write side-effect — deliverable export stays in the main graph
         "export_pdf",  # write side-effect — deliverable export stays in the main graph
         "check_html",  # writes its screenshot to scratch/; deliverable QA stays in the main graph
+        "memory_write",  # F132: write side-effect on the user's long-term memory — main graph only
+        "memory_search",  # F132: the researcher does not read memory (R3); its text never reaches it
     }
 )
 # Runtime double safety: even if someone forgets to register a HITL tool in
@@ -1409,6 +1411,7 @@ async def create_linsight_agent(
     turn_budget_sink: dict | None = None,
     citation_scope=None,
     context_window_sink: dict | None = None,
+    memory_prompt: str | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -1430,6 +1433,9 @@ async def create_linsight_agent(
             retrieval tools so the completion audit knows which sources were seen.
         context_window_sink: mutable dict filled with the context window this run
             uses (F087), so the caller can log it when the task fails.
+        memory_prompt: F132 long-term memory text of this round (tool guidance,
+            resident and experience blocks), fixed at round start. Appended only
+            when the memory tools are actually bound (prompt <-> tool lockstep).
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -1551,6 +1557,12 @@ async def create_linsight_agent(
                 session=session_model,
             )
         )
+
+    # F132: long-term memory text, after the skills block and before the two tails.
+    if memory_prompt and any(getattr(t, "name", "").startswith("memory_") for t in tools):
+        from bisheng.linsight.domain.services.memory_turns import LinsightMemoryMiddleware
+
+        middlewares.append(LinsightMemoryMiddleware(memory_prompt))
 
     # F069: citation requirement restated right before the language tail, only
     # when a citable retrieval tool is bound (same gate as the rules themselves).
