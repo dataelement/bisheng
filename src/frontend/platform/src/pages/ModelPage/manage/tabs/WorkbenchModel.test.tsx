@@ -85,3 +85,14 @@ it('saves without any stored model metadata when the desktop module is off', asy
     await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ models: [] })))
     expect(mocks.message).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }))
 })
+
+it('opens the collapsed settings when the required embedding model blocks saving', async () => {
+    mocks.get.mockResolvedValue({ data: { ...config, embedding_model: null } })
+    const { container } = render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    const save = await screen.findByRole('button', { name: 'model.save' })
+    const details = container.querySelector('details')!
+    expect(details).not.toHaveAttribute('open')
+    fireEvent.click(save)
+    await waitFor(() => expect(details).toHaveAttribute('open'))
+    expect(mocks.save).not.toHaveBeenCalled()
+})

@@ -392,7 +392,7 @@
   "com_label_save": "保存",
   "com_linsight_add_skill": "添加技能",
   "com_linsight_exit_task_mode": "关闭深度研究",
-  "com_linsight_input_placeholder": "请输入你的任务目标，然后交给$t(bisheng)$t(linsight)",
+  "com_linsight_input_placeholder": "请输入你的任务目标，交给$t(com_linsight_task_mode)完成",
   "com_linsight_awaiting_reply": "请在上方回答问题后继续任务",
   "com_linsight_skill_empty": "暂无可用技能",
   "com_linsight_skill_search": "搜索技能",

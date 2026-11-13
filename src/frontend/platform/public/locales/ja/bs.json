@@ -4113,6 +4113,7 @@
       "selectedSubjects": "{{count}} 件を選択済み",
       "selectedVisible": "一部のメンバーに公開",
       "selectedVisibleHelp": "以下で許可されたユーザー、部門、ロールのみがこのモデルを利用できます。",
+      "selectedVisibleEmpty": "ユーザー・部署・ロールを1つ以上追加してください。追加しないと、このモデルは誰も使えません。",
       "visibilityHelp": "Chat と Work で公開範囲を共有します。許可されたメンバーはモデルを選択し、個人クレジットを使用します。",
       "modelSettings": "モデル権限と倍率",
       "multiplier": "クレジット倍率",

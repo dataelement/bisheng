@@ -186,10 +186,14 @@ class LLMDao:
             for model in models:
                 model.server_id = server.id
             session.add_all(models)
-            if models and settings.dsh.enabled:
-                from bisheng.dsh.domain.repositories.new_model_visibility import initialize_new_model_visibility
+            if models:
+                from bisheng.dsh.domain.repositories.new_model_visibility import (
+                    initialize_new_model_visibility,
+                    should_record_new_model_visibility,
+                )
 
-                await initialize_new_model_visibility(session, models, server.user_id)
+                if should_record_new_model_visibility(settings.dsh.enabled):
+                    await initialize_new_model_visibility(session, models, server.user_id)
             await session.commit()
             await session.refresh(server)
 
@@ -267,12 +271,16 @@ class LLMDao:
             for model in add_models:
                 model.tenant_id = server.tenant_id
             session.add_all(add_models)
-            if add_models and settings.dsh.enabled:
-                from bisheng.dsh.domain.repositories.new_model_visibility import initialize_new_model_visibility
-
-                await initialize_new_model_visibility(
-                    session, add_models, operator.user_id if operator else server.user_id
+            if add_models:
+                from bisheng.dsh.domain.repositories.new_model_visibility import (
+                    initialize_new_model_visibility,
+                    should_record_new_model_visibility,
                 )
+
+                if should_record_new_model_visibility(settings.dsh.enabled):
+                    await initialize_new_model_visibility(
+                        session, add_models, operator.user_id if operator else server.user_id
+                    )
             # Update data for existing models
             for one in update_models:
                 await session.exec(

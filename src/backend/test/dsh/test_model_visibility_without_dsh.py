@@ -147,3 +147,64 @@ async def test_visibility_admin_with_dsh_uses_dsh_management(monkeypatch):
     monkeypatch.setattr(unified_policy, "get_management", AsyncMock(return_value="management"))
     assert await unified_policy.get_policy_admin(SimpleNamespace()) == "management"
     assert unified_policy._missing_row_visible_to_everyone() is False
+
+
+# ---- new models get an explicit "everyone" row whenever a tenant is in scope ---------------
+
+
+def test_new_model_rows_follow_dsh_or_a_valid_tenant_scope():
+    from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
+    from bisheng.dsh.domain.repositories.new_model_visibility import should_record_new_model_visibility
+
+    # DSH keeps the strict behaviour: the row is required and a missing tenant fails later.
+    assert should_record_new_model_visibility(True) is True
+    token = set_current_tenant_id(None)
+    try:
+        # Without DSH and without a tenant (initialization scripts) creation is unchanged.
+        assert should_record_new_model_visibility(False) is False
+    finally:
+        current_tenant_id.reset(token)
+    token = set_current_tenant_id(3)
+    try:
+        assert should_record_new_model_visibility(False) is True
+        with bypass_tenant_filter():
+            assert should_record_new_model_visibility(False) is False
+    finally:
+        current_tenant_id.reset(token)
+
+
+def test_backfill_script_adds_rows_only_for_models_without_one(store):
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "scripts" / "backfill_model_visibility_everyone.py"
+    spec = importlib.util.spec_from_file_location("backfill_model_visibility_everyone", path)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+
+    with Session(store) as session, session.begin():
+        UnifiedPolicyRepository(session).save_visibility(
+            7, 20, ModelVisibilityInput(version=0, subjects=[PolicySubject(kind="USER", id=21)])
+        )
+
+    from unittest.mock import patch
+
+    def sessions():
+        from contextlib import contextmanager
+
+        @contextmanager
+        def scope():
+            with Session(store) as session:
+                yield session
+
+        return scope()
+
+    with patch.object(script, "get_sync_db_session", sessions):
+        preview = script.backfill([5, 7, 8], actor=20, apply=False)
+        assert preview["missing_rows"] == [5, 8]
+        script.backfill([5, 7, 8], actor=20, apply=True)
+    with Session(store) as session:
+        repo = UnifiedPolicyRepository(session)
+        assert repo.visibility(5)["everyone"] is True and repo.visibility(8)["everyone"] is True
+        # The narrowed model keeps its stored scope.
+        assert repo.visibility(7)["everyone"] is False

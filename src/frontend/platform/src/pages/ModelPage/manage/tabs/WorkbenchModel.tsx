@@ -86,6 +86,8 @@ export default function WorkbenchModel({ data, onBack }) {
 
   const lastSaveFormDataRef = useRef(null);
   const [saveload, setSaveLoad] = useState(false);
+  // The collapsed section holds the required embedding model; open it when it blocks a save.
+  const [otherSettingsOpen, setOtherSettingsOpen] = useState(false);
 
   const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
@@ -207,6 +209,7 @@ export default function WorkbenchModel({ data, onBack }) {
     }
     if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
       errors.push(t("model.workVectorModel") + t("bs:required"));
+      setOtherSettingsOpen(true);
     }
     if (errors.length) {
       toast.show({ type: "error", message: errors.filter(Boolean).join("\n") });
@@ -292,7 +295,11 @@ export default function WorkbenchModel({ data, onBack }) {
           }))
         }
       />
-      <details className="mt-2 border-t pt-4">
+      <details
+        className="mt-2 border-t pt-4"
+        open={otherSettingsOpen}
+        onToggle={(event) => setOtherSettingsOpen(event.currentTarget.open)}
+      >
         <summary className="cursor-pointer text-sm text-muted-foreground">
           {t("model.otherModelSettings")}
         </summary>
@@ -300,7 +307,7 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.linsightDefaultModel")}
-            tooltipText={t("model.linsightDefaultModelTooltip")}
+            tooltipText={`${t("model.linsightDefaultModelTooltip")} ${t("model.defaultModelVisibilityNote")}`}
             value={form.linsightDefaultModelId}
             options={llmOptions}
             onChange={(val) => handleDefaultModelChange("linsightDefaultModelId", val)}
@@ -308,6 +315,7 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.dailyDefaultModel")}
+            tooltipText={`${t("model.dailyDefaultModelTooltip")} ${t("model.defaultModelVisibilityNote")}`}
             value={form.chatDefaultModelId}
             options={llmOptions}
             onChange={(val) => handleDefaultModelChange("chatDefaultModelId", val)}

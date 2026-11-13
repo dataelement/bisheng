@@ -389,7 +389,7 @@
   "com_label_save": "保存",
   "com_linsight_add_skill": "スキルを追加",
   "com_linsight_exit_task_mode": "詳細リサーチを終了",
-  "com_linsight_input_placeholder": "タスク目標を入力して $t(bisheng)$t(linsight) にお任せください",
+  "com_linsight_input_placeholder": "タスクの目標を入力すると、$t(com_linsight_task_mode)が進めます",
   "com_linsight_awaiting_reply": "上記の質問に回答してタスクを続行してください",
   "com_linsight_skill_empty": "利用可能なスキルはありません",
   "com_linsight_skill_search": "スキルを検索",

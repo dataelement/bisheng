@@ -4167,6 +4167,7 @@
       "everyoneVisibleHelp": "Everyone in the enterprise can use this model.",
       "selectedVisible": "Visible to selected members",
       "selectedVisibleHelp": "Only the users, departments and roles listed below can use this model.",
+      "selectedVisibleEmpty": "Add at least one user, department or role. Otherwise no one can use this model.",
       "saved": "Saved",
       "visibilityHelp": "Choose which members can use this model.",
       "modelSettings": "Model permissions and rate",
