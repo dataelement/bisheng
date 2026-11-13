@@ -191,7 +191,7 @@
   **覆盖 AC**: AC-10, AC-40, AC-66, AC-72, AC-73, AC-74, AC-76, AC-99
   **依赖**: T018
 
-- [ ] **T022**: 资格登记与启用判定的实现
+- [x] **T022**: 资格登记与启用判定的实现
   **文件**: `src/backend/bisheng/memory/domain/services/gate.py`、`src/backend/bisheng/memory/domain/repositories/cursor_repository.py`
   **逻辑**: `MemoryGate.open(chat_id, login_user)` 与 `resolve(chat_id, scene, app_enabled)`。登记行的写入规则、会话归属核对、时区回落见 design 决策 6、13；登记行的更新全部是按列的条件更新。
   **测试**: T021 全部通过
