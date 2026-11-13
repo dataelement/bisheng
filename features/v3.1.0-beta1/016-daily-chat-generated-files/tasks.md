@@ -13,7 +13,7 @@
 | design.md | ✅ 已评审 | 2026-11-13 用户确认；接手时的第一入口 |
 | test-cases.md | ✅ 已生成 | 23 条，格式已校验 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 第 2 轮 LGTM |
-| 实现 | 🔲 未开始 | 0 / 12 完成 |
+| 实现 | 🚧 进行中 | 12 / 13 完成（代码与单测完成；T007–T011、T013 的 116 手动验证并入 T012） |
 
 ---
 
@@ -39,7 +39,7 @@
 
 ### Wave 1（后端底座，两组可以并行）
 
-- [ ] **T001**: 代码执行器交付物收集 — 测试
+- [x] **T001**: 代码执行器交付物收集 — 测试
   **文件**: `src/backend/test/sandbox/test_generated_deliverables.py`（新建）
   **逻辑**: 用 `LocalExecutor(minio={...})`，把 `upload_minio` mock 成返回 `"http://h/tmp-dir/<name>?sig"`，`local_sync_path=None`，在临时目录里运行脚本。
   **测试**:
@@ -52,7 +52,7 @@
   **覆盖 AC**: AC-02, AC-05, AC-22, AC-23
   **依赖**: 无
 
-- [ ] **T002**: 代码执行器交付物收集 — 实现
+- [x] **T002**: 代码执行器交付物收集 — 实现
   **文件**: `src/backend/bisheng_langchain/gpts/tools/code_interpreter/base_executor.py`
   **逻辑**:
   - `__init__` 新增 `self.collect_deliverables = False`、`self.published_deliverables: list[dict] = []`、`self._deliverables_lock = threading.Lock()`。
@@ -63,7 +63,7 @@
   **覆盖 AC**: AC-02, AC-05, AC-22, AC-23
   **依赖**: T001
 
-- [ ] **T003**: 附件签名与审计接口 — 测试
+- [x] **T003**: 附件签名与审计接口 — 测试
   **文件**: `src/backend/test/chat_session/test_generated_file_url.py`（新建）
   **逻辑**: 先构造会话、提问行，以及带 `files=[{file_id, object_name, source:"code_interpreter"}]` 的回答行，再 mock `get_minio_storage().get_share_link` 和 `AuditLogService.assert_session_in_audit_scope`。
   **测试**:
@@ -77,7 +77,7 @@
   **覆盖 AC**: AC-10, AC-11, AC-17, AC-18
   **依赖**: 无
 
-- [ ] **T004**: 附件签名与审计接口 — 实现
+- [x] **T004**: 附件签名与审计接口 — 实现
   **文件**: `src/backend/bisheng/chat_session/domain/chat.py`、`src/backend/bisheng/chat_session/api/endpoints/session.py`
   **逻辑**:
   - 新增 `ChatSessionService._sign_attachment(chat_id, file_id, owner, *, only_source=None) -> str`。它承接 `resolve_attachment_url` 主人校验之后的那段逻辑；`only_source` 不为空时，`attachment.get("source")` 必须相等，否则返回不存在。`resolve_attachment_url` 改为先校验主人、再调用它。
@@ -90,7 +90,7 @@
 
 ### Wave 2（日常会话接线）
 
-- [ ] **T005**: 日常会话挂载附件 — 测试
+- [x] **T005**: 日常会话挂载附件 — 测试
   **文件**: `src/backend/test/workstation/test_daily_generated_files.py`（新建）
   **逻辑**: 直接测试 T006 新增的纯函数和落库辅助函数，用假工具对象带 `executor.published_deliverables`，并 mock `promote_chat_attachments`。
   **测试**:
@@ -106,7 +106,7 @@
   **覆盖 AC**: AC-01, AC-03, AC-04, AC-06, AC-07, AC-09, AC-16, AC-20, AC-21
   **依赖**: T002
 
-- [ ] **T006**: 日常会话挂载附件 — 实现
+- [x] **T006**: 日常会话挂载附件 — 实现
   **文件**: `src/backend/bisheng/workstation/domain/services/chat_service.py`
   **逻辑**:
   - 新增 `_enable_deliverable_collection(tool)`：取 `getattr(tool, "tool_instance", tool).executor`；有 `collect_deliverables` 属性时置 True，并在内层和外层 `description` 末尾追加 design 决策 6 的英文说明。在约 1331 行 `init_by_tool_id` 返回后，对 `tool_key == CODE_INTERPRETER_TOOL_KEY` 的工具调用。
@@ -123,7 +123,7 @@
 
 ### Wave 3（前端，client 与 platform 可以并行）
 
-- [ ] **T007**: client — 流式结束带回 files，助手气泡渲染卡片
+- [x] **T007**: client — 流式结束带回 files，助手气泡渲染卡片
   **文件**: `src/frontend/client/src/hooks/useAiChatSSE.ts`、`src/frontend/client/src/components/Chat/AiMessageBubble.tsx`，以及消费 `onAgentUpdate` 并写回消息的调用处（一处）
   **逻辑**:
   - `AgentPatch` 增加 `files?: any[]`；`agent_answer` end 事件把 `message.files` 带进 `emitAgent`；调用处把它写到 `ChatMessage.files`。
@@ -134,7 +134,7 @@
   **手动验证**: 在 `http://192.168.106.116:3001/workspace` 执行 TC-DCF-001、TC-DCF-003。
   **依赖**: T006
 
-- [ ] **T008**: client — 打开附件前再签名
+- [x] **T008**: client — 打开附件前再签名
   **文件**: `src/frontend/client/src/components/Chat/attachments/ChatHistoryFileRow.tsx`、`src/frontend/client/src/components/Chat/hooks/useTaskWorkspaceState.ts`（打开文件的路径）
   **逻辑**:
   - 新增一个小的再签名函数：附件有 `object_name`、`file_id`，且上下文有 `conversationId` 时，先 `await getAttachmentUrl(conversationId, file_id)`。拿到地址就用它构造预览或下载；拿不到就回退到存储的 `filepath`。
@@ -146,7 +146,7 @@
   **手动验证**: 执行 TC-DCF-002、TC-DCF-008、TC-DCF-023。
   **依赖**: T007
 
-- [ ] **T009**: client — 正文 output/ 链接规则
+- [x] **T009**: client — 正文 output/ 链接规则
   **文件**: `src/frontend/client/src/components/Chat/Messages/Content/Markdown.tsx`，以及日常会话气泡传参处（`AiMessageBubble.tsx` 的主 `<Markdown>`）
   **逻辑**:
   - 日常会话气泡传入 `resolveFileLink(href)`。它先归一化 href：`decodeURIComponent` 容错，去掉 `./` 和前导 `/`；再与 `message.files[].path` 比对。
@@ -159,7 +159,7 @@
   **手动验证**: 执行 TC-DCF-012、TC-DCF-013、TC-DCF-014、TC-DCF-021。
   **依赖**: T008
 
-- [ ] **T010**: platform — 审计详情卡片与下载
+- [x] **T010**: platform — 审计详情卡片与下载
   **文件**: `src/frontend/platform/src/controllers/API/log.ts`、`src/frontend/platform/src/pages/LogPage/useAppLog/dailyChatDetail.tsx`
   **逻辑**:
   - `log.ts` 新增 `getAuditChatFileUrlApi(chatId, fileId)`，调用 T004 的接口。
@@ -169,7 +169,7 @@
   **手动验证**: 在 `http://192.168.106.116:3001/log/chatlog/<会话id>` 执行 TC-DCF-015、TC-DCF-016。
   **依赖**: T004, T006
 
-- [ ] **T011**: platform — 审计正文 output/ 链接规则
+- [x] **T011**: platform — 审计正文 output/ 链接规则
   **文件**: `src/frontend/platform/src/pages/LogPage/useAppLog/DailyMessageContent.tsx`
   **逻辑**:
   - `ReactMarkdown` 增加 `components.a`，规则与 T009 相同：用本条消息的 `files` 匹配；命中时调用 T010 的取地址函数下载；`output/`、`scratch/` 未命中时渲染为文字；其他链接保持原样。
@@ -177,6 +177,18 @@
   **覆盖 AC**: AC-19
   **手动验证**: 执行 TC-DCF-017。
   **依赖**: T010
+
+- [x] **T013**: 后端 — E2B 执行器接入（实现期追加，2026-11-13 用户确认）
+  **文件**: `src/backend/bisheng_langchain/gpts/tools/code_interpreter/e2b_executor.py`、`src/backend/bisheng/workstation/domain/services/chat_service.py`
+  **逻辑**:
+  - `_walk_sandbox` 用 `files.list("./", depth=10)` 递归列出，跳过任一级以 `.` 开头的路径；原来只列一层，`output/x.docx` 从未进入 `new_files`。
+  - 执行前快照记录 `{路径: (大小, 修改时间)}`，执行后取新增和改动的文件，口径与本地执行器的 `_snapshot_files` 一致；重跑覆盖同名文件也会再次上传。
+  - 运行成功（`execution.error` 为空）且 `collect_deliverables` 打开时，`output/` 下的文件经临时文件 `upload_minio` 上传，再 `_record_deliverable` 登记，地址追加进返回的 `file_list`。未打开收集的调用方（深度研究等）不多上传。
+  - `run` 加实例锁，保留沙箱时并行的工具调用不会同时初始化沙箱或互相干扰快照比对。
+  - 日常会话 `_enable_deliverable_collection` 对有 `keep_sandbox` 属性的执行器（E2B）置为 `True`，一轮回答内共用一个沙箱（懒创建，用到才建）；`event_stream` 的 `finally` 调 `_release_code_sandboxes`，在后台线程关闭沙箱，正常结束、出错、停止三种结束方式都会走到。
+  **测试**: `test/sandbox/test_e2b_deliverables.py`（8 条：子目录文件上传、改动重传、未改动不重传、scratch 与隐藏目录不上传、失败不上传、未开收集不上传、沙箱跨调用保留直到 close、临时文件删除）；`test/workstation/test_daily_generated_files.py` 增加 5 条（E2B 置 keep_sandbox、其他执行器不加属性、只关闭保留中的沙箱、正常结束与停止都会释放）。
+  **覆盖 AC**: AC-01, AC-02
+  **依赖**: T001, T005
 
 ### Wave 4（验收）
 
@@ -188,10 +200,19 @@
   - 运行后端定向回归：`test/sandbox`、`test/linsight/test_code_interpreter_*`、`test/workstation`、`test/chat_session`、`test/audit`。
   - 运行两端前端 lint 和 jest。
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-09, AC-10, AC-11, AC-12, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18, AC-19, AC-20, AC-21, AC-22, AC-23
-  **依赖**: T009, T011
+  **依赖**: T009, T011, T013
 
 ---
 
 ## 实际偏差记录
 
-（暂无）
+- T001：并发用例实际命名为 `test_parallel_publishes_keep_all_entries`，直接并发调用 `_publish_generated_files`（40 线程）验证锁；另加 `test_root_file_collected_after_relocation`，覆盖写到工作目录根、被搬进 `output/` 的文件也会收集。
+- T006：正常结束路径的异步转正放在 `persisted = True` **之前**。放在之后时，用户在拷贝期间停止会让中断路径以为已落库而跳过，整轮回答丢失；放在之前，中断路径会自己做同步转正并落库。停止路径的分区缺省为 `str(login_user.user_id)`，与提问附件一致。
+- T005：额外加了 `test_enable_ignores_tools_without_collection`（非代码执行器工具不改描述）。
+- 后端回归基线：`test/workstation test/chat_session test/sandbox test/linsight` 在 HEAD（27e16f09f2）上已有约 50 条失败（skill、deferred ingest、导出渲染等，与本功能无关）；本分支与 HEAD 在同一批文件上的失败名单一致，仅个别用例受执行顺序影响时有时无。
+- T007：`useAiChat.ts` 里有两处消费 `onAgentUpdate`（发送与重新生成），两处都写回 `files`，不是任务里写的「一处」。助手气泡只渲染 `source === "code_interpreter"` 的附件，其他场景助手行上的 `files` 不会因此冒出来。
+- T008：没有只在卡片里再签名，而是给 `ArtifactFile` 加了 `attachment`（会话 id + file_id），并新增 `resolveArtifactFileUrl`；工作区面板的预览（`PreviewBody`）和下载（`fetchArtifactBlob`）也走它，坑 11 一并解决。共用函数在 `chatAttachmentUtils.ts`（`getReissuableAttachment` / `reissueAttachmentUrl`）。
+- T009：匹配和渲染放在新文件 `attachments/GeneratedFileLink.tsx`；`Markdown` 只加了 `renderFileLink` 一个 prop（文件已 587 行，接近 600 行上限）。`useAiChatSSE` 的 end 事件用例写在新文件 `useAiChatSSE.files.test.ts`：已有的 `useAiChatSSE.failure.test.ts` 在 HEAD 上就因 `jest.mock` 工厂引用类型参数 `event` 无法通过 babel 转换（0 条用例执行），本次不修。
+- T010：下载失败不新增文案。取地址走 `handleUiRequest`，被拒时由统一的 `showApiError` 提示，与打开该会话详情时一致；所以无新增 i18n。卡片、链接规则和过滤函数放在新文件 `useAppLog/DailyGeneratedFiles.tsx`。
+- T013（范围变更）：spec 原本排除 E2B。本机联调走 E2B 时回答只写了文件名、没有卡片，用户确认后追加。附带改变一处深度研究的行为：E2B 的 copy-out 原来只认新增文件，现在改动的同名文件也会写回工作区，与本地执行器一致。`test/linsight/test_e2b_copy_in_out.py` 的假沙箱 `files.list` 补了 `depth` 参数。`test/sandbox` + `test/workstation` 在 HEAD 与本分支上都是同样 15 条已有失败。
+- 前端测试环境：本机 client jest 需要屏蔽未编译的 `canvas`（client AGENTS.md Known Pitfalls），通过临时 `NODE_OPTIONS=--require` 预加载让 `canvas` 解析失败，未改仓库。client 的 `ChatErrorCard`、`importFailureContract`、`ChatResourceMenu` 三个套件在 HEAD 上同样失败（10 条），与本功能无关。
