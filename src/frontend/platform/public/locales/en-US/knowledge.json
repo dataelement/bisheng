@@ -711,7 +711,10 @@
         "empty": "No spaces",
         "more_folders": "Load more folders",
         "collapse_navigation": "Collapse space navigation",
-        "expand_navigation": "Expand space navigation"
+        "expand_navigation": "Expand space navigation",
+        "search": "Search spaces",
+        "personal": "Personal spaces",
+        "more_spaces": "Load more spaces"
     },
     "workspace": {
         "files": "Space files",

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { KnowledgeSpaceSidebar } from "./KnowledgeSpaceSidebar";
 
@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("./useSidebarSpaceActions", () => ({ useSidebarSpaceActions: () => ({ load: vi.fn(), render: () => null, dialogs: null }) }));
 vi.mock("@/controllers/request", () => ({ default: { get: mocks.get, post: mocks.post }, showApiError: mocks.error }));
-vi.mock("@/controllers/API/knowledgeSpace", () => ({ knowledgeSpaceApi: { listChildren: mocks.children } }));
+vi.mock("@/controllers/API/knowledgeSpace", () => ({ knowledgeSpaceApi: { listChildren: mocks.children, listAdminSpaces: (query: object) => mocks.get("/api/v1/knowledge/space/admin/list", { params: query }), listVisibleSpaces: (query: object) => mocks.get("/api/v1/knowledge/space/list", { params: query }) } }));
 vi.mock("@/controllers/API/knowledgeFiles", () => ({ knowledgeFilesApi: { listSpaceFolderParents: mocks.parents } }));
 vi.mock("@/controllers/hooks/knowledge", () => ({
   knowledgeQueryKeys: {
@@ -18,6 +18,7 @@ vi.mock("@/controllers/hooks/knowledge", () => ({
   },
 }));
 vi.mock("@bisheng/ui", () => ({
+  SearchInput: ({ value, onChange, "aria-label": label }: InputHTMLAttributes<HTMLInputElement>) => <input type="search" value={value} onChange={onChange} aria-label={label} />,
   Tooltip: ({ children }: { children: ReactNode }) => children,
   Button: ({ children, onClick, disabled, "aria-label": label }: ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" onClick={onClick} disabled={disabled} aria-label={label}>{children}</button>,
   Dropdown: ({ children, menu }: { children: ReactNode; menu: ReactNode }) => {
@@ -34,7 +35,7 @@ const clients: QueryClient[] = [];
 function setup(extra = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
-  const props = { scope, canCreate: true, onCreate: vi.fn(), onSelect: vi.fn(), ...extra };
+  const props = { scope, canCopy: true, onSelect: vi.fn(), ...extra };
   const draw = (next = props) => <QueryClientProvider client={client}><KnowledgeSpaceSidebar {...next} /></QueryClientProvider>;
   return { props, draw, client };
 }
@@ -63,8 +64,7 @@ it("preserves the three groups and only loads folders when their space is expand
   expect(screen.queryByText("Not a folder")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "sidebar.expand Root folder" }));
   await waitFor(() => expect(mocks.children).toHaveBeenLastCalledWith(7, { parent_id: 9, file_type: 0, page_size: 100 }));
-  fireEvent.click(screen.getByRole("button", { name: "f118.create_space" }));
-  expect(f.props.onCreate).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("button", { name: "f118.create_space" })).toBeNull();
 });
 
 it("advances an empty cursor page and does not truncate the folder tree", async () => {
@@ -130,7 +130,7 @@ it("retires a pending old tenant response and its create control on scope change
   const view = render(f.draw());
   await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(3));
   mocks.get.mockImplementation((url: string) => Promise.resolve(url.endsWith("/mine") ? [{ id: 8, name: "New tenant" }] : []));
-  view.rerender(f.draw({ ...f.props, canCreate: false, scope: { ...scope, tenantId: 202, managementTenantId: 202 } }));
+  view.rerender(f.draw({ ...f.props, canCopy: false, scope: { ...scope, tenantId: 202, managementTenantId: 202 } }));
   await screen.findByRole("button", { name: "New tenant" });
   await act(async () => resolveOld([{ id: 7, name: "Old tenant" }]));
   expect(screen.queryByText("Old tenant")).toBeNull();
@@ -185,4 +185,66 @@ it("stops automatic deep-link paging after a failure and retries the same opaque
   fireEvent.click(retry);
   await screen.findByRole("button", { name: "Selected folder" });
   expect(mocks.children).toHaveBeenNthCalledWith(3, 7, { parent_id: null, file_type: 0, page_size: 100, cursor: "later/+==" });
+});
+
+
+it("pages management spaces into department and personal groups without ordinary navigation or creation", async () => {
+  mocks.get.mockImplementation(async (_url: string, options: { params: { page?: number; keyword?: string } }) => options.params.page === 2
+    ? { data: [{ id: 9, name: "Later personal", space_kind: "normal" }], total: 201 }
+    : { data: [{ id: 7, name: "Department", space_kind: "department" }, { id: 8, name: "Personal", space_kind: "normal" }], total: 201 });
+  const f = setup({ scope: { ...scope, view: "admin" as const } });
+  render(f.draw());
+  await screen.findByRole("button", { name: "Department" });
+  expect(screen.getByRole("region", { name: "sidebar.department" })).toHaveTextContent("Department");
+  expect(screen.getByRole("region", { name: "sidebar.personal" })).toHaveTextContent("Personal");
+  expect(screen.queryByRole("region", { name: "sidebar.created" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "f118.create_space" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "sidebar.more_spaces" }));
+  await screen.findByRole("button", { name: "Later personal" });
+  expect(mocks.get.mock.calls.every(([url]) => String(url).endsWith("/admin/list"))).toBe(true);
+  expect(mocks.get).toHaveBeenLastCalledWith("/api/v1/knowledge/space/admin/list", { params: { page: 2, page_size: 200 } });
+});
+
+it.each(["ordinary", "admin"] as const)("searches %s in its own scope and restores groups after clearing", async (view) => {
+  const base = mocks.get.getMockImplementation()!;
+  mocks.get.mockImplementation(async (url: string, options: { params: { keyword?: string } }) => {
+    if (url.endsWith("/list")) {
+      const rows = options.params.keyword ? [{ id: 10, name: "Search result", user_id: 99, space_kind: "normal" }] : [{ id: 7, name: "My space", space_kind: "normal" }];
+      return view === "admin" ? { data: rows, total: rows.length } : { data: rows, has_more: false };
+    }
+    return base(url, options);
+  });
+  const f = setup({ scope: { ...scope, view } });
+  render(f.draw());
+  await screen.findByRole("button", { name: "My space" });
+  const search = screen.getByRole("searchbox", { name: "sidebar.search" });
+  fireEvent.change(search, { target: { value: "Search" } });
+  await screen.findByRole("button", { name: "Search result" });
+  expect(screen.queryByRole("button", { name: "My space" })).toBeNull();
+  expect(mocks.get).toHaveBeenCalledWith(`/api/v1/knowledge/space/${view === "admin" ? "admin/" : ""}list`, { params: { page_size: 200, keyword: "Search", ...(view === "admin" ? { page: 1 } : {}) } });
+  fireEvent.change(search, { target: { value: "" } });
+  await screen.findByRole("button", { name: "My space" });
+  expect(screen.queryByRole("button", { name: "Search result" })).toBeNull();
+  expect(f.props.onSelect).not.toHaveBeenCalled();
+});
+
+it("ignores retired search results and advances sparse ordinary visible cursors", async () => {
+  let finish!: (value: object) => void;
+  const slow = new Promise((resolve) => { finish = resolve; });
+  const base = mocks.get.getMockImplementation()!;
+  mocks.get.mockImplementation((url: string, options: { params: { keyword?: string; cursor?: string } }) => {
+    if (!url.endsWith("/list")) return base(url, options);
+    if (options.params.keyword === "Old") return slow;
+    return Promise.resolve(options.params.cursor ? { data: [{ id: 12, name: "Later visible", user_id: 99 }], has_more: false } : { data: [], has_more: true, next_cursor: "opaque/+==" });
+  });
+  const f = setup(); render(f.draw());
+  const search = screen.getByRole("searchbox", { name: "sidebar.search" });
+  fireEvent.change(search, { target: { value: "Old" } });
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith("/api/v1/knowledge/space/list", { params: { page_size: 200, keyword: "Old" } }));
+  fireEvent.change(search, { target: { value: "New" } });
+  fireEvent.click(await screen.findByRole("button", { name: "sidebar.more_spaces" }));
+  await screen.findByRole("button", { name: "Later visible" });
+  await act(async () => finish({ data: [{ id: 13, name: "Retired result" }], has_more: false }));
+  expect(screen.queryByText("Retired result")).toBeNull();
+  expect(mocks.get).toHaveBeenLastCalledWith("/api/v1/knowledge/space/list", { params: { page_size: 200, keyword: "New", cursor: "opaque/+==" } });
 });

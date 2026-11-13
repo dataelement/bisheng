@@ -1890,11 +1890,6 @@
       "count": 1
     }
   },
-  "src/pages/KnowledgePage/components/FileUploadSplitStrategy.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
   "src/pages/KnowledgePage/components/FileUploadStep1.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2

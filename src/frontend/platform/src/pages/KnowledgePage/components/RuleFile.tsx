@@ -1,73 +1,15 @@
 import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
-import { Input, InputNumber, Select } from '@bisheng/ui';
-import type { DocumentProcessingRule } from '@/controllers/API/knowledgeSpace';
-import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { Input } from '@bisheng/ui';
 
 import { Label } from "@/components/bs-ui/label";
 import { Checkbox } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
-import { useCallback,useEffect,useId,useMemo,useRef,useState } from "react";
+import { useCallback,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
 import { KnowledgeHint } from "./KnowledgeTooltip";
 
 import { cn } from "@/utils";
-
-type DocumentNumberField = 'chunk_size' | 'chunk_overlap' | 'hierarchy_level' | 'max_chunk_size';
-export type DocumentProcessingDefaultsDraft = Omit<DocumentProcessingRule, DocumentNumberField> & Record<DocumentNumberField, number | null>;
-interface DocumentProcessingDefaultsFieldsProps {
-    value: DocumentProcessingDefaultsDraft;
-    onChange: (value: DocumentProcessingDefaultsDraft) => void;
-    disabled?: boolean;
-}
-
-/** Default drafts are controlled separately from the legacy upload state. */
-export function DocumentProcessingDefaultsFields({ value, onChange, disabled = false }: DocumentProcessingDefaultsFieldsProps) {
-    const { t } = useTranslation('knowledge');
-    const selectLabels = useSelectLabels();
-    const id = useId();
-    const numbers: { key: DocumentNumberField; label: string; min: number; max?: number }[] = [
-        { key: 'chunk_size', label: 'splitLength', min: 1 },
-        { key: 'chunk_overlap', label: 'chunkOverlap', min: 0 },
-        { key: 'hierarchy_level', label: 'splitLevel', min: 1, max: 6 },
-        { key: 'max_chunk_size', label: 'maxChunkSize', min: 1 },
-    ];
-    const flags = [
-        ['retain_images', 'keepImages'], ['force_ocr', 'ocrForce'],
-        ['enable_formula', 'enableRec'], ['filter_page_header_footer', 'hfFilter'],
-    ] as const;
-    return <fieldset disabled={disabled} className="space-y-4">
-        <div className="space-y-3 rounded-lg border p-4">
-            <p className="text-sm text-text-2">{t('pdfOptionsHint')}</p>
-            {flags.map(([key, label]) => <div key={key} className="flex items-center gap-2">
-                <Checkbox id={`${id}-${key}`} checked={value[key] === 1} disabled={disabled}
-                    onCheckedChange={checked => onChange({ ...value, [key]: checked === true ? 1 : 0 })} />
-                <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
-            </div>)}
-        </div>
-        <Label htmlFor={`${id}-mode`}>{t('docSplitStrategy')}</Label>
-        <Select {...selectLabels} id={`${id}-mode`} aria-label={t('docSplitStrategy')} disabled={disabled}
-            value={value.split_mode} options={[
-                { value: 'auto', label: t('autoSplit') }, { value: 'custom', label: t('customSplit') },
-                { value: 'hierarchical', label: t('hierarchicalSplit') },
-            ]} onChange={mode => { if (mode === 'auto' || mode === 'custom' || mode === 'hierarchical') onChange({ ...value, split_mode: mode }); }} />
-        <div className="grid gap-4 sm:grid-cols-2">
-            {numbers.map(({ key, label, min, max }) => <div key={key} className="space-y-2">
-                <Label htmlFor={`${id}-${key}`}>{t(label)}</Label>
-                <InputNumber id={`${id}-${key}`} aria-label={t(label)} value={value[key]} min={min} max={max}
-                    precision={0} disabled={disabled} onChange={number => onChange({ ...value, [key]: number })}
-                    increaseLabel={t('bs:sharedUi.increase')} decreaseLabel={t('bs:sharedUi.decrease')}
-                    errorMessage={() => t(max === undefined ? 'f118.integer_at_least' : 'f118.integer_between', { min, max })} />
-            </div>)}
-        </div>
-        <div className="flex items-center gap-2">
-            <Checkbox id={`${id}-append`} checked={value.append_title} disabled={disabled}
-                onCheckedChange={checked => onChange({ ...value, append_title: checked === true })} />
-            <Label htmlFor={`${id}-append`}>{t('appendTitle')}</Label>
-        </div>
-    </fieldset>;
-}
-
 
 // Utility function: Convert 1/0 or boolean values to standard boolean
 const toBoolean = (value) => {

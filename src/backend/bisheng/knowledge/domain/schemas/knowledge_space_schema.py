@@ -56,6 +56,10 @@ class KnowledgeSpaceListItemResp(KnowledgeBase):
     user_role: UserRoleEnum | None = Field(default=None, description="Knowledge Space user role")
 
 
+class KnowledgeSpaceAdminListItemResp(KnowledgeSpaceListItemResp):
+    space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
+
+
 class KnowledgeSpaceCreateReq(BaseModel):
     name: str = Field(..., max_length=200, description="Knowledge Space Name")
     description: str | None = Field(None, description="Knowledge Space Description")

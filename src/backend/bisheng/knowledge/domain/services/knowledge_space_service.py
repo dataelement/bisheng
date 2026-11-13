@@ -106,6 +106,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     InitialPermissionApplyResult,
     InitialPermissionsRequest,
+    KnowledgeSpaceAdminListItemResp,
     KnowledgeSpaceCreateResp,
     KnowledgeSpaceFileResponse,
     KnowledgeSpaceInfoResp,
@@ -2093,7 +2094,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def list_admin_spaces(
         self, *, keyword: str | None = None, page: int = 1, page_size: int = 20, has_abnormal: bool | None = None
-    ) -> "PageData[KnowledgeSpaceListItemResp]":
+    ) -> "PageData[KnowledgeSpaceAdminListItemResp]":
         """List one trusted management tenant without ordinary visibility filters."""
         from bisheng.common.schemas.api import PageData
 
@@ -2117,10 +2118,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if any(row.tenant_id != tenant_id or row.type != KnowledgeTypeEnum.SPACE.value for row in rows):
             raise SpaceNotFoundError()
         abnormal = await self.space_listing_repository.aexists_abnormal_files(space_ids=[row.id for row in rows])
-        return PageData[KnowledgeSpaceListItemResp](
+        bindings = await DepartmentKnowledgeSpaceDao.aget_by_space_ids([row.id for row in rows]) if rows else []
+        department_ids = {binding.space_id for binding in bindings}
+        return PageData[KnowledgeSpaceAdminListItemResp](
             data=[
-                KnowledgeSpaceListItemResp.model_validate(row).model_copy(
-                    update={"has_abnormal_files": row.id in abnormal}
+                KnowledgeSpaceAdminListItemResp.model_validate(row).model_copy(
+                    update={
+                        "has_abnormal_files": row.id in abnormal,
+                        "space_kind": "department" if row.id in department_ids else "normal",
+                    }
                 )
                 for row in rows
             ],

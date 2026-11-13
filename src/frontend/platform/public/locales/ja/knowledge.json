@@ -705,7 +705,10 @@
         "empty": "スペースがありません",
         "more_folders": "フォルダーをさらに読み込む",
         "collapse_navigation": "スペースナビゲーションを折りたたむ",
-        "expand_navigation": "スペースナビゲーションを展開"
+        "expand_navigation": "スペースナビゲーションを展開",
+        "search": "スペースを検索",
+        "personal": "個人スペース",
+        "more_spaces": "スペースをさらに読み込む"
     },
     "workspace": {
         "files": "スペースのファイル",
