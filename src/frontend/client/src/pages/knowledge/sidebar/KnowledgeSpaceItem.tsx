@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { getSpaceMembershipAction } from "./spaceMembershipAction";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
@@ -66,6 +67,8 @@ export default function KnowledgeSpaceItem({
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const confirm = useConfirm();
+  const membershipAction = getSpaceMembershipAction(type, canDeleteSpace);
+  const isDeleteAction = membershipAction === "delete";
   const navigate = useNavigate();
   const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
 
@@ -119,16 +122,16 @@ export default function KnowledgeSpaceItem({
         {space.isPinned ? localize("com_knowledge.unpin") : localize("com_knowledge.pin_space")}
       </DropdownItem>
 
-      {(canDeleteSpace || type === "joined") && (
+      {(membershipAction !== null) && (
         <>
           <DropdownSeparator />
           <DropdownItem
             danger
-            icon={canDeleteSpace ? <Outlined.Delete /> : <Outlined.LogOut />}
+            icon={isDeleteAction ? <Outlined.Delete /> : <Outlined.LogOut />}
             onSelect={async () => {
               // Delete-space uses the destructive variant (matches file-delete).
               // Exit-space keeps the default prompt — it's not destructive.
-              const ok = canDeleteSpace
+              const ok = isDeleteAction
                 ? await confirm({
                     description: `${localize("com_knowledge.confirm_delete_space_name", { 0: space.name })}${localize("com_knowledge.delete_irreversible_warning")}`,
                     variant: "destructive",
@@ -141,11 +144,11 @@ export default function KnowledgeSpaceItem({
                   });
 
               if (ok) {
-                canDeleteSpace ? onDelete(space.id) : onLeave(space.id);
+                isDeleteAction ? onDelete(space.id) : onLeave(space.id);
               }
             }}
           >
-            {canDeleteSpace
+            {isDeleteAction
               ? localize("com_knowledge.delete_space")
               : localize("com_knowledge.exit_space_short")}
           </DropdownItem>

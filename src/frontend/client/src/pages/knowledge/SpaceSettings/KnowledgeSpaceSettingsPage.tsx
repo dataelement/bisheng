@@ -30,7 +30,7 @@ import { useAuthContext, useLocalize } from "~/hooks";
 import useSelectCopy from "~/hooks/useSelectCopy";
 import { useToastContext } from "~/Providers";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
-import { extractApiStatusCode } from "~/pages/Subscription/errorUtils";
+import { showApiError } from "~/api/request";
 import { resolveSettingsReturnPath } from "../knowledgeUtils";
 import { CreatedPermissionFailureState } from "./CreatedPermissionFailureState";
 import {
@@ -186,12 +186,7 @@ export function KnowledgeSpaceSettingsPage() {
       });
       navigate(returnPath);
     } catch (error) {
-      if (!extractApiStatusCode(error)) {
-        showToast({
-          message: localize("com_knowledge.operation_failed_retry"),
-          severity: NotificationSeverity.WARNING,
-        });
-      }
+      showApiError(error);
     }
   };
 

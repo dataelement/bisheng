@@ -672,7 +672,7 @@
     "submit": "Submit",
     "workstationEntry": "Lingsi Entry",
     "menuDisplayName": "Menu Display Name",
-    "menuNameLengthHint": "Maximum 8 units: Chinese and Japanese characters count as 2; English letters count as 1.",
+    "menuNameTooLong": "Use up to 4 Chinese characters or 8 English characters. Mixed text follows the same width limit.",
     "iconUpload": "Icon Upload",
     "sidebarIcon": "Sidebar Icon",
     "assistantIcon": "Welcome Page Icon & Avatar",
@@ -778,6 +778,7 @@
     "modelStatusChecking": "Checking",
     "notBeEmpty": "cannot be empty",
     "pasteAdvancedParamsHere": "Please paste or enter your advanced parameter configuration in the text box below",
+    "contextWindowParamTip": "Task mode reads the model's context length (in tokens, input plus output) from context_window. If it is empty, the system tries to get the length from the provider's API.",
     "rerank": "Rerank",
     "save": "Save",
     "saveSuccess": "Save Success",
@@ -2883,6 +2884,7 @@
     "permissionTiers": {
       "editor": "Editor",
       "manager": "Manager",
+      "owner": "Owner",
       "viewer": "Viewer"
     },
     "resourceTypes": {
@@ -4186,11 +4188,11 @@
       "userTab": "Users",
       "addCredits": "Add allowance",
       "emptyCredits": "No credit allowances yet",
-      "ruleHelp": "Set monthly credits per member by user, department or role. The highest matching enabled allowance applies, shared by Chat and Work. Members no enabled allowance matches are not capped.",
+      "ruleHelp": "Set a monthly credit allowance per user, department, or role. Each member of a department or role receives their own allowance. When multiple allocations apply, the highest enabled allowance is used, shared by Chat and Work.",
       "scope": "Scope",
-      "monthlyCredits": "Credits per member / month",
+      "monthlyCredits": "Monthly credit allowance per user",
       "creditRangeHint": "0–{{max}} credits per month, with up to 1 decimal place.",
-      "enabled": "Enable rule",
+      "enabled": "Enable this credit allocation",
       "selectSubject": "Select a subject",
       "save": "Save",
       "saving": "Saving…",
@@ -4198,7 +4200,9 @@
       "edit": "Edit",
       "yes": "Enabled",
       "no": "Disabled",
-      "usedCredits": "Credits used in this period: {{value}}"
+      "usedCredits": "Credits used in this period: {{value}}",
+      "monthlyCreditsHelp": "The monthly credit limit for each user, shared by Chat and Work",
+      "monthlyCreditsHelpLabel": "About credit allowances"
     }
   },
   "request": {
@@ -4230,6 +4234,7 @@
     "noProgress": "No progress available"
   },
   "department": {
+    "defaultOrganization": "Default Org",
     "searchUsersPlaceholder": "Search user name or ID",
     "searchMember": "Search user name or ID"
   },

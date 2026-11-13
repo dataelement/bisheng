@@ -188,10 +188,12 @@ class TestForwarding:
         assert record["method"] == "POST"
         assert json.loads(record["body"]) == {"answer": "42"}
 
-    def test_upstream_status_and_headers_reach_the_client(self, logged_in, echo_upstream):
-        echo_upstream.status_code = 418
+    @pytest.mark.parametrize("status_code", [418, 500, 502, 503])
+    def test_upstream_status_and_headers_reach_the_client(self, logged_in, echo_upstream, status_code):
+        """F119 AC-40: application 5xx remains an upstream response, never a synthetic page."""
+        echo_upstream.status_code = status_code
         response = logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
-        assert response.status_code == 418
+        assert response.status_code == status_code
         assert response.headers["content-type"].startswith("application/json")
 
     def test_every_set_cookie_survives_the_hop(self, logged_in, echo_upstream):

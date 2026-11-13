@@ -75,7 +75,7 @@
   },
   "src/api/knowledge.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 64
+      "count": 62
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -2535,7 +2535,7 @@
       "count": 2
     },
     "no-console": {
-      "count": 4
+      "count": 3
     },
     "no-restricted-imports": {
       "count": 1

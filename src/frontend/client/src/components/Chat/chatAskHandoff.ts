@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SelectedOrgKb } from '~/store/modeltype';
 import { useActivate } from 'react-activation';
 
 /**
@@ -21,7 +22,7 @@ export interface ChatAsk {
   text: string;
   /** Stable model ID chosen in the originating input. */
   modelId?: number;
-  space?: { id: string; name: string };
+  space?: { id: string; name: string; tag?: { id: number; name: string } };
   attachment?: File;
 }
 
@@ -34,7 +35,7 @@ export interface AttachmentAsk {
 }
 
 /** The chat's knowledge selection as the store types it (`type` is a plain string there). */
-type KbSelection = { id: string; name: string; type: string };
+type KbSelection = SelectedOrgKb;
 
 let pendingAsk: ChatAsk | null = null;
 let askSeq = 0;
@@ -107,7 +108,7 @@ export function useChatAskHandoff({
       // subscribers can flush this effect again during the same commit.
       preparingAskRef.current = ask;
       setSelectedKbs(ask.space
-        ? [{ id: ask.space.id, name: ask.space.name, type: 'space' }]
+        ? [{ ...ask.space, type: 'space' }]
         : []);
       if (ask.modelId !== undefined && !selectModel(ask.modelId)) {
         setMountedAsk(null);
@@ -123,7 +124,7 @@ export function useChatAskHandoff({
     if (preparedAsk !== ask) return;
     if (ask.modelId !== undefined && selectedModelId !== ask.modelId) return;
     const mounted = ask.space
-      ? selectedKbs.length === 1 && selectedKbs[0].type === 'space' && String(selectedKbs[0].id) === ask.space.id
+      ? selectedKbs.length === 1 && selectedKbs[0].type === 'space' && String(selectedKbs[0].id) === ask.space.id && selectedKbs[0].tag?.id === ask.space.tag?.id
       : selectedKbs.length === 0;
     if (!mounted) return;
     if (ask.attachment) {

@@ -59,13 +59,18 @@ async def test_queued_messages_do_not_overwrite_each_others_identity(monkeypatch
     from bisheng.common.chat import client as module
 
     queued = []
-    monkeypatch.setattr(module.thread_pool, "submit", lambda *args, **kwargs: queued.append((args, kwargs)))
+    async def capture_worker(worker, fn, *args, **kwargs):
+        queued.append(worker)
+
+    monkeypatch.setattr(ChatClient, "wrapper_task", capture_worker)
     original = ChatClient.__new__(ChatClient)
     original.login_user = SimpleNamespace(user_id=21)
     original.user_id = 21
     original.client_key = "f113"
     original.work_type = WorkType.GPTS
     original.kwargs = {}
+    original.message_tasks = set()
+    original.finalizing_tasks = set()
     original.gpts_agent = object()
     original.gpts_async_callback = object()
     original.db_assistant = object()
@@ -77,7 +82,7 @@ async def test_queued_messages_do_not_overwrite_each_others_identity(monkeypatch
         await original.handle_message({"owner": owner}, execution_context=context)
         with pytest.raises(TypeError):
             context.execution_snapshot["tenant_id"] = 9
-    workers = [args[1].__self__ for args, _kwargs in queued]
+    workers = queued
     assert [worker.user_id for worker in workers] == [22, 23]
     assert [worker.login_user.user_id for worker in workers] == [22, 23]
     assert original.user_id == 21 and original.login_user.user_id == 21

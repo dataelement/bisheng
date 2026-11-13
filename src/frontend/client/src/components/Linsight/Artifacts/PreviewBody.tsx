@@ -21,6 +21,7 @@ import { useToastContext } from '~/Providers';
 import {
     type ArtifactFile,
     type PreviewKind,
+    artifactVersionId,
     downloadArtifactFile,
     getArtifactPreviewKind,
     getFileExtension,
@@ -63,7 +64,7 @@ const OUTLINED_FILE_ICONS: Record<string, React.ComponentType<{ className?: stri
 // time. Artifacts are immutable per version, so versionId+url is a safe key — a hit
 // lets the new instance render instantly with no spinner and no network round-trip.
 const previewCache = new Map<string, { text?: string; imageUrl?: string; resolvedUrl?: string }>();
-const previewCacheKey = (file: ArtifactFile, versionId: string) => `${versionId}::${file.file_url}`;
+const previewCacheKey = (file: ArtifactFile, versionId: string) => `${artifactVersionId(file, versionId)}::${file.file_url}`;
 // Kinds this hook does not load: nothing to fetch ('unsupported'), or loaded by a
 // dedicated hook ('slides' → useSlidesPreview, which polls the pptx→pdf conversion).
 const SELF_LOADING_KINDS: PreviewKind[] = ['unsupported', 'slides'];
@@ -119,7 +120,7 @@ export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
         setLoading(true);
         (async () => {
             try {
-                const url = file.directUrl || await resolveArtifactUrl(file.file_url, versionId);
+                const url = file.directUrl || await resolveArtifactUrl(file.file_url, artifactVersionId(file, versionId));
                 if (cancelled) return;
                 if (kind === 'image') {
                     previewCache.set(key, { imageUrl: url });
@@ -204,7 +205,7 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
         const entry = matchArtifactByRelPath(fileListRef.current, src);
         if (!entry) return null;
         try {
-            const url = await resolveArtifactUrl(entry.file_url, vid);
+            const url = await resolveArtifactUrl(entry.file_url, artifactVersionId(entry, vid));
             imageUrlCacheRef.current.set(key, url);
             return url;
         } catch (e) {

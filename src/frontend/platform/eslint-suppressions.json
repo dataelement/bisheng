@@ -131,9 +131,6 @@
     }
   },
   "src/components/bs-comp/department/LazyDepartmentTree.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -587,7 +584,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 3
     }
   },
   "src/controllers/API/approval.ts": {
@@ -1492,7 +1489,7 @@
   },
   "src/pages/BuildPage/flow/Header.tsx": {
     "@typescript-eslint/no-unused-expressions": {
-      "count": 3
+      "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
@@ -1536,11 +1533,6 @@
   },
   "src/pages/BuildPage/flow/flowStore.ts": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/BuildPage/flow/index.tsx": {
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },
@@ -2249,9 +2241,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
     }
   },
   "src/pages/LoginPage/loginBridge.tsx": {

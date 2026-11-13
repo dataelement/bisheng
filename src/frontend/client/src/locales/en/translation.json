@@ -1293,6 +1293,8 @@
     "history_deleted": "Conversation history deleted"
   },
   "com_knowledge": {
+    "tag_filter_daily_only": "Tag filters are available in daily mode. Remove the tag or switch back to daily mode.",
+    "load_tags_failed": "Could not load tags. Please retry.",
     "department_private_disabled": "Department knowledge spaces cannot be private",
     "add_new": "Add",
     "web_link": "Web link",
@@ -2929,6 +2931,14 @@
       "REMOTE_SUCCEEDED": "The remote Agent completed",
       "REMOTE_FAILED": "The remote Agent failed",
       "REMOTE_CANCELLED": "The remote Agent was cancelled"
-    }
+    },
+    "unknownApp": "Unknown app",
+    "noDescription": "No description available",
+    "emptyShared": "This shared conversation has no messages yet"
+  },
+  "knowledgeAccess": {
+    "checking": "Checking knowledge space access…",
+    "failed": "Could not load knowledge space permissions. Refresh the page to try again.",
+    "revoked": "Access has expired for these knowledge spaces: {{names}}. Choose accessible spaces in Add context."
   }
 }

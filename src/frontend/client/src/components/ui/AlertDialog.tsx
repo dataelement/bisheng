@@ -61,6 +61,7 @@ const AlertDialogContent = React.forwardRef<
         className,
       )}
       {...props}
+      aria-modal="true"
     />
   </AlertDialogPortal>
 ));

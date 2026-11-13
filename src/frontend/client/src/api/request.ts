@@ -81,7 +81,7 @@ async function _postResponse<T>(
 async function _postMultiPart(url: string, formData: FormData, options?: AxiosRequestConfig & ErrorOptions) {
   const response = await customAxios.post(url, formData, {
     ...options,
-    headers: { "Content-Type": "multipart/form-data" },
+    headers: { "Content-Type": "multipart/form-data", ...options?.headers },
   });
   return response.data;
 }

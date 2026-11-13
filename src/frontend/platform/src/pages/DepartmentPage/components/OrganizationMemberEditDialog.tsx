@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { departmentDisplayName } from "@/components/bs-comp/department/departmentDisplayName";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, Input, Select, notification } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
@@ -290,7 +291,7 @@ export function OrganizationMemberEditDialog({
         {...selectLabels}
         multiple
         showSearch
-        className="mt-1"
+        className="mt-1 min-w-0 max-w-full"
         aria-label={ariaLabel}
         options={options
           .filter((r) => r.id != null)
@@ -313,7 +314,7 @@ export function OrganizationMemberEditDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
+        className="max-h-[90vh] min-w-0 overflow-y-auto sm:max-w-lg [&>div]:min-w-0"
         aria-describedby={undefined}
       >
         <DialogHeader>
@@ -324,7 +325,7 @@ export function OrganizationMemberEditDialog({
             {t("bs:department.memberEditLoading")}
           </div>
         ) : (
-          <div className="space-y-4 py-1">
+          <div className="min-w-0 space-y-4 py-1">
             <div>
               <Label>{t("system.username")}</Label>
               <Input value={userName} disabled={
@@ -349,7 +350,7 @@ export function OrganizationMemberEditDialog({
                       {...selectLabels}
                       multiple
                       showSearch
-                      className="mt-1"
+                      className="mt-1 min-w-0 max-w-full"
                       aria-label={t("bs:department.userGroups")}
                       options={form.manageable_groups
                         .filter((g) => g.id != null)
@@ -377,7 +378,7 @@ export function OrganizationMemberEditDialog({
                     <Label>{t("bs:department.primary")}</Label>
                     {form.can_change_primary && primaryDeptInternalId != null ? (
                       <TreeDepartmentSelect
-                        className="mt-1"
+                        className="mt-1 min-w-0 max-w-full"
                         modal={false}
                         value={primaryDeptInternalId}
                         onChange={handleUiRequest(handlePrimaryDeptChange)}
@@ -386,14 +387,14 @@ export function OrganizationMemberEditDialog({
                     ) : (
                       <>
                         <SharedTooltipProvider delayDuration={300}><SharedTooltip  content={<><p className="break-words text-left text-xs">
-                                {form.primary_department.name}
+                                {departmentDisplayName(form.primary_department, t("bs:department.defaultOrganization"))}
                               </p></>} side="bottom" ><div
                                 className={cn(
                                   "mt-1 flex h-9 w-full min-w-0 cursor-default items-center rounded-md border border-input bg-muted px-3 py-1 text-sm text-foreground shadow-sm",
                                 )}
                               >
                                 <span className="min-w-0 flex-1 truncate">
-                                  {form.primary_department.name}
+                                  {departmentDisplayName(form.primary_department, t("bs:department.defaultOrganization"))}
                                 </span>
                               </div></SharedTooltip></SharedTooltipProvider>
                         <p className="mt-1 text-xs text-muted-foreground">

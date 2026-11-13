@@ -1375,10 +1375,27 @@ class WorkStationService(BaseService):
                     continue
 
                 try:
+                    milvus_kwargs = {"k": 100, "param": {"ef": 110}}
+                    es_kwargs = {"k": 100}
+                    selected_tag_id = use_knowledge_param.knowledge_space_tag_filters.get(int(kb_id))
+                    if selected_tag_id is not None:
+                        from bisheng.knowledge.domain.services.knowledge_space_tag_filter_service import (
+                            KnowledgeSpaceTagFilterService,
+                        )
+
+                        scope_filter = await KnowledgeSpaceTagFilterService().build_index_prefilter(
+                            int(kb_id), selected_tag_id, login_user
+                        )
+                        if scope_filter.is_empty:
+                            continue
+                        if scope_filter.milvus_expr:
+                            milvus_kwargs["expr"] = scope_filter.milvus_expr
+                        if scope_filter.es_filter:
+                            es_kwargs["filter"] = scope_filter.es_filter
                     per_kb_milvus = (
                         MultiRetriever(
                             vectors=[milvus_vectorstore],
-                            search_kwargs=[{"k": 100, "param": {"ef": 110}}],
+                            search_kwargs=[milvus_kwargs],
                             finally_k=100,
                         )
                         if milvus_vectorstore is not None
@@ -1387,7 +1404,7 @@ class WorkStationService(BaseService):
                     per_kb_es = (
                         MultiRetriever(
                             vectors=[es_vectorstore],
-                            search_kwargs=[{"k": 100}],
+                            search_kwargs=[es_kwargs],
                             finally_k=100,
                         )
                         if es_vectorstore is not None

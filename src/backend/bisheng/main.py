@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -152,6 +153,23 @@ async def lifespan(app: FastAPI):
                 await backfill_linsight_default_model()
             except Exception:
                 logger.exception("linsight default-model backfill failed; continuing startup")
+            # Pre-3.0 workbench configs: daily-mode default = the last listed model
+            # (what the old client picked), and the listed models stay visible to
+            # every member once DSH visibility drives the picker.
+            try:
+                from bisheng.llm.domain.services.chat_default_model_backfill import backfill_chat_default_model
+
+                await backfill_chat_default_model()
+            except Exception:
+                logger.exception("chat default-model backfill failed; continuing startup")
+            try:
+                from bisheng.dsh.domain.services.workbench_visibility_backfill import (
+                    backfill_workbench_model_visibility,
+                )
+
+                await asyncio.to_thread(backfill_workbench_model_visibility)
+            except Exception:
+                logger.exception("workbench model visibility backfill failed; continuing startup")
             # Skill bundles moved from node-local disk to object storage. Publish what
             # this host still holds so an upgraded deployment heals itself; anything it
             # cannot resolve is logged by name for the operator to run the migration

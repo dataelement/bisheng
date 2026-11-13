@@ -1,16 +1,18 @@
 import { useState, useRef, memo } from "react";
-import { Ellipsis } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useChatContext } from "~/Providers";
-import { Dropdown, DropdownItem, DropdownSeparator, DropdownSub } from "@bisheng/ui";
+import { Dropdown, DropdownItem, DropdownSeparator, DropdownSub, Tooltip } from "@bisheng/ui";
 import {
+  createMockProject,
   moveChatToProject,
   removeChatFromProject,
   useMockProjectChats,
 } from "~/layouts/WorkbenchSidebar/projectsStore";
 import { useSidebarProjects } from "~/layouts/WorkbenchSidebar/useSidebarProjects";
+import { SIDEBAR_ICON_BUTTON_CLASS_NAME } from "~/layouts/WorkbenchSidebar/sidebarIconButton";
+import { ProjectNameDialog } from "~/layouts/WorkbenchSidebar/ProjectNameDialog";
 import { useDeleteConversationConfirm } from "./useDeleteConversationConfirm";
 import ShareButton from "./ShareButton";
 import { cn } from "~/utils";
@@ -22,20 +24,22 @@ function ConvoOptions({
   renameHandler,
   isPopoverActive,
   setIsPopoverActive,
-  isActiveConvo,
+  onMenuExit,
 }: {
   conversationId: string | null;
   title: string | null;
   retainView: () => void;
   renameHandler: () => void;
   isPopoverActive: boolean;
-  setIsPopoverActive: React.Dispatch<React.SetStateAction<boolean>>;
-  isActiveConvo: boolean;
+  setIsPopoverActive: (open: boolean) => void;
+  onMenuExit?: () => void;
 }) {
   const localize = useLocalize();
   const { index } = useChatContext();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
+  const createProjectAfterMenuCloseRef = useRef(false);
   const deleteConversationConfirm = useDeleteConversationConfirm();
   // MOCK: projects live in localStorage until the backend has a model for them
   // (see projectsStore) — moving a conversation only re-files it in the sidebar.
@@ -60,6 +64,27 @@ function ConvoOptions({
     removeChatFromProject(conversationId);
   };
 
+  const handleNewProject = () => {
+    if (!conversationId) return;
+    createProjectAfterMenuCloseRef.current = true;
+    setIsPopoverActive(false);
+  };
+
+  const handleMenuCloseAutoFocus = (event: Event) => {
+    onMenuExit?.();
+    if (!createProjectAfterMenuCloseRef.current) return;
+    createProjectAfterMenuCloseRef.current = false;
+    // Open the dialog after the menu releases its focus scope.
+    event.preventDefault();
+    setNewProjectDialogOpen(true);
+  };
+
+  const handleProjectCreate = (name: string) => {
+    if (!conversationId) return;
+    const project = createMockProject(name);
+    moveChatToProject(conversationId, project.id);
+  };
+
   const handleDelete = () => {
     if (!conversationId) {
       return;
@@ -71,11 +96,13 @@ function ConvoOptions({
     <>
       {/* The menu is portaled, but its clicks still bubble through the React
           tree to the conversation row — stop them here. */}
-      <span className="contents" onClick={(e) => e.stopPropagation()}>
+      <Tooltip content={localize("com_workbench_sidebar.more")}>
+      <span className="inline-flex shrink-0" onClick={(e) => e.stopPropagation()}>
         <Dropdown
           align="end"
           open={isPopoverActive}
           onOpenChange={setIsPopoverActive}
+          onCloseAutoFocus={handleMenuCloseAutoFocus}
           menu={
             <>
               <DropdownItem icon={<Outlined.Edit />} onSelect={renameHandler}>
@@ -83,15 +110,22 @@ function ConvoOptions({
               </DropdownItem>
               {!isSmallScreen && (
                 <DropdownSub label={localize("com_workbench_sidebar.move_to_project")} icon={<Outlined.MoveToFolder />}>
+                  <DropdownItem icon={<Outlined.Plus />} disabled={!conversationId} onSelect={handleNewProject}>
+                    {localize("com_workbench_sidebar.project_new")}
+                  </DropdownItem>
+                  {projects.length > 0 && <DropdownSeparator />}
                   {projects.map((project) => (
                     <DropdownItem key={project.id} icon={<Outlined.FolderClose />} onSelect={() => handleMoveToProject(project.id)}>
                       {project.name}
                     </DropdownItem>
                   ))}
                   {currentProjectId != null && (
+                    <>
+                    <DropdownSeparator />
                     <DropdownItem icon={<Outlined.Return />} onSelect={handleRemoveFromProject}>
                       {localize("com_workbench_sidebar.move_out_of_project")}
                     </DropdownItem>
+                    </>
                   )}
                 </DropdownSub>
               )}
@@ -108,16 +142,20 @@ function ConvoOptions({
             id={`conversation-menu-${conversationId}`}
             aria-label={localize("com_nav_convo_menu_options")}
             className={cn(
-              "z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium text-text-3 ring-ring-primary transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 fine-pointer:hover:text-text-1",
-              isActiveConvo
-                ? "opacity-100"
-                : "opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100",
+              SIDEBAR_ICON_BUTTON_CLASS_NAME,
+              "opacity-0 focus-visible:opacity-100 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100",
             )}
           >
-            <Ellipsis className="icon-md" aria-hidden />
+            <Outlined.More className="size-4" aria-hidden />
           </button>
         </Dropdown>
       </span>
+      </Tooltip>
+      <ProjectNameDialog
+        open={newProjectDialogOpen}
+        onOpenChange={setNewProjectDialogOpen}
+        onSubmit={handleProjectCreate}
+      />
       {showShareDialog && (
         <ShareButton
           conversationId={conversationId ?? ""}

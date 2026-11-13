@@ -38,7 +38,6 @@ from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
 from bisheng.utils import get_request_ip
-from bisheng.utils.threadpool import thread_pool
 from bisheng_langchain.gpts.message_types import LiberalToolMessage
 
 
@@ -89,8 +88,9 @@ class ChatClient:
         # Incoming when talking to the model Full Historical Dialogue Round Count
         self.latest_history_num = 10
         self.gpts_conf = settings.get_from_db("gpts")
-        # Asynchronous Task List
-        self.task_ids = []
+        # Each connection owns the generation tasks that its stop request settles.
+        self.message_tasks: set[asyncio.Task] = set()
+        self.finalizing_tasks: set[asyncio.Task] = set()
         self.background_tasks: set[asyncio.Task] = set()
         # A queue of streaming outputs to accept the content of the streaming output, processing newquestionEmpty at all times
         self.stream_queue = Queue()
@@ -106,9 +106,10 @@ class ChatClient:
 
     async def handle_message(self, message: dict[any, any], *, execution_context: ChatMessageExecution | None = None):
         logger.info(f"client_id={self.client_key} handle_message start, message: {message}")
-        trace_id = trace_id_var.get()
-        # Handling messages from clients, Submit to Thread Pool for Execution
         if self.work_type == WorkType.GPTS:
+            if message.get("action") == "stop":
+                await self.stop_handle_message(message)
+                return
             worker = self
             if execution_context is not None:
                 # Identity-bound agents/callbacks belong to this message, never the shared connection.
@@ -120,14 +121,14 @@ class ChatClient:
                 worker.gpts_agent = None
                 worker.gpts_async_callback = None
                 worker.db_assistant = None
-            thread_pool.submit(
-                trace_id, worker.wrapper_task, trace_id, worker.handle_gpts_message, message, trace_id=trace_id
-            )
-            # await self.handle_gpts_message(message)
+            task = asyncio.create_task(worker.wrapper_task(worker.handle_gpts_message, message))
+            self.message_tasks.add(task)
+            task.add_done_callback(self.message_tasks.discard)
+            task.add_done_callback(self.finalizing_tasks.discard)
+            # Enter the generation's cancellation handler before accepting a stop.
+            await asyncio.sleep(0)
 
-    async def wrapper_task(self, task_id: str, fn: Callable, *args, **kwargs):
-        # The wrapper handler function is an asynchronous task
-        self.task_ids.append(task_id)
+    async def wrapper_task(self, fn: Callable, *args, **kwargs):
         start_time = time.time()
         try:
             # Execute Handling Functions
@@ -135,8 +136,6 @@ class ChatClient:
         except Exception:
             logger.exception("handle message error")
         finally:
-            # When the execution is complete, the task will beidRemove from list
-            self.task_ids.remove(task_id)
             end_time = time.time()
             await telemetry_service.log_event(
                 user_id=self.user_id,
@@ -327,12 +326,17 @@ class ChatClient:
         self.gpts_async_callback = async_callbacks
 
     async def stop_handle_message(self, message: dict[any, any]):
-        # Abort Streaming Output, Because the latest taskidis to abort the task.id, you can't cancel yourself
-        logger.info(f"need stop agent, client_key: {self.client_key}, message: {message}")
+        tasks = tuple(task for task in self.message_tasks if not task.done())
+        for task in tasks:
+            if task not in self.finalizing_tasks:
+                task.cancel()
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.opt(exception=result).error("Assistant stop finalization failed for {}", self.client_key)
 
-        # Processing function before abort
-        thread_pool.cancel_task(self.task_ids[:-1])
-
+    async def save_stopped_response(self):
         # Write streaming output to database
         answer = ""
         reasoning_answer = ""
@@ -344,13 +348,12 @@ class ChatClient:
                 reasoning_answer += msg.get("content", "")
 
         # If there is streaming output, record the streaming output to the database
-        if reasoning_answer.split():
-            res = await self.add_message("bot", answer, "reasoning_answer", "break_answer")
+        if reasoning_answer:
+            res = await self.add_message("bot", reasoning_answer, "reasoning_answer", "break_answer")
             await self.send_response("reasoning_answer", "end", "", message_id=res.id if res else None)
-        if answer.strip():
-            res = await self.add_message("bot", answer, "answer", "break_answer")
-            await self.send_response("answer", "end", "", message_id=res.id if res else None)
-        await self.send_response("processing", "close", "")
+        # An empty answer carries the terminal marker when stopped before the first token.
+        res = await self.add_message("bot", answer, "answer", "break_answer")
+        await self.send_response("answer", "end", "", message_id=res.id if res else None)
 
     async def clear_stream_queue(self):
         while not self.stream_queue.empty():
@@ -360,13 +363,9 @@ class ChatClient:
         if not message:
             return
         logger.debug(f"receive client message, client_key: {self.client_key} message: {message}")
-        if message.get("action") == "stop":
-            await self.stop_handle_message(message)
-            return
-
+        question_saved = False
         try:
-            await self.send_response("processing", "begin", "")
-            # Empty the streaming queue to prevent contamination of the previous answer
+            # Start each round with its own stream buffer, including immediate stops.
             await self.clear_stream_queue()
             inputs = message.get("inputs", {})
             input_msg = inputs.get("input")
@@ -385,13 +384,19 @@ class ChatClient:
             await self.init_gpts_agent()
 
             # Write user issue to database
+            question_saved = True
             await self.add_message("human", json.dumps(inputs, ensure_ascii=False), "question")
+            await self.send_response("processing", "begin", "")
 
             # Get callback history
             chat_history = await self.get_latest_history()
             self.gpts_agent.reset_citation_registry_items()
             # RecallagentGet Results
             result = await self.gpts_agent.run(input_msg, chat_history, self.gpts_async_callback)
+            # Providers may catch cancellation while completing their own cleanup.
+            if asyncio.current_task().cancelling():
+                raise asyncio.CancelledError
+            self.finalizing_tasks.add(asyncio.current_task())
             logger.debug(f"gpts agent {self.client_key} result: {result}")
             answer = result[-1].content
 
@@ -458,6 +463,17 @@ class ChatClient:
             self.background_tasks.add(title_task)
             title_task.add_done_callback(self.background_tasks.discard)
 
+        except asyncio.CancelledError:
+            self.finalizing_tasks.add(asyncio.current_task())
+            if question_saved:
+                try:
+                    await self.save_stopped_response()
+                except Exception as exc:
+                    logger.exception("Failed to save stopped assistant response")
+                    await AssistantOtherError(exception=exc).websocket_close_message(
+                        websocket=self.websocket, close_ws=False
+                    )
+            raise
         except BaseErrorCode as e:
             logger.exception("handle gpts message error: ")
             await self.send_response("system", "start", "")
@@ -468,6 +484,7 @@ class ChatClient:
             await self.send_response("system", "start", "")
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         finally:
+            self.finalizing_tasks.add(asyncio.current_task())
             await self.send_response("processing", "close", "")
 
     async def generate_session_title(self, question: str):

@@ -95,6 +95,7 @@ const ChatView = ({
   // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
   const {
     selectedOrgKbs,
+    knowledgeAccessMessage,
     setSelectedOrgKbs,
     messages,
     conversationId: activeConvoId,
@@ -611,7 +612,9 @@ const ChatView = ({
 
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
   const taskWorkspaceFiles = useMemo(() => {
-    return collectConversationWorkspaceFiles(taskVersionIds.map((versionId) => linsightMap.get(versionId)));
+    return collectConversationWorkspaceFiles(
+      taskVersionIds.map((versionId) => ({ versionId, snapshot: linsightMap.get(versionId) })),
+    );
   }, [taskVersionIds, linsightMap]);
   // Task turns hydrate lazily (TaskTurnPanel), so on a cold load (share page,
   // full refresh) the store is still empty — that must not read as "no files".
@@ -837,6 +840,7 @@ const ChatView = ({
                               onChange={setInputText}
                               bsConfig={bsConfig}
                               selectedOrgKbs={selectedOrgKbs}
+                              knowledgeAccessMessage={knowledgeAccessMessage}
                               onSelectedOrgKbsChange={setSelectedOrgKbs}
                               searchType={searchType}
                               onSearchTypeChange={setSearchType}
@@ -1033,6 +1037,7 @@ const ChatView = ({
                             onChange={setInputText}
                             bsConfig={bsConfig}
                             selectedOrgKbs={selectedOrgKbs}
+                            knowledgeAccessMessage={knowledgeAccessMessage}
                             onSelectedOrgKbsChange={setSelectedOrgKbs}
                             searchType={searchType}
                             onSearchTypeChange={setSearchType}

@@ -1217,6 +1217,8 @@
     "history_deleted": "会話履歴を削除しました"
   },
   "com_knowledge": {
+    "tag_filter_daily_only": "タグによる絞り込みは通常モードのみ対応しています。タグを解除するか通常モードに戻してください。",
+    "load_tags_failed": "タグを取得できませんでした。再試行してください。",
     "department_private_disabled": "部門ナレッジスペースは非公開に設定できません",
     "add_new": "新規追加",
     "web_link": "Webリンク",
@@ -2852,6 +2854,14 @@
       "REMOTE_SUCCEEDED": "連携先の Agent が完了しました",
       "REMOTE_FAILED": "連携先の Agent が失敗しました",
       "REMOTE_CANCELLED": "連携先の Agent がキャンセルされました"
-    }
+    },
+    "unknownApp": "不明なアプリ",
+    "noDescription": "説明はありません",
+    "emptyShared": "この共有会話にはまだメッセージがありません"
+  },
+  "knowledgeAccess": {
+    "checking": "ナレッジスペースのアクセス権を確認しています…",
+    "failed": "ナレッジスペースの権限を読み込めませんでした。ページを更新して再試行してください。",
+    "revoked": "次のナレッジスペースのアクセス権が失効しました：{{names}}。「コンテキストを追加」からアクセス可能なスペースを選び直してください。"
   }
 }

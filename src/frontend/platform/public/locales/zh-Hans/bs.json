@@ -618,6 +618,7 @@
     "modelStatusChecking": "检测中",
     "notBeEmpty": "不能为空",
     "pasteAdvancedParamsHere": "请在下方的文本框中粘贴或输入你的高级参数配置",
+    "contextWindowParamTip": "任务模式用 context_window 判断模型的上下文长度（单位 token，含输入和输出）。不填时，系统尝试从服务商接口自动获取。",
     "rerank": "重排(Rerank)",
     "save": "保存",
     "saveSuccess": "保存成功",
@@ -945,7 +946,7 @@
     "submit": "提交",
     "workstationEntry": "灵思入口",
     "menuDisplayName": "菜单显示名称",
-    "menuNameLengthHint": "中文、日文计 2，英文计 1，最多 8；即最多 4 个中文或 8 个英文字母。",
+    "menuNameTooLong": "最多4个中文字符或8个英文字符；混合输入按相同宽度限制。",
     "iconUpload": "图标上传",
     "sidebarIcon": "左侧边栏图标",
     "assistantIcon": "欢迎页面图标&对话头像",
@@ -2828,6 +2829,7 @@
     "permissionTiers": {
       "editor": "编辑者",
       "manager": "管理者",
+      "owner": "所有者",
       "viewer": "查看者"
     },
     "resourceTypes": {
@@ -4131,11 +4133,11 @@
       "userTab": "用户",
       "addCredits": "新增分配",
       "emptyCredits": "暂无积分配置",
-      "ruleHelp": "按用户、部门或角色设置每人每月积分。同时命中多条有效配置时取最高值，Chat 和 Work 共用。未命中任何有效配置的人员不限额度。",
+      "ruleHelp": "按用户、部门或角色设置每人每月积分额度，部门和角色中的每位用户分别获得该额度。多条配置同时适用时，取已启用配置中的最高额度，Chat 和 Work 共用。",
       "scope": "适用范围",
-      "monthlyCredits": "每人每月积分",
+      "monthlyCredits": "每人每月积分额度",
       "creditRangeHint": "每月 0～{{max}} 积分，最多 1 位小数。",
-      "enabled": "启用规则",
+      "enabled": "启用此积分分配",
       "selectSubject": "选择对象",
       "save": "保存",
       "saving": "保存中…",
@@ -4143,7 +4145,9 @@
       "edit": "编辑",
       "yes": "已启用",
       "no": "已停用",
-      "usedCredits": "当前时段已消耗 {{value}} 积分"
+      "usedCredits": "当前时段已消耗 {{value}} 积分",
+      "monthlyCreditsHelp": "每位用户的月度积分上限，Chat 和 Work 共用",
+      "monthlyCreditsHelpLabel": "积分额度说明"
     }
   },
   "request": {
@@ -4175,6 +4179,7 @@
     "noProgress": "暂无进度数据"
   },
   "department": {
+    "defaultOrganization": "默认组织",
     "searchUsersPlaceholder": "搜索用户名称或 ID",
     "searchMember": "搜索用户名称或 ID"
   },

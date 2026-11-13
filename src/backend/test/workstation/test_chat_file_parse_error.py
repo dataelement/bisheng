@@ -18,9 +18,22 @@ from bisheng.common.errcode.workstation import ChatFileParseError
 from bisheng.utils.exceptions import EtlException
 from bisheng.workstation.domain.services import chat_service
 
+
+@pytest.fixture(autouse=True)
+def configured_image_parser(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(
+        type(settings), "async_get_knowledge", AsyncMock(return_value=SimpleNamespace(image_parser_enabled=True))
+    )
+
+
 # Verbatim shape of the PaddleOCR (Baidu AI Studio) throttle response.
 OCR_THROTTLE_MESSAGE = (
-    'PaddleOCR API error: status=429, resp={"logId":"5f23efd7","errorCode":12002,"errorMsg":"请求频率过高，请稍后重试"}'
+    'PaddleOCR API error: status=429, resp={"logId":"5f23efd7","errorCode":12002,"errorMsg":"请求频率过高，请稍后重试"}'  # noqa: RUF001 -- Verbatim upstream response.
 )
 
 
@@ -133,3 +146,79 @@ async def test_transcription_service_failure_still_raises(monkeypatch):
             file_name="clip.avi",
             invoke_user_id=1,
         )
+
+
+async def test_image_without_configured_parser_is_rejected_before_parsing(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(
+        type(settings), "async_get_knowledge", AsyncMock(return_value=SimpleNamespace(image_parser_enabled=False))
+    )
+    parse = AsyncMock(return_value="silently ignored image")
+    monkeypatch.setattr(chat_service, "get_file_content", parse)
+    with pytest.raises(ChatFileParseError) as caught:
+        await chat_service._extract_doc_text("/tmp/photo.png", "photo.png", 1)
+    assert caught.value.kwargs["error_type"] == "file_parse_failed"
+    assert caught.value.kwargs["filename"] == "photo.png"
+    parse.assert_not_awaited()
+
+
+async def test_unsupported_file_is_not_silently_replaced_with_empty_text(monkeypatch):
+    from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
+
+    class Pipeline:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def arun(self):
+            raise KnowledgeFileNotSupportedError()
+
+    monkeypatch.setattr("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", Pipeline)
+    with pytest.raises(KnowledgeFileNotSupportedError):
+        await chat_service.get_file_content("/tmp/photo.png", "photo.png", 1)
+
+
+async def test_configured_ocr_timeout_has_terminal_sse_error_envelope(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(
+        type(settings), "async_get_knowledge", AsyncMock(return_value=SimpleNamespace(image_parser_enabled=True))
+    )
+    error = await _run_extract(monkeypatch, EtlException("PaddleOCR API timeout"))
+    payload = json.loads(error.to_sse_event_instance_str().split("data: ", 1)[1])
+    assert payload["status_code"] == 12047
+    assert payload["data"]["error_type"] == "file_parse_failed"
+    assert "timeout" in payload["data"]["detail"]
+
+
+async def test_vision_images_bypass_ocr_even_when_no_parser_is_configured(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from bisheng.common.services.config_service import settings
+
+    monkeypatch.setattr(
+        type(settings), "async_get_knowledge", AsyncMock(return_value=SimpleNamespace(image_parser_enabled=False))
+    )
+    monkeypatch.setattr(chat_service, "async_file_download", AsyncMock(return_value=("/tmp/photo.png", "photo.png")))
+    monkeypatch.setattr(chat_service, "read_image_as_data_url", AsyncMock(return_value="data:image/png;base64,aA=="))
+    monkeypatch.setattr(
+        chat_service, "_annotate_agent_files_with_video_covers", AsyncMock(side_effect=lambda files, _: files)
+    )
+    parse = AsyncMock()
+    monkeypatch.setattr(chat_service, "get_file_content", parse)
+    text, images, _ = await chat_service._process_agent_files(
+        SimpleNamespace(files=[{"filepath": "/photo.png"}]),
+        SimpleNamespace(visual=True),
+        SimpleNamespace(user_id=1),
+        SimpleNamespace(maxTokens=1000),
+    )
+    assert text == ""
+    assert images == ["data:image/png;base64,aA=="]
+    parse.assert_not_awaited()
