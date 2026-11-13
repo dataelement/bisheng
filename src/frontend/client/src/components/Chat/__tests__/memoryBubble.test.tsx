@@ -91,7 +91,8 @@ it("treats any redacted payload as a memory operation, even under another name (
       toolCall={{
         tool_call_id: "tc2",
         tool_name: "unknown_tool",
-        args: JSON.stringify({ redacted: true, op: "remember", item_ids: ["m-secret-3"] }),
+        // Older rows persisted args as a JSON string.
+        args: JSON.stringify({ redacted: true, op: "remember", item_ids: ["m-secret-3"] }) as unknown as Record<string, unknown>,
         results: null,
       }}
     />,
