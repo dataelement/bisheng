@@ -57,6 +57,14 @@ class LinkResponse(BaseModel):
     new_version_no: int
 
 
+class CanonicalVersionLinkResult(LinkResponse):
+    """同库管理入口关联的内部事务结果, 不改变公开响应。"""
+
+    previous_manager_file_id: int
+    cleanup_entry_id: int | None = None
+    idempotent: bool = False
+
+
 class MergeRequest(BaseModel):
     """Version management merge: pull a single-version source document into the
     current file's document chain as its new primary version. Reverse semantics

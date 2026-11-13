@@ -36,6 +36,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
     KnowledgeFileRepository,
 )
+from bisheng.knowledge.domain.schemas.knowledge_version_schema import CanonicalVersionLinkResult
 from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
     KnowledgeDocumentPermissionActivationError,
     KnowledgeDocumentPermissionActivationService,
@@ -249,6 +250,17 @@ class KnowledgeDocumentDistributionService:
             self.session,
             trigger_type="document_distribution_updated",
         )
+
+    async def link_independent_managers(self, **kwargs: int) -> CanonicalVersionLinkResult:
+        """同库版本关联由一笔事务提交, 不调用逐条自动提交的基础仓储。"""
+        try:
+            result = await self.version_repository.link_independent_managers(**kwargs)
+            if not result.idempotent:
+                await self._commit()
+            return result
+        except BaseException:
+            await self.session.rollback()
+            raise
 
     async def _enqueue_content_stat_files(self, file_ids: Sequence[int]) -> None:
         # 入口离开有效库存后通知看板删掉文件快照. 入队失败不回滚已经提交的删除.

@@ -43,6 +43,7 @@ from bisheng.knowledge.domain.schemas.favorite_notification_schema import (
     FavoriteChangeEvent,
     FavoriteRecipientSnapshot,
 )
+from bisheng.knowledge.domain.schemas.knowledge_version_schema import LinkResponse
 from bisheng.knowledge.domain.services.favorite_notify import (
     FAVORITE_SOURCE_PRIMARY_VERSION_CHANGED,
     FAVORITE_SOURCE_VERSION_ADDED,
@@ -415,6 +416,77 @@ class KnowledgeVersionService:
             )
         return out
 
+    async def _link_manager_to_document(
+        self,
+        current: KnowledgeFile,
+        target_document_id: int,
+        *,
+        action_code: str = FAVORITE_SOURCE_VERSION_LINKED,
+    ) -> LinkResponse:
+        from bisheng.common.errcode.knowledge_space import (
+            KnowledgeDocumentEntryConflictError,
+            KnowledgeDocumentStateConflictError,
+            VersionLinkTargetUnavailableError,
+        )
+        from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
+
+        source = await self._require_document_content_manager(current)
+        target_doc = await self.doc_repo.find_by_id(target_document_id)
+        if target_doc is None or target_doc.primary_version_id is None:
+            raise VersionLinkTargetUnavailableError()
+        if target_doc.knowledge_id != current.knowledge_id:
+            raise HTTPException(status_code=409, detail="target document belongs to a different space")
+        target_version = await self.version_repo.find_by_id(int(target_doc.primary_version_id))
+        if target_version is None or target_version.document_id != target_document_id:
+            raise VersionLinkTargetUnavailableError()
+        target_file = await self.knowledge_file_repo.find_by_id(int(target_version.knowledge_file_id))
+        if target_file is None or target_file.status != KnowledgeFileStatus.SUCCESS.value:
+            raise VersionLinkTargetUnavailableError()
+        if target_file.entry_type != "manager":
+            raise KnowledgeDocumentEntryConflictError()
+        target = await self._require_document_content_manager(target_file)
+        if self.document_distribution_service is None or source is None or target is None:
+            raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
+        before_no = int(target_version.version_no)
+        result = await self.document_distribution_service.link_independent_managers(
+            tenant_id=int(self.login_user.tenant_id),
+            space_id=int(current.knowledge_id),
+            current_file_id=int(current.id),
+            source_document_id=int(source.canonical_document_id),
+            target_document_id=target_document_id,
+            source_version_id=int(source.canonical_version_id),
+            target_version_id=int(target.canonical_version_id),
+            source_generation=int(source.content_generation),
+            target_generation=int(target.content_generation),
+        )
+        response = LinkResponse(document_id=result.document_id, new_version_no=result.new_version_no)
+        if result.idempotent:
+            return response
+        affected_file_ids = [int(current.id), result.previous_manager_file_id]
+        await self._delete_similarity_candidate_cache_by_file_ids(affected_file_ids)
+        KnowledgeAuditTelemetryService.audit_link_file_version(
+            self.login_user,
+            self.request,
+            current.knowledge_id,
+            current.file_name,
+            result.new_version_no,
+        )
+        await self._notify_favorite_version_changed(
+            [
+                (int(current.id), current.file_name or "", int(current.knowledge_id)),
+                (int(target_file.id), target_file.file_name or "", int(target_file.knowledge_id)),
+            ],
+            action_code=action_code,
+            before_value=f"V{before_no}",
+            after_value=f"V{result.new_version_no}",
+        )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(affected_file_ids)
+        await self._enqueue_document_distribution_projection(
+            tenant_id=int(self.login_user.tenant_id),
+            entry_ids=[int(current.id), int(result.cleanup_entry_id)],
+        )
+        return response
+
     async def link_file_to_document(self, knowledge_file_id: int, target_document_id: int):
         """Associate a parsed file into a target document's chain.
 
@@ -447,6 +519,8 @@ class KnowledgeVersionService:
             raise VersionLinkSourceFileMissingError()
         if current_kf.status != KnowledgeFileStatus.SUCCESS.value:
             raise VersionLinkFileNotReadyError()
+        if current_kf.entry_type == "manager":
+            return await self._link_manager_to_document(current_kf, target_document_id)
         if current_kf.reference_document_id is not None or current_kf.entry_type is not None:
             raise KnowledgeDocumentEntryConflictError()
 
@@ -1744,6 +1818,15 @@ class KnowledgeVersionService:
             raise VersionLinkFileNotReadyError()
         if not force and not await self._similarity_matches_threshold(current_kf, source_kf):
             raise HTTPException(status_code=409, detail="source document is not similar to current file")
+
+        if source_kf.entry_type == "manager":
+            return await self._link_manager_to_document(
+                source_kf, int(target_doc_id), action_code=FAVORITE_SOURCE_VERSION_ADDED,
+            )
+        if current_kf.reference_document_id is not None or current_kf.entry_type is not None:
+            from bisheng.common.errcode.knowledge_space import KnowledgeDocumentEntryConflictError
+
+            raise KnowledgeDocumentEntryConflictError()
 
         existing = await self.version_repo.find_by_document_id(target_doc_id)
         existing_kf_ids = [v.knowledge_file_id for v in existing]
