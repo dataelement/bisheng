@@ -4,7 +4,7 @@
 
 **关联**: [spec.md](./spec.md) · [discovery.md](./discovery.md) · [tasks.md](./tasks.md)（待写）
 **版本**: v3.0.0（开发基线）
-**最后更新**: 2026-11-13（第 4 稿）
+**最后更新**: 2026-11-13（第 5 稿）
 **状态**: 设计草稿第 4 稿，已按三轮 design 审查修订，待用户确认。第三轮审查的结论是：原 6 个高严重度问题已解决或由待验证项覆盖，新发现的问题已在本稿处理，本稿未再做全量复审。§10 列出的待验证项要在编码最前面用小实验确认，结论写回本文。本功能尚未编码：§4.1–§4.3 是**目标形态**，§4.4 是**已取证的接入点现状**（基线 `feat/3.0.0@741662475b`）。实现后按实际覆盖更新。
 
 ---
@@ -286,26 +286,26 @@
 - **原因**：A 要在三套互不通用的引用机制上各做一遍句柄转换，并且标注是否准确无法保证。B 完全由系统确定，可自动化测试。
 - **何时该重新考虑**：用户反馈"分不清哪条常驻记忆起了作用"成为主要问题时。
 
-### 决策 17：开关存储在各自对象的现有配置里
+### 决策 17：三处开关存储在各自对象的现有配置里，没有租户级开关
 
 | 开关 | 存储 | 说明 |
 |---|---|---|
-| 租户记忆 | `WorkstationConfig` 的新字段 `memory: {enabled, model_id}`，存在现有的工作台配置键里 | 沿用 `POST/GET /api/v1/workstation/config/daily` 与 `_aresolve_tenant_config` / `_aupsert_tenant_config`，不新开配置键，所以不涉及 `_TENANT_KEYS` 白名单。字段缺失时按 `enabled=true` 处理（AC-76）。未开多租户时它落在全局配置里，由系统管理员修改（AC-67）；子租户没有自己的配置时继承根租户，这是工作台配置的既有行为 |
-| 我的记忆 | 新表 `memory_user_setting`，一人一租户一行 | 同一行还有 `rev` 与 `timezone`。没有行时按 `enabled=true` |
+| （没有租户级开关） | — | 用户于 2026-11-13 裁定去掉。工作台配置里只有一个与记忆有关的字段：`WorkstationConfig.memory_model_id`（整理使用的模型，见决策 18），沿用 `POST/GET /api/v1/workstation/config/daily` 与现有读写入口，不新开配置键 |
+| 我的记忆 | 新表 `memory_user_setting`，一人一租户一行 | 同一行还有 `rev` 与 `timezone`。没有行时按 `enabled=true`，所以升级后每个用户默认是开（AC-76） |
 | 助手记忆 | `assistant` 表新列 `memory_enabled`，`server_default` 为关 | 助手没有版本表，保存即生效（spec AC-71 已据此订正） |
 | 工作流记忆 | 开始节点的参数 `memory_enabled`，存在 `flow_version.data` 里 | 随版本走；参数缺失视为关 |
 
-- **备选**：给租户记忆单开一个配置键。否决原因是要改白名单、要新开接口，而且新接口路径受"不得含 config"的约束。
+- **被否方案**：保留租户级开关（第 4 稿的做法）。用户裁定去掉，后果是租户管理员不能在租户范围内关闭记忆；要整体停掉后台整理，只能用部署配置里的自动整理总开关（决策 19），它不影响显式写入与读取。
 - **工作流运行时怎么拿到这些值**：工作流实例化时（`GraphEngine.init_nodes`）按 `flow_id` 查一次上线版本的开关，连同本次运行的 `chat_id` 一起放进 `graph_state` 的只读字段。节点自身没有 `chat_id` 属性，这是它取得 `chat_id` 的途径（**待验证 V4**）。记忆检索节点和消息落库回调都从 `graph_state` 读。整理任务判定"现在是否仍开启"时读该工作流当前上线版本的开始节点参数。
-- **启用判定**：`MemoryGate.resolve(chat_id, scene, app_enabled) -> MemoryContext | None`。顺序：登记行存在且有资格（决策 6）→ 用户未停用 → 租户记忆 → 我的记忆 → 应用开关。一轮开始时取一次，沿用到该轮结束（AC-74）。
+- **启用判定**：`MemoryGate.resolve(chat_id, scene, app_enabled) -> MemoryContext | None`。顺序：登记行存在且有资格（决策 6）→ 用户未停用 → 我的记忆 → 应用开关。一轮开始时取一次，沿用到该轮结束（AC-74）。
 - **应用开关的取值**：都以数据库为准，不信任运行时手头的对象。助手每轮重读 `assistant.memory_enabled`（决策 11）。工作流读该工作流**当前上线版本**的开始节点参数：登录态路径上实际执行的图来自客户端消息（K14），客户端可以自带一个开关为开的图，所以不能读正在执行的图。记忆检索节点执行时如果数据库里的开关是关，按未启用处理，输出空数组。
-- **每轮的查询代价**：见决策 15 末尾的统计。租户配置走既有的 Redis 缓存。
+- **每轮的查询代价**：见决策 15 末尾的统计。
 - **何时该重新考虑**：每轮三次小查询成为可测的延迟时，把登记行与用户设置合并缓存。
 
 ### 决策 18：整理用的模型由租户指定，调用按租户计量
 
 - **选定**：
-  - 租户记忆配置里有"整理使用的模型"（决策 17 的 `model_id`）。未指定时用工作台模型列表的第一个。两者都没有时整理任务按失败处理并计数，不静默跳过。
+  - 工作台配置里有"记忆整理使用的模型"（`WorkstationConfig.memory_model_id`，AC-106）。未指定时用工作台模型列表的第一个。两者都没有时整理任务按失败处理并计数，不静默跳过。
   - 整理的模型调用与记忆的 embedding 调用，以记忆主人的 `user_id` 发起，标记一个新的应用类型"记忆"，记入现有的 token 用量记录。
 - **额度（用户已于 2026-11-13 裁定）**：整理与记忆 embedding 的调用**不计入用户个人额度**，只按租户记录用量。现有模型调用会经过额度检查（DSH 积分等，`dsh/domain/services/chat_credits.py:20-23`），记忆的调用要绕开个人额度扣减这一步；如果调用仍被其他机制拒绝，按整理失败处理并计数。
 - **备选**：整理固定用系统默认模型，不给配置。否决原因是后台整理是持续成本，应当能指到便宜的模型。
@@ -413,14 +413,14 @@
 
 HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没有任何"按用户 id"的参数：
 
-| 接口 | 用途 | 租户记忆为关时 |
-|---|---|---|
-| 条目列表 | 管理页查看 | 可用 |
-| 新增、编辑 | 管理页 | 拒绝（AC-90） |
-| 删除单条、清空 | 管理页与归因处 | 可用 |
-| 读取与修改"我的记忆" | 个人设置 | 读取返回"不可用"，前端据此隐藏开关 |
-| 按 `turn_id` 或 `message_id` 取操作提示与归因 | 消息气泡 | 可用（历史消息仍可查看） |
-| 撤销一次显式写入 | 操作提示 | 可用 |
+| 接口 | 用途 |
+|---|---|
+| 条目列表 | 管理页查看 |
+| 新增、编辑 | 管理页 |
+| 删除单条、清空 | 管理页与归因处 |
+| 读取与修改"我的记忆"、上报时区 | 个人设置 |
+| 按 `turn_id` 或 `message_id` 取操作提示与归因；按 `chat_id` 批量取记忆标志 | 消息气泡 |
+| 撤销一次显式写入 | 操作提示 |
 
 "我的记忆"关闭不影响上表任何一项（AC-90）。
 
@@ -480,11 +480,11 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 租户归属变化 | `tenant/domain/services/user_tenant_sync_service.py:76` | 不挂钩子；靠决策 9 的显式过滤满足 AC-06、AC-07 |
 | 应用删除 | 助手软删 `api/services/assistant.py:419`；工作流硬删 `database/models/flow.py:211` | 不挂钩子；来源名称已快照 |
 | 审计 | `database/models/audit_log.py:531` `AuditLogDao.ainsert_v2` | 动作名 `memory.item.*`，`metadata` 不放内容 |
-| 租户配置 | `workstation/domain/services/workstation_service.py:57/247`；`api/v1/schemas.py` `WorkstationConfig` | 加 `memory` 字段 |
+| 工作台配置 | `workstation/domain/services/workstation_service.py:57/247`；`api/v1/schemas.py` `WorkstationConfig` | 加 `memory_model_id` 字段 |
 | 额度 | `dsh/domain/services/chat_credits.py:20-23,57-60`；`llm/domain/services/llm.py:1407-1412,1457-1464` | 记忆的调用不扣个人额度，按租户记用量（决策 18） |
 | 前端：工作流节点 | `platform/src/controllers/API/workflow.ts:185`、`pages/BuildPage/flow/FlowNode/Parameter.tsx`、`FlowNode/NodeLogo.tsx`、`public/locales/*/flow.json` | 新增节点四处都要改 |
 | 前端：助手设置 | `platform/src/pages/BuildPage/assistant/editAssistant/Setting.tsx`（`knowledge_auth` 开关是样板） | 新增开关与说明 |
-| 前端：工作台配置 | `platform/src/pages/BuildPage/bench/index.tsx`、`ToggleSection.tsx`、`DailyChatConfig.tsx` | 新增"记忆"区：开关加整理模型下拉 |
+| 前端：工作台配置 | `platform/src/pages/BuildPage/bench/index.tsx`、`DailyChatConfig.tsx` | 新增一项"记忆整理使用的模型"下拉，没有开关 |
 | 前端：日常模式气泡 | `client/src/components/Chat/AiMessageBubble.tsx`；SSE 解析 `client/src/hooks/useAiChatSSE.ts`；工具卡片 `Messages/ToolCallDisplay.tsx` | 操作提示与归因入口；记忆工具的卡片按脱敏后的格式渲染 |
 | 前端：应用聊天 | `client/src/pages/appChat/ChatMessages.tsx`、`components/ClientMessageFooter.tsx` | 同上，第二套 |
 | 前端：深度研究结果 | `client/src/components/Linsight/Execution/ResultPanel.tsx`、`TaskTurnPanel.tsx` | 操作提示（含撤销）与归因入口，按该轮的 `turn_id` 取数。这是第三处接入 |
@@ -545,14 +545,14 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 |---|---|---|
 | `chatmessage` 按 `chat_id` 可读，`category` 能区分用户输入、系统输出、深度研究任务行及其终态 | 隐式数据契约 | 任一场景改消息格式，整理会读不懂或水位判断出错；每个场景要有一条整理的集成测试 |
 | 各场景的工具事件落库点 | 代码位置 | 新增一种落库路径而没有调脱敏函数，就是一处泄漏；要有覆盖三个场景的断言 |
-| `WorkstationConfig` 与工作台配置接口 | 结构与接口 | 该结构改形态时 `memory` 字段要同步 |
+| `WorkstationConfig` 与工作台配置接口 | 结构与接口 | 该结构改形态时 `memory_model_id` 字段要同步 |
 | 知识库默认 embedding、`MilvusFactory`、`ElasticsearchFactory` | 内部 API | 属于知识库模块，记忆不得改变它们的行为 |
 | `AuditLogDao.ainsert_v2` | 内部 API | 动作名需登记 |
 | 租户上下文（`get_current_tenant_id`、`bypass_tenant_filter`） | 内部 API | "当前租户"的语义变化会直接影响隔离 |
 | 模型调用的额度机制 | `dsh/domain/services/chat_credits.py` | 记忆的调用要绕开个人额度扣减；该机制改形态时要复核 |
 | 引用呈现组件（F075） | 前端组件 | 归因沿用其样式，不沿用其数据通道 |
 
-**在其他 Owner 的对象上新增的写入点**（`release-contract.md` 的 F132 段同步）：审计记录；`WorkstationConfig` 的 `memory` 字段；`assistant.memory_enabled` 列；工作流开始节点参数、实例化时的 `graph_state` 字段与上线校验；三个场景的工具事件落库处；client 个人设置的新 section。管理端查看会话的页面只多一种"记忆操作"的占位渲染。
+**在其他 Owner 的对象上新增的写入点**（`release-contract.md` 的 F132 段同步）：审计记录；`WorkstationConfig` 的 `memory_model_id` 字段；`assistant.memory_enabled` 列；工作流开始节点参数、实例化时的 `graph_state` 字段与上线校验；三个场景的工具事件落库处；client 个人设置的新 section。管理端查看会话的页面只多一种"记忆操作"的占位渲染。
 
 ---
 
@@ -621,7 +621,7 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 | 7 | 删除是软删除，行与详情对象保留到用户清空；撤销在三种情况下会失败 | 请知悉。spec §3 需补这三种边界 | 决策 4 |
 | 8 | 助手没有版本，助手记忆开关保存即生效 | 事实订正，spec AC-71 需改写 | 决策 17 |
 | 9 | 管理端回放会话时，记忆工具的调用显示为"记忆操作"占位，不显示内容 | 请知悉。这是 AC-09 的实现方式 | 决策 10 |
-| 10 | 租户记忆配置里增加"整理使用的模型"；client 加载后向记忆接口上报浏览器时区 | 实现所需的新增项 | 决策 18、决策 13 |
+| 10 | 工作台配置里增加"记忆整理使用的模型"；client 加载后向记忆接口上报浏览器时区 | 实现所需的新增项 | 决策 18、决策 13 |
 
 **第 3 稿新增的裁定（2026-11-13）。**
 
@@ -629,6 +629,7 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 |---|---|---|---|
 | 11 | 开放 API 的调用是否支持记忆 | 本期都不支持，spec AC-11 移出 | 决策 6 |
 | 12 | 助手回调落库、连接内切换会话、深度研究分享链接等不确定点 | 先做小实验再定，见 §10 | §10 |
+| 13 | 是否保留租户级的记忆开关 | 去掉，只保留个人、助手、工作流三处；工作台配置里保留整理模型 | 决策 17 |
 
 ---
 
@@ -654,6 +655,7 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-11-13 | 初版（设计草稿，未编码） | spec 第 2 稿确认后进入设计 |
+| 2026-11-13 | 第 5 稿：去掉租户级记忆开关，启用判定少一层；工作台配置只留整理模型一个字段 | 用户裁定 |
 | 2026-11-13 | 拆任务时的三处细化：时区改为客户端一处上报；条目记录建索引所用的模型以支持换模型后重建；引入三个接口解开服务与索引的循环依赖 | `/sdd-review tasks` 第一轮 |
 | 2026-11-13 | 第 4 稿：深度研究改为以任务轮为整理单位；助手与工作流改为由登录态 endpoint 注入登记回调；工作流开关读数据库上线版本；水位只增不减；检索节点的每条输出自带背景信息前缀；指标改为事件计数；新增 V7、V8 | 三轮 design 审查：原 6 个高严重度问题已解决或由待验证项覆盖，新发现 1 个高严重度问题 |
 | 2026-11-13 | 第 3 稿：登记只做在登录态 endpoint 且开放 API 不支持记忆；脱敏落点补全助手回调与深度研究步骤；助手每轮重读开关、裁剪后注入；本轮记录的各场景落点；登记行的初值、并发写与清空；新增常驻快照表与待验证项 | 二轮 design 审查发现 6 个高严重度问题；用户裁定收窄范围并先做实验 |

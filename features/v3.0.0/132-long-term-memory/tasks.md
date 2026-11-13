@@ -9,9 +9,9 @@
 
 | 步骤 | 状态 | 备注 |
 |------|------|------|
-| spec.md | ✅ 已评审 | 2026-11-13 用户确认；同日修订 AC-71、AC-87，移出 AC-11、AC-100 |
-| design.md | ✅ 已评审 | 2026-11-13 用户确认第 4 稿；§10 的 V1–V8 待 Wave 0 验证后回写 |
-| tasks.md | ✅ 已拆解 | 第 3 稿。`/sdd-review tasks` 两轮：第二轮结论为可以开始 Wave 0，其余问题已在本稿修订，本稿未再复审 |
+| spec.md | ✅ 已评审 | 2026-11-13 用户确认；同日修订 AC-71、AC-87，移出 AC-11、AC-67、AC-100，新增 AC-106 |
+| design.md | ✅ 已评审 | 2026-11-13 用户确认第 4 稿，第 5 稿去掉租户级开关；§10 的 V1–V8 待 Wave 0 验证后回写 |
+| tasks.md | ✅ 已拆解 | 第 4 稿（去掉租户级开关）。`/sdd-review tasks` 两轮：第二轮结论为可以开始 Wave 0，其余问题已在本稿修订，本稿未再复审 |
 | 实现 | 🔲 未开始 | 0 / 96 完成 |
 
 ---
@@ -118,7 +118,7 @@
 
 - [ ] **T010**: 错误码 121、架构守卫名单与三个接口定义
   **文件**: `src/backend/bisheng/common/errcode/memory.py`（新建）、`scripts/arch-guard.sh`、`src/backend/bisheng/memory/domain/ports.py`（新建，含 `MemoryContext`）
-  **逻辑**: 定义 121 段错误码类（写成 `Code: int = 121NN`）：内容超长、内容含密钥类信息、内容含相对时间、目标条目不存在或状态已变、撤销失败（三种原因各一个码）、租户记忆关闭时禁止新增与编辑、检索不可用、检索数量参数非法、工作流含记忆检索节点而开关关闭。把 `memory` 加进 `scripts/arch-guard.sh` 的 `DOMAIN_MODULES`。在 `ports.py` 里定义三个 `Protocol`：`MemoryIndex`（写入、删除、检索、按用户删除）、`DetailStore`（写、读、删、按用户删、按用户列出对象键）、`MemoryLLM`（整理调用、embedding 调用）。同一文件里定义 `MemoryContext` 数据类（`tenant_id`、`user_id`、时区、`chat_id`、`turn_id`、场景、应用 id 与名称）和唯一的范围过滤函数 `build_scope_filter(ctx)`，两路检索的过滤条件只能由它生成。后续的真实实现与测试替身都实现这三个接口，以此解开"服务依赖索引、索引依赖服务"的环。
+  **逻辑**: 定义 121 段错误码类（写成 `Code: int = 121NN`）：内容超长、内容含密钥类信息、内容含相对时间、目标条目不存在或状态已变、撤销失败（三种原因各一个码）、检索不可用、检索数量参数非法、工作流含记忆检索节点而开关关闭。把 `memory` 加进 `scripts/arch-guard.sh` 的 `DOMAIN_MODULES`。在 `ports.py` 里定义三个 `Protocol`：`MemoryIndex`（写入、删除、检索、按用户删除）、`DetailStore`（写、读、删、按用户删、按用户列出对象键）、`MemoryLLM`（整理调用、embedding 调用）。同一文件里定义 `MemoryContext` 数据类（`tenant_id`、`user_id`、时区、`chat_id`、`turn_id`、场景、应用 id 与名称）和唯一的范围过滤函数 `build_scope_filter(ctx)`，两路检索的过滤条件只能由它生成。后续的真实实现与测试替身都实现这三个接口，以此解开"服务依赖索引、索引依赖服务"的环。
   **依赖**: T009
 
 - [ ] **T011**: 错误码文案与登记
@@ -172,30 +172,30 @@
   **覆盖 AC**: AC-01, AC-02, AC-05, AC-06, AC-07
   **依赖**: T017
 
-- [ ] **T019**: 租户记忆配置的测试
+- [ ] **T019**: 整理模型配置的测试
   **文件**: `src/backend/test/workstation/test_memory_config.py`
-  **逻辑**: 工作台配置里没有 `memory` 字段时按开启处理（升级后的默认）；保存 `memory.enabled=false` 后读取为关；`memory.model_id` 可保存与读取；只有租户管理员能改，未开多租户时由系统管理员改；子租户没有自己的配置时沿用根租户的值。
-  **覆盖 AC**: AC-67, AC-76
+  **逻辑**: 工作台配置里的 `memory_model_id` 可保存与读取；只有能修改工作台配置的管理员能改；没有该字段或为空时，取模型的函数返回工作台模型列表的第一个；模型列表也为空时返回"无可用模型"；子租户没有自己的工作台配置时沿用根租户的值（工作台配置的既有行为）。工作台配置里没有任何记忆开关字段。
+  **覆盖 AC**: AC-106
   **依赖**: T014
 
-- [ ] **T020**: 租户记忆配置的实现
-  **文件**: `src/backend/bisheng/api/v1/schemas.py`、`src/backend/bisheng/memory/domain/services/tenant_switch.py`（新建）
-  **逻辑**: `WorkstationConfig` 增加 `memory: {enabled: bool = True, model_id: int | None = None}`；沿用现有工作台配置接口与读写入口，不新开配置键。`tenant_switch.py` 提供读取当前租户记忆开关与整理模型的函数，供启用判定与整理使用。设计见 design 决策 17。
+- [ ] **T020**: 整理模型配置的实现
+  **文件**: `src/backend/bisheng/api/v1/schemas.py`、`src/backend/bisheng/memory/domain/services/consolidation_model.py`（新建）
+  **逻辑**: `WorkstationConfig` 增加 `memory_model_id: int | None = None`；沿用现有工作台配置接口与读写入口，不新开配置键。`consolidation_model.py` 提供按当前租户取整理模型的函数。设计见 design 决策 17、18。
   **测试**: T019 全部通过
-  **覆盖 AC**: AC-67, AC-76
+  **覆盖 AC**: AC-106
   **依赖**: T019
 
 - [ ] **T021**: 资格登记与启用判定的测试
   **文件**: `src/backend/test/memory/test_gate.py`
-  **逻辑**: 没有登记行时 `resolve` 返回空；`open` 新建行时水位初值等于会话当前最大消息 id，租户与用户取自当前登录上下文；同一用户同一租户再次 `open` 不改行，用户设置里的时区变了才更新行上的时区；租户或用户与已登记不同则置为无资格；`chat_id` 对应的会话属于别人时不登记；时区的三级回落（登记行 → 用户设置 → 部署默认）；启用判定的全部组合（租户开关、我的记忆、助手开关、工作流开关各自开与关）；用户停用时返回空、重新启用后恢复；任一开关关闭后再开，之前的条目仍可读；一轮开始时取得的结果在该轮内不随开关变化；下游以登记行上的租户与用户为准，不读租户上下文变量。
-  **覆盖 AC**: AC-10, AC-40, AC-66, AC-72, AC-73, AC-74, AC-99
-  **依赖**: T018, T020
+  **逻辑**: 没有登记行时 `resolve` 返回空；`open` 新建行时水位初值等于会话当前最大消息 id，租户与用户取自当前登录上下文；同一用户同一租户再次 `open` 不改行，用户设置里的时区变了才更新行上的时区；租户或用户与已登记不同则置为无资格；`chat_id` 对应的会话属于别人时不登记；时区的三级回落（登记行 → 用户设置 → 部署默认）；启用判定的全部组合（我的记忆、助手开关、工作流开关各自开与关）；没有用户设置行时"我的记忆"按开处理（升级后的默认）；用户停用时返回空、重新启用后恢复；任一开关关闭后再开，之前的条目仍可读；一轮开始时取得的结果在该轮内不随开关变化；下游以登记行上的租户与用户为准，不读租户上下文变量。
+  **覆盖 AC**: AC-10, AC-40, AC-66, AC-72, AC-73, AC-74, AC-76, AC-99
+  **依赖**: T018
 
 - [ ] **T022**: 资格登记与启用判定的实现
   **文件**: `src/backend/bisheng/memory/domain/services/gate.py`、`src/backend/bisheng/memory/domain/repositories/cursor_repository.py`
   **逻辑**: `MemoryGate.open(chat_id, login_user)` 与 `resolve(chat_id, scene, app_enabled)`。登记行的写入规则、会话归属核对、时区回落见 design 决策 6、13；登记行的更新全部是按列的条件更新。
   **测试**: T021 全部通过
-  **覆盖 AC**: AC-10, AC-40, AC-66, AC-72, AC-73, AC-74, AC-99
+  **覆盖 AC**: AC-10, AC-40, AC-66, AC-72, AC-73, AC-74, AC-76, AC-99
   **依赖**: T021
 
 **Wave 2 验收**: `uv run pytest test/memory test/workstation/test_memory_config.py -q` 全部通过且输出里没有 skipped；〔架构检查〕、〔分层检查〕为 `0`；〔基线比对〕为 `NEW FAILURES: 0`。
@@ -290,7 +290,7 @@
 
 - [ ] **T035**: 真实索引与模型调用的测试
   **文件**: `src/backend/test/memory/test_index_llm_adapters.py`
-  **逻辑**: 用打桩的 ES、Milvus 客户端与 LLM 服务验证适配层：ES 索引名 `bisheng_memory_item`，Milvus collection 名含 embedding 模型 id；写入与检索都带租户与用户过滤；embedding 调用超过 3 秒按超时处理；embedding 与整理的模型调用以记忆主人的用户 id 发起、应用类型为 `memory`、写入 token 用量记录、不触发个人额度扣减；模型调用被拒绝时抛出可识别的失败；整理模型取租户配置的 `model_id`，未配置时取工作台模型列表的第一个，都没有时抛"无可用模型"；装配函数返回的服务实例使用的是真实的三个实现。
+  **逻辑**: 用打桩的 ES、Milvus 客户端与 LLM 服务验证适配层：ES 索引名 `bisheng_memory_item`，Milvus collection 名含 embedding 模型 id；写入与检索都带租户与用户过滤；embedding 调用超过 3 秒按超时处理；embedding 与整理的模型调用以记忆主人的用户 id 发起、应用类型为 `memory`、写入 token 用量记录、不触发个人额度扣减；模型调用被拒绝时抛出可识别的失败；整理模型取工作台配置的 `memory_model_id`，未配置时取工作台模型列表的第一个，都没有时抛"无可用模型"；装配函数返回的服务实例使用的是真实的三个实现。
   **覆盖 AC**: AC-45, AC-58
   **依赖**: T020, T034
 
@@ -307,7 +307,7 @@
 
 - [ ] **T037**: 管理接口的测试
   **文件**: `src/backend/test/memory/test_memory_api.py`
-  **逻辑**: 列表只含本人当前租户的有效条目，每条含内容、类型、记录时间、事件时间、来源标记、是否常驻，手动新增的来源为手动添加；新增与编辑超长或含密钥类内容时返回对应错误码且不保存；删除单条、清空、撤销可用；传入他人条目 id 时返回不存在，接口没有按用户 id 取数的参数；租户记忆为关时新增与编辑被拒、查看与删除与清空可用、读取"我的记忆"返回不可用；"我的记忆"为关时全部接口照常；修改"我的记忆"只影响本人且只有本人能改；上报时区只在值变化时写库；按 `turn_id` 或消息 id 取回的归因分两部分：检索取回的条目与常驻快照的条目；非主人取回为空；按 `chat_id` 批量取回本人在该会话各条消息的记忆标志（有操作提示、有归因、`turn_id`），供前端加载历史消息时使用；`/api/v1/memory` 下没有任何返回指标或统计的接口。
+  **逻辑**: 列表只含本人当前租户的有效条目，每条含内容、类型、记录时间、事件时间、来源标记、是否常驻，手动新增的来源为手动添加；新增与编辑超长或含密钥类内容时返回对应错误码且不保存；删除单条、清空、撤销可用；传入他人条目 id 时返回不存在，接口没有按用户 id 取数的参数；"我的记忆"为关时全部接口照常；修改"我的记忆"只影响本人且只有本人能改；上报时区只在值变化时写库；按 `turn_id` 或消息 id 取回的归因分两部分：检索取回的条目与常驻快照的条目；非主人取回为空；按 `chat_id` 批量取回本人在该会话各条消息的记忆标志（有操作提示、有归因、`turn_id`），供前端加载历史消息时使用；`/api/v1/memory` 下没有任何返回指标或统计的接口。
   **覆盖 AC**: AC-08, AC-09, AC-68, AC-87, AC-88, AC-89, AC-90, AC-103
   **依赖**: T030, T032, T034
 
@@ -475,7 +475,7 @@
 
 - [ ] **T060**: 记忆检索节点的测试
   **文件**: `src/backend/test/workflow/test_memory_retriever_node.py`
-  **逻辑**: 节点类型已注册，同一工作流可放多个；`query` 可为纯文字、纯变量引用、两者混写，引用的变量不是文字时转成文字；`limit` 默认 20，节点的参数校验对 1 到 100 以外的整数与非整数返回检索数量参数非法的错误码；执行时只在当前使用者本人的记忆里检索，包含在其他场景产生的条目，按相关程度排序且不超过 `limit`；输出每一项含内容、类型、记录时间、来源标记，有事件时间的带事件时间，带详情的内容为详情全文，每项内容以背景信息前缀与记录日期开头；没有命中、运行时 `query` 为空、没有登记、租户记忆为关、"我的记忆"为关、工作流开关为关时输出空数组且节点正常结束；检索不可用时节点失败并给出原因；运行日志含检索内容与返回条数、不含条目内容；两个用户运行同一工作流各自只得到本人的条目；节点不写本轮记录；工作流的其他节点没有收到常驻记忆；工作流运行中没有任何记忆写入能力（没有 `memory_write`）。测试里直接给 `graph_state` 的两个只读字段赋值。
+  **逻辑**: 节点类型已注册，同一工作流可放多个；`query` 可为纯文字、纯变量引用、两者混写，引用的变量不是文字时转成文字；`limit` 默认 20，节点的参数校验对 1 到 100 以外的整数与非整数返回检索数量参数非法的错误码；执行时只在当前使用者本人的记忆里检索，包含在其他场景产生的条目，按相关程度排序且不超过 `limit`；输出每一项含内容、类型、记录时间、来源标记，有事件时间的带事件时间，带详情的内容为详情全文，每项内容以背景信息前缀与记录日期开头；没有命中、运行时 `query` 为空、没有登记、"我的记忆"为关、工作流开关为关时输出空数组且节点正常结束；检索不可用时节点失败并给出原因；运行日志含检索内容与返回条数、不含条目内容；两个用户运行同一工作流各自只得到本人的条目；节点不写本轮记录；工作流的其他节点没有收到常驻记忆；工作流运行中没有任何记忆写入能力（没有 `memory_write`）。测试里直接给 `graph_state` 的两个只读字段赋值。
   **覆盖 AC**: AC-02, AC-28, AC-57, AC-60, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-86
   **依赖**: T034, T022
 
@@ -607,11 +607,11 @@
   **覆盖 AC**: AC-69, AC-75
   **依赖**: T058
 
-- [ ] **T079**: 工作台配置的记忆区
+- [ ] **T079**: 工作台配置的整理模型选项
   **文件**: `src/frontend/platform/src/pages/BuildPage/bench/index.tsx`、`src/frontend/platform/src/pages/BuildPage/bench/DailyChatConfig.tsx`、`src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`
-  **逻辑**: 用 `ToggleSection` 新增"记忆"区：开关（配置里没有该字段时显示为开）与"整理使用的模型"下拉。补 `ChatConfigForm` 类型、初始值、加载时合并、保存时的数据四处。
-  **测试**: `src/frontend/platform/src/pages/BuildPage/bench/__tests__/memoryConfig.test.tsx`：没有字段时开关为开；关闭后保存的数据里 `memory.enabled` 为 false；模型下拉的值进入保存数据。
-  **覆盖 AC**: AC-67
+  **逻辑**: 新增一项"记忆整理使用的模型"下拉，没有开关；未选择时显示"使用工作台默认模型"。补 `ChatConfigForm` 类型、初始值、加载时合并、保存时的数据四处。
+  **测试**: `src/frontend/platform/src/pages/BuildPage/bench/__tests__/memoryConfig.test.tsx`：下拉的值进入保存数据的 `memory_model_id`；未选择时保存为空；页面上没有记忆开关。
+  **覆盖 AC**: AC-106
   **依赖**: T020
 
 - [ ] **T080**: 管理端查看会话时的记忆操作占位
@@ -636,8 +636,8 @@
 
 - [ ] **T082**: 个人设置的记忆页
   **文件**: `src/frontend/client/src/pages/settings/sections/MemoryPane.tsx`（新建）、`src/frontend/client/src/pages/settings/settingsSections.ts`、`src/frontend/client/src/pages/settings/SettingsPage.tsx`
-  **逻辑**: 新增"记忆" section：顶部是"我的记忆"开关；下面是条目列表（内容、类型、记录时间、事件时间、来源、是否常驻），支持编辑、新增、删除、清空（二次确认）。租户记忆为关时不显示开关，列表只保留查看、删除、清空。新增与编辑被拒时显示接口返回的原因。文案进三语文件。
-  **测试**: `src/frontend/client/src/pages/settings/sections/__tests__/MemoryPane.test.tsx`：列表渲染各字段；手动新增的条目来源显示为手动添加；清空需要二次确认；租户记忆为关时没有开关、没有新增与编辑入口；被拒时显示原因。
+  **逻辑**: 新增"记忆" section：顶部是"我的记忆"开关；下面是条目列表（内容、类型、记录时间、事件时间、来源、是否常驻），支持编辑、新增、删除、清空（二次确认）。新增与编辑被拒时显示接口返回的原因。文案进三语文件。
+  **测试**: `src/frontend/client/src/pages/settings/sections/__tests__/MemoryPane.test.tsx`：列表渲染各字段；手动新增的条目来源显示为手动添加；清空需要二次确认；"我的记忆"关闭后列表与全部操作仍可用；被拒时显示原因。
   **覆盖 AC**: AC-68, AC-88, AC-89, AC-90
   **依赖**: T081
 
