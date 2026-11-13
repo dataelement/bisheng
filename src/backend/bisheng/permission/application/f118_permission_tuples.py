@@ -52,7 +52,7 @@ class PermissionTuplePlan:
 
 
 class F118PermissionTupleBuilder:
-    def __init__(self, *, catalog_plan, before_tuples, source_schema, target_schema):
+    def __init__(self, *, catalog_plan, before_tuples, source_schema, target_schema, legacy_policy=False):
         self.catalog, self.source, self.target = catalog_plan, source_schema, target_schema
         self.before_order = tuple(before_tuples)
         self.before = frozenset(self.before_order)
@@ -61,6 +61,7 @@ class F118PermissionTupleBuilder:
         self.resources, self.grants, self.moves = set(), set(), {}
         self.expected_before, self.expected_after = set(), set()
         self.after_order = {}
+        self.legacy_policy = legacy_policy
 
     def _add(self, output, keys):
         for key in keys:
@@ -68,7 +69,7 @@ class F118PermissionTupleBuilder:
             if output is self.expected_after:
                 self.after_order.setdefault(key, None)
 
-    def observe(self, plan):
+    def observe(self, plan, *, restore_missing_markers=True):
         if type(plan) is not ResourceRetirementPlan or plan.catalog_plan is not self.catalog or plan.after is None:
             blocked("complete_shared_plan_required")
         old, new = plan.before, plan.after
@@ -90,7 +91,8 @@ class F118PermissionTupleBuilder:
                     for key in keys
                     if permits(schema, key)
                     and (
-                        key[1] not in {"permission_enabled", "custom_mode", "inherit_mode"}
+                        (output is self.expected_after and not self.legacy_policy and restore_missing_markers)
+                        or key[1] not in {"permission_enabled", "custom_mode", "inherit_mode"}
                         or (key[0], key[1], old_object) in self.before
                     )
                 ),
@@ -201,9 +203,31 @@ class F118PermissionTupleBuilder:
         }
         extras = owned - self.expected_before - duplicate_parents
         retained_extras = set()
+        invalid_extras = set()
         for key in extras:
             if self._extra(key) and permits(self.source, key):
                 continue
+            if not self.legacy_policy:
+                # SQL mode owns the sole structural parent/mode. An extra
+                # parent is removable only when its canonical original edge
+                # is present; never infer a missing parent or a new Grant.
+                if (
+                    key[2] in self.resources
+                    and key[1] in {"parent", "custom_mode", "inherit_mode"}
+                    and any(
+                        original[2] == key[2]
+                        and (
+                            original[1] == "parent"
+                            if key[1] == "parent"
+                            else original[1] in {"custom_mode", "inherit_mode"}
+                        )
+                        and original in self.before
+                        for original in self.expected_before
+                    )
+                ):
+                    invalid_extras.add(key)
+                    continue
+                blocked("unclassified_existing_graph")
             # Historical SQL/FGA differences on nodes whose identity does not
             # change remain exact original facts. This is preservation, never
             # a source for new assignments or destination-node adoption.
@@ -226,7 +250,7 @@ class F118PermissionTupleBuilder:
                 blocked("target_schema_mismatch")
             result[key] = None
         for key in self.before_order:
-            if key not in extras or key in retained_extras:
+            if key not in extras or key in retained_extras or key in invalid_extras:
                 continue
             changed = (self.moves.get(key[0], key[0]), key[1], self.moves.get(key[2], key[2]))
             if typed_relation(changed) != changed or not permits(self.target, changed):

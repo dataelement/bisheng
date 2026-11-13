@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
+from test.knowledge_unification import test_app_snapshot as fixtures
 
 from bisheng.app_publish.domain.services import preview_instance_service as preview_module
 from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeOperation
@@ -19,7 +20,6 @@ from bisheng.database.models.app_version import AppVersion
 from bisheng.resource_reference.application.bindings import ReferenceBindings
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
-from test.knowledge_unification import test_app_snapshot as fixtures
 
 ctx = fixtures.ctx
 resolving = fixtures.resolving
@@ -38,7 +38,9 @@ async def deleting(writing, monkeypatch):
     monkeypatch.setattr(module.AppStateService, "_require_deleter", authorization)
     monkeypatch.setattr(module.AppStateService, "_audit", AsyncMock())
     monkeypatch.setattr(module.lifecycle_hooks, "on_app_deleted", AsyncMock(return_value=[]))
-    adapter = SimpleNamespace(load_permission_record=AsyncMock(return_value=SimpleNamespace(id="actual-app")))
+    adapter = SimpleNamespace(
+        cleanup_deleted=AsyncMock(), load_permission_record=AsyncMock(return_value=SimpleNamespace(id="actual-app"))
+    )
     monkeypatch.setattr(module, "get_f048_resource_adapter", AsyncMock(return_value=adapter))
     projection = AsyncMock()
     monkeypatch.setattr(module.AppStateService, "_project_delete", projection)

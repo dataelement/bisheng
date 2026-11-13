@@ -183,7 +183,7 @@ async def test_arbitrary_unmarked_empty_model_cannot_gain_tenant_visibility():
     context = tenant_context()
     grant = replace(context.creation_grants[0], model=GrantModelSnapshot("empty", True, (), derived_level=3))
     service, projection, _, _ = harness()
-    with pytest.raises(ValueError, match="valid permission model"):
+    with pytest.raises(ValueError, match="existing visibility source"):
         await service.project_created(replace(context, creation_grants=(grant,)))
     projection.prepare.assert_not_awaited()
 

@@ -2114,6 +2114,7 @@ class ChannelService:
                 await runtime.aapply_source_bindings(session, prepared)
             await session.commit()
         if deleting:
+            await adapter.cleanup_deleted(record=record, actor=await resolve_permission_actor(login_user))
             await self._send_channel_event_notification(
                 action_code=CHANNEL_DISMISSED_MESSAGE,
                 operator_user_id=login_user.user_id,

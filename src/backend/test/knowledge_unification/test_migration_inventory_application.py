@@ -12,6 +12,10 @@ import httpx
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
+from test.knowledge_unification import test_migration_inventory_repository as raw
+from test.knowledge_unification import test_migration_preflight as preflight
+from test.knowledge_unification import test_migration_resource_repository as resources
+from test.knowledge_unification import test_perm_migration_snapshot as permission
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
 from bisheng.common.models.space_channel_member import SpaceChannelMember
@@ -31,10 +35,6 @@ from bisheng.permission.application.migration_read import PinnedMigrationPermiss
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
-from test.knowledge_unification import test_migration_inventory_repository as raw
-from test.knowledge_unification import test_migration_preflight as preflight
-from test.knowledge_unification import test_migration_resource_repository as resources
-from test.knowledge_unification import test_perm_migration_snapshot as permission
 
 resource_native = preflight.resource_native
 native = preflight.native
@@ -124,7 +124,7 @@ def transport():
             "evidence_material",
             material_kind=material_kind,
             environment="test",
-            writer_contract_version="f118-v1",
+            writer_contract_version=RUN["writer_contract_version"],
             tenant_inventory_digest=digest((1, 101, 202)),
             material_ref=RUN[f"{material_kind}_ref"],
         )

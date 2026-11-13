@@ -323,6 +323,7 @@ class UnificationInventoryApplication:
         metadata = [record.data for record in plan_root.records if record.record_type == "run"]
         if len(metadata) != 1:
             _blocked("manifest_metadata")
+        preparation_policy = metadata[0].get("preparation_policy_version", 1)
         permissions = PermissionInventoryVerifier(
             run_id=result.run_id,
             writer_contract_version=result.writer_contract_version,
@@ -401,6 +402,8 @@ class UnificationInventoryApplication:
                     if len(metadata) != 1:
                         _blocked("manifest_metadata")
                     value = metadata[0]
+                    if value.get("preparation_policy_version", 1) != preparation_policy:
+                        _blocked("frozen_policy_changed")
                     expected = {
                         "writer_contract_version": result.writer_contract_version,
                         "environment": environment,
@@ -510,9 +513,33 @@ class UnificationInventoryApplication:
         spaces = {}
         memberships = MembershipInventoryVerifier()
         retained_creators = {}
+        liveness, liveness_pending, liveness_operations = {}, [], {}
         async for section, record in self.preflight.aiter_tenant(
             session, permission_planner=permission_planner, planned_at=planned_at
         ):
+            if record.record_type == "resource_mode":
+                data = record.data
+                liveness_pending.append((data["resource_type"], data["resource_id"]))
+                if data["operation_id"] is not None:
+                    liveness_operations[data["resource_type"], data["resource_id"]] = (
+                        data["operation_id"],
+                        data["version"],
+                    )
+            if len(liveness_pending) == 200 or (record.record_type == "permission_plan" and liveness_pending):
+                liveness.update(
+                    await self.raw.ainspect_permission_resource_liveness(
+                        session, resources=tuple(liveness_pending), operations=liveness_operations
+                    )
+                )
+                liveness_pending.clear()
+                liveness_operations.clear()
+            if record.record_type == "permission_plan":
+                data = record.data
+                record = record_from_values(
+                    "permission_plan",
+                    **data,
+                    restore_missing_markers=liveness[data["resource_type"], data["resource_id"]],
+                )
             kind = (
                 "plan"
                 if section in {"conversion", "permission_namespace"} or record.record_type in RETENTIONS
@@ -657,6 +684,7 @@ class UnificationInventoryApplication:
                     existing, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref, current=current
                 )
                 return existing
+            await self.raw.avalidate_history_prepared(session)
             if (
                 not callable(self.reader_factory)
                 or not callable(getattr(self.physical, "aiter_facts", None))
@@ -717,6 +745,7 @@ class UnificationInventoryApplication:
             # broker/pidbox contents. Old frozen task pages remain readable.
             await pages.finish()
             common = {
+                "preparation_policy_version": 2,
                 "writer_contract_version": writer_contract_version,
                 "environment": environment,
                 "tenant_count": len(tenant_ids),

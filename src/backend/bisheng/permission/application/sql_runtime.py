@@ -721,19 +721,37 @@ class SqlProjectionFinalizer:
 
                 source_projection_state = mode_row.projection_state
 
-                grant_ids = tuple(
+                original_grant_keys = {
+                    endpoint.partition("#")[0].removeprefix("permission_grant:")
+                    for delta in plan.deltas
+                    for endpoint in (delta.user, delta.object)
+                    if endpoint.startswith("permission_grant:")
+                }
+                candidates = tuple(
                     (
                         await session.execute(
-                            select(PermissionGrant.id).where(
+                            select(PermissionGrant).where(
                                 PermissionGrant.tenant_id == plan.tenant_id,
                                 PermissionGrant.resource_type == resource_type,
                                 PermissionGrant.resource_id == resource_id,
-                                PermissionGrant.projection_state == "PROJECTING",
+                                PermissionGrant.projection_state.in_(("PROJECTING", "FAILED_CLOSED")),
                             )
                         )
                     )
                     .scalars()
                     .all()
+                )
+                grant_ids = tuple(
+                    row.id
+                    for row in candidates
+                    if row.projection_state == "PROJECTING"
+                    or stable_grant_key(
+                        tenant_id=plan.tenant_id,
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        model_key=row.model_key,
+                    )
+                    in original_grant_keys
                 )
                 if grant_ids:
                     await session.execute(

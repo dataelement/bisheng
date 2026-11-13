@@ -1537,11 +1537,11 @@ Other malformed IDs and explicitly saved new selections remain strict.
 
 ### Historical preparation before a new M2 freeze
 
-`prepare_f118_history.py` repairs valid SQL folder-depth counters and redundant
-parent edges, and cleans derived permission mirrors of globally hard-deleted
-resources after checking downstreams. It retains permission operation/tuple
-journals and business audit. It does not alter index bindings, MinIO, ES,
-Milvus, roles, Celery queues or messages. Operators stop every writer/consumer.
+`prepare_f118_history.py` backs and cleans proven orphan files/documents/versions,
+invalid tags/members, repairs parent ownership/depth and unmapped empty-resource
+embedding names, and purges invalid derived permissions. Exact orphan MinIO
+objects and ES/Milvus slices are backed before deletion; live index bindings,
+shared stores, audit, roles and queues remain. Operators stop every writer/consumer.
 
 ```bash
 cd src/backend
@@ -1559,8 +1559,11 @@ unknown types or remaining downstreams are reported, never guessed away.
 Apply returns permission operation IDs; exit 2 means selected repairs completed
 but blocked items remain, and exit 3 means an error requiring the same plan to
 be inspected/resumed. Preview exit 0 does not certify migration readiness.
-This is selected-data evidence, not a full physical backup. See
-[scope and review](../../../docs/reviews/f118-general-repairs-20261112.md).
+SQL evidence is saved before physical inspection in `.candidates.json`; exact
+payload backups use `.payloads/`. Missing original bindings/file identities stop
+cleanup; no whole-index deletion or guessed replacement is allowed. This selected
+evidence does not replace a full environment backup. See
+[implemented rules and complete flow](../../../docs/reviews/f118-confirmed-rules-implementation-20261113.md).
 
 ### Formal stopped-service migration
 
