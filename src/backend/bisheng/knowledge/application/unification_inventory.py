@@ -1,11 +1,13 @@
 """Formal M2 inventory entry; only the ledger is written in the caller's TX.
 
-Real physical transports and a pinned reader factory are required inputs.
+New inventories preserve SQL index bindings without reading physical stores.
+Old frozen physical evidence keeps its original verification contract.
 This entry never detects downtime, seeds permissions, binds references, changes
 business data or certifies Coverage. Backups remain an operational prerequisite.
 """
 
 from collections import defaultdict
+from copy import copy
 from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,9 +28,9 @@ from bisheng.knowledge.application.unification_permission_inventory import Permi
 from bisheng.knowledge.application.unification_permission_namespace import catalog_namespace_records
 from bisheng.knowledge.application.unification_physical_retention import (
     PhysicalRetentionInventoryVerifier,
-    retention_record,
 )
 from bisheng.knowledge.application.unification_preflight import UnificationPreflight, source_decision
+from bisheng.knowledge.application.unification_preview_artifacts import preview_artifact_store
 from bisheng.knowledge.application.unification_source_codec import decode_source_page, encode_source_page
 from bisheng.knowledge.application.unification_sources import (
     ReferenceInventoryRecord,
@@ -110,13 +112,6 @@ _SECTIONS = {
         "source_decision",
     },
 }
-_OBJECT_FIELDS = (
-    ("object_name", "original"),
-    ("preview_file_object_name", "preview"),
-    ("bbox_object_name", "bbox"),
-    ("thumbnails", "thumbnail"),
-    ("html_snapshot_object_name", "html_snapshot"),
-)
 
 
 def _blocked(reason):
@@ -234,9 +229,8 @@ class UnificationInventoryApplication:
         # create buckets/policies/indexes or enforce unrelated online gates.
         self.store = artifact_store
         self.reader_factory = sharing_reader_factory
-        self.physical = physical_reader
-        # Accept legacy composition arguments for callers resuming old Runs;
-        # neither adapter is invoked by a new inventory or frozen replay.
+        # Accept legacy composition arguments without calling them. Ordinary
+        # migration does not construct ES/Milvus clients or stat file objects.
         self.runs = KnowledgeUnificationRunRepository()
         self.raw = UnificationInventoryRepository()
         self.permissions = PermissionMigrationSnapshotRepository()
@@ -303,7 +297,6 @@ class UnificationInventoryApplication:
             _blocked("invalid_frozen_input")
         memberships = MembershipInventoryVerifier()
         tenants = frozenset(result.tenant_ids)
-        physical = PhysicalRetentionInventoryVerifier()
         structural = StructuralRetentionInventoryVerifier()
         current = current if current is not None else lambda: None
         backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
@@ -324,6 +317,8 @@ class UnificationInventoryApplication:
         if len(metadata) != 1:
             _blocked("manifest_metadata")
         preparation_policy = metadata[0].get("preparation_policy_version", 1)
+        physical_policy = metadata[0].get("physical_inventory_policy", "legacy_physical")
+        physical = PhysicalRetentionInventoryVerifier(policy=physical_policy)
         permissions = PermissionInventoryVerifier(
             run_id=result.run_id,
             writer_contract_version=result.writer_contract_version,
@@ -350,6 +345,8 @@ class UnificationInventoryApplication:
                 expected_baseline=expected_baseline,
             ):
                 current()
+                if section == "physical" and physical_policy == "bindings_only":
+                    _blocked("unexpected_physical_inventory")
                 if scope == "tenant" and tenant_id not in tenants:
                     _blocked("manifest_tenant")
                 if depth > 64 or ref["object_key"] in seen:
@@ -404,6 +401,8 @@ class UnificationInventoryApplication:
                     value = metadata[0]
                     if value.get("preparation_policy_version", 1) != preparation_policy:
                         _blocked("frozen_policy_changed")
+                    if value.get("physical_inventory_policy", "legacy_physical") != physical_policy:
+                        _blocked("frozen_physical_policy_changed")
                     expected = {
                         "writer_contract_version": result.writer_contract_version,
                         "environment": environment,
@@ -457,60 +456,8 @@ class UnificationInventoryApplication:
             current=current,
         )
 
-    async def _physical_batch(self, pages, tenant, resources, files, *, session):
-        expected_indices = {row.data["id"]: row.data for row in resources}
-        file_counts = None
-        expected_objects = {
-            (tenant, row.data["knowledge_id"], row.data["id"], kind, row.data[field])
-            for row in files
-            for field, kind in _OBJECT_FIELDS
-            if row.data[field]
-        }
-        async for record in self.physical.aiter_facts(resource_requests=tuple(resources), object_requests=tuple(files)):
-            _section("physical", record)
-            value = record.data
-            if value["tenant_id"] != tenant:
-                _blocked("physical_tenant")
-            if record.record_type == "physical_index":
-                original = expected_indices.pop(value["space_id"], None)
-                if (
-                    original is None
-                    or value["index_name"] != original["index_name"]
-                    or value["collection_name"] != original["collection_name"]
-                ):
-                    _blocked("physical_index_identity")
-                if value["identifier_compatible"] is not True:
-                    if file_counts is None:
-                        file_counts = await self.preflight.resources.acount_resource_files(
-                            session, resource_ids=tuple(row.data["id"] for row in resources)
-                        )
-                    proof = retention_record(
-                        resource=original,
-                        physical=value,
-                        managed_file_count=file_counts[value["space_id"]],
-                    )
-                    await pages.add("physical", tenant, proof, kind="plan")
-            else:
-                key = (
-                    value["tenant_id"],
-                    value["space_id"],
-                    value["file_id"],
-                    value["object_kind"],
-                    value["object_key"],
-                )
-                if key not in expected_objects:
-                    _blocked("physical_object_identity")
-                expected_objects.remove(key)
-            # Counts, existence and ETag are original facts, not an invented
-            # nonempty/equality/content-SHA criterion for legacy indexes.
-            await pages.add("physical", tenant, record)
-        if expected_indices or expected_objects:
-            _blocked("incomplete_physical_inventory")
-
     async def _tenant(self, session, pages, source_inventory, permission_planner, tenant, identity, planned_at):
         context = await source_inventory.aprepare_tenant_context(session, **identity)
-        resource_requests, object_requests = [], []
-        spaces = {}
         memberships = MembershipInventoryVerifier()
         retained_creators = {}
         liveness, liveness_pending, liveness_operations = {}, [], {}
@@ -553,19 +500,7 @@ class UnificationInventoryApplication:
                 )
             memberships.observe(kind=kind, section=section, tenant_id=tenant, record=record)
             await pages.add(section, tenant, record, kind=kind)
-            if record.record_type == "resource":
-                value = record.data
-                spaces[value["id"]] = value["type"]
-                if value["type"] in {0, 3}:
-                    resource_requests.append(record)
-            elif record.record_type == "file" and spaces.get(record.data["knowledge_id"]) in {0, 3}:
-                object_requests.append(record)
-            if len(resource_requests) == 199 or len(object_requests) == 199:
-                await self._physical_batch(pages, tenant, resource_requests, object_requests, session=session)
-                resource_requests, object_requests = [], []
         memberships.finish()
-        if resource_requests or object_requests:
-            await self._physical_batch(pages, tenant, resource_requests, object_requests, session=session)
         header, refs = None, []
         creators = {}
         source_headers = {}
@@ -654,7 +589,37 @@ class UnificationInventoryApplication:
             _blocked("source_creator_missing")
 
     async def arun(
-        self, session: AsyncSession, *, run_id, writer_contract_version, environment, backup_ref, schema_ref
+        self,
+        session: AsyncSession,
+        *,
+        run_id,
+        writer_contract_version,
+        environment,
+        backup_ref,
+        schema_ref,
+        freeze=True,
+    ) -> FrozenGlobalInventoryResult:
+        if type(freeze) is not bool:
+            _blocked("freeze_mode")
+        inputs = {
+            "run_id": run_id,
+            "writer_contract_version": writer_contract_version,
+            "environment": environment,
+            "backup_ref": backup_ref,
+            "schema_ref": schema_ref,
+            "freeze": freeze,
+        }
+        if freeze:
+            return await self._arun(session, **inputs)
+        # Reuse every native inventory/plan validator, swapping only the page
+        # sink. Nothing can persist these descriptors or use them to resume.
+        with preview_artifact_store(self.store) as store:
+            preview = copy(self)
+            preview.store = store
+            return await preview._arun(session, **inputs)
+
+    async def _arun(
+        self, session: AsyncSession, *, run_id, writer_contract_version, environment, backup_ref, schema_ref, freeze
     ) -> FrozenGlobalInventoryResult:
         self.runs._global_scope(session)
         self.runs.assert_inventory_clean(session)
@@ -680,16 +645,14 @@ class UnificationInventoryApplication:
             tenant_ids = await self.runs.alist_actual_tenant_ids(session)
             existing = await self.runs.aget_global_freeze(session, **identity, tenant_ids=tenant_ids)
             if existing is not None:
+                if not freeze:
+                    _blocked("preview_requires_new_run")
                 await self._verify_frozen(
                     existing, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref, current=current
                 )
                 return existing
             await self.raw.avalidate_history_prepared(session)
-            if (
-                not callable(self.reader_factory)
-                or not callable(getattr(self.physical, "aiter_facts", None))
-                or not isinstance(self.store, UnificationArtifactStore)
-            ):
+            if not callable(self.reader_factory) or not isinstance(self.store, UnificationArtifactStore):
                 raise ReferenceCoverageNotReadyError(reason="migration_required_native_ports_missing")
             await self._materials(
                 **identity,
@@ -746,6 +709,7 @@ class UnificationInventoryApplication:
             await pages.finish()
             common = {
                 "preparation_policy_version": 2,
+                "physical_inventory_policy": "bindings_only",
                 "writer_contract_version": writer_contract_version,
                 "environment": environment,
                 "tenant_count": len(tenant_ids),
@@ -784,6 +748,8 @@ class UnificationInventoryApplication:
                 permission_planner=permission_planner,
             )
             self.runs.assert_inventory_clean(session)
+            if not freeze:
+                return candidate
             return await self.runs.afreeze_all(
                 session, **identity, tenant_ids=tenant_ids, baseline_ref=baseline, plan_ref=plan
             )

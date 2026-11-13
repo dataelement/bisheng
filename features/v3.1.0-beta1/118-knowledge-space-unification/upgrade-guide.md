@@ -1,6 +1,6 @@
 # 升级说明：知识空间统一与全平台 use 动作退役
 
-2026-11-13代码现状的查询顺序、预检条件、SQL字段及OpenFGA转换详图见[迁移数据流程评审](../../../docs/reviews/f118-migration-data-flow-20261113.md)。该文明确区分历史准备、原冻结图预览与完整迁移；下文带日期的演练结果保留原证据边界。
+2026-11-13本轮修复后的查询顺序、预检条件、SQL字段及OpenFGA转换详图见[当前迁移流程](../../../docs/reviews/f118-migration-current-flow-20261113.md)。[早期流程评审](../../../docs/reviews/f118-migration-data-flow-20261113.md)保留历史背景；当前普通资源物理存储边界和新Run全量只读预检以当前流程及本文末节为准，下文带日期的演练结果保留原证据边界。
 
 **状态（2026-11-10）**：功能开发已收齐，修正样本后的backup2及clone2完整还原/中性DDL通过；隔离clone2已正式M2冻结并同run apply/replay ready。原项目也已完成正式冻结及同run apply/replay ready，并部署新版API/Worker/frontend；API19原run n10api1在71dd已失败结束（19 tests/12 failures/6 errors/0 skipped，exit1、suite_complete=false），不可相减推算通过数；两项生产修复已合流但新candidate未部署复测，UI21未启动。当前仍为演练说明，不据此开放生产升级；SDK无本次代码改动，全托管SDK场景单列未执行。最新入口见§3.1，后文日期章节保留历史证据边界。\
 **日期**：2026-11-03\
@@ -18,14 +18,14 @@
 
 1. 确定维护窗口预算和执行负责人，准备维护入口、备份/恢复方案与回退材料。停服前只做维护准备和工期估算，不产出正式盘点清单、失效分类或冻结基线；正式盘点在旧服务停止后进行。
 2. 暂停本次迁移影响范围内的新请求/写入、新任务派发及启动；覆盖 Beat、定时派发和相关队列消费者，保留已有排队消息及必要 broker 数据。
-3. 等待已经运行的受影响任务自然完成。确认旧 Worker 不再有活跃写入后，停止旧 API、Worker、Beat 等应用进程；迁移要连接的数据库、OpenFGA、ES/Milvus、MinIO、Redis 等必要存储/中间件仍需可用。
+3. 等待已经运行的受影响任务自然完成。确认旧 Worker 不再有活跃写入后，停止旧 API、Worker、Beat 等应用进程；迁移连接的数据库、OpenFGA、迁移证据 MinIO、Redis 等必要存储/中间件仍需可用。普通资源不要求 ES/Milvus 能够完成迁移盘点查询；只有历史准备计划含已批准的孤儿文件精确清理时，才需要对应 ES/Milvus/MinIO 的定位、备份和删除能力。
 4. 如果超过维护窗口预算仍有任务未完成，保持维护并交人工处置，不自动强杀任务，也不继续数据转换。后续如何结束任务或调整窗口由现场人员处理，不由迁移脚本判断。
 5. 在旧服务已停止后完成可恢复的一致备份与对象/索引清单，明确 SQL、FGA、索引及必要变更对象的同一恢复点，再进入 §3 正式盘点。不要清空未执行任务来获得“空队列”。
 
 ## 3. 停服期间执行迁移
 
 1. 运维完成停服及一致备份后，先执行中性DDL，再运行§3.1已实现的正式迁移入口；脚本本身不检查停服状态。
-2. 首次执行先在停服期间按租户正式盘点资源/创建者、文件/版本、标签/元数据、模型/索引、SQL 授权/FGA、业务引用、任务记录及配额，再预检数据关联与发布合同。全平台权限迁移也在此时盘点标准/自定义/预设/系统权限模型、Grant/Source、系统标记、原可见集合及非 use 动作效果（含 rename），并冻结移除 use 后按资源类型退化为纯可见的模型、原 model_key/管理等级及 Grant/Source 摘要；不使用维护前授权快照。在任何转换写入前，将权限盘点事实和权限子计划一并纳入同一正式基线、run 和转换计划/hash，包含原引用目标存在性、来源/版本、配置修订、Catalog/model/checksum 与证据。原 ID 明确且该基线已证明目标不存在的关系登记为存量失效。预检或冻结未完成时保持维护，不进入转换；续跑读取同一原基线/run/计划和检查点，不对已转换的数据重新盘点冻结，不将脚本错误重新归为存量失效。
+2. 首次执行先在停服期间按租户正式盘点资源/创建者、文件/版本、标签/元数据、模型配置与 SQL 索引绑定、SQL 授权/FGA、业务引用、未完成业务删除切换/墓碑及配额，再预检数据关联与发布合同；不查询普通资源 ES/Milvus 的存在性、schema/count，不逐文件 stat，不盘点 Celery 队列或无关的全量 Role/UserRole 资格。空间成员身份和权限来源主体仍须按迁移合同读取、校验。全平台权限迁移也在此时盘点标准/自定义/预设/系统权限模型、Grant/Source、系统标记、原可见集合及非 use 动作效果（含 rename），并冻结移除 use 后按资源类型退化为纯可见的模型、原 model_key/管理等级及 Grant/Source 摘要；不使用维护前授权快照。在任何转换写入前，将权限盘点事实和权限子计划一并纳入同一正式基线、run 和转换计划/hash，包含原引用目标存在性、来源/版本、配置修订、Catalog/model/checksum 与证据。原 ID 明确且该基线已证明目标不存在的关系登记为存量失效。预检或冻结未完成时保持维护，不进入转换；续跑读取同一原基线/run/计划和检查点，不对已转换的数据重新盘点冻结，不将脚本错误重新归为存量失效。
 3. 按已确认规则进行全平台 use 退役与文档库→空间转换，保留主体/可见范围/其他动作、资源及文件 ID、原模型和索引位置；不扩展文件 edit 的适用范围；文件及文件夹重命名仍用 rename，原高级处理按其既有容器 edit 等映射执行。纯可见模型按 design §7.3.2 标记原资源类型并保留原管理等级、model_key、Source 及撤销链，不添加其他动作或新的 visible 动作；不默认重切分/重建全部向量。
 4. 文件/版本及旧 ID 规范化完成后，用各业务同版本提取器按 Spec §3.15.1 / design §6.4.1 回填已保存配置及需保留版本的绑定明细和来源集合：含暂不能运行草稿、未删非当前工作流版本、仍可管理预览的托管应用历史版本、暂停频道同步和生效默认槽位；零引用来源也须标记已提取，任务不回填。同时核对删除标记及失效引用，禁止回填清除失效绑定、自动改写业务配置或复活目标。按来源修订/摘要和全量覆盖对账；合法强删失效及原冻结基线证明的存量失效均保留并分别标记，不伪造强删记录；已知存量失效且完整对账后可升级。其他未解释的目标异常、名称歧义、非法跨租户关系或覆盖缺口报告失败，未就绪不能启用按绑定表的删除保护。
 5. 以停服后、转换写入前冻结的同一正式基线，核对每资源、每租户的 SQL 与 FGA、文件/版本/标签/元数据、配额和业务绑定，输出迁移报告。原已可见但无 use 的资格变化属于预期变化，其他非预期变化须处理。
@@ -33,7 +33,7 @@
 
 ### 3.1 已实现的执行入口（2026-11-10）
 
-从本版本的 `src/backend/` 运行，使用API/Worker同一配置、已安装依赖和环境凭据。先保持业务停止，执行 `python -m alembic upgrade head`；当前单一head为 `f118_knowledge_delete_execution`，仅准备结构，不进行正式业务盘点或回填。该DDL已在隔离完整还原clone验证；clone2进一步完成正式M2冻结及同run apply/replay ready，原项目也已独立完成正式冻结、同run apply/replay ready及部署；各环境证据分别保留，不把schema/ready或sanity当完整API/UI验收。
+从本版本的 `src/backend/` 运行，使用API/Worker同一配置、已安装依赖和环境凭据。先保持业务停止，以目标镜像执行 `python -m alembic heads` 确认唯一head，再执行 `python -m alembic upgrade head`，仅准备结构，不进行正式业务盘点或回填。2026-11-10演练所用head为 `f118_knowledge_delete_execution`，其DDL已在隔离完整还原clone验证；clone2进一步完成正式M2冻结及同run apply/replay ready，原项目也已独立完成正式冻结、同run apply/replay ready及部署；各环境证据分别保留，不把该历史head、schema/ready或sanity当当前目标镜像或完整API/UI验收。
 
 正式入口为 `scripts/unify_knowledge_spaces.py`。下面所有环境名、run、操作人及描述符必须替换为实际值；`object_key/sha256`必须指向同一维护窗口中已持久保存并验证的真实备份、结构证据，不是随意生成的占位hash。
 
@@ -48,7 +48,7 @@ python scripts/unify_knowledge_spaces.py \
   --apply --operator-id 7
 ```
 
-`--apply`实际执行停服后的M2盘点/冻结、M3原SQL转换和权限发布、M4六来源回填/完整对账及持久Coverage签证。中断后使用完全相同参数加 `--resume`，只允许沿已有冻结run续跑；不对已转换数据重新冻结。默认不带 `--apply` 的预览只读已有冻结图，不创建首次M2、不签ready；没有冻结run时不能当正式盘点报告。
+`--apply`实际执行停服后的M2盘点/冻结、M3原SQL转换和权限发布、M4六来源回填/完整对账及持久Coverage签证。中断后使用完全相同参数加 `--resume`，只允许沿已有冻结run续跑；不对已转换数据重新冻结。默认不带 `--apply`：新Run执行完整当前数据预检，成功输出 `validation_scope=current_inventory`、`preflight_complete=true`、`frozen=false`、`ready=false`，私有本地临时页退出时删除，不写 SQL/FGA/MinIO；已有冻结Run仅复核原图，输出 `validation_scope=frozen_run`、`preflight_complete=false`。材料必须对应当次Run、环境、writer及当前租户集合，不能以旧范围的备份材料冒充新范围；预检通过不等于已冻结、迁移完成或可以开服。
 
 输出包括run/hash、实际租户、六来源证明及包含失效槽清单的不可变plan描述符；非零退出保检查点且不得开放业务。脚本只初始化原配置中的必要DB/Redis及已审查存储适配器，避免通用启动初始化创建bucket/policy；不启动API、不执行默认数据seed。它不检测停服，也不自动重启、恢复备份或重新投递旧消息。恢复入口仍是同run续跑或运维完整一致备份恢复。
 
@@ -288,3 +288,16 @@ backup1完成（manifest SHA256 `2e8bb87fae241b3e777b0c9aba5dbb03acc8609aa8a8bbf
 M2此前正确拒绝本次synthetic AppVersion的display/vendor名称混淆（26511）：旧/新resolver均要求`f118-chat`，fixture误写`e2e-f118-chat`。Root已用旧镜像a1b通过fixture reset preview并成功apply：精确撤回本次未发布旧版本`162dc64af3404a91ae7f9071f270089f`，按vendor `f118-chat`完整创建新版本`d58b464c56574ecf876d569f9a56d199`；保留旧code，其他SQL/FGA/模型默认/文件/WF核对不变，不UPDATE真实历史版本、不走Runtime删除、不添加fallback或伪invalid_legacy。reset证明SHA256 `a49889884809b5cb0a6d13887c00c58aa07e955e6e2a0f64e67c5cc1b035ea69`，独立项目`prep/revision2/fixture-reset.json`私密原文留服务器；保backup1/failed clone。backup2于2026-11-10 06:58:24 UTC完成，manifest SHA256 `fd7dd63b37ba45d6503d02f1d5de01cf078a38182832f8aed1635f9bf60e9630`：24 files、187张SQL表/798条FGA/68个MinIO对象版本，旧镜像归档8447341568 bytes以同旧inode硬链接保存。retained broker及其他SQL/FGA不变，仅上述synthetic版本及唯一新code改变；Root独立核summary固定字段，未取私密原文。该停服备份阶段已结束；原项目现已升级部署，原停服及旧schema证据仍保留。隔离clone2位于独立项目`restore-check/e2e-f118-20261110-prep2/.restore2`：backup2完整还原7项全true（187 SQL/798 FGA/68对象版本/4 ES/3 Milvus/22逻辑向量），新中性DDL保180张原表旧列不变、8张新表空。其实际材料覆盖3租户，正式M2 frozen后，同run `e2e-f118-20261110-prep2-restore` CLI apply和replay均ready `[1,2,3]`，两次JSON证据SHA256均为`5b9c51a2fea64f1c285b772e52c532dcb7de9293c1ba4bc24adbb3984542a76f`。clone2与原项目证据分别保留：原七store启动后Native7比对backup2全true，原中性DDL保180原表旧列/8新表空，正式M2冻结3租户，同run `e2e-f118-20261110-prep2-upgrade` apply/replay均ready `[1,2,3]`，结果SHA256均为`fa19a571fdedfe61c4d67ed807c9ebcb1c42fa75108f3af75675eceae274be34`。原项目及clone2迁移后、撤销测试前独立只读审计均PASS：429引用完全等冻结集合且组合无重复；5 File/2 Doc/3 Version/QA1、旧0→3/QA1、WF206 missing911800001原配置/invalid_legacy、Grant61/74主体等级、App d58 caps保持，六kind×3租户及global ready，无Embedding重建。两环境`reference_identity_set`同为`c31065a8655d13f7274e7d53b987eb776e21ea61417a835681415cc85ec0233f`。原Grant74/Source3181446261062334809已真实HTTP验证迁移visible/use别名true且其他space动作false；正规REMOVE后全部false、children18040，owner原Source343… DTO不变，安全报告为Root原环境证据目录`originalEV/pure-visible-revoke.json`。PUBLIC/APPROVAL preview仍actions=[]按原业务规则保留，不修产品迎合错误Oracle；临时str ID断言仅测试修正。原API19已失败结束、修复后现场复测待执行，UI21未启动，14卡仍pending，部署及sanity不算完整E2E。oneoff短/完整容器ID及只读rootfs缓存路径已窄适配，`XDG_CACHE_HOME=/tmp/f118-cache`下真实broker只读检查通过、旧失败留证，不是产品/SDK新增修复，不扩RTM。Milvus原生1800秒超时exit1无OOM/外部kill单列保留，3005保持不动。
 
 旧重复文件覆盖/重试保原File/Doc/Version和目录，原处理版本是来源快照，更新空间默认不重算旧文件；正式升级后需用原ID及存量快照核对这一兼容路径。整批WAITING提交与原worker派发均需实测，未知ACK不作为成功证据。仍按停服/排空/一致备份→中性DDL→停服后正式盘点冻结→同run转换/权限发布→六来源回填/对账/Coverage→校验后恢复的原顺序，不由迁移脚本判断停服。
+
+## 当前正式预检与物理存储边界（2026-11-13）
+
+本节是当前修复后的操作说明；前文各日期的联装、物理盘点及演练结果只代表对应历史版本。完整查询顺序、通过条件和转换流程见[当前迁移流程图](../../../docs/reviews/f118-migration-current-flow-20261113.md)。本次代码修复及本地测试不代表已更新 release 镜像或已在真实环境验证。
+
+1. 运维先停止所有业务写端及消费者、保存一致备份和 schema 记录，再执行中性 DDL。脚本不启停服务，也不检查 Celery 队列或据队列推断停写。
+2. 新 M2 前运行 `prepare_f118_history.py` 的 preview，保存选中 SQL/FGA 证据、计划及必要的精确孤儿物理内容备份；核对后按同计划 `--apply --operator-id <ID>`。计划中有未解决项时继续阻塞，不自动扩大清理范围。普通资源的 SQL/底层向量数量偏差仍单独治理。
+3. 为当次 Run、环境、writer 和实际全部租户生成不可变 backup/schema 证据描述符。旧30租户材料不能冒充当前31租户材料，不改写旧材料或冻结基线。
+4. 新 Run 默认 preview 现在执行与正式新 M2 相同的完整业务、权限、六类来源与计划校验。分页暂存于私有本地临时目录，成功或抛异常退出时删除；不写 SQL、OpenFGA 或 MinIO，不冻结 Run。通过返回 `validation_scope=current_inventory`、`preflight_complete=true`、`frozen=false`、`ready=false`。`preflight_complete` 仅表示本轮预检完成，不能作为迁移完成或开服依据。
+5. 已有冻结 Run 的 preview/`--resume` 沿原图校验，输出 `validation_scope=frozen_run`、`preflight_complete=false`；不会重新扫描并覆盖原基线。原 Run 租户集合变化仍阻断复核。若新预览初查后被另一进程抢先冻结，也明确拒绝，不把旧图复核冒充全量新扫描。
+6. 新 M2 记录 `physical_inventory_policy=bindings_only`：普通资源只保留 SQL 的 `index_name/collection_name` 原绑定，不查询 ES/Milvus 的存在性、schema、count，也不逐文件做 MinIO stat。代码中的模型/知识引用“physical fact”若来自 SQL 目标仓储，仍是目标行与父关系校验，并非向量查询。旧冻结图继续按旧 codec 和原证据合同校验。
+7. MinIO 仍承载不可变 backup/schema 证据及正式 baseline/plan，故保留这些迁移对象读写。已确认的孤儿文件清理仍需按精确文件 ID、原索引绑定和对象键备份、核验、删除对应内容；这条历史准备路径可访问 ES/Milvus/MinIO，不能泛化为扫描或删除整库。
+8. 预检通过后显式 `--apply` 重新盘点并冻结 M2，随后完成 SQL 转换、权限 namespace/目标授权模型及 Catalog 发布、六来源回填、对账和全租户 Coverage。只有真实升级验收通过后，运维才恢复业务访问。中断使用同 Run、原材料和 checkpoint 恢复，遇阻保存证据并维持维护状态。
