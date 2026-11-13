@@ -1,7 +1,7 @@
 import { Button, Dropdown, DropdownItem, Tooltip } from "@bisheng/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { knowledgeFilesApi } from "@/controllers/API/knowledgeFiles";
 import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
@@ -9,6 +9,7 @@ import { listNavigationSpaces, setNavigationSpacePin, type SpaceSection, type Sp
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
 import { KnowledgeFolderTree } from "./KnowledgeFolderTree";
+import { useSidebarSpaceActions } from "./useSidebarSpaceActions";
 
 export interface KnowledgeSpaceSidebarProps {
   scope: KnowledgeQueryScope;
@@ -18,12 +19,17 @@ export interface KnowledgeSpaceSidebarProps {
   onCreate: () => void;
   onSelect: (spaceId: number, parentId: number | null) => void;
   onSquare: () => void;
+  onDeleted?: (id: number) => void;
 }
 
 const sections: readonly SpaceSection[] = ["department", "created", "joined"];
 const sorts: readonly SpaceSort[] = ["update_time", "create_time", "name"];
 
-interface SpaceItemProps extends KnowledgeSpaceSidebarProps {
+interface SpaceMenuProps {
+  renderActions: (item: KnowledgeSpaceInfo) => ReactNode;
+  onMenuOpen: (item: KnowledgeSpaceInfo, open: boolean) => void;
+}
+interface SpaceItemProps extends KnowledgeSpaceSidebarProps, SpaceMenuProps {
   item: KnowledgeSpaceInfo;
   section: SpaceSection;
   path: readonly number[];
@@ -73,10 +79,14 @@ function SpaceItem({ item, section, path, ...props }: SpaceItemProps) {
         </button>
         <Dropdown
           align="end"
+          onOpenChange={(open) => props.onMenuOpen(item, open)}
           menu={(
+            <>
             <DropdownItem disabled={pin.isLoading} icon={item.is_pinned ? <Outlined.PinOff /> : <Outlined.Pin />} onSelect={() => pin.mutate()}>
               {t(item.is_pinned ? "sidebar.unpin" : "sidebar.pin")}
             </DropdownItem>
+            {props.renderActions(item)}
+            </>
           )}
         >
           <Button color="default" variant="text" iconOnly size="small" className="opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100" aria-label={`${t("more", { ns: "bs" })} ${item.name}`}>
@@ -91,7 +101,7 @@ function SpaceItem({ item, section, path, ...props }: SpaceItemProps) {
   );
 }
 
-interface SectionProps extends KnowledgeSpaceSidebarProps {
+interface SectionProps extends KnowledgeSpaceSidebarProps, SpaceMenuProps {
   section: SpaceSection;
   path: readonly number[];
 }
@@ -146,6 +156,7 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const navigationId = useId();
   const { spaceId, parentId, scope } = props;
+  const actions = useSidebarSpaceActions(scope, props.canCreate, props.onDeleted);
   const client = useQueryClient();
   const { identityKey, tenantId, managementTenantId, view } = scope;
   const prefix = useMemo(() => knowledgeQueryKeys.scope({ identityKey, tenantId, managementTenantId, view }), [identityKey, tenantId, managementTenantId, view]);
@@ -178,11 +189,12 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
         </Tooltip>
       </div>
       <nav id={navigationId} hidden={collapsed} className="min-h-0 flex-1 overflow-y-auto px-3" aria-label={t("sidebar.navigation")}>
-        {sections.map((section) => <SpaceSectionList key={section} {...props} section={section} path={path} />)}
+        {sections.map((section) => <SpaceSectionList key={section} {...props} section={section} path={path} renderActions={actions.render} onMenuOpen={actions.load} />)}
       </nav>
       <div hidden={collapsed} className="shrink-0 p-3">
         <Button variant="outlined" color="default" className="w-full" icon={<Outlined.BlocksAndArrows />} onClick={props.onSquare}>{t("sidebar.square")}</Button>
       </div>
+      {actions.dialogs}
     </aside>
   );
 }

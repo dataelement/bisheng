@@ -62,6 +62,7 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, active = true }: Knowl
         onCreate={() => setCreateOpen(true)}
         onSelect={(id, folderId) => handleSelect(id, folderId, true)}
         onSquare={() => window.open(getWorkspaceClientUrl("/knowledge?square=1"), "_blank", "noopener,noreferrer")}
+        onDeleted={(id) => { if (id === spaceId) navigate("/filelib", { replace: true }); }}
       />}
       <main className="min-w-0 flex-1 overflow-auto px-4" aria-label={t("workspace.files")}>
         {invalid ? <p role="status">{t("f118.scope_unavailable")}</p> : spaceId !== null ? (

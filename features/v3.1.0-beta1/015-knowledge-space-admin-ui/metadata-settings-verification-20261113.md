@@ -36,3 +36,18 @@
 | 文档同步 | 0 | 0 | PASS：spec/design/tasks、八列 QA 与本验证同步；默认旧接口的基本信息白名单保持不变。 |
 
 总体：PASS。本地交付无新增阻断项。仍需在同版专用环境核验元数据的真实异步索引结果、真实标签库/TXT 及非管理员动作授权；本地通过和 E2E skip 均不构成上线验收。
+
+## 前台设置样式复用追加（AC-30，基线 9041f3c263）
+
+用户认为原设置版式不符合前台样式，本轮改为复用前台既有设置组合：648px 居中表单、32px 灰底图标分区、紧凑字号/间距、小号 Switch、带说明的 RadioCard。按用户明确的样式要求，开关和前台一样随确认一起保存，不新增即时写入行为；不变更现有 API、权限、字段长度或校验规则。后台不导入 client 状态或路由代码。
+
+- 5 文件 / 69 项回归通过：spaceSettingsEditor、spaceSettingsForm、knowledgeSpaceManagementView、f118KnowledgeLibraryDialog、f118SpaceDetail。仅适配已有用例的控件语义，未为布局写镜像实现测试。
+- 全前端 lint/typecheck/check-i18n 通过；三个变更 TS/TSX 文件均通过 arch-guard、600 行上限及空白检查。
+- 本地浏览器真实 SpaceManagementView 内核验标题/页签、表单和三个开关。1440px 时表单实测 648px；1440px/1024px 均无横向溢出，三个开关都位于可视宽度内。自动标签切自定义并保存得到原白名单 payload；私密卡片触发原确认，取消后仍选中分享。控制台无 error，只有两条既有 Router future warning。临时 fixture/API 服务、页面和源文件已移除，未访问真实后端。
+- 七维复核：边界、权限、并发与披露路径不变且原用例通过；前台组合和共享组件复用，三语言文案及 spec/design/tasks/QA 同步。无 HIGH/MEDIUM，PASS；只声明本地验证，未提交推送或部署。
+
+## 前台同口径字符限制追加（AC-33）
+
+名称 10、简介 200 全角单位，ASCII 字符计半个；名称计数向上取整，与 client 设置一致。输入/粘贴及中文组合结束时限制，校验采用同一口径；历史超长值不在加载时静默重写。完整码点截断保护代理对，后端接口未改。
+
+3 文件 / 24 项回归通过：spaceSettingsForm、spaceSettingsEditor、knowledgeSpaceManagementView。覆盖英文 20/400、全角 10/200、混合边界、粘贴、组合中/组合结束、计数及提交值、旧超长名称。全前端 lint/typecheck 和变更源码架构/600 行/空白检查通过；未新增文案或依赖。本轮为小修，实际组件交互 smoke 不等于真实输入法或部署环境 E2E。七维复核无新增阻断项，未提交推送或部署。
