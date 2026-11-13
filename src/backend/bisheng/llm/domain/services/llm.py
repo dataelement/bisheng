@@ -407,6 +407,28 @@ class LLMService:
         return config
 
     @classmethod
+    async def aget_online_chat_models(cls) -> list[tuple[LLMModel, LLMServer]]:
+        """Online chat (``llm``) models this tenant can see, with their providers.
+
+        Uses the same server set as the management list (own + Root-shared), so
+        the workbench offers exactly the rows an administrator sees there.
+        """
+        leaf_id = get_current_tenant_id() or ROOT_TENANT_ID
+        servers = await cls.acollect_visible_servers(leaf_id)
+        server_by_id = {server.id: server for server in servers}
+        if not server_by_id:
+            return []
+        # Root-shared servers live outside the caller tenant; the server set above
+        # has already been authorized, so only their models are read here.
+        with bypass_tenant_filter():
+            models = await LLMDao.aget_model_by_server_ids(list(server_by_id))
+        return [
+            (model, server_by_id[model.server_id])
+            for model in sorted(models, key=lambda row: row.id)
+            if model.online and (model.model_type or "").strip() == LLMModelType.LLM.value
+        ]
+
+    @classmethod
     async def acollect_visible_servers(cls, leaf_id: int, *, strict: bool = False) -> list[LLMServer]:
         """Every LLM server row this tenant may see: own + Root-shared + inherited.
 

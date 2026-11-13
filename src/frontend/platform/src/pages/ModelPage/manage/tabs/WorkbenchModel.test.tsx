@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@/test/test-utils'
 import { beforeEach, expect, it, vi } from 'vitest'
 import WorkbenchModel from './WorkbenchModel'
-const mocks = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), message: vi.fn(), t: (key: string) => key }))
+const mocks = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), message: vi.fn(), t: (key: string) => key, dshEnabled: true }))
 vi.mock('@/components/bs-icons/loading', () => ({ LoadingIcon: () => null, LoadIcon: () => null }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: mocks.t }) }))
-vi.mock('@/hooks/useDshBrowserConfig', () => ({ useDshBrowserConfig: () => ({ config: { enabled: true } }) }))
+vi.mock('@/hooks/useDshBrowserConfig', () => ({ useDshBrowserConfig: () => ({ config: { enabled: mocks.dshEnabled } }) }))
 vi.mock('@/components/bs-ui/toast/use-toast', () => ({ useToast: () => ({ message: mocks.message }) }))
 vi.mock('@bisheng/ui', async (importOriginal) => ({
     ...await importOriginal<typeof import('@bisheng/ui')>(),
@@ -25,6 +25,7 @@ const config = {
 const data = [{ id: 1, name: 'Provider', models: [{ id: 42, model_name: 'vendor', model_type: 'llm', online: true }] }]
 beforeEach(() => {
     vi.clearAllMocks()
+    mocks.dshEnabled = true
     mocks.get.mockResolvedValue({ data: config })
     mocks.save.mockResolvedValue(true)
 })
@@ -73,4 +74,14 @@ it('adds a newly chosen default to the saved selectable catalog', async () => {
         chat_default_model_id: '7',
         models: expect.arrayContaining([expect.objectContaining({ id: '7', displayName: 'New model' })]),
     })))
+})
+
+it('saves without any stored model metadata when the desktop module is off', async () => {
+    // Online chat models are offered by default, so an empty metadata list is valid.
+    mocks.dshEnabled = false
+    mocks.get.mockResolvedValue({ data: { ...config, models: [], chat_default_model_id: null } })
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'model.save' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ models: [] })))
+    expect(mocks.message).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }))
 })

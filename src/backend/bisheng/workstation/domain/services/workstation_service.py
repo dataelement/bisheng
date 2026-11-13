@@ -811,8 +811,12 @@ class WorkStationService(BaseService):
         tools = [tool.model_dump(mode="json") for tool in config.tools or []]
         if tools:
             tools = await cls.afilter_tools_by_use_permission(tools, login_user)
+        from bisheng.dsh.domain.services.model_catalog import user_workbench_models
+
+        # Same list chat completion validates against: online models this user may see.
+        models = await user_workbench_models(login_user.user_id)
         return {
-            "models": [model.model_dump(mode="json") for model in config.models or []],
+            "models": [model.model_dump(mode="json") for model in models],
             "tools": tools,
         }
 
