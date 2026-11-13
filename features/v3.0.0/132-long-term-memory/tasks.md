@@ -281,7 +281,7 @@
   **覆盖 AC**: AC-58, AC-59, AC-61, AC-62
   **依赖**: T028
 
-- [ ] **T034**: 检索的实现
+- [x] **T034**: 检索的实现
   **文件**: `src/backend/bisheng/memory/domain/services/search.py`
   **逻辑**: `search(ctx, query, limit, detail_ids)`：调用 `MemoryIndex` 的两路、倒数排名融合、追加待建索引的条目、回表校验、计数。过滤条件只用 T010 的 `build_scope_filter`。设计见 design 决策 12。
   **测试**: T033 全部通过
