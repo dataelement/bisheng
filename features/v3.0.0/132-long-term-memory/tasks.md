@@ -710,7 +710,7 @@
   **覆盖 AC**: AC-50, AC-54, AC-55
   **依赖**: T090
 
-- [ ] **T092**: 过期事件改写的测试
+- [x] **T092**: 过期事件改写的测试
   **文件**: `src/backend/test/memory/test_consolidator_expired_event.py`、`tools/memory_eval/cases/`（增加两条标注 AC-95 的用例）、`tools/memory_eval/tests/test_cases.py`（把 AC-95 加入必备编号）
   **逻辑**: 用桩模型返回改写后的表述：事件时间已过的有效条目在下一次整理中被新条目取代，新条目保留日期且通过校验，旧条目为已被取代；同一条目不被重复改写。
   **覆盖 AC**: AC-95
