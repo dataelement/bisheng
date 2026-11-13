@@ -24,7 +24,7 @@
   - B. 不改这两个文件，接受〔基线比对〕里因此出现的新增失败。
   - C. 不新增枚举成员（记忆调用改用已有的类型）。这会改变 design 决策 18 与 AC-45 测试的口径。
 - **建议**：A。
-- **目前做法**：**用户已批准（2026-11-13）**，已应用 `proposed/p02-existing-tests.patch`。此前曾按 A 修改（提交 8dfd18db07），后按规程 §8 撤回，等待确认期间两个文件为基线内容。A 的改动保存在 `proposed/p02-existing-tests.patch`，你同意后执行 `git apply features/v3.0.0/132-long-term-memory/proposed/p02-existing-tests.patch` 即可。批准前〔基线比对〕因此有 3 个新增失败；批准并应用后见最终报告第 3 项。
+- **目前做法**：**用户已批准（2026-11-13）**，已应用 `proposed/p02-existing-tests.patch`。此前曾按 A 修改（提交 8dfd18db07），后按规程 §8 撤回，等待确认期间两个文件为基线内容。批准前〔基线比对〕因此有 3 个新增失败；批准并应用后见最终报告第 3 项。
 
 ## P-03 `/workbench/continue` 追问轮的提示与归因按任务消息合并显示（P-01 的延续）
 

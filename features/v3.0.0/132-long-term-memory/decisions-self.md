@@ -126,3 +126,4 @@
 - T095｜tasks 写 T095 依赖 T094（test 环境验证），但规程把 T095 列入范围、T094 留给人｜先按实现现状回写 design §4.5、release-contract（INV-44–47 转正、F132 状态）与 AGENTS Quick Map；V5 真实端点兼容性在 §4.5 注明仍待 T094｜不等人工步骤即可完成的部分先完成
 - 收尾｜goal 判定指出 P-02 改了既有测试的断言，违反规程 §8 与 goal 条件｜撤回两处改动（路径限定的 checkout 恢复基线内容），改动另存为 proposed/p02-existing-tests.patch 等用户确认｜如实遵守"不改断言"，接受〔基线比对〕因此出现的新增失败并如实报告
 - 收尾｜用户于 2026-11-13 批准 P-02｜应用 proposed/p02-existing-tests.patch（提交 cc82fc01b9）后重跑〔基线比对〕｜见 progress.md 末行
+- 收尾｜批准 P-02 后的第一次〔基线比对〕出现 1 个新增失败：`test/dsh/test_content_safety_maintenance_cli.py::...[missing_table]`，原因是它启动的子进程在 8 片并行负载下超过 30 秒（TimeoutExpired）｜单独运行 3/3 通过，此前两次全量运行也通过；判定为负载导致的超时，不改该测试，重跑比对确认｜与本功能代码无关
