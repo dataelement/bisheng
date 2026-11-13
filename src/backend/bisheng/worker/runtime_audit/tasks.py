@@ -7,9 +7,9 @@ from bisheng.worker.main import bisheng_celery
 @bisheng_celery.task(name="runtime_audit_export", acks_late=True, reject_on_worker_lost=True)
 def runtime_audit_export(job_id, tenant_id):
     from bisheng.app_governance.domain.services.runtime_audit_export_service import RuntimeAuditExportService
-    from bisheng.core.context.tenant import tenant_execution_scope
+    from bisheng.worker.tenant_context import durable_workload_scope
 
-    with tenant_execution_scope(tenant_id):
+    with durable_workload_scope("export", job_id, tenant_id):
         return run_async_task(lambda: RuntimeAuditExportService().run(job_id, tenant_id))
 
 

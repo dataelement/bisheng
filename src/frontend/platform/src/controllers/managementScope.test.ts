@@ -15,5 +15,5 @@ it.each([
 it('preserves shared temporary uploads and independent public execution', () => {
   expect(requiresManagementScope('POST', '/api/v1/knowledge/upload')).toBe(false);
   expect(requiresManagementScope('POST', '/api/v1/public/workflow/flow-a/run')).toBe(false);
-  expect(requiresManagementScope('GET', '/api/v1/guest-link/workflow/flow-a')).toBe(false);
+  expect(requiresManagementScope('GET', '/api/v1/guest-link/workflow/flow-a')).toBe(true);
 });

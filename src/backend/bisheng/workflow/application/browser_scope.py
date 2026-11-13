@@ -11,9 +11,19 @@ from bisheng.workflow.domain.repositories.creation_repository import CreationRep
 
 
 @asynccontextmanager
-async def browser_workflow_scope(identity, workflow_id: str):
+async def browser_workflow_scope(identity, workflow_id: str, *, admitted=None):
     credential_tenant = getattr(identity, "_dsh_web_session_tenant_id", None)
-    if credential_tenant is not None:
+    if admitted is not None:
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        if admitted.user_id != identity.user_id or admitted.tenant_id != get_current_tenant_id():
+            raise UnAuthorizedError()
+        actor = identity
+        target = admitted.tenant_id
+        view = (
+            management_tenant_scope(target) if admitted.is_super and admitted.source != "credential" else nullcontext()
+        )
+    elif credential_tenant is not None:
         actor = identity
         target = credential_tenant
         view = nullcontext()

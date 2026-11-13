@@ -45,3 +45,17 @@ async def test_unknown_qualification_rejects_without_replacing_positive_cache(mo
     with pytest.raises(AdminScopeUnavailableError):
         await _check_is_global_super(191, role_ids=[], force_refresh=True)
     redis.aset.assert_not_awaited()
+
+
+async def test_downstream_check_keeps_the_current_admitted_decision(monkeypatch):
+    from bisheng.common.request_scope import admitted_request_scope
+    from bisheng.core.cache import redis_manager
+
+    cache = AsyncMock()
+    monkeypatch.setattr(redis_manager, "get_redis_client", cache)
+    token = admitted_request_scope.set(SimpleNamespace(user_id=191, is_super=False))
+    try:
+        assert await _check_is_global_super(191) is False
+        cache.assert_not_awaited()
+    finally:
+        admitted_request_scope.reset(token)

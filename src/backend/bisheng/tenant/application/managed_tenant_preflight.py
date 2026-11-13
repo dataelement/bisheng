@@ -71,8 +71,22 @@ async def inspect_managed_tenant(tenant_id, user_ids=(), limit=100):
             row["permission_mirror"] = snapshot.projection_state if snapshot else "MISSING_OR_UNDECIDABLE"
     except Exception as exc:
         report["permission_inventory"] = {"state": "UNKNOWN", "error_type": type(exc).__name__}
+    try:
+        report["context_relationships"] = await inspect_context_ownership(tenant_id, limit=limit)
+    except Exception as exc:
+        from loguru import logger
+
+        logger.opt(exception=True).warning("Read-only relationship inventory incomplete")
+        report["context_relationships"] = {"state": "UNKNOWN", "error_type": type(exc).__name__}
+    report["historical_compatibility_verified"] = False
     report["fga_verification"] = "NOT_RUN"
     report["people"] = people
     report["read_only"] = True
     report["historical_ready_rows"] = "READY is a migration default, not proof of historical permission completeness"
     return report
+
+
+async def inspect_context_ownership(tenant_id, *, limit=100, offset=0):
+    from bisheng.tenant.domain.repositories.context_preflight import TenantContextPreflightRepository
+
+    return await TenantContextPreflightRepository.inventory(tenant_id, limit=limit, offset=offset)

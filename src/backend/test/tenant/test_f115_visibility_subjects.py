@@ -19,7 +19,7 @@ async def test_current_directory_filters_inactive_and_keeps_usersets(monkeypatch
     directory._summary_queries = SimpleNamespace(
         load=AsyncMock(
             return_value={
-                ("department", "3"): SimpleNamespace(tenant_id=60, name="Dept"),
+                ("department", "3"): SimpleNamespace(business_tenant_id=60, storage_tenant_id=1, name="Dept"),
                 ("user_group", "4"): SimpleNamespace(tenant_id=60, group_name="Group"),
             }
         )

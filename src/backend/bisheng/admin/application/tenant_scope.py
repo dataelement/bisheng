@@ -23,6 +23,12 @@ class EffectiveManagementScope:
 async def resolve_management_scope(
     user_id: int, *, is_super: bool, for_write: bool = False
 ) -> EffectiveManagementScope:
+    from bisheng.common.request_scope import get_admitted_request_scope
+
+    admitted = get_admitted_request_scope()
+    if admitted is not None and admitted.user_id == user_id:
+        target = admitted.tenant_id if is_super else admitted.home_tenant_id
+        return EffectiveManagementScope(target, "selected" if is_super else "own", None)
     value = await TenantScopeService.get_scope(user_id, is_super=is_super, for_write=for_write)
     tenant_id = value.get("scope_tenant_id")
     if type(tenant_id) is not int or tenant_id <= 0 or value.get("source") not in {"selected", "own"}:
@@ -38,6 +44,11 @@ def require_expected_management_tenant(expected: str | None, scope: EffectiveMan
 
 
 async def current_admin_scope(user_id: int) -> int:
+    from bisheng.common.request_scope import get_admitted_request_scope
+
+    admitted = get_admitted_request_scope()
+    if admitted is not None and admitted.user_id == user_id:
+        return admitted.tenant_id
     return (await TenantScopeService.get_scope(user_id))["scope_tenant_id"]
 
 

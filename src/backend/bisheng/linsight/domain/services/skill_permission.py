@@ -12,8 +12,11 @@ class SkillPermissionAdapter:
         self.runtime = runtime
         self.repository = repository or SkillPermissionRepository()
 
+    async def load_permission_record(self, *, resource_id):
+        return await self.repository.get(int(resource_id)) if resource_id.isdigit() else None
+
     async def resolve_permission_target(self, *, resource_id, actor, action):
-        row = await self.repository.get(int(resource_id)) if resource_id.isdigit() else None
+        row = await self.load_permission_record(resource_id=resource_id)
         if row is None or row.tenant_id != actor.current_tenant_id:
             raise PermissionInvalidResourceError()
         owner_user_id = int(getattr(row, "owner_user_id", 0) or 0)

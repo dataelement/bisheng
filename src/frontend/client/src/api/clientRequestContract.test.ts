@@ -68,7 +68,7 @@ it('runs maintenance handling for a binary business error before marking it hand
 
 it.each([403, 11001])('preserves global handling for binary business error %s', async code => {
   const previous = window.location;
-  const location = { href: previous.href, pathname: previous.pathname };
+  const location = { href: previous.href, pathname: previous.pathname, origin: previous.origin };
   Object.defineProperty(window, 'location', { configurable: true, value: location });
   const blob = new Blob([JSON.stringify({ status_code: code, status_message: 'global failure' })], { type: 'application/json' });
   transport.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: blob });

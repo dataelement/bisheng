@@ -273,6 +273,13 @@ async def _check_is_global_super(
     """
     if not user_id:
         return False
+    from bisheng.common.request_scope import get_admitted_request_scope
+
+    admitted = get_admitted_request_scope()
+    if admitted is not None and admitted.user_id == user_id:
+        # Downstream legacy helpers must not reintroduce an older positive
+        # marker after the route has already established current identity.
+        return admitted.is_super
     cache_key = f"user:{user_id}:is_super"
     try:
         from bisheng.core.cache.redis_manager import get_redis_client

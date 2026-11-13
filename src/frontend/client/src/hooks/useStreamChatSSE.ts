@@ -1,3 +1,4 @@
+import { prepareBrowserHeaders, translateApiErrorMessage } from "~/api/request";
 /**
  * Generic SSE hook for the "stream" chat format used by channel, file, and folder chat.
  *
@@ -155,7 +156,16 @@ export default function useStreamChatSSE(
             onEnd();
         });
 
-        sse.stream();
+        void prepareBrowserHeaders('POST', sseUrl).then(headers => {
+            if (finished) return;
+            sse.headers = {...sse.headers, ...headers};
+            sse.stream();
+        }).catch(error => {
+            if (finished) return;
+            finished = true;
+            onError(translateApiErrorMessage(error));
+            onEnd();
+        });
 
         return () => {
             finished = true;

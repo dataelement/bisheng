@@ -1,7 +1,8 @@
 """F062 router composition; endpoint modules own the dedicated auth policies."""
 
-from fastapi import APIRouter
-
+from bisheng.common.request_scope import RequestScope as S
+from bisheng.common.request_scope import ScopedAPIRouter as APIRouter
+from bisheng.common.request_scope import scope_overrides
 from bisheng.dsh.api.endpoints.admin import router as admin_router
 from bisheng.dsh.api.endpoints.apps import router as apps_router
 from bisheng.dsh.api.endpoints.capabilities import router as capability_router
@@ -21,25 +22,27 @@ from bisheng.dsh.api.endpoints.unified_policy import router as unified_policy_ro
 from bisheng.dsh.api.endpoints.web_session import router as web_session_router
 from bisheng.dsh.api.endpoints.work import router as work_router
 
+scope_overrides(unified_policy_router, S.IDENTITY, "personal_credits")
+scope_overrides(settings_router, S.IDENTITY, "browser_config")
 router = APIRouter()
-router.include_router(skill_center_router)
-router.include_router(local_auth_router)
-router.include_router(capability_router)
-router.include_router(work_router)
-router.include_router(unified_policy_router)
-router.include_router(web_session_router)
-router.include_router(content_safety_router)
+router.include_router(skill_center_router, request_scope=S.CREDENTIAL)
+router.include_router(local_auth_router, request_scope=S.CREDENTIAL)
+router.include_router(capability_router, request_scope=S.CREDENTIAL)
+router.include_router(work_router, request_scope=S.CREDENTIAL)
+router.include_router(unified_policy_router, request_scope=S.TENANT)
+router.include_router(web_session_router, request_scope=S.CREDENTIAL)
+router.include_router(content_safety_router, request_scope=S.CREDENTIAL)
 
 compatibility_router = APIRouter(prefix="/api")
-compatibility_router.include_router(local_auth_router)
-router.include_router(self_router)
-router.include_router(identity_router)
-router.include_router(model_router)
-router.include_router(admin_router)
-router.include_router(settings_router)
-router.include_router(model_audit_router)
-router.include_router(model_audit_title_router)
-router.include_router(model_audit_feedback_router)
-router.include_router(tool_router)
-router.include_router(mobile_router)
-router.include_router(apps_router)
+compatibility_router.include_router(local_auth_router, request_scope=S.CREDENTIAL)
+router.include_router(self_router, request_scope=S.IDENTITY)
+router.include_router(identity_router, request_scope=S.CREDENTIAL)
+router.include_router(model_router, request_scope=S.CREDENTIAL)
+router.include_router(admin_router, request_scope=S.TENANT)
+router.include_router(settings_router, request_scope=S.PLATFORM)
+router.include_router(model_audit_router, request_scope=S.TENANT)
+router.include_router(model_audit_title_router, request_scope=S.CREDENTIAL)
+router.include_router(model_audit_feedback_router, request_scope=S.CREDENTIAL)
+router.include_router(tool_router, request_scope=S.CREDENTIAL)
+router.include_router(mobile_router, request_scope=S.CREDENTIAL)
+router.include_router(apps_router, request_scope=S.CREDENTIAL)

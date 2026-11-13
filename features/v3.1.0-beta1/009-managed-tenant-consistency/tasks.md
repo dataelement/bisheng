@@ -542,3 +542,73 @@ T048本地集成复核已完成并按用户明确授权合并；T047真实HTTP/�
 - [ ] **T097**（现场验收）：待专用身份/数据及匹配版本部署后验证HTTP、浏览器、MySQL/DM8及网关；禁止使用116已有业务数据代替。文件：`features/v3.1.0-beta1/009-managed-tenant-consistency/e2e-checklist.md`、`features/v3.1.0-beta1/009-managed-tenant-consistency/test-cases.md`。依赖：T096。 覆盖 AC: AC-41, AC-42, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48。
 
 T094打勾表示完成用例编写及执行尝试，端到端结果仍为PARTIAL（部分验证）；T097和旧T047保持待执行，未将跳过标为现场通过。任务自审和复盘偏差见[第一阶段审查](phase1-code-review.md)，实际验证结果见[第一阶段交付](phase1-delivery.md)。
+
+## 第二、三阶段（2026-11-14）
+
+用户授权继续完成，沿统一方案；历史修数与行政承接不纳入。以下为增量业务链依赖，原子文件步骤在交付记录保留。目标头/登记/流的新增测试已观察先红后绿，历史关系与任务恢复等为实现后补充，不能追记全量测试先行。组织页边界已由用户明确确认为所选租户挂载子树。实现及验证见phase23-delivery.md；真实现场验收单列。
+
+- [ ] T098：范围登记和继承测试；文件test/admin/test_request_scope_registry.py；覆盖 AC: AC-49, AC-58。
+- [ ] T099：准入/流及目标负向测试；文件test/admin/test_request_scope_admission.py、test/permission/test_management_target_boundary.py；覆盖 AC: AC-50, AC-52, AC-53。
+- [x] T100：通用元数据与选路后准入；文件common/request_scope.py、admin/application/request_admission.py；依赖T098、T099。
+- [x] T101：显式范围自举和管理证明；文件admin/api/endpoints/request_scope.py、admin/api/router.py；依赖T100。
+- [x] T102：真实身份复用及严格选择；文件user/domain/services/auth.py、admin/domain/services/tenant_scope.py；依赖T101。
+- [x] T103：根路由/生命周期和CORS；文件api/router.py、main.py；依赖T102。
+- [x] T104：混合范围组接线；文件dsh/api/router.py、open_api/api/router.py；依赖T103。
+- [x] T105：应用和审批组例外；文件app_runtime/api/router.py、approval/api/router.py；依赖T103。
+- [x] T106：租户身份例外/冻结事实复用；文件tenant/api/router.py、admin/application/tenant_scope.py；依赖T103。
+- [x] T107：资源动作前的目标边界；文件permission/application/business_authorization.py、resource_authorization.py；依赖T099。
+- [x] T108：浏览器连接不重读选择；文件workflow/application/browser_scope.py、api/v1/workflow.py；依赖T100。
+- [x] T109：统一前端范围会话及元数据生成；文件packages/api-client/src/browserScope.ts、backend/scripts/export_request_scopes.py；依赖T103。
+- [x] T110：前端并发自举/外部URL测试；文件packages/api-client/src/browserScope.test.ts；覆盖 AC: AC-51, AC-58；依赖T109。
+- [x] T111：Platform请求准入；文件controllers/managementScope.ts、controllers/request.ts；依赖T109。
+- [x] T112：切换未知重读/原生流；文件controllers/API/admin.ts、controllers/requestStream.ts；依赖T111。
+- [x] T113：Client请求准入；文件client/src/api/request.ts；依赖T109。
+- [x] T114：Client对话SSE；文件hooks/useAiChatSSE.ts、hooks/useStreamChatSSE.ts；依赖T113。
+- [x] T115：Client任务SSE；文件hooks/useLinsightManager.tsx；依赖T113。覆盖 AC: AC-51, AC-52。
+- [x] T116：移除退役用户组资源前端残留；文件controllers/API/pro.ts、components/Pro/FlowControl.tsx；依赖T111。
+- [x] T117：历史关系只读盘点；文件tenant/domain/repositories/context_preflight.py；覆盖 AC: AC-57。
+- [x] T118：预检应用入口/命令；文件tenant/application/managed_tenant_preflight.py、scripts/managed_tenant_preflight.py；依赖T117。
+- [x] T119：工作流/导出持久目标事实；文件workflow/domain/repositories/creation_repository.py、app_governance/domain/repositories/runtime_audit_export_repository.py；依赖T100。
+- [x] T120：任务消息和执行体共同围栏；文件worker/tenant_context.py、worker/workflow/tasks.py；依赖T119。
+- [x] T121：导出执行；文件worker/runtime_audit/tasks.py；依赖T120。覆盖 AC: AC-56。
+- [x] T122：网关资源/部门窄证明；文件admin/application/gateway_scope.py；依赖T107。
+- [x] T123：网关独立工作树的范围声明、后端证明和管理控制器接线及Java回归；依赖T122，具体Java文件步骤在网关交付记录；不恢复旧用户组资源，不改历史网关表。
+- [x] T124：按用户确认接入所选租户挂载子树，含Root排除子租户、目录存储翻译及账号/角色边界；回归见T126/T127。
+- [x] T125：生成资料一致性检查、后端/两前端/网关定向回归、架构及文档自审；依赖T098～T124，真实环境端到端单列待执行。
+
+
+补充原子落点（以下为验收关系，不追记为全部测试先行；原T115/T117/T121/T122/T123为业务链汇总，测试与实现分开）：
+
+- [x] T126（测试）：组织边界、真实SQL/HTTP、兼属及账号初始化回归；文件test/department/test_management_directory_scope.py；覆盖AC-59。
+- [x] T127（测试）：范围自举/切换审计未知；文件test/admin/test_request_scope_bootstrap.py；覆盖AC-51。
+- [x] T128（实现）：目录范围事实/仓储；文件department/domain/schemas/directory_scope.py、domain/repositories/directory_repository.py。
+- [x] T129（实现）：组织局部存储作用域及业务数据归位；文件department/domain/services/directory_scope.py、department_service.py。
+- [x] T130（实现）：组织API依赖/路由；文件department/api/dependencies.py、api/router.py。
+- [x] T131（实现）：组织搜索SQL和计数裁剪；文件department/domain/repositories/organization_search_repository.py、management_search_repository.py。
+- [x] T132（实现）：既有规范所有者算法提供归档目录事实；文件department/domain/repositories/policy_scope_repository.py；活跃角色事实合同不变。
+- [x] T133（实现）：账号只操作所选租户真实主属；文件user/application/management_subject.py、user/api/user.py。
+- [x] T134（实现）：账号检索/创建初始化；文件user/domain/repositories/management_search_repository.py、domain/services/user.py。
+- [x] T135（实现）：已知部门身份展示跨模块端口/本人主部门；文件department/application/directory.py、department/api/endpoints/department.py。
+- [x] T136（实现）：授权展示与部门userset事实；文件tenant/domain/repositories/permission_subject_repository.py、domain/services/f048_permission_subject.py。
+- [x] T137（实现）：变量父资源/版本和动作校验；文件workflow/application/variables.py、domain/repositories/variable_repository.py。
+- [x] T138（API）：变量入口接线；文件api/v1/variable.py。
+- [x] T139（测试）：变量跨租户、混批、伪造所有者及拒绝；文件test/workflow/test_variable_tenant_boundary.py。
+- [x] T140（实现）：技能权限端口补齐负向归属读取；文件linsight/domain/services/skill_permission.py。
+- [x] T141（测试）：Java后端证明/统一过滤器；文件gateway的DshSafetyAdminClientTest.java、ManagementBoundaryFilterTest.java。
+- [x] T142（实现）：Java声明和选路过滤器；文件gateway的scope/RequestBoundary.java、ManagementBoundaryFilter.java。
+- [x] T143（实现）：Java请求证明及DSH接线；文件gateway的client/DshSafetyAdminClient.java、controller/DshSensitivePolicyController.java。
+- [x] T144（实现）：Java敏感词与部门限流接线；文件gateway的controller/SensitiveWordsController.java、DepartmentLimitController.java。
+- [x] T145（实现）：Java旧组入口退役；文件gateway的controller/UserGroupController.java、GroupResourceController.java。
+- [x] T146（实现）：Java公开协议声明；文件gateway的controller/OauthController.java、LicenseController.java。
+- [x] T147（实现）：Java旧拦截日志显式平台范围；文件gateway的controller/BlockRecordController.java。
+- [x] T148（测试）：历史关系SQL/扩展SQL目录；文件test/tenant/test_context_preflight.py。
+- [x] T149（测试）：Client请求兼容及SSE异步准备；文件clientRequestContract.test.ts、useAiChatSSE.failure.test.ts。
+- [x] T150（测试）：原生流拒绝错目标；文件platform/controllers/requestStream.test.ts。
+- [x] T151（持续集成）：登记/生成资料/边界回归门禁；文件.github/workflows/tenant-context-quality.yml。
+- [x] T152（端到端）：更新新目标合同和新增读取/本人身份用例，执行尝试12跳过；文件test/e2e/test_e2e_managed_tenant_consistency.py；不代表现场通过。
+- [x] T153（文档/自审）：增量设计、交付和验证记录；文件phase23-delivery.md、phase23-code-review.md。T125指本地完成，不指整体质量门禁全绿或现场通过。
+- [ ] T154（现场验收）：匹配部署后执行两前端/Java/Worker/Redis/OpenFGA/MySQL/DM8/存储及真实历史只读盘点；文件e2e-checklist.md、test-cases.md；覆盖AC-49～59。未部署、未推送。
+
+- [x] T155（文档）：增量设计与现状设计同步；文件phase23-design.md、design.md。
+- [x] T156（测试）：消息持久目标恢复/拒绝与合法平台任务；文件test/tenant/test_durable_task_scope.py。
+- [x] T157（测试）：网关业务所有者/旧角色回退负向；文件test/admin/test_gateway_scope.py。

@@ -391,7 +391,9 @@ async def workflow_ws(
     login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
     try:
-        async with browser_workflow_scope(login_user, workflow_id) as execution_user:
+        async with browser_workflow_scope(
+            login_user, workflow_id, admitted=getattr(websocket.state, "admitted_request", None)
+        ) as execution_user:
             await require_business_action(
                 execution_user,
                 resource_type="workflow",
