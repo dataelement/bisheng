@@ -367,7 +367,7 @@
   **覆盖 AC**: AC-04, AC-39, AC-42
   **依赖**: T044
 
-- [ ] **T046**: 整理内容处理的实现
+- [x] **T046**: 整理内容处理的实现
   **文件**: `src/backend/bisheng/memory/domain/services/consolidation_content.py`、`src/backend/bisheng/memory/domain/services/consolidation_prompt.py`
   **逻辑**: 读增量消息并按场景筛选；组织提示词；经 `MemoryLLM` 调用；候选过 `guard`；与现有有效条目比对后产出"新增、取代、调整常驻"的操作清单，交 T044 在事务里执行。
   **测试**: T045 全部通过
