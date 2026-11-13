@@ -2,6 +2,7 @@ import base64
 import hashlib
 import os
 import tempfile
+import threading
 import uuid
 
 from e2b.sandbox.filesystem.filesystem import EntryInfo, FileType, WriteEntry
@@ -27,6 +28,8 @@ SIZE_AUTOPUSH = 5 * 1024 * 1024  # 5 MB
 SIZE_INLINE = 1 * 1024 * 1024  # 1 MB
 
 _SANDBOX_ROOT = "/home/user/"
+# files.list depth for the copy-out walk; output/<sub>/<file> needs more than the default 1.
+_WALK_DEPTH = 10
 
 
 def _log_text(value) -> str:
@@ -92,6 +95,9 @@ class E2bCodeExecutor(BaseExecutor):
         # the sandbox so identical files are not re-pushed across runs.
         self.workspace_backend = kwargs.get("workspace_backend")
         self._pushed_md5: set[str] = set()
+        # A kept sandbox is shared by every call of this executor; parallel tool calls
+        # would otherwise race on the lazy init and on each other's copy-out diff.
+        self._run_lock = threading.Lock()
 
         if self.file_list:
             new_file_list = []
@@ -183,20 +189,23 @@ class E2bCodeExecutor(BaseExecutor):
         :return: dict with ``results``/``new_files`` (and ``copy_in_hint`` when a
             large file was used but not declared).
         """
-        required_files = required_files or []
+        with self._run_lock:
+            return self._run_locked(code, required_files or [])
+
+    def _run_locked(self, code: str, required_files: list[str]) -> dict:
         if self.sandbox is None:
             self.init_sandbox()
         try:
             # copy-in: stage the working set into the sandbox
             copy_in_hint = self._copy_in(required_files)
             # snapshot AFTER copy-in so staged inputs are not mistaken for products
-            pre_paths = self._snapshot_paths()
+            pre_snapshot = self._snapshot_paths()
 
             execution = self.sandbox.run_code(code)
             results, file_list = self.parse_results(execution.results)
 
-            # copy-out: enumerate new files vs the pre-run snapshot
-            new_files = self._copy_out(pre_paths)
+            # copy-out: enumerate new and changed files vs the pre-run snapshot
+            new_files = self._copy_out(pre_snapshot, publish=not execution.error, file_list=file_list)
 
             result = {
                 "results": results,
@@ -251,19 +260,25 @@ class E2bCodeExecutor(BaseExecutor):
             )
         return None
 
-    def _snapshot_paths(self) -> set:
-        """Set of sandbox file paths before a run, for copy-out diffing."""
-        return {entry.path for entry in self._walk_sandbox()}
+    def _snapshot_paths(self) -> dict:
+        """``{sandbox path: (size, modified_time)}`` before a run, for copy-out diffing."""
+        return {entry.path: self._entry_meta(entry) for entry in self._walk_sandbox()}
 
-    def _copy_out(self, pre_paths: set) -> list[dict]:
-        """Enumerate files created by the run and write products to the workspace.
+    @staticmethod
+    def _entry_meta(entry: EntryInfo) -> tuple:
+        return getattr(entry, "size", None), getattr(entry, "modified_time", None)
+
+    def _copy_out(self, pre_snapshot: dict, publish: bool = False, file_list: list | None = None) -> list[dict]:
+        """Enumerate files created or changed by the run and write them to the workspace.
 
         ``output/`` prefix => product (delivered); ``scratch/`` => intermediate.
-        Returns ``[{path, size, is_product}]`` for each new file.
+        Returns ``[{path, size, is_product}]`` for each such file. With ``publish``
+        (the run succeeded) and ``collect_deliverables`` on, products are also
+        uploaded and recorded, and their URLs appended to ``file_list``.
         """
         new_files: list[dict] = []
         for entry in self._walk_sandbox():
-            if entry.path in pre_paths:
+            if pre_snapshot.get(entry.path, ...) == self._entry_meta(entry):
                 continue
             rel_path = self._to_workspace_rel(entry.path)
             content = self.sandbox.files.read(entry.path, format="bytes")
@@ -274,13 +289,34 @@ class E2bCodeExecutor(BaseExecutor):
             if self.workspace_backend is not None:
                 # Large products are pointer-tracked by the backend; small ones inlined.
                 self.workspace_backend.write(rel_path, content)
+            if publish and is_product and self.collect_deliverables:
+                url = self._publish_product(rel_path, content)
+                if url and file_list is not None:
+                    file_list.append(url)
         return new_files
 
+    def _publish_product(self, rel_path: str, content: bytes) -> str:
+        """Upload one sandbox product to object storage and record it as a deliverable."""
+        ext = os.path.splitext(rel_path)[-1]
+        fd, tmp_path = tempfile.mkstemp(suffix=ext)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(content)
+            url = self.upload_minio(f"{uuid.uuid4().hex}{ext}", tmp_path)
+            self._record_deliverable(rel_path, tmp_path, url)
+            return url
+        except Exception:
+            logger.exception("e2b: publishing {} failed", rel_path)
+            return ""
+        finally:
+            os.unlink(tmp_path)
+
     def _walk_sandbox(self) -> list[EntryInfo]:
-        """Flat list of all (non-hidden) file entries in the sandbox."""
+        """Flat list of all (non-hidden) file entries in the sandbox, subdirectories included."""
         files: list[EntryInfo] = []
-        for entry in self.sandbox.files.list("./"):
-            if entry.name.startswith("."):
+        for entry in self.sandbox.files.list("./", depth=_WALK_DEPTH):
+            rel_parts = self._to_workspace_rel(entry.path).split("/")
+            if any(part.startswith(".") for part in rel_parts):
                 continue
             if getattr(entry, "type", FileType.FILE) == FileType.FILE or entry.type == "file":
                 files.append(entry)

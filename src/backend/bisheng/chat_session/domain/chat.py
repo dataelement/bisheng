@@ -217,10 +217,27 @@ class ChatSessionService:
         account.
         """
         owner = await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
+        return await ChatSessionService._sign_attachment(chat_id, file_id, owner)
 
+    @staticmethod
+    async def resolve_audit_attachment_url(chat_id: str, file_id: str) -> str:
+        """Sign a code-interpreter file of a conversation for an auditor.
+
+        The caller has already checked the audit scope. User uploads are not
+        part of what an auditor may download, so only generated files are found.
+        """
+        owner = await MessageSessionDao.async_get_one(chat_id)
+        if owner is None:
+            raise NotFoundError.http_exception()
+        return await ChatSessionService._sign_attachment(chat_id, file_id, owner, only_source="code_interpreter")
+
+    @staticmethod
+    async def _sign_attachment(chat_id: str, file_id: str, owner, *, only_source: str | None = None) -> str:
         messages = await WorkflowFileRepository.attachment_messages(chat_id)
         for attachment in ChatSessionService._attachment_objects(messages, owner):
             if str(attachment.get("file_id")) != str(file_id):
+                continue
+            if only_source is not None and attachment.get("source") != only_source:
                 continue
             object_name = attachment.get("object_name")
             if attachment.get("_workflow_image") and attachment.get("state") != "ready":

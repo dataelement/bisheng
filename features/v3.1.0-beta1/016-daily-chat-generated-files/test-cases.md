@@ -9,7 +9,7 @@
 - 目标版本与构建：v3.1.0-beta1 / 待实现。
 - 其他依据：116 报障会话 `1bf1895760984458a9f58a9a757edc5a`（下载 404 与可下载地址交替出现）。
 - 代码核对：`feat/3.1.0-beta1` 工作区 HEAD（2026-11-13）。已核对的现状为：`ToolExecutor.parse_preset_tool_params`、`BaseExecutor._publish_generated_files` / `upload_minio`、`promote_chat_attachments`、`ChatSessionService.resolve_attachment_url`、`AuditLogService.assert_session_in_audit_scope`、client `AiMessageBubble` / `ChatHistoryFileRow` / `Markdown`、platform `dailyChatDetail`。新行为均为规格推导，未实现。
-- 覆盖范围：生成与展示主链路、7 天后可下载、正文链接、会话本人与审计范围的权限边界、内容安全与停止生成、深度研究不回归。E2B、历史回填、分享页下载在范围外，不设用例。
+- 覆盖范围：生成与展示主链路、7 天后可下载、正文链接、会话本人与审计范围的权限边界、内容安全与停止生成、深度研究不回归。E2B 接入由 `test/sandbox/test_e2b_deliverables.py` 单测覆盖，116 验收时如环境配了 E2B，按 TC-DCF-001 的步骤复测一次。历史回填、分享页下载在范围外，不设用例。
 
 ## 环境、账号与测试数据
 
