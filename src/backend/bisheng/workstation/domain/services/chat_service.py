@@ -2696,7 +2696,14 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
     # failures stay best-effort here: the client's start-execute is the fallback.
     from bisheng.workstation.domain.services.task_submit_service import submit_task_turn
 
-    _session, session_version = await submit_task_turn(data, login_user)
+    from bisheng.linsight.domain.services.memory_turns import register_memory_session
+
+    # F132: this entry is login-state only (the Open API forces task_mode off on
+    # the daily route and submits through its own service), so it registers the
+    # conversation for long-term memory before the run is queued.
+    _session, session_version = await submit_task_turn(
+        data, login_user, on_session_created=lambda s, _v: register_memory_session(s.chat_id, login_user)
+    )
 
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode

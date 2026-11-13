@@ -33,6 +33,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
+from bisheng.linsight.domain.services.memory_turns import LinsightMemoryRound
 from bisheng.linsight.domain.services.binary_content_guard import CODE_INTERPRETER_TOOL
 from bisheng.linsight.domain.services.resilience_middleware import _MAX_STATE_ONLY_REFUNDS
 from bisheng.linsight.domain.services.state_message_manager import (
@@ -244,6 +245,9 @@ class LinsightWorkflowTask:
         self._has_code_interpreter: bool = False
         self.session_version_id: str | None = None
         self.llm: BaseChatModel | None = None  # For storageLLMInstances
+        # F132: long-term memory state of this run's round (begin at round start,
+        # end once in the entry's finally; a no-op for unregistered / unattended runs).
+        self._memory = LinsightMemoryRound()
 
     # ==================== Resource Management ====================
 
@@ -397,6 +401,7 @@ class LinsightWorkflowTask:
             logger.exception(f"Unknown error: session_version_id={self.session_version_id}")
             await self._handle_execution_error(e)
         finally:
+            await self._end_memory_round()
             if tenant_context_token is not None:
                 current_tenant_id.reset(tenant_context_token)
 
@@ -479,6 +484,7 @@ class LinsightWorkflowTask:
             logger.error(f"Unknown error on resume: session_version_id={self.session_version_id}, error={e}")
             await self._handle_execution_error(e)
         finally:
+            await self._end_memory_round()
             if tenant_context_token is not None:
                 current_tenant_id.reset(tenant_context_token)
 
@@ -527,6 +533,8 @@ class LinsightWorkflowTask:
         # reality (and the worker-startup crash sweep, which scans IN_PROGRESS,
         # again covers it while a worker is genuinely driving it).
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
+        # F132: an ask_user resume continues the round that parked (same turn id).
+        await self._begin_memory_round(session_model, resume=True)
 
         self.llm = await self._get_round_llm(session_model)
         # The previous round deleted file_dir. Put this session's output/ back
@@ -648,6 +656,7 @@ class LinsightWorkflowTask:
             logger.error(f"Unknown error on continue: session_version_id={self.session_version_id}, error={e}")
             await self._handle_execution_error(e)
         finally:
+            await self._end_memory_round()
             if tenant_context_token is not None:
                 current_tenant_id.reset(tenant_context_token)
 
@@ -658,6 +667,8 @@ class LinsightWorkflowTask:
         # A continued round starts from COMPLETED; flip back to IN_PROGRESS so the
         # frontend leaves the "done" state and re-opens the WS event stream.
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
+        # F132: a /continue follow-up is a new round, never auto-consolidated (P-01 option C).
+        await self._begin_memory_round(session_model, follow_up=True)
 
         self.llm = await self._get_round_llm(session_model)
         # Same session workspace, new local dir: output/ from the previous round
@@ -730,6 +741,8 @@ class LinsightWorkflowTask:
         # final answer. The live state (running / waiting_for_user_input) is read
         # by SV from the linsight detail endpoints on reload.
         await linsight_execute_utils.persist_task_turn_message(session_model)
+        # F132: the round starts once its task message row exists (summary row bound to it).
+        await self._begin_memory_round(session_model)
 
         # Cross-turn continuity: seed this turn's workspace from the previous turn
         # so a follow-up (e.g. "convert the report to HTML") can read and build on
@@ -785,6 +798,20 @@ class LinsightWorkflowTask:
         else:
             await self._handle_user_termination(session_model)
             raise UserTerminationError("Task terminated by user")
+
+    # ==================== Long-term memory (F132) ====================
+
+    def _memory_round(self) -> LinsightMemoryRound:
+        # Tests build the executor with __new__; keep the hooks safe there.
+        if getattr(self, "_memory", None) is None:
+            self._memory = LinsightMemoryRound()
+        return self._memory
+
+    async def _begin_memory_round(self, session_model: LinsightSessionVersion, **kwargs) -> None:
+        await self._memory_round().begin(session_model, **kwargs)
+
+    async def _end_memory_round(self) -> None:
+        await self._memory_round().end(getattr(self, "_waiting_for_input", False))
 
     # ==================== Session and State Management ====================
 

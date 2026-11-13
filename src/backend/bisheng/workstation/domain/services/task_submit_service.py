@@ -12,6 +12,8 @@ turn, the Open API writes nothing) and generate titles differently.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from loguru import logger
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
@@ -37,6 +39,7 @@ async def submit_task_turn(
     telemetry_source: str = "platform",
     session_name: str = "New Chat",
     strict_enqueue: bool = False,
+    on_session_created: Callable[[MessageSession, LinsightSessionVersion], Awaitable[None]] | None = None,
 ) -> tuple[MessageSession, LinsightSessionVersion]:
     """Create the task turn and hand it to the linsight queue.
 
@@ -45,6 +48,10 @@ async def submit_task_turn(
     (Open API, no browser to fall back on): an enqueue failure marks the version
     failed and raises 26068 (HTTP 503), so the caller never receives an id for a
     task that will not run.
+
+    ``on_session_created`` (F132): awaited once the conversation exists and
+    before the run is queued. Only the logged-in daily task-mode entry passes
+    it (long-term memory registration); the Open API never does.
     """
     # Local imports avoid a module-level workstation->linsight cycle.
     from bisheng.linsight.domain import utils as linsight_execute_utils
@@ -64,6 +71,8 @@ async def submit_task_turn(
         telemetry_source=telemetry_source,
         session_name=session_name,
     )
+    if on_session_created is not None:
+        await on_session_created(session, session_version)
 
     # Persist the bot task turn BEFORE enqueueing. The worker's start-time call
     # (`_execute_workflow`) is the same find-then-insert upsert with no unique
