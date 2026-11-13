@@ -172,7 +172,8 @@ async def unfrozen(session):
 
 def business_models():
     # Composition belongs to scripts. Permission repositories never infer
-    # business existence by importing these owners' tables.
+    # business existence by importing these owners' tables. Keep each owner's
+    # ID parser explicit: SQLModel AutoString does not expose python_type.
     from bisheng.channel.domain.models.channel import Channel
     from bisheng.database.models.app import App
     from bisheng.database.models.assistant import Assistant
@@ -183,29 +184,33 @@ def business_models():
     from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 
     return {
-        "knowledge_library": Knowledge,
-        "knowledge_space": Knowledge,
-        "folder": KnowledgeFile,
-        "knowledge_file": KnowledgeFile,
-        "workflow": Flow,
-        "assistant": Assistant,
-        "channel": Channel,
-        "tool": GptsToolsType,
-        "dashboard": Dashboard,
-        "app": App,
+        "knowledge_library": (Knowledge, int),
+        "knowledge_space": (Knowledge, int),
+        "folder": (KnowledgeFile, int),
+        "knowledge_file": (KnowledgeFile, int),
+        "workflow": (Flow, str),
+        "assistant": (Assistant, str),
+        "channel": (Channel, str),
+        "tool": (GptsToolsType, int),
+        "dashboard": (Dashboard, int),
+        "app": (App, str),
     }
 
 
 async def hard_missing(session, target):
     from sqlmodel import select
 
-    model = business_models().get(target["resource_type"])
-    if model is None:
+    owner = business_models().get(target["resource_type"])
+    if owner is None:
+        return False
+    model, parse_id = owner
+    raw_id = target["resource_id"]
+    if type(raw_id) is not str or not raw_id:
         return False
     # IDs are global within each owning table. An existing foreign tenant/type
     # or converted knowledge namespace is preserved, never mistaken for absent.
     try:
-        ident = int(target["resource_id"]) if model.__table__.c.id.type.python_type is int else target["resource_id"]
+        ident = parse_id(raw_id)
     except (TypeError, ValueError):
         return False
     return (await session.exec(select(model.id).where(model.id == ident).limit(1))).first() is None

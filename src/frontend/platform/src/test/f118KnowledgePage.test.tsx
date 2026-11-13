@@ -7,6 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
 import KnowledgePage from "@/pages/KnowledgePage";
@@ -36,11 +37,21 @@ vi.mock("react-i18next", () => ({
     i18n: { loadNamespaces: vi.fn(), resolvedLanguage: "en" },
   }),
 }));
-vi.mock("react-router-dom", () => ({
-  useNavigate: () => mocks.navigate,
-  useParams: () => ({}),
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
-}));
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => {
+      const navigate = actual.useNavigate();
+      return (to: string) => { mocks.navigate(to); navigate(to); };
+    },
+  };
+});
+// Isolate list authorization/pagination; the real default workspace is tested separately.
+vi.mock("@/pages/KnowledgePage/KnowledgeSpaceWorkspace", async () => {
+  const { default: KnowledgeFile } = await import("@/pages/KnowledgePage/KnowledgeFile");
+  return { KnowledgeSpaceWorkspace: ({ scope }: { scope: import("@/controllers/hooks/knowledge").KnowledgeQueryScope }) => <KnowledgeFile scope={scope} /> };
+});
 vi.mock("@/pages/KnowledgePage/sidebar/KnowledgeSpaceSidebar", () => ({
   KnowledgeSpaceSidebar: () => <aside data-testid="knowledge-space-tree" />,
 }));
@@ -268,7 +279,7 @@ function setup(extra: Record<string, unknown> = {}) {
   const draw = (value = user) => (
     <QueryClientProvider client={client}>
       <userContext.Provider value={{ user: value } as never}>
-        <KnowledgePage />
+        <MemoryRouter initialEntries={["/filelib"]}><KnowledgePage /></MemoryRouter>
       </userContext.Provider>
     </QueryClientProvider>
   );
@@ -355,7 +366,7 @@ it.each(["ordinary", "admin"])(
   },
 );
 
-it("uses ordinary SPACE listing, preserves the create menu and keeps QA as its own tab", async () => {
+it("preserves isolated list authorization, the create menu and the independent QA tab", async () => {
   const f = setup();
   render(f.draw());
   await screen.findByText("Space");
@@ -521,6 +532,20 @@ it("does not fabricate business actions for an admin row with a null action proj
   expect(
     screen.queryByRole("button", { name: "f118.defaults_title" }),
   ).toBeNull();
+});
+
+it.each(["super", "tenant-admin"])("retains the management view when %s opens a space or its configuration", async (role) => {
+  const f = setup(role === "super" ? { is_global_super: true } : { is_child_admin: true });
+  render(f.draw());
+  await screen.findByText("Space");
+  tab("f118.manage_spaces");
+  fireEvent.click(await screen.findByText("Admin space"));
+  await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/filelib/7?view=admin"));
+  expect(mocks.permission).toHaveBeenCalledWith("knowledge_space", "7");
+  fireEvent.click(screen.getByRole("button", { name: "more" }));
+  fireEvent.click(await screen.findByRole("button", { name: "f118.defaults_title" }));
+  expect(mocks.navigate).toHaveBeenCalledWith("/filelib/7?tab=defaults&view=admin");
+  expect(mocks.settings).not.toHaveBeenCalled();
 });
 
 it("retires a previous scope's row menu and late permission response", async () => {

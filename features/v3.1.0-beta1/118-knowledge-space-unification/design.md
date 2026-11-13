@@ -1000,6 +1000,8 @@ F118PermissionTupleBuilder在目标端点guard前识别封闭重复父边：仅k
 
 ### 2026-11-12 通用修复与历史准备（AC-114–117）
 
+2026-11-13修正：历史准备的Owner存在性查询在同一映射中显式声明模型和ID解析器（整数/字符串），不再依赖SQLModel AutoString未实现的`python_type`。未知类型或不可解析ID保留；存在的外租户/旧namespace行仍不能当成硬删除。真实10类资源主键查询及workflow/assistant/app的完整capture回归覆盖此边界。查询、比较和写入的逐阶段图见[迁移数据流程评审](../../../docs/reviews/f118-migration-data-flow-20261113.md)；本次不改AC-115/116清理范围。
+
 方案选择：历史层级/派生修复采用独立、显式apply的M2前准备脚本，而非Alembic数据写入、隐式启动修复或改写已冻结计划。理由是修复后原业务事实必须重新形成正式基线；已冻结来源不能被准备脚本重新解释。若后续要将准备合并成一个命令，仍需保留独立计划、备份和明确冻结边界，不能在原Run中途插入。
 
 数据流与职责：`scripts/prepare_f118_history.py`只在运维停全服务/消费者后采集当前SQL父链、mode及有限所属派生记录；SQLSession关闭后一次流式扫描FGA，仅保留选中对象及父边。0600/O_EXCL备份完整选中原行、祖先/根事实、FGA键、原pin并验SHA256，apply重读SQL/pin/下游，沿相同计划原生投影清理后修SQL。KnowledgeDocument的tenant取自实际Knowledge父行，bulk UPDATE显式约束父库所属租户；不虚构文档tenant列。父路径不改变，不补缺失授权。历史硬删除资源通过脚本层组合各Owner模型核实全局不存在；permission仓库不导入业务ORM。

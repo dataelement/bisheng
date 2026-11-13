@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import KnowledgePage from "@/pages/KnowledgePage";
 import { userContext } from "@/contexts/userContext";
@@ -14,11 +14,15 @@ vi.mock("@/controllers/request", () => ({ default: { get: mock.get }, showApiErr
 vi.mock("@/pages/KnowledgePage/KnowledgeFile", () => ({ default: ({ scope }: { scope: { view: string } }) => <p>{scope.view}-list</p> }));
 vi.mock("@/pages/KnowledgePage/KnowledgeQa", () => ({ default: () => <p>qa-list</p> }));
 vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({ KnowledgeLibraryDialog: () => null }));
-vi.mock("@/pages/KnowledgePage/components/Files", () => ({ default: (props: FilesProps) => <output data-testid="files">{JSON.stringify({ id: props.spaceId, parent: props.parentId, presentation: props.presentation })}</output> }));
+vi.mock("@/pages/KnowledgePage/components/Files", () => ({ default: (props: FilesProps) => <output data-testid="files">{JSON.stringify({ id: props.spaceId, parent: props.parentId, presentation: props.presentation, view: props.scope?.view })}</output> }));
 
 const scope = { identityKey: "user:5", tenantId: 60, managementTenantId: 60, view: "ordinary" } as const;
 const clients: QueryClient[] = [];
-function Location() { const location = useLocation(); return <output data-testid="location">{location.pathname}{location.search}</output>; }
+function Location() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return <><output data-testid="location">{location.pathname}{location.search}</output><button onClick={() => navigate(-1)}>history-back</button><button onClick={() => navigate(1)}>history-forward</button></>;
+}
 function mount(path = "/filelib") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
@@ -41,14 +45,14 @@ afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear(
 it("keeps the expanded tree and routes selected folders into the workspace file presentation", async () => {
   mount("/filelib?fileStatus=abnormal&keep=1");
   const tree = screen.getByRole("complementary");
-  fireEvent.click(await within(tree).findByRole("button", { name: "sidebar.expand Reports" }));
+  await screen.findByTestId("files");
   fireEvent.click(await within(tree).findByRole("button", { name: "Finance" }));
   await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"parent":9'));
   expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?fileStatus=abnormal&keep=1&parent_id=9");
   expect(screen.getByTestId("files")).toHaveTextContent('"presentation":"workspace"');
   expect(within(screen.getByRole("complementary")).getByRole("button", { name: "Finance" })).toHaveAttribute("aria-current", "page");
-  fireEvent.click(within(screen.getByRole("complementary")).getByRole("button", { name: "sidebar.all_spaces" }));
-  expect(await screen.findByText("ordinary-list")).toBeVisible();
+  expect(screen.queryByText("ordinary-list")).toBeNull();
+  expect(screen.queryByRole("button", { name: "sidebar.all_spaces" })).toBeNull();
 });
 
 it("opens deep folder links while preserving the independent QA and management tabs", async () => {
@@ -77,4 +81,73 @@ it("selects file content from a configuration deep link while retaining director
   fireEvent.click(await within(tree).findByRole("button", { name: "Finance" }));
   await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?fileStatus=abnormal&keep=1&parent_id=9"));
   expect(screen.getByTestId("location")).not.toHaveTextContent("tab=");
+});
+
+it("automatically opens the first sidebar space instead of rendering the ordinary space list", async () => {
+  mount();
+  expect(await screen.findByTestId("files")).toHaveTextContent('"id":7');
+  expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7");
+  expect(screen.queryByText("ordinary-list")).toBeNull();
+});
+
+it("keeps management details, list return and browser history in the admin view without loading personal navigation", async () => {
+  mount("/filelib/7?view=admin&parent_id=9&fileStatus=abnormal");
+  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"admin"');
+  expect(screen.getByRole("tab", { name: "f118.manage_spaces" })).toHaveAttribute("data-state", "active");
+  expect(screen.queryByRole("complementary")).toBeNull();
+  expect(mock.get.mock.calls.some(([url]) => /\/(department|mine|joined|list)$/.test(String(url)))).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "back" }));
+  expect(await screen.findByText("admin-list")).toBeVisible();
+  expect(screen.getByTestId("location")).toHaveTextContent("/filelib?view=admin");
+  expect(screen.queryByTestId("files")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "history-back" }));
+  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"admin"');
+  expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9&fileStatus=abnormal");
+  fireEvent.click(screen.getByRole("button", { name: "history-forward" }));
+  expect(await screen.findByText("admin-list")).toBeVisible();
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "f118.spaces" }), { button: 0, ctrlKey: false });
+  await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"view":"ordinary"'));
+  expect(screen.getByTestId("location")).not.toHaveTextContent("view=admin");
+  expect(screen.getByRole("complementary")).toBeVisible();
+});
+
+it("restores the management list directly from its URL without selecting an ordinary space", async () => {
+  mount("/filelib?view=admin");
+  expect(await screen.findByText("admin-list")).toBeVisible();
+  expect(mock.get).not.toHaveBeenCalled();
+  expect(screen.queryByTestId("files")).toBeNull();
+});
+
+it("waits for earlier navigation groups before selecting the first space", async () => {
+  let finish!: (rows: { id: number; name: string; tenant_id: number }[]) => void;
+  const pending = new Promise<{ id: number; name: string; tenant_id: number }[]>((resolve) => { finish = resolve; });
+  const fallback = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation((url: string, options?: unknown) => url.endsWith("/department") ? pending : fallback(url, options));
+  mount();
+  await screen.findByRole("button", { name: "Reports" });
+  expect(screen.queryByTestId("files")).toBeNull();
+  finish([{ id: 8, name: "Department first", tenant_id: 60 }]);
+  await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"id":8'));
+});
+
+it("shows an empty workspace when no navigation or child-only space exists", async () => {
+  mock.get.mockResolvedValue([]);
+  mock.get.mockImplementation(async (url: string) => url.endsWith("/list") ? { data: [], has_more: false, next_cursor: null } : []);
+  mount();
+  await waitFor(() => expect(mock.get).toHaveBeenCalledWith("/api/v1/knowledge/space/list", { params: { page_size: 1 } }));
+  expect(screen.queryByTestId("files")).toBeNull();
+  expect(screen.queryByText("ordinary-list")).toBeNull();
+});
+
+it("advances a child-only visible-space cursor without showing a space list", async () => {
+  const fallback = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation(async (url: string, options?: { params?: { cursor?: string } }) => {
+    if (url.endsWith("/mine") || url.endsWith("/department") || url.endsWith("/joined")) return [];
+    if (url.endsWith("/list")) return options?.params?.cursor ? { data: [{ id: 12, name: "Child grant", tenant_id: 60 }], has_more: false } : { data: [], has_more: true, next_cursor: "opaque/+==" };
+    return fallback(url, options);
+  });
+  mount();
+  await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"id":12'));
+  expect(mock.get).toHaveBeenCalledWith("/api/v1/knowledge/space/list", { params: { page_size: 1, cursor: "opaque/+==" } });
+  expect(screen.queryByText("ordinary-list")).toBeNull();
 });

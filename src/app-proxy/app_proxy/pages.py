@@ -37,6 +37,7 @@ from __future__ import annotations
 import html
 from dataclasses import dataclass
 
+from app_proxy import app_inaccessible_appearance, app_unpublished_appearance
 from app_proxy.authz import (
     DECISION_FORBIDDEN,
     DECISION_LOGIN,
@@ -46,7 +47,7 @@ from app_proxy.authz import (
     DECISION_UNAVAILABLE,
 )
 from app_proxy.config import DEFAULT_SQUARE_URL
-from app_proxy.recovery_appearance import ILLUSTRATION, STYLE
+from app_proxy.recovery_appearance import ILLUSTRATION, STATE_VIEW_MOBILE_STYLE, STYLE
 
 #: Transitional, not a verdict: the app exists and you may enter, but nothing
 #: is answering right now. Two kinds, told apart by the manager's answer rather
@@ -156,6 +157,11 @@ _LAYOUT: dict[str, _Layout] = {
     DECISION_UNAVAILABLE: _Layout(show_square=False),
     PAGE_DEPLOYING: _Layout(show_square=False),
     PAGE_RECOVERING: _Layout(show_square=False),
+}
+
+_APP_STATE_APPEARANCE = {
+    DECISION_NOT_FOUND: app_unpublished_appearance,
+    DECISION_UNAVAILABLE: app_inaccessible_appearance,
 }
 
 _CHROME: dict[str, _Chrome] = {
@@ -439,9 +445,17 @@ def render_page(
     # not-found page would make four supposedly identical renders differ, which
     # is exactly the enumeration oracle AC-29 closes.
     if request_id and (kind == DECISION_UNAVAILABLE or kind in TRANSITIONAL_KINDS):
-        hint = f'    <p class="hint">{html.escape(chrome.request_id.format(id=request_id))}</p>'
+        escaped_id = html.escape(request_id)
+        if kind == DECISION_UNAVAILABLE:
+            escaped_id = f'<span class="hint-id">{escaped_id}</span>'
+        hint = f'    <p class="hint">{html.escape(chrome.request_id).format(id=escaped_id)}</p>'
 
     refresh_meta, retry_script = _retry_markup(kind)
+    illustration, style = ILLUSTRATION, STYLE
+    appearance = _APP_STATE_APPEARANCE.get(kind)
+    if appearance is not None:
+        illustration = appearance.ILLUSTRATION
+        style += STATE_VIEW_MOBILE_STYLE + appearance.STYLE
 
     return f"""<!doctype html>
 <html lang="{_HTML_LANG[locale]}">
@@ -450,11 +464,11 @@ def render_page(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 {refresh_meta}<title>{html.escape(copy.title)}</title>
-<style>{STYLE}</style>
+<style>{style}</style>
 </head>
 <body>
   <div class="card">
-    <div class="mark">{ILLUSTRATION}</div>
+    <div class="mark">{illustration}</div>
     <h1>{html.escape(copy.title)}</h1>
 {body}
 {actions}

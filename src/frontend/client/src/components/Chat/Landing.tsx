@@ -20,7 +20,8 @@ export default function Landing({ Header, isNew, hideSubtitle = false, onStarter
 }) {
   const { data: bsConfig } = useGetBsConfig();
   const localize = useLocalize();
-  const branding = workbenchBranding(bsConfig, localize('dshChat.welcome'));
+  // Keep the headline slot empty until the workbench's branding is known.
+  const branding = bsConfig ? workbenchBranding(bsConfig, localize('dshChat.welcome')) : undefined;
   const [searchParams] = useSearchParams();
   const defaultCategory = searchParams.get('category') || 'favorites';
 
@@ -35,16 +36,18 @@ export default function Landing({ Header, isNew, hideSubtitle = false, onStarter
       <div className="dsh-chat-welcome-content">
         {/* The headline shares the native Work hero dimensions at every width. */}
         <div className="dsh-chat-headline">
-          {branding.assistantIcon.enabled && (
+          {branding?.assistantIcon.enabled && (
             <img
               className="dsh-chat-hero-mark"
               src={branding.assistantIcon.image}
               alt=""
             />
           )}
-          <h2 className="dsh-chat-headline-title">
-            {branding.welcomeMessage}
-          </h2>
+          {branding && (
+            <h2 className="dsh-chat-headline-title">
+              {branding.welcomeMessage}
+            </h2>
+          )}
         </div>
         {!hideSubtitle && bsConfig?.functionDescription?.trim() && (
           <div className="max-w-lg text-center mt-[26px] text-sm font-normal text-gray-500 leading-5">

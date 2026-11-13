@@ -1,5 +1,6 @@
+import { Button } from "@bisheng/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { useContext, useState, type ReactNode } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { userContext } from "@/contexts/userContext";
@@ -8,15 +9,16 @@ import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
 import { SpaceDetail, parseKnowledgeId } from "./detail";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
+import { useInitialSpace } from "./sidebar/useInitialSpace";
 
 interface KnowledgeSpaceWorkspaceProps {
   scope: KnowledgeQueryScope;
   routeId?: string;
-  children: ReactNode;
+  active?: boolean;
 }
 
 /** Restore the pre-homepage client layout without importing client state or APIs. */
-export function KnowledgeSpaceWorkspace({ scope, routeId, children }: KnowledgeSpaceWorkspaceProps) {
+export function KnowledgeSpaceWorkspace({ scope, routeId, active = true }: KnowledgeSpaceWorkspaceProps) {
   const { t } = useTranslation("knowledge");
   const { user } = useContext(userContext);
   const navigate = useNavigate();
@@ -29,27 +31,38 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, children }: KnowledgeS
   const invalid = routeId !== undefined && (
     spaceId === null || (parents.length > 0 && (parents.length !== 1 || parentId === null))
   );
+  const ordinary = scope.view === "ordinary";
+  const initial = useInitialSpace(scope, active && ordinary && routeId === undefined);
+  useEffect(() => {
+    if (!active || !ordinary || routeId !== undefined || !initial.space) return;
+    const next = new URLSearchParams(params);
+    next.delete("parent_id");
+    next.delete("tab");
+    next.delete("file_id");
+    navigate({ pathname: `/filelib/${initial.space.id}`, search: next.toString() }, { replace: true });
+  }, [initial.space, active, ordinary, routeId, params, navigate]);
   const canCreate = user?.is_global_super === true || user?.is_child_admin === true ||
     user?.web_menu?.includes("create_knowledge") === true;
   const handleSelect = (id: number, folderId: number | null, showFiles = false) => {
     const next = new URLSearchParams(params);
     if (showFiles) next.delete("tab");
+    next.delete("file_id");
     if (folderId === null) next.delete("parent_id");
     else next.set("parent_id", String(folderId));
     navigate({ pathname: `/filelib/${id}`, search: next.toString() });
   };
+  if (!active) return null;
   return (
     <div className="flex h-[calc(100vh-120px-var(--license-banner-h,0px))] min-h-0 min-w-0">
-      <KnowledgeSpaceSidebar
+      {ordinary && <KnowledgeSpaceSidebar
         scope={scope}
         spaceId={invalid ? undefined : spaceId ?? undefined}
         parentId={invalid ? null : parentId}
         canCreate={canCreate}
         onCreate={() => setCreateOpen(true)}
         onSelect={(id, folderId) => handleSelect(id, folderId, true)}
-        onOverview={() => navigate("/filelib")}
         onSquare={() => window.open(getWorkspaceClientUrl("/knowledge?square=1"), "_blank", "noopener,noreferrer")}
-      />
+      />}
       <main className="min-w-0 flex-1 overflow-auto px-4" aria-label={t("workspace.files")}>
         {invalid ? <p role="status">{t("f118.scope_unavailable")}</p> : spaceId !== null ? (
           <SpaceDetail
@@ -60,9 +73,12 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, children }: KnowledgeS
             presentation="workspace"
             onOpenFolder={(id) => handleSelect(spaceId, id)}
           />
-        ) : children}
+        ) : <div role="status" className="space-y-3 py-6">
+          <p>{t(initial.error ? "sidebar.load_failed" : initial.loading || initial.space ? "sidebar.loading" : "sidebar.empty")}</p>
+          {initial.error && <Button variant="text" onClick={() => { void initial.retry(); }}>{t("retry")}</Button>}
+        </div>}
       </main>
-      {canCreate && <KnowledgeLibraryDialog
+      {ordinary && canCreate && <KnowledgeLibraryDialog
         scope={scope}
         datalist={[]}
         open={createOpen}

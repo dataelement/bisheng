@@ -56,11 +56,8 @@ vi.mock("react-i18next", () => ({
     i18n: { resolvedLanguage: "en", loadNamespaces: vi.fn() },
   }),
 }));
-vi.mock("@/pages/KnowledgePage/components/Paragraphs", () => ({
-  default: () => <output data-testid="legacy-chunks" />,
-}));
-vi.mock("@/pages/KnowledgePage/useKnowledgeStore", () => ({
-  default: () => ({ isEditable: true }),
+vi.mock("@/pages/KnowledgePage/components/PreviewParagraph", () => ({
+  default: () => <output data-testid="detail-chunks" />,
 }));
 vi.mock("@/pages/KnowledgePage/components/PreviewFile", () => ({
   default: () => <output data-testid="original-preview" />,
@@ -195,6 +192,9 @@ beforeEach(() => {
       if (url.endsWith("/children"))
         return mocks.children(url, options?.params);
       if (url.endsWith("/preview")) return mocks.preview(url);
+      if (url.includes("/file/info/")) return { id: 11, file_name: "report.pdf", knowledge_id: 7, user_metadata: {} };
+      if (url.endsWith("/chunk")) return { data: [], total: 0 };
+      if (url.endsWith("/file_bbox")) return {};
       throw new Error(`unexpected API read: ${url}`);
     },
   );
@@ -466,4 +466,35 @@ it("retires a delayed abnormal page across fileStatus URL ABA", async () => {
   );
   expect(screen.queryByText("retired-abnormal.pdf")).not.toBeInTheDocument();
   expect(mocks.children).toHaveBeenCalledTimes(3);
+});
+
+it.each(["file_id=0", "file_id=11&file_id=12"])("rejects invalid file targets before reading file or root data: %s", async (query) => {
+  mount(`/filelib/7?${query}`);
+  expect(await screen.findByText("f118.scope_unavailable")).toBeVisible();
+  expect(mocks.get).not.toHaveBeenCalled();
+});
+
+it.each(["ordinary", "admin"])("opens the chunk editor in the %s view and returns to the same directory with its original filters", async (view) => {
+  user = { ...user, is_child_admin: view === "admin" };
+  const current = mount(`/filelib/7?parent_id=9&fileStatus=abnormal&keep=1${view === "admin" ? "&view=admin" : ""}`);
+  fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
+  await waitFor(() => expect(screen.getByTestId("detail-chunks")).toBeInTheDocument());
+  expect(screen.getByTestId("location")).toHaveTextContent("file_id=11");
+  fireEvent.click(screen.getByRole("button", { name: "back" }));
+  expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
+  expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9&fileStatus=abnormal&keep=1");
+  expect(screen.getByTestId("location")).not.toHaveTextContent("file_id=");
+  const views = current.client.getQueryCache().getAll().map((query) => query.queryKey[4]);
+  expect(views).toContain(view);
+  expect(views).not.toContain(view === "admin" ? "ordinary" : "admin");
+  expect(screen.getByRole("tab", { name: view === "admin" ? "f118.manage_spaces" : "f118.spaces" })).toHaveAttribute("data-state", "active");
+});
+
+it("does not turn a forged management URL into an admin scope for an ordinary user", async () => {
+  const current = mount("/filelib/7?view=admin");
+  expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
+  expect(screen.queryByRole("tab", { name: "f118.manage_spaces" })).toBeNull();
+  const keys = JSON.stringify(current.client.getQueryCache().getAll().map((query) => query.queryKey));
+  expect(keys).toContain("ordinary");
+  expect(keys).not.toContain('"admin"');
 });

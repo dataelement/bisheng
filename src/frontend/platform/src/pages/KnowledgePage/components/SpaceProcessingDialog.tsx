@@ -7,6 +7,7 @@ import { getModelListApi } from "@/controllers/API/finetune";
 import {
   knowledgeSpaceApi,
   type KnowledgeSpaceInfo,
+  type ProcessingKind,
   type OperationPrecheck,
   type ProcessingPrecheckRequest,
   type ProcessingTargetInput,
@@ -47,6 +48,7 @@ interface SpaceProcessingDialogProps {
   target?: ProcessingTargetInput;
   fileId?: number;
   includeCopies?: boolean;
+  jobKind?: ProcessingKind;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
@@ -85,6 +87,7 @@ function Content({
   target,
   fileId,
   includeCopies = false,
+  jobKind,
   onOpenChange,
   onSaved,
   presentation,
@@ -131,6 +134,7 @@ function Content({
     {
       page: jobsPage,
       page_size: 20,
+      ...(jobKind ? { kind: jobKind } : {}),
     },
   );
   const copies = useKnowledgeProcessingJobs(

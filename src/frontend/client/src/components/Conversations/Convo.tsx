@@ -203,7 +203,8 @@ export default function Conversation({
       onPointerEnter={titleReveal.reveal} onPointerLeave={titleReveal.reset}
       onFocus={titleReveal.reveal} onBlur={titleReveal.reset}
       className={cn(
-        "dsh-history-row group relative w-full content-stretch flex gap-[8px] items-center mb-1 rounded-lg shrink-0 transition-colors coarse-pointer:min-h-11 coarse-pointer:py-0",
+        "dsh-history-row group relative w-full content-stretch flex gap-[8px] items-center mb-1 rounded-lg shrink-0 transition-colors coarse-pointer:py-0",
+        compact ? "coarse-pointer:min-h-8" : "coarse-pointer:min-h-11",
         // Mobile rows: 8px left / 6px right, 8px vertical (desktop nav uses 12px/6px).
         isSmallScreen
           ? "pl-[8px] pr-[6px] py-[8px]"
@@ -261,7 +262,8 @@ export default function Conversation({
           data-testid="convo-item"
           onClick={clickHandler}
           className={cn(
-            "flex grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all coarse-pointer:min-h-11"
+            "flex grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all",
+            compact ? "coarse-pointer:min-h-8" : "coarse-pointer:min-h-11",
           )}
           title={title ?? ""}
         >
@@ -296,7 +298,7 @@ export default function Conversation({
         </a>
       )}
       {!renaming && hasDate && !isPopoverPresent && (
-        <time className="dsh-history-time" dateTime={updatedAt.toISOString()}>
+        <time className="dsh-history-time coarse-pointer:hidden" dateTime={updatedAt.toISOString()}>
           {updatedAt.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
         </time>
       )}
@@ -306,14 +308,11 @@ export default function Conversation({
       <div
         className={cn(
           "dsh-history-options",
-          isSmallScreen
-            ? "flex w-[48px] justify-end items-center shrink-0"
-            : // While running, keep the slot visible so the spinner shows without
-              // hover; otherwise reveal the options menu on hover or keyboard focus.
-              isPopoverPresent || isTaskRunning
-              ? "flex items-center"
-              : "hidden items-center group-has-[:focus-visible]:flex group-hover:flex",
-          "coarse-pointer:flex",
+          // Do not reserve space next to the date while the menu is hidden.
+          isPopoverPresent || isTaskRunning
+            ? "flex"
+            : "hidden group-has-[:focus-visible]:flex group-hover:flex",
+          "shrink-0 items-center coarse-pointer:flex coarse-pointer:gap-1",
         )}
       >
         {isTaskRunning && (
@@ -332,14 +331,14 @@ export default function Conversation({
         )}
         <div
           className={cn(
-            // When running, the menu is hover-only so it swaps in for the
-            // spinner; otherwise it always fills this (already hover-gated) slot.
+            // Keep the menu reachable on touch while the running spinner is shown.
             isTaskRunning && !isPopoverPresent
-              ? "hidden group-has-[:focus-visible]:flex group-hover:flex"
+              ? "hidden group-has-[:focus-visible]:flex group-hover:flex coarse-pointer:flex"
               : "flex",
           )}
         >
           <ConvoOptions
+            compact={compact}
             title={title}
             retainView={retainView}
             renameHandler={renameHandler}

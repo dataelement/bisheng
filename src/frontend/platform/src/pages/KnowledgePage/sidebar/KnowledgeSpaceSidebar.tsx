@@ -18,7 +18,6 @@ export interface KnowledgeSpaceSidebarProps {
   onCreate: () => void;
   onSelect: (spaceId: number, parentId: number | null) => void;
   onSquare: () => void;
-  onOverview?: () => void;
 }
 
 const sections: readonly SpaceSection[] = ["department", "created", "joined"];
@@ -172,10 +171,7 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
   const path = parents.data?.map((folder) => folder.id) ?? [];
   return (
     <aside className={`flex h-full shrink-0 flex-col border-r border-border-base bg-bg-page ${collapsed ? "w-10" : "w-72"}`} aria-label={t("f118.spaces")}>
-      <div className={`flex items-center py-2 ${collapsed ? "justify-center" : "justify-between px-2"}`}>
-        {!collapsed && props.onOverview && <Tooltip content={t("sidebar.all_spaces")}>
-          <Button variant="text" color="default" iconOnly size="small" aria-label={t("sidebar.all_spaces")} onClick={props.onOverview}><Outlined.List /></Button>
-        </Tooltip>}
+      <div className={`flex items-center py-2 ${collapsed ? "justify-center" : "justify-end px-2"}`}>
         <Tooltip content={t(collapsed ? "sidebar.expand_navigation" : "sidebar.collapse_navigation")}>
           <Button variant="text" color="default" iconOnly size="small" aria-controls={navigationId} aria-expanded={!collapsed}
             aria-label={t(collapsed ? "sidebar.expand_navigation" : "sidebar.collapse_navigation")} onClick={() => setCollapsed((value) => !value)}><Outlined.SidebarMenu /></Button>

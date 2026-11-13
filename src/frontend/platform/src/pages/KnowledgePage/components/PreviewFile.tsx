@@ -40,6 +40,8 @@ export default function PreviewFile({
   rawFiles: any[];
   setChunks: any;
   edit?: boolean;
+  step?: number;
+  previewUrl?: string;
   previewData?: any;
   previewErrorMessage?: string;
 }) {

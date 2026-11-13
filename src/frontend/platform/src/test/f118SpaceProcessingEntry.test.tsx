@@ -335,3 +335,13 @@ it("metadata schema review uses the real revision and waits for the original con
   );
   expect(create).not.toHaveBeenCalled();
 });
+
+it("loads only Embedding rebuild jobs for the embedded model history", async () => {
+  const { SpaceProcessingPanel } = await import("@/pages/KnowledgePage/components/SpaceProcessingDialog");
+  const read = vi.mocked(knowledgeSpaceApi.listProcessingJobs);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  clients.push(client);
+  render(<QueryClientProvider client={client}><SpaceProcessingPanel scope={scope} spaceId={40} mode="jobs" jobKind="embedding_rebuild" /></QueryClientProvider>);
+  await waitFor(() => expect(read).toHaveBeenCalledWith(40, { page: 1, page_size: 20, kind: "embedding_rebuild" }));
+  expect(read.mock.calls.every(([, query]) => query.kind === "embedding_rebuild")).toBe(true);
+});

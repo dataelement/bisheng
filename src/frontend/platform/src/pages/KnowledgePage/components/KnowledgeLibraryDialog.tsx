@@ -295,7 +295,7 @@ function CreateSpaceForm({
       await onLoadEnd();
       if (!alive()) return;
       navigate(
-        importing ? `/filelib/upload/${result.id}` : `/filelib/${result.id}`,
+        `${importing ? `/filelib/upload/${result.id}` : `/filelib/${result.id}`}${scope.view === "admin" ? "?view=admin" : ""}`,
       );
       if (alive()) onOpenChange(false);
     } catch (error) {

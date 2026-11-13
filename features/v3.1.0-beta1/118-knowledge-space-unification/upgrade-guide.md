@@ -1,5 +1,7 @@
 # 升级说明：知识空间统一与全平台 use 动作退役
 
+2026-11-13代码现状的查询顺序、预检条件、SQL字段及OpenFGA转换详图见[迁移数据流程评审](../../../docs/reviews/f118-migration-data-flow-20261113.md)。该文明确区分历史准备、原冻结图预览与完整迁移；下文带日期的演练结果保留原证据边界。
+
 **状态（2026-11-10）**：功能开发已收齐，修正样本后的backup2及clone2完整还原/中性DDL通过；隔离clone2已正式M2冻结并同run apply/replay ready。原项目也已完成正式冻结及同run apply/replay ready，并部署新版API/Worker/frontend；API19原run n10api1在71dd已失败结束（19 tests/12 failures/6 errors/0 skipped，exit1、suite_complete=false），不可相减推算通过数；两项生产修复已合流但新candidate未部署复测，UI21未启动。当前仍为演练说明，不据此开放生产升级；SDK无本次代码改动，全托管SDK场景单列未执行。最新入口见§3.1，后文日期章节保留历史证据边界。\
 **日期**：2026-11-03\
 **关联**：[spec.md](./spec.md)（AC-63、AC-85、AC-89、AC-91、AC-92、AC-93、AC-94） · [design.md](./design.md) §7。
