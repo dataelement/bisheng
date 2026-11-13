@@ -224,7 +224,8 @@ it("shows current message ratings on an expanded audit conversation", async () =
       onToggle={vi.fn()}
     />,
   );
-  expect(screen.getByText("dsh.modelAuditView.group_like")).toBeVisible();
+  expect(screen.queryByText("dsh.modelAuditView.group_like")).toBeNull();
+  expect(screen.queryByText("dsh.modelAuditView.group_likes")).toBeNull();
   expect(screen.getByText("dsh.modelAuditView.group_dislikes")).toBeVisible();
   expect(await screen.findByText("private note")).toBeVisible();
   expect(screen.getByText("msg-1")).toBeVisible();
