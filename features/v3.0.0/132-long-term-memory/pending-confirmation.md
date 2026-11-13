@@ -13,7 +13,7 @@
 - **建议**：C。这条路径没有界面入口，A、B 的成本不值得。
 - **目前做法**：按 C（保守：少整理，不多存对话内容）继续。主路径按 svid 建本轮概要行并整理；`/continue` 轮照常带入常驻记忆、提供工具、显式写入与归因，但其本轮概要行标为不整理。**确认后如改为 A**，涉及 `memory/domain/services/consolidation_linsight.py`、`memory_turn_record` 增加两列与对应迁移、`linsight/domain/task_exec.py` 的追问轮开始与结束处。
 
-## P-02 两个任务未点名的既有测试文件需要随本功能更新（未改，等你确认）
+## P-02 两个任务未点名的既有测试文件需要随本功能更新（用户已于 2026-11-13 批准，已按 A 修改）
 
 - **涉及**：T012、T014；goal-runbook §8"不修改任务点名以外的既有测试文件"。
 - **问题**：两个既有测试文件钉住了本功能必须修改的对象，不改它们就会产生新增失败：
@@ -24,7 +24,7 @@
   - B. 不改这两个文件，接受〔基线比对〕里因此出现的新增失败。
   - C. 不新增枚举成员（记忆调用改用已有的类型）。这会改变 design 决策 18 与 AC-45 测试的口径。
 - **建议**：A。
-- **目前做法**：**未修改**。曾按 A 修改（提交 8dfd18db07），后按规程 §8 与 goal 条件"不得为满足条件改断言"撤回（两个文件已恢复为基线内容）。A 的改动保存在 `proposed/p02-existing-tests.patch`，你同意后执行 `git apply features/v3.0.0/132-long-term-memory/proposed/p02-existing-tests.patch` 即可。**因此当前〔基线比对〕会出现由这两个文件引起的新增失败**（`test_application_enum_preserves_existing_values` 与使用手写 `assistant` DDL 的测试），见最终报告第 3 项。
+- **目前做法**：**用户已批准（2026-11-13）**，已应用 `proposed/p02-existing-tests.patch`。此前曾按 A 修改（提交 8dfd18db07），后按规程 §8 撤回，等待确认期间两个文件为基线内容。A 的改动保存在 `proposed/p02-existing-tests.patch`，你同意后执行 `git apply features/v3.0.0/132-long-term-memory/proposed/p02-existing-tests.patch` 即可。批准前〔基线比对〕因此有 3 个新增失败；批准并应用后见最终报告第 3 项。
 
 ## P-03 `/workbench/continue` 追问轮的提示与归因按任务消息合并显示（P-01 的延续）
 
