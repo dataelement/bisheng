@@ -6,8 +6,9 @@ export const MEMORY_SWITCH_KEY = 'memory_enabled';
 export const MEMORY_START_GROUP_NAME = 'memory';
 export const MEMORY_LIMIT_MIN = 1;
 export const MEMORY_LIMIT_MAX = 100;
-/** Switch value for start nodes of newly created workflows. Existing workflows are upgraded with it off. */
-export const MEMORY_SWITCH_DEFAULT = false;
+/** Switch value for start nodes of newly created workflows. Existing workflows are upgraded with it off.
+ *  Kunlian integration: new workflows start with memory on (user ruling 2026-11-14). */
+export const MEMORY_SWITCH_DEFAULT = true;
 
 interface MemoryParam {
     key: string;

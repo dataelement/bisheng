@@ -65,8 +65,9 @@ async def _remember(service, make_ctx, text=FACT, user_id=USER_1):
 
 
 @pytest.mark.parametrize("executor", EXECUTORS)
-async def test_ac69_ac71_new_assistant_switch_default_off(executor, wired, tenant_ctx, make_ctx):
-    """AC-69, AC-71: a new assistant has memory off: no resident block, no memory tools."""
+async def test_ac69_ac71_new_assistant_switch_default_on(executor, wired, tenant_ctx, make_ctx):
+    """AC-69, AC-71 (Kunlian integration: new assistants start with memory on): a new assistant
+    gets the resident block and the memory tools without the author touching the switch."""
     tenant_ctx(TENANT_A)
     seed_assistant(wired.db)  # column default
     seed_chat(wired.db)
@@ -77,8 +78,8 @@ async def test_ac69_ac71_new_assistant_switch_default_off(executor, wired, tenan
     result = await agent.run("你好", [])
 
     assert result[-1].content == "好的"
-    assert not any(has_resident(msgs) for msgs in llm.received)
-    assert not MEMORY_TOOLS & set(tool_names(agent))
+    assert any(has_resident(msgs) for msgs in llm.received)
+    assert MEMORY_TOOLS <= set(tool_names(agent))
 
 
 @pytest.mark.parametrize("executor", EXECUTORS)

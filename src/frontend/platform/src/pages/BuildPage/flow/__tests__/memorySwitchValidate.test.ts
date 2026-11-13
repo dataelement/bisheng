@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { getWorkflowNodeTemplate } from '@/controllers/API/workflow';
 import { flowVersionCompatible } from '@/util/flowCompatible';
+import { MEMORY_SWITCH_DEFAULT } from '@/util/workflowMemory';
 import SwitchItem from '../FlowNode/component/SwitchItem';
 import { MEMORY_LIMIT_MAX, MEMORY_LIMIT_MIN, useNodeEvent, validateMemoryLimits } from '../hooks/useNodeEvent';
 import zhHans from '../../../../../public/locales/zh-Hans/flow.json';
@@ -44,13 +45,15 @@ async function graph(options: { switchOn: boolean; limit?: unknown }): Promise<V
 afterEach(cleanup);
 
 describe('workflow memory switch', () => {
-    it('AC-70: the start node has a memory group whose memory_enabled switch defaults to off', async () => {
+    it('AC-70: the start node has a memory group whose memory_enabled switch starts at the configured default', async () => {
         const start = await template('start');
         const group = start.group_params.find(item => item.params.some(param => param.key === 'memory_enabled'));
         expect(group?.name).toBe('memory');
         const param = findParam(start, 'memory_enabled')!;
         expect(param.type).toBe('switch');
-        expect(param.value).toBe(false);
+        // Kunlian integration: new workflows start with memory on.
+        expect(MEMORY_SWITCH_DEFAULT).toBe(true);
+        expect(param.value).toBe(MEMORY_SWITCH_DEFAULT);
         expect(param.desc).toBe('true');
     });
 

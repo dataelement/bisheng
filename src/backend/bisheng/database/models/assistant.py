@@ -13,7 +13,8 @@ from bisheng.utils import generate_uuid
 
 
 # F132: memory switch of newly created assistants. Rows that predate the column stay off (server_default).
-ASSISTANT_MEMORY_DEFAULT = False
+# Kunlian integration: new assistants start with memory on (user ruling 2026-11-14).
+ASSISTANT_MEMORY_DEFAULT = True
 
 class AssistantStatus(Enum):
     OFFLINE = 1

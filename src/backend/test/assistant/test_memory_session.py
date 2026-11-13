@@ -394,11 +394,14 @@ async def test_ac37_ac42_assistant_session_consolidated_after_quiet_period(
 
 def test_ac69_update_request_and_detail_carry_memory_enabled():
     """AC-69: the update request accepts memory_enabled (absent = untouched); details expose it;
-    a new assistant has it off."""
+    a new assistant starts at ASSISTANT_MEMORY_DEFAULT (on in the Kunlian integration)."""
+    from bisheng.database.models.assistant import ASSISTANT_MEMORY_DEFAULT
+
     assert AssistantUpdateReq(id="a").memory_enabled is None
     assert AssistantUpdateReq(id="a", memory_enabled=True).memory_enabled is True
-    assert Assistant(name="新助手").memory_enabled is False
-    assert AssistantInfo(**Assistant(id="a", name="n").model_dump()).memory_enabled is False
+    assert ASSISTANT_MEMORY_DEFAULT is True
+    assert Assistant(name="新助手").memory_enabled is True
+    assert AssistantInfo(**Assistant(id="a", name="n").model_dump()).memory_enabled is True
 
 
 @pytest.fixture
