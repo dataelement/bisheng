@@ -417,7 +417,7 @@ def stream_env(monkeypatch):
     )
 
 
-async def endpoint_register():
+def login_register():
     """The register callable a login-state endpoint hands to the service."""
     from bisheng.memory.domain.services.gate import MemoryGate
 
@@ -429,7 +429,7 @@ async def endpoint_register():
 
 async def run_turn(env, *, registered=True):
     """Drive one daily-mode turn to completion; returns the SSE chunks."""
-    kwargs = {"memory_register": await endpoint_register()} if registered else {}
+    kwargs = {"memory_register": login_register()} if registered else {}
     response = await env.chat_service._agent_stream_chat_completion(MagicMock(), env.data(), login_user(), **kwargs)
     return [chunk async for chunk in response.body_iterator]
 
