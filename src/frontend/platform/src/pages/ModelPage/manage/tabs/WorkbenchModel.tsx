@@ -202,9 +202,8 @@ export default function WorkbenchModel({ data, onBack }) {
   const handleSave = () => {
     if (form.models.some((model) => String(model.description ?? "").length > 50)) return;
     const errors = [];
-    if (!enterpriseConfig?.enabled && !form.models.length) {
-      errors.push(t("model.chatModelRequired"));
-    }
+    // Every online chat model is offered by default (narrowed by visibility), so
+    // the stored list only holds optional labels and may be empty.
     // Reject blank rows: a model without an id serializes to `{ id: '' }`,
     // which reaches the client model picker as <SelectItem value="">
     // (empty string) and crashes the whole page in Radix. Force the admin

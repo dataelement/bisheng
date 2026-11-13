@@ -45,10 +45,10 @@ class UnifiedPolicyRepository:
             raise DshInvalidRequestError()
 
     @staticmethod
-    def visibility_payload(row: ModelVisibility | None) -> dict:
+    def visibility_payload(row: ModelVisibility | None, *, default_everyone: bool = False) -> dict:
         return {
             "version": row.version if row else 0,
-            "everyone": row.everyone if row else False,
+            "everyone": row.everyone if row else default_everyone,
             "credit_multiplier": format(Decimal(row.credit_rate if row else 100) / 100, "f"),
             "subjects": row.subjects if row else [],
         }
@@ -63,11 +63,14 @@ class UnifiedPolicyRepository:
             "monthly_credits": credits_from_tokens(row.monthly_token_limit),
         }
 
-    def visibility(self, model_id: int) -> dict:
+    def visibility(self, model_id: int, *, default_everyone: bool = False) -> dict:
+        """``default_everyone`` describes a model without a stored row: DSH grants
+        access explicitly (no row = hidden), the platform without DSH shows every
+        online model until an administrator narrows it."""
         require_tenant()
         with strict_tenant_filter():
             row = self.session.exec(select(ModelVisibility).where(ModelVisibility.model_id == model_id)).one_or_none()
-        payload = self.visibility_payload(row)
+        payload = self.visibility_payload(row, default_everyone=default_everyone)
         from bisheng.user.domain.models.user import User
 
         user_ids = [item["id"] for item in payload["subjects"] if item["kind"] == "USER"]
@@ -176,6 +179,37 @@ class UnifiedPolicyRepository:
         after = self.rule_payload(row)
         self._audit(actor, f"credits:{subject.kind}:{subject.id}", before, after)
         return after
+
+    def visible_model_ids(self, user_id: int, model_ids: list[int]) -> set[int]:
+        """Models of ``model_ids`` this user may pick when DSH is not deployed.
+
+        A model without a stored visibility row is visible to everyone; a stored
+        row applies exactly as under DSH. Credits are not involved.
+        """
+        require_tenant()
+        if not model_ids:
+            return set()
+        with strict_tenant_filter():
+            rows = {
+                row.model_id: row
+                for row in self.session.exec(
+                    select(ModelVisibility).where(ModelVisibility.model_id.in_(model_ids))
+                ).all()
+            }
+        restricted = [row for row in rows.values() if not row.everyone]
+        departments: set[int] = set()
+        roles: set[int] = set()
+        if restricted:
+            departments = set(self.memberships._department_ancestor_ids(user_id, self.memberships._departments()))
+            roles = set(self.memberships._role_ids(user_id))
+        visible = set()
+        for model_id in model_ids:
+            row = rows.get(model_id)
+            if row is None or ModelVisibilityInput(**self.visibility_payload(row)).permits(
+                user_id=user_id, departments=departments, roles=roles
+            ):
+                visible.add(model_id)
+        return visible
 
     def effective(self, user_id: int, *, lock: bool = False) -> DshPolicySnapshot:
         tenant = require_tenant()
