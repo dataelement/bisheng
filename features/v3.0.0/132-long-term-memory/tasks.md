@@ -294,7 +294,7 @@
   **覆盖 AC**: AC-45, AC-58
   **依赖**: T020, T034
 
-- [ ] **T036**: 真实索引与模型调用的实现
+- [x] **T036**: 真实索引与模型调用的实现
   **文件**: `src/backend/bisheng/memory/domain/services/index.py`、`src/backend/bisheng/memory/domain/services/llm.py`、`src/backend/bisheng/memory/domain/services/factory.py`
   **逻辑**: `index.py` 是 `MemoryIndex` 的实现，经 `MilvusFactory`、`ElasticsearchFactory` 取客户端，不复用 `core/vectorstore/multi_retriever.py`，写入时在条目上记下 `index_model_id`。`llm.py` 是 `MemoryLLM` 的实现：取模型、发起调用、标记应用类型、记 token 用量；调用路径不经过个人额度扣减（现有额度检查只作用于日常对话与深度研究两种应用类型，见 `dsh/domain/services/chat_credits.py:20-23`，用测试钉住这一点）。`factory.py` 提供 `get_memory_service()` 等装配函数，把真实的索引、详情存储、模型调用装进服务。设计见 design 决策 12、18。
   **测试**: T035 全部通过
