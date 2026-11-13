@@ -4,8 +4,8 @@
 
 **关联**: [spec.md](./spec.md) · [discovery.md](./discovery.md) · [tasks.md](./tasks.md)（待写）
 **版本**: v3.0.0（开发基线）
-**最后更新**: 2026-11-13（第 3 稿）
-**状态**: 设计草稿第 3 稿，已按两轮 design 审查修订，待用户确认。§10 列出的待验证项要在编码最前面用小实验确认，结论写回本文。本功能尚未编码：§4.1–§4.3 是**目标形态**，§4.4 是**已取证的接入点现状**（基线 `feat/3.0.0@741662475b`）。实现后按实际覆盖更新。
+**最后更新**: 2026-11-13（第 4 稿）
+**状态**: 设计草稿第 4 稿，已按三轮 design 审查修订，待用户确认。第三轮审查的结论是：原 6 个高严重度问题已解决或由待验证项覆盖，新发现的问题已在本稿处理，本稿未再做全量复审。§10 列出的待验证项要在编码最前面用小实验确认，结论写回本文。本功能尚未编码：§4.1–§4.3 是**目标形态**，§4.4 是**已取证的接入点现状**（基线 `feat/3.0.0@741662475b`）。实现后按实际覆盖更新。
 
 ---
 
@@ -34,11 +34,12 @@
 | K6 | 主体类型只在 API 入口可知。工作流节点、消息落库回调、深度研究 worker、Beat 任务手里只有一个整型 `user_id`；用户表没有主体类型列；免登录链接的配置里也带一个 `user_id` | `open_api/domain/services/identity_service.py:67-81`；`workflow/nodes/base.py:39`；`public_endpoints/domain/services/guest_link.py:35,72` | 不能在下游凭 `user_id` 判定"是不是一个确定的自然人"。资格必须在入口判定并持久化，下游只查结果，查不到即不工作。并且登录用户与开放 API 的调用会汇到同一批 Service 函数（如 `stream_chat_completion`），所以登记必须做在 **endpoint 层**，不能做在共用的 Service 里 |
 | K7 | 各场景会把工具调用的入参和返回落库，而且落点不止一处：日常模式写进 `chatmessage.message` 的 `events`；助手有两条路径，一条由 `run()` 的返回值构造 tool_call、tool_result 行，另一条由 LangChain 回调直接插入 `category=tool` 的行并经 WebSocket 下发；深度研究把步骤的 `params` 与 `output` 写进 `linsight_execute_task.history`，持分享链接的非本人可以原样读到 | `workstation/domain/services/chat_service.py:2311-2319`、`:2343-2344`、`:2557-2560`；`common/chat/client.py:391-405`；`api/v1/callback.py:472-495`、`:523-545`、`:572-585`；`linsight/domain/services/stream_event_mapper.py:631`、`:662`、`:700-712`；`linsight/api/endpoints/linsight.py:579-615` | 记忆工具的入参与返回如果照常落库，管理员翻会话就能看到记忆原文，违反 AC-09。记忆工具的事件必须在落库前脱敏 |
 | K8 | 助手的 agent 在一个 WebSocket 连接内只构建一次，提示词和工具列表在连接期内固定 | `common/chat/client.py:235-256` | 常驻记忆和开关状态不能在构建时确定，必须每轮在调用时处理 |
-| K9 | 深度研究的轮次落在日常会话的同一个 `chat_id` 里；任务行在开始时插入空占位、完成时原地更新 | `linsight/domain/services/workbench_impl.py:345-355`；`linsight/domain/utils.py:975-992` | 整理登记按 `chat_id` 一行，不按场景分；水位不能越过未完成的任务行 |
+| K9 | 深度研究的轮次落在日常会话的同一个 `chat_id` 里；任务行在开始时插入空占位、完成时原地更新；**追问轮不插新行，而是原地更新同一个任务行，追问的问题也不落消息表** | `linsight/domain/services/workbench_impl.py:345-355`、`:402`；`linsight/domain/utils.py:975-992`、`:1007-1019`；`linsight/api/endpoints/linsight.py:327-378` | 整理登记按 `chat_id` 一行；深度研究不能用消息 id 当水位，要以"任务轮"为整理单位 |
+| K14 | 助手与工作流的 client 建连 URL 不带 `chat_id`，`chat_id` 由连接内的首条消息送达；处理这些消息的 `ChatClient`、`WorkflowClient` 在 `common/` 下，同时服务登录态、免登录链接和开放 API 的 WebSocket。登录态路径上工作流实际执行的图也来自客户端消息 | `client/src/pages/appChat/useChatHelpers.ts:52`；`common/chat/client.py:361-372`；`common/chat/clients/workflow_client.py:97-98`、`:171-179`；`public_endpoints/api/endpoints/assistant.py:45`；`open_endpoints/api/endpoints/assistant.py:160` | 登记不能在 endpoint 里凭 URL 完成；应用开关不能信任客户端送来的图 |
 | K10 | 助手和工作流的会话不刷新 `message_session.update_time` | 只有工作台与深度研究调 `touch_session` | 安静期用记忆自己的登记判定 |
 | K11 | 平台没有硬删除账号的路径；工作流删除是硬删 `flow` 行；助手没有版本表 | 全仓无删除用户实现；`database/models/flow.py:211`；全仓无 `assistant_version` | 账号删除时的清除本期不做（spec AC-100 已移出）；来源名称写入时快照；助手开关就地保存 |
 | K12 | 用户表没有时区字段，现有提示词里的日期用服务器时间 | `chat_service.py:2105`；`linsight/domain/task_exec.py:1595` | AC-14 需要新的时区来源 |
-| K13 | 消息渲染有三套：client 日常模式（SSE，自有气泡）、client 应用聊天（WebSocket，`@bisheng/chat` 共享组件）、platform 管理端查看会话 | 取证 §4.4 | 操作提示与归因在前两套各接一次；第三套不接 |
+| K13 | 消息渲染有三套：client 日常模式（SSE，自有气泡）、client 应用聊天（WebSocket，`@bisheng/chat` 共享组件）、platform 管理端查看会话 | 取证 §4.4 | 操作提示与归因要接三处：日常模式气泡、应用聊天、深度研究结果面板；管理端那一套不接 |
 
 **权限（C4）的适用结论。** 记忆管理接口只作用于调用者本人，不存在"对某个资源授权"的对象，不走资源授权，由登录态确定主体。助手记忆开关与工作流记忆开关是应用配置的一部分，沿用应用现有的编辑权限检查，不新增权限动作。
 
@@ -106,13 +107,15 @@
 - **调用 `open` 的入口**（都在 endpoint 层，都要求登录态）：
   - 日常模式对话：`workstation/api/endpoints/chat.py:97`。
   - 深度研究：`linsight/api/endpoints/linsight.py` 的提交（`:174` 一带）、`/workbench/continue`（`:327`）、`/workbench/user-input`（`:390`）；从日常入口转入任务模式的情况已被上一条覆盖。
-  - 助手与工作流：WebSocket 建连的 endpoint。
+  - 助手与工作流：`chat_id` 不在建连时可知（K14）。做法是登录态的 WebSocket endpoint 在创建客户端对象时**传入一个登记回调**，客户端在拿到或切换 `chat_id` 时调用它。回调由 `memory` 提供、由 endpoint 注入，`common/` 里的客户端只持有一个可调用对象，不引用 `memory`。免登录与开放 API 的 endpoint 不传回调，所以它们的连接无论怎么切换会话都不会被登记。
+- **`open` 要核对会话归属**：`chat_id` 对应的会话已存在时，它的所属用户必须是当前登录用户，否则不登记。这防止知道他人 `chat_id` 的人抢先登记，使对方的会话失去记忆。
 - **不调用 `open` 的入口**：`open_endpoints/` 与 `open_api/` 下的全部入口（含 `open_endpoints/api/endpoints/workstation.py:66-97`、`open_api/domain/services/task_mode_service.py:292-307`、`assistant/domain/services/published_assistant_service.py`）；`/api/v3` 免登录入口；无人值守运行（`unattended_run`）。
 - **没有 `chat_id` 的运行**：工作流评测（`evaluation_service.py:194-202`）、助手与工作流的调试运行，`chat_id` 为空且不落消息。它们没有登记行，记忆不工作。这是预期行为。
 - **登记行的写入规则**：
   - 不存在时创建：写入 `tenant_id`（当前租户）、`user_id`，并把水位初值设为该会话**当前最大的消息 id**。所以登记之前的历史消息永不整理（AC-40）。
   - 已存在且 `tenant_id`、`user_id` 都相同：只在时区变化时更新。绝大多数轮次是零写入。
   - 已存在但 `tenant_id` 或 `user_id` 不同（例如用户调岗后打开旧会话）：不覆盖，把该行置为 `eligible=false`。这个会话此后不再使用记忆，未整理的旧对话也不再整理。
+- **下游以登记行为准**：登记行上的 `tenant_id`、`user_id` 是在有可靠登录上下文的 endpoint 写入的。下游（worker、节点、整理任务）直接用行上的值构造 `MemoryContext`，不再与当时的租户上下文变量比对，因为 worker 里的租户上下文不保证已设置（`workflow/nodes/base.py:45-48` 的注释）。
 - **这一行同时承载**：会话的时区（决策 13）、整理水位与状态（决策 7）。
 - **何时该重新考虑**：平台给运行时统一下传主体对象时，可以去掉这层持久化，并重新评估开放 API 的支持。
 
@@ -131,9 +134,13 @@
   - **水位**：任务开始时对每个会话取一次"当前最大可整理消息 id"作为本次终点；处理期间到达的新消息留给下一次。水位不越过未完成的深度研究任务行（K9）：遇到 `category='task'` 且未到终态的行，终点停在它之前。
   - **原子性**：一个会话的"条目落库 + 取代关系 + 水位推进"在同一个数据库事务里提交。索引在提交后做（决策 5 的失败处理）。中途崩溃重跑不会重复落条目。
   - **失败与退避**：失败时 `fail_count+1`，下次可调度时间为 `min(2^n × 扫描周期, 2 小时)`，成功清零。失败计入指标（AC-45）。"没有可用的整理模型"也按失败处理并计数，但不无限重试到刷屏：同一原因连续失败只记录首次与之后每小时一次的日志。
-- **同一行的并发写**：`open`、`end_turn`、Beat、整理结束四者都写登记行，全部用**按列的条件更新**，不做读改写。`end_turn` 执行 `last_message_id = 较大者, state = 'pending'`。整理结束时执行 `watermark = 本次终点, state = 'idle' WHERE last_message_id <= 本次终点`；条件不成立说明整理期间有新消息，只推进水位、保持 `pending`。
+- **同一行的并发写**：`open`、`end_turn`、Beat、整理结束四者都写登记行，全部用**按列的条件更新**，不做读改写。水位只增不减：任何更新都写成 `watermark = 两者中较大者`。`end_turn(enabled=true)` 执行 `last_message_id = 较大者, state = 'pending'`；`end_turn(enabled=false)` 执行 `last_message_id = 较大者, watermark = 较大者`。整理结束时执行 `watermark = max(现值, 本次终点), state = 'idle' WHERE last_message_id <= 本次终点`；条件不成立说明整理期间有新消息，只推进水位、保持 `pending`。
 - **场景与应用的来源**：登记行不存场景。整理时从 `message_session` 的 `flow_type`、`flow_id` 得到场景与应用，从消息的 `category='task'` 识别深度研究轮次，据此做启用判定并填写条目的来源标记。
-- **未完成的深度研究任务行**：任务是否到终态要通过深度研究模块提供的查询得到（消息行自身不带状态）。未到终态的任务行超过 24 小时仍未完成的，水位越过它，该任务永不整理。否则一个停在"等待用户补充"的任务会让整个会话此后都不被整理。
+- **深度研究以"任务轮"为整理单位，不用消息 id**（K9）。追问轮不产生新消息行，按消息 id 推进的水位在首轮之后就越过了任务行，追问轮永远不会被整理。所以：
+  - 消息水位只管非任务消息，整理时跳过 `category='task'` 的行。
+  - 深度研究每一轮（首次提交与每次追问）结束时，本轮记录表里有一行该轮的概要（决策 15），上面带 `consolidated` 标志。整理任务处理该用户所有未整理的深度研究轮，逐轮读取这一轮的问题与结果，处理后置位。
+  - 一轮的问题与结果从深度研究自己的存储里按轮读取。追问的问题存在哪里、能否按轮取出，是**待验证 V7**。
+  - 仍在进行中或停在"等待用户补充"的轮不整理；它结束时才会有 `end_turn`。超过 24 小时未结束的轮放弃整理。
 - **只整理启用之后的对话（AC-40）与关闭后不再整理（AC-41）**：
   - 每轮结束时接入点都调 `MemoryActivity.end_turn(chat_id, last_message_id, enabled)`。`enabled=true` 置 `pending`；`enabled=false` 直接把水位推进到 `last_message_id`，即这轮被跳过，永不整理。
   - 任务开始时对每个会话重新过一次启用判定。判定为关，或会话已软删除（`message_session.is_delete`），就把水位推进到当前终点并置 `idle`，不整理。
@@ -172,7 +179,7 @@
 
 | 方法 | 为什么没有上下文 | 靠什么隔离 |
 |---|---|---|
-| 按 `chat_id` 读登记行（`MemoryGate`） | 上下文正是由它产生的 | 按主键取一行，再校验行上的 `tenant_id` 等于当前租户、`user_id` 等于当前用户，不等即视为无资格 |
+| 按 `chat_id` 读登记行（`MemoryGate.resolve`） | 上下文正是由它产生的 | 按主键取一行，用行上的 `tenant_id`、`user_id` 构造上下文。行只能由登录态 endpoint 的 `open` 写入，`open` 写入时用的是当前登录用户与当前租户，并核对了会话归属 |
 | Beat 扫描到期登记行 | 跨租户枚举 | 包在 `bypass_tenant_filter()` 里，只读 `chat_id`、`tenant_id`、`user_id`，随后按租户设置上下文再投任务 |
 | 索引对账、遗留记录清理 | 后台维护 | 同上，逐租户设置上下文后再用带上下文的方法处理 |
 | `memory_metric_daily` 的写入 | 没有用户维度 | 只含计数，带 `tenant_id` |
@@ -189,7 +196,7 @@
     - 日常模式：`chat_service.py:2311-2319`（入参）、`:2343-2344`（返回）。
     - 助手路径一：`common/chat/client.py:391-405`，行由 `AssistantAgent.run()` 的返回值构造，`run()` 返回前脱敏。
     - 助手路径二：`api/v1/callback.py` 的工具回调（`:472-495` 下发、`:523-545` 与 `:572-585` 落库）。回调拿到的是原始入参，必须在回调处理器里脱敏。**待验证 V1**。
-    - 深度研究：`linsight/domain/services/stream_event_mapper.py:631`、`:662`、`:700-712`，步骤事件写入 `linsight_execute_task.history` 之前脱敏。**待验证 V3**。
+    - 深度研究：`linsight/domain/services/stream_event_mapper.py:631`、`:662`、`:700-712`，步骤事件写入 `linsight_execute_task.history` 之前脱敏。上下文压缩还会把线程里的历史消息写成工作区文件（`linsight/domain/utils.py:104-117`、`context_budget.py:144`），其中的记忆工具消息同样要处理。**待验证 V3**。
   - 这只保护工具事件。模型在**回答正文**里复述的记忆内容不做遮盖（spec §3 已声明）。
   - 有一条测试对上述每个落点的落库结果做断言；新增落库路径而没有脱敏，这条测试要能失败。
 - **脱敏对历史回放的影响**：助手下一轮会把历史里的工具消息回放给模型（`client.py:270-306`）。回放的是脱敏后的内容，所以上一轮检索到的非常驻条目不会留在上文里，模型需要时会再检索一次。显式写入的条目是常驻的，不受影响（AC-24 仍成立）。回放时把脱敏后的工具结果渲染成一句中性说明（"记忆操作已完成"），避免模型把 `redacted` 当成异常。
@@ -205,7 +212,7 @@
   - **助手**：agent 在连接内只建一次（K8），连接持有的助手对象也不重读。所以每轮开始时：
     1. 从数据库重读该助手的 `memory_enabled`（一次按主键的查询），不用连接里缓存的对象。
     2. 做启用判定。结果与上一轮不同（开或关发生变化）时，在 `AssistantAgent` 内部重建 agent，使工具列表与当前状态一致（AC-72、AC-74）。
-    3. 常驻记忆作为一条系统消息加入输入。它在 `trim_messages`（`assistant_agent.py:548-572`）**之后**插入，否则超长裁剪会从头部先把它丢掉。两种执行器都接受输入里的系统消息（ReAct 的历史占位符、function call 的 `create_react_agent`）。多条系统消息在各模型端点上的兼容性是**待验证 V5**。
+    3. 常驻记忆作为一条系统消息加入输入。它在 `trim_messages`（`assistant_agent.py:548-572`）**之后**插入，否则超长裁剪会从头部先把它丢掉。两种执行器都接受输入里的系统消息（ReAct 的历史占位符、function call 的 `create_react_agent`）。多条系统消息在各模型端点上的兼容性是**待验证 V5**。`run()` 返回前把这条注入的系统消息从结果里剔除：`client.py:393-400` 用 `result[len(chat_history):-1]` 切出新增消息，多出一条会让偏移错一位。
   - **深度研究**：新增一个中间件，在 `wrap_model_call` 里追加常驻记忆与经验类条目。文本在**任务开始时取一次**并保存在本次运行的对象里，之后每次模型调用追加同一段，不重取，所以不破坏提示词前缀缓存，也符合 AC-51"任务开始时带入"。它排在引用与语言两个尾部中间件之前，那两个保持在最末（`agent_factory.py:222-259`、`:1559-1564`）。
 - **原因**：
   - 助手：AC-51 每轮带入、AC-74 下一轮按新状态，构建时注入都做不到。
@@ -234,7 +241,7 @@
 - **备选**：A. 给用户表加时区设置。B. 客户端在发起对话时带上浏览器的 IANA 时区，入口调 `MemoryGate.open` 时写到登记行，并同步到 `memory_user_setting.timezone`。
 - **选定**：B
 - **原因**：K12。A 需要一个新的用户设置项，超出本功能范围。B 借助决策 6 已有的入口登记，一处解决了传递问题：工作流节点、深度研究 worker、整理任务都从登记行读时区，不需要让时区穿过 WebSocket 或任务队列。
-- **回落顺序**：本会话登记的时区 → `memory_user_setting.timezone`（最近一次已知）→ 部署默认时区。开放 API 的调用没有浏览器，走后两级。
+- **回落顺序**：本会话登记的时区 → `memory_user_setting.timezone`（最近一次已知）→ 部署默认时区。后台任务没有请求，直接读登记行。
 - **何时该重新考虑**：平台增加用户级时区设置时，改读那个设置。
 
 ### 决策 14：密钥类内容的拒绝由确定性规则完成
@@ -262,7 +269,7 @@
 |---|---|---|
 | 日常模式 | `chat_service.py:2558-2575`（正常）、`:1955-1980`（中断） | 中断路径是同步函数，只能用同步 DAO，`bind_turn` 与 `end_turn` 都要提供同步实现 |
 | 助手 | `common/chat/client.py:427-428`（回答落库）、`:337-354` 与 `:461-465`（中断落库） | `client.py` 在 `common/` 下，不得引用 `memory`。做法是 `AssistantAgent` 增加一个方法 `after_answer_persisted(message_id, interrupted)`，由 `client.py` 在落库后调用。`client.py` 本来就持有并调用 `AssistantAgent`，不新增依赖方向 |
-| 深度研究 | 任务行在开始时已插入占位，`message_id` 在任务开始时就有 | 任务开始时直接带着 `message_id` 记录，不需要事后补 |
+| 深度研究 | 每一轮（首次提交与每次追问）开始时建本轮概要行 | 多轮共用同一个任务消息行（K9），所以深度研究的操作提示与归因按 `turn_id` 取，不按 `message_id`。前端每一轮的结果面板要拿得到该轮的 `turn_id`：**待验证 V7** |
 | 工作流 | 不记录 | spec 规定工作流的最终输出不做归因；记忆检索节点不写本轮记录，只计指标 |
 
 - **遗留记录**：进程崩溃会留下没有 `message_id` 的记录。前端在会话进行中按 `turn_id` 取，所以当场的操作提示与撤销不受影响；刷新后按 `message_id` 取不到，这一轮的提示丢失，条目本身不受影响（管理页可见可删）。没有 `message_id` 且超过一天的记录由定时任务清理。
@@ -288,9 +295,9 @@
 | 工作流记忆 | 开始节点的参数 `memory_enabled`，存在 `flow_version.data` 里 | 随版本走；参数缺失视为关 |
 
 - **备选**：给租户记忆单开一个配置键。否决原因是要改白名单、要新开接口，而且新接口路径受"不得含 config"的约束。
-- **工作流开关在运行时怎么读**：工作流实例化时（`GraphEngine.init_nodes`）从开始节点参数取出 `memory_enabled`，连同本次运行的 `chat_id` 一起放进 `graph_state` 的只读字段。节点自身没有 `chat_id` 属性，这是它取得 `chat_id` 的途径（**待验证 V4**）。记忆检索节点和消息落库回调都从 `graph_state` 读。整理任务判定"现在是否仍开启"时读该工作流当前上线版本的开始节点参数。
+- **工作流运行时怎么拿到这些值**：工作流实例化时（`GraphEngine.init_nodes`）按 `flow_id` 查一次上线版本的开关，连同本次运行的 `chat_id` 一起放进 `graph_state` 的只读字段。节点自身没有 `chat_id` 属性，这是它取得 `chat_id` 的途径（**待验证 V4**）。记忆检索节点和消息落库回调都从 `graph_state` 读。整理任务判定"现在是否仍开启"时读该工作流当前上线版本的开始节点参数。
 - **启用判定**：`MemoryGate.resolve(chat_id, scene, app_enabled) -> MemoryContext | None`。顺序：登记行存在且有资格（决策 6）→ 用户未停用 → 租户记忆 → 我的记忆 → 应用开关。一轮开始时取一次，沿用到该轮结束（AC-74）。
-- **应用开关的取值**：工作流取本次运行所用版本的开始节点参数；助手**每轮从数据库重读**，不用连接里缓存的助手对象（决策 11）。
+- **应用开关的取值**：都以数据库为准，不信任运行时手头的对象。助手每轮重读 `assistant.memory_enabled`（决策 11）。工作流读该工作流**当前上线版本**的开始节点参数：登录态路径上实际执行的图来自客户端消息（K14），客户端可以自带一个开关为开的图，所以不能读正在执行的图。记忆检索节点执行时如果数据库里的开关是关，按未启用处理，输出空数组。
 - **每轮的查询代价**：见决策 15 末尾的统计。租户配置走既有的 Redis 缓存。
 - **何时该重新考虑**：每轮三次小查询成为可测的延迟时，把登记行与用户设置合并缓存。
 
@@ -327,11 +334,11 @@
 - **选定**：B
 - **原因**：K3。每轮带入几十条就更新几十行是不可接受的热写。
 - **各指标的来源（AC-102）**：
-  - 显式写入、自动整理、手动新增的新增条数，被取代与被删除的条数：从条目表按 `origin`、`status` 聚合。
+  - 显式写入、自动整理、手动新增的新增条数，被取代与被删除的条数：事件发生时在 Redis 计数。不从条目表聚合，因为"清空"会物理删除行，事后聚合会丢数。
   - 被带入、被检索返回的条目数；带入失败、检索失败、详情读取失败、整理失败、检索降级的次数：Redis 计数。
   - 从未被带入也未被检索返回的条目数：条目上的 `last_read_at` 为空。Redis 里维护"今日被读条目集合"，定时任务批量更新这一列。
   - 详情被取回过的比例：条目上的 `detail_read_at`，同样由定时任务从 Redis 集合批量更新。
-  - 用户撤销次数：从决策 15 的表聚合。
+  - 用户撤销次数：事件发生时在 Redis 计数，理由同上。
 - **何时该重新考虑**：需要分钟级的指标时。
 
 ### 决策 21：实体关系表本期不建
@@ -383,7 +390,7 @@
 | `memory_item` | 一条记忆条目 | `id`（应用侧生成的 UUID）、`tenant_id`、`user_id`、`scope`（本期恒为 `personal`）、`type`（fact/preference/experience）、`content`、`status`（active/superseded/deleted）、`superseded_by`、`pinned`、`pin_order`、`event_time`、`valid_from`、`valid_to`、`recorded_at`、`origin`（explicit/auto/manual）、`source_scene`、`source_app_id`、`source_app_name`（写入时快照）、`source_chat_id`、`detail_object_key`、`detail_sha256`、`index_state`（ok/pending）、`last_read_at`、`detail_read_at` |
 | `memory_session_cursor` | 一个会话的登记（一个 `chat_id` 一行） | `chat_id`、`tenant_id`、`user_id`、`eligible`、`timezone`、`last_activity_at`、`last_message_id`、`watermark_message_id`（创建时取会话当前最大消息 id）、`state`（idle/pending/running）、`locked_at`、`fail_count`、`next_run_at` |
 | `memory_user_setting` | 一个用户在一个租户的记忆设置 | `tenant_id`、`user_id`、`enabled`、`timezone`、`rev` |
-| `memory_turn_record` | 一轮对话里与记忆有关的一件事 | `turn_id`、`chat_id`、`message_id`（回答落库后补）、`tenant_id`、`user_id`、`kind`（summary/write/retrieved）、`op`（remember/correct/forget，仅 write）、`item_id`、`related_item_id`（被取代或被忘掉的条目）、`item_ids`（JSON，仅 retrieved）、`resident_rev`、`resident_day`、`undone` |
+| `memory_turn_record` | 一轮对话里与记忆有关的一件事 | `turn_id`、`chat_id`、`message_id`（回答落库后补）、`tenant_id`、`user_id`、`kind`（summary/write/retrieved）、`op`（remember/correct/forget，仅 write）、`item_id`、`related_item_id`（被取代或被忘掉的条目）、`item_ids`（JSON，仅 retrieved）、`resident_rev`、`resident_day`、`undone`、`consolidated`（仅深度研究的概要行） |
 | `memory_resident_snapshot` | 某个用户在某个版本、某一天带入的常驻条目 | `tenant_id`、`user_id`、`rev`、`day`、`scene_class`、`item_ids`（JSON） |
 | `memory_metric_daily` | 一天的一组计数 | `day`、`tenant_id`、`scene`、`app_id`、`metric`、`value` |
 
@@ -399,7 +406,7 @@
 | 落库后的记忆工具事件 | `{"redacted": true, "op": ..., "item_ids": [...]}` | 决策 10 |
 | 前端信号 | SSE / WebSocket category `memory`，载荷 `{turn_id, has_write, has_attribution}` | 不含原文 |
 | 工作流节点类型 | `NodeType.MEMORY_RETRIEVER = "memory_retriever"` | 参数 `query`（`var_textarea` 控件，必填）、`limit`（`number` 控件，默认 20）。后端在保存与上线时校验 `limit` 为 1 到 100 的整数，否则返回 121 段的错误码（AC-80）；前端同步校验 |
-| 节点输出变量 | `retrieved_memory`：数组，每项 `{text, metadata{type, recorded_at, event_time, source}}` | 结构对齐知识库检索节点。条目带详情时 `text` 为详情全文（AC-82）。运行时检索内容为空、没有命中或记忆未启用时输出空数组（AC-83）；检索因故障无法完成时节点失败（AC-84）。被大模型节点作为变量引用时，序列化结果以背景信息说明开头，每条带记录日期（AC-57） |
+| 节点输出变量 | `retrieved_memory`：数组，每项 `{text, metadata{type, recorded_at, event_time, source}}` | 结构对齐知识库检索节点。每一项的 `text` 自带前缀"［背景信息，记录于 YYYY-MM-DD］"，所以不管下游节点怎么引用这个变量，背景信息的说明和记录日期都跟着内容走（AC-57）。条目带详情时 `text` 为详情全文（AC-82）。运行时检索内容为空、没有命中或记忆未启用时输出空数组（AC-83）；检索因故障无法完成时节点失败（AC-84）。 |
 | 节点运行日志 | `parse_log` 返回检索内容与返回条数，不含条目原文 | AC-86；条目原文在节点输出里，由作者决定去向 |
 | 工作流开始节点参数 | `memory_enabled`（`switch` 控件），独立的"记忆"分组 | 说明文案见 AC-75 |
 
@@ -449,15 +456,15 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 日常模式：工具事件 | `chat_service.py:2311-2319`（入参）、`:2343-2344`（返回） | 记忆工具的事件在写入 `events` 前脱敏 |
 | 日常模式：流式事件 | `workstation/domain/services/chat_helpers.py:153` `_sse_resp` | 新增 category `memory`。事件类别是字符串字面量，没有集中枚举 |
 | 日常模式：一轮结束 | `chat_service.py:2558-2575`；中断路径 `:1955-1980` | 两处都调 `bind_turn` 与 `end_turn` |
-| 助手：建连 | WebSocket endpoint → `common/chat/client.py:230` `init_gpts_agent` | 在 WebSocket endpoint 里调 `MemoryGate.open`。连接内可以切换应用与会话而不重新建连（`client.py:361-372`），切换后的新 `chat_id` 没有登记行：**待验证 V2**。开放面入口 `assistant/domain/services/published_assistant_service.py:74-92` 不登记 |
+| 助手：建连与会话切换 | 登录态 WebSocket endpoint → `chat_manager.dispatch_client` → `common/chat/client.py:230`、`:361-372` | 登录态 endpoint 注入登记回调；`ChatClient` 在 `chat_id` 确定或切换时调用（**V2**）。免登录 `public_endpoints/api/endpoints/assistant.py:45` 与开放面 `open_endpoints/api/endpoints/assistant.py:160` 不注入 |
 | 助手：每轮调用 | `api/services/assistant_agent.py:576` `run`、`:605` `astream`；裁剪 `:548-572` | 每轮：重读开关、启用判定、必要时重建 agent、裁剪后插入常驻记忆系统消息；`run()` 返回前对工具消息脱敏 |
 | 助手：工具 | `assistant_agent.py:285` `init_tools` | 启用时追加记忆工具；两种执行器（ReAct、function call，`:445-458`）都要验证 |
 | 助手：工具消息落库（路径一） | `common/chat/client.py:391-405` | 行由 `run()` 返回值构造，已脱敏 |
 | 助手：工具消息落库（路径二） | `api/v1/callback.py:472-495`、`:523-545`、`:572-585`；挂载 `client.py:308-322` | 回调处理器内脱敏（V1） |
 | 助手：回答落库 | `client.py:427-428`；中断 `:337-354`、`:461-465` | 落库后调 `AssistantAgent.after_answer_persisted` |
-| 工作流：入口 | WebSocket 建连的 endpoint；任务体 `worker/workflow/tasks.py:62` | endpoint 调 `MemoryGate.open`。评测与调试运行 `chat_id` 为空，不登记 |
+| 工作流：入口 | 登录态 WebSocket endpoint → `common/chat/clients/workflow_client.py:97-98`、`:171-179`；任务体 `worker/workflow/tasks.py:62` | 同助手：endpoint 注入登记回调，`WorkflowClient` 在拿到消息体里的 `chat_id` 时调用（**V8**）。评测与调试运行 `chat_id` 为空，不登记 |
 | 工作流：节点注册 | `workflow/common/node.py:8-24`、`workflow/nodes/node_manage.py` | 新增类型与节点类 |
-| 工作流：实例化 | `workflow/graph/graph_engine.py:207-231` | 把开始节点的 `memory_enabled` 与本次运行的 `chat_id` 放进 `graph_state`（V4） |
+| 工作流：实例化 | `workflow/graph/graph_engine.py:207-231` | 按 `flow_id` 查上线版本的开关，与本次运行的 `chat_id` 一起放进 `graph_state`（V4、V8） |
 | 工作流：节点拿身份 | `workflow/nodes/base.py:39,49` | 节点不用 `self.user_id` 判定资格，按 `chat_id` 查登记行 |
 | 工作流：上线校验 | `api/services/workflow.py:1219`，ONLINE 分支 `:1237-1244` | 加"含记忆检索节点而开关为关则拒绝"与 `limit` 校验；前端 `useNodeEvent.ts` 同步提示 |
 | 工作流：一轮结束 | `worker/workflow/tasks.py:40-55` | 任务函数每次让出控制时调一次 `end_turn`：停在等待输入（INPUT）返回时，以及成功或失败结束时。不在 `redis_callback.save_chat_message` 里调，它每条消息都会触发 |
@@ -465,7 +472,7 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 深度研究：常驻与经验带入 | `linsight/domain/services/agent_factory.py:1400` `create_linsight_agent`，中间件 `:222-259`、`:1559-1564` | 新增一个中间件，排在两个尾部中间件之前；文本任务开始时取一次 |
 | 深度研究：步骤落库 | `linsight/domain/services/stream_event_mapper.py:631`、`:662`、`:700-712` → `linsight_execute_task.history`；读取 `linsight/api/endpoints/linsight.py:579-615` | 落库前脱敏（V3） |
 | 深度研究：工具 | `_generate_tools` 定义在 `task_exec.py:1097`，调用点 `:537`、`:668`、`:749` | 三个调用点之后都追加记忆工具；按 `linsight/AGENTS.md`，提示词与工具同步出现 |
-| 深度研究：任务开始与结束 | 占位行 `linsight/domain/utils.py:973-992`；结束 `task_exec.py:2440`、`:2369`、`:1990`、`:2075` | 开始时带着占位行的 `message_id` 建本轮记录；结束时调 `end_turn` |
+| 深度研究：每一轮的开始与结束 | 首次提交与追问 `linsight/api/endpoints/linsight.py:174`、`:327`；任务行原地更新 `linsight/domain/utils.py:973-1019`；结束 `task_exec.py:2440`、`:2369`、`:1990`、`:2075` | 每一轮开始时建本轮概要行并生成 `turn_id`；结束时调 `end_turn`（V7） |
 | 会话与消息 | `database/models/session.py:20/81`（含 `is_delete`）、`database/models/message.py:35/90` | 整理按 `chat_id` 读 `chatmessage`；深度研究轮次是同一会话里 `category='task'` 的行 |
 | 用户停用 | 入口至少六处，没有统一回调 | 不挂钩子；`MemoryGate.resolve` 每轮读用户状态（AC-99） |
 | 租户归属变化 | `tenant/domain/services/user_tenant_sync_service.py:76` | 不挂钩子；靠决策 9 的显式过滤满足 AC-06、AC-07 |
@@ -478,7 +485,7 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 前端：工作台配置 | `platform/src/pages/BuildPage/bench/index.tsx`、`ToggleSection.tsx`、`DailyChatConfig.tsx` | 新增"记忆"区：开关加整理模型下拉 |
 | 前端：日常模式气泡 | `client/src/components/Chat/AiMessageBubble.tsx`；SSE 解析 `client/src/hooks/useAiChatSSE.ts`；工具卡片 `Messages/ToolCallDisplay.tsx` | 操作提示与归因入口；记忆工具的卡片按脱敏后的格式渲染 |
 | 前端：应用聊天 | `client/src/pages/appChat/ChatMessages.tsx`、`components/ClientMessageFooter.tsx` | 同上，第二套 |
-| 前端：深度研究结果 | `client/src/components/Linsight/Execution/ResultPanel.tsx` | 归因入口 |
+| 前端：深度研究结果 | `client/src/components/Linsight/Execution/ResultPanel.tsx`、`TaskTurnPanel.tsx` | 操作提示（含撤销）与归因入口，按该轮的 `turn_id` 取数。这是第三处接入 |
 | 前端：个人设置 | `client/src/pages/settings/settingsSections.ts`、`SettingsPage.tsx`；样板 `sections/AiAccessPane.tsx` | 新增"记忆" section |
 | 前端：管理端查看会话 | `platform/src/pages/LogPage/useAppLog/appChatDetail.tsx`、`dailyChatDetail.tsx`、`LabelPage/taskAppChats.tsx` | 不接记忆接口。它们渲染到脱敏后的记忆工具事件时显示为"记忆操作"，不显示内容 |
 
@@ -489,9 +496,9 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | # | 反直觉事实 | 如果不知道会怎样 | 在哪处理 |
 |---|---|---|---|
 | 1 | 租户自动过滤给普通用户的是可见租户 IN 列表，给全局超管的是不过滤，并且只拦 SELECT | 调岗用户仍读到原租户的记忆；超管读到别的租户里同 id 的行；批量写跨租户生效 | 决策 9：repository 每个方法显式带租户与用户条件 |
-| 2 | 各场景会把工具入参与返回原样落进消息，管理端接口原样返回 | 管理员翻会话就看到记忆原文 | 决策 10：落库前脱敏，三处共用一个函数 |
+| 2 | 各场景会把工具入参与返回原样落进消息，管理端接口原样返回 | 管理员翻会话就看到记忆原文 | 决策 10：落点清单里的每一处都调同一个脱敏函数 |
 | 3 | 下游只有整型 `user_id`，分不出自然人、服务账号、访客配置 | 给不该有记忆的调用开了记忆 | 决策 6：入口登记，下游只查登记行 |
-| 4 | 助手 agent 在连接内只建一次 | 常驻记忆不更新、开关改了不生效 | 决策 11：调用时注入，指纹变化时重建 |
+| 4 | 助手 agent 在连接内只建一次 | 常驻记忆不更新、开关改了不生效 | 决策 11：调用时注入，开关状态变化时重建 |
 | 5 | 深度研究的首条消息有两处拼装，写进消息的文本会留在检查点线程里 | 续轮没有常驻记忆；已删除的记忆仍对模型可见 | 决策 11：中间件注入 |
 | 6 | 深度研究的工具拼装有三个调用点（`task_exec.py:537`、`:668`、`:749`） | 只改一处，续跑的任务没有记忆工具 | 三处都改 |
 | 7 | 深度研究轮次与日常模式共用 `chat_id`；任务行先插空占位、完成时原地更新 | 一个会话两个水位；水位越过占位行后，任务结果永远不被整理 | 决策 7：登记按 `chat_id` 一行；水位不越过未完成的任务行 |
@@ -512,7 +519,10 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 22 | 助手连接持有的助手对象在连接期内不重读 | 作者关掉助手记忆后，已建立的连接仍按开启处理 | 决策 11：每轮重读开关 |
 | 23 | 助手的 `trim_messages` 从消息列表头部开始丢 | 常驻记忆先插后裁会最先被丢掉 | 决策 11：裁剪之后再插入 |
 | 24 | 日常模式的中断落库路径是同步函数，里面 `await` 会被取消 | 用异步方法补本轮记录，中断时静默丢失 | 决策 15：提供同步实现 |
-| 25 | 对话型工作流停在等待输入时任务函数已返回，但工作流没有结束 | 只在成功或失败时登记活跃，这类会话永远不会被整理 | 决策 15 的工作流行、§4.4 |
+| 26 | 深度研究的追问轮不插新消息行，问题也不落消息表 | 用消息 id 当水位，追问轮永远不会被整理；多轮的操作提示挂在同一个消息上混在一起 | 决策 7：以任务轮为整理单位；决策 15：按 `turn_id` 取 |
+| 27 | 助手与工作流的 `chat_id` 由连接内的消息送达，处理它的客户端类同时服务免登录与开放 API | 在客户端类里直接登记，会给免登录和开放 API 的连接开记忆 | 决策 6：登录态 endpoint 注入回调 |
+| 28 | 登录态路径上工作流执行的图来自客户端消息 | 读正在执行的图上的开关，使用者可以自带一个开着的图绕过作者的设置 | 决策 17：读数据库里的上线版本 |
+| 25 | 对话型工作流停在等待输入时任务函数已返回，但工作流没有结束 | 只在成功或失败时登记活跃，这类会话永远不会被整理 | §4.4"工作流：一轮结束" |
 
 ---
 
@@ -537,7 +547,6 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 知识库默认 embedding、`MilvusFactory`、`ElasticsearchFactory` | 内部 API | 属于知识库模块，记忆不得改变它们的行为 |
 | `AuditLogDao.ainsert_v2` | 内部 API | 动作名需登记 |
 | 租户上下文（`get_current_tenant_id`、`bypass_tenant_filter`） | 内部 API | "当前租户"的语义变化会直接影响隔离 |
-| 开放 API 的身份解析 | `open_api/domain/services/identity_service.py` | `MemoryGate.open` 依赖它给出的主体类型 |
 | 模型调用的额度机制 | `dsh/domain/services/chat_credits.py` | 记忆的调用要绕开个人额度扣减；该机制改形态时要复核 |
 | 引用呈现组件（F075） | 前端组件 | 归因沿用其样式，不沿用其数据通道 |
 
@@ -628,10 +637,12 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 | # | 要验证什么 | 判据 | 不通过时影响 |
 |---|---|---|---|
 | V1 | 助手的工具回调（`api/v1/callback.py`）里能否在落库和下发之前识别记忆工具并脱敏 | 调用一次记忆工具后，`chatmessage` 里 `category=tool` 的行和 WebSocket 下发的消息都不含条目原文 | 决策 10 |
-| V2 | 助手 WebSocket 连接内切换应用或会话（`client.py:361-372`）是否仍被前端使用；若是，切换后如何补登记 | 找到前端发出该消息的代码或确认已无调用方；若仍在用，切换后的首轮记忆能工作 | 决策 6 |
-| V3 | 深度研究的步骤事件在写入 `linsight_execute_task.history` 前能否脱敏；大工具结果卸载到工作区 `large_tool_results/` 时，`memory_search` 的结果会不会被写成工作区文件 | 调用一次记忆工具后，`history` 与工作区里都没有条目原文；用分享链接读取任务详情看不到条目原文 | 决策 10 |
+| V2 | 助手的登记回调：登录态连接在 `chat_id` 确定或切换时登记；免登录与开放 API 的连接不登记 | 登录态连接切换会话后首轮记忆能工作；免登录链接与开放 API 的助手连接无论如何切换，登记表里都不出现它们的 `chat_id` | 决策 6 |
+| V3 | 深度研究的步骤事件在写入 `linsight_execute_task.history` 前能否脱敏；大工具结果卸载到工作区 `large_tool_results/` 时，`memory_search` 的结果会不会被写成工作区文件 | 调用一次记忆工具后，`history` 与工作区里都没有条目原文；用分享链接读取任务详情看不到条目原文；实际触发一次上下文压缩后，工作区 `conversation_history/` 下的文件里也没有条目原文 | 决策 10 |
 | V4 | 工作流节点能否从 `graph_state` 拿到 `chat_id` 与开始节点的 `memory_enabled` | 记忆检索节点在 Celery worker 里执行时两者都取得到；评测与调试运行取到空 | 决策 17 |
 | V5 | 输入里带多条系统消息时，助手的两种执行器在平台已接入的主要模型端点上是否正常 | ReAct 与 function call 各跑通一轮，模型能用上常驻记忆里的信息 | 决策 11 |
+| V7 | 深度研究追问轮的问题与结果存在哪里，能否按轮取出；前端每一轮的结果面板能否拿到该轮的 `turn_id` | 一个任务追问两次后，三轮各有一条本轮概要、各自被整理一次，三轮的操作提示互不混淆 | 决策 7、决策 15 |
+| V8 | 工作流的登记回调与开关取值：`chat_id` 来自消息体；开关读数据库的上线版本 | 登录态运行被登记而免登录与开放 API 不被登记；客户端自带一个开关为开的图时，数据库里开关为关则检索节点输出空数组 | 决策 6、决策 17 |
 | V6 | 管理端查看会话的三个页面实际调用哪些接口，是否读取 `category=tool` 的行与深度研究步骤 | 列出接口清单；用管理员账号打开一个含记忆操作的会话，页面上没有条目原文 | 决策 10 |
 
 ---
@@ -641,5 +652,6 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-11-13 | 初版（设计草稿，未编码） | spec 第 2 稿确认后进入设计 |
+| 2026-11-13 | 第 4 稿：深度研究改为以任务轮为整理单位；助手与工作流改为由登录态 endpoint 注入登记回调；工作流开关读数据库上线版本；水位只增不减；检索节点的每条输出自带背景信息前缀；指标改为事件计数；新增 V7、V8 | 三轮 design 审查：原 6 个高严重度问题已解决或由待验证项覆盖，新发现 1 个高严重度问题 |
 | 2026-11-13 | 第 3 稿：登记只做在登录态 endpoint 且开放 API 不支持记忆；脱敏落点补全助手回调与深度研究步骤；助手每轮重读开关、裁剪后注入；本轮记录的各场景落点；登记行的初值、并发写与清空；新增常驻快照表与待验证项 | 二轮 design 审查发现 6 个高严重度问题；用户裁定收窄范围并先做实验 |
 | 2026-11-13 | 第 2 稿：新增入口登记（决策 6）、显式租户过滤（决策 9）、工具事件脱敏（决策 10）、调用时注入（决策 11）、软删除（决策 4）；整理的运行语义、缓存正确性、按轮记录、开关存储、检索融合全部重写 | design 审查发现 6 个高严重度问题 |
