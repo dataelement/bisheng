@@ -72,3 +72,18 @@ def get_resident_service():
     from bisheng.memory.domain.services.resident import ResidentService
 
     return _get("resident", lambda: ResidentService(kv=get_kv(), metrics=get_metrics()))
+
+
+def get_consolidator():
+    from bisheng.memory.domain.services.consolidation_content import ConsolidationContent
+    from bisheng.memory.domain.services.consolidator import Consolidator
+
+    return _get(
+        "consolidator",
+        lambda: Consolidator(
+            service=get_memory_service(),
+            kv=get_kv(),
+            metrics=get_metrics(),
+            content_fn=ConsolidationContent(get_memory_llm()),
+        ),
+    )

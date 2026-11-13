@@ -380,7 +380,7 @@
   **覆盖 AC**: AC-43, AC-102
   **依赖**: T046, T024, T026
 
-- [ ] **T048**: 定时任务的实现
+- [x] **T048**: 定时任务的实现
   **文件**: `src/backend/bisheng/worker/memory/tasks.py`（新建，含 `__init__.py`）、`src/backend/bisheng/memory/domain/services/reconcile.py`（新建）、`src/backend/bisheng/core/config/settings.py`
   **逻辑**: 对账的业务逻辑（补建索引、换模型后重建、清理孤儿详情对象）放在 `reconcile.py`，任务文件只负责调度。扫描、整理、对账、指标落库、遗留清理五个任务，走默认 `celery` 队列；Beat 调度项按现有方式追加。**租户传递**：扫描、对账、指标落库、遗留清理四个任务的跨租户枚举查询包在 `bypass_tenant_filter()` 里，之后逐租户调用 `set_current_tenant_id()` 再处理；投整理任务时 `apply_async(args=[tenant_id, user_id], headers={"tenant_id": tenant_id})`，由 `task_prerun` 恢复租户上下文。`settings.py` 只追加调度项，不导入记忆模块（任务以字符串名引用）。
   **测试**: T047 全部通过
