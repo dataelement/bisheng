@@ -184,6 +184,11 @@ export default function KnowledgeFile({
     }
   };
   const handleRead = async (row: KnowledgeSpaceInfo) => {
+    if (live.current !== epoch) return;
+    if (isAdmin) {
+      navigate(`/filelib/${row.id}?view=admin`);
+      return;
+    }
     let allowed = row.actions?.includes("visible") || hasAction(row, "visible");
     if (!allowed) {
       const result = await loadActions(String(row.id));
@@ -195,7 +200,7 @@ export default function KnowledgeFile({
       allowed = result.actions.includes("visible");
     }
     if (!allowed || live.current !== epoch) return;
-    navigate(`/filelib/${row.id}${isAdmin ? "?view=admin" : ""}`);
+    navigate(`/filelib/${row.id}`);
   };
   const handleConfiguration = (row: KnowledgeSpaceInfo, tab: string) => {
     setOpenId(null);
@@ -430,6 +435,7 @@ export default function KnowledgeFile({
             {rows.map((row) => (
               <TableRow
                 key={row.id}
+                className="cursor-pointer"
                 onClick={() => {
                   void handleRead(row);
                 }}
