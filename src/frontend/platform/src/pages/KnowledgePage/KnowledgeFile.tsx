@@ -56,8 +56,6 @@ interface KnowledgeFileProps {
   toolbarTarget?: HTMLDivElement | null;
 }
 
-const pageWindow = window as Window & { LibPage?: { type: string } };
-
 export default function KnowledgeFile({
   scope,
   toolbarTarget,
@@ -197,13 +195,11 @@ export default function KnowledgeFile({
       allowed = result.actions.includes("visible");
     }
     if (!allowed || live.current !== epoch) return;
-    pageWindow.LibPage = { type: isAdmin ? "admin" : "file" };
-    navigate(`/filelib/${row.id}`);
+    navigate(`/filelib/${row.id}${isAdmin ? "?view=admin" : ""}`);
   };
   const handleConfiguration = (row: KnowledgeSpaceInfo, tab: string) => {
     setOpenId(null);
-    pageWindow.LibPage = { type: isAdmin ? "admin" : "file" };
-    navigate(`/filelib/${row.id}?tab=${tab}`);
+    navigate(`/filelib/${row.id}?tab=${tab}${isAdmin ? "&view=admin" : ""}`);
   };
   const handleRefresh = async () => {
     try {

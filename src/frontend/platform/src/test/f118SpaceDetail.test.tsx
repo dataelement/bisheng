@@ -474,8 +474,9 @@ it.each(["file_id=0", "file_id=11&file_id=12"])("rejects invalid file targets be
   expect(mocks.get).not.toHaveBeenCalled();
 });
 
-it("opens the chunk editor and returns to the same directory with its original filters", async () => {
-  mount("/filelib/7?parent_id=9&fileStatus=abnormal&keep=1");
+it.each(["ordinary", "admin"])("opens the chunk editor in the %s view and returns to the same directory with its original filters", async (view) => {
+  user = { ...user, is_child_admin: view === "admin" };
+  const current = mount(`/filelib/7?parent_id=9&fileStatus=abnormal&keep=1${view === "admin" ? "&view=admin" : ""}`);
   fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
   await waitFor(() => expect(screen.getByTestId("detail-chunks")).toBeInTheDocument());
   expect(screen.getByTestId("location")).toHaveTextContent("file_id=11");
@@ -483,4 +484,17 @@ it("opens the chunk editor and returns to the same directory with its original f
   expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
   expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9&fileStatus=abnormal&keep=1");
   expect(screen.getByTestId("location")).not.toHaveTextContent("file_id=");
+  const views = current.client.getQueryCache().getAll().map((query) => query.queryKey[4]);
+  expect(views).toContain(view);
+  expect(views).not.toContain(view === "admin" ? "ordinary" : "admin");
+  expect(screen.getByRole("tab", { name: view === "admin" ? "f118.manage_spaces" : "f118.spaces" })).toHaveAttribute("data-state", "active");
+});
+
+it("does not turn a forged management URL into an admin scope for an ordinary user", async () => {
+  const current = mount("/filelib/7?view=admin");
+  expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
+  expect(screen.queryByRole("tab", { name: "f118.manage_spaces" })).toBeNull();
+  const keys = JSON.stringify(current.client.getQueryCache().getAll().map((query) => query.queryKey));
+  expect(keys).toContain("ordinary");
+  expect(keys).not.toContain('"admin"');
 });

@@ -147,7 +147,7 @@ export function SpaceManagementView({
               color="default"
               iconOnly
               aria-label={t("back")}
-              onClick={() => navigate("/filelib")}
+              onClick={() => navigate(scope.view === "admin" ? "/filelib?view=admin" : "/filelib")}
             >
               <Outlined.ArrowLeft />
             </Button>

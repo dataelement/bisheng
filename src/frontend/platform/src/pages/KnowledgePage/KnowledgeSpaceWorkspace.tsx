@@ -31,15 +31,16 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, active = true }: Knowl
   const invalid = routeId !== undefined && (
     spaceId === null || (parents.length > 0 && (parents.length !== 1 || parentId === null))
   );
-  const initial = useInitialSpace(scope, active && routeId === undefined);
+  const ordinary = scope.view === "ordinary";
+  const initial = useInitialSpace(scope, active && ordinary && routeId === undefined);
   useEffect(() => {
-    if (!active || routeId !== undefined || !initial.space) return;
+    if (!active || !ordinary || routeId !== undefined || !initial.space) return;
     const next = new URLSearchParams(params);
     next.delete("parent_id");
     next.delete("tab");
     next.delete("file_id");
     navigate({ pathname: `/filelib/${initial.space.id}`, search: next.toString() }, { replace: true });
-  }, [initial.space, active, routeId, params, navigate]);
+  }, [initial.space, active, ordinary, routeId, params, navigate]);
   const canCreate = user?.is_global_super === true || user?.is_child_admin === true ||
     user?.web_menu?.includes("create_knowledge") === true;
   const handleSelect = (id: number, folderId: number | null, showFiles = false) => {
@@ -50,9 +51,10 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, active = true }: Knowl
     else next.set("parent_id", String(folderId));
     navigate({ pathname: `/filelib/${id}`, search: next.toString() });
   };
+  if (!active) return null;
   return (
     <div className="flex h-[calc(100vh-120px-var(--license-banner-h,0px))] min-h-0 min-w-0">
-      <KnowledgeSpaceSidebar
+      {ordinary && <KnowledgeSpaceSidebar
         scope={scope}
         spaceId={invalid ? undefined : spaceId ?? undefined}
         parentId={invalid ? null : parentId}
@@ -60,7 +62,7 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, active = true }: Knowl
         onCreate={() => setCreateOpen(true)}
         onSelect={(id, folderId) => handleSelect(id, folderId, true)}
         onSquare={() => window.open(getWorkspaceClientUrl("/knowledge?square=1"), "_blank", "noopener,noreferrer")}
-      />
+      />}
       <main className="min-w-0 flex-1 overflow-auto px-4" aria-label={t("workspace.files")}>
         {invalid ? <p role="status">{t("f118.scope_unavailable")}</p> : spaceId !== null ? (
           <SpaceDetail
@@ -76,7 +78,7 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, active = true }: Knowl
           {initial.error && <Button variant="text" onClick={() => { void initial.retry(); }}>{t("retry")}</Button>}
         </div>}
       </main>
-      {canCreate && <KnowledgeLibraryDialog
+      {ordinary && canCreate && <KnowledgeLibraryDialog
         scope={scope}
         datalist={[]}
         open={createOpen}

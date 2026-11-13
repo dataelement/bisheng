@@ -89,7 +89,7 @@ export function FilesUpload() {
   const { t } = useTranslation("knowledge");
   const { id } = useParams();
   const [params] = useSearchParams();
-  const { scopes, isLoading, retry } = useKnowledgePageScope();
+  const { scopes, isLoading, canManage, retry } = useKnowledgePageScope();
   const spaceId = parseId(id);
   const parents = params.getAll("parent_id");
   const parentId = parents.length === 1 ? parseId(parents[0]) : null;
@@ -113,7 +113,8 @@ export function FilesUpload() {
         </Button>
       </div>
     );
-  const scope = scopes.ordinary;
+  const views = params.getAll("view");
+  const scope = canManage && views.length === 1 && views[0] === "admin" ? scopes.admin : scopes.ordinary;
   return (
     <UploadTarget
       key={JSON.stringify([

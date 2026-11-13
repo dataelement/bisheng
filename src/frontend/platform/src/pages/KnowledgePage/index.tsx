@@ -2,7 +2,7 @@ import { Button, Tabs } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
 import KnowledgeFile from "./KnowledgeFile";
@@ -15,15 +15,21 @@ export default function KnowledgePage() {
   const { t } = useTranslation("knowledge");
   const { id } = useParams();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const { scopes, isLoading, canManage, retry } = useKnowledgePageScope();
   const [toolbarTarget, setToolbarTarget] = useState<HTMLDivElement | null>(
     null,
   );
-  const [active, setActive] = useState(
+  const [initialTab, setInitialTab] = useState(
     () => pageWindow.LibPage?.type || "file",
   );
-  const activeKey =
-    id === undefined && (active === "qa" || (active === "admin" && canManage)) ? active : "file";
+  const views = params.getAll("view");
+  const requested = views.length === 0
+    ? (id === undefined ? initialTab : "file")
+    : views.length === 1 ? views[0] : "file";
+  const activeKey = requested === "admin" && canManage
+    ? "admin"
+    : requested === "qa" && id === undefined ? "qa" : "file";
   useEffect(() => {
     delete pageWindow.LibPage;
   }, []);
@@ -43,7 +49,7 @@ export default function KnowledgePage() {
   const content = (scope: KnowledgeQueryScope | undefined, tree = false) =>
     scope ? (
       tree ? (
-        <KnowledgeSpaceWorkspace key={JSON.stringify(scope)} scope={scope} routeId={id} active={activeKey === "file"} />
+        <KnowledgeSpaceWorkspace key={JSON.stringify(scope)} scope={scope} routeId={id} active={activeKey === (scope.view === "admin" ? "admin" : "file")} />
       ) : <KnowledgeFile key={JSON.stringify(scope)} scope={scope} toolbarTarget={toolbarTarget} />
     ) : (
       unavailable
@@ -53,11 +59,8 @@ export default function KnowledgePage() {
       <Tabs
         activeKey={activeKey}
         onChange={(key) => {
-          setActive(key);
-          if (id !== undefined) {
-            pageWindow.LibPage = { type: key };
-            navigate("/filelib");
-          }
+          setInitialTab("file");
+          navigate(key === "file" ? "/filelib" : `/filelib?view=${key}`);
         }}
         extra={<div ref={setToolbarTarget} />}
         className="mb-10 w-full [&>div:first-child]:mx-2 [&>div:first-child]:mb-2"
@@ -80,7 +83,7 @@ export default function KnowledgePage() {
                   key: "admin",
                   label: t("f118.manage_spaces"),
                   icon: <Outlined.Books aria-hidden="true" />,
-                  children: content(scopes?.admin),
+                  children: content(scopes?.admin, id !== undefined),
                 },
               ]
             : []),

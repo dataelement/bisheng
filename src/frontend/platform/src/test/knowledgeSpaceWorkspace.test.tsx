@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import KnowledgePage from "@/pages/KnowledgePage";
 import { userContext } from "@/contexts/userContext";
@@ -14,11 +14,15 @@ vi.mock("@/controllers/request", () => ({ default: { get: mock.get }, showApiErr
 vi.mock("@/pages/KnowledgePage/KnowledgeFile", () => ({ default: ({ scope }: { scope: { view: string } }) => <p>{scope.view}-list</p> }));
 vi.mock("@/pages/KnowledgePage/KnowledgeQa", () => ({ default: () => <p>qa-list</p> }));
 vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({ KnowledgeLibraryDialog: () => null }));
-vi.mock("@/pages/KnowledgePage/components/Files", () => ({ default: (props: FilesProps) => <output data-testid="files">{JSON.stringify({ id: props.spaceId, parent: props.parentId, presentation: props.presentation })}</output> }));
+vi.mock("@/pages/KnowledgePage/components/Files", () => ({ default: (props: FilesProps) => <output data-testid="files">{JSON.stringify({ id: props.spaceId, parent: props.parentId, presentation: props.presentation, view: props.scope?.view })}</output> }));
 
 const scope = { identityKey: "user:5", tenantId: 60, managementTenantId: 60, view: "ordinary" } as const;
 const clients: QueryClient[] = [];
-function Location() { const location = useLocation(); return <output data-testid="location">{location.pathname}{location.search}</output>; }
+function Location() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return <><output data-testid="location">{location.pathname}{location.search}</output><button onClick={() => navigate(-1)}>history-back</button><button onClick={() => navigate(1)}>history-forward</button></>;
+}
 function mount(path = "/filelib") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
@@ -84,6 +88,34 @@ it("automatically opens the first sidebar space instead of rendering the ordinar
   expect(await screen.findByTestId("files")).toHaveTextContent('"id":7');
   expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7");
   expect(screen.queryByText("ordinary-list")).toBeNull();
+});
+
+it("keeps management details, list return and browser history in the admin view without loading personal navigation", async () => {
+  mount("/filelib/7?view=admin&parent_id=9&fileStatus=abnormal");
+  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"admin"');
+  expect(screen.getByRole("tab", { name: "f118.manage_spaces" })).toHaveAttribute("data-state", "active");
+  expect(screen.queryByRole("complementary")).toBeNull();
+  expect(mock.get.mock.calls.some(([url]) => /\/(department|mine|joined|list)$/.test(String(url)))).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "back" }));
+  expect(await screen.findByText("admin-list")).toBeVisible();
+  expect(screen.getByTestId("location")).toHaveTextContent("/filelib?view=admin");
+  expect(screen.queryByTestId("files")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "history-back" }));
+  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"admin"');
+  expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9&fileStatus=abnormal");
+  fireEvent.click(screen.getByRole("button", { name: "history-forward" }));
+  expect(await screen.findByText("admin-list")).toBeVisible();
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "f118.spaces" }), { button: 0, ctrlKey: false });
+  await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"view":"ordinary"'));
+  expect(screen.getByTestId("location")).not.toHaveTextContent("view=admin");
+  expect(screen.getByRole("complementary")).toBeVisible();
+});
+
+it("restores the management list directly from its URL without selecting an ordinary space", async () => {
+  mount("/filelib?view=admin");
+  expect(await screen.findByText("admin-list")).toBeVisible();
+  expect(mock.get).not.toHaveBeenCalled();
+  expect(screen.queryByTestId("files")).toBeNull();
 });
 
 it("waits for earlier navigation groups before selecting the first space", async () => {
