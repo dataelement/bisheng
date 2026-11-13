@@ -190,3 +190,21 @@ knowledge_space:
   # 知识空间左侧目录树展示开关（仅前端读取，后端 API 不变）
   # 默认 true；中粮场内部署改为 false 走原 Tab 布局
   tree_structured_directory_display: true
+
+memory:
+  # F132 长期记忆的部署级参数。缺键时代码里有同值的默认值，这里只起说明作用。
+  # 常驻记忆条数与字数上限（未经评测校准）
+  resident_max_items: 60
+  resident_max_chars: 6000
+  # 深度研究任务开始时带入的经验类条目上限
+  experience_max_items: 20
+  experience_max_chars: 2000
+  # 会话安静多久后整理（分钟）与扫描周期（分钟）
+  quiet_minutes: 30
+  scan_interval_minutes: 5
+  # 整理锁的存活时间（分钟）
+  lock_ttl_minutes: 10
+  # 取不到用户时区时使用的默认时区
+  default_timezone: Asia/Shanghai
+  # 自动整理总开关；关闭后不再投整理任务，不影响显式写入与读取
+  auto_consolidation_enabled: true

@@ -137,7 +137,7 @@
   **回滚**: `downgrade` 删除六张新表与该列。六张表是新增表，没有数据迁移，可逆。
   **依赖**: T012
 
-- [ ] **T014**: 运行期配置、应用类型与测试夹具
+- [x] **T014**: 运行期配置、应用类型与测试夹具
   **文件**: `src/backend/bisheng/memory/domain/config.py`（新建）、`src/backend/bisheng/common/constants/enums/telemetry.py`、`src/backend/bisheng/initdb_config.yaml`、`src/backend/test/memory/conftest.py`（新建，含 `__init__.py`）
   **逻辑**: `MemoryRuntimeConfig` 从 `settings.aget_from_db("memory")` 读取，缺键时用代码里的默认值（design 决策 19 的表）；`bisheng/initdb_config.yaml` 增加带注释的 `memory` 段，不改 `config.yaml`。`ApplicationTypeEnum` 增加 `MEMORY = "memory"`。夹具提供：内存 SQLite 上建好六张表的会话；实现 `MemoryIndex` 的内存索引（可注入"关键词路不可达""向量路不可达""写入失败""超时"）；实现 `DetailStore` 的内存存储（可注入读取失败）；实现 `MemoryLLM` 的桩（按脚本返回候选、工具调用或抛错）；`MemoryContext` 工厂；两个租户、两个用户、一个"可见多租户"身份、一个全局超管身份。
   **依赖**: T010, T012
