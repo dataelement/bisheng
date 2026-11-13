@@ -25,3 +25,22 @@
   - C. 不新增枚举成员（记忆调用改用已有的类型）。这会改变 design 决策 18 与 AC-45 测试的口径。
 - **建议**：A。
 - **目前做法**：已按 A 修改并单独提交。如果不同意，回退这两处改动即可（`git revert` 对应提交），涉及文件只有这两个。
+
+## P-03 `/workbench/continue` 追问轮的提示与归因按任务消息合并显示（P-01 的延续）
+
+- **涉及**：T068、T070、T086；AC-21、AC-87；P-01。来源：wave-notes/wave-11.md W11-1、wave-13.md U-13-02。
+- **问题**：主路径一轮一条任务消息行，按 `message_id` 取提示与归因没有问题。`/continue` 追问轮与首轮共用同一条任务消息行，所以按 `message_id` 取到的是这条行上多轮合并的结果；`/linsight/new` 页上的多轮只有前端自造的轮次标识，这些轮不显示记忆提示。
+- **可选做法**：
+  - A. 维持现状：这条隐藏路径不保证逐轮区分。
+  - B. 后端经 WS 记忆事件为每轮带 `turn_id`，前端按 `turn_id` 取。后果：要改深度研究的 WS 事件与前端 `useLinsightManager` 的轮次状态。
+  - C. `/continue` 轮的概要行不写 `message_id`。后果：一天后被遗留记录清理删除，刷新后操作提示与撤销入口消失。
+- **建议**：A，与 P-01 的建议一致（这条路径没有界面入口）。
+- **目前做法**：按 A。改为 C 只需改 `linsight/domain/services/memory_turns.py` 的 `begin`；改为 B 涉及 `linsight/domain/services/memory_turns.py` 与 `client/src/components/Linsight/` 的轮次状态。
+
+## P-04 单条删除不做二次确认
+
+- **涉及**：T082、T083；AC-87、AC-89。来源：wave-notes/wave-13.md U-13-01。
+- **问题**：AC-89 只要求"清空全部"二次确认。记忆管理页的单条删除和回答旁归因里的就地删除，目前点一下就删除；删错后只能在管理页重新新增（撤销只针对对话里的显式写入）。
+- **可选做法**：A. 不确认（现状）；B. 单条删除也弹确认，代价是归因里连续删多条时多一步。
+- **建议**：A。AC-87 写的是"就地删除"，单条误删代价小。
+- **目前做法**：按 A。改为 B 涉及 `client/src/pages/settings/sections/MemoryPane.tsx` 与 `client/src/components/Chat/MemoryNotice.tsx`。

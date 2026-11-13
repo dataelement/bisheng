@@ -391,26 +391,26 @@
 
 ### Wave 8：接入日常模式
 
-- [ ] **T049**: 日常模式带入与工具的测试
+- [x] **T049**: 日常模式带入与工具的测试
   **文件**: `src/backend/test/workstation/test_memory_inject.py`
   **逻辑**: 用桩模型驱动一轮：登录态 endpoint 调用后会话被登记；已登记且启用时系统提示词含常驻记忆文本块，工具列表含两个记忆工具；直接调用服务函数而不经登录态 endpoint（模拟开放面入口）时两者都没有；无工具直连分支同样带上常驻记忆；带入失败时本轮回答仍完成并计一次失败；在别的场景记下的条目出现在日常模式新会话的常驻文本里。
   **覆盖 AC**: AC-03, AC-10, AC-27, AC-28, AC-51, AC-61
   **依赖**: T040, T032
 
-- [ ] **T050**: 日常模式带入与工具的实现
+- [x] **T050**: 日常模式带入与工具的实现
   **文件**: `src/backend/bisheng/workstation/api/endpoints/chat.py`、`src/backend/bisheng/workstation/domain/services/chat_service.py`
   **逻辑**: endpoint 里调 `MemoryGate.open`；`_agent_stream_chat_completion` 开头做启用判定并生成 `turn_id`；系统提示词拼装处（`chat_service.py:2099-2111` 之后）追加常驻文本块，直连分支（`:2407-2411`）同样处理；`_prepare_tools` 的调用处追加记忆工具。
   **测试**: T049 全部通过
   **覆盖 AC**: AC-03, AC-10, AC-27, AC-28, AC-51, AC-61
   **依赖**: T049
 
-- [ ] **T051**: 日常模式事件与一轮结束的测试
+- [x] **T051**: 日常模式事件与一轮结束的测试
   **文件**: `src/backend/test/workstation/test_memory_events.py`
   **逻辑**: 模型调用 `memory_write` 成功后流里出现 `memory` 类别的事件，载荷含 `turn_id` 与标志、不含条目内容；一轮里只带入了常驻记忆或只做了检索、没有显式写入时，结束前同样下发带"有归因"标志的事件，并已写入本轮概要行（含常驻版本与日期）；落库消息的 `events` 里记忆工具的入参与返回已脱敏；流式下发的工具事件同样已脱敏；正常结束时本轮记录绑定到回答的消息 id，登记行变为待整理；中断路径同样完成绑定与登记；记忆未启用的一轮结束时水位被推进。
   **覆盖 AC**: AC-09, AC-21, AC-37, AC-41, AC-87
   **依赖**: T050, T042
 
-- [ ] **T052**: 日常模式事件与一轮结束的实现
+- [x] **T052**: 日常模式事件与一轮结束的实现
   **文件**: `src/backend/bisheng/workstation/domain/services/chat_service.py`、`src/backend/bisheng/workstation/domain/services/chat_helpers.py`
   **逻辑**: 工具事件写入 `events` 与下发前（`chat_service.py:2311-2319`、`:2343-2344`）调脱敏函数；`_sse_resp` 增加 `memory` 类别；一轮结束前写本轮概要行并下发归因标志；正常结束（`:2558-2575`）与中断路径（`:1955-1980`，同步函数，用同步实现）调 `bind_turn` 与 `end_turn`。
   **测试**: T051 全部通过
@@ -423,46 +423,46 @@
 
 实现位置以 T002、T003、T006 的结论为准。
 
-- [ ] **T053**: 助手每轮处理的测试
+- [x] **T053**: 助手每轮处理的测试
   **文件**: `src/backend/test/assistant/test_memory_turn.py`
   **逻辑**: 用桩模型在 ReAct 与 function call 两种执行器下各跑：新建助手开关默认关，不带入常驻记忆、没有记忆工具；开关打开且已登记时，每轮输入里含常驻记忆系统消息、工具列表里有记忆工具，作者没有配置任何工具也如此；同一个 `AssistantAgent` 对象上，数据库里的开关被关掉后下一轮不再带入且工具消失，再打开后恢复且之前的条目可读；历史超长触发裁剪时常驻记忆仍在输入里；`run()` 返回值里不含注入的系统消息；带入失败时本轮仍完成并计一次失败；作者配置了与记忆工具同名的工具时以记忆工具为准并记一条告警；用户乙在同一个助手里读不到用户甲的条目；没有登记行时记忆不工作。
   **覆盖 AC**: AC-02, AC-10, AC-51, AC-61, AC-71, AC-72, AC-73, AC-74, AC-77
   **依赖**: T040, T032
 
-- [ ] **T054**: 助手每轮处理的实现
+- [x] **T054**: 助手每轮处理的实现
   **文件**: `src/backend/bisheng/api/services/assistant_agent.py`
   **逻辑**: `run` / `astream` 开头：按主键重读 `assistant.memory_enabled`、做启用判定、状态与上一轮不同则重建 agent；裁剪之后插入常驻记忆系统消息；返回前剔除注入的系统消息。`init_tools` 在启用时追加记忆工具并处理同名工具。设计见 design 决策 11、10。
   **测试**: T053 全部通过
   **覆盖 AC**: AC-02, AC-10, AC-51, AC-61, AC-71, AC-72, AC-73, AC-74, AC-77
   **依赖**: T053
 
-- [ ] **T055**: 助手工具事件脱敏与信号的测试
+- [x] **T055**: 助手工具事件脱敏与信号的测试
   **文件**: `src/backend/test/assistant/test_memory_redaction.py`
   **逻辑**: 调用一次记忆工具后：由 `run()` 返回值构造的 tool_call、tool_result 行里内容已脱敏；回调插入的 `category=tool` 行与 `intermediate_steps` 字段里内容已脱敏；回调经 WebSocket 下发的工具消息里内容已脱敏；非记忆工具的三处内容不变；下一轮回放历史时，记忆工具的结果被渲染成中性说明；显式写入成功后经 WebSocket 下发一条 `memory` 消息，载荷含 `turn_id` 与标志、不含条目内容；只带入常驻或只检索的一轮同样下发带"有归因"标志的消息并写入本轮概要行。
   **覆盖 AC**: AC-09, AC-21, AC-87
   **依赖**: T054
 
-- [ ] **T056**: 助手工具事件脱敏与信号的实现
+- [x] **T056**: 助手工具事件脱敏与信号的实现
   **文件**: `src/backend/bisheng/api/v1/callback.py`、`src/backend/bisheng/api/services/assistant_agent.py`
   **逻辑**: 回调处理器在工具开始时按 `run_id` 记下是否为记忆工具，在结束、出错、下发、落库处调脱敏函数；`AssistantAgent` 在返回前对结果里的记忆工具消息脱敏，并在回放历史时替换为中性说明；每轮写本轮概要行；有显式写入或归因时通过现有回调下发 `memory` 消息。
   **测试**: T055 全部通过
   **覆盖 AC**: AC-09, AC-21, AC-87
   **依赖**: T055
 
-- [ ] **T057**: 助手登记与一轮结束的测试
+- [x] **T057**: 助手登记与一轮结束的测试
   **文件**: `src/backend/test/assistant/test_memory_session.py`
   **逻辑**: 登录态连接在 `chat_id` 确定时被登记，连接内切换到另一个会话后新会话也被登记；免登录与开放面的连接无论如何切换都不产生登记行；回答落库后本轮记录绑定到消息 id，登记行变为待整理；中断落库时同样；记忆未启用的一轮结束时水位被推进；助手会话在安静期后能被整理出条目；只有对助手有编辑权限的用户能修改 `memory_enabled`，新建助手该字段为关。
   **覆盖 AC**: AC-10, AC-37, AC-42, AC-69
   **依赖**: T056, T046
 
-- [ ] **T058**: 助手登记与一轮结束的实现
+- [x] **T058**: 助手登记与一轮结束的实现
   **文件**: `src/backend/bisheng/common/chat/client.py`、`src/backend/bisheng/api/services/assistant_agent.py`、登录态助手 WebSocket endpoint 所在文件（以 T003 的结论为准）、`src/backend/bisheng/api/v1/schemas.py`、`src/backend/bisheng/api/services/assistant.py`
   **逻辑**: 登录态 endpoint 构造客户端时传入登记回调（一个可调用对象）。`client.py` 做两件事：`chat_id` 确定或切换时调用该回调；回答落库后（正常与中断）调用 `self.gpts_agent.after_answer_persisted(message_id, interrupted)`。`client.py` 里不出现对记忆模块的导入。`AssistantAgent.after_answer_persisted` 里调 `bind_turn` 与 `end_turn`。助手更新是逐字段白名单：`AssistantUpdateReq`（`api/v1/schemas.py`）加 `memory_enabled`，`api/services/assistant.py` 的更新逻辑逐字段赋值处同样加上，详情返回带出该字段。沿用现有编辑权限检查。
   **测试**: T057 全部通过
   **覆盖 AC**: AC-10, AC-37, AC-42, AC-69
   **依赖**: T057
 
-- [ ] **T059**: 删除助手相关的实验测试
+- [x] **T059**: 删除助手相关的实验测试
   **文件**: `src/backend/test/memory/spike/test_v1_callback.py`、`src/backend/test/memory/spike/test_v5_assistant_inject.py`
   **逻辑**: 这两个实验测试的结论已由 T053–T058 的正式测试覆盖，删除它们。
   **依赖**: T058
@@ -473,46 +473,46 @@
 
 实现位置以 T003、T005 的结论为准。
 
-- [ ] **T060**: 记忆检索节点的测试
+- [x] **T060**: 记忆检索节点的测试
   **文件**: `src/backend/test/workflow/test_memory_retriever_node.py`
   **逻辑**: 节点类型已注册，同一工作流可放多个；`query` 可为纯文字、纯变量引用、两者混写，引用的变量不是文字时转成文字；`limit` 默认 20，节点的参数校验对 1 到 100 以外的整数与非整数返回检索数量参数非法的错误码；执行时只在当前使用者本人的记忆里检索，包含在其他场景产生的条目，按相关程度排序且不超过 `limit`；输出每一项含内容、类型、记录时间、来源标记，有事件时间的带事件时间，带详情的内容为详情全文，每项内容以背景信息前缀与记录日期开头；没有命中、运行时 `query` 为空、没有登记、"我的记忆"为关、工作流开关为关时输出空数组且节点正常结束；检索不可用时节点失败并给出原因；运行日志含检索内容与返回条数、不含条目内容；两个用户运行同一工作流各自只得到本人的条目；节点不写本轮记录；工作流的其他节点没有收到常驻记忆；工作流运行中没有任何记忆写入能力（没有 `memory_write`）。测试里直接给 `graph_state` 的两个只读字段赋值。
   **覆盖 AC**: AC-02, AC-28, AC-57, AC-60, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-86
   **依赖**: T034, T022
 
-- [ ] **T061**: 记忆检索节点的实现
+- [x] **T061**: 记忆检索节点的实现
   **文件**: `src/backend/bisheng/workflow/nodes/memory_retriever/memory_retriever.py`（新建，含 `__init__.py`）、`src/backend/bisheng/workflow/common/node.py`、`src/backend/bisheng/workflow/nodes/node_manage.py`、`src/backend/bisheng/workflow/graph/graph_state.py`
   **逻辑**: 新增 `NodeType.MEMORY_RETRIEVER` 与节点类；参数校验函数；`graph_state` 增加 `chat_id` 与 `memory_enabled` 两个只读字段（默认空与关，T063 负责在实例化时填值）；`_run` 从 `graph_state` 取 `chat_id` 与开关，过启用判定后调检索；`parse_log` 返回检索内容与返回条数。输出变量 `retrieved_memory`，结构见 design §4.2。
   **测试**: T060 全部通过
   **覆盖 AC**: AC-02, AC-28, AC-57, AC-60, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-86
   **依赖**: T060
 
-- [ ] **T062**: 工作流开关与上线校验的测试
+- [x] **T062**: 工作流开关与上线校验的测试
   **文件**: `src/backend/test/workflow/test_memory_switch.py`
   **逻辑**: 新建工作流的开始节点里记忆开关为关；开关随工作流版本保存，没有该参数的历史版本按关处理；上线时：含记忆检索节点而开关为关被拒并返回对应错误码，开关为开时可上线，节点的 `limit` 非法被拒；运行时的开关取自数据库里的上线版本，客户端送来一个开关为开的图而数据库为关时节点输出空数组；只有对工作流有编辑权限的用户能保存开关。
   **覆盖 AC**: AC-70, AC-71, AC-80, AC-85
   **依赖**: T061
 
-- [ ] **T063**: 工作流开关与上线校验的实现
+- [x] **T063**: 工作流开关与上线校验的实现
   **文件**: `src/backend/bisheng/workflow/graph/graph_engine.py`、`src/backend/bisheng/api/services/workflow.py`
   **逻辑**: 实例化时按 `flow_id` 读上线版本的开始节点参数 `memory_enabled`，与 `chat_id` 一起填进 `graph_state` 的两个只读字段；`update_flow_status` 的上线分支加两项校验（开关、`limit`）。保存时的 `limit` 校验在前端（T077），后端以上线时为准。
   **测试**: T062 全部通过
   **覆盖 AC**: AC-70, AC-71, AC-80, AC-85
   **依赖**: T062
 
-- [ ] **T064**: 工作流登记与一轮结束的测试
+- [x] **T064**: 工作流登记与一轮结束的测试
   **文件**: `src/backend/test/workflow/test_memory_session.py`
   **逻辑**: 登录态运行在拿到消息体里的 `chat_id` 时被登记；免登录与开放面运行不产生登记行；评测与调试运行（`chat_id` 为空）不登记、节点输出空数组；任务函数停在等待输入返回时登记一次活跃，成功或失败结束时各登记一次；记忆未启用时水位被推进；工作流会话在安静期后能被整理出条目。
   **覆盖 AC**: AC-10, AC-37, AC-42
   **依赖**: T063, T046
 
-- [ ] **T065**: 工作流登记与一轮结束的实现
+- [x] **T065**: 工作流登记与一轮结束的实现
   **文件**: `src/backend/bisheng/common/chat/clients/workflow_client.py`、`src/backend/bisheng/worker/workflow/tasks.py`、登录态工作流 WebSocket endpoint 所在文件（以 T003 的结论为准）
   **逻辑**: 登录态 endpoint 构造客户端时传入登记回调；`workflow_client.py` 在拿到 `chat_id` 时调用它，文件里不出现对记忆模块的导入；任务函数每次让出控制时调 `end_turn`。
   **测试**: T064 全部通过
   **覆盖 AC**: AC-10, AC-37, AC-42
   **依赖**: T064
 
-- [ ] **T066**: 删除工作流相关的实验测试
+- [x] **T066**: 删除工作流相关的实验测试
   **文件**: `src/backend/test/memory/spike/test_v4_graph_state.py`
   **逻辑**: 结论已由 T060–T065 的正式测试覆盖，删除。
   **依赖**: T065
@@ -523,59 +523,59 @@
 
 实现位置以 T004、T008 的结论为准。
 
-- [ ] **T067**: 深度研究登记与轮次的测试
+- [x] **T067**: 深度研究登记与轮次的测试
   **文件**: `src/backend/test/linsight/test_memory_turns.py`
   **逻辑**: 三个登录态 endpoint（提交、继续、补充输入）调用后会话被登记；开放面与无人值守运行不登记；每一轮（首次提交与每次追问）开始时各建一条本轮概要并有各自的 `turn_id`；每一轮结束（成功、部分完成、终止、直接回答四种）各登记一次活跃；记忆未启用时不建概要。
   **覆盖 AC**: AC-10, AC-37
   **依赖**: T042, T026
 
-- [ ] **T068**: 深度研究登记与轮次的实现
+- [x] **T068**: 深度研究登记与轮次的实现
   **文件**: `src/backend/bisheng/linsight/api/endpoints/linsight.py`、`src/backend/bisheng/linsight/domain/task_exec.py`
   **逻辑**: 三个 endpoint 调 `MemoryGate.open`；任务开始处做启用判定、建本轮概要行；四个结束点调 `end_turn`。只加调用，不改既有流程。
   **测试**: T067 全部通过
   **覆盖 AC**: AC-10, AC-37
   **依赖**: T067
 
-- [ ] **T069**: 深度研究带入与工具的测试
+- [x] **T069**: 深度研究带入与工具的测试
   **文件**: `src/backend/test/linsight/test_memory_inject.py`
   **逻辑**: 用桩模型：已登记且启用时，模型每次调用收到的提示词末段含常驻记忆与经验类条目；文本在任务开始时取一次，任务中途条目变化不改变它；记忆中间件排在引用与语言两个尾部中间件之前；首次执行、恢复、继续三条路径的工具列表里都有记忆工具，提示词里同步出现工具的使用说明；未登记时都没有；带入失败时任务仍继续并计一次失败；显式写入成功后下发记忆事件；只带入或只检索的一轮结束时下发带"有归因"标志的事件。
   **覆盖 AC**: AC-21, AC-28, AC-51, AC-55, AC-61, AC-87
   **依赖**: T068, T040
 
-- [ ] **T070**: 深度研究带入与工具的实现
+- [x] **T070**: 深度研究带入与工具的实现
   **文件**: `src/backend/bisheng/linsight/domain/services/agent_factory.py`、`src/backend/bisheng/linsight/domain/task_exec.py`、`src/backend/bisheng/linsight/domain/services/state_message_manager.py`
   **逻辑**: 新增记忆中间件（`wrap_model_call` 追加，文本任务开始时取一次，排在两个尾部中间件之前）；`_generate_tools` 的三个调用点之后追加记忆工具，并按 `linsight/AGENTS.md` 让提示词与工具同步出现；`MessageEventType` 增加记忆事件，在显式写入成功后与一轮结束有归因时下发。
   **测试**: T069 全部通过
   **覆盖 AC**: AC-21, AC-28, AC-51, AC-55, AC-61, AC-87
   **依赖**: T069
 
-- [ ] **T071**: 深度研究脱敏的测试
+- [x] **T071**: 深度研究脱敏的测试
   **文件**: `src/backend/test/linsight/test_memory_redaction.py`
   **逻辑**: 调用一次记忆工具后：步骤事件写入任务历史的内容里记忆工具的入参与返回已脱敏；触发一次上下文压缩后写出的工作区文件里没有条目内容；大工具结果卸载路径不会把记忆工具的结果写成工作区文件；分享链接读取任务详情所走的接口返回里没有条目内容；非记忆工具的内容不变。
   **覆盖 AC**: AC-09
   **依赖**: T070
 
-- [ ] **T072**: 深度研究脱敏的实现
+- [x] **T072**: 深度研究脱敏的实现
   **文件**: `src/backend/bisheng/linsight/domain/services/stream_event_mapper.py`、`src/backend/bisheng/linsight/domain/utils.py`（及 T004 列出的其他落点文件）
   **逻辑**: T004 列出的每个落点在写出前调脱敏函数。
   **测试**: T071 全部通过
   **覆盖 AC**: AC-09
   **依赖**: T071
 
-- [ ] **T073**: 深度研究轮次整理的测试
+- [x] **T073**: 深度研究轮次整理的测试
   **文件**: `src/backend/test/memory/test_consolidator_linsight.py`
   **逻辑**: 用桩模型：一个任务追问两次后，三轮各有一条本轮概要、各被整理一次且只一次；每一轮读到的是该轮自己的问题与结果；进行中或停在等待用户补充的轮不整理；超过 24 小时未结束的轮被标记为放弃且不再尝试；整理出的条目来源为深度研究；同一会话里的日常消息仍按消息水位整理，两种方式互不干扰。
   **覆盖 AC**: AC-39, AC-42
   **依赖**: T068, T046
 
-- [ ] **T074**: 深度研究轮次整理的实现
+- [x] **T074**: 深度研究轮次整理的实现
   **文件**: `src/backend/bisheng/memory/domain/services/consolidation_linsight.py`（新建）、`src/backend/bisheng/memory/domain/services/consolidator.py`
   **逻辑**: 找出该用户未整理的深度研究轮（本轮概要行的 `consolidated` 标志），按 T008 的方法读取每一轮的问题与结果，交内容处理，处理后置位；超时放弃。`consolidator.py` 里加一步调用。读取深度研究数据通过深度研究模块的 Service 方法，不直接查它的表。
   **测试**: T073 全部通过
   **覆盖 AC**: AC-39, AC-42
   **依赖**: T073
 
-- [ ] **T075**: 删除深度研究相关的实验测试
+- [x] **T075**: 删除深度研究相关的实验测试
   **文件**: `src/backend/test/memory/spike/test_v3_linsight_paths.py`
   **逻辑**: 结论已由 T071、T072 覆盖，删除；`test/memory/spike/` 目录此时应为空，一并删除。
   **依赖**: T072
@@ -586,35 +586,35 @@
 
 每个任务带 Vitest 测试。测试命令的工作目录是 `src/frontend/platform/`；lint、类型检查与 i18n 检查在 `src/frontend/`。新增文案三语同批加入，源码里不写中文字面量。
 
-- [ ] **T076**: 工作流的记忆检索节点模板
+- [x] **T076**: 工作流的记忆检索节点模板
   **文件**: `src/frontend/platform/src/controllers/API/workflow.ts`、`src/frontend/platform/src/pages/BuildPage/flow/FlowNode/NodeLogo.tsx`、`src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/flow.json`
   **逻辑**: `workflowTemplate` 增加 `memory_retriever` 节点：`query` 用 `var_textarea` 控件、必填；`limit` 用 `number` 控件、默认 20；输出 `retrieved_memory`。图标与三语文案。
   **测试**: `src/frontend/platform/src/pages/BuildPage/flow/__tests__/memoryRetrieverTemplate.test.ts`：模板里有该节点、参数类型与默认值正确、三语文案的 key 都存在。
   **覆盖 AC**: AC-78, AC-79
   **依赖**: T061
 
-- [ ] **T077**: 工作流的开关、参数校验与上线提示
+- [x] **T077**: 工作流的开关、参数校验与上线提示
   **文件**: `src/frontend/platform/src/controllers/API/workflow.ts`、`src/frontend/platform/src/pages/BuildPage/flow/hooks/useNodeEvent.ts`、`src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/flow.json`
   **逻辑**: 开始节点增加"记忆"分组与 `memory_enabled` 开关（`switch` 控件，默认关），旁边显示 AC-75 的说明；`limit` 不是 1 到 100 的整数时保存校验不通过并提示合法范围；含记忆检索节点而开关为关时上线校验给出提示。
   **测试**: `src/frontend/platform/src/pages/BuildPage/flow/__tests__/memorySwitchValidate.test.ts`：开关默认关；说明文案存在；`limit` 为 0、101、1.5 时校验失败并带范围提示；开关为关且含该节点时上线校验失败。
   **覆盖 AC**: AC-70, AC-75, AC-80, AC-85
   **依赖**: T076, T063
 
-- [ ] **T078**: 助手设置页的记忆开关
+- [x] **T078**: 助手设置页的记忆开关
   **文件**: `src/frontend/platform/src/pages/BuildPage/assistant/editAssistant/Setting.tsx`、`AssistantDetail` 类型所在文件（用 `grep -rn "AssistantDetail" src/frontend/platform/src` 定位）、`src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`
   **逻辑**: 参照同页的 `knowledge_auth` 开关新增 `memory_enabled`，默认关，旁边显示 AC-75 的说明；写入 `assistantState`，随现有保存接口提交。
   **测试**: `src/frontend/platform/src/pages/BuildPage/assistant/editAssistant/__tests__/memorySwitch.test.tsx`：默认关；切换后状态里的字段变化；说明文案存在。
   **覆盖 AC**: AC-69, AC-75
   **依赖**: T058
 
-- [ ] **T079**: 工作台配置的整理模型选项
+- [x] **T079**: 工作台配置的整理模型选项
   **文件**: `src/frontend/platform/src/pages/BuildPage/bench/index.tsx`、`src/frontend/platform/src/pages/BuildPage/bench/DailyChatConfig.tsx`、`src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`
   **逻辑**: 新增一项"记忆整理使用的模型"下拉，没有开关；未选择时显示"使用工作台默认模型"。补 `ChatConfigForm` 类型、初始值、加载时合并、保存时的数据四处。
   **测试**: `src/frontend/platform/src/pages/BuildPage/bench/__tests__/memoryConfig.test.tsx`：下拉的值进入保存数据的 `memory_model_id`；未选择时保存为空；页面上没有记忆开关。
   **覆盖 AC**: AC-106
   **依赖**: T020
 
-- [ ] **T080**: 管理端查看会话时的记忆操作占位
+- [x] **T080**: 管理端查看会话时的记忆操作占位
   **文件**: T007 指出的渲染组件（预期为 `src/frontend/platform/src/components/bs-comp/appChat/PlatformConversationMessages.tsx` 与 `src/frontend/platform/src/pages/LogPage/useAppLog/DailyMessageContent.tsx`）、`src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`
   **逻辑**: 渲染到脱敏后的记忆工具事件（含 `redacted: true`）时显示"记忆操作"占位，不显示其他内容。这些页面不调用任何 `/api/v1/memory` 接口。
   **测试**: `src/frontend/platform/src/pages/LogPage/__tests__/memoryPlaceholder.test.tsx`：给定一条含脱敏记忆工具事件的消息，渲染结果只有占位文案；渲染过程中没有对 `/api/v1/memory` 的请求。
@@ -627,42 +627,42 @@
 
 每个任务带 Jest 测试。测试命令的工作目录是 `src/frontend/client/`。不要为了跑测试执行 `pnpm install`（见 `src/frontend/client/AGENTS.md`）。新增文案三语同批加入 `src/frontend/client/src/locales/{zh-Hans,en,ja}/translation.json`。
 
-- [ ] **T081**: 记忆接口封装、时区上报与流式信号
+- [x] **T081**: 记忆接口封装、时区上报与流式信号
   **文件**: `src/frontend/client/src/api/memory.ts`（新建）、`src/frontend/client/src/hooks/useMemoryTimezone.ts`（新建）、`src/frontend/client/src/hooks/useAiChatSSE.ts`
   **逻辑**: 封装 `/api/v1/memory` 的全部接口。应用加载后取浏览器的 IANA 时区，与本地记住的上次上报值不同才调用上报接口；这一处覆盖日常模式、应用聊天与深度研究，对话请求本身不带时区。SSE 解析增加 `memory` 类别，把 `turn_id` 与标志写入消息状态。加载一个会话的历史消息时，按 `chat_id` 批量取记忆标志并合并进消息状态。
   **测试**: `src/frontend/client/src/api/__tests__/memory.test.ts`：各接口的路径与参数；时区未变时不重复上报、变化时上报；收到 `memory` 事件后消息状态里有 `turn_id`；加载历史后带标志的消息状态里有标志。
   **覆盖 AC**: AC-14, AC-21
   **依赖**: T038, T052
 
-- [ ] **T082**: 个人设置的记忆页
+- [x] **T082**: 个人设置的记忆页
   **文件**: `src/frontend/client/src/pages/settings/sections/MemoryPane.tsx`（新建）、`src/frontend/client/src/pages/settings/settingsSections.ts`、`src/frontend/client/src/pages/settings/SettingsPage.tsx`
   **逻辑**: 新增"记忆" section：顶部是"我的记忆"开关；下面是条目列表（内容、类型、记录时间、事件时间、来源、是否常驻），支持编辑、新增、删除、清空（二次确认）。新增与编辑被拒时显示接口返回的原因。文案进三语文件。
   **测试**: `src/frontend/client/src/pages/settings/sections/__tests__/MemoryPane.test.tsx`：列表渲染各字段；手动新增的条目来源显示为手动添加；清空需要二次确认；"我的记忆"关闭后列表与全部操作仍可用；被拒时显示原因。
   **覆盖 AC**: AC-68, AC-88, AC-89, AC-90
   **依赖**: T081
 
-- [ ] **T083**: 操作提示与归因组件
+- [x] **T083**: 操作提示与归因组件
   **文件**: `src/frontend/client/src/components/Chat/MemoryNotice.tsx`（新建）、`src/frontend/client/src/locales/{zh-Hans,en,ja}/translation.json`
   **逻辑**: 给定 `turn_id` 或消息 id：显示操作提示（记下、更正、忘掉三种），可展开看到条目原文并撤销，撤销失败时显示接口返回的原因；归因入口展开后分两部分：检索取回的条目逐条列出、常驻记忆整份查看，每条可就地删除。没有任何记忆标志时不渲染。
   **测试**: `src/frontend/client/src/components/Chat/__tests__/MemoryNotice.test.tsx`：有写入标志时出现提示，展开后显示接口返回的条目；撤销调用接口并在成功后更新显示，失败时显示原因；归因分两部分；就地删除调用接口；没有标志时不渲染。
   **覆盖 AC**: AC-21, AC-22, AC-87
   **依赖**: T081
 
-- [ ] **T084**: 日常模式气泡接入
+- [x] **T084**: 日常模式气泡接入
   **文件**: `src/frontend/client/src/components/Chat/AiMessageBubble.tsx`、`src/frontend/client/src/components/Chat/Messages/ToolCallDisplay.tsx`
   **逻辑**: 气泡操作区挂 `MemoryNotice`；脱敏后的记忆工具事件在工具卡片里显示为"记忆操作"。
   **测试**: `src/frontend/client/src/components/Chat/__tests__/memoryBubble.test.tsx`：带标志的消息渲染出 `MemoryNotice`；脱敏的工具事件渲染为占位、不显示原始结构。
   **覆盖 AC**: AC-21, AC-87
   **依赖**: T083
 
-- [ ] **T085**: 应用聊天接入
+- [x] **T085**: 应用聊天接入
   **文件**: `src/frontend/client/src/pages/appChat/components/ClientMessageFooter.tsx`、`src/frontend/client/src/pages/appChat/useWebsocket.ts`
   **逻辑**: 解析 WebSocket 的 `memory` 消息；助手聊天的消息底部挂 `MemoryNotice`。工作流聊天不显示归因。
   **测试**: `src/frontend/client/src/pages/appChat/__tests__/memoryFooter.test.tsx`：收到 `memory` 消息后助手的回答底部出现提示与归因入口；工作流的回答不出现归因入口。
   **覆盖 AC**: AC-21, AC-87
   **依赖**: T083, T056
 
-- [ ] **T086**: 深度研究结果面板接入
+- [x] **T086**: 深度研究结果面板接入
   **文件**: `src/frontend/client/src/components/Linsight/Execution/ResultPanel.tsx`、`src/frontend/client/src/components/Linsight/Execution/TaskTurnPanel.tsx`
   **逻辑**: 每一轮的结果面板按该轮的 `turn_id` 挂 `MemoryNotice`，与点赞操作并列。`turn_id` 的来源以 T008 的结论为准。
   **测试**: `src/frontend/client/src/components/Linsight/Execution/__tests__/memoryResult.test.tsx`：一个任务的两轮各自显示各自的提示与归因，互不混淆。
