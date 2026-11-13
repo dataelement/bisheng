@@ -151,3 +151,86 @@ class ConsolidationContent:
         prompt = build_prompt(today, messages, existing_view, config.resident_max_items, mode=mode)
         answer = await self.llm.consolidate(ctx, prompt)
         return map_candidates(parse_candidates(answer), {i["id"] for i in existing_view})
+
+
+REWRITE_PROMPT = """下面这些记忆条目描述的事件日期已经过去（用户时区下今天是 {today}）。
+把每一条改写成过去时的表述，保留原来的具体日期，只改时态，不增删信息；不要写"昨天""上周"这类相对时间。
+输出一个 JSON 对象，不要输出其它文字：{{"rewrites": [{{"id": "...", "content": "..."}}]}}
+
+{items}"""
+
+
+class ExpiredEventRewrite:
+    """P1 consolidator step (AC-95): rewrite past-event items once, as a correction.
+
+    Picks the user's active items whose event date is before today (user
+    timezone) and that are not a rewrite themselves; the rewritten item
+    supersedes the old one, keeps the date and carries ``rewritten=True`` so the
+    same event is never rewritten again.
+    """
+
+    def __init__(self, service, llm, max_items: int = 20):
+        self.service = service
+        self.llm = llm
+        self.max_items = max_items
+
+    async def __call__(self, tenant_id: int, user_id: int) -> None:
+        from bisheng.memory.domain.models.memory_item import STATUS_ACTIVE, MemoryItem
+        from bisheng.memory.domain.repositories.setting_repository import SettingRepository
+
+        config = await aget_memory_config()
+        probe = MemoryContext(tenant_id=tenant_id, user_id=user_id)
+        setting = await SettingRepository.get(probe)
+        ctx = MemoryContext(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            timezone=(setting.timezone if setting and setting.timezone else config.default_timezone),
+            scene="manual",
+        )
+        today = local_today(ctx.timezone, config.default_timezone)
+        start_of_today = today.replace(hour=0, minute=0, second=0, microsecond=0)
+        stmt = (
+            select(MemoryItem)
+            .where(
+                MemoryItem.tenant_id == tenant_id,
+                MemoryItem.user_id == user_id,
+                MemoryItem.status == STATUS_ACTIVE,
+                MemoryItem.event_time.is_not(None),
+                MemoryItem.event_time < start_of_today,
+                MemoryItem.rewritten.is_(False),
+            )
+            .order_by(MemoryItem.event_time.asc())
+            .limit(self.max_items)
+        )
+        async with _db.async_session() as s:
+            items = list((await s.exec(stmt)).all())
+        if not items:
+            return
+        listing = "\n".join(f"- id={i.id} 事件日期 {i.event_time:%Y-%m-%d}：{i.content}" for i in items)
+        answer = await self.llm.consolidate(
+            ctx, REWRITE_PROMPT.format(today=today.strftime("%Y-%m-%d"), items=listing)
+        )
+        by_id = {i.id: i for i in items}
+        ops = []
+        for rw in parse_candidates(answer).get("rewrites") or []:
+            old = by_id.get(rw.get("id")) if isinstance(rw, dict) else None
+            if old is None:
+                continue
+            ops.append(
+                {
+                    "op": "rewrite",
+                    "target_id": old.id,
+                    "content": rw.get("content"),
+                    "type": old.type,
+                    "event_time": old.event_time.strftime("%Y-%m-%d"),
+                    "pinned": old.pinned,
+                }
+            )
+        if not ops:
+            return
+        async with _db.async_session() as s:
+            new_items = await self.service.apply_operations(s, ctx, ops)
+            if new_items:
+                await SettingRepository.bump_rev(s, ctx)
+            await s.commit()
+        await self.service.after_auto_commit(ctx, new_items)

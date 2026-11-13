@@ -75,7 +75,7 @@ def get_resident_service():
 
 
 def get_consolidator():
-    from bisheng.memory.domain.services.consolidation_content import ConsolidationContent
+    from bisheng.memory.domain.services.consolidation_content import ConsolidationContent, ExpiredEventRewrite
     from bisheng.memory.domain.services.consolidation_linsight import LinsightRoundConsolidation
     from bisheng.memory.domain.services.consolidator import Consolidator
 
@@ -88,7 +88,11 @@ def get_consolidator():
             metrics=get_metrics(),
             content_fn=content,
             # Deep-research rounds are consolidated per round, not by message watermark (R8).
-            extra_steps=[LinsightRoundConsolidation(service=service, content=content)],
+            extra_steps=[
+                LinsightRoundConsolidation(service=service, content=content),
+                # P1 (AC-95): past-event items are rewritten in past tense once.
+                ExpiredEventRewrite(service=service, llm=get_memory_llm()),
+            ],
         )
 
     return _get("consolidator", _build)
