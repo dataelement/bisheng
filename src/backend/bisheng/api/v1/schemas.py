@@ -299,6 +299,9 @@ class AssistantUpdateReq(BaseModel):
         description="F041: 用户知识库权限校验 — ON filters knowledge-space retrieval by the runtime "
         "user's view_file, OFF by the config author's; None = do not update",
     )
+    memory_enabled: bool | None = Field(
+        default=None, description="F132: long-term memory switch of this assistant; None = do not update"
+    )
 
     @field_validator("model_name", mode="before")
     @classmethod
