@@ -209,6 +209,28 @@ it('supports arrow-key category selection and preserves focus', async () => {
   });
 });
 
+it('keeps full category counts and exposes later cards when tabbing through a large list', () => {
+  mockData = {
+    mine: Array.from({ length: 100 }, (_, index) => row(String(index + 1), `Space ${index + 1}`)),
+    joined: [],
+    department: [row('101', 'Department')],
+  };
+  mount();
+  expect(screen.getByRole('tab', { name: 'com_knowledge.home_next.all 101', selected: true })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Space 49' })).not.toBeInTheDocument();
+
+  const lastLink = screen.getByRole('link', { name: 'Space 48' });
+  act(() => lastLink.focus());
+  expect(lastLink).toHaveFocus();
+  expect(screen.getByRole('link', { name: 'Space 49' })).toBeInTheDocument();
+
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_knowledge.home_next.department 1' }));
+  expect(screen.getAllByRole('article')).toHaveLength(1);
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_knowledge.home_next.all 101' }));
+  expect(screen.getByRole('link', { name: 'Space 48' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Space 49' })).not.toBeInTheDocument();
+});
+
 it('keeps latest pin first through sort changes, unpin and re-pin', async () => {
   mockPin.mockImplementation(async (id: string, isPinned: boolean) => {
     const update = (list: KnowledgeSpace[]) => list.map((space) => space.id === id ? { ...space, isPinned } : space);
