@@ -13,6 +13,8 @@ spec:
       app.kubernetes.io/component: worker
   template:
     metadata:
+      annotations:
+        {{- include "bisheng.credentialRevision" . | nindent 8 }}
       labels:
         {{- include "bisheng.labels" . | nindent 8 }}
         app.kubernetes.io/component: worker
@@ -33,17 +35,13 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
           volumeMounts:
-            - name: config
-              mountPath: /app/bisheng/config.yaml
-              subPath: config.yaml
+            {{- include "bisheng.credentialMounts" . | nindent 12 }}
             - name: data
               mountPath: /app/data
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
       volumes:
-        - name: config
-          configMap:
-            name: {{ default (printf "%s-config" (include "bisheng.fullname" .)) .Values.config.existingConfigMap }}
+        {{- include "bisheng.credentialVolume" . | nindent 8 }}
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:

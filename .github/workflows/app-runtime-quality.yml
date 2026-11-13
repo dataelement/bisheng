@@ -70,9 +70,6 @@ jobs:
         run: cp docker/.env.example docker/.env
 
       - name: Verify the app-runtime compose wiring
-        env:
-          MINIO_ROOT_USER: ci-minio-user
-          MINIO_ROOT_PASSWORD: ci-minio-password
         run: bash scripts/tests/compose/verify-app-runtime-compose.sh
 
   unit:

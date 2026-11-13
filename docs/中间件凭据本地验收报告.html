@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>毕昇中间件凭据治理 · 本地验收报告</title>
+<style>
+:root{--ink:#172033;--muted:#5c6678;--line:#dce2ec;--bg:#f6f8fc;--accent:#3349b8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}main{max-width:1080px;margin:auto;padding:36px 28px 80px}h1{font-size:28px;margin:0}h2{font-size:21px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-top:34px}h3{font-size:17px}p{margin:10px 0}.meta{color:var(--muted);font-size:13px}a{color:var(--accent)}nav{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0}section{scroll-margin-top:16px}table{border-collapse:collapse;width:100%;background:white;font-size:13px;margin:14px 0}th,td{padding:9px 11px;border:1px solid var(--line);text-align:left;vertical-align:top}th{background:#edf1f8}code{font-family:ui-monospace,Menlo,monospace;background:#edf0f8;padding:1px 4px;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#eef1f8;padding:14px;border-radius:8px;font-size:13px}.ok,.note{padding:14px 18px;border-radius:8px;margin:16px 0}.ok{background:#edf9f1;border:1px solid #a6d9b6}.note{background:#fff6e8;border:1px solid #ebce9b}.pass{color:#166c36;font-weight:600}.pending{color:#955300;font-weight:600}li{margin:6px 0}@media(max-width:700px){main{padding:22px 14px}table{font-size:12px}th,td{padding:7px}}@media print{body{background:white}main{max-width:none;padding:12px}tr{break-inside:avoid}nav{display:none}}
+</style>
+</head>
+<body><main>
+<h1>中间件凭据治理 · 本地验收报告</h1>
+<p class="meta">2026-11-13 · 当前工作区 feat/3.1-beta2 · 改造前基线 285bfde44d · 本报告记录提交前的本地验收现场</p>
+<nav><a href="#result">结论</a><a href="#environment">环境与清理</a><a href="#coverage">验收证据</a><a href="#defects">发现与修复</a><a href="#impact">影响范围</a><a href="#limits">未验证项</a><a href="#handover">现场与交接</a></nav>
+
+<section id="result"><h2>1. 结论</h2>
+<div class="ok"><strong>本地标准 Compose 范围有条件通过。</strong>已执行原入口部署、重复部署、匹配密钥备份恢复、旧版密文迁移、真实故障续跑、五组件改密及成套凭据回退。当前测试栈可启动，日常部署仍使用原命令。</div>
+<div class="note"><strong>完整交付门禁仍未关闭。</strong>用户已明确“DM 保持待验证”；本次没有 DM 实例，也没有商业版 Gateway license、可用模型业务配置或 Kubernetes 集群。本报告不能签收这些场景，T035/T038 保持未完成。</div>
+<pre><code>bash docker/install.sh
+# 或使用原包装入口
+bash scripts/deploy.sh install</code></pre>
+<p>首次密码由测试操作者在终端隐藏输入并确认；密钥、加密配置、原生凭据文件和版本由脚本管理。重复部署不会自动修改真实账号密码。专项改密与回退使用维护工具和组件管理接口，不是正常部署新增步骤。</p>
+</section>
+
+<section id="environment"><h2>2. 环境与清理</h2>
+<table><thead><tr><th>项目</th><th>本次实际环境</th></tr></thead><tbody>
+<tr><td>宿主机 / Docker</td><td>macOS ARM，32 GB 内存；已有 Colima 从停止状态启动，调整为 6 CPU、16 GiB 内存、100 GiB 磁盘。保留调整前配置备份。</td></tr>
+<tr><td>清理结果</td><td>清点 22 个旧容器，停止原先运行的 5 个服务；11 个有名称冲突的旧毕昇容器改名前缀保留。删除 1,145 个无关镜像 ID，原用户容器数据和全部 6 个数据卷保留。未执行 volume/system prune。</td></tr>
+<tr><td>隔离方式</td><td>独立凭据目录、Compose 项目、网络和数据根；不读取或写入原用户数据卷。只在本地可销毁测试数据上改密、故障注入和迁移。</td></tr>
+<tr><td>后端镜像</td><td>目标 CR beta2 后端标签不可用，使用当前工作区及项目原 Dockerfile、冻结依赖构建；镜像仅推送到 127.0.0.1:5055 的本地仓库，未对外发布。</td></tr>
+<tr><td>升级基线</td><td>以 git archive 只读导出 HEAD 285bfde44d 的改造前后端，使用其原 Dockerfile 构建真实旧版镜像；不是伪造一个旧密码分支。</td></tr>
+<tr><td>版本组合</td><td>CR MySQL 8.0 标签实际为 8.0.43；Redis 7.0.4；Bitnami ES 8.12.0；MinIO RELEASE.2023-03-20T20-16-18Z；Milvus 2.5.10；etcd 3.5.5；OpenFGA 1.15.2-dm-arm64；前端与沙箱 v3.0.0-arm64。</td></tr>
+<tr><td>架构限制</td><td>后端、前端、OpenFGA、沙箱为 ARM；部分中间件为 amd64，通过模拟运行。本轮不是原生 Linux amd64 的性能或容量验收。</td></tr>
+</tbody></table>
+<p>最初的镜像清理后保留 13 个相关镜像 ID；后续只增加本轮构建、基线、组件和本地仓库所需镜像。镜像 ID 数包含中间层，不能理解为 1,145 个独立下载软件。</p>
+</section>
+
+<section id="coverage"><h2>3. 验收证据</h2>
+<table><thead><tr><th>用例 / 对应要求</th><th>实际执行及可观察结果</th><th>结果</th></tr></thead><tbody>
+<tr><td>INSTALL-01 · AC-43/44</td><td>真实 PTY 输入五项不同密码并确认，包含单引号等 URL/SQL 特殊字符。首次暴露 MySQL vendor 初始化缺陷；修复后只隔离留存本次失败 MySQL 数据，复用同一密码、密钥和配置重测，原安装器退出 0。此过程不冒充半初始化数据库自动修复。</td><td class="pass">通过，含缺陷修复</td></tr>
+<tr><td>AUTH/DATA-01 · AC-12～27/41/42</td><td>五组件真实新连接；MinIO 新对象写入/读取/删除；ES 新索引写入/读取/删除；Milvus 新 collection 插入/查询/删除与错误密码拒绝。改密后重新执行实际组件测试。</td><td class="pass">9 项 live 通过，含下述原生 MySQL 迁移测试</td></tr>
+<tr><td>DB-01 · AC-28～36/42</td><td>真实 MySQL 事务与行锁，两租户组织同步密文分批更新并重复调用；tenant、update_time、未知 JSON 字段保留。缓存清理后原 DB 上下文仍能读取。</td><td class="pass">通过</td></tr>
+<tr><td>APP-01</td><td>通过 Nginx 调用实际 API：未登录用户信息返回 401；RSA 注册、登录、登录后用户信息核对通过。没有关闭验证码；API 夹具只读取本次自己生成的 Redis nonce。Worker 实际收到并成功执行周期任务。</td><td class="pass">通过已列链路</td></tr>
+<tr><td>REPEAT-01 · AC-45</td><td>实际执行原包装入口；首次重复部署的密钥及配置字节完全一致，未再次询问密码。改密回退后再次以非交互方式执行原入口，退出 0。</td><td class="pass">通过</td></tr>
+<tr><td>RECOVER-01 · AC-46/47</td><td>移走测试现用密钥，非交互部署退出 1，没有生成替代身份；再以真实交互终端执行原命令，按提示提供匹配备份，退出 0。恢复后使用同一密钥及配置版本。</td><td class="pass">通过</td></tr>
+<tr><td>LEGACY-01 · AC-28～36/46/47</td><td>真实旧版 API 先成功启动并解密旧数据；保留 !env 来源。生成两租户组织同步及沙箱共 3 条旧密文。暂停测试 Redis，DB 提交后停在 DB_COMPLETE_CACHE_PENDING，业务保持停止、没有完成标记。修复缓存生命周期问题并恢复 Redis后，原命令自动续跑到 COMPLETE=3。</td><td class="pass">通过，含真实失败续跑</td></tr>
+<tr><td>迁移不变量</td><td>7 个原生服务容器 ID 均未变化，原生密码不变；三条记录通过新主密钥独立复检；续跑没有重复加密；页面沙箱 token 确实覆盖部署 token，无静默回退。这里只验证 token 的业务读取，没有执行模型沙箱代码链路。</td><td class="pass">通过已列不变量</td></tr>
+<tr><td>ROTATE-01</td><td>为五组件分别生成增量配置包；实际修改 MySQL、Redis、ES、Milvus 服务端账号，MinIO 通过受限文件和重建生效；同步毕昇、Worker、OpenFGA 及 Milvus 对象存储配置。新连接通过，五项旧密码新连接分别被认证拒绝。</td><td class="pass">通过</td></tr>
+<tr><td>ROLLBACK-01</td><td>通过有效管理身份恢复服务端原密码，生成匹配的客户端/native 配置并激活；新连接可用，被替换的新密码均被拒绝。不是仅回退 YAML 或镜像。</td><td class="pass">通过</td></tr>
+<tr><td>数据保留</td><td>在 MySQL 表、Redis key、MinIO 对象、ES 文档和 Milvus collection 各写入独立标记；分别在重复部署、旧版迁移、实际改密和成套回退后读取，五项均一致。</td><td class="pass">通过</td></tr>
+<tr><td>NEGATIVE-01</td><td>错误/被替换密码认证拒绝；匿名访问检查使用明确去除密码的新连接。修复后的 9 个当前容器日志及 6 份安装日志，按已知测试密码/密钥的原文、URL、JSON、repr 形式扫描。</td><td class="pending">五组件匿名访问均拒绝；已知秘密日志扫描 0 命中</td></tr>
+<tr><td>ARTIFACT-01 · AC-01/06/42</td><td>扫描当前交付源码、真实 docker save 镜像元数据及全部层，额外匹配真实旧固定密钥、测试新装及过渡密钥；档案约 1.43 GiB，退出 0。历史基线镜像故意包含旧实现，不作为新交付物。</td><td class="pass">通过</td></tr>
+<tr><td>DB-02 · DM</td><td>本地没有 DM 实例。用户确认“没有，先完成其余验收，DM 保持待验证”。没有用 MySQL 或 SQLite 替代。</td><td class="pending">NOT RUN</td></tr>
+</tbody></table>
+<h3>自动化与静态检查</h3>
+<table><thead><tr><th>检查</th><th>结果与范围</th></tr></thead><tbody>
+<tr><td>聚焦后端回归</td><td>231 passed，0 failed，0 skipped；包含新 MySQL、缓存生命周期、挂载去重及既有 URL/沙箱兼容回归。包含本次实际 Helm 渲染；不包含下面单独运行的 9 项 live。</td></tr>
+<tr><td>真实组件</td><td>9 passed，0 failed，2 warnings，23.77 秒；改密后的真实中间件上执行，使用当前维护脚本。警告不计失败。</td></tr>
+<tr><td>原安装器 shell 契约</td><td>15 passed；此组使用 Docker 边界替身，不能代替上面的真实部署证据。</td></tr>
+<tr><td>Compose / Helm</td><td>真实 Compose app-runtime 解析门禁通过，默认 14 / 启用 profile 18 个服务。官方 Helm 3.17.4 校验 SHA256 后进行真实渲染和拒绝旧秘密输入测试；没有真实 Kubernetes rollout。</td></tr>
+<tr><td>格式、语法与架构</td><td>Ruff 检查 34 个 Python 文件通过；10 个 shell 语法检查通过；架构守卫覆盖 80 个改动文件，0 发现；git diff --check 通过。三份 HTML 锚点、链接及两张 SVG 结构检查通过，本轮未进行浏览器视觉验收。</td></tr>
+</tbody></table>
+</section>
+
+<section id="defects"><h2>4. 发现与修复</h2>
+<table><thead><tr><th>问题</th><th>复现及影响</th><th>修复与复检</th></tr></thead><tbody>
+<tr><td>P0 · MySQL 特殊字符初始化失败</td><td>CR MySQL 8.0.43 vendor 脚本直接将含单引号密码插入 SQL，报 1064 后留下部分数据；TCP 不可用，未设密码的 root socket 仍可连接。应用启动被阻止。</td><td>新增安全 bootstrap/CNF 序列化 wrapper，保留 vendor 生命周期及 mysql 用户降权；Compose 显式 mysqld。相同密码新装成功、正确 TCP 通过、无密码 socket 拒绝。5 项单测及真实组合复检。</td></tr>
+<tr><td>P1 · 缓存清理关闭全局 DB 上下文</td><td>真实迁移已提交 DB，清理缓存时关闭全局上下文，导致后续读取抛 ContextStateError；恢复 Redis 后仍不能完成迁移。</td><td>使用独立 RedisClient，只关闭自身；成功/失败两项红到绿。保留同一迁移现场，更新配套镜像后原命令续跑，主 key 与数据幂等性复检通过。</td></tr>
+<tr><td>P1 · 维护工具重复挂载</td><td>输入清单和输出包共用父目录时，Docker 报 Duplicate mount point；账号尚未改密。</td><td>同目标合并一个挂载，显式输出父目录保留写权限，其余只读；两种参数顺序回归，真实五组件准备和回退包生成成功。</td></tr>
+</tbody></table>
+<p>测试侧同时修正 SDK 实际抛出的 gRPC 认证异常断言，以及登录标识、验证码和“移除 URL 密码”的夹具用法；没有降低认证断言、关闭认证或扩大产品改动来制造通过。</p>
+</section>
+
+<section id="impact"><h2>5. 影响范围与不变量</h2>
+<table><thead><tr><th>改动点</th><th>直接消费者</th><th>影响与证据</th></tr></thead><tbody>
+<tr><td>外置密钥 / 同源配置</td><td>API、Celery、Beat、Linsight 的配置加载</td><td>原入口配置复用、实际 API 和 Worker 运行；密钥缺失安全停止与备份恢复。全部模型任务与外部节点不在本轮覆盖内。</td></tr>
+<tr><td>MySQL 及原生文件</td><td>毕昇、OpenFGA、初始化任务</td><td>初始化、实际读写、FGA 服务健康和成套改密/回退；未扩展账号权限。无数据库 Schema 变更。</td></tr>
+<tr><td>Redis / 缓存</td><td>缓存、队列、沙箱配置</td><td>实际认证、Worker 成功任务、旧缓存失效和 DB 迁移续跑；独立连接不关闭其他消费者。Gateway 联动仅有静态/单测。</td></tr>
+<tr><td>MinIO、ES、Milvus</td><td>对象、索引、向量存储与 Milvus 对象存储</td><td>新读写、旧数据标记保留、真实改密/回退及匿名/错误身份验证；没有把模型语义检索与 SDK 存储操作混为一谈。</td></tr>
+<tr><td>维护迁移</td><td>组织同步与全局沙箱密文</td><td>全租户授权后显式 ID/tenant/key 条件、行锁、备份、幂等计划及原修改时间保留；人工确认其他节点停写仍不可省略。</td></tr>
+</tbody></table>
+</section>
+
+<section id="limits"><h2>6. 未验证项与剩余风险</h2>
+<ol>
+<li><strong>DM 原生迁移未执行。</strong>按用户要求保持待验证，T035 不勾选；需要真实 DM 再验证驱动、锁、事务、CLOB 和故障续跑。</li>
+<li><strong>完整模型业务未执行。</strong>没有配置可用的模型服务，未验收知识上传后语义召回、LLM 工作流、完整 Linsight 任务、页面沙箱代码执行、旧 MinIO 签名 URL、ES 同步/异步统计链路。</li>
+<li><strong>商业与其他部署形态未执行。</strong>无有效 Gateway license，无 Kubernetes 集群；源码/systemd、多节点、Sentinel/Cluster、自定义 ACL、ES TLS、其他 MySQL 镜像及自定义 SQL mode 未做真实组合验收。</li>
+<li><strong>权限范围有限。</strong>测试了匿名 API 拒绝、实际登录和两租户迁移不串改；登录账号为本地首个管理员，不能据此宣称所有业务的普通用户 ReBAC/跨租户权限均已验收。</li>
+<li><strong>不是仓库全量回归或性能验收。</strong>历史扩展集两项 Beat 断言冲突保留原记录，本轮没有修改无关功能或把旧失败改为通过。未进行长时间压力、并发多节点或宿主重启/断电演练。</li>
+<li><strong>半初始化数据库须受控恢复。</strong>本轮隔离留存失败数据并仅重建可销毁测试 MySQL；产品不会自动猜测、清空数据或重置未知已有账号。密钥和全部备份均丢失也无法通过重新安装恢复。</li>
+</ol>
+<p>本轮已执行范围没有遗留失败项；上述未执行场景不能记作通过。可以评审本地证据和继续专项验收，当前不出具全部部署形态的生产交付 PASS。</p>
+</section>
+
+<section id="handover"><h2>7. 现场、证据与交接</h2><p>提交前已整合远端4项安全修复，本特性目录调整为003，聚焦回归重新执行231项全部通过。本报告的9项live及部署镜像证据属于整合前镜像；包含最新代码的可交付镜像尚需另行构建发布。</p>
+<p>本次从 <code>docker/.generated/local-acceptance-20261113/fresh/</code> 隔离副本执行原命令，源码根目录的 <code>docker/.env</code> 未替换；标准容器名和端口当前由验收栈占用。当前测试平台入口为 <a href="http://127.0.0.1:3001">http://127.0.0.1:3001</a>，API 健康检查为 <a href="http://127.0.0.1:7860/health">/health</a>。原用户旧容器仍停止并保留，没有自动恢复以免端口及资源冲突。五组件标记资源、两条组织同步夹具和一条沙箱页面夹具已按精确ID/租户/前缀清理；保留测试账号以供查看本地平台。MySQL 初始化及 OpenFGA migrate 均退出 0；它们是运行一次即结束的任务，继承的服务健康状态不能用于判定迁移失败。</p>
+<p>受限现场位于工作区的 <code>docker/.generated/local-acceptance-20261113/</code>，已被 Git 忽略；密码、密钥、环境快照和原始日志只能在受限目录内查看，不写入本报告。现用配置包和密钥的准确路径以 fresh/docker/.env 为准；整个验收目录含有效挂载与备份，不能统一视作可删除临时文件。</p>
+<p>可分享摘要：<a href="../features/v3.1.0-beta2/003-middleware-credential-security/local-acceptance-results.json">本轮机器摘要</a>；执行矩阵：<a href="../features/v3.1.0-beta2/003-middleware-credential-security/local-acceptance-plan.json">验收矩阵</a>；完整工程进度：<a href="../features/v3.1.0-beta2/003-middleware-credential-security/verification.md">验证记录</a>。</p>
+<p>方案与操作入口：<a href="中间件密码与配置加密治理方案.html">治理方案</a> · <a href="中间件凭据运维手册.html">HTML 运维手册</a>。正常部署仍按原命令，报告中的故障注入、改密和回退夹具不能当作生产部署步骤。</p>
+</section>
+</main></body></html>

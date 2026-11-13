@@ -1,0 +1,152 @@
+{
+  "date": "2026-11-13",
+  "branch": "feat/3.1-beta2",
+  "scope": "middleware credential security local live acceptance",
+  "operator_role": "local deployment administrator",
+  "tenant_scope": "isolated disposable environment; synthetic e2e records only",
+  "cases": [
+    {
+      "id": "ENV-01",
+      "requirement": "local environment cleanup",
+      "priority": "P0",
+      "initial_state": "container/image inventory",
+      "steps": "Stop existing containers, retain required image allowlist and all old volumes",
+      "expected": "No old services running; only unrelated images removed",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "INSTALL-01",
+      "requirement": "AC-43/44 original fresh command",
+      "priority": "P0",
+      "initial_state": "empty isolated data, current workspace image",
+      "steps": "Run original installer through a real PTY and supply five unique test passwords",
+      "expected": "Hidden input, confirmed passwords, external key/config generated, successful deployment",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "AUTH-01",
+      "requirement": "real middleware auth",
+      "priority": "P0",
+      "initial_state": "fresh isolated governed stack",
+      "steps": "Run existing live read-only connections for mysql/redis/minio/elasticsearch/milvus",
+      "expected": "Correct credentials succeed; no default/anonymous fallback",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "DATA-01",
+      "requirement": "native business writes",
+      "priority": "P0",
+      "initial_state": "same isolated stack",
+      "steps": "Run existing MinIO/ES/Milvus scoped roundtrip tests",
+      "expected": "Only e2e-scoped objects created, read back and cleaned",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "APP-01",
+      "requirement": "app and asynchronous consumers",
+      "priority": "P0",
+      "initial_state": "API schema migration and workers",
+      "steps": "Probe actual API/login and worker consumers with governed config",
+      "expected": "Real app/queue/FGA consumers use matching credentials",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "REPEAT-01",
+      "requirement": "AC-45 original wrapper repeat",
+      "priority": "P0",
+      "initial_state": "successful fresh deployment",
+      "steps": "Run bash scripts/deploy.sh install from isolated copy",
+      "expected": "Same key/config/revision and existing test data retained, no password prompts",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "RECOVER-01",
+      "requirement": "AC-46/47 interruption and missing input",
+      "priority": "P0",
+      "initial_state": "backup of only this test deployment",
+      "steps": "Inject controlled failure, re-run original command and restore matching test files",
+      "expected": "Safe stop, no replacement identity, same command continues",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "LEGACY-01",
+      "requirement": "old ciphertext adoption",
+      "priority": "P0",
+      "initial_state": "dedicated baseline image/config and synthetic old ciphertext records",
+      "steps": "Use original entry, confirm maintenance and verify actual DB records/cache",
+      "expected": "Native credentials unchanged; full tenant/time/JSON preservation and primary-key verification",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "DB-01",
+      "requirement": "MySQL native rewrap",
+      "priority": "P0",
+      "initial_state": "disposable MySQL schema",
+      "steps": "Run existing native database test",
+      "expected": "Real transaction/lock path, idempotence, tenant/time preserved",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "DB-02",
+      "requirement": "DM native rewrap",
+      "priority": "P0",
+      "initial_state": "real disposable DM instance",
+      "steps": "Run the same rewrap requirements on DM",
+      "expected": "Cannot substitute SQLite/MySQL result",
+      "status": "not_run",
+      "reason": "No DM instance; user explicitly requested DM remain unverified on 2026-11-13.",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "NEGATIVE-01",
+      "requirement": "wrong credentials and logging",
+      "priority": "P1",
+      "initial_state": "same disposable stack",
+      "steps": "Use new wrong-password connections and scan protected logs for fixture secrets",
+      "expected": "Authentication fails; fixture passwords/keys not echoed",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "ARTIFACT-01",
+      "requirement": "delivery image secret layers",
+      "priority": "P0",
+      "initial_state": "image built from actual current Dockerfile",
+      "steps": "Scan backend source and saved image layers",
+      "expected": "No fixed/deployment key or runtime input in current delivery image",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "ROTATE-01",
+      "requirement": "five actual native password changes",
+      "priority": "P0",
+      "operator_role": "isolated local administrator",
+      "tenant_scope": "synthetic records only",
+      "steps": "Prepare incremental bundles; stop consumers; update actual native identities; activate matching files; assert all new connections and deny all replaced passwords",
+      "expected": "Matching credentials work; previous credentials fail; existing data retained",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    },
+    {
+      "id": "ROLLBACK-01",
+      "requirement": "matching server and client rollback",
+      "priority": "P0",
+      "operator_role": "isolated local administrator",
+      "tenant_scope": "synthetic records only",
+      "steps": "Restore native old identities using valid management access, activate matching bundles, verify all data and deny replaced new credentials",
+      "expected": "Matching credentials work; previous credentials fail; existing data retained",
+      "status": "passed",
+      "evidence": "local-acceptance-results.json"
+    }
+  ]
+}

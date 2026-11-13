@@ -1,0 +1,376 @@
+{
+  "date": "2026-11-13",
+  "conclusion": "CONDITIONAL_PASS_LOCAL_STANDARD_COMPOSE",
+  "branch": "feat/3.1-beta2",
+  "baseline_commit": "285bfde44d",
+  "environment": {
+    "host": "macOS ARM",
+    "colima_cpu": 6,
+    "colima_memory_gib": 16,
+    "colima_disk_gib": 100,
+    "mixed_architecture": true,
+    "production_environment": false
+  },
+  "cleanup": {
+    "old_containers_total": 22,
+    "previously_running_stopped": 5,
+    "renamed_preserved_old_containers": 11,
+    "deleted_unrelated_image_ids": 1145,
+    "retained_initial_image_ids": 13,
+    "preserved_volumes": 6
+  },
+  "unit_and_compatibility": {
+    "tests": 231,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 20.95
+  },
+  "live_components_and_native_mysql": {
+    "tests": 9,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 23.771
+  },
+  "shell_contract_passed": 15,
+  "repeat": {
+    "returncode": 0,
+    "key_unchanged": true,
+    "config_unchanged": true
+  },
+  "key_recovery": {
+    "missing_key_exit": 1,
+    "interactive_exit": 0,
+    "backup_prompt_seen": true,
+    "same_key_bytes": true,
+    "same_revision": true,
+    "new_key_not_generated": true
+  },
+  "legacy_baseline": {
+    "baseline_commit": "285bfde44d",
+    "health_http": 200,
+    "seconds": 16.07,
+    "old_env_reference": true,
+    "native_containers_preserved": true
+  },
+  "legacy_interrupted": {
+    "phase": "interrupted",
+    "returncode": 1,
+    "seconds": 27.47,
+    "guide_events": [
+      "image_selection",
+      "maintenance_confirmation"
+    ],
+    "entrypoint": "bash docker/install.sh",
+    "journal": {
+      "version": 1,
+      "phase": "DB_COMPLETE_CACHE_PENDING",
+      "completed": 3
+    },
+    "complete_marker": false
+  },
+  "legacy_resumed_after_fix": {
+    "phase": "fixed-resume",
+    "returncode": 0,
+    "seconds": 12.09,
+    "guide_events": [],
+    "entrypoint": "bash docker/install.sh",
+    "journal": {
+      "version": 1,
+      "phase": "COMPLETE",
+      "completed": 3
+    },
+    "complete_marker": true
+  },
+  "native_ids_unchanged_during_adoption": {
+    "bisheng-mysql": true,
+    "bisheng-redis": true,
+    "bisheng-es": true,
+    "bisheng-milvus-etcd": true,
+    "bisheng-milvus-minio": true,
+    "bisheng-milvus-standalone": true,
+    "bisheng-openfga": true
+  },
+  "rotation": {
+    "returncode": 0,
+    "seconds": 106.33,
+    "normal_deploy_command_changed": false,
+    "maintenance_uses_explicit_checked_bundle": true
+  },
+  "credential_pair_rollback": {
+    "returncode": 0,
+    "seconds": 105.04,
+    "normal_deploy_command_changed": false,
+    "maintenance_uses_explicit_checked_bundle": true
+  },
+  "repeat_after_rollback": {
+    "returncode": 0,
+    "entrypoint": "bash scripts/deploy.sh install",
+    "stdin": "non-interactive",
+    "prompts_expected": false
+  },
+  "auth_and_retention": {
+    "retention-after-repeat": {
+      "phase": "verify",
+      "checks": {
+        "mysql": true,
+        "redis": true,
+        "minio": true,
+        "elasticsearch": true,
+        "milvus": true
+      },
+      "completed": true
+    },
+    "retention-after-legacy": {
+      "phase": "verify",
+      "checks": {
+        "mysql": true,
+        "redis": true,
+        "minio": true,
+        "elasticsearch": true,
+        "milvus": true
+      },
+      "completed": true
+    },
+    "retention-after-password-change": {
+      "phase": "verify",
+      "checks": {
+        "mysql": true,
+        "redis": true,
+        "minio": true,
+        "elasticsearch": true,
+        "milvus": true
+      },
+      "completed": true
+    },
+    "retention-after-rollback": {
+      "phase": "verify",
+      "checks": {
+        "mysql": true,
+        "redis": true,
+        "minio": true,
+        "elasticsearch": true,
+        "milvus": true
+      },
+      "completed": true
+    },
+    "rotation-negative": {
+      "mysql_old_password_denied": true,
+      "redis_old_password_denied": true,
+      "minio_old_password_denied": true,
+      "elasticsearch_old_password_denied": true,
+      "milvus_old_password_denied": true
+    },
+    "rollback-negative": {
+      "mysql_old_password_denied": true,
+      "redis_old_password_denied": true,
+      "minio_old_password_denied": true,
+      "elasticsearch_old_password_denied": true,
+      "milvus_old_password_denied": true
+    },
+    "anonymous-denied": {
+      "anonymous_denied": {
+        "mysql": true,
+        "redis": true,
+        "minio": true,
+        "elasticsearch": true,
+        "milvus": true
+      }
+    }
+  },
+  "api_flow": {
+    "unauthenticated_http": 401,
+    "rsa_registration": true,
+    "login": true,
+    "authenticated_user_info": true,
+    "nginx_proxy": true,
+    "user_id": 1
+  },
+  "artifact": {
+    "returncode": 0,
+    "seconds": 47.36,
+    "archive_bytes": 1530874368,
+    "source_root": "src/backend",
+    "image": "localhost:5055/bisheng-backend:credential-20261113",
+    "known_keys": "historical baseline + fresh test deployment",
+    "image_id": "sha256:44a14bc15329fc75e29d2966dd888f56e850db7dab783e2041b11212cfd133cd"
+  },
+  "runtime_logs": {
+    "checked_containers": 9,
+    "checked_installer_logs": 6,
+    "secret_match_locations": [],
+    "scope": "fixed runtime and installer, exact raw/URL/JSON/repr variants of known test passwords and keys; not a generic log security proof"
+  },
+  "final_http": {
+    "api_health_http": 200,
+    "frontend_http": 200
+  },
+  "current_containers": [
+    {
+      "name": "bisheng-backend",
+      "image": "localhost:5055/bisheng-backend:credential-20261113",
+      "state": "running",
+      "health": "healthy",
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-backend-worker",
+      "image": "localhost:5055/bisheng-backend:credential-20261113",
+      "state": "running",
+      "health": null,
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-openfga",
+      "image": "cr.dataelem.com/dataelement/openfga:v1.15.2-dm-arm64",
+      "state": "running",
+      "health": "healthy",
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-openfga-migrate",
+      "image": "cr.dataelem.com/dataelement/openfga:v1.15.2-dm-arm64",
+      "state": "exited",
+      "health": "unhealthy",
+      "project": "credential-acceptance-fresh",
+      "exit_code": 0,
+      "note": "Successful one-shot initialization; inherited serving healthcheck is not a readiness gate after completion."
+    },
+    {
+      "name": "credential-acceptance-fresh-mysql-init-1",
+      "image": "cr.dataelem.com/mysql:8.0",
+      "state": "exited",
+      "health": null,
+      "project": "credential-acceptance-fresh",
+      "exit_code": 0,
+      "note": "Successful one-shot initialization; inherited serving healthcheck is not a readiness gate after completion."
+    },
+    {
+      "name": "bisheng-milvus-standalone",
+      "image": "cr.dataelem.com/milvusdb/milvus:v2.5.10",
+      "state": "running",
+      "health": "healthy",
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-mysql",
+      "image": "cr.dataelem.com/mysql:8.0",
+      "state": "running",
+      "health": "healthy",
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-milvus-minio",
+      "image": "cr.dataelem.com/minio/minio:RELEASE.2023-03-20T20-16-18Z",
+      "state": "running",
+      "health": "healthy",
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-redis",
+      "image": "cr.dataelem.com/redis:7.0.4",
+      "state": "running",
+      "health": "healthy",
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-es",
+      "image": "cr.dataelem.com/bitnami/elasticsearch:8.12.0",
+      "state": "running",
+      "health": "healthy",
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-frontend",
+      "image": "cr.dataelem.com/dataelement/bisheng-frontend:v3.0.0-arm64",
+      "state": "running",
+      "health": null,
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-code-runner-2",
+      "image": "cr.dataelem.com/dataelement/bisheng-sandbox:v3.0.0-arm64",
+      "state": "running",
+      "health": null,
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-code-runner-1",
+      "image": "cr.dataelem.com/dataelement/bisheng-sandbox:v3.0.0-arm64",
+      "state": "running",
+      "health": null,
+      "project": "credential-acceptance-fresh"
+    },
+    {
+      "name": "bisheng-milvus-etcd",
+      "image": "cr.dataelem.com/quay.io/coreos/etcd:v3.5.5",
+      "state": "running",
+      "health": "healthy",
+      "project": "credential-acceptance-fresh"
+    }
+  ],
+  "synthetic_teardown": {
+    "five_native_marker_resources_removed": true,
+    "org_sync_rows_removed": 2,
+    "sandbox_page_row_removed": 1,
+    "test_account_retained": true
+  },
+  "not_run": [
+    "DM native transaction/lock/CLOB and migration recovery (explicit user decision)",
+    "Gateway licensed runtime",
+    "Kubernetes rollout",
+    "source/systemd and multinode external middleware combinations",
+    "LLM semantic retrieval/workflow/full Linsight/sandbox code execution",
+    "performance and host reboot or power failure"
+  ],
+  "full_delivery_status": "T035 and T038 remain open; no production delivery PASS",
+  "static_checks": {
+    "architecture_guard_files": 80,
+    "architecture_findings": 0,
+    "ruff_python_files": 34,
+    "ruff_returncode": 0,
+    "shell_parse_files": 10,
+    "shell_contract_passed": 15,
+    "compose_app_runtime_static_passed": true,
+    "html": [
+      {
+        "file": "docs/中间件密码与配置加密治理方案.html",
+        "sections": 15,
+        "links": 58,
+        "svg": 2
+      },
+      {
+        "file": "docs/中间件凭据运维手册.html",
+        "sections": 7,
+        "links": 8,
+        "svg": 0
+      },
+      {
+        "file": "docs/中间件凭据本地验收报告.html",
+        "sections": 7,
+        "links": 14,
+        "svg": 0
+      }
+    ],
+    "git_diff_check": true,
+    "visual_preview_executed": false
+  },
+  "task_status": {
+    "completed": 57,
+    "total": 59,
+    "remaining": [
+      "T035: DM native verification explicitly deferred",
+      "T038: complete release acceptance across remaining supported scenarios"
+    ]
+  },
+  "integration_verification": {
+    "remote_base": "3b10d1eda83fed40df30c2a79f03a06769d4393f",
+    "feature_directory": "features/v3.1.0-beta2/003-middleware-credential-security",
+    "focused_tests": 231,
+    "failures": 0,
+    "skipped": 0,
+    "seconds": 21.91,
+    "live_image_evidence": "Pre-integration image; not rebuilt or rerun against the four remote security commits in this commit/push step."
+  }
+}

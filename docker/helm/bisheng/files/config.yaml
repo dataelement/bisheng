@@ -1,8 +1,5 @@
-# 数据库配置， 当前加密串的密码是1234，
-# 密码加密参考 https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc#Gxitd1xEeof1TzxdhINcGS6JnXd
-database_url:
-  "mysql+pymysql://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@mysql:3306/bisheng?charset=utf8mb4"
-  # "dm+dmPython://BISHENG:<enc>@192.168.107.9:5236/?schema=BISHENG"
+# 部署模板；prepare --mode fresh 从客户密码文件生成密文 URL。
+database_url: "mysql+pymysql://root@mysql:3306/bisheng?charset=utf8mb4"
 # 数据库连接池配置（可选，省略则用下方默认值）。
 # 注意：连接池是“每进程每引擎”一套，总连接数 ≈ 进程数 ×（pool_size + max_overflow）。
 # 调优时务必让该总数小于数据库服务端的最大会话数（如达梦 MAX_SESSIONS）。
@@ -63,7 +60,7 @@ database_pool:
 #   audit_active_key_id: null  # 外部加密密钥引用，不填写密钥明文
 
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
-# 如果设置了密码，需要参考MySQL密码的加密逻辑对密码进行加密。eg: redis://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@redis:6379/0
+# 密文字段由 credentials prepare 生成，不复制旧部署密文。
 # 普通模式:
 redis_url: "redis://redis:6379/1"
 
@@ -88,12 +85,12 @@ sso_sync:
 #   mode: "cluster"
 #   startup_nodes: 
 #     - {"host": "192.168.106.115", "port": 6002}
-#   password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
+# 密文字段由 credentials prepare 生成，不复制旧部署密文。
 #   #sentinel
 #   mode: "sentinel"
 #   sentinel_hosts: [("redis", 6379)]
 #   sentinel_master: "mymaster"
-#   sentinel_password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
+# 密文字段由 credentials prepare 生成，不复制旧部署密文。
 #   db: 1
 
 # Celery broker Redis 配置
@@ -107,8 +104,8 @@ celery_redis_url: "redis://redis:6379/2"
 #     - {"host": "redis-sentinel-2", "port": 26379}
 #     - {"host": "redis-sentinel-3", "port": 26379}
 #   sentinel_master: "mymaster"
-#   sentinel_password: encrypt(gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=)
-#   password: encrypt(gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=)
+# 密文字段由 credentials prepare 生成，不复制旧部署密文。
+# 密文字段由 credentials prepare 生成，不复制旧部署密文。
 #   db: 10
 
 # 知识库文件解析调度策略
@@ -151,24 +148,24 @@ celery_task:
 # 知识库的milvus和es配置  支持使用 !env ${PATH} 填写环境变量的值, 若环境变量不存在则会报错
 vector_stores:
   milvus:
-    connection_args: !env ${BS_MILVUS_CONNECTION_ARGS}
-    is_partition: !env ${BS_MILVUS_IS_PARTITION}
-    partition_suffix: !env ${BS_MILVUS_PARTITION_SUFFIX}
+    connection_args: '{"host":"milvus","port":19530,"secure":false}'
+    is_partition: true
+    partition_suffix: '1'
   elasticsearch:
-    url: !env ${BS_ELASTICSEARCH_URL}
-    ssl_verify: !env ${BS_ELASTICSEARCH_SSL_VERIFY}
+    url: http://elasticsearch:9200
+    ssl_verify: {}
 
 
 # 对象存储， 目前只支持minio
 object_storage:
   type: minio
   minio:
-    schema: !env ${BS_MINIO_SCHEMA}
-    cert_check: !env ${BS_MINIO_CERT_CHECK}
-    endpoint: !env ${BS_MINIO_ENDPOINT}
-    sharepoint: !env ${BS_MINIO_SHAREPOINT}
-    access_key: !env ${BS_MINIO_ACCESS_KEY}
-    secret_key: !env ${BS_MINIO_SECRET_KEY}
+    schema: false
+    cert_check: false
+    endpoint: minio:9000
+    sharepoint: minio:9000
+    access_key: ""
+    secret_key: ""
     public_bucket: 'bisheng'  # 公共bucket，存储平台上一些需要持久化的文件。会设置为可公开访问
     tmp_bucket: 'tmp-dir'  # 临时bucket，会对传到此bucket内的文件设置有效期
     # share_schema: false  # 公开访问地址是否使用 HTTPS

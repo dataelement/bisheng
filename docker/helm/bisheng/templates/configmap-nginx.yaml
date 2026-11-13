@@ -59,8 +59,8 @@ data:
       location ~ ^/(workspace/bisheng|bisheng|tmp-dir)/ {
         rewrite ^/workspace(/.*)$ $1 break;
         # SigV4 signs Host; must match object_storage.minio.sharepoint.
-        proxy_set_header Host {{ .Values.middleware.minio.sharepoint }};
-        proxy_pass http://{{ .Values.middleware.minio.endpoint }};
+        proxy_set_header Host {{ .Values.frontend.objectStorageSharepoint }};
+        proxy_pass http://{{ .Values.frontend.objectStorageEndpoint }};
       }
     }
     {{- if .Values.frontend.service.clientPort }}
@@ -102,8 +102,8 @@ data:
       location ~ ^/(workspace/bisheng|bisheng|tmp-dir)/ {
         rewrite ^/workspace(/.*)$ $1 break;
         # SigV4 signs Host; must match object_storage.minio.sharepoint.
-        proxy_set_header Host {{ .Values.middleware.minio.sharepoint }};
-        proxy_pass http://{{ .Values.middleware.minio.endpoint }};
+        proxy_set_header Host {{ .Values.frontend.objectStorageSharepoint }};
+        proxy_pass http://{{ .Values.frontend.objectStorageEndpoint }};
       }
     }
     {{- end }}

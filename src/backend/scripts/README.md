@@ -1521,3 +1521,19 @@ establish those guarantees.
 ## 工具与技能全员授权升级（f048-v6）
 
 `migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。
+
+
+## 中间件凭据维护（v3.1.0-beta2）
+
+部署密钥不在源码中。配置准备/原生改密/备份恢复见 [凭据运维手册](../../../docs/中间件凭据运维手册.html)。以下从 src/backend 执行，使用与服务相同的 config 和 BS_SECRET_KEYS_FILE。
+
+- `rewrap_credentials.sh` / `rewrap_credentials.py`：组织同步与沙箱页令牌的独立重加密；默认 dry-run，显式 --all-tenants，--apply 前 fsync 密文备份，失败按 journal resume，不修改真实中间件密码。
+  ```bash
+  bash scripts/rewrap_credentials.sh --all-tenants --backup-dir /secure/bisheng/rewrap/run-a
+  bash scripts/rewrap_credentials.sh --all-tenants --backup-dir /secure/bisheng/rewrap/run-a --apply
+  bash scripts/rewrap_credentials.sh --all-tenants --resume /secure/bisheng/rewrap/run-a --apply
+  ```
+- `check_image_secrets.py`：离线检查实际交付源码与 Docker-save 所有镜像层，不提取档案、不连接服务；缺档案/格式不支持非零退出。可通过 --keyring 传受控文件做已知 key 匹配，不把 key 写参数。
+  ```bash
+  python scripts/check_image_secrets.py --source-root . --image-archive /secure/release/backend.tar
+  ```

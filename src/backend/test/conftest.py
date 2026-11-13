@@ -16,10 +16,35 @@ they only activate when explicitly requested in function signatures.
 Created by F000-test-infrastructure. Expanded from F001 minimal conftest.
 """
 
+# Explicit, temporary unit-test deployment bootstrap must exist before the
+# pre-mock import chain imports ConfigService during collection. Production
+# startup has no such fallback. Live acceptance uses its own --confcutdir.
+import json
+import os
+import tempfile
+from pathlib import Path
+
+from cryptography.fernet import Fernet
+
+_test_bootstrap = tempfile.TemporaryDirectory(prefix="bisheng-unit-bootstrap-")
+_test_root = Path(_test_bootstrap.name)
+if "BS_SECRET_KEYS_FILE" not in os.environ:
+    _test_key = _test_root / "keyring.json"
+    _test_key.write_text(json.dumps({"version": 1, "keys": [Fernet.generate_key().decode()]}))
+    _test_key.chmod(0o600)
+    os.environ["BS_SECRET_KEYS_FILE"] = str(_test_key)
+if "config" not in os.environ:
+    _test_config = _test_root / "config.yaml"
+    _test_config.write_text(
+        "database_url: sqlite://\nredis_url: redis://localhost:6379/1\ncelery_redis_url: redis://localhost:6379/2\n"
+    )
+    os.environ["config"] = str(_test_config)
+
 # ---------------------------------------------------------------------------
 # Module-level pre-mock: must run BEFORE any deep bisheng imports.
 # This is idempotent and safe alongside F001's per-file pre-mocking.
 # ---------------------------------------------------------------------------
+# ruff: noqa: E402 -- dependent imports must follow import-chain pre-mocking
 from test.fixtures.mock_services import premock_import_chain
 
 premock_import_chain()
@@ -43,7 +68,21 @@ from test.fixtures.table_definitions import create_all_tables
 
 
 @pytest.fixture(autouse=True)
-def _local_code_tests_stay_unisolated(monkeypatch):
+def _credential_keys(tmp_path, monkeypatch):
+    """Explicit, throwaway deployment key for tests; never a product default."""
+    from bisheng.core.config.secret_crypto import get_keyring
+
+    path = tmp_path / "deployment-keyring.json"
+    path.write_text(json.dumps({"version": 1, "keys": [Fernet.generate_key().decode()]}))
+    path.chmod(0o600)
+    monkeypatch.setenv("BS_SECRET_KEYS_FILE", str(path))
+    get_keyring.cache_clear()
+    yield
+    get_keyring.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _local_code_tests_stay_unisolated(monkeypatch, _credential_keys):
     """Product default of local_isolation is uid. Tests that spawn a local
     interpreter were written for the off path; uid-mode tests stub _conf or
     isolation_mode themselves and do not read this attribute.
