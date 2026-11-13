@@ -23,7 +23,6 @@ vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: mocks.permissions,
 }));
 vi.mock("@/controllers/API", () => ({ getKnowledgeDetailApi: vi.fn() }));
-vi.mock("./SpaceFileTools", () => ({ SpaceFileTools: () => null }));
 vi.mock("./SpaceVersionHistorySheet", () => ({
   SpaceVersionHistorySheet: () => null,
 }));

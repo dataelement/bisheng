@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -539,11 +540,16 @@ it.each(["super", "tenant-admin"])("retains the management view when %s opens a 
   render(f.draw());
   await screen.findByText("Space");
   tab("f118.manage_spaces");
-  fireEvent.click(await screen.findByText("Admin space"));
+  const managementRow = (await screen.findByText("Admin space")).closest("tr")!;
+  fireEvent.click(within(managementRow).getByText("Creator"));
   await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/filelib/7?view=admin"));
-  expect(mocks.permission).toHaveBeenCalledWith("knowledge_space", "7");
+  expect(mocks.permission).not.toHaveBeenCalled();
+  mocks.navigate.mockClear();
   fireEvent.click(screen.getByRole("button", { name: "more" }));
-  fireEvent.click(await screen.findByRole("button", { name: "f118.defaults_title" }));
+  const defaults = await screen.findByRole("button", { name: "f118.defaults_title" });
+  expect(mocks.navigate).not.toHaveBeenCalled();
+  expect(mocks.permission).toHaveBeenCalledWith("knowledge_space", "7");
+  fireEvent.click(defaults);
   expect(mocks.navigate).toHaveBeenCalledWith("/filelib/7?tab=defaults&view=admin");
   expect(mocks.settings).not.toHaveBeenCalled();
 });
