@@ -341,7 +341,7 @@
   **覆盖 AC**: AC-37, AC-38, AC-40, AC-41
   **依赖**: T022
 
-- [ ] **T042**: 活跃登记的实现
+- [x] **T042**: 活跃登记的实现
   **文件**: `src/backend/bisheng/memory/domain/services/activity.py`、`src/backend/bisheng/memory/domain/repositories/cursor_repository.py`
   **逻辑**: `MemoryActivity.end_turn` 的异步与同步实现；选取到期登记行并按用户分组的查询；全部用按列的条件更新。设计见 design 决策 7。
   **测试**: T041 全部通过
