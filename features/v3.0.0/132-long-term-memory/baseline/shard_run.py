@@ -1,12 +1,13 @@
-"""Run backend pytest in N shards by top-level test entry; merge junit into one file.
+"""Run backend pytest in N shards (by crc32 of each top-level test entry); merge junit into one file.
 usage: python shard_run.py <backend_dir> <out.xml> [N]"""
-import os, subprocess, sys, xml.etree.ElementTree as ET
+import os, subprocess, sys, zlib, xml.etree.ElementTree as ET
 backend, out = sys.argv[1], sys.argv[2]
 n = int(sys.argv[3]) if len(sys.argv) > 3 else 8
 entries = sorted(e for e in os.listdir(os.path.join(backend, "test"))
                  if (e.startswith("test_") and e.endswith(".py")) or
                  (os.path.isdir(os.path.join(backend, "test", e)) and not e.startswith(("_", ".")) and e not in ("fixtures", "e2e")))
-shards = [entries[i::n] for i in range(n)]
+# Stable assignment by name hash: adding a new test directory never moves others.
+shards = [[e for e in entries if zlib.crc32(e.encode()) % n == i] for i in range(n)]
 env = {k: v for k, v in os.environ.items() if k.lower() not in ("all_proxy", "http_proxy", "https_proxy")}
 procs = []
 for i, shard in enumerate(shards):

@@ -61,15 +61,22 @@ async def memory_db(tmp_path, monkeypatch):
     SQLModel.metadata.create_all(engine, tables=MEMORY_TABLES + _extra_tables())
     async_engine = create_async_engine(f"sqlite+aiosqlite:///{path}")
 
+    from bisheng.core.context.tenant import bypass_tenant_filter
+
+    # Other suites register the global tenant-filter session events; memory
+    # repositories filter tenant and user explicitly, so tests bypass the
+    # automatic filter instead of depending on a tenant ContextVar.
     @asynccontextmanager
     async def async_session():
-        async with AsyncSession(async_engine, expire_on_commit=False) as session:
-            yield session
+        with bypass_tenant_filter():
+            async with AsyncSession(async_engine, expire_on_commit=False) as session:
+                yield session
 
     @contextmanager
     def sync_session():
-        with Session(engine, expire_on_commit=False) as session:
-            yield session
+        with bypass_tenant_filter():
+            with Session(engine, expire_on_commit=False) as session:
+                yield session
 
     monkeypatch.setattr(_db, "async_session", async_session)
     monkeypatch.setattr(_db, "sync_session", sync_session)

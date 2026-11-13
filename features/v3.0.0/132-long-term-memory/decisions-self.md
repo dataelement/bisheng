@@ -12,3 +12,8 @@
 - T012｜实现需要几列 design §4.2 没列的字段｜`memory_item.rewritten`（过期事件只改写一次，T093）；`memory_turn_record.scene_class`、`ended`（常驻快照归因与深度研究轮结束）；索引名按表加前缀｜纯新增列，不影响契约
 - T013｜`src/backend/AGENTS.md`：独立新表由 `create_all(checkfirst=True)` 建，revision 只管既有表｜迁移只给 `assistant` 加 `memory_enabled`；downgrade 删该列并删六张新表｜符合仓库的迁移规则，且可逆
 - T014｜服务需要 Redis（常驻缓存、计数、整理锁），测试不能依赖 Redis｜新增窄接口 `MemoryKV`（`services/kv.py`，真实实现 `RedisKV` 直接用原始命令不走 pickle）与测试替身 `InMemoryKV`；数据库会话经 `repositories/_db.py` 一个接缝供测试替换｜与三个 ports 同一思路
+- T028/T030｜write 与 edit/delete/clear/undo 共用"新建、条件替换、条件删除"三个内部方法｜在 T028 一次写出全部方法，T029 的测试写好后直接通过，T030 只补 MinIO 实现｜拆开写会重复同一套事务代码；T029 的测试独立覆盖了这些分支
+- T029｜撤销时找不到写入记录（被清空，或不是本人的记录）｜一律返回"已清空"原因码 12104｜不向非本人透露记录是否存在
+- T030｜详情对象放在哪个桶｜放平台默认桶的 `memory/` 前缀下；该桶的匿名读策略只覆盖 `knowledge/images/*` 与 `tmp/images/*`｜不新增桶配置项（新增 config 顶层键会让旧镜像起不来）
+- T001｜按位置轮转分片时，新增 `test/memory` 目录会让其后所有目录换到别的分片，执行顺序变化引出与本功能无关的顺序依赖失败（误报）｜改为按目录名 crc32 取模分片，并在干净 worktree 上重新生成基线｜新增目录不再移动其他目录
+- T014｜别的测试套件会注册全局租户过滤事件，合跑时记忆测试的 SQLite 会话因缺租户上下文报错｜测试的会话接缝包 `bypass_tenant_filter()`；生产代码不变（仓储层本来就显式按租户与用户过滤）｜只影响测试替身
