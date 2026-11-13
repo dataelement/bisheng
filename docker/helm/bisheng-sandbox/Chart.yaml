@@ -2,8 +2,8 @@ apiVersion: v2
 name: bisheng-sandbox
 description: Isolation-environment runners for BiSheng (StatefulSet + headless Service).
 type: application
-version: 0.1.0
-appVersion: v3.0.0
+version: 0.1.1
+appVersion: v3.0.1
 keywords:
   - bisheng
   - sandbox

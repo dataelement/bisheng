@@ -368,6 +368,21 @@ real-account acceptance are recorded separately.
 - **幂等**：四步均可安全重跑。步骤 2/3 重复启动是 no-op；步骤 4 借 `metadata.sop-id` 识别已迁移项并覆盖自身 bundle，不会重复产生带后缀的技能。
 - 步骤 4 单租户灰度可加 `--tenant-id <id>`。
 
+### v3.0 · 工作台模型配置升级为「用户可选模型」
+
+从 < v3.0 升级时，旧工作台配置（`linsight_llm`）有两项要带进 3.0 的系统模型设置。两步都在服务启动时自动执行（`main.lifespan`，幂等，失败只记日志、不阻塞启动）；`scripts/backfill_workbench_upgrade.py` 仅用于 dry-run 核对或手动补跑（`--apply` 写入）。
+
+| # | 步骤 | 触发方式 | 不执行的后果 |
+|---|------|---------|-------------|
+| 1 | **日常模式默认模型**：`chat_default_model_id` 缺失或为 null 的配置行，设为模型列表的最后一个（2.x 客户端未选模型时用它，3.0 客户端没有默认值时也回退到它） | ✅ 启动自动 | 后台默认模型显示为空；开启 DSH 时默认模型变成可选列表的第一个，与升级前不一致 |
+| 2 | **用户可选模型可见范围**：每个活跃租户的工作台模型设为「所有成员可见」；每租户只执行一次（审计 `migration:workbench-visibility-v1`），之后管理员的修改不会被覆盖 | ✅ 启动自动 | 开启 DSH 后这些模型对所有人不可见，日常模式和任务模式的模型下拉为空 |
+
+要点：
+
+- 已有任何 `dsh_model_visibility` 记录的租户，启动时跳过步骤 2：这说明管理员已在用 DSH 可见范围，未配置的模型可能是有意关闭的。如果这类租户确实是升级后漏配，运行 `backfill_workbench_upgrade.py --apply --tenant-id <id> --include-configured-tenants`，只补没有记录的模型，已配置的保持原样。
+- 继承 Root 配置的子租户，按继承到的模型列表各自写入本租户的可见范围。
+- 存有旧版 DSH 授权（`dsh_user_policy` / `dsh_subject_policy`）且尚未导入统一积分的租户，步骤 2 会跳过：先运行 `scripts/dsh/migrate_unified_credits.py --apply` 导入旧授权，再运行 `backfill_workbench_upgrade.py --apply` 补齐。
+
 ### v3.0 · 灵思技能 bundle 迁至对象存储
 
 技能正文/脚本/附件此前以**节点本地文件系统**（`SKILLS_ROOT`）为权威存储，DB 只存元数据。单机

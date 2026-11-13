@@ -777,6 +777,7 @@
     "modelStatusChecking": "Checking",
     "notBeEmpty": "cannot be empty",
     "pasteAdvancedParamsHere": "Please paste or enter your advanced parameter configuration in the text box below",
+    "contextWindowParamTip": "Task mode reads the model's context length (in tokens, input plus output) from context_window. If it is empty, the system tries to get the length from the provider's API.",
     "rerank": "Rerank",
     "save": "Save",
     "saveSuccess": "Save Success",

@@ -1050,6 +1050,34 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/migrate_linsight_task_
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/migrate_linsight_task_model_to_default.py --apply    # write
 ```
 
+### `backfill_workbench_upgrade.py`
+
+> **v3.0 upgrade — AUTO at startup.** Both steps run on service startup
+> (`main.lifespan`, idempotent, failure never blocks boot). This CLI is for a
+> dry-run preview or a manual re-run. See `docs/architecture/08-deployment.md` → 升级 checklist.
+
+Carries pre-3.0 workbench model settings into the 3.0 model settings:
+
+1. **Daily-mode default model** — a `linsight_llm` row whose `chat_default_model_id` is
+   absent or `null` gets the last listed model, which is what the 2.x client opened daily
+   chat with (and what the 3.0 client still falls back to when no default is set).
+2. **User-selectable model visibility** — each active tenant's workbench models become
+   "visible to all members". Runs once per tenant (audit
+   `migration:workbench-visibility-v1`), so an admin's later edits are kept. A tenant that
+   already has any `dsh_model_visibility` row is skipped (its admin already manages
+   visibility); pass `--include-configured-tenants` to fill only its unconfigured models.
+   A tenant holding unmigrated legacy DSH grants is skipped: run
+   `scripts/dsh/migrate_unified_credits.py` for it first, then rerun this script.
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py            # dry-run
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py --apply    # write
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py --apply --tenant-id 2 --actor-id 1
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py --apply --tenant-id 2 --include-configured-tenants
+```
+
 ### `seed_overflow_skill.py`
 
 > **Dev/QA fixture — NOT part of any upgrade checklist.** Seeds ONE throwaway
