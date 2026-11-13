@@ -44,11 +44,20 @@ USER_2 = 102
 
 def _extra_tables():
     from bisheng.database.models.assistant import Assistant
+    from bisheng.database.models.flow import Flow
+    from bisheng.database.models.flow_version import FlowVersion
     from bisheng.database.models.message import ChatMessage
     from bisheng.database.models.session import MessageSession
     from bisheng.user.domain.models.user import User
 
-    return [MessageSession.__table__, ChatMessage.__table__, User.__table__, Assistant.__table__]
+    return [
+        MessageSession.__table__,
+        ChatMessage.__table__,
+        User.__table__,
+        Assistant.__table__,
+        Flow.__table__,
+        FlowVersion.__table__,
+    ]
 
 
 @pytest.fixture
