@@ -6,6 +6,7 @@ import json
 from urllib.parse import urlparse
 
 import httpx
+from cryptography.fernet import InvalidToken
 from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
@@ -15,6 +16,7 @@ from bisheng.common.services.config_service import (
     settings,
     write_sandbox_endpoint_cache,
 )
+from bisheng.core.config.secret_crypto import CredentialConfigurationError
 from bisheng.core.config.settings import decrypt_token, encrypt_token
 
 SANDBOX_TOKEN_MASK = "********"
@@ -167,8 +169,8 @@ def _probe_token(token: str) -> str:
     if stored and stored["token_enc"]:
         try:
             return decrypt_token(stored["token_enc"])
-        except Exception:
-            logger.error("sandbox endpoint config unreadable; using deployment config")
+        except InvalidToken:
+            raise CredentialConfigurationError("sandbox.token: page credential cannot be decrypted") from None
     return settings.sandbox_conf.token or ""
 
 

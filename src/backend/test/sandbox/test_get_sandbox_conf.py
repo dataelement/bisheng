@@ -15,6 +15,7 @@ from bisheng.common.services.config_service import (
     ConfigService,
     write_sandbox_endpoint_cache,
 )
+from bisheng.core.config.secret_crypto import CredentialConfigurationError
 from bisheng.core.config.settings import SandboxConf, Settings, encrypt_token
 
 _UNREADABLE = "sandbox endpoint config unreadable; using deployment config"
@@ -224,22 +225,21 @@ def test_bad_db_value_falls_back(deployment, redis, dao, errors, raw):
     assert "deploy-token" not in " ".join(errors)
 
 
-def test_decrypt_failure_on_cache_falls_back(deployment, redis, dao, errors):
+def test_decrypt_failure_on_cache_rejects_identity_fallback(deployment, redis, dao, errors):
     redis.store[SANDBOX_ENDPOINT_CACHE_KEY] = {"endpoints": ["http://page:8080"], "token_enc": "not-fernet"}
-    result = ConfigService.get_sandbox_conf(deployment)
-    assert result.token == "deploy-token"
+    with pytest.raises(CredentialConfigurationError) as caught:
+        ConfigService.get_sandbox_conf(deployment)
     assert dao["calls"] == 0
-    assert _UNREADABLE in errors
-    assert "not-fernet" not in " ".join(errors)
-    assert "deploy-token" not in " ".join(errors)
+    assert "not-fernet" not in str(caught.value)
+    assert "deploy-token" not in str(caught.value)
 
 
 def test_decrypt_failure_on_db_does_not_fill(deployment, redis, dao, errors):
     dao["row"] = _Row(json.dumps({"endpoints": [], "token_enc": "not-fernet"}))
-    result = ConfigService.get_sandbox_conf(deployment)
-    assert result.token == "deploy-token"
+    with pytest.raises(CredentialConfigurationError) as caught:
+        ConfigService.get_sandbox_conf(deployment)
     assert redis.setnx_calls == []
-    assert _UNREADABLE in errors
+    assert "not-fernet" not in str(caught.value)
 
 
 def test_setnx_error_still_returns_db_value(deployment, redis, dao):

@@ -315,7 +315,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
                 fileId: selectedFileId,
                 fileData: {
                     previewUrl: currentPreviewUrl,
-                    id: currentFile?.id,
+                    id: selectedFileId,
                     name: currentFile?.name,
                     split_rule: currentFile?.split_rule || currentFile?.fullData?.split_rule,
                     status: currentFile?.status,

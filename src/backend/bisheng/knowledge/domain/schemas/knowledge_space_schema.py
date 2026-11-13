@@ -186,6 +186,7 @@ class FolderRenameReq(BaseModel):
 
 class FileCreateReq(BaseModel):
     file_path: list[str] = Field(..., description="File Path")
+    preview_upload_refs: list[str] = Field(default_factory=list, description="References returned by upload")
     parent_id: int | None = Field(None, description="Parent Folder ID")
 
 
@@ -204,6 +205,7 @@ class FolderUploadItem(BaseModel):
     """F034 §5.5 folder upload: one already-uploaded file body + its relative path."""
 
     file_path: str = Field(..., description="MinIO path returned by the upload endpoint")
+    preview_upload_ref: str | None = Field(None, description="Reference returned by upload")
     relative_path: str = Field(..., description="Path relative to the drop point, e.g. 'Top/Sub/a.pdf'")
     # Client-reported size, used only for the batch-level capacity pre-check
     # (all-or-nothing UX). The authoritative per-file quota check still runs

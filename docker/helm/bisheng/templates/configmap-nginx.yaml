@@ -61,8 +61,8 @@ data:
         auth_request /_object_bucket_ok/$bs_object_bucket;
         rewrite ^/(?:workspace/)?object/(.*)$ /$1 break;
         # SigV4 signs Host; must match object_storage.minio.sharepoint.
-        proxy_set_header Host {{ .Values.middleware.minio.sharepoint }};
-        proxy_pass http://{{ .Values.middleware.minio.endpoint }};
+        proxy_set_header Host {{ .Values.frontend.objectStorageSharepoint }};
+        proxy_pass http://{{ .Values.frontend.objectStorageEndpoint }};
       }
 
       location /_object_bucket_ok/ {
@@ -117,8 +117,8 @@ data:
         auth_request /_object_bucket_ok/$bs_object_bucket;
         rewrite ^/(?:workspace/)?object/(.*)$ /$1 break;
         # SigV4 signs Host; must match object_storage.minio.sharepoint.
-        proxy_set_header Host {{ .Values.middleware.minio.sharepoint }};
-        proxy_pass http://{{ .Values.middleware.minio.endpoint }};
+        proxy_set_header Host {{ .Values.frontend.objectStorageSharepoint }};
+        proxy_pass http://{{ .Values.frontend.objectStorageEndpoint }};
       }
 
       location /_object_bucket_ok/ {

@@ -30,13 +30,16 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # 允许覆盖，方便对着改坏的副本做「这个门确实拦得住」的反向自测。
 COMPOSE_FILE="${COMPOSE_FILE:-${REPO_ROOT}/docker/docker-compose.yml}"
 PROFILE="app-runtime"
+COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-${REPO_ROOT}/docker/.env}"
+[[ -f "$COMPOSE_ENV_FILE" ]] || COMPOSE_ENV_FILE="${REPO_ROOT}/docker/.env.example"
 
 # 不带 profile 的 service 数 / 带 profile 的 service 数。
 # 「整层不装」是产品明确支持的形态（GOV-10 / AC-59）：不带 --profile 起来时这两个
 # service 根本不创建，平台其余部分零变化。这个不等式一旦被破坏（比如有人顺手把
 # profiles 删了），默认装机就会多起两个容器并要求配密钥。
-EXPECTED_SERVICES_WITHOUT_PROFILE=13
-EXPECTED_SERVICES_WITH_PROFILE=17
+# mysql-init is the explicit one-shot database initializer; health probes stay read-only.
+EXPECTED_SERVICES_WITHOUT_PROFILE=14
+EXPECTED_SERVICES_WITH_PROFILE=18
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; BOLD='\033[1m'; RESET='\033[0m'
 
@@ -140,17 +143,25 @@ HOWTO
 fi
 
 head_ "═══ 应用工场运行时层 compose 校验 ═══"
+# Structural rendering only: no credentials are generated and no container starts.
+# Fresh .env intentionally leaves these installer-managed paths empty.
+export BISHENG_CREDENTIALS_DIR="${BISHENG_CREDENTIALS_DIR:-/tmp/bisheng-static-only/credentials}"
+export BISHENG_SECRET_KEYS_FILE="${BISHENG_SECRET_KEYS_FILE:-/tmp/bisheng-static-only/keys.json}"
+export BISHENG_CREDENTIAL_REVISION="${BISHENG_CREDENTIAL_REVISION:-00000000000000000000000000000000}"
+export BISHENG_SECRET_FILE_GID="${BISHENG_SECRET_FILE_GID:-0}"
+export BISHENG_ES_REST_TLS="${BISHENG_ES_REST_TLS:-false}"
+export BISHENG_ES_SKIP_TRANSPORT_TLS="${BISHENG_ES_SKIP_TRANSPORT_TLS:-yes}"
 echo "compose: ${COMPOSE_FILE}"
 echo ""
 
 # ─── 1. compose 可解析（两种 profile 组合都要过）──────────────────────────────
 head_ "[1/5] compose 语法与插值"
-if err=$(docker compose -f "${COMPOSE_FILE}" config -q 2>&1); then
+if err=$(docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" config -q 2>&1); then
   pass "不带 profile 解析通过"
 else
   fail "不带 profile 解析失败：${err}"
 fi
-if err=$(docker compose -f "${COMPOSE_FILE}" --profile "${PROFILE}" config -q 2>&1); then
+if err=$(docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" --profile "${PROFILE}" config -q 2>&1); then
   pass "带 --profile ${PROFILE} 解析通过"
 else
   fail "带 --profile ${PROFILE} 解析失败：${err}"
@@ -158,8 +169,8 @@ fi
 
 # ─── 2. profile 表达仍然成立 ─────────────────────────────────────────────────
 head_ "[2/5] profile 计数（「整层不装」形态）"
-n_without=$(docker compose -f "${COMPOSE_FILE}" config --services 2>/dev/null | grep -c . || true)
-n_with=$(docker compose -f "${COMPOSE_FILE}" --profile "${PROFILE}" config --services 2>/dev/null | grep -c . || true)
+n_without=$(docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" config --services 2>/dev/null | grep -c . || true)
+n_with=$(docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" --profile "${PROFILE}" config --services 2>/dev/null | grep -c . || true)
 if [ "${n_without}" = "${EXPECTED_SERVICES_WITHOUT_PROFILE}" ]; then
   pass "默认（不带 profile）= ${n_without} 个 service"
 else
@@ -173,7 +184,7 @@ fi
 
 # ─── 3–5. 环境变量契约 + 网络 + 出站白名单（交给 python，要读 config.py 的 AST）──
 head_ "[3/5] 环境变量名 ↔ config.py 读取点"
-compose_json="$(docker compose -f "${COMPOSE_FILE}" --profile "${PROFILE}" config --format json 2>/dev/null)"
+compose_json="$(docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" --profile "${PROFILE}" config --format json 2>/dev/null)"
 if [ -z "${compose_json}" ]; then
   fail "无法导出 compose JSON"
   echo ""

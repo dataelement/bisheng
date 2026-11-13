@@ -30,6 +30,12 @@ interface IProps {
 export type Partition = {
   [key in string]: { text: string, type: string, part_id: string }
 }
+function previewCachePath(file, showPreview: boolean) {
+  if (file.previewFileId == null) return file.filePath;
+  const source = showPreview && file.previewUrl ? 'converted' : 'original';
+  return `knowledge-preview-file:${file.previewFileId}:${source}`;
+}
+
 export default function PreviewResult({
   showPreview, previewCount, rules, resultFiles, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult, onDeleteFile, onFileTypeChange
 }: IProps) {
@@ -71,12 +77,8 @@ export default function PreviewResult({
     // 合并配置（与原逻辑一致）
     const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId, retainImages, separator, separatorRule, splitMode, hierarchyLevel, appendTitle, maxChunkSize } = rules;
     const currentFile = fileList.find(file => file.id === selectId);
-    let preview_url;
-    if (showPreview) {
-      preview_url = currentFile.previewUrl || currentFile?.filePath;
-    } else {
-      preview_url = currentFile?.filePath;
-    }
+    const previewSource = showPreview && currentFile.previewUrl ? 'converted' : 'original';
+    const previewPath = previewCachePath(currentFile, !!showPreview);
     const normalizeSeparators = (arr) => (arr || []).map((s) =>
       typeof s === 'string' ? s.replace(/\\n/g, '\n') : s
     );
@@ -90,7 +92,9 @@ export default function PreviewResult({
         cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
         knowledge_id: id || kId,
         file_list: [{
-          file_path: preview_url,
+          file_path: previewPath,
+          ...(currentFile.previewUploadRef ? { preview_upload_ref: currentFile.previewUploadRef } : {}),
+          ...(currentFile.previewFileId != null ? { preview_file_id: currentFile.previewFileId, preview_source: previewSource } : {}),
           excel_rule: applyEachCell ? currentFile.excelRule : { ...cellGeneralConfig }
         }],
         separator: normalizeSeparators(separator),
@@ -131,7 +135,7 @@ export default function PreviewResult({
             setFileViewUrl({ load: false, url: data.file_url });
             if (currentFile?.suffix && isMediaUploadSuffix(currentFile.suffix)) {
               setMediaPreviewData(buildMediaUploadPreviewData(
-                currentFile.filePath,
+                currentFile.originalUrl || currentFile.filePath,
                 data.file_url,
                 currentFile.suffix,
               ));
@@ -152,7 +156,7 @@ export default function PreviewResult({
             setLoading(false);
             // 原错误处理逻辑：支持的文件类型显示原文件预览
             if (["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)) {
-              setFileViewUrl({ load: false, url: currentFile.filePath });
+              setFileViewUrl({ load: false, url: currentFile.originalUrl || currentFile.filePath });
             }
             console.error('解析错误：', data.code, data.message);
             break;
@@ -174,7 +178,7 @@ export default function PreviewResult({
   }, [selectId, previewCount]);
 
   const handleDelete = async (chunkIndex: number, text: string) => {
-    const filePath = rules.fileList.find(file => file.id === selectId)?.filePath
+    const filePath = previewCachePath(currentFile, !!showPreview)
     await delChunkInPreviewApi({
       knowledge_id: id || kId,
       file_path: filePath,
@@ -198,7 +202,7 @@ export default function PreviewResult({
     };
 
     updatePreviewChunkApi({
-      knowledge_id: Number(id) || kId, file_path: currentFile.filePath, chunk_index: chunkIndex, text, bbox: JSON.stringify(bbox)
+      knowledge_id: Number(id) || kId, file_path: previewCachePath(currentFile, !!showPreview), chunk_index: chunkIndex, text, bbox: JSON.stringify(bbox)
     })
     setChunks(chunks => chunks.map(chunk => chunk.chunkIndex === chunkIndex ? { ...chunk, text } : chunk))
   }

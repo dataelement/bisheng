@@ -3879,6 +3879,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         skip_approval: bool = False,
         skip_dedup: bool = False,
         audit: bool = True,
+        trusted_sources: list | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
@@ -3949,8 +3950,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         created_files = []
 
+        if trusted_sources is not None and len(trusted_sources) != len(file_path):
+            raise ValueError("Upload sources do not match file paths")
         try:
-            for one in file_path:
+            for index, one in enumerate(file_path):
                 db_file = KnowledgeService.process_one_file(
                     self.login_user,
                     knowledge=db_knowledge,
@@ -3962,6 +3965,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "file_source": file_source.value,
                     },
                     skip_dedup=skip_dedup,
+                    **({"trusted_source": trusted_sources[index]} if trusted_sources is not None else {}),
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     if getattr(db_file, "id", None):
@@ -4066,6 +4070,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         knowledge_id: int,
         items: list[FolderUploadItem],
         parent_id: int | None = None,
+        trusted_sources: list | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         """F034 §5.5 folder upload: rebuild the client-side directory tree, then
         register every file through the regular add_file pipeline.
@@ -4103,14 +4108,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Parse relative paths into (dir chain, file path); collect every
         # directory that needs creating. "." / ".." / empty segments are
         # dropped so a crafted path cannot escape the drop point.
-        parsed: list[tuple[tuple[str, ...], str]] = []
+        if trusted_sources is not None and len(trusted_sources) != len(items):
+            raise ValueError("Upload sources do not match folder items")
+        parsed: list[tuple[tuple[str, ...], str, object]] = []
         dir_set: set[tuple[str, ...]] = set()
-        for item in items:
+        for index, item in enumerate(items):
             parts = [p for p in item.relative_path.replace("\\", "/").split("/") if p and p not in (".", "..")]
             if not parts:
                 raise SpaceFolderNotFoundError()
             dir_parts = tuple(parts[:-1])
-            parsed.append((dir_parts, item.file_path))
+            parsed.append((dir_parts, item.file_path, trusted_sources[index] if trusted_sources is not None else None))
             for depth in range(1, len(dir_parts) + 1):
                 dir_set.add(dir_parts[:depth])
 
@@ -4189,13 +4196,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # Register files per directory through the regular pipeline (quota,
         # dedup/FAILED semantics, doc+V1 rows, parse dispatch all reused).
-        groups: dict[tuple[str, ...], list[str]] = {}
-        for dir_parts, file_path in parsed:
-            groups.setdefault(dir_parts, []).append(file_path)
+        groups: dict[tuple[str, ...], list[tuple[str, object]]] = {}
+        for dir_parts, file_path, source in parsed:
+            groups.setdefault(dir_parts, []).append((file_path, source))
         results: list[KnowledgeSpaceFileResponse] = []
-        for dir_parts, file_paths in groups.items():
+        for dir_parts, entries in groups.items():
+            kwargs = {"trusted_sources": [source for _, source in entries]} if trusted_sources is not None else {}
             results.extend(
-                await self.add_file(knowledge_id, file_paths, parent_id=node_info[dir_parts][0], audit=False)
+                await self.add_file(
+                    knowledge_id, [path for path, _ in entries], parent_id=node_info[dir_parts][0], audit=False, **kwargs
+                )
             )
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         if created_folders or results:

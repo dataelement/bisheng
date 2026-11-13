@@ -8,8 +8,6 @@ from urllib.parse import quote, urlparse, urlunparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from celery.schedules import crontab
-from cryptography.fernet import Fernet
-from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy.engine.url import make_url
 
@@ -20,18 +18,50 @@ from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.open_platform import OpenApiConf, OpenMcpConf, OpenPlatformConf
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
+from bisheng.core.config.secret_crypto import (
+    CredentialConfigurationError,
+    decrypt_token,
+    encrypt_token,  # noqa: F401 -- compatibility export for existing consumers
+)
 from bisheng.core.config.sso_sync import SSOSyncConf
 from bisheng.core.config.user_tenant_sync import UserTenantSyncConf
 
-secret_key = "TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E="
+
+class _ResolvedSecret(str):
+    """Internal-only marker preventing revalidation from decrypting twice."""
 
 
-def encrypt_token(token: str):
-    return Fernet(secret_key).encrypt(token.encode())
+def _credential(value, field: str):
+    if value is None or isinstance(value, _ResolvedSecret):
+        return value
+    if not isinstance(value, str):
+        raise CredentialConfigurationError(f"{field}: encrypted text required")
+    if not value:
+        return _ResolvedSecret("")
+    if not value.startswith("encrypt(") or not value.endswith(")"):
+        raise CredentialConfigurationError(f"{field}: encrypted credential required")
+    try:
+        return _ResolvedSecret(decrypt_token(value[8:-1]))
+    except ValueError:
+        raise CredentialConfigurationError(f"{field}: credential cannot be decrypted") from None
 
 
-def decrypt_token(token: str):
-    return Fernet(secret_key).decrypt(token).decode()
+def _redis_credentials(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return decrypt_redis_url(value)
+    if not isinstance(value, dict):
+        raise CredentialConfigurationError("redis: URL or object required")
+    result = dict(value)
+    for name in ("password", "sentinel_password"):
+        if name in result:
+            result[name] = _credential(result[name], f"redis.{name}")
+    if result.get("url"):
+        if result.get("password"):
+            raise CredentialConfigurationError("redis: URL and object password conflict")
+        result["url"] = decrypt_redis_url(result["url"])
+    return result
 
 
 def decrypt_redis_url(value: str) -> str:
@@ -41,16 +71,22 @@ def decrypt_redis_url(value: str) -> str:
     quoted again. The host is the original netloc after the last ``@``, so IPv6
     brackets stay in place. A missing or empty password is left untouched.
     """
-    parsed = urlparse(value)
-    if not parsed.password:
+    if isinstance(value, _ResolvedSecret):
         return value
-    plain_password = decrypt_token(parsed.password)
+    try:
+        parsed = urlparse(value)
+        password = parsed.password
+    except (TypeError, ValueError):
+        raise CredentialConfigurationError("redis: invalid connection URL") from None
+    if not password:
+        return _ResolvedSecret(value)
+    plain_password = decrypt_token(password)
     userinfo, separator, hostport = parsed.netloc.rpartition("@")
     if not separator:
         return value
     username = userinfo.partition(":")[0]
     netloc = f"{username}:{quote(plain_password, safe='')}@{hostport}"
-    return urlunparse(parsed._replace(netloc=netloc))
+    return _ResolvedSecret(urlunparse(parsed._replace(netloc=netloc)))
 
 
 def decrypt_database_url(value: str) -> str:
@@ -59,11 +95,16 @@ def decrypt_database_url(value: str) -> str:
     The plaintext is set on the SQLAlchemy URL and rendered once. Callers must not
     quote the password first. A missing or empty password is left untouched.
     """
-    parsed = make_url(value)
+    if isinstance(value, _ResolvedSecret):
+        return value
+    try:
+        parsed = make_url(value)
+    except Exception:
+        raise CredentialConfigurationError("database_url: invalid connection URL") from None
     if not parsed.password:
         return value
     plain_password = decrypt_token(parsed.password)
-    return parsed.set(password=plain_password).render_as_string(hide_password=False)
+    return _ResolvedSecret(parsed.set(password=plain_password).render_as_string(hide_password=False))
 
 
 class LoggerConf(BaseModel):
@@ -119,7 +160,8 @@ class SystemLoginMethod(BaseModel):
 class MilvusConf(BaseModel):
     """milvus Configure"""
 
-    connection_args: dict | None = Field(default=None, description="milvus Configure")
+    model_config = ConfigDict(hide_input_in_errors=True)
+    connection_args: dict | None = Field(default=None, description="milvus Configure", repr=False)
     is_partition: bool | None = Field(
         default=True, description="Is itpartitionMode", deprecated="Not in SupportpartitionMode"
     )
@@ -131,22 +173,60 @@ class MilvusConf(BaseModel):
     @classmethod
     def convert_connection_args(cls, value):
         if isinstance(value, str):
-            return json.loads(value)
-        return value
+            try:
+                value = json.loads(value)
+            except ValueError:
+                raise CredentialConfigurationError("milvus.connection_args: invalid JSON") from None
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise CredentialConfigurationError("milvus.connection_args: object required")
+        result = dict(value)
+        if result.get("token") and (result.get("password") or result.get("user")):
+            raise CredentialConfigurationError("milvus.connection_args: conflicting authentication")
+        for name in ("password", "token"):
+            if name in result:
+                result[name] = _credential(result[name], f"milvus.{name}")
+        return result
 
 
 class ElasticsearchConf(BaseModel):
     """elasticsearch Configure"""
 
-    elasticsearch_url: str | None = Field(default=None, alias="url", description="elasticsearchAccesses address")
+    model_config = ConfigDict(hide_input_in_errors=True)
+    elasticsearch_url: str | None = Field(
+        default=None, alias="url", description="elasticsearchAccesses address", repr=False
+    )
 
-    ssl_verify: str | dict | None = Field(default="{}", description="Additional Arguments")
+    ssl_verify: str | dict | None = Field(default="{}", description="Additional Arguments", repr=False)
 
     @model_validator(mode="after")
     def validate(self):
-        if isinstance(self.ssl_verify, str):
-            self.ssl_verify = ast.literal_eval(self.ssl_verify)
-
+        value = self.ssl_verify
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except ValueError:
+                try:
+                    value = ast.literal_eval(value)
+                except (ValueError, SyntaxError):
+                    raise CredentialConfigurationError("elasticsearch.ssl_verify: invalid object") from None
+        if value is not None and not isinstance(value, dict):
+            raise CredentialConfigurationError("elasticsearch.ssl_verify: object required")
+        result = dict(value or {})
+        if self.elasticsearch_url:
+            try:
+                parsed = urlparse(self.elasticsearch_url)
+                if parsed.username is not None or parsed.password is not None:
+                    raise CredentialConfigurationError("elasticsearch.url: move authentication to basic_auth")
+            except ValueError:
+                raise CredentialConfigurationError("elasticsearch.url: invalid or embedded authentication") from None
+        if "basic_auth" in result:
+            auth = result["basic_auth"]
+            if not isinstance(auth, (tuple, list)) or len(auth) != 2 or not isinstance(auth[0], str):
+                raise CredentialConfigurationError("elasticsearch.basic_auth: username and encrypted password required")
+            result["basic_auth"] = (auth[0], _credential(auth[1], "elasticsearch.basic_auth"))
+        self.ssl_verify = result
         return self
 
 
@@ -168,8 +248,15 @@ class MinioConf(BaseModel):
     share_cert_check: bool | None = Field(
         default=False, description="minio Whether the public access address verifies the certificate"
     )
-    access_key: str | None = Field(default="minioadmin", description="minio Username")
-    secret_key: str | None = Field(default="minioadmin", description="minio Passwords")
+    model_config = ConfigDict(hide_input_in_errors=True)
+    access_key: str | None = Field(default=None, description="minio Username")
+    secret_key: str | None = Field(default=None, description="minio Passwords", repr=False)
+
+    @field_validator("secret_key", mode="plain")
+    @classmethod
+    def decrypt_secret(cls, value):
+        return _credential(value, "minio.secret_key")
+
     public_bucket: str | None = Field(
         default="bisheng",
         description="Store permanent files by defaultbucket. Files can be permanently accessed by anonymous users",
@@ -988,7 +1075,9 @@ def _coerce_sandbox_env(annotation, raw: str):
 class Settings(BaseModel):
     """Application Settings"""
 
-    model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra="ignore")
+    model_config = ConfigDict(
+        validate_assignment=True, arbitrary_types_allowed=True, extra="ignore", hide_input_in_errors=True
+    )
 
     chains: dict = {}
     agents: dict = {}
@@ -1015,9 +1104,9 @@ class Settings(BaseModel):
         default_factory=DshSettings,
         description="DSH Desktop access, gateway trust, verified model capabilities and quota infrastructure configuration.",
     )
-    database_url: str | None = None
-    redis_url: Union[str, dict] | None = None
-    celery_redis_url: Union[str, dict] | None = None
+    database_url: str | None = Field(default=None, repr=False, validate_default=True)
+    redis_url: Union[str, dict] | None = Field(default=None, repr=False)
+    celery_redis_url: Union[str, dict] | None = Field(default=None, repr=False)
     redis: dict | None = None
     cache: str = "InMemoryCache"
     remove_api_keys: bool = False
@@ -1068,54 +1157,64 @@ class Settings(BaseModel):
     metric_log: MetricLogConf = MetricLogConf()
     sandbox_conf: SandboxConf = Field(default_factory=SandboxConf)
 
-    @field_validator("database_url")
+    @field_validator("database_url", mode="plain")
     @classmethod
     def set_database_url(cls, value):
-        if not value:
-            logger.debug("No database_url provided, trying bisheng_DATABASE_URL env variable")
-            if bisheng_database_url := os.getenv("bisheng_DATABASE_URL"):
-                value = bisheng_database_url
-            else:
-                logger.debug("No DATABASE_URL env variable, using sqlite database")
-                value = "sqlite:///./bisheng.db"
-        else:
-            value = decrypt_database_url(value)
+        if isinstance(value, _ResolvedSecret):
+            return value
+        legacy = os.getenv("bisheng_DATABASE_URL")
+        if value and legacy and value != legacy:
+            raise CredentialConfigurationError("database_url: conflicting configuration sources")
+        value = value or legacy
+        return decrypt_database_url(value) if value else None
 
-        return value
+    @field_validator("redis_url", "celery_redis_url", mode="plain")
+    @classmethod
+    def parse_redis_credentials(cls, value):
+        return _redis_credentials(value)
 
-    @model_validator(mode="before")
     @classmethod
     def set_redis_url(cls, values):
-        if "redis_url" in values:
-            if isinstance(values["redis_url"], dict):
-                for k, v in values["redis_url"].items():
-                    if isinstance(v, str) and v.startswith("encrypt(") and v.endswith(")"):
-                        v = v[8:-1]
-                        values["redis_url"][k] = decrypt_token(v)
-            else:
-                values["redis_url"] = decrypt_redis_url(values["redis_url"])
-        return values
+        result = dict(values)
+        if "redis_url" in result:
+            result["redis_url"] = _redis_credentials(result["redis_url"])
+        return result
 
-    @model_validator(mode="before")
     @classmethod
     def set_celery_redis_url(cls, values):
-        if "celery_redis_url" in values:
-            if isinstance(values["celery_redis_url"], dict):
-                for k, v in values["celery_redis_url"].items():
-                    if isinstance(v, str) and v.startswith("encrypt(") and v.endswith(")"):
-                        v = v[8:-1]
-                        values["celery_redis_url"][k] = decrypt_token(v)
-            else:
-                values["celery_redis_url"] = decrypt_redis_url(values["celery_redis_url"])
-        return values
+        result = dict(values)
+        if "celery_redis_url" in result:
+            result["celery_redis_url"] = _redis_credentials(result["celery_redis_url"])
+        return result
 
     @model_validator(mode="before")
     @classmethod
     def validate_lists(cls, values):
-        for key, value in values.items():
-            if key not in {"dev", "dsh"} and not value:
-                values[key] = []
-        return values
+        if not isinstance(values, dict):
+            return values
+        result = dict(values)
+        legacy_keys = {
+            "chains",
+            "agents",
+            "prompts",
+            "llms",
+            "tools",
+            "memories",
+            "embeddings",
+            "knowledges",
+            "vectorstores",
+            "documentloaders",
+            "retrievers",
+            "toolkits",
+            "textsplitters",
+            "utilities",
+            "input_output",
+            "output_parsers",
+        }
+        for key in legacy_keys.intersection(result):
+            if not result[key]:
+                result[key] = []
+        return result
 
     def get_minio_conf(self) -> MinioConf:
         return self.object_storage.minio

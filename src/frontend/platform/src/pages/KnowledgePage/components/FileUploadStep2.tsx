@@ -19,9 +19,12 @@ import RuleTable from "./RuleTable";
 // 原有类型定义不变
 export interface FileItem {
     split_rule: any;
-    id: string;
+    id: string | number;
     fileName: string;
     file_path: string;
+    preview_upload_ref?: string;
+    preview_file_id?: number;
+    originalUrl?: string;
     fileType: 'table' | 'file';
     suffix: string;
     isEtl4lm?: string;
@@ -182,6 +185,7 @@ const FileUploadStep2 = forwardRef(({
             knowledge_id: kid || kId,
             file_list: fileList.map(item => ({
                 file_path: item.filePath,
+                ...(item.previewUploadRef ? { preview_upload_ref: item.previewUploadRef } : {}),
                 excel_rule: applyEachCell ? item.excelRule : cellGeneralConfig
             })),
             separator,
@@ -434,6 +438,9 @@ const useFileProcessingRules = (
                 fileList: resultFiles.map(file => ({
                     id: file.id,
                     filePath: file.file_path,
+                    originalUrl: file.originalUrl,
+                    previewUploadRef: file.preview_upload_ref,
+                    previewFileId: file.preview_file_id,
                     fileName: file.fileName,
                     previewUrl: file.previewUrl,
                     suffix: file.suffix,

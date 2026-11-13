@@ -156,7 +156,9 @@ export default function AdjustFilesUpload() {
     {
       id: initFileData.id,
       fileName: initFileData.name || initFileData.file_name, // Compatible field name
-      file_path: initFileData.filePath || initFileData.object_name, // Compatible file path
+      file_path: `knowledge-preview-file:${Number(initFileData.id)}:original`,
+      originalUrl: initFileData.filePath || initFileData.object_name,
+      preview_file_id: Number(initFileData.id),
       suffix: initFileData.suffix || initFileData.file_name?.split(".").pop() || "", // Parse suffix
       previewUrl: initFileData.previewUrl,
       fileType: fileType,

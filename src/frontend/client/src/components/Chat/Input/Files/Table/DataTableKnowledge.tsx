@@ -120,6 +120,7 @@ export default function DataTableKnowledge<TData, TValue>({
       });
       const fileList = repeatFiles.map(repeatFile => ({
         file_path: repeatFile.file_path,
+        preview_upload_ref: repeatFile.preview_upload_ref,
         excel_rule: repeatFile.fileType === 'file' ? {} : {
           "append_header": true,
           "header_end_row": 1,
@@ -194,6 +195,9 @@ export default function DataTableKnowledge<TData, TValue>({
 
         const repeatCheckRes = await dataService.repeatUpload(formData, infoId);
 
+        if (!repeatCheckRes.data?.file_path || typeof repeatCheckRes.data?.preview_upload_ref !== 'string' || !repeatCheckRes.data.preview_upload_ref.trim()) {
+          throw new Error('Upload response is missing the file path or preview reference');
+        }
         if (repeatCheckRes.data?.repeat === true) {
           duplicateFiles.push({
             file,
@@ -203,12 +207,14 @@ export default function DataTableKnowledge<TData, TValue>({
             repeat_update_time: repeatCheckRes.data.repeat_update_time,
             data: repeatCheckRes.data,
             file_path: repeatCheckRes.data.file_path,
+            preview_upload_ref: repeatCheckRes.data.preview_upload_ref,
           });
         } else {
           nonDuplicateFiles.push({
             file,
             name: file.name,
             file_path: repeatCheckRes.data.file_path,
+            preview_upload_ref: repeatCheckRes.data.preview_upload_ref,
           });
         }
       }
@@ -218,6 +224,7 @@ export default function DataTableKnowledge<TData, TValue>({
           id: item.name,
           remark: `${item.file_name} 对应已存在文件 ${item.repeat_file_name}`,
           file_path: item.file_path,
+          preview_upload_ref: item.preview_upload_ref,
           fileType: 'file',
           file: item.file,
         })));
@@ -229,6 +236,7 @@ export default function DataTableKnowledge<TData, TValue>({
         // 修改这里：将多个文件合并成一个数组上传
         const fileList = nonDuplicateFiles.map(fileInfo => ({
           file_path: fileInfo.file_path,
+          preview_upload_ref: fileInfo.preview_upload_ref,
           excel_rule: fileInfo.file.type === 'file' ? {} : {
             "append_header": true,
             "header_end_row": 1,

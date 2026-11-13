@@ -6,7 +6,9 @@ from starlette.responses import StreamingResponse
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.errcode.http_error import NotFoundError, ServerError
+from bisheng.api.v1.schemas import KnowledgeFileOne
+from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
 from bisheng.common.schemas.api import SSEResponse, resp_200
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_document_version_repository,
@@ -471,10 +473,20 @@ async def upload_folder(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     """F034 §5.5: register a whole client-side folder (nested) in one batch."""
+    await svc._require_action("folder" if req.parent_id else "knowledge_space", req.parent_id or space_id, "upload_file")
+    sources = [
+        await PreviewSourceService.resolve(
+            item=KnowledgeFileOne(file_path=item.file_path, preview_upload_ref=item.preview_upload_ref),
+            login_user=svc.login_user,
+            knowledge_id=space_id,
+        )
+        for item in req.items
+    ]
     files = await svc.upload_folder_items(
         knowledge_id=space_id,
         items=req.items,
         parent_id=req.parent_id,
+        trusted_sources=sources,
     )
     return resp_200(files)
 
@@ -519,10 +531,22 @@ async def add_file(
     req: FileCreateReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
+    await svc._require_action("folder" if req.parent_id else "knowledge_space", req.parent_id or space_id, "upload_file")
+    if len(req.file_path) != len(req.preview_upload_refs) or not req.file_path:
+        raise NotFoundError.http_exception()
+    sources = [
+        await PreviewSourceService.resolve(
+            item=KnowledgeFileOne(file_path=path, preview_upload_ref=ref),
+            login_user=svc.login_user,
+            knowledge_id=space_id,
+        )
+        for path, ref in zip(req.file_path, req.preview_upload_refs)
+    ]
     file_record = await svc.add_file(
         knowledge_id=space_id,
         file_path=req.file_path,
         parent_id=req.parent_id,
+        trusted_sources=sources,
     )
     return resp_200(file_record)
 

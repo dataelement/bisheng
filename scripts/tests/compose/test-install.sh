@@ -16,13 +16,16 @@ new_case() {
   CASE_ROOT="$(mktemp -d "${TEST_ROOT}/case.XXXXXX")"
   CASE_DIR="${CASE_ROOT}/docker"
   mkdir -p "$CASE_DIR" "${CASE_ROOT}/bin"
-  for item in install.sh .env.example docker-compose.yml lib gateway nginx; do cp -R "${SCRIPT_DIR}/${item}" "$CASE_DIR/"; done
+  for item in install.sh credentials.sh .env.example docker-compose.yml lib gateway nginx; do cp -R "${SCRIPT_DIR}/${item}" "$CASE_DIR/"; done
   printf 'fixture-license\n' > "${CASE_ROOT}/license"
   cat > "${CASE_ROOT}/bin/docker" <<'DOCKER'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\t' "$@" >> "$INSTALL_TEST_LOG"; printf '\n' >> "$INSTALL_TEST_LOG"
 if [[ "$*" = 'compose version' && "${INSTALL_TEST_LEGACY:-}" = yes ]]; then exit 1; fi
+if [[ "${1:-}" = container ]]; then exit 1; fi
+if [[ "${1:-}" = inspect ]]; then printf 'healthy\n'; fi
+if [[ " $* " = *' ps '* ]]; then printf 'fixture-container\n'; fi
 if [[ "${1:-}" = login ]]; then
   IFS= read -r supplied_password
   [[ "$supplied_password" = "${INSTALL_TEST_EXPECTED_PASSWORD:-dataelem}" ]] || exit 18
@@ -39,6 +42,17 @@ BLOCK
   cp "${CASE_ROOT}/bin/python" "${CASE_ROOT}/bin/python3"
   chmod +x "${CASE_ROOT}/bin/"*
 }
+# Registry/Gateway contract fixtures start from saved deployment metadata.
+# Real no-argument bootstrap and crypto are covered by test_credential_one_command.py.
+saved_credentials() {
+  [[ -f "${CASE_DIR}/.env" ]] || cp "${CASE_DIR}/.env.example" "${CASE_DIR}/.env"
+  mkdir -p "${CASE_ROOT}/bundle"
+  printf '{"version": 1, "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}\n' > "${CASE_ROOT}/bundle/manifest.json"
+  printf '{}\n' > "${CASE_ROOT}/keys.json"
+  env_set "${CASE_DIR}/.env" BISHENG_CREDENTIALS_DIR "${CASE_ROOT}/bundle"
+  env_set "${CASE_DIR}/.env" BISHENG_SECRET_KEYS_FILE "${CASE_ROOT}/keys.json"
+  env_set "${CASE_DIR}/.env" BISHENG_CREDENTIAL_REVISION aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+}
 run_install() {
   : > "${CASE_ROOT}/calls"
   if PATH="${CASE_ROOT}/bin:$PATH" INSTALL_TEST_LOG="${CASE_ROOT}/calls" \
@@ -54,13 +68,13 @@ new_case
 run_install --prepare-only
 ok
 cmp "${SCRIPT_DIR}/.env.example" "${CASE_DIR}/.env" || fail 'Default configuration was rewritten'
-[[ "$(env_get "${CASE_DIR}/.env" MINIO_ROOT_USER)" = minioadmin ]] || fail 'Wrong MinIO user'
-[[ "$(env_get "${CASE_DIR}/.env" MINIO_ROOT_PASSWORD)" = minioadmin ]] || fail 'Wrong MinIO password'
+[[ -z "$(env_get "${CASE_DIR}/.env" BISHENG_SECRET_KEYS_FILE)" ]] || fail 'Structural check persisted a key path'
+absent "${CASE_DIR}/.env" 'MINIO_ROOT_PASSWORD='
 [[ "$(ls -l "${CASE_DIR}/.env" | awk '{print substr($1, 1, 10)}')" = -rw------- ]] || fail 'Unsafe .env permissions'
 absent "${CASE_ROOT}/calls" $'login\t'
 absent "${CASE_ROOT}/calls" $'pull\t'
 absent "${CASE_ROOT}/calls" $'up\t'
-pass 'Default setup copies the template exactly, uses legacy MinIO values, and does not deploy in prepare-only'
+pass 'Prepare-only copies the template exactly, persists no secret placeholders, and starts nothing'
 
 env_set "${CASE_DIR}/.env" MINIO_ROOT_PASSWORD existing-password
 env_set "${CASE_DIR}/.env" BISHENG_BACKEND_IMAGE custom.example/backend:custom
@@ -72,6 +86,7 @@ cmp "${CASE_DIR}/.env" "${CASE_ROOT}/before" || fail 'Existing .env changed'
 pass 'Existing .env, credentials, image addresses and unknown settings remain byte-identical'
 
 new_case
+saved_credentials
 run_install
 ok
 awk '/^login\t/ { login = NR } /pull\t/ { pull = NR } /up\t-d\t$/ { up = NR } END { exit !(login && pull > login && up > pull) }' "${CASE_ROOT}/calls" || fail 'Default deploy is not pull then up -d'
@@ -89,6 +104,7 @@ run_install --prepare-only
 ok
 env_set "${CASE_DIR}/.env" CR_REGISTRY_USERNAME custom-user
 env_set "${CASE_DIR}/.env" CR_REGISTRY_PASSWORD 'custom-password$literal'
+saved_credentials
 TEST_PASSWORD='custom-password$literal' run_install
 ok
 contains "${CASE_ROOT}/calls" $'--username\tcustom-user\t--password-stdin\t'
@@ -107,17 +123,19 @@ pass 'Failed registry login stops before pull or service changes'
 
 new_case
 printf 'COMPOSE_PROFILES=\n' > "${CASE_DIR}/.env"
+saved_credentials
 run_install
 ok
 contains "${CASE_ROOT}/calls" $'--username\tdocker\t--password-stdin\t'
 pass 'Existing env files without registry settings use public defaults'
 
 new_case
+saved_credentials
 TEST_FAIL=pull run_install
 failed
 absent "${CASE_ROOT}/calls" $'up\t'
 absent "${CASE_ROOT}/calls" $'build\t'
-contains "${CASE_ROOT}/err" '*_IMAGE'
+contains "${CASE_ROOT}/err" '镜像'
 pass 'Missing images stop before any service changes and never build source'
 
 new_case
@@ -139,6 +157,7 @@ absent "${CASE_ROOT}/calls" $'up\t'
 pass 'A cached license does not enable Gateway without a file; an unreadable file fails explicitly'
 
 new_case
+saved_credentials
 gateway
 ok
 [[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = gateway ]] || fail 'Gateway profile missing'
@@ -149,7 +168,7 @@ for key in BISHENG_GATEWAY_HMAC_SECRET BISHENG_GATEWAY_DB_PASSWORD; do
   absent "${CASE_ROOT}/out" "$secret"
   absent "${CASE_ROOT}/err" "$secret"
 done
-awk '/pull\t/ { pull = NR } /up\t-d\tgateway\t$/ { gateway = NR } /up\t-d\t$/ { all = NR } END { exit !(pull && gateway > pull && all > gateway) }' "${CASE_ROOT}/calls" || fail 'Wrong Gateway start order'
+awk '/pull\t/ { pull = NR } /up\t-d\t--no-deps\t--force-recreate\tbackend/ { backend = NR } /up\t-d\t$/ { all = NR } END { exit !(pull && backend > pull && all > backend) }' "${CASE_ROOT}/calls" || fail 'Wrong Gateway start order'
 absent "${CASE_ROOT}/calls" $'exec\t'
 [[ ! -f "${CASE_ROOT}/python-called" ]] || fail 'Host Python called'
 pass 'Gateway uses Compose dependencies for initialization and preserves independent generated credentials'

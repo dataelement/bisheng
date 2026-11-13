@@ -43,34 +43,15 @@ app.kubernetes.io/instance: {{ .Release.Name }}
     secretKeyRef:
       name: {{ include "bisheng.fullname" . }}
       key: gatewayHmacSecret
-- name: BS_MILVUS_CONNECTION_ARGS
-  value: {{ .Values.middleware.milvus.connectionArgs | quote }}
-- name: BS_MILVUS_IS_PARTITION
-  value: {{ .Values.middleware.milvus.isPartition | quote }}
-- name: BS_MILVUS_PARTITION_SUFFIX
-  value: {{ .Values.middleware.milvus.partitionSuffix | quote }}
-- name: BS_ELASTICSEARCH_URL
-  value: {{ .Values.middleware.elasticsearch.url | quote }}
-- name: BS_ELASTICSEARCH_SSL_VERIFY
-  value: {{ .Values.middleware.elasticsearch.sslVerify | quote }}
-- name: BS_MINIO_SCHEMA
-  value: {{ .Values.middleware.minio.schema | quote }}
-- name: BS_MINIO_CERT_CHECK
-  value: {{ .Values.middleware.minio.certCheck | quote }}
-- name: BS_MINIO_ENDPOINT
-  value: {{ .Values.middleware.minio.endpoint | quote }}
-- name: BS_MINIO_SHAREPOINT
-  value: {{ .Values.middleware.minio.sharepoint | quote }}
-- name: BS_MINIO_ACCESS_KEY
+- name: BS_SECRET_KEYS_FILE
+  value: /run/secrets/bisheng-fernet-keys.json
+- name: BISHENG_GATEWAY_HMAC_SECRET
   valueFrom:
     secretKeyRef:
       name: {{ include "bisheng.fullname" . }}
-      key: minioAccessKey
-- name: BS_MINIO_SECRET_KEY
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "bisheng.fullname" . }}
-      key: minioSecretKey
+      key: gatewayHmacSecret
+- name: BS_CREDENTIAL_REVISION
+  value: {{ .Values.credentials.configRevision | quote }}
 {{- end }}
 
 {{- define "bisheng.sandboxEnv" -}}
@@ -89,3 +70,46 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .Values.sandbox.endpoints | toJson | quote }}
 {{- end }}
 {{- end }}
+
+{{- define "bisheng.credentialValidate" -}}
+{{- if or (hasKey .Values "middleware") (hasKey .Values "config") -}}
+{{- fail "migrate legacy middleware/config values to credentials.existingSecret; secret values are not rendered" -}}
+{{- end -}}
+{{- $_ := required "credentials.existingSecret is required" .Values.credentials.existingSecret -}}
+{{- $_ := required "credentials.configRevision is required" .Values.credentials.configRevision -}}
+{{- range $component := list "backend" "worker" "linsight" -}}
+{{- range $env := (index $.Values $component).extraEnv -}}
+{{- if or (hasPrefix "BS_MINIO_" $env.name) (hasPrefix "BS_MILVUS_" $env.name) (hasPrefix "BS_ELASTICSEARCH_" $env.name) (has $env.name (list "config" "BS_SECRET_KEYS_FILE" "bisheng_DATABASE_URL" "BS_DATABASE_URL" "BS_REDIS_URL" "BS_CELERY_REDIS_URL")) -}}
+{{- fail "migrate credential environment overrides to external Secret config.yaml" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "bisheng.credentialRevision" -}}
+{{- include "bisheng.credentialValidate" . -}}
+bisheng.io/credential-revision: {{ .Values.credentials.configRevision | quote }}
+{{- end -}}
+
+{{- define "bisheng.credentialMounts" -}}
+- name: credentials
+  mountPath: /app/bisheng/config.yaml
+  subPath: config.yaml
+  readOnly: true
+- name: credentials
+  mountPath: /run/secrets/bisheng-fernet-keys.json
+  subPath: fernet-keys.json
+  readOnly: true
+{{- end -}}
+
+{{- define "bisheng.credentialVolume" -}}
+- name: credentials
+  secret:
+    secretName: {{ .Values.credentials.existingSecret | quote }}
+    defaultMode: 0400
+    items:
+      - key: config.yaml
+        path: config.yaml
+      - key: fernet-keys.json
+        path: fernet-keys.json
+{{- end -}}

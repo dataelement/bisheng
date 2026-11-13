@@ -1,0 +1,14 @@
+# Runtime/customer inputs must never enter the image build context.
+bisheng/config.yaml
+.env
+.env.*
+secrets/
+.generated/
+**/secrets/
+**/.generated/
+.venv/
+.git/
+.pytest_cache/
+.ruff_cache/
+**/__pycache__/
+**/*.pyc
