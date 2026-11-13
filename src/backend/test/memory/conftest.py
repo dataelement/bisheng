@@ -342,3 +342,36 @@ def make_message(chat_id, user_id, message, category="question", is_bot=False, *
     kw.setdefault("flow_id", "")
     kw.setdefault("type", "end" if is_bot else "human")
     return ChatMessage(chat_id=chat_id, user_id=user_id, message=message, category=category, is_bot=is_bot, **kw)
+
+
+class FakeAuditWriter:
+    def __init__(self):
+        self.rows = []
+
+    async def __call__(self, **kwargs):
+        self.rows.append(kwargs)
+
+
+@pytest.fixture
+def audit_rows():
+    return FakeAuditWriter()
+
+
+@pytest.fixture
+def service(memory_db, index, details, kv, audit_rows):
+    """MemoryService wired with in-memory doubles."""
+    from bisheng.memory.domain.services.audit import MemoryAudit
+    from bisheng.memory.domain.services.memory_service import MemoryService
+    from bisheng.memory.domain.services.metrics import MemoryMetrics
+
+    return MemoryService(
+        index=index, details=details, kv=kv, audit=MemoryAudit(writer=audit_rows), metrics=MemoryMetrics(kv)
+    )
+
+
+async def counter(kv, tenant_id, metric):
+    """Sum of a metric across scenes/apps for today in the KV double."""
+    from bisheng.memory.domain.services.metrics import _COUNTER_KEY, _today
+
+    h = await kv.hgetall(_COUNTER_KEY.format(day=_today(), tenant=tenant_id))
+    return sum(v for k, v in h.items() if k.endswith("|" + metric))
