@@ -251,7 +251,7 @@
   **覆盖 AC**: AC-22, AC-89, AC-93, AC-101, AC-102
   **依赖**: T028, T022
 
-- [ ] **T030**: 编辑、删除、清空、撤销的实现
+- [x] **T030**: 编辑、删除、清空、撤销的实现
   **文件**: `src/backend/bisheng/memory/domain/services/memory_service.py`、`src/backend/bisheng/memory/domain/services/detail_store.py`、`src/backend/bisheng/memory/domain/repositories/cursor_repository.py`
   **逻辑**: `edit`、`add_manual`、`delete`、`clear`、`undo`。删除是软删除；清空是硬删除，顺序为索引、对象、本轮记录与快照、条目行，最后推进该用户登记行的水位。`detail_store.py` 是 `DetailStore` 的 MinIO 实现，对象键 `memory/{tenant_id}/{user_id}/{item_id}.md`。设计见 design 决策 4、7。
   **测试**: T029 全部通过
