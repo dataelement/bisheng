@@ -19,6 +19,7 @@ from datetime import date, datetime
 
 from loguru import logger
 
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.memory import (
     MemoryItemNotFoundError,
     MemoryUndoAlreadyDoneError,
@@ -336,3 +337,79 @@ class MemoryService:
         await self.audit.record(ctx, "undo", ids)
         await self.metrics.incr(ctx, m.UNDO)
         return WriteResult(ok=True, op="undo", item_id=item_id, related_item_id=related_id, record_id=record_id)
+
+    # ------------------------------------------------------------------ consolidation (decision 7)
+    async def apply_operations(self, session, ctx: MemoryContext, ops: list[dict]) -> list[MemoryItem]:
+        """Apply consolidation operations inside the caller's transaction.
+
+        ``add`` inserts an auto item; ``supersede`` replaces an active item (the old
+        row stays, AC-92); ``pin`` adjusts residency within the configured limit.
+        Invalid candidates are dropped one by one without affecting the others.
+        """
+        from bisheng.memory.domain.config import aget_memory_config
+        from bisheng.memory.domain.models.memory_item import ORIGIN_AUTO
+
+        config = await aget_memory_config()
+        new_items: list[MemoryItem] = []
+        superseded: list[str] = []
+        pinned_now = len(await ItemRepository.list_resident(session, ctx, RESIDENT_TYPES))
+        for op in ops or []:
+            kind = op.get("op")
+            try:
+                if kind in ("add", "supersede", "rewrite"):
+                    item_type = op.get("type") or "fact"
+                    old = None
+                    if kind != "add":
+                        old = await ItemRepository.get_active(session, ctx, op.get("target_id") or "")
+                        if old is None:
+                            continue
+                        item_type = op.get("type") or old.type
+                    text = validate_item(op.get("content"), item_type)
+                    want_pin = bool(op.get("pinned", old.pinned if old else False)) and item_type in RESIDENT_TYPES
+                    keeps_slot = old is not None and old.pinned
+                    if want_pin and not keeps_slot and pinned_now >= config.resident_max_items:
+                        want_pin = False
+                    item = self._new_item(ctx, text, item_type, ORIGIN_AUTO, op.get("event_time"), pinned=want_pin)
+                    if old is not None and kind == "rewrite":
+                        item.rewritten = True
+                    if want_pin:
+                        item.pin_order = old.pin_order if keeps_slot else await ItemRepository.max_pin_order(session, ctx) + 1
+                        pinned_now += 0 if keeps_slot else 1
+                    elif keeps_slot:
+                        pinned_now -= 1
+                    if old is not None:
+                        changed = await ItemRepository.update_status(
+                            session, ctx, old.id, STATUS_ACTIVE, STATUS_SUPERSEDED, superseded_by=item.id
+                        )
+                        if changed == 0:
+                            continue
+                        superseded.append(old.id)
+                    await ItemRepository.insert(session, ctx, item)
+                    new_items.append(item)
+                elif kind == "pin":
+                    target = await ItemRepository.get_active(session, ctx, op.get("target_id") or "")
+                    if target is None or target.type not in RESIDENT_TYPES or bool(op.get("pinned")) == target.pinned:
+                        continue
+                    if op.get("pinned"):
+                        if pinned_now >= config.resident_max_items:
+                            continue
+                        order = await ItemRepository.max_pin_order(session, ctx) + 1
+                        await ItemRepository.update_fields(session, ctx, [target.id], pinned=True, pin_order=order)
+                        pinned_now += 1
+                    else:
+                        await ItemRepository.update_fields(session, ctx, [target.id], pinned=False)
+                        pinned_now -= 1
+            except BaseErrorCode as exc:
+                logger.info("memory consolidation dropped a candidate: {}", exc.message)
+            except ValueError as exc:
+                logger.info("memory consolidation dropped a candidate: {}", exc)
+        ctx.extra["superseded_ids"] = superseded
+        return new_items
+
+    async def after_auto_commit(self, ctx: MemoryContext, new_items: list[MemoryItem]) -> None:
+        superseded = ctx.extra.pop("superseded_ids", [])
+        if superseded:
+            await self._unindex(ctx, superseded)
+        await self.index_items(ctx, new_items)
+        await self.metrics.incr(ctx, m.ADDED_AUTO, len(new_items))
+        await self.metrics.incr(ctx, m.SUPERSEDED, len(superseded))

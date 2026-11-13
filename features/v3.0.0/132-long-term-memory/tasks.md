@@ -354,7 +354,7 @@
   **覆盖 AC**: AC-39, AC-41, AC-44, AC-45
   **依赖**: T042, T036
 
-- [ ] **T044**: 整理调度语义的实现
+- [x] **T044**: 整理调度语义的实现
   **文件**: `src/backend/bisheng/memory/domain/services/consolidator.py`
   **逻辑**: `consolidate_user(tenant_id, user_id)`：取锁与续期、逐会话重新做启用判定、确定本次终点、调用以参数注入的内容处理函数（真实实现在 T046，装配在 `factory.py`）、事务内落库并推进水位、失败退避与日志节流。设计见 design 决策 7。
   **测试**: T043 全部通过
