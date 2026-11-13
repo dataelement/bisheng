@@ -131,7 +131,7 @@
   **逻辑**: 按 design §4.2 定义 `memory_item`（含 `index_model_id`，记录建索引时所用的 embedding 模型）、`memory_session_cursor`、`memory_user_setting`、`memory_turn_record`、`memory_resident_snapshot`、`memory_metric_daily`。JSON 用 `dialect_helpers.JsonType`，长文本用 `LargeText`，`update_time` 用方言辅助。`assistant` 模型加列 `memory_enabled`（布尔，默认关）。把记忆的模型模块路径（字符串）登记进 `tenant_filter.py` 的 `_TENANT_AWARE_MODEL_MODULES`。
   **依赖**: T009
 
-- [ ] **T013**: Alembic 迁移
+- [x] **T013**: Alembic 迁移
   **文件**: `src/backend/bisheng/core/database/alembic/versions/`（新增一个 revision）
   **逻辑**: 按同目录 `AGENTS.md`：`down_revision` 取当前唯一 head；只写 DDL；用 `table_exists` / `column_exists` 保证可重入；不写字符集；`assistant.memory_enabled` 带 `server_default`。运行 `uv run pytest test/database/test_alembic_single_head.py -q`。
   **回滚**: `downgrade` 删除六张新表与该列。六张表是新增表，没有数据迁移，可逆。
