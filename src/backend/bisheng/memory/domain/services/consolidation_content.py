@@ -19,7 +19,7 @@ from sqlmodel import select
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.memory.domain.config import aget_memory_config
 from bisheng.memory.domain.models.memory_item import ITEM_TYPES
-from bisheng.memory.domain.ports import MemoryContext
+from bisheng.memory.domain.ports import SCENE_LINSIGHT, MemoryContext
 from bisheng.memory.domain.repositories import _db
 from bisheng.memory.domain.repositories.item_repository import ItemRepository
 from bisheng.memory.domain.services.consolidation_prompt import build_prompt
@@ -147,6 +147,7 @@ class ConsolidationContent:
             existing = await ItemRepository.list_active(s, ctx)
         existing_view = [{"id": i.id, "type": i.type, "content": i.content, "pinned": i.pinned} for i in existing]
         today = local_today(ctx.timezone, config.default_timezone).strftime("%Y-%m-%d")
-        prompt = build_prompt(today, messages, existing_view, config.resident_max_items)
+        mode = "linsight" if ctx.scene == SCENE_LINSIGHT else "chat"
+        prompt = build_prompt(today, messages, existing_view, config.resident_max_items, mode=mode)
         answer = await self.llm.consolidate(ctx, prompt)
         return map_candidates(parse_candidates(answer), {i["id"] for i in existing_view})

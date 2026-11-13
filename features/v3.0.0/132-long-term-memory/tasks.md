@@ -703,7 +703,7 @@
   **覆盖 AC**: AC-50, AC-54, AC-55
   **依赖**: T074
 
-- [ ] **T091**: 经验类自动整理的实现
+- [x] **T091**: 经验类自动整理的实现
   **文件**: `src/backend/bisheng/memory/domain/services/consolidation_prompt.py`、`src/backend/bisheng/memory/domain/services/consolidation_linsight.py`
   **逻辑**: 深度研究轮次使用单独的整理提示词，关注用户对产出的固定要求与任务中已验证有效或无效的做法。
   **测试**: T090 全部通过
