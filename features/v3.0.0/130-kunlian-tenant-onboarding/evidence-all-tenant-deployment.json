@@ -1,0 +1,186 @@
+{
+  "release": "20261113-all-tenant-sso",
+  "environment": "192.168.106.104",
+  "public_origin": "http://110.16.193.170:50055",
+  "authorization": "用户明确批准 104 候选部署并继续真实联调",
+  "deployment": {
+    "containers": [
+      {
+        "name": "/bisheng-kunlian-backend",
+        "running": true,
+        "same_image_env_mounts": true,
+        "health": "healthy"
+      },
+      {
+        "name": "/bisheng-kunlian-backend-worker",
+        "running": true,
+        "same_image_env_mounts": true,
+        "health": null
+      },
+      {
+        "name": "/bisheng-gateway",
+        "running": true,
+        "same_image_env_mounts": true,
+        "health": null
+      }
+    ],
+    "gateway_mode": "directory_active_tenants",
+    "backup_bytes": 15087129,
+    "backup_sha256": "85fae391b1249f8b891645958f5d11fbd569ed060b8b8475fb3a54fb2b4c282c",
+    "switched_at": "2026-11-13T11:52:16+0800"
+  },
+  "directory_and_identity": {
+    "mode": "directory_active_tenants",
+    "configuration_policy": 4,
+    "status": {
+      "connection_id": "kunlian-workflow-test",
+      "directory_status": "PUBLISHED",
+      "projection_status": "UNMAPPED",
+      "active_batch_id": "b0c2be81-3197-46d7-80e2-5649e0432d17",
+      "running_batch_id": null,
+      "member_count": 18,
+      "unmapped_count": 3,
+      "projection_pending": 0,
+      "projection_failed": 0,
+      "last_published_at": "2026-11-13 03:59:07",
+      "last_reason_code": null,
+      "last_request_id": "7edd8242271698b8ea54f38e8ae6f44d",
+      "sync_requested_version": 513,
+      "sync_completed_version": 513,
+      "enabled": true,
+      "policy_revision": 4,
+      "last_run_at": "2026-11-13 03:59:06"
+    },
+    "tenant_states": [
+      {
+        "state": "READY",
+        "policy_revision": 4,
+        "count": 10
+      }
+    ],
+    "basic_role_states": [
+      {
+        "state": "APPLIED",
+        "count": 10
+      }
+    ],
+    "basic_access_states": [
+      {
+        "state": "APPLIED",
+        "count": 15
+      }
+    ],
+    "bindings": [
+      {
+        "admission_status": "ACTIVE",
+        "projection_status": "SUCCEEDED",
+        "count": 15
+      }
+    ],
+    "recent_sessions": [
+      {
+        "local_user_id": 10,
+        "local_tenant_id": 11,
+        "external_tenant_id": "c2375e55-4c6c-431d-8d2d-4d6e68d9ed87",
+        "state": "ACTIVE",
+        "issued_at": "2026-11-13 03:58:45",
+        "auth_epoch_at_issue": 2,
+        "auth_epoch": 2
+      },
+      {
+        "local_user_id": 2,
+        "local_tenant_id": 2,
+        "external_tenant_id": "ce767a2d-e46a-4e11-bd1d-50c8ea4ef4b7",
+        "state": "REVOKED",
+        "issued_at": "2026-11-13 03:55:58",
+        "auth_epoch_at_issue": 4,
+        "auth_epoch": 4
+      },
+      {
+        "local_user_id": 10,
+        "local_tenant_id": 11,
+        "external_tenant_id": "c2375e55-4c6c-431d-8d2d-4d6e68d9ed87",
+        "state": "REVOKED",
+        "issued_at": "2026-11-13 03:54:06",
+        "auth_epoch_at_issue": 2,
+        "auth_epoch": 2
+      },
+      {
+        "local_user_id": 2,
+        "local_tenant_id": 2,
+        "external_tenant_id": "ce767a2d-e46a-4e11-bd1d-50c8ea4ef4b7",
+        "state": "EXPIRED",
+        "issued_at": "2026-11-12 13:38:39",
+        "auth_epoch_at_issue": 3,
+        "auth_epoch": 4
+      },
+      {
+        "local_user_id": 2,
+        "local_tenant_id": 2,
+        "external_tenant_id": "ce767a2d-e46a-4e11-bd1d-50c8ea4ef4b7",
+        "state": "EXPIRED",
+        "issued_at": "2026-11-12 13:31:06",
+        "auth_epoch_at_issue": 3,
+        "auth_epoch": 4
+      }
+    ],
+    "unmapped_member_tenant_states": [
+      {
+        "status": "SUSPENDED",
+        "count": 3
+      }
+    ],
+    "membership": [
+      {
+        "external_users": 15,
+        "missing_department": "0"
+      }
+    ],
+    "workflow_owners": [
+      {
+        "id": "2c3bcfd3f5d840ec9d68e8027644aac4",
+        "user_id": 1,
+        "tenant_id": 1
+      },
+      {
+        "id": "744c30d9721e404da9d4e5553296e8ad",
+        "user_id": 2,
+        "tenant_id": 2
+      },
+      {
+        "id": "b077671ff3d04546a0e8f3b25d414b68",
+        "user_id": 2,
+        "tenant_id": 2
+      }
+    ]
+  },
+  "anonymous": {
+    "http_status": 401,
+    "status_code": null,
+    "authenticated_user_returned": false
+  },
+  "browser": {
+    "workflow_account": "PASS",
+    "model_account": "PASS",
+    "model_refresh": "PASS",
+    "logout_callback": "PASS",
+    "switch_model_to_workflow_to_model": "PASS",
+    "workflow_can_open_own_editor": "PASS",
+    "model_open_workflow_editor": "DENIED_404",
+    "resources_created": 0,
+    "resources_modified": 0
+  },
+  "pending": [
+    "其他及未来租户的客户端范围一次性确认",
+    "授权测试数据下的新增和停用/恢复",
+    "真实内省竞争故障矩阵",
+    "实际回退演练",
+    "DM8"
+  ],
+  "operation_notes": [
+    "首次人工同步检查因后台 FETCHING 返回而断言中止；未重复启动拉取",
+    "人工恢复首轮 10 租户/15 成员成功；第二轮与后台新目录相遇而触发版本栅栏，未记为幂等全绿",
+    "只读审计曾误查不存在的 deleted 列，按实际目录模型修正并复验成功；未修改业务数据库结构或数据",
+    "独立诊断进程退出存在原有 aiohttp client session 提示；部署服务健康与身份验证正常"
+  ]
+}

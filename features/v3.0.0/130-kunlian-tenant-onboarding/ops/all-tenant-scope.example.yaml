@@ -1,0 +1,8 @@
+# 仅示例范围键；现有凭据、发行方和回调继续复用。不要整份覆盖现场配置。
+# 后端 sso_sync.kunlian
+login_scope_mode: directory_active_tenants
+auto_onboarding_enabled: true
+policy_revision: 4  # 发布前核对实时值，必须严格递增。
+
+# 网关 custom.kunlian
+login-scope-mode: directory_active_tenants

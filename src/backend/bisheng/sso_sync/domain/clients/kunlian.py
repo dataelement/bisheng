@@ -295,14 +295,14 @@ class KunlianOidcClient:
 
         self._config = config.model_copy(deep=True)
         try:
-            scope_valid = bool(
-                resolve_scope_pairs(
-                    config.login_scope_mode,
-                    config.allowed_tenant_id,
-                    config.allowed_workspace_ids,
-                    config.tenant_workspace_allowlist,
-                )
+            resolve_scope_pairs(
+                config.login_scope_mode,
+                config.allowed_tenant_id,
+                config.allowed_workspace_ids,
+                config.tenant_workspace_allowlist,
             )
+            # 目录模式不枚举组合, 空静态映射不表示配置无效; 准入仍由当前目录裁决。
+            scope_valid = True
         except ValueError:
             scope_valid = False
         origin = urlsplit(config.issuer)

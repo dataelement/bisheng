@@ -28,3 +28,16 @@ def test_fixed_defaults_remain_usable_and_integrated_map_mode_is_ready():
     conf.login_scope_mode = "tenant_workspace_map"
     conf.tenant_workspace_allowlist = {"A": ["WA"], "B": ["WB"]}
     assert not conf.readiness_reasons(multi_tenant_enabled=True)
+
+
+def test_directory_mode_needs_no_static_list_but_keeps_readiness_gates():
+    conf = config().model_copy(update={"login_scope_mode": "directory_active_tenants"})
+    conf.allowed_tenant_id, conf.allowed_workspace_ids = "", []
+    assert not conf.readiness_reasons(multi_tenant_enabled=True)
+    for tenant, workspace in [("A", "WA"), ("B", "WB"), ("future-tenant", "future-workspace")]:
+        assert conf.allows_scope(tenant, workspace)
+    for tenant, workspace in [("", "WA"), ("A", ""), ("*", "WA"), ("A", "W A"), (123, "WA"), ("A", "W\u0081")]:
+        assert not conf.allows_scope(tenant, workspace)
+    assert "MULTI_TENANT_REQUIRED" in conf.readiness_reasons(multi_tenant_enabled=False)
+    conf.directory_enabled = False
+    assert "DIRECTORY_DISABLED" in conf.readiness_reasons(multi_tenant_enabled=True)

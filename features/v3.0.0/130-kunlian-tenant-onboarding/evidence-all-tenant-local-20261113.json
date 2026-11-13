@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-13",
+  "backend_base": "f1194f46acb7994c747c79834dbf27daa68a2136",
+  "gateway_base": "0b73a1fa57030c4478fc1daa0e64d329d36d344a",
+  "code_state": "uncommitted all-tenant scope changes",
+  "files": {
+    "src/backend/bisheng/core/config/kunlian_scope.py": "782be8009e760fcc51668359a4a62013dd27b7c08cd9c69076c046ae693af62d",
+    "src/backend/bisheng/core/config/sso_sync.py": "64b870e587e26a585f6aefd8b8bd20bd19b3b7663fe349518470bde0bcdbeaca",
+    "src/backend/bisheng/sso_sync/domain/clients/kunlian.py": "5f3fd417789642ffc2317a0357a497fa617d4773481f6b51c2e8857993156977",
+    "src/backend/test/sso/test_kunlian_scope_policy.py": "4573cc150013d1b4d5a5283eb5550eae655e3a00258175a5621b937a53ccfda1",
+    "src/backend/test/sso/test_kunlian_idp_client.py": "f44004dd4571e0c4de39897e0379fd7a314e78169470dd322117adc77541c916",
+    "src/backend/test/sso/test_kunlian_onboarding_login.py": "4a376c85cbe8de297c2d1563c83ba699729fb247e5d06a3e2b4969dc74a4a008",
+    "src/backend/test/sso/test_kunlian_onboarding_admission.py": "d7e3a2db5f96b0493370231c01b4920b4622523f3bf604fc45100274cd48e67f"
+  },
+  "backend_regression": {
+    "passed": 163,
+    "failed": 0,
+    "log": "/tmp/kunlian-all-tenant-backend-regression.log"
+  },
+  "gateway_regression": {
+    "passed": 79,
+    "failed": 0,
+    "log": "/tmp/kunlian-all-tenant-gateway-focused.log"
+  },
+  "frontend_regression": {
+    "platform": 17,
+    "shared_entry": 64
+  },
+  "gateway_build": "PASS",
+  "ruff": "PASS",
+  "arch_guard": "PASS",
+  "separate_mock_environment": "not_created",
+  "deployment": "已授权部署；真实两个租户登录、切换与隔离通过，见 evidence-all-tenant-deployment.json",
+  "real_model_protocol_probe": {
+    "client_id": "bisheng-workflow-test",
+    "tenant_id": "c2375e55-4c6c-431d-8d2d-4d6e68d9ed87",
+    "workspace_id": "db01d72a-3dbd-4c85-a5d9-0bb94698fec5",
+    "rs256": "PASS",
+    "introspection": "PASS",
+    "local_session_issued": false
+  },
+  "pending": [
+    "其他及未来租户客户端约定",
+    "真实新增与停用/恢复测试",
+    "真实内省竞争矩阵",
+    "DM8",
+    "实际回退演练"
+  ]
+}

@@ -8,7 +8,17 @@ import pytest
 from bisheng.common.errcode.sso_sync import KunlianIdentityUnavailableError
 from test.sso import test_kunlian_admission as fixtures
 
-admission = fixtures.admission
+base_admission = fixtures.admission
+
+
+@pytest.fixture(params=["fixed", "tenant_workspace_map", "directory_active_tenants"])
+async def admission(request, base_admission):
+    service = base_admission[0]
+    service.config.login_scope_mode = request.param
+    service.config.tenant_workspace_allowlist = {"external-a": ["fixture-workspace"]}
+    if request.param != "fixed":
+        service.config.allowed_tenant_id, service.config.allowed_workspace_ids = "", []
+    return base_admission
 session_store = fixtures.session_store
 directory_store = fixtures.directory_store
 
@@ -16,9 +26,6 @@ directory_store = fixtures.directory_store
 @pytest.mark.parametrize("transport", ["HTTP", "WEBSOCKET"])
 async def test_source_revocation_during_introspection_blocks_new_action(admission, transport):
     service, _, _, _, issued, _, _, users, _ = admission
-    service.config.login_scope_mode = "tenant_workspace_map"
-    service.config.tenant_workspace_allowlist = {"external-a": ["fixture-workspace"], "external-b": ["WB"]}
-    service.config.allowed_tenant_id, service.config.allowed_workspace_ids = "", []
     current = users.read_current_qualification.return_value
     service.onboarding = SimpleNamespace(
         current_qualification=AsyncMock(side_effect=[current, KunlianIdentityUnavailableError()])
@@ -30,9 +37,6 @@ async def test_source_revocation_during_introspection_blocks_new_action(admissio
 
 async def test_payload_uses_roles_reread_after_network_round_trip(admission):
     service, _, _, _, issued, _, _, users, _ = admission
-    service.config.login_scope_mode = "tenant_workspace_map"
-    service.config.tenant_workspace_allowlist = {"external-a": ["fixture-workspace"], "external-b": ["WB"]}
-    service.config.allowed_tenant_id, service.config.allowed_workspace_ids = "", []
     initial = users.read_current_qualification.return_value
     latest = SimpleNamespace(user_id=101, user_name="最新名称", token_version=1, role_ids=(920,))
     users.read_current_qualification.side_effect = [initial, latest]

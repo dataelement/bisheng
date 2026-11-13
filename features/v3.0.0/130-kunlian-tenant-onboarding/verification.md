@@ -1,6 +1,45 @@
 # 昆联租户与用户自动开通：验证记录
 
-更新日期：2026-11-12
+更新日期：2026-11-13
+
+## 本轮全租户 SSO 增量（2026-11-13）
+
+用户要求改为真实联调优先，不新建独立 Mock 环境。双端已补 `directory_active_tenants`，原 fixed／精确组合、签名与内省、当前目录最终准入和会话重读继续复用。下列旧记录仅代表当时状态，本轮以 E-029 起的证据为准。
+
+### E-029：发布前相关回归（PASS）
+
+- 使用现有 Python 3.11 环境和临时 SQLite 配置，pytest 导入前阻断 TCP；未连接 116 或业务库。只运行原认证／目录相关测试，不新建模拟业务服务。
+- 新模式支持前的后端配置回归出现预期 `1 failed, 8 passed`，网关配置回归出现 `Tests run: 4, Failures: 1`，均因第三模式未支持。两次日志包装命令末尾 tail 导致外层退出 0，因此以测试器报告为红灯证据，不能将包装器退出码当测试通过。
+- 后端配置及令牌定向 45 项、登录及会话定向 28 项通过；最终相关回归为 **163 passed**，实际测试命令退出 0，不与定向次数累加。
+- 最终命令：`config=<受控临时配置> PYTHONPATH=. <现有 Python3.11> <pytest-offline.py> test/sso/test_kunlian_scope_policy.py test/sso/test_kunlian_idp_client.py test/sso/test_kunlian_onboarding_scope.py test/sso/test_kunlian_login_contract.py test/sso/test_kunlian_onboarding_login.py test/sso/test_kunlian_admission.py test/sso/test_kunlian_onboarding_admission.py test/sso/test_kunlian_http_admission.py test/sso/test_kunlian_ws_admission.py test/sso/test_kunlian_session_store.py test/sso/test_kunlian_tenant_onboarding.py test/sso/test_kunlian_onboarding_directory.py test/sso/test_kunlian_worker.py -q --tb=short --disable-warnings`。
+- 网关 JDK17：`mvn -o -q '-Dtest=Kunlian*Test' test`：79 项、零失败／错误／跳过；`mvn -o -q -DskipTests package` 退出 0。前端现有 `kunlianSession.test.ts` 17 项与共享 `kunlianWorkflowEntry.test.ts` 64 项通过。
+- 7 个修改的 Python 文件 Ruff 通过；三个运行文件架构守卫无报告；diff 空白检查通过。仅修正本轮注释标点后重新执行 Ruff，行为未变化。
+- 本次源码摘要、基线和日志位置见 [证据 JSON](./evidence-all-tenant-local-20261113.json)。未修改登录／会话业务服务：当前目录、Owner 资格和内省后复核已由原链路完成，用行为证据验证复用。
+
+### E-030：真实模型账号协议诊断（PASS，尚非浏览器登录成功）
+
+- 原 fixed 模式中，真实 `bisheng-moxing-tenant` 从昆联认证返回毕昇回调，使用全新授权事务仍为 `LOGIN_INVALID`。
+- 在不改运行配置、不签发本地会话的受控诊断中，通过相同客户端、回调、PKCE 及真实授权码换取令牌；使用实际 JWKS 验证 RS256，并调用真实内省逐字段匹配。
+- 结果：模型租户 `c2375e55-4c6c-431d-8d2d-4d6e68d9ed87`、Workspace `db01d72a-3dbd-4c85-a5d9-0bb94698fec5`，验签及在线内省 PASS。诊断中的精确组合仅用于核验实际已签发身份，没有写入服务器允许列表或签发本地 JWT。
+- 结论仅证明模型账号已可在昆联端签发；旧文档的单租户说明已落后于该账号实测。其他／未来租户登记保证仍待昆联确认，不据此声称全部租户已通过。
+
+### E-031：104 候选与备份（PASS，后续切换独立记录）
+
+- 用户随后明确批准部署 104 并继续真实联调。候选仅三个后端文件、网关 JAR 和两份配置；策略 3→4，源代码和配置摘要前置保护通过。
+- `/dataelem/bisheng-kunlian/source/backups/20261113-all-tenant-sso` 已保存原文件、JAR、容器信息和数据库；数据库备份 15,087,129 字节。10 个秘密／Compose 文件纳入摘要保护，具体值不输出。
+- `prepare` 与只读 `rollback-check` 通过；实际回退尚未演练。部署步骤及影响见 [发布预案](./ops/all-tenant-deploy-plan.md)。
+
+### E-032：104 发布及真实双租户闭环（PASS；完整 V-06 仍为 PARTIAL）
+
+- **发布**：2026-11-13 11:52:16 +08:00，已应用 `directory_active_tenants`，策略 3→4。发布前 Worker 活跃任务为 0；三个后端文件、网关 JAR、两份配置摘要校验通过。后端健康，API／Worker／网关运行；容器 ID、镜像、环境变量和按目标路径比较的挂载保持，RestartCount 均为 0。
+- **真实同步**：后台已完整发布当前目录，控制面策略 4。只读核对 10 个租户 READY、10 个基础角色 APPLIED、15 名成员 ACTIVE／SUCCEEDED、15 项基础资格 APPLIED；15 名外部用户组织成员无缺失。3 名未映射成员所属租户状态均为 SUSPENDED，不自动开通。全局投影诊断仍显示 UNMAPPED（含这 3 名成员），不能将该总览误写为无未映射项。
+- **真实登录归属**：模型账号对应本地 user_id=10、tenant_id=11；Workflow 账号对应 user_id=2、tenant_id=2。SQL 会话记录与浏览器身份一致，退出后的会话为 REVOKED；旧试点会话策略 epoch 过期。
+- **浏览器验收**：在同一浏览器从模型 → Workflow → 模型，均经实际昆联登录和毕昇回调进入 `/build/workflows`；模型页面不显示 Workflow 租户资产，Workflow 页面显示原有两条本租户工作流。模型刷新通过，两个账号统一退出均收到 `LOGOUT_CALLBACK_RECEIVED`。
+- **对象隔离**：Workflow 账号可进入自己工作流 `744c30d9721e404da9d4e5553296e8ad` 的编辑画布；切回模型账号直达同一路径进入 `/404`，没有加载该画布。匿名访问 `/api/v1/user/info` 为 HTTP 401，不返回用户身份。没有新建、保存、发布或运行工作流。
+- **证据**：[部署与数据库快照](./evidence-all-tenant-deployment.json)、[发布记录](./deployment-all-tenant-sso.md)、[模型页面](./all-tenant-model-20261113.jpg)、[Workflow 页面](./all-tenant-workflow-20261113.jpg)、[跨租户拒绝](./all-tenant-denied-20261113.jpg)。截图已视觉检查。
+- **操作中断如实记录**：首次人工同步检查遇后台 FETCHING 后停止，随后只读确认发布；第一轮恢复成功，第二轮与后台新批次竞争，出现 7 个栅栏／未就绪拒绝，未记为“重复恢复全绿”。已停止人工循环，由原 Worker 收敛；最终只读确认上述当前就绪状态。审计脚本有一次误查不存在的 deleted 列，修正后重新执行成功，未涉及数据写入。独立探针有原有 aiohttp 退出清理提示，应用容器健康未受影响。
+- **仍待执行**：其他／未来租户的客户端范围约定与真实账号验收，授权测试数据下的新增／停用／恢复、真实内省竞争、实际回退演练和 DM8。T058、T064、T067 及原完整联合验收 T042 不因本次双租户通过而全部勾选。
+- **代码状态**：本轮双端修改未暂存、未提交、未推送。没有修改 Schema、端口、发行方、客户端、回调或凭据。
 
 ## 当前结论
 

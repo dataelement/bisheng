@@ -266,3 +266,26 @@ async def test_multi_audience_requires_matching_authorized_party(harness):
             expected_nonce="fixture-nonce",
         )
         assert identity.client_id == "client+fixture"
+
+
+@pytest.mark.parametrize("tenant,workspace", [("A", "WA"), ("B", "WB"), ("new-tenant", "new-workspace")])
+async def test_directory_mode_verifies_real_signature_and_exact_online_context(harness, tenant, workspace):
+    client, state, _, token = harness
+    conf = client._config.model_copy(update={"login_scope_mode": "directory_active_tenants",
+                                           "allowed_tenant_id": "", "allowed_workspace_ids": []})
+    transport, clock = client._client._transport, client._clock
+    await client._client.aclose()
+    client = type(client)(conf, client_secret=SecretStr("fixture+secret"), transport=transport, clock=clock)
+    state["claims"].update(tenant_id=tenant, workspace_id=workspace)
+    state["introspection"].update(tenant_id=tenant, workspace_id=workspace)
+    async with client:
+        identity = await client.verify_id_token(token(), expected_nonce="fixture-nonce")
+        assert identity.tenant_id == tenant
+        await client.introspect(SecretStr("opaque+AT"), expected=identity)
+        state["introspection"]["workspace_id"] = "different-workspace"
+        with pytest.raises(KunlianIdentityUnavailableError):
+            await client.introspect(SecretStr("opaque+AT"), expected=identity)
+        for overrides in ({"aud": "other-client"}, {"iss": "https://other.invalid"},
+                          {"tenant_id": "*"}, {"workspace_id": ""}, {"nonce": "other-nonce"}):
+            with pytest.raises(KunlianLoginInvalidError):
+                await client.verify_id_token(token(claims=overrides), expected_nonce="fixture-nonce")

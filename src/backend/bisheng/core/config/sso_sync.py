@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
 
-from bisheng.core.config.kunlian_scope import resolve_scope_pairs
+from bisheng.core.config.kunlian_scope import allows_scope_claims, resolve_scope_pairs
 
 
 class KunlianConf(BaseModel):
@@ -20,7 +20,7 @@ class KunlianConf(BaseModel):
     client_id: str = ""
     allowed_tenant_id: str = ""
     auto_onboarding_enabled: bool = Field(default=False, strict=True)
-    login_scope_mode: Literal["fixed", "tenant_workspace_map"] = "fixed"
+    login_scope_mode: Literal["fixed", "tenant_workspace_map", "directory_active_tenants"] = "fixed"
     tenant_workspace_allowlist: dict[str, list[str]] = Field(default_factory=dict)
     public_origin: str = ""
     redirect_uri: str = ""
@@ -47,18 +47,14 @@ class KunlianConf(BaseModel):
     sync_interval_seconds: int = Field(default=300, gt=0)
 
     def allows_scope(self, tenant_id, workspace_id) -> bool:
-        if not isinstance(tenant_id, str) or not isinstance(workspace_id, str):
-            return False
-        try:
-            pairs = resolve_scope_pairs(
-                self.login_scope_mode,
-                self.allowed_tenant_id,
-                self.allowed_workspace_ids,
-                self.tenant_workspace_allowlist,
-            )
-        except ValueError:
-            return False
-        return workspace_id in pairs.get(tenant_id, ())
+        return allows_scope_claims(
+            self.login_scope_mode,
+            self.allowed_tenant_id,
+            self.allowed_workspace_ids,
+            self.tenant_workspace_allowlist,
+            tenant_id,
+            workspace_id,
+        )
 
     def readiness_reasons(self, *, multi_tenant_enabled: bool) -> tuple[str, ...]:
         """只评估配置前置条件。完整目录和投影就绪由应用服务检查。"""
