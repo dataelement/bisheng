@@ -83,7 +83,10 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
     }, org)
     const filterKeys = Object.keys({ ...filters, ...nextFilters }) as (keyof RuntimeAuditFilters)[]
     if (filterKeys.some(key => filters[key] !== nextFilters[key])) {
-      setFilters({ ...nextFilters, visitor_id: undefined })
+      // A new time window can leave the chosen visitor outside it; an organisation change must not clear it (AC-26).
+      const timeKeys: (keyof RuntimeAuditFilters)[] = ['time_range', 'start_time', 'end_time']
+      const timeChanged = timeKeys.some(key => filters[key] !== nextFilters[key])
+      setFilters(timeChanged ? { ...nextFilters, visitor_id: undefined } : nextFilters)
     }
     reloadFromFirstPage()
   }
