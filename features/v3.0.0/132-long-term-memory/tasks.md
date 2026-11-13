@@ -288,7 +288,7 @@
   **覆盖 AC**: AC-58, AC-59, AC-61, AC-62
   **依赖**: T033
 
-- [ ] **T035**: 真实索引与模型调用的测试
+- [x] **T035**: 真实索引与模型调用的测试
   **文件**: `src/backend/test/memory/test_index_llm_adapters.py`
   **逻辑**: 用打桩的 ES、Milvus 客户端与 LLM 服务验证适配层：ES 索引名 `bisheng_memory_item`，Milvus collection 名含 embedding 模型 id；写入与检索都带租户与用户过滤；embedding 调用超过 3 秒按超时处理；embedding 与整理的模型调用以记忆主人的用户 id 发起、应用类型为 `memory`、写入 token 用量记录、不触发个人额度扣减；模型调用被拒绝时抛出可识别的失败；整理模型取工作台配置的 `memory_model_id`，未配置时取工作台模型列表的第一个，都没有时抛"无可用模型"；装配函数返回的服务实例使用的是真实的三个实现。
   **覆盖 AC**: AC-45, AC-58
