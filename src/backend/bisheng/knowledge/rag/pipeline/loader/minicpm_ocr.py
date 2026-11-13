@@ -37,7 +37,7 @@ class MinicpmOcrLoader(BaseBishengLoader):
     each request carries the rendered page as an ``image_url`` part followed by
     the configured instruction text.
 
-    This loader sends whole pages, which is the lightweight path: MiniCPM-OCR's
+    This loader sends whole pages instead of cropped regions: MiniCPM-OCR's
     official document parsing SDK instead runs PP-DocLayoutV3 layout detection
     locally and sends cropped regions, so reading order on complex multi-column
     pages can differ. Output is page-level Markdown only: the service returns no
@@ -192,8 +192,8 @@ class MinicpmOcrLoader(BaseBishengLoader):
         if not isinstance(content, str):
             raise EtlException(f"MiniCPM-OCR returned non-text content for page {page_number}")
         if not content.strip() and message.get("reasoning_content"):
-            # Thinking mode routes the transcription to reasoning_content and
-            # leaves content empty — turn it off on the server.
+            # Thinking mode writes the transcription to reasoning_content and
+            # leaves content empty, so the service must run with thinking off.
             raise EtlException(
                 f"MiniCPM-OCR returned empty content for page {page_number} but filled reasoning_content; "
                 "disable thinking on the service (e.g. --default-chat-template-kwargs "
@@ -347,7 +347,7 @@ class MinicpmOcrLoader(BaseBishengLoader):
                 for index, future in enumerate(futures):
                     page_texts[index] = future.result()
             except BaseException:
-                # Stop queued pages instead of spending requests on a doomed file.
+                # Cancel queued pages so a failed file stops consuming requests.
                 for future in futures:
                     future.cancel()
                 raise
