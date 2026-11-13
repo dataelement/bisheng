@@ -278,6 +278,8 @@ billed_tokens = ⌈raw ÷ credit_value_micro⌉
 | `PUT /api/v1/llm/models/{model_id}/pricing`（带 revision；冲突返回 10813；Root 共享模型子租户 19801） | HTTP（新） | 管理后台 |
 | `GET / PUT /api/v1/dsh/admin/credit-settings`（PUT 带 version，冲突 `DshOperationConflictError`） | HTTP（新） | 管理后台 |
 | `GET /api/v1/dsh/admin/model-pricing` → `[{model_id, pricing, effective, edited, missing, hint}]` | HTTP（新） | 管理后台 |
+| `GET /api/v1/dsh/admin/users/{user_id}/credits` → 与 `/dsh/me/credits` 相同（`month, billing_timezone, period_start, reset_at, limit, used, remaining, tokens_per_credit, unlimited`，金额为小数字符串） | HTTP（新，T33） | 管理后台用量页 |
+| `GET /api/v1/dsh/me/credits`（已有） | HTTP（新增使用方） | 网页「设置 → 客户端」积分卡片 |
 | `GET /api/v1/workstation/config`：`models[].pricing_hint`（企业客户端开启时） | HTTP（扩展） | 网页工作台、桌面 Chat |
 | `GET /api/v1/dsh/models`：`data[].pricing_hint` | HTTP（扩展） | 桌面 |
 | `PUT /api/v1/dsh/admin/models/{id}/visibility`：`credit_multiplier` 仍接受、忽略 | HTTP（兼容） | 老管理后台 |

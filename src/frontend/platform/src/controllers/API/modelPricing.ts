@@ -79,3 +79,17 @@ export const saveCreditSettings = (value: CreditSettings): Promise<CreditSetting
     }, { silent: true })
 export const getModelPricingRows = (signal?: AbortSignal): Promise<ModelPricingRow[]> =>
     request.get(`${admin}/model-pricing`, { signal, silent: true })
+
+/** A member's current-month balance in credits, as exact decimal strings (same shape as `/dsh/me/credits`). */
+export type MonthCredits = {
+    month: string
+    billing_timezone: string
+    reset_at: string
+    limit: string
+    /** null while the ledger is not ready. */
+    used: string | null
+    remaining: string | null
+    unlimited: boolean
+}
+export const getUserCredits = (userId: number, signal?: AbortSignal): Promise<MonthCredits> =>
+    request.get(`${admin}/users/${userId}/credits`, { signal, silent: true })

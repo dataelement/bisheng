@@ -95,19 +95,34 @@ async def save_credit_rule(
         return resp_200(data=await policy_transaction(lambda repo: repo.save_rule(subject, user.user_id, body)))
 
 
-@router.get("/me/credits")
-async def personal_credits(user=Depends(UserPayload.get_login_user), runtime=Depends(get_runtime)):
+async def month_credits(runtime, tenant_id: int, user_id: int) -> dict:
+    """One balance for the member's own view and the administrator's usage page."""
     from types import SimpleNamespace
 
+    period = billing_period(datetime.now(UTC), runtime.settings.billing_timezone)
+    with profile_scope(tenant_id):
+        policy = await read_policy(user_id)
+        service = await get_model_runtime(runtime)
+        snapshot = await service.prepare_month(SimpleNamespace(tenant_id=tenant_id, user_id=user_id), period["month"])
+    used = snapshot["used"] if snapshot.get("quota_state") == "ready" else None
+    return {**period, **credit_balance(limit=policy.monthly_token_limit, used=used)}
+
+
+@router.get("/me/credits")
+async def personal_credits(user=Depends(UserPayload.get_login_user), runtime=Depends(get_runtime)):
     from bisheng.dsh.domain.services.self_service import DshSelfService
 
     await DshSelfService(runtime).identity(user)
-    period = billing_period(datetime.now(UTC), runtime.settings.billing_timezone)
-    with profile_scope(user.tenant_id):
-        policy = await read_policy(user.user_id)
-        service = await get_model_runtime(runtime)
-        snapshot = await service.prepare_month(
-            SimpleNamespace(tenant_id=user.tenant_id, user_id=user.user_id), period["month"]
-        )
-    used = snapshot["used"] if snapshot.get("quota_state") == "ready" else None
-    return resp_200(data={**period, **credit_balance(limit=policy.monthly_token_limit, used=used)})
+    return resp_200(data=await month_credits(runtime, user.tenant_id, user.user_id))
+
+
+@router.get("/admin/users/{user_id}/credits")
+async def user_credits(
+    user_id: UserId,
+    user=Depends(admin_user),
+    service=Depends(get_management),
+    runtime=Depends(get_runtime),
+    tenant_id: TenantId = None,
+):
+    _, tenant = await service.authorize(user.user_id, tenant_id or get_current_tenant_id(), user_id)
+    return resp_200(data=await month_credits(runtime, tenant, user_id))

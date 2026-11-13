@@ -49,7 +49,10 @@ export async function getDshUsageSummary(signal?: AbortSignal): Promise<DshUsage
 }
 
 
-export type DshCredits = { remaining: string | null; limit: string; used: string | null; reset_at: string };
+export type DshCredits = {
+  remaining: string | null; limit: string; used: string | null; reset_at: string;
+  billing_timezone?: string; unlimited?: boolean;
+};
 export async function getDshCredits(signal?: AbortSignal): Promise<DshCredits> {
   return unwrap(await request.get<Envelope<DshCredits>>('/api/v1/dsh/me/credits', { signal }));
 }

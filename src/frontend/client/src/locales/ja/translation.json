@@ -2708,6 +2708,13 @@
   "dsh_source_unavailable": "使用量を取得できません",
   "dsh_unknown_usage": "{{count}} 回の呼び出しの使用量が未取得です。",
   "dsh": {
+    "creditsTitle": "今月のクレジット",
+    "creditsRemaining": "残りクレジット",
+    "creditsDetail": "今月の上限 {{limit}} · 使用済み {{used}}",
+    "creditsUsedOnly": "今月の使用量 {{used}}",
+    "creditsUnlimited": "上限なし",
+    "creditsReset": "{{date}}にリセット",
+    "creditsHelp": "Chat と Work で共有します。呼び出しごとにモデル価格と実際の使用量で消費します。",
     "launchHelp": "クライアント が開かない場合は、「クライアント をダウンロード」からインストールしてください。インストール済みの場合は、ブラウザーでアプリを開くことを許可するか、手動で起動してください。",
     "launchHelpNoDownload": "クライアント が開かず、インストール済みの場合は、ブラウザーでアプリを開くことを許可するか、手動で起動してください。未インストールの場合は、管理者にダウンロード先を確認してください。",
     "heatmapFuture": "まだ到達していない時間",

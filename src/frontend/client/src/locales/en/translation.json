@@ -2784,6 +2784,13 @@
   "dsh_source_unavailable": "Usage unavailable",
   "dsh_unknown_usage": "Usage was not received for {{count}} calls.",
   "dsh": {
+    "creditsTitle": "Credits this month",
+    "creditsRemaining": "Credits remaining",
+    "creditsDetail": "Monthly allowance {{limit}} · used {{used}}",
+    "creditsUsedOnly": "Used this month {{used}}",
+    "creditsUnlimited": "Unlimited",
+    "creditsReset": "Resets {{date}}",
+    "creditsHelp": "Shared by Chat and Work. Each call is charged by the model price and its actual usage.",
     "launchHelp": "If Client did not open, click “Download Client” to install it. If already installed, allow your browser to open the app or start it manually.",
     "launchHelpNoDownload": "If Client did not open and is already installed, allow your browser to open the app or start it manually. If not installed, contact your administrator for a download link.",
     "heatmapFuture": "Upcoming interval",

@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔄 部分实测 | MySQL 与 Redis 已实测；达梦与全流程待执行 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 34 / 36（T04 暂缓、T26 不做；S6 管理后台、S7 网页、S8 桌面完成；本机联调完成，剩 T32 测试服务器验收） |
+| 实现 | 🔄 进行中 | 35 / 37（T04 暂缓、T26 不做；S6 管理后台、S7 网页、S8 桌面、T33 积分展示完成；本机联调完成，剩 T32 测试服务器验收） |
 
 ---
 
@@ -216,6 +216,7 @@
 
 - [~] **T26**: Cascader 可选 suffix / footer — `packages/ui/src/components/Cascader/*` · 依赖: 无（需组件库负责人认可）
 - [x] **T27**: 模型下拉框倍率 — `client/src/types/chat/config.ts`、`components/Chat/AiModelSelect.tsx` · 覆盖 AC: AC-13 · 依赖: T16, T26
+- [x] **T33**: 本月积分展示（2026-11-13 Callum 联调时提出：界面上看不到员工的积分）— 网页「设置 → 客户端」积分卡片 `client/src/components/dsh/DshCreditsCard.tsx`、`DshDesktopPanel.tsx`（读已有的 `/dsh/me/credits`）；后台「用量」按用户显示本月已用 / 额度 / 剩余 `platform/src/pages/SystemPage/dsh/UserCreditsCard.tsx`、`PolicyView.tsx`，新接口 `GET /dsh/admin/users/{id}/credits`（与 `/me/credits` 共用 `month_credits`）；「当前时段已消耗」改为最多 2 位小数 · 依赖: 无
 
 ### Wave 6 — 桌面（S8，bisheng-desktop）
 
@@ -271,3 +272,6 @@
 - 2026-11-12 特性改号 015 → 016：上游已有 `015-knowledge-space-admin-ui`。目录、迁移 revision（`v310b1_f016_dsh_call_pricing`）、迁移文件与测试文件名、本特性新增内容里的编号一并改；上游 v2.5.1 的 F015（LDAP 校对）等引用不动。本地分支改名为 `feat/3.1.0-beta1-016-credit-pricing`。
 - 合并后补的测试：上游 F009 让对账恢复读取用户归属租户与主部门，价格恢复测试补建这些数据（并按外键顺序写入）；上游新增的「入口不碰数据库」测试补上价格与积分设置的读取替身。
 - 本机联调发现并修复三处界面问题（提交 030dd518a）：价格区在查到价格表前不显示状态；用户可选模型表最小宽度降到 1120；工作台与桌面 Work 下拉框里基准模型只显示「1.00x」。联调结果见 validation.md。
+- T33 做法：员工端和后台用同一个计算（`unified_policy.month_credits`），金额是精确的小数字符串，前端只负责格式化（最多 2 位小数），不限额由服务端的 `unlimited` 标记表示。后台没有复用已有的 `GET /dsh/admin/users/{id}/policy`：该接口按 JS 安全整数校验额度，不限额用户的 int64 上限会让整份数据被判为格式错误；而且用户本月还没有调用时，它返回的「已用」是空，`/me/credits` 返回的是 0。积分卡片只在「按用户」查看时显示，按自然月统计，不随时间范围变化；页面右上「刷新」同时刷新积分。
+- 发现原有缺陷（不在本特性范围，未改）：不限额用户（没有命中任何积分规则）有 2 个及以上模型时，读不到本月积分，`/dsh/me/credits` 和新的后台接口都返回 26126「额度状态暂不可用」，员工端和后台积分卡片显示「暂时无法读取」。原因：账本自动恢复（`automatic_quota_recovery.py` 第 182 行）把各模型额度直接相加，写入 Redis 的总额度。不限额时每个模型的额度都是 int64 上限，本机 f015admin 有 6 个模型，总额度为 55340232221128654842，超出 int64，`read_usage.lua` 因此判为 `bad_counter`。模型调用的准入只看单个模型的额度，所以调用本身不受影响。修复需要同时改恢复写入和 `read_usage.lua` 的总额度校验，属于统一额度账本，需要和账本负责人商量。
+- T33 检查：client `components/dsh` jest 9 条通过（新增 3 条）；platform `dshPolicyView` 13 条通过（新增 5 条）；后端新增 `test/dsh/test_admin_user_credits.py` 3 条通过，同时跑的 `test_admin_api`、`test_self_service` 各有 1 条失败，与改动前的基线相同；两端 tsc-strict、check-i18n 通过，改动文件 eslint 和 ruff 无问题；arch-guard 通过。platform `SystemPage` + `ModelPage` 共 511 条，3 条失败：`ContentSafetyDetails` 2 条，在上游 6a9255e3a 上同样失败；`ModelAccessDialog` 1 条，见 T25。

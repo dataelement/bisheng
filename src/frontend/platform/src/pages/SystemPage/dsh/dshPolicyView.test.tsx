@@ -1,6 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { render } from '@/test/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDshUsageOverview, getDshUsageTimeSummary } from '@/controllers/API/dsh'
+import { getUserCredits, type MonthCredits } from '@/controllers/API/modelPricing'
 import type { DshUsageTimeSummary } from '@/types/dsh'
 import { PolicyView } from './PolicyView'
 
@@ -8,6 +10,7 @@ vi.mock('react-i18next', () => ({
     useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'zh-Hans' } }),
 }))
 vi.mock('@/controllers/API/dsh', () => ({ getDshUsageOverview: vi.fn(), getDshUsageTimeSummary: vi.fn() }))
+vi.mock('@/controllers/API/modelPricing', () => ({ getUserCredits: vi.fn() }))
 vi.mock('@/contexts/userContext', async () => ({
     userContext: (await import('react')).createContext({ user: { user_id: 20, user_name: 'alice' } }),
 }))
@@ -50,8 +53,19 @@ function summary(range: { startAt: string; endAt: string }): DshUsageTimeSummary
         points: [{ ...metrics, start_at: range.startAt, end_at: range.endAt }],
     }
 }
+const credits = (overrides: Partial<MonthCredits> = {}): MonthCredits => ({
+    month: '2026-09',
+    billing_timezone: 'Asia/Shanghai',
+    reset_at: '2026-09-30T16:00:00Z',
+    limit: '1000',
+    used: '100.51272',
+    remaining: '899.48728',
+    unlimited: false,
+    ...overrides,
+})
 beforeEach(() => {
     vi.resetAllMocks()
+    vi.mocked(getUserCredits).mockResolvedValue(credits())
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-15T16:00:00+08:00'))
     vi.stubGlobal(
         'ResizeObserver',
@@ -217,5 +231,55 @@ describe('unified usage selection', () => {
         render(<PolicyView />)
         await waitFor(() => expect(screen.getByLabelText('dsh.selectUsageUser')).toHaveTextContent('bob'))
         expect(getDshUsageTimeSummary).toHaveBeenCalledWith('30', expect.any(Object), expect.any(AbortSignal))
+    })
+})
+
+describe('F016 selected user credits', () => {
+    const card = () => screen.findByRole('region', { name: 'dsh.unified.monthCredits' })
+    const figure = (region: HTMLElement, key: string) =>
+        region.querySelector(`[data-credits="${key}"] dd`)?.textContent
+    it('shows used, allowance and remaining credits for this month with two decimals', async () => {
+        render(<PolicyView />)
+        const region = await card()
+        expect(getUserCredits).toHaveBeenCalledWith(20, expect.any(AbortSignal))
+        expect(figure(region, 'used')).toBe('100.51')
+        expect(figure(region, 'limit')).toBe('1,000')
+        expect(figure(region, 'remaining')).toBe('899.49')
+        expect(await screen.findByText('15')).toBeTruthy()
+    })
+    it('says unlimited instead of the int64 ceiling for a member no rule caps', async () => {
+        vi.mocked(getUserCredits).mockResolvedValue(
+            credits({ unlimited: true, limit: '9223372036854.775807', remaining: '9223372036854.675294' }),
+        )
+        render(<PolicyView />)
+        const region = await card()
+        expect(within(region).getAllByText('dsh.unified.creditsUnlimited')).toHaveLength(2)
+        expect(figure(region, 'used')).toBe('100.51')
+    })
+    it('marks used and remaining unavailable while the ledger is not ready', async () => {
+        vi.mocked(getUserCredits).mockResolvedValue(credits({ used: null, remaining: null }))
+        render(<PolicyView />)
+        const region = await card()
+        expect(figure(region, 'used')).toBe('dsh.unavailable')
+        expect(figure(region, 'limit')).toBe('1,000')
+        expect(figure(region, 'remaining')).toBe('dsh.unavailable')
+    })
+    it('keeps the chart when credits fail and retries them on their own', async () => {
+        vi.mocked(getUserCredits).mockRejectedValueOnce(new Error('offline'))
+        render(<PolicyView />)
+        const alert = await screen.findByRole('alert')
+        expect(alert).toHaveTextContent('dsh.unified.creditsUnavailable')
+        expect(await screen.findByText('15')).toBeTruthy()
+        fireEvent.click(within(alert).getByRole('button', { name: 'dsh.refresh' }))
+        expect(await card()).toBeTruthy()
+        expect(getUserCredits).toHaveBeenCalledTimes(2)
+    })
+    it('reloads credits with the page refresh and leaves them out of the department view', async () => {
+        render(<PolicyView />)
+        await card()
+        fireEvent.click(screen.getByRole('button', { name: 'dsh.refresh' }))
+        await waitFor(() => expect(getUserCredits).toHaveBeenCalledTimes(2))
+        fireEvent.click(screen.getByRole('radio', { name: 'dsh.byDepartment' }), { button: 0, ctrlKey: false })
+        await waitFor(() => expect(screen.queryByRole('region', { name: 'dsh.unified.monthCredits' })).toBeNull())
     })
 })
