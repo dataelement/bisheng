@@ -33,12 +33,14 @@ export function ModelAuditFeedbackCounts({
 }) {
   const { t } = useTranslation();
   if (!knownSafetyCount(likeCount) || !knownSafetyCount(dislikeCount)) return null;
-  const label = (count: number, plain: string, counted: string) =>
-    count === 0 ? t(plain) : t(counted, { count });
   return (
     <>
-      <span>{label(likeCount, "dsh.modelAuditView.group_like", "dsh.modelAuditView.group_likes")}</span>
-      <span>{label(dislikeCount, "dsh.modelAuditView.group_dislike", "dsh.modelAuditView.group_dislikes")}</span>
+      {likeCount > 0 && (
+        <span>{t("dsh.modelAuditView.group_likes", { count: likeCount })}</span>
+      )}
+      {dislikeCount > 0 && (
+        <span>{t("dsh.modelAuditView.group_dislikes", { count: dislikeCount })}</span>
+      )}
     </>
   );
 }
