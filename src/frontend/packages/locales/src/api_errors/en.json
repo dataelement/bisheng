@@ -702,5 +702,18 @@
   "25025": "A permission model with this name already exists.",
   "25026": "The last owner of this resource cannot be removed.",
   "19704": "The tenant view changed. Refresh the page before continuing.",
-  "19705": "No valid tenant view is available. Contact an administrator."
+  "19705": "No valid tenant view is available. Contact an administrator.",
+  "12100": "Memory content cannot exceed 200 characters",
+  "12101": "The content looks like a password, key, ID number or card number and cannot be saved as a memory",
+  "12102": "Memory content contains a relative time; use a specific date instead",
+  "12103": "The memory does not exist or has changed",
+  "12104": "Cannot undo: the memory has been cleared",
+  "12105": "Cannot undo: the memory has been changed again",
+  "12106": "This operation has already been undone",
+  "12107": "Memory search is temporarily unavailable",
+  "12108": "The retrieval limit must be an integer from 1 to 100",
+  "12109": "The workflow has a memory retrieval node but memory is off in the start node",
+  "12110": "Memory type must be fact, preference or experience",
+  "12111": "Memory content cannot be empty",
+  "12112": "No model is available for memory consolidation"
 }

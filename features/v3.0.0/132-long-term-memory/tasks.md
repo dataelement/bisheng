@@ -121,7 +121,7 @@
   **逻辑**: 定义 121 段错误码类（写成 `Code: int = 121NN`）：内容超长、内容含密钥类信息、内容含相对时间、目标条目不存在或状态已变、撤销失败（三种原因各一个码）、检索不可用、检索数量参数非法、工作流含记忆检索节点而开关关闭。把 `memory` 加进 `scripts/arch-guard.sh` 的 `DOMAIN_MODULES`。在 `ports.py` 里定义三个 `Protocol`：`MemoryIndex`（写入、删除、检索、按用户删除）、`DetailStore`（写、读、删、按用户删、按用户列出对象键）、`MemoryLLM`（整理调用、embedding 调用）。同一文件里定义 `MemoryContext` 数据类（`tenant_id`、`user_id`、时区、`chat_id`、`turn_id`、场景、应用 id 与名称）和唯一的范围过滤函数 `build_scope_filter(ctx)`，两路检索的过滤条件只能由它生成。后续的真实实现与测试替身都实现这三个接口，以此解开"服务依赖索引、索引依赖服务"的环。
   **依赖**: T009
 
-- [ ] **T011**: 错误码文案与登记
+- [x] **T011**: 错误码文案与登记
   **文件**: `src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`、`docs/constitution.md`、`features/v3.0.0/release-contract.md`
   **逻辑**: T010 的每个错误码三语文案同批加入，运行 `pnpm locales:build`（在 `src/frontend/`）。回写 C5 表与 release-contract 的"已分配模块编码"。
   **依赖**: T010
