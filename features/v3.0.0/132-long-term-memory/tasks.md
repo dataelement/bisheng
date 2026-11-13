@@ -208,7 +208,7 @@
   **覆盖 AC**: AC-101, AC-102, AC-103
   **依赖**: T018
 
-- [ ] **T024**: 审计与指标的实现
+- [x] **T024**: 审计与指标的实现
   **文件**: `src/backend/bisheng/memory/domain/services/audit.py`、`src/backend/bisheng/memory/domain/services/metrics.py`
   **逻辑**: 审计调用 `AuditLogDao.ainsert_v2`，动作名统一为 `memory.item.<动作>`，在 `audit.py` 里用常量集中定义；这些动作**不加入**管理端审计页面的可见白名单（`_UI_VISIBLE_V2_ACTIONS`），因为本期不向管理员展示任何与用户记忆有关的界面。指标在 Redis 计数，提供落库方法。设计见 design 决策 20。
   **测试**: T023 全部通过
