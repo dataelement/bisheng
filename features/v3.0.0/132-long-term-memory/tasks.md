@@ -268,7 +268,7 @@
   **覆盖 AC**: AC-52, AC-53, AC-54, AC-55, AC-56, AC-57, AC-91, AC-94, AC-96
   **依赖**: T028
 
-- [ ] **T032**: 常驻记忆的实现
+- [x] **T032**: 常驻记忆的实现
   **文件**: `src/backend/bisheng/memory/domain/services/resident.py`
   **逻辑**: `resident(ctx, scene_class)` 与 `experience(ctx)`；渲染文本块；Redis 缓存（键含租户、用户、`rev`、用户时区下的日期、场景类别，TTL 1 小时）；未命中时写常驻快照；计数。设计见 design 决策 8。
   **测试**: T031 全部通过
