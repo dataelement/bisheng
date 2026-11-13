@@ -961,6 +961,52 @@ const workflowTemplate = [
         ]
     },
     {
+        // F132 long-term memory: reads the current user's own memory (AC-78, AC-79, AC-80)
+        "id": "memory_retriever_xxx",
+        "name": "true",
+        "description": "true",
+        "type": "memory_retriever",
+        "v": "1",
+        "group_params": [
+            {
+                "name": "retrieval_settings",
+                "params": [
+                    {
+                        "key": "query",
+                        "label": "true",
+                        "type": "var_textarea",
+                        "test": "var",
+                        "value": "",
+                        "required": true,
+                        "placeholder": "true"
+                    },
+                    {
+                        "key": "limit",
+                        "label": "true",
+                        "type": "number",
+                        "value": 20,
+                        "min": 1,
+                        "max": 100,
+                        "help": "true"
+                    }
+                ]
+            },
+            {
+                "name": "output",
+                "params": [
+                    {
+                        "key": "retrieved_memory",
+                        "label": "true",
+                        "type": "var",
+                        "global": "key",
+                        "value": "",
+                        "help": "true"
+                    }
+                ]
+            }
+        ]
+    },
+    {
         "id": "report_xxx",
         "name": "true",
         "description": "true",

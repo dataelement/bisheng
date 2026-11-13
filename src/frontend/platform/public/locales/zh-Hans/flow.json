@@ -566,6 +566,24 @@
         "label": "检索结果"
       }
     },
+    "memory_retriever": {
+      "name": "记忆检索",
+      "description": "从当前使用者自己的记忆中检索相关内容，供后续节点使用。",
+      "retrieval_settings": "检索设置",
+      "output": "输出",
+      "query": {
+        "label": "检索内容",
+        "placeholder": "输入要检索的内容，可以插入变量"
+      },
+      "limit": {
+        "label": "最大检索数量",
+        "help": "取 1 到 100 的整数，默认 20。"
+      },
+      "retrieved_memory": {
+        "label": "检索到的记忆",
+        "help": "检索到的记忆条目列表，每条包含正文和记录时间等信息。"
+      }
+    },
     "report": {
       "name": "报告",
       "description": "按照预设的word模板生成报告。",

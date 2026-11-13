@@ -566,6 +566,24 @@
         "label": "Retrieved Result"
       }
     },
+    "memory_retriever": {
+      "name": "Memory Retrieval",
+      "description": "Retrieves relevant entries from the current user's own memory for later nodes.",
+      "retrieval_settings": "Retrieval Settings",
+      "output": "Output",
+      "query": {
+        "label": "Search Content",
+        "placeholder": "Enter what to search for; variables are allowed"
+      },
+      "limit": {
+        "label": "Maximum Results",
+        "help": "An integer from 1 to 100. Defaults to 20."
+      },
+      "retrieved_memory": {
+        "label": "Retrieved Memory",
+        "help": "The list of retrieved memory entries. Each entry includes its text and when it was recorded."
+      }
+    },
     "report": {
       "name": "Report",
       "description": "Generates a report based on a predefined Word template.",

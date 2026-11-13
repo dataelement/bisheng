@@ -13,7 +13,8 @@ export const Icons = {
     'end': FlagTriangleRight,
     'condition': Split,
     'report': Outlined.Download,
-    'knowledge_retriever':BookOpenCheck
+    'knowledge_retriever':BookOpenCheck,
+    'memory_retriever': Outlined.Notebook
 }
 export const Colors = {
     'start': 'bg-[#FFD89A]',
@@ -27,7 +28,8 @@ export const Colors = {
     'end': 'bg-red-400',
     'condition': 'bg-[#EDC9E9]',
     'report': 'bg-[#9CE4F4]',
-    'knowledge_retriever':'bg-[#B8EEDF]'
+    'knowledge_retriever':'bg-[#B8EEDF]',
+    'memory_retriever': 'bg-[#E4D7FF]'
 
 }
 
