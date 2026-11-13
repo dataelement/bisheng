@@ -305,7 +305,7 @@
       "memory": "Memory",
       "memory_enabled": {
         "label": "Workflow Memory",
-        "desc": "When on, this app reads and writes each user's own memory. A user's memory may appear in this app's answers and outputs. Users cannot see each other's memory."
+        "desc": "When on, key points from a user's conversations in this workflow are saved to that user's own memory, and the workflow can read the current user's memory with the Memory Retrieval node. What it reads may appear in answers and outputs. Each user's memory is their own; other users cannot see it."
       }
     },
     "input": {

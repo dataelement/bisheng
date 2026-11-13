@@ -52,9 +52,9 @@ describe('assistant memory switch', () => {
         renderSetting();
         expect(screen.getByText('build.assistantMemoryDesc')).toBeInTheDocument();
         const zhDesc = zhHans.build.assistantMemoryDesc;
-        expect(zhDesc).toContain('读取并写入');
-        expect(zhDesc).toContain('回答与输出');
-        expect(zhDesc).toContain('互不可见');
+        expect(zhDesc).toContain('对话要点会整理进自己的记忆');
+        expect(zhDesc).toContain('出现在回答里');
+        expect(zhDesc).toContain('其他用户看不到');
         for (const locale of [zhHans, enUS, ja]) {
             expect(locale.build.memory.length).toBeGreaterThan(0);
             expect(locale.build.assistantMemory.length).toBeGreaterThan(0);
