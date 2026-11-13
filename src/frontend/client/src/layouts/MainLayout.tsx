@@ -17,6 +17,7 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import store from "~/store";
 import { useAgentToolPreferences } from "~/components/Chat/Input/AgentToolSelector";
+import { useMemoryTimezone } from "~/hooks/useMemoryTimezone";
 
 const systemNoticeTodayKey = () => {
   const d = new Date();
@@ -214,6 +215,8 @@ export default function MainLayout() {
   const { data: bsConfig } = useGetBsConfig();
   useAgentToolPreferences(bsConfig?.tools);
   const { user, logout, isUserLoading } = useAuthContext();
+  // F132: report the browser timezone for memory dates (once per change).
+  useMemoryTimezone(user?.id != null ? String(user.id) : null);
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
   const isMobile = usePrefersMobileLayout();
