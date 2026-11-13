@@ -77,7 +77,7 @@
   **判据**: 给出只在登录态路径传入可调用对象的注入点、客户端里 `chat_id` 确定或切换的调用点；确认免登录与开放面路径拿不到它。
   **依赖**: T001
 
-- [ ] **T004**: V3 深度研究的落库与落文件路径
+- [x] **T004**: V3 深度研究的落库与落文件路径
   **文件**: `src/backend/test/memory/spike/test_v3_linsight_paths.py`（新建，实验代码，Wave 11 完成后删除）、`verification.md`
   **逻辑**: 读 `linsight/domain/services/stream_event_mapper.py:627-712`、`linsight/domain/models/linsight_execute_task.py:68`、`linsight/api/endpoints/linsight.py:579-615`、`linsight/domain/utils.py:104-117`、`linsight/domain/services/context_budget.py:144` 以及大工具结果卸载的实现。写最小测试直接调用"步骤事件映射"与"上下文压缩写文件"两个函数，输入含一条工具消息，观察输出里工具入参与返回出现在哪。
   **判据**: 列出工具内容的全部落点（数据库字段、工作区文件），每个落点给出脱敏的切入位置；指出分享链接读取任务详情所走的接口。
