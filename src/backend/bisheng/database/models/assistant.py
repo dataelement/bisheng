@@ -59,6 +59,15 @@ class AssistantBase(SQLModelSerializable):
             "user's view_file, OFF by the config author's (default OFF preserves current behavior)",
         ),
     )
+    memory_enabled: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean,
+            nullable=False,
+            server_default=text("0"),
+            comment="F132: long-term memory switch of this assistant (default OFF)",
+        ),
+    )
     create_time: datetime | None = Field(
         default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
     )

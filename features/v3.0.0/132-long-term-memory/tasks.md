@@ -126,7 +126,7 @@
   **逻辑**: T010 的每个错误码三语文案同批加入，运行 `pnpm locales:build`（在 `src/frontend/`）。回写 C5 表与 release-contract 的"已分配模块编码"。
   **依赖**: T010
 
-- [ ] **T012**: 六张表的 ORM 模型
+- [x] **T012**: 六张表的 ORM 模型
   **文件**: `src/backend/bisheng/memory/domain/models/`（新建，每张表一个文件）、`src/backend/bisheng/database/models/assistant.py`、`src/backend/bisheng/core/database/tenant_filter.py`
   **逻辑**: 按 design §4.2 定义 `memory_item`（含 `index_model_id`，记录建索引时所用的 embedding 模型）、`memory_session_cursor`、`memory_user_setting`、`memory_turn_record`、`memory_resident_snapshot`、`memory_metric_daily`。JSON 用 `dialect_helpers.JsonType`，长文本用 `LargeText`，`update_time` 用方言辅助。`assistant` 模型加列 `memory_enabled`（布尔，默认关）。把记忆的模型模块路径（字符串）登记进 `tenant_filter.py` 的 `_TENANT_AWARE_MODEL_MODULES`。
   **依赖**: T009
