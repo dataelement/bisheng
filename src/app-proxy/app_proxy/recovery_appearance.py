@@ -79,3 +79,10 @@ a.button:focus-visible { outline: 2px solid rgb(var(--brand-500)); outline-offse
   }
 }
 """
+
+STATE_VIEW_MOBILE_STYLE = """
+@media (max-width: 768px) {
+  body { padding-inline: 16px; }
+  .mark { width: 80px; height: 80px; }
+}
+"""

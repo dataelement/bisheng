@@ -23,6 +23,8 @@ component: Illustration
 ```tsx
 import { CSSProperties, useState } from 'react';
 import {
+  AppInaccessibleIllustration,
+  AppUnpublishedIllustration,
   ArticleQAIllustration,
   CrawlingIllustration,
   EmptyStateIllustration,
@@ -47,14 +49,16 @@ const BLUE_ILLUS_VARS = {
 } as CSSProperties;
 
 const ILLUSTRATIONS = [
-  ['EmptyStateIllustration', '通用空状态 — 列表 / 成员 / 频道等无数据', EmptyStateIllustration],
-  ['NoPermissionIllustration', '无权限访问 / 内容待审核不可见', NoPermissionIllustration],
-  ['ListWebLinkIllustration', '列表网页链接 — 按名称搜索无收录空态', ListWebLinkIllustration],
-  ['CrawlingIllustration', '爬取中 — 网页爬取等待态', CrawlingIllustration],
-  ['SuccessIllustration', '成功态 — 跟随品牌主题', SuccessIllustration],
-  ['ArticleQAIllustration', '文章问答场景', ArticleQAIllustration],
-  ['SystemMaintenanceIllustration', '系统维护 — 后端 500 全屏维护弹层', SystemMaintenanceIllustration],
-  ['SystemErrorIllustration', '系统错误 — 前端路由异常兜底页', SystemErrorIllustration],
+  ['EmptyState', '通用空状态 — 列表 / 成员 / 频道等无数据', EmptyStateIllustration],
+  ['NoPermission', '无权限访问 / 内容待审核不可见', NoPermissionIllustration],
+  ['AppUnpublished', '应用未上线', AppUnpublishedIllustration],
+  ['AppInaccessible', '应用无法访问', AppInaccessibleIllustration],
+  ['ListWebLink', '列表网页链接 — 按名称搜索无收录空态', ListWebLinkIllustration],
+  ['Crawling', '爬取中 — 网页爬取等待态', CrawlingIllustration],
+  ['Success', '成功态 — 跟随品牌主题', SuccessIllustration],
+  ['ArticleQA', '文章问答场景', ArticleQAIllustration],
+  ['SystemMaintenance', '系统维护 — 后端 500 全屏维护弹层', SystemMaintenanceIllustration],
+  ['SystemError', '系统错误 — 前端路由异常兜底页', SystemErrorIllustration],
 ] as const;
 
 export default () => {
@@ -110,6 +114,7 @@ export default () => {
 
 ## 使用规则
 
+- 从 `@bisheng/ui` 导入时，在卡片名后加 `Illustration`，如 `EmptyStateIllustration`。
 - 空状态 / 加载 / 无权限 / 成功等场景一律用这批插画组件，**不再用静态 PNG**。
 - 灰稿：给组件传 `grey` 属性，主题无关、整图降 80% 不透明度。
 - 插画调色板（`--illus-*`）只给插画用；UI 图标仍走品牌色。
