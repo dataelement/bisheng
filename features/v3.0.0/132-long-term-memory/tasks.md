@@ -733,7 +733,7 @@
   **覆盖 AC**: AC-02, AC-03, AC-09, AC-24, AC-66, AC-85
   **依赖**: T086
 
-- [ ] **T095**: 文档回写
+- [x] **T095**: 文档回写
   **文件**: `features/v3.0.0/132-long-term-memory/design.md`、`features/v3.0.0/release-contract.md`、`src/backend/AGENTS.md`
   **逻辑**: design §4 从"目标形态"改为实现后的现状，行号按实际更新，修订历史记一行；release-contract 的 F132 段更新状态，候选不变量 INV-44 到 INV-47 转正；`src/backend/AGENTS.md` 的 Quick Map 增加 `memory` 模块一行。
   **依赖**: T094

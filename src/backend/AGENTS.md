@@ -145,6 +145,7 @@ uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only;
 - **Permission** (ReBAC / OpenFGA) → `architecture/10` (+ constitution C4)
 - **Multi-tenant** → `architecture/12` (+ constitution C3)
 - **Gateway** (commercial) → `architecture/11`
+- **Long-term memory (F132)** — `memory/` (domain module: gate / service / resident / search / tools / redaction / consolidation) + `worker/memory/` (scan, consolidate, reconcile, metrics, cleanup). Integration points live in each scene (`workstation/domain/services/daily_memory.py`, `api/services/assistant_memory.py`, `workflow/nodes/memory_retriever/`, `linsight/domain/services/memory_turns.py`). Design → `features/v3.0.0/132-long-term-memory/design.md`.
 - **Approval center (F025)** — `approval/` (domain module) + `worker/approval/` (outbox exec) + `notification/` (in-app messages). Read the `approval-module` skill before touching it.
 
 **Cross-cutting dirs** (not domain modules; touched constantly):

@@ -122,3 +122,5 @@
 - T086｜TaskTurnPanel 要不要改｜`ResultPanel` 已经拿到本轮任务消息 id，`MemoryNotice` 挂在 `ResultPanel` 的点赞下方，可见条件与点赞相同（本人、非只读、非分享）；`TaskTurnPanel` 只补一段注释说明 id 的来源｜一轮 = 一个 svid = 一条任务消息行（R8），点赞与记忆提示用同一个 id。
 - 合并｜Wave 8 与 Wave 11 都在 `chat_service._task_mode_stream_completion` 登记日常入口的任务模式会话｜合并为：Wave 11 的 `on_session_created` 钩子，只在 Wave 8 的登录态 `memory_register` 存在时传入；相应更新 Wave 11 的测试 `test_ac10_daily_task_mode_entry_passes_registration_hook`（同时断言不传回调时没有钩子）｜两边意图相同，取开放面不可能误登记的写法
 - 合并｜Wave 9 的子代理覆盖了主线 scratchpad 里的测试脚本 pt.sh（指向它自己的 worktree）｜合并后发现并恢复｜不影响已提交代码，只影响主线本地命令
+- 合并后｜合跑时 test/linsight 留下的租户 ContextVar（=5）让 Wave 8 测试的会话登记到别的租户，10 个用例只在合跑中失败｜Wave 8 的测试夹具 `memory_support.memory` 固定当前租户为 TENANT_A｜生产路径由中间件设置租户，不受影响；这是测试隔离问题
+- T095｜tasks 写 T095 依赖 T094（test 环境验证），但规程把 T095 列入范围、T094 留给人｜先按实现现状回写 design §4.5、release-contract（INV-44–47 转正、F132 状态）与 AGENTS Quick Map；V5 真实端点兼容性在 §4.5 注明仍待 T094｜不等人工步骤即可完成的部分先完成

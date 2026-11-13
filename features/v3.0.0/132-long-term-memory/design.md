@@ -5,7 +5,7 @@
 **关联**: [spec.md](./spec.md) · [discovery.md](./discovery.md) · [tasks.md](./tasks.md)（待写）
 **版本**: v3.0.0（开发基线）
 **最后更新**: 2026-11-13（第 5 稿）
-**状态**: 设计草稿第 4 稿，已按三轮 design 审查修订，待用户确认。第三轮审查的结论是：原 6 个高严重度问题已解决或由待验证项覆盖，新发现的问题已在本稿处理，本稿未再做全量复审。§10 列出的待验证项要在编码最前面用小实验确认，结论写回本文。本功能尚未编码：§4.1–§4.3 是**目标形态**，§4.4 是**已取证的接入点现状**（基线 `feat/3.0.0@741662475b`）。实现后按实际覆盖更新。
+**状态**: 已实现（2026-11-13，无人值守开发，分支 `feat/v3.0.0/132-long-term-memory`）。§4.5 是实现后的现状；§4.1–§4.3 的数据流、表与职责与实现一致，Wave 0 的修订见 §9 末 R1–R9。以下为当初的设计说明：设计草稿第 4 稿，已按三轮 design 审查修订，待用户确认。第三轮审查的结论是：原 6 个高严重度问题已解决或由待验证项覆盖，新发现的问题已在本稿处理，本稿未再做全量复审。§10 列出的待验证项要在编码最前面用小实验确认，结论写回本文。本功能尚未编码：§4.1–§4.3 是**目标形态**，§4.4 是**已取证的接入点现状**（基线 `feat/3.0.0@741662475b`）。实现后按实际覆盖更新。
 
 ---
 
@@ -491,6 +491,33 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 前端：个人设置 | `client/src/pages/settings/settingsSections.ts`、`SettingsPage.tsx`；样板 `sections/AiAccessPane.tsx` | 新增"记忆" section |
 | 前端：管理端查看会话 | `platform/src/pages/LogPage/useAppLog/appChatDetail.tsx`、`dailyChatDetail.tsx`、`LabelPage/taskAppChats.tsx` | 不接记忆接口。它们渲染到脱敏后的记忆工具事件时显示为"记忆操作"，不显示内容 |
 
+### 4.5 实现后的现状（2026-11-13）
+
+路径省略前缀 `src/backend/bisheng/`。行号会漂移，这里只列文件与函数。
+
+| 部分 | 实际位置 | 说明 |
+|---|---|---|
+| 接口与上下文 | `memory/domain/ports.py` | `MemoryContext`、`build_scope_filter`、三个 Protocol |
+| 资格与启用 | `memory/domain/services/gate.py`、`repositories/cursor_repository.py` | `open` 核对会话归属；`resolve` / `resolve_sync` 按登记行构造上下文 |
+| 条目写入与管理 | `memory/domain/services/memory_service.py` | `write`、`add_manual`、`edit`、`delete`、`clear`、`undo`、`apply_operations`（整理）|
+| 常驻与经验 | `memory/domain/services/resident.py` | Redis 缓存键含 `rev` 与用户时区日期 |
+| 检索 | `memory/domain/services/search.py`、`index.py` | 倒数排名融合、待建索引追加、回表校验；ES `bisheng_memory_item`、Milvus `bisheng_memory_item_{model}` |
+| 模型工具与脱敏 | `memory/domain/services/tools.py`、`redaction.py` | `memory_write` / `memory_search`；`redact_tool_event`、`is_memory_tool_output` |
+| 本轮记录 | `memory/domain/services/turn_record.py`、`views.py` | `/api/v1/memory/turn` 与 `/flags` 的数据 |
+| 自动整理 | `memory/domain/services/consolidator.py`、`consolidation_content.py`、`consolidation_prompt.py`、`consolidation_linsight.py`、`app_switch.py` | 附加步骤：深度研究轮次整理、过期事件改写（P1）|
+| 装配 | `memory/domain/services/factory.py` | 全部接入点从这里取服务实例 |
+| 定时任务 | `worker/memory/tasks.py`、`memory/domain/services/reconcile.py`；调度项在 `core/config/settings.py` | 扫描每分钟触发、按部署配置的扫描周期自行节流 |
+| 管理接口 | `memory/api/endpoints/memory.py` | `/api/v1/memory/*`，只作用于本人 |
+| 日常模式 | `workstation/domain/services/daily_memory.py`；`workstation/api/endpoints/chat.py` 注入 `memory_register`；`chat_service.py` 调用 | 日常入口的任务模式经 `task_submit_service.submit_task_turn(on_session_created=...)` 登记 |
+| 助手 | `api/services/assistant_memory.py`、`assistant_agent.py`、`api/v1/callback.py`（按 `run_id` 脱敏，含 `intermediate_steps`）、`common/chat/client.py`（`memory_register` 与 `after_answer_persisted` 回调，不导入 memory）、`api/v1/assistant.py` | 每轮重读开关；R6 的注入方式 |
+| 工作流 | `workflow/nodes/memory_retriever/`、`memory/domain/services/workflow_retrieval.py`、`workflow/graph/graph_state.py`（冻结字段）、`worker/workflow/tasks.py`（上线版本开关、`end_turn`）、`api/services/workflow.py`（上线校验）、`common/chat/clients/workflow_client.py`、`api/v1/workflow.py` | |
+| 深度研究 | `linsight/domain/services/memory_turns.py`、`task_exec.py`（轮开始、三个入口的 finally、`_handle_exec_step` 脱敏、`_generate_tools`）、`agent_factory.py`（记忆中间件、子 agent 禁用）、`context_budget.py`、`workspace_backend.py`、`state_message_manager.py`（`MEMORY` 事件） | P-01、P-03 按保守做法 |
+| 共用接线 | `common/chat/manager.py` `dispatch_client(memory_register=...)` | 只有登录态 endpoint 传值 |
+| 前端 platform | `controllers/API/workflow.ts`、`util/workflowMemory.ts`、`assistant/editAssistant/Setting.tsx`、`bench/DailyChatConfig.tsx`、`PlatformConversationMessages.tsx`、`dailyChatDetail.tsx` | |
+| 前端 client | `api/memory.ts`、`hooks/useMemoryTimezone.ts`、`pages/settings/sections/MemoryPane.tsx`、`components/Chat/MemoryNotice.tsx`、`pages/appChat/appMemory.ts`、`components/Linsight/Execution/ResultPanel.tsx` | |
+
+各 Wave 的实现细节与偏差记录在 `wave-notes/`。真实模型端点上多条系统消息的兼容性（V5 的后半）仍待 T094。
+
 ---
 
 ## 5. 已知坑 / 反直觉事实
@@ -671,6 +698,7 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-11-13 | 初版（设计草稿，未编码） | spec 第 2 稿确认后进入设计 |
+| 2026-11-13 | 实现完成：新增 §4.5 实现后的现状；Wave 8–13 由 6 个并行 worktree 实现后合并（各 Wave 记录见 wave-notes/） | 无人值守开发 T095 |
 | 2026-11-13 | Wave 0 验证后的实现修订 R1–R9（§9 末），§10 写入结论；V7 的 `/continue` 路径待用户确认（P-01） | 无人值守开发 Wave 0 |
 | 2026-11-13 | 第 5 稿：去掉租户级记忆开关，启用判定少一层；工作台配置只留整理模型一个字段 | 用户裁定 |
 | 2026-11-13 | 拆任务时的三处细化：时区改为客户端一处上报；条目记录建索引所用的模型以支持换模型后重建；引入三个接口解开服务与索引的循环依赖 | `/sdd-review tasks` 第一轮 |
