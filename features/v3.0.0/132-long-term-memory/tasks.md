@@ -165,7 +165,7 @@
   **覆盖 AC**: AC-01, AC-02, AC-05, AC-06, AC-07
   **依赖**: T014
 
-- [ ] **T018**: 数据访问层的实现
+- [x] **T018**: 数据访问层的实现
   **文件**: `src/backend/bisheng/memory/domain/repositories/item_repository.py`、`src/backend/bisheng/memory/domain/repositories/setting_repository.py`
   **逻辑**: 条目与用户设置的读写方法，签名都接收 `MemoryContext`，查询与写操作显式带 `tenant_id` 与 `user_id`（design 决策 9）。用户设置首次需要时建行，捕获唯一键冲突后重读；`rev` 的自增与条目变更在同一事务。
   **测试**: T017 全部通过
