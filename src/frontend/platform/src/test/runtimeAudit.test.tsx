@@ -160,6 +160,26 @@ it('sends the organisation as a comma string only after apply', async () => {
   }), undefined))
 })
 
+it('keeps the chosen visitor when only the organisation is applied', async () => {
+  const user = userEvent.setup()
+  mock.departments.mockResolvedValue({
+    active: [{ id: 2, dept_id: 'BS@2', external_id: null, name: 'Sales', path_name: 'Root/Sales', parent_id: 1, tenant_id: 1, has_children: false }],
+    archived: [], show_none: false, show_unrecorded: false,
+  })
+  mock.candidates.mockResolvedValue({ items: [{ id: '7', label: 'Audit visitor' }] })
+  render(<RuntimeAuditPanel />, { wrapper })
+  await user.click(screen.getByRole('combobox', { name: 'log.runtime.visitor' }))
+  await user.click(await screen.findByRole('option', { name: 'Audit visitor' }))
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expect.objectContaining({ visitor_id: 7 }), undefined))
+  fireEvent.click(screen.getByRole('button', { name: 'log.org.placeholder' }))
+  fireEvent.click(await screen.findByRole('checkbox', { name: /Sales/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'log.org.confirm' }))
+  fireEvent.click(screen.getByRole('button', { name: 'log.runtime.apply' }))
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expect.objectContaining({
+    dept_ids: '2', visitor_id: 7,
+  }), undefined))
+})
+
 it('keeps a pending export on close and cancels only through the explicit cancel action', async () => {
   const user = userEvent.setup()
   mock.createExport.mockResolvedValue({ export_id: 'pending-job', status: 'pending' })

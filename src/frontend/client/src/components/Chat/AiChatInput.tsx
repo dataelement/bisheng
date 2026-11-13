@@ -75,7 +75,7 @@ interface AiChatInputProps {
     /** Identifies the composer across async admission checks and navigation. */
     composerIdentity?: string;
     size?: '' | 'mini';
-    /** Conversation setup choices belong to the new-chat surface. */
+    /** False on an established conversation: only switches the placeholder to the follow-up wording. */
     allowConfiguration?: boolean;
     features?: AiChatInputFeatures;
     disabled?: boolean;
@@ -355,7 +355,10 @@ const AiChatInput = memo(
         const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
             && (taskMode || (taskModeEntry && !!onToggleTaskMode))
             && showAddSkill;
-        const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
+        // Tools are sent with every request (see useAiChat), so an established
+        // conversation keeps the picker: a tool removed from the composer can be
+        // added back, and a later turn can use a tool the first one did not.
+        const showToolPicker = tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const filesDisabled = !!disabled;
 
         const navigate = useNavigate();
