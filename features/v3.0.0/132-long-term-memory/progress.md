@@ -38,3 +38,4 @@
 - T095 文档回写完成。T089、T094、T096 留给人工。
 - 最终〔基线比对〕（合并、T090–T093、夹具修复之后）：merged 14797 cases, 1241 failed/errored；`NEW FAILURES: 0`。
 - 用户批准 P-02 后的〔基线比对〕：merged 14797 cases, 1242 failed/errored -> /tmp/f132-current.xml NEW FAILURES: 1 
+- 重跑〔基线比对〕：merged 14797 cases, 1241 failed/errored；`NEW FAILURES: 0`（正常结束）。
