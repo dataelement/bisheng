@@ -324,7 +324,7 @@
   **覆盖 AC**: AC-09, AC-14, AC-57, AC-61
   **依赖**: T030, T034
 
-- [ ] **T040**: 工具工厂与脱敏函数的实现
+- [x] **T040**: 工具工厂与脱敏函数的实现
   **文件**: `src/backend/bisheng/memory/domain/services/tools.py`、`src/backend/bisheng/memory/domain/services/redaction.py`
   **逻辑**: `build_memory_tools(ctx)`；`redact_tool_event(name, payload)`；`replay_placeholder()`；`is_memory_tool(name)`（`memory_` 为保留前缀）。设计见 design 决策 10。
   **测试**: T039 全部通过
