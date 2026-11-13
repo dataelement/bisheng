@@ -52,6 +52,9 @@ class ChatMessageExecution:
 
 
 class ChatClient:
+    # F132: set by ChatManager.dispatch_client for logged-in connections only.
+    memory_register = None
+
     def __init__(
         self,
         request: Request,

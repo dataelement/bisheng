@@ -15,6 +15,9 @@ from bisheng.utils.threadpool import thread_pool
 
 
 class BaseClient(ABC):
+    # F132: set by ChatManager.dispatch_client for logged-in connections only.
+    memory_register = None
+
     def __init__(self, request: Request, client_key: str, client_id: str, chat_id: str, user_id: int,
                  login_user: UserPayload, work_type: WorkType, websocket: WebSocket, **kwargs):
         self.request = request

@@ -244,7 +244,11 @@ class ChatManager:
         session_subject=None,
         execution_snapshot: dict | None = None,
         message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
+        memory_register: Callable[[str], Any] | None = None,
     ):
+        """``memory_register`` (F132) is passed only by logged-in endpoints; the
+        client calls it whenever its chat_id is set or switched. Guest-link and
+        open-API endpoints never pass it, so their sessions are never registered."""
         start_time = time.time()
         client_key = generate_uuid()
         if work_type == WorkType.GPTS:
@@ -261,6 +265,7 @@ class ChatManager:
                 session_subject=session_subject,
                 execution_snapshot=execution_snapshot,
             )
+            chat_client.memory_register = memory_register
         else:
             chat_client = WorkflowClient(
                 request,
@@ -274,6 +279,7 @@ class ChatManager:
                 session_subject=session_subject,
                 execution_snapshot=execution_snapshot,
             )
+            chat_client.memory_register = memory_register
         await self.accept_client(client_key, chat_client, websocket)
         logger.debug(f"act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}")
         try:
