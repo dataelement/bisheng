@@ -437,7 +437,9 @@ async def test_work_snapshot_uses_tenant_credit_settings(service_setup):
     service, llm, ledger, _policy, _state = service_setup
     model, _ = await service.model_loader(42)
     model.config["pricing"] = dict(DEEPSEEK)
-    service.credit_setting_reader = AsyncMock(return_value=CreditSettingState(currency="USD", credit_value_micro=1_389))
+    service.credit_setting_reader = AsyncMock(
+        return_value=CreditSettingState(currency="USD", credit_value_micro=1_389, usd_cny_rate_micro=7_200_000)
+    )
     llm.measured = lambda: {"input_tokens": 30, "output_tokens": 50, "total_tokens": 80}
     await service.complete(principal(), request())
     snapshot = ledger.events[0].pricing

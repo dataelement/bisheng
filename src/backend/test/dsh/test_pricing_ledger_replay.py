@@ -11,6 +11,9 @@ from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.domain.services.pricing import build_snapshot
 from bisheng.dsh.infrastructure.quota_redis import QuotaRedis
 
+# The design examples convert at 7.2 CNY per USD; the default rate is tested in test_credit_settings.
+DESIGN_SETTING = CreditSettingState(usd_cny_rate_micro=7_200_000)
+
 DEEPSEEK = {
     "currency": "CNY",
     "input": "9",
@@ -57,7 +60,7 @@ def settled(**changes):
 
 
 def test_priced_event_bills_by_snapshot():
-    priced = settled(pricing=build_snapshot(DEEPSEEK, CreditSettingState()))
+    priced = settled(pricing=build_snapshot(DEEPSEEK, DESIGN_SETTING))
     assert priced.billed_tokens == 8_820_000
     assert priced.cost_micro == 88_200
     assert priced.currency == "CNY"
@@ -71,14 +74,14 @@ def test_unpriced_event_keeps_legacy_formula_for_replay():
 
 
 def test_unknown_usage_bills_nothing_with_or_without_snapshot():
-    snapshot = build_snapshot(DEEPSEEK, CreditSettingState())
+    snapshot = build_snapshot(DEEPSEEK, DESIGN_SETTING)
     for running in (event(), event(pricing=snapshot)):
         assert running.billed_tokens is None
         assert running.cost_micro is None
 
 
 def test_priced_event_round_trips_through_redis_json():
-    priced = settled(pricing=build_snapshot(GPT41, CreditSettingState()))
+    priced = settled(pricing=build_snapshot(GPT41, DESIGN_SETTING))
     restored = UsageEvent.model_validate_json(priced.model_dump_json())
     assert restored == priced
     assert restored.billed_tokens == priced.billed_tokens == 23_040_000
@@ -114,8 +117,8 @@ def test_identity_hash_of_unpriced_events_is_unchanged():
 
 
 def test_identity_hash_fences_the_price_snapshot():
-    snapshot = build_snapshot(DEEPSEEK, CreditSettingState())
-    other = build_snapshot({**DEEPSEEK, "output": "54"}, CreditSettingState())
+    snapshot = build_snapshot(DEEPSEEK, DESIGN_SETTING)
+    other = build_snapshot({**DEEPSEEK, "output": "54"}, DESIGN_SETTING)
     base = QuotaRedis._identity(event())
     assert QuotaRedis._identity(event(pricing=snapshot)) != base
     assert QuotaRedis._identity(event(pricing=snapshot)) != QuotaRedis._identity(event(pricing=other))
@@ -147,7 +150,7 @@ SETTLED = {
 
 
 def test_projection_persists_snapshot_cost_and_currency(usage_db):
-    snapshot = build_snapshot(GPT41, CreditSettingState())
+    snapshot = build_snapshot(GPT41, DESIGN_SETTING)
     running = repo_event(pricing=snapshot)
     terminal = running.model_copy(update=SETTLED)
     with Session(usage_db) as session, session.begin():
@@ -160,9 +163,9 @@ def test_projection_persists_snapshot_cost_and_currency(usage_db):
 
 
 def test_projection_rejects_a_changed_snapshot_for_the_same_request(usage_db):
-    running = repo_event(pricing=build_snapshot(DEEPSEEK, CreditSettingState()))
+    running = repo_event(pricing=build_snapshot(DEEPSEEK, DESIGN_SETTING))
     tampered = running.model_copy(
-        update={**SETTLED, "pricing": build_snapshot({**DEEPSEEK, "output": "1"}, CreditSettingState())}
+        update={**SETTLED, "pricing": build_snapshot({**DEEPSEEK, "output": "1"}, DESIGN_SETTING)}
     )
     with Session(usage_db) as session, session.begin():
         DshUsageRepository(session).project_batch([running])
@@ -198,7 +201,7 @@ def test_recovery_rebuilds_a_month_mixing_legacy_and_priced_calls(usage_db):
         session.add(UserTenant(user_id=20, tenant_id=2, is_default=1, is_active=1, status="active"))
         session.add(UserDepartment(id=1, user_id=20, department_id=10, is_primary=1))
     legacy = repo_event(credit_rate=150, **SETTLED)
-    priced = repo_event(pricing=build_snapshot(DEEPSEEK, CreditSettingState()), **SETTLED)
+    priced = repo_event(pricing=build_snapshot(DEEPSEEK, DESIGN_SETTING), **SETTLED)
     with Session(usage_db) as session, session.begin():
         DshUsageRepository(session).project_batch([legacy, priced])
     with Session(usage_db) as session, session.begin():

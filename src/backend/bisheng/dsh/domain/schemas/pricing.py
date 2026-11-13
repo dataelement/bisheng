@@ -13,8 +13,9 @@ Currency = Literal["CNY", "USD"]
 PositiveId = Annotated[int, Field(strict=True, gt=0)]
 
 DEFAULT_CREDIT_VALUE_MICRO = 10_000  # 1 credit = 0.01 in the billing currency
-# Product has not fixed the default rate yet; the prototype used 7.2.
-DEFAULT_USD_CNY_RATE_MICRO = 7_200_000
+# Default for tenants that never saved one: the PBOC central parity of 2026-11-12 (6.7174), rounded.
+# Administrators set their actual purchase rate in the credit settings; it is not updated automatically.
+DEFAULT_USD_CNY_RATE_MICRO = 6_720_000
 CREDIT_VALUE_RANGE = (100, 100_000_000)  # 0.0001 to 100
 USD_CNY_RATE_RANGE = (10_000, 100_000_000)  # 0.01 to 100
 

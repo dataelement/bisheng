@@ -139,3 +139,10 @@ def test_credit_setting_table_is_tenant_aware():
     assert "bisheng.dsh.domain.models.credit_setting" in tenant_filter._TENANT_AWARE_MODEL_MODULES
     tenant_filter._force_import_all_models()
     assert "dsh_credit_setting" in tenant_filter._discover_tenant_aware_tables()
+
+
+def test_default_rate_is_the_current_central_parity_and_stays_editable():
+    """Callum 2026-11-13: default to today's rate (PBOC central parity 6.7174 on 11-12), editable by admins."""
+    assert DEFAULT_USD_CNY_RATE_MICRO == 6_720_000
+    assert CreditSettingState().usd_cny_rate_micro == 6_720_000
+    assert CreditSettingState(usd_cny_rate_micro=7_100_000).usd_cny_rate_micro == 7_100_000

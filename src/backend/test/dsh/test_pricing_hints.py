@@ -17,7 +17,8 @@ DEEPSEEK = {"currency": "CNY", "input": "9", "cache_read": "0.3", "output": "27"
 GPT41 = {"currency": "USD", "input": "2", "cache_read": "0.5", "output": "8", "source": "CATALOG"}
 QWEN_FLASH = {"currency": "CNY", "input": "0.2", "cache_read": "0.02", "output": "0.8", "source": "CATALOG"}
 FREE = {"currency": "CNY", "input": "0", "cache_read": "0", "output": "0", "source": "DEFAULT"}
-SETTING = CreditSettingState()
+# The design examples convert at 7.2 CNY per USD; the default rate is tested in test_credit_settings.
+SETTING = CreditSettingState(usd_cny_rate_micro=7_200_000)
 
 
 def context(base=DEEPSEEK, base_id=7):
@@ -80,11 +81,11 @@ async def test_base_defaults_to_the_daily_chat_default_model(llm):
 
 
 async def test_configured_base_wins_and_unusable_bases_hide_ratios(llm):
-    llm.runtime.read_credit_setting.return_value = CreditSettingState(base_model_id=8)
+    llm.runtime.read_credit_setting.return_value = CreditSettingState(base_model_id=8, usd_cny_rate_micro=7_200_000)
     assert (await service.read_hint_context()).base_model_id == 8
     llm.offline.add(8)
     assert (await service.read_hint_context()).base is None  # offline or deleted
-    llm.runtime.read_credit_setting.return_value = CreditSettingState(base_model_id=9)
+    llm.runtime.read_credit_setting.return_value = CreditSettingState(base_model_id=9, usd_cny_rate_micro=7_200_000)
     assert (await service.read_hint_context()).base is None  # free base
 
 

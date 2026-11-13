@@ -20,8 +20,9 @@ DEEPSEEK = {
 }
 GPT41 = {"currency": "USD", "input": "2", "cache_read": "0.5", "cache_write": None, "output": "8", "source": "CATALOG"}
 FREE = {"currency": "CNY", "input": "0", "cache_read": "0", "cache_write": None, "output": "0", "source": "DEFAULT"}
-CNY = CreditSettingState()
-USD = CreditSettingState(currency="USD", credit_value_micro=1_389)
+# The design examples convert at 7.2 CNY per USD; the default rate is tested in test_credit_settings.
+CNY = CreditSettingState(usd_cny_rate_micro=7_200_000)
+USD = CreditSettingState(currency="USD", credit_value_micro=1_389, usd_cny_rate_micro=7_200_000)
 
 
 def usage(input_tokens, output_tokens, read=None, write=None):

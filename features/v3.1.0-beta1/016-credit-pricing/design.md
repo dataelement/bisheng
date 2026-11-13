@@ -111,12 +111,12 @@
 - **原因**：溯源由 `asyncio.create_task` 在回答发出后执行，拦截只会让已发出的回答报错（AC-15）。不从外部写私有 ContextVar（评审应修项）。
 - **何时重新考虑**：溯源改为在回答前同步执行时，应改为正常拦截。
 
-### 决策 12：桌面 Work 下拉框用 Harness 插槽，不打补丁
+### 决策 12：桌面 Work 下拉框用模型名外层属性加样式，不占插槽、不打补丁
 
-- **备选**：A. 注册 `conversation.input.model.label` 插槽；B. 改 `patches/@deepseek-ai+dsh-client-ui-model-selection`。
-- **选定**：A，`priority: -1`
-- **原因**：插槽是 single 类型，DeepSeek 官方插件已占优先级 0，同优先级注册会抛错；数字小的优先级渲染。代价是员工自带 DeepSeek 账号时 deepseek-flash 的 1017 小标被遮住。
-- **何时重新考虑**：Harness 把该插槽改为 chain 类型时。
+- **备选**：A. 注册 `conversation.input.model.label` 插槽（`priority: -1`）；B. 改 `patches/@deepseek-ai+dsh-client-ui-model-selection`；C. 按模型选择包 README 给出的方式，用名字外层的 `data-provider-id` / `data-model-id` 注入样式，以 `::after` 显示倍率。
+- **选定**：C（2026-11-13 由 A 改为 C）
+- **原因**：插槽是 single 类型，DeepSeek 官方插件的 1017 标签已在其中。A 会在企业账号与 DeepSeek 官方账号同时使用时遮住 1017 标签；Callum 要求两个标签同时显示。C 不占插槽，两者互不影响；B 要维护补丁。代价：倍率是生成内容，屏幕阅读器可能不朗读。
+- **何时重新考虑**：Harness 把该插槽改为可组合（chain / list），或提供模型附加信息的正式接缝时。
 
 ### 决策 13：价格表与模型价格放 llm 模块，计费与倍率放 dsh 模块
 
