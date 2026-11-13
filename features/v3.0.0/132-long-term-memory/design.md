@@ -232,16 +232,17 @@
   - 一路不可达：用另一路，计一次"降级"指标。
   - 两路都不可达：抛错。模型工具把错误返回给模型并按 AC-61 记录；检索节点按 AC-84 以失败结束。
   - 索引里没有某条目不算失败（决策 5 的 `pending` 并入已覆盖）。
-- **embedding**：取租户的知识库默认 embedding（`llm/domain/services/llm.py:1248`）。租户更换 embedding 模型后，旧 collection 不再使用，由重建任务按新模型重新写入。
+- **embedding**：取租户的知识库默认 embedding（`llm/domain/services/llm.py:1248`）。租户更换 embedding 模型后，旧 collection 不再使用：对账任务发现条目的 `index_model_id` 与租户当前模型不一致时重建其索引。
+- **接口隔离**：`MemoryService` 与检索只依赖 `memory/domain/ports.py` 里的 `MemoryIndex`、`DetailStore`、`MemoryLLM` 三个接口，真实实现与测试替身都实现它们。服务与索引实现之间因此没有循环依赖，标〔测〕的验收标准可以不依赖中间件。
 - **被否方案**：每个用户一个 collection。collection 数量随用户数增长，不可行。
 - **何时该重新考虑**：评测显示检索质量不足时，加重排一路。
 
-### 决策 13：时区随会话登记保存，取不到用部署默认值
+### 决策 13：时区由客户端上报一次，随会话登记保存，取不到用部署默认值
 
-- **备选**：A. 给用户表加时区设置。B. 客户端在发起对话时带上浏览器的 IANA 时区，入口调 `MemoryGate.open` 时写到登记行，并同步到 `memory_user_setting.timezone`。
-- **选定**：B
-- **原因**：K12。A 需要一个新的用户设置项，超出本功能范围。B 借助决策 6 已有的入口登记，一处解决了传递问题：工作流节点、深度研究 worker、整理任务都从登记行读时区，不需要让时区穿过 WebSocket 或任务队列。
-- **回落顺序**：本会话登记的时区 → `memory_user_setting.timezone`（最近一次已知）→ 部署默认时区。后台任务没有请求，直接读登记行。
+- **备选**：A. 给用户表加时区设置。B. 每个对话请求都带上时区。C. 客户端加载后把浏览器的 IANA 时区上报给记忆接口（值变化时才上报），存进 `memory_user_setting.timezone`；入口调 `MemoryGate.open` 时把它抄到登记行。
+- **选定**：C
+- **原因**：K12。A 需要一个新的用户设置项，超出本功能范围。B 要改日常模式、应用聊天（WebSocket）、深度研究三种入口的请求，还要让时区穿过任务队列。C 只有客户端一处上报；工作流节点、深度研究 worker、整理任务都从登记行读时区。
+- **回落顺序**：本会话登记的时区 → `memory_user_setting.timezone` → 部署默认时区。
 - **何时该重新考虑**：平台增加用户级时区设置时，改读那个设置。
 
 ### 决策 14：密钥类内容的拒绝由确定性规则完成
@@ -387,7 +388,7 @@
 
 | 表 | 一行是什么 | 关键列 |
 |---|---|---|
-| `memory_item` | 一条记忆条目 | `id`（应用侧生成的 UUID）、`tenant_id`、`user_id`、`scope`（本期恒为 `personal`）、`type`（fact/preference/experience）、`content`、`status`（active/superseded/deleted）、`superseded_by`、`pinned`、`pin_order`、`event_time`、`valid_from`、`valid_to`、`recorded_at`、`origin`（explicit/auto/manual）、`source_scene`、`source_app_id`、`source_app_name`（写入时快照）、`source_chat_id`、`detail_object_key`、`detail_sha256`、`index_state`（ok/pending）、`last_read_at`、`detail_read_at` |
+| `memory_item` | 一条记忆条目 | `id`（应用侧生成的 UUID）、`tenant_id`、`user_id`、`scope`（本期恒为 `personal`）、`type`（fact/preference/experience）、`content`、`status`（active/superseded/deleted）、`superseded_by`、`pinned`、`pin_order`、`event_time`、`valid_from`、`valid_to`、`recorded_at`、`origin`（explicit/auto/manual）、`source_scene`、`source_app_id`、`source_app_name`（写入时快照）、`source_chat_id`、`detail_object_key`、`detail_sha256`、`index_state`（ok/pending）、`index_model_id`（建索引时所用的 embedding 模型）、`last_read_at`、`detail_read_at` |
 | `memory_session_cursor` | 一个会话的登记（一个 `chat_id` 一行） | `chat_id`、`tenant_id`、`user_id`、`eligible`、`timezone`、`last_activity_at`、`last_message_id`、`watermark_message_id`（创建时取会话当前最大消息 id）、`state`（idle/pending/running）、`locked_at`、`fail_count`、`next_run_at` |
 | `memory_user_setting` | 一个用户在一个租户的记忆设置 | `tenant_id`、`user_id`、`enabled`、`timezone`、`rev` |
 | `memory_turn_record` | 一轮对话里与记忆有关的一件事 | `turn_id`、`chat_id`、`message_id`（回答落库后补）、`tenant_id`、`user_id`、`kind`（summary/write/retrieved）、`op`（remember/correct/forget，仅 write）、`item_id`、`related_item_id`（被取代或被忘掉的条目）、`item_ids`（JSON，仅 retrieved）、`resident_rev`、`resident_day`、`undone`、`consolidated`（仅深度研究的概要行） |
@@ -438,7 +439,8 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | `memory/domain/services/index.py` | ES / Milvus 的写入、删除、检索、融合、重建；唯一的过滤条件生成函数 | 不作为事实源 |
 | `memory/domain/repositories/*` | 六张表的数据访问；按决策 9 显式带租户与用户条件 | 不含业务规则 |
 | `memory/api/endpoints/*` | 本人的管理接口 | 不暴露按用户 id 查询 |
-| `worker/memory/*` | Beat 扫描、整理任务、索引对账、指标落库 | 不含业务规则 |
+| `memory/domain/ports.py` | 三个接口：`MemoryIndex`、`DetailStore`、`MemoryLLM` | 不含实现 |
+| `worker/memory/*` | 五个任务：扫描、整理、对账（补建待建索引、换模型后重建、清理孤儿详情对象）、指标落库、遗留本轮记录清理 | 不含业务规则 |
 | `workflow/nodes/memory_retriever/` | 记忆检索节点 | 不做启用判定以外的权限判断 |
 
 **分层（C1）。** 四个场景的 Service 层调用 `memory` 的 domain service，属于 Service 调 Service，合规。`common/` 不得引用领域模块，所以 `common/chat/client.py` 里不出现任何对 `memory` 的引用：助手的每轮处理和落库后的回调都通过 `AssistantAgent` 的方法完成（决策 11、决策 15）。`api/v1/callback.py` 属于 API 层，可以调用 `memory` 的脱敏函数。`scripts/arch-guard.sh` 的领域模块名单是固定列表，目前不含 `memory`，所以 `common/` 引用 `memory` 不会被自动拦住；落码时把 `memory` 加进这个名单。
@@ -449,7 +451,7 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 
 | 接入点 | 位置 | 要做的事 |
 |---|---|---|
-| 日常模式：对话入口 | `workstation/api/endpoints/chat.py:97` → `chat_service.py:2634` | 在 endpoint 里调 `MemoryGate.open`，请求体带时区。**不在** `stream_chat_completion` 里调：开放 API 的入口 `open_endpoints/api/endpoints/workstation.py:66-97` 也进这个函数 |
+| 日常模式：对话入口 | `workstation/api/endpoints/chat.py:97` → `chat_service.py:2634` | 在 endpoint 里调 `MemoryGate.open`。**不在** `stream_chat_completion` 里调：开放 API 的入口 `open_endpoints/api/endpoints/workstation.py:66-97` 也进这个函数 |
 | 日常模式：系统提示词 | `chat_service.py:2099-2111` | 追加常驻记忆文本块 |
 | 日常模式：无工具直连分支 | `chat_service.py:2407-2411` | 同样带上常驻记忆。记忆已启用时工具列表恒非空，此分支实际不会走到，但两条分支都要测 |
 | 日常模式：工具组装 | `_prepare_tools`（`:1268`，调用处 `:2013`） | 追加记忆工具 |
@@ -619,7 +621,7 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 | 7 | 删除是软删除，行与详情对象保留到用户清空；撤销在三种情况下会失败 | 请知悉。spec §3 需补这三种边界 | 决策 4 |
 | 8 | 助手没有版本，助手记忆开关保存即生效 | 事实订正，spec AC-71 需改写 | 决策 17 |
 | 9 | 管理端回放会话时，记忆工具的调用显示为"记忆操作"占位，不显示内容 | 请知悉。这是 AC-09 的实现方式 | 决策 10 |
-| 10 | 租户记忆配置里增加"整理使用的模型"；client 对话请求带上浏览器时区 | 实现所需的新增项 | 决策 18、决策 13 |
+| 10 | 租户记忆配置里增加"整理使用的模型"；client 加载后向记忆接口上报浏览器时区 | 实现所需的新增项 | 决策 18、决策 13 |
 
 **第 3 稿新增的裁定（2026-11-13）。**
 
@@ -652,6 +654,7 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-11-13 | 初版（设计草稿，未编码） | spec 第 2 稿确认后进入设计 |
+| 2026-11-13 | 拆任务时的三处细化：时区改为客户端一处上报；条目记录建索引所用的模型以支持换模型后重建；引入三个接口解开服务与索引的循环依赖 | `/sdd-review tasks` 第一轮 |
 | 2026-11-13 | 第 4 稿：深度研究改为以任务轮为整理单位；助手与工作流改为由登录态 endpoint 注入登记回调；工作流开关读数据库上线版本；水位只增不减；检索节点的每条输出自带背景信息前缀；指标改为事件计数；新增 V7、V8 | 三轮 design 审查：原 6 个高严重度问题已解决或由待验证项覆盖，新发现 1 个高严重度问题 |
 | 2026-11-13 | 第 3 稿：登记只做在登录态 endpoint 且开放 API 不支持记忆；脱敏落点补全助手回调与深度研究步骤；助手每轮重读开关、裁剪后注入；本轮记录的各场景落点；登记行的初值、并发写与清空；新增常驻快照表与待验证项 | 二轮 design 审查发现 6 个高严重度问题；用户裁定收窄范围并先做实验 |
 | 2026-11-13 | 第 2 稿：新增入口登记（决策 6）、显式租户过滤（决策 9）、工具事件脱敏（决策 10）、调用时注入（决策 11）、软删除（决策 4）；整理的运行语义、缓存正确性、按轮记录、开关存储、检索融合全部重写 | design 审查发现 6 个高严重度问题 |
