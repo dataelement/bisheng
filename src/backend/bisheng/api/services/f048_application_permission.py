@@ -121,6 +121,8 @@ class ApplicationPermissionPort(Protocol):
 
     async def project_delete(self, **kwargs): ...
 
+    async def cleanup_deleted(self, **kwargs): ...
+
 
 class F048ApplicationPermissionAdapter:
     """Validate application facts before invoking concrete actions."""
@@ -226,6 +228,9 @@ class F048ApplicationPermissionAdapter:
             actor=actor,
             target=self._record_target(record, actor),
         )
+
+    async def cleanup_deleted(self, *, record, actor):
+        return await self._permission.cleanup_deleted(actor=actor, target=self._record_target(record, actor))
 
     def _record_target(
         self,

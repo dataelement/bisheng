@@ -230,7 +230,8 @@ it.each([false, true])(
     expect(JSON.stringify(key)).toContain(superAdmin ? "202" : "101");
     expect(JSON.stringify(key)).toContain("ordinary");
     expect(user?.tenant_id).toBe(1);
-    expect(mocks.containerEdit).toHaveBeenCalledWith({ resource_type: "knowledge_space", resource_id: "7", action: "edit" });
+    expect(mocks.containerEdit).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "f118.processing_title_file" })).not.toBeInTheDocument();
     expect(
       screen.queryByText("Unscoped private title"),
     ).not.toBeInTheDocument();
@@ -252,7 +253,7 @@ it("mounts visible-only child content when root info fails and never enters lega
     mocks.get.mock.calls.every(([url]) => !String(url).endsWith("/download")),
   ).toBe(true);
   expect(screen.queryByTestId("legacy-chunks")).not.toBeInTheDocument();
-  expect(mocks.containerEdit).toHaveBeenCalledWith({ resource_type: "knowledge_space", resource_id: "7", action: "edit" });
+  expect(mocks.containerEdit).not.toHaveBeenCalled();
 });
 it("direct child admission uses current folder facts without a root info or visible precondition", async () => {
   mocks.containerEdit.mockResolvedValue({ allowed: false });
@@ -269,7 +270,7 @@ it("direct child admission uses current folder facts without a root info or visi
   expect(mocks.permissions).toHaveBeenCalledWith("folder", "9");
   expect(screen.queryByRole("tab", { name: "detail.settings" })).toBeNull();
   expect(mocks.info).not.toHaveBeenCalled();
-  expect(mocks.containerEdit).toHaveBeenCalledWith({ resource_type: "knowledge_space", resource_id: "7", action: "edit" });
+  expect(mocks.containerEdit).not.toHaveBeenCalled();
 });
 it("updates only parent_id for folder and breadcrumb navigation and keeps the old status filter", async () => {
   mount("/filelib/7?fileStatus=abnormal");

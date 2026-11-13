@@ -5,10 +5,15 @@ targets, binding sets and definitions remain real; permission projection is an
 observed transport boundary, never an alternate reference Owner.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 import sqlalchemy as sa
+from test.knowledge_unification import test_wf_create as create_fixtures
+from test.knowledge_unification import test_wf_current as current_fixtures
+from test.knowledge_unification import test_wf_save as save_fixtures
+from test.knowledge_unification.test_wf_extract import graph, node
 
 from bisheng.api.services import flow as flow_service
 from bisheng.api.v1 import flows as endpoint
@@ -21,10 +26,6 @@ from bisheng.resource_reference.application.contracts import reference_set_diges
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
-from test.knowledge_unification import test_wf_create as create_fixtures
-from test.knowledge_unification import test_wf_current as current_fixtures
-from test.knowledge_unification import test_wf_save as save_fixtures
-from test.knowledge_unification.test_wf_extract import graph, node
 
 store = create_fixtures.store
 tenant = create_fixtures.tenant
@@ -36,7 +37,9 @@ rows = create_fixtures.rows
 
 @pytest.fixture
 async def deleting(configured, monkeypatch):
-    configured.delete_projection = AsyncMock()
+    configured.cleanup_projection = AsyncMock()
+    configured.delete_receipt = (SimpleNamespace(cleanup_deleted=configured.cleanup_projection), object(), object())
+    configured.delete_projection = AsyncMock(return_value=configured.delete_receipt)
     monkeypatch.setattr(flow_service.FlowService, "project_flow_delete", configured.delete_projection)
     monkeypatch.setattr(flow_service.FlowService, "delete_flow_hook", Mock())
     return configured
@@ -59,6 +62,7 @@ async def test_actual_root_delete_preserves_all_definitions_and_releases_all_liv
     assert {row["id"] for row in rows(deleting, "flowversion")} == before_ids
     assert all(row["is_delete"] == 1 for row in rows(deleting, "flowversion"))
     assert not rows(deleting, "business_resource_reference")
+    deleting.cleanup_projection.assert_awaited_once()
     sources = [row for row in rows(deleting, "business_reference_set") if row["record_kind"] == "source"]
     assert len(sources) == 4 and all(row["effective"] == 0 and row["ready"] == 1 for row in sources)
     assert next(row for row in sources if row["source_version"] == "3") == terminal
@@ -117,6 +121,7 @@ async def test_permission_projection_sees_existing_committed_root_before_final_s
     async def before_commit(user, root):
         assert any(row["id"] == root.id and row["is_delete"] == 0 for row in rows(deleting, "flow"))
         assert len(rows(deleting, "business_resource_reference")) == 3
+        return deleting.delete_receipt
 
     deleting.delete_projection.side_effect = before_commit
     await delete(deleting)
@@ -272,9 +277,9 @@ async def test_legacy_deleted_version_without_set_or_raw_references_does_not_get
 
 async def test_root_reference_inventory_is_exact_tenant_type_root_and_stably_ordered(deleting, monkeypatch):
     from sqlmodel import Session
+    from test.knowledge_unification.test_wf_save import key
 
     from bisheng.core.database import tenant_filter
-    from test.knowledge_unification.test_wf_save import key
 
     # The isolated workflow fixture creates only its tables; activate the real
     # C3 listener for this explicit cross-tenant query regression.

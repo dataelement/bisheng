@@ -11,6 +11,10 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+from test.knowledge_unification import test_migration_preflight as native_preflight
+from test.knowledge_unification import test_migration_resource_repository as resources
+from test.knowledge_unification import test_perm_migration_snapshot as permission
+from test.knowledge_unification.test_model_share_projection_deferred import Marker, Transport
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.errcode.permission import PermissionPublishNotReadyError
@@ -29,10 +33,6 @@ from bisheng.permission.domain.models import (
 from bisheng.permission.domain.repositories.projection_repository import ProjectionRepository
 from bisheng.permission.domain.services.projection_service import ProjectionService
 from scripts import prepare_f118_history as module
-from test.knowledge_unification import test_migration_preflight as native_preflight
-from test.knowledge_unification import test_migration_resource_repository as resources
-from test.knowledge_unification import test_perm_migration_snapshot as permission
-from test.knowledge_unification.test_model_share_projection_deferred import Marker, Transport
 
 resource_native, native = native_preflight.resource_native, native_preflight.native
 
@@ -65,7 +65,26 @@ class FGA(Transport):
 
 @pytest.fixture
 async def history(native, monkeypatch):
+    from scripts.f118_history_business import models
+
+    from bisheng.common.models.config import Config
+    from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+    from bisheng.llm.domain.models.llm_server import LLMModel
+
     metadata = sa.MetaData()
+    for model in (*models().values(), *(owner[0] for owner in module.business_models().values()), Config, LLMModel):
+        if model.__table__.name not in metadata.tables:
+            model.__table__.to_metadata(metadata)
+    # Copy actual FK dependencies too (Channel -> User); no synthetic schema.
+    pending = [
+        model.__table__ for model in (*models().values(), *(owner[0] for owner in module.business_models().values()))
+    ]
+    while pending:
+        for foreign in pending.pop().foreign_keys:
+            target = foreign.column.table
+            if target.name not in metadata.tables:
+                target.to_metadata(metadata)
+                pending.append(target)
     for model in (KnowledgeUnificationRun, PermissionProjectionTuple):
         cloned = model.__table__.to_metadata(metadata)
         if model is PermissionProjectionTuple:
@@ -91,7 +110,21 @@ async def history(native, monkeypatch):
         ],
     )
     await native.insert(
-        KnowledgeDocument, [{"id": 100, "tenant_id": 101, "knowledge_id": 10, "file_level_path": "/20", "level": 0}]
+        KnowledgeDocument,
+        [
+            {
+                "id": 100,
+                "tenant_id": 101,
+                "knowledge_id": 10,
+                "file_level_path": "/20",
+                "level": 0,
+                "primary_version_id": 100,
+            }
+        ],
+    )
+    await native.insert(
+        KnowledgeDocumentVersion,
+        [{"id": 100, "document_id": 100, "knowledge_file_id": 30, "version_no": 1, "is_primary": True}],
     )
     for ident, kind, parent, pid in (
         (20, "folder", "knowledge_library", "10"),
@@ -158,12 +191,11 @@ async def history(native, monkeypatch):
 @pytest.mark.parametrize("kind", ["workflow", "assistant", "app"])
 async def test_capture_checks_real_string_id_owners_without_misclassifying_existing_resources(history, kind):
     model, _ = module.business_models()[kind]
-    metadata = sa.MetaData()
-    owner = sa.Table(model.__tablename__, metadata, sa.Column("id", model.__table__.c.id.type, primary_key=True))
     existing, missing = "a" * 32, "b" * 32
-    async with history.db.engine.begin() as connection:
-        await connection.run_sync(metadata.create_all)
-        await connection.execute(owner.insert().values(id=existing))
+    async with history.sessions() as session, session.begin():
+        session.add(
+            model(id=existing, tenant_id=101, name="existing", user_id=7, owner_user_id=7, slug=existing, state="draft")
+        )
     for ident, resource_id in [(1200, existing), (1201, missing)]:
         await history.db.insert(
             ResourcePermissionMode,
@@ -291,11 +323,11 @@ async def test_reappearing_deleted_resource_relation_does_not_reuse_old_cleanup_
     assert history.fga.writes == writes
 
 
-async def test_missing_folder_is_reported_without_guessing_or_deleting_file(history):
+async def test_missing_folder_plans_orphan_cleanup_without_preview_writes(history):
     async with history.db.engine.begin() as connection:
         await connection.execute(sa.update(KnowledgeFile).where(KnowledgeFile.id == 30).values(file_level_path="/404"))
     plan = await module.capture(history.sessions, history.fga)
-    assert any(row == {"table": "knowledgefile", "id": 30, "reason": "invalid_parent_chain"} for row in plan["blocked"])
+    assert any(row["table"] == "knowledgefile" and row["before"]["id"] == 30 for row in plan["business"]["deletes"])
     assert not plan["parents"] and history.fga.writes == 0
     async with history.sessions() as session:
         assert (await session.get(KnowledgeFile, 30)).level == 0

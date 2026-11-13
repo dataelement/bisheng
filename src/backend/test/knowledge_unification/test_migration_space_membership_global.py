@@ -3,6 +3,8 @@
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
+from test.knowledge_unification import test_migration_control_repository as original
+from test.knowledge_unification.test_migration_space_membership_inventory import member
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.models.space_channel_member import SpaceChannelMember as Member
@@ -18,8 +20,6 @@ from bisheng.knowledge.domain.repositories.unification_control_repository import
 from bisheng.knowledge.domain.repositories.unification_space_membership_repository import (
     UnificationSpaceMembershipRepository,
 )
-from test.knowledge_unification import test_migration_control_repository as original
-from test.knowledge_unification.test_migration_space_membership_inventory import member
 
 control_native = original.native
 
@@ -115,8 +115,8 @@ async def test_global_reads_cover_foreign_tenants_all_states_and_qa_retired_pare
     await native.insert(Member, values)
     native.writes.clear()
     assert await run(native, control=True) is None
-    assert len(native.queries) == 6  # Four old controls, one Member page, one exact numeric Root batch.
-    assert sum("m2_control_row" in sql for sql, _ in native.queries) == 4
+    assert len(native.queries) == 4  # Membership/department controls, Member page and exact Root batch.
+    assert sum("m2_control_row" in sql for sql, _ in native.queries) == 2
     assert get_current_tenant_id() == 101 and not is_tenant_filter_bypassed() and not native.writes
     root_sql, params = next((sql, params) for sql, params in native.queries if "FROM knowledge" in sql)
     assert set(params) == {1, 2, 3, 4} and all(type(value) is int for value in params)
@@ -184,7 +184,7 @@ async def test_every_real_await_rechecks_original_context_and_restores_short_byp
     await native.insert(Member, [member(1)])
     async with AsyncSession(native.engine) as session, session.begin():
         execute, tokens, nested, calls = session.execute, [], [], []
-        at = (6 if control else 2) if boundary == "parent" else 1
+        at = (4 if control else 2) if boundary == "parent" else 1
 
         async def mutation(*args, **kwargs):
             result = await execute(*args, **kwargs)

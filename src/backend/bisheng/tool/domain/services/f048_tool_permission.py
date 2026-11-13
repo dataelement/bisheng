@@ -100,6 +100,8 @@ class ToolPermissionPort(Protocol):
 
     async def project_delete(self, **kwargs): ...
 
+    async def cleanup_deleted(self, **kwargs): ...
+
 
 class F048ToolPermissionAdapter:
     """Reject invalid/preset tool facts before the sole permission facade."""
@@ -189,6 +191,9 @@ class F048ToolPermissionAdapter:
             actor=actor,
             target=self._record_target(record, actor),
         )
+
+    async def cleanup_deleted(self, *, record, actor):
+        return await self._permission.cleanup_deleted(actor=actor, target=self._record_target(record, actor))
 
     def _record_target(
         self,

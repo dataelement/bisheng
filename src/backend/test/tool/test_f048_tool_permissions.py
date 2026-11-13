@@ -440,6 +440,7 @@ async def test_delete_tool_checks_delete_then_projects_lifecycle(
     adapter = SimpleNamespace(
         load_permission_record=AsyncMock(return_value=_record()),
         project_delete=AsyncMock(),
+        cleanup_deleted=AsyncMock(),
     )
     delete_row = AsyncMock()
     monkeypatch.setattr(

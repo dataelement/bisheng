@@ -104,3 +104,23 @@
 - [x] 七维合入复核 PASS，详见 code-review-integration-20261113.md。没有后端/client 增量，远端已有 DSH 与历史迁移修复保留。
 
 本条为合并树验证记录，不代表 CI、部署或真实环境写入 E2E 已完成。
+
+## 2026-11-13 移除列表“处理版本”（基线 aa8b75f844）
+
+- [x] AC-19：共享文件行不再渲染 SpaceFileTools，移除其专用空间编辑权限查询；普通/管理页签、列表/卡片/兼容表格沿用相同行组件。
+- [x] 现有交互回归 5 文件 / 59 项通过：SpaceDirectoryWorkspace、f118SpaceDetail、knowledgeSpaceFileDetail、f118SpaceFileTools、f118SpaceVersionOperations。确认文件详情的元数据、调整分段策略、分块编辑及原历史版本操作继续可用，子项浏览不因根编辑权限而受阻。
+- [x] 全前端 lint/typecheck/check-i18n、最终变更文件 ESLint、架构守卫、行数限制和 diff 空白检查通过。
+
+本轮使用既有组件/路由回归验证，未新增镜像实现的测试；未执行真实环境浏览器或写入 E2E，未合入、推送或部署该追加修改。
+
+## 同轮追加：管理列表直接进入详情
+
+- [x] AC-20：超管和租户管理员点击创建用户单元格直接进入对应 admin 详情；跳转前不调用逐空间可见权限查询；点击三点菜单不跳转，配置入口仍查询有效权限。
+- [x] 两项追加合计 7 文件 / 85 项 Vitest 通过，包含前述 59 项及 f118KnowledgePage、knowledgeSpaceWorkspace；全前端 lint/typecheck/check-i18n 通过。
+- [x] 本地 Chromium 只读模拟 API：管理列表三点菜单打开时仍处于清单路径；点击更新时间进入 /filelib/7?view=admin，管理页签保持选中；列表及卡片无“处理版本”，进入文件详情显示元数据和调整分段策略。控制台无 error，临时入口与服务已清理。
+
+本次实际浏览器检查使用本机 fixture，不代表真实环境权限或写入 E2E；未合入、推送或部署本轮追加。
+
+## 两项入口调整的合入复验
+
+用户随后明确授权合入并推送 beta1。最新远端基线 `aa8b75f844`，源实现 `a0dda6e58e`，在独立工作树无冲突合并。实际合并代码重新执行 7 文件 / 85 项回归及全前端 lint/typecheck/check-i18n，全部通过；5 个变更 TS/TSX 文件架构守卫、600 行、冲突标记和 diff 检查通过。七维合入复核 PASS，见 code-review-integration-20261113.md 的同日追加记录。本次没有执行部署。

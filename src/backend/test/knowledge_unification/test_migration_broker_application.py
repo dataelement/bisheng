@@ -1,13 +1,12 @@
-"""A separate broker inventory is required before the real global freeze."""
+"""Writers are stopped by operations; a new migration never inspects Celery."""
 
 import json
 
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
-
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
-from bisheng.knowledge.application.unification_inventory_codec import record_from_values
 from test.knowledge_unification import test_migration_inventory_application as inventory
+
+from bisheng.knowledge.application.unification_inventory_codec import record_from_values
 
 resource_native = inventory.resource_native
 native = inventory.native
@@ -54,50 +53,21 @@ class Broker:
             self.closed += 1
 
 
-async def test_scheduler_presence_does_not_replace_missing_broker_even_on_outer_commit(module, complete, transport):
-    error = None
+async def test_new_inventory_does_not_require_a_broker_probe(module, complete, transport):
     app = inventory.application(module, transport, broker_reader=None)
     async with AsyncSession(complete.engine) as session, session.begin():
-        try:
-            await app.arun(session, **transport.inputs)
-        except ReferenceCoverageNotReadyError as caught:
-            error = caught
-    assert error is not None
-    assert await inventory.count_runs(complete.engine) == 0
+        await app.arun(session, **transport.inputs)
+    assert await inventory.count_runs(complete.engine) == 3
 
 
-async def test_broker_once_global_and_authoritative_tenant_pages_are_frozen_and_replayed(module, complete, transport):
-    records = (
-        fact(),
-        fact(
-            tenant_id=None,
-            state="global_control",
-            task_id="control",
-            file_id=None,
-            space_id=None,
-            task_kind="bisheng.worker.knowledge.scheduler.trigger_dispatch_task",
-            header_tenant_id=202,
-        ),
-        fact(
-            tenant_id=None, state="target_missing", task_id="missing", file_id=909, space_id=None, header_tenant_id=202
-        ),
-    )
-    broker = Broker(records)
+async def test_new_inventory_and_replay_never_consume_or_freeze_broker_facts(module, complete, transport):
+    broker = Broker((fact(),))
     app = inventory.application(module, transport, broker_reader=broker)
     async with AsyncSession(complete.engine) as session, session.begin():
         result = await app.arun(session, **transport.inputs)
-    assert broker.calls == [(1, 101, 202)] and broker.closed == 1
-    pages = [json.loads(value) for value in transport.objects.values()]
-    seen = {}
-    for page in pages:
-        for row in page["records"]:
-            if row.get("record_type") == "broker_task":
-                seen[row["task_id"]] = (page["records"][0]["scope"], page["records"][0]["tenant_id"], row)
-    assert set(seen) == {"broker-message:occurrence-1", "control", "missing"}
-    assert seen["broker-message:occurrence-1"][:2] == ("tenant", 101)
-    assert seen["control"][:2] == seen["missing"][:2] == ("global", None)
-    assert seen["missing"][2]["header_tenant_id"] == 202
-    # Reentry reads original artifacts, without rebuilding the broker baseline.
+    assert not broker.calls and broker.closed == 0
+    records = [row for content in transport.objects.values() for row in json.loads(content)["records"]]
+    assert not any(row.get("record_type") in {"broker_task", "queued_task"} for row in records)
     replay = inventory.application(
         module,
         transport,
@@ -108,43 +78,27 @@ async def test_broker_once_global_and_authoritative_tenant_pages_are_frozen_and_
     )
     async with AsyncSession(complete.engine) as session, session.begin():
         assert await replay.arun(session, **transport.inputs) == result
-    assert broker.calls == [(1, 101, 202)]
+    assert not broker.calls
 
 
 @pytest.mark.parametrize("mode", ["foreign", "wrong_record", "partial_error"])
-async def test_bad_broker_stream_is_closed_and_never_freezes_even_after_outer_commit(module, complete, transport, mode):
+async def test_unneeded_broker_adapter_is_not_invoked_even_when_it_would_fail(module, complete, transport, mode):
     record = fact(tenant_id=909) if mode == "foreign" else fact()
     if mode == "wrong_record":
         record = record_from_values(
             "queued_task", **{key: value for key, value in record.data.items() if key != "header_tenant_id"}
         )
-    failure = RuntimeError("transport unavailable") if mode == "partial_error" else None
-    broker = Broker((record,), failure)
-    app = inventory.application(module, transport, broker_reader=broker)
-    raised = None
+    broker = Broker((record,), RuntimeError("transport unavailable") if mode == "partial_error" else None)
     async with AsyncSession(complete.engine) as session, session.begin():
-        try:
-            await app.arun(session, **transport.inputs)
-        except (KnowledgeOperationPlanConflictError, RuntimeError) as error:
-            raised = error
-    assert raised is not None and broker.closed == 1
-    if failure is not None:
-        assert raised is failure
-    assert await inventory.count_runs(complete.engine) == 0
+        await inventory.application(module, transport, broker_reader=broker).arun(session, **transport.inputs)
+    assert not broker.calls and broker.closed == 0
+    assert await inventory.count_runs(complete.engine) == 3
 
 
-async def test_many_broker_occurrences_stay_paged_and_original_scheduler_is_also_kept(module, complete, transport):
+async def test_backlog_does_not_change_new_inventory_or_produce_queue_artifacts(module, complete, transport):
     broker = Broker(tuple(fact(task_id=f"message:{i}") for i in range(401)))
-    app = inventory.application(module, transport, broker_reader=broker)
     async with AsyncSession(complete.engine) as session, session.begin():
-        await app.arun(session, **transport.inputs)
-    contents = [json.loads(value) for value in transport.objects.values()]
-    broker_pages = [
-        page for page in contents if any(row.get("record_type") == "broker_task" for row in page["records"])
-    ]
-    rows = [row for page in broker_pages for row in page["records"] if row.get("record_type") == "broker_task"]
-    assert len(rows) == len({row["task_id"] for row in rows}) == 401
-    assert all(len(page["records"]) <= 200 for page in broker_pages)
-    assert len(broker_pages) == 3
-    assert any(row.get("record_type") == "queued_task" for page in contents for row in page["records"])
-    assert broker.calls == [(1, 101, 202)] and broker.closed == 1
+        await inventory.application(module, transport, broker_reader=broker).arun(session, **transport.inputs)
+    records = [row for content in transport.objects.values() for row in json.loads(content)["records"]]
+    assert not any(row.get("record_type") in {"broker_task", "queued_task"} for row in records)
+    assert not broker.calls and broker.closed == 0

@@ -1029,3 +1029,18 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 **已知坑与验证**：目录选择器先生成页面占位ID，创建接口返回真实ID前确认可能误存占位值；不能因真实文件夹已落库而认为频道绑定正确。读、保存、迁移重读和投递必须共用格式识别，否则会出现迁移通过但配置打不开、无法手动修复或投递到根目录。原生SQLite/隔离传输覆盖M2至M4、续跑、配置原值、空间删除保护、配置读取和手动换绑、新写拒绝及错误项/正常项投递；真实环境验收沿用T1036。
 
 **前端入口补齐（AC-119）**：`useAddToKnowledge`独占目录命名、创建中状态和进行中的创建请求；同一请求的回车/失焦只提交一次。只有选中真实节点、无命名编辑/创建/提交时，Modal确认按钮才可用；创建中使用现有Button的loading属性。`handleConfirm`本身也拒绝占位选择与进行中的创建，不依赖按钮防护。成功后替换成接口返回ID；失败清除失效选择。关闭及受控open变化使旧创建请求的UI结果失效，重开后即使占位时间戳相同，也不接受旧响应覆盖新请求。目录创建仍使用空间的同一个API，无新状态库、接口、样式或i18n键。
+
+
+## 2026-11-13 已确认规则修订（优先于早期现场兼容章节）
+
+以spec AC-101/107/113/115/116/120/121为准。新计划metadata策略版本2，缺字段的旧计划保持原策略，引用writer仍为f118-v1；新M2在existing-freeze分支之后检查历史准备完成，旧Run不受新准备规则追溯重写。
+
+历史准备分为SQL业务计划（f118_history_business）、精确物理备份/清理端口（f118_history_physical）及原生权限投影。先编译并备份selected before/expected after；apply重验范围/pin/权限及下游，再删已备份的孤儿切片/对象，最后单事务提交SQL修复并继续派生权限purge和level修正。任一身份无法证明则报告，不猜绑/猜删。物理存储外部写入由停服保障，不新增跨存储事务；提交前再次核对SQL。外部清理成功SQL失败可按同份校验计划续跑。
+
+当前事实分类只清有canonical父边闭合的额外父关系，不将schema合法当授权来源。活资源mode计划恢复缺失技术marker；有效Grant来源不变；死资源只做purge。原metadata缺策略字段时的tuple解释保留于legacy_policy，仅对已有冻结Run使用。
+
+旧CURRENT维护组合只初始化DB/Redis及read-pinned FGA；scope guard/finalizer每次重验Catalog pin。Owner收尾和补偿重验原idempotency、operation、版本及pin；FAILED_CLOSED Grant只在当前围栏和原账本Grant对象命中时推进。内置系统资源启动巡检可续办原bootstrap，不能借巡检重授CURRENT上已撤销的成员。
+
+已采用RESOURCE_DELETE的非知识Owner在业务提交后调用cleanup_deleted，沿原删除回执的持久journal清FGA及mode/Grant/assignee/visible_source，保留operation/tuple审计。失败向调用者报告，可使用原操作/历史prepare续办；这不等于建立全平台所有模型Owner的后台垃圾回收器。
+
+完整流程与验证边界见docs/reviews/f118-confirmed-rules-implementation-20261113.md。

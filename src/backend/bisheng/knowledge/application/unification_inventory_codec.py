@@ -120,6 +120,14 @@ def _value(value, spec):
 
 def _validate(tag, data):
     schema = _SCHEMAS.get(tag)
+    # Existing frozen metadata has no policy field and retains revision 1.
+    # The reference writer contract itself does not change in this repair.
+    if tag == "run" and type(data) is dict and "preparation_policy_version" in data:
+        schema = {**schema, "preparation_policy_version": "positive"}
+        if type(data["preparation_policy_version"]) is not int or data["preparation_policy_version"] != 2:
+            _invalid()
+    if tag == "permission_plan" and type(data) is dict and "restore_missing_markers" in data:
+        schema = {**schema, "restore_missing_markers": "bool"}
     if schema is None or type(data) is not dict or set(data) != set(schema):
         _invalid()
     for name, spec in schema.items():

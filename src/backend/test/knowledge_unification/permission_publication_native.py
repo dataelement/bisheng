@@ -12,6 +12,8 @@ import httpx
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
+from test.knowledge_unification import test_migration_inventory_application as m2
+from test.knowledge_unification.test_permission_floor_retirement_signing import legacy_catalog
 
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.permission.application import control_state, sql_runtime
@@ -47,8 +49,6 @@ from bisheng.permission.domain.services.model_policy import CustomModelSelection
 from bisheng.permission.domain.services.visibility_projection_service import VisibilityProjectionCompiler
 from bisheng.permission.migration import f048_runtime_storage
 from bisheng.permission.migration import f118_plan as plans
-from test.knowledge_unification import test_migration_inventory_application as m2
-from test.knowledge_unification.test_permission_floor_retirement_signing import legacy_catalog
 
 raw_resource_native = m2.resource_native
 native = m2.native
@@ -498,8 +498,23 @@ async def published_input(complete, transport, monkeypatch, request):
         __import__("bisheng.knowledge.application.unification_inventory", fromlist=["UnificationInventoryApplication"]),
         transport,
     )
-    async with sessions() as session, session.begin():
-        frozen = await app.arun(session, **transport.inputs)
+    # Produce the exact old optional-field shape to exercise frozen legacy
+    # decoding/publication. Production never exposes a legacy-policy switch.
+    with monkeypatch.context() as legacy:
+        if options.get("legacy_frozen_policy"):
+            inventory_module = __import__(
+                "bisheng.knowledge.application.unification_inventory", fromlist=["record_from_values"]
+            )
+            original_record = inventory_module.record_from_values
+
+            def legacy_record(tag, **values):
+                values.pop("preparation_policy_version", None)
+                values.pop("restore_missing_markers", None)
+                return original_record(tag, **values)
+
+            legacy.setattr(inventory_module, "record_from_values", legacy_record)
+        async with sessions() as session, session.begin():
+            frozen = await app.arun(session, **transport.inputs)
     store.enforce_closed = True
     store.requests.clear()
     store.scans = 0

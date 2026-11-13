@@ -660,16 +660,21 @@ class AssistantService(BaseService, AssistantUtils):
         login_user: UserPayload,
         assistant_id: str,
     ) -> bool:
+        deletion = []
+
         async def project_delete(_session, assistant):
             adapter = await get_f048_resource_adapter("assistant")
             record = await adapter.load_permission_record(resource_type="assistant", resource_id=str(assistant.id))
             if record is None:
                 raise AssistantNotExistsError()
             await adapter.project_delete(record=record, actor=await resolve_permission_actor(login_user))
+            deletion.append((adapter, record))
 
         assistant = await cls._persist_assistant_changes(
             assistant_id, login_user, action="delete", deleting=True, before_save=project_delete
         )
+        for adapter, record in deletion:
+            await adapter.cleanup_deleted(record=record, actor=await resolve_permission_actor(login_user))
         telemetry_service.log_event_sync(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.DELETE_APPLICATION, trace_id=trace_id_var.get()
         )

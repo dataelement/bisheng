@@ -32,3 +32,26 @@
 本次验证为合并树上的定向测试和前端质量门；上轮浏览器只读 fixture 结果见 e2e-checklist.md。未执行完整平台测试集、真实环境写入 E2E、CI 或部署验证。主工作区的未提交文件保留，不将构建或推送视作部署完成。
 
 ## Overall: PASS
+
+## 同日追加：文件入口收敛与管理列表导航合入复核
+
+**Base branch**: origin/feat/3.1.0-beta1，`aa8b75f8441d9a1b08300afc21e25a913d32bec5`
+**Source**: `a0dda6e58e74cec02b82b993831dcbbf88f9f898`
+**Scope**: AC-19、AC-20，实现增量 9 文件（5 个 TS/TSX），另补本合入记录；无冲突。
+
+| Dimension | High | Medium | Status |
+| --- | --- | --- | --- |
+| Boundary Conditions | 0 | 0 | PASS |
+| Permission & Auth | 0 | 0 | PASS |
+| Concurrency Safety | 0 | 0 | PASS |
+| Information Leakage | 0 | 0 | PASS |
+| Test Coverage | 0 | 0 | PASS |
+| Code Style | 0 | 0 | PASS |
+| Docs Sync | 0 | 0 | PASS |
+
+- 文件行移除 SpaceFileTools 挂载和导入，列表、卡片与表格同步生效；详情元数据/分段策略沿用既有组件，历史版本面板仍是 SpaceFileTools 的有效消费者。
+- 管理清单由既有角色和可信租户范围读取，行点击仅在当前生命周期有效时直接进入对应 admin 详情；普通列表的 visible 校验、三点菜单的动作读取及事件隔离、服务端业务授权均不变。没有新增后端/client 修改或数据披露。
+- 合并结果重新执行 7 文件 / 85 项定向测试及全前端 lint/typecheck/check-i18n，全部通过；5 个 TS/TSX 文件通过架构守卫、600 行限制、冲突标记及 diff 空白检查。覆盖管理员整行点击、菜单不跳转、普通权限、文件列表/卡片、元数据/分段策略与历史版本操作。
+- 本轮未新增依赖或修改锁文件；workspace 包解析到当前集成树。spec/design/tasks 与两项用户要求一致，验证清单保留原本机浏览器点验及真实环境边界。
+
+**Overall: PASS**。本次为合并树复验，未运行完整平台测试集、真实环境写入 E2E、CI 或部署验证。
