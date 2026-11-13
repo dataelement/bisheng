@@ -24,3 +24,16 @@
 - 〔架构检查〕ARCH 0；〔分层检查〕LAYER 0。
 - 〔基线比对〕：merged 14627 cases, 1241 failed/errored；`NEW FAILURES: 0`。
 - 按用户 2026-11-13 的建议，Wave 8–13 改为 6 个独立 worktree 并行（Workflow），最后统一合并验证。并行前先把 `dispatch_client` 的 `memory_register` 参数做好（提交 076893d0b2），避免 Wave 9、10 同改 `manager.py`。
+
+## Wave 8–13（T049–T086，6 个并行 worktree）
+- 6 个分支全部完成、无未做任务；各自的 Wave 验收：W8 270 passed、W9 275 passed、W10 300 passed、W11 278 passed（均无 skipped）；W12 vitest 5 files / 35 tests passed；W13 jest 6 suites / 38 tests passed。
+- 合并顺序 8→13，唯一冲突在 `chat_service._task_mode_stream_completion`（日常入口任务模式的登记），合并为"Wave 11 的钩子 + Wave 8 的登录态回调门控"。
+- 合并后：后端全部记忆测试一起跑 412 passed；platform vitest 35 passed；client jest 38 passed；`pnpm lint` 0、`pnpm typecheck` 0（worktree 的 node_modules 改为逐项软链、`@bisheng/*` 指向本 worktree 的 packages 后）、`pnpm check-i18n` OK。
+- 第一次合并后〔基线比对〕NEW FAILURES 10：均为 Wave 8 测试在合跑时受 `test/linsight` 遗留的租户 ContextVar 影响，测试夹具固定租户后修复。
+- 〔架构检查〕ARCH 0；〔分层检查〕LAYER 0。
+
+## Wave 14–16
+- T087 运行器、T088 用例 40 条（加上 T090、T092 各 2 条共 44 条）：`pytest ../../tools/memory_eval/tests` 6 passed。
+- T090–T093（P1）：`pytest test/memory ../../tools/memory_eval/tests -q`：232 passed。
+- T095 文档回写完成。T089、T094、T096 留给人工。
+- 最终〔基线比对〕（合并、T090–T093、夹具修复之后）：merged 14797 cases, 1241 failed/errored；`NEW FAILURES: 0`。
