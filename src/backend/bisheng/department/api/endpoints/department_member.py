@@ -60,6 +60,8 @@ async def get_members(
     limit: int = 20,
     keyword: str = "",
     is_primary: int | None = Query(None, description="Filter: 1=primary, 0=secondary"),
+    include_descendants: bool = False,
+    include_archived: bool = False,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     try:
@@ -70,6 +72,8 @@ async def get_members(
             keyword,
             login_user,
             is_primary=is_primary,
+            include_descendants=include_descendants,
+            include_archived=include_archived,
         )
         return resp_200(data)
     except BaseErrorCode as e:

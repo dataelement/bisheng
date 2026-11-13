@@ -54,6 +54,7 @@ export interface DepartmentMember {
   /** Raw account alias returned by the department API. */
   person_id?: string | null
   department_id: number
+  department?: Pick<DepartmentTreeNode, "dept_id" | "name" | "status">
   is_primary: number
   source: string
   create_time: string

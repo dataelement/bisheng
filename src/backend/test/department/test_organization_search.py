@@ -186,3 +186,87 @@ async def test_http_search_and_locate_validate_membership_scope(directory_db):
             assert allowed["data"]["filter_adjusted"]
             denied = (await client.get("/api/v1/departments/hidden/members/locate", params={"user_id": 10})).json()
             assert denied["status_code"] == 21009
+
+
+async def test_http_member_list_expands_only_visible_descendants(directory_db):
+    """AC-12/13: Scope, ordering, filters and row identity agree in the paged API."""
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from bisheng.common.dependencies.user_deps import UserPayload
+    from bisheng.department.api.endpoints.department_member import router
+    from bisheng.department.domain.services.department_service import DepartmentService
+
+    async with directory_db.begin() as connection:
+        for statement in (
+            "ALTER TABLE user ADD COLUMN disable_source VARCHAR(32)",
+            'CREATE TABLE "group" (id INTEGER, group_name VARCHAR(128), tenant_id INTEGER)',
+            "CREATE TABLE usergroup (user_id INTEGER, group_id INTEGER, tenant_id INTEGER)",
+            "CREATE TABLE role (id INTEGER, role_name VARCHAR(128), tenant_id INTEGER)",
+            "CREATE TABLE userrole (user_id INTEGER, role_id INTEGER, tenant_id INTEGER)",
+            """INSERT INTO department (id,dept_id,name,path,tenant_id,status) VALUES
+            (7,'deep','Deep','/1/2/4/7/',1,'active'),
+            (9,'other-tenant','Other tenant','/1/2/9/',2,'active'),
+            (20,'sibling','Sibling','/1/20/',1,'active')""",
+        ):
+            await connection.execute(text(statement))
+
+    await add_user(directory_db, 10, "Ada", [(4, 1), (2, 0)], external_id="alias-10")
+    await add_user(directory_db, 11, "Bea", [(7, 1)])
+    await add_user(directory_db, 12, "Archived member", [(6, 1)])
+    await add_user(directory_db, 13, "Other tenant member", [(9, 1)])
+    await add_user(directory_db, 14, "Sibling member", [(20, 1)])
+
+    @asynccontextmanager
+    async def sessions():
+        async with AsyncSession(directory_db) as session:
+            yield session
+
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1/departments")
+    app.dependency_overrides[UserPayload.get_login_user] = lambda: SimpleNamespace(user_id=42)
+    service = "bisheng.department.domain.services.department_service"
+    with (
+        patch(f"{service}.get_async_db_session", sessions),
+        patch(f"{service}._check_permission", AsyncMock()),
+        patch(f"{service}._aget_user_scope", AsyncMock(return_value=(False, {"/1/2/"}))),
+        patch.object(
+            DepartmentService,
+            "_aget_department_admin_user_ids",
+            AsyncMock(side_effect=lambda dept: {10} if dept == 4 else set()),
+        ),
+        patch(
+            "bisheng.user_group.domain.services.user_group_service._can_view_all_groups",
+            AsyncMock(return_value=True),
+        ),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            async def members(**params):
+                response = await client.get("/api/v1/departments/visible/members", params=params)
+                result = response.json()
+                assert result["status_code"] == 200
+                return result["data"]
+
+            direct = await members()
+            assert direct["total"] == 1
+            assert "direct_total" not in direct
+            assert "department" not in direct["data"][0]
+
+            expanded = await members(include_descendants=True)
+            assert (expanded["total"], expanded["direct_total"]) == (3, 1)
+            assert [(row["user_id"], row["department"]["dept_id"]) for row in expanded["data"]] == [
+                (10, "visible"),
+                (10, "earlier"),
+                (11, "deep"),
+            ]
+            assert [row["is_department_admin"] for row in expanded["data"]] == [False, True, False]
+            second = await members(include_descendants=True, page=2, limit=1)
+            assert second["data"][0]["department"]["dept_id"] == "earlier"
+            secondary = await members(include_descendants=True, keyword="alias-10", is_primary=0)
+            assert (secondary["total"], secondary["direct_total"]) == (1, 1)
+            archived = await members(include_descendants=True, include_archived=True)
+            assert archived["total"] == 4
+            assert archived["data"][-1]["department"]["status"] == "archived"
+
+            denied = await client.get("/api/v1/departments/hidden/members", params={"include_descendants": True})
+            assert denied.json()["status_code"] == 21009

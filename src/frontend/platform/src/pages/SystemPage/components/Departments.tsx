@@ -54,6 +54,7 @@ export default function Departments() {
   } | null>(null);
   const [membersRefreshSignal, setMembersRefreshSignal] = useState(0);
   const [memberFilter, setMemberFilter] = useState("all");
+  const [directOnly, setDirectOnly] = useState(true);
   const [memberLocation, setMemberLocation] = useState<MemberLocationRequest>();
   const locateSequence = useRef(0);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
@@ -321,28 +322,25 @@ export default function Departments() {
             }
             membersRefreshSignal={membersRefreshSignal}
             location={memberLocation}
+            directOnly={directOnly}
+            includeArchived={includeArchived}
+            onDirectOnlyChange={(checked) => {
+              setMemberLocation(undefined);
+              setDirectOnly(checked);
+            }}
             isPrimaryFilter={memberFilter}
             onFilterChange={(value) => {
               setMemberLocation(undefined);
               setMemberFilter(value);
             }}
             toolbarActions={
-              <>
-                <Button
-                  variant="outlined"
-                  color="default"
-                  onClick={() => setSettingsTarget(selectedDept)}
-                >
-                  {t("bs:department.settings")}
-                </Button>
-                <Button
-                  variant="outlined"
-                  disabled={selectedDept.status === "archived"}
-                  onClick={() => handleCreateClick(selectedDept.id)}
-                >
-                  {t("bs:department.create")}
-                </Button>
-              </>
+              <Button
+                variant="outlined"
+                color="default"
+                onClick={() => setSettingsTarget(selectedDept)}
+              >
+                {t("bs:department.settings")}
+              </Button>
             }
           />
         ) : (
