@@ -44,6 +44,7 @@ import { AuditEmptyState } from "../components/AuditEmptyState";
 import { OrgPathText } from "../components/OrgPathText";
 import { OrgFilter } from "../components/OrgFilter";
 import type { OrgSelection } from "@/types/api/audit";
+import styles from "../AuditFilters.module.css";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -204,8 +205,8 @@ export default function SystemLog() {
                 <LoadingIcon />
             </div>
         )}
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-4 pb-20">
-            <div className="flex shrink-0 flex-wrap gap-4">
+        <div className={`${styles.filterContainer} flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-2 pb-20`}>
+            <div className={`${styles.filterGrid} shrink-0`}>
                 <OrgFilter value={keys.org} tenantId={keys.tenantId ? Number(keys.tenantId) : null}
                     onChange={org => setKeys({ ...keys, org })} />
                 <Select
@@ -213,7 +214,6 @@ export default function SystemLog() {
                     multiple
                     showSearch
                     allowClear
-                    className="w-[200px]"
                     aria-label={t('log.selectUser')}
                     placeholder={t('log.selectUser')}
                     options={users.filter(u => u.value != null && u.value !== '')}
@@ -223,7 +223,6 @@ export default function SystemLog() {
                 <Select
                     {...selectLabels}
                     allowClear
-                    className="w-[200px]"
                     aria-label={t('log.selectUserGroup')}
                     placeholder={t('log.selectUserGroup')}
                     onOpenChange={(open) => { if (open) loadData() }}
@@ -234,7 +233,7 @@ export default function SystemLog() {
                 <DatePicker
                     key={datePickerVersion}
                     aria-label={t('datePicker.dateRange')}
-                    className="w-[336px] max-w-full"
+                    className={styles.dateRange}
                     mode="range"
                     allowOpenRange
                     allowClear
@@ -246,7 +245,6 @@ export default function SystemLog() {
                 <Select
                     {...selectLabels}
                     allowClear
-                    className="w-[180px]"
                     aria-label={t('log.systemModule')}
                     placeholder={t('log.systemModule')}
                     onOpenChange={(open) => { if (open) loadModules() }}
@@ -257,7 +255,6 @@ export default function SystemLog() {
                 <Select
                     {...selectLabels}
                     allowClear
-                    className="w-[180px]"
                     aria-label={t('log.actionBehavior')}
                     placeholder={t('log.actionBehavior')}
                     onOpenChange={(open) => { if (open) handleActionOpen() }}
@@ -265,32 +262,28 @@ export default function SystemLog() {
                     onChange={(value) => setKeys({ ...keys, action: value == null ? '' : value })}
                     options={actions.filter(a => a.value != null && a.value !== '').map(a => ({ value: a.value, label: t(a.name) }))}
                 />
-                <Select {...selectLabels} allowClear showSearch className="w-[220px]"
+                <Select {...selectLabels} allowClear showSearch
                     aria-label={t('log.selectApp')} placeholder={t('log.selectApp')}
                     options={apps} value={keys.targetAppId || null}
                     onOpenChange={open => { if (open) loadApps() }} onSearch={searchApps}
                     onChange={value => setKeys({ ...keys, targetAppId: value == null ? '' : String(value) })} />
-                {showTenant && <Select {...selectLabels} allowClear className="w-[180px]"
+                {showTenant && <Select {...selectLabels} allowClear
                     aria-label={t('log.selectTenant')} placeholder={t('log.selectTenant')}
                     options={tenants.filter(tenant => tenant.id != null).map(tenant => ({ value: String(tenant.id), label: tenant.tenant_name }))}
                     value={keys.tenantId || null} onOpenChange={open => { if (open) loadTenants() }}
                     onChange={value => setKeys({ ...keys, tenantId: value == null ? '' : String(value) })} />}
                 <Input
-                    className="w-[200px]"
                     aria-label={t('log.remark')}
                     placeholder={t('log.remark')}
                     value={keys.note}
                     onChange={(event) => setKeys({ ...keys, note: event.target.value.slice(0, 200) })}
                 />
-                <div className="ml-auto mr-4 flex shrink-0 items-center gap-4">
-                    <Button size="medium" onClick={handleSearch} disabled={Boolean(dateError)}>
-                        {t('log.searchButton')}
-                    </Button>
+                <div className={styles.filterActions}>
                     <Button size="medium" variant="outlined" onClick={handleReset} color="default">
                         {t('log.resetButton')}
                     </Button>
-                    <Button size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
-                        {t('log.exportButton')}
+                    <Button size="medium" onClick={handleSearch} disabled={Boolean(dateError)}>
+                        {t('log.searchButton')}
                     </Button>
                 </div>
             </div>
@@ -315,7 +308,7 @@ export default function SystemLog() {
                     {logs.map((log: any) => {
                         const operator = renderOperator(log, t)
                         return (
-                            <TableRow key={log.id}>
+                            <TableRow key={log.id} hoverable={false}>
                                 <TableCell>{log.id}</TableCell>
                                 <TableCell>
                                     <div className="max-w-[200px] break-all truncate-multiline">{operator.primary}</div>
@@ -342,9 +335,10 @@ export default function SystemLog() {
             </Table>
             {loaded && !loading && logs.length === 0 && <AuditEmptyState />}
         </div>
-        {/* Pagination */}
-
-        <div className="bisheng-table-footer gap-4 px-6 bg-background-login">
+        <div className="bisheng-table-footer gap-4 pl-2 pr-6 bg-background-login">
+            <Button className="shrink-0" size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
+                {t('log.exportButton')}
+            </Button>
             <Pagination locale={paginationLocale}
                 className="ml-auto min-w-0"
                 current={page}

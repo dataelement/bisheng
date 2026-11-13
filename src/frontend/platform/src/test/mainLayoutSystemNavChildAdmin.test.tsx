@@ -206,18 +206,13 @@ describe("MainLayout identity-specific navigation", () => {
     expect(screen.getByText("menu.tenant")).toBeInTheDocument();
   });
 
-  it("aligns the DSH icon column with adjacent menus and distributes the label across three em", () => {
+  it("centers the icon and label together on every sidebar link", () => {
     renderLayout({ role: "admin" });
-    const link = screen.getByRole("link", { name: "menu.dshDesktop" });
-    const modelLink = screen.getByRole("link", { name: "menu.models" });
-    expect(link).toHaveAttribute("href", "/dsh");
-    expect(link).toHaveClass("inline-flex", "items-center", "px-6", "w-full", "h-12");
-    expect(modelLink).toHaveClass("inline-flex", "px-6", "w-full", "h-12");
-    expect(link.querySelector("svg")).toHaveClass("h-4", "w-4", "mr-2", "shrink-0");
-    const label = link.querySelector("span[aria-hidden='true']");
-    expect(label).toHaveClass("mx-[14px]", "inline-flex", "w-[3em]", "justify-between", "text-sm");
-    expect(screen.getByText("menu.models")).toHaveClass("mx-[14px]");
-    expect(label?.textContent).toBe("menu.dshDesktop");
+    const nav = screen.getByRole("navigation");
+    for (const link of nav.querySelectorAll("a")) {
+      expect(link).toHaveClass("flex", "items-center", "justify-center", "gap-3", "w-full", "h-12");
+    }
+    expect(screen.getByRole("link", { name: "menu.dshDesktop" })).toHaveAttribute("href", "/dsh");
   });
 
   it("keeps single-tenant organization naming inside system management", () => {

@@ -698,7 +698,6 @@
         "created": "Created by me",
         "joined": "Joined",
         "navigation": "Space navigation",
-        "square": "Go to square",
         "expand": "Expand",
         "collapse": "Collapse",
         "sort": "Sort",
@@ -710,10 +709,12 @@
         "loading": "Loading…",
         "load_failed": "Failed to load",
         "empty": "No spaces",
-        "no_folders": "No folders",
         "more_folders": "Load more folders",
         "collapse_navigation": "Collapse space navigation",
-        "expand_navigation": "Expand space navigation"
+        "expand_navigation": "Expand space navigation",
+        "search": "Search spaces",
+        "personal": "Personal spaces",
+        "more_spaces": "Load more spaces"
     },
     "workspace": {
         "files": "Space files",

@@ -692,7 +692,6 @@
         "created": "自分が作成",
         "joined": "参加中",
         "navigation": "スペースナビゲーション",
-        "square": "広場へ",
         "expand": "展開",
         "collapse": "折りたたむ",
         "sort": "並べ替え",
@@ -704,10 +703,12 @@
         "loading": "読み込み中…",
         "load_failed": "読み込みに失敗しました",
         "empty": "スペースがありません",
-        "no_folders": "フォルダーがありません",
         "more_folders": "フォルダーをさらに読み込む",
         "collapse_navigation": "スペースナビゲーションを折りたたむ",
-        "expand_navigation": "スペースナビゲーションを展開"
+        "expand_navigation": "スペースナビゲーションを展開",
+        "search": "スペースを検索",
+        "personal": "個人スペース",
+        "more_spaces": "スペースをさらに読み込む"
     },
     "workspace": {
         "files": "スペースのファイル",

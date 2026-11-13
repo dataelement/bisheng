@@ -104,6 +104,37 @@ async def test_keeps_the_classification_the_writer_recorded(fakes):
     assert manager.pushed[0].data["error_code"] == 1
 
 
+async def test_reannounced_failure_keeps_service_source_and_redacts_details(fakes):
+    failure = {
+        "version": 1,
+        "failure_id": "model-failure-1",
+        "category": "model_service",
+        "service": "llm",
+        "occurred_at": "2026-11-13T13:37:22+00:00",
+    }
+    fakes(
+        failed_session(
+            {
+                "error_message": "Service request failed (model_service)",
+                "error_type": "content_filter",
+                "error_code": 11090,
+                "failure_info": failure,
+                "reference_id": "support-1",
+                "detail": "Provider failed https://internal.test password=secret-value",
+                "attempt_id": "attempt-1",
+            }
+        ),
+        [],
+    )
+    await utils.announce_stranded_session_failure("sv-1")
+    payload = FakeStateManager.instances[0].pushed[-1].data
+    assert payload["failure_info"] == failure
+    assert payload["reference_id"] == "support-1"
+    assert payload["attempt_id"] == "attempt-1"
+    assert "internal.test" not in payload["detail"]
+    assert "secret-value" not in payload["detail"]
+
+
 async def test_missing_session_is_a_no_op(fakes):
     fakes(None, [])
     await utils.announce_stranded_session_failure("gone")
@@ -126,7 +157,9 @@ async def test_crash_sweep_announces_every_terminated_session(monkeypatch):
     fake_worker = ModuleType("bisheng.linsight.worker")
     fake_worker.NodeManager = StubNodeManager
     monkeypatch.setitem(sys.modules, "bisheng.linsight.worker", fake_worker)
-    monkeypatch.setattr(utils, "get_redis_client", AsyncMock(return_value=SimpleNamespace(aget=AsyncMock(return_value=None))))
+    monkeypatch.setattr(
+        utils, "get_redis_client", AsyncMock(return_value=SimpleNamespace(aget=AsyncMock(return_value=None)))
+    )
     monkeypatch.setattr(type(utils.settings), "aget_all_config", AsyncMock(return_value={}))
 
     orphans = [SimpleNamespace(id="sv-1", user_id=1), SimpleNamespace(id="sv-2", user_id=2)]

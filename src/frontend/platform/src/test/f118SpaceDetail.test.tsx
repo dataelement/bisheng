@@ -47,7 +47,6 @@ vi.mock("@/contexts/userContext", async () => ({
 }));
 vi.mock("@/hooks/useAdminScope", () => ({ useAdminScope: mocks.management }));
 vi.mock("@/pages/KnowledgePage/sidebar/KnowledgeSpaceSidebar", () => ({ KnowledgeSpaceSidebar: () => null }));
-vi.mock("@/pages/KnowledgePage/KnowledgeFile", () => ({ default: () => null }));
 vi.mock("@/pages/KnowledgePage/KnowledgeQa", () => ({ default: () => null }));
 vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({ KnowledgeLibraryDialog: () => null }));
 vi.mock("react-i18next", () => ({

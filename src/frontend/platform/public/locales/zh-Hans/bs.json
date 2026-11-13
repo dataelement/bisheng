@@ -1805,7 +1805,6 @@
     "exportEmpty": "当前筛选条件下没有记录可导出",
     "exportTruncated": "共 {{total}} 条记录，超过单次导出上限，仅导出最新的 {{max}} 条，请缩小筛选范围",
     "runtime": {
-      "identityHint": "调用方和访问用户显示记录中的名称；执行用户缺少记录名称时显示当前账号名称。悬停可查看原始标识。",
       "exportModelHint": "CSV 保留原始标识和空值。应用自身调用没有执行用户；首 Token 耗时仅适用于流式调用；上游未提供用量时 Token 数留空。成功记录的错误码和未记录的 HTTP 状态也会留空，空白不代表 0。",
       "exportCapabilityHint": "CSV 保留原始记录。调用被拒绝或未产生检索结果时，结果条数可能为空；实际返回 0 条时仍导出 0。",
       "callerWithId": "调用方 #{{id}}（名称未记录）",
@@ -1847,7 +1846,6 @@
       "accessTab": "应用访问",
       "tenant": "租户",
       "allTenants": "全部租户",
-      "accessHint": "访问记录按进入应用的合并窗口保存，不代表每条 HTTP 请求。",
       "status": {
         "pending": "等待导出",
         "running": "正在导出",

@@ -12,6 +12,7 @@ import { useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
 import { MessageContent } from "./DailyMessageContent"
+import { GeneratedFileCards, pickGeneratedFiles, type GeneratedFile } from "./DailyGeneratedFiles"
 import { locationContext } from "@/contexts/locationContext"
 
 interface Message {
@@ -21,6 +22,7 @@ interface Message {
     isCreatedByUser: boolean;
     user_name: string;
     source: number;
+    generatedFiles: GeneratedFile[];
 }
 
 // v2.5: backend stores daily-mode `message.message` as JSON
@@ -88,7 +90,11 @@ export default function DailyChatDetail() {
     useEffect(() => {
         getChatHistoryApi(cid).then((res: any) => {
             const items = Array.isArray(res) ? res : []
-            const normalised = items.map((m: any) => ({ ...m, text: extractDisplayText(m) }))
+            const normalised = items.map((m: any) => ({
+                ...m,
+                text: extractDisplayText(m),
+                generatedFiles: m.isCreatedByUser ? [] : pickGeneratedFiles(m.files),
+            }))
             setMessages(normalised)
             setLoading(false)
         }).catch(() => setLoading(false))
@@ -148,7 +154,8 @@ export default function DailyChatDetail() {
                                         msg.error
                                             ? <Alert className="border-red-500/20 bg-red-500/5 px-3 py-2"><AlertDescription>{msg.text}</AlertDescription></Alert>
                                             : <div className="prose prose-sm max-w-none dark:prose-invert prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-700">
-                                                <MessageContent text={msg.text} />
+                                                <MessageContent text={msg.text} chatId={cid} files={msg.generatedFiles} />
+                                                <GeneratedFileCards chatId={cid} files={msg.generatedFiles} />
 
                                                 {msg.source === 1 && <div className="mt-2">
                                                     <Button variant="text" size="small" onClick={() => showResouce(msg.messageId, msg.text)} color="default">{t('chat.source')}</Button>

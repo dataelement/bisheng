@@ -11,7 +11,6 @@ vi.mock("@/contexts/userContext", async () => ({ userContext: (await import("rea
 vi.mock("@/hooks/useKnowledgePageScope", () => ({ useKnowledgePageScope: mock.scope }));
 vi.mock("@/controllers/API/permission", () => ({ getMyResourcePermissionsApi: async () => ({ actions: [] }) }));
 vi.mock("@/controllers/request", () => ({ default: { get: mock.get }, showApiError: vi.fn() }));
-vi.mock("@/pages/KnowledgePage/KnowledgeFile", () => ({ default: ({ scope }: { scope: { view: string } }) => <p>{scope.view}-list</p> }));
 vi.mock("@/pages/KnowledgePage/KnowledgeQa", () => ({ default: () => <p>qa-list</p> }));
 vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({ KnowledgeLibraryDialog: () => null }));
 vi.mock("@/pages/KnowledgePage/components/Files", () => ({ default: (props: FilesProps) => <output data-testid="files">{JSON.stringify({ id: props.spaceId, parent: props.parentId, presentation: props.presentation, view: props.scope?.view })}</output> }));
@@ -32,6 +31,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mock.scope.mockReturnValue({ scopes: { ordinary: scope, admin: { ...scope, view: "admin" } }, canManage: true, isLoading: false, retry: vi.fn() });
   mock.get.mockImplementation(async (url: string, options?: { params?: { file_type?: number; parent_id?: number | null } }) => {
+    if (url.endsWith("/admin/list")) return { data: [{ id: 7, name: "Reports", tenant_id: 60, space_kind: "normal" }], total: 1 };
     if (url.endsWith("/mine")) return [{ id: 7, name: "Reports", tenant_id: 60 }];
     if (url.endsWith("/joined") || url.endsWith("/department")) return [];
     if (url.endsWith("/children") && options?.params?.file_type === 0) return { data: options.params.parent_id == null ? [{ id: 9, file_name: "Finance", file_type: 0 }] : [], has_more: false, next_cursor: null };
@@ -64,8 +64,8 @@ it("opens deep folder links while preserving the independent QA and management t
   fireEvent.mouseDown(screen.getByRole("tab", { name: "lib.qaData" }), { button: 0, ctrlKey: false });
   expect(await screen.findByText("qa-list")).toBeVisible();
   fireEvent.mouseDown(screen.getByRole("tab", { name: "f118.manage_spaces" }), { button: 0, ctrlKey: false });
-  expect(await screen.findByText("admin-list")).toBeVisible();
-  expect(screen.queryByRole("complementary")).toBeNull();
+  await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"view":"admin"'));
+  expect(screen.getByRole("complementary")).toBeVisible();
 });
 
 it("rejects invalid directory links without loading their file content", async () => {
@@ -93,32 +93,29 @@ it("automatically opens the first sidebar space instead of rendering the ordinar
   expect(screen.queryByText("ordinary-list")).toBeNull();
 });
 
-it("keeps management details, list return and browser history in the admin view without loading personal navigation", async () => {
-  mount("/filelib/7?view=admin&parent_id=9&fileStatus=abnormal");
+it("opens management defaults with two groups and never loads ordinary navigation", async () => {
+  mount("/filelib?view=admin");
   expect(await screen.findByTestId("files")).toHaveTextContent('"view":"admin"');
-  expect(screen.getByRole("tab", { name: "f118.manage_spaces" })).toHaveAttribute("data-state", "active");
-  expect(screen.queryByRole("complementary")).toBeNull();
-  expect(mock.get.mock.calls.some(([url]) => /\/(department|mine|joined|list)$/.test(String(url)))).toBe(false);
-  fireEvent.click(screen.getByRole("button", { name: "back" }));
-  expect(await screen.findByText("admin-list")).toBeVisible();
-  expect(screen.getByTestId("location")).toHaveTextContent("/filelib?view=admin");
-  expect(screen.queryByTestId("files")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "history-back" }));
-  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"admin"');
-  expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9&fileStatus=abnormal");
-  fireEvent.click(screen.getByRole("button", { name: "history-forward" }));
-  expect(await screen.findByText("admin-list")).toBeVisible();
+  expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?view=admin");
+  const tree = screen.getByRole("complementary");
+  expect(within(tree).getByRole("region", { name: "sidebar.department" })).toBeVisible();
+  expect(within(tree).getByRole("region", { name: "sidebar.personal" })).toBeVisible();
+  expect(within(tree).queryByRole("region", { name: "sidebar.created" })).toBeNull();
+  expect(within(tree).getByRole("searchbox", { name: "sidebar.search" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "back" })).toBeNull();
+  expect(mock.get.mock.calls.some(([url]) => /\/(department|mine|joined)$/.test(String(url)))).toBe(false);
+  expect(screen.queryByRole("button", { name: "f118.create_space" })).toBeNull();
+});
+
+it("preserves admin scope while selecting a folder and switching to ordinary navigation", async () => {
+  mount("/filelib/7?view=admin");
+  await screen.findByTestId("files");
+  fireEvent.click(await within(screen.getByRole("complementary")).findByRole("button", { name: "Finance" }));
+  await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"parent":9'));
+  expect(screen.getByTestId("location")).toHaveTextContent("view=admin&parent_id=9");
   fireEvent.mouseDown(screen.getByRole("tab", { name: "f118.spaces" }), { button: 0, ctrlKey: false });
   await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"view":"ordinary"'));
   expect(screen.getByTestId("location")).not.toHaveTextContent("view=admin");
-  expect(screen.getByRole("complementary")).toBeVisible();
-});
-
-it("restores the management list directly from its URL without selecting an ordinary space", async () => {
-  mount("/filelib?view=admin");
-  expect(await screen.findByText("admin-list")).toBeVisible();
-  expect(mock.get).not.toHaveBeenCalled();
-  expect(screen.queryByTestId("files")).toBeNull();
 });
 
 it("waits for earlier navigation groups before selecting the first space", async () => {
@@ -153,4 +150,33 @@ it("advances a child-only visible-space cursor without showing a space list", as
   await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"id":12'));
   expect(mock.get).toHaveBeenCalledWith("/api/v1/knowledge/space/list", { params: { page_size: 1, cursor: "opaque/+==" } });
   expect(screen.queryByText("ordinary-list")).toBeNull();
+});
+
+
+it("does not let a late initial space redirect a user away from QA", async () => {
+  let finish!: (value: object[]) => void;
+  const delayed = new Promise<object[]>((resolve) => { finish = resolve; });
+  const base = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation((url: string, options?: unknown) => url.endsWith("/department") ? delayed : base(url, options));
+  mount();
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "lib.qaData" }), { button: 0, ctrlKey: false });
+  await screen.findByText("qa-list");
+  finish([{ id: 10, name: "Late department", tenant_id: 60 }]);
+  await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/filelib?view=qa"));
+  expect(screen.queryByTestId("files")).toBeNull();
+});
+
+it("does not expose management reads through a forged URL", async () => {
+  mock.scope.mockReturnValue({ scopes: { ordinary: scope }, canManage: false, isLoading: false, retry: vi.fn() });
+  mount("/filelib?view=admin");
+  await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"view":"ordinary"'));
+  expect(screen.queryByRole("tab", { name: "f118.manage_spaces" })).toBeNull();
+  expect(mock.get.mock.calls.some(([url]) => String(url).includes("/admin/list"))).toBe(false);
+});
+
+it("waits for a concrete management scope before reading spaces", () => {
+  mock.scope.mockReturnValue({ scopes: undefined, canManage: true, isLoading: true, retry: vi.fn() });
+  mount("/filelib?view=admin");
+  expect(screen.getByText("f118.loading_space")).toBeVisible();
+  expect(mock.get).not.toHaveBeenCalled();
 });

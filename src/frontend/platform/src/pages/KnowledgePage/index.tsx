@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
-import KnowledgeFile from "./KnowledgeFile";
 import KnowledgeQa from "./KnowledgeQa";
 import { KnowledgeSpaceWorkspace } from "./KnowledgeSpaceWorkspace";
 
@@ -24,12 +23,20 @@ export default function KnowledgePage() {
     () => pageWindow.LibPage?.type || "file",
   );
   const views = params.getAll("view");
-  const requested = views.length === 0
-    ? (id === undefined ? initialTab : "file")
-    : views.length === 1 ? views[0] : "file";
-  const activeKey = requested === "admin" && canManage
-    ? "admin"
-    : requested === "qa" && id === undefined ? "qa" : "file";
+  const requested =
+    views.length === 0
+      ? id === undefined
+        ? initialTab
+        : "file"
+      : views.length === 1
+        ? views[0]
+        : "file";
+  const activeKey =
+    requested === "admin" && canManage
+      ? "admin"
+      : requested === "qa" && id === undefined
+        ? "qa"
+        : "file";
   useEffect(() => {
     delete pageWindow.LibPage;
   }, []);
@@ -46,11 +53,14 @@ export default function KnowledgePage() {
       </Button>
     </div>
   );
-  const content = (scope: KnowledgeQueryScope | undefined, tree = false) =>
+  const content = (scope: KnowledgeQueryScope | undefined) =>
     scope ? (
-      tree ? (
-        <KnowledgeSpaceWorkspace key={JSON.stringify(scope)} scope={scope} routeId={id} active={activeKey === (scope.view === "admin" ? "admin" : "file")} />
-      ) : <KnowledgeFile key={JSON.stringify(scope)} scope={scope} toolbarTarget={toolbarTarget} />
+      <KnowledgeSpaceWorkspace
+        key={JSON.stringify(scope)}
+        scope={scope}
+        routeId={id}
+        active={activeKey === (scope.view === "admin" ? "admin" : "file")}
+      />
     ) : (
       unavailable
     );
@@ -63,13 +73,13 @@ export default function KnowledgePage() {
           navigate(key === "file" ? "/filelib" : `/filelib?view=${key}`);
         }}
         extra={<div ref={setToolbarTarget} />}
-        className="mb-10 w-full [&>div:first-child]:mx-2 [&>div:first-child]:mb-2"
+        className="flex h-full w-full flex-col [&>div:first-child]:mx-2 [&>div:first-child]:mb-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1"
         items={[
           {
             key: "file",
             label: t("f118.spaces"),
             icon: <Outlined.Books aria-hidden="true" />,
-            children: content(scopes?.ordinary, true),
+            children: content(scopes?.ordinary),
           },
           {
             key: "qa",
@@ -83,7 +93,7 @@ export default function KnowledgePage() {
                   key: "admin",
                   label: t("f118.manage_spaces"),
                   icon: <Outlined.Books aria-hidden="true" />,
-                  children: content(scopes?.admin, id !== undefined),
+                  children: content(scopes?.admin),
                 },
               ]
             : []),

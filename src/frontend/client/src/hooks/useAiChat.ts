@@ -1088,6 +1088,7 @@ export default function useAiChat(
                             ...(patch.messageId ? { messageId: patch.messageId } : {}),
                             ...(patch.text != null ? { text: patch.text } : {}),
                             ...(patch.events ? { events: patch.events } : {}),
+                            ...(patch.files ? { files: patch.files } : {}),
                             ...(patch.finalised ? { unfinished: false } : {}),
                         };
                         return msgs;
@@ -1370,6 +1371,7 @@ export default function useAiChat(
                         ...(patch.messageId ? { messageId: patch.messageId } : {}),
                         ...(patch.text != null ? { text: patch.text } : {}),
                         ...(patch.events ? { events: patch.events } : {}),
+                        ...(patch.files ? { files: patch.files } : {}),
                         ...(patch.finalised ? { unfinished: false } : {}),
                     });
                 },

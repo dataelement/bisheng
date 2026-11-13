@@ -36,12 +36,12 @@ it('changes tenant and kind without reusing prior cursor or showing old rows', a
 
 it('renders real source rows and distinguishes failed loading from empty records', async () => {
   mock.records.mockRejectedValueOnce(new Error('unavailable'))
-  render(<RuntimeAuditPanel />, { wrapper })
+  const { rerender } = render(<RuntimeAuditPanel kind="model" />, { wrapper })
   expect(await screen.findByRole('alert')).toHaveTextContent('log.runtime.loadFailed')
   fireEvent.click(screen.getByRole('button', { name: 'log.runtime.refresh' }))
   await waitFor(() => expect(screen.getByText('log.emptyTitle')).toBeVisible())
-  fireEvent.click(screen.getByRole('radio', { name: 'log.runtime.accessTab' }))
-  expect(await screen.findByText('log.runtime.accessHint')).toBeVisible()
+  rerender(<RuntimeAuditPanel kind="access" />)
+  expect(await screen.findByRole('columnheader', { name: 'log.runtime.fields.entry_time' })).toBeVisible()
 })
 
 it('reloads the first page on every search without clearing an unchanged visitor filter', async () => {
@@ -50,7 +50,7 @@ it('reloads the first page on every search without clearing an unchanged visitor
   mock.records.mockImplementation(async (_kind, _filters, cursor?: string) => ({
     items: [], next_cursor: cursor ? null : 'page-two', snapshot_id: 'initial', matched_count: null,
   }))
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await user.click(screen.getByRole('combobox', { name: 'log.runtime.visitor' }))
   await user.click(await screen.findByRole('option', { name: 'Audit visitor' }))
   const expectedFilters = expect.objectContaining({ time_range: 'recent7d', visitor_id: 7 })
@@ -90,7 +90,7 @@ it('reloads the first page on every search without clearing an unchanged visitor
 it('submits full export using the current frozen selection rather than current page rows', async () => {
   mock.createExport.mockResolvedValue({ export_id: 'job', status: 'pending' })
   mock.exportJob.mockResolvedValue({ export_id: 'job', status: 'ready', final_count: 300 })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await waitFor(() => expect(screen.getByRole('button', { name: 'log.runtime.export' })).toBeEnabled())
   fireEvent.click(screen.getByRole('button', { name: 'log.runtime.export' }))
   await waitFor(() => expect(mock.createExport).toHaveBeenCalledWith('selection', undefined))
@@ -106,7 +106,7 @@ it('submits full export using the current frozen selection rather than current p
 
 it('renders caller and model metadata while leaving missing tokens unknown and excluding bodies', async () => {
   mock.records.mockResolvedValue({ items: [{ id: 1, actor_kind: 'service_account', actor_name: 'SDK account', model_name: 'Example model', total_tokens: null, prompt: 'PRIVATE_BODY', result: 'success' }], next_cursor: null, snapshot_id: 'selection' })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   expect(await screen.findByText('Example model')).toBeVisible()
   expect(screen.getByText('log.runtime.values.service_account')).toBeVisible()
   expect(screen.getAllByText('log.runtime.notRecorded').length).toBeGreaterThan(0)
@@ -118,7 +118,7 @@ it('uses readable identities instead of separate surrogate-ID columns', async ()
     actor_name: 'Recorded application', subject_kind: 'app_self', subject_id: null,
     credential_id: 143, credential_mask: 'bs-app-********ABCD', result: 'upstream_failed' }],
     next_cursor: null, snapshot_id: 'selection' })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   expect(await screen.findByText('Recorded application')).toBeVisible()
   expect(screen.getByText('bs-app-********ABCD')).toBeVisible()
   expect(screen.getAllByText('log.runtime.values.app_self').length).toBeGreaterThan(0)
@@ -130,8 +130,7 @@ it('uses readable identities instead of separate surrogate-ID columns', async ()
 it('shows the recorded visitor name without a redundant numeric user column', async () => {
   mock.records.mockResolvedValue({ items: [{ id: 58, user_id: 3, user_name: 'Recorded visitor' }],
     next_cursor: null, snapshot_id: 'selection' })
-  render(<RuntimeAuditPanel />, { wrapper })
-  fireEvent.click(screen.getByRole('radio', { name: 'log.runtime.accessTab' }))
+  render(<RuntimeAuditPanel kind="access" />, { wrapper })
   expect(await screen.findByText('Recorded visitor')).toBeVisible()
   expect(screen.queryByRole('columnheader', { name: 'log.runtime.fields.user_id' })).not.toBeInTheDocument()
   expect(screen.getByRole('columnheader', { name: 'log.runtime.fields.operator_dept_path' })).toBeVisible()
@@ -145,7 +144,7 @@ it('sends the organisation as a comma string only after apply', async () => {
     ],
     archived: [], show_none: true, show_unrecorded: false,
   })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await waitFor(() => expect(mock.records).toHaveBeenCalled())
   expect(screen.getAllByRole('button')[0]).toHaveAccessibleName('log.org.placeholder')
   fireEvent.click(screen.getByRole('button', { name: 'log.org.placeholder' }))
@@ -167,7 +166,7 @@ it('keeps the chosen visitor when only the organisation is applied', async () =>
     archived: [], show_none: false, show_unrecorded: false,
   })
   mock.candidates.mockResolvedValue({ items: [{ id: '7', label: 'Audit visitor' }] })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await user.click(screen.getByRole('combobox', { name: 'log.runtime.visitor' }))
   await user.click(await screen.findByRole('option', { name: 'Audit visitor' }))
   await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expect.objectContaining({ visitor_id: 7 }), undefined))
@@ -185,7 +184,7 @@ it('keeps a pending export on close and cancels only through the explicit cancel
   mock.createExport.mockResolvedValue({ export_id: 'pending-job', status: 'pending' })
   mock.exportJob.mockResolvedValue({ export_id: 'pending-job', status: 'running' })
   mock.cancelExport.mockResolvedValue({ export_id: 'pending-job', status: 'expired' })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await waitFor(() => expect(screen.getByRole('button', { name: 'log.runtime.export' })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: 'log.runtime.export' }))
   await screen.findByRole('button', { name: 'log.runtime.cancel' })
@@ -204,7 +203,7 @@ it('shows creation failures inside the dialog and can retry the export', async (
   const user = userEvent.setup()
   mock.createExport.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ export_id: 'retry-job', status: 'pending' })
   mock.exportJob.mockResolvedValue({ export_id: 'retry-job', status: 'ready', final_count: 2 })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await waitFor(() => expect(screen.getByRole('button', { name: 'log.runtime.export' })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: 'log.runtime.export' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('log.runtime.exportCreateFailed')
@@ -219,7 +218,7 @@ it('renders zoned runtime timestamps in the viewers local time instead of raw UT
   const pad = (n: number) => String(n).padStart(2, '0')
   const expected = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
   mock.records.mockResolvedValue({ items: [{ id: 1, create_time: value }], next_cursor: null, snapshot_id: 'selection' })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   expect(await screen.findByText(expected)).toBeVisible()
   expect(screen.queryByText(value)).toBeNull()
 })
@@ -227,7 +226,7 @@ it('renders zoned runtime timestamps in the viewers local time instead of raw UT
 it('accepts either date boundary and resets to the first page of the default time range', async () => {
   const user = userEvent.setup()
   mock.records.mockResolvedValueOnce({ items: [], next_cursor: 'recent-next', snapshot_id: 'recent', matched_count: null })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   const next = screen.getByRole('button', { name: 'pagination.next' })
   await waitFor(() => expect(next).toBeEnabled())
   await user.click(next)
