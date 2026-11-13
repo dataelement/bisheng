@@ -65,7 +65,7 @@
   **逻辑**: 把主检出的 `src/backend/.venv` 与 `src/frontend` 下各级 `node_modules` 软链到本 worktree（只软链，不执行 `uv sync` 或 `pnpm install`）；确认 `src/backend/bisheng/config.yaml` 存在（没有就从主检出复制，它不进版本库）。按〔架构检查〕的前半段在未改动的代码上生成 `baseline/arch-guard.txt`。确认 `cd src/frontend/platform && pnpm exec vitest run --version` 与 `cd src/frontend/client && pnpm exec jest --version` 能执行。在未改动的代码上运行 `uv run pytest test/ -m "not e2e" -q -p no:cacheprovider --junitxml=<baseline/backend.xml>`。写 `compare_junit.py`：读两个 junit 文件，输出新增失败的用例 id 清单，最后一行固定为 `NEW FAILURES: <n>`。在 `verification.md` 的"基线"一节记录运行前置条件（代理环境变量等）与基线的通过、失败、报错数量。
   **依赖**: 无
 
-- [ ] **T002**: V1 助手工具回调里的脱敏
+- [x] **T002**: V1 助手工具回调里的脱敏
   **文件**: `src/backend/test/memory/spike/test_v1_callback.py`（新建，实验代码，Wave 9 完成后删除）、`verification.md`
   **逻辑**: 读 `bisheng/api/v1/callback.py:434-585` 与挂载点 `common/chat/client.py:308-322`。写一个最小测试：构造回调处理器，模拟一次名为 `memory_probe` 的工具从开始到结束，记录落库与下发的内容。确认 `on_tool_start` 能拿到工具名、能否按 `run_id` 在 `on_tool_end` / `on_tool_error` 里认出同一次调用、`intermediate_steps` 字段带了什么。
   **判据**: 实验测试能跑通，并给出"按 `run_id` 识别记忆工具并替换落库与下发内容"是否可行的结论与确切改动位置。
