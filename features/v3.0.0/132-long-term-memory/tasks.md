@@ -60,7 +60,7 @@
 
 这一 Wave 不写产品代码。验证结论写进 `features/v3.0.0/132-long-term-memory/verification.md`，再回写 design。结论与 design 现有方案不一致时，停下来请用户确认（SDD-Guide §3）。**这一 Wave 不适合无人值守**：它的产出可能推翻设计。
 
-- [ ] **T001**: 测试环境、基线与比对脚本
+- [x] **T001**: 测试环境、基线与比对脚本
   **文件**: `features/v3.0.0/132-long-term-memory/baseline/compare_junit.py`（新建）、`features/v3.0.0/132-long-term-memory/baseline/backend.xml`（生成）、`features/v3.0.0/132-long-term-memory/baseline/arch-guard.txt`（生成）、`features/v3.0.0/132-long-term-memory/verification.md`（新建）
   **逻辑**: 把主检出的 `src/backend/.venv` 与 `src/frontend` 下各级 `node_modules` 软链到本 worktree（只软链，不执行 `uv sync` 或 `pnpm install`）；确认 `src/backend/bisheng/config.yaml` 存在（没有就从主检出复制，它不进版本库）。按〔架构检查〕的前半段在未改动的代码上生成 `baseline/arch-guard.txt`。确认 `cd src/frontend/platform && pnpm exec vitest run --version` 与 `cd src/frontend/client && pnpm exec jest --version` 能执行。在未改动的代码上运行 `uv run pytest test/ -m "not e2e" -q -p no:cacheprovider --junitxml=<baseline/backend.xml>`。写 `compare_junit.py`：读两个 junit 文件，输出新增失败的用例 id 清单，最后一行固定为 `NEW FAILURES: <n>`。在 `verification.md` 的"基线"一节记录运行前置条件（代理环境变量等）与基线的通过、失败、报错数量。
   **依赖**: 无
