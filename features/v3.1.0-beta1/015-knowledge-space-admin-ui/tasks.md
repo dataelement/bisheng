@@ -103,3 +103,24 @@
 - [x] 用户明确授权合入并提交推送；远端基线 aa8b75f844，源实现 a0dda6e58e，独立工作树合并无冲突。
 - [x] 合并代码复跑 7 文件 / 85 项回归、全前端 lint/typecheck/check-i18n 通过，5 个 TS/TSX 文件通过架构守卫、行数、冲突标记和 diff 检查。
 - [x] 七维合入复核 PASS，详见 code-review-integration-20261113.md 同日追加；不执行部署。
+
+## 四步上传恢复：规格阶段
+
+| 文档 | 状态 | 范围 |
+| --- | --- | --- |
+| spec.md 上传恢复追加 | ✅ 已评审，用户已确认 | AC-21 至 AC-26，sdd-review 规格检查 LGTM，见 upload-flow-spec-review-20261113.md。 |
+| upload-flow-discovery-20261113.md | 已完成代码调研 | 旧四步、当前上传注册/默认策略、预览根 edit 与容器 upload_file 的差异。 |
+| upload-flow-design-20261113.md | ✅ 已评审，用户已确认 | 四步恢复、上传会话/预览、规则快照及现有 SPACE 注册衔接；sdd-review 设计检查见 upload-flow-design-review-20261113.md。 |
+
+设计已确认，按以下任务实施。
+
+## 四步上传实施任务
+
+- [x] UP-01：上传会话、容器资格与归属隔离、绑定预览及 revision；保留旧接口鉴权。覆盖 AC-21、AC-23、AC-24。
+- [x] UP-02：可选 upload_context、冻结快照、SPACE 正式注册/文件夹衔接与 Worker 缺失快照保护。覆盖 AC-23、AC-25。
+- [x] UP-03：旧四步容器、空间/系统默认初始化、手动与表格规则、原文对比和直接上传。覆盖 AC-21、AC-22、AC-23、AC-26。
+- [x] UP-04：八列用例、前后端回归、浏览器/E2E 及七维复核；记录实际环境边界。覆盖 AC-21–AC-26。
+
+- [x] UP-01/02 任务复核：仅目标 upload_file 作为资源动作闸；跨身份/租户/空间拒绝，旧预览保持根写权限；原生 HTTP + SQLite + 临时真实 Redis 检查 revision、规则补全、不可变快照、未知 ACK 和每文件规则。
+- [x] UP-03 任务复核：阶段延后注册、有效默认读取、零值/表格适配、步骤往返、已完成预览复用、实际 ID 轮询和退役回调均有定向覆盖；上传预览即时失焦保存避免确认竞态。
+- [x] UP-04 本地验证与七维审查完成，详见 upload-flow-verification-20261113.md。真实专用环境 E2E 已生成并离线执行为 skip，不构成真实解析/Worker 或上线验收通过；需要 API/Worker 同版部署后执行。

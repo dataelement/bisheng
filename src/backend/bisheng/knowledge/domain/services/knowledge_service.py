@@ -1289,6 +1289,12 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id=knowledge.id,
         )
 
+        return await cls.parse_staged_file(login_user, req_data)
+
+    @classmethod
+    async def parse_staged_file(cls, login_user, req_data: KnowledgeFileProcess, *, cache_key: str | None = None):
+        """Parse only after the calling entry has verified its own business target."""
+        legacy_cache = cache_key is None
         file_path = req_data.file_list[0].file_path
         excel_rule = req_data.file_list[0].excel_rule
         file_rule = FileProcessBase(
@@ -1307,13 +1313,13 @@ class KnowledgeService(KnowledgeUtils):
             retain_images=req_data.retain_images,
             excel_rule=excel_rule,
         )
-        cache_key = cls.preview_cache_key_for_split_rule(req_data.knowledge_id, file_path, file_rule)
+        cache_key = cache_key or cls.preview_cache_key_for_split_rule(req_data.knowledge_id, file_path, file_rule)
         legacy_cache_key = cls.legacy_preview_cache_key(req_data.knowledge_id, file_path)
 
         redis_client = await get_redis_client()
 
         # Attempt to fetch from cache
-        if req_data.cache:
+        if req_data.cache and legacy_cache:
             used_cache_key = cache_key
             cache_value = await cls.async_get_preview_cache(cache_key)
             if not cache_value and legacy_cache_key != cache_key:
@@ -1395,7 +1401,8 @@ class KnowledgeService(KnowledgeUtils):
 
         # Deposit Cache
         await cls.async_save_preview_cache(cache_key, mapping=cache_map)
-        await cls.async_bind_preview_cache_key(req_data.knowledge_id, file_path, cache_key)
+        if legacy_cache:
+            await cls.async_bind_preview_cache_key(req_data.knowledge_id, file_path, cache_key)
         await redis_client.aset(f"{cache_key}_parse_type", parse_type)
         await redis_client.aset(f"{cache_key}_file_path", file_share_url)
         await redis_client.aset(f"{cache_key}_partitions", partitions)

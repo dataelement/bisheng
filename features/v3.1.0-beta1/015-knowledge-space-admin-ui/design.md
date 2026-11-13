@@ -73,3 +73,7 @@
 - 完整 scope 继续隔离普通/管理目录、配置、文件编辑及上传查询；现有 URLSearchParams 保留目录、文件、筛选与 view。新建/新建并导入带回管理上下文，上传入口按角色和 view 选择 scope，上传返回保留原参数，详情返回进入管理清单。
 - Radix 页签退场期间，未激活 Workspace 不渲染目录/文件内容，防止切换页签时以过渡路由触发另一视图的详情读取。个人首空间选择仅在激活的 ordinary 根入口运行。
 - 所有业务动作继续读取服务端有效权限，不依据 URL 构造授权；管理员免逐空间授权沿用现有服务端角色/租户短路。本轮无后端、client、browser-config 或 user/info 刷新实现改动。
+
+## 四步上传流程恢复（已实现）
+
+2026-11-13 用户已确认 AC-21 至 AC-26 的规格与设计，本轮已完成。后台复用旧四步导航、规则表单、左右原文与分段编辑；新增绑定当前上传者及目标容器的临时预览，通过可选 upload_context 将确认规则、revision 与冻结缓存交给原 SPACE 注册链。具体接口、状态及兼容边界见 [upload-flow-design-20261113.md](./upload-flow-design-20261113.md)，验证与部署边界见 [upload-flow-verification-20261113.md](./upload-flow-verification-20261113.md)。本轮 backend 变化仅属于新增上传范围，client、browser-config 和 user/info 未改动。

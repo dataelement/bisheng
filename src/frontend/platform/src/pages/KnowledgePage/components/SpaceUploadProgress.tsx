@@ -9,6 +9,7 @@ interface SpaceUploadProgressProps {
   unavailable: boolean;
   onCancel: (job: Upload) => void;
   onRetry: (job: Upload) => void;
+  onRemove?: (job: Upload) => void;
 }
 const terminal = (status: number | null | undefined) =>
   status === 2 || status === 3 || status === 6 || status === 7;
@@ -18,6 +19,7 @@ export function SpaceUploadProgress({
   unavailable,
   onCancel,
   onRetry,
+  onRemove,
 }: SpaceUploadProgressProps) {
   const { t } = useTranslation("knowledge");
   return (
@@ -35,7 +37,8 @@ export function SpaceUploadProgress({
                 {t("cancel")}
               </Button>
             )}
-            {(job.phase === "error" || job.phase === "cancelled") && (
+            {onRemove && !job.registrationStarted && <Button variant="text" onClick={() => onRemove(job)}>{t("delete")}</Button>}
+            {!job.registrationStarted && (job.phase === "error" || job.phase === "cancelled") && (
               <Button variant="text" onClick={() => onRetry(job)}>
                 {t("retry")}
               </Button>
@@ -44,7 +47,7 @@ export function SpaceUploadProgress({
           <div role="status">
             {job.phase === "queued" && t("queuing")}
             {job.phase === "uploading" && t("importing")}
-            {job.phase === "registering" && t("f118.upload_staged")}
+            {(job.phase === "staged" || job.phase === "registering") && t("f118.upload_staged")}
             {job.phase === "registered" && t("f118.upload_registered")}
             {job.phase === "error" && t("fileLoadFailed")}
             {job.phase === "cancelled" && t("f118.upload_cancelled")}
