@@ -71,7 +71,7 @@
   **判据**: 实验测试能跑通，并给出"按 `run_id` 识别记忆工具并替换落库与下发内容"是否可行的结论与确切改动位置。
   **依赖**: T001
 
-- [ ] **T003**: V2 与 V8 登记回调的注入点
+- [x] **T003**: V2 与 V8 登记回调的注入点
   **文件**: `verification.md`
   **逻辑**: 读登录态助手与工作流的 WebSocket endpoint、`chat_manager.dispatch_client`、`common/chat/client.py:230`、`:361-372`、`common/chat/clients/workflow_client.py:97-98`、`:171-179`，以及免登录 `public_endpoints/api/endpoints/assistant.py:45`、`workflow.py:23` 与开放面 `open_endpoints/api/endpoints/assistant.py:160`。确认三类路径各自如何构造客户端对象。
   **判据**: 给出只在登录态路径传入可调用对象的注入点、客户端里 `chat_id` 确定或切换的调用点；确认免登录与开放面路径拿不到它。
@@ -95,13 +95,13 @@
   **判据**: 两种执行器下消息序列的结论与注入代码的确切位置。**本任务只能证明消息能送达模型**；多条系统消息在真实模型端点上是否被接受，要在 T094 用 test 环境的模型验证，届时回写。
   **依赖**: T001
 
-- [ ] **T007**: V6 管理端查看会话所用的接口
+- [x] **T007**: V6 管理端查看会话所用的接口
   **文件**: `verification.md`
   **逻辑**: 读 `src/frontend/platform/src/pages/LogPage/useAppLog/appChatDetail.tsx`、`dailyChatDetail.tsx`、`LabelPage/taskAppChats.tsx` 及其调用的 API 函数，追到后端端点。
   **判据**: 一张"页面 → 接口 → 返回的含工具内容的字段"对照表，并指出渲染这些字段的组件。
   **依赖**: T001
 
-- [ ] **T008**: V7 深度研究追问轮的存储与前端轮次标识
+- [x] **T008**: V7 深度研究追问轮的存储与前端轮次标识
   **文件**: `verification.md`
   **逻辑**: 读 `linsight/api/endpoints/linsight.py:174`、`:327-378`、`linsight/domain/utils.py:973-1019`、`linsight/domain/services/workbench_impl.py:345-402`，前端 `client/src/components/Linsight/Execution/TaskTurnPanel.tsx`、`ResultPanel.tsx`、`ExecutionFlow.tsx`。
   **判据**: 给出"按轮读取问题与结果"的数据来源与方法；给出把 `turn_id` 送到前端每一轮面板的途径。
