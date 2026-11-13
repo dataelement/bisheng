@@ -501,23 +501,15 @@ it("advances an empty ordinary cursor page without inventing a total and resets 
   ).toBeNull();
 });
 
-it("loads SPACE actions lazily, routes defaults into its tab and leaves copy/delete unavailable", async () => {
-  const f = setup({ is_child_admin: true }),
-    view = render(f.draw());
-  await screen.findByText("Space");
-  expect(mocks.permission).not.toHaveBeenCalled();
+it("loads actions lazily and exposes only permission management in the simplified menu", async () => {
+  const f = setup({ is_child_admin: true }); render(f.draw());
+  await screen.findByText("Space"); expect(mocks.permission).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "more" }));
-  await screen.findByRole("button", { name: "f118.defaults_title" });
+  await screen.findByRole("button", { name: "managePermission" });
   expect(mocks.permission).toHaveBeenCalledWith("knowledge_space", "7");
-  expect(screen.queryByRole("button", { name: "delete" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "lib.copy" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "f118.defaults_title" }));
-  expect(mocks.navigate).toHaveBeenCalledWith("/filelib/7?tab=defaults");
-  expect(mocks.settings).not.toHaveBeenCalled();
-  view.rerender(f.draw({ ...f.user, user_id: f.user.user_id + 1000 }));
-  await screen.findByText("Space");
-  expect(screen.queryByRole("dialog")).toBeNull();
-  expect(mocks.legacy).not.toHaveBeenCalled();
+  for (const name of ["f118.defaults_title", "settings", "f118.processing_title_schema", "f118.processing_title_embedding", "f118.processing_title_copy", "deletion.references", "deletion.clear"])
+    expect(screen.queryByRole("button", { name })).toBeNull();
+  expect(mocks.settings).not.toHaveBeenCalled(); expect(mocks.legacy).not.toHaveBeenCalled();
 });
 
 it("does not fabricate business actions for an admin row with a null action projection", async () => {
@@ -535,7 +527,7 @@ it("does not fabricate business actions for an admin row with a null action proj
   ).toBeNull();
 });
 
-it.each(["super", "tenant-admin"])("retains the management view when %s opens a space or its configuration", async (role) => {
+it.each(["super", "tenant-admin"])("retains the management view when %s opens a space or its permission menu", async (role) => {
   const f = setup(role === "super" ? { is_global_super: true } : { is_child_admin: true });
   render(f.draw());
   await screen.findByText("Space");
@@ -546,11 +538,10 @@ it.each(["super", "tenant-admin"])("retains the management view when %s opens a 
   expect(mocks.permission).not.toHaveBeenCalled();
   mocks.navigate.mockClear();
   fireEvent.click(screen.getByRole("button", { name: "more" }));
-  const defaults = await screen.findByRole("button", { name: "f118.defaults_title" });
-  expect(mocks.navigate).not.toHaveBeenCalled();
+  const permissions = await screen.findByRole("button", { name: "managePermission" });
+  expect(permissions).toBeVisible(); expect(mocks.navigate).not.toHaveBeenCalled();
   expect(mocks.permission).toHaveBeenCalledWith("knowledge_space", "7");
-  fireEvent.click(defaults);
-  expect(mocks.navigate).toHaveBeenCalledWith("/filelib/7?tab=defaults&view=admin");
+  expect(screen.queryByRole("button", { name: "f118.defaults_title" })).toBeNull();
   expect(mocks.settings).not.toHaveBeenCalled();
 });
 

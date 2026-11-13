@@ -739,5 +739,19 @@
         "no_metadata": "メタデータ項目がありません",
         "no_jobs": "処理タスクがありません",
         "back_to_jobs": "タスク一覧に戻る"
+    },
+    "settings_ext": {
+        "auto_tag": "タグを自動生成",
+        "library": "共有タグライブラリ",
+        "custom": "カスタムタグ",
+        "custom_tags": "カスタムタグ（1行に1件、最大200件）",
+        "upload_txt": "TXTをアップロード",
+        "access": "アクセスと共有",
+        "private": "非公開",
+        "shared": "共有",
+        "review": "参加申請を承認",
+        "publish": "広場に公開",
+        "private_notice": "非公開にすると購読できなくなり、既存のメンバーと購読関係も変更されます。非公開にしますか？",
+        "department_notice": "部署のナレッジスペースは非公開にできません。"
     }
 }

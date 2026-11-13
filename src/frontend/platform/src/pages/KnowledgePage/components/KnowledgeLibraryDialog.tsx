@@ -1,4 +1,5 @@
 import { Button, Input, Textarea, notification, toast } from "@bisheng/ui";
+import { SpaceSettingsEditor } from "./SpaceSettingsEditor";
 import {
   useQuery,
   useQueryClient,
@@ -520,15 +521,7 @@ export function KnowledgeSpaceSettingsPanel({
   onSaved,
 }: KnowledgeSpaceSettingsPanelProps) {
   return (
-    <EditSpaceForm
-      key={JSON.stringify([scope, spaceId])}
-      scope={scope}
-      spaceId={spaceId}
-      api={knowledgeSpaceApi}
-      presentation="page"
-      onOpenChange={() => undefined}
-      onLoadEnd={onSaved}
-    />
+    <SpaceSettingsEditor scope={scope} spaceId={spaceId} onSaved={onSaved} />
   );
 }
 

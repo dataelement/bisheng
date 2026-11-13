@@ -745,5 +745,19 @@
         "no_metadata": "No metadata fields",
         "no_jobs": "No processing tasks",
         "back_to_jobs": "Back to task list"
+    },
+    "settings_ext": {
+        "auto_tag": "Generate tags automatically",
+        "library": "Shared tag library",
+        "custom": "Custom tags",
+        "custom_tags": "Custom tags (one per line, up to 200)",
+        "upload_txt": "Upload TXT",
+        "access": "Access and sharing",
+        "private": "Private",
+        "shared": "Shared",
+        "review": "Approve join requests",
+        "publish": "Publish to the square",
+        "private_notice": "Making this space private prevents subscriptions and changes existing membership and subscriptions. Make it private?",
+        "department_notice": "Department spaces cannot be private."
     }
 }

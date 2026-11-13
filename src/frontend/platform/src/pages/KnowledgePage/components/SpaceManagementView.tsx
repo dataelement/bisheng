@@ -14,7 +14,7 @@ import {
 import { showApiError } from "@/controllers/request";
 import { KnowledgeSpaceSettingsPanel } from "./KnowledgeLibraryDialog";
 import { ProcessingDefaultsPanel } from "./ProcessingDefaultsDialog";
-import { SpaceProcessingPanel } from "./SpaceProcessingDialog";
+import { SpaceMetadataPanel } from "./SpaceMetadataPanel";
 import { SpaceModelIndexPanel } from "./SpaceModelIndexPanel";
 
 interface SpaceManagementViewProps {
@@ -96,10 +96,9 @@ export function SpaceManagementView({
             key: "metadata",
             label: t("detail.metadata"),
             children: (
-              <SpaceProcessingPanel
+              <SpaceMetadataPanel
                 scope={scope}
                 spaceId={spaceId}
-                mode="schema"
                 onSaved={() => {
                   void handleSaved();
                 }}
