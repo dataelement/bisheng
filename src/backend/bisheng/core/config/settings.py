@@ -667,6 +667,33 @@ class PaddleOcrConf(BaseModel):
     request_kwargs: dict = Field(default_factory=dict, description="PaddleOcrService Request Arguments")
 
 
+class MinicpmOcrConf(BaseModel):
+    """MiniCPM-OCR Configure.
+
+    MiniCPM-OCR is served by an OpenAI-compatible endpoint (vLLM / SGLang /
+    llama.cpp). ``base_url`` is the API root, e.g. ``http://127.0.0.1:8000/v1``;
+    the loader appends ``/chat/completions``.
+    """
+
+    base_url: str = Field(default="", description="OpenAI-compatible API root, e.g. http://127.0.0.1:8000/v1")
+    model: str = Field(default="minicpm-ocr", description="Model name exposed by the endpoint")
+    api_key: str = Field(default="", description="Bearer token for the OpenAI-compatible endpoint")
+    prompt: str = Field(default="Text Recognition:", description="Instruction sent with each page image")
+    timeout: int = Field(default=120, description="Per-page request timeout (sec)")
+    max_retries: int = Field(default=3, ge=0, description="Retries for transient MiniCPM-OCR errors")
+    retry_backoff: float = Field(default=1.0, ge=0, description="Initial MiniCPM-OCR retry delay (sec)")
+    concurrency: int = Field(default=4, ge=1, le=32, description="Pages recognized in parallel")
+    dpi: int = Field(default=200, ge=72, le=600, description="PDF rasterization resolution")
+    max_tokens: int = Field(default=4096, ge=1, description="Per-page output token budget")
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0, description="Sampling temperature")
+    mm_processor_kwargs: dict | None = Field(
+        default=None,
+        description="Request-level multimodal processor arguments; null sends none",
+    )
+    request_kwargs: dict = Field(default_factory=dict, description="Extra chat-completions request fields")
+    headers: dict = Field(default_factory=dict, description="Additional HTTP headers")
+
+
 class VersionManagementConf(BaseModel):
     """Version Management Configure"""
 
@@ -687,6 +714,7 @@ class KnowledgeConf(BaseModel):
     mineru: MineruConf = Field(default_factory=MineruConf, description="Mineru Configure")
     mineru_v4: MineruV4Conf = Field(default_factory=MineruV4Conf, description="MinerU V4 configuration")
     paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description="PaddleOcr Config")
+    minicpm_ocr: MinicpmOcrConf = Field(default_factory=MinicpmOcrConf, description="MiniCPM-OCR Config")
     version_management: VersionManagementConf = Field(
         default_factory=VersionManagementConf,
         description="Version Management Configure",
@@ -710,6 +738,8 @@ class KnowledgeConf(BaseModel):
             return bool(self.mineru_v4.api_url)
         if provider == "paddle_ocr":
             return bool(self.paddle_ocr.url)
+        if provider == "minicpm_ocr":
+            return bool(self.minicpm_ocr.base_url)
         return False
 
 
