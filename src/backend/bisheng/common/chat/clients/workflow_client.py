@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import json
 
 from fastapi import Request, WebSocket
@@ -96,6 +97,8 @@ class WorkflowClient(BaseClient):
         # chat ws connection first handle
         workflow_id = message.get("flow_id", self.client_id)
         self.chat_id = message.get("chat_id", "")
+        if self.chat_id and self.memory_register is not None:
+            await self._register_memory_session()
         if self.chat_id and self.session_subject is not None:
             session = await ChatSessionService.get_subject_session_if_exists(
                 self.chat_id,
@@ -158,6 +161,15 @@ class WorkflowClient(BaseClient):
         logger.debug("init workflow over, continue run workflow")
         await self.workflow_run()
         return False, unique_id
+
+    async def _register_memory_session(self) -> None:
+        """F132: call the callback injected by the logged-in endpoint (never set for guest/open)."""
+        try:
+            result = self.memory_register(self.chat_id)
+            if inspect.isawaitable(result):
+                await result
+        except Exception:
+            logger.exception("memory session registration failed chat_id={}", self.chat_id)
 
     async def get_execute_worker(self) -> str | None:
         if not self.hash_key:
