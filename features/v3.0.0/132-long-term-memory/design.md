@@ -150,7 +150,7 @@
 - **选定**：B
 - **原因**：K4。自动过滤给普通用户的是可见租户的 IN 列表，给全局超管的是不过滤。用户从根租户调到子租户后，根租户仍在其可见集合内，A 方案下他在根租户的旧记忆仍可读，违反 AC-06。超管用自己的记忆时会读到所有租户里同 `user_id` 的行。
 - **"当前租户"的取值**：一轮开始时从租户上下文取（`get_current_tenant_id()`），写进 `MemoryContext` 并沿用到该轮结束；后台任务取登记行上的 `tenant_id`。
-- **与 C3 的关系**：C3 写"不要手写 `WHERE tenant_id`"，其目的是防止遗漏隔离。本功能的隔离比自动过滤更严，手写是加强而不是绕过。新表仍登记进 `tenant_filter`，自动过滤作为第二道。**这是一处显式例外，需要用户与评审知悉**（§9）。
+- **与 C3 的关系**：C3 写"不要手写 `WHERE tenant_id`"，其目的是防止遗漏隔离。本功能的隔离比自动过滤更严，手写是加强而不是绕过。新表仍登记进 `tenant_filter`，自动过滤作为第二道。**这是一处显式例外，用户已于 2026-11-13 同意**（§9），并登记在 `release-contract.md` 的 F132 段。
 - **强制方式**：repository 的每个方法签名都必须接收 `MemoryContext`，没有不带上下文的重载；有一条测试用全局超管身份和"可见多租户"身份各跑一遍隔离用例。
 - **何时该重新考虑**：`tenant_filter` 提供"严格等于当前租户"的模式时，改用它。
 
@@ -247,7 +247,7 @@
 - **选定**：
   - 租户记忆配置里有"整理使用的模型"（决策 17 的 `model_id`）。未指定时用工作台模型列表的第一个。两者都没有时整理任务按失败处理并计数，不静默跳过。
   - 整理的模型调用与记忆的 embedding 调用，以记忆主人的 `user_id` 发起，标记一个新的应用类型"记忆"，记入现有的 token 用量记录。
-- **⚠ 待用户裁定：额度**。现有模型调用会经过额度检查（DSH 积分等，`dsh/domain/services/chat_credits.py:20-23`）。整理是系统发起的后台调用，用户没有主动触发。本稿建议**不计入用户个人额度、只做租户维度的用量记录**；被额度机制拒绝时按失败处理。这是成本归属问题，不是技术问题。
+- **额度（用户已于 2026-11-13 裁定）**：整理与记忆 embedding 的调用**不计入用户个人额度**，只按租户记录用量。现有模型调用会经过额度检查（DSH 积分等，`dsh/domain/services/chat_credits.py:20-23`），记忆的调用要绕开个人额度扣减这一步；如果调用仍被其他机制拒绝，按整理失败处理并计数。
 - **备选**：整理固定用系统默认模型，不给配置。否决原因是后台整理是持续成本，应当能指到便宜的模型。
 - **何时该重新考虑**：平台有统一的"后台任务模型"配置时，改读那个配置。
 
@@ -415,7 +415,7 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 应用删除 | 助手软删 `api/services/assistant.py:419`；工作流硬删 `database/models/flow.py:211` | 不挂钩子；来源名称已快照 |
 | 审计 | `database/models/audit_log.py:531` `AuditLogDao.ainsert_v2` | 动作名 `memory.item.*`，`metadata` 不放内容 |
 | 租户配置 | `workstation/domain/services/workstation_service.py:57/247`；`api/v1/schemas.py` `WorkstationConfig` | 加 `memory` 字段 |
-| 额度 | `dsh/domain/services/chat_credits.py:20-23,57-60`；`llm/domain/services/llm.py:1407-1412,1457-1464` | 决策 18 待裁定 |
+| 额度 | `dsh/domain/services/chat_credits.py:20-23,57-60`；`llm/domain/services/llm.py:1407-1412,1457-1464` | 记忆的调用不扣个人额度，按租户记用量（决策 18） |
 | 前端：工作流节点 | `platform/src/controllers/API/workflow.ts:185`、`pages/BuildPage/flow/FlowNode/Parameter.tsx`、`FlowNode/NodeLogo.tsx`、`public/locales/*/flow.json` | 新增节点四处都要改 |
 | 前端：助手设置 | `platform/src/pages/BuildPage/assistant/editAssistant/Setting.tsx`（`knowledge_auth` 开关是样板） | 新增开关与说明 |
 | 前端：工作台配置 | `platform/src/pages/BuildPage/bench/index.tsx`、`ToggleSection.tsx`、`DailyChatConfig.tsx` | 新增"记忆"区：开关加整理模型下拉 |
@@ -474,7 +474,7 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | `AuditLogDao.ainsert_v2` | 内部 API | 动作名需登记 |
 | 租户上下文（`get_current_tenant_id`、`bypass_tenant_filter`） | 内部 API | "当前租户"的语义变化会直接影响隔离 |
 | 开放 API 的身份解析 | `open_api/domain/services/identity_service.py` | `MemoryGate.open` 依赖它给出的主体类型 |
-| 模型调用的额度机制 | `dsh/domain/services/chat_credits.py` | 决策 18 |
+| 模型调用的额度机制 | `dsh/domain/services/chat_credits.py` | 记忆的调用要绕开个人额度扣减；该机制改形态时要复核 |
 | 引用呈现组件（F075） | 前端组件 | 归因沿用其样式，不沿用其数据通道 |
 
 **在其他 Owner 的对象上新增的写入点**（`release-contract.md` 的 F132 段同步）：审计记录；`WorkstationConfig` 的 `memory` 字段；`assistant.memory_enabled` 列；工作流开始节点参数、实例化时的 `graph_state` 字段与上线校验；三个场景的工具事件落库处；client 个人设置的新 section。管理端查看会话的页面只多一种"记忆操作"的占位渲染。
@@ -531,12 +531,12 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 | 3 | 实体关系表本期不建 | PRD D2 | 采纳 | 决策 21 |
 | 4 | 账号删除在平台中没有触发点 | spec AC-100 | 本期不做，AC-100 移出 | 决策 22 |
 
-**第 2 稿新增，待用户裁定或知悉。**
+**第 2 稿新增（第 5、6 项已于 2026-11-13 裁定，其余为知悉项）。**
 
 | # | 事项 | 性质 | 落点 |
 |---|---|---|---|
-| 5 | 整理与 embedding 的模型调用是否计入用户个人额度 | 待裁定（成本归属） | 决策 18 |
-| 6 | 记忆的读写显式按"当前租户 + 本人"过滤，是对 C3"不手写租户条件"的一处显式例外 | 待确认（架构法则的例外） | 决策 9 |
+| 5 | 整理与 embedding 的模型调用是否计入用户个人额度 | 已裁定：不计个人额度，按租户记用量 | 决策 18 |
+| 6 | 记忆的读写显式按"当前租户 + 本人"过滤，是对 C3"不手写租户条件"的一处显式例外 | 已同意 | 决策 9 |
 | 7 | 删除是软删除，行与详情对象保留到用户清空；撤销在三种情况下会失败 | 请知悉。spec §3 需补这三种边界 | 决策 4 |
 | 8 | 助手没有版本，助手记忆开关保存即生效 | 事实订正，spec AC-71 需改写 | 决策 17 |
 | 9 | 管理端回放会话时，记忆工具的调用显示为"记忆操作"占位，不显示内容 | 请知悉。这是 AC-09 的实现方式 | 决策 10 |
