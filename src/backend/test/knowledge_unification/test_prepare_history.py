@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -113,16 +114,6 @@ async def history(native, monkeypatch):
                 }
             ],
         )
-    monkeypatch.setattr(
-        module,
-        "business_models",
-        lambda: {
-            "folder": KnowledgeFile,
-            "knowledge_file": KnowledgeFile,
-            "knowledge_library": Knowledge,
-            "knowledge_space": Knowledge,
-        },
-    )
     monkeypatch.setattr(sql_runtime, "get_async_db_session", sessions)
     monkeypatch.setattr(control_state, "get_async_db_session", sessions)
     async with module.global_session(sessions) as session:
@@ -162,6 +153,90 @@ async def history(native, monkeypatch):
         explain=None,
     )
     return SimpleNamespace(sessions=sessions, fga=fga, runtime=runtime, db=native)
+
+
+@pytest.mark.parametrize("kind", ["workflow", "assistant", "app"])
+async def test_capture_checks_real_string_id_owners_without_misclassifying_existing_resources(history, kind):
+    model, _ = module.business_models()[kind]
+    metadata = sa.MetaData()
+    owner = sa.Table(model.__tablename__, metadata, sa.Column("id", model.__table__.c.id.type, primary_key=True))
+    existing, missing = "a" * 32, "b" * 32
+    async with history.db.engine.begin() as connection:
+        await connection.run_sync(metadata.create_all)
+        await connection.execute(owner.insert().values(id=existing))
+    for ident, resource_id in [(1200, existing), (1201, missing)]:
+        await history.db.insert(
+            ResourcePermissionMode,
+            [
+                {
+                    "id": ident,
+                    "tenant_id": 101,
+                    "resource_type": kind,
+                    "resource_id": resource_id,
+                    "mode": "CUSTOM",
+                    "version": 1,
+                    "projection_state": "CURRENT",
+                }
+            ],
+        )
+    plan = await module.capture(history.sessions, history.fga)
+    assert {(item["mode"]["resource_type"], item["mode"]["resource_id"]) for item in plan["purges"]} == {
+        ("knowledge_file", "999"),
+        (kind, missing),
+    }
+    assert history.fga.writes == 0
+    async with history.sessions() as session:
+        assert await session.get(ResourcePermissionMode, 1200) is not None
+        assert await session.get(ResourcePermissionMode, 1201) is not None
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "knowledge_library",
+        "knowledge_space",
+        "folder",
+        "knowledge_file",
+        "workflow",
+        "assistant",
+        "app",
+        "channel",
+        "tool",
+        "dashboard",
+    ],
+)
+async def test_hard_missing_queries_real_owner_primary_key_types(kind):
+    model, _ = module.business_models()[kind]
+    existing = "a" * 32 if kind in {"workflow", "assistant", "app", "channel"} else 41
+    missing = "b" * 32 if isinstance(existing, str) else 42
+    metadata = sa.MetaData()
+    owner = sa.Table(
+        model.__tablename__,
+        metadata,
+        sa.Column("id", model.__table__.c.id.type, primary_key=True),
+        sa.Column("tenant_id", sa.Integer),
+    )
+    engine = create_async_engine("sqlite+aiosqlite://")
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(metadata.create_all)
+            await connection.execute(owner.insert().values(id=existing, tenant_id=202))
+        with bypass_tenant_filter():
+            async with AsyncSession(engine) as session:
+                assert not await module.hard_missing(session, {"resource_type": kind, "resource_id": str(existing)})
+                assert await module.hard_missing(session, {"resource_type": kind, "resource_id": str(missing)})
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "kind,raw_id",
+    [("unknown", "41"), ("knowledge_file", "invalid"), ("knowledge_file", None), ("workflow", None), ("app", "")],
+)
+async def test_unknown_or_unparseable_ids_are_not_deleted(kind, raw_id):
+    session = SimpleNamespace(exec=AsyncMock())
+    assert not await module.hard_missing(session, {"resource_type": kind, "resource_id": raw_id})
+    session.exec.assert_not_awaited()
 
 
 async def test_preview_repair_and_same_plan_replay_keep_storage_bindings_and_audit(history):
