@@ -19,6 +19,7 @@ import { ACCENT, BODY, MUTED } from './execTokens';
 import { detailTextCls, formatStepParams, stepTypeIcon } from './StepRow';
 import { mergedStepRenderEqual, type MergedStep } from './stepUtils';
 import { isMemoryToolEvent } from '~/api/memory';
+import { describeMemoryStep, memoryStepLabel } from '~/components/Memory/memoryStep';
 
 export interface ToolRowLiteProps {
     step: MergedStep;
@@ -80,7 +81,12 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
     const paramsText = isMemoryStep ? '' : formatStepParams(step.params);
     const hasDetails = !isMemoryStep && !!(step.callReason || paramsText || step.output);
 
-    const title = isMemoryStep ? localize('memory.tool_operation') : resolveTitle(step, localize);
+    const title = isMemoryStep
+        ? memoryStepLabel(
+              describeMemoryStep({ tool_name: step.name, args: step.params, results: step.output, inflight: step.running }),
+              localize,
+          )
+        : resolveTitle(step, localize);
     // Unified icon system (§1.3): running → Accent Loading spinner; done →
     // stepTypeIcon recolored to Ink via the descendant selector. Open-aware:
     // the spinner shows only while COLLAPSED + running; once expanded the node

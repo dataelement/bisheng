@@ -1,7 +1,8 @@
 """Redaction of memory tool events (design decision 10, AC-09).
 
 Every place that persists or streams a tool call replaces the input and output of
-tools whose name starts with ``memory_`` with ``{"redacted": true, "op", "item_ids"}``.
+tools whose name starts with ``memory_`` with ``{"redacted": true, "op", "item_ids"}``
+(outputs add the content-free ``ok`` / ``reason_code``).
 The owner reads the original text through the memory API by item id.
 """
 
@@ -56,24 +57,51 @@ def _as_obj(payload):
     return payload
 
 
+# Status fields a redacted stand-in may carry. They hold no memory text: ``ok`` says
+# whether the operation succeeded and ``reason_code`` names a rejection (12100-12112),
+# so the UI can tell "remembered 1" from "not remembered: relative time".
+_STATUS_KEYS = ("ok", "reason_code")
+
+
+def _search_status(text: str) -> dict:
+    from bisheng.common.errcode.memory import MemorySearchUnavailableError
+    from bisheng.memory.domain.services.search import SEARCH_HEADER
+
+    if text.lstrip().startswith(SEARCH_HEADER):
+        return {"ok": True, "reason_code": None}
+    return {"ok": False, "reason_code": MemorySearchUnavailableError.Code}
+
+
 def redact_tool_event(name: str | None, payload, op: str | None = None):
-    """Return a content-free stand-in for a memory tool's input or output."""
+    """Return a content-free stand-in for a memory tool's input or output.
+
+    Inputs become ``{"redacted", "op", "item_ids"}``. Outputs also carry ``ok`` and
+    ``reason_code`` when the tool reported them.
+    """
     if not is_memory_tool(name):
         return payload
     obj = _as_obj(payload)
     item_ids: list[str] = []
+    status: dict = {}
     if isinstance(obj, dict):
         if obj.get("redacted") is True:
-            return {"redacted": True, "op": obj.get("op") or op, "item_ids": list(obj.get("item_ids") or [])}
+            kept = {"redacted": True, "op": obj.get("op") or op, "item_ids": list(obj.get("item_ids") or [])}
+            kept.update({key: obj[key] for key in _STATUS_KEYS if key in obj})
+            return kept
         op = op or obj.get("op") or obj.get("action")
         for key in ("item_id", "related_item_id"):
             if obj.get(key):
                 item_ids.append(str(obj[key]))
+        if "ok" in obj:
+            reason = obj.get("reason_code")
+            status = {"ok": bool(obj.get("ok")), "reason_code": reason if isinstance(reason, int) else None}
     elif isinstance(obj, str):
         item_ids = list(dict.fromkeys(_ID_RE.findall(obj)))
+        if str(name) == "memory_search":
+            status = _search_status(obj)
     if not op:
         op = "search" if str(name) == "memory_search" else "write"
-    return {"redacted": True, "op": op, "item_ids": item_ids}
+    return {"redacted": True, "op": op, "item_ids": item_ids, **status}
 
 
 def redact_text(name: str | None, payload) -> str:

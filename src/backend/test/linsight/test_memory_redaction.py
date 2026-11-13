@@ -127,7 +127,8 @@ async def test_ac09_step_history_redis_and_ws_hold_no_memory_content(step_sinks)
     history = step_sinks.db_writes[-1]["history"]
     _assert_no_secret(history)
     entry = history[0]
-    assert entry["params"] == {"redacted": True, "op": "search", "item_ids": ["item-7"]}
+    # The step history reuses the output stand-in, which carries the content-free status.
+    assert entry["params"] == {"redacted": True, "op": "search", "item_ids": ["item-7"], "ok": True, "reason_code": None}
     assert '"redacted": true' in entry["output"] and "item-7" in entry["output"]
     _assert_no_secret(step_sinks.redis.kv[f"{step_sinks.prefix}execution_tasks:{SVID}"])
     pushed = step_sinks.redis.lists[f"{step_sinks.prefix}messages"]
