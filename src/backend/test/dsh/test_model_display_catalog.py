@@ -7,6 +7,40 @@ from bisheng.api.v1.schemas import WSModel
 from bisheng.dsh.domain.services.model_display import configured_display_names, model_display_name
 
 
+async def test_cross_home_management_display_does_not_build_personal_policy(monkeypatch):
+    """AC-42: display the verified target config without inventing a Home."""
+    from bisheng.core.context.tenant import get_current_tenant_id, management_tenant_scope
+    from bisheng.dsh import runtime
+    from bisheng.dsh.domain.services import model_catalog
+    from bisheng.llm.domain.schemas import WorkbenchModelConfig
+    from bisheng.llm.domain.services.llm import LLMService
+
+    operator = SimpleNamespace(user_id=191, tenant_id=1, is_global_super=True)
+    verified = WorkbenchModelConfig(models=[WSModel(id="42")])
+    monkeypatch.setattr(LLMService, "get_workbench_llm", AsyncMock(return_value=verified))
+    personal = AsyncMock(side_effect=AssertionError("must not build a child-tenant personal policy"))
+    monkeypatch.setattr(runtime, "read_policy", personal)
+    projector = AsyncMock(return_value=[WSModel(id="42")])
+    monkeypatch.setattr(model_catalog, "_project_models", projector)
+    with management_tenant_scope(60):
+        result = await model_catalog.workbench_models_for_display(operator)
+        assert get_current_tenant_id() == 60
+    assert result[0].id == "42"
+    assert operator.tenant_id == 1
+    personal.assert_not_awaited()
+    projector.assert_awaited_once_with(verified, [42])
+
+
+async def test_cross_home_display_denies_non_super_instead_of_faking_policy():
+    """AC-42: a scope value is not an administrator grant."""
+    from bisheng.common.errcode.dsh import DshModelNotAllowedError
+    from bisheng.core.context.tenant import management_tenant_scope
+    from bisheng.dsh.domain.services.model_catalog import workbench_models_for_display
+
+    with management_tenant_scope(60), pytest.raises(DshModelNotAllowedError):
+        await workbench_models_for_display(SimpleNamespace(user_id=9, tenant_id=1, is_global_super=False))
+
+
 def test_display_names_preserve_provider_and_fall_back_for_blank_labels():
     config = SimpleNamespace(
         models=[WSModel(id="42", displayName="  Custom label  "), WSModel(id="43", displayName=" ")]

@@ -88,6 +88,60 @@ def _make_role(role_id, role_name="Test Role", role_type="tenant", department_id
 class TestCreateRole:
     """AC-01, AC-02, AC-09, AC-10b, AC-10c."""
 
+    @pytest.mark.parametrize("with_menu", [False, True])
+    @pytest.mark.parametrize(("kind", "owner"), [("tenant", 60), ("global", 1)])
+    async def test_explicit_creation_owner_keeps_real_home(
+        self, mock_admin_user, definition_store, with_menu, kind, owner
+    ):
+        """AC-44: definition and menu owner follow type, never operator Home."""
+        from bisheng.core.context.tenant import management_tenant_scope
+        from bisheng.role.domain.schemas.role_schema import RoleCreateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+
+        mock_admin_user.tenant_id = 2
+        req = RoleCreateRequest(role_name="New role", role_type=kind, menu_ids=["build"] if with_menu else None)
+        with (
+            management_tenant_scope(60),
+            patch.object(RoleService, "_check_role_permission", AsyncMock()),
+            patch.object(RoleService, "_ensure_create_scope", AsyncMock()),
+            patch(
+                "bisheng.role.domain.services.role_service.RoleDao.aget_role_by_name", AsyncMock(return_value=None)
+            ) as names,
+        ):
+            call = RoleService.create_role_with_menu if with_menu else RoleService.create_role
+            role = await call(req, mock_admin_user)
+        assert (role.role_type, role.tenant_id, mock_admin_user.tenant_id) == (kind, owner, 2)
+        assert names.await_args.kwargs["tenant_id"] == owner
+        assert definition_store.create.await_args.args[0].tenant_id == owner
+        if with_menu:
+            assert definition_store.create.await_args.args[1] == ["build"]
+
+    async def test_shared_creation_denies_non_platform_admin(self, mock_tenant_admin, definition_store):
+        """AC-44: declaring global does not confer platform qualification."""
+        from bisheng.common.errcode.role import RolePermissionDeniedError
+        from bisheng.role.domain.schemas.role_schema import RoleCreateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+
+        with patch.object(RoleService, "_check_role_permission", AsyncMock()), pytest.raises(RolePermissionDeniedError):
+            await RoleService.create_role(RoleCreateRequest(role_name="Denied", role_type="global"), mock_tenant_admin)
+        definition_store.create.assert_not_awaited()
+
+    async def test_verified_platform_identity_does_not_need_a_duplicate_legacy_binding(self, definition_store):
+        """AC-44/46: use verified platform identity without inventing AdminRole."""
+        from types import SimpleNamespace
+
+        from bisheng.core.context.tenant import management_tenant_scope
+        from bisheng.role.domain.schemas.role_schema import RoleCreateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+
+        actor = SimpleNamespace(user_id=191, tenant_id=1, is_global_super=True, is_admin=lambda: False)
+        with (
+            management_tenant_scope(60),
+            patch("bisheng.role.domain.services.role_service.RoleDao.aget_role_by_name", AsyncMock(return_value=None)),
+        ):
+            role = await RoleService.create_role(RoleCreateRequest(role_name="FGA-owned"), actor)
+        assert (role.role_type, role.tenant_id, actor.tenant_id) == ("tenant", 60, 1)
+
     @pytest.mark.asyncio
     async def test_tenant_admin_creates_tenant_role(self, mock_tenant_admin):
         """AC-01: Tenant admin creates role → role_type='tenant'."""
@@ -128,7 +182,7 @@ class TestCreateRole:
         from bisheng.role.domain.schemas.role_schema import RoleCreateRequest
         from bisheng.role.domain.services.role_service import RoleService
 
-        req = RoleCreateRequest(role_name="Global Template")
+        req = RoleCreateRequest(role_name="Global Template", role_type="global")
 
         with (
             patch.object(RoleService, "_check_role_permission", new_callable=AsyncMock),

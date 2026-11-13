@@ -507,3 +507,38 @@ T011前置完成T017/T019的只读主体事实接口；写入/终止随后完成
 实际fetch df927a7f6e，解决13文件冲突；保留F118 workflow参考绑定/迁移来源个人豁免/挂载覆盖事务及worker执行证明。新增空merge migration；补挂载factory真实同事务终止用例，适配F118创建/配额旧合同测试及unmount窄替身，修复人员弹窗类型推断。不是新增AC或新业务表。
 
 T048本地集成复核已完成并按用户明确授权合并；T047真实HTTP/浏览器仍未执行，依赖例外为本次用户已知待验项后的明确合并指令，不伪造完成。最新去重353 passed / 10基线失败及87本批回归见merge-validation.json；此前“未fetch/未合并”的记录为历史快照。
+
+## 2026-11-13 第一阶段追加任务
+
+用户明确授权修订方案第一阶段；原任务属于旧批次，不计作本轮验收。以下按业务链的测试、实现和文档拆成至多两文件的原子步骤。测试行仅含测试，不混业务实现。列表是当前依赖及验收关系，不是执行时序日志：目标头缺陷已观察先红后绿，其余含实现后补充的回归，不追记为全部测试先行。
+
+本次无新表列或迁移，无Worker实现任务：Celery headers传递及Worker ContextVar恢复格式保留，未新增从Redis读取后续选择。Client、Java及其他业务链无实现任务。
+
+- [x] **T072**（文档）：同步第一阶段AC、用户授权及零历史修数边界。文件：`features/v3.1.0-beta1/009-managed-tenant-consistency/spec.md`、`features/v3.1.0-beta1/009-managed-tenant-consistency/scope-revision.md`。依赖：无。
+- [x] **T073**（文档）：登记显式类型、导航响应及既有范围/消息格式兼容。文件：`features/v3.1.0-beta1/009-managed-tenant-consistency/design.md`、`features/v3.1.0-beta1/release-contract.md`。依赖：T072。
+- [x] **T074**（文档）：按八列模板追加独立QA及真实验收清单。文件：`features/v3.1.0-beta1/009-managed-tenant-consistency/test-cases.md`、`features/v3.1.0-beta1/009-managed-tenant-consistency/e2e-checklist.md`。依赖：T073。
+- [x] **T075**（后端测试）：验证六种写入缺/错/匹配目标、访客读取及当前资格/未知拒绝。文件：`src/backend/test/admin/test_f114_scope_middleware.py`、`src/backend/test/admin/test_current_super_qualification.py`。依赖：T074。 覆盖 AC: AC-41, AC-45, AC-46。
+- [x] **T076**（后端测试）：验证窄HTTP响应不解析运行引用、展示不伪造个人政策。文件：`src/backend/test/workstation/test_navigation_config.py`、`src/backend/test/dsh/test_model_display_catalog.py`。依赖：T074。 覆盖 AC: AC-42。
+- [x] **T077**（后端测试）：真实Home检索初始化、固定连接目标/恢复、错目标及受信设备隔离。文件：`src/backend/test/knowledge/test_space_flow_retrieval.py`、`src/backend/test/workflow/test_browser_scope.py`。依赖：T074。 覆盖 AC: AC-43, AC-48。
+- [x] **T078**（后端测试）：显式类型/默认本地、普通用户拒绝及真实SQLite旧定义菜单归属。文件：`src/backend/test/role/test_role_service.py`、`src/backend/test/role/test_managed_tenant_role.py`。依赖：T074。 覆盖 AC: AC-02, AC-44。
+- [x] **T079**（前端Platform测试）：写目标清单/通用上传兼容及辅助404保页、原403保持。文件：`src/frontend/platform/src/controllers/managementScope.test.ts`、`src/frontend/platform/src/controllers/requestCompatibilityMatrix.test.ts`。依赖：T074。 覆盖 AC: AC-41, AC-45, AC-47。
+- [x] **T080**（前端Platform测试）：表单默认tenant及显式global的创建载荷。文件：`src/frontend/platform/src/pages/SystemPage/components/Roles.creation.test.tsx`。依赖：T074。 覆盖 AC: AC-44。
+- [x] **T081**（后端Domain）：既有准入加入访客/上传写路径及当前资格，保留原Redis键和权威来源。文件：`src/backend/bisheng/common/middleware/admin_scope.py`、`src/backend/bisheng/utils/http_middleware.py`。依赖：T075。
+- [x] **T082**（后端Domain）：按请求标记刷新资格；验证后才设置私有设备目标；冻结浏览器连接范围并核验流程。文件：`src/backend/bisheng/user/domain/services/auth.py`、`src/backend/bisheng/workflow/application/browser_scope.py`。依赖：T081, T077。
+- [x] **T083**（后端Domain）：导航仅图标、无初始化；跨主属管理只展示已验证配置，执行仍用个人政策。文件：`src/backend/bisheng/workstation/domain/services/workstation_service.py`、`src/backend/bisheng/dsh/domain/services/model_catalog.py`。依赖：T076。
+- [x] **T084**（后端API）：可选navigation窄响应及展示投影接线，完整配置仍校验引用。文件：`src/backend/bisheng/workstation/api/endpoints/config.py`、`src/backend/bisheng/llm/api/router.py`。依赖：T083。
+- [x] **T085**（后端Domain）：不把资源目标当预期Home；权威当前身份且不改变ContextVar。文件：`src/backend/bisheng/knowledge/domain/services/space_flow_retrieval.py`。依赖：T077。
+- [x] **T086**（后端Domain）：可选类型默认tenant、显式global平台资格、Root新定义及旧定义/菜单所有者保留。文件：`src/backend/bisheng/role/domain/schemas/role_schema.py`、`src/backend/bisheng/role/domain/services/role_service.py`。依赖：T078。
+- [x] **T087**（后端API）：授权角色元数据展示及工作流连接窄端口接线，保留动作权限/结构化错误。文件：`src/backend/bisheng/role/api/endpoints/role.py`、`src/backend/bisheng/api/v1/workflow.py`。依赖：T082, T086。
+- [x] **T088**（前端Platform）：匹配后台新增写路径；业务辅助404保页、现有刷新及403保留。文件：`src/frontend/platform/src/controllers/managementScope.ts`、`src/frontend/platform/src/controllers/request.ts`。依赖：T079。
+- [x] **T089**（前端Platform）：全局导航用可选purpose，完整运行调用保留。文件：`src/frontend/platform/src/controllers/API/index.ts`、`src/frontend/platform/src/contexts/locationContext.tsx`。依赖：T084。
+- [x] **T090**（前端Platform）：创建类型及可见定义owner类型增量。文件：`src/frontend/platform/src/controllers/API/user.ts`、`src/frontend/platform/src/types/api/user.ts`。依赖：T086。
+- [x] **T091**（前端Platform）：默认本地/显式共享选择；编辑类型只读、展示owner；无部门不标共享。文件：`src/frontend/platform/src/pages/SystemPage/components/Roles.tsx`、`src/frontend/platform/src/pages/SystemPage/components/RolesView.tsx`。依赖：T090, T080。
+- [x] **T092**（前端Platform）：新增中文/英文类型、所有者及作用域词条。文件：`src/frontend/platform/public/locales/zh-Hans/bs.json`、`src/frontend/platform/public/locales/en-US/bs.json`。依赖：T091。
+- [x] **T093**（前端Platform）：对应日文词条，与已有组件语言一致。文件：`src/frontend/platform/public/locales/ja/bs.json`。依赖：T092。
+- [x] **T094**（端到端测试）：追加导航与错误目标负向请求；专用fixture缺失本次9跳过，未变现场数据。文件：`src/backend/test/e2e/test_e2e_managed_tenant_consistency.py`。依赖：T087, T088, T089, T093。 覆盖 AC: AC-41, AC-42, AC-45, AC-48。
+- [x] **T095**（文档）：标明仅第一阶段/角色第一步本地交付，历史修正和行政承接未实施。文件：`docs/reviews/tenant-context-unification-proposal-20261113.md`、`docs/reviews/tenant-role-minimal-change-plan-20261113.md`。依赖：T094。
+- [x] **T096**（本地验证/审查）：本地定向/兼容/前端回归、Ruff/架构及合规自审，基线失败和真实验收缺口单列。文件：`features/v3.1.0-beta1/009-managed-tenant-consistency/phase1-delivery.md`、`features/v3.1.0-beta1/009-managed-tenant-consistency/phase1-code-review.md`。依赖：T095。
+- [ ] **T097**（现场验收）：待专用身份/数据及匹配版本部署后验证HTTP、浏览器、MySQL/DM8及网关；禁止使用116已有业务数据代替。文件：`features/v3.1.0-beta1/009-managed-tenant-consistency/e2e-checklist.md`、`features/v3.1.0-beta1/009-managed-tenant-consistency/test-cases.md`。依赖：T096。 覆盖 AC: AC-41, AC-42, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48。
+
+T094打勾表示完成用例编写及执行尝试，端到端结果仍为PARTIAL（部分验证）；T097和旧T047保持待执行，未将跳过标为现场通过。任务自审和复盘偏差见[第一阶段审查](phase1-code-review.md)，实际验证结果见[第一阶段交付](phase1-delivery.md)。

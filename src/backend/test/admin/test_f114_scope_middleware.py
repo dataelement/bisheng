@@ -22,7 +22,7 @@ def scoped_client(monkeypatch):
     app = FastAPI()
     app.add_middleware(middleware.AdminScopeMiddleware)
 
-    @app.api_route("/{path:path}", methods=["GET", "POST", "PATCH", "DELETE"])
+    @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     async def echo(request: Request, path: str):
         return {
             "scope": get_admin_scope_tenant_id(),
@@ -40,6 +40,39 @@ def test_shared_read_has_no_new_required_header(scoped_client):
     assert response.status_code == 200
     assert response.json() == {"scope": 3, "visible": [3], "all": False}
     assert response.headers["X-Management-Tenant"] == "3"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("PATCH", "/api/v1/guest-link/workflow/flow-a"),
+        ("PATCH", "/api/v1/guest-link/assistant/assistant-a"),
+        ("POST", "/api/v1/knowledge/space/3/uploads"),
+        ("POST", "/api/v1/knowledge/space/3/uploads/upload-a/previews"),
+        ("PUT", "/api/v1/knowledge/space/3/uploads/upload-a/previews/preview-a/chunks/0"),
+        ("DELETE", "/api/v1/knowledge/space/3/uploads/upload-a/previews/preview-a/chunks/0"),
+    ],
+)
+def test_phase_one_writes_require_matching_target_before_handler(scoped_client, method, path):
+    """AC-41/45: reject missing/stale page targets before business work."""
+    client, resolver, _ = scoped_client
+    missing = client.request(method, path)
+    assert missing.status_code == 400
+    assert missing.json()["status_code"] == 19703
+    stale = client.request(method, path, headers={"X-Management-Tenant": "2"})
+    assert stale.status_code == 409
+    assert stale.json()["status_code"] == 19704
+    response = client.request(method, path, headers={"X-Management-Tenant": "3"})
+    assert response.status_code == 200
+    assert response.json() == {"scope": 3, "visible": [3], "all": False}
+    assert resolver.await_args.kwargs["for_write"] is True
+
+
+def test_guest_link_read_uses_selected_scope(scoped_client):
+    """AC-41: management settings inherit the selected resource tenant."""
+    client, _, _ = scoped_client
+    response = client.get("/api/v1/guest-link/workflow/flow-a")
+    assert response.json() == {"scope": 3, "visible": [3], "all": False}
 
 
 @pytest.mark.parametrize("is_super", [True, False])

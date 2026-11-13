@@ -213,7 +213,9 @@ export async function handleRequestResponse(response) {
     }
     // The login page owns the password-reset interaction.
     if (statusCode === 10601) return Promise.reject(error);
-    if ([403, 404].includes(statusCode) && response.config.url !== '/api/v1/user/info') {
+    // Missing auxiliary resources belong to their callers; they must not
+    // replace the current page. Route-level 404 handling remains in the router.
+    if (statusCode === 403 && response.config.url !== '/api/v1/user/info') {
         localStorage.setItem('noAccessUrl', response.request?.responseURL ?? response.config.url ?? '');
         if (response.config.method === 'get') {
             location.href = __APP_ENV__.BASE_URL + '/' + statusCode;
