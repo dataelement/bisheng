@@ -712,7 +712,6 @@
         "empty": "No spaces",
         "no_folders": "No folders",
         "more_folders": "Load more folders",
-        "all_spaces": "All spaces",
         "collapse_navigation": "Collapse space navigation",
         "expand_navigation": "Expand space navigation"
     },
@@ -730,6 +729,9 @@
         "select_all": "Select all"
     },
     "detail": {
+        "save_failed": "Changes could not be saved. Please retry.",
+        "file_title": "File {{id}}",
+        "file_editor": "File chunks",
         "files": "Files",
         "defaults": "Parsing and splitting",
         "metadata": "Metadata",

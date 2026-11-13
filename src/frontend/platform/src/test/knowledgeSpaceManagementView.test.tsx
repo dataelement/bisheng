@@ -12,6 +12,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SpaceManagementView } from "@/pages/KnowledgePage/components/SpaceManagementView";
 import { SpaceDirectoryToolbar } from "@/pages/KnowledgePage/components/SpaceDirectoryToolbar";
+import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 
 const mock = vi.hoisted(() => ({
   permission: vi.fn(),
@@ -64,7 +65,7 @@ function setup(path = "/filelib/7?parent_id=9&fileStatus=abnormal&keep=1") {
     logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
   });
   clients.push(client);
-  const draw = (currentScope = scope, spaceId = 7) => (
+  const draw = (currentScope: KnowledgeQueryScope = scope, spaceId = 7) => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <Location />
@@ -116,11 +117,11 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
 });
 
-it("offers six authorized panels and preserves directory parameters when returning to files", async () => {
-  const f = setup();
-  render(f.draw());
+it.each(["ordinary", "admin"] as const)("offers the same five authorized panels in the %s view and preserves its directory parameters", async (view) => {
+  const f = setup(`/filelib/7?parent_id=9&fileStatus=abnormal&keep=1${view === "admin" ? "&view=admin" : ""}`);
+  render(f.draw({ ...scope, view }));
   const tabs = await screen.findByRole("tablist");
-  expect(within(tabs).getAllByRole("tab")).toHaveLength(6);
+  expect(within(tabs).getAllByRole("tab")).toHaveLength(5);
   expect(
     await screen.findByRole("heading", { name: "Root space" }),
   ).toBeVisible();
@@ -128,19 +129,20 @@ it("offers six authorized panels and preserves directory parameters when returni
   tab("detail.defaults");
   expect(await screen.findByText("defaults-form")).toBeVisible();
   expect(screen.getByTestId("location")).toHaveTextContent(
-    "parent_id=9&fileStatus=abnormal&keep=1&tab=defaults",
+    `parent_id=9&fileStatus=abnormal&keep=1${view === "admin" ? "&view=admin" : ""}&tab=defaults`,
   );
   tab("detail.metadata");
   expect(await screen.findByText("schema-form")).toBeVisible();
   tab("detail.embedding");
   expect(await screen.findByText("embedding-form")).toBeVisible();
-  tab("detail.jobs");
   expect(await screen.findByText("jobs-form")).toBeVisible();
+  expect(screen.queryByRole("tab", { name: "detail.jobs" })).toBeNull();
   tab("detail.settings");
   expect(await screen.findByText("settings-form")).toBeVisible();
   tab("detail.files");
   expect(await screen.findByText("directory-files")).toBeVisible();
   expect(screen.getByTestId("location")).not.toHaveTextContent("tab=");
+  if (view === "admin") expect(screen.getByTestId("location")).toHaveTextContent("view=admin");
 });
 
 it("places file actions beside permissions and preserves upload directory parameters", async () => {
@@ -210,4 +212,14 @@ it("retires the old tenant's permissions and open member dialog", async () => {
   expect(screen.queryByRole("tab", { name: "detail.settings" })).toBeNull();
   await act(async () => resolve({ actions: [] }));
   expect(screen.getByText("directory-files")).toBeVisible();
+});
+
+it("redirects a saved task-tab link into model and index while preserving the directory", async () => {
+  const f = setup("/filelib/7?parent_id=9&tab=jobs&keep=1");
+  render(f.draw());
+  expect(await screen.findByRole("tab", { name: "detail.embedding" })).toHaveAttribute("data-state", "active");
+  expect(await screen.findByText("embedding-form")).toBeVisible();
+  expect(screen.getByText("jobs-form")).toBeVisible();
+  expect(screen.getByTestId("location")).toHaveTextContent("tab=embedding");
+  expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9");
 });

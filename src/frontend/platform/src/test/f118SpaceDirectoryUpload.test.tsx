@@ -50,7 +50,8 @@ vi.mock("@/contexts/locationContext", async () => ({
 }));
 vi.mock("@/hooks/useKnowledgePageScope", () => ({
   useKnowledgePageScope: () => ({
-    scopes: { ordinary: currentScope },
+    scopes: { ordinary: { ...currentScope, view: "ordinary" }, admin: { ...currentScope, view: "admin" } },
+    canManage: true,
     isLoading: false,
     retry: vi.fn(),
   }),
@@ -97,7 +98,7 @@ function mount(parentId: number | null = null) {
       </output>
     );
   }
-  const initial = `/filelib/7?keep=1&fileStatus=abnormal${parentId === null ? "" : `&parent_id=${parentId}`}`;
+  const initial = `/filelib/7?keep=1&fileStatus=abnormal${parentId === null ? "" : `&parent_id=${parentId}`}${currentScope.view === "admin" ? "&view=admin" : ""}`;
   const view = (parent: number | null) => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[initial]}>
@@ -117,6 +118,7 @@ function mount(parentId: number | null = null) {
   const result = render(view(parentId));
   return {
     ...result,
+    client,
     update: (parent = parentId) => result.rerender(view(parent)),
   };
 }
@@ -181,6 +183,19 @@ it.each([
     ).not.toBeInTheDocument();
   },
 );
+it("preserves management scope and folder context through upload and return", async () => {
+  currentScope = { ...base, view: "admin" };
+  grants.set("folder:9", ["upload_file"]);
+  const current = mount(9);
+  fireEvent.click(await screen.findByRole("button", { name: "uploadFile" }));
+  expect(screen.getByTestId("location")).toHaveTextContent("/filelib/upload/7?keep=1&fileStatus=abnormal&parent_id=9&view=admin");
+  await waitFor(() => expect(document.querySelector('input[type="file"]')).not.toBeNull());
+  const uploadQuery = current.client.getQueryCache().getAll().find((query) => query.queryKey.includes("upload-target"));
+  expect(uploadQuery?.queryKey[4]).toBe("admin");
+  fireEvent.click(screen.getByRole("button", { name: "back" }));
+  expect(await screen.findByText("report.md")).toBeVisible();
+  expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?keep=1&fileStatus=abnormal&parent_id=9&view=admin");
+});
 it("navigates the real folder entry into the real upload route, register and exact-ID status chain", async () => {
   grants.set("folder:9", ["upload_file"]);
   mount(9);

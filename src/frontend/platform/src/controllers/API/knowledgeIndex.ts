@@ -1,10 +1,10 @@
 import axios from "@/controllers/request";
-import type { PageData } from "./knowledgeSpace";
+import type { KnowledgeSpaceChild, PageData } from "./knowledgeSpace";
 export interface SpaceChunk {
   text: string;
   metadata: { document_id: number; chunk_index: number; bbox?: string | null };
 }
-export interface FileMetadata {
+export interface FileMetadata extends Partial<Omit<KnowledgeSpaceChild, "user_metadata">> {
   user_metadata?: Record<
     string,
     { field_value: unknown; field_type?: string }
@@ -14,9 +14,10 @@ export function readVersionChunks(
   spaceId: number,
   fileId: number,
   page: number,
+  keyword = "",
 ): Promise<PageData<SpaceChunk>> {
   return axios.get("/api/v1/knowledge/chunk", {
-    params: { knowledge_id: spaceId, file_ids: [fileId], page, limit: 10 },
+    params: { knowledge_id: spaceId, file_ids: [fileId], page, limit: 10, ...(keyword ? { keyword } : {}) },
     paramsSerializer: { indexes: null },
   });
 }
@@ -60,4 +61,9 @@ export function updateFileMetadata(
       ([field_name, field_value]) => ({ field_name, field_value }),
     ),
   });
+}
+
+export type FilePartitions = Record<string, { text: string; type: string; part_id: string }>;
+export function readFilePartitions(fileId: number): Promise<FilePartitions> {
+  return axios.get("/api/v1/knowledge/file_bbox", { params: { file_id: fileId } });
 }

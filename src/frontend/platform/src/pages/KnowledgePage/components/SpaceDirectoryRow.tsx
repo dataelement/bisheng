@@ -159,7 +159,7 @@ export function SpaceDirectoryRow({
                     {t("deletion.references")}
                   </DropdownItem>
                   <DropdownItem danger onSelect={onDelete}>
-                    {t("deletion.delete_items")}
+                    {t("delete")}
                   </DropdownItem>
                 </>
               )}
