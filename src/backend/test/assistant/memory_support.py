@@ -46,6 +46,8 @@ class StubChatModel(BaseChatModel):
     def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
         self.received.append(list(messages))
         reply = self.replies.pop(0) if self.replies else "done"
+        if isinstance(reply, Exception):
+            raise reply
         msg = reply if isinstance(reply, AIMessage) else AIMessage(content=reply)
         return ChatResult(generations=[ChatGeneration(message=msg)])
 
