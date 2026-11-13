@@ -317,6 +317,27 @@ export default function Setting() {
         </AccordionItem> */}
 
       </Accordion>
+      {/* F132 long-term memory: per-assistant switch, default off (AC-69); explanation always visible (AC-75) */}
+      <h1 className="border-b bg-background-login indent-4 text-sm leading-8 text-muted-foreground">
+        {t("build.memory")}
+      </h1>
+      <div className="px-6 py-4">
+        <div className="flex items-center justify-between gap-2">
+          <label htmlFor="assistant-memory-enabled" className="bisheng-label">
+            {t("build.assistantMemory")}
+          </label>
+          <Switch
+            id="assistant-memory-enabled"
+            checked={!!assistantState.memory_enabled}
+            onCheckedChange={(checked) =>
+              dispatchAssistant("setting", { memory_enabled: checked })
+            }
+          />
+        </div>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          {t("build.assistantMemoryDesc")}
+        </p>
+      </div>
     </div>
   );
 }
