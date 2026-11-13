@@ -41,6 +41,7 @@ __all__ = [
     "USER_2",
     "details",
     "graph",
+    "import_worker_tasks",
     "index",
     "kv",
     "make_message",
@@ -48,6 +49,7 @@ __all__ = [
     "memory_runtime_config",
     "register_chat",
     "retriever_node",
+    "seed_online_workflow",
     "seed_user",
     "service",
     "start_node",
@@ -229,3 +231,35 @@ def graph(*middle: dict, memory_enabled: bool | None = None) -> dict:
             }
         )
     return {"nodes": nodes, "edges": edges}
+
+
+def import_worker_tasks():
+    """The real ``bisheng.worker.workflow.tasks`` (same bootstrap as test_workflow_tasks.py).
+
+    The shared premock replaces ``bisheng.worker`` with a stub that has no package
+    path; give it one so the real task module imports while Celery stays mocked.
+    """
+    import importlib
+    import pathlib
+    import sys
+    from types import ModuleType
+
+    pkg = sys.modules.get("bisheng.worker")
+    if not isinstance(pkg, ModuleType) or not getattr(pkg, "__path__", None):
+        pkg = ModuleType("bisheng.worker")
+        pkg.__path__ = [str(pathlib.Path(__file__).parents[2] / "bisheng" / "worker")]
+        sys.modules["bisheng.worker"] = pkg
+    return importlib.import_module("bisheng.worker.workflow.tasks")
+
+
+def seed_online_workflow(memory_db, flow_id="wf-1", switch=True, status=2, name="报销流程", extra_versions=()):
+    """A flow whose current version's start node carries ``memory_enabled=switch`` (None = no param)."""
+    from bisheng.database.models.flow import Flow
+    from bisheng.database.models.flow_version import FlowVersion
+
+    with memory_db.session() as s:
+        s.add(Flow(id=flow_id, name=name, tenant_id=TENANT_A, user_id=1, status=status, flow_type=10))
+        s.add(FlowVersion(flow_id=flow_id, name="current", is_current=1, data=graph(memory_enabled=switch), user_id=1))
+        for data in extra_versions:
+            s.add(FlowVersion(flow_id=flow_id, name="other", is_current=0, data=data, user_id=1))
+        s.commit()
