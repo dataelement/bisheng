@@ -33,7 +33,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
-from bisheng.linsight.domain.services.memory_turns import LinsightMemoryRound
+from bisheng.linsight.domain.services.memory_turns import LinsightMemoryRound, redact_exec_step
 from bisheng.linsight.domain.services.binary_content_guard import CODE_INTERPRETER_TOOL
 from bisheng.linsight.domain.services.resilience_middleware import _MAX_STATE_ONLY_REFUNDS
 from bisheng.linsight.domain.services.state_message_manager import (
@@ -1951,11 +1951,18 @@ class LinsightWorkflowTask:
         ``get_final_result_file`` (output/ zone scan), so no per-step file upload
         is done here. The legacy ``handle_step_event_extra`` hook (which keyed off
         the retired local_file tool names) is removed.
+
+        F132: memory tool frames are redacted here, once, before the DB history,
+        the Redis task key and the WS list see them (R3, AC-09).
         """
+        memory_step = event.name if event.name.startswith("memory_") else None
+        event = redact_exec_step(event)
         await self._state_manager.add_execution_task_step(event.task_id, step=event)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.TASK_EXECUTE_STEP, data=event.model_dump())
         )
+        if memory_step and event.status == "end":
+            await self._memory_round().push_signal()
 
     # F035 §4.5/§4.6: the legacy `_wait_for_user_input` coroutine and the
     # `_wait_for_input_completion` 1s polling loop are REMOVED. Under

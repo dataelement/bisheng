@@ -234,3 +234,93 @@ class LinsightMemoryMiddleware(AgentMiddleware):
 
     async def awrap_model_call(self, request, handler):
         return await handler(self._append(request))
+
+
+# ---- redaction (AC-09, design decision 10, R3) ------------------------------------------
+
+
+def redact_exec_step(event):
+    """Content-free copy of a memory tool's step frame; every other frame is returned as is.
+
+    Called once at ``_handle_exec_step`` entry, the single upstream of the DB
+    history, the Redis task key and the WS message list (start, end,
+    out-of-order merge and subagent frames alike). ``params`` and ``output`` get
+    the same stand-in; item ids come from the output when there is one.
+    """
+    import json
+
+    from bisheng.memory.domain.services.redaction import is_memory_tool, redact_tool_event
+
+    name = getattr(event, "name", None)
+    if not is_memory_tool(name):
+        return event
+    output = getattr(event, "output", None)
+    stand_in = redact_tool_event(name, output if output else getattr(event, "params", None))
+    update = {"params": stand_in}
+    if output is not None:
+        update["output"] = json.dumps(stand_in, ensure_ascii=False)
+    return event.model_copy(update=update)
+
+
+def _redact_tool_call(call: dict) -> dict:
+    from bisheng.memory.domain.services.redaction import redact_tool_event
+
+    return {**call, "args": redact_tool_event(call.get("name"), call.get("args"))}
+
+
+def redact_messages(messages: list) -> list:
+    """Copies of ``messages`` with memory tool arguments and results replaced (state untouched).
+
+    Used where the conversation is written to a workspace file (compaction).
+    """
+    import json
+
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    from bisheng.memory.domain.services.redaction import is_memory_tool, is_memory_tool_output, redact_tool_event
+
+    memory_call_ids: dict[str, str] = {}
+    for msg in messages:
+        if isinstance(msg, AIMessage):
+            for call in msg.tool_calls or []:
+                if is_memory_tool(call.get("name")) and call.get("id"):
+                    memory_call_ids[call["id"]] = call["name"]
+
+    out = []
+    for msg in messages:
+        if isinstance(msg, AIMessage) and memory_call_ids:
+            update = {}
+            if any(is_memory_tool(c.get("name")) for c in msg.tool_calls or []):
+                update["tool_calls"] = [
+                    _redact_tool_call(c) if is_memory_tool(c.get("name")) else c for c in msg.tool_calls
+                ]
+            raw_calls = (msg.additional_kwargs or {}).get("tool_calls")
+            if raw_calls:
+                redacted_raw = []
+                for raw in raw_calls:
+                    fn = (raw or {}).get("function") or {}
+                    if is_memory_tool(fn.get("name")):
+                        stand_in = redact_tool_event(fn.get("name"), fn.get("arguments"))
+                        raw = {**raw, "function": {**fn, "arguments": json.dumps(stand_in, ensure_ascii=False)}}
+                    redacted_raw.append(raw)
+                update["additional_kwargs"] = {**msg.additional_kwargs, "tool_calls": redacted_raw}
+            if isinstance(msg.content, list):
+                blocks = []
+                for block in msg.content:
+                    if isinstance(block, dict) and is_memory_tool(block.get("name")):
+                        block = {k: v for k, v in block.items() if k not in ("input", "args", "arguments")}
+                        block["input"] = redact_tool_event(block.get("name"), None)
+                    blocks.append(block)
+                update["content"] = blocks
+            out.append(msg.model_copy(update=update) if update else msg)
+            continue
+        if isinstance(msg, ToolMessage):
+            name = memory_call_ids.get(msg.tool_call_id) or (msg.name if is_memory_tool(msg.name) else None)
+            if name is None and is_memory_tool_output(msg.content):
+                name = "memory_search"
+            if name is not None:
+                stand_in = redact_tool_event(name, msg.content)
+                out.append(msg.model_copy(update={"content": json.dumps(stand_in, ensure_ascii=False)}))
+                continue
+        out.append(msg)
+    return out
