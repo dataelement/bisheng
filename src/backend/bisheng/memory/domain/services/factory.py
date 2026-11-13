@@ -76,14 +76,19 @@ def get_resident_service():
 
 def get_consolidator():
     from bisheng.memory.domain.services.consolidation_content import ConsolidationContent
+    from bisheng.memory.domain.services.consolidation_linsight import LinsightRoundConsolidation
     from bisheng.memory.domain.services.consolidator import Consolidator
 
-    return _get(
-        "consolidator",
-        lambda: Consolidator(
-            service=get_memory_service(),
+    def _build():
+        content = ConsolidationContent(get_memory_llm())
+        service = get_memory_service()
+        return Consolidator(
+            service=service,
             kv=get_kv(),
             metrics=get_metrics(),
-            content_fn=ConsolidationContent(get_memory_llm()),
-        ),
-    )
+            content_fn=content,
+            # Deep-research rounds are consolidated per round, not by message watermark (R8).
+            extra_steps=[LinsightRoundConsolidation(service=service, content=content)],
+        )
+
+    return _get("consolidator", _build)

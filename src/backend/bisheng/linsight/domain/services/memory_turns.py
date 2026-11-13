@@ -15,6 +15,8 @@ from __future__ import annotations
 from langchain.agents.middleware.types import AgentMiddleware
 from loguru import logger
 
+from bisheng.database.models.message import ChatMessageDao
+from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.linsight.domain.services.unattended_run import is_unattended_run
 
 # Appended to the system message together with the memory tools (prompt <-> tool
@@ -324,3 +326,39 @@ def redact_messages(messages: list) -> list:
                 continue
         out.append(msg)
     return out
+
+
+# ---- round reader for consolidation (design decision 7, R8) ---------------------------
+
+_FINAL_STATUSES = frozenset(
+    {SessionVersionStatusEnum.COMPLETED, SessionVersionStatusEnum.FAILED, SessionVersionStatusEnum.TERMINATED}
+)
+
+
+async def read_round_for_memory(chat_id: str, message_id: int) -> dict | None:
+    """Question and result of one deep-research round, located by its task message row.
+
+    The memory module reads deep-research rounds only through this function, never
+    the tables. ``None`` when the row is gone or does not belong to ``chat_id``;
+    ``finished`` is False while the session version is not final.
+    """
+    import json
+
+    message = await ChatMessageDao.aget_message_by_id(int(message_id))
+    if message is None or message.chat_id != chat_id or message.category != "task" or not message.is_bot:
+        return None
+    try:
+        svid = json.loads(message.extra or "{}").get("linsight_session_version_id")
+    except (json.JSONDecodeError, TypeError):
+        svid = None
+    if not svid:
+        return None
+    version = await LinsightSessionVersionDao.get_by_id(svid)
+    if version is None or version.session_id != chat_id or int(version.user_id) != int(message.user_id):
+        return None
+    output = version.output_result or {}
+    return {
+        "question": version.question or "",
+        "answer": output.get("answer") or "",
+        "finished": version.status in _FINAL_STATUSES,
+    }
