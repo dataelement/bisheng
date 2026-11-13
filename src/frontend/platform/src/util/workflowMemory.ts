@@ -6,6 +6,8 @@ export const MEMORY_SWITCH_KEY = 'memory_enabled';
 export const MEMORY_START_GROUP_NAME = 'memory';
 export const MEMORY_LIMIT_MIN = 1;
 export const MEMORY_LIMIT_MAX = 100;
+/** Switch value for start nodes of newly created workflows. Existing workflows are upgraded with it off. */
+export const MEMORY_SWITCH_DEFAULT = false;
 
 interface MemoryParam {
     key: string;
@@ -24,8 +26,8 @@ interface MemoryNodeData {
     group_params?: MemoryGroup[] | null;
 }
 
-/** The start node's "memory" group with the workflow memory switch, default off (AC-70, AC-75). */
-export function createMemoryStartGroup() {
+/** The start node's "memory" group with the workflow memory switch (AC-70, AC-75). */
+export function createMemoryStartGroup(enabled: boolean = MEMORY_SWITCH_DEFAULT) {
     return {
         name: MEMORY_START_GROUP_NAME,
         params: [
@@ -33,7 +35,7 @@ export function createMemoryStartGroup() {
                 key: MEMORY_SWITCH_KEY,
                 label: 'true',
                 type: 'switch',
-                value: false,
+                value: enabled,
                 desc: 'true',
             },
         ],
@@ -52,7 +54,8 @@ export function findNodeParam(node: MemoryNodeData | undefined, key: string): Me
 export function ensureMemoryStartGroup(node: MemoryNodeData) {
     if (!Array.isArray(node.group_params)) return;
     if (findNodeParam(node, MEMORY_SWITCH_KEY)) return;
-    node.group_params.push(createMemoryStartGroup());
+    // A workflow saved before the switch existed keeps memory off until its author turns it on.
+    node.group_params.push(createMemoryStartGroup(false));
 }
 
 /** A limit is valid only as an integer from 1 to 100 (AC-80); numeric strings count. */
