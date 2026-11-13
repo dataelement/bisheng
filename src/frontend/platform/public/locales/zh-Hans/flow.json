@@ -270,6 +270,8 @@
   "enterVariableValue": "请输入变量值",
   "kbQueryToolIntro": "## 知识库查询工具介绍\n当需要查询知识库来解决用户问题时，调用知识库查询工具，将用户需求改写成合适的 query 作为知识库工具的入参。",
   "sqlAgentToolIntro": "## sqlagent 数据库工具介绍\n1. 使用自然语言精确的描述用户查询需求，将该描述作为参数 query 的值，调用 sqlagent 工具；\n2. 如果用户有多条查询需求，多次调用sqlagent。",
+  "memoryLimitInvalid": "{{name}}：最大检索数量只能是 {{min}} 到 {{max}} 之间的整数",
+  "memoryRetrieverNeedsSwitch": "工作流里有记忆检索节点，请先在开始节点开启工作流记忆，再上线",
   "node": {
     "start": {
       "name": "开始",
@@ -299,6 +301,11 @@
       "custom_variables": {
         "label": "自定义全局变量",
         "help": "设置可以在其他节点引用的变量"
+      },
+      "memory": "记忆",
+      "memory_enabled": {
+        "label": "工作流记忆",
+        "desc": "开启后，本应用会读取并写入每个使用者自己的记忆；使用者的记忆可能出现在本应用的回答与输出里；不同使用者之间互不可见。"
       }
     },
     "input": {
@@ -564,6 +571,24 @@
       },
       "retrieved_result": {
         "label": "检索结果"
+      }
+    },
+    "memory_retriever": {
+      "name": "记忆检索",
+      "description": "从当前使用者自己的记忆中检索相关内容，供后续节点使用。",
+      "retrieval_settings": "检索设置",
+      "output": "输出",
+      "query": {
+        "label": "检索内容",
+        "placeholder": "输入要检索的内容，可以插入变量"
+      },
+      "limit": {
+        "label": "最大检索数量",
+        "help": "取 1 到 100 的整数，默认 20。"
+      },
+      "retrieved_memory": {
+        "label": "检索到的记忆",
+        "help": "检索到的记忆条目列表，每条包含正文和记录时间等信息。"
       }
     },
     "report": {

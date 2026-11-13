@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
 import { MessageContent } from "./DailyMessageContent"
 import { locationContext } from "@/contexts/locationContext"
+import { isMemoryToolEvent } from "@/components/bs-comp/appChat/memoryPlaceholder"
 
 interface Message {
     messageId: string;
@@ -29,7 +30,7 @@ interface Message {
 // column untransformed, so we normalize here to the same display string the
 // client builds in parseStreamHistoryItem — plain text plus an optional
 // `:::thinking\n...\n:::\n...` prefix that DailyMessageContent already renders.
-function extractDisplayText(msg: any): string {
+function extractDisplayText(msg: any, memoryPlaceholder: string): string {
     const raw = msg?.text ?? "";
     if (typeof raw !== "string" || !raw) return "";
     const trimmed = raw.trim();
@@ -72,8 +73,13 @@ function extractDisplayText(msg: any): string {
         reasoning = parsed.reasoning_content;
     }
 
-    if (reasoning) return `:::thinking\n${reasoning}\n:::\n${content}`;
-    return content || raw;
+    // F132 (AC-09): never fall back to the raw JSON when it carries a memory tool event
+    const hasMemoryEvent = Array.isArray(parsed.events)
+        && parsed.events.some((e: unknown) => (e as { type?: unknown } | null)?.type === "tool_call" && isMemoryToolEvent(e));
+    const body = content || (hasMemoryEvent ? memoryPlaceholder : "");
+
+    if (reasoning) return `:::thinking\n${reasoning}\n:::\n${body}`;
+    return body || raw;
 }
 
 export default function DailyChatDetail() {
@@ -83,12 +89,16 @@ export default function DailyChatDetail() {
     const { appConfig } = useContext(locationContext)
 
     const { t } = useTranslation()
+    // Read t through a ref so the history request does not re-run when t changes identity
+    const tRef = useRef(t)
+    tRef.current = t
     const title = messages.length > 0 ? messages[0].flow_name : ''
 
     useEffect(() => {
         getChatHistoryApi(cid).then((res: any) => {
             const items = Array.isArray(res) ? res : []
-            const normalised = items.map((m: any) => ({ ...m, text: extractDisplayText(m) }))
+            const memoryPlaceholder = String(tRef.current('memory.operation'))
+            const normalised = items.map((m: any) => ({ ...m, text: extractDisplayText(m, memoryPlaceholder) }))
             setMessages(normalised)
             setLoading(false)
         }).catch(() => setLoading(false))
