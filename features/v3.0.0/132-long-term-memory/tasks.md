@@ -83,7 +83,7 @@
   **判据**: 列出工具内容的全部落点（数据库字段、工作区文件），每个落点给出脱敏的切入位置；指出分享链接读取任务详情所走的接口。
   **依赖**: T001
 
-- [ ] **T005**: V4 工作流节点取 `chat_id` 与上线版本的开关
+- [x] **T005**: V4 工作流节点取 `chat_id` 与上线版本的开关
   **文件**: `src/backend/test/memory/spike/test_v4_graph_state.py`（新建，实验代码，Wave 10 完成后删除）、`verification.md`
   **逻辑**: 读 `workflow/graph/graph_engine.py:207-231`、`workflow/graph/graph_state.py`、`workflow/nodes/base.py:21-60`、`worker/workflow/tasks.py:40-82`、`worker/workflow/redis_callback.py:532-554`。写最小测试：实例化一个只含开始节点与一个假节点的图，确认能把 `chat_id` 与一个只读标志放进 `graph_state` 并在节点 `_run` 里取到。找出按 `flow_id` 读上线版本开始节点参数的现成方法，以及评测与调试运行时 `chat_id` 的取值。
   **判据**: 实验测试跑通；给出节点取这两个值的实现位置。
