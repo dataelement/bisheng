@@ -311,7 +311,7 @@
   **覆盖 AC**: AC-08, AC-09, AC-68, AC-87, AC-88, AC-89, AC-90, AC-103
   **依赖**: T030, T032, T034
 
-- [ ] **T038**: 管理接口的实现
+- [x] **T038**: 管理接口的实现
   **文件**: `src/backend/bisheng/memory/api/endpoints/memory.py`、`src/backend/bisheng/memory/api/router.py`、`src/backend/bisheng/api/router.py`
   **逻辑**: `/api/v1/memory` 下：条目列表、新增、编辑、删除、清空、读取与修改"我的记忆"、上报时区、按 `turn_id` 或消息 id 取操作提示与归因、按 `chat_id` 批量取记忆标志、撤销。登录态取主体，委托 Service，`UnifiedResponseModel` 包装，在主路由注册。
   **测试**: T037 全部通过
