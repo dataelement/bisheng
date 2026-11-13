@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, within } from '@/test/test-utils'
+import { fireEvent, render, screen, waitFor, within } from '@/test/test-utils'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { getModelPricingRows } from '@/controllers/API/modelPricing'
+import { getModelPricingRows, matchPriceCatalog } from '@/controllers/API/modelPricing'
 import type { ModelPricingRow } from '@/controllers/API/modelPricing'
 import { UserSelectableModels } from './UserSelectableModels'
 import { updateModelMetadata } from './userModelMetadata'
@@ -13,6 +13,8 @@ vi.mock('@/controllers/API/modelPricing', () => ({
     getModelPricingRows: vi.fn(),
     getCreditSettings: vi.fn(async () => ({ version: 2, currency: 'CNY', credit_value: '0.01', usd_cny_rate: '7.2', base_model_id: null })),
     saveCreditSettings: vi.fn(),
+    saveModelPricing: vi.fn(),
+    matchPriceCatalog: vi.fn(async () => ({ matched: false, via_name: false, catalog_version: 'v', entry: null })),
 }))
 
 const priced = (model_id: number, changes: Partial<ModelPricingRow> = {}): ModelPricingRow => ({
@@ -73,21 +75,17 @@ it('shows the server-computed ratio and price of each model, marking base, free 
     expect(within(free).getByText('dsh.pricing.defaultTag')).toBeVisible()
     const unpriced = await rowOf('unpriced')
     expect(within(unpriced).getByText('dsh.pricing.missingTag')).toBeVisible()
-    expect(within(unpriced).queryByRole('button', { name: /dsh.pricing.viewPrice/ })).toBeNull()
     expect(screen.getByText('base-picker')).toBeVisible()
 })
 
-it('opens a read-only price dialog with prices in the billing currency', async () => {
-    render(<UserSelectableModels data={servers} configuredModels={[]} enterpriseEnabled disabled={false} onMetadataChange={vi.fn()} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'dsh.pricing.viewPrice · vendor-model' }))
+it('opens the price editor for priced and unpriced models with the provider type for the catalog', async () => {
+    render(<UserSelectableModels data={[{ ...servers[0], type: 'openai' }]} configuredModels={[]} enterpriseEnabled disabled={false} onMetadataChange={vi.fn()} />)
+    expect(await screen.findByRole('button', { name: 'dsh.pricing.editPrice · unpriced' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'dsh.pricing.editPrice · vendor-model' }))
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('dsh.pricing.priceDialogTitle · vendor-model')
-    expect(within(dialog).getAllByText('9 dsh.pricing.currencyCNY')).toHaveLength(2)
-    expect(within(dialog).getByText('27 dsh.pricing.currencyCNY')).toBeVisible()
-    expect(within(dialog).getByText('dsh.pricing.originalPrice')).toBeVisible()
-    expect(within(dialog).getByText('dsh.pricing.typical')).toBeVisible()
-    expect(within(dialog).getByText('dsh.pricing.editHint')).toBeVisible()
-    expect(within(dialog).queryByRole('textbox')).toBeNull()
+    expect(within(dialog).getByRole('textbox', { name: 'model.pricing.output' })).toHaveValue('3.75')
+    await waitFor(() => expect(matchPriceCatalog).toHaveBeenCalledWith('openai', 'vendor-model', expect.any(AbortSignal)))
 })
 
 it('keeps the community table free of pricing requests', () => {

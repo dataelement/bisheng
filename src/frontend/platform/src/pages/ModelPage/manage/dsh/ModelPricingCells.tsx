@@ -26,18 +26,25 @@ export function CreditRatioCell({ row }: CreditRatioCellProps) {
 interface PriceSummaryCellProps {
     row?: ModelPricingRow
     modelName: string
-    onView: () => void
+    onEdit: () => void
 }
 
-export function PriceSummaryCell({ row, modelName, onView }: PriceSummaryCellProps) {
+export function PriceSummaryCell({ row, modelName, onEdit }: PriceSummaryCellProps) {
     const { t } = useTranslation()
     if (!row) return <Empty />
+    const edit = <Button variant="link" size="small" className="h-auto px-0"
+        aria-label={`${t('dsh.pricing.editPrice')} · ${modelName}`} onClick={onEdit}>
+        {t('dsh.pricing.editPrice')}
+    </Button>
     if (row.missing || !row.effective) {
-        return <Tooltip content={t('dsh.pricing.missingHelp')}>
-            <span tabIndex={0} className="inline-flex rounded outline-none focus-visible:shadow-focus">
-                <Tag size="small" color="danger">{t('dsh.pricing.missingTag')}</Tag>
-            </span>
-        </Tooltip>
+        return <div className="flex min-w-0 flex-col items-start gap-0.5">
+            <Tooltip content={t('dsh.pricing.missingHelp')}>
+                <span tabIndex={0} className="inline-flex rounded outline-none focus-visible:shadow-focus">
+                    <Tag size="small" color="danger">{t('dsh.pricing.missingTag')}</Tag>
+                </span>
+            </Tooltip>
+            {edit}
+        </div>
     }
     const { input, output, currency } = row.effective
     return <div className="flex min-w-0 flex-col items-start gap-0.5">
@@ -47,9 +54,6 @@ export function PriceSummaryCell({ row, modelName, onView }: PriceSummaryCellPro
             </span>
             {row.pricing?.source === 'DEFAULT' && <Tag size="small" color="warning">{t('dsh.pricing.defaultTag')}</Tag>}
         </span>
-        <Button variant="link" size="small" className="h-auto px-0"
-            aria-label={`${t('dsh.pricing.viewPrice')} · ${modelName}`} onClick={onView}>
-            {t('dsh.pricing.viewPrice')}
-        </Button>
+        {edit}
     </div>
 }

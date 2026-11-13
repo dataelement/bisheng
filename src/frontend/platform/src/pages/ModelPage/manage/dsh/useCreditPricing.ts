@@ -2,7 +2,9 @@ import {
     getCreditSettings,
     getModelPricingRows,
     saveCreditSettings,
+    saveModelPricing,
     type CreditSettings,
+    type ModelPricing,
 } from '@/controllers/API/modelPricing'
 import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -39,6 +41,16 @@ export function useModelPricingRows(enabled: boolean) {
         select: (rows) => new Map(rows.map(row => [row.model_id, row])),
         enabled,
         ...fresh,
+    })
+}
+
+export function useSaveModelPricing() {
+    const client = useQueryClient()
+    return useMutation({
+        mutationFn: ({ modelId, pricing }: { modelId: number; pricing: ModelPricing }) => saveModelPricing(modelId, pricing),
+        retry: false,
+        // Refetch after a conflict too, so reopening the dialog shows the price that won.
+        onSettled: () => void client.invalidateQueries({ queryKey: modelPricingKey }),
     })
 }
 

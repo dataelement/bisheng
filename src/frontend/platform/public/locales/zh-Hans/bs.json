@@ -4384,18 +4384,15 @@
       "free": "免费",
       "price": "价格",
       "priceSummary": "输入 {{input}} / 输出 {{output}}（{{currency}}）",
-      "viewPrice": "查看价格",
       "missingTag": "价格缺失",
       "missingHelp": "这个模型还没有价格，员工调用会被拒绝。请在模型配置里保存一次，或让运维运行升级补价脚本。",
       "defaultTag": "默认 0",
       "priceDialogTitle": "价格",
-      "priceDialogHelp": "以下为折算到计价币种后的价格，单位为每百万 token。",
-      "originalPrice": "模型原价：输入 {{input}} / 缓存命中 {{cacheRead}} / 缓存写入 {{cacheWrite}} / 输出 {{output}}（{{currency}}），已按汇率折算。",
+      "priceDialogHelp": "单位为每百万 token。保存后，之后开始的调用按新价格扣积分。",
       "input": "输入（未命中缓存）",
       "cacheRead": "缓存命中",
       "cacheWrite": "缓存写入",
       "output": "输出",
-      "editHint": "如需修改价格，请到「模型配置」里对应服务提供方的模型中修改。",
       "typical": "一次普通问答（输入 3,000、输出 1,000 token）约扣 {{credits}} 积分",
       "baseModel": "基准模型",
       "baseModelHelp": "积分倍率为 1.00x 的模型，只影响倍率显示，不影响扣费。",
@@ -4421,7 +4418,10 @@
       "saved": "已保存",
       "conflict": "设置已被他人修改，请刷新后重试。",
       "unavailable": "暂时无法读取价格信息。",
-      "refresh": "刷新"
+      "refresh": "刷新",
+      "editPrice": "修改价格",
+      "priceSaved": "价格已保存",
+      "saveFailed": "保存失败，请重试。"
     }
   },
   "request": {

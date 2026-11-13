@@ -31,7 +31,7 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
         .filter(model => model.id > 0 && model.online && model.model_type === 'llm')
         .map(model => {
             const config = configuredModels.find(row => String(row.id) === String(model.id))
-            return { ...model, provider: server.name, config, label: config?.displayName?.trim() || model.model_name }
+            return { ...model, provider: server.name, providerType: server.type, config, label: config?.displayName?.trim() || model.model_name }
         })), [data, configuredModels])
 
     return <section className="space-y-4">
@@ -77,8 +77,9 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
                                 disabled={disabled} onCheckedChange={visual => onMetadataChange(model, { visual })} />}</TableCell>
                         {enterpriseEnabled && <TableCell><CreditRatioCell row={row} /></TableCell>}
                         {enterpriseEnabled && <TableCell>
-                            <PriceSummaryCell row={row} modelName={model.label}
-                                onView={() => { if (row) setPriced({ name: model.label, row }) }} />
+                            <PriceSummaryCell row={row} modelName={model.label} onEdit={() => {
+                                if (row) setPriced({ id: model.id, name: model.label, modelName: model.model_name, providerType: model.providerType, row })
+                            }} />
                         </TableCell>}
                         {enterpriseEnabled && <TableCell className="text-left">
                             <Button variant="link" className="whitespace-nowrap px-0"
@@ -92,6 +93,6 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
             {!models.length && <p className="px-6 py-12 text-center text-sm text-muted-foreground">{t('model.noOnlineDshModels')}</p>}
         </div>
         <ModelAccessDialog model={selected} onClose={() => setSelected(null)} />
-        <ModelPriceDialog model={priced} creditValue={settings.data?.credit_value} onClose={() => setPriced(null)} />
+        <ModelPriceDialog model={priced} settings={settings.data} onClose={() => setPriced(null)} />
     </section>
 }

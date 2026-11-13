@@ -276,7 +276,8 @@
       "statusDefault": "This model is not in the price list, so it is treated as free and uses no credits. If it is a paid model, enter its prices.",
       "statusManual": "Prices entered manually.",
       "help": "Each call is billed from the usage the provider reports: every token type times its price. An empty cache-write price uses the input price."
-    }
+    },
+    "discoveryScope_price_catalog": "These are common models from the price catalog; picking one fills in its price. Check that your provider uses the same model names before adding them."
   },
   "finetune": {
     "rtServiceManagement": "FT Service Management",

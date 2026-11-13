@@ -66,6 +66,9 @@ export const matchPriceCatalog = (serverType: string, modelName: string, signal?
         params: { server_type: serverType, model_name: modelName }, signal, silent: true,
     })
 
+export const getPriceCatalog = (signal?: AbortSignal): Promise<{ version: string; entries: PriceCatalogEntry[] }> =>
+    request.get('/api/v1/llm/price-catalog', { signal, silent: true })
+
 const admin = '/api/v1/dsh/admin'
 export const getCreditSettings = (signal?: AbortSignal): Promise<CreditSettings> =>
     request.get(`${admin}/credit-settings`, { signal, silent: true })
@@ -79,6 +82,16 @@ export const saveCreditSettings = (value: CreditSettings): Promise<CreditSetting
     }, { silent: true })
 export const getModelPricingRows = (signal?: AbortSignal): Promise<ModelPricingRow[]> =>
     request.get(`${admin}/model-pricing`, { signal, silent: true })
+/** Edit one model's price; `revision` is the one last read, so a concurrent edit fails with 10813. */
+export const saveModelPricing = (modelId: number, pricing: ModelPricing): Promise<ModelPricing> =>
+    request.put(`/api/v1/llm/models/${modelId}/pricing`, {
+        currency: pricing.currency,
+        input: pricing.input,
+        cache_read: pricing.cache_read,
+        cache_write: pricing.cache_write || null,
+        output: pricing.output,
+        revision: pricing.revision ?? null,
+    }, { silent: true })
 
 /** A member's current-month balance in credits, as exact decimal strings (same shape as `/dsh/me/credits`). */
 export type MonthCredits = {

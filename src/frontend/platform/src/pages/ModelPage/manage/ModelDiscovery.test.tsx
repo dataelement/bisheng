@@ -1,4 +1,5 @@
 import { discoverModels } from "@/controllers/API/modelDiscovery";
+import { getPriceCatalog } from "@/controllers/API/modelPricing";
 import {
   act,
   fireEvent,
@@ -11,6 +12,9 @@ import { ModelDiscovery } from "./ModelDiscovery";
 
 vi.mock("@/controllers/API/modelDiscovery", () => ({
   discoverModels: vi.fn(),
+}));
+vi.mock("@/controllers/API/modelPricing", () => ({
+  getPriceCatalog: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -50,6 +54,8 @@ const props = () => ({
 describe("model discovery interaction", () => {
   beforeEach(() => {
     vi.mocked(discoverModels).mockReset();
+    // Without a reachable price catalog every failure stays an error, as before F016.
+    vi.mocked(getPriceCatalog).mockReset().mockRejectedValue(new Error("offline"));
   });
   it("does not open the catalog when required connection fields are missing", () => {
     render(<ModelDiscovery {...props()} getConnection={() => null} />);
@@ -226,6 +232,8 @@ describe("model discovery interaction", () => {
 describe("provider-specific discovery", () => {
   beforeEach(() => {
     vi.mocked(discoverModels).mockReset();
+    // Without a reachable price catalog every failure stays an error, as before F016.
+    vi.mocked(getPriceCatalog).mockReset().mockRejectedValue(new Error("offline"));
   });
 
   it.each([
@@ -379,6 +387,8 @@ describe("provider-specific discovery", () => {
 describe("progressive model discovery", () => {
   beforeEach(() => {
     vi.mocked(discoverModels).mockReset();
+    // Without a reachable price catalog every failure stays an error, as before F016.
+    vi.mocked(getPriceCatalog).mockReset().mockRejectedValue(new Error("offline"));
   });
 
   it.each(["qwen", "volcengine", "azure_openai", "zhipu"])(
@@ -513,4 +523,55 @@ it("uses the release structured error payload for missing workspace information"
   render(<ModelDiscovery {...props()} provider="qwen" />);
   fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
   await screen.findByLabelText("model.discoveryWorkspace");
+});
+
+describe("F016 price-catalog model list", () => {
+  const entry = (key: string, label: string, providers: string[]) => ({
+    key,
+    vendor: "v",
+    label,
+    provider_types: providers,
+    aliases: [key.split("/")[1]],
+    currency: "CNY" as const,
+    input: "1",
+    cache_read: "0.1",
+    cache_write: null,
+    output: "2",
+    source_url: "https://example.com",
+    verified_at: "2026-11-10",
+  });
+  beforeEach(() => {
+    vi.mocked(discoverModels).mockReset();
+    vi.mocked(getPriceCatalog).mockReset().mockResolvedValue({
+      version: "2026-11-10",
+      entries: [
+        entry("qwen/qwen-max", "Qwen Max", ["qwen", "openai_compatible"]),
+        entry("openai/gpt-4.1", "gpt-4.1", ["openai", "openai_compatible"]),
+      ],
+    });
+  });
+  it("lists the price catalog for an OpenAI-compatible gateway without asking the vendor", async () => {
+    const input = { ...props(), provider: "openai_compatible", existing: [], getConnection: vi.fn(() => null) };
+    render(<ModelDiscovery {...input} />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await screen.findByText("qwen-max");
+    expect(screen.getByText("model.discoveryScope_price_catalog")).toBeInTheDocument();
+    expect(discoverModels).not.toHaveBeenCalled();
+    expect(input.getConnection).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "qwen-max" }));
+    fireEvent.click(screen.getByRole("button", { name: "model.addSelectedModels" }));
+    expect(input.onImport).toHaveBeenCalledWith([
+      { model_name: "qwen-max", display_name: "Qwen Max", model_type: "llm", type_source: "registry" },
+    ]);
+  });
+  it("falls back to the provider's catalog models when the vendor list fails, keeping the reason", async () => {
+    vi.mocked(discoverModels).mockRejectedValue({ kind: "network" });
+    render(<ModelDiscovery {...props()} existing={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await screen.findByText("gpt-4.1");
+    expect(screen.queryByText("qwen-max")).toBeNull();
+    expect(screen.getByText("model.discoveryError_connection")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "gpt-4.1" })).toBeEnabled();
+  });
 });

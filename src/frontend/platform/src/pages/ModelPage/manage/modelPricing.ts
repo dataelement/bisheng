@@ -126,3 +126,17 @@ export function typicalCredits(
     if (credits < 0.01) return "<0.01";
     return credits < 1 ? credits.toFixed(2) : String(Math.round(credits * 100) / 100);
 }
+
+/** The ordinary-Q&A estimate for prices typed in either currency, converted like the server does. */
+export function draftTypicalCredits(
+    pricing: ModelPricing,
+    settings: { currency: PricingCurrency; credit_value: string; usd_cny_rate: string },
+): string | null {
+    if (!isPricingValid(pricing)) return null;
+    if (pricing.currency === settings.currency) return typicalCredits(pricing, settings.credit_value);
+    const convert = (price: string) =>
+        convertCreditValue(price, pricing.currency, settings.currency, settings.usd_cny_rate);
+    const input = convert(pricing.input);
+    const output = convert(pricing.output);
+    return input && output ? typicalCredits({ input, output }, settings.credit_value) : null;
+}

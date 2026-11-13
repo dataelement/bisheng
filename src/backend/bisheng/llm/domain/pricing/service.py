@@ -103,6 +103,35 @@ def apply_pricing_on_save(server_type: str, models, old_models: dict) -> None:
         model.config = config
 
 
+async def save_model_pricing(operator, model_id: int, incoming) -> dict:
+    """Edit one model's price from the user-selectable model table (T04); returns the stored price."""
+    from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError, LLMModelSharedReadonlyError
+    from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
+    from bisheng.database.models.tenant import ROOT_TENANT_ID
+    from bisheng.llm.domain.models.llm_server import LLMDao
+    from bisheng.llm.domain.repositories.model_pricing_repository import asave_model_pricing
+    from bisheng.llm.domain.utils import invalidate_llm_info_cache
+
+    if incoming is None:
+        raise ModelPricingInvalidError()
+    # Read past the tenant filter only to tell a Root-shared model (read-only here) from a missing one.
+    with bypass_tenant_filter():
+        model = await LLMDao.aget_model_by_id(model_id)
+        server = await LLMDao.aget_server_by_id(model.server_id) if model else None
+    if server is None:
+        raise LLMModelNotAccessibleError()
+    if server.tenant_id == ROOT_TENANT_ID and get_current_tenant_id() != ROOT_TENANT_ID:
+        raise LLMModelSharedReadonlyError()
+    pricing = await asave_model_pricing(
+        model_id,
+        lambda server_type, model_name, stored: resolve_model_pricing(
+            server_type, model_name, incoming=incoming, existing=stored
+        ),
+    )
+    invalidate_llm_info_cache(model_id=model_id)
+    return pricing
+
+
 def catalog_view() -> dict:
     """The built-in price catalog for the admin "pick a reference price" list."""
     from bisheng.llm.domain.pricing.catalog import load_catalog

@@ -13,7 +13,8 @@ export type DiscoverySource = "auto" | "live" | "preset";
 export interface DiscoveryResult {
   models: DiscoveredModel[];
   source?: "live" | "preset";
-  scope?: "catalog" | "local" | "deployments" | "azure_models";
+  // "price_catalog": F016 bundled price catalog, shown when no vendor list is available.
+  scope?: "catalog" | "local" | "deployments" | "azure_models" | "price_catalog";
   docs_url?: string;
   catalog_date?: string;
 }

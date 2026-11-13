@@ -4439,18 +4439,15 @@
       "free": "Free",
       "price": "Price",
       "priceSummary": "Input {{input}} / output {{output}} ({{currency}})",
-      "viewPrice": "View price",
       "missingTag": "No price",
       "missingHelp": "This model has no price yet, so employees cannot use it. Save it once in model settings, or ask the operator to run the upgrade pricing script.",
       "defaultTag": "Default 0",
       "priceDialogTitle": "Price",
-      "priceDialogHelp": "Prices converted to the billing currency, per million tokens.",
-      "originalPrice": "Original price: input {{input}} / cache hit {{cacheRead}} / cache write {{cacheWrite}} / output {{output}} ({{currency}}), converted at the exchange rate.",
+      "priceDialogHelp": "Prices are per million tokens. Calls that start after you save are charged at the new price.",
       "input": "Input (cache miss)",
       "cacheRead": "Cache hit",
       "cacheWrite": "Cache write",
       "output": "Output",
-      "editHint": "To change prices, edit the model under its service provider in model settings.",
       "typical": "One ordinary question (3,000 input and 1,000 output tokens) uses about {{credits}} credits",
       "baseModel": "Base model",
       "baseModelHelp": "The model whose credit ratio is 1.00x. It only affects the ratio shown, not what is charged.",
@@ -4476,7 +4473,10 @@
       "saved": "Saved",
       "conflict": "Someone else changed these settings. Refresh and try again.",
       "unavailable": "Price information is unavailable right now.",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "editPrice": "Edit price",
+      "priceSaved": "Price saved",
+      "saveFailed": "Could not save. Try again."
     }
   },
   "request": {

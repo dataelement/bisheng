@@ -274,7 +274,8 @@
       "statusDefault": "价格表里没有这个模型，按免费处理，不扣积分。如果是收费模型，请填写价格。",
       "statusManual": "手动填写的价格。",
       "help": "每次调用按厂商返回的用量，每类 token 乘以对应价格计费；缓存写入不填时按输入价计。"
-    }
+    },
+    "discoveryScope_price_catalog": "以下是价格表中的常用模型，选中后会自动带出价格。添加前请确认服务商使用的模型名称与此一致。"
   },
   "finetune": {
     "rtServiceManagement": "FT服务管理",

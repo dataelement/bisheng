@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔄 部分实测 | MySQL 与 Redis 已实测；达梦与全流程待执行 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 35 / 37（T04 暂缓、T26 不做；S6 管理后台、S7 网页、S8 桌面、T33 积分展示完成；本机联调完成，剩 T32 测试服务器验收） |
+| 实现 | 🔄 进行中 | 38 / 39（T26 不做；T04 已恢复并完成；T33–T35 为联调后新增；本机自测完成，剩 T32 测试服务器验收） |
 
 ---
 
@@ -72,7 +72,7 @@
   **覆盖 AC**: AC-08, AC-09, AC-10
   **依赖**: T02
 
-- [ ] **T04**: 改价入口与三个接口（单一写入边界）【暂缓，见偏差记录】
+- [x] **T04**: 改价入口与三个接口（单一写入边界）【2026-11-13 恢复并完成，见偏差记录】
   **文件**: `src/backend/bisheng/llm/api/pricing.py`、llm 路由注册；`llm/domain/services/llm.py`（`update_model_pricing`）；`llm/domain/repositories/model_pricing_repository.py`；`common/errcode/llm.py`（10813 价格冲突）
   **逻辑**: Root 只读（19801）→ 提供方行锁与空闲检查（优先复用 F118 `alock_provider` / `arequire_idle`；F118 未合入时对 `llm_model` 行 `with_for_update()`）→ 租户校验 → revision 比较交换，只改 `config.pricing` → 提交后清本进程缓存、写审计
   **测试**: `test/llm/test_price_catalog_api.py`（约 10 个）
@@ -216,6 +216,8 @@
 
 - [~] **T26**: Cascader 可选 suffix / footer — `packages/ui/src/components/Cascader/*` · 依赖: 无（需组件库负责人认可）
 - [x] **T27**: 模型下拉框倍率 — `client/src/types/chat/config.ts`、`components/Chat/AiModelSelect.tsx` · 覆盖 AC: AC-13 · 依赖: T16, T26
+- [x] **T34**: 「选择模型」用价格表兜底（2026-11-13 Callum 联调提出）— 服务商列表拉取失败时列出价格表里该类型的模型并保留失败原因；「OpenAI 兼容」新增按钮直接从价格表选 — `platform/.../ModelDiscovery.tsx`、`modelDiscoveryCatalog.ts`、`modelDiscoveryErrors.ts`（从 ModelDiscovery 拆出以守住 600 行） · 依赖: T02
+- [x] **T35**: 客户端常驻剩余积分（2026-11-13 Callum 联调提出）— 网页工作台左下角 `client/src/components/dsh/SidebarCredits.tsx`；桌面左下角账号行 `bisheng-desktop packages/dsh-desktop-settings`，对话结束后自动刷新 · 依赖: T33
 - [x] **T33**: 本月积分展示（2026-11-13 Callum 联调时提出：界面上看不到员工的积分）— 网页「设置 → 客户端」积分卡片 `client/src/components/dsh/DshCreditsCard.tsx`、`DshDesktopPanel.tsx`（读已有的 `/dsh/me/credits`）；后台「用量」按用户显示本月已用 / 额度 / 剩余 `platform/src/pages/SystemPage/dsh/UserCreditsCard.tsx`、`PolicyView.tsx`，新接口 `GET /dsh/admin/users/{id}/credits`（与 `/me/credits` 共用 `month_credits`）；「当前时段已消耗」改为最多 2 位小数 · 依赖: 无
 
 ### Wave 6 — 桌面（S8，bisheng-desktop）
@@ -275,3 +277,7 @@
 - T33 做法：员工端和后台用同一个计算（`unified_policy.month_credits`），金额是精确的小数字符串，前端只负责格式化（最多 2 位小数），不限额由服务端的 `unlimited` 标记表示。后台没有复用已有的 `GET /dsh/admin/users/{id}/policy`：该接口按 JS 安全整数校验额度，不限额用户的 int64 上限会让整份数据被判为格式错误；而且用户本月还没有调用时，它返回的「已用」是空，`/me/credits` 返回的是 0。积分卡片只在「按用户」查看时显示，按自然月统计，不随时间范围变化；页面右上「刷新」同时刷新积分。
 - 发现原有缺陷（不在本特性范围，未改）：不限额用户（没有命中任何积分规则）有 2 个及以上模型时，读不到本月积分，`/dsh/me/credits` 和新的后台接口都返回 26126「额度状态暂不可用」，员工端和后台积分卡片显示「暂时无法读取」。原因：账本自动恢复（`automatic_quota_recovery.py` 第 182 行）把各模型额度直接相加，写入 Redis 的总额度。不限额时每个模型的额度都是 int64 上限，本机 f015admin 有 6 个模型，总额度为 55340232221128654842，超出 int64，`read_usage.lua` 因此判为 `bad_counter`。模型调用的准入只看单个模型的额度，所以调用本身不受影响。修复需要同时改恢复写入和 `read_usage.lua` 的总额度校验，属于统一额度账本，需要和账本负责人商量。
 - T33 检查：client `components/dsh` jest 9 条通过（新增 3 条）；platform `dshPolicyView` 13 条通过（新增 5 条）；后端新增 `test/dsh/test_admin_user_credits.py` 3 条通过，同时跑的 `test_admin_api`、`test_self_service` 各有 1 条失败，与改动前的基线相同；两端 tsc-strict、check-i18n 通过，改动文件 eslint 和 ruff 无问题；arch-guard 通过。platform `SystemPage` + `ModelPage` 共 511 条，3 条失败：`ContentSafetyDetails` 2 条，在上游 6a9255e3a 上同样失败；`ModelAccessDialog` 1 条，见 T25。
+- 2026-11-13 Callum 联调后要求在「用户可选模型」表里直接改价 → 恢复 T04。上游已合入 F118 的提供方写入锁（`model_provider_write_guard.alock_idle_model`），改价接口 `PUT /api/v1/llm/models/{id}/pricing` 照「改模型上下线」的写法加锁，锁内比较版本号并写入，只改 `config.pricing`，提交后清本进程缓存。审计记录未做（provider 保存原本也不写审计）。前端把「查看价格」弹框改为可编辑，复用添加模型时的价格区（带价格表比对和「恢复原价」），缺价模型也能在这里设价。AC-10 中「在价格弹框里改价」补齐。
+- T34 说明：上游「选择模型」按 API Key 实时拉取服务商的模型列表，只有智谱、讯飞、MiniMax、腾讯 4 家有内置目录，「OpenAI 兼容」不在支持列表里，没有按钮。拉取失败（地址、Key、代理不对）时只显示错误。现在改为列出价格表里该类型的模型（OpenAI 8 个、OpenAI 兼容 37 个……），名称取价格表别名的第一项，提示管理员核对服务商实际使用的名称。导入的模型由价格区按名称带出价格。
+- T35 说明与自测中发现的问题：桌面主进程缓存用量，内嵌网页 Chat 的调用不经过主进程，原来账号行不会更新。为此桌面本机刷新接口 `/api/enterprise.models.refresh` 增加可选 `{"includeUsage": true}`（broker 只放行这一个字段），账号行在 Chat 结束、打开菜单时读最新值，收到主进程其他通知时读本机缓存。新对话的标题生成是单独一次计费调用，比回答晚约 11 秒结算，所以网页和桌面都在对话结束后读两次（约 1.5 秒和 20 秒），网页另有 60 秒兜底。详细过程见 `self-test-2026-11-13.md`。
+- 2026-11-13 第二轮自测（计划与结果见 `self-test-2026-11-13.md`）：后端 A 组 4,113 条，platform 相关 622 条，client 相关 261 + 13 条，桌面全量，均无新增失败；浏览器与桌面端到端 13 项全部通过（真实模型，扣费与独立重算一致）。
