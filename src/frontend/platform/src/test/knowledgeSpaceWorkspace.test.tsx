@@ -50,6 +50,7 @@ it("keeps the expanded tree and routes selected folders into the workspace file 
   await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"parent":9'));
   expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?fileStatus=abnormal&keep=1&parent_id=9");
   expect(screen.getByTestId("files")).toHaveTextContent('"presentation":"workspace"');
+  expect(screen.getByRole("button", { name: "back" })).toBeVisible();
   expect(within(screen.getByRole("complementary")).getByRole("button", { name: "Finance" })).toHaveAttribute("aria-current", "page");
   expect(screen.queryByText("ordinary-list")).toBeNull();
   expect(screen.queryByRole("button", { name: "sidebar.all_spaces" })).toBeNull();
@@ -86,6 +87,8 @@ it("selects file content from a configuration deep link while retaining director
 it("automatically opens the first sidebar space instead of rendering the ordinary space list", async () => {
   mount();
   expect(await screen.findByTestId("files")).toHaveTextContent('"id":7');
+  expect(await screen.findByRole("heading", { name: "Reports" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "back" })).not.toBeInTheDocument();
   expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7");
   expect(screen.queryByText("ordinary-list")).toBeNull();
 });

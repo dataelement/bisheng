@@ -91,7 +91,7 @@
 - 新面板不再叠加旧组件本地乐观插入，字段列表以 schema 刷新为准，避免同一次新建因响应刷新与本地插入而出现重复。schema 为 `[]` 时清空旧列表。后台索引任务显示进度及原重试能力，完成后刷新。未知确认 ACK 下保留相同计划和幂等键供本次表单重试；明确业务拒绝后重新预检。卸载后的响应不能再确认。
 - `KnowledgeFile` 的空间菜单仅按有效 delete/manage_permission 动作展示删除空间和权限管理。复制、清空、引用来源及各配置快捷入口删除，对应无消费者的复制/schema 处理表单退役。空间删除继续走原 hook/弹窗，有引用时才展示来源；无引用、来源受限和预检失败保留原处理。
 - `SpaceSettingsEditor` 以完整 scope、空间和挂载实例读取 info/有效动作；`spaceSettingsForm` 负责初始化、校验和白名单 payload，`knowledgeSpaceSettings.ts` 调用既有 PUT space 接口。旧 `updateSpaceBasicInfo` 仍只接受原基本字段，不扩大旧调用者的写入范围。
-- 设置恢复已有自动标签模式与标签、访问方式、审核加入和广场发布。标签选择支持公共标签库、自定义多行及 TXT，去重并拒绝超过 200 个；不静默截断。已保存标签库不在第一页时单独读取以回显。按组件规范，统一确认保存的设置使用 Checkbox；仍复用共享 Select、Tabs、Button、Input 和 Textarea。
+- 设置恢复已有自动标签模式与标签、访问方式、审核加入和广场发布。标签选择支持公共标签库、自定义多行及 TXT，去重并拒绝超过 200 个；不静默截断。已保存标签库不在第一页时单独读取以回显。用户随后要求完整复用前台样式，设置项改用与前台相同的紧凑 Switch 行；仍在统一确认时保存，未引入拨动即写接口的新流程。控件均来自共享 UI 库。
 - 自动标签受现有 feature visibility 控制；未开放或本次未修改时省略标签字段，不清空已有配置。关闭或切换标签模式才显式清除另一种绑定。基本信息需 edit；访问与分享还需 manage_permission，复用前台的控制口径。部门空间不能改为私密，普通空间转私密保留原影响提示；私密保存同时取消广场发布。
 - 访问方式或发布状态缺失时不猜默认值；保存失败保留输入。权限管理沿用现有 `PermissionDialog`。不修改审批引擎、client、browser-config 或 user/info 的刷新逻辑。
 
@@ -104,3 +104,25 @@
 | 前台分享依赖 edit 与 manage_permission 两项动作 | 后台仅因能编辑名称就暴露分享操作 | 按相同有效动作禁用分享区，服务端继续做最终鉴权。 |
 
 本追加只消费已有 info、metadata-schema、processing-jobs、space PUT、标签库、功能可见性和有效权限接口；不新增外部依赖。验证和真实环境边界见 [metadata-settings-verification-20261113.md](./metadata-settings-verification-20261113.md)。
+
+### 前台设置样式复用（AC-30，基线 9041f3c263）
+
+- 参考 client 的 `KnowledgeSpaceSettingsPage`、`UnifiedPermissionControls` 和 `KnowledgeSpaceAccessMode`，复用已落地的 RadioCard/RadioGroup、small Switch 及表单字阶。`SpaceSettingsControls` 在 platform 仅组合同款呈现，不导入 client 的 Recoil、认证、路由或提交 hook，也不修改共享组件视觉样式。
+- 表单采用前台 Web 的居中 `max-width:648px`、分区 24px/字段 16px 间距、32px 灰底图标标题；去掉可见重复“编辑空间”标题，保留读屏标题。描述使用三行 Textarea；按后续 AC-33，名称和描述改为前台相同的全角单位限制，名称显示计数。
+- 访问方式使用同款带说明的单选卡片，审核加入/发布及自动标签恢复右对齐开关行；说明文案取前台同源内容并补齐三语言。标签预览使用胶囊标签，TXT 入口与计数同排，确认区增加顶部分隔线。
+- 这次调整展示层，不改数据转换、字段白名单、保存权限、私密确认或后端 API；原交互测试仅适配新的控件语义。1440px/1024px 的本地浏览器实测显示三个开关都位于可视宽度内，无页面横向溢出。
+
+### 普通空间菜单与复制入口（AC-31、AC-32）
+
+- 普通树原来只接入置顶。`useSidebarSpaceActions` 在一个 scoped 侧栏实例中统一维护动作懒读取、删除、权限和复制弹窗，避免给每个空间创建一组删除窗口监听器。每次菜单打开才读有效动作，不以部门/创建/加入分组或列表 hints 推测 delete/manage_permission。
+- 复制同时要求当前 user_id 与 source.user_id 严格相等，以及现有创建资格和 upload_file 动作；不以超管/租户管理员身份替代源实际创建者。服务端原 `SpaceCopyApplication.authorize` 仍做最终创建者、租户、状态及动作检查。
+- 删除继续复用 `useKnowledgeDeletion`/`KnowledgeDeletionDialog`，保留引用保护。成功后刷新完整 scope 的空间/导航查询；若删除当前空间，Workspace 返回普通入口再选择剩余首空间。退场或范围变化后的响应不得触发新视图导航。权限弹窗复用现有组件并绑定原 scope 和目标 ID。
+- `SpaceCopyDialog` 按 PRD 提供副本名称、完整处理范围、授权范围与排除项说明。创建时内部预检并确认；检查不完整或不可执行不确认。未知确认 ACK 下保留原计划/幂等键供重试，明确业务拒绝后允许重新预检；退场后不继续确认。
+- 接受复制后立即刷新导航；有任务时用副本 ID、space_copy kind 接原进度/重试组件，空副本可直接完成。后台业务、权限投影、对象及索引复制实现本轮只读核对。管理列表菜单维持删除/权限两个入口，普通树保留置顶。
+- 核对结果与注意事项见 [space-copy-prd-audit-20261113.md](./space-copy-prd-audit-20261113.md)。其中公共标签库被克隆为副本私有词库、设置回显为自定义，是原后端行为；PRD 未明确模式名称，本轮未更改。
+
+### 设置字符限制（AC-33）
+
+用户补充要求与前台一致。核对 client `KnowledgeSpaceSettingsPage` 的 MAX_NAME_LENGTH=10、MAX_DESCRIPTION_LENGTH=200 及 utils 的全角单位算法：ASCII 字符计 0.5，非 ASCII 的 UTF-16 单位计 1。后台 `spaceSettingsForm` 提供相同计数/限制，截断时保留完整码点，避免切出孤立代理项。
+
+SpaceSettingsEditor 使用自定义 suffix 显示向上取整后的名称计数，不使用共享 Input 基于原始字符串长度的 showCount；输入/粘贴和中文组合结束时执行限制，组合期间保留完整输入。验证与输入统一使用全角单位，因此英文名称可到 20 字符、英文简介可到 400 字符。历史超长内容原样回显并阻断保存，不自动重写已有名称。现有后端 DTO/保存接口不变，复制名称等独立流程不在本次设置页调整范围内。

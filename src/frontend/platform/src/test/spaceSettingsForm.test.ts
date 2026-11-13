@@ -5,7 +5,11 @@ import {
   spaceSettingsDraft,
   spaceSettingsPayload,
   validSpaceSettings,
+  getSpaceTextLength,
+  truncateSpaceText,
 } from "@/pages/KnowledgePage/components/spaceSettingsForm";
+// CJK input samples for character-width validation, independent of UI copy.
+const ideograph = String.fromCodePoint(0x4e00);
 const info: KnowledgeSpaceInfo = {
   id: 7,
   name: "space",
@@ -15,6 +19,33 @@ const info: KnowledgeSpaceInfo = {
   auto_tag_mode: "custom",
   auto_tag_custom_tags: ["first", "second"],
 };
+it("matches the client's full-width name and description limits", () => {
+  const draft = spaceSettingsDraft(info)!;
+  draft.name = "a".repeat(20);
+  draft.description = "b".repeat(400);
+  expect(validSpaceSettings(draft, false)).toBe(true);
+  draft.name += "a";
+  expect(validSpaceSettings(draft, false)).toBe(false);
+  draft.name = ideograph.repeat(10);
+  draft.description = ideograph.repeat(200);
+  expect(validSpaceSettings(draft, false)).toBe(true);
+  draft.description += ideograph;
+  expect(validSpaceSettings(draft, false)).toBe(false);
+});
+it("truncates mixed text in full-width units without splitting a surrogate pair", () => {
+  expect(getSpaceTextLength(ideograph.repeat(2) + "world")).toBe(4.5);
+  expect(truncateSpaceText(ideograph.repeat(9) + "abc", 10)).toBe(
+    ideograph.repeat(9) + "ab",
+  );
+  expect(truncateSpaceText(ideograph.repeat(9) + "😀", 10)).toBe(
+    ideograph.repeat(9),
+  );
+});
+it("does not silently truncate a saved long name when opening settings", () => {
+  const draft = spaceSettingsDraft({ ...info, name: "a".repeat(21) })!;
+  expect(draft.name).toHaveLength(21);
+  expect(validSpaceSettings(draft, false)).toBe(false);
+});
 it("restores saved custom tags without inventing a library binding", () => {
   expect(spaceSettingsDraft(info)).toMatchObject({
     customText: "first\nsecond",

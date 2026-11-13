@@ -9,6 +9,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SpaceSettingsEditor } from "@/pages/KnowledgePage/components/SpaceSettingsEditor";
 import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
+// CJK input samples for character-width validation, independent of UI copy.
+const ideograph = String.fromCodePoint(0x4e00);
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   put: vi.fn(),
@@ -85,13 +87,13 @@ it("shows saved sharing options and saves custom automatic tags", async () => {
   mount();
   await screen.findByDisplayValue("Space");
   expect(
-    screen.getByRole("checkbox", { name: "settings_ext.review" }),
+    screen.getByRole("switch", { name: "settings_ext.review" }),
   ).toBeChecked();
   expect(
-    screen.getByRole("checkbox", { name: "settings_ext.publish" }),
+    screen.getByRole("switch", { name: "settings_ext.publish" }),
   ).toBeChecked();
   fireEvent.click(
-    screen.getByRole("checkbox", { name: "settings_ext.auto_tag" }),
+    screen.getByRole("switch", { name: "settings_ext.auto_tag" }),
   );
   fireEvent.mouseDown(
     await screen.findByRole("tab", { name: "settings_ext.custom" }),
@@ -119,13 +121,13 @@ it("shows saved sharing options and saves custom automatic tags", async () => {
 it("requires the existing private-space confirmation before changing access", async () => {
   mount();
   await screen.findByDisplayValue("Space");
-  fireEvent.click(screen.getByRole("button", { name: "settings_ext.private" }));
+  fireEvent.click(screen.getByRole("radio", { name: "settings_ext.private" }));
   expect(mocks.confirm).toHaveBeenCalled();
   expect(mocks.put).not.toHaveBeenCalled();
   mocks.confirm.mock.calls[0][0].onOk();
   await waitFor(() =>
     expect(
-      screen.queryByRole("checkbox", { name: "settings_ext.review" }),
+      screen.queryByRole("switch", { name: "settings_ext.review" }),
     ).toBeNull(),
   );
   fireEvent.click(screen.getByRole("button", { name: "confirm" }));
@@ -140,7 +142,7 @@ it("prevents a department space from becoming private", async () => {
   mount();
   await screen.findByDisplayValue("Space");
   expect(
-    screen.getByRole("button", { name: "settings_ext.private" }),
+    screen.getByRole("radio", { name: "settings_ext.private" }),
   ).toBeDisabled();
 });
 it("hides gated tag controls and preserves tags when saving basic information", async () => {
@@ -149,7 +151,7 @@ it("hides gated tag controls and preserves tags when saving basic information", 
   mount();
   await screen.findByDisplayValue("Space");
   expect(
-    screen.queryByRole("checkbox", { name: "settings_ext.auto_tag" }),
+    screen.queryByRole("switch", { name: "settings_ext.auto_tag" }),
   ).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "confirm" }));
   await waitFor(() => expect(mocks.put).toHaveBeenCalled());
@@ -160,7 +162,7 @@ it("does not grant sharing management to a basic editor", async () => {
   mount();
   await screen.findByDisplayValue("Space");
   expect(
-    screen.getByRole("button", { name: "settings_ext.private" }),
+    screen.getByRole("radio", { name: "settings_ext.private" }),
   ).toBeDisabled();
   expect(screen.queryByText("managePermission")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "confirm" }));
@@ -182,4 +184,41 @@ it("keeps failed saves visible and allows retry without resetting user input", a
   expect(screen.getByDisplayValue("changed")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "confirm" }));
   await waitFor(() => expect(mocks.put).toHaveBeenCalledTimes(2));
+});
+it("limits pasted names and descriptions using the client full-width rules", async () => {
+  mount();
+  const name = await screen.findByRole("textbox", { name: "f118.space_name" });
+  fireEvent.change(name, { target: { value: "a".repeat(21) } });
+  expect(name).toHaveValue("a".repeat(20));
+  expect(screen.getByText("10/10")).toBeVisible();
+  const description = screen.getByRole("textbox", {
+    name: "f118.space_description",
+  });
+  fireEvent.change(description, { target: { value: "b".repeat(401) } });
+  expect(description).toHaveValue("b".repeat(400));
+  fireEvent.click(screen.getByRole("button", { name: "confirm" }));
+  await waitFor(() => expect(mocks.put).toHaveBeenCalled());
+  expect(mocks.put.mock.calls[0][1]).toMatchObject({
+    name: "a".repeat(20),
+    description: "b".repeat(400),
+  });
+});
+it("keeps IME composition intact and applies limits when composition finishes", async () => {
+  mount();
+  const name = await screen.findByRole("textbox", { name: "f118.space_name" });
+  const value = ideograph.repeat(11);
+  fireEvent.compositionStart(name);
+  fireEvent.change(name, { target: { value } });
+  expect(name).toHaveValue(value);
+  expect(screen.getByRole("button", { name: "confirm" })).toBeDisabled();
+  fireEvent.compositionEnd(name, { data: ideograph });
+  expect(name).toHaveValue(ideograph.repeat(10));
+  const description = screen.getByRole("textbox", {
+    name: "f118.space_description",
+  });
+  fireEvent.compositionStart(description);
+  fireEvent.change(description, { target: { value: ideograph.repeat(201) } });
+  expect(description).toHaveValue(ideograph.repeat(201));
+  fireEvent.compositionEnd(description, { data: ideograph });
+  expect(description).toHaveValue(ideograph.repeat(200));
 });

@@ -1,15 +1,13 @@
-import {
-  Button,
-  Input,
-  Select,
-  Checkbox,
-  Tabs,
-  Textarea,
-  toast,
-} from "@bisheng/ui";
+import { Button, Input, Select, Tabs, Textarea, toast } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Outlined } from "bisheng-icons";
+import {
+  SpaceSettingsAccessSelector,
+  SpaceSettingsSectionHeader,
+  SpaceSettingsSwitchRow,
+} from "./SpaceSettingsControls";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -28,6 +26,10 @@ import {
 import { showApiError } from "@/controllers/request";
 import {
   parseSpaceTags,
+  getSpaceTextLength,
+  truncateSpaceText,
+  SPACE_NAME_LIMIT,
+  SPACE_DESCRIPTION_LIMIT,
   spaceSettingsDraft,
   spaceSettingsPayload,
   validSpaceSettings,
@@ -54,6 +56,8 @@ function SettingsEditor({ scope, spaceId, onSaved }: SpaceSettingsEditorProps) {
   const active = useRef(true),
     locked = useRef(false);
   const controller = useRef<AbortController | null>(null);
+  const nameComposing = useRef(false),
+    descriptionComposing = useRef(false);
   const [draft, setDraft] = useState<SpaceSettingsDraft | null>(null);
   const [busy, setBusy] = useState(false),
     [permissionOpen, setPermissionOpen] = useState(false),
@@ -240,26 +244,92 @@ function SettingsEditor({ scope, spaceId, onSaved }: SpaceSettingsEditorProps) {
       </div>
     );
   return (
-    <section className="space-y-6">
-      <fieldset disabled={!canEdit || busy} className="space-y-4">
-        <h2 className="text-heading-sm font-medium">{t("f118.edit_space")}</h2>
-        <label className="block space-y-2">
-          <span>{t("f118.space_name")}</span>
-          <Input
-            value={draft.name}
-            maxLength={200}
-            onChange={(event) => update("name", event.target.value)}
-          />
-        </label>
-        <label className="block space-y-2">
-          <span>{t("f118.space_description")}</span>
-          <Textarea
-            rows={5}
-            maxLength={200}
-            value={draft.description}
-            onChange={(event) => update("description", event.target.value)}
-          />
-        </label>
+    <section className="mx-auto w-full min-w-0 max-w-[648px] space-y-6 py-6 text-body">
+      <h2 className="sr-only">{t("f118.edit_space")}</h2>
+      <fieldset disabled={!canEdit || busy} className="min-w-0 space-y-6">
+        <SpaceSettingsSectionHeader
+          kind="basic"
+          title={t("settings_ext.basic")}
+        />
+        <div className="space-y-4 px-6 max-[768px]:px-0">
+          <label className="block space-y-2">
+            <span className="font-medium text-text-1">
+              <span className="mr-1 text-danger">*</span>
+              {t("f118.space_name")}
+            </span>
+            <Input
+              aria-label={t("f118.space_name")}
+              value={draft.name}
+              status={
+                getSpaceTextLength(draft.name) > SPACE_NAME_LIMIT
+                  ? "error"
+                  : "default"
+              }
+              suffix={
+                <span
+                  aria-hidden
+                  className={`text-body-sm ${getSpaceTextLength(draft.name) > SPACE_NAME_LIMIT ? "text-danger" : "text-text-3"}`}
+                >
+                  {Math.ceil(getSpaceTextLength(draft.name))}/{SPACE_NAME_LIMIT}
+                </span>
+              }
+              onCompositionStart={() => {
+                nameComposing.current = true;
+              }}
+              onCompositionEnd={(event) => {
+                nameComposing.current = false;
+                update(
+                  "name",
+                  truncateSpaceText(
+                    event.currentTarget.value,
+                    SPACE_NAME_LIMIT,
+                  ),
+                );
+              }}
+              onChange={(event) =>
+                update(
+                  "name",
+                  nameComposing.current
+                    ? event.target.value
+                    : truncateSpaceText(event.target.value, SPACE_NAME_LIMIT),
+                )
+              }
+            />
+          </label>
+          <label className="block space-y-2">
+            <span className="font-medium text-text-1">
+              {t("f118.space_description")}
+            </span>
+            <Textarea
+              rows={3}
+              value={draft.description}
+              onCompositionStart={() => {
+                descriptionComposing.current = true;
+              }}
+              onCompositionEnd={(event) => {
+                descriptionComposing.current = false;
+                update(
+                  "description",
+                  truncateSpaceText(
+                    event.currentTarget.value,
+                    SPACE_DESCRIPTION_LIMIT,
+                  ),
+                );
+              }}
+              onChange={(event) =>
+                update(
+                  "description",
+                  descriptionComposing.current
+                    ? event.target.value
+                    : truncateSpaceText(
+                        event.target.value,
+                        SPACE_DESCRIPTION_LIMIT,
+                      ),
+                )
+              }
+            />
+          </label>
+        </div>
         {feature.isError && (
           <div role="alert">
             <p>{t("f118.load_failed")}</p>
@@ -273,166 +343,191 @@ function SettingsEditor({ scope, spaceId, onSaved }: SpaceSettingsEditorProps) {
           </div>
         )}
         {feature.data?.visible && (
-          <div className="space-y-4">
-            <h3 className="rounded-lg bg-muted p-3 font-medium">
-              {t("f118.advanced_settings")}
-            </h3>
-            <label className="flex items-center justify-between">
-              <span>{t("settings_ext.auto_tag")}</span>
-              <Checkbox
+          <section className="space-y-6">
+            <SpaceSettingsSectionHeader
+              kind="advanced"
+              title={t("f118.advanced_settings")}
+            />
+            <div className="space-y-4 px-6 max-[768px]:px-0">
+              <SpaceSettingsSwitchRow
+                label={t("settings_ext.auto_tag")}
                 checked={draft.autoTag}
-                onCheckedChange={(value) => setTag("autoTag", value === true)}
+                disabled={!canEdit || busy}
+                onCheckedChange={(value) => setTag("autoTag", value)}
               />
-            </label>
-            {draft.autoTag && (
-              <Tabs
-                activeKey={draft.tagMode}
-                onChange={(value) => {
-                  if (value === "library" || value === "custom")
-                    setTag("tagMode", value);
-                }}
-                items={[
-                  {
-                    key: "library",
-                    label: t("settings_ext.library"),
-                    children: (
-                      <div className="space-y-3">
-                        <Select
-                          {...labels}
-                          aria-label={t("settings_ext.library")}
-                          loading={libraries.isFetching}
-                          options={options}
-                          value={draft.libraryId ?? undefined}
-                          onChange={(value) => {
-                            if (value != null)
-                              setTag("libraryId", Number(value));
-                          }}
-                        />
-                        {libraries.isError && (
-                          <Button
-                            onClick={() => {
-                              void libraries.refetch();
-                            }}
-                          >
-                            {t("retry")}
-                          </Button>
-                        )}
-                        {library.isError && (
-                          <Button
-                            onClick={() => {
-                              void library.refetch();
-                            }}
-                          >
-                            {t("retry")}
-                          </Button>
-                        )}
-                        {library.data && (
-                          <p className="text-sm text-text-secondary">
-                            {library.data.tags.slice(0, 20).join(" / ")}
-                          </p>
-                        )}
-                      </div>
-                    ),
-                  },
-                  {
-                    key: "custom",
-                    label: t("settings_ext.custom"),
-                    children: (
-                      <div className="space-y-2">
-                        <p>{parseSpaceTags(draft.customText).length}/200</p>
-                        <Textarea
-                          aria-label={t("settings_ext.custom_tags")}
-                          value={draft.customText}
-                          onChange={(event) =>
-                            setTag("customText", event.target.value)
-                          }
-                          rows={5}
-                        />
-                        <label className="inline-block cursor-pointer text-primary">
-                          {t("settings_ext.upload_txt")}
-                          <input
-                            type="file"
-                            accept=".txt"
-                            className="hidden"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0];
-                              event.target.value = "";
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                if (active.current)
-                                  setTag(
-                                    "customText",
-                                    typeof reader.result === "string"
-                                      ? reader.result
-                                      : "",
-                                  );
-                              };
-                              reader.onerror = () => {
-                                if (active.current) showApiError(reader.error);
-                              };
-                              reader.readAsText(file);
+              {draft.autoTag && (
+                <Tabs
+                  activeKey={draft.tagMode}
+                  onChange={(value) => {
+                    if (value === "library" || value === "custom")
+                      setTag("tagMode", value);
+                  }}
+                  items={[
+                    {
+                      key: "library",
+                      label: t("settings_ext.library"),
+                      children: (
+                        <div className="mt-3 space-y-2">
+                          <Select
+                            {...labels}
+                            aria-label={t("settings_ext.library")}
+                            loading={libraries.isFetching}
+                            options={options}
+                            value={draft.libraryId ?? undefined}
+                            onChange={(value) => {
+                              if (value != null)
+                                setTag("libraryId", Number(value));
                             }}
                           />
-                        </label>
-                      </div>
-                    ),
-                  },
-                ]}
-              />
-            )}
-          </div>
+                          {libraries.isError && (
+                            <Button
+                              onClick={() => {
+                                void libraries.refetch();
+                              }}
+                            >
+                              {t("retry")}
+                            </Button>
+                          )}
+                          {library.isError && (
+                            <Button
+                              onClick={() => {
+                                void library.refetch();
+                              }}
+                            >
+                              {t("retry")}
+                            </Button>
+                          )}
+                          {library.data && (
+                            <div className="flex flex-wrap gap-2 text-body-sm text-text-3">
+                              {library.data.tags.slice(0, 20).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="rounded-full bg-fill-2 px-2 py-1"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "custom",
+                      label: t("settings_ext.custom"),
+                      children: (
+                        <div className="mt-3 space-y-2">
+                          <div className="flex items-center justify-between text-body-sm text-text-3">
+                            <span>
+                              {parseSpaceTags(draft.customText).length}/200
+                            </span>
+                            <label className="inline-flex cursor-pointer items-center gap-1 text-blue-500 hover:underline">
+                              <Outlined.Upload className="size-4" />
+                              {t("settings_ext.upload_txt")}
+                              <input
+                                type="file"
+                                accept=".txt"
+                                className="hidden"
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0];
+                                  event.target.value = "";
+                                  if (!file) return;
+                                  const reader = new FileReader();
+                                  reader.onload = () => {
+                                    if (active.current)
+                                      setTag(
+                                        "customText",
+                                        typeof reader.result === "string"
+                                          ? reader.result
+                                          : "",
+                                      );
+                                  };
+                                  reader.onerror = () => {
+                                    if (active.current)
+                                      showApiError(reader.error);
+                                  };
+                                  reader.readAsText(file);
+                                }}
+                              />
+                            </label>
+                          </div>
+                          <Textarea
+                            aria-label={t("settings_ext.custom_tags")}
+                            value={draft.customText}
+                            onChange={(event) =>
+                              setTag("customText", event.target.value)
+                            }
+                            rows={5}
+                          />
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          </section>
         )}
       </fieldset>
-      <fieldset disabled={busy || !canShare} className="space-y-4">
-        <h3 className="rounded-lg bg-muted p-3 font-medium">
-          {t("settings_ext.access")}
-        </h3>
-        <div className="flex gap-3">
-          <Button
-            variant={draft.auth === "private" ? "solid" : "outlined"}
-            disabled={!canShare || busy || department}
-            onClick={() => chooseAccess("private")}
-          >
-            {t("settings_ext.private")}
-          </Button>
-          <Button
-            variant={draft.auth !== "private" ? "solid" : "outlined"}
-            onClick={() => chooseAccess("shared")}
-          >
-            {t("settings_ext.shared")}
-          </Button>
-        </div>
-        {department && (
-          <p className="text-sm text-text-secondary">
-            {t("settings_ext.department_notice")}
-          </p>
-        )}
-        {draft.auth !== "private" && (
-          <>
-            <label className="flex items-center justify-between">
-              <span>{t("settings_ext.review")}</span>
-              <Checkbox
+      <fieldset disabled={busy || !canShare} className="min-w-0 space-y-6">
+        <SpaceSettingsSectionHeader
+          kind="permission"
+          title={t("settings_ext.access")}
+        />
+        <div className="space-y-4 px-6 max-[768px]:px-0">
+          <div className="space-y-2">
+            <p className="font-medium text-text-1">
+              <span className="mr-1 text-danger">*</span>
+              {t("settings_ext.access")}
+            </p>
+            <SpaceSettingsAccessSelector
+              value={draft.auth === "private" ? "private" : "shared"}
+              onValueChange={chooseAccess}
+              disabled={!canShare || busy}
+              privateDisabled={department}
+              label={t("settings_ext.access")}
+              privateLabel={t("settings_ext.private")}
+              privateDescription={t(
+                department
+                  ? "settings_ext.department_notice"
+                  : "settings_ext.private_hint",
+              )}
+              sharedLabel={t("settings_ext.shared")}
+              sharedDescription={t("settings_ext.shared_hint")}
+            />
+          </div>
+          {draft.auth !== "private" && (
+            <>
+              <SpaceSettingsSwitchRow
+                required
+                label={t("settings_ext.review")}
+                description={t("settings_ext.review_hint")}
                 checked={draft.auth === "approval"}
+                disabled={!canShare || busy}
                 onCheckedChange={(value) =>
-                  update("auth", value === true ? "approval" : "public")
+                  update("auth", value ? "approval" : "public")
                 }
               />
-            </label>
-            <label className="flex items-center justify-between">
-              <span>{t("settings_ext.publish")}</span>
-              <Checkbox
+              <SpaceSettingsSwitchRow
+                required
+                label={t("settings_ext.publish")}
+                description={t("settings_ext.publish_hint")}
                 checked={draft.released}
-                onCheckedChange={(value) => update("released", value === true)}
+                disabled={!canShare || busy}
+                onCheckedChange={(value) => update("released", value)}
               />
-            </label>
-          </>
-        )}
-        {canShare && (
-          <Button variant="outlined" onClick={() => setPermissionOpen(true)}>
-            {t("managePermission", { ns: "permission" })}
-          </Button>
-        )}
+            </>
+          )}
+          {canShare && (
+            <Button
+              color="default"
+              variant="outlined"
+              onClick={() => setPermissionOpen(true)}
+            >
+              {t("managePermission", { ns: "permission" })}
+            </Button>
+          )}
+        </div>
       </fieldset>
       {permission.isError && (
         <Button
@@ -443,8 +538,9 @@ function SettingsEditor({ scope, spaceId, onSaved }: SpaceSettingsEditorProps) {
           {t("retry")}
         </Button>
       )}
-      <div className="flex justify-end">
+      <footer className="flex h-16 items-center justify-end gap-3 border-t border-border-base">
         <Button
+          loading={busy}
           disabled={busy || !canEdit || !validSpaceSettings(draft, tagsTouched)}
           onClick={() => {
             void handleSave();
@@ -452,7 +548,7 @@ function SettingsEditor({ scope, spaceId, onSaved }: SpaceSettingsEditorProps) {
         >
           {t("confirm")}
         </Button>
-      </div>
+      </footer>
       {permissionOpen && canShare && (
         <PermissionDialog
           open

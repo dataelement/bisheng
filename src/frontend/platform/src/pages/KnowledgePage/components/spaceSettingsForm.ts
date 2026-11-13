@@ -1,5 +1,26 @@
 import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
 import type { SpaceSettingsUpdate } from "@/controllers/API/knowledgeSpaceSettings";
+export const SPACE_NAME_LIMIT = 10;
+export const SPACE_DESCRIPTION_LIMIT = 200;
+
+// Match the client settings' full-width units: ASCII is half a unit.
+export function getSpaceTextLength(value: string): number {
+  let length = 0;
+  for (const character of value) {
+    length += character.charCodeAt(0) <= 0x7f ? 0.5 : character.length;
+  }
+  return length;
+}
+export function truncateSpaceText(value: string, limit: number): string {
+  let length = 0,
+    end = 0;
+  for (const character of value) {
+    length += character.charCodeAt(0) <= 0x7f ? 0.5 : character.length;
+    if (length > limit) break;
+    end += character.length;
+  }
+  return value.slice(0, end);
+}
 export interface SpaceSettingsDraft {
   name: string;
   description: string;
@@ -45,8 +66,8 @@ export function validSpaceSettings(
 ): boolean {
   return (
     Boolean(value.name.trim()) &&
-    value.name.length <= 200 &&
-    value.description.length <= 200 &&
+    getSpaceTextLength(value.name) <= SPACE_NAME_LIMIT &&
+    getSpaceTextLength(value.description) <= SPACE_DESCRIPTION_LIMIT &&
     (!tagsTouched ||
       !value.autoTag ||
       (value.tagMode === "custom"

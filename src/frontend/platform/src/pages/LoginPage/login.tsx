@@ -32,7 +32,6 @@ interface LoginPageProps {
 }
 
 type RegistrationLayout = {
-    panelTop: number;
     formTop: number;
     loginHeight: number;
     accountHeight: number;
@@ -64,6 +63,7 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     const pwdRef = useRef(null);
 
     const layoutRef = useRef<HTMLDivElement>(null);
+    const scrollAreaRef = useRef<HTMLDivElement>(null);
     const formRef = useRef<HTMLDivElement>(null);
     const fieldsRef = useRef<HTMLDivElement>(null);
     const loginFieldsRef = useRef<HTMLDivElement>(null);
@@ -72,20 +72,21 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     const [returningToLogin, setReturningToLogin] = useState(false);
     const showLogin = registrationLayout === null;
 
+    useLayoutEffect(() => {
+        if (showLogin && scrollAreaRef.current) scrollAreaRef.current.scrollTop = 0;
+    }, [showLogin]);
+
     const handleShowRegistration = (event: MouseEvent<HTMLAnchorElement>) => {
         event.preventDefault();
         const layout = layoutRef.current;
         const form = formRef.current;
         const fields = fieldsRef.current;
         const account = loginFieldsRef.current?.firstElementChild;
-        const page = layout?.parentElement;
-        if (!layout || !form || !fields || !account || !page) return;
+        if (!layout || !form || !fields || !account) return;
 
-        // Preserve the centered login title's position while registration grows below it.
-        const panelTop = layout.getBoundingClientRect().top;
+        // Keep the login title at the same height when the registration fields fit.
         setRegistrationLayout({
-            panelTop: panelTop - page.getBoundingClientRect().top,
-            formTop: form.getBoundingClientRect().top - panelTop,
+            formTop: form.getBoundingClientRect().top - layout.getBoundingClientRect().top,
             loginHeight: fields.getBoundingClientRect().height,
             accountHeight: account.getBoundingClientRect().height,
         });
@@ -304,11 +305,10 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     }
 
     return (
-        <div className="flex min-h-dvh w-full flex-col items-center bg-background-dark md:px-4">
+        <div className="flex h-dvh w-full flex-col items-center overflow-hidden bg-background-dark md:px-4">
             <div
                 ref={layoutRef}
-                className="my-auto grid min-h-dvh w-full max-w-[1280px] shrink-0 grid-cols-1 bg-background-login md:min-h-[min(720px,100dvh)] md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:rounded-lg"
-                style={registrationLayout ? { marginBlockStart: registrationLayout.panelTop, marginBlockEnd: 0 } : undefined}
+                className="my-auto grid h-dvh w-full max-w-[1280px] shrink-0 grid-cols-1 grid-rows-[minmax(0,1fr)] bg-background-login md:h-[min(720px,100dvh)] md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:rounded-lg"
             >
                 <div className="relative my-2 ml-2 hidden overflow-hidden rounded-lg md:block">
                     <img
@@ -323,11 +323,14 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                     />
                 </div>
                 <div
-                    className="grid min-w-0 grid-rows-[minmax(1rem,1fr)_auto_minmax(min-content,1fr)]"
-                    style={registrationLayout ? { gridTemplateRows: `${registrationLayout.formTop}px auto minmax(min-content, 1fr)` } : undefined}
+                    className={`grid min-h-0 min-w-0 ${registrationLayout
+                        ? "grid-rows-[0px_minmax(0,1fr)_auto]"
+                        : "grid-rows-[minmax(1rem,1fr)_minmax(0,max-content)_minmax(min-content,1fr)]"}`}
                 >
-                    <div ref={formRef} className="row-start-2 mx-auto w-full max-w-[360px] px-5">
-                        <div>
+                    <div ref={scrollAreaRef} className="row-start-2 flex min-h-0 flex-col overflow-y-auto overscroll-contain pb-1">
+                        {/* Shrink the empty space before scrolling the form. */}
+                        {registrationLayout && <div aria-hidden className="min-h-4" style={{ flexBasis: registrationLayout.formTop }} />}
+                        <div ref={formRef} className="mx-auto w-full max-w-[360px] shrink-0 px-5">
                             <img
                                 src={getBrandAssetUrl("headerLogoLight", "/assets/bisheng/login-logo-small.png")}
                                 className="m-auto block h-[36px] w-[114px] dark:hidden"
@@ -342,9 +345,10 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                                 {t("login.slogen")}
                             </span>
                         </div>
-                        <div ref={fieldsRef} className="relative mt-8 grid grid-cols-1 content-start md:[@media(min-height:752px)]:mt-[68px]">
+                        <div aria-hidden className={`basis-8 md:[@media(min-height:752px)]:basis-[68px] ${registrationLayout ? "min-h-4" : "shrink-0"}`} />
+                        <div ref={fieldsRef} className="relative mx-auto grid w-full max-w-[360px] shrink-0 grid-cols-1 content-start px-5">
                             {(showLogin || returningToLogin) && (
-                                <div ref={loginFieldsRef} className={`grid content-start gap-3 ${returningToLogin ? "absolute inset-x-0 top-0 z-10 bg-background-login" : ""}`}>
+                                <div ref={loginFieldsRef} className={`grid content-start gap-3 ${returningToLogin ? "absolute inset-x-5 top-0 z-10 bg-background-login" : ""}`}>
                                     <div className="grid">
                                         <Input size="large" id="email" ref={personIdRef} placeholder={t("login.account")} type="text" autoCapitalize="none" autoComplete="username" autoCorrect="off" />
                                     </div>

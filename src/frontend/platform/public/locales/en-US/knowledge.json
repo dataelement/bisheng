@@ -758,6 +758,21 @@
         "review": "Approve join requests",
         "publish": "Publish to the square",
         "private_notice": "Making this space private prevents subscriptions and changes existing membership and subscriptions. Make it private?",
-        "department_notice": "Department spaces cannot be private."
+        "department_notice": "Department spaces cannot be private.",
+        "basic": "Basic settings",
+        "private_hint": "Others cannot subscribe on their own",
+        "shared_hint": "Others can subscribe via a link or the square",
+        "review_hint": "Administrator approval is required to join",
+        "publish_hint": "Show this space in the square so others can search for or view it"
+    },
+    "space_copy_ui": {
+        "title": "Copy knowledge space",
+        "name": "Copy name",
+        "scope_label": "Included content",
+        "scope": "Folders, files, all versions, tags, metadata and parsing settings",
+        "permissions": "Permission modes and ordinary grants follow existing resource-copy rules. The copy creator becomes its owner; protected creator identities are not copied.",
+        "independent": "The copy has independent resources, indexes and tasks. It is not published to the square, and subscriptions, pins and chats are not copied.",
+        "create": "Create copy",
+        "created": "Copy created: {{name}}"
     }
 }
