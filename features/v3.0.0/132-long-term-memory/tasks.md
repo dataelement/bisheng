@@ -238,7 +238,7 @@
   **覆盖 AC**: AC-04, AC-21, AC-23, AC-24, AC-25, AC-26, AC-44, AC-91, AC-92, AC-97, AC-98, AC-101
   **依赖**: T024, T026, T016
 
-- [ ] **T028**: 记下、更正、忘掉的实现
+- [x] **T028**: 记下、更正、忘掉的实现
   **文件**: `src/backend/bisheng/memory/domain/services/memory_service.py`
   **逻辑**: `write`（remember / correct / forget）与 `list`。新增是 INSERT；更正与忘掉是带状态条件的 UPDATE，影响行数为 0 即失败。详情对象先写后插行，`item_id` 由应用侧生成。事务里同时：`rev` 加一、写本轮记录。提交后：通过 `MemoryIndex` 同步建或删索引（失败置待建）、写审计、计数。依赖以构造参数注入 `MemoryIndex` 与 `DetailStore`。设计见 design 决策 3、4、5、8。
   **测试**: T027 全部通过
