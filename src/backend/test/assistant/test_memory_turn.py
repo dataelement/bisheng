@@ -29,11 +29,14 @@ from test.assistant.memory_support import (
     set_switch,
     tool_names,
     tool_reply,
+    wired,  # noqa: F401  (pytest fixture)
 )
-from test.assistant.memory_support import wired  # noqa: F401  (pytest fixture)
-from test.memory.conftest import TENANT_A, USER_1, USER_2, counter
 from test.memory.conftest import (  # noqa: F401  (pytest fixtures)
+    TENANT_A,
+    USER_1,
+    USER_2,
     audit_rows,
+    counter,
     details,
     index,
     kv,
@@ -90,7 +93,10 @@ async def test_ac51_ac77_enabled_injects_resident_and_tools_without_author_tools
         sent = llm.received[-1]
         assert has_resident(sent) and any(FACT in str(x.content) for x in sent)
         # Injected right before the question (ReAct reads inputs[-1] as the question).
-        assert isinstance(sent[-1], HumanMessage) and sent[-1].content == question
+        # (ReAct wraps the question in its own "Question: ..." scratchpad message.)
+        assert isinstance(sent[-1], HumanMessage) and question in sent[-1].content
+        resident_at = next(i for i, x in enumerate(sent) if FACT in str(x.content))
+        assert 0 < resident_at < len(sent) - 1
         assert MEMORY_TOOLS <= set(tool_names(agent))
     if executor == "function call":
         assert MEMORY_TOOLS <= set(llm.bound[-1])
@@ -281,4 +287,6 @@ async def test_ac77_memory_write_tool_works_in_assistant(executor, enabled_chat,
     assert result[-1].content == "记住了"
     async with _db.async_session() as s:
         items = list((await s.exec(select(MemoryItem))).all())
-    assert [(i.content, i.source_scene, i.source_app_id) for i in items] == [("用户喜欢绿茶", "assistant", ASSISTANT_ID)]
+    assert [(i.content, i.source_scene, i.source_app_id) for i in items] == [
+        ("用户喜欢绿茶", "assistant", ASSISTANT_ID)
+    ]

@@ -14,6 +14,7 @@ from langgraph.prebuilt import create_react_agent
 from loguru import logger
 from pydantic import Field, SkipValidation
 
+from bisheng.api.services import assistant_memory
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
@@ -228,6 +229,11 @@ class AssistantAgent(AssistantUtils):
         # Knowledge Base Retrieval Related Parameters
         self.knowledge_retriever = {"max_content": 15000, "sort_by_source_and_index": False}
         self.citation_registry_collector = CitationRegistryCollector()
+        # F132: author-configured tools (memory tools are added per turn) and the
+        # memory state of the current turn.
+        self.author_tools: list[BaseTool] | None = None
+        self.memory_tools_on = False
+        self.memory_turn = None
 
     async def init_assistant(self, callbacks: Callbacks = None):
         await self.init_llm()
@@ -376,6 +382,8 @@ class AssistantAgent(AssistantUtils):
                 )
             )
         self.tools = [self.wrap_citation_tool(tool) for tool in tools]
+        self.author_tools = list(self.tools)
+        self.memory_tools_on = False
         kb_name_by_id = self._resolve_kb_name_by_id(kb_ids + space_ids)
         for tool in self.tools:
             if isinstance(tool, AssistantCitationToolWrapper) and tool._has_knowledge_rag_tool():
@@ -591,16 +599,37 @@ class AssistantAgent(AssistantUtils):
         # trim message
         inputs = await self.trim_messages(inputs)
 
+        # F132: memory is applied per turn, after trimming, on a copy of the inputs (R6).
+        turn = await self.begin_memory_turn(callback)
+        inputs = assistant_memory.prepare_inputs(inputs, turn)
+
         if self.current_agent_executor == "ReAct":
             result = await self.react_run(inputs, callback)
         else:
             result = await self.agent.ainvoke({"messages": inputs}, config=RunnableConfig(callbacks=callback))
             result = result["messages"]
 
+        # Drop the injected resident message and redact memory tool messages before
+        # the caller slices and persists the result.
+        result = assistant_memory.finalize_result(result)
+
         # Record Chat History
         await self.record_chat_history([one.to_json() for one in result])
 
         return result
+
+    async def begin_memory_turn(self, callback: Callbacks = None):
+        """Re-read the memory switch and rebuild the agent when the tool set changes (decision 11)."""
+        if self.author_tools is None:
+            self.author_tools = list(self.tools)
+        turn = await assistant_memory.begin_turn(self.assistant, self.chat_id, callback)
+        self.memory_turn = turn
+        if turn.enabled or self.memory_tools_on:
+            # Memory tools carry this turn's context, so an enabled turn always rebuilds.
+            self.tools = assistant_memory.compose_tools(self.author_tools, turn)
+            self.memory_tools_on = turn.enabled
+            await self.init_agent()
+        return turn
 
     async def astream(self, query: str, chat_history: list = None, callback: Callbacks = None):
         """
@@ -616,10 +645,12 @@ class AssistantAgent(AssistantUtils):
 
         # trim message
         inputs = await self.trim_messages(inputs)
+        turn = await self.begin_memory_turn(callback)
+        inputs = assistant_memory.prepare_inputs(inputs, turn)
 
         if self.current_agent_executor == "ReAct":
             # ReActMode temporarily does not support streaming, downgrade to non streaming
-            result = await self.react_run(inputs, callback)
+            result = assistant_memory.finalize_result(await self.react_run(inputs, callback))
             # Record Chat History
             await self.record_chat_history([one.to_json() for one in result])
             yield result
