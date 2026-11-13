@@ -290,3 +290,43 @@ async def test_ac77_memory_write_tool_works_in_assistant(executor, enabled_chat,
     assert [(i.content, i.source_scene, i.source_app_id) for i in items] == [
         ("用户喜欢绿茶", "assistant", ASSISTANT_ID)
     ]
+
+
+@pytest.mark.parametrize("executor", EXECUTORS)
+async def test_ac02_knowing_someone_elses_chat_id_gives_no_memory(executor, enabled_chat, make_ctx):
+    """AC-02 / AC-08: user B sends user A's registered chat_id; B gets none of A's memory."""
+    await _remember(enabled_chat.service, make_ctx, text="用户甲的会员号偏好")
+    agent_b, llm_b = await build_agent(executor, [final_reply(executor)], user_id=USER_2)  # A's chat
+
+    await agent_b.run("你好", [])
+
+    assert not has_resident(llm_b.received[-1])
+    assert not MEMORY_TOOLS & set(tool_names(agent_b))
+
+
+@pytest.mark.parametrize("executor", EXECUTORS)
+async def test_ac10_guest_connection_never_gets_memory(executor, enabled_chat, make_ctx):
+    """AC-10: a guest-link / open-API connection (no memory_register) switching to a registered
+    chat of the same user id still gets no memory."""
+    await _remember(enabled_chat.service, make_ctx)
+    agent, llm = await build_agent(executor, [final_reply(executor)])
+    agent.memory_allowed = False  # what ChatClient leaves on guest and open-API connections
+
+    await agent.run("你好", [])
+
+    assert not has_resident(llm.received[-1])
+    assert not MEMORY_TOOLS & set(tool_names(agent))
+
+
+def test_resident_message_is_first_and_question_stays_last():
+    """Decision 11 / R6: consecutive with the system prompt (Anthropic rejects split system messages)."""
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+    from bisheng.api.services import assistant_memory
+
+    turn = assistant_memory.AssistantMemoryTurn()
+    turn.resident_text = "以下是关于用户的背景信息"
+    inputs = [HumanMessage(content="早"), AIMessage(content="早"), HumanMessage(content="问题")]
+    prepared = assistant_memory.prepare_inputs(inputs, turn)
+    assert isinstance(prepared[0], SystemMessage) and prepared[0].content == turn.resident_text
+    assert prepared[-1].content == "问题" and len(inputs) == 3

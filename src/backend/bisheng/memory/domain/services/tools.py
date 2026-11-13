@@ -98,9 +98,17 @@ def build_memory_tools(ctx: MemoryContext, service=None, search=None, on_write=N
             hits = await search.search(ctx, query, limit=limit, detail_ids=detail_ids or [])
         except MemorySearchUnavailableError as exc:
             return f"记忆检索暂时不可用：{exc.message}。请在回答中说明这一点，不要假装查到了记忆。"
+        except Exception:
+            # Never raise into the agent loop: the answer continues without memory (AC-61).
+            logger.exception("memory_search failed")
+            return "记忆检索暂时不可用。请在回答中说明这一点，不要假装查到了记忆。"
         ids = [h.item_id for h in hits]
         if ids:
-            await TurnRecordService.add_retrieved(ctx, ids)
+            try:
+                await TurnRecordService.add_retrieved(ctx, ids)
+            except Exception:
+                # Only the attribution record is lost; the search result is still returned.
+                logger.exception("memory: recording retrieved items failed")
             ctx.extra["memory_retrieved"] = True
         return render_hits(hits)[:MAX_SEARCH_OUTPUT_CHARS]
 

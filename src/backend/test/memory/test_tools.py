@@ -134,3 +134,17 @@ def test_third_party_memory_prefixed_tool_is_not_redacted():
     """AC-09 scope: an MCP tool named memory_store keeps its input and output."""
     payload = {"key": "k", "value": "v"}
     assert redact_tool_event("memory_store", payload) is payload
+
+
+async def test_ac61_unexpected_search_error_is_returned_not_raised(tools_for, make_ctx, monkeypatch):
+    """AC-61: any search failure comes back to the model as text; the agent loop never sees an exception."""
+    ctx = make_ctx()
+
+    async def _boom(*a, **k):
+        raise RuntimeError("database gone")
+
+    from bisheng.memory.domain.services import search as search_mod
+
+    monkeypatch.setattr(search_mod.SearchService, "search", _boom)
+    out = await tools_for(ctx)["memory_search"].ainvoke({"query": "x"})
+    assert "不可用" in out

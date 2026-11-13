@@ -258,7 +258,6 @@ async def chat(
             action="use",
         )
 
-
         async def memory_register(session_chat_id: str) -> None:
             # F132 (decision 6, R2): only this logged-in endpoint registers sessions
             # for long-term memory; guest and open API endpoints pass nothing.

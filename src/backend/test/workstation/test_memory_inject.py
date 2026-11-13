@@ -214,3 +214,27 @@ async def test_ac10_registration_failure_never_breaks_the_turn(memory, stream_en
     chunks = await run_turn(stream_env, registered=registered)
     assert any('"final": true' in c for c in chunks)
     assert not stream_env.state.prompts
+
+
+async def test_ac02_ac08_other_user_with_the_chat_id_gets_no_memory(memory, stream_env):
+    """AC-02 / AC-08: user 1's chat is registered; a turn by user 2 on that chat_id gets none of it."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from bisheng.memory.domain.services.gate import MemoryGate
+
+    await _remember(memory)
+    await MemoryGate.open(CHAT_ID, login_user())  # the owner registers it
+    intruder = SimpleNamespace(user_id=USER_1 + 1, tenant_id=1, user_name="u102")
+
+    async def _register(chat_id):
+        await MemoryGate.open(chat_id, intruder)
+
+    response = await stream_env.chat_service._agent_stream_chat_completion(
+        MagicMock(), stream_env.data(), intruder, memory_register=_register
+    )
+    _ = [chunk async for chunk in response.body_iterator]
+    prompt = (stream_env.state.prompts or [""])[0]
+    assert RESIDENT_HEADER not in prompt and "用户偏好用中文回答" not in prompt
+    tools = set(stream_env.state.tool_names[0]) if stream_env.state.tool_names else set()
+    assert not MEMORY_TOOLS & tools

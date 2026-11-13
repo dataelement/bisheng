@@ -18,6 +18,7 @@ import CollapsibleTimelineItem from './CollapsibleTimelineItem';
 import { ACCENT, BODY, MUTED } from './execTokens';
 import { detailTextCls, formatStepParams, stepTypeIcon } from './StepRow';
 import { mergedStepRenderEqual, type MergedStep } from './stepUtils';
+import { isMemoryToolEvent } from '~/api/memory';
 
 export interface ToolRowLiteProps {
     step: MergedStep;
@@ -73,10 +74,13 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
     // local; the parent DeepStepGroup owns the group-level fold.
     const [open, setOpen] = useState<boolean>(false);
 
-    const paramsText = formatStepParams(step.params);
-    const hasDetails = !!(step.callReason || paramsText || step.output);
+    // F132: a memory tool step (already redacted server-side) shows a fixed
+    // placeholder title and no input/output details.
+    const isMemoryStep = isMemoryToolEvent({ tool_name: step.name, args: step.params, results: step.output });
+    const paramsText = isMemoryStep ? '' : formatStepParams(step.params);
+    const hasDetails = !isMemoryStep && !!(step.callReason || paramsText || step.output);
 
-    const title = resolveTitle(step, localize);
+    const title = isMemoryStep ? localize('memory.tool_operation') : resolveTitle(step, localize);
     // Unified icon system (§1.3): running → Accent Loading spinner; done →
     // stepTypeIcon recolored to Ink via the descendant selector. Open-aware:
     // the spinner shows only while COLLAPSED + running; once expanded the node

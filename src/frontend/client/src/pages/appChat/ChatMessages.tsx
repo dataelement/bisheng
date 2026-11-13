@@ -25,7 +25,7 @@ import { useLocalize } from "~/hooks";
 import InputForm from "./components/InputForm";
 import InputFormSkill from "./components/InputFormSkill";
 import { bishengConfState, currentChatState, currentRunningState } from "./store/atoms";
-import { appMemoryEnabled } from "./appMemory";
+import { appMemoryEnabled, isMemoryRun, maskMemoryRuns } from "./appMemory";
 import { useMessage } from "./useMessages";
 
 // F028: only question + answer category rows are selectable. Intermediate
@@ -93,11 +93,14 @@ export default function ChatMessages({
       <SelectionMessagesProvider messages={selectableMessages}>
         {selectionActive && messages.length > 0 && <SelectAllBelowBanner scrollRef={messageScrollRef} />}
         <ConversationMessages
-          messages={messagesForPresentation(
-            remark
-              ? [{ category: "guide_word", message: remark, chat_ui_key: `${chatId}:greeting` }, ...messages]
-              : messages,
-            { mode: chatState?.flow.flow_type === 10 ? "workflow" : "assistant", sessionKey: chatId ?? "" },
+          messages={maskMemoryRuns(
+            messagesForPresentation(
+              remark
+                ? [{ category: "guide_word", message: remark, chat_ui_key: `${chatId}:greeting` }, ...messages]
+                : messages,
+              { mode: chatState?.flow.flow_type === 10 ? "workflow" : "assistant", sessionKey: chatId ?? "" },
+            ),
+            localize("memory.tool_operation"),
           )}
           canExecute={!readOnly}
           labels={{
@@ -120,7 +123,10 @@ export default function ChatMessages({
             });
           }}
           slots={{
-            runPresentation: (message) => describeRun(message, chatState?.flow, createRunLabels(localize)),
+            runPresentation: (message) =>
+              isMemoryRun(message)
+                ? { title: localize("memory.tool_operation"), unavailable: false }
+                : describeRun(message, chatState?.flow, createRunLabels(localize)),
             title: (message) =>
               message.kind === "user" ? displayText(message.raw.user_name) || useName || "" : title,
             avatar: (message) =>

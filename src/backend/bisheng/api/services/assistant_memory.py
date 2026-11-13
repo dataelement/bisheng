@@ -147,13 +147,16 @@ def compose_tools(author_tools: list, turn: AssistantMemoryTurn) -> list:
 def prepare_inputs(inputs: list, turn: AssistantMemoryTurn) -> list:
     """Copy the trimmed inputs, neutralise replayed memory results, insert the resident block.
 
-    The copy keeps the caller's list untouched (R6); the resident message goes right
-    before the last message because ReAct reads ``inputs[-1]`` as the question.
+    The copy keeps the caller's list untouched (R6); the resident message goes first
+    (consecutive with the system prompt), and ``inputs[-1]`` stays the question for ReAct.
     """
     prepared = [_replay(one) for one in inputs]
     changed = any(a is not b for a, b in zip(prepared, inputs))
     if turn.resident_text and prepared:
-        prepared.insert(len(prepared) - 1, SystemMessage(content=turn.resident_text, id=RESIDENT_MESSAGE_ID))
+        # At the front: right after the agent's own system prompt, so the two system
+        # messages are consecutive (some endpoints, e.g. Anthropic, reject system
+        # messages that are not). The question stays last for ReAct.
+        prepared.insert(0, SystemMessage(content=turn.resident_text, id=RESIDENT_MESSAGE_ID))
         changed = True
     # Nothing to change: hand back the very same list so memory-off turns behave
     # exactly as before (the client's result slice depends on list aliasing, V5).
@@ -221,9 +224,31 @@ def _redact_ai_message(message: AIMessage, memory_call_ids: dict[str, str]) -> B
                 raw = {**raw, "function": fn}
             raw_calls.append(raw)
         additional["tool_calls"] = raw_calls
+    content = message.content
+    if isinstance(content, list):
+        # Anthropic carries tool calls as ``tool_use`` blocks in content too, with raw input.
+        content = [_redact_content_block(block) for block in content]
     return message.model_copy(
-        update={"tool_calls": tool_calls, "additional_kwargs": additional, "invalid_tool_calls": []}
+        update={
+            "tool_calls": tool_calls,
+            "additional_kwargs": additional,
+            "invalid_tool_calls": [],
+            "content": content,
+        }
     )
+
+
+def _redact_content_block(block):
+    if not isinstance(block, dict) or not is_memory_tool(block.get("name")):
+        return block
+    block = dict(block)
+    if "input" in block:
+        block["input"] = redact_tool_event(block["name"], block.get("input") or {})
+    if "partial_json" in block:
+        block["partial_json"] = json.dumps(redact_tool_event(block["name"], {}), ensure_ascii=False)
+    if "arguments" in block:
+        block["arguments"] = json.dumps(redact_tool_event(block["name"], block.get("arguments")), ensure_ascii=False)
+    return block
 
 
 async def finish_turn(turn: AssistantMemoryTurn | None, callbacks) -> None:

@@ -205,3 +205,23 @@ async def test_ac10_unregistered_path_never_touches_the_session_row(memory, stre
     await run_turn(stream_env, registered=False)
     assert cursor(memory.db).model_dump() == before
     assert turn_rows(memory.db) == []
+
+
+async def test_ac41_content_safety_blocked_turn_is_never_consolidated(monkeypatch):
+    """AC-41 / AC-18: a turn blocked by content safety moves the watermark past itself."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from bisheng.workstation.domain.services import chat_service
+
+    end_turn = AsyncMock()
+    monkeypatch.setattr(chat_service.MemoryActivity, "end_turn", end_turn)
+    monkeypatch.setattr(chat_service.ChatMessageDao, "ainsert_one", AsyncMock(return_value=SimpleNamespace(id=42)))
+    monkeypatch.setattr(chat_service, "iter_blocked_sse", lambda **kw: iter(["data: x\n\n"]))
+    conversation = SimpleNamespace(chat_id="blocked-chat", user_id=101)
+    data = SimpleNamespace(text="违规内容", files=[])
+    response = chat_service._respond_blocked_workbench(
+        conversation, SimpleNamespace(id=41), SimpleNamespace(displayName="m"), data, "已拦截"
+    )
+    _ = [chunk async for chunk in response.body_iterator]
+    end_turn.assert_awaited_once_with("blocked-chat", 42, False)

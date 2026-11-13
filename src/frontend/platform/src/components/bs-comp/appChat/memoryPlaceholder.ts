@@ -5,18 +5,19 @@ import { asRecord, parsePayload, type ChatMessage } from '@bisheng/chat/core';
 // {"redacted": true, "op", "item_ids"}; these pages render a fixed placeholder for
 // them and never call the /api/v1/memory endpoints.
 
-const MEMORY_TOOL_PREFIX = 'memory_';
+// The built-in memory tools; a third-party tool that merely starts with "memory_" is not one.
+const MEMORY_TOOL_NAMES = new Set(['memory_write', 'memory_search']);
 const PAYLOAD_FIELDS = ['input_str', 'input', 'output', 'args', 'results', 'result', 'tool_input', 'tool_output'];
 
 function isRedacted(value: unknown): boolean {
     return asRecord(parsePayload(value)).redacted === true;
 }
 
-/** True for a memory tool event: a memory_* tool name or any redacted payload part. */
+/** True for a memory tool event: a built-in memory tool name or any redacted payload part. */
 export function isMemoryToolEvent(value: unknown): boolean {
     const record = asRecord(parsePayload(value));
     const name = [record.tool_key, record.tool_name, record.name].find(item => typeof item === 'string');
-    if (typeof name === 'string' && name.startsWith(MEMORY_TOOL_PREFIX)) return true;
+    if (typeof name === 'string' && MEMORY_TOOL_NAMES.has(name)) return true;
     if (record.redacted === true) return true;
     return PAYLOAD_FIELDS.some(field => isRedacted(record[field]));
 }

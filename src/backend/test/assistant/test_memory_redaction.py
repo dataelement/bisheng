@@ -272,3 +272,26 @@ async def test_ac87_retrieval_only_turn_signals_attribution(executor, enabled_ch
     assert signal["message"]["has_attribution"] is True and signal["message"]["has_write"] is False
     ctx = agent.memory_turn.ctx
     assert (await TurnRecordService.get_for_owner(ctx, turn_id=ctx.turn_id))["retrieved_item_ids"]
+
+
+def test_ac09_anthropic_tool_use_content_blocks_are_redacted():
+    """AC-09: Anthropic also puts tool calls in content as tool_use blocks with raw input."""
+    from langchain_core.messages import AIMessage
+
+    from bisheng.api.services import assistant_memory
+
+    secret = {"action": "remember", "content": "用户的私人行程", "type": "fact"}
+    message = AIMessage(
+        content=[
+            {"type": "text", "text": "好的"},
+            {"type": "tool_use", "id": "tu_1", "name": "memory_write", "input": secret},
+            {"type": "tool_use", "id": "tu_2", "name": "web_search", "input": {"q": "天气"}},
+        ],
+        tool_calls=[
+            {"id": "tu_1", "name": "memory_write", "args": secret},
+            {"id": "tu_2", "name": "web_search", "args": {"q": "天气"}},
+        ],
+    )
+    out = assistant_memory.finalize_result([message])[0]
+    assert "用户的私人行程" not in out.model_dump_json()
+    assert out.content[2]["input"] == {"q": "天气"}

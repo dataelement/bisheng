@@ -6,7 +6,7 @@
  * the footer reads back from `message.raw.memory`. Workflow answers never show
  * attribution (spec: a workflow's final output is not attributed).
  */
-import { parseMemorySignal, type MemoryFlags } from "~/api/memory";
+import { MEMORY_TOOL_NAMES, parseMemorySignal, type MemoryFlags } from "~/api/memory";
 
 const ASSISTANT_FLOW_TYPE = 5;
 const ANSWER_CATEGORIES = new Set(["stream_msg", "answer", "output_msg", "agent_answer"]);
@@ -79,4 +79,62 @@ export function takeQueuedMemoryFlags(chatId: string): MemoryFlags | undefined {
   const flags = pending.get(chatId);
   pending.delete(chatId);
   return flags;
+}
+
+/**
+ * Memory tool runs in assistant chat (AC-09 owner view): the persisted run is
+ * already redacted to `{redacted, op, item_ids}`. Render a fixed placeholder
+ * instead of the raw JSON, and keep the default "tool was deleted" title away
+ * (memory tools are built in, so they are never in the assistant's tool list).
+ */
+const RUN_PAYLOAD_FIELDS = ["input_str", "input", "output", "args", "results", "result", "tool_input", "tool_output"];
+
+function parseMaybeJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function asObject(value: unknown): Row {
+  const parsed = parseMaybeJson(value);
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Row) : {};
+}
+
+function isMemoryRunPayload(payload: unknown): boolean {
+  const record = asObject(payload);
+  const name = [record.tool_key, record.tool_name, record.name].find((item) => typeof item === "string");
+  if (typeof name === "string" && MEMORY_TOOL_NAMES.has(name)) return true;
+  if (record.redacted === true) return true;
+  return RUN_PAYLOAD_FIELDS.some((field) => asObject(record[field]).redacted === true);
+}
+
+interface RunLike {
+  kind?: string;
+  category?: string;
+  payload?: unknown;
+  text?: string;
+  reasoning?: string;
+  raw?: Row;
+}
+
+export function isMemoryRun(message: RunLike): boolean {
+  return message.kind === "run" && message.category !== "node_run" && isMemoryRunPayload(message.payload);
+}
+
+/** Replace every field a run card could display with the placeholder. */
+export function maskMemoryRuns<T extends RunLike>(messages: T[], placeholder: string): T[] {
+  return messages.map((message) => {
+    if (!isMemoryRun(message)) return message;
+    const toolKey = asObject(message.payload).tool_key;
+    return {
+      ...message,
+      text: placeholder,
+      reasoning: "",
+      payload: typeof toolKey === "string" ? { tool_key: toolKey, redacted: true } : { redacted: true },
+      raw: { ...(message.raw ?? {}), message: placeholder, thought: placeholder, intermediate_steps: placeholder },
+    };
+  });
 }

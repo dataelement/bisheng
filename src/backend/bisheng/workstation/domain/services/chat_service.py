@@ -118,6 +118,8 @@ from .daily_citation import (
     select_cited_items_sync,
     strip_ids_for_sync_path,
 )
+from bisheng.memory.domain.services.activity import MemoryActivity
+
 from .daily_memory import (
     DailyMemoryTurn,
     MemoryRegister,
@@ -1713,6 +1715,12 @@ def _respond_blocked_workbench(conversation, message, model_info, data: APIChatC
             auto_reply=auto_reply,
         )
         resp = await ChatMessageDao.ainsert_one(row)
+        # F132: a blocked turn is never consolidated into long-term memory; move the
+        # watermark past it (no-op for chats not registered for memory).
+        try:
+            await MemoryActivity.end_turn(conversation.chat_id, resp.id, False)
+        except Exception:
+            logger.exception("memory: ending a blocked turn failed chat_id={}", conversation.chat_id)
         for chunk in iter_blocked_sse(
             conversation_id=conversation.chat_id,
             user_message_id=message.id,

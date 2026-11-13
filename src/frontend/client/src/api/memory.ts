@@ -240,7 +240,10 @@ const isRedactedPayload = (value: unknown): boolean => {
  * replaced by `{redacted: true, op, item_ids}`. Recognised by name too, so an
  * in-flight call never shows its arguments.
  */
+/** The built-in memory tools; other tools that merely start with "memory_" are not memory events. */
+export const MEMORY_TOOL_NAMES = new Set(["memory_write", "memory_search"]);
+
 export function isMemoryToolEvent(call: { tool_name?: string | null; args?: unknown; results?: unknown }): boolean {
-  if ((call.tool_name || "").toLowerCase().startsWith("memory_")) return true;
+  if (MEMORY_TOOL_NAMES.has(call.tool_name || "")) return true;
   return isRedactedPayload(call.args) || isRedactedPayload(call.results);
 }
