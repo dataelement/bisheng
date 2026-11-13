@@ -1013,7 +1013,10 @@
     "taskModeFullName": "タスクモード",
     "blindOverwriteTitle": "この設定を保存しますか？",
     "blindOverwriteDesc": "現在表示されているのは既定の設定で、保存済みのワークベンチ設定を読み込めていません。既存の設定がある場合、保存すると既定値で全体が上書きされます。保存する前にページを再読み込みして確認してください。",
-    "blindOverwriteOk": "このまま保存"
+    "blindOverwriteOk": "このまま保存",
+    "memoryModel": "メモリ整理に使うモデル",
+    "memoryModelPlaceholder": "ワークベンチの既定モデルを使用",
+    "memoryModelHint": "各利用者のメモリをバックグラウンドで整理するときにこのモデルを呼び出します。選択しない場合は、ワークベンチのモデル一覧の最初のモデルを使います。"
   },
   "build": {
     "editPermissionRequired": "編集権限が必要です",

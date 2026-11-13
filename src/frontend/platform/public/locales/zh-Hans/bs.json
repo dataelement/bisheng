@@ -1019,7 +1019,10 @@
     "taskModeFullName": "任务模式",
     "blindOverwriteTitle": "确认保存为当前配置？",
     "blindOverwriteDesc": "当前页面展示的是默认配置，未读取到已保存的工作台配置。若此前已有配置，保存将把它整体覆盖为默认值。建议先刷新页面确认，再决定是否保存。",
-    "blindOverwriteOk": "仍然保存"
+    "blindOverwriteOk": "仍然保存",
+    "memoryModel": "记忆整理使用的模型",
+    "memoryModelPlaceholder": "使用工作台默认模型",
+    "memoryModelHint": "后台整理每个用户的记忆时调用这个模型。未选择时使用工作台模型列表中的第一个模型。"
   },
   "build": {
     "editPermissionRequired": "无编辑权限",

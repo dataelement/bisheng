@@ -746,7 +746,10 @@
     "taskModeFullName": "Task Mode",
     "blindOverwriteTitle": "Save these settings?",
     "blindOverwriteDesc": "This page is showing default settings — the saved workbench configuration could not be loaded. If one already exists, saving will overwrite it entirely with defaults. Refresh the page to check before saving.",
-    "blindOverwriteOk": "Save anyway"
+    "blindOverwriteOk": "Save anyway",
+    "memoryModel": "Model for Memory Organization",
+    "memoryModelPlaceholder": "Use the workbench default model",
+    "memoryModelHint": "This model organizes each user's memory in the background. If none is selected, the first model in the workbench model list is used."
   },
   "save": "Save",
   "model": {
