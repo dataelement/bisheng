@@ -268,7 +268,9 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
 
             {/* artifacts: report link / answer markdown / file card. Clicking a
                 document link opens it directly in ChatView's inline workspace
-                panel (preview), replacing the legacy right-side drawer. */}
+                panel (preview), replacing the legacy right-side drawer.
+                messageId is this round's own task message row (one round = one
+                svid = one row): feedback and the F132 memory notice key on it. */}
             {completed && (
                 <ResultPanel
                     messageId={linsight?.message_id ?? undefined}

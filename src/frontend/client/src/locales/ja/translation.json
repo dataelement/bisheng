@@ -2828,5 +2828,80 @@
     "checking": "ナレッジスペースのアクセス権を確認しています…",
     "failed": "ナレッジスペースの権限を読み込めませんでした。ページを更新して再試行してください。",
     "revoked": "次のナレッジスペースのアクセス権が失効しました：{{names}}。「コンテキストを追加」からアクセス可能なスペースを選び直してください。"
+  },
+  "memory": {
+    "nav_title": "メモリー",
+    "switch_label": "マイメモリー",
+    "switch_hint": "オンにすると、会話で覚えるよう頼んだ内容を記憶し、役に立つ情報を自動で整理します。オフにすると、会話でメモリーの読み書きを行いません。保存済みのメモリーは下で引き続き確認・管理できます。",
+    "list_title": "保存済みのメモリー",
+    "empty": "保存済みのメモリーはまだありません",
+    "add": "追加",
+    "add_title": "メモリーを追加",
+    "edit": "編集",
+    "edit_title": "メモリーを編集",
+    "delete": "削除",
+    "clear": "すべてクリア",
+    "clear_confirm_title": "すべてのメモリーをクリアしますか？",
+    "clear_confirm_desc": "保存したすべてのメモリーが削除され、元に戻せません。",
+    "clear_confirm_ok": "クリア",
+    "cancel": "キャンセル",
+    "close": "閉じる",
+    "save": "保存",
+    "field": {
+      "content": "内容",
+      "type": "種類",
+      "event_time": "イベント日付"
+    },
+    "event_time_hint": "任意。出張や締め切りなど、日付に関わる内容は日付を入力できます。",
+    "content_placeholder": "覚えておく内容（200 文字以内）",
+    "type": {
+      "fact": "事実",
+      "preference": "好み",
+      "experience": "経験"
+    },
+    "resident": "常時",
+    "recorded_at_value": "記録 {{time}}",
+    "event_time_value": "イベント日付 {{time}}",
+    "source": {
+      "manual": "手動で追加",
+      "daily": "日常チャット",
+      "linsight": "ディープリサーチ",
+      "assistant": "アシスタント",
+      "workflow": "ワークフロー",
+      "unknown": "チャット",
+      "auto": "{{source}}（自動整理）"
+    },
+    "load_failed": "メモリーを読み込めませんでした",
+    "retry": "再試行",
+    "save_failed": "保存できませんでした。もう一度お試しください。",
+    "delete_failed": "削除できませんでした。もう一度お試しください。",
+    "clear_failed": "クリアできませんでした。もう一度お試しください。",
+    "switch_failed": "設定を保存できませんでした。もう一度お試しください。",
+    "loading": "読み込み中…",
+    "notice": {
+      "pending": "メモリーを更新しました",
+      "remember": "{{count}} 件のメモリーを記憶しました",
+      "correct": "{{count}} 件のメモリーを訂正しました",
+      "forget": "{{count}} 件のメモリーを忘れました",
+      "updated": "{{count}} 件のメモリーを更新しました",
+      "op_remember": "記憶",
+      "op_correct": "訂正",
+      "op_forget": "忘却",
+      "was": "変更前：{{content}}",
+      "item_gone": "このメモリーはクリアされました",
+      "undo": "元に戻す",
+      "undone": "元に戻しました",
+      "undo_failed": "元に戻せませんでした。もう一度お試しください。"
+    },
+    "attribution": {
+      "entry": "メモリーを参照",
+      "retrieved": "今回検索したメモリー",
+      "resident": "常時メモリー",
+      "resident_hint": "これらのメモリーは毎回の会話に含まれます。どれが使われたかは区別しません。",
+      "resident_view": "すべて表示（{{count}} 件）",
+      "resident_hide": "閉じる",
+      "empty": "関連するメモリーは削除されました"
+    },
+    "tool_operation": "メモリー操作"
   }
 }

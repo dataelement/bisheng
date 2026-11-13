@@ -16,6 +16,7 @@ import { cn } from "~/utils";
 import { AccountPane } from "./sections/AccountPane";
 import { AiAccessPane } from "./sections/AiAccessPane";
 import { DshDesktopPane } from "./sections/DshDesktopPane";
+import { MemoryPane } from "./sections/MemoryPane";
 import { useDshDesktop } from "~/hooks/useDshDesktop";
 import { shouldShowAiAccessSection } from "./sections/personalTokenEntry";
 import { usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
@@ -270,6 +271,7 @@ export default function SettingsPage() {
         <h2 className={cn("hidden pb-3 md:block", paneTitleClass)}>{sectionTitle}</h2>
         {section === "account" && <AccountPane />}
         {section === "ai-access" && <AiAccessPane />}
+        {section === "memory" && <MemoryPane />}
         {section === "desktop" && <DshDesktopPane />}
         {section === "general" && <GeneralSection />}
       </div>

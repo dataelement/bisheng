@@ -20,6 +20,7 @@ import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import type { ChatMessage } from "~/api/chatApi";
 import { getAgentMessages, getSessionName } from "~/api/chatApi";
+import { getMemoryFlagsApi, mergeMemoryFlags } from "~/api/memory";
 import { openChatStream, type SSESubmission } from "~/hooks/useAiChatSSE";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
@@ -416,6 +417,16 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 if (!active) return;
                 setMessages(msgs);
                 setIsLoading(false);
+                // F132: memory flags are owner-only, so a share view never asks.
+                if (shareToken) return;
+                getMemoryFlagsApi(conversationId)
+                    .then((flags) => {
+                        if (!active) return;
+                        setMessages((prev) => mergeMemoryFlags(prev, flags));
+                    })
+                    .catch(() => {
+                        /* flags are decoration; the history stays usable without them */
+                    });
             })
             .catch((err) => {
                 if (!active) return;
@@ -998,6 +1009,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             ...(patch.text != null ? { text: patch.text } : {}),
                             ...(patch.events ? { events: patch.events } : {}),
                             ...(patch.finalised ? { unfinished: false } : {}),
+                            ...(patch.memory ? { memory: patch.memory } : {}),
                         };
                         return msgs;
                     });
@@ -1252,8 +1264,12 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 onAgentUpdate: (patch) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
+                        // The end event swaps the temp id for the stored one, so a
+                        // later patch (e.g. the F132 memory signal) matches either.
                         const idx = msgs.findIndex(
-                            (m) => m.messageId === newResponseId,
+                            (m) =>
+                                m.messageId === newResponseId ||
+                                (!!patch.messageId && m.messageId === patch.messageId),
                         );
                         if (idx < 0) return prev;
                         msgs[idx] = {
@@ -1264,6 +1280,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             ...(patch.text != null ? { text: patch.text } : {}),
                             ...(patch.events ? { events: patch.events } : {}),
                             ...(patch.finalised ? { unfinished: false } : {}),
+                            ...(patch.memory ? { memory: patch.memory } : {}),
                         };
                         return msgs;
                     });

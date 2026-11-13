@@ -20,6 +20,7 @@
 import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
+import { parseMemorySignal, type MemoryFlags } from "~/api/memory";
 import { translateApiErrorMessage } from "~/api/request";
 import { captureProjectChatCreation } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 
@@ -37,6 +38,8 @@ export interface AgentPatch {
     category?: string;
     /** True once the final `agent_answer.end` event has been received. */
     finalised?: boolean;
+    /** F132: memory flags of this answer (from the `memory` SSE category). */
+    memory?: MemoryFlags;
 }
 
 export interface SSESubmission {
@@ -343,6 +346,14 @@ export function openChatStream(
                 }
 
                 if (category === "processing") {
+                    return;
+                }
+
+                // F132: memory signal — turn id + notice/attribution flags, never item text.
+                if (category === "memory") {
+                    const flags = parseMemorySignal(data);
+                    if (!flags) return;
+                    emitAgent({ memory: flags });
                     return;
                 }
 

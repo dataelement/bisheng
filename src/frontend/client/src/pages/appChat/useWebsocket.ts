@@ -19,6 +19,7 @@ import {
   syncWorkflowActivation,
 } from "./workflowAutoRerun";
 import type { WorkflowCloseAction } from "./workflowAutoRerun";
+import { isMemoryFrame, readMemoryFrame, takeQueuedMemoryFlags } from "./appMemory";
 
 export const AppLostMessage = "11111";
 const unavailableCodes = new Set(["10421", "13002", "13010", AppLostMessage]);
@@ -229,6 +230,14 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
   const handleMessages = (data, _ws) => {
     // Keep terminal availability errors stable across queued close/input frames.
     if (isUnavailable()) return;
+    // F132: memory signal — pin it on the answer (assistant only); never a chat row itself.
+    if (isMemoryFrame(data)) {
+      const memory = readMemoryFrame(data);
+      if (memory && helpers.flow.flow_type !== 10) {
+        helpers.message.attachMemory(helpers.chatId, memory.flags, memory.messageId);
+      }
+      return;
+    }
     // 过滤无效数据
     if (data.category === "end_cover" && data.type !== "end_cover") {
       return;
@@ -347,6 +356,11 @@ export const useWebSocket = (helpers, { canExecute = true }: { canExecute?: bool
         helpers.message.skillCloseMsg();
         // Generate title for new conversations after first round completes
         // triggerGenTitle()
+      }
+      // F132: a memory signal that beat its answer row lands once the round ends.
+      if (["end", "end_cover", "close"].includes(data.type)) {
+        const queued = takeQueuedMemoryFlags(helpers.chatId);
+        if (queued) helpers.message.attachMemory(helpers.chatId, queued);
       }
 
       return;

@@ -20,6 +20,7 @@ import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { ChatErrorCard, isTransientErrorType } from "~/components/ChatErrorCard";
 import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
+import { MemoryNotice } from "~/components/Chat/MemoryNotice";
 import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext, useLocalize } from "~/hooks";
@@ -789,6 +790,10 @@ function AssistantBubble({
                             <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
                         )}
                     </div>
+                )}
+                {/* F132: memory notice + attribution, owner only (flags never reach a share view). */}
+                {!isStreaming && message.memory && (
+                    <MemoryNotice flags={message.memory} messageId={message.messageId} />
                 )}
             </div>
         </div>

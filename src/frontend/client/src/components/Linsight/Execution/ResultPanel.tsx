@@ -12,6 +12,7 @@ import { Outlined } from 'bisheng-icons';
 import type { ReactNode } from 'react';
 import { useLocalize } from '~/hooks';
 import { MessageFeedbackButtons } from '~/components/Chat/MessageFeedbackButtons';
+import { MemoryNotice } from '~/components/Chat/MemoryNotice';
 import { likeChatApi, disLikeCommentApi } from '~/api/apps';
 import { INK } from './execTokens';
 
@@ -24,7 +25,7 @@ interface ResultPanelProps {
     messageId?: string;
     /** persisted like/dislike verdict: 0 none / 1 up / 2 down */
     liked?: number;
-    /** show like/dislike (off for read-only / share view) */
+    /** show like/dislike and the F132 memory notice (off for read-only / share view) */
     allowFeedback?: boolean;
     /** Sync the new verdict back to the linsight store so the highlight survives a
         switch-away/switch-back: the panel reads `liked` from the store, which is
@@ -55,8 +56,11 @@ export function ResultPanel({ children, messageId, liked, allowFeedback, onLiked
             {/* like/dislike — the task result is a category="task" ChatMessage, so
                 rate it through the shared chatmessage feedback endpoints keyed by
                 message id (rollup to message_session is maintained backend-side). */}
+            {/* F132: one round = one task message row (design R8), so the round's
+                memory notice and attribution are read by that row's id. Shares the
+                feedback row's owner-only visibility. */}
             {allowFeedback && messageId && (
-                <div className="mt-3">
+                <div className="mt-3 flex flex-col gap-1">
                     <MessageFeedbackButtons
                         liked={liked}
                         onLike={(l) => {
@@ -66,6 +70,7 @@ export function ResultPanel({ children, messageId, liked, allowFeedback, onLiked
                         }}
                         onDislikeComment={(c) => disLikeCommentApi(messageId, c)}
                     />
+                    <MemoryNotice messageId={messageId} probe />
                 </div>
             )}
         </div>

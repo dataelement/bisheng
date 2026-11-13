@@ -2833,5 +2833,80 @@
     "checking": "正在核验知识空间访问权限…",
     "failed": "知识空间权限加载失败，请刷新页面后重试。",
     "revoked": "以下知识空间的访问权限已失效：{{names}}。请在“添加上下文”中重新选择可访问的空间。"
+  },
+  "memory": {
+    "nav_title": "记忆",
+    "switch_label": "我的记忆",
+    "switch_hint": "开启后，对话会记住你要求记下的内容，并自动整理出对你有用的信息。关闭后，对话不再读写记忆；下方已保存的记忆仍可查看和管理。",
+    "list_title": "已保存的记忆",
+    "empty": "还没有保存的记忆",
+    "add": "新增",
+    "add_title": "新增记忆",
+    "edit": "编辑",
+    "edit_title": "编辑记忆",
+    "delete": "删除",
+    "clear": "清空全部",
+    "clear_confirm_title": "清空全部记忆？",
+    "clear_confirm_desc": "你保存的全部记忆都会被删除，删除后无法恢复。",
+    "clear_confirm_ok": "清空",
+    "cancel": "取消",
+    "close": "关闭",
+    "save": "保存",
+    "field": {
+      "content": "内容",
+      "type": "类型",
+      "event_time": "事件时间"
+    },
+    "event_time_hint": "选填。和某个日期有关的事情（如出差、截止日）可以填上日期。",
+    "content_placeholder": "写下要记住的内容，200 字以内",
+    "type": {
+      "fact": "事实",
+      "preference": "偏好",
+      "experience": "经验"
+    },
+    "resident": "常驻",
+    "recorded_at_value": "记录于 {{time}}",
+    "event_time_value": "事件时间 {{time}}",
+    "source": {
+      "manual": "手动添加",
+      "daily": "日常对话",
+      "linsight": "深度研究",
+      "assistant": "助手",
+      "workflow": "工作流",
+      "unknown": "对话",
+      "auto": "{{source}}（自动整理）"
+    },
+    "load_failed": "记忆加载失败",
+    "retry": "重试",
+    "save_failed": "保存失败，请重试",
+    "delete_failed": "删除失败，请重试",
+    "clear_failed": "清空失败，请重试",
+    "switch_failed": "设置未保存，请重试",
+    "loading": "加载中…",
+    "notice": {
+      "pending": "记忆已更新",
+      "remember": "已记下 {{count}} 条记忆",
+      "correct": "已更正 {{count}} 条记忆",
+      "forget": "已忘掉 {{count}} 条记忆",
+      "updated": "已更新 {{count}} 条记忆",
+      "op_remember": "记下",
+      "op_correct": "更正",
+      "op_forget": "忘掉",
+      "was": "原为：{{content}}",
+      "item_gone": "这条记忆已被清空",
+      "undo": "撤销",
+      "undone": "已撤销",
+      "undo_failed": "撤销失败，请重试"
+    },
+    "attribution": {
+      "entry": "参考了记忆",
+      "retrieved": "本次查到的记忆",
+      "resident": "常驻记忆",
+      "resident_hint": "每次对话都会带上这些记忆，这里不区分其中哪一条被用到。",
+      "resident_view": "查看全部 {{count}} 条",
+      "resident_hide": "收起",
+      "empty": "相关记忆已被删除"
+    },
+    "tool_operation": "记忆操作"
   }
 }
