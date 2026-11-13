@@ -22,3 +22,5 @@
 ## Wave 7（T041–T048）
 - `pytest test/memory -q`：237 passed，无 skipped。
 - 〔架构检查〕ARCH 0；〔分层检查〕LAYER 0。
+- 〔基线比对〕：merged 14627 cases, 1241 failed/errored；`NEW FAILURES: 0`。
+- 按用户 2026-11-13 的建议，Wave 8–13 改为 6 个独立 worktree 并行（Workflow），最后统一合并验证。并行前先把 `dispatch_client` 的 `memory_register` 参数做好（提交 076893d0b2），避免 Wave 9、10 同改 `manager.py`。
