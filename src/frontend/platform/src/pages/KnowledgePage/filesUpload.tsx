@@ -46,21 +46,7 @@ function UploadTarget({ scope, spaceId, parentId }: UploadTargetProps) {
     if (permissions.error) showApiError(permissions.error);
   }, [permissions.error]);
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">{t("uploadFile")}</h1>
-        <Button
-          variant="link"
-          onClick={() =>
-            navigate({
-              pathname: `/filelib/${spaceId}`,
-              search: params.toString(),
-            })
-          }
-        >
-          {t("back")}
-        </Button>
-      </div>
+    <div className="h-full min-h-0">
       {permissions.isInitialLoading ? (
         <div role="status">{t("f118.loading_directory")}</div>
       ) : permissions.isError ? (
@@ -77,6 +63,7 @@ function UploadTarget({ scope, spaceId, parentId }: UploadTargetProps) {
           scope={scope}
           spaceId={spaceId}
           parentId={parentId}
+          onBack={() => navigate({ pathname: `/filelib/${spaceId}`, search: params.toString() })}
         />
       ) : (
         <div role="status">{t("noOperationPermission")}</div>
@@ -89,7 +76,7 @@ export function FilesUpload() {
   const { t } = useTranslation("knowledge");
   const { id } = useParams();
   const [params] = useSearchParams();
-  const { scopes, isLoading, retry } = useKnowledgePageScope();
+  const { scopes, isLoading, canManage, retry } = useKnowledgePageScope();
   const spaceId = parseId(id);
   const parents = params.getAll("parent_id");
   const parentId = parents.length === 1 ? parseId(parents[0]) : null;
@@ -113,7 +100,8 @@ export function FilesUpload() {
         </Button>
       </div>
     );
-  const scope = scopes.ordinary;
+  const views = params.getAll("view");
+  const scope = canManage && views.length === 1 && views[0] === "admin" ? scopes.admin : scopes.ordinary;
   return (
     <UploadTarget
       key={JSON.stringify([

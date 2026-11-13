@@ -662,17 +662,48 @@ class F048PermissionRuntime:
             or any(delta.action != "WRITE" for delta in plan.deltas)
         ):
             raise PermissionInvalidResourceError()
-        if str(operation.status) == "FAILED_CLOSED":
-            raise PermissionPublishNotReadyError(msg="Creation requires controlled failed-closed recovery")
         if str(operation.status) == "PREPARED" and not await repository.has_prepared_owner(target, int(operation.id)):
             # Crash between durable plan and owner SQL prepare: recreate the same deterministic
             # owner context. prepare() compares the complete checksum before any mirror write.
             return await self.authorize_created(
                 actor=actor, target=target, owner_user_id=owner_user_id, mode="CUSTOM", idempotency_key=key
             )
-        outcome = await self._projection.reconcile_operation(int(operation.id))
+        outcome = await self._resume_creation_operation(operation)
         await repository.finalize_creation(target, int(operation.id), owner_user_id)
         return outcome
+
+    async def _resume_creation_operation(self, operation):
+        if str(operation.status) == "FAILED_CLOSED":
+            preview = await self._projection.inspect_failed_closed_recovery(int(operation.id))
+            return await self._projection.recover_failed_closed_operation(
+                int(operation.id), confirmation_checksum=preview.confirmation_checksum
+            )
+        return await self._projection.reconcile_operation(int(operation.id))
+
+    async def resume_system_owned(self, *, actor, target, idempotency_key, apply=True):
+        """Resume only this system bootstrap; never replay a later grant edit."""
+        repository = self._projection._repository
+        operation = await repository.aget_operation_by_idempotency(idempotency_key)
+        if operation is None:
+            raise PermissionPublishNotReadyError(msg="System creation ledger is missing")
+        plan = restore_projection_plan(operation, await repository.aget_operation_tuples(operation.id))
+        catalog = await self._runtime_catalog()
+        mode = await self._state.mode_for_target(target)
+        if (
+            plan.tenant_id != target.tenant_id
+            or plan.scope_key != f"{target.resource_type}:{target.resource_id}"
+            or plan.scope_type != "resource"
+            or plan.operation_type != "RESOURCE_CREATE"
+            or (plan.expected_version, plan.target_version) != (0, 1)
+            or plan.operator_id != actor.user_id
+            or (plan.store_id, plan.model_id) != (catalog.store_id, catalog.model_id)
+            or mode.operation_id != operation.id
+            or mode.version not in {0, 1}
+            or any(delta.action != "WRITE" for delta in plan.deltas)
+        ):
+            raise PermissionPublishNotReadyError(msg="System creation no longer owns this resource")
+        if apply:
+            return await self._resume_creation_operation(operation)
 
     async def rollback_created(
         self,
@@ -787,6 +818,19 @@ class F048PermissionRuntime:
                 await self._projection.abandon_prepared(plan, exc)
                 raise
         return await self._projection.execute(plan)
+
+    async def cleanup_deleted(self, *, actor, target, idempotency_key=None):
+        """Business owners call only after their deletion transaction commits."""
+        from bisheng.permission.application.deleted_resource_cleanup import DeletedResourceCleanup
+
+        return await DeletedResourceCleanup(self).run(
+            actor=actor,
+            target=target,
+            delete_idempotency_key=idempotency_key
+            or _idempotency_key(
+                "delete", target.tenant_id, target.resource_type, target.resource_id, target.resource_version
+            ),
+        )
 
     async def project_parent_change(
         self,

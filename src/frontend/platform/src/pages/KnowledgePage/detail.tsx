@@ -1,11 +1,12 @@
 import { Breadcrumb, Button } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useId } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   knowledgeSpaceApi,
   type KnowledgeSpaceInfo,
+  type KnowledgeSpaceChild,
 } from "@/controllers/API/knowledgeSpace";
 import {
   knowledgeFilesApi,
@@ -16,11 +17,12 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
-import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
 import Files from "./components/Files";
 import Header from "./components/Header";
+import { SpaceManagementView } from "./components/SpaceManagementView";
+import { SpaceFileDetail } from "./components/SpaceFileDetail";
 
-const parseId = (value: string | null | undefined): number | null => {
+export const parseKnowledgeId = (value: string | null | undefined): number | null => {
   if (!value || !/^\d+$/.test(value)) return null;
   const id = Number(value);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
@@ -31,17 +33,22 @@ interface SpaceDetailProps {
   spaceId: number;
   parentId: number | null;
   onOpenFolder: (id: number | null) => void;
+  presentation?: "workspace";
 }
 
-function SpaceDetail({
+export function SpaceDetail({
   scope,
   spaceId,
   parentId,
   onOpenFolder,
+  presentation,
 }: SpaceDetailProps) {
   const { t } = useTranslation("knowledge");
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const fileParams = searchParams.getAll("file_id");
+  const fileId = fileParams.length === 1 ? parseKnowledgeId(fileParams[0]) : null;
+  const [openedFile, setOpenedFile] = useState<KnowledgeSpaceChild | undefined>();
   const fileStatus =
     searchParams.get("fileStatus") === "abnormal" ? "abnormal" : "all";
   const instance = useId();
@@ -56,6 +63,7 @@ function SpaceDetail({
       parentId === null
         ? knowledgeSpaceApi.getSpaceInfo(spaceId)
         : knowledgeFilesApi.listSpaceFolderParents(spaceId, parentId),
+    enabled: fileParams.length === 0,
     keepPreviousData: false,
     cacheTime: 0,
   });
@@ -69,16 +77,8 @@ function SpaceDetail({
       ? (info?.name ?? "")
       : String(parents[parents.length - 1]?.file_name ?? "");
 
-  return (
-    <div className="relative size-full bg-background-login px-2">
-      <div className="pt-4">
-        <Header
-          fileTitle
-          title={title}
-          description={parentId === null ? (info?.description ?? "") : ""}
-          onBack={() => navigate("/filelib")}
-        />
-      </div>
+  const directory = (toolbarTarget?: HTMLDivElement | null) => (
+    <>
       {parentId !== null && parents.length > 0 && (
         <Breadcrumb
           ariaLabel={t("f118.current_folder")}
@@ -116,64 +116,30 @@ function SpaceDetail({
         spaceId={spaceId}
         parentId={parentId}
         onOpenFolder={onOpenFolder}
+        presentation={presentation}
+        toolbarTarget={toolbarTarget}
+        onOpenFile={presentation === "workspace" ? (item) => {
+          setOpenedFile(item);
+          const next = new URLSearchParams(searchParams);
+          next.set("file_id", String(item.id));
+          setSearchParams(next);
+        } : undefined}
       />
-    </div>
+    </>
   );
-}
-
-export default function FilesPage() {
-  const { t } = useTranslation("knowledge");
-  const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { scopes, isLoading, retry } = useKnowledgePageScope();
-  const spaceId = parseId(id);
-  const values = searchParams.getAll("parent_id");
-  const parentId =
-    values.length === 0
-      ? null
-      : values.length === 1
-        ? parseId(values[0])
-        : null;
-  const invalidParent =
-    values.length > 0 && (values.length !== 1 || parentId === null);
-  if (spaceId === null || invalidParent)
-    return <div role="status">{t("f118.scope_unavailable")}</div>;
-  if (isLoading) return <div role="status">{t("f118.loading_directory")}</div>;
-  if (!scopes)
-    return (
-      <div>
-        <div role="status">{t("f118.scope_unavailable")}</div>
-        <Button
-          variant="text"
-          onClick={() => {
-            void retry();
-          }}
-        >
-          {t("retry")}
-        </Button>
-      </div>
-    );
-  const scope = scopes.ordinary;
-  const handleOpenFolder = (folderId: number | null) => {
-    const next = new URLSearchParams(searchParams);
-    if (folderId === null) next.delete("parent_id");
-    else next.set("parent_id", String(folderId));
-    setSearchParams(next);
-  };
-  return (
-    <SpaceDetail
-      key={JSON.stringify([
-        scope.identityKey,
-        scope.tenantId,
-        scope.managementTenantId,
-        scope.view,
-        spaceId,
-        parentId,
-      ])}
-      scope={scope}
-      spaceId={spaceId}
-      parentId={parentId}
-      onOpenFolder={handleOpenFolder}
-    />
+  if (fileParams.length > 0 && fileId === null) return <p role="status">{t("f118.scope_unavailable")}</p>;
+  if (presentation === "workspace" && fileId !== null) return <SpaceFileDetail
+    key={JSON.stringify([scope, spaceId, fileId])} scope={scope} spaceId={spaceId} fileId={fileId}
+    initialFile={openedFile?.id === fileId ? openedFile : undefined}
+    onBack={() => { const next = new URLSearchParams(searchParams); next.delete("file_id"); setSearchParams(next); }}
+  />;
+  if (presentation === "workspace") return (
+    <SpaceManagementView scope={scope} spaceId={spaceId} parentId={parentId} title={title} description={parentId === null ? info?.description ?? "" : ""}>
+      {(toolbarTarget) => directory(toolbarTarget)}
+    </SpaceManagementView>
   );
+  return <div className="relative size-full bg-background-login px-2">
+    <div className="pt-4"><Header fileTitle title={title} description={info?.description ?? ""} onBack={() => navigate("/filelib")} /></div>
+    {directory()}
+  </div>;
 }

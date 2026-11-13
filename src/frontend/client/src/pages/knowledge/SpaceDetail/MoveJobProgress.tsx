@@ -84,40 +84,7 @@ export function MoveJobProgress({ progress }: MoveJobProgressProps) {
                 </Button>
               </div>
             </>
-          ) : (
-            <div>
-              {progress.history?.data.map((entry) => (
-                <Button
-                  key={entry.id}
-                  variant="text"
-                  onClick={() => void progress.select(entry.id)}
-                >
-                  {localize(`com_knowledge.move_state_${entry.state}`)} ·{" "}
-                  {entry.succeeded_count}/{entry.total_count}
-                </Button>
-              ))}
-              <div className="flex justify-end gap-2">
-                <Button
-                  size="small"
-                  variant="text"
-                  disabled={page === 1}
-                  onClick={() => progress.setPage(page - 1)}
-                >
-                  {localize("com_knowledge.move_previous_page")}
-                </Button>
-                <Button
-                  size="small"
-                  variant="text"
-                  disabled={
-                    !progress.history || page * 20 >= progress.history.total
-                  }
-                  onClick={() => progress.setPage(page + 1)}
-                >
-                  {localize("com_knowledge.move_next_page")}
-                </Button>
-              </div>
-            </div>
-          )}
+          ) : <p role="status">{localize("com_ui_loading")}</p>}
         </div>
         <DialogFooter>
           {progress.confirmation && (
@@ -128,7 +95,7 @@ export function MoveJobProgress({ progress }: MoveJobProgressProps) {
               {localize("com_knowledge.move_resume")}
             </Button>
           )}
-          {error && (
+          {error && !progress.confirmation && (
             <Button
               variant="outlined"
               loading={progress.loading}

@@ -1,7 +1,9 @@
-import { Button, Input, Select, Tabs } from "@bisheng/ui";
+import { Tabs } from "@bisheng/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import FileUploadSplitStrategy, {
+  ruleI18nMap,
+} from "./FileUploadSplitStrategy";
 import type {
   ProcessingDefaults,
   SeparatorRule,
@@ -9,7 +11,7 @@ import type {
 import {
   DocumentProcessingDefaultsFields,
   type DocumentProcessingDefaultsDraft,
-} from "./RuleFile";
+} from "./DocumentProcessingDefaultsFields";
 import {
   TableProcessingDefaultsFields,
   type TableProcessingDefaultsDraft,
@@ -131,159 +133,48 @@ export function ProcessingDefaultsEditor({
   disabled = false,
 }: ProcessingDefaultsEditorProps) {
   const { t } = useTranslation("knowledge");
-  const selectLabels = useSelectLabels();
   const [active, setActive] = useState("documents");
   const document = value.document;
   const validation = validateProcessingDefaultsDraft(value);
-  const positions = [
-    { value: "before", label: t("before") },
-    { value: "after", label: t("after") },
-  ];
-  const handleMove = (index: number, direction: number) => {
-    const next = index + direction;
-    if (next < 0 || next >= document.separator.length) return;
-    const separator = document.separator.slice(),
-      separator_rule = document.separator_rule.slice();
-    [separator[index], separator[next]] = [separator[next], separator[index]];
-    [separator_rule[index], separator_rule[next]] = [
-      separator_rule[next],
-      separator_rule[index],
-    ];
-    onChange({
-      ...value,
-      document: { ...document, separator, separator_rule },
-    });
-  };
   const documentPanel = (
-    <div className="space-y-4">
-      <DocumentProcessingDefaultsFields
-        value={document}
-        disabled={disabled}
-        onChange={(next) => onChange({ ...value, document: next })}
-      />
-      <fieldset disabled={disabled} className="space-y-3 rounded-lg border p-4">
-        <h3 className="text-sm font-medium">{t("addedRules")}</h3>
-        {document.separator.map((pattern, index) => (
-          <div key={index} className="flex flex-wrap items-center gap-2">
-            <Input
-              aria-label={t("f118.separator_pattern", { index: index + 1 })}
-              value={pattern}
-              disabled={disabled}
-              onChange={(event) =>
-                onChange({
-                  ...value,
-                  document: {
-                    ...document,
-                    separator: document.separator.map((token, i) =>
-                      i === index ? event.target.value : token,
-                    ),
-                  },
-                })
-              }
-            />
-            <Select
-              {...selectLabels}
-              aria-label={t("f118.separator_position", { index: index + 1 })}
-              value={document.separator_rule[index]}
-              disabled={disabled}
-              options={positions}
-              onChange={(position) => {
-                if (position === "before" || position === "after")
-                  onChange({
-                    ...value,
-                    document: {
-                      ...document,
-                      separator_rule: document.separator_rule.map((old, i) =>
-                        i === index ? position : old,
-                      ),
-                    },
-                  });
-              }}
-            />
-            <Button
-              variant="outlined"
-              color="default"
-              disabled={disabled || index === 0}
-              onClick={() => handleMove(index, -1)}
-            >
-              {t("f118.move_up")}
-            </Button>
-            <Button
-              variant="outlined"
-              color="default"
-              disabled={disabled || index === document.separator.length - 1}
-              onClick={() => handleMove(index, 1)}
-            >
-              {t("f118.move_down")}
-            </Button>
-            <Button
-              variant="outlined"
-              color="default"
-              disabled={disabled}
-              onClick={() =>
-                onChange({
-                  ...value,
-                  document: {
-                    ...document,
-                    separator: document.separator.filter((_, i) => i !== index),
-                    separator_rule: document.separator_rule.filter(
-                      (_, i) => i !== index,
-                    ),
-                  },
-                })
-              }
-            >
-              {t("delete")}
-            </Button>
-          </div>
-        ))}
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            aria-label={t("addCustomRule")}
-            placeholder={t("enterRegex")}
-            value={value.pendingPattern}
-            disabled={disabled}
-            onChange={(event) =>
-              onChange({ ...value, pendingPattern: event.target.value })
-            }
-          />
-          <Select
-            {...selectLabels}
-            aria-label={t("f118.separator_position", {
-              index: document.separator.length + 1,
-            })}
-            disabled={disabled}
-            options={positions}
-            value={value.pendingPosition}
-            onChange={(position) => {
-              if (position === "before" || position === "after")
-                onChange({ ...value, pendingPosition: position });
-            }}
-          />
-          <Button
-            variant="outlined"
-            color="default"
-            disabled={disabled || value.pendingPattern === ""}
-            onClick={() =>
-              onChange({
-                ...value,
-                pendingPattern: "",
-                document: {
-                  ...document,
-                  separator: [...document.separator, value.pendingPattern],
-                  separator_rule: [
-                    ...document.separator_rule,
-                    value.pendingPosition,
-                  ],
-                },
-              })
-            }
-          >
-            {t("add")}
-          </Button>
-        </div>
-      </fieldset>
-    </div>
+    <DocumentProcessingDefaultsFields
+      value={document}
+      disabled={disabled}
+      onChange={(next) => onChange({ ...value, document: next })}
+    >
+      {document.split_mode === "custom" && (
+        <FileUploadSplitStrategy
+          disabled={disabled}
+          pending={value.pendingPattern}
+          pendingPosition={value.pendingPosition}
+          onPositionChange={(pendingPosition) =>
+            onChange({ ...value, pendingPosition })
+          }
+          onPendingChange={(pendingPattern) =>
+            onChange({ ...value, pendingPattern })
+          }
+          data={document.separator.map((regex, index) => ({
+            id: String(index),
+            regex,
+            position: document.separator_rule[index],
+            rule: ruleI18nMap[regex]
+              ? t(`predefinedRules.${ruleI18nMap[regex]}.desc`)
+              : t("customRule"),
+          }))}
+          onChange={(strategies, added) =>
+            onChange({
+              ...value,
+              pendingPattern: added ? "" : value.pendingPattern,
+              document: {
+                ...document,
+                separator: strategies.map((rule) => rule.regex),
+                separator_rule: strategies.map((rule) => rule.position),
+              },
+            })
+          }
+        />
+      )}
+    </DocumentProcessingDefaultsFields>
   );
   return (
     <div className="space-y-4">

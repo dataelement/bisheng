@@ -2,24 +2,41 @@ import { Button, Tabs } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
-import KnowledgeFile from "./KnowledgeFile";
 import KnowledgeQa from "./KnowledgeQa";
+import { KnowledgeSpaceWorkspace } from "./KnowledgeSpaceWorkspace";
 
 const pageWindow = window as Window & { LibPage?: { type: string } };
 
 export default function KnowledgePage() {
   const { t } = useTranslation("knowledge");
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
   const { scopes, isLoading, canManage, retry } = useKnowledgePageScope();
   const [toolbarTarget, setToolbarTarget] = useState<HTMLDivElement | null>(
     null,
   );
-  const [active, setActive] = useState(
+  const [initialTab, setInitialTab] = useState(
     () => pageWindow.LibPage?.type || "file",
   );
+  const views = params.getAll("view");
+  const requested =
+    views.length === 0
+      ? id === undefined
+        ? initialTab
+        : "file"
+      : views.length === 1
+        ? views[0]
+        : "file";
   const activeKey =
-    active === "qa" || (active === "admin" && canManage) ? active : "file";
+    requested === "admin" && canManage
+      ? "admin"
+      : requested === "qa" && id === undefined
+        ? "qa"
+        : "file";
   useEffect(() => {
     delete pageWindow.LibPage;
   }, []);
@@ -38,10 +55,11 @@ export default function KnowledgePage() {
   );
   const content = (scope: KnowledgeQueryScope | undefined) =>
     scope ? (
-      <KnowledgeFile
+      <KnowledgeSpaceWorkspace
         key={JSON.stringify(scope)}
         scope={scope}
-        toolbarTarget={toolbarTarget}
+        routeId={id}
+        active={activeKey === (scope.view === "admin" ? "admin" : "file")}
       />
     ) : (
       unavailable
@@ -50,9 +68,12 @@ export default function KnowledgePage() {
     <div className="relative h-full w-full px-2 pt-4">
       <Tabs
         activeKey={activeKey}
-        onChange={setActive}
+        onChange={(key) => {
+          setInitialTab("file");
+          navigate(key === "file" ? "/filelib" : `/filelib?view=${key}`);
+        }}
         extra={<div ref={setToolbarTarget} />}
-        className="mb-10 w-full [&>div:first-child]:mx-2 [&>div:first-child]:mb-2"
+        className="flex h-full w-full flex-col [&>div:first-child]:mx-2 [&>div:first-child]:mb-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1"
         items={[
           {
             key: "file",

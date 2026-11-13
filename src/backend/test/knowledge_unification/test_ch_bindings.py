@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
+from test.knowledge_unification import test_ch_repository as fixtures
 
 from bisheng.channel.domain.models import channel_knowledge_sync as sync_module
 from bisheng.channel.domain.models.channel import Channel
@@ -39,7 +40,6 @@ from bisheng.resource_reference.domain.models.business_reference_set import Busi
 from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
 from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
-from test.knowledge_unification import test_ch_repository as fixtures
 
 store = fixtures.store
 tenant = fixtures.tenant
@@ -78,6 +78,7 @@ async def business(store, monkeypatch):
         authorize_created=AsyncMock(),
         load_permission_record=AsyncMock(return_value=object()),
         project_delete=AsyncMock(),
+        cleanup_deleted=AsyncMock(),
         remove_ordinary_sources=AsyncMock(),
     )
     monkeypatch.setattr(service_module, "get_async_db_session", sessions, raising=False)

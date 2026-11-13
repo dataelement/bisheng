@@ -115,6 +115,7 @@ class PermissionPublicationInput:
         metadata = [row.data for row in root.records if row.record_type == "run"]
         if len(metadata) != 1:
             blocked("plan_metadata")
+        self.legacy_policy = metadata[0].get("preparation_policy_version", 1) == 1
         plan = build_catalog_retirement_plan(
             run_id=self.frozen.run_id,
             writer_contract_version=self.frozen.writer_contract_version,
@@ -353,10 +354,16 @@ class PermissionPublicationApplication:
             before_tuples=inputs.original_tuples,
             source_schema=io.source_schema,
             target_schema=io.target_schema,
+            legacy_policy=inputs.legacy_policy,
         )
         for tenant in inputs.frozen.tenant_ids:
             for plan in await inputs.aplans(tenant):
-                builder.observe(plan)
+                builder.observe(
+                    plan,
+                    restore_missing_markers=inputs.summaries[tenant][plan.before.mode.id].get(
+                        "restore_missing_markers", False
+                    ),
+                )
         return builder.finish(
             stage_tuples=stage,
             before_release_key=inputs.planner.catalog_plan.before.release.release_key,

@@ -42,23 +42,12 @@ from bisheng.common.errcode.permission import (  # noqa: E402
     PermissionVersionConflictError,
 )
 from bisheng.common.services.config_service import settings  # noqa: E402
-from bisheng.core.context.manager import (  # noqa: E402
-    app_context,
-    close_app_context,
-    initialize_app_context,
-)
 from bisheng.core.context.tenant import (  # noqa: E402
     bypass_tenant_filter,
     current_tenant_id,
     set_current_tenant_id,
 )
 from bisheng.core.database import get_async_db_session  # noqa: E402
-from bisheng.permission.application.runtime import (  # noqa: E402
-    build_f048_permission_runtime,
-)
-from bisheng.permission.application.sql_runtime import (  # noqa: E402
-    SqlCatalogDecisionState,
-)
 from bisheng.permission.domain.models import (  # noqa: E402
     PermissionProjectionOperation,
     ResourcePermissionMode,
@@ -68,6 +57,18 @@ from bisheng.permission.domain.repositories.projection_repository import (  # no
 )
 from bisheng.permission.domain.services.projection_service import (  # noqa: E402
     restore_projection_plan,
+)
+from scripts.f048_maintenance_runtime import (  # noqa: E402
+    build_maintenance_projection as build_f048_permission_runtime,
+)
+from scripts.f048_maintenance_runtime import (  # noqa: E402
+    close_maintenance_context as close_app_context,
+)
+from scripts.f048_maintenance_runtime import (  # noqa: E402
+    initialize_maintenance_context as initialize_app_context,
+)
+from scripts.f048_maintenance_runtime import (  # noqa: E402
+    maintenance_client,
 )
 
 EXIT_OK = 0
@@ -157,11 +158,7 @@ def _require(condition: bool, message: str) -> None:
 
 
 async def _build_runtime(*, apply: bool) -> ProjectionReconcileRuntime:
-    client = await app_context.async_get_instance("openfga")
-    await SqlCatalogDecisionState(
-        expected_store_id=client.store_id,
-        expected_model_id=client.model_id,
-    ).ensure_runtime_ready()
+    client = await maintenance_client()
 
     projection = None
     if apply:

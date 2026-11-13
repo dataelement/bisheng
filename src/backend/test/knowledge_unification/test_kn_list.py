@@ -40,6 +40,9 @@ def concrete_tenant(tenant_context):
 
 @pytest.fixture
 async def catalog(concrete_tenant, monkeypatch):
+    from bisheng.knowledge.domain.services.knowledge_space_service import DepartmentKnowledgeSpaceDao
+
+    monkeypatch.setattr(DepartmentKnowledgeSpaceDao, "aget_by_space_ids", AsyncMock(return_value=[]))
     register_tenant_filter_events()
     # Other native-SQL fixtures narrow discovery during the first global
     # registration; pin this fixture's real model even in a combined selection.

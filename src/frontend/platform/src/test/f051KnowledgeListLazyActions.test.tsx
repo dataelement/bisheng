@@ -1,5 +1,4 @@
 import {
-  act,
   cleanup,
   fireEvent,
   render,
@@ -215,7 +214,6 @@ vi.mock("@/pages/ModelPage/manage", () => ({
   useModel: () => ({ embeddings: [], isLoading: false }),
 }));
 
-import KnowledgeFile from "@/pages/KnowledgePage/KnowledgeFile";
 import KnowledgeQa from "@/pages/KnowledgePage/KnowledgeQa";
 
 function deferred<T>() {
@@ -255,23 +253,7 @@ afterEach(() => {
   cleanup();
   clients.splice(0).forEach((client) => client.clear());
 });
-const spaceProps = {
-  scope: {
-    identityKey: "user:841",
-    tenantId: 60,
-    managementTenantId: 60,
-    view: "ordinary" as const,
-  },
-  toolbarTarget: undefined,
-};
-
 describe.each([
-  [
-    "document knowledge",
-    <KnowledgeFile {...spaceProps} />,
-    "601",
-    "knowledge_space",
-  ],
   ["QA knowledge", <KnowledgeQa />, "qa-knowledge", "knowledge_library"],
 ])("F051 lazy row actions: %s", (_label, page, resourceId, resourceType) => {
   beforeEach(() => {
@@ -319,15 +301,7 @@ describe("F051 lazy row action failure and busy states", () => {
 
   afterEach(cleanup);
 
-  it("closes the menu and reports a failed permission lookup", async () => {
-    permissionApi.mockRejectedValue(new Error("permission unavailable"));
-    renderPage(<KnowledgeFile {...spaceProps} />);
 
-    fireEvent.click(await screen.findByTestId("row-actions-trigger"));
-    await waitFor(() => expect(permissionError).toHaveBeenCalled());
-    expect(screen.queryByTestId("row-actions-menu")).toBeNull();
-    expect(document.querySelector('[data-value="set"]')).toBeNull();
-  });
 
   it("does not query actions for a busy row", () => {
     testState.state = 2;
@@ -337,35 +311,7 @@ describe("F051 lazy row action failure and busy states", () => {
     expect(permissionApi).not.toHaveBeenCalled();
   });
 
-  it("keeps B open when A emits a late close and never mixes their actions", async () => {
-    testState.resourceId = "621";
-    testState.secondResourceId = "622";
-    const requestA = deferred<{ actions: string[] }>();
-    const requestB = deferred<{ actions: string[] }>();
-    permissionApi.mockImplementation((_type: string, resourceId: string) =>
-      resourceId === "621" ? requestA.promise : requestB.promise,
-    );
-    renderPage(<KnowledgeFile {...spaceProps} />);
 
-    const triggers = await screen.findAllByTestId("row-actions-trigger");
-    const closeButtons = screen.getAllByTestId("row-actions-close");
-    fireEvent.click(triggers[0]);
-    fireEvent.click(triggers[1]);
-    fireEvent.click(closeButtons[0]);
-    expect(screen.getByTestId("row-actions-menu")).not.toBeNull();
-
-    requestB.resolve({ actions: ["manage_permission", "delete"] });
-    await waitFor(() => {
-      expect(
-        document.querySelector('[data-value="permission"]'),
-      ).not.toBeNull();
-    });
-    await act(async () => requestA.resolve({ actions: ["edit"] }));
-    expect(permissionApi).toHaveBeenCalledTimes(2);
-    expect(document.querySelector('[data-value="permission"]')).not.toBeNull();
-    expect(document.querySelector('[data-value="delete"]')).toBeNull();
-    expect(document.querySelector('[data-value="set"]')).toBeNull();
-  });
 
   it("does not reopen a menu after it is closed while loading", async () => {
     testState.resourceId = "closed-while-loading";
@@ -381,18 +327,5 @@ describe("F051 lazy row action failure and busy states", () => {
     expect(screen.queryByTestId("row-actions-menu")).toBeNull();
   });
 
-  it("does not borrow legacy copy qualification for an unassembled SPACE operation", async () => {
-    testState.resourceId = "631";
-    permissionApi.mockResolvedValue({ actions: ["visible"] });
-    renderPage(<KnowledgeFile {...spaceProps} />, ["create_knowledge"]);
 
-    fireEvent.click(await screen.findByTestId("row-actions-trigger"));
-    await waitFor(() => {
-      expect(document.querySelector('[data-value="empty"]')).not.toBeNull();
-    });
-    expect(document.querySelector('[data-value="copy"]')).toBeNull();
-    expect(document.querySelector('[data-value="set"]')).toBeNull();
-    expect(document.querySelector('[data-value="delete"]')).toBeNull();
-    expect(document.querySelector('[data-value="permission"]')).toBeNull();
-  });
 });

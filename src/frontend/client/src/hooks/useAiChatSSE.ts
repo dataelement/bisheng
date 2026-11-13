@@ -38,6 +38,8 @@ export interface AgentPatch {
     category?: string;
     /** True once the final `agent_answer.end` event has been received. */
     finalised?: boolean;
+    /** Files the code interpreter produced this turn, sent on `agent_answer.end`. */
+    files?: ChatMessage["files"];
 }
 
 export interface SSESubmission {
@@ -366,6 +368,9 @@ export function openChatStream(
                             events: snapshot(),
                             category: "agent_answer",
                             finalised: true,
+                            ...(Array.isArray(message?.files) && message.files.length
+                                ? { files: message.files }
+                                : {}),
                         });
                         emitLegacy();
                         return;

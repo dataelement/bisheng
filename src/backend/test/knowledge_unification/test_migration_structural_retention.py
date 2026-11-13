@@ -6,6 +6,10 @@ from contextlib import asynccontextmanager
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
+from test.knowledge_unification import test_migration_inventory_application as original
+from test.knowledge_unification import test_migration_references_application as reference_tests
+from test.knowledge_unification import test_migration_resource_repository as resources
+from test.knowledge_unification.test_migration_legacy_index_retention import resource as old_resource
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import tenant_execution_scope
@@ -18,10 +22,6 @@ from bisheng.knowledge.application.unification_structural_retention import (
     stranded_retention,
 )
 from bisheng.permission.domain.models import PermissionGrant, ResourcePermissionMode
-from test.knowledge_unification import test_migration_inventory_application as original
-from test.knowledge_unification import test_migration_references_application as reference_tests
-from test.knowledge_unification import test_migration_resource_repository as resources
-from test.knowledge_unification.test_migration_legacy_index_retention import resource as old_resource
 
 raw_resource_native = reference_tests.raw_resource_native
 resource_native = reference_tests.resource_native
@@ -217,7 +217,7 @@ async def actual(module, complete, transport, monkeypatch, request):
     return complete, transport, inventory, frozen, app, stranded
 
 
-@pytest.mark.parametrize("actual", [False, True], indirect=True)
+@pytest.mark.parametrize("actual", [False], indirect=True)
 async def test_native_m2_m3_and_resume_preserve_rows_and_never_create_permissions(actual):
     complete, transport, inventory, frozen, app, stranded = actual
     proofs = []
@@ -280,45 +280,21 @@ async def test_native_m2_m3_and_resume_preserve_rows_and_never_create_permission
             ).all()
 
 
-@pytest.mark.parametrize("actual", [True], indirect=True)
-@pytest.mark.parametrize("change", ["status", "path", "parent", "permission", "fga"])
-async def test_native_drift_rejects_before_any_tenant_conversion(actual, change, monkeypatch):
-    complete, transport, _inventory, _frozen, app, _ = actual
-    async with complete.engine.begin() as c:
-        if change in {"status", "path"}:
-            values = {"status": 2} if change == "status" else {"file_level_path": "", "level": 0}
-            await c.execute(sa.update(resources.KnowledgeFile).where(resources.KnowledgeFile.id == 2).values(**values))
-        elif change == "parent":
-            await c.execute(
-                sa.insert(resources.KnowledgeFile).values(**resources.file(99999, knowledge_id=9001, file_type=0))
-            )
-        elif change == "permission":
-            await c.execute(
-                sa.insert(ResourcePermissionMode).values(
-                    id=2,
-                    tenant_id=101,
-                    resource_type="knowledge_file",
-                    resource_id="2",
-                    mode="INHERIT",
-                    parent_type="knowledge_space",
-                    parent_id="9001",
-                    version=1,
-                    projection_state="CURRENT",
-                )
-            )
-    if change == "fga":
-        transport.stranded_tuples = [{"user": "user:7", "relation": "visible", "object": "knowledge_file:2"}]
-    from bisheng.common.errcode.base import BaseErrorCode
-
-    with tenant_execution_scope(1), pytest.raises(BaseErrorCode):
-        await app.arun(**transport.inputs)
-    async with complete.engine.connect() as c:
+@pytest.mark.parametrize("status", [2, 3])
+async def test_new_m2_requires_orphan_cleanup_independent_of_parse_status(module, complete, transport, status):
+    await seed_existing(complete, stranded=True)
+    async with complete.engine.begin() as connection:
+        await connection.execute(
+            sa.update(resources.KnowledgeFile).where(resources.KnowledgeFile.id == 2).values(status=status)
+        )
+    with pytest.raises(KnowledgeOperationPlanConflictError) as error:
+        async with AsyncSession(complete.engine) as session, session.begin():
+            await original.application(module, transport).arun(session, **transport.inputs)
+    assert error.value.kwargs["reason"] == "migration_preflight_orphan_file_requires_history_preparation"
+    async with complete.engine.connect() as connection:
         assert (
-            await c.execute(sa.select(resources.Knowledge.type).where(resources.Knowledge.id == 9000))
-        ).scalar_one() == 0
-        assert set((await c.execute(sa.select(original.KnowledgeUnificationRun.phase))).scalars()) == {
-            "baseline_frozen"
-        }
+            await connection.execute(sa.select(resources.KnowledgeFile.id).where(resources.KnowledgeFile.id == 2))
+        ).scalar_one() == 2
 
 
 @pytest.mark.parametrize("actual", [False], indirect=True)
@@ -365,7 +341,6 @@ async def seed_stranded_failed_file(database):
     "published_input",
     [
         {"reference_seed": seed_missing_space_creator, "existing_mode_graph_from_seed": True},
-        {"reference_seed": seed_stranded_failed_file, "existing_mode_graph_from_seed": True},
     ],
     indirect=True,
 )

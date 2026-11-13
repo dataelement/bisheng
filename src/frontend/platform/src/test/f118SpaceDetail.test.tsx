@@ -18,7 +18,7 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
 import type { User } from "@/types/api/user";
-import FilesPage from "@/pages/KnowledgePage/detail";
+import KnowledgePage from "@/pages/KnowledgePage";
 import Header from "@/pages/KnowledgePage/components/Header";
 
 const mocks = vi.hoisted(() => ({
@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
   children: vi.fn(),
   parents: vi.fn(),
   permissions: vi.fn(),
-  legacyPermission: vi.fn(),
+  containerEdit: vi.fn(),
   legacy: vi.fn(),
   management: vi.fn(),
   error: vi.fn(),
@@ -39,24 +39,24 @@ vi.mock("@/controllers/request", () => ({
 }));
 vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: mocks.permissions,
-  checkResourceActionApi: mocks.legacyPermission,
+  checkResourceActionApi: mocks.containerEdit,
 }));
 vi.mock("@/controllers/API", () => ({ updateKnowledgeApi: mocks.legacy }));
 vi.mock("@/contexts/userContext", async () => ({
   userContext: (await import("react")).createContext({ user: null }),
 }));
 vi.mock("@/hooks/useAdminScope", () => ({ useAdminScope: mocks.management }));
+vi.mock("@/pages/KnowledgePage/sidebar/KnowledgeSpaceSidebar", () => ({ KnowledgeSpaceSidebar: () => null }));
+vi.mock("@/pages/KnowledgePage/KnowledgeQa", () => ({ default: () => null }));
+vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({ KnowledgeLibraryDialog: () => null }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
     i18n: { resolvedLanguage: "en", loadNamespaces: vi.fn() },
   }),
 }));
-vi.mock("@/pages/KnowledgePage/components/Paragraphs", () => ({
-  default: () => <output data-testid="legacy-chunks" />,
-}));
-vi.mock("@/pages/KnowledgePage/useKnowledgeStore", () => ({
-  default: () => ({ isEditable: true }),
+vi.mock("@/pages/KnowledgePage/components/PreviewParagraph", () => ({
+  default: () => <output data-testid="detail-chunks" />,
 }));
 vi.mock("@/pages/KnowledgePage/components/PreviewFile", () => ({
   default: () => <output data-testid="original-preview" />,
@@ -126,7 +126,7 @@ function mount(path = "/filelib/7") {
         <MemoryRouter initialEntries={[path]}>
           <Navigation />
           <Routes>
-            <Route path="/filelib/:id" element={<FilesPage />} />
+            <Route path="/filelib/:id" element={<KnowledgePage />} />
             <Route path="/filelib" element={<p>space-list</p>} />
           </Routes>
         </MemoryRouter>
@@ -161,7 +161,7 @@ beforeEach(() => {
     refresh: vi.fn().mockResolvedValue(undefined),
   };
   mocks.management.mockImplementation(() => management);
-  mocks.legacyPermission.mockResolvedValue({ allowed: true });
+  mocks.containerEdit.mockResolvedValue({ allowed: true });
   mocks.permissions.mockResolvedValue(permission());
   mocks.info.mockImplementation(async (id: number) => ({
     id,
@@ -191,6 +191,9 @@ beforeEach(() => {
       if (url.endsWith("/children"))
         return mocks.children(url, options?.params);
       if (url.endsWith("/preview")) return mocks.preview(url);
+      if (url.includes("/file/info/")) return { id: 11, file_name: "report.pdf", knowledge_id: 7, user_metadata: {} };
+      if (url.endsWith("/chunk")) return { data: [], total: 0 };
+      if (url.endsWith("/file_bbox")) return {};
       throw new Error(`unexpected API read: ${url}`);
     },
   );
@@ -215,7 +218,7 @@ it.each([false, true])(
     user = { ...user, is_global_super: superAdmin };
     const view = mount();
     expect(await screen.findByText("Server 7")).toBeInTheDocument();
-    expect(screen.getByText("Description 7")).toBeInTheDocument();
+    expect(screen.getByText("ID: 7 · Description 7")).toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "report.pdf" }),
     ).toBeInTheDocument();
@@ -226,7 +229,8 @@ it.each([false, true])(
     expect(JSON.stringify(key)).toContain(superAdmin ? "202" : "101");
     expect(JSON.stringify(key)).toContain("ordinary");
     expect(user?.tenant_id).toBe(1);
-    expect(mocks.legacyPermission).not.toHaveBeenCalled();
+    expect(mocks.containerEdit).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "f118.processing_title_file" })).not.toBeInTheDocument();
     expect(
       screen.queryByText("Unscoped private title"),
     ).not.toBeInTheDocument();
@@ -239,6 +243,7 @@ it.each([false, true])(
 it("mounts visible-only child content when root info fails and never enters legacy chunks", async () => {
   const error = { status_code: 19000, marker: "original error" };
   mocks.info.mockRejectedValue(error);
+  mocks.containerEdit.mockResolvedValue({ allowed: false });
   mount();
   fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
   expect(await screen.findByTestId("original-preview")).toBeInTheDocument();
@@ -247,9 +252,10 @@ it("mounts visible-only child content when root info fails and never enters lega
     mocks.get.mock.calls.every(([url]) => !String(url).endsWith("/download")),
   ).toBe(true);
   expect(screen.queryByTestId("legacy-chunks")).not.toBeInTheDocument();
-  expect(mocks.legacyPermission).not.toHaveBeenCalled();
+  expect(mocks.containerEdit).not.toHaveBeenCalled();
 });
 it("direct child admission uses current folder facts without a root info or visible precondition", async () => {
+  mocks.containerEdit.mockResolvedValue({ allowed: false });
   mount("/filelib/7?parent_id=9");
   expect(
     await screen.findByRole("button", { name: "report.pdf" }),
@@ -261,9 +267,9 @@ it("direct child admission uses current folder facts without a root info or visi
     expect.objectContaining({ parent_id: 9 }),
   );
   expect(mocks.permissions).toHaveBeenCalledWith("folder", "9");
-  expect(mocks.permissions).not.toHaveBeenCalledWith("knowledge_space", "7");
+  expect(screen.queryByRole("tab", { name: "detail.settings" })).toBeNull();
   expect(mocks.info).not.toHaveBeenCalled();
-  expect(mocks.legacyPermission).not.toHaveBeenCalled();
+  expect(mocks.containerEdit).not.toHaveBeenCalled();
 });
 it("updates only parent_id for folder and breadcrumb navigation and keeps the old status filter", async () => {
   mount("/filelib/7?fileStatus=abnormal");
@@ -307,7 +313,7 @@ it.each([
   expect(await screen.findByText("f118.scope_unavailable")).toBeInTheDocument();
   expect(mocks.get).not.toHaveBeenCalled();
   expect(mocks.permissions).not.toHaveBeenCalled();
-  expect(mocks.legacyPermission).not.toHaveBeenCalled();
+  expect(mocks.containerEdit).not.toHaveBeenCalled();
 });
 it("waits for a trusted super management tenant before issuing any resource request", async () => {
   user = { ...user, is_global_super: true };
@@ -460,4 +466,35 @@ it("retires a delayed abnormal page across fileStatus URL ABA", async () => {
   );
   expect(screen.queryByText("retired-abnormal.pdf")).not.toBeInTheDocument();
   expect(mocks.children).toHaveBeenCalledTimes(3);
+});
+
+it.each(["file_id=0", "file_id=11&file_id=12"])("rejects invalid file targets before reading file or root data: %s", async (query) => {
+  mount(`/filelib/7?${query}`);
+  expect(await screen.findByText("f118.scope_unavailable")).toBeVisible();
+  expect(mocks.get).not.toHaveBeenCalled();
+});
+
+it.each(["ordinary", "admin"])("opens the chunk editor in the %s view and returns to the same directory with its original filters", async (view) => {
+  user = { ...user, is_child_admin: view === "admin" };
+  const current = mount(`/filelib/7?parent_id=9&fileStatus=abnormal&keep=1${view === "admin" ? "&view=admin" : ""}`);
+  fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
+  await waitFor(() => expect(screen.getByTestId("detail-chunks")).toBeInTheDocument());
+  expect(screen.getByTestId("location")).toHaveTextContent("file_id=11");
+  fireEvent.click(screen.getByRole("button", { name: "back" }));
+  expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
+  expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9&fileStatus=abnormal&keep=1");
+  expect(screen.getByTestId("location")).not.toHaveTextContent("file_id=");
+  const views = current.client.getQueryCache().getAll().map((query) => query.queryKey[4]);
+  expect(views).toContain(view);
+  expect(views).not.toContain(view === "admin" ? "ordinary" : "admin");
+  expect(screen.getByRole("tab", { name: view === "admin" ? "f118.manage_spaces" : "f118.spaces" })).toHaveAttribute("data-state", "active");
+});
+
+it("does not turn a forged management URL into an admin scope for an ordinary user", async () => {
+  const current = mount("/filelib/7?view=admin");
+  expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
+  expect(screen.queryByRole("tab", { name: "f118.manage_spaces" })).toBeNull();
+  const keys = JSON.stringify(current.client.getQueryCache().getAll().map((query) => query.queryKey));
+  expect(keys).toContain("ordinary");
+  expect(keys).not.toContain('"admin"');
 });

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   getProcessingJob,
   listProcessingItems,
-  listProcessingJobs,
   retryProcessingJob,
   type JobAccepted,
 } from "~/api/knowledgeProcessing";
@@ -85,17 +84,6 @@ export function useMoveJobProgress(
   const [page, setPage] = useState(1);
   const moved = useRef(onMoved);
   moved.current = onMoved;
-  const history = useQuery({
-    queryKey: ["knowledge-move-history", user?.id, spaceId, page],
-    queryFn: () =>
-      listProcessingJobs(Number(spaceId), {
-        kind: "move_index",
-        page,
-        page_size: 20,
-      }),
-    enabled: open && !operation && !confirmation,
-    retry: false,
-  });
   const current =
     !!operation && operation.user === userId && operation.source === spaceId;
   const job = useQuery({
@@ -180,28 +168,10 @@ export function useMoveJobProgress(
   return {
     open: open && !!user && (!operation || current),
     setOpen,
-    showHistory: () => {
-      setOperation(null);
-      setPage(1);
-      setOpen(true);
-      setRetryError(false);
-    },
     start,
     job: job.error ? undefined : job.data,
     items: items.data,
-    history: history.data,
-    select: async (id: string) => {
-      setRetryError(false);
-      try {
-        const response = await import("~/api/knowledge");
-        const tenant = await response.getMoveManagementTenant(spaceId);
-        setOperation({ id, tenant, user: userId, source: spaceId });
-        setPage(1);
-      } catch {
-        setRetryError(true);
-      }
-    },
-    error: !!job.error || !!items.error || !!history.error || retryError,
+    error: !!job.error || !!items.error || retryError,
     loading: job.isFetching,
     retrying,
     retry,
@@ -273,7 +243,6 @@ export function useMoveJobProgress(
         setRetrying(false);
       }
     },
-    available: !!user,
-    refresh: () => (operation ? job.refetch() : history.refetch()),
+    refresh: () => current ? job.refetch() : undefined,
   };
 }

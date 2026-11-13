@@ -8,6 +8,8 @@
  * It is also not an --illus-* illustration (no palette, no grey draft).
  */
 export {
+  AppInaccessibleIllustration,
+  AppUnpublishedIllustration,
   ArticleQAIllustration,
   CrawlingIllustration,
   EmptyStateIllustration,

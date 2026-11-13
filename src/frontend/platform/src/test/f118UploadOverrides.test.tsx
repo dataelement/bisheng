@@ -1,4 +1,3 @@
-import "@testing-library/jest-dom/vitest";
 import {
   act,
   cleanup,
@@ -8,15 +7,17 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { ProcessingDefaults } from "@/controllers/API/knowledgeSpace";
-import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { SpaceFileUploadPanel } from "@/pages/KnowledgePage/components/SpaceFileUploadPanel";
+import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
+import { uploadSettings } from "./uploadWizardFixtures";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   put: vi.fn(),
+  delete: vi.fn(),
   error: vi.fn(),
 }));
 vi.mock("@/controllers/request", () => ({
@@ -33,36 +34,33 @@ vi.mock("@/pages/KnowledgePage/components/FileUploadSplitStrategy", () => ({
 }));
 vi.mock("@/pages/KnowledgePage/components/KnowledgeTooltip", () => ({
   KnowledgeHint: () => null,
+  KnowledgeTooltip: () => null,
 }));
-const defaults: ProcessingDefaults = {
-  schema_version: 1,
-  document: {
-    split_mode: "custom",
-    separator: ["\\n", ""],
-    separator_rule: ["after", "after"],
-    chunk_size: 300,
-    chunk_overlap: 20,
-    hierarchy_level: 3,
-    append_title: false,
-    max_chunk_size: 600,
-    retain_images: 1,
-    force_ocr: 0,
-    enable_formula: 0,
-    filter_page_header_footer: 1,
-  },
-  table: {
-    slice_length: 10,
-    header_start_row: 1,
-    header_end_row: 2,
-    append_header: 0,
-  },
-};
-const settings = () => ({
-  space_id: 7,
-  config_version: 4,
-  saved_defaults: null,
-  effective_defaults: structuredClone(defaults),
-});
+vi.mock("@/pages/KnowledgePage/components/PreviewFile", () => ({
+  default: () => <aside>original-preview</aside>,
+}));
+vi.mock("@/pages/KnowledgePage/components/PreviewParagraph", () => ({
+  default: (props: {
+    chunks: { text: string; chunkIndex: number }[];
+    edit: boolean;
+    onChange: (index: number, text: string) => void;
+  }) => (
+    <div>
+      {props.chunks.map((chunk) => (
+        <div key={chunk.chunkIndex}>
+          <span>{chunk.text}</span>
+          {props.edit && (
+            <button
+              onClick={() => props.onChange(chunk.chunkIndex, "edited chunk")}
+            >
+              edit-chunk
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  ),
+}));
 const scope: KnowledgeQueryScope = {
   identityKey: "user:7",
   tenantId: 101,
@@ -76,9 +74,11 @@ function mount() {
   });
   clients.push(client);
   const element = (value: KnowledgeQueryScope) => (
-    <QueryClientProvider client={client}>
-      <SpaceFileUploadPanel scope={value} spaceId={7} parentId={9} />
-    </QueryClientProvider>
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <SpaceFileUploadPanel scope={value} spaceId={7} parentId={9} />
+      </QueryClientProvider>
+    </MemoryRouter>
   );
   const result = render(element(scope));
   return {
@@ -86,168 +86,192 @@ function mount() {
     update: (value: KnowledgeQueryScope) => result.rerender(element(value)),
   };
 }
-async function drop(name = "report.md") {
+async function drop() {
   await act(async () =>
     fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [new File(["content"], name)] },
+      target: { files: [new File(["content"], "report.md")] },
     }),
   );
-}
-async function customize() {
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "f118.upload_temporary" }),
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled(),
   );
-  await screen.findByRole("spinbutton", { name: "splitLength" });
 }
 const registers = () =>
   mocks.post.mock.calls.filter(([url]) => url.endsWith("/files"));
+const previews = () =>
+  mocks.post.mock.calls.filter(([url]) => url.endsWith("/previews"));
+const preview = (revision = 0, text = "original chunk") => ({
+  preview_id: "b".repeat(32),
+  status: "completed",
+  revision,
+  data: {
+    file_url: "/tmp/report.md",
+    parse_type: "local",
+    partitions: {},
+    chunks: [{ text, metadata: { chunk_index: 0 } }],
+  },
+});
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.get.mockImplementation(async (url: string) => {
-    if (url.endsWith("/upload-settings")) return settings();
+    if (url.endsWith("/upload-settings")) {
+      const value = uploadSettings();
+      value.effective_defaults.document.split_mode = "custom";
+      value.effective_defaults.document.separator = ["\\n"];
+      return value;
+    }
+    if (url.includes("/previews/")) return preview();
     throw new Error(`unexpected read ${url}`);
   });
-  mocks.post.mockImplementation(async (url: string, body: FormData) =>
-    url.endsWith("/files")
-      ? [{ id: 81, knowledge_id: 7, file_name: "report.md", status: 2 }]
-      : { file_path: `tmp/${(body.get("file") as File).name}`, repeat: false },
-  );
+  mocks.post.mockImplementation(async (url: string) => {
+    if (url.endsWith("/uploads"))
+      return {
+        file_path: "tmp/report.md",
+        upload_id: "a".repeat(32),
+        repeat: false,
+      };
+    if (url.endsWith("/previews")) return { preview_id: "b".repeat(32) };
+    if (url.endsWith("/files"))
+      return [{ id: 81, knowledge_id: 7, file_name: "report.md", status: 2 }];
+    throw new Error(`unexpected write ${url}`);
+  });
+  mocks.put.mockResolvedValue(preview(1, "edited chunk"));
 });
 afterEach(() => {
   cleanup();
   clients.splice(0).forEach((client) => client.clear());
 });
-
-it("inherits without reading edit-only defaults or sending overrides", async () => {
+it("loads effective rules for the actual folder eagerly and stages without processing", async () => {
   mount();
   await drop();
-  await waitFor(() => expect(registers()).toHaveLength(1));
-  expect(registers()[0][1]).toEqual({
-    file_path: ["tmp/report.md"],
-    parent_id: 9,
-  });
-  expect(mocks.get).not.toHaveBeenCalled();
-  expect(mocks.put).not.toHaveBeenCalled();
-});
-
-it("fixes actual folder rules and both document/table drafts per drop and retry", async () => {
-  let resolve!: (value: { file_path: string; repeat: boolean }) => void;
-  const staged = new Promise<{ file_path: string; repeat: boolean }>((yes) => {
-    resolve = yes;
-  });
-  const failure = { status_code: 10999 };
-  let attempts = 0;
-  mocks.post.mockImplementation(async (url: string) => {
-    if (!url.endsWith("/files")) return staged;
-    if (++attempts === 1) throw failure;
-    return [{ id: 81, knowledge_id: 7, file_name: "report.md", status: 2 }];
-  });
-  mount();
-  await customize();
   expect(mocks.get).toHaveBeenCalledExactlyOnceWith(
     "/api/v1/knowledge/space/7/files/upload-settings",
     { params: { parent_id: 9 }, signal: expect.any(AbortSignal) },
   );
-  fireEvent.change(screen.getByRole("spinbutton", { name: "splitLength" }), {
-    target: { value: "420" },
-  });
-  fireEvent.mouseDown(screen.getByRole("tab", { name: "f118.tables" }), {
-    button: 0,
-    ctrlKey: false,
-  });
-  fireEvent.change(
-    screen.getByRole("spinbutton", { name: "maxRowsPerSegment" }),
-    {
-      target: { value: "25" },
-    },
-  );
-  await drop();
-  fireEvent.change(
-    screen.getByRole("spinbutton", { name: "maxRowsPerSegment" }),
-    {
-      target: { value: "99" },
-    },
-  );
-  await act(async () => resolve({ file_path: "tmp/fixed", repeat: false }));
-  await waitFor(() => expect(registers()).toHaveLength(1));
-  fireEvent.click(screen.getByRole("button", { name: "retry" }));
-  await waitFor(() => expect(registers()).toHaveLength(2));
-  const expected = {
-    document: { ...defaults.document, chunk_size: 420 },
-    table: { ...defaults.table, slice_length: 25 },
-  };
-  expect(registers().map((call) => call[1].overrides)).toEqual([
-    expected,
-    expected,
-  ]);
+  expect(registers()).toHaveLength(0);
+  expect(previews()).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
   expect(
-    mocks.post.mock.calls.filter(([url]) => url.endsWith("/upload/7")),
-  ).toHaveLength(1);
-  expect(mocks.put).not.toHaveBeenCalled();
-  expect(mocks.error).toHaveBeenCalledWith(failure);
+    await screen.findByRole("spinbutton", { name: "splitLength" }),
+  ).toHaveValue(300);
+  expect(screen.getByRole("spinbutton", { name: "chunkOverlap" })).toHaveValue(
+    0,
+  );
+  expect(
+    screen.getByRole("checkbox", { name: "keepImages" }),
+  ).not.toBeChecked();
 });
-
-it("rejects incomplete drafts before staging and can explicitly inherit", async () => {
+it("submits the same manual rule and edited preview revision only after comparison confirmation", async () => {
   mount();
-  await customize();
-  fireEvent.change(screen.getByRole("spinbutton", { name: "splitLength" }), {
-    target: { value: "" },
+  await drop();
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  fireEvent.change(
+    await screen.findByRole("spinbutton", { name: "splitLength" }),
+    { target: { value: "456" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  await screen.findByText("original-preview");
+  fireEvent.click(await screen.findByRole("button", { name: "edit-chunk" }));
+  await screen.findByText("edited chunk");
+  expect(registers()).toHaveLength(0);
+  expect(mocks.put.mock.calls[0]).toEqual([
+    `/api/v1/knowledge/space/7/uploads/${"a".repeat(32)}/previews/${"b".repeat(32)}/chunks/0`,
+    { text: "edited chunk", bbox: "", expected_revision: 0 },
+    { signal: expect.any(AbortSignal) },
+  ]);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  await waitFor(() => expect(registers()).toHaveLength(1));
+  const body = registers()[0][1];
+  expect(body.overrides.document.chunk_size).toBe(456);
+  expect(body.upload_context.items[0]).toMatchObject({
+    upload_id: "a".repeat(32),
+    preview_id: "b".repeat(32),
+    expected_revision: 1,
   });
-  await drop();
-  expect(mocks.post).not.toHaveBeenCalled();
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "f118.upload_temporary" }),
+  expect(body.upload_context.items[0].overrides).toEqual(
+    previews()[0][1].overrides,
   );
+});
+it("keeps manual changes when returning to strategy, and direct upload deliberately uses space defaults", async () => {
+  mount();
   await drop();
-  await waitFor(() => expect(registers()).toHaveLength(1));
-  expect(registers()[0][1]).not.toHaveProperty("overrides");
-});
-
-it("does not send document/table overrides for specialized media", async () => {
-  mount();
-  await customize();
-  await drop("recording.mp3");
-  await waitFor(() => expect(registers()).toHaveLength(1));
-  expect(registers()[0][1]).not.toHaveProperty("overrides");
-});
-
-it("keeps failed settings reads explicit with real retry and no early upload", async () => {
-  const error = { status_code: 19000 };
-  mocks.get.mockRejectedValueOnce(error).mockResolvedValueOnce(settings());
-  mount();
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "f118.upload_temporary" }),
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  fireEvent.change(
+    await screen.findByRole("spinbutton", { name: "splitLength" }),
+    { target: { value: "456" } },
   );
+  fireEvent.click(screen.getByRole("button", { name: "previousStep" }));
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  expect(
+    await screen.findByRole("spinbutton", { name: "splitLength" }),
+  ).toHaveValue(456);
+  fireEvent.click(screen.getByRole("button", { name: "previousStep" }));
+  fireEvent.click(screen.getByRole("button", { name: "uploadDirectly" }));
+  await waitFor(() => expect(registers()).toHaveLength(1));
+  expect(registers()[0][1].overrides.document.chunk_size).toBe(300);
+  expect(registers()[0][1].upload_context.mode).toBe("direct");
+  expect(previews()).toHaveLength(0);
+});
+it("blocks both exits on a defaults read failure and retries the actual request", async () => {
+  const failure = new Error("defaults failed");
+  mocks.get.mockRejectedValueOnce(failure);
+  mount();
   await screen.findByText("f118.load_failed");
-  await drop();
-  expect(mocks.post).not.toHaveBeenCalled();
-  expect(mocks.error).toHaveBeenCalledWith(error);
-  fireEvent.click(screen.getByRole("button", { name: "retry" }));
-  await screen.findByRole("spinbutton", { name: "splitLength" });
-  await drop();
-  await waitFor(() => expect(registers()).toHaveLength(1));
-});
-
-it("retires a late rules read across tenant scope changes", async () => {
-  let resolve!: (value: ReturnType<typeof settings>) => void;
-  mocks.get.mockReturnValue(
-    new Promise<ReturnType<typeof settings>>((yes) => {
-      resolve = yes;
+  await act(async () =>
+    fireEvent.change(document.querySelector('input[type="file"]')!, {
+      target: { files: [new File(["x"], "report.md")] },
     }),
   );
-  const view = mount();
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "f118.upload_temporary" }),
+  expect(screen.getByRole("button", { name: "nextStep" })).toBeDisabled();
+  expect(registers()).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled(),
   );
-  await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(1));
-  const signal = mocks.get.mock.calls[0][1].signal as AbortSignal;
-  view.update({ ...scope, tenantId: 202, managementTenantId: 202 });
-  await act(async () => resolve(settings()));
-  expect(signal.aborted).toBe(true);
+  expect(mocks.error).toHaveBeenCalledWith(failure);
+});
+it("retires strategy and staged files across an identity/tenant change", async () => {
+  const view = mount();
+  await drop();
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  await screen.findByRole("spinbutton", { name: "splitLength" });
+  view.update({ ...scope, tenantId: 202 });
   expect(
     screen.queryByRole("spinbutton", { name: "splitLength" }),
   ).not.toBeInTheDocument();
-  expect(
-    screen.getByRole("checkbox", { name: "f118.upload_temporary" }),
-  ).not.toBeChecked();
+  expect(screen.queryByText("report.md")).not.toBeInTheDocument();
+  expect(registers()).toHaveLength(0);
+});
+it("keeps a failed preview explicit and disables final confirmation", async () => {
+  mocks.get.mockImplementation(async (url: string) =>
+    url.endsWith("/upload-settings")
+      ? uploadSettings()
+      : { ...preview(), status: "error" },
+  );
+  mount();
+  await drop();
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  fireEvent.click(await screen.findByRole("button", { name: "nextStep" }));
+  await screen.findByText("previewFailed");
+  expect(screen.getByRole("button", { name: "nextStep" })).toBeDisabled();
+  expect(registers()).toHaveLength(0);
+});
+
+it("reuses a completed inline preview when advancing to comparison", async () => {
+  mount();
+  await drop();
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "previewResults" }),
+  );
+  await screen.findByText("original chunk");
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  await screen.findByText("original-preview");
+  expect(previews()).toHaveLength(1);
 });

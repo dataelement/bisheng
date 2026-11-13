@@ -18,7 +18,10 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 
 
 @pytest.fixture
-def listing(tenant_context):
+def listing(tenant_context, monkeypatch):
+    from bisheng.knowledge.domain.services.knowledge_space_service import DepartmentKnowledgeSpaceDao
+
+    monkeypatch.setattr(DepartmentKnowledgeSpaceDao, "aget_by_space_ids", AsyncMock(return_value=[]))
     tenant_context(101)
     repository = SimpleNamespace(
         alist_admin=AsyncMock(

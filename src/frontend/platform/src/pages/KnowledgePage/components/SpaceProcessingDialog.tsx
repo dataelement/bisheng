@@ -1,25 +1,19 @@
-import { Button, Input, Pagination, Select } from "@bisheng/ui";
+import { Button, Pagination } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog";
+import { Dialog } from "@/components/bs-ui/dialog";
 import { getModelListApi } from "@/controllers/API/finetune";
-import type {
-  OperationPrecheck,
-  ProcessingPrecheckRequest,
-  ProcessingTargetInput,
+import {
+  knowledgeSpaceApi,
+  type KnowledgeSpaceInfo,
+  type ProcessingKind,
+  type OperationPrecheck,
+  type ProcessingPrecheckRequest,
+  type ProcessingTargetInput,
 } from "@/controllers/API/knowledgeSpace";
 import {
-  precheckSpaceCopy,
-  confirmSpaceCopy,
   readProcessingTarget,
-  readMetadataSchema,
 } from "@/controllers/API/knowledgeProcessing";
 import {
   useKnowledgeProcessingActions,
@@ -28,7 +22,6 @@ import {
   knowledgeQueryKeys,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
-import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { createDshOperationId as createOperationId } from "@/util/dshOperationId";
 import { showApiError } from "@/controllers/request";
@@ -41,36 +34,48 @@ import {
   type ProcessingDefaultsDraft,
 } from "./ProcessingDefaultsEditor";
 import { SpaceProcessingProgress } from "./SpaceProcessingProgress";
+import { SpacePanelFrame } from "./SpacePanelFrame";
+import { SpaceProcessingActions } from "./SpaceProcessingActions";
 
 interface SpaceProcessingDialogProps {
   scope: KnowledgeQueryScope;
   spaceId: number;
-  mode: "copy" | "embedding" | "file" | "jobs" | "schema";
+  mode: "embedding" | "file" | "jobs";
   target?: ProcessingTargetInput;
   fileId?: number;
   includeCopies?: boolean;
+  jobKind?: ProcessingKind;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
+  presentation?: "page";
 }
 export function SpaceProcessingDialog(props: SpaceProcessingDialogProps) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       {props.open && (
         <Content
-          key={JSON.stringify([
-            props.scope,
-            props.spaceId,
-            props.target,
-            props.fileId,
-            props.mode,
-          ])}
+          key={JSON.stringify([props.scope, props.spaceId, props.target, props.fileId, props.mode])}
           {...props}
         />
       )}
     </Dialog>
   );
 }
+export function SpaceProcessingPanel(
+  props: Omit<SpaceProcessingDialogProps, "open" | "onOpenChange" | "presentation">,
+) {
+  return (
+    <Content
+      key={JSON.stringify([props.scope, props.spaceId, props.mode])}
+      {...props}
+      open
+      presentation="page"
+      onOpenChange={() => undefined}
+    />
+  );
+}
+
 function Content({
   scope,
   spaceId,
@@ -78,8 +83,10 @@ function Content({
   target,
   fileId,
   includeCopies = false,
+  jobKind,
   onOpenChange,
   onSaved,
+  presentation,
 }: SpaceProcessingDialogProps) {
   const { t, i18n } = useTranslation("knowledge");
   const invalidReason = (reason: string) =>
@@ -87,43 +94,48 @@ function Content({
       ? t(`batch.reason_${reason}`)
       : t("f118.processing_unavailable");
   const actions = useKnowledgeProcessingActions(scope, spaceId);
+  const instance = useId();
+  const configured = useQuery<KnowledgeSpaceInfo>({
+    queryKey: [...knowledgeQueryKeys.info(scope, spaceId), "processing-opening", instance],
+    queryFn: () => knowledgeSpaceApi.getSpaceInfo(spaceId),
+    enabled: mode === "embedding" && Boolean(scope.identityKey),
+    cacheTime: 0,
+    retry: false,
+  });
   const [jobsPage, setJobsPage] = useState(1);
   const paginationLocale = usePaginationLocale();
-  const selectLabels = useSelectLabels();
-  const [schemaOperation, setSchemaOperation] = useState<
-    "add" | "rename" | "delete"
-  >("add");
-  const [fieldName, setFieldName] = useState(""),
-    [newFieldName, setNewFieldName] = useState("");
-  const [fieldType, setFieldType] = useState<"string" | "number" | "time">(
-    "string",
+  const settings = useKnowledgeProcessingSettings(
+    mode === "file" ? scope : { ...scope, identityKey: "" },
+    spaceId,
   );
-  const schema = useQuery({
-    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "metadata-schema"],
-    queryFn: () => readMetadataSchema(spaceId),
-    enabled: mode === "schema" && Boolean(scope.identityKey),
-    cacheTime: 0,
-  });
-  const settings = useKnowledgeProcessingSettings(scope, spaceId);
   const models = useQuery({
     queryKey: [...knowledgeQueryKeys.scope(scope), "embedding-candidates"],
     queryFn: async () => embeddingGroups(await getModelListApi()),
     enabled: mode === "embedding" && Boolean(scope.identityKey),
   });
-  const jobs = useKnowledgeProcessingJobs(scope, spaceId, {
-    page: jobsPage,
-    page_size: 20,
-  });
+  const jobs = useKnowledgeProcessingJobs(
+    mode === "jobs" ? scope : { ...scope, identityKey: "" },
+    spaceId,
+    {
+      page: jobsPage,
+      page_size: 20,
+      ...(jobKind ? { kind: jobKind } : {}),
+    },
+  );
   const copies = useKnowledgeProcessingJobs(
     includeCopies && mode === "jobs" ? scope : { ...scope, identityKey: "" },
     spaceId,
     { page: jobsPage, page_size: 20, kind: "space_copy" },
   );
-  const [name, setName] = useState(""),
-    [model, setModel] = useState("");
-  const [kind, setKind] = useState<"file_reprocess" | "file_resplit">(
-    "file_reprocess",
-  );
+  const [model, setModel] = useState("");
+  const modelInitialized = useRef(false);
+  useEffect(() => {
+    if (!modelInitialized.current && configured.data) {
+      modelInitialized.current = true;
+      setModel(String(configured.data.model ?? ""));
+    }
+  }, [configured.data]);
+  const [kind, setKind] = useState<"file_reprocess" | "file_resplit">("file_reprocess");
   const [draft, setDraft] = useState<ProcessingDefaultsDraft | null>(null);
   const [plan, setPlan] = useState<{
     result: OperationPrecheck;
@@ -144,8 +156,7 @@ function Content({
     };
   }, []);
   useEffect(() => {
-    if (settings.data)
-      setDraft(processingDefaultsToDraft(settings.data.effective_defaults));
+    if (settings.data) setDraft(processingDefaultsToDraft(settings.data.effective_defaults));
   }, [settings.data]);
   useEffect(() => {
     const error =
@@ -153,51 +164,31 @@ function Content({
       models.error ||
       jobs.error ||
       copies.error ||
-      schema.error;
+      configured.error;
     if (error) showApiError(error);
-  }, [settings.error, models.error, jobs.error, copies.error, schema.error]);
+  }, [settings.error, models.error, jobs.error, copies.error, configured.error]);
   const validation = draft ? validateProcessingDefaultsDraft(draft) : null;
   const handleReview = async () => {
-    if (busy) return;
+    if (busy || (mode === "embedding" && !configured.isSuccess)) return;
     setBusy(true);
     try {
       let result: OperationPrecheck;
-      if (mode === "copy") result = await precheckSpaceCopy(spaceId, name);
-      else {
+      {
         let request: ProcessingPrecheckRequest;
         if (mode === "embedding")
           request = {
             kind: "embedding_rebuild",
-            parameters: { embedding_model_id: model ? Number(model) : null },
-          };
-        else if (mode === "schema") {
-          if (!schema.data || !fieldName.trim()) return;
-          const change =
-            schemaOperation === "add"
-              ? {
-                  operation: "add" as const,
-                  field_name: fieldName,
-                  field_type: fieldType,
-                }
-              : schemaOperation === "rename"
-                ? {
-                    operation: "rename" as const,
-                    field_name: fieldName,
-                    new_field_name: newFieldName,
-                  }
-                : { operation: "delete" as const, field_name: fieldName };
-          request = {
-            kind: "metadata_schema_change",
             parameters: {
-              expected_schema_revision: schema.data.revision,
-              changes: [change],
+              embedding_model_id:
+                /^[1-9]\d*$/.test(model) && Number.isSafeInteger(Number(model))
+                  ? Number(model)
+                  : null,
             },
           };
-        } else {
+        else {
           if (!validation?.ok) return;
           const actualTarget =
-            target ??
-            (fileId ? await readProcessingTarget(spaceId, fileId) : null);
+            target ?? (fileId ? await readProcessingTarget(spaceId, fileId) : null);
           if (!alive.current || !actualTarget) return;
           request = {
             kind,
@@ -220,13 +211,7 @@ function Content({
     }
   };
   const handleConfirm = async () => {
-    if (
-      !plan ||
-      busy ||
-      !plan.result.can_execute ||
-      !plan.result.check_complete
-    )
-      return;
+    if (!plan || busy || !plan.result.can_execute || !plan.result.check_complete) return;
     setBusy(true);
     const request = {
       confirmation_id: plan.result.confirmation_id,
@@ -234,22 +219,10 @@ function Content({
       idempotency_key: plan.key,
     };
     try {
-      if (mode === "copy") {
-        const result = await confirmSpaceCopy(spaceId, request);
-        if (!alive.current) return;
-        if (result.processing_job)
-          setJob({
-            id: result.processing_job.job_id,
-            space: result.knowledge.id,
-            kind: "space_copy",
-          });
-        else setCompleted(result.completed);
-      } else {
-        const result = await actions.createJob(request);
-        if (!alive.current) return;
-        if ("completed" in result) setCompleted(result.completed);
-        else setJob({ id: result.job_id, space: spaceId });
-      }
+      const result = await actions.createJob(request);
+      if (!alive.current) return;
+      if ("completed" in result) setCompleted(result.completed);
+      else setJob({ id: result.job_id, space: spaceId });
       onSaved?.();
     } catch (error) {
       if (alive.current) showApiError(error);
@@ -258,40 +231,76 @@ function Content({
     }
   };
   return (
-    <DialogContent
+    <SpacePanelFrame
+      title={t(`f118.processing_title_${mode}`)}
+      presentation={presentation}
+      busy={busy}
       className="max-h-[85vh] max-w-3xl overflow-y-auto"
-      aria-describedby={undefined}
+      footer={
+        <SpaceProcessingActions
+          busy={busy}
+          showReview={!job && !completed && mode !== "jobs"}
+          reviewDisabled={
+            busy ||
+            (mode === "embedding" && !configured.isSuccess) ||
+            (mode === "file" && !validation?.ok)
+          }
+          hasPlan={Boolean(plan)}
+          canExecute={Boolean(plan?.result.can_execute && plan.result.check_complete)}
+          onClose={presentation !== "page" ? () => onOpenChange(false) : undefined}
+          onReview={() => {
+            void handleReview();
+          }}
+          onConfirm={() => {
+            void handleConfirm();
+          }}
+          onReviewAgain={() => setPlan(null)}
+        />
+      }
     >
-      <DialogHeader>
-        <DialogTitle>{t(`f118.processing_title_${mode}`)}</DialogTitle>
-      </DialogHeader>
       {!job && !completed && mode !== "jobs" && (
         <p>
           {t(
             mode === "file"
               ? "f118.processing_overwrite_warning"
-              : mode === "copy"
-                ? "f118.processing_copy_notice"
-                : mode === "schema"
-                  ? "f118.processing_schema_notice"
-                  : "f118.processing_rebuild_notice",
+              : "f118.processing_rebuild_notice",
           )}
         </p>
       )}
       {job ? (
-        <SpaceProcessingProgress
-          scope={scope}
-          spaceId={job.space}
-          jobId={job.id}
-          kind={job.kind}
-          onCompleted={onSaved}
-        />
+        <>
+          {mode === "jobs" && (
+            <Button variant="text" onClick={() => setJob(null)}>
+              {t("detail.back_to_jobs")}
+            </Button>
+          )}
+          <SpaceProcessingProgress
+            scope={scope}
+            spaceId={job.space}
+            jobId={job.id}
+            kind={job.kind}
+            onCompleted={onSaved}
+          />
+        </>
       ) : completed ? (
         <p>{t("completed")}</p>
       ) : mode === "jobs" ? (
-        <ul>
-          {[...(jobs.data?.data ?? []), ...(copies.data?.data ?? [])].map(
-            (row) => (
+        <>
+          {jobs.isInitialLoading && <p role="status">{t("f118.loading_space")}</p>}
+          {jobs.isError && (
+            <Button
+              onClick={() => {
+                void jobs.refetch();
+              }}
+            >
+              {t("retry")}
+            </Button>
+          )}
+          {!jobs.isInitialLoading && !jobs.isError && !jobs.data?.total && !copies.data?.total && (
+            <p>{t("detail.no_jobs")}</p>
+          )}
+          <ul>
+            {[...(jobs.data?.data ?? []), ...(copies.data?.data ?? [])].map((row) => (
               <li key={row.id}>
                 <Button
                   variant="link"
@@ -299,9 +308,7 @@ function Content({
                     setJob({
                       id: row.id,
                       space: spaceId,
-                      ...(row.kind === "space_copy"
-                        ? { kind: "space_copy" as const }
-                        : {}),
+                      ...(row.kind === "space_copy" ? { kind: "space_copy" as const } : {}),
                     })
                   }
                 >
@@ -309,82 +316,38 @@ function Content({
                   {t(`f118.processing_state_${row.state}`)}
                 </Button>
               </li>
-            ),
-          )}
-        </ul>
+            ))}
+          </ul>
+        </>
       ) : (
         <>
           <fieldset disabled={busy || Boolean(plan)} className="space-y-4">
-            {mode === "copy" && (
-              <Input
-                aria-label={t("f118.space_name")}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            )}
             {mode === "embedding" && (
-              <ModelSelect
-                label={t("f118.embedding_model")}
-                value={model}
-                close
-                options={models.data ?? []}
-                onChange={(value: string) => setModel(value)}
-              />
-            )}
-            {mode === "schema" && (
-              <section className="space-y-3">
-                <Select
-                  {...selectLabels}
-                  value={schemaOperation}
-                  options={["add", "rename", "delete"].map((value) => ({
-                    value,
-                    label: t(`f118.processing_schema_${value}`),
-                  }))}
-                  onChange={(value) => {
-                    setSchemaOperation(value as typeof schemaOperation);
-                    setFieldName("");
+              <>
+                <ModelSelect
+                  label={t("f118.embedding_model")}
+                  value={model}
+                  close
+                  options={models.data ?? []}
+                  onChange={(value: string) => {
+                    modelInitialized.current = true;
+                    setModel(value);
                   }}
                 />
-                {schemaOperation === "add" ? (
-                  <Input
-                    aria-label={t("f118.processing_field_name")}
-                    value={fieldName}
-                    onChange={(event) => setFieldName(event.target.value)}
-                  />
-                ) : (
-                  <Select
-                    {...selectLabels}
-                    value={fieldName || undefined}
-                    options={(schema.data?.fields ?? [])
-                      .filter((row) => row.field_name?.trim())
-                      .map((row) => ({
-                        value: row.field_name,
-                        label: row.field_name,
-                      }))}
-                    onChange={(value) => setFieldName(String(value))}
-                  />
+                {configured.isInitialLoading && <p role="status">{t("f118.loading_space")}</p>}
+                {configured.isError && (
+                  <div role="alert">
+                    <p>{t("f118.load_failed")}</p>
+                    <Button
+                      onClick={() => {
+                        void configured.refetch();
+                      }}
+                    >
+                      {t("retry")}
+                    </Button>
+                  </div>
                 )}
-                {schemaOperation === "rename" && (
-                  <Input
-                    aria-label={t("f118.processing_field_name")}
-                    value={newFieldName}
-                    onChange={(event) => setNewFieldName(event.target.value)}
-                  />
-                )}
-                {schemaOperation === "add" && (
-                  <Select
-                    {...selectLabels}
-                    value={fieldType}
-                    options={["string", "number", "time"].map((value) => ({
-                      value,
-                      label: t(`f118.processing_field_${value}`),
-                    }))}
-                    onChange={(value) =>
-                      setFieldType(value as typeof fieldType)
-                    }
-                  />
-                )}
-              </section>
+              </>
             )}
             {mode === "file" && (
               <>
@@ -402,9 +365,7 @@ function Content({
                     {t("f118.processing_kind_file_resplit")}
                   </Button>
                 </div>
-                {draft && (
-                  <ProcessingDefaultsEditor value={draft} onChange={setDraft} />
-                )}
+                {draft && <ProcessingDefaultsEditor value={draft} onChange={setDraft} />}
               </>
             )}
           </fieldset>
@@ -418,73 +379,22 @@ function Content({
               </p>
               {plan.result.invalid_items.map((item, index) => (
                 <p key={index}>
-                  {item.name ?? t("f118.processing_unavailable")}:{" "}
-                  {invalidReason(item.reason)}
+                  {item.name ?? t("f118.processing_unavailable")}: {invalidReason(item.reason)}
                 </p>
               ))}
             </section>
           )}
         </>
       )}
-      {mode === "jobs" &&
-        !job &&
-        Math.max(jobs.data?.total ?? 0, copies.data?.total ?? 0) > 20 && (
-          <Pagination
-            current={jobsPage}
-            total={Math.max(jobs.data?.total ?? 0, copies.data?.total ?? 0)}
-            pageSize={20}
-            onChange={setJobsPage}
-            locale={paginationLocale}
-          />
-        )}
-      <DialogFooter>
-        <Button
-          variant="outlined"
-          disabled={busy}
-          onClick={() => onOpenChange(false)}
-        >
-          {t("close", { ns: "bs" })}
-        </Button>
-        {!job &&
-          !completed &&
-          mode !== "jobs" &&
-          (plan ? (
-            <>
-              <Button
-                variant="outlined"
-                disabled={busy}
-                onClick={() => setPlan(null)}
-              >
-                {t("f118.processing_review_again")}
-              </Button>
-              <Button
-                disabled={
-                  busy ||
-                  !plan.result.can_execute ||
-                  !plan.result.check_complete
-                }
-                onClick={() => void handleConfirm()}
-              >
-                {t("confirm", { ns: "bs" })}
-              </Button>
-            </>
-          ) : (
-            <Button
-              disabled={
-                busy ||
-                (mode === "copy" && !name.trim()) ||
-                (mode === "file" && !validation?.ok) ||
-                (mode === "schema" &&
-                  (!schema.data ||
-                    !fieldName.trim() ||
-                    (schemaOperation === "rename" && !newFieldName.trim())))
-              }
-              onClick={() => void handleReview()}
-            >
-              {t("f118.processing_review_action")}
-            </Button>
-          ))}
-      </DialogFooter>
-    </DialogContent>
+      {mode === "jobs" && !job && Math.max(jobs.data?.total ?? 0, copies.data?.total ?? 0) > 20 && (
+        <Pagination
+          current={jobsPage}
+          total={Math.max(jobs.data?.total ?? 0, copies.data?.total ?? 0)}
+          pageSize={20}
+          onChange={setJobsPage}
+          locale={paginationLocale}
+        />
+      )}
+    </SpacePanelFrame>
   );
 }

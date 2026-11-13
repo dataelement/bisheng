@@ -23,7 +23,7 @@ export function AuditScopeNotice() {
     }
   }, [])
 
-  if (failed) return <Alert className="shrink-0" type="warning" description={t('log.scope.loadFailed')} />
+  if (failed) return <Alert className="audit-scope-notice shrink-0" type="warning" description={t('log.scope.loadFailed')} />
   if (!scope) return null
-  return <Alert className="shrink-0" description={auditScopeDescription(scope, t)} />
+  return <Alert className="audit-scope-notice shrink-0" description={auditScopeDescription(scope, t)} />
 }

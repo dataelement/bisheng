@@ -1537,11 +1537,11 @@ Other malformed IDs and explicitly saved new selections remain strict.
 
 ### Historical preparation before a new M2 freeze
 
-`prepare_f118_history.py` repairs valid SQL folder-depth counters and redundant
-parent edges, and cleans derived permission mirrors of globally hard-deleted
-resources after checking downstreams. It retains permission operation/tuple
-journals and business audit. It does not alter index bindings, MinIO, ES,
-Milvus, roles, Celery queues or messages. Operators stop every writer/consumer.
+`prepare_f118_history.py` backs and cleans proven orphan files/documents/versions,
+invalid tags/members, repairs parent ownership/depth and unmapped empty-resource
+embedding names, and purges invalid derived permissions. Exact orphan MinIO
+objects and ES/Milvus slices are backed before deletion; live index bindings,
+shared stores, audit, roles and queues remain. Operators stop every writer/consumer.
 
 ```bash
 cd src/backend
@@ -1559,20 +1559,46 @@ unknown types or remaining downstreams are reported, never guessed away.
 Apply returns permission operation IDs; exit 2 means selected repairs completed
 but blocked items remain, and exit 3 means an error requiring the same plan to
 be inspected/resumed. Preview exit 0 does not certify migration readiness.
-This is selected-data evidence, not a full physical backup. See
-[scope and review](../../../docs/reviews/f118-general-repairs-20261112.md).
+SQL evidence is saved before physical inspection in `.candidates.json`; exact
+payload backups use `.payloads/`. Missing original bindings/file identities stop
+cleanup; no whole-index deletion or guessed replacement is allowed. This selected
+evidence does not replace a full environment backup. See
+[implemented rules and complete flow](../../../docs/reviews/f118-confirmed-rules-implementation-20261113.md).
 
 ### Formal stopped-service migration
 
 Run from `src/backend` after the operator has stopped all business writers and
 created the immutable backup/schema evidence artifacts. Use the same `config`
-as the service. The default preview validates an existing frozen graph and
-reports its scope without SQL/FGA/artifact writes; it does not freeze a fresh
-inventory or certify readiness.
+as the service. For a new Run, default preview executes the same complete
+SQL/permission/six-source inventory and plan validation as fresh M2, without
+SQL/FGA/MinIO writes or freezing a Run. Private local scratch pages are removed
+on success or failure. Output is `validation_scope=current_inventory`,
+`preflight_complete=true`, `frozen=false`, `ready=false`; passing preflight is
+not a completed migration or permission publication.
 
-New inventories do not inspect Redis broker/queued-task contents or Role/UserRole
-integrity. They still reject uncommitted business delete cutovers/tombstones;
+The supplied backup/schema artifacts must belong to this Run/environment/writer
+and the current tenant inventory. Materials for an earlier 30-tenant scope
+cannot be reused as evidence for a new 31-tenant scope. If another process
+freezes this Run between the CLI lookup and scanning, fresh preview stops
+instead of reporting the frozen graph as a complete current-data scan.
+
+For an existing frozen Run, preview validates its original graph and reports
+`validation_scope=frozen_run`, `preflight_complete=false`. `--resume` requires
+that original Run; it does not rescan or replace its baseline. An old Run's
+tenant inventory mismatch remains a recovery/review blocker, not proof that a
+new inventory has failed.
+
+New inventories do not inspect Redis broker/queued-task contents or make unrelated
+full Role/UserRole eligibility cleanup a prerequisite. Space membership roles
+and permission-source subjects still participate in their exact migration checks;
+the command does not copy or rebind tenant roles. It still rejects uncommitted business delete cutovers/tombstones;
 these checks do not detect Celery consumption or whether services are stopped.
+Normal resources preserve the SQL `index_name`/`collection_name` bindings without
+ES/Milvus existence, schema or count queries, or per-file MinIO stat. Physical
+store health and SQL/vector inconsistencies are separate diagnostics. The
+historical preparation above still requires exact payload backup/deletion when
+an approved orphan cleanup needs it; missing cleanup evidence remains blocking.
+MinIO reads of backup/schema and frozen migration artifacts remain necessary.
 
 ```bash
 python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production \
@@ -1584,8 +1610,9 @@ Add `--apply --operator-id 7` for the actual M2 freeze, original SQL conversion,
 permission publication, six-source backfill, full reconciliation and persisted
 Coverage certificate. After interruption, repeat the identical arguments with
 `--apply --resume`; this requires the same already-frozen Run and never rebuilds
-its baseline. Old frozen artifacts lacking original index/deletion facts require
-a new stopped-service inventory, not a guessed legacy classification. Output
+its baseline. Old frozen artifacts retain their original codec and evidence
+checks; missing required legacy facts remain blocking rather than being invented
+or bypassed by rewriting the baseline. Output
 contains the Run/hashes, tenant scope, six-source proofs and the immutable plan
 reference containing the invalid-slot inventory. Nonzero exit preserves the
 checkpoint and never restarts services. Enable business traffic only after the
@@ -1596,7 +1623,10 @@ F118 deliberately uses a narrow context assembly rather than the general
 `initialize_app_context` convention: the eager general initializer constructs
 `MinioStorage` and may initialize buckets/policies. The command registers the
 original DB/Redis managers from the live service settings and closes each owned
-manager explicitly; its existing owned raw MinIO/ES/Milvus and permission
+manager explicitly; its owned raw MinIO artifact and permission
 adapters never invoke the API startup, default seeds or bucket/policy writers.
 This feature-specific exception preserves the frozen read-only inventory
-contract and does not change general script initialization.
+contract and does not change general script initialization. The migration
+runtime does not open ES/Milvus clients. Current query order, comparison rules,
+conversion and publication boundaries are shown in the
+[complete current flow](../../../docs/reviews/f118-migration-current-flow-20261113.md).

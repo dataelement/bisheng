@@ -20,7 +20,6 @@ from bisheng.core.database import tenant_filter
 from bisheng.core.openfga.client import FGAClient
 from bisheng.knowledge.application.unification_artifacts import UnificationArtifactStore
 from bisheng.knowledge.application.unification_inventory_codec import (
-    InventoryRecord,
     digest,
     encode_inventory_page,
     record_from_values,
@@ -124,7 +123,7 @@ def transport():
             "evidence_material",
             material_kind=material_kind,
             environment="test",
-            writer_contract_version="f118-v1",
+            writer_contract_version=RUN["writer_contract_version"],
             tenant_inventory_digest=digest((1, 101, 202)),
             material_ref=RUN[f"{material_kind}_ref"],
         )
@@ -322,7 +321,7 @@ async def test_actual_default_composition_freezes_all_tenants_and_private_baseli
     assert plan["records"][1]["baseline_ref"] == result.baseline_ref
 
 
-@pytest.mark.parametrize("port", ["physical_reader", "sharing_reader_factory"])
+@pytest.mark.parametrize("port", ["sharing_reader_factory"])
 async def test_missing_required_real_port_fails_closed_without_run_writes(module, complete, transport, port):
     async with AsyncSession(complete.engine) as session, session.begin():
         with pytest.raises(ReferenceCoverageNotReadyError):
@@ -330,12 +329,28 @@ async def test_missing_required_real_port_fails_closed_without_run_writes(module
     assert await count_runs(complete.engine) == 0
 
 
-@pytest.mark.parametrize("mode", ["wrong_section", "missing", "duplicate"])
-async def test_wrong_or_incomplete_physical_record_cannot_prove_section_coverage(module, complete, transport, mode):
+async def test_new_inventory_ignores_unavailable_physical_ports_and_keeps_sql_bindings(module, complete, transport):
+    class Unavailable:
+        async def aiter_facts(self, **kwargs):
+            raise AssertionError("normal migration must not query ES, Milvus or file objects")
+            yield
+
     async with AsyncSession(complete.engine) as session, session.begin():
-        with pytest.raises(KnowledgeOperationPlanConflictError):
-            await application(module, transport, physical_reader=Physical(mode)).arun(session, **transport.inputs)
-    assert await count_runs(complete.engine) == 0
+        result = await application(module, transport, physical_reader=Unavailable()).arun(session, **transport.inputs)
+    assert await count_runs(complete.engine) == 3
+    contents = [json.loads(content) for content in transport.objects.values()]
+    records = [row for page in contents for row in page["records"]]
+    assert not any(
+        row.get("record_type") in {"physical_index", "physical_object", "physical_index_retention"} for row in records
+    )
+    roots = [row for row in records if row.get("record_type") == "run"]
+    assert roots and all(row["physical_inventory_policy"] == "bindings_only" for row in roots)
+    async with complete.engine.connect() as connection:
+        row = (
+            await connection.execute(sa.select(resources.Knowledge.index_name, resources.Knowledge.collection_name))
+        ).one()
+    assert row == ("original-text", "original-vector")
+    assert result.tenant_ids == (1, 101, 202)
 
 
 async def test_late_tenant_failure_keeps_all_artifacts_unbound_and_all_runs_absent(module, complete, transport):
@@ -446,7 +461,7 @@ async def test_actual_401_resource_source_inventory_reuses_directories_and_bound
     complete.queries.clear()
     async with AsyncSession(complete.engine) as session, session.begin():
         await application(module, transport, physical_reader=physical).arun(session, **transport.inputs)
-    assert sum(len(rows) for rows, _ in physical.calls) == 402
+    assert physical.calls == []
     assert sum("FROM knowledge " in sql for sql, _ in complete.queries) <= 30
     assert sum("FROM llm_model" in sql for sql, _ in complete.queries) <= 8
     assert sum(request.url.path.endswith("/streamed-list-objects") for request in transport.requests) == 2
@@ -483,53 +498,6 @@ async def test_actual_reader_must_be_bound_to_the_same_sql_catalog_pin(module, c
         with pytest.raises(KnowledgeOperationPlanConflictError):
             await application(module, transport, sharing_reader_factory=different).arun(session, **transport.inputs)
     assert await count_runs(complete.engine) == 0
-
-
-@pytest.mark.parametrize("compatibility", [False, 0, "false"])
-async def test_incompatible_or_malformed_physical_identifiers_cannot_freeze(module, complete, transport, compatibility):
-    class Incompatible(Physical):
-        async def aiter_facts(self, **kwargs):
-            async for fact in super().aiter_facts(**kwargs):
-                if fact.record_type == "physical_index":
-                    yield InventoryRecord(
-                        "physical_index",
-                        json.dumps(
-                            fact.data | {"identifier_compatible": compatibility}, sort_keys=True, separators=(",", ":")
-                        ),
-                    )
-                else:
-                    yield fact
-
-    async with AsyncSession(complete.engine) as session, session.begin():
-        with pytest.raises(KnowledgeOperationPlanConflictError):
-            await application(module, transport, physical_reader=Incompatible()).arun(session, **transport.inputs)
-    assert await count_runs(complete.engine) == 0
-
-
-@pytest.mark.parametrize("absent", [True, False])
-async def test_compatible_absent_empty_or_different_native_counts_do_not_gain_new_gate(
-    module, complete, transport, absent
-):
-    class Compatible(Physical):
-        async def aiter_facts(self, **kwargs):
-            async for fact in super().aiter_facts(**kwargs):
-                if fact.record_type == "physical_index":
-                    value = fact.data | {
-                        "es_exists": not absent,
-                        "milvus_exists": not absent,
-                        "es_count": None if absent else 0,
-                        "milvus_count": None if absent else 1,
-                        "es_mapping_digest": None if absent else "a" * 64,
-                        "milvus_schema_digest": None if absent else "b" * 64,
-                        "identifier_compatible": True,
-                    }
-                    yield record_from_values("physical_index", **value)
-                else:
-                    yield fact
-
-    async with AsyncSession(complete.engine) as session, session.begin():
-        result = await application(module, transport, physical_reader=Compatible()).arun(session, **transport.inputs)
-    assert result.tenant_ids == (1, 101, 202) and await count_runs(complete.engine) == 3
 
 
 async def test_full_m2_refuses_final_creation_collision_without_writing_run(module, complete, transport):

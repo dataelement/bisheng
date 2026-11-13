@@ -2,7 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
-import RuleFile, { DocumentProcessingDefaultsFields, type DocumentProcessingDefaultsDraft } from "@/pages/KnowledgePage/components/RuleFile";
+import RuleFile from "@/pages/KnowledgePage/components/RuleFile";
+import { DocumentProcessingDefaultsFields, type DocumentProcessingDefaultsDraft } from "@/pages/KnowledgePage/components/DocumentProcessingDefaultsFields";
 import RuleTable, { TableProcessingDefaultsFields, type TableProcessingDefaultsDraft } from "@/pages/KnowledgePage/components/RuleTable";
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { resolvedLanguage: "en" } }) }));

@@ -161,7 +161,7 @@ async def assistant_business(tmp_path, assistant_tenant, monkeypatch):
         AsyncMock(return_value=SimpleNamespace(llm_list=[SimpleNamespace(default=True, model_id=1)])),
     )
     permission_adapter = SimpleNamespace(
-        load_permission_record=AsyncMock(return_value=object()), project_delete=AsyncMock()
+        load_permission_record=AsyncMock(return_value=object()), project_delete=AsyncMock(), cleanup_deleted=AsyncMock()
     )
     monkeypatch.setattr(assistant_module, "get_f048_resource_adapter", AsyncMock(return_value=permission_adapter))
     monkeypatch.setattr(

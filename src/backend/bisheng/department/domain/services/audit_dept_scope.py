@@ -58,8 +58,11 @@ class AuditDeptScopeService:
         # in the tenant — including 「未记录」 and the system admin's sessions.
         if tenant_id is not None and await cls._is_tenant_admin(login_user.user_id, tenant_id):
             # The tenant's own department tree, including a child tenant mounted
-            # on the parent tree. Operators from outside that tree stay hidden.
-            return AuditDeptScope.restricted(admin_paths=await AuditDeptRepository.root_paths(tenant_id))
+            # on the parent tree. Operators from outside that tree stay hidden,
+            # and so do 「未记录」 rows, which predate the department stamp.
+            return AuditDeptScope.restricted(
+                admin_paths=await AuditDeptRepository.root_paths(tenant_id), unattributed=True
+            )
         if await cls.is_audit_admin(login_user, tenant_id):
             return AuditDeptScope.unlimited()
 
@@ -108,8 +111,7 @@ class AuditDeptScopeService:
         return {
             "active": [_node(dept, names, dept.id in with_children) for dept in active],
             "archived": [_node(dept, names, False) for dept in archived],
-            # The two unattributed options never reach a restricted reader's rows.
-            "show_none": scope.unrestricted,
+            "show_none": scope.shows_none,
             "show_unrecorded": scope.unrestricted,
         }
 

@@ -193,3 +193,10 @@ describe("MainLayout workspace entry", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+it("uses the same text alignment for knowledge and the other two-character menu entries", () => {
+  renderLayout(["knowledge", "board"]);
+  const knowledge = screen.getByRole("link", { name: "menu.knowledge" }).querySelector("span");
+  const dashboard = screen.getByRole("link", { name: "menu.dashboard" }).querySelector("span");
+  expect(knowledge?.className).toBe(dashboard?.className);
+});

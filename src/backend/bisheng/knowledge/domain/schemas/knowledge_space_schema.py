@@ -8,6 +8,7 @@ from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
 from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults, ProcessingOverrides
+from bisheng.knowledge.domain.schemas.upload_preview import UploadContext
 from bisheng.permission.domain.schemas import GrantSubjectInput
 
 
@@ -53,6 +54,10 @@ class KnowledgeSpaceListItemResp(KnowledgeBase):
         description="Current user subscription status",
     )
     user_role: UserRoleEnum | None = Field(default=None, description="Knowledge Space user role")
+
+
+class KnowledgeSpaceAdminListItemResp(KnowledgeSpaceListItemResp):
+    space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
 
 
 class KnowledgeSpaceCreateReq(BaseModel):
@@ -189,6 +194,7 @@ class FolderRenameReq(BaseModel):
 
 
 class FileCreateReq(BaseModel):
+    upload_context: UploadContext | None = None
     file_path: list[str] = Field(..., description="File Path")
     parent_id: int | None = Field(None, description="Parent Folder ID")
     overrides: ProcessingOverrides | None = None
@@ -235,6 +241,7 @@ class FolderUploadItem(BaseModel):
 
 
 class FolderUploadReq(BaseModel):
+    upload_context: UploadContext | None = None
     overrides: ProcessingOverrides | None = None
     parent_id: int | None = Field(None, description="Target folder id; None = space root")
     items: list[FolderUploadItem] = Field(..., min_length=1, description="Files with relative paths")

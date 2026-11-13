@@ -283,7 +283,10 @@ const legacyActions = [
  * Module → legacy actions, written out instead of matched by substring: a
  * substring rule put `knowledge_space` actions under 知识库 and left the tool
  * and sandbox actions out of 系统. Must agree with the `system_id` each
- * backend writer records (api/services/audit_log.py).
+ * backend writer records (api/services/audit_log.py). Personal Skill actions
+ * stay under `system`: older rows were stored as `system_id=linsight`, and
+ * the list query folds those four event types back in. There is no linsight
+ * module to pick.
  */
 const LEGACY_MODULE_ACTIONS: Record<string, string[]> = {
     chat: ['create_chat', 'delete_chat'],
@@ -354,9 +357,8 @@ export const V2_ACTIONS: string[] = [
     'approval.scenario.create',
     'approval.exception.skip_node',
     'approval.menu_access.revoke_grant',
-    // F049 open API auth. The grant / share_link / ws families get their first
-    // writers in later waves; registered in one go so the filter is touched
-    // exactly once per feature.
+    // F049 open API auth. Only actions with a writer are listed; an action
+    // without one would be a filter option that can never match.
     'open_api.service_account.create',
     'open_api.service_account.update',
     'open_api.service_account.enable',
@@ -365,18 +367,6 @@ export const V2_ACTIONS: string[] = [
     'open_api.api_key.issue',
     'open_api.api_key.update',
     'open_api.api_key.revoke',
-    'open_api.api_key.revoke_all',
-    'open_api.api_key.expire',
-    'open_api.api_key.invalidate_by_subject',
-    'open_api.grant.add',
-    'open_api.grant.update',
-    'open_api.grant.remove',
-    'open_api.grant.remove_all',
-    'open_api.share_link.revoke',
-    'open_api.share_link.expire',
-    'open_api.ws.connect',
-    // F052 MCP face: one row per tools/call, plus door refusals.
-    'open_api.mcp.tool_call',
     // F054 hosted applications — the state machine, meta updates and the
     // data-tab row edit / export.
     'app.publish',
@@ -512,6 +502,13 @@ export async function getMarkPermissionApi(): Promise<boolean> {
 // 更新标注状态
 export async function updateMarkStatusApi(data: { session_id: string, task_id: number, status: number }) {
     return await axios.post('/api/v1/mark/mark', data)
+}
+
+/** Fresh link to a file the code interpreter attached to an answer, for an auditor in scope. */
+export async function getAuditChatFileUrlApi(chatId: string, fileId: string): Promise<{ url: string }> {
+    return await axios.get(
+        `/api/v1/session/chat/${encodeURIComponent(chatId)}/files/${encodeURIComponent(fileId)}/url`,
+    )
 }
 
 // 获取下一个标注会话

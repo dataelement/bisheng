@@ -1,7 +1,7 @@
 import { useContext, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Button, DatePicker, Pagination, Segmented, Select } from '@bisheng/ui'
+import { Button, DatePicker, Pagination, Select } from '@bisheng/ui'
 import type { DatePickerError, DatePickerOpenRange } from '@bisheng/ui'
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table'
@@ -21,6 +21,7 @@ import type { RuntimeAuditFilters, RuntimeAuditKind } from '@/controllers/API/ru
 import { useRuntimeAudit } from './useRuntimeAudit'
 import { RuntimeAuditExportDialog } from './RuntimeAuditExportDialog'
 import { RuntimeAuditCell } from './RuntimeAuditCell'
+import styles from '../AuditFilters.module.css'
 
 interface CandidateProps {
   kind: RuntimeAuditKind
@@ -37,7 +38,7 @@ export function CandidateFilter({ kind, dimension, filters, scopeKey, value, onC
   const query = useInfiniteQuery({ queryKey: ['runtime-audit-candidates', scopeKey, kind, dimension, filters, search], queryFn: ({ pageParam = 0 }) => getRuntimeAuditCandidates(kind, dimension, filters, search, Number(pageParam)), getNextPageParam: (last, pages) => last.has_more ? pages.length * 100 : undefined, retry: false })
   const empty = query.isError ? t('f115.audit.candidatesFailed')
     : dimension === 'visitor' ? t('f115.audit.noVisitors') : t('f115.audit.noCandidates')
-  return <div className="min-w-48 flex-1"><Select {...labels} allowClear showSearch onSearch={setSearch} loading={query.isInitialLoading} loadingMore={query.isFetchingNextPage} onLoadMore={() => { if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage() }}
+  return <div><Select {...labels} allowClear showSearch onSearch={setSearch} loading={query.isInitialLoading} loadingMore={query.isFetchingNextPage} onLoadMore={() => { if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage() }}
     emptyText={empty} noMatchText={query.isError ? empty : t('f115.audit.noMatches')} loadingText={t('f115.audit.loading')}
     placeholder={t(`log.runtime.${dimension}`)} aria-label={t(`log.runtime.${dimension}`)} value={value ?? null}
     options={(query.data?.pages.flatMap(page => page.items) ?? []).filter(item => item.id != null && item.id !== '').map(item => ({ value: item.id, label: item.label }))}
@@ -83,7 +84,10 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
     }, org)
     const filterKeys = Object.keys({ ...filters, ...nextFilters }) as (keyof RuntimeAuditFilters)[]
     if (filterKeys.some(key => filters[key] !== nextFilters[key])) {
-      setFilters({ ...nextFilters, visitor_id: undefined })
+      // A new time window can leave the chosen visitor outside it; an organisation change must not clear it (AC-26).
+      const timeKeys: (keyof RuntimeAuditFilters)[] = ['time_range', 'start_time', 'end_time']
+      const timeChanged = timeKeys.some(key => filters[key] !== nextFilters[key])
+      setFilters(timeChanged ? { ...nextFilters, visitor_id: undefined } : nextFilters)
     }
     reloadFromFirstPage()
   }
@@ -128,18 +132,15 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
       ? ['id', 'create_time', 'app_name', 'app_id', 'credential_mask', 'subject_kind', 'subject_name', 'operator_dept_path', 'capability', 'result', 'error_code', 'latency_ms', 'chunk_count', 'version_id']
       : ['id', 'entry_time', 'app_name_snapshot', 'app_id', 'user_name', 'operator_dept_path', 'request_id']
   return <div className="flex min-h-0 flex-1 flex-col">
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pt-2">
-      {kind === 'access' && <p className="text-sm text-muted-foreground">{t('log.runtime.accessHint')}</p>}
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <OrgFilter value={org} onChange={setOrg} tenantId={tenantId ?? null} className="min-w-48 flex-1" />
-        <div className="min-w-48 flex-1">
-          <Select {...labels} value={range} aria-label={t('log.runtime.timeRange')} options={['recent7d', 'custom', 'all'].map(value => ({ value, label: t(`log.runtime.${value}`) }))} onChange={value => setRange(value as RuntimeAuditFilters['time_range'])} />
-        </div>
+    <div className={`${styles.filterContainer} flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pt-2`}>
+      <div className={`${styles.filterGrid} shrink-0`}>
+        <OrgFilter value={org} onChange={setOrg} tenantId={tenantId ?? null} />
+        <Select {...labels} value={range} aria-label={t('log.runtime.timeRange')} options={['recent7d', 'custom', 'all'].map(value => ({ value, label: t(`log.runtime.${value}`) }))} onChange={value => setRange(value as RuntimeAuditFilters['time_range'])} />
         <CandidateFilter key={`app-${scopeKey}-${filters.time_range}-${filters.start_time}-${filters.end_time}`} kind={kind} dimension="app" filters={filters} scopeKey={scopeKey} value={filters.app_id} onChange={value => setFilters({ ...filters, app_id: value, visitor_id: undefined })} />
         <CandidateFilter key={`visitor-${scopeKey}-${filters.time_range}-${filters.start_time}-${filters.end_time}-${filters.app_id}-${filters.credential_id}`} kind={kind} dimension="visitor" filters={filters} scopeKey={scopeKey} value={filters.visitor_id?.toString()} onChange={value => setFilters({ ...filters, visitor_id: value ? Number(value) : undefined })} />
         {kind === 'model' && <CandidateFilter key={`credential-${scopeKey}-${filters.time_range}-${filters.app_id}`} kind={kind} dimension="credential" filters={filters} scopeKey={scopeKey} value={filters.credential_id?.toString()} onChange={value => setFilters({ ...filters, credential_id: value ? Number(value) : undefined, visitor_id: undefined })} />}
         {range === 'custom' && (
-          <DatePicker aria-label={t('datePicker.dateRange')} mode="range" allowOpenRange allowClear className="w-[336px] max-w-full"
+          <DatePicker aria-label={t('datePicker.dateRange')} mode="range" allowOpenRange allowClear className={styles.dateRange}
             value={dateRange}
             onChange={(value: DatePickerOpenRange | null) => {
               setDateRange(value)
@@ -147,21 +148,19 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
             }}
             onValidationChange={setDateError} locale={datePickerLocale} />
         )}
-        <div className="ml-auto mr-4 flex shrink-0 items-center gap-4">
-          <Button onClick={handleSearch} disabled={range === 'custom' && Boolean(dateError)}>{t('log.runtime.apply')}</Button>
+        <div className={styles.filterActions}>
           <Button onClick={handleReset} variant="outlined" color="default">{t('log.resetButton')}</Button>
-          <Button variant="outlined" color="default" disabled={busy || !query.data || query.isError} onClick={handleExport}>{t('log.runtime.export')}</Button>
+          <Button onClick={handleSearch} disabled={range === 'custom' && Boolean(dateError)}>{t('log.runtime.apply')}</Button>
         </div>
       </div>
       {range === 'custom' && rangeError && <p role="alert">{t('log.runtime.invalidRange')}</p>}
-      <p className="text-sm text-muted-foreground">{t('log.runtime.identityHint')}</p>
       {query.isError ? <div role="alert">{t('log.runtime.loadFailed')} <Button onClick={() => void query.refetch()}>{t('log.runtime.refresh')}</Button></div>
         : query.isInitialLoading ? <p role="status">{t('log.runtime.loading')}</p>
           : <>
             <Table containerClassName={query.data?.items.length ? 'min-h-0 flex-1' : 'shrink-0'}>
               <TableHeader className="sticky top-0 z-10 bg-background-main">
                 <TableRow>
-                  {fields.map(field => <TableHead key={field}>{t(`log.runtime.fields.${field}`)}</TableHead>)}
+                  {fields.map(field => <TableHead key={field} scope="col" className="whitespace-nowrap">{t(`log.runtime.fields.${field}`)}</TableHead>)}
                 </TableRow>
               </TableHeader>
               {!!query.data?.items.length && <TableBody>
@@ -171,9 +170,10 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
             {query.data?.items.length === 0 && <AuditEmptyState />}
           </>}
     </div>
-    <div className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-x-4 px-4">
+    <div className="flex min-h-16 shrink-0 items-center gap-4 pr-4">
+      <Button className="shrink-0" variant="outlined" color="default" disabled={busy || !query.data || query.isError} onClick={handleExport}>{t('log.runtime.export')}</Button>
       <Pagination
-        className="ml-auto w-auto max-w-full"
+        className="ml-auto min-w-0"
         total={null}
         hasNextPage={Boolean(query.data?.next_cursor)}
         current={page}
@@ -189,7 +189,11 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
   </div>
 }
 
-export function RuntimeAuditPanel() {
+interface RuntimeAuditPanelProps {
+  kind: RuntimeAuditKind
+}
+
+export function RuntimeAuditPanel({ kind }: RuntimeAuditPanelProps) {
   const { t } = useTranslation()
   const { user } = useContext(userContext)
   const { appConfig } = useContext(locationContext)
@@ -197,23 +201,14 @@ export function RuntimeAuditPanel() {
   const superAdmin = user?.role === 'admin'
   const { scope, loading } = useAdminScope({ enabled: superAdmin })
   const [tenantId, setTenantId] = useState<number | undefined>()
-  const [kind, setKind] = useState<RuntimeAuditKind>('model')
   const tenants = useQuery({ queryKey: ['runtime-audit-tenants'], queryFn: () => getTenantsApi({ page: 1, page_size: 100 }), enabled: superAdmin && !!appConfig.multiTenantEnabled, retry: false })
   const effectiveTenant = scope.scope_tenant_id ?? tenantId
   const scopeKey = JSON.stringify([user?.user_id, scope.scope_tenant_id, effectiveTenant])
   if (loading) return <p role="status">{t('log.runtime.loading')}</p>
-  return <div className="flex h-full min-h-0 flex-1 flex-col gap-4 px-2 pt-4">
-    <div className="flex shrink-0 flex-wrap items-center gap-4">
-      <Segmented
-        aria-label={t('log.runtime.title')}
-        value={kind}
-        onChange={value => setKind(value as RuntimeAuditKind)}
-        options={(['model', 'capability', 'access'] as const).map(value => ({ value, label: t(`log.runtime.${value}Tab`) }))}
-      />
-      {superAdmin && appConfig.multiTenantEnabled && scope.scope_tenant_id == null && <div className="w-60 max-w-full">
-        <Select {...labels} allowClear placeholder={t('log.runtime.allTenants')} aria-label={t('log.runtime.tenant')} value={tenantId ?? null} options={(tenants.data?.data ?? []).filter(item => item.id != null).map(item => ({ value: item.id, label: item.tenant_name }))} onChange={value => setTenantId(value == null ? undefined : Number(value))} />
-      </div>}
-    </div>
+  return <div className="flex h-full min-h-0 flex-1 flex-col gap-4 px-2 pt-2">
+    {superAdmin && appConfig.multiTenantEnabled && scope.scope_tenant_id == null && <div className="w-60 max-w-full shrink-0">
+      <Select {...labels} allowClear placeholder={t('log.runtime.allTenants')} aria-label={t('log.runtime.tenant')} value={tenantId ?? null} options={(tenants.data?.data ?? []).filter(item => item.id != null).map(item => ({ value: item.id, label: item.tenant_name }))} onChange={value => setTenantId(value == null ? undefined : Number(value))} />
+    </div>}
     <RuntimeAuditRecords key={`${scopeKey}:${kind}`} kind={kind} tenantId={effectiveTenant} scopeKey={scopeKey} onResetTenant={() => setTenantId(undefined)} />
   </div>
 }
