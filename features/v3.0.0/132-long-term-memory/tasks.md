@@ -221,7 +221,7 @@
   **覆盖 AC**: AC-08, AC-09
   **依赖**: T018
 
-- [ ] **T026**: 本轮记录的实现
+- [x] **T026**: 本轮记录的实现
   **文件**: `src/backend/bisheng/memory/domain/services/turn_record.py`、`src/backend/bisheng/memory/domain/repositories/turn_repository.py`
   **逻辑**: 三类行的写入；`bind_turn` 的异步与同步实现；按消息 id 或 `turn_id` 取回并校验主人；常驻快照的写入与读取；按用户删除；遗留记录清理。设计见 design 决策 15。
   **测试**: T025 全部通过
