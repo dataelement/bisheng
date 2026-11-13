@@ -101,10 +101,12 @@ def test_ac09_redaction_of_memory_tools_only():
     args = {"action": "remember", "content": "用户的秘密", "type": "fact"}
     result = json.dumps({"ok": True, "op": "remember", "item_id": "i-1"})
     assert redact_tool_event("memory_write", args) == {"redacted": True, "op": "remember", "item_ids": []}
-    assert redact_tool_event("memory_write", result) == {"redacted": True, "op": "remember", "item_ids": ["i-1"]}
+    assert redact_tool_event("memory_write", result) == {
+        "redacted": True, "op": "remember", "item_ids": ["i-1"], "ok": True, "reason_code": None
+    }
     search_out = SEARCH_HEADER + "\n- id=i-2 [事实] 用户的秘密（记录于 2026-11-13）"
     red = redact_tool_event("memory_search", search_out)
-    assert red == {"redacted": True, "op": "search", "item_ids": ["i-2"]}
+    assert red == {"redacted": True, "op": "search", "item_ids": ["i-2"], "ok": True, "reason_code": None}
     assert "秘密" not in json.dumps(red, ensure_ascii=False)
     assert redact_tool_event("web_search", args) is args
     assert redact_tool_event("memory_search", {}) == {"redacted": True, "op": "search", "item_ids": []}
@@ -148,3 +150,18 @@ async def test_ac61_unexpected_search_error_is_returned_not_raised(tools_for, ma
     monkeypatch.setattr(search_mod.SearchService, "search", _boom)
     out = await tools_for(ctx)["memory_search"].ainvoke({"query": "x"})
     assert "不可用" in out
+
+
+def test_ac09_redacted_output_keeps_status_without_content():
+    """A rejected write keeps ok/reason_code so the UI can say why; no text survives."""
+    rejected = json.dumps(
+        {"memory_tool": "memory_write", "op": "remember", "ok": False, "reason_code": 12102, "reason": "用户明天出差"},
+        ensure_ascii=False,
+    )
+    red = redact_tool_event("memory_write", rejected)
+    assert red == {"redacted": True, "op": "remember", "item_ids": [], "ok": False, "reason_code": 12102}
+    assert "明天" not in json.dumps(red, ensure_ascii=False)
+    # Already-redacted payloads pass their status through unchanged.
+    assert redact_tool_event("memory_write", red) == red
+    down = redact_tool_event("memory_search", "记忆检索暂时不可用。请在回答中说明这一点。")
+    assert down["ok"] is False and down["reason_code"] == 12107

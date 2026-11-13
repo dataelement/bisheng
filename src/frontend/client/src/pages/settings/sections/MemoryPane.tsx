@@ -146,11 +146,6 @@ export function MemoryPane() {
                   <p className="whitespace-pre-wrap break-words text-body text-text-1">{item.content}</p>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
                     <Tag size="small">{memoryTypeLabel(item.type, localize)}</Tag>
-                    {item.pinned && (
-                      <Tag size="small" color="brand">
-                        {localize("memory.resident")}
-                      </Tag>
-                    )}
                     {memoryMetaParts(item, localize).map((part) => (
                       <span key={part}>{part}</span>
                     ))}

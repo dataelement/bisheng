@@ -15,6 +15,7 @@ import { AlertCircle } from "lucide-react";
 import { memo, useEffect, useState, type FC } from "react";
 import type { AgentToolCall } from "~/api/chatApi";
 import { isMemoryToolEvent } from "~/api/memory";
+import { describeMemoryStep, memoryStepLabel } from "~/components/Memory/memoryStep";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
@@ -240,20 +241,34 @@ const variantStyles = {
 } as const;
 
 /**
- * F132: memory tool events arrive redacted (`{redacted, op, item_ids}`); the card
- * names the operation only — never the payload, which is not for display.
+ * F132: memory tool events arrive redacted (`{redacted, op, item_ids, ok, reason_code}`).
+ * The row says what the call did and whether it worked — "已记下 1 条记忆",
+ * "没记下：内容里有相对时间" — but never shows memory text, which is not in the event.
+ * The remembered text itself is listed under the answer (MemoryNotice).
  */
-const MemoryToolPlaceholder: FC<{ showConnector: boolean; inflight?: boolean }> = ({ showConnector, inflight }) => {
+const MemoryToolStep: FC<{ toolCall: ToolCallDisplayProps["toolCall"]; showConnector: boolean }> = ({
+    toolCall,
+    showConnector,
+}) => {
     const localize = useLocalize();
+    const step = describeMemoryStep(toolCall);
+    const icon =
+        step.state === "running" ? (
+            <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
+        ) : step.state === "failed" ? (
+            <AlertCircle size={16} className="shrink-0 text-red-500" />
+        ) : (
+            <Outlined.Bulb size={16} className="shrink-0 text-text-3" />
+        );
     return (
-        <div className="flex w-full min-w-0 gap-1.5">
+        <div className="flex w-full min-w-0 gap-1.5" data-memory-step={step.state}>
             <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
-                <Outlined.Bulb size={16} className="shrink-0 text-text-3" />
+                {icon}
                 {showConnector && <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />}
             </div>
             <div className="flex min-w-0 flex-1 flex-col pb-3">
-                <span className={cn("text-sm leading-[22px] text-text-3", inflight && "animate-pulse")}>
-                    {localize("memory.tool_operation")}
+                <span className={cn("text-sm leading-[22px] text-text-3", step.state === "running" && "animate-pulse")}>
+                    {memoryStepLabel(step, localize)}
                 </span>
             </div>
         </div>
@@ -262,7 +277,7 @@ const MemoryToolPlaceholder: FC<{ showConnector: boolean; inflight?: boolean }> 
 
 const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) =>
     isMemoryToolEvent(toolCall) ? (
-        <MemoryToolPlaceholder showConnector={showConnector} inflight={toolCall.inflight} />
+        <MemoryToolStep toolCall={toolCall} showConnector={showConnector} />
     ) : (
         <RegularToolCall toolCall={toolCall} showConnector={showConnector} />
     ),

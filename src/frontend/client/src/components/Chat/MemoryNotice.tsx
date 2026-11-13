@@ -3,18 +3,18 @@
  *
  * - Operation notice: what this turn remembered, corrected or forgot, with the
  *   item text on expand and an undo per write.
- * - Attribution: the items this turn retrieved, listed one by one, and the
- *   resident memory carried into the turn, viewable as a whole. Every item can
- *   be deleted in place.
+ * - Attribution: one plain list of the memory this turn drew on — the
+ *   retrieved items first, then the pinned (resident) items not already
+ *   listed. Every item can be deleted in place.
  *
  * Everything comes from GET /api/v1/memory/turn, which answers the owner only.
  * The component renders nothing unless the answer's flags (or, in `probe`
  * mode, the turn record itself) say there is something to show.
  */
-import { Button, Tag } from "@bisheng/ui";
+import { Button } from "@bisheng/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   deleteMemoryItemApi,
   getMemoryTurnApi,
@@ -51,7 +51,6 @@ export function MemoryNotice({ flags, turnId, messageId, probe = false, classNam
   const localize = useLocalize();
   const queryClient = useQueryClient();
   const [panel, setPanel] = useState<Panel>(null);
-  const [residentOpen, setResidentOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const key = { turnId: turnId || flags?.turn_id || undefined, messageId: messageId || undefined };
@@ -101,8 +100,11 @@ export function MemoryNotice({ flags, turnId, messageId, probe = false, classNam
   const writes = data?.writes ?? [];
   const retrieved = data?.retrieved ?? [];
   const resident = data?.resident ?? [];
+  // One list for the user: retrieved first, then pinned items not already listed.
+  const retrievedIds = new Set(retrieved.map((i) => i.id));
+  const referenced = [...retrieved, ...resident.filter((i) => !retrievedIds.has(i.id))];
   const showWrites = probe ? writes.length > 0 : flagged && flags.has_write;
-  const showAttribution = probe ? retrieved.length + resident.length > 0 : flagged && flags.has_attribution;
+  const showAttribution = probe ? referenced.length > 0 : flagged && flags.has_attribution;
   if (!hasKey || (!probe && !flagged) || (!showWrites && !showAttribution)) return null;
 
   const toggle = (next: Exclude<Panel, null>) => setPanel((cur) => (cur === next ? null : next));
@@ -115,83 +117,73 @@ export function MemoryNotice({ flags, turnId, messageId, probe = false, classNam
     return localize("memory.notice.updated", { count: writes.length });
   };
 
-  const deleteButton = (memory: MemoryItem) => (
-    <Button
-      size="small"
-      variant="text"
-      color="default"
-      iconOnly
-      aria-label={localize("memory.delete")}
-      title={localize("memory.delete")}
-      loading={deleteMutation.isLoading && deleteMutation.variables === memory.id}
-      onClick={() => deleteMutation.mutate(memory.id)}
-    >
-      <Outlined.Delete />
+  const errorLine = (key: string) =>
+    errors[key] ? (
+      <p role="alert" className="text-caption text-danger">
+        {errors[key]}
+      </p>
+    ) : null;
+
+  // Light row actions are text buttons (Button spec §2).
+  const textAction = (label: string, onClick: () => void, loading: boolean) => (
+    <Button size="small" variant="text" color="default" className="shrink-0" loading={loading} onClick={onClick}>
+      {label}
     </Button>
   );
 
-  const itemRow = (memory: MemoryItem) => (
-    <li key={memory.id} className="flex items-start gap-2 py-1">
-      <div className="min-w-0 flex-1">
-        <p className="whitespace-pre-wrap break-words text-body-sm text-text-1">{memory.content}</p>
-        {errors[`i${memory.id}`] && (
-          <p role="alert" className="text-caption text-danger">
-            {errors[`i${memory.id}`]}
-          </p>
-        )}
+  // One memory per row: [operation] content [action]. Nothing else gets its own line.
+  const row = (key: string | number, body: ReactNode, action: ReactNode, errorKey: string, op?: string) => (
+    <li key={key} className="flex flex-col" data-op={op}>
+      <div className="flex items-center gap-2">
+        {op && mixedOps && <span className="shrink-0 text-caption text-text-3">{localize(`memory.notice.op_${op}`)}</span>}
+        <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-body-sm text-text-1">{body}</p>
+        {action}
       </div>
-      {deleteButton(memory)}
+      {errorLine(errorKey)}
     </li>
   );
 
+  const itemRow = (memory: MemoryItem) =>
+    row(
+      memory.id,
+      memory.content,
+      textAction(
+        localize("memory.delete"),
+        () => deleteMutation.mutate(memory.id),
+        deleteMutation.isLoading && deleteMutation.variables === memory.id,
+      ),
+      `i${memory.id}`,
+    );
+
+  // Show the operation word per row only when one answer did different things.
+  const mixedOps = new Set(writes.map((w) => w.op)).size > 1;
+
   const writeRow = (w: MemoryTurnWrite) => {
     const op = KNOWN_OPS.has(w.op) ? w.op : "remember";
-    const shown = op === "forget" ? w.related_item : w.item;
-    const error = errors[`w${w.record_id}`];
-    return (
-      <li key={w.record_id} className="flex flex-col gap-0.5 py-1">
-        <div className="flex items-start gap-2">
-          <Tag size="small" className="shrink-0">
-            {localize(`memory.notice.op_${op}`)}
-          </Tag>
-          <div className="min-w-0 flex-1">
-            <p
-              className={cn(
-                "whitespace-pre-wrap break-words text-body-sm text-text-1",
-                (w.undone || op === "forget") && "text-text-3",
-                w.undone && "line-through",
-              )}
-            >
-              {shown?.content ?? localize("memory.notice.item_gone")}
-            </p>
-            {op === "correct" && w.related_item && (
-              <p className="break-words text-caption text-text-3">
-                {localize("memory.notice.was", { content: w.related_item.content })}
-              </p>
-            )}
-          </div>
-          {w.undone ? (
-            <span className="shrink-0 text-caption text-text-3">{localize("memory.notice.undone")}</span>
-          ) : (
-            <Button
-              size="small"
-              variant="text"
-              color="default"
-              className="shrink-0"
-              loading={undoMutation.isLoading && undoMutation.variables === w.record_id}
-              onClick={() => undoMutation.mutate(w.record_id)}
-            >
-              {localize("memory.notice.undo")}
-            </Button>
-          )}
-        </div>
-        {error && (
-          <p role="alert" className="text-caption text-danger">
-            {error}
-          </p>
-        )}
-      </li>
+    const gone = localize("memory.notice.item_gone");
+    const body =
+      op === "forget" ? (
+        <s className="text-text-3">{w.related_item?.content ?? gone}</s>
+      ) : op === "correct" && w.related_item ? (
+        <>
+          <s className="text-text-3">{w.related_item.content}</s> {w.item?.content ?? gone}
+        </>
+      ) : (
+        (w.item?.content ?? gone)
+      );
+    // The item was cleared since: there is nothing left to undo.
+    const missing = op === "forget" ? !w.related_item : !w.item;
+    const action = missing ? null : w.undone ? (
+      <span className="shrink-0 text-caption text-text-3">{localize("memory.notice.undone")}</span>
+    ) : (
+      textAction(
+        localize("memory.notice.undo"),
+        () => undoMutation.mutate(w.record_id),
+        undoMutation.isLoading && undoMutation.variables === w.record_id,
+      )
     );
+    const shown = w.undone ? <s className="text-text-3">{body}</s> : missing ? <span className="text-text-3">{body}</span> : body;
+    return row(w.record_id, shown, action, `w${w.record_id}`, op);
   };
 
   const entryClass =
@@ -199,6 +191,23 @@ export function MemoryNotice({ flags, turnId, messageId, probe = false, classNam
   const chevron = (open: boolean) => (
     <Outlined.Down size={14} className={cn("shrink-0 transition-transform", !open && "-rotate-90")} />
   );
+
+  const panelBody = () => {
+    if (isError) {
+      return (
+        <div className="flex items-center gap-2 text-caption text-text-3">
+          {localize("memory.load_failed")}
+          {textAction(localize("memory.retry"), () => void refetch(), false)}
+        </div>
+      );
+    }
+    if (!data) return <p className="text-caption text-text-3">{localize("memory.loading")}</p>;
+    if (panel === "writes") return <ul className="flex flex-col gap-1">{writes.map(writeRow)}</ul>;
+    if (referenced.length === 0) {
+      return <p className="text-caption text-text-3">{localize("memory.attribution.empty")}</p>;
+    }
+    return <ul className="flex flex-col gap-1">{referenced.map(itemRow)}</ul>;
+  };
 
   return (
     <div data-slot="memory-notice" className={cn("mt-1 flex flex-col gap-1", className)}>
@@ -225,46 +234,11 @@ export function MemoryNotice({ flags, turnId, messageId, probe = false, classNam
       </div>
 
       {panel && (
-        <div className="rounded-lg border border-border-base bg-fill-1 px-3 py-2">
-          {isError ? (
-            <div className="flex items-center gap-2 text-caption text-text-3">
-              {localize("memory.load_failed")}
-              <Button size="small" variant="link" onClick={() => refetch()}>
-                {localize("memory.retry")}
-              </Button>
-            </div>
-          ) : !data ? (
-            <p className="text-caption text-text-3">{localize("memory.loading")}</p>
-          ) : panel === "writes" ? (
-            <ul className="flex flex-col">{writes.map(writeRow)}</ul>
-          ) : retrieved.length + resident.length === 0 ? (
-            <p className="text-caption text-text-3">{localize("memory.attribution.empty")}</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {retrieved.length > 0 && (
-                <section role="region" aria-label={localize("memory.attribution.retrieved")}>
-                  <h4 className="text-caption font-medium text-text-2">{localize("memory.attribution.retrieved")}</h4>
-                  <ul className="flex flex-col">{retrieved.map(itemRow)}</ul>
-                </section>
-              )}
-              {resident.length > 0 && (
-                <section role="region" aria-label={localize("memory.attribution.resident")}>
-                  <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-caption font-medium text-text-2">{localize("memory.attribution.resident")}</h4>
-                    <Button size="small" variant="link" onClick={() => setResidentOpen((open) => !open)}>
-                      {residentOpen
-                        ? localize("memory.attribution.resident_hide")
-                        : localize("memory.attribution.resident_view", { count: resident.length })}
-                    </Button>
-                  </div>
-                  <p className="text-caption text-text-3">{localize("memory.attribution.resident_hint")}</p>
-                  {residentOpen && <ul className="flex flex-col">{resident.map(itemRow)}</ul>}
-                </section>
-              )}
-            </div>
-          )}
-        </div>
+        // Hangs under the entry like a quote: a rule on the left, no card, no fill. The list is as
+        // wide as its content (up to 560px), so each row's action stays next to its text.
+        <div className="ml-2.5 w-fit max-w-[560px] border-l-2 border-border-base py-0.5 pl-3">{panelBody()}</div>
       )}
     </div>
   );
 }
+

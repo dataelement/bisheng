@@ -2936,7 +2936,6 @@
       "preference": "Preference",
       "experience": "Experience"
     },
-    "resident": "Always on",
     "recorded_at_value": "Saved {{time}}",
     "event_time_value": "Event date {{time}}",
     "source": {
@@ -2964,7 +2963,6 @@
       "op_remember": "Remembered",
       "op_correct": "Corrected",
       "op_forget": "Forgot",
-      "was": "Was: {{content}}",
       "item_gone": "This memory has been cleared",
       "undo": "Undo",
       "undone": "Undone",
@@ -2972,13 +2970,34 @@
     },
     "attribution": {
       "entry": "Used memory",
-      "retrieved": "Memories looked up this time",
-      "resident": "Always-on memory",
-      "resident_hint": "These memories are included in every chat. Which of them were used is not tracked.",
-      "resident_view": "View all {{count}}",
-      "resident_hide": "Hide",
       "empty": "The related memories have been deleted"
     },
-    "tool_operation": "Memory operation"
+    "tool_operation": "Memory operation",
+    "step": {
+      "running_remember": "Remembering",
+      "running_correct": "Correcting a memory",
+      "running_forget": "Forgetting a memory",
+      "running_search": "Searching memory",
+      "running_write": "Updating memory",
+      "done_remember": "Remembered 1 memory",
+      "done_correct": "Corrected 1 memory",
+      "done_forget": "Forgot 1 memory",
+      "done_write": "Memory updated",
+      "done_search": "Searched memory, found {{count}}",
+      "done_search_empty": "Searched memory, nothing relevant",
+      "failed_remember": "Memory write rejected: {{reason}}",
+      "failed_correct": "Memory correction rejected: {{reason}}",
+      "failed_forget": "Memory deletion rejected: {{reason}}",
+      "failed_search": "Memory search failed: {{reason}}",
+      "failed_write": "Memory update rejected: {{reason}}",
+      "reason_12100": "longer than 200 characters",
+      "reason_12101": "looks like a password, ID or card number",
+      "reason_12102": "uses a relative time such as \"tomorrow\" or \"next Tuesday\"",
+      "reason_12103": "the memory to change no longer exists or has changed",
+      "reason_12107": "memory search is temporarily unavailable",
+      "reason_12110": "invalid memory type",
+      "reason_12111": "the content is empty",
+      "reason_other": "the operation did not succeed"
+    }
   }
 }

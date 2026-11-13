@@ -121,10 +121,10 @@ it("shows the backend reason when an undo fails (AC-22)", async () => {
   expect(screen.getByRole("button", { name: "memory.notice.undo" })).toBeInTheDocument();
 });
 
-it("splits attribution into retrieved items and the resident set, each deletable in place (AC-87)", async () => {
+it("lists retrieved and pinned items in one plain list, each deletable in place (AC-87)", async () => {
   mockApi.getMemoryTurnApi.mockResolvedValue(
     turn({
-      retrieved: [item("r1", "Budget is 5000"), item("r2", "Hotel near the station")],
+      retrieved: [item("r1", "Budget is 5000"), item("p1", "Answer in English", { pinned: true })],
       resident: [item("p1", "Answer in English", { pinned: true }), item("p2", "Works in finance", { pinned: true })],
     }),
   );
@@ -134,24 +134,32 @@ it("splits attribution into retrieved items and the resident set, each deletable
   expect(mockApi.getMemoryTurnApi).not.toHaveBeenCalled();
   fireEvent.click(entry);
 
-  const retrieved = await screen.findByRole("region", { name: "memory.attribution.retrieved" });
-  expect(within(retrieved).getByText("Budget is 5000")).toBeInTheDocument();
-  expect(within(retrieved).getByText("Hotel near the station")).toBeInTheDocument();
+  // One list, retrieved first, then pinned items not already listed (p1 appears once).
+  await screen.findByText("Budget is 5000");
+  const lists = screen.getAllByRole("list");
+  expect(lists).toHaveLength(1);
+  const rows = within(lists[0]).getAllByRole("listitem");
+  expect(rows.map((r) => r.querySelector("p")?.textContent)).toEqual([
+    "Budget is 5000",
+    "Answer in English",
+    "Works in finance",
+  ]);
+  // No section headings, groups, hint or expand toggle.
+  expect(screen.queryByRole("region")).toBeNull();
+  expect(screen.queryByRole("heading")).toBeNull();
+  expect(screen.queryByText(/resident/i)).toBeNull();
+  expect(screen.getAllByRole("button", { name: "memory.delete" })).toHaveLength(3);
 
-  const resident = screen.getByRole("region", { name: "memory.attribution.resident" });
-  expect(within(resident).queryByText("Answer in English")).toBeNull();
-  fireEvent.click(within(resident).getByRole("button", { name: /memory\.attribution\.resident_view\|2/ }));
-  expect(within(resident).getByText("Answer in English")).toBeInTheDocument();
-  expect(within(resident).getByText("Works in finance")).toBeInTheDocument();
-
-  const row = within(retrieved).getByText("Budget is 5000").closest("li") as HTMLElement;
+  const row = screen.getByText("Budget is 5000").closest("li") as HTMLElement;
   fireEvent.click(within(row).getByRole("button", { name: "memory.delete" }));
   await waitFor(() => expect(mockApi.deleteMemoryItemApi).toHaveBeenCalledWith("r1"));
-  await waitFor(() => expect(within(retrieved).queryByText("Budget is 5000")).toBeNull());
+  await waitFor(() => expect(screen.queryByText("Budget is 5000")).toBeNull());
 
-  const residentRow = within(resident).getByText("Works in finance").closest("li") as HTMLElement;
-  fireEvent.click(within(residentRow).getByRole("button", { name: "memory.delete" }));
+  const pinnedRow = screen.getByText("Works in finance").closest("li") as HTMLElement;
+  fireEvent.click(within(pinnedRow).getByRole("button", { name: "memory.delete" }));
   await waitFor(() => expect(mockApi.deleteMemoryItemApi).toHaveBeenCalledWith("p2"));
+  await waitFor(() => expect(screen.queryByText("Works in finance")).toBeNull());
+  expect(screen.getByText("Answer in English")).toBeInTheDocument();
 });
 
 it("renders nothing and asks nothing without memory flags (AC-21, AC-87)", () => {

@@ -2864,7 +2864,6 @@
       "preference": "偏好",
       "experience": "经验"
     },
-    "resident": "常驻",
     "recorded_at_value": "记录于 {{time}}",
     "event_time_value": "事件时间 {{time}}",
     "source": {
@@ -2892,7 +2891,6 @@
       "op_remember": "记下",
       "op_correct": "更正",
       "op_forget": "忘掉",
-      "was": "原为：{{content}}",
       "item_gone": "这条记忆已被清空",
       "undo": "撤销",
       "undone": "已撤销",
@@ -2900,13 +2898,34 @@
     },
     "attribution": {
       "entry": "参考了记忆",
-      "retrieved": "本次查到的记忆",
-      "resident": "常驻记忆",
-      "resident_hint": "每次对话都会带上这些记忆，这里不区分其中哪一条被用到。",
-      "resident_view": "查看全部 {{count}} 条",
-      "resident_hide": "收起",
       "empty": "相关记忆已被删除"
     },
-    "tool_operation": "记忆操作"
+    "tool_operation": "记忆操作",
+    "step": {
+      "running_remember": "正在记下记忆",
+      "running_correct": "正在更正记忆",
+      "running_forget": "正在忘掉记忆",
+      "running_search": "正在查找记忆",
+      "running_write": "正在处理记忆",
+      "done_remember": "已记下 1 条记忆",
+      "done_correct": "已更正 1 条记忆",
+      "done_forget": "已忘掉 1 条记忆",
+      "done_write": "记忆已更新",
+      "done_search": "查找记忆，找到 {{count}} 条",
+      "done_search_empty": "查找记忆，没有相关内容",
+      "failed_remember": "记忆写入被拒绝：{{reason}}",
+      "failed_correct": "记忆更正被拒绝：{{reason}}",
+      "failed_forget": "记忆删除被拒绝：{{reason}}",
+      "failed_search": "记忆检索失败：{{reason}}",
+      "failed_write": "记忆更新被拒绝：{{reason}}",
+      "reason_12100": "内容超过 200 字",
+      "reason_12101": "内容像密码、证件号或卡号",
+      "reason_12102": "内容里有“明天”“下周二”这类相对时间",
+      "reason_12103": "要改的记忆不存在或已经变了",
+      "reason_12107": "记忆检索暂时不可用",
+      "reason_12110": "记忆类型不对",
+      "reason_12111": "内容为空",
+      "reason_other": "操作没有成功"
+    }
   }
 }

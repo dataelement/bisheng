@@ -2859,7 +2859,6 @@
       "preference": "好み",
       "experience": "経験"
     },
-    "resident": "常時",
     "recorded_at_value": "記録 {{time}}",
     "event_time_value": "イベント日付 {{time}}",
     "source": {
@@ -2887,7 +2886,6 @@
       "op_remember": "記憶",
       "op_correct": "訂正",
       "op_forget": "忘却",
-      "was": "変更前：{{content}}",
       "item_gone": "このメモリーはクリアされました",
       "undo": "元に戻す",
       "undone": "元に戻しました",
@@ -2895,13 +2893,34 @@
     },
     "attribution": {
       "entry": "メモリーを参照",
-      "retrieved": "今回検索したメモリー",
-      "resident": "常時メモリー",
-      "resident_hint": "これらのメモリーは毎回の会話に含まれます。どれが使われたかは区別しません。",
-      "resident_view": "すべて表示（{{count}} 件）",
-      "resident_hide": "閉じる",
       "empty": "関連するメモリーは削除されました"
     },
-    "tool_operation": "メモリー操作"
+    "tool_operation": "メモリー操作",
+    "step": {
+      "running_remember": "メモリに記録しています",
+      "running_correct": "メモリを訂正しています",
+      "running_forget": "メモリを削除しています",
+      "running_search": "メモリを検索しています",
+      "running_write": "メモリを更新しています",
+      "done_remember": "メモリを 1 件記録しました",
+      "done_correct": "メモリを 1 件訂正しました",
+      "done_forget": "メモリを 1 件削除しました",
+      "done_write": "メモリを更新しました",
+      "done_search": "メモリを検索し、{{count}} 件見つかりました",
+      "done_search_empty": "メモリを検索しましたが、関連する内容はありません",
+      "failed_remember": "メモリの書き込みが拒否されました：{{reason}}",
+      "failed_correct": "メモリの訂正が拒否されました：{{reason}}",
+      "failed_forget": "メモリの削除が拒否されました：{{reason}}",
+      "failed_search": "メモリの検索に失敗しました：{{reason}}",
+      "failed_write": "メモリの更新が拒否されました：{{reason}}",
+      "reason_12100": "200 文字を超えています",
+      "reason_12101": "パスワード、身分証番号、カード番号のような内容です",
+      "reason_12102": "「明日」「来週火曜」のような相対的な日時が含まれています",
+      "reason_12103": "変更するメモリが存在しないか、変更されています",
+      "reason_12107": "メモリ検索は一時的に利用できません",
+      "reason_12110": "メモリの種類が正しくありません",
+      "reason_12111": "内容が空です",
+      "reason_other": "操作が完了しませんでした"
+    }
   }
 }

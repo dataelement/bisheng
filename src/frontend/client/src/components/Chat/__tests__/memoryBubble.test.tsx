@@ -80,8 +80,9 @@ it("renders a redacted memory tool event as a placeholder without its raw struct
       }}
     />,
   );
-  expect(screen.getByText("memory.tool_operation")).toBeInTheDocument();
-  expect(container.textContent).not.toMatch(/redacted|m-secret|item_ids|search/);
+  // Names what the call did (a search that found 2), never the ids or payload.
+  expect(screen.getByText("memory.step.done_search")).toBeInTheDocument();
+  expect(container.textContent).not.toMatch(/redacted|m-secret|item_ids/);
   expect(screen.queryByRole("link")).toBeNull();
 });
 
@@ -97,16 +98,17 @@ it("treats any redacted payload as a memory operation, even under another name (
       }}
     />,
   );
-  expect(screen.getByText("memory.tool_operation")).toBeInTheDocument();
+  // A finished write with no output is read as not remembered.
+  expect(screen.getByText("memory.step.failed_remember")).toBeInTheDocument();
   expect(container.textContent).not.toMatch(/m-secret|unknown_tool/);
 });
 
 it("keeps ordinary tool calls unchanged (AC-87)", () => {
-  render(
+  const { container } = render(
     <ToolCallDisplay
       toolCall={{ tool_call_id: "tc3", tool_name: "calculator", display_name: "Calculator", args: { a: 1 }, results: "2" }}
     />,
   );
-  expect(screen.queryByText("memory.tool_operation")).toBeNull();
+  expect(container.textContent).not.toMatch(/memory\.step\./);
   expect(screen.getByText("com_tools_state_tool_done")).toBeInTheDocument();
 });

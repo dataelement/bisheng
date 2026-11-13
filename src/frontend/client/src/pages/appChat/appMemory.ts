@@ -7,6 +7,7 @@
  * attribution (spec: a workflow's final output is not attributed).
  */
 import { MEMORY_TOOL_NAMES, parseMemorySignal, type MemoryFlags } from "~/api/memory";
+import { describeMemoryStep, type MemoryStep } from "~/components/Memory/memoryStep";
 
 const ASSISTANT_FLOW_TYPE = 5;
 const ANSWER_CATEGORIES = new Set(["stream_msg", "answer", "output_msg", "agent_answer"]);
@@ -83,8 +84,8 @@ export function takeQueuedMemoryFlags(chatId: string): MemoryFlags | undefined {
 
 /**
  * Memory tool runs in assistant chat (AC-09 owner view): the persisted run is
- * already redacted to `{redacted, op, item_ids}`. Render a fixed placeholder
- * instead of the raw JSON, and keep the default "tool was deleted" title away
+ * already redacted to `{redacted, op, item_ids, ok, reason_code}`. Render a label for
+ * what the run did instead of the raw JSON, and keep the default "tool was deleted" title away
  * (memory tools are built in, so they are never in the assistant's tool list).
  */
 const RUN_PAYLOAD_FIELDS = ["input_str", "input", "output", "args", "results", "result", "tool_input", "tool_output"];
@@ -124,17 +125,46 @@ export function isMemoryRun(message: RunLike): boolean {
   return message.kind === "run" && message.category !== "node_run" && isMemoryRunPayload(message.payload);
 }
 
-/** Replace every field a run card could display with the placeholder. */
-export function maskMemoryRuns<T extends RunLike>(messages: T[], placeholder: string): T[] {
+const RUN_INPUT_FIELDS = ["input_str", "input", "args", "tool_input"];
+const RUN_OUTPUT_FIELDS = ["output", "results", "result", "tool_output"];
+
+function firstRedacted(record: Row, fields: string[]): Row | undefined {
+  for (const field of fields) {
+    const value = asObject(record[field]);
+    if (value.redacted === true) return value;
+  }
+  return undefined;
+}
+
+/** What a memory run did, read from its redacted input and output (see memoryStep). */
+export function memoryRunStep(message: RunLike & { status?: unknown }): MemoryStep {
+  const record = asObject(message.payload);
+  const name = [record.tool_key, record.tool_name, record.name].find((item) => typeof item === "string");
+  const output = firstRedacted(record, RUN_OUTPUT_FIELDS);
+  // A failed call is stored as "Error: <redacted json>" (api/v1/callback.py on_tool_error).
+  const errored = RUN_OUTPUT_FIELDS.some((field) => typeof record[field] === "string" && /^Error:/.test(record[field] as string));
+  return describeMemoryStep({
+    tool_name: typeof name === "string" ? name : null,
+    args: firstRedacted(record, RUN_INPUT_FIELDS) ?? (record.redacted === true ? record : undefined),
+    results: output,
+    error: errored || undefined,
+    // The start frame carries only the input; the end frame adds the output.
+    inflight: !output && !errored && record.redacted !== true,
+  });
+}
+
+/** Replace every field a run card could display with a content-free label for that run. */
+export function maskMemoryRuns<T extends RunLike>(messages: T[], labelFor: (message: T) => string): T[] {
   return messages.map((message) => {
     if (!isMemoryRun(message)) return message;
+    const label = labelFor(message);
     const toolKey = asObject(message.payload).tool_key;
     return {
       ...message,
-      text: placeholder,
+      text: label,
       reasoning: "",
       payload: typeof toolKey === "string" ? { tool_key: toolKey, redacted: true } : { redacted: true },
-      raw: { ...(message.raw ?? {}), message: placeholder, thought: placeholder, intermediate_steps: placeholder },
+      raw: { ...(message.raw ?? {}), message: label, thought: label, intermediate_steps: label },
     };
   });
 }

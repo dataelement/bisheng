@@ -83,21 +83,21 @@ beforeEach(() => {
   mockApi.clearMemoryItemsApi.mockResolvedValue(undefined);
 });
 
-it("lists content, type, recorded time, event time, source and resident mark (AC-88)", async () => {
+it("lists content, type, recorded time, event time and source, with no pinned/resident mark (AC-88)", async () => {
   renderPane();
   await screen.findByText("Prefers short answers");
 
   const first = rowOf("Prefers short answers");
   expect(within(first).getByText("memory.type.preference")).toBeInTheDocument();
   expect(within(first).getByText(/2026-11-01 09:30/)).toBeInTheDocument();
-  expect(within(first).getByText("memory.resident")).toBeInTheDocument();
   expect(within(first).getByText(/memory\.source\.daily/)).toBeInTheDocument();
+  // A pinned item carries no extra label.
+  expect(within(first).queryByText(/resident/i)).toBeNull();
 
   const second = rowOf("Team offsite in Hangzhou");
   expect(within(second).getByText("memory.type.fact")).toBeInTheDocument();
   expect(within(second).getByText(/2026-12-05/)).toBeInTheDocument();
   expect(within(second).getByText(/Travel helper/)).toBeInTheDocument();
-  expect(within(second).queryByText("memory.resident")).toBeNull();
 });
 
 it("shows a manually added item as added by hand (AC-88)", async () => {

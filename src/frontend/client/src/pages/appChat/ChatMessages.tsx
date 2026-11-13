@@ -25,7 +25,8 @@ import { useLocalize } from "~/hooks";
 import InputForm from "./components/InputForm";
 import InputFormSkill from "./components/InputFormSkill";
 import { bishengConfState, currentChatState, currentRunningState } from "./store/atoms";
-import { appMemoryEnabled, isMemoryRun, maskMemoryRuns } from "./appMemory";
+import { memoryStepLabel } from "~/components/Memory/memoryStep";
+import { appMemoryEnabled, isMemoryRun, maskMemoryRuns, memoryRunStep } from "./appMemory";
 import { useMessage } from "./useMessages";
 
 // F028: only question + answer category rows are selectable. Intermediate
@@ -100,7 +101,7 @@ export default function ChatMessages({
                 : messages,
               { mode: chatState?.flow.flow_type === 10 ? "workflow" : "assistant", sessionKey: chatId ?? "" },
             ),
-            localize("memory.tool_operation"),
+            (run) => memoryStepLabel(memoryRunStep(run), localize),
           )}
           canExecute={!readOnly}
           labels={{
@@ -125,7 +126,7 @@ export default function ChatMessages({
           slots={{
             runPresentation: (message) =>
               isMemoryRun(message)
-                ? { title: localize("memory.tool_operation"), unavailable: false }
+                ? { title: message.text || localize("memory.tool_operation"), unavailable: false }
                 : describeRun(message, chatState?.flow, createRunLabels(localize)),
             title: (message) =>
               message.kind === "user" ? displayText(message.raw.user_name) || useName || "" : title,
