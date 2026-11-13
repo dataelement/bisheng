@@ -2876,6 +2876,31 @@
     "save_failed": "保存できませんでした。もう一度お試しください。",
     "delete_failed": "削除できませんでした。もう一度お試しください。",
     "clear_failed": "クリアできませんでした。もう一度お試しください。",
-    "switch_failed": "設定を保存できませんでした。もう一度お試しください。"
+    "switch_failed": "設定を保存できませんでした。もう一度お試しください。",
+    "loading": "読み込み中…",
+    "notice": {
+      "pending": "メモリーを更新しました",
+      "remember": "{{count}} 件のメモリーを記憶しました",
+      "correct": "{{count}} 件のメモリーを訂正しました",
+      "forget": "{{count}} 件のメモリーを忘れました",
+      "updated": "{{count}} 件のメモリーを更新しました",
+      "op_remember": "記憶",
+      "op_correct": "訂正",
+      "op_forget": "忘却",
+      "was": "変更前：{{content}}",
+      "item_gone": "このメモリーはクリアされました",
+      "undo": "元に戻す",
+      "undone": "元に戻しました",
+      "undo_failed": "元に戻せませんでした。もう一度お試しください。"
+    },
+    "attribution": {
+      "entry": "メモリーを参照",
+      "retrieved": "今回検索したメモリー",
+      "resident": "常時メモリー",
+      "resident_hint": "これらのメモリーは毎回の会話に含まれます。どれが使われたかは区別しません。",
+      "resident_view": "すべて表示（{{count}} 件）",
+      "resident_hide": "閉じる",
+      "empty": "関連するメモリーは削除されました"
+    }
   }
 }

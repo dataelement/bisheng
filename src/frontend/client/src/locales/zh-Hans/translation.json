@@ -2881,6 +2881,31 @@
     "save_failed": "保存失败，请重试",
     "delete_failed": "删除失败，请重试",
     "clear_failed": "清空失败，请重试",
-    "switch_failed": "设置未保存，请重试"
+    "switch_failed": "设置未保存，请重试",
+    "loading": "加载中…",
+    "notice": {
+      "pending": "记忆已更新",
+      "remember": "已记下 {{count}} 条记忆",
+      "correct": "已更正 {{count}} 条记忆",
+      "forget": "已忘掉 {{count}} 条记忆",
+      "updated": "已更新 {{count}} 条记忆",
+      "op_remember": "记下",
+      "op_correct": "更正",
+      "op_forget": "忘掉",
+      "was": "原为：{{content}}",
+      "item_gone": "这条记忆已被清空",
+      "undo": "撤销",
+      "undone": "已撤销",
+      "undo_failed": "撤销失败，请重试"
+    },
+    "attribution": {
+      "entry": "参考了记忆",
+      "retrieved": "本次查到的记忆",
+      "resident": "常驻记忆",
+      "resident_hint": "每次对话都会带上这些记忆，这里不区分其中哪一条被用到。",
+      "resident_view": "查看全部 {{count}} 条",
+      "resident_hide": "收起",
+      "empty": "相关记忆已被删除"
+    }
   }
 }
