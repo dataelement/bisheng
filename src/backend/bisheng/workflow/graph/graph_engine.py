@@ -42,6 +42,8 @@ class GraphEngine:
         platform_knowledge_context=None,
         redact_errors: bool = False,
         node_entry_check=None,
+        chat_id: str = "",
+        memory_enabled: bool = False,
     ):
         self.user_id = user_id
         self.workflow_id = workflow_id
@@ -80,7 +82,8 @@ class GraphEngine:
         self.condition_nodes = []
 
         self.edges = None
-        self.graph_state = GraphState()
+        # F132 (R5): run values decided by the Celery task, frozen in the shared state
+        self.graph_state = GraphState(chat_id=chat_id or "", memory_enabled=bool(memory_enabled))
 
         # init langgraph state graph
         self.graph_builder = StateGraph(TempState)

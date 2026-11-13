@@ -13,6 +13,7 @@ import CitationReferencesDrawer from '../chatComponent/CitationReferencesDrawer'
 import { normalizeCitationItems } from '../chatComponent/citationUtils';
 import SourceEntry from '../chatComponent/SourceEntry';
 import ResouceModal from '@/pages/ChatAppPage/components/ResouceModal';
+import { maskMemoryRuns, memoryRunPresentation } from './memoryPlaceholder';
 
 interface PlatformConversationMessagesProps {
     mode: ChatMode;
@@ -31,7 +32,9 @@ interface PlatformConversationMessagesProps {
 /** Authenticated host operations surround the same client-based message renderer. */
 export function PlatformConversationMessages({ mode, sessionKey, messages: rows, canExecute, canAnnotate, logo, title = '', runCatalog, userName = '', version, onMarkClick, onChoice }: PlatformConversationMessagesProps) {
     const { t } = useTranslation(['bs', 'shared']);
-    const messages = messagesForPresentation(rows, { mode, sessionKey });
+    // F132 (AC-09): memory tool events show only a fixed placeholder
+    const memoryLabel = String(t('memory.operation'));
+    const messages = maskMemoryRuns(messagesForPresentation(rows, { mode, sessionKey }), memoryLabel);
     const sourceRef = useRef<{ openModal: (value: { chatId: string; messageId?: string; message: string }) => void }>(null);
     const handleMark = (message: ChatMessage) => {
         if (!canAnnotate || !message.sourceMessageId) return;
@@ -42,7 +45,7 @@ export function PlatformConversationMessages({ mode, sessionKey, messages: rows,
         <ConversationMessages messages={messages} canExecute={canExecute} onChoice={onChoice}
             labels={{ confirm: t('chat.confirm'), confirmed: t('chat.confirmed'), thinking: t('flow:thinking'), completed: t('flow:thoughtCompleted') }}
             slots={{
-                runPresentation: message => describeRun(message, runCatalog, createRunLabels(key => String(t(key)))),
+                runPresentation: message => memoryRunPresentation(message, memoryLabel) ?? describeRun(message, runCatalog, createRunLabels(key => String(t(key)))),
                 title: message => message.kind === 'user' ? displayText(message.raw.user_name) || userName : title,
                 avatar: message => message.kind === 'user' ? <img className="w-6 h-6 min-w-6" src={__APP_ENV__.BASE_URL + '/assets/user.png'} alt="" /> : logo,
                 content: (text, message) => {

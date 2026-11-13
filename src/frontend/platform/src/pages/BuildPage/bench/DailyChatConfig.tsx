@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import ConfigInheritanceBanner from "./ConfigInheritanceBanner";
 import { FormInput } from "./FormInput";
 import { isMenuNameTooLong } from "./menuDisplayName";
+import { MemoryModelConfig } from "./MemoryModelConfig";
 import { IconUploadSection } from "./IconUploadSection";
 import { useChatConfig } from "./index";
 import { handleUiRequest } from "@/controllers/request";
@@ -220,6 +221,10 @@ export function DailyChatConfig({ scopeVersion = 0 }: DailyChatConfigProps) {
                                 </Select>
                             </div>
                         </ToggleSection> */}
+                        <MemoryModelConfig
+                            value={formData.memoryModelId}
+                            onChange={(memoryModelId) => setFormData((prev) => ({ ...prev, memoryModelId }))}
+                        />
                         {/* v2.5 Agent-mode: available tools configuration (replaces 联网搜索 toggle) */}
                         <ToolsConfig
                             tools={formData.tools}

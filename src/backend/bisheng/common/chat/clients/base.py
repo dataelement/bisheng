@@ -18,6 +18,9 @@ _message_execution: ContextVar[tuple | None] = ContextVar("chat_message_executio
 
 
 class BaseClient(ABC):
+    # F132: set by ChatManager.dispatch_client for logged-in connections only.
+    memory_register = None
+
     @property
     def current_execution_context(self):
         context = _message_execution.get()

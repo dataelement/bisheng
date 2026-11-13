@@ -11,6 +11,11 @@ class GraphState(BaseModel):
     # Store Chat History
     history_memory: Optional[ConversationBufferWindowMemory] = None
 
+    # F132 (R5): the run's session and the ONLINE version's memory switch, filled once
+    # by the Celery task at execution start; read-only so a node cannot change them.
+    chat_id: str = Field(default="", frozen=True, description="Session of this run; empty for debug/evaluation")
+    memory_enabled: bool = Field(default=False, frozen=True, description="Workflow memory switch (online version)")
+
     # Global Variable Pool
     variables_pool: Dict[str, Dict[str, Any]] = Field(default_factory=dict, description='Global Variable Pool: {node_id: {key: value}}')
 

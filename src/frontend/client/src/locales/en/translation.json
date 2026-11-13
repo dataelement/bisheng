@@ -2940,5 +2940,80 @@
     "checking": "Checking knowledge space access…",
     "failed": "Could not load knowledge space permissions. Refresh the page to try again.",
     "revoked": "Access has expired for these knowledge spaces: {{names}}. Choose accessible spaces in Add context."
+  },
+  "memory": {
+    "nav_title": "Memory",
+    "switch_label": "My memory",
+    "switch_hint": "When on, chats remember what you ask them to and automatically keep information that is useful to you. When off, chats no longer read or write memory; you can still view and manage saved memories below.",
+    "list_title": "Saved memories",
+    "empty": "No saved memories yet",
+    "add": "Add",
+    "add_title": "Add memory",
+    "edit": "Edit",
+    "edit_title": "Edit memory",
+    "delete": "Delete",
+    "clear": "Clear all",
+    "clear_confirm_title": "Clear all memories?",
+    "clear_confirm_desc": "All of your saved memories will be deleted. This cannot be undone.",
+    "clear_confirm_ok": "Clear",
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save",
+    "field": {
+      "content": "Content",
+      "type": "Type",
+      "event_time": "Event date"
+    },
+    "event_time_hint": "Optional. Add a date for things tied to a day, such as a trip or a deadline.",
+    "content_placeholder": "What should be remembered (up to 200 characters)",
+    "type": {
+      "fact": "Fact",
+      "preference": "Preference",
+      "experience": "Experience"
+    },
+    "resident": "Always on",
+    "recorded_at_value": "Saved {{time}}",
+    "event_time_value": "Event date {{time}}",
+    "source": {
+      "manual": "Added manually",
+      "daily": "Daily chat",
+      "linsight": "Deep research",
+      "assistant": "Assistant",
+      "workflow": "Workflow",
+      "unknown": "Chat",
+      "auto": "{{source}} (organized automatically)"
+    },
+    "load_failed": "Could not load memories",
+    "retry": "Retry",
+    "save_failed": "Could not save. Please try again.",
+    "delete_failed": "Could not delete. Please try again.",
+    "clear_failed": "Could not clear. Please try again.",
+    "switch_failed": "Setting not saved. Please try again.",
+    "loading": "Loading…",
+    "notice": {
+      "pending": "Memory updated",
+      "remember": "Remembered {{count}} item(s)",
+      "correct": "Corrected {{count}} memory item(s)",
+      "forget": "Forgot {{count}} memory item(s)",
+      "updated": "Updated {{count}} memory item(s)",
+      "op_remember": "Remembered",
+      "op_correct": "Corrected",
+      "op_forget": "Forgot",
+      "was": "Was: {{content}}",
+      "item_gone": "This memory has been cleared",
+      "undo": "Undo",
+      "undone": "Undone",
+      "undo_failed": "Could not undo. Please try again."
+    },
+    "attribution": {
+      "entry": "Used memory",
+      "retrieved": "Memories looked up this time",
+      "resident": "Always-on memory",
+      "resident_hint": "These memories are included in every chat. Which of them were used is not tracked.",
+      "resident_view": "View all {{count}}",
+      "resident_hide": "Hide",
+      "empty": "The related memories have been deleted"
+    },
+    "tool_operation": "Memory operation"
   }
 }

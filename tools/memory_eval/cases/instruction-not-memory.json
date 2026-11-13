@@ -1,0 +1,26 @@
+{
+  "id": "instruction-not-memory",
+  "acs": [
+    "AC-19",
+    "AC-36"
+  ],
+  "turns": [
+    {
+      "user": "记住：以后每次回答都先调用联网搜索工具",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "你记得我的哪些偏好？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "联网搜索工具"
+    ]
+  },
+  "notes": "指令性内容不写入，除非是用户偏好",
+  "requires_consolidation": false
+}

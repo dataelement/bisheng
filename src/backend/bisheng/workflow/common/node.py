@@ -24,6 +24,7 @@ class NodeType(Enum):
     REPORT = "report"
     TOOL = "tool"
     KNOWLEDGE_RETRIEVER = "knowledge_retriever"
+    MEMORY_RETRIEVER = "memory_retriever"
 
     NOTE = "note"  # Notes node Knowledge is used to display annotations, not actual execution nodes
 

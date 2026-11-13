@@ -1020,7 +1020,10 @@
     "taskModeFullName": "任务模式",
     "blindOverwriteTitle": "确认保存为当前配置？",
     "blindOverwriteDesc": "当前页面展示的是默认配置，未读取到已保存的工作台配置。若此前已有配置，保存将把它整体覆盖为默认值。建议先刷新页面确认，再决定是否保存。",
-    "blindOverwriteOk": "仍然保存"
+    "blindOverwriteOk": "仍然保存",
+    "memoryModel": "记忆整理使用的模型",
+    "memoryModelPlaceholder": "使用工作台默认模型",
+    "memoryModelHint": "后台整理每个用户的记忆时调用这个模型。未选择时使用工作台模型列表中的第一个模型。"
   },
   "build": {
     "editPermissionRequired": "无编辑权限",
@@ -1102,6 +1105,9 @@
     "knowledgeSpace": "知识空间",
     "userAuthVerification": "用户知识库权限校验",
     "userAuthVerificationTips": "开启后，检索结果按当前使用者本人的知识空间文件查看权限过滤，每人只能检索到自己有权查看的文件；关闭时，按配置者的可见范围检索，所有使用者共享配置者能看到的文件（配置者无权查看的文件同样不会被检索）。文档知识库不受细粒度文件权限影响。",
+    "memory": "记忆",
+    "assistantMemory": "助手记忆",
+    "assistantMemoryDesc": "开启后，本应用会读取并写入每个使用者自己的记忆；使用者的记忆可能出现在本应用的回答与输出里；不同使用者之间互不可见。",
     "searchBaseName": "搜索知识库名称",
     "debugPreview": "调试预览",
     "addTool": "添加工具",
@@ -4281,5 +4287,8 @@
       "admin": "管理员",
       "children": "包含下级部门"
     }
+  },
+  "memory": {
+    "operation": "记忆操作"
   }
 }

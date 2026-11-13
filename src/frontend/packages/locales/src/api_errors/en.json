@@ -737,5 +737,18 @@
   "appStartApprovalExecuting": "Approval has passed and deployment is being prepared. Refresh the release status shortly.",
   "appStartApprovalExecuteFailed": "Execution after approval failed. Ask a platform administrator to review and retry it in the approval center.",
   "appStartPublishFailed": "Release preparation failed; no version can go online. Review the failure and resubmit.",
-  "appStartPublishPreparing": "Release preparation is in progress. Refresh the release status shortly."
+  "appStartPublishPreparing": "Release preparation is in progress. Refresh the release status shortly.",
+  "12100": "Memory content cannot exceed 200 characters",
+  "12101": "The content looks like a password, key, ID number or card number and cannot be saved as a memory",
+  "12102": "Memory content contains a relative time; use a specific date instead",
+  "12103": "The memory does not exist or has changed",
+  "12104": "Cannot undo: the memory has been cleared",
+  "12105": "Cannot undo: the memory has been changed again",
+  "12106": "This operation has already been undone",
+  "12107": "Memory search is temporarily unavailable",
+  "12108": "The retrieval limit must be an integer from 1 to 100",
+  "12109": "The workflow has a memory retrieval node but memory is off in the start node",
+  "12110": "Memory type must be fact, preference or experience",
+  "12111": "Memory content cannot be empty",
+  "12112": "No model is available for memory consolidation"
 }

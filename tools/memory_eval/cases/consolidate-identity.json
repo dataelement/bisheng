@@ -1,0 +1,31 @@
+{
+  "id": "consolidate-identity",
+  "acs": [
+    "AC-46"
+  ],
+  "turns": [
+    {
+      "user": "我是平台组的后端开发，主要写 Python",
+      "new_session": false,
+      "expect_write": null
+    },
+    {
+      "user": "帮我看下这段 SQLModel 代码有什么问题",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "我是做什么工作的？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "后端",
+      "Python"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": true
+}

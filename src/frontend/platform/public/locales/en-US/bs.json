@@ -747,7 +747,10 @@
     "taskModeFullName": "Task Mode",
     "blindOverwriteTitle": "Save these settings?",
     "blindOverwriteDesc": "This page is showing default settings — the saved workbench configuration could not be loaded. If one already exists, saving will overwrite it entirely with defaults. Refresh the page to check before saving.",
-    "blindOverwriteOk": "Save anyway"
+    "blindOverwriteOk": "Save anyway",
+    "memoryModel": "Model for Memory Organization",
+    "memoryModelPlaceholder": "Use the workbench default model",
+    "memoryModelHint": "This model organizes each user's memory in the background. If none is selected, the first model in the workbench model list is used."
   },
   "save": "Save",
   "model": {
@@ -1113,6 +1116,9 @@
     "knowledgeSpace": "Knowledge Space",
     "userAuthVerification": "User knowledge permission check",
     "userAuthVerificationTips": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions.",
+    "memory": "Memory",
+    "assistantMemory": "Assistant Memory",
+    "assistantMemoryDesc": "When on, this app reads and writes each user's own memory. A user's memory may appear in this app's answers and outputs. Users cannot see each other's memory.",
     "searchBaseName": "Search for knowledge base name",
     "debugPreview": "Debug Preview",
     "addTool": "Add Tool",
@@ -4336,5 +4342,8 @@
       "admin": "Administrators",
       "children": "Includes subdepartments"
     }
+  },
+  "memory": {
+    "operation": "Memory operation"
   }
 }

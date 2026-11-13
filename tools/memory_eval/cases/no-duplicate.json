@@ -1,0 +1,30 @@
+{
+  "id": "no-duplicate",
+  "acs": [
+    "AC-47"
+  ],
+  "turns": [
+    {
+      "user": "记住我喜欢喝美式",
+      "new_session": false,
+      "expect_write": true
+    },
+    {
+      "user": "我还是最喜欢美式咖啡",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "我喜欢喝什么？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "美式"
+    ]
+  },
+  "notes": "整理后不应有两条相同条目",
+  "requires_consolidation": true
+}

@@ -1,0 +1,25 @@
+{
+  "id": "tool-result-not-memory",
+  "acs": [
+    "AC-18"
+  ],
+  "turns": [
+    {
+      "user": "帮我联网搜一下今天的人民币汇率",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "你记得关于我的什么？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "汇率"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": true
+}

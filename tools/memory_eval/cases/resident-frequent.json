@@ -1,0 +1,30 @@
+{
+  "id": "resident-frequent",
+  "acs": [
+    "AC-63"
+  ],
+  "turns": [
+    {
+      "user": "我叫小林，叫我小林就行",
+      "new_session": false,
+      "expect_write": null
+    },
+    {
+      "user": "小林今天想问问工作流节点",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "你一般怎么称呼我？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "小林"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": true
+}

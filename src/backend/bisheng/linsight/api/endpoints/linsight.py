@@ -56,6 +56,7 @@ from bisheng.linsight.domain.services.deliverable_download_service import (
     workspace_fetcher,
 )
 from bisheng.linsight.domain.services.md_image_refs import build_markdown_bundle, inline_local_images
+from bisheng.linsight.domain.services.memory_turns import register_memory_session
 from bisheng.linsight.domain.services.message_stream_handle import MessageStreamHandle
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
@@ -221,6 +222,8 @@ async def submit_linsight_workbench(
             message_session_model, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(
                 submit_obj, login_user
             )
+            # F132: login-state entry registers the conversation for long-term memory.
+            await register_memory_session(message_session_model.chat_id, login_user)
 
             response_data = {
                 "message_session": message_session_model.model_dump(),
@@ -356,6 +359,8 @@ async def continue_conversation(
         return LinsightSessionVersionRunningError.return_resp()
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
+    # F132: login-state entry registers the conversation for long-term memory.
+    await register_memory_session(session_version_model.session_id, login_user)
 
     # Flip back to IN_PROGRESS BEFORE enqueue so the worker's pre-flight
     # non-terminal guard accepts the continue item.
@@ -413,6 +418,8 @@ async def user_input(
         return UnAuthorizedError.return_resp()
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
+    # F132: login-state entry registers the conversation for long-term memory.
+    await register_memory_session(session_version_model.session_id, login_user)
 
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
 

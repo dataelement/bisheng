@@ -14,6 +14,7 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.models.assistant import Assistant
+from bisheng.memory.domain.services.gate import MemoryGate
 from bisheng.permission.application.business_authorization import (
     require_business_action,
 )
@@ -257,8 +258,21 @@ async def chat(
             await require_business_action(login_user, resource_type="assistant", resource_id=assistant_id, action="use")
             admission = websocket_message_admission(websocket, login_user)
             options = {"message_admission": admission} if admission is not None else {}
+
+            async def memory_register(session_chat_id: str) -> None:
+                # F132 (decision 6, R2): only this logged-in endpoint registers sessions
+                # for long-term memory; guest and open API endpoints pass nothing.
+                await MemoryGate.open(session_chat_id, login_user)
+
             await chat_manager.dispatch_client(
-                websocket, assistant_id, chat_id, login_user, WorkType.GPTS, websocket, **options
+                websocket,
+                assistant_id,
+                chat_id,
+                login_user,
+                WorkType.GPTS,
+                websocket,
+                memory_register=memory_register,
+                **options,
             )
     except KunlianError as error:
         await websocket.close(code=1013 if error.http_status == 503 else 1008, reason=error.reason_code)

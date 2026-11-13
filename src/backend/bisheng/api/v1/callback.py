@@ -17,6 +17,7 @@ from bisheng.api.v1.schemas import ChatResponse
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.llm.domain.utils import extract_reasoning_content
+from bisheng.memory.domain.services.redaction import is_memory_tool, redact_text, redact_tool_event
 
 
 # https://github.com/hwchase17/chat-langchain/blob/master/callback.py
@@ -469,18 +470,43 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         resp = ChatResponse(type="end", category="processing", flow_id=self.flow_id, chat_id=self.chat_id)
         await self.websocket.send_json(resp.dict())
 
+    async def send_memory_signal(self, payload: dict) -> None:
+        """F132: the ``memory`` WebSocket message ({turn_id, has_write, has_attribution}, no text)."""
+        await self.websocket.send_json(
+            {
+                "category": "memory",
+                "type": "memory",
+                "is_bot": True,
+                "message": dict(payload),
+                "message_id": None,
+                "flow_id": self.flow_id,
+                "chat_id": self.chat_id,
+                "intermediate_steps": "",
+                "extra": "{}",
+            }
+        )
+
     async def on_tool_start(self, serialized: dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         logger.debug(f"on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}")
         if self._is_nested_tool_run(kwargs):
             return
 
-        tool_name, tool_category = self.parse_tool_category(serialized["name"])
+        raw_name = serialized["name"]
+        memory_tool = is_memory_tool(raw_name)
+        if memory_tool:
+            # F132 (R1): memory tool content never reaches the websocket or the message
+            # table; the run is remembered by run_id because on_tool_error has no name.
+            raw_input = kwargs.get("inputs")
+            input_str = redact_text(raw_name, raw_input if isinstance(raw_input, dict) else input_str)
+            serialized = {"name": raw_name}
+        tool_name, tool_category = self.parse_tool_category(raw_name)
         input_info = {"tool_key": tool_name, "serialized": serialized, "input_str": input_str}
         self.tool_cache[kwargs.get("run_id").hex] = {
             "input": input_info,
             "category": tool_category,
             "steps": f"Tool input: \n\n{input_str}\n\n",
+            "memory_tool": raw_name if memory_tool else None,
         }
         resp = ChatResponse(
             type="start",
@@ -501,6 +527,9 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         observation_prefix = kwargs.get("observation_prefix", "Tool output: ")
 
         result = output if isinstance(output, str) else getattr(output, "content", output)
+        memory_tool = (self.tool_cache.get(kwargs.get("run_id").hex) or {}).get("memory_tool")
+        if memory_tool:
+            result = redact_text(memory_tool, result)
         if not isinstance(result, str):
             result = str(result)
         # Create a formatted message.
@@ -551,12 +580,16 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             return
         input_info = self.tool_cache.get(kwargs.get("run_id").hex)
         if input_info:
-            output_info = {"output": "Error: " + str(error)}
+            error_text = str(error)
+            if input_info.get("memory_tool"):
+                # The error text may quote the memory content; keep only the op.
+                error_text = json.dumps(redact_tool_event(input_info["memory_tool"], None), ensure_ascii=False)
+            output_info = {"output": "Error: " + error_text}
             output_info.update(input_info["input"])
             resp = ChatResponse(
                 type="end",
                 category=input_info["category"],
-                intermediate_steps="\n\nTool output:\n\n  Error: " + str(error),
+                intermediate_steps="\n\nTool output:\n\n  Error: " + error_text,
                 message=_dump_run_log(output_info),
                 flow_id=self.flow_id,
                 chat_id=self.chat_id,
@@ -575,7 +608,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                 ChatMessageModel(
                     is_bot=1,
                     message=_dump_run_log(output_info),
-                    intermediate_steps=f"{input_info['steps']}\n\nTool output:\n\n  Error: " + str(error),
+                    intermediate_steps=f"{input_info['steps']}\n\nTool output:\n\n  Error: " + error_text,
                     category=tool_category,
                     type="end",
                     flow_id=self.flow_id,

@@ -1,0 +1,27 @@
+{
+  "id": "forget-not-found",
+  "acs": [
+    "AC-33"
+  ],
+  "turns": [
+    {
+      "user": "把我养猫的那条记忆删掉",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "你刚才删掉了什么？",
+    "new_session": false,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "没有找到",
+      "未找到",
+      "没有相关"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

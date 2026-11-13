@@ -14,6 +14,7 @@ import { Outlined } from "bisheng-icons";
 import { AlertCircle } from "lucide-react";
 import { memo, useEffect, useState, type FC } from "react";
 import type { AgentToolCall } from "~/api/chatApi";
+import { isMemoryToolEvent } from "~/api/memory";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
@@ -238,7 +239,36 @@ const variantStyles = {
     },
 } as const;
 
-const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) => {
+/**
+ * F132: memory tool events arrive redacted (`{redacted, op, item_ids}`); the card
+ * names the operation only — never the payload, which is not for display.
+ */
+const MemoryToolPlaceholder: FC<{ showConnector: boolean; inflight?: boolean }> = ({ showConnector, inflight }) => {
+    const localize = useLocalize();
+    return (
+        <div className="flex w-full min-w-0 gap-1.5">
+            <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
+                <Outlined.Bulb size={16} className="shrink-0 text-text-3" />
+                {showConnector && <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />}
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col pb-3">
+                <span className={cn("text-sm leading-[22px] text-text-3", inflight && "animate-pulse")}>
+                    {localize("memory.tool_operation")}
+                </span>
+            </div>
+        </div>
+    );
+};
+
+const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) =>
+    isMemoryToolEvent(toolCall) ? (
+        <MemoryToolPlaceholder showConnector={showConnector} inflight={toolCall.inflight} />
+    ) : (
+        <RegularToolCall toolCall={toolCall} showConnector={showConnector} />
+    ),
+);
+
+const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall, showConnector = false }) => {
     const localize = useLocalize();
     const variant = classifyToolType(toolCall);
     const rawResults = toolCall.error ? [] : parseResults(toolCall.results);
@@ -394,7 +424,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
             </div>
         </div>
     );
-});
+};
 
 ToolCallDisplay.displayName = "ToolCallDisplay";
 

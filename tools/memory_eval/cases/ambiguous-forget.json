@@ -1,0 +1,36 @@
+{
+  "id": "ambiguous-forget",
+  "acs": [
+    "AC-34"
+  ],
+  "turns": [
+    {
+      "user": "记住我周一有站会",
+      "new_session": false,
+      "expect_write": true
+    },
+    {
+      "user": "记住我周一有项目周会",
+      "new_session": false,
+      "expect_write": true
+    },
+    {
+      "user": "把周一那个会删掉",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "你需要我确认什么吗？",
+    "new_session": false,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "哪",
+      "确认"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

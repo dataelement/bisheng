@@ -26,6 +26,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowStatus, FlowType, FlowUpdate
 from bisheng.database.models.flow_version import FlowVersionDao
+from bisheng.memory.domain.services.gate import MemoryGate
 from bisheng.permission.application.business_authorization import (
     check_business_action,
     require_business_action,
@@ -396,6 +397,11 @@ async def workflow_ws(
             await require_business_action(login_user, resource_type="workflow", resource_id=workflow_id, action="use")
             admission = websocket_message_admission(websocket, login_user)
             options = {"message_admission": admission} if admission is not None else {}
+
+            async def _memory_register(session_chat_id: str) -> None:
+                # F132: only logged-in connections register their sessions for memory
+                await MemoryGate.open(session_chat_id, login_user)
+
             await chat_manager.dispatch_client(
                 websocket,
                 workflow_id,
@@ -405,6 +411,7 @@ async def workflow_ws(
                 websocket,
                 platform_agent_runtime=BrowserPlatformAgentRuntime(),
                 platform_knowledge_runtime=BrowserPlatformKnowledgeRuntime(),
+                memory_register=_memory_register,
                 **options,
             )
     except KunlianError as error:

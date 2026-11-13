@@ -23,6 +23,8 @@ class Workflow:
         platform_knowledge_context=None,
         redact_errors: bool = False,
         node_entry_check=None,
+        chat_id: str = "",
+        memory_enabled: bool = False,
     ):
 
         # Unique identifier of the run, unique saved to the databaseID
@@ -57,6 +59,8 @@ class Workflow:
             platform_knowledge_context=platform_knowledge_context,
             redact_errors=redact_errors,
             node_entry_check=node_entry_check,
+            chat_id=chat_id,
+            memory_enabled=memory_enabled,
         )
 
     def set_platform_agent_context(self, context):

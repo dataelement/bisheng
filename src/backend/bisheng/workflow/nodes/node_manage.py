@@ -8,6 +8,7 @@ from bisheng.workflow.nodes.end.end import EndNode
 from bisheng.workflow.nodes.input.input import InputNode
 from bisheng.workflow.nodes.knowledge_retriever.knowledge_retriever import KnowledgeRetriever
 from bisheng.workflow.nodes.llm.llm import LLMNode
+from bisheng.workflow.nodes.memory_retriever.memory_retriever import MemoryRetrieverNode
 from bisheng.workflow.nodes.output.output import OutputNode
 from bisheng.workflow.nodes.platform_agent.platform_agent import PlatformAgentNode
 from bisheng.workflow.nodes.platform_knowledge_retriever.platform_knowledge_retriever import (
@@ -39,6 +40,7 @@ NODE_CLASS_MAP = {
     NodeType.CODE.value: CodeNode,
     NodeType.LLM.value: LLMNode,
     NodeType.KNOWLEDGE_RETRIEVER.value: KnowledgeRetriever,
+    NodeType.MEMORY_RETRIEVER.value: MemoryRetrieverNode,
 }
 
 

@@ -49,6 +49,7 @@ from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.graph.workflow import Workflow
+from bisheng.workflow.nodes.memory_retriever.memory_retriever import check_memory_nodes_for_publish
 from bisheng.workflow.nodes.node_manage import NodeFactory
 
 if TYPE_CHECKING:
@@ -1313,6 +1314,8 @@ class WorkFlowService(BaseService):
         registration_scope = workflow_scope(getattr(db_flow, "tenant_id", None), flow_id, user=login_user)
         if status == FlowStatus.ONLINE.value:
             def validate(name, graph):
+                # F132: memory retriever nodes need the start-node switch on and a valid limit (AC-85, AC-80)
+                check_memory_nodes_for_publish(graph)
                 try:
                     Workflow(flow_id, name, login_user.user_id, graph, False, 10, 10, None)
                 except Exception as e:
