@@ -697,7 +697,7 @@
 
 ### Wave 15：P1
 
-- [ ] **T090**: 经验类自动整理的测试
+- [x] **T090**: 经验类自动整理的测试
   **文件**: `src/backend/test/memory/test_consolidator_experience.py`、`tools/memory_eval/cases/`（增加两条标注 AC-50 的用例）、`tools/memory_eval/tests/test_cases.py`（把 AC-50 加入必备编号）
   **逻辑**: 用桩模型返回经验类候选：深度研究轮次整理出的经验类条目类型为 experience、不常驻、来源为深度研究；下一个深度研究任务开始时它被带入；日常模式的常驻文本里没有它。
   **覆盖 AC**: AC-50, AC-54, AC-55
