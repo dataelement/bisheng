@@ -10,6 +10,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
+from bisheng.memory.domain.services.app_switch import workflow_memory_enabled_sync
 from bisheng.open_api.domain.services.execution_context import restore_execution_context
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.permission.application.identity import get_current_permission_actor
@@ -55,6 +56,22 @@ def _judge_workflow_status(redis_callback: RedisCallback, workflow: Workflow):
     _clear_workflow_obj(redis_callback.unique_id)
 
 
+def _online_memory_switch(workflow_id: str, chat_id: str) -> bool:
+    """F132 R5: the workflow memory switch of the ONLINE version in the database.
+
+    Read once per run at execution start, never from the graph the client sent.
+    Runs without a session (evaluation, canvas debug) skip the lookup. A lookup
+    failure counts as off and never fails the run.
+    """
+    if not chat_id:
+        return False
+    try:
+        return workflow_memory_enabled_sync(workflow_id)
+    except Exception:
+        logger.exception("memory switch lookup failed workflow_id={}", workflow_id)
+        return False
+
+
 def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
     # F022 INV-T18: resolve Flow.tenant_id once; reuse for both Workflow
     # node tenant threading and RedisCallback's sync workbench reads.
@@ -87,6 +104,8 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
             redis_callback,
             tenant_id=flow_tenant_id,
             flow_user_id=flow_user_id,
+            chat_id=chat_id or "",
+            memory_enabled=_online_memory_switch(workflow_id, chat_id),
         )
         redis_callback.workflow = workflow
         status, reason = workflow.run()
