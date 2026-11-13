@@ -112,6 +112,7 @@ class MemoryRetrieverNode(BaseNode):
             app_enabled=self.graph_state.memory_enabled,
             app_id=self.workflow_id,
             app_name=self.workflow_name,
+            actor_user_id=self.user_id,
         )
         if ctx is None:
             # not registered, user switched memory off, or the workflow switch is off (AC-83)

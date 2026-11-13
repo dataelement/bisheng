@@ -18,7 +18,17 @@ WRITE_OUTPUT_KEY = "memory_tool"
 _ID_RE = re.compile(r"\bid=([^\s\[\]（]+)")
 
 
+# The built-in memory tools. Redaction matches these exact names only, so a
+# third-party tool that merely starts with "memory_" keeps its normal behaviour.
+MEMORY_TOOL_NAMES = frozenset({"memory_write", "memory_search"})
+
+
 def is_memory_tool(name: str | None) -> bool:
+    return bool(name) and str(name) in MEMORY_TOOL_NAMES
+
+
+def is_reserved_tool_name(name: str | None) -> bool:
+    """``memory_`` is a reserved prefix for author-configured tools while memory is on."""
     return bool(name) and str(name).startswith(MEMORY_TOOL_PREFIX)
 
 
@@ -82,7 +92,7 @@ def split_reserved_tools(tools: list) -> tuple[list, list]:
     """Drop author-configured tools that use the reserved ``memory_`` prefix."""
     kept, dropped = [], []
     for tool in tools or []:
-        (dropped if is_memory_tool(getattr(tool, "name", None)) else kept).append(tool)
+        (dropped if is_reserved_tool_name(getattr(tool, "name", None)) else kept).append(tool)
     for tool in dropped:
         logger.warning("tool {!r} uses the reserved memory_ prefix; the built-in memory tool wins", tool.name)
     return kept, dropped

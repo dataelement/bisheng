@@ -275,6 +275,13 @@ class MemoryService:
             await SettingRepository.bump_rev(s, ctx)
             await s.commit()
         await CursorRepository.advance_all_for_user(ctx.tenant_id, ctx.user_id)
+        try:
+            from bisheng.memory.domain.services.consolidator import clear_marker_key
+
+            # A consolidation run already in flight must not write pre-clear results back.
+            await self.kv.set(clear_marker_key(ctx.tenant_id, ctx.user_id), uuid.uuid4().hex, 86400)
+        except Exception:
+            logger.exception("memory: setting the clear marker failed")
         await self.audit.record(ctx, "clear", [])
         await self.metrics.incr(ctx, m.DELETED, removed)
 
@@ -371,7 +378,11 @@ class MemoryService:
                         want_pin = False
                     item = self._new_item(ctx, text, item_type, ORIGIN_AUTO, op.get("event_time"), pinned=want_pin)
                     if old is not None and kind == "rewrite":
+                        # A tense rewrite is the same memory: keep its source mark (AC-04, AC-98).
                         item.rewritten = True
+                        item.source_scene, item.source_app_id = old.source_scene, old.source_app_id
+                        item.source_app_name, item.source_chat_id = old.source_app_name, old.source_chat_id
+                        item.origin = old.origin
                     if want_pin:
                         item.pin_order = old.pin_order if keeps_slot else await ItemRepository.max_pin_order(session, ctx) + 1
                         pinned_now += 0 if keeps_slot else 1

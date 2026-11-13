@@ -196,3 +196,47 @@ async def test_ac44_users_in_parallel_and_same_user_single_runner(memory_db, mak
     assert len(c1.calls) + len(c2.calls) == 1
     contents = {i.content for i in await _items()}
     assert "用户明确说自己是左撇子" in contents and "来自u1b的结论" in contents
+
+
+async def test_lost_lock_stops_and_hands_rows_back(memory_db, make_consolidator, kv, monkeypatch):
+    """Decision 7: when the lock can no longer be renewed, stop and leave the rest pending."""
+    _seed_chat(memory_db, "c1")
+    _seed_chat(memory_db, "c2")
+
+    async def _lost(key, token, ttl):
+        return False
+
+    monkeypatch.setattr(kv, "renew", _lost)
+    content = FakeContent()
+    await make_consolidator(content).consolidate_user(TENANT_A, USER_1)
+    assert content.calls == []
+    assert {_cursor(memory_db, c).state for c in ("c1", "c2")} == {"pending"}
+    assert await _items() == []
+
+
+async def test_ac93_clear_during_run_drops_its_results(memory_db, make_consolidator, service, make_ctx):
+    """AC-93: a clear that lands while a run is computing must not be undone by that run."""
+    _seed_chat(memory_db, "c1")
+
+    class ClearingContent(FakeContent):
+        async def __call__(self, ctx, cursor, end_id):
+            ops = await super().__call__(ctx, cursor, end_id)
+            await service.clear(make_ctx())
+            return ops
+
+    await make_consolidator(ClearingContent()).consolidate_user(TENANT_A, USER_1)
+    assert await _items() == []
+
+
+async def test_ac39_truncated_backlog_moves_watermark_only_to_last_read(memory_db, make_consolidator):
+    """AC-39: a run that read part of a long backlog leaves the rest for the next run."""
+    ids = _seed_chat(memory_db, "c1", messages=4)
+
+    class PartialContent(FakeContent):
+        async def __call__(self, ctx, cursor, end_id):
+            ops = await super().__call__(ctx, cursor, end_id)
+            return ops, ids[1]
+
+    await make_consolidator(PartialContent()).consolidate_user(TENANT_A, USER_1)
+    row = _cursor(memory_db, "c1")
+    assert row.watermark_message_id == ids[1] and row.state == "pending"

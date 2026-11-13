@@ -75,7 +75,9 @@ async def send_signal(callbacks, payload: dict) -> None:
         return
 
 
-async def begin_turn(assistant, chat_id: str | None, callbacks=None) -> AssistantMemoryTurn:
+async def begin_turn(
+    assistant, chat_id: str | None, callbacks=None, actor_user_id: int | None = None
+) -> AssistantMemoryTurn:
     """Re-read the switch, resolve enablement, load resident memory and build tools."""
     turn = AssistantMemoryTurn()
     if not chat_id:
@@ -90,6 +92,7 @@ async def begin_turn(assistant, chat_id: str | None, callbacks=None) -> Assistan
             app_enabled=enabled,
             app_id=getattr(assistant, "id", None),
             app_name=name or getattr(assistant, "name", None),
+            actor_user_id=actor_user_id,
         )
     except Exception:
         logger.exception("memory: assistant enablement check failed; this turn runs without memory")

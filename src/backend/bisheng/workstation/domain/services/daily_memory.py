@@ -83,13 +83,17 @@ class DailyMemoryTurn:
     def enabled(self) -> bool:
         return self.ctx is not None
 
-    async def start(self, registered: bool) -> None:
-        """Enablement check and a fresh ``turn_id`` (only on the login-state path)."""
+    async def start(self, registered: bool, actor_user_id: int | None = None) -> None:
+        """Enablement check and a fresh ``turn_id`` (only on the login-state path).
+
+        ``actor_user_id`` is the logged-in user of this request: a chat registered
+        to someone else never resolves for them, even if they know its chat_id.
+        """
         self.registered = registered
         if not registered:
             return
         try:
-            self.ctx = await MemoryGate.resolve(self.chat_id, SCENE_DAILY)
+            self.ctx = await MemoryGate.resolve(self.chat_id, SCENE_DAILY, actor_user_id=actor_user_id)
         except Exception:
             logger.exception("memory: resolving daily chat {} failed", self.chat_id)
             self.ctx = None

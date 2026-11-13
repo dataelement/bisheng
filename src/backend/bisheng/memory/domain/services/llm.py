@@ -9,11 +9,16 @@ personal allowance. Any refusal surfaces as ``MemoryLLMCallError``.
 
 from __future__ import annotations
 
+import asyncio
+
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.llm.domain.services.llm import LLMService
 from bisheng.memory.domain.ports import MemoryContext
 from bisheng.memory.domain.services.consolidation_model import resolve_memory_model_id
 from bisheng.memory.domain.services.index import default_embedding_loader
+
+
+CONSOLIDATE_TIMEOUT_SECONDS = 300
 
 
 class MemoryLLMCallError(Exception):
@@ -31,7 +36,8 @@ class PlatformMemoryLLM:
             user_id=ctx.user_id,
         )
         try:
-            response = await llm.ainvoke(prompt)
+            # Bounded below the consolidation lock TTL so a hung call cannot outlive the lock.
+            response = await asyncio.wait_for(llm.ainvoke(prompt), timeout=CONSOLIDATE_TIMEOUT_SECONDS)
         except Exception as exc:
             raise MemoryLLMCallError(str(exc)) from exc
         content = getattr(response, "content", response)

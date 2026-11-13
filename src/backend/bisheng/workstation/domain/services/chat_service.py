@@ -2024,7 +2024,7 @@ async def _agent_stream_chat_completion(
         try:
             # F132: enablement and a fresh turn_id; only the login-state path
             # (which passes memory_register) can resolve a memory context.
-            await memory_turn.start(registered=memory_register is not None)
+            await memory_turn.start(registered=memory_register is not None, actor_user_id=login_user.user_id)
 
             # ---- Step 1: resolve user-selected KBs ----
             knowledge_bases_info = await _resolve_user_kb_selection(data)

@@ -108,23 +108,36 @@ class MemoryGate:
         app_enabled: bool = True,
         app_id: str | None = None,
         app_name: str | None = None,
+        actor_user_id: int | None = None,
     ) -> MemoryContext | None:
+        """Context of the registration owner, or None.
+
+        ``actor_user_id`` is the user acting in this turn when known (request
+        handlers, workers). A registration that belongs to someone else is
+        never resolved for them, even if they know the chat_id. The row is read
+        by primary key without the tenant auto-filter: its own tenant and user
+        are the identity (decision 6), not the current ContextVar.
+        """
         if not chat_id:
             return None
+        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.user.domain.models.user import User
 
-        async with _db.async_session() as s:
-            row = await s.get(MemorySessionCursor, chat_id)
-            if row is None or not row.eligible:
-                return None
-            user = await s.get(User, row.user_id)
-            setting = (
-                await s.exec(
-                    select(MemoryUserSetting).where(
-                        MemoryUserSetting.tenant_id == row.tenant_id, MemoryUserSetting.user_id == row.user_id
+        with bypass_tenant_filter():
+            async with _db.async_session() as s:
+                row = await s.get(MemorySessionCursor, chat_id)
+                if row is None or not row.eligible:
+                    return None
+                if actor_user_id is not None and int(actor_user_id) != int(row.user_id):
+                    return None
+                user = await s.get(User, row.user_id)
+                setting = (
+                    await s.exec(
+                        select(MemoryUserSetting).where(
+                            MemoryUserSetting.tenant_id == row.tenant_id, MemoryUserSetting.user_id == row.user_id
+                        )
                     )
-                )
-            ).first()
+                ).first()
         config = await aget_memory_config()
         return cls._build(row, user, setting, scene, app_enabled, config.default_timezone, app_id, app_name)
 
@@ -136,20 +149,33 @@ class MemoryGate:
         app_enabled: bool = True,
         app_id: str | None = None,
         app_name: str | None = None,
+        actor_user_id: int | None = None,
     ) -> MemoryContext | None:
+        """Context of the registration owner, or None.
+
+        ``actor_user_id`` is the user acting in this turn when known (request
+        handlers, workers). A registration that belongs to someone else is
+        never resolved for them, even if they know the chat_id. The row is read
+        by primary key without the tenant auto-filter: its own tenant and user
+        are the identity (decision 6), not the current ContextVar.
+        """
         if not chat_id:
             return None
+        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.user.domain.models.user import User
 
-        with _db.sync_session() as s:
-            row = s.get(MemorySessionCursor, chat_id)
-            if row is None or not row.eligible:
-                return None
-            user = s.get(User, row.user_id)
-            setting = s.exec(
-                select(MemoryUserSetting).where(
-                    MemoryUserSetting.tenant_id == row.tenant_id, MemoryUserSetting.user_id == row.user_id
-                )
-            ).first()
+        with bypass_tenant_filter():
+            with _db.sync_session() as s:
+                row = s.get(MemorySessionCursor, chat_id)
+                if row is None or not row.eligible:
+                    return None
+                if actor_user_id is not None and int(actor_user_id) != int(row.user_id):
+                    return None
+                user = s.get(User, row.user_id)
+                setting = s.exec(
+                    select(MemoryUserSetting).where(
+                        MemoryUserSetting.tenant_id == row.tenant_id, MemoryUserSetting.user_id == row.user_id
+                    )
+                ).first()
         config = get_memory_config()
         return cls._build(row, user, setting, scene, app_enabled, config.default_timezone, app_id, app_name)

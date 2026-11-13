@@ -326,7 +326,8 @@ _READ_FILE = "read_file"
 # another listing, so they are clipped with a "narrow it down" hint instead.
 _SEARCH_TOOLS = ("ls", "glob", "grep")
 # F132: memory tool results are clipped in place, never offloaded to the workspace.
-_MEMORY_TOOL_PREFIX = "memory_"
+# F132: the built-in memory tools (exact names; other "memory_*" tools are untouched).
+_MEMORY_TOOL_NAMES = frozenset({"memory_write", "memory_search"})
 _MEMORY_TRUNCATION_HINT = "\n\n（记忆检索结果过长，已截断；请缩小检索范围或减少条数后重试。）"
 _SEARCH_TRUNCATION_HINT = (
     "\n\n[结果超过本模型单次可读的长度，已截断。请缩小路径范围或改用更具体的匹配条件后重试。]"
@@ -423,7 +424,7 @@ class ToolResultBudgetMiddleware(AgentMiddleware):
             return self._clip_read(request, result)
         if name in _SEARCH_TOOLS:
             return self._clip(result, _SEARCH_TRUNCATION_HINT)
-        if name and name.startswith(_MEMORY_TOOL_PREFIX):
+        if name in _MEMORY_TOOL_NAMES:
             # F132 (R3): a memory result is never written to the workspace.
             return self._clip(result, _MEMORY_TRUNCATION_HINT)
         if name in TOOLS_EXCLUDED_FROM_EVICTION:
@@ -437,7 +438,7 @@ class ToolResultBudgetMiddleware(AgentMiddleware):
             return self._clip_read(request, result)
         if name in _SEARCH_TOOLS:
             return self._clip(result, _SEARCH_TRUNCATION_HINT)
-        if name and name.startswith(_MEMORY_TOOL_PREFIX):
+        if name in _MEMORY_TOOL_NAMES:
             # F132 (R3): a memory result is never written to the workspace.
             return self._clip(result, _MEMORY_TRUNCATION_HINT)
         if name in TOOLS_EXCLUDED_FROM_EVICTION:

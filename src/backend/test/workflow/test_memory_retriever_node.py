@@ -59,7 +59,9 @@ def _ctx(user_id=USER_1, scene=SCENE_DAILY, **kw) -> MemoryContext:
     return MemoryContext(tenant_id=TENANT_A, user_id=user_id, timezone="Asia/Shanghai", scene=scene, **kw)
 
 
-def _node(query="喜欢川菜", limit=20, chat_id=CHAT, enabled=True, state=None, callback=None, node_id="mr_1"):
+def _node(
+    query="喜欢川菜", limit=20, chat_id=CHAT, enabled=True, state=None, callback=None, node_id="mr_1", user_id=USER_1
+):
     data = retriever_node(node_id=node_id, query=query, limit=limit)["data"]
     state = state or GraphState(chat_id=chat_id, memory_enabled=enabled)
     return NodeFactory.instance_node(
@@ -67,7 +69,7 @@ def _node(query="喜欢川菜", limit=20, chat_id=CHAT, enabled=True, state=None
         node_data=BaseNodeData(**data),
         workflow_id="wf-1",
         workflow_name="报销流程",
-        user_id=USER_1,
+        user_id=user_id,
         graph_state=state,
         target_edges=[],
         max_steps=10,
@@ -205,7 +207,7 @@ async def test_ac02_two_users_same_workflow_see_only_their_own(memory_db, wired)
     await wired.service.write(_ctx(USER_2), "remember", content="乙的成本中心是 C-200", type="fact")
 
     out1 = await _run(_node(query="成本中心", chat_id="chat-u1"))
-    out2 = await _run(_node(query="成本中心", chat_id="chat-u2"))
+    out2 = await _run(_node(query="成本中心", chat_id="chat-u2", user_id=USER_2))
     assert [_body(o) for o in out1] == ["甲的成本中心是 C-100"]
     assert [_body(o) for o in out2] == ["乙的成本中心是 C-200"]
 
@@ -365,3 +367,10 @@ def test_ac28_no_memory_write_ability_in_workflow():
         text = path.read_text(encoding="utf-8")
         assert "build_memory_tools" not in text and "memory_write" not in text, path
         assert "get_memory_service" not in text, path
+
+
+async def test_ac02_running_another_users_chat_gets_nothing(memory_db, wired):
+    """AC-02: a run whose user is not the owner of the registered chat gets no memory."""
+    register_chat(memory_db, "chat-u2", user_id=USER_2)
+    await wired.service.write(_ctx(USER_2), "remember", content="乙的成本中心是 C-200", type="fact")
+    assert await _run(_node(query="成本中心", chat_id="chat-u2", user_id=USER_1)) == []

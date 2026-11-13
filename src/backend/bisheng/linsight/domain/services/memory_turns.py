@@ -88,7 +88,9 @@ class LinsightMemoryRound:
         from bisheng.memory.domain.services.gate import MemoryGate
 
         try:
-            ctx = await MemoryGate.resolve(self.chat_id, SCENE_LINSIGHT)
+            ctx = await MemoryGate.resolve(
+                self.chat_id, SCENE_LINSIGHT, actor_user_id=getattr(session_model, "user_id", None)
+            )
         except Exception:
             logger.exception("memory: resolving deep-research chat {} failed", self.chat_id)
             ctx = None
@@ -100,7 +102,12 @@ class LinsightMemoryRound:
         if resume:
             from bisheng.memory.domain.services.linsight_turns import LinsightTurnService
 
-            turn_id = await LinsightTurnService.open_round_turn_id(ctx, self.message_id)
+            try:
+                turn_id = await LinsightTurnService.open_round_turn_id(ctx, self.message_id)
+            except Exception:
+                # Memory is best effort: a lookup failure must not fail the resumed task.
+                logger.exception("memory: finding the open round failed chat={}", self.chat_id)
+                turn_id = None
             if turn_id:
                 ctx.turn_id = turn_id
                 reused = True
@@ -129,9 +136,9 @@ class LinsightMemoryRound:
         from bisheng.memory.domain.services import metrics as m
         from bisheng.memory.domain.services.resident import SCENE_CLASS_LINSIGHT
 
-        resident = factory.get_resident_service()
         block = None
         try:
+            resident = factory.get_resident_service()
             block = await resident.resident(ctx, SCENE_CLASS_LINSIGHT)
             self.resident_text = block.text or ""
             experience = await resident.experience(ctx)

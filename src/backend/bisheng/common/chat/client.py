@@ -263,6 +263,8 @@ class ChatClient:
                 self.db_assistant = assistant
                 # Conversation businessagentFixed generation from database data,Don't change every time
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id, invoke_user_id=self.user_id)
+                # F132: only connections whose endpoint injected memory_register are logged in.
+                self.gpts_agent.memory_allowed = self.memory_register is not None
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
             elif not self.chat_id:
                 self.db_assistant = assistant

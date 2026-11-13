@@ -1,5 +1,6 @@
 """Scheduled memory tasks (AC-43, AC-102)."""
 
+import time
 from datetime import datetime, timedelta
 
 import pytest
@@ -86,13 +87,18 @@ async def test_reconcile_pending_model_change_and_orphans(memory_db, service, ma
     index.write_fail = False
     ok = await service.write(ctx, "remember", content="用户在学德语", type="fact", detail="德语学习计划全文")
     details.objects[f"memory/{ctx.tenant_id}/{ctx.user_id}/orphan.md"] = "孤儿对象"
+    orphan = f"memory/{ctx.tenant_id}/{ctx.user_id}/orphan.md"
     index.model_id = "emb-2"  # tenant switched embedding model
     await reconcile_tenant(TENANT_A, service)
     async with _db.async_session() as s:
         rows = {i.id: i for i in (await s.exec(select(MemoryItem))).all()}
     assert rows[pending.item_id].index_state == INDEX_OK
     assert rows[ok.item_id].index_model_id == "emb-2" and rows[ok.item_id].index_state == INDEX_OK
-    assert f"memory/{ctx.tenant_id}/{ctx.user_id}/orphan.md" not in details.objects
+    # First sighting only marks the orphan: it may be a detail whose row has not committed yet.
+    assert orphan in details.objects
+    await service.kv.set(f"memory:orphan:{orphan}", str(time.time() - 3601))
+    await reconcile_tenant(TENANT_A, service)
+    assert orphan not in details.objects
     assert rows[ok.item_id].detail_object_key in details.objects
 
 

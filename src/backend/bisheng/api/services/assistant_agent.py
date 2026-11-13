@@ -214,6 +214,9 @@ class AssistantAgent(AssistantUtils):
 
         # To record the data tracking points
         self.invoke_user_id = invoke_user_id
+        # F132: set True by ChatClient only on logged-in connections; guest-link
+        # and open-API connections never get memory, whatever chat_id they send.
+        self.memory_allowed = False
 
         self.chat_id = chat_id
         self.tools: list[BaseTool] = []
@@ -629,7 +632,12 @@ class AssistantAgent(AssistantUtils):
         """Re-read the memory switch and rebuild the agent when the tool set changes (decision 11)."""
         if self.author_tools is None:
             self.author_tools = list(self.tools)
-        turn = await assistant_memory.begin_turn(self.assistant, self.chat_id, callback)
+        turn = await assistant_memory.begin_turn(
+            self.assistant,
+            self.chat_id if self.memory_allowed else None,
+            callback,
+            actor_user_id=self.invoke_user_id,
+        )
         self.memory_turn = turn
         if turn.enabled or self.memory_tools_on:
             # Memory tools carry this turn's context, so an enabled turn always rebuilds.

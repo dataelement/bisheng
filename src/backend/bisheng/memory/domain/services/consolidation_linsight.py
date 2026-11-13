@@ -49,7 +49,7 @@ def _flag_stmt(row: R, op: str | None = None):
         values["op"] = op
     return (
         update(R)
-        .where(R.id == row.id, R.tenant_id == row.tenant_id, R.user_id == row.user_id, R.consolidated.is_(False))
+        .where(R.id == row.id, R.tenant_id == row.tenant_id, R.user_id == row.user_id, R.consolidated == False)  # noqa: E712 - DM8 rejects IS 1 / IS 0
         .values(**values)
     )
 
@@ -71,7 +71,7 @@ class LinsightRoundConsolidation:
                 R.user_id == user_id,
                 R.kind == KIND_SUMMARY,
                 R.scene_class == SCENE_CLASS_LINSIGHT,
-                R.consolidated.is_(False),
+                R.consolidated == False,  # noqa: E712 - DM8 rejects IS 1 / IS 0
             )
             .order_by(R.id.asc())
         )

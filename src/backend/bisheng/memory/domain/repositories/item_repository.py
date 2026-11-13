@@ -60,7 +60,7 @@ class ItemRepository:
     async def list_resident(cls, session, ctx: MemoryContext, types: tuple[str, ...]) -> list[MemoryItem]:
         stmt = (
             select(MemoryItem)
-            .where(*_scope(ctx), MemoryItem.status == STATUS_ACTIVE, MemoryItem.pinned.is_(True))
+            .where(*_scope(ctx), MemoryItem.status == STATUS_ACTIVE, MemoryItem.pinned == True)  # noqa: E712 - DM8 rejects IS 1 / IS 0
             .where(MemoryItem.type.in_(types))
             .order_by(MemoryItem.pin_order.asc(), MemoryItem.recorded_at.desc(), MemoryItem.id.asc())
         )
@@ -130,7 +130,7 @@ class ItemRepository:
     @classmethod
     async def min_pin_order(cls, session, ctx: MemoryContext) -> int:
         stmt = select(func.min(MemoryItem.pin_order)).where(
-            *_scope(ctx), MemoryItem.status == STATUS_ACTIVE, MemoryItem.pinned.is_(True)
+            *_scope(ctx), MemoryItem.status == STATUS_ACTIVE, MemoryItem.pinned == True  # noqa: E712 - DM8 rejects IS 1 / IS 0
         )
         value = (await session.exec(stmt)).first()
         return int(value) if value is not None else 0
@@ -138,7 +138,7 @@ class ItemRepository:
     @classmethod
     async def max_pin_order(cls, session, ctx: MemoryContext) -> int:
         stmt = select(func.max(MemoryItem.pin_order)).where(
-            *_scope(ctx), MemoryItem.status == STATUS_ACTIVE, MemoryItem.pinned.is_(True)
+            *_scope(ctx), MemoryItem.status == STATUS_ACTIVE, MemoryItem.pinned == True  # noqa: E712 - DM8 rejects IS 1 / IS 0
         )
         value = (await session.exec(stmt)).first()
         return int(value) if value is not None else 0

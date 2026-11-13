@@ -1955,7 +1955,9 @@ class LinsightWorkflowTask:
         F132: memory tool frames are redacted here, once, before the DB history,
         the Redis task key and the WS list see them (R3, AC-09).
         """
-        memory_step = event.name if event.name.startswith("memory_") else None
+        from bisheng.memory.domain.services.redaction import is_memory_tool
+
+        memory_step = event.name if is_memory_tool(event.name) else None
         event = redact_exec_step(event)
         await self._state_manager.add_execution_task_step(event.task_id, step=event)
         await self._state_manager.push_message(

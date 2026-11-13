@@ -202,3 +202,17 @@ async def test_no_new_messages_no_model_call(memory_db, run, llm):
     _seed(memory_db, "c1", messages=[("question", "已整理过", False)], watermark=1)
     await run()
     assert llm.prompts == []
+
+
+async def test_ac39_long_backlog_is_cut_and_reported(memory_db):
+    """AC-39: the content step stops at the character budget and reports the last message read."""
+    from bisheng.memory.domain.services import consolidation_content as cc
+
+    ids = _seed(memory_db, "c1", messages=[("question", "长" * 1500, False)] * 3)
+    original = cc.MAX_TOTAL_CHARS
+    cc.MAX_TOTAL_CHARS = 2000
+    try:
+        messages, consumed = await cc.load_new_messages("c1", 0, ids[-1])
+    finally:
+        cc.MAX_TOTAL_CHARS = original
+    assert len(messages) == 1 and consumed == ids[0]

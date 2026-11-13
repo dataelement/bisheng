@@ -48,3 +48,36 @@ async def test_invalid_rewrite_is_dropped(service, llm, make_ctx):
     llm.answers = [json.dumps({"rewrites": [{"id": old.item_id, "content": "用户昨天参加了评审"}]}, ensure_ascii=False)]
     await ExpiredEventRewrite(service=service, llm=llm)(TENANT_A, USER_1)
     assert (await _items())[old.item_id].status == STATUS_ACTIVE
+
+
+async def test_rewrite_keeps_source_mark_and_rejected_rewrite_is_not_retried(service, llm, make_ctx):
+    """AC-04 / AC-98: the rewritten item keeps the original source; a rejected rewrite costs one call only."""
+    past = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+    src = make_ctx(scene="assistant", app_id="asst-1", app_name="差旅助手", chat_id="c-src")
+    kept = await service.write(src, "remember", content=f"用户 {past} 去了上海出差", type="fact", event_time=past)
+    bad = await service.write(make_ctx(), "remember", content=f"用户 {past} 有周会", type="fact", event_time=past)
+    llm.answers = [
+        json.dumps(
+            {
+                "rewrites": [
+                    {"id": kept.item_id, "content": f"用户在 {past} 去过上海出差"},
+                    {"id": bad.item_id, "content": "用户昨天开过周会"},
+                ]
+            },
+            ensure_ascii=False,
+        )
+    ]
+    step = ExpiredEventRewrite(service=service, llm=llm)
+    await step(TENANT_A, USER_1)
+    items = await _items()
+    new = items[items[kept.item_id].superseded_by]
+    assert (new.source_scene, new.source_app_id, new.source_app_name, new.source_chat_id, new.origin) == (
+        "assistant",
+        "asst-1",
+        "差旅助手",
+        "c-src",
+        "explicit",
+    )
+    assert items[bad.item_id].status == STATUS_ACTIVE
+    await step(TENANT_A, USER_1)
+    assert len(llm.prompts) == 1

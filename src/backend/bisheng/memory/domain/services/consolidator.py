@@ -31,6 +31,11 @@ def lock_key(tenant_id: int, user_id: int) -> str:
     return f"memory:consolidate:{tenant_id}:{user_id}"
 
 
+def clear_marker_key(tenant_id: int, user_id: int) -> str:
+    """Changes every time the user clears their memory; a run compares it before committing."""
+    return f"memory:cleared:{tenant_id}:{user_id}"
+
+
 class Consolidator:
     def __init__(self, service, kv, metrics: m.MemoryMetrics, content_fn, extra_steps=None):
         self.service = service
@@ -57,11 +62,18 @@ class Consolidator:
             lock_ttl = timedelta(minutes=config.lock_ttl_minutes)
             rows = await CursorRepository.list_due_for_user(tenant_id, user_id, now, quiet, lock_ttl)
             await CursorRepository.mark_running([r.chat_id for r in rows], now)
-            for row in rows:
-                await self.kv.renew(key, token, ttl)
+            for index, row in enumerate(rows):
+                if not await self.kv.renew(key, token, ttl):
+                    # The lock expired and another node may own this user now: stop, and
+                    # hand the rows not yet processed back to the next scan.
+                    logger.warning("memory consolidation lost its lock tenant={} user={}", tenant_id, user_id)
+                    await CursorRepository.release_running([r.chat_id for r in rows[index:]])
+                    return
                 await self._one_session(row, config, now)
             for step in self.extra_steps:
-                await self.kv.renew(key, token, ttl)
+                if not await self.kv.renew(key, token, ttl):
+                    logger.warning("memory consolidation lost its lock tenant={} user={}", tenant_id, user_id)
+                    return
                 try:
                     await step(tenant_id, user_id)
                 except Exception as exc:  # noqa: BLE001 - counted and retried next scan
@@ -70,25 +82,38 @@ class Consolidator:
             await self.kv.release(key, token)
 
     async def _one_session(self, row: MemorySessionCursor, config, now: datetime) -> None:
-        end_id = await CursorRepository.max_message_id(row.chat_id)
-        scene, app_id, app_enabled, app_name, deleted = await session_scene(row.chat_id)
-        ctx = None if deleted else await MemoryGate.resolve(row.chat_id, scene, app_enabled, app_id, app_name)
-        if ctx is None:
-            # Deleted session or memory off: skip these messages for good (AC-41).
-            await CursorRepository.finish(row.chat_id, end_id)
-            return
-        ctx.turn_id = None
+        ctx = None
         try:
-            ops = await self.content_fn(ctx, row, end_id) if end_id > row.watermark_message_id else []
+            end_id = await CursorRepository.max_message_id(row.chat_id)
+            scene, app_id, app_enabled, app_name, deleted = await session_scene(row.chat_id)
+            ctx = None if deleted else await MemoryGate.resolve(row.chat_id, scene, app_enabled, app_id, app_name)
+            if ctx is None:
+                # Deleted session or memory off: skip these messages for good (AC-41).
+                await CursorRepository.finish(row.chat_id, end_id)
+                return
+            ctx.turn_id = None
+            started = await self._clear_marker(ctx)
+            result = await self.content_fn(ctx, row, end_id) if end_id > row.watermark_message_id else []
+            # The content step may stop early on a very long backlog; it then reports the
+            # last message it actually read, and the rest waits for the next run.
+            ops, consumed_end = result if isinstance(result, tuple) else (result, end_id)
+            if await self._clear_marker(ctx) != started:
+                # The user cleared their memory while this run was working on pre-clear
+                # messages: drop the results (AC-93); the clear already moved the watermark.
+                await CursorRepository.release_running([row.chat_id])
+                return
             async with _db.async_session() as s:
                 new_items = await self.service.apply_operations(s, ctx, ops)
-                await CursorRepository.finish(row.chat_id, end_id, session=s)
+                await CursorRepository.finish(row.chat_id, consumed_end, session=s)
                 if new_items or any(op.get("op") == "pin" for op in ops):
                     await SettingRepository.bump_rev(s, ctx)
                 await s.commit()
             await self.service.after_auto_commit(ctx, new_items)
         except Exception as exc:  # noqa: BLE001 - any failure is retried with backoff (AC-45)
-            await self._record_failure(ctx.tenant_id, ctx.user_id, row, exc, config, now, ctx=ctx)
+            await self._record_failure(row.tenant_id, row.user_id, row, exc, config, now, ctx=ctx)
+
+    async def _clear_marker(self, ctx) -> str | None:
+        return await self.kv.get(clear_marker_key(ctx.tenant_id, ctx.user_id))
 
     async def _record_failure(self, tenant_id, user_id, row, exc, config, now, ctx=None, retry=True):
         from bisheng.memory.domain.ports import MemoryContext

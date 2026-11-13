@@ -78,7 +78,7 @@ class CursorRepository:
             values["state"] = case((C.state == STATE_RUNNING, STATE_RUNNING), else_=STATE_PENDING)
         else:
             values["watermark_message_id"] = _greatest(C.watermark_message_id, last)
-        return update(C).where(C.chat_id == chat_id, C.eligible.is_(True)).values(**values)
+        return update(C).where(C.chat_id == chat_id, C.eligible == True).values(**values)  # noqa: E712 - DM8 rejects IS 1 / IS 0
 
     @classmethod
     async def end_turn(cls, chat_id: str, last_message_id: int, enabled: bool, now: datetime) -> int:
@@ -103,7 +103,7 @@ class CursorRepository:
             & or_(C.next_run_at.is_(None), C.next_run_at <= now)
         )
         stale_running = (C.state == STATE_RUNNING) & (C.locked_at <= now - lock_ttl)
-        return C.eligible.is_(True) & or_(pending_due, stale_running)
+        return (C.eligible == True) & or_(pending_due, stale_running)  # noqa: E712 - DM8 rejects IS 1 / IS 0
 
     @classmethod
     async def list_due_users(cls, now: datetime, quiet: timedelta, lock_ttl: timedelta) -> list[tuple[int, int]]:

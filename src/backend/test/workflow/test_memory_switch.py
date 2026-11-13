@@ -191,6 +191,13 @@ class FakeRedisCallback(BaseCallback):
 def worker(monkeypatch):
     tasks = import_worker_tasks()
     monkeypatch.setattr(tasks, "RedisCallback", FakeRedisCallback)
+    # The start node looks up the running user's profile; runs here use the chat owner's id.
+    from bisheng.workflow.nodes.start import start as start_mod
+
+    monkeypatch.setattr(start_mod.UserDao, "get_user", Mock(return_value=SimpleNamespace(user_name="u101")))
+    monkeypatch.setattr(start_mod.UserGroupDao, "get_user_group", Mock(return_value=[]))
+    monkeypatch.setattr(start_mod.UserRoleDao, "get_user_roles", Mock(return_value=[]))
+    monkeypatch.setattr(start_mod.UserDepartmentDao, "get_user_primary_department", Mock(return_value=None))
     monkeypatch.setattr(
         tasks.FlowDao, "get_flow_by_id", Mock(return_value=SimpleNamespace(name="报销流程", tenant_id=1, user_id=1))
     )
@@ -224,7 +231,7 @@ async def test_ac71_runtime_switch_from_online_version_not_client_graph(memory_d
     await wired.service.write(_ctx(), "remember", content="用户的成本中心是 C-100", type="fact")
     FakeRedisCallback.graph_data = graph(retriever_node(query="成本中心"), memory_enabled=True)
 
-    await asyncio.to_thread(worker.tasks._execute_workflow, "u-1", "wf-1", CHAT, 0)
+    await asyncio.to_thread(worker.tasks._execute_workflow, "u-1", "wf-1", CHAT, USER_1)
 
     state = worker.built[-1].graph_engine.graph_state
     assert (state.chat_id, state.memory_enabled) == (CHAT, expected)
@@ -241,3 +248,17 @@ async def test_no_chat_id_run_does_not_read_the_switch(memory_db, wired, worker,
     state = worker.built[-1].graph_engine.graph_state
     assert (state.chat_id, state.memory_enabled) == ("", False)
     lookup.assert_not_called()
+
+
+async def test_ac10_open_api_run_with_registered_chat_gets_no_memory(memory_db, wired, worker):
+    """AC-10: an open-API run (source="api") reusing a registered chat_id never reads memory."""
+    seed_online_workflow(memory_db, "wf-1", switch=True)
+    register_chat(memory_db, CHAT)
+    await wired.service.write(_ctx(), "remember", content="用户的成本中心是 C-100", type="fact")
+    FakeRedisCallback.graph_data = graph(retriever_node(query="成本中心"), memory_enabled=True)
+
+    await asyncio.to_thread(worker.tasks._execute_workflow, "u-3", "wf-1", CHAT, USER_1, "api")
+
+    state = worker.built[-1].graph_engine.graph_state
+    assert state.memory_enabled is False
+    assert state.get_variable("memory_retriever_1", "retrieved_memory") == []

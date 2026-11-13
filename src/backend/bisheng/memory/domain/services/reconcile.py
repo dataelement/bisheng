@@ -9,6 +9,8 @@ Runs with the tenant context already set by the caller.
 
 from __future__ import annotations
 
+import time
+
 from loguru import logger
 from sqlalchemy import or_
 from sqlmodel import select
@@ -19,6 +21,8 @@ from bisheng.memory.domain.repositories import _db
 from bisheng.memory.domain.repositories.item_repository import ItemRepository
 
 BATCH = 200
+ORPHAN_GRACE_SECONDS = 3600
+ORPHAN_MARKER_TTL = 3 * 86400
 
 
 async def _users_of_tenant(tenant_id: int) -> list[int]:
@@ -50,9 +54,19 @@ async def reconcile_user(ctx: MemoryContext, service) -> None:
         await service.index_items(ctx, items)
     async with _db.async_session() as s:
         referenced = set(await ItemRepository.list_detail_keys(s, ctx))
+    now = time.time()
     for key in await service.details.list_keys(ctx):
-        if key not in referenced:
+        marker = f"memory:orphan:{key}"
+        if key in referenced:
+            continue
+        # A detail object is written before its row commits (decision 3). Delete only
+        # objects still unreferenced a grace period after they were first seen orphaned.
+        first_seen = await service.kv.get(marker)
+        if first_seen is None:
+            await service.kv.set(marker, str(now), ORPHAN_MARKER_TTL)
+        elif now - float(first_seen) >= ORPHAN_GRACE_SECONDS:
             await service.details.delete(key)
+            await service.kv.delete(marker)
 
 
 async def reconcile_tenant(tenant_id: int, service) -> None:

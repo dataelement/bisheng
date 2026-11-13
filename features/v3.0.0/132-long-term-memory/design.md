@@ -552,6 +552,11 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 27 | 助手与工作流的 `chat_id` 由连接内的消息送达，处理它的客户端类同时服务免登录与开放 API | 在客户端类里直接登记，会给免登录和开放 API 的连接开记忆 | 决策 6：登录态 endpoint 注入回调 |
 | 28 | 登录态路径上工作流执行的图来自客户端消息 | 读正在执行的图上的开关，使用者可以自带一个开着的图绕过作者的设置 | 决策 17：读数据库里的上线版本 |
 | 25 | 对话型工作流停在等待输入时任务函数已返回，但工作流没有结束 | 只在成功或失败时登记活跃，这类会话永远不会被整理 | §4.4"工作流：一轮结束" |
+| 29 | 日常模式新会话的 `chat_id` 在 endpoint 层还不存在，要到服务里插入问题行时才确定 | 在 endpoint 里直接调 `MemoryGate.open` 登记不到新会话，首轮没有记忆 | endpoint 只构造 `memory_register` 回调，服务在插入本轮问题行之前调用（`daily_memory.register_session`）|
+| 30 | 助手 WebSocket 的 `ChatResponse` 对 `type` 有校验，不接受 `memory` | 用 `ChatResponse` 发记忆信号会抛校验错误、这一轮中断 | `callback.send_memory_signal` 直接发 `{category: "memory", type: "memory", message: {...}}` 帧，前端 `appMemory.isMemoryFrame` 按此识别 |
+| 31 | 深度研究的任务 WebSocket 在 `FINAL_RESULT` 后关闭 | 只在一轮结束时下发记忆事件，前端收不到 | 写入成功、记忆工具结束、一轮结束三处下发，去重 |
+| 32 | 流式模型的工具调用第一个分片只有名字和 id，参数后到；深度研究落库的普通工具 `params` 是 `{}` | 脱敏函数假定入参里一定有 `action`/`query` 会出错 | `redact_tool_event` 对空入参返回只含 `op` 的结构 |
+| 33 | 测试进程里别的套件会留下租户 ContextVar；`MemoryGate.open` 按当前租户登记 | 合跑时测试的会话登记到别的租户，记忆读不到（单跑通过） | 记忆相关测试夹具显式固定租户（`test/workstation/memory_support.py`、`test/memory/conftest.py` 的会话接缝绕过租户自动过滤）|
 
 ---
 
@@ -565,6 +570,10 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | `MemoryGate.open` / `resolve`、`MemoryService.resident` / `experience` / `bind_turn`、`build_memory_tools`、`MemoryActivity.end_turn`、工具事件脱敏函数 | 内部 Python API | 工作台、助手、深度研究、工作流的接入点 |
 | `memory_retriever` 节点类型与输出结构 | 工作流节点契约 | 工作流作者的下游节点 |
 | `memory` SSE / WebSocket 信号；脱敏后的记忆工具事件格式 | 流式事件与落库格式 | client 两套渲染、platform 管理端回放 |
+| `ChatManager.dispatch_client(memory_register=...)`、`ChatClient` / `BaseClient.memory_register` | 内部 Python API（可调用对象注入） | 登录态助手与工作流 WebSocket endpoint；免登录与开放面不传 |
+| `submit_task_turn(..., on_session_created=...)` | 内部 Python API（`workstation/domain/services/task_submit_service.py`） | 日常入口的任务模式登记；开放 API 不传 |
+| `create_linsight_agent(..., memory_prompt=...)` | 内部 Python API（`linsight/domain/services/agent_factory.py`） | 深度研究的记忆中间件 |
+| 助手 WebSocket 记忆帧 `{category: "memory", type: "memory", message: {turn_id, has_write, has_attribution}}`；深度研究 `MessageEventType.MEMORY` | 流式事件 | client 应用聊天与深度研究结果面板 |
 
 ### 6.2 我依赖别人的（Incoming）
 

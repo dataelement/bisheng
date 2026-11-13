@@ -264,11 +264,15 @@ async def test_ac37_continue_after_input_marks_activity_again(memory_db, worker)
     assert worker.calls == [(CHAT, True), (CHAT, True)]
 
 
-async def test_ac37_continue_with_lost_run_object_still_ends_the_turn(memory_db, worker):
-    """AC-37: the resumed run object is gone (expired); the turn still ends, as not enabled."""
+async def test_ac39_continue_with_lost_run_object_leaves_the_session_alone(memory_db, worker):
+    """AC-39 / AC-45: the resumed run object is gone, so its switch is unknown; the session is
+    left as it is, and earlier enabled turns that are still pending get consolidated later."""
     _seed_session(memory_db)
+    before = _cursor(memory_db)
     await asyncio.to_thread(worker.tasks._continue_workflow, "gone", "wf-1", CHAT, USER_1)
-    assert worker.calls == [(CHAT, False)]
+    assert worker.calls == []
+    after = _cursor(memory_db)
+    assert (after.watermark_message_id, after.state) == (before.watermark_message_id, before.state)
 
 
 async def test_memory_off_advances_the_watermark(memory_db, worker):

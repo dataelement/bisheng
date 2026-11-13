@@ -38,7 +38,7 @@ class LinsightTurnService:
                 R.message_id == int(message_id),
                 R.kind == KIND_SUMMARY,
                 R.scene_class == SCENE_CLASS_LINSIGHT,
-                R.ended.is_(False),
+                R.ended == False,  # noqa: E712 - DM8 rejects IS 1 / IS 0
             )
             .order_by(R.id.desc())
         )

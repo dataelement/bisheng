@@ -37,6 +37,7 @@ SYSTEM_CATEGORIES = {
 }
 MAX_MESSAGE_CHARS = 2000
 MAX_TOTAL_CHARS = 24000
+MAX_EXISTING_IN_PROMPT = 200
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
 
@@ -71,18 +72,23 @@ def parse_candidates(answer: str) -> dict:
     return data
 
 
-async def load_new_messages(chat_id: str, after_id: int, end_id: int) -> list[tuple[str, str]]:
+async def load_new_messages(chat_id: str, after_id: int, end_id: int) -> tuple[list[tuple[str, str]], int]:
+    """User inputs and system outputs after the watermark, and the last message id read.
+
+    A very long backlog is cut at ``MAX_TOTAL_CHARS``; the returned id then points at the
+    last message that made it into the prompt, so the rest is read by the next run.
+    """
     from bisheng.database.models.message import ChatMessage
 
     stmt = (
-        select(ChatMessage.category, ChatMessage.message, ChatMessage.is_bot)
+        select(ChatMessage.id, ChatMessage.category, ChatMessage.message)
         .where(ChatMessage.chat_id == chat_id, ChatMessage.id > after_id, ChatMessage.id <= end_id)
         .order_by(ChatMessage.id.asc())
     )
     async with _db.async_session() as s:
         rows = (await s.exec(stmt)).all()
-    out, total = [], 0
-    for category, message, _is_bot in rows:
+    out, total, consumed, last_read = [], 0, end_id, after_id
+    for message_id, category, message in rows:
         if category in USER_CATEGORIES:
             role = "用户"
         elif category in SYSTEM_CATEGORIES:
@@ -92,11 +98,13 @@ async def load_new_messages(chat_id: str, after_id: int, end_id: int) -> list[tu
         text = message_text(message).strip()[:MAX_MESSAGE_CHARS]
         if not text:
             continue
-        total += len(text)
-        if total > MAX_TOTAL_CHARS:
+        if total + len(text) > MAX_TOTAL_CHARS and out:
+            consumed = last_read
             break
+        total += len(text)
         out.append((role, text))
-    return out
+        last_read = message_id
+    return out, consumed
 
 
 def map_candidates(data: dict, existing_ids: set[str]) -> list[dict]:
@@ -135,16 +143,20 @@ class ConsolidationContent:
     def __init__(self, llm):
         self.llm = llm
 
-    async def __call__(self, ctx: MemoryContext, cursor, end_id: int) -> list[dict]:
-        messages = await load_new_messages(cursor.chat_id, cursor.watermark_message_id, end_id)
+    async def __call__(self, ctx: MemoryContext, cursor, end_id: int):
+        """Operations for the new messages, and the last message id they cover."""
+        messages, consumed = await load_new_messages(cursor.chat_id, cursor.watermark_message_id, end_id)
         if not messages:
-            return []
-        return await self.from_messages(ctx, messages)
+            return [], consumed
+        return await self.from_messages(ctx, messages), consumed
 
     async def from_messages(self, ctx: MemoryContext, messages: list[tuple[str, str]]) -> list[dict]:
         config = await aget_memory_config()
         async with _db.async_session() as s:
             existing = await ItemRepository.list_active(s, ctx)
+        # Bound the prompt: resident items first, then the most recent ones.
+        existing = sorted(existing, key=lambda i: (not i.pinned, -(i.recorded_at.timestamp() if i.recorded_at else 0)))
+        existing = existing[:MAX_EXISTING_IN_PROMPT]
         existing_view = [{"id": i.id, "type": i.type, "content": i.content, "pinned": i.pinned} for i in existing]
         today = local_today(ctx.timezone, config.default_timezone).strftime("%Y-%m-%d")
         mode = "linsight" if ctx.scene == SCENE_LINSIGHT else "chat"
@@ -197,7 +209,7 @@ class ExpiredEventRewrite:
                 MemoryItem.status == STATUS_ACTIVE,
                 MemoryItem.event_time.is_not(None),
                 MemoryItem.event_time < start_of_today,
-                MemoryItem.rewritten.is_(False),
+                MemoryItem.rewritten == False,  # noqa: E712 - DM8 rejects IS 1 / IS 0
             )
             .order_by(MemoryItem.event_time.asc())
             .limit(self.max_items)
@@ -226,10 +238,13 @@ class ExpiredEventRewrite:
                     "pinned": old.pinned,
                 }
             )
-        if not ops:
-            return
+        from bisheng.memory.domain.repositories.item_repository import ItemRepository
+
         async with _db.async_session() as s:
-            new_items = await self.service.apply_operations(s, ctx, ops)
+            new_items = await self.service.apply_operations(s, ctx, ops) if ops else []
+            # One attempt per item: those the model skipped or whose rewrite was rejected
+            # are flagged too, so a stubborn item never costs a model call on every run.
+            await ItemRepository.update_fields(s, ctx, [i.id for i in items], rewritten=True)
             if new_items:
                 await SettingRepository.bump_rev(s, ctx)
             await s.commit()

@@ -122,4 +122,15 @@ def test_reserved_name_conflict_detected():
     kept, dropped = split_reserved_tools(ext)
     assert [t.name for t in kept] == ["web_search"]
     assert [t.name for t in dropped] == ["memory_write", "memory_x"]
-    assert is_memory_tool("memory_anything") and not is_memory_tool("mymemory")
+    # Reserved prefix for author tools, but redaction only covers the two built-in tools.
+    from bisheng.memory.domain.services.redaction import is_reserved_tool_name
+
+    assert is_reserved_tool_name("memory_anything") and not is_reserved_tool_name("mymemory")
+    assert is_memory_tool("memory_write") and is_memory_tool("memory_search")
+    assert not is_memory_tool("memory_store")
+
+
+def test_third_party_memory_prefixed_tool_is_not_redacted():
+    """AC-09 scope: an MCP tool named memory_store keeps its input and output."""
+    payload = {"key": "k", "value": "v"}
+    assert redact_tool_event("memory_store", payload) is payload
