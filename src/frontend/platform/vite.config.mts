@@ -2,6 +2,7 @@ import { diagramAssetTargets } from '../config/diagramAssets';
 import { createFrontendProxy, frontendEnvDefinitions, loadFrontendEnv, resolveApiTarget } from '../config/vite';
 import react from "@vitejs/plugin-react";
 import fs from "fs";
+import http from "node:http";
 import path from "path";
 import { createRequire } from "node:module";
 import postcss from "postcss";
@@ -138,7 +139,64 @@ const createProxyConfig = (target: string, rewrite = true, isMinio = false, verb
 });
 
 const apiRoutes = ["/api/", "/health"];
-const fileServiceRoutes = ["/bisheng", "/tmp-dir"];
+const fileServiceRoutes = ["/object"];
+
+function objectBucketAllowed(apiTarget: string, bucket: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let target: URL;
+    try {
+      target = new URL("/api/v1/storage/browser-bucket", apiTarget.endsWith("/") ? apiTarget : `${apiTarget}/`);
+    } catch {
+      resolve(false);
+      return;
+    }
+    const check = http.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port,
+        method: "GET",
+        path: `${target.pathname}${target.search}`,
+        headers: { "X-Object-Bucket": bucket },
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode === 204);
+      },
+    );
+    check.on("error", () => resolve(false));
+    check.setTimeout(3000, () => {
+      check.destroy();
+      resolve(false);
+    });
+    check.end();
+  });
+}
+
+function objectBucketGate(apiTarget: string): Plugin {
+  return {
+    name: "bisheng:object-bucket-gate",
+    apply: "serve",
+    configureServer(server) {
+      const gate = async (req, res, next) => {
+        const requestUrl = req.url || "";
+        if (!requestUrl.startsWith("/object/") && requestUrl !== "/object") {
+          next();
+          return;
+        }
+        const bucket = decodeURIComponent(requestUrl.match(/^\/object\/([^/?#]+)/)?.[1] || "");
+        const allowed = bucket ? await objectBucketAllowed(apiTarget, bucket) : false;
+        if (!allowed) {
+          res.writeHead(403, { "Content-Type": "text/plain" });
+          res.end("object bucket is not allowed");
+          return;
+        }
+        next();
+      };
+      server.middlewares.stack.unshift({ route: "", handle: gate });
+    },
+  };
+}
 
 function resolveMinioProxyTarget(env: Record<string, string>): string {
   if (env.VITE_MINIO_PROXY_TARGET) {
@@ -197,9 +255,10 @@ export default defineConfig(({ command, mode }) => {
 
   const proxyLog = env.VITE_PROXY_LOG === '1';
   const rewrite = (url: string) => app_env.BASE_URL && url.startsWith(app_env.BASE_URL) ? url.slice(app_env.BASE_URL.length) : url;
+  const objectRewrite = (url: string) => rewrite(url).replace(/^\/object/, "");
   const apiProxyConfig = createFrontendProxy(target, { rewrite, verbose: proxyLog });
   const gatewayProxyConfig = createFrontendProxy(gatewayTarget, { rewrite, verbose: proxyLog });
-  const fileServiceProxyConfig = createFrontendProxy(fileServiceTarget, { rewrite, verbose: proxyLog, minioEnvName: 'VITE_MINIO_PROXY_TARGET' });
+  const fileServiceProxyConfig = createFrontendProxy(fileServiceTarget, { rewrite: objectRewrite, verbose: proxyLog, minioEnvName: 'VITE_MINIO_PROXY_TARGET' });
   const proxyTargets: Record<string, ReturnType<typeof createFrontendProxy>> = {};
   // More specific than `/api/` and must be registered first, otherwise Vite's
   // prefix match sends `/api/license/status` to FastAPI (404 in open-source).
@@ -265,6 +324,7 @@ export default defineConfig(({ command, mode }) => {
       }
     },
     plugins: [
+      objectBucketGate(target),
       dshContentSafetyStyles(),
       react(),
       svgr(),

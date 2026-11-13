@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 from langchain_core.document_loaders import BaseLoader
 
+from bisheng.core.storage.browser_object_path import browser_object_path
 from bisheng.knowledge.rag.pipeline.types import TextBbox
 
 
@@ -101,7 +102,7 @@ class BaseBishengLoader(BaseLoader):
                 self._image_urls[filename] = self.image_url_builder(filename)
             return self._image_urls[filename]
         if self.image_object_dir:
-            return f"/{self._minio_bucket}/{self.image_object_dir}/{filename}"
+            return browser_object_path(self._minio_bucket, f"{self.image_object_dir}/{filename}")
         if self.local_image_dir:
             return f"{self.local_image_dir}/{filename}"
         return filename
@@ -126,5 +127,5 @@ class BaseBishengLoader(BaseLoader):
             return content
         return content.replace(
             self.local_image_dir,
-            f"/{self._minio_bucket}/{self.image_object_dir}",
+            browser_object_path(self._minio_bucket, self.image_object_dir),
         )

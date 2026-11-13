@@ -672,7 +672,7 @@ class LinsightWorkbenchImpl:
         # onto A. Only pair by position when the lengths still prove alignment;
         # otherwise re-read key by key so each file gets its own value (or None).
         if len(temp_values) == len(linsight_files):
-            temp_by_id = {f.file_id: t for f, t in zip(linsight_files, temp_values)}
+            temp_by_id = {f.file_id: t for f, t in zip(linsight_files, temp_values, strict=False)}
         else:
             temp_by_id = {
                 f.file_id: await redis_client.aget(f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{f.file_id}")
@@ -2525,7 +2525,11 @@ class LinsightWorkbenchImpl:
         minio_client = await get_minio_storage()
 
         object_name = file_info.file_url
-        object_name = object_name.replace(f"/{minio_client.bucket}/", "")
+        bucket = minio_client.bucket
+        for prefix in (f"/object/{bucket}/", f"/{bucket}/"):
+            if prefix in object_name:
+                object_name = object_name.replace(prefix, "", 1)
+                break
         try:
             bytes_io = BytesIO()
 

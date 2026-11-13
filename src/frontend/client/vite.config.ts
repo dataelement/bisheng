@@ -34,9 +34,42 @@ const app_env = {
   BISHENG_HOST: '/admin'
 }
 
-const minioPathRE = /^\/(?:workspace\/)?(?:bisheng|tmp-dir)(?:\/|$)/;
+const minioPathRE = /^\/(?:workspace\/)?object(?:\/|$)/;
+const objectBucketRE = /^(?:\/workspace)?\/object\/([^/?#]+)/;
 
-function minioFileProxyPlugin(minioTarget: string): Plugin {
+function objectBucketAllowed(apiTarget: string, bucket: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let target: URL;
+    try {
+      target = new URL('/api/v1/storage/browser-bucket', apiTarget.endsWith('/') ? apiTarget : `${apiTarget}/`);
+    } catch {
+      resolve(false);
+      return;
+    }
+    const check = http.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port,
+        method: 'GET',
+        path: `${target.pathname}${target.search}`,
+        headers: { 'X-Object-Bucket': bucket },
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode === 204);
+      },
+    );
+    check.on('error', () => resolve(false));
+    check.setTimeout(3000, () => {
+      check.destroy();
+      resolve(false);
+    });
+    check.end();
+  });
+}
+
+function minioFileProxyPlugin(minioTarget: string, apiTarget: string): Plugin {
   const warnMinio = createMinioWarning('VITE_MINIO_PROXY_TARGET', minioTarget);
   return {
     name: 'bisheng:minio-file-proxy',
@@ -46,7 +79,7 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
         `[bisheng:minio-proxy] dev object proxy -> ${minioTarget} ` +
         `(host must equal backend sharepoint; 127.0.0.1 ≠ localhost)`,
       );
-      const minioProxyMiddleware = (req, res, next) => {
+      const minioProxyMiddleware = async (req, res, next) => {
         const requestUrl = req.url || '';
 
         if (!minioPathRE.test(requestUrl)) {
@@ -54,7 +87,15 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
           return;
         }
 
-        const rewrittenUrl = requestUrl.replace(/^\/workspace(?=\/(?:bisheng|tmp-dir)(?:\/|$))/, '');
+        const bucket = decodeURIComponent(requestUrl.match(objectBucketRE)?.[1] || '');
+        const allowed = bucket ? await objectBucketAllowed(apiTarget, bucket) : false;
+        if (!allowed) {
+          res.writeHead(403, { 'Content-Type': 'text/plain' });
+          res.end('object bucket is not allowed');
+          return;
+        }
+
+        const rewrittenUrl = requestUrl.replace(/^\/workspace(?=\/object(?:\/|$))/, '').replace(/^\/object/, '');
         const targetUrl = new URL(rewrittenUrl, minioTarget);
         const proxyReq = http.request(
           {
@@ -98,7 +139,7 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
   const env = loadFrontendEnv(mode, __dirname);
-  // MinIO object proxy for bucket paths (/bisheng/...): these must reach MinIO,
+  // MinIO object proxy for /object/{bucket}/{key}. These must reach MinIO,
   // NOT the backend (7860 only 404s on object keys). Override per environment via
   // VITE_DEV_MINIO_TARGET, whose host MUST match the backend `sharepoint` config —
   // SigV4 presigned URLs sign the Host header, so a mismatch yields 403
@@ -132,33 +173,23 @@ export default defineConfig(({ command, mode }) => {
       // Pin to 4001: fail loudly if the port is taken instead of drifting to 4002+.
       strictPort: true,
       proxy: {
-        '^(/workspace)?/bisheng': {
+        '^(/workspace)?/object/': {
           target: minioTarget,
           changeOrigin: true,
           secure: false,
-          rewrite: (path) => {
-            return path.replace(/^\/workspace/, '');
-          },
+          rewrite: (path) => path.replace(/^\/workspace/, '').replace(/^\/object/, ''),
         },
         '/workspace/api': createFrontendProxy(apiTarget, {
           verbose: proxyLog,
           rewrite: (url) => url.replace(/^\/workspace/, ''),
         }),
-        '/workspace/tmp-dir': {
-          target: minioTarget,
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => {
-            return path.replace(/^\/workspace/, '');
-          },
-        },
       },
     },
     // Set the directory where environment variables are loaded from and restrict prefixes
     envDir: '../',
     envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
     plugins: [
-      minioFileProxyPlugin(minioTarget),
+      minioFileProxyPlugin(minioTarget, apiTarget),
       react(),
       nodePolyfills(),
       VitePWA({

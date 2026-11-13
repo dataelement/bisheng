@@ -71,7 +71,7 @@ class KbImageStage:
         self._entries: dict[str, StagedImage] = {}
         self._lock = threading.Lock()
         self._path_re = re.compile(
-            rf"^/{re.escape(bucket)}/({_OBJECT_DIR}/([0-9]+)/([0-9]+)/([^/?#\\\x00-\x1f]+))(?:[?#].*)?$"
+            rf"^(?:/object)?/{re.escape(bucket)}/({_OBJECT_DIR}/([0-9]+)/([0-9]+)/([^/?#\\\x00-\x1f]+))(?:[?#].*)?$"
         )
 
     @classmethod
@@ -130,7 +130,7 @@ class KbImageStage:
             " KNOWLEDGE-BASE IMAGES: a search result may show an image followed by "
             f"`{ANCHOR_LEFT}file: uploads/kb/...{ANCHOR_RIGHT}`. That relative path is a real file in the "
             "working directory: pass it straight to `open()` or `add_picture()`. Do NOT download the "
-            "image by URL and do NOT invent a host name; the original `/bisheng/...` link is only "
+            "image by URL and do NOT invent a host name; the original image link is only "
             "for display."
         )
 

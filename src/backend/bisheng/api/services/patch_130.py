@@ -3,6 +3,7 @@ import os
 from langchain_core.documents import Document
 
 from bisheng.core.cache.utils import CACHE_DIR
+from bisheng.core.storage.browser_object_path import browser_object_path
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.knowledge.rag.pipeline.loader.utils.md_from_docx import handler as docx_handler
 from bisheng.knowledge.rag.pipeline.loader.utils.md_from_excel import handler as excel_handler
@@ -118,8 +119,9 @@ def replace_image_url(
     """
     from bisheng.api.services.knowledge_imp import KnowledgeUtils
 
-    minio_image_path = (
-        f"/{get_minio_storage_sync().bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}"
+    minio_image_path = browser_object_path(
+        get_minio_storage_sync().bucket,
+        KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id),
     )
     url_for_replacement = local_image_dir
     if not include_cache_dir:

@@ -56,11 +56,24 @@ data:
         add_header X-Frame-Options SAMEORIGIN;
       }
 
-      location ~ ^/(workspace/bisheng|bisheng|tmp-dir)/ {
-        rewrite ^/workspace(/.*)$ $1 break;
+      location ~ ^/(workspace/)?object/([^/]+)/ {
+        set $bs_object_bucket $2;
+        auth_request /_object_bucket_ok/$bs_object_bucket;
+        rewrite ^/(?:workspace/)?object/(.*)$ /$1 break;
         # SigV4 signs Host; must match object_storage.minio.sharepoint.
         proxy_set_header Host {{ .Values.middleware.minio.sharepoint }};
         proxy_pass http://{{ .Values.middleware.minio.endpoint }};
+      }
+
+      location /_object_bucket_ok/ {
+        internal;
+        rewrite ^ /api/v1/storage/browser-bucket break;
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Object-Bucket $bs_object_bucket;
+        proxy_set_header Authorization "";
+        proxy_set_header Cookie "";
       }
     }
     {{- if .Values.frontend.service.clientPort }}
@@ -99,11 +112,24 @@ data:
         add_header X-Frame-Options SAMEORIGIN;
       }
 
-      location ~ ^/(workspace/bisheng|bisheng|tmp-dir)/ {
-        rewrite ^/workspace(/.*)$ $1 break;
+      location ~ ^/(workspace/)?object/([^/]+)/ {
+        set $bs_object_bucket $2;
+        auth_request /_object_bucket_ok/$bs_object_bucket;
+        rewrite ^/(?:workspace/)?object/(.*)$ /$1 break;
         # SigV4 signs Host; must match object_storage.minio.sharepoint.
         proxy_set_header Host {{ .Values.middleware.minio.sharepoint }};
         proxy_pass http://{{ .Values.middleware.minio.endpoint }};
+      }
+
+      location /_object_bucket_ok/ {
+        internal;
+        rewrite ^ /api/v1/storage/browser-bucket break;
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Object-Bucket $bs_object_bucket;
+        proxy_set_header Authorization "";
+        proxy_set_header Cookie "";
       }
     }
     {{- end }}

@@ -219,6 +219,7 @@
   "11191": "Invite code does not exist",
   "11192": "The usage limit cannot be lower than the times already used",
   "11193": "Invalid batch. The name is required and at most 64 characters, the count is 1-100, and the limit is 1-100000",
+  "11301": "This storage location cannot be opened in the browser",
   "11403": "No permission to view",
   "12040": "web_search tool not found",
   "12041": "Session not found",

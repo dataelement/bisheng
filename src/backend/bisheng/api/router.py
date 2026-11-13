@@ -20,6 +20,7 @@ from bisheng.api.v1 import (
     workflow_router,
     workstation_router,
 )
+from bisheng.api.v1.storage import router as storage_router
 from bisheng.app_governance.api.router import router as runtime_audit_router
 from bisheng.app_publish.api.router import v1_router as app_publish_v1_router
 from bisheng.app_publish.api.router import v2_router as app_publish_v2_router
@@ -134,6 +135,7 @@ router.include_router(admin_router)
 router.include_router(approval_router)
 router.include_router(brand_router)
 router.include_router(sensitive_word_policy_router)
+router.include_router(storage_router)
 # Open API management face (features/v3.0.0-beta1/053): service accounts,
 # personal tokens, scope catalogue and skill-pack distribution — session auth,
 # tenant-admin gated inside the endpoints.

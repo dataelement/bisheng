@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import PurePath
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import UploadFile
@@ -12,6 +12,7 @@ from fastapi import UploadFile
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.core.storage.browser_object_path import parse_browser_object_reference
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 
@@ -66,12 +67,10 @@ class TempUploadService:
 
     @staticmethod
     def _object_name_from_url(value: str, bucket: str) -> str | None:
-        path = urlparse(value).path
-        marker = f"/{bucket}/"
-        position = path.find(marker)
-        if position < 0:
+        parsed = parse_browser_object_reference(value, "", bucket)
+        if parsed is None:
             return None
-        object_name = unquote(path[position + len(marker) :])
+        object_name = unquote(parsed[1])
         while object_name != unquote(object_name):
             object_name = unquote(object_name)
         return object_name or None

@@ -1,5 +1,5 @@
 from datetime import datetime
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Request, UploadFile
@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Request, Uplo
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.core.cache.utils import save_download_file, save_uploaded_file
+from bisheng.core.storage.browser_object_path import parse_browser_object_reference
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.role.domain.services.quota_service import QuotaService
@@ -28,13 +29,10 @@ def _resolve_minio_object_from_filepath(filepath: str, minio_client) -> tuple[st
     if not normalized:
         raise ValueError("filepath is empty")
 
-    parsed = urlparse(normalized)
-    path = parsed.path if parsed.scheme in ("http", "https") or parsed.path else normalized.split("?", 1)[0]
-    path = path.lstrip("/")
-    bucket_name, _, object_name = path.partition("/")
-    allowed_buckets = {minio_client.bucket, minio_client.tmp_bucket}
-    if bucket_name not in allowed_buckets or not object_name:
+    parsed = parse_browser_object_reference(normalized, minio_client.bucket, minio_client.tmp_bucket)
+    if parsed is None:
         raise ValueError(f"invalid minio filepath: {filepath}")
+    bucket_name, object_name = parsed
 
     decoded_name = unquote(object_name)
     while decoded_name != unquote(decoded_name):
