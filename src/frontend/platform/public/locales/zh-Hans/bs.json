@@ -4123,6 +4123,7 @@
       "everyoneVisibleHelp": "企业内所有成员均可使用此模型。",
       "selectedVisible": "部分成员可见",
       "selectedVisibleHelp": "仅下方授权的用户、部门和角色可使用此模型。",
+      "selectedVisibleEmpty": "请至少添加一个用户、部门或角色；否则这个模型对所有人都不可用。",
       "saved": "已保存",
       "visibilityHelp": "设置可使用此模型的成员范围。",
       "modelSettings": "模型权限与倍率",

@@ -11,19 +11,27 @@ export function useDshBrowserConfig() {
             const current = new AbortController()
             abort = current
             getDshBrowserConfig(current.signal).then((value) => {
-                if (!current.signal.aborted) { setConfig(value); setFailed(false) }
+                if (current.signal.aborted) return
+                setConfig(value); setFailed(false)
+                // `management_enabled` reflects whether DSH is deployed at all (yaml,
+                // changes only with a restart); `enabled` is the runtime management
+                // toggle and keeps being polled. Nothing to poll for without DSH.
+                if (value.management_enabled === false) stopPolling()
             }).catch(() => {
                 if (!current.signal.aborted) { setConfig(null); setFailed(true) }
             })
         }
-        refresh()
         const timer = window.setInterval(refresh, 30000)
+        const stopPolling = () => {
+            window.clearInterval(timer)
+            window.removeEventListener('focus', refresh)
+        }
+        refresh()
         window.addEventListener('focus', refresh)
         window.addEventListener('dsh-settings-changed', refresh)
         return () => {
             abort?.abort()
-            window.clearInterval(timer)
-            window.removeEventListener('focus', refresh)
+            stopPolling()
             window.removeEventListener('dsh-settings-changed', refresh)
         }
     }, [])
