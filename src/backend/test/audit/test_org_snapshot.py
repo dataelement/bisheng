@@ -148,6 +148,11 @@ class TestStamp:
             (3, "Root/Sales/East"),
         ]
 
+    def test_negative_system_operator_is_not_applicable(self, engines):
+        row = _audit_row(-1)
+        stamp_audit_logs([row])
+        assert (row.operator_dept_id, row.operator_dept_path) == (DEPT_NOT_APPLICABLE, None)
+
     def test_already_stamped_row_is_kept(self, engines):
         row = _audit_row(10, dept_id=20, dept_path="Root/R&D")
         stamp_audit_logs([row])
@@ -190,6 +195,15 @@ class TestPredicate:
         scope = AuditDeptScope.restricted(admin_paths=["/1/2/"])
         selection = DeptSelection.of([3], include_none=True, include_unrecorded=True)
         assert _matching(engines, scope, selection) == {3}
+
+    def test_tenant_admin_closure_adds_none_and_not_applicable_but_not_unrecorded(self, engines):
+        scope = AuditDeptScope.restricted(admin_paths=["/1/2/"], unattributed=True)
+        assert _matching(engines, scope) == {2, 3, 4, 6, 7}
+
+    def test_tenant_admin_keeps_none_option_and_drops_unrecorded_option(self, engines):
+        scope = AuditDeptScope.restricted(admin_paths=["/1/2/"], unattributed=True)
+        selection = DeptSelection.of([3], include_none=True, include_unrecorded=True)
+        assert _matching(engines, scope, selection) == {3, 6}
 
     def test_selection_outside_closure_matches_nothing(self, engines):
         scope = AuditDeptScope.restricted(admin_paths=["/1/2/"])

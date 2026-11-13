@@ -120,7 +120,8 @@ class TestUnrestricted:
 
 
 class TestTenantAdmin:
-    async def test_rbac_admin_cannot_read_unrecorded_rows(self, org, monkeypatch):
+    @pytest.fixture()
+    def tenant_admin(self, monkeypatch):
         async def _tenant_admin(user_id, tenant_id):
             return tenant_id == TENANT
 
@@ -133,8 +134,15 @@ class TestTenantAdmin:
             "bisheng.department.domain.services.audit_dept_scope.AuditDeptRepository.root_paths",
             _roots,
         )
-        assert await _operators(_user(admin=True)) == [31, 32, 33, 34]
-        assert await _export_operators(_user(admin=True)) == [31, 32, 33, 34]
+
+    async def test_rbac_admin_reads_none_and_not_applicable_but_not_unrecorded(self, org, tenant_admin):
+        assert await _operators(_user(admin=True)) == [0, 31, 32, 33, 34, 35]
+        assert await _export_operators(_user(admin=True)) == [0, 31, 32, 33, 34, 35]
+
+    async def test_none_option_applies_and_unrecorded_option_is_ignored(self, org, tenant_admin):
+        assert await _operators(_user(admin=True), selection=DeptSelection.of(include_none=True)) == [35]
+        selection = DeptSelection.of([3], include_none=True, include_unrecorded=True)
+        assert await _operators(_user(admin=True), selection=selection) == [32, 35]
 
 
 class TestDepartmentAdmin:
