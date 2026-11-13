@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { knowledgeSpaceApi, type KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { ScrollableTreeName } from "./ScrollableTreeName";
 
 interface KnowledgeFolderTreeProps {
   scope: KnowledgeQueryScope;
@@ -52,7 +53,7 @@ function FolderNode({ item, depth = 1, ...props }: FolderNodeProps) {
           onClick={() => props.onSelect(props.spaceId, item.id)}
         >
           {expanded ? <Outlined.FolderOpen aria-hidden className="size-4 shrink-0 text-text-3" /> : <Outlined.FolderClose aria-hidden className="size-4 shrink-0 text-text-3" />}
-          <span className="truncate">{item.file_name}</span>
+          <ScrollableTreeName name={item.file_name} />
         </button>
       </div>
       {expanded && (
@@ -95,18 +96,18 @@ export function KnowledgeFolderTree(props: KnowledgeFolderTreeProps) {
   return (
     <ul className="space-y-0.5">
       {rows.map((item) => <FolderNode key={item.id} {...props} item={item} />)}
-      {query.isInitialLoading && <li role="status" className="px-8 py-2 text-control text-text-3">{t("sidebar.loading")}</li>}
+      {query.isInitialLoading && <li role="status" className="sticky left-3 w-fit px-8 py-2 text-control text-text-3">{t("sidebar.loading")}</li>}
       {query.isError && (
-        <li className="px-6 py-1 text-control text-text-3">
+        <li className="sticky left-3 w-fit px-6 py-1 text-control text-text-3">
           <span>{t("sidebar.load_failed")}</span>
           <Button variant="text" onClick={() => { void (query.data && query.hasNextPage ? query.fetchNextPage() : query.refetch()).catch(showApiError); }}>{t("retry")}</Button>
         </li>
       )}
       {!query.isInitialLoading && !query.isError && rows.length === 0 && (
-        <li className="px-8 py-2 text-control text-text-3">{t("sidebar.no_folders")}</li>
+        <li className="sticky left-3 w-fit px-8 py-2 text-control text-text-3">{t("sidebar.no_folders")}</li>
       )}
       {query.hasNextPage && !query.isError && (
-        <li className="pl-8">
+        <li className="sticky left-3 w-fit pl-8">
           <Button variant="text" disabled={query.isFetchingNextPage} onClick={() => { void query.fetchNextPage().catch(showApiError); }}>{t("sidebar.more_folders")}</Button>
         </li>
       )}
