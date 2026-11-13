@@ -9,7 +9,7 @@
 - **分片运行**：串行全量约需 5 小时（无中间件时大量用例在连接超时上等待）。改为按 `test/` 下顶层条目轮转分 8 片并行，基线与每次比对使用同一分片规则（`shard_run.py`），合并成一个 junit 文件再比较。
 - **收集错误**：基线里 `test/app_runtime/test_runtime_management.py`、`test/knowledge/test_knowledge_chat_history_retention_worker.py` 两个文件在收集阶段 ImportError（与本功能无关），所以运行带 `--continue-on-collection-errors`。
 - **架构检查基线**：`baseline/arch-guard.txt`，51 行，其中 23 行 VIOLATION（与本功能无关的既有违规）。
-- **后端基线数量**：`baseline/shard_run.py` 8 片合并后共 14379 个用例，其中 1321 个失败或报错（无中间件、既有缺陷），耗时约 13 分钟。各片汇总行：173 failed/10 errors、5 failed、15 failed/6 errors、472 failed、383 failed/9 errors、49 failed/54 errors、114 failed/15 errors、15 failed。
+- **后端基线数量**：`baseline/shard_run.py`（按目录名 crc32 分 8 片）合并后共 14380 个用例，其中 1242 个失败或报错（无中间件、既有缺陷），耗时约 13 分钟。
 - **〔基线比对〕的命令**（工作目录 `src/backend/`）：`python3 ../../features/v3.0.0/132-long-term-memory/baseline/shard_run.py $PWD /tmp/f132-current.xml 8 && python3 ../../features/v3.0.0/132-long-term-memory/baseline/compare_junit.py ../../features/v3.0.0/132-long-term-memory/baseline/backend.xml /tmp/f132-current.xml`。
 
 ## 回写分级（T009）
