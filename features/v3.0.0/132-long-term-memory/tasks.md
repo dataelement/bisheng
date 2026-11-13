@@ -753,3 +753,7 @@
 > 只留一行指针，论证在 design.md。推翻已确认的决策时，先停下与用户重新确认，再记录。
 
 （暂无）
+
+## 交付后变更
+
+- 2026-11-14（用户裁定）：AC-106 的整理模型从工作台配置挪到系统模型配置的工作台页，字段由 `WorkstationConfig.memory_model_id` 改为 `WorkbenchModelConfig.memory_llm`，界面名称"记忆整理模型"。原 T0xx 中涉及 `memory_model_id` 与 `bench/MemoryModelConfig.tsx` 的实现与测试已随之替换：后端测试 `test/memory/test_consolidation_model.py`，前端测试 `ModelPage/manage/tabs/WorkbenchModel.memory.test.tsx`。

@@ -3,22 +3,23 @@
 from __future__ import annotations
 
 from bisheng.common.errcode.memory import MemoryNoModelError
-from bisheng.workstation.domain.services.workstation_service import WorkStationService
+from bisheng.llm.domain.services.llm import LLMService
 
 
 async def resolve_memory_model_id() -> int:
-    """The configured memory model, else the first workstation model, else MemoryNoModelError.
+    """The memory consolidation model, else the first daily-chat model, else MemoryNoModelError.
 
-    Reads through ``WorkStationService.aget_config`` so a child tenant without its
-    own config inherits the root tenant's value (existing workstation behaviour).
+    Both live in the workbench section of the system model settings
+    (``WorkbenchModelConfig.memory_llm`` / ``.models``). Reading through
+    ``LLMService.get_workbench_llm`` keeps the existing inheritance: a child
+    tenant without its own row uses the root tenant's value.
     """
-    config = await WorkStationService.aget_config()
-    if config is not None and config.memory_model_id:
-        return int(config.memory_model_id)
-    models = (config.models if config is not None else None) or []
-    if isinstance(models, list):
-        for model in models:
-            model_id = getattr(model, "id", None)
-            if model_id not in (None, ""):
-                return int(model_id)
+    config = await LLMService.get_workbench_llm()
+    memory_llm = getattr(config, "memory_llm", None) if config is not None else None
+    if memory_llm is not None and getattr(memory_llm, "id", None) not in (None, ""):
+        return int(memory_llm.id)
+    for model in (getattr(config, "models", None) or []) if config is not None else []:
+        model_id = getattr(model, "id", None)
+        if model_id not in (None, ""):
+            return int(model_id)
     raise MemoryNoModelError()

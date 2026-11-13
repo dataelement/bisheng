@@ -89,8 +89,6 @@ export interface ChatConfigForm {
     tools: unknown[];
     tab_display_name: string;
   };
-  // F132: model id used by memory consolidation; "" = workbench default (AC-106)
-  memoryModelId: string;
 }
 export { DailyChatConfig as default } from "./DailyChatConfig";
 
@@ -154,7 +152,6 @@ export const useChatConfig = (
       tools: [],
       tab_display_name: t("chatConfig.taskModeFullName"),
     },
-    memoryModelId: "",
   });
 
   // Simple deep comparison to avoid circular refresh caused by parent-child mutual setting
@@ -277,10 +274,6 @@ export const useChatConfig = (
             tools: toolsFromCfg,
             orgKbs: Array.isArray(cfg.orgKbs) ? cfg.orgKbs : prev.orgKbs,
             recommendedApps: Array.isArray(cfg.recommendedApps) ? cfg.recommendedApps : prev.recommendedApps,
-            memoryModelId:
-              cfg.memory_model_id !== undefined && cfg.memory_model_id !== null && cfg.memory_model_id !== ""
-                ? String(cfg.memory_model_id)
-                : "",
           };
         });
       })
@@ -513,8 +506,6 @@ export const useChatConfig = (
       tools: formData.tools,
       orgKbs: formData.orgKbs,
       recommendedApps: formData.recommendedApps || [],
-      // F132: empty = use the first workbench model (AC-106)
-      memory_model_id: formData.memoryModelId ? Number(formData.memoryModelId) : null,
     };
 
     // F035: the merged task-mode fields persist to the legacy linsight
