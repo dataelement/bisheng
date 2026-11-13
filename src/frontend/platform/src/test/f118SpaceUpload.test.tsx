@@ -1,3 +1,4 @@
+import { uploadSettings } from "./uploadWizardFixtures";
 import {
   act,
   cleanup,
@@ -161,9 +162,11 @@ async function select(files = [file()]) {
   );
   const input = document.querySelector('input[type="file"]')!;
   await act(async () => fireEvent.change(input, { target: { files } }));
+  const direct = screen.queryByRole("button", { name: "uploadDirectly" });
+  if (direct && !direct.hasAttribute("disabled")) fireEvent.click(direct);
 }
 const stageCalls = () =>
-  mocks.post.mock.calls.filter(([url]) => url === "/api/v1/knowledge/upload/7");
+  mocks.post.mock.calls.filter(([url]) => url === "/api/v1/knowledge/space/7/uploads");
 const registerCalls = () =>
   mocks.post.mock.calls.filter(
     ([url]) => url === "/api/v1/knowledge/space/7/files",
@@ -182,17 +185,18 @@ beforeEach(() => {
   mocks.children.mockResolvedValue(page());
   mocks.get.mockImplementation(
     (url: string, options?: { params?: unknown }) => {
+      if (url.endsWith("/upload-settings")) return uploadSettings();
       if (url.endsWith("/children")) return mocks.children(options?.params);
       throw new Error(`unexpected read: ${url}`);
     },
   );
   mocks.post.mockImplementation(async (url: string, body: unknown) => {
-    if (url === "/api/v1/knowledge/upload/7") {
+    if (url === "/api/v1/knowledge/space/7/uploads") {
       const value = (body as FormData).get("file") as File;
       return {
         file_path: `tmp/${value.name}`,
         file_name: value.name,
-        repeat: false,
+        upload_id: "a".repeat(32), repeat: false,
       };
     }
     if (url === "/api/v1/knowledge/space/7/files") return [row()];
@@ -210,12 +214,12 @@ it("allows folder-only upload without root info, root visible, space edit or leg
   await select();
   expect(mocks.permission).toHaveBeenCalledExactlyOnceWith("folder", "9");
   await screen.findByText("completed");
-  expect(registerCalls()[0][1]).toEqual({
+  expect(registerCalls()[0][1]).toMatchObject({
     file_path: ["tmp/report.md"],
     parent_id: 9,
   });
   expect(
-    mocks.get.mock.calls.every(([url]) => String(url).endsWith("/children")),
+    mocks.get.mock.calls.every(([url]) => (String(url).endsWith("/children") || String(url).endsWith("/upload-settings"))),
   ).toBe(true);
   expect(mocks.legacy).not.toHaveBeenCalled();
   expect(screen.getByText("f118.upload_registered")).toBeInTheDocument();
@@ -229,11 +233,11 @@ it("checks the actual SPACE root upload_file action and preserves directory quer
     "knowledge_space",
     "7",
   );
-  expect(registerCalls()[0][1]).toEqual({
+  expect(registerCalls()[0][1]).toMatchObject({
     file_path: ["tmp/report.md"],
     parent_id: null,
   });
-  fireEvent.click(screen.getByRole("button", { name: "back" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "backToKnowledge" })[0]);
   expect(screen.getByTestId("location")).toHaveTextContent(
     "/filelib/7?fileStatus=abnormal&keep=1",
   );
@@ -290,7 +294,7 @@ it("does not report completion after staging before registration finishes", asyn
   mocks.post.mockImplementation(async (url: string) =>
     url.endsWith("/files")
       ? pending.promise
-      : { file_path: "tmp/a", repeat: false },
+      : { file_path: "tmp/a", upload_id: "a".repeat(32), repeat: false },
   );
   mount();
   await select();
@@ -304,7 +308,7 @@ it("uses registered IDs rather than names/order and follows a sparse progressing
   mocks.post.mockImplementation(async (url: string) =>
     url.endsWith("/files")
       ? [row(92, 3, "same.md"), row(81, 5, "same.md")]
-      : { file_path: "tmp/a", repeat: false },
+      : { file_path: "tmp/a", upload_id: "a".repeat(32), repeat: false },
   );
   mocks.children
     .mockResolvedValueOnce(page([], "opaque/+=="))
@@ -336,24 +340,20 @@ it("retries failed status reads without uploading or registering again", async (
   expect(registerCalls()).toHaveLength(1);
   expect(mocks.error).toHaveBeenCalledWith(error);
 });
-it("reuses the actual staged body after a registration failure and keeps the original error", async () => {
-  const error = { status_code: 10999, data: { original: true } };
-  let registrations = 0;
+it("keeps an uncertain registration failed without offering duplicate submission", async () => {
+  const error = { status_code: 10999 };
   mocks.post.mockImplementation(async (url: string) => {
-    if (!url.endsWith("/files")) return { file_path: "tmp/a", repeat: false };
-    if (++registrations === 1) throw error;
-    return [row()];
+    if (!url.endsWith("/files")) return { file_path: "tmp/a", upload_id: "a".repeat(32), repeat: false };
+    throw error;
   });
-  mount();
-  await select();
-  fireEvent.click(await screen.findByRole("button", { name: "retry" }));
-  await screen.findByText("completed");
-  expect(stageCalls()).toHaveLength(1);
-  expect(registerCalls()).toHaveLength(2);
+  mount(); await select();
+  await screen.findByText("fileLoadFailed");
+  expect(registerCalls()).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "retry" })).not.toBeInTheDocument();
   expect(mocks.error).toHaveBeenCalledWith(error);
 });
 it("aborts staging on cancel and never registers a late successful body", async () => {
-  const pending = deferred<{ file_path: string; repeat: boolean }>();
+  const pending = deferred<{ file_path: string; upload_id?: string; repeat: boolean }>();
   mocks.post.mockReturnValue(pending.promise);
   mount();
   await select();
@@ -362,7 +362,7 @@ it("aborts staging on cancel and never registers a late successful body", async 
   fireEvent.click(screen.getByRole("button", { name: "cancel" }));
   expect(signal.aborted).toBe(true);
   await act(async () =>
-    pending.resolve({ file_path: "tmp/late", repeat: false }),
+    pending.resolve({ file_path: "tmp/late", upload_id: "a".repeat(32), repeat: false }),
   );
   expect(registerCalls()).toHaveLength(0);
   expect(screen.getByText("f118.upload_cancelled")).toBeInTheDocument();
@@ -372,7 +372,7 @@ it("retires a cancelled registration without pretending the server rolled it bac
   mocks.post.mockImplementation(async (url: string) =>
     url.endsWith("/files")
       ? pending.promise
-      : { file_path: "tmp/a", repeat: false },
+      : { file_path: "tmp/a", upload_id: "a".repeat(32), repeat: false },
   );
   mount();
   await select();
@@ -388,7 +388,7 @@ it("retires a cancelled registration without pretending the server rolled it bac
 it.each(["scope", "parent"])(
   "permanently retires a pending upload across %s A-B-A",
   async (kind) => {
-    const pending = deferred<{ file_path: string; repeat: boolean }>();
+    const pending = deferred<{ file_path: string; upload_id?: string; repeat: boolean }>();
     mocks.post.mockReturnValue(pending.promise);
     const view = mount();
     await select();
@@ -404,14 +404,14 @@ it.each(["scope", "parent"])(
       view.refresh();
     } else view.go("/filelib/upload/7?parent_id=9");
     await act(async () =>
-      pending.resolve({ file_path: "tmp/old", repeat: false }),
+      pending.resolve({ file_path: "tmp/old", upload_id: "a".repeat(32), repeat: false }),
     );
     expect(registerCalls()).toHaveLength(0);
     expect(screen.queryByText("report.md")).not.toBeInTheDocument();
   },
 );
 it("aborts pending staging on full unmount", async () => {
-  const pending = deferred<{ file_path: string; repeat: boolean }>();
+  const pending = deferred<{ file_path: string; upload_id?: string; repeat: boolean }>();
   mocks.post.mockReturnValue(pending.promise);
   const view = mount();
   await select();
@@ -420,7 +420,7 @@ it("aborts pending staging on full unmount", async () => {
   view.unmount();
   expect(signal.aborted).toBe(true);
   await act(async () =>
-    pending.resolve({ file_path: "tmp/late", repeat: false }),
+    pending.resolve({ file_path: "tmp/late", upload_id: "a".repeat(32), repeat: false }),
   );
   expect(registerCalls()).toHaveLength(0);
 });
@@ -444,7 +444,7 @@ it("never exposes cancellation as deletion after registration has completed", as
 it("bounds exact status IDs to batches of 100 rather than scanning the whole directory", async () => {
   const registered = Array.from({ length: 101 }, (_, index) => row(index + 1));
   mocks.post.mockImplementation(async (url: string) =>
-    url.endsWith("/files") ? registered : { file_path: "tmp/a", repeat: false },
+    url.endsWith("/files") ? registered : { file_path: "tmp/a", upload_id: "a".repeat(32), repeat: false },
   );
   mocks.children.mockImplementation(async (query: { file_ids: number[] }) =>
     page(query.file_ids.map((id) => row(id, 2))),
@@ -470,8 +470,8 @@ it("fails a nonprogressing status cursor instead of inventing completion or loop
   expect(screen.queryByText("completed")).not.toBeInTheDocument();
 });
 it("keeps an old cancelled attempt retired after the same item is retried", async () => {
-  const old = deferred<{ file_path: string; repeat: boolean }>();
-  const fresh = deferred<{ file_path: string; repeat: boolean }>();
+  const old = deferred<{ file_path: string; upload_id?: string; repeat: boolean }>();
+  const fresh = deferred<{ file_path: string; upload_id?: string; repeat: boolean }>();
   let stages = 0;
   mocks.post.mockImplementation(async (url: string) =>
     url.endsWith("/files")
@@ -486,11 +486,13 @@ it("keeps an old cancelled attempt retired after the same item is retried", asyn
   fireEvent.click(screen.getByRole("button", { name: "cancel" }));
   fireEvent.click(screen.getByRole("button", { name: "retry" }));
   await waitFor(() => expect(stageCalls()).toHaveLength(2));
-  await act(async () => old.resolve({ file_path: "tmp/old", repeat: false }));
+  await act(async () => old.resolve({ file_path: "tmp/old", upload_id: "a".repeat(32), repeat: false }));
   expect(registerCalls()).toHaveLength(0);
   await act(async () =>
-    fresh.resolve({ file_path: "tmp/fresh", repeat: false }),
+    fresh.resolve({ file_path: "tmp/fresh", upload_id: "a".repeat(32), repeat: false }),
   );
+  await waitFor(() => expect(screen.getByRole("button", { name: "uploadDirectly" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "uploadDirectly" }));
   await screen.findByText("completed");
   expect(registerCalls()[0][1].file_path).toEqual(["tmp/fresh"]);
 });
@@ -529,7 +531,7 @@ it("retires late polling results through scope A-B-A", async () => {
   expect(screen.queryByText("report.md")).not.toBeInTheDocument();
 });
 it("limits active staging to six and releases cancelled slots even when the old transport ignores abort", async () => {
-  const pending = deferred<{ file_path: string; repeat: boolean }>();
+  const pending = deferred<{ file_path: string; upload_id?: string; repeat: boolean }>();
   mocks.post.mockReturnValue(pending.promise);
   mount();
   await select(Array.from({ length: 7 }, (_, index) => file(`${index}.md`)));

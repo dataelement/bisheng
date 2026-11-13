@@ -1,3 +1,4 @@
+import { uploadSettings } from "./uploadWizardFixtures";
 import {
   act,
   cleanup,
@@ -132,14 +133,15 @@ beforeEach(() => {
   );
   mocks.get.mockImplementation(
     async (url: string, options?: { params?: { file_ids?: number[] } }) => {
+      if (url.endsWith("/upload-settings")) return uploadSettings();
       if (url.endsWith("/children"))
         return page(options?.params?.file_ids?.map((id) => row(id)));
       throw new Error(`unexpected read ${url}`);
     },
   );
   mocks.post.mockImplementation(async (url: string) => {
-    if (url === "/api/v1/knowledge/upload/7")
-      return { file_path: "tmp/report.md", repeat: false };
+    if (url === "/api/v1/knowledge/space/7/uploads")
+      return { file_path: "tmp/report.md", upload_id: "a".repeat(32), repeat: false };
     if (url === "/api/v1/knowledge/space/7/files") return [row(81, 5)];
     throw new Error(`unexpected write ${url}`);
   });
@@ -192,7 +194,7 @@ it("preserves management scope and folder context through upload and return", as
   await waitFor(() => expect(document.querySelector('input[type="file"]')).not.toBeNull());
   const uploadQuery = current.client.getQueryCache().getAll().find((query) => query.queryKey.includes("upload-target"));
   expect(uploadQuery?.queryKey[4]).toBe("admin");
-  fireEvent.click(screen.getByRole("button", { name: "back" }));
+  fireEvent.click(screen.getByRole("button", { name: "backToKnowledge" }));
   expect(await screen.findByText("report.md")).toBeVisible();
   expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?keep=1&fileStatus=abnormal&parent_id=9&view=admin");
 });
@@ -219,12 +221,13 @@ it("navigates the real folder entry into the real upload route, register and exa
       },
     }),
   );
+  fireEvent.click(screen.getByRole("button", { name: "uploadDirectly" }));
   await screen.findByText("completed");
   expect(mocks.post.mock.calls.map(([url]) => url)).toEqual([
-    "/api/v1/knowledge/upload/7",
+    "/api/v1/knowledge/space/7/uploads",
     "/api/v1/knowledge/space/7/files",
   ]);
-  expect(mocks.post.mock.calls[1][1]).toEqual({
+  expect(mocks.post.mock.calls[1][1]).toMatchObject({
     file_path: ["tmp/report.md"],
     parent_id: 9,
   });
@@ -238,7 +241,7 @@ it("navigates the real folder entry into the real upload route, register and exa
   ]);
   expect(mocks.legacy).not.toHaveBeenCalled();
   expect(
-    mocks.get.mock.calls.every(([url]) => String(url).endsWith("/children")),
+    mocks.get.mock.calls.every(([url]) => (String(url).endsWith("/children") || String(url).endsWith("/upload-settings"))),
   ).toBe(true);
 });
 it("keeps root navigation at root while retaining unrelated directory query", async () => {

@@ -1,4 +1,5 @@
 import axios from "@/controllers/request";
+import type { UploadContext } from "./knowledgeUploadPreview";
 import type {
   KnowledgeSpaceChild,
   ProcessingOverrides,
@@ -6,6 +7,7 @@ import type {
 } from "./knowledgeSpace";
 
 export interface SpaceUploadFile {
+  upload_id?: string;
   flowId?: string | null;
   file_path: string;
   relative_path?: string | null;
@@ -17,6 +19,7 @@ export interface SpaceUploadFile {
 }
 
 export interface SpaceFilesCreate {
+  upload_context?: UploadContext;
   file_path: string[];
   parent_id?: number | null;
   overrides?: ProcessingOverrides | null;
@@ -49,6 +52,7 @@ export async function registerSpaceFiles(
     `/api/v1/knowledge/space/${spaceId}/files`,
     {
       file_path: body.file_path.slice(),
+      ...(body.upload_context ? { upload_context: body.upload_context } : {}),
       ...(body.parent_id === undefined ? {} : { parent_id: body.parent_id }),
       ...(body.overrides === undefined ? {} : { overrides: body.overrides }),
     },
@@ -57,6 +61,7 @@ export async function registerSpaceFiles(
 }
 
 export interface SpaceFolderFilesCreate {
+  upload_context?: UploadContext;
   parent_id?: number | null;
   items: { file_path: string; relative_path: string; size: number }[];
   overrides?: ProcessingOverrides;
@@ -76,6 +81,7 @@ export async function registerSpaceFolder(
         relative_path,
         size,
       })),
+      ...(body.upload_context ? { upload_context: body.upload_context } : {}),
       ...(body.parent_id === undefined ? {} : { parent_id: body.parent_id }),
       ...(body.overrides === undefined
         ? {}
