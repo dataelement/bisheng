@@ -2758,15 +2758,16 @@ async def _task_mode_stream_completion(
     # failures stay best-effort here: the client's start-execute is the fallback.
     from bisheng.workstation.domain.services.task_submit_service import submit_task_turn
 
-    # F132: a task turn entered from the daily entry is registered here (design
-    # decision 6). An existing conversation is registered before the turn is
-    # queued so the worker's first resolve finds it; a new one only gets its
-    # chat_id from the submit itself.
-    if data.conversationId:
-        await register_session(memory_register, data.conversationId)
-    _session, session_version = await submit_task_turn(data, login_user)
-    if not data.conversationId:
-        await register_session(memory_register, session_version.session_id)
+    # F132: a task turn entered from the daily entry is registered for long-term
+    # memory (design decision 6). Only the logged-in endpoint injects
+    # memory_register; the hook runs once the conversation exists and before the
+    # run is queued, so the worker's first resolve finds the registration.
+    async def _register(session, _version):
+        await register_session(memory_register, session.chat_id)
+
+    _session, session_version = await submit_task_turn(
+        data, login_user, on_session_created=_register if memory_register is not None else None
+    )
 
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode

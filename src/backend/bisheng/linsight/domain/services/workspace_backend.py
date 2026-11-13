@@ -116,6 +116,8 @@ SCRATCH_DIR = "scratch"
 # the producing call — so a follow-up turn (and the code interpreter) must
 # still see the same objects.
 LARGE_TOOL_RESULTS_DIR = "large_tool_results"
+# F132: returned when a long-term memory result would be offloaded (it stays in context).
+_MEMORY_OFFLOAD_REFUSED = "memory tool results are not written to the workspace"
 MANIFEST_NAME = "manifest.json"
 # Where the platform copies this run's skill bundles at task start (canonical
 # name: ``skill_provisioning.WORKSPACE_SKILLS_DIR``, duplicated here as a literal
@@ -876,11 +878,32 @@ class WorkspaceBackend(FilesystemBackend):
     _normalize_markdown_citation_bytes = _canonicalize_citation_bytes
 
     # -- write --------------------------------------------------------------
+    def _refuses_memory_offload(self, rel: str, content) -> bool:
+        """F132 (R3): a long-term memory tool result is never offloaded to large_tool_results/.
+
+        The three offload paths (two inside deepagents) all write here and keep
+        the message in context when the write fails. The check is on content
+        only (fixed prefix of the memory tool output), so it is stateless.
+        """
+        if not rel.startswith(LARGE_TOOL_RESULTS_DIR + "/"):
+            return False
+        from bisheng.memory.domain.services.redaction import is_memory_tool_output
+
+        text = content.decode("utf-8", "ignore") if isinstance(content, (bytes, bytearray)) else content
+        if isinstance(text, list):
+            text = "".join(str(part) for part in text)
+        if not is_memory_tool_output(text):
+            return False
+        logger.info("[linsight-memory] svid={} refused offloading a memory tool result to {}", self.svid, rel)
+        return True
+
     def write(self, file_path: str, content) -> WriteResult:
         rel = self._ws_rel(file_path)
         if _is_skills_path(rel):
             logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
             return WriteResult(error=_skills_readonly_error(file_path))
+        if self._refuses_memory_offload(rel, content):
+            return WriteResult(error=_MEMORY_OFFLOAD_REFUSED)
         data = self._canonicalize_citation_bytes(rel, self._to_bytes(content))
         # cache first (fast local), then write-through to MinIO (truth).
         self._cache_write(rel, data)
@@ -1145,6 +1168,8 @@ class WorkspaceBackend(FilesystemBackend):
         if _is_skills_path(rel):
             logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
             return WriteResult(error=_skills_readonly_error(file_path))
+        if self._refuses_memory_offload(rel, content):
+            return WriteResult(error=_MEMORY_OFFLOAD_REFUSED)
         data = self._canonicalize_citation_bytes(rel, self._to_bytes(content))
         await asyncio.to_thread(self._cache_write, rel, data)
         await self.minio.put_object(
