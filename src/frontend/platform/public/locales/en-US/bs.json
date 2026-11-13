@@ -224,8 +224,8 @@
     "registration": {
       "account": "Account",
       "nickname": "Nickname",
-      "accountPlaceholder": "Account for sign-in; cannot be changed",
-      "nicknamePlaceholder": "Nickname shown in the system",
+      "accountPlaceholder": "Account (cannot be changed)",
+      "nicknamePlaceholder": "Nickname",
       "accountRules": "1–64 characters. Start with an English letter or digit. Case-sensitive; symbols allowed. No spaces or whitespace.",
       "nicknameRules": "1–32 characters. No spaces or whitespace.",
       "accountRulesLabel": "Account rules",

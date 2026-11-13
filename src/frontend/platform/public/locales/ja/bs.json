@@ -223,8 +223,8 @@
     "registration": {
       "account": "アカウント",
       "nickname": "ニックネーム",
-      "accountPlaceholder": "ログイン用アカウント・作成後は変更不可",
-      "nicknamePlaceholder": "システム内の表示名",
+      "accountPlaceholder": "アカウント（作成後は変更不可）",
+      "nicknamePlaceholder": "ニックネーム",
       "accountRules": "1～64文字。英字または数字で始め、大文字と小文字を区別します。記号を使用できます。スペース・空白文字は使用できません。",
       "nicknameRules": "1～32文字。スペース・空白文字は使用できません。",
       "accountRulesLabel": "アカウントの入力ルール",
