@@ -1860,7 +1860,6 @@
     "exportEmpty": "No records match the current filters",
     "exportTruncated": "{{total}} records match, above the per-export limit; only the latest {{max}} were exported — narrow the filters",
     "runtime": {
-      "identityHint": "Caller and visitor names use recorded values. Execution users use current account names when no recorded name is available. Hover to view the original identifier.",
       "exportModelHint": "CSV preserves raw identifiers and null values. App-self calls have no execution user. Time to first token applies to streaming calls, and token counts stay blank when the provider supplied no usage. Error codes on successful calls and unrecorded HTTP statuses also stay blank. Blank does not mean zero.",
       "exportCapabilityHint": "CSV preserves the original records. Result counts may be blank when a call was refused or produced no retrieval result. An actual count of zero is exported as 0.",
       "callerWithId": "Caller #{{id}} (name not recorded)",
@@ -1902,7 +1901,6 @@
       "accessTab": "Application visits",
       "tenant": "Tenant",
       "allTenants": "All tenants",
-      "accessHint": "Visits are merged within the entry window. They do not represent individual HTTP requests.",
       "status": {
         "pending": "Waiting to export",
         "running": "Exporting",

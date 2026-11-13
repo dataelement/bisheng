@@ -7,7 +7,7 @@ import { userContext } from '@/contexts/userContext'
 
 vi.mock('./systemLog', () => ({ default: () => <div>System panel</div> }))
 vi.mock('./useAppLog', () => ({ default: () => <div>Application panel</div> }))
-vi.mock('./runtime/RuntimeAuditPanel', () => ({ RuntimeAuditPanel: () => <div>Runtime panel</div> }))
+vi.mock('./runtime/RuntimeAuditPanel', () => ({ RuntimeAuditPanel: ({ kind }: { kind: string }) => <div>Runtime panel {kind}</div> }))
 afterEach(cleanup)
 it('preserves default application logs and switches the mounted panel with the shared tabs', () => {
     render(<LogPage />)
@@ -30,9 +30,16 @@ it.each([
     const user = { user: { role, is_child_admin: child } } as unknown as ContextType<typeof userContext>
     render(<locationContext.Provider value={location}><userContext.Provider value={user}><LogPage /></userContext.Provider></locationContext.Provider>)
     const tab = screen.queryByRole('tab', { name: 'log.runtime.title' })
+    expect(screen.queryByRole('radiogroup', { name: 'log.runtime.title' })).not.toBeInTheDocument()
     if (visible) {
         expect(tab).toBeVisible()
         fireEvent.mouseDown(tab!, { button: 0, ctrlKey: false })
-        expect(screen.getByText('Runtime panel')).toBeVisible()
+        expect(screen.getByText('Runtime panel model')).toBeVisible()
+        fireEvent.click(screen.getByRole('radio', { name: 'log.runtime.capabilityTab' }))
+        expect(screen.getByText('Runtime panel capability')).toBeVisible()
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'log.appUsage' }), { button: 0, ctrlKey: false })
+        expect(screen.queryByRole('radiogroup', { name: 'log.runtime.title' })).not.toBeInTheDocument()
+        fireEvent.mouseDown(tab!, { button: 0, ctrlKey: false })
+        expect(screen.getByText('Runtime panel model')).toBeVisible()
     } else expect(tab).not.toBeInTheDocument()
 })

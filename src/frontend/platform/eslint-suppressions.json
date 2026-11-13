@@ -2114,9 +2114,6 @@
     }
   },
   "src/pages/LogPage/useAppLog/index.tsx": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
     "@typescript-eslint/no-explicit-any": {
       "count": 2
     },
