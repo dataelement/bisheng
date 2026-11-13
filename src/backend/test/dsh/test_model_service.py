@@ -376,6 +376,65 @@ async def test_context_length_refusal_preserves_client_error_without_freezing(se
     assert not ledger.frozen
 
 
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("overflow", [False, True])
+async def test_sdk_context_overflow_is_preserved_in_public_response_and_ledger(service_setup, stream, overflow):
+    """Exercise real SDK/LangChain conversion, including an HTTP 200 SSE error."""
+    import json
+
+    import httpx
+    from langchain_openai import ChatOpenAI
+
+    from bisheng.common.errcode.dsh import DshContextLengthExceededError
+
+    service, llm, ledger, *_ = service_setup
+    message = (
+        "Your input exceeds the context window of this model. Please adjust your input and try again."
+        if overflow
+        else "private provider failure"
+    )
+    # The gateway loses the specific code but LangChain recognises the overflow.
+    payload = {"error": {"code": "upstream_error", "message": message, "type": "invalid_request_error"}}
+    calls = []
+
+    def respond(incoming):
+        calls.append(incoming)
+        if stream:
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content="data: " + json.dumps(payload) + "\n\n",
+            )
+        # The HTTP adapter recognises this provider's input-overflow wording.
+        body = {"error": {**payload["error"], "code": "context_length_exceeded"}} if overflow else payload
+        return httpx.Response(400, json=body)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        upstream = ChatOpenAI(model="fixture", api_key="fixture", http_async_client=client, max_retries=0)
+        llm.ainvoke = upstream.ainvoke
+        llm.astream = upstream.astream
+        if stream:
+            result = await service.complete(principal(), request(stream=True))
+            wire = "".join([frame async for frame in result])
+            assert wire.startswith("event: error\n")
+            assert "[DONE]" not in wire
+            error = json.loads(wire.split("data: ", 1)[1])["error"]
+            assert error["code"] == ("context_length_exceeded" if overflow else "upstream_error")
+            assert message not in wire
+        else:
+            expected = DshContextLengthExceededError if overflow else DshUpstreamErrorError
+            with pytest.raises(expected):
+                await service.complete(principal(), request())
+
+    assert len(calls) == 1
+    terminal = ledger.events[-1]
+    assert terminal.error_code == (
+        "context_length_exceeded" if overflow else "upstream_error" if stream else "upstream_http_400"
+    )
+    assert terminal.status == "USAGE_UNKNOWN" and terminal.total_tokens is None
+    assert ledger.used == 90 and not ledger.frozen
+
+
 async def test_work_admission_snapshots_model_multiplier(service_setup):
     service, llm, ledger, policy, _state = service_setup
     policy.rows[0].credit_rate = 125
