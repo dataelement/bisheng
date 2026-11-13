@@ -1,94 +1,40 @@
-from typing import List, Optional
+from typing import Annotated
 
-from loguru import logger
-from fastapi import APIRouter, HTTPException
-from sqlmodel import delete, select
+from fastapi import APIRouter, Depends, Query
 
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.flow_version import FlowVersionDao
-from bisheng.database.models.variable_value import Variable, VariableCreate, VariableRead, VariableDao
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.schemas.api import resp_200
+from bisheng.variable.domain.schemas import VariableInput
+from bisheng.variable.domain.services.variable_service import VariableService
 
-# build router
-router = APIRouter(prefix='/variable', tags=['variable'])
+router = APIRouter(prefix="/variable", tags=["variable"], dependencies=[Depends(UserPayload.get_login_user)])
+LoginUser = Annotated[UserPayload, Depends(UserPayload.get_login_user)]
 
 
-@router.post('/', status_code=200)
-def post_variable(variable: Variable):
-    try:
-        if not variable.version_id:
-            raise HTTPException(status_code=500, detail='version_id is required')
-        if variable.id:
-            # Update with full replacement
-            with get_sync_db_session() as session:
-                db_variable = session.get(Variable, variable.id)
-            db_variable.variable_name = variable.variable_name[:50]
-            db_variable.value = variable.value
-            db_variable.value_type = variable.value_type
-        else:
-            # if name exist
-            with get_sync_db_session() as session:
-                db_variable = session.exec(
-                    select(Variable).where(
-                        Variable.node_id == variable.node_id,
-                        Variable.variable_name == variable.variable_name,
-                        Variable.version_id == variable.version_id)).all()
-            if db_variable:
-                raise HTTPException(status_code=500, detail='name repeat, please choose another')
-            db_variable = Variable.from_orm(variable)
-
-        with get_sync_db_session() as session:
-            session.add(db_variable)
-            session.commit()
-            session.refresh(db_variable)
-        return resp_200(db_variable)
-    except Exception as e:
-        logger.exception("post variable error: ")
-        return HTTPException(status_code=500, detail=str(e))
+@router.post("/", status_code=200)
+async def post_variable(variable: VariableInput, login_user: LoginUser):
+    return resp_200(await VariableService.save(login_user, variable))
 
 
-@router.get('/list')
-def get_variables(*,
-                  flow_id: str,
-                  node_id: Optional[str] = None,
-                  variable_name: Optional[str] = None,
-                  version_id: Optional[int] = None):
-    try:
-        # No passingIDGet data for the current version by default
-        if version_id is None:
-            version_id = FlowVersionDao.get_version_by_flow(flow_id).id
-        res = VariableDao.get_variables(flow_id, node_id, variable_name, version_id)
-        return resp_200(res)
-
-    except Exception as e:
-        return HTTPException(status_code=500, detail=str(e))
+@router.get("/list")
+async def get_variables(
+    login_user: LoginUser,
+    *,
+    flow_id: str,
+    node_id: str | None = None,
+    variable_name: str | None = None,
+    version_id: Annotated[int | None, Query(gt=0)] = None,
+):
+    return resp_200(await VariableService.list(login_user, flow_id, version_id, node_id, variable_name))
 
 
-@router.delete('/del', status_code=200)
-def del_variables(*, id: int):
-    try:
-        statment = delete(Variable).where(Variable.id == id)
-        with get_sync_db_session() as session:
-            session.exec(statment)
-            session.commit()
-        return resp_200()
-
-    except Exception as e:
-        return HTTPException(status_code=500, detail=str(e))
+@router.delete("/del", status_code=200)
+async def del_variables(login_user: LoginUser, *, id: Annotated[int, Query(gt=0)]):
+    await VariableService.delete(login_user, id)
+    return resp_200()
 
 
-@router.post('/save_all', status_code=200)
-def save_all_variables(*, data: List[VariableCreate]):
-    try:
-        # delete first
-        flow_id = data[0].flow_id
-        with get_sync_db_session() as session:
-            session.exec(delete(Variable).where(Variable.flow_id == flow_id))
-            session.commit()
-            for var in data:
-                db_var = Variable.model_validate(var)
-                session.add(db_var)
-            session.commit()
-        return resp_200()
-    except Exception as e:
-        return HTTPException(status_code=500, detail=str(e))
+@router.post("/save_all", status_code=200)
+async def save_all_variables(login_user: LoginUser, *, data: list[VariableInput]):
+    await VariableService.replace(login_user, data)
+    return resp_200()

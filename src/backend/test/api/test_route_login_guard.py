@@ -53,7 +53,6 @@ DELETE /api/v1/apps/{app_id}/storage/objects/{key:path}
 DELETE /api/v1/dsh/market/admin/plugins/{plugin_id}
 DELETE /api/v1/service-accounts/{service_account_id}
 DELETE /api/v1/tenants/{tenant_id}/users/{user_id}
-DELETE /api/v1/variable/del
 GET /api/v1/all
 GET /api/v1/apps/_unavailable
 GET /api/v1/apps/{app_id}/storage/meta/{key:path}
@@ -121,7 +120,6 @@ GET /api/v1/telemetry/dashboard/dataset/list
 GET /api/v1/tool/linsight/preset
 GET /api/v1/user/get_captcha
 GET /api/v1/user/public_key
-GET /api/v1/variable/list
 GET /api/v1/version
 GET /api/v1/web/config
 PATCH /api/v1/dsh/market/admin/install-policy
@@ -199,8 +197,6 @@ POST /api/v1/user/logout
 POST /api/v1/user/regist
 POST /api/v1/user/sso
 POST /api/v1/user/switch-tenant
-POST /api/v1/variable/
-POST /api/v1/variable/save_all
 POST /api/v1/workflow/report/callback
 PUT /api/v1/apps/{app_id}/storage/objects/{key:path}
 PUT /api/v1/internal/app-runtime/v2/transfers/{transfer_id}/content
