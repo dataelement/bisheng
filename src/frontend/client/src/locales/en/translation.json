@@ -2978,6 +2978,7 @@
       "resident_view": "View all {{count}}",
       "resident_hide": "Hide",
       "empty": "The related memories have been deleted"
-    }
+    },
+    "tool_operation": "Memory operation"
   }
 }

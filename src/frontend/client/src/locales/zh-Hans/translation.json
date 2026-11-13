@@ -2906,6 +2906,7 @@
       "resident_view": "查看全部 {{count}} 条",
       "resident_hide": "收起",
       "empty": "相关记忆已被删除"
-    }
+    },
+    "tool_operation": "记忆操作"
   }
 }

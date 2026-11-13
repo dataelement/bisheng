@@ -2901,6 +2901,7 @@
       "resident_view": "すべて表示（{{count}} 件）",
       "resident_hide": "閉じる",
       "empty": "関連するメモリーは削除されました"
-    }
+    },
+    "tool_operation": "メモリー操作"
   }
 }

@@ -223,3 +223,24 @@ export function mergeMemoryFlags<T extends { messageId: string; memory?: MemoryF
   });
   return changed ? next : messages;
 }
+
+const isRedactedPayload = (value: unknown): boolean => {
+  if (typeof value === "string") {
+    try {
+      return isRedactedPayload(JSON.parse(value));
+    } catch {
+      return false;
+    }
+  }
+  return !!value && typeof value === "object" && (value as { redacted?: unknown }).redacted === true;
+};
+
+/**
+ * A memory tool event as persisted/streamed: tool input and output are each
+ * replaced by `{redacted: true, op, item_ids}`. Recognised by name too, so an
+ * in-flight call never shows its arguments.
+ */
+export function isMemoryToolEvent(call: { tool_name?: string | null; args?: unknown; results?: unknown }): boolean {
+  if ((call.tool_name || "").toLowerCase().startsWith("memory_")) return true;
+  return isRedactedPayload(call.args) || isRedactedPayload(call.results);
+}
