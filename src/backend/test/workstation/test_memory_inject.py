@@ -79,9 +79,11 @@ async def test_ac10_initialize_registers_before_the_question_row(monkeypatch):
     monkeypatch.setattr(
         chat_service.WorkStationService, "aget_config", AsyncMock(return_value=SimpleNamespace(models=[model]))
     )
-    from bisheng.common.services.config_service import settings as enterprise_settings
-
-    assert not enterprise_settings.dsh.enabled  # default: workbench models come from the config
+    # The user-facing model list comes from the shared catalog (online models the
+    # user may see); this test only needs model "m1" to be selectable.
+    monkeypatch.setattr(
+        "bisheng.dsh.domain.services.model_catalog.user_workbench_models", AsyncMock(return_value=[model])
+    )
     monkeypatch.setattr(chat_service.MessageSessionDao, "async_insert_one", AsyncMock())
     monkeypatch.setattr(chat_service.telemetry_service, "log_event", AsyncMock())
 
