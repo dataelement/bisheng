@@ -290,7 +290,7 @@
 
 | 开关 | 存储 | 说明 |
 |---|---|---|
-| （没有租户级开关） | — | 用户于 2026-11-13 裁定去掉。工作台配置里只有一个与记忆有关的字段：`WorkstationConfig.memory_model_id`（整理使用的模型，见决策 18），沿用 `POST/GET /api/v1/workstation/config/daily` 与现有读写入口，不新开配置键 |
+| （没有租户级开关） | — | 用户于 2026-11-13 裁定去掉。与记忆有关的租户级配置只有整理用的模型：系统模型配置工作台页的 `WorkbenchModelConfig.memory_llm`（见决策 18），沿用 `GET/POST /api/v1/llm/workbench`，不新开配置键 |
 | 我的记忆 | 新表 `memory_user_setting`，一人一租户一行 | 同一行还有 `rev` 与 `timezone`。没有行时按 `enabled=true`，所以升级后每个用户默认是开（AC-76） |
 | 助手记忆 | `assistant` 表新列 `memory_enabled`，`server_default` 为关 | 助手没有版本表，保存即生效（spec AC-71 已据此订正） |
 | 工作流记忆 | 开始节点的参数 `memory_enabled`，存在 `flow_version.data` 里 | 随版本走；参数缺失视为关 |
@@ -305,7 +305,8 @@
 ### 决策 18：整理用的模型由租户指定，调用按租户计量
 
 - **选定**：
-  - 工作台配置里有"记忆整理使用的模型"（`WorkstationConfig.memory_model_id`，AC-106）。未指定时用工作台模型列表的第一个。两者都没有时整理任务按失败处理并计数，不静默跳过。
+  - 系统模型配置的工作台页里有"记忆整理模型"（`WorkbenchModelConfig.memory_llm`，存在 `linsight_llm` 配置键下，AC-106），与会话标题生成模型并列，沿用该页的租户继承、可用模型校验与越权模型过滤。未指定时用日常对话模型列表（同一配置的 `models`）的第一个。两者都没有时整理任务按失败处理并计数，不静默跳过。
+  - 被否方案：放在工作台配置（`WorkstationConfig.memory_model_id`，第 5 稿的做法）。用户于 2026-11-14 裁定挪走：模型类选项统一在系统模型配置里管理。
   - 整理的模型调用与记忆的 embedding 调用，以记忆主人的 `user_id` 发起，标记一个新的应用类型"记忆"，记入现有的 token 用量记录。
 - **额度（用户已于 2026-11-13 裁定）**：整理与记忆 embedding 的调用**不计入用户个人额度**，只按租户记录用量。现有模型调用会经过额度检查（DSH 积分等，`dsh/domain/services/chat_credits.py:20-23`），记忆的调用要绕开个人额度扣减这一步；如果调用仍被其他机制拒绝，按整理失败处理并计数。
 - **备选**：整理固定用系统默认模型，不给配置。否决原因是后台整理是持续成本，应当能指到便宜的模型。
@@ -480,7 +481,7 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 租户归属变化 | `tenant/domain/services/user_tenant_sync_service.py:76` | 不挂钩子；靠决策 9 的显式过滤满足 AC-06、AC-07 |
 | 应用删除 | 助手软删 `api/services/assistant.py:419`；工作流硬删 `database/models/flow.py:211` | 不挂钩子；来源名称已快照 |
 | 审计 | `database/models/audit_log.py:531` `AuditLogDao.ainsert_v2` | 动作名 `memory.item.*`，`metadata` 不放内容 |
-| 工作台配置 | `workstation/domain/services/workstation_service.py:57/247`；`api/v1/schemas.py` `WorkstationConfig` | 加 `memory_model_id` 字段 |
+| 系统模型配置 | `llm/domain/schemas.py` `WorkbenchModelConfig`；`llm/domain/services/llm.py`（引用校验、越权过滤、继承模型清单） | 加 `memory_llm` 字段 |
 | 额度 | `dsh/domain/services/chat_credits.py:20-23,57-60`；`llm/domain/services/llm.py:1407-1412,1457-1464` | 记忆的调用不扣个人额度，按租户记用量（决策 18） |
 | 前端：工作流节点 | `platform/src/controllers/API/workflow.ts:185`、`pages/BuildPage/flow/FlowNode/Parameter.tsx`、`FlowNode/NodeLogo.tsx`、`public/locales/*/flow.json` | 新增节点四处都要改 |
 | 前端：助手设置 | `platform/src/pages/BuildPage/assistant/editAssistant/Setting.tsx`（`knowledge_auth` 开关是样板） | 新增开关与说明 |
@@ -581,14 +582,14 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 |---|---|---|
 | `chatmessage` 按 `chat_id` 可读，`category` 能区分用户输入、系统输出、深度研究任务行及其终态 | 隐式数据契约 | 任一场景改消息格式，整理会读不懂或水位判断出错；每个场景要有一条整理的集成测试 |
 | 各场景的工具事件落库点 | 代码位置 | 新增一种落库路径而没有调脱敏函数，就是一处泄漏；要有覆盖三个场景的断言 |
-| `WorkstationConfig` 与工作台配置接口 | 结构与接口 | 该结构改形态时 `memory_model_id` 字段要同步 |
+| `WorkbenchModelConfig` 与 `/api/v1/llm/workbench` | 结构与接口 | 该结构改形态时 `memory_llm` 字段要同步 |
 | 知识库默认 embedding、`MilvusFactory`、`ElasticsearchFactory` | 内部 API | 属于知识库模块，记忆不得改变它们的行为 |
 | `AuditLogDao.ainsert_v2` | 内部 API | 动作名需登记 |
 | 租户上下文（`get_current_tenant_id`、`bypass_tenant_filter`） | 内部 API | "当前租户"的语义变化会直接影响隔离 |
 | 模型调用的额度机制 | `dsh/domain/services/chat_credits.py` | 记忆的调用要绕开个人额度扣减；该机制改形态时要复核 |
 | 引用呈现组件（F075） | 前端组件 | 归因沿用其样式，不沿用其数据通道 |
 
-**在其他 Owner 的对象上新增的写入点**（`release-contract.md` 的 F132 段同步）：审计记录；`WorkstationConfig` 的 `memory_model_id` 字段；`assistant.memory_enabled` 列；工作流开始节点参数、实例化时的 `graph_state` 字段与上线校验；三个场景的工具事件落库处；client 个人设置的新 section。管理端查看会话的页面只多一种"记忆操作"的占位渲染。
+**在其他 Owner 的对象上新增的写入点**（`release-contract.md` 的 F132 段同步）：审计记录；`WorkbenchModelConfig` 的 `memory_llm` 字段；`assistant.memory_enabled` 列；工作流开始节点参数、实例化时的 `graph_state` 字段与上线校验；三个场景的工具事件落库处；client 个人设置的新 section。管理端查看会话的页面只多一种"记忆操作"的占位渲染。
 
 ---
 
@@ -711,6 +712,7 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-11-14 | 整理模型从工作台配置挪到系统模型配置的工作台页，字段改为 `WorkbenchModelConfig.memory_llm`，界面名称改为"记忆整理模型"；修订 AC-106 | 用户裁定 |
 | 2026-11-13 | 初版（设计草稿，未编码） | spec 第 2 稿确认后进入设计 |
 | 2026-11-13 | `/sdd-code-review` 修复：R10（资格：本人校验、助手仅登录态、工作流仅平台来源）、R11（整理安全、脱敏范围、内容安全拦截），R6 注入位置修订，§8 补三条已知限制 | 代码审查 |
 | 2026-11-13 | 实现完成：新增 §4.5 实现后的现状；Wave 8–13 由 6 个并行 worktree 实现后合并（各 Wave 记录见 wave-notes/） | 无人值守开发 T095 |

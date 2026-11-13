@@ -138,6 +138,7 @@ def _workbench_model_ref_values(config: WorkbenchModelConfig) -> list[Any]:
         getattr(config.asr_model, "id", None),
         getattr(config.tts_model, "id", None),
         getattr(config.chat_title_llm, "id", None),
+        getattr(config.memory_llm, "id", None),
         getattr(config.image_read_model, "id", None),
     ]
 
@@ -282,6 +283,7 @@ class LLMService:
                     getattr(workbench_cfg.asr_model, "id", None),
                     getattr(workbench_cfg.tts_model, "id", None),
                     getattr(workbench_cfg.chat_title_llm, "id", None),
+                    getattr(workbench_cfg.memory_llm, "id", None),
                 ],
             )
 
@@ -400,7 +402,7 @@ class LLMService:
             config.linsight_default_model_id = None
         if not is_allowed(config.chat_default_model_id):
             config.chat_default_model_id = None
-        for field_name in ("embedding_model", "asr_model", "tts_model", "chat_title_llm"):
+        for field_name in ("embedding_model", "asr_model", "tts_model", "chat_title_llm", "memory_llm"):
             ws_model = getattr(config, field_name)
             if ws_model is not None and not is_allowed(ws_model.id):
                 setattr(config, field_name, None)
@@ -1608,6 +1610,7 @@ class LLMService:
                         config_obj.asr_model,
                         config_obj.tts_model,
                         config_obj.chat_title_llm,
+                        config_obj.memory_llm,
                         config_obj.image_read_model,
                     )
                 ),
