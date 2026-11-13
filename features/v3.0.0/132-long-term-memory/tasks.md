@@ -178,7 +178,7 @@
   **覆盖 AC**: AC-106
   **依赖**: T014
 
-- [ ] **T020**: 整理模型配置的实现
+- [x] **T020**: 整理模型配置的实现
   **文件**: `src/backend/bisheng/api/v1/schemas.py`、`src/backend/bisheng/memory/domain/services/consolidation_model.py`（新建）
   **逻辑**: `WorkstationConfig` 增加 `memory_model_id: int | None = None`；沿用现有工作台配置接口与读写入口，不新开配置键。`consolidation_model.py` 提供按当前租户取整理模型的函数。设计见 design 决策 17、18。
   **测试**: T019 全部通过
