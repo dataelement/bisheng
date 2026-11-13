@@ -96,6 +96,7 @@ from .chat_helpers import (
     # insert a placeholder entry in the sidebar conversation list
     # the moment a new chat is created (title updated later via
     # gen_title). Must be emitted *before* any category event.
+    _memory_sse,  # F132 long-term memory signal
     _sse_resp,  # v2.5 Agent-mode SSE builder
     gen_title,
     read_image_as_data_url,
@@ -116,6 +117,15 @@ from .daily_citation import (
     select_cited_items,
     select_cited_items_sync,
     strip_ids_for_sync_path,
+)
+from .daily_memory import (
+    DailyMemoryTurn,
+    MemoryRegister,
+    redact_args,
+    redact_error,
+    redact_results,
+    register_session,
+    with_resident,
 )
 from .workstation_service import WorkStationService
 
@@ -1393,6 +1403,7 @@ async def _agent_initialize_chat(
     session_subject: SessionSubject | None = None,
     *,
     skip_llm: bool = False,
+    memory_register: MemoryRegister | None = None,
 ):
     """Agent-mode init: creates/fetches the conversation and inserts the user's
     question row in the NEW JSON format (`{"query": str, "files": [...]}`)
@@ -1451,6 +1462,11 @@ async def _agent_initialize_chat(
     if not is_new_conversation:
         await MessageSessionDao.touch_session(conversation_id)
         conversation = await MessageSessionDao.async_get_one(conversation_id)
+
+    # F132: login-state endpoints register the conversation for long-term memory
+    # (decision 6). It runs before this turn's question row so the watermark set
+    # at first registration excludes only earlier history (AC-40).
+    await register_session(memory_register, conversation_id)
 
     # Same as the legacy flow: the attachment becomes permanent at send time,
     # not at upload time (see promote_chat_attachments).
@@ -1715,6 +1731,8 @@ async def _agent_stream_chat_completion(
     data: APIChatCompletion,
     login_user: UserPayload,
     session_subject: SessionSubject | None = None,
+    *,
+    memory_register: MemoryRegister | None = None,
 ):
     """v2.5 LangGraph ReAct Agent chat completion.
 
@@ -1739,7 +1757,7 @@ async def _agent_stream_chat_completion(
     blocked = SensitiveWordPolicyService.evaluate_workbench_user_text(tenant_id, data.text or "")
     try:
         ws_config, conversation, message, bisheng_llm, model_info, is_new_conv = await _agent_initialize_chat(
-            data, login_user, session_subject, skip_llm=bool(blocked)
+            data, login_user, session_subject, skip_llm=bool(blocked), memory_register=memory_register
         )
         conversation_id = conversation.chat_id
     except (BaseErrorCode, ValueError) as exc:
@@ -1844,6 +1862,7 @@ async def _agent_stream_chat_completion(
         # True once the answer row has been written, so the interrupt path can't
         # double-insert a turn the normal path already saved.
         persisted = False
+        memory_turn = DailyMemoryTurn(conversation_id)
         scanner = None
         if SensitiveWordPolicyService.is_workbench_content_safety_active(tenant_id):
             from bisheng.sensitive_word.domain.services.stream_scanner import StreamContentSafetyScanner
@@ -1921,6 +1940,11 @@ async def _agent_stream_chat_completion(
             row = build_answer_row(db_content)
             row.extra = blocked_answer_extra()
             resp_msg = await ChatMessageDao.ainsert_one(row)
+            # F132: memory writes made before the replacement still happened.
+            await memory_turn.finish(resp_msg.id)
+            memory_signal = memory_turn.final_signal()
+            if memory_signal:
+                yield _memory_sse(memory_signal, conversation_id, message_id=resp_msg.id)
             yield _sse_resp(
                 "agent_answer",
                 "end",
@@ -1969,6 +1993,8 @@ async def _agent_stream_chat_completion(
                     cited=citation_items,
                 )
                 resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}))
+                # F132: synchronous bind and end of turn (an await would be cancelled).
+                memory_turn.finish_sync(resp.id)
                 save_message_citations_sync(
                     message_id=resp.id,
                     items=citation_items,
@@ -1996,6 +2022,10 @@ async def _agent_stream_chat_completion(
 
         langchain_tools: list[BaseTool] = []
         try:
+            # F132: enablement and a fresh turn_id; only the login-state path
+            # (which passes memory_register) can resolve a memory context.
+            await memory_turn.start(registered=memory_register is not None)
+
             # ---- Step 1: resolve user-selected KBs ----
             knowledge_bases_info = await _resolve_user_kb_selection(data)
 
@@ -2020,6 +2050,8 @@ async def _agent_stream_chat_completion(
                 citation_scope=citation_scope,
                 kb_image_stage=kb_image_stage,
             )
+            # F132: the two memory tools join when memory is on (AC-27, AC-28).
+            langchain_tools = memory_turn.tools(langchain_tools)
 
             # Surface init failures as synthetic tool_call events so the user
             # sees *something* (e.g. "联网搜索 失败: 未配置服务商") rather than
@@ -2109,6 +2141,9 @@ async def _agent_stream_chat_completion(
             # (tenants saved the old default); swap that section for the handle
             # rules at run time, or append them when the prompt has none.
             sys_prompt = replace_legacy_citation_rules(sys_prompt)
+            # F132: resident memory rides on the system prompt of every turn, so
+            # both the agent branch and the direct branch below carry it (AC-51).
+            sys_prompt = with_resident(sys_prompt, await memory_turn.resident_text())
             llm_messages = [*history, HumanMessage(content=content_payload)]
 
             logger.info(
@@ -2313,7 +2348,9 @@ async def _agent_stream_chat_completion(
                             "tool_name": tool_name,
                             "display_name": meta["display_name"],
                             "tool_type": meta["tool_type"],
-                            "args": (ev.get("data") or {}).get("input", {}),
+                            # F132 decision 10: memory tool inputs are redacted
+                            # before they reach `events` or the stream (AC-09).
+                            "args": redact_args(tool_name, (ev.get("data") or {}).get("input", {})),
                             "started_at": int(time.time() * 1000),
                         }
                         events.append(tool_event)
@@ -2340,16 +2377,17 @@ async def _agent_stream_chat_completion(
                         ended_ms = int(time.time() * 1000)
                         if idx is not None:
                             tool_event = events[idx]
-                            results = _parse_tool_results(raw_output, tool_event.get("tool_name"))
+                            ended_tool = tool_event.get("tool_name")
+                            results = redact_results(ended_tool, raw_output, _parse_tool_results)
                             tool_event["results"] = results
-                            tool_event["error"] = _extract_tool_error(raw_output)
+                            tool_event["error"] = redact_error(ended_tool, _extract_tool_error(raw_output))
                             tool_event["ended_at"] = ended_ms
                             if tool_event.get("started_at") is not None:
                                 tool_event["duration_ms"] = max(0, ended_ms - tool_event["started_at"])
                             payload = {k: v for k, v in tool_event.items() if k != "type"}
                         else:
                             # Edge case: tool_end without a matching start. Synthesise one.
-                            results = _parse_tool_results(raw_output, name)
+                            results = redact_results(name, raw_output, _parse_tool_results)
                             tool_event = {
                                 "type": "tool_call",
                                 "tool_call_id": tc_id,
@@ -2358,7 +2396,7 @@ async def _agent_stream_chat_completion(
                                 "tool_type": "tool",
                                 "args": {},
                                 "results": results,
-                                "error": _extract_tool_error(raw_output),
+                                "error": redact_error(name, _extract_tool_error(raw_output)),
                                 "started_at": ended_ms,
                                 "ended_at": ended_ms,
                                 "duration_ms": 0,
@@ -2366,6 +2404,10 @@ async def _agent_stream_chat_completion(
                             events.append(tool_event)
                             payload = {k: v for k, v in tool_event.items() if k != "type"}
                         yield _sse_resp("agent_tool_call", "end", payload, conversation_id)
+                        # F132: tell the client as soon as a memory write lands (AC-21).
+                        memory_signal = memory_turn.pending_signal()
+                        if memory_signal:
+                            yield _memory_sse(memory_signal, conversation_id)
                     elif et == "on_tool_error":
                         tc_id = str(ev.get("run_id") or "")
                         if tc_id in ignored_tool_run_ids:
@@ -2379,6 +2421,7 @@ async def _agent_stream_chat_completion(
                         err = (ev.get("data") or {}).get("error")
                         err_msg = str(err) if err is not None else "tool execution failed"
                         if idx is not None:
+                            err_msg = redact_error(events[idx].get("tool_name"), err_msg)
                             tool_event = events[idx]
                             tool_event["results"] = []
                             tool_event["error"] = err_msg
@@ -2393,9 +2436,9 @@ async def _agent_stream_chat_completion(
                                 "tool_name": name,
                                 "display_name": name,
                                 "tool_type": "tool",
-                                "args": (ev.get("data") or {}).get("input", {}),
+                                "args": redact_args(name, (ev.get("data") or {}).get("input", {})),
                                 "results": [],
-                                "error": err_msg,
+                                "error": redact_error(name, err_msg),
                                 "started_at": ended_ms,
                                 "ended_at": ended_ms,
                                 "duration_ms": 0,
@@ -2564,6 +2607,12 @@ async def _agent_stream_chat_completion(
             chat_id=conversation_id,
             flow_id="",
         )
+        # F132: bind this turn's memory records to the answer and end the turn;
+        # the flags go out before the answer's end event (AC-21, AC-87).
+        await memory_turn.finish(resp_msg.id)
+        memory_signal = memory_turn.final_signal()
+        if memory_signal:
+            yield _memory_sse(memory_signal, conversation_id, message_id=resp_msg.id)
 
         yield _sse_resp(
             "agent_answer",
@@ -2637,6 +2686,7 @@ async def stream_chat_completion(
     login_user: UserPayload,
     *,
     session_subject: SessionSubject | None = None,
+    memory_register: MemoryRegister | None = None,
 ):
     """v2.5 unified entry — every workstation chat request goes through the
     LangGraph ReAct Agent flow. When `data.tools` is empty/None the agent
@@ -2646,14 +2696,26 @@ async def stream_chat_completion(
     F035 Track J: a single entry now serves both modes. ``data.task_mode`` routes
     this turn to the linsight task kernel (the turn still belongs to the same
     conversation/chat_id); otherwise the daily agent flow runs unchanged.
+
+    ``memory_register`` (F132) is passed only by the login-state endpoint; the
+    open-API entry calls this function without it, so its turns never use
+    long-term memory (AC-10).
     """
     if data.task_mode:
-        return await _task_mode_stream_completion(request, data, login_user)
+        return await _task_mode_stream_completion(request, data, login_user, memory_register=memory_register)
     daily_data = data.model_copy(update={"skills": []})
-    return await _agent_stream_chat_completion(request, daily_data, login_user, session_subject)
+    return await _agent_stream_chat_completion(
+        request, daily_data, login_user, session_subject, memory_register=memory_register
+    )
 
 
-async def _task_mode_stream_completion(request: Request, data: APIChatCompletion, login_user: UserPayload):
+async def _task_mode_stream_completion(
+    request: Request,
+    data: APIChatCompletion,
+    login_user: UserPayload,
+    *,
+    memory_register: MemoryRegister | None = None,
+):
     """F035 Track J: task-mode entry — create the linsight session inside the
     current conversation and hand off to the existing task stream.
 
@@ -2696,7 +2758,15 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
     # failures stay best-effort here: the client's start-execute is the fallback.
     from bisheng.workstation.domain.services.task_submit_service import submit_task_turn
 
+    # F132: a task turn entered from the daily entry is registered here (design
+    # decision 6). An existing conversation is registered before the turn is
+    # queued so the worker's first resolve finds it; a new one only gets its
+    # chat_id from the submit itself.
+    if data.conversationId:
+        await register_session(memory_register, data.conversationId)
     _session, session_version = await submit_task_turn(data, login_user)
+    if not data.conversationId:
+        await register_session(memory_register, session_version.session_id)
 
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode
