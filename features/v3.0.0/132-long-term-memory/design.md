@@ -406,7 +406,7 @@
 | 模型工具 | `memory_write`、`memory_search` | 返回 JSON，含 `ok`、`reason_code`、条目 id；`memory_search` 的每条结果带记录日期，并以同样的背景信息说明开头 |
 | 落库后的记忆工具事件 | `{"redacted": true, "op": ..., "item_ids": [...]}` | 决策 10 |
 | 前端信号 | SSE / WebSocket category `memory`，载荷 `{turn_id, has_write, has_attribution}` | 不含原文 |
-| 工作流节点类型 | `NodeType.MEMORY_RETRIEVER = "memory_retriever"` | 参数 `query`（`var_textarea` 控件，必填）、`limit`（`number` 控件，默认 20）。后端在保存与上线时校验 `limit` 为 1 到 100 的整数，否则返回 121 段的错误码（AC-80）；前端同步校验 |
+| 工作流节点类型 | `NodeType.MEMORY_RETRIEVER = "memory_retriever"` | 参数 `query`（`var_textarea` 控件，必填）、`limit`（`number` 控件，默认 20）。保存时由前端校验 `limit` 为 1 到 100 的整数并提示合法范围；后端在上线时再校验一次，不合法返回 121 段的错误码（AC-80） |
 | 节点输出变量 | `retrieved_memory`：数组，每项 `{text, metadata{type, recorded_at, event_time, source}}` | 结构对齐知识库检索节点。每一项的 `text` 自带前缀"［背景信息，记录于 YYYY-MM-DD］"，所以不管下游节点怎么引用这个变量，背景信息的说明和记录日期都跟着内容走（AC-57）。条目带详情时 `text` 为详情全文（AC-82）。运行时检索内容为空、没有命中或记忆未启用时输出空数组（AC-83）；检索因故障无法完成时节点失败（AC-84）。 |
 | 节点运行日志 | `parse_log` 返回检索内容与返回条数，不含条目原文 | AC-86；条目原文在节点输出里，由作者决定去向 |
 | 工作流开始节点参数 | `memory_enabled`（`switch` 控件），独立的"记忆"分组 | 说明文案见 AC-75 |

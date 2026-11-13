@@ -11,7 +11,7 @@
 |------|------|------|
 | spec.md | ✅ 已评审 | 2026-11-13 用户确认；同日修订 AC-71、AC-87，移出 AC-11、AC-100 |
 | design.md | ✅ 已评审 | 2026-11-13 用户确认第 4 稿；§10 的 V1–V8 待 Wave 0 验证后回写 |
-| tasks.md | 🔲 草稿 | 第 2 稿，已按 `/sdd-review tasks` 第一轮修订 |
+| tasks.md | ✅ 已拆解 | 第 3 稿。`/sdd-review tasks` 两轮：第二轮结论为可以开始 Wave 0，其余问题已在本稿修订，本稿未再复审 |
 | 实现 | 🔲 未开始 | 0 / 96 完成 |
 
 ---
@@ -26,16 +26,16 @@
 
 **三条固定命令**（下文各 Wave 验收引用它们的名字）：
 
-- **〔架构检查〕** `scripts/arch-guard.sh` 一次只检查一个文件，不带参数时直接退出，所以要逐个文件调用：
+- **〔架构检查〕** `scripts/arch-guard.sh` 一次只检查一个文件，不带参数时直接退出；基线代码里已有若干与本功能无关的违规。所以对全部源码逐文件检查，再与 T001 存下的基线输出比较，只数新增的行：
   ```bash
-  for f in $(git diff --name-only origin/feat/3.0.0...HEAD; git ls-files -m -o --exclude-standard); do bash scripts/arch-guard.sh "$f"; done | grep -c VIOLATION
+  { git ls-files -z src/backend/bisheng src/frontend; git ls-files -z -o --exclude-standard src/backend/bisheng src/frontend; } | xargs -0 -n1 bash scripts/arch-guard.sh | sort > /tmp/f132-arch.txt; comm -13 features/v3.0.0/132-long-term-memory/baseline/arch-guard.txt /tmp/f132-arch.txt | grep VIOLATION | wc -l
   ```
   工作目录是仓库根。预期输出 `0`。
 - **〔分层检查〕** `common/` 与 `core/` 不得导入记忆模块：
   ```bash
-  grep -rnE "^\s*(from|import) bisheng\.memory" src/backend/bisheng/common src/backend/bisheng/core | wc -l
+  grep -rnE "^\s*(from bisheng\.memory|import bisheng\.memory|from bisheng import .*\bmemory\b)" src/backend/bisheng/common src/backend/bisheng/core | wc -l
   ```
-  预期输出 `0`。`core/database/tenant_filter.py` 里登记模型模块的是字符串，不是导入语句，不会被匹配。
+  工作目录是仓库根。预期输出 `0`。`core/database/tenant_filter.py` 里登记模型模块的是字符串，不是导入语句，不会被匹配。
 - **〔基线比对〕** 本地没有中间件时后端测试本来就成块失败，所以回归用"相对基线的新增失败"判定：
   ```bash
   uv run pytest test/ -m "not e2e" -q -p no:cacheprovider --junitxml=/tmp/f132-current.xml; python ../../features/v3.0.0/132-long-term-memory/baseline/compare_junit.py ../../features/v3.0.0/132-long-term-memory/baseline/backend.xml /tmp/f132-current.xml
@@ -45,6 +45,10 @@
 **验收标准的两类。** spec 里标〔测〕的由本文的测试任务覆盖，每个测试函数在名字或文档字符串里写明所覆盖的 AC 编号。标〔评〕的依赖模型行为，由 Wave 14 的评测集覆盖，不作为任何 Wave 的完成条件。
 
 **设计论证不在这里重复**，指向 design 的决策号。接入类任务里的行号以实现时的代码为准。
+
+**任务做不完时。** 单个任务在一次会话内做不完的，按它的测试文件里的测试分组分多次提交，不改任务编号，也不跳过测试。
+
+**生产装配。** 服务只依赖接口；真实实现由 `memory/domain/services/factory.py`（T036）装配，四个接入点、管理接口、定时任务、检索节点都从它取服务实例，不自己构造。
 
 **禁区。** 实现过程中不得：执行 `git push`；修改各任务点名的测试文件以外的任何既有测试；新增第三方依赖；改动 `core/vectorstore/`、`knowledge/` 下的检索行为；在 `common/` 或 `core/` 里导入 `memory`（〔分层检查〕）。
 
@@ -57,12 +61,12 @@
 这一 Wave 不写产品代码。验证结论写进 `features/v3.0.0/132-long-term-memory/verification.md`，再回写 design。结论与 design 现有方案不一致时，停下来请用户确认（SDD-Guide §3）。**这一 Wave 不适合无人值守**：它的产出可能推翻设计。
 
 - [ ] **T001**: 测试环境、基线与比对脚本
-  **文件**: `features/v3.0.0/132-long-term-memory/baseline/compare_junit.py`（新建）、`features/v3.0.0/132-long-term-memory/baseline/backend.xml`（生成）、`features/v3.0.0/132-long-term-memory/verification.md`（新建）
-  **逻辑**: 把主检出的 `src/backend/.venv` 软链到本 worktree；确认 `src/backend/bisheng/config.yaml` 存在（没有就从主检出复制，它不进版本库）。在未改动的代码上运行 `uv run pytest test/ -m "not e2e" -q -p no:cacheprovider --junitxml=<baseline/backend.xml>`。写 `compare_junit.py`：读两个 junit 文件，输出新增失败的用例 id 清单，最后一行固定为 `NEW FAILURES: <n>`。在 `verification.md` 的"基线"一节记录运行前置条件（代理环境变量等）与基线的通过、失败、报错数量。
+  **文件**: `features/v3.0.0/132-long-term-memory/baseline/compare_junit.py`（新建）、`features/v3.0.0/132-long-term-memory/baseline/backend.xml`（生成）、`features/v3.0.0/132-long-term-memory/baseline/arch-guard.txt`（生成）、`features/v3.0.0/132-long-term-memory/verification.md`（新建）
+  **逻辑**: 把主检出的 `src/backend/.venv` 与 `src/frontend` 下各级 `node_modules` 软链到本 worktree（只软链，不执行 `uv sync` 或 `pnpm install`）；确认 `src/backend/bisheng/config.yaml` 存在（没有就从主检出复制，它不进版本库）。按〔架构检查〕的前半段在未改动的代码上生成 `baseline/arch-guard.txt`。确认 `cd src/frontend/platform && pnpm exec vitest run --version` 与 `cd src/frontend/client && pnpm exec jest --version` 能执行。在未改动的代码上运行 `uv run pytest test/ -m "not e2e" -q -p no:cacheprovider --junitxml=<baseline/backend.xml>`。写 `compare_junit.py`：读两个 junit 文件，输出新增失败的用例 id 清单，最后一行固定为 `NEW FAILURES: <n>`。在 `verification.md` 的"基线"一节记录运行前置条件（代理环境变量等）与基线的通过、失败、报错数量。
   **依赖**: 无
 
 - [ ] **T002**: V1 助手工具回调里的脱敏
-  **文件**: `src/backend/test/memory/spike/test_v1_callback.py`（新建，实验代码，Wave 7 完成后删除）、`verification.md`
+  **文件**: `src/backend/test/memory/spike/test_v1_callback.py`（新建，实验代码，Wave 9 完成后删除）、`verification.md`
   **逻辑**: 读 `bisheng/api/v1/callback.py:434-585` 与挂载点 `common/chat/client.py:308-322`。写一个最小测试：构造回调处理器，模拟一次名为 `memory_probe` 的工具从开始到结束，记录落库与下发的内容。确认 `on_tool_start` 能拿到工具名、能否按 `run_id` 在 `on_tool_end` / `on_tool_error` 里认出同一次调用、`intermediate_steps` 字段带了什么。
   **判据**: 实验测试能跑通，并给出"按 `run_id` 识别记忆工具并替换落库与下发内容"是否可行的结论与确切改动位置。
   **依赖**: T001
@@ -86,7 +90,7 @@
   **依赖**: T001
 
 - [ ] **T006**: V5 助手两种执行器下的系统消息注入
-  **文件**: `src/backend/test/memory/spike/test_v5_assistant_inject.py`（新建，实验代码，Wave 7 完成后删除）、`verification.md`
+  **文件**: `src/backend/test/memory/spike/test_v5_assistant_inject.py`（新建，实验代码，Wave 9 完成后删除）、`verification.md`
   **逻辑**: 读 `api/services/assistant_agent.py:428-458`、`:548-601`。用桩模型分别在 ReAct 与 function call 执行器下跑一轮：在裁剪之后向输入插入一条系统消息，断言桩模型收到的消息序列里包含它；确认 `run()` 返回值经处理后 `client.py:393-400` 的切片偏移不受影响。
   **判据**: 两种执行器下消息序列的结论与注入代码的确切位置。**本任务只能证明消息能送达模型**；多条系统消息在真实模型端点上是否被接受，要在 T094 用 test 环境的模型验证，届时回写。
   **依赖**: T001
@@ -108,13 +112,13 @@
   **逻辑**: 按 T002–T008 的结论更新决策 6、7、10、11、15、17 与 §4.4、§10；§10 每一项写上结论与日期。有任何一项推翻了 design 的现有方案，先停下来请用户确认，再继续。
   **依赖**: T002, T003, T004, T005, T006, T007, T008
 
-**Wave 0 验收**: `uv run pytest test/memory/spike -q` 通过；`verification.md` 含基线与 V1–V8 的结论；`baseline/backend.xml` 存在。是否有需要用户确认的推翻项，由人判断。
+**Wave 0 验收**: `uv run pytest test/memory/spike -q` 通过；`verification.md` 含基线与 V1–V8 的结论；`baseline/backend.xml` 与 `baseline/arch-guard.txt` 存在。是否有需要用户确认的推翻项，由人判断。
 
 ### Wave 1：基础设施（无测试配对）
 
 - [ ] **T010**: 错误码 121、架构守卫名单与三个接口定义
-  **文件**: `src/backend/bisheng/common/errcode/memory.py`（新建）、`scripts/arch-guard.sh`、`src/backend/bisheng/memory/domain/ports.py`（新建）
-  **逻辑**: 定义 121 段错误码类（写成 `Code: int = 121NN`）：内容超长、内容含密钥类信息、内容含相对时间、目标条目不存在或状态已变、撤销失败（三种原因各一个码）、租户记忆关闭时禁止新增与编辑、检索不可用、检索数量参数非法、工作流含记忆检索节点而开关关闭。把 `memory` 加进 `scripts/arch-guard.sh` 的 `DOMAIN_MODULES`。在 `ports.py` 里定义三个 `Protocol`：`MemoryIndex`（写入、删除、检索、按用户删除）、`DetailStore`（写、读、删、按用户删）、`MemoryLLM`（整理调用、embedding 调用）。后续的真实实现与测试替身都实现这三个接口，以此解开"服务依赖索引、索引依赖服务"的环。
+  **文件**: `src/backend/bisheng/common/errcode/memory.py`（新建）、`scripts/arch-guard.sh`、`src/backend/bisheng/memory/domain/ports.py`（新建，含 `MemoryContext`）
+  **逻辑**: 定义 121 段错误码类（写成 `Code: int = 121NN`）：内容超长、内容含密钥类信息、内容含相对时间、目标条目不存在或状态已变、撤销失败（三种原因各一个码）、租户记忆关闭时禁止新增与编辑、检索不可用、检索数量参数非法、工作流含记忆检索节点而开关关闭。把 `memory` 加进 `scripts/arch-guard.sh` 的 `DOMAIN_MODULES`。在 `ports.py` 里定义三个 `Protocol`：`MemoryIndex`（写入、删除、检索、按用户删除）、`DetailStore`（写、读、删、按用户删、按用户列出对象键）、`MemoryLLM`（整理调用、embedding 调用）。同一文件里定义 `MemoryContext` 数据类（`tenant_id`、`user_id`、时区、`chat_id`、`turn_id`、场景、应用 id 与名称）和唯一的范围过滤函数 `build_scope_filter(ctx)`，两路检索的过滤条件只能由它生成。后续的真实实现与测试替身都实现这三个接口，以此解开"服务依赖索引、索引依赖服务"的环。
   **依赖**: T009
 
 - [ ] **T011**: 错误码文案与登记
@@ -134,7 +138,7 @@
   **依赖**: T012
 
 - [ ] **T014**: 运行期配置、应用类型与测试夹具
-  **文件**: `src/backend/bisheng/memory/domain/config.py`（新建）、`src/backend/bisheng/common/constants/enums/telemetry.py`、`src/backend/test/memory/conftest.py`（新建，含 `__init__.py`）
+  **文件**: `src/backend/bisheng/memory/domain/config.py`（新建）、`src/backend/bisheng/common/constants/enums/telemetry.py`、`src/backend/bisheng/initdb_config.yaml`、`src/backend/test/memory/conftest.py`（新建，含 `__init__.py`）
   **逻辑**: `MemoryRuntimeConfig` 从 `settings.aget_from_db("memory")` 读取，缺键时用代码里的默认值（design 决策 19 的表）；`bisheng/initdb_config.yaml` 增加带注释的 `memory` 段，不改 `config.yaml`。`ApplicationTypeEnum` 增加 `MEMORY = "memory"`。夹具提供：内存 SQLite 上建好六张表的会话；实现 `MemoryIndex` 的内存索引（可注入"关键词路不可达""向量路不可达""写入失败""超时"）；实现 `DetailStore` 的内存存储（可注入读取失败）；实现 `MemoryLLM` 的桩（按脚本返回候选、工具调用或抛错）；`MemoryContext` 工厂；两个租户、两个用户、一个"可见多租户"身份、一个全局超管身份。
   **依赖**: T010, T012
 
@@ -162,8 +166,8 @@
   **依赖**: T014
 
 - [ ] **T018**: 数据访问层的实现
-  **文件**: `src/backend/bisheng/memory/domain/repositories/item_repository.py`、`src/backend/bisheng/memory/domain/repositories/setting_repository.py`、`src/backend/bisheng/memory/domain/context.py`
-  **逻辑**: `MemoryContext` 数据类（`tenant_id`、`user_id`、时区、`chat_id`、`turn_id`、场景、应用 id 与名称）。条目与用户设置的读写方法，签名都接收 `MemoryContext`，查询与写操作显式带 `tenant_id` 与 `user_id`（design 决策 9）。用户设置首次需要时建行，捕获唯一键冲突后重读；`rev` 的自增与条目变更在同一事务。
+  **文件**: `src/backend/bisheng/memory/domain/repositories/item_repository.py`、`src/backend/bisheng/memory/domain/repositories/setting_repository.py`
+  **逻辑**: 条目与用户设置的读写方法，签名都接收 `MemoryContext`，查询与写操作显式带 `tenant_id` 与 `user_id`（design 决策 9）。用户设置首次需要时建行，捕获唯一键冲突后重读；`rev` 的自增与条目变更在同一事务。
   **测试**: T017 全部通过
   **覆盖 AC**: AC-01, AC-02, AC-05, AC-06, AC-07
   **依赖**: T017
@@ -248,7 +252,7 @@
   **依赖**: T028, T022
 
 - [ ] **T030**: 编辑、删除、清空、撤销的实现
-  **文件**: `src/backend/bisheng/memory/domain/services/memory_service.py`、`src/backend/bisheng/memory/domain/services/detail_store.py`
+  **文件**: `src/backend/bisheng/memory/domain/services/memory_service.py`、`src/backend/bisheng/memory/domain/services/detail_store.py`、`src/backend/bisheng/memory/domain/repositories/cursor_repository.py`
   **逻辑**: `edit`、`add_manual`、`delete`、`clear`、`undo`。删除是软删除；清空是硬删除，顺序为索引、对象、本轮记录与快照、条目行，最后推进该用户登记行的水位。`detail_store.py` 是 `DetailStore` 的 MinIO 实现，对象键 `memory/{tenant_id}/{user_id}/{item_id}.md`。设计见 design 决策 4、7。
   **测试**: T029 全部通过
   **覆盖 AC**: AC-22, AC-89, AC-93, AC-101, AC-102
@@ -260,7 +264,7 @@
 
 - [ ] **T031**: 常驻记忆的测试
   **文件**: `src/backend/test/memory/test_resident.py`
-  **逻辑**: 带入的条目数与总字数都不超过上限，先到者生效，上限取自运行期配置；到达上限时没有任何条目被截断，未带入的条目仍有效并可被检索；已被取代与已删除的条目不被带入；经验类条目不出现在日常模式与助手的常驻文本里；深度研究的带入在常驻之外另含经验类条目，按最近被读时间与记录时间排序并受独立上限约束；带详情的条目只带入概括；文本首行是背景信息说明且每条带记录日期；事件时间已过（按用户时区）的条目不再带入但仍可检索；缓存键随 `rev` 与日期变化，条目变更后下一次读取反映变更；存在很久且从未被读取的条目没有被删除；缓存未命中时写一行常驻快照，并记一次带入计数。
+  **逻辑**: 带入的条目数与总字数都不超过上限，先到者生效，上限取自运行期配置；到达上限时没有任何条目被截断，未带入的条目状态仍为有效（可检索性在 T033 验证）；已被取代与已删除的条目不被带入；经验类条目不出现在日常模式与助手的常驻文本里；深度研究的带入在常驻之外另含经验类条目，按最近被读时间与记录时间排序并受独立上限约束；带详情的条目只带入概括；文本首行是背景信息说明且每条带记录日期；事件时间已过（按用户时区）的条目不再带入、状态仍为有效；缓存键随 `rev` 与日期变化，条目变更后下一次读取反映变更；存在很久且从未被读取的条目没有被删除；缓存未命中时写一行常驻快照，并记一次带入计数。
   **覆盖 AC**: AC-52, AC-53, AC-54, AC-55, AC-56, AC-57, AC-91, AC-94, AC-96
   **依赖**: T028
 
@@ -273,26 +277,26 @@
 
 - [ ] **T033**: 检索的测试
   **文件**: `src/backend/test/memory/test_search.py`
-  **逻辑**: 只返回当前用户当前租户的有效条目；返回内容、类型、记录时间、事件时间，并可按 id 取回详情全文；待建索引的条目被追加进结果（上限 20）；一路不可达时用另一路并计一次降级；两路都不可达时抛检索不可用并计一次失败；租户未配置 embedding 时只走关键词且不计失败；索引里残留已删除条目的 id 时回表后不返回；详情读取失败时返回条目自身内容并计一次失败；两路检索收到的过滤条件都含租户与用户，且出自同一个函数；每次返回都更新被读条目集合；倒数排名融合的顺序正确。
+  **逻辑**: 只返回当前用户当前租户的有效条目；返回内容、类型、记录时间、事件时间，并可按 id 取回详情全文；待建索引的条目被追加进结果（上限 20）；一路不可达时用另一路并计一次降级；两路都不可达时抛检索不可用并计一次失败；租户未配置 embedding 时只走关键词且不计失败；索引里残留已删除条目的 id 时回表后不返回；详情读取失败时返回条目自身内容并计一次失败；两路检索收到的过滤条件都含租户与用户，且等于 `build_scope_filter(ctx)` 的结果；已被移出常驻的条目与事件时间已过的条目都能被检索到；每次返回都更新被读条目集合；倒数排名融合的顺序正确。
   **覆盖 AC**: AC-58, AC-59, AC-61, AC-62
   **依赖**: T028
 
 - [ ] **T034**: 检索的实现
   **文件**: `src/backend/bisheng/memory/domain/services/search.py`
-  **逻辑**: `search(ctx, query, limit, detail_ids)`：调用 `MemoryIndex` 的两路、倒数排名融合、追加待建索引的条目、回表校验、计数。唯一的过滤条件生成函数放在这里并被 `MemoryIndex` 的实现引用。设计见 design 决策 12。
+  **逻辑**: `search(ctx, query, limit, detail_ids)`：调用 `MemoryIndex` 的两路、倒数排名融合、追加待建索引的条目、回表校验、计数。过滤条件只用 T010 的 `build_scope_filter`。设计见 design 决策 12。
   **测试**: T033 全部通过
   **覆盖 AC**: AC-58, AC-59, AC-61, AC-62
   **依赖**: T033
 
 - [ ] **T035**: 真实索引与模型调用的测试
   **文件**: `src/backend/test/memory/test_index_llm_adapters.py`
-  **逻辑**: 用打桩的 ES、Milvus 客户端与 LLM 服务验证适配层：ES 索引名 `bisheng_memory_item`，Milvus collection 名含 embedding 模型 id；写入与检索都带租户与用户过滤；embedding 调用超过 3 秒按超时处理；embedding 与整理的模型调用以记忆主人的用户 id 发起、应用类型为 `memory`、写入 token 用量记录、不触发个人额度扣减；模型调用被拒绝时抛出可识别的失败；整理模型取租户配置的 `model_id`，未配置时取工作台模型列表的第一个，都没有时抛"无可用模型"。
+  **逻辑**: 用打桩的 ES、Milvus 客户端与 LLM 服务验证适配层：ES 索引名 `bisheng_memory_item`，Milvus collection 名含 embedding 模型 id；写入与检索都带租户与用户过滤；embedding 调用超过 3 秒按超时处理；embedding 与整理的模型调用以记忆主人的用户 id 发起、应用类型为 `memory`、写入 token 用量记录、不触发个人额度扣减；模型调用被拒绝时抛出可识别的失败；整理模型取租户配置的 `model_id`，未配置时取工作台模型列表的第一个，都没有时抛"无可用模型"；装配函数返回的服务实例使用的是真实的三个实现。
   **覆盖 AC**: AC-45, AC-58
-  **依赖**: T020
+  **依赖**: T020, T034
 
 - [ ] **T036**: 真实索引与模型调用的实现
-  **文件**: `src/backend/bisheng/memory/domain/services/index.py`、`src/backend/bisheng/memory/domain/services/llm.py`
-  **逻辑**: `index.py` 是 `MemoryIndex` 的实现，经 `MilvusFactory`、`ElasticsearchFactory` 取客户端，不复用 `core/vectorstore/multi_retriever.py`，写入时在条目上记下 `index_model_id`。`llm.py` 是 `MemoryLLM` 的实现：取模型、发起调用、标记应用类型、记 token 用量；调用路径不经过个人额度扣减（现有额度检查只作用于日常对话与深度研究两种应用类型，见 `dsh/domain/services/chat_credits.py:20-23`，用测试钉住这一点）。设计见 design 决策 12、18。
+  **文件**: `src/backend/bisheng/memory/domain/services/index.py`、`src/backend/bisheng/memory/domain/services/llm.py`、`src/backend/bisheng/memory/domain/services/factory.py`
+  **逻辑**: `index.py` 是 `MemoryIndex` 的实现，经 `MilvusFactory`、`ElasticsearchFactory` 取客户端，不复用 `core/vectorstore/multi_retriever.py`，写入时在条目上记下 `index_model_id`。`llm.py` 是 `MemoryLLM` 的实现：取模型、发起调用、标记应用类型、记 token 用量；调用路径不经过个人额度扣减（现有额度检查只作用于日常对话与深度研究两种应用类型，见 `dsh/domain/services/chat_credits.py:20-23`，用测试钉住这一点）。`factory.py` 提供 `get_memory_service()` 等装配函数，把真实的索引、详情存储、模型调用装进服务。设计见 design 决策 12、18。
   **测试**: T035 全部通过
   **覆盖 AC**: AC-45, AC-58
   **依赖**: T035
@@ -303,28 +307,28 @@
 
 - [ ] **T037**: 管理接口的测试
   **文件**: `src/backend/test/memory/test_memory_api.py`
-  **逻辑**: 列表只含本人当前租户的有效条目，每条含内容、类型、记录时间、事件时间、来源标记、是否常驻，手动新增的来源为手动添加；新增与编辑超长或含密钥类内容时返回对应错误码且不保存；删除单条、清空、撤销可用；传入他人条目 id 时返回不存在，接口没有按用户 id 取数的参数；租户记忆为关时新增与编辑被拒、查看与删除与清空可用、读取"我的记忆"返回不可用；"我的记忆"为关时全部接口照常；修改"我的记忆"只影响本人且只有本人能改；上报时区只在值变化时写库；按 `turn_id` 或消息 id 取回的归因分两部分：检索取回的条目与常驻快照的条目；非主人取回为空。
-  **覆盖 AC**: AC-08, AC-09, AC-68, AC-87, AC-88, AC-89, AC-90
+  **逻辑**: 列表只含本人当前租户的有效条目，每条含内容、类型、记录时间、事件时间、来源标记、是否常驻，手动新增的来源为手动添加；新增与编辑超长或含密钥类内容时返回对应错误码且不保存；删除单条、清空、撤销可用；传入他人条目 id 时返回不存在，接口没有按用户 id 取数的参数；租户记忆为关时新增与编辑被拒、查看与删除与清空可用、读取"我的记忆"返回不可用；"我的记忆"为关时全部接口照常；修改"我的记忆"只影响本人且只有本人能改；上报时区只在值变化时写库；按 `turn_id` 或消息 id 取回的归因分两部分：检索取回的条目与常驻快照的条目；非主人取回为空；按 `chat_id` 批量取回本人在该会话各条消息的记忆标志（有操作提示、有归因、`turn_id`），供前端加载历史消息时使用；`/api/v1/memory` 下没有任何返回指标或统计的接口。
+  **覆盖 AC**: AC-08, AC-09, AC-68, AC-87, AC-88, AC-89, AC-90, AC-103
   **依赖**: T030, T032, T034
 
 - [ ] **T038**: 管理接口的实现
   **文件**: `src/backend/bisheng/memory/api/endpoints/memory.py`、`src/backend/bisheng/memory/api/router.py`、`src/backend/bisheng/api/router.py`
-  **逻辑**: `/api/v1/memory` 下：条目列表、新增、编辑、删除、清空、读取与修改"我的记忆"、上报时区、按 `turn_id` 或消息 id 取操作提示与归因、撤销。登录态取主体，委托 Service，`UnifiedResponseModel` 包装，在主路由注册。
+  **逻辑**: `/api/v1/memory` 下：条目列表、新增、编辑、删除、清空、读取与修改"我的记忆"、上报时区、按 `turn_id` 或消息 id 取操作提示与归因、按 `chat_id` 批量取记忆标志、撤销。登录态取主体，委托 Service，`UnifiedResponseModel` 包装，在主路由注册。
   **测试**: T037 全部通过
-  **覆盖 AC**: AC-08, AC-09, AC-68, AC-87, AC-88, AC-89, AC-90
+  **覆盖 AC**: AC-08, AC-09, AC-68, AC-87, AC-88, AC-89, AC-90, AC-103
   **依赖**: T037
 
 - [ ] **T039**: 工具工厂与脱敏函数的测试
   **文件**: `src/backend/test/memory/test_tools.py`
   **逻辑**: 工厂返回 `memory_write` 与 `memory_search` 两个工具；工具说明里含用户时区下的今天日期（时区取不到时用部署默认时区），并写明只在用户当前这句话明确要求时写入；`memory_write` 三种动作各自调用到服务并返回含 `ok`、原因码、条目 id 的结果；写入被拒时返回原因码；`memory_search` 把取回的 id 记入本轮检索记录，结果以背景信息说明开头且每条带记录日期；检索不可用时工具返回错误说明而不是抛出，并计一次失败；脱敏函数把名称以 `memory_` 开头的工具的入参与返回替换为只含 `redacted`、动作、条目 id 的结构，其他工具原样返回；脱敏结果里不含条目内容；回放用的中性说明文本生成函数；与记忆工具同名的外部工具被识别出来。
-  **覆盖 AC**: AC-09, AC-14, AC-27, AC-28, AC-57, AC-61
+  **覆盖 AC**: AC-09, AC-14, AC-57, AC-61
   **依赖**: T030, T034
 
 - [ ] **T040**: 工具工厂与脱敏函数的实现
   **文件**: `src/backend/bisheng/memory/domain/services/tools.py`、`src/backend/bisheng/memory/domain/services/redaction.py`
   **逻辑**: `build_memory_tools(ctx)`；`redact_tool_event(name, payload)`；`replay_placeholder()`；`is_memory_tool(name)`（`memory_` 为保留前缀）。设计见 design 决策 10。
   **测试**: T039 全部通过
-  **覆盖 AC**: AC-09, AC-14, AC-27, AC-28, AC-57, AC-61
+  **覆盖 AC**: AC-09, AC-14, AC-57, AC-61
   **依赖**: T039
 
 **Wave 6 验收**: `uv run pytest test/memory -q` 全部通过且无 skipped；〔架构检查〕、〔分层检查〕为 `0`；〔基线比对〕为 `NEW FAILURES: 0`。
@@ -338,7 +342,7 @@
   **依赖**: T022
 
 - [ ] **T042**: 活跃登记的实现
-  **文件**: `src/backend/bisheng/memory/domain/services/activity.py`
+  **文件**: `src/backend/bisheng/memory/domain/services/activity.py`、`src/backend/bisheng/memory/domain/repositories/cursor_repository.py`
   **逻辑**: `MemoryActivity.end_turn` 的异步与同步实现；选取到期登记行并按用户分组的查询；全部用按列的条件更新。设计见 design 决策 7。
   **测试**: T041 全部通过
   **覆盖 AC**: AC-37, AC-38, AC-40, AC-41
@@ -346,13 +350,13 @@
 
 - [ ] **T043**: 整理调度语义的测试
   **文件**: `src/backend/test/memory/test_consolidator_run.py`
-  **逻辑**: 任务一次处理该用户所有到期的会话；拿不到用户锁时不处理且不改登记行；锁带令牌，运行中续期，释放时只释放自己持有的锁；条目落库与水位推进在同一事务，模拟中途异常后重跑不产生重复条目；同一段对话处理两次只落一次；整理失败时记录失败并计数，登记行保持待整理并带退避时间，之后可重跑；"没有可用的整理模型"与"模型调用被拒绝"都按失败处理；会话已软删除或开关在整理前被关闭时，把水位推到当前且不产生条目；两个用户的整理并发进行互不影响，同一用户两个节点同时触发时只有一个在处理且两边的显式写入都保留。
+  **逻辑**: 任务一次处理该用户所有到期的会话；拿不到用户锁时不处理且不改登记行；锁带令牌，运行中续期，释放时只释放自己持有的锁；条目落库与水位推进在同一事务，模拟中途异常后重跑不产生重复条目；同一段对话处理两次只落一次；整理失败时记录失败并计数，登记行保持待整理并带退避时间，之后可重跑；"没有可用的整理模型"与"模型调用被拒绝"都按失败处理；会话已软删除或开关在整理前被关闭时，把水位推到当前且不产生条目；同一原因连续失败时只在首次和之后每小时记一次日志；内容处理以可注入的函数传入，本测试用假的内容处理函数；两个用户的整理并发进行互不影响，同一用户两个节点同时触发时只有一个在处理且两边的显式写入都保留。
   **覆盖 AC**: AC-39, AC-41, AC-44, AC-45
   **依赖**: T042, T036
 
 - [ ] **T044**: 整理调度语义的实现
   **文件**: `src/backend/bisheng/memory/domain/services/consolidator.py`
-  **逻辑**: `consolidate_user(tenant_id, user_id)`：取锁与续期、逐会话重新做启用判定、确定本次终点、调用内容处理（T046）、事务内落库并推进水位、失败退避。设计见 design 决策 7。
+  **逻辑**: `consolidate_user(tenant_id, user_id)`：取锁与续期、逐会话重新做启用判定、确定本次终点、调用以参数注入的内容处理函数（真实实现在 T046，装配在 `factory.py`）、事务内落库并推进水位、失败退避与日志节流。设计见 design 决策 7。
   **测试**: T043 全部通过
   **覆盖 AC**: AC-39, AC-41, AC-44, AC-45
   **依赖**: T043
@@ -377,13 +381,13 @@
   **依赖**: T046, T024, T026
 
 - [ ] **T048**: 定时任务的实现
-  **文件**: `src/backend/bisheng/worker/memory/tasks.py`（新建，含 `__init__.py`）、`src/backend/bisheng/core/config/settings.py`
-  **逻辑**: 扫描、整理、对账、指标落库、遗留清理五个任务，走默认 `celery` 队列；Beat 调度项按现有方式追加。**租户传递**：扫描、对账、指标落库、遗留清理四个任务的跨租户枚举查询包在 `bypass_tenant_filter()` 里，之后逐租户调用 `set_current_tenant_id()` 再处理；投整理任务时 `apply_async(args=[tenant_id, user_id], headers={"tenant_id": tenant_id})`，由 `task_prerun` 恢复租户上下文。`settings.py` 只追加调度项，不导入记忆模块（任务以字符串名引用）。
+  **文件**: `src/backend/bisheng/worker/memory/tasks.py`（新建，含 `__init__.py`）、`src/backend/bisheng/memory/domain/services/reconcile.py`（新建）、`src/backend/bisheng/core/config/settings.py`
+  **逻辑**: 对账的业务逻辑（补建索引、换模型后重建、清理孤儿详情对象）放在 `reconcile.py`，任务文件只负责调度。扫描、整理、对账、指标落库、遗留清理五个任务，走默认 `celery` 队列；Beat 调度项按现有方式追加。**租户传递**：扫描、对账、指标落库、遗留清理四个任务的跨租户枚举查询包在 `bypass_tenant_filter()` 里，之后逐租户调用 `set_current_tenant_id()` 再处理；投整理任务时 `apply_async(args=[tenant_id, user_id], headers={"tenant_id": tenant_id})`，由 `task_prerun` 恢复租户上下文。`settings.py` 只追加调度项，不导入记忆模块（任务以字符串名引用）。
   **测试**: T047 全部通过
   **覆盖 AC**: AC-43, AC-102
   **依赖**: T047
 
-**Wave 7 验收**: `uv run pytest test/memory -q` 全部通过且无 skipped；`test/memory/spike/test_v1_callback.py` 与 `test_v5_assistant_inject.py` 保留到 Wave 9；〔架构检查〕、〔分层检查〕为 `0`；〔基线比对〕为 `NEW FAILURES: 0`。
+**Wave 7 验收**: `uv run pytest test/memory -q` 全部通过且无 skipped；〔架构检查〕、〔分层检查〕为 `0`；〔基线比对〕为 `NEW FAILURES: 0`。
 
 ### Wave 8：接入日常模式
 
@@ -402,15 +406,15 @@
 
 - [ ] **T051**: 日常模式事件与一轮结束的测试
   **文件**: `src/backend/test/workstation/test_memory_events.py`
-  **逻辑**: 模型调用 `memory_write` 成功后流里出现 `memory` 类别的事件，载荷含 `turn_id` 与标志、不含条目内容；落库消息的 `events` 里记忆工具的入参与返回已脱敏；流式下发的工具事件同样已脱敏；正常结束时本轮记录绑定到回答的消息 id，登记行变为待整理；中断路径同样完成绑定与登记；记忆未启用的一轮结束时水位被推进。
-  **覆盖 AC**: AC-09, AC-21, AC-37, AC-41
+  **逻辑**: 模型调用 `memory_write` 成功后流里出现 `memory` 类别的事件，载荷含 `turn_id` 与标志、不含条目内容；一轮里只带入了常驻记忆或只做了检索、没有显式写入时，结束前同样下发带"有归因"标志的事件，并已写入本轮概要行（含常驻版本与日期）；落库消息的 `events` 里记忆工具的入参与返回已脱敏；流式下发的工具事件同样已脱敏；正常结束时本轮记录绑定到回答的消息 id，登记行变为待整理；中断路径同样完成绑定与登记；记忆未启用的一轮结束时水位被推进。
+  **覆盖 AC**: AC-09, AC-21, AC-37, AC-41, AC-87
   **依赖**: T050, T042
 
 - [ ] **T052**: 日常模式事件与一轮结束的实现
   **文件**: `src/backend/bisheng/workstation/domain/services/chat_service.py`、`src/backend/bisheng/workstation/domain/services/chat_helpers.py`
-  **逻辑**: 工具事件写入 `events` 与下发前（`chat_service.py:2311-2319`、`:2343-2344`）调脱敏函数；`_sse_resp` 增加 `memory` 类别；正常结束（`:2558-2575`）与中断路径（`:1955-1980`，同步函数，用同步实现）调 `bind_turn` 与 `end_turn`。
+  **逻辑**: 工具事件写入 `events` 与下发前（`chat_service.py:2311-2319`、`:2343-2344`）调脱敏函数；`_sse_resp` 增加 `memory` 类别；一轮结束前写本轮概要行并下发归因标志；正常结束（`:2558-2575`）与中断路径（`:1955-1980`，同步函数，用同步实现）调 `bind_turn` 与 `end_turn`。
   **测试**: T051 全部通过
-  **覆盖 AC**: AC-09, AC-21, AC-37, AC-41
+  **覆盖 AC**: AC-09, AC-21, AC-37, AC-41, AC-87
   **依赖**: T051
 
 **Wave 8 验收**: `uv run pytest test/memory test/workstation/test_memory_config.py test/workstation/test_memory_inject.py test/workstation/test_memory_events.py -q` 全部通过且无 skipped；〔架构检查〕、〔分层检查〕为 `0`；〔基线比对〕为 `NEW FAILURES: 0`。
@@ -434,15 +438,15 @@
 
 - [ ] **T055**: 助手工具事件脱敏与信号的测试
   **文件**: `src/backend/test/assistant/test_memory_redaction.py`
-  **逻辑**: 调用一次记忆工具后：由 `run()` 返回值构造的 tool_call、tool_result 行里内容已脱敏；回调插入的 `category=tool` 行与 `intermediate_steps` 字段里内容已脱敏；回调经 WebSocket 下发的工具消息里内容已脱敏；非记忆工具的三处内容不变；下一轮回放历史时，记忆工具的结果被渲染成中性说明；显式写入成功后经 WebSocket 下发一条 `memory` 消息，载荷含 `turn_id` 与标志、不含条目内容。
-  **覆盖 AC**: AC-09, AC-21
+  **逻辑**: 调用一次记忆工具后：由 `run()` 返回值构造的 tool_call、tool_result 行里内容已脱敏；回调插入的 `category=tool` 行与 `intermediate_steps` 字段里内容已脱敏；回调经 WebSocket 下发的工具消息里内容已脱敏；非记忆工具的三处内容不变；下一轮回放历史时，记忆工具的结果被渲染成中性说明；显式写入成功后经 WebSocket 下发一条 `memory` 消息，载荷含 `turn_id` 与标志、不含条目内容；只带入常驻或只检索的一轮同样下发带"有归因"标志的消息并写入本轮概要行。
+  **覆盖 AC**: AC-09, AC-21, AC-87
   **依赖**: T054
 
 - [ ] **T056**: 助手工具事件脱敏与信号的实现
   **文件**: `src/backend/bisheng/api/v1/callback.py`、`src/backend/bisheng/api/services/assistant_agent.py`
-  **逻辑**: 回调处理器在工具开始时按 `run_id` 记下是否为记忆工具，在结束、出错、下发、落库处调脱敏函数；`AssistantAgent` 在返回前对结果里的记忆工具消息脱敏，并在回放历史时替换为中性说明；显式写入成功后通过现有回调下发 `memory` 消息。
+  **逻辑**: 回调处理器在工具开始时按 `run_id` 记下是否为记忆工具，在结束、出错、下发、落库处调脱敏函数；`AssistantAgent` 在返回前对结果里的记忆工具消息脱敏，并在回放历史时替换为中性说明；每轮写本轮概要行；有显式写入或归因时通过现有回调下发 `memory` 消息。
   **测试**: T055 全部通过
-  **覆盖 AC**: AC-09, AC-21
+  **覆盖 AC**: AC-09, AC-21, AC-87
   **依赖**: T055
 
 - [ ] **T057**: 助手登记与一轮结束的测试
@@ -452,8 +456,8 @@
   **依赖**: T056, T046
 
 - [ ] **T058**: 助手登记与一轮结束的实现
-  **文件**: `src/backend/bisheng/common/chat/client.py`、`src/backend/bisheng/api/services/assistant_agent.py`、登录态助手 WebSocket endpoint 所在文件（以 T003 的结论为准）
-  **逻辑**: 登录态 endpoint 构造客户端时传入登记回调（一个可调用对象）。`client.py` 做两件事：`chat_id` 确定或切换时调用该回调；回答落库后（正常与中断）调用 `self.gpts_agent.after_answer_persisted(message_id, interrupted)`。`client.py` 里不出现对记忆模块的导入。`AssistantAgent.after_answer_persisted` 里调 `bind_turn` 与 `end_turn`。助手保存接口沿用现有编辑权限检查，接受 `memory_enabled` 字段。
+  **文件**: `src/backend/bisheng/common/chat/client.py`、`src/backend/bisheng/api/services/assistant_agent.py`、登录态助手 WebSocket endpoint 所在文件（以 T003 的结论为准）、`src/backend/bisheng/api/v1/schemas.py`、`src/backend/bisheng/api/services/assistant.py`
+  **逻辑**: 登录态 endpoint 构造客户端时传入登记回调（一个可调用对象）。`client.py` 做两件事：`chat_id` 确定或切换时调用该回调；回答落库后（正常与中断）调用 `self.gpts_agent.after_answer_persisted(message_id, interrupted)`。`client.py` 里不出现对记忆模块的导入。`AssistantAgent.after_answer_persisted` 里调 `bind_turn` 与 `end_turn`。助手更新是逐字段白名单：`AssistantUpdateReq`（`api/v1/schemas.py`）加 `memory_enabled`，`api/services/assistant.py` 的更新逻辑逐字段赋值处同样加上，详情返回带出该字段。沿用现有编辑权限检查。
   **测试**: T057 全部通过
   **覆盖 AC**: AC-10, AC-37, AC-42, AC-69
   **依赖**: T057
@@ -471,15 +475,15 @@
 
 - [ ] **T060**: 记忆检索节点的测试
   **文件**: `src/backend/test/workflow/test_memory_retriever_node.py`
-  **逻辑**: 节点类型已注册，同一工作流可放多个；`query` 可为纯文字、纯变量引用、两者混写，引用的变量不是文字时转成文字；`limit` 默认 20，节点的参数校验对 1 到 100 以外的整数与非整数返回检索数量参数非法的错误码；执行时只在当前使用者本人的记忆里检索，包含在其他场景产生的条目，按相关程度排序且不超过 `limit`；输出每一项含内容、类型、记录时间、来源标记，有事件时间的带事件时间，带详情的内容为详情全文，每项内容以背景信息前缀与记录日期开头；没有命中、运行时 `query` 为空、没有登记、租户记忆为关、"我的记忆"为关、工作流开关为关时输出空数组且节点正常结束；检索不可用时节点失败并给出原因；运行日志含检索内容与返回条数、不含条目内容；两个用户运行同一工作流各自只得到本人的条目；节点不写本轮记录；工作流的其他节点没有收到常驻记忆。
-  **覆盖 AC**: AC-02, AC-57, AC-60, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-86
+  **逻辑**: 节点类型已注册，同一工作流可放多个；`query` 可为纯文字、纯变量引用、两者混写，引用的变量不是文字时转成文字；`limit` 默认 20，节点的参数校验对 1 到 100 以外的整数与非整数返回检索数量参数非法的错误码；执行时只在当前使用者本人的记忆里检索，包含在其他场景产生的条目，按相关程度排序且不超过 `limit`；输出每一项含内容、类型、记录时间、来源标记，有事件时间的带事件时间，带详情的内容为详情全文，每项内容以背景信息前缀与记录日期开头；没有命中、运行时 `query` 为空、没有登记、租户记忆为关、"我的记忆"为关、工作流开关为关时输出空数组且节点正常结束；检索不可用时节点失败并给出原因；运行日志含检索内容与返回条数、不含条目内容；两个用户运行同一工作流各自只得到本人的条目；节点不写本轮记录；工作流的其他节点没有收到常驻记忆；工作流运行中没有任何记忆写入能力（没有 `memory_write`）。测试里直接给 `graph_state` 的两个只读字段赋值。
+  **覆盖 AC**: AC-02, AC-28, AC-57, AC-60, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-86
   **依赖**: T034, T022
 
 - [ ] **T061**: 记忆检索节点的实现
-  **文件**: `src/backend/bisheng/workflow/nodes/memory_retriever/memory_retriever.py`（新建，含 `__init__.py`）、`src/backend/bisheng/workflow/common/node.py`、`src/backend/bisheng/workflow/nodes/node_manage.py`
-  **逻辑**: 新增 `NodeType.MEMORY_RETRIEVER` 与节点类；参数校验函数；`_run` 从 `graph_state` 取 `chat_id` 与开关，过启用判定后调检索；`parse_log` 返回检索内容与返回条数。输出变量 `retrieved_memory`，结构见 design §4.2。
+  **文件**: `src/backend/bisheng/workflow/nodes/memory_retriever/memory_retriever.py`（新建，含 `__init__.py`）、`src/backend/bisheng/workflow/common/node.py`、`src/backend/bisheng/workflow/nodes/node_manage.py`、`src/backend/bisheng/workflow/graph/graph_state.py`
+  **逻辑**: 新增 `NodeType.MEMORY_RETRIEVER` 与节点类；参数校验函数；`graph_state` 增加 `chat_id` 与 `memory_enabled` 两个只读字段（默认空与关，T063 负责在实例化时填值）；`_run` 从 `graph_state` 取 `chat_id` 与开关，过启用判定后调检索；`parse_log` 返回检索内容与返回条数。输出变量 `retrieved_memory`，结构见 design §4.2。
   **测试**: T060 全部通过
-  **覆盖 AC**: AC-02, AC-57, AC-60, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-86
+  **覆盖 AC**: AC-02, AC-28, AC-57, AC-60, AC-78, AC-79, AC-80, AC-81, AC-82, AC-83, AC-84, AC-86
   **依赖**: T060
 
 - [ ] **T062**: 工作流开关与上线校验的测试
@@ -489,8 +493,8 @@
   **依赖**: T061
 
 - [ ] **T063**: 工作流开关与上线校验的实现
-  **文件**: `src/backend/bisheng/workflow/graph/graph_engine.py`、`src/backend/bisheng/workflow/graph/graph_state.py`、`src/backend/bisheng/api/services/workflow.py`
-  **逻辑**: 实例化时按 `flow_id` 读上线版本的开始节点参数 `memory_enabled`，与 `chat_id` 一起放进 `graph_state` 的只读字段；`update_flow_status` 的上线分支加两项校验（开关、`limit`）。
+  **文件**: `src/backend/bisheng/workflow/graph/graph_engine.py`、`src/backend/bisheng/api/services/workflow.py`
+  **逻辑**: 实例化时按 `flow_id` 读上线版本的开始节点参数 `memory_enabled`，与 `chat_id` 一起填进 `graph_state` 的两个只读字段；`update_flow_status` 的上线分支加两项校验（开关、`limit`）。保存时的 `limit` 校验在前端（T077），后端以上线时为准。
   **测试**: T062 全部通过
   **覆盖 AC**: AC-70, AC-71, AC-80, AC-85
   **依赖**: T062
@@ -534,15 +538,15 @@
 
 - [ ] **T069**: 深度研究带入与工具的测试
   **文件**: `src/backend/test/linsight/test_memory_inject.py`
-  **逻辑**: 用桩模型：已登记且启用时，模型每次调用收到的提示词末段含常驻记忆与经验类条目；文本在任务开始时取一次，任务中途条目变化不改变它；记忆中间件排在引用与语言两个尾部中间件之前；首次执行、恢复、继续三条路径的工具列表里都有记忆工具，提示词里同步出现工具的使用说明；未登记时都没有；带入失败时任务仍继续并计一次失败；显式写入成功后下发记忆事件。
-  **覆盖 AC**: AC-21, AC-28, AC-51, AC-55, AC-61
+  **逻辑**: 用桩模型：已登记且启用时，模型每次调用收到的提示词末段含常驻记忆与经验类条目；文本在任务开始时取一次，任务中途条目变化不改变它；记忆中间件排在引用与语言两个尾部中间件之前；首次执行、恢复、继续三条路径的工具列表里都有记忆工具，提示词里同步出现工具的使用说明；未登记时都没有；带入失败时任务仍继续并计一次失败；显式写入成功后下发记忆事件；只带入或只检索的一轮结束时下发带"有归因"标志的事件。
+  **覆盖 AC**: AC-21, AC-28, AC-51, AC-55, AC-61, AC-87
   **依赖**: T068, T040
 
 - [ ] **T070**: 深度研究带入与工具的实现
   **文件**: `src/backend/bisheng/linsight/domain/services/agent_factory.py`、`src/backend/bisheng/linsight/domain/task_exec.py`、`src/backend/bisheng/linsight/domain/services/state_message_manager.py`
-  **逻辑**: 新增记忆中间件（`wrap_model_call` 追加，文本任务开始时取一次，排在两个尾部中间件之前）；`_generate_tools` 的三个调用点之后追加记忆工具，并按 `linsight/AGENTS.md` 让提示词与工具同步出现；`MessageEventType` 增加记忆事件并在显式写入成功后下发。
+  **逻辑**: 新增记忆中间件（`wrap_model_call` 追加，文本任务开始时取一次，排在两个尾部中间件之前）；`_generate_tools` 的三个调用点之后追加记忆工具，并按 `linsight/AGENTS.md` 让提示词与工具同步出现；`MessageEventType` 增加记忆事件，在显式写入成功后与一轮结束有归因时下发。
   **测试**: T069 全部通过
-  **覆盖 AC**: AC-21, AC-28, AC-51, AC-55, AC-61
+  **覆盖 AC**: AC-21, AC-28, AC-51, AC-55, AC-61, AC-87
   **依赖**: T069
 
 - [ ] **T071**: 深度研究脱敏的测试
@@ -617,7 +621,7 @@
   **覆盖 AC**: AC-09
   **依赖**: T052, T056
 
-**Wave 12 验收**: `cd src/frontend/platform && pnpm test -- memoryRetrieverTemplate memorySwitchValidate memorySwitch memoryConfig memoryPlaceholder` 全部通过；`cd src/frontend && pnpm lint && pnpm typecheck && pnpm check-i18n` 退出码为 0。
+**Wave 12 验收**: `cd src/frontend/platform && pnpm exec vitest run memoryRetrieverTemplate memorySwitchValidate memorySwitch memoryConfig memoryPlaceholder` 全部通过；`cd src/frontend && pnpm lint && pnpm typecheck && pnpm check-i18n` 退出码为 0。
 
 ### Wave 13：前端 Client
 
@@ -625,8 +629,8 @@
 
 - [ ] **T081**: 记忆接口封装、时区上报与流式信号
   **文件**: `src/frontend/client/src/api/memory.ts`（新建）、`src/frontend/client/src/hooks/useMemoryTimezone.ts`（新建）、`src/frontend/client/src/hooks/useAiChatSSE.ts`
-  **逻辑**: 封装 `/api/v1/memory` 的全部接口。应用加载后取浏览器的 IANA 时区，与本地记住的上次上报值不同才调用上报接口；这一处覆盖日常模式、应用聊天与深度研究，对话请求本身不带时区。SSE 解析增加 `memory` 类别，把 `turn_id` 与标志写入消息状态。
-  **测试**: `src/frontend/client/src/api/__tests__/memory.test.ts`：各接口的路径与参数；时区未变时不重复上报、变化时上报；收到 `memory` 事件后消息状态里有 `turn_id`。
+  **逻辑**: 封装 `/api/v1/memory` 的全部接口。应用加载后取浏览器的 IANA 时区，与本地记住的上次上报值不同才调用上报接口；这一处覆盖日常模式、应用聊天与深度研究，对话请求本身不带时区。SSE 解析增加 `memory` 类别，把 `turn_id` 与标志写入消息状态。加载一个会话的历史消息时，按 `chat_id` 批量取记忆标志并合并进消息状态。
+  **测试**: `src/frontend/client/src/api/__tests__/memory.test.ts`：各接口的路径与参数；时区未变时不重复上报、变化时上报；收到 `memory` 事件后消息状态里有 `turn_id`；加载历史后带标志的消息状态里有标志。
   **覆盖 AC**: AC-14, AC-21
   **依赖**: T038, T052
 
@@ -665,7 +669,7 @@
   **覆盖 AC**: AC-21, AC-87
   **依赖**: T083, T070
 
-**Wave 13 验收**: `cd src/frontend/client && pnpm test:ci -- api/__tests__/memory MemoryPane MemoryNotice memoryBubble memoryFooter memoryResult` 全部通过；`cd src/frontend && pnpm lint && pnpm typecheck && pnpm check-i18n` 退出码为 0。
+**Wave 13 验收**: `cd src/frontend/client && pnpm exec jest --ci api/__tests__/memory MemoryPane MemoryNotice memoryBubble memoryFooter memoryResult` 全部通过；`cd src/frontend && pnpm lint && pnpm typecheck && pnpm check-i18n` 退出码为 0。
 
 ### Wave 14：评测集（〔评〕类验收标准）
 
@@ -689,12 +693,12 @@
   **覆盖 AC**: AC-104, AC-105
   **依赖**: T088
 
-**Wave 14 验收（本地部分）**: `uv run pytest ../../tools/memory_eval/tests -q` 通过（工作目录 `src/backend/`）。T089 由人在 test 环境执行。
+**Wave 14 验收（本地部分）**: `uv run pytest -c pyproject.toml --rootdir . ../../tools/memory_eval/tests -q` 通过（工作目录 `src/backend/`）。T089 由人在 test 环境执行。
 
 ### Wave 15：P1
 
 - [ ] **T090**: 经验类自动整理的测试
-  **文件**: `src/backend/test/memory/test_consolidator_experience.py`、`tools/memory_eval/cases/`（增加两条标注 AC-50 的用例）
+  **文件**: `src/backend/test/memory/test_consolidator_experience.py`、`tools/memory_eval/cases/`（增加两条标注 AC-50 的用例）、`tools/memory_eval/tests/test_cases.py`（把 AC-50 加入必备编号）
   **逻辑**: 用桩模型返回经验类候选：深度研究轮次整理出的经验类条目类型为 experience、不常驻、来源为深度研究；下一个深度研究任务开始时它被带入；日常模式的常驻文本里没有它。
   **覆盖 AC**: AC-50, AC-54, AC-55
   **依赖**: T074
@@ -707,7 +711,7 @@
   **依赖**: T090
 
 - [ ] **T092**: 过期事件改写的测试
-  **文件**: `src/backend/test/memory/test_consolidator_expired_event.py`、`tools/memory_eval/cases/`（增加两条标注 AC-95 的用例）
+  **文件**: `src/backend/test/memory/test_consolidator_expired_event.py`、`tools/memory_eval/cases/`（增加两条标注 AC-95 的用例）、`tools/memory_eval/tests/test_cases.py`（把 AC-95 加入必备编号）
   **逻辑**: 用桩模型返回改写后的表述：事件时间已过的有效条目在下一次整理中被新条目取代，新条目保留日期且通过校验，旧条目为已被取代；同一条目不被重复改写。
   **覆盖 AC**: AC-95
   **依赖**: T046
@@ -719,7 +723,7 @@
   **覆盖 AC**: AC-95
   **依赖**: T092
 
-**Wave 15 验收**: `uv run pytest test/memory ../../tools/memory_eval/tests -q` 全部通过且无 skipped；〔基线比对〕为 `NEW FAILURES: 0`。
+**Wave 15 验收**: `uv run pytest -c pyproject.toml --rootdir . test/memory ../../tools/memory_eval/tests -q` 全部通过且无 skipped；〔基线比对〕为 `NEW FAILURES: 0`。
 
 ### Wave 16：收尾
 
