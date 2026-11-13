@@ -34,7 +34,7 @@ const clients: QueryClient[] = [];
 function setup(extra = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
-  const props = { scope, canCreate: true, onCreate: vi.fn(), onSelect: vi.fn(), onSquare: vi.fn(), ...extra };
+  const props = { scope, canCreate: true, onCreate: vi.fn(), onSelect: vi.fn(), ...extra };
   const draw = (next = props) => <QueryClientProvider client={client}><KnowledgeSpaceSidebar {...next} /></QueryClientProvider>;
   return { props, draw, client };
 }
@@ -64,9 +64,7 @@ it("preserves the three groups and only loads folders when their space is expand
   fireEvent.click(screen.getByRole("button", { name: "sidebar.expand Root folder" }));
   await waitFor(() => expect(mocks.children).toHaveBeenLastCalledWith(7, { parent_id: 9, file_type: 0, page_size: 100 }));
   fireEvent.click(screen.getByRole("button", { name: "f118.create_space" }));
-  fireEvent.click(screen.getByRole("button", { name: "sidebar.square" }));
   expect(f.props.onCreate).toHaveBeenCalledTimes(1);
-  expect(f.props.onSquare).toHaveBeenCalledTimes(1);
 });
 
 it("advances an empty cursor page and does not truncate the folder tree", async () => {
@@ -106,6 +104,7 @@ it("restores a deep-linked folder through paginated ancestors", async () => {
   render(f.draw());
   const selected = await screen.findByRole("button", { name: "Selected folder" });
   expect(selected).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("button", { name: "sidebar.expand Selected folder" })).toHaveAttribute("aria-expanded", "false");
   expect(mocks.children).toHaveBeenCalledWith(7, { parent_id: null, file_type: 0, page_size: 100, cursor: "later" });
   expect(mocks.parents).toHaveBeenCalledWith(7, 12);
 });

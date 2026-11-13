@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { userContext } from "@/contexts/userContext";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
-import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
 import { SpaceDetail, parseKnowledgeId } from "./detail";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
@@ -53,7 +52,7 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, active = true }: Knowl
   };
   if (!active) return null;
   return (
-    <div className="flex h-[calc(100vh-120px-var(--license-banner-h,0px))] min-h-0 min-w-0">
+    <div className="flex h-full min-h-0 min-w-0">
       {ordinary && <KnowledgeSpaceSidebar
         scope={scope}
         spaceId={invalid ? undefined : spaceId ?? undefined}
@@ -61,7 +60,6 @@ export function KnowledgeSpaceWorkspace({ scope, routeId, active = true }: Knowl
         canCreate={canCreate}
         onCreate={() => setCreateOpen(true)}
         onSelect={(id, folderId) => handleSelect(id, folderId, true)}
-        onSquare={() => window.open(getWorkspaceClientUrl("/knowledge?square=1"), "_blank", "noopener,noreferrer")}
         onDeleted={(id) => { if (id === spaceId) navigate("/filelib", { replace: true }); }}
       />}
       <main className="min-w-0 flex-1 overflow-auto px-4" aria-label={t("workspace.files")}>

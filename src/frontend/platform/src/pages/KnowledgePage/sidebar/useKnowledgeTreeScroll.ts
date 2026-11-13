@@ -6,6 +6,7 @@ export function useKnowledgeTreeScroll(viewportRef: RefObject<HTMLElement>) {
     if (!viewport) return;
 
     let frame = 0;
+    let scrollTimer: number | undefined;
     let measuredScrollLeft = viewport.scrollLeft;
     const measure = () => {
       frame = 0;
@@ -18,7 +19,12 @@ export function useKnowledgeTreeScroll(viewportRef: RefObject<HTMLElement>) {
       for (const { label, room } of labels) label.style.setProperty("--tree-name-room", `${room}px`);
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(measure); };
-    const handleScroll = () => { if (viewport.scrollLeft !== measuredScrollLeft) schedule(); };
+    const handleScroll = () => {
+      if (viewport.scrollLeft !== measuredScrollLeft) schedule();
+      viewport.dataset.scrolling = "true";
+      window.clearTimeout(scrollTimer);
+      scrollTimer = window.setTimeout(() => { delete viewport.dataset.scrolling; }, 500);
+    };
     const handleWheel = (event: WheelEvent) => {
       // Keep native horizontal gestures and support mouse wheels that report Shift+wheel vertically.
       if (!event.shiftKey || event.ctrlKey || event.deltaX || !event.deltaY ||
@@ -40,6 +46,8 @@ export function useKnowledgeTreeScroll(viewportRef: RefObject<HTMLElement>) {
 
     return () => {
       cancelAnimationFrame(frame);
+      window.clearTimeout(scrollTimer);
+      delete viewport.dataset.scrolling;
       resize.disconnect();
       mutation.disconnect();
       viewport.removeEventListener("scroll", handleScroll);

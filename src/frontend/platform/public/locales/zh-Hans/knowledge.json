@@ -698,7 +698,6 @@
         "created": "我创建的",
         "joined": "我加入的",
         "navigation": "空间导航",
-        "square": "前往广场",
         "expand": "展开",
         "collapse": "收起",
         "sort": "排序",
@@ -710,7 +709,6 @@
         "loading": "正在加载…",
         "load_failed": "加载失败",
         "empty": "暂无空间",
-        "no_folders": "暂无文件夹",
         "more_folders": "加载更多文件夹",
         "collapse_navigation": "收起空间导航",
         "expand_navigation": "展开空间导航"
