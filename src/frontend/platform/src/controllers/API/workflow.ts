@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { WorkFlow } from "@/types/flow";
+import { createMemoryStartGroup } from "@/util/workflowMemory";
 import axios from "../request";
 
 /**
@@ -251,7 +252,8 @@ const workflowTemplate = [
                         "help": "true"
                     }
                 ]
-            }
+            },
+            createMemoryStartGroup()
         ]
     },
     {
