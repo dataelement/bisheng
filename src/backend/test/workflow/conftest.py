@@ -15,6 +15,21 @@ from bisheng.workflow.domain.models.platform_agent_execution import PlatformAgen
 from bisheng.workflow.domain.repositories.platform_agent import PlatformAgentRepository
 
 
+@pytest.fixture(autouse=True)
+def _memory_switch_off_for_platform_tests(request, monkeypatch):
+    """F132 x F118: the worker reads the workflow memory switch from the real
+    database at run start. Platform Agent / knowledge / Kunlian tests run the
+    worker against their own SQLite stores; letting that read open the real
+    database manager would register the global tenant filter, which those
+    fixtures rely on being absent. They do not exercise memory, so the switch
+    is pinned off (the production fallback when the read fails) and the
+    turn-end bookkeeping, which also reads the real database, is skipped."""
+    name = request.node.module.__name__.rsplit(".", 1)[-1]
+    if name.startswith(("test_platform_", "test_kunlian_")):
+        monkeypatch.setattr("bisheng.worker.workflow.tasks._online_memory_switch", lambda *a, **k: False)
+        monkeypatch.setattr("bisheng.worker.workflow.tasks._end_memory_turn", lambda *a, **k: None)
+
+
 @pytest.fixture
 def agent_store(monkeypatch):
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
