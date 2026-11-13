@@ -152,7 +152,7 @@
   **覆盖 AC**: AC-12, AC-14, AC-16
   **依赖**: T014
 
-- [ ] **T016**: 内容校验的实现
+- [x] **T016**: 内容校验的实现
   **文件**: `src/backend/bisheng/memory/domain/services/guard.py`
   **逻辑**: `SensitiveContentGuard`、长度与类型校验、相对时间检查；每种拒绝返回一个原因码（T010 的错误码）。设计见 design 决策 14 与 §4.1 末段。
   **测试**: T015 全部通过
