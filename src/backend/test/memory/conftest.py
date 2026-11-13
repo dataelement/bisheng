@@ -258,6 +258,20 @@ class StubLLM:
         return [[float(len(t))] for t in texts]
 
 
+@pytest.fixture(autouse=True)
+def memory_runtime_config(monkeypatch):
+    """Runtime config from code defaults (settings is a MagicMock under the test premock)."""
+    from bisheng.common.services.config_service import settings
+
+    cls = type(settings)
+
+    async def _aget(self, key):
+        return {}
+
+    monkeypatch.setattr(cls, "aget_from_db", _aget)
+    monkeypatch.setattr(cls, "get_from_db", lambda self, key: {})
+
+
 @pytest.fixture
 def kv():
     return InMemoryKV()
@@ -319,3 +333,12 @@ def tenant_ctx():
         except ValueError:
             # Set inside an async test: that task's context copy is already gone.
             pass
+
+
+def make_message(chat_id, user_id, message, category="question", is_bot=False, **kw):
+    """A ChatMessage with the NOT NULL columns filled."""
+    from bisheng.database.models.message import ChatMessage
+
+    kw.setdefault("flow_id", "")
+    kw.setdefault("type", "end" if is_bot else "human")
+    return ChatMessage(chat_id=chat_id, user_id=user_id, message=message, category=category, is_bot=is_bot, **kw)
