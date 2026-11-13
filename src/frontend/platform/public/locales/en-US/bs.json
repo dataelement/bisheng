@@ -4334,5 +4334,8 @@
       "admin": "Administrators",
       "children": "Includes subdepartments"
     }
+  },
+  "memory": {
+    "operation": "Memory operation"
   }
 }

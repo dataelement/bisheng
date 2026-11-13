@@ -4279,5 +4279,8 @@
       "admin": "管理者",
       "children": "下位部門を含む"
     }
+  },
+  "memory": {
+    "operation": "メモリ操作"
   }
 }

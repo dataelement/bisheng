@@ -4279,5 +4279,8 @@
       "admin": "管理员",
       "children": "包含下级部门"
     }
+  },
+  "memory": {
+    "operation": "记忆操作"
   }
 }
