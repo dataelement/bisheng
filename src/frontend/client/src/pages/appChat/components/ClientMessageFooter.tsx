@@ -19,7 +19,7 @@ interface ClientMessageFooterProps {
     readOnly: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
-    /** F132: memory notice + attribution — signed-in assistant chats only (never workflow). */
+    /** F132: memory notice (what the answer remembered) — signed-in assistant chats only (never workflow). */
     memoryEnabled?: boolean;
 }
 
@@ -32,7 +32,7 @@ function AppMemoryNotice({ chatId, messageId, live }: { chatId: string; messageI
         staleTime: 60_000,
     });
     const flags = live ?? (messageId ? history?.[messageId] : undefined);
-    return <MemoryNotice flags={flags} messageId={messageId} />;
+    return <MemoryNotice inline divider={false} flags={flags} messageId={messageId} />;
 }
 
 /** Resource and business operations remain in the client boundary. */
@@ -45,21 +45,23 @@ export function ClientMessageFooter({ message, contentRef, readOnly, onOpenCitat
     if (message.kind === 'user' || message.kind === 'run') return null;
     if (message.kind === 'form' || message.kind === 'choice') return readOnly ? null : <TextToSpeechButton messageId={id ?? message.key} text={message.text} />;
     if (message.category === 'guide_word') return readOnly ? null : <TextToSpeechButton messageId={message.key} text={message.text} />;
-    const actions = <>
-        <CitationReferencesDrawer content={referenceText} webContent={webContent} citations={raw.citations} messageId={id}
+    const citations = <CitationReferencesDrawer content={referenceText} webContent={webContent} citations={raw.citations} messageId={id}
             desktopMode={onOpenCitationPanel ? 'inline-panel' : 'overlay'}
             open={onOpenCitationPanel ? activeCitationMessageId === id : undefined}
-            onDesktopOpen={onOpenCitationPanel} buttonClassName="ml-4" />
+            onDesktopOpen={onOpenCitationPanel} buttonClassName="ml-4" />;
+    const buttons = <>
         {(readOnly || message.kind !== 'answer' || !id) && <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity"><CopyMessageAction label={localize('com_ui_copy')} copiedLabel={localize('com_ui_copied')} onCopy={() => copyText(contentRef.current ?? message.text)} /></div>}
         {!readOnly && id && message.kind === 'answer' && <MessageButtons id={raw.id ?? id} data={raw.liked} text={message.text} onCopy={() => copyText(contentRef.current ?? message.text)}>
             {raw.create_time && <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(raw.create_time, localize('shared:app_chat.timestamp_format'))}</span>}
             {conversationId && <ExportSelectionButton chatId={conversationId} messageId={id} />}
         </MessageButtons>}
     </>;
-    if (!memoryEnabled || readOnly || message.kind !== 'answer') return actions;
+    if (!memoryEnabled || readOnly || message.kind !== 'answer') return <>{citations}{buttons}</>;
     const live = (raw as unknown as { memory?: MemoryFlags }).memory;
-    return <div className="flex w-full flex-col">
-        <div className="flex justify-between">{actions}</div>
+    // F132: what this answer remembered leads the answer's own row; the actions keep the right edge.
+    return <div className="flex w-full flex-wrap items-center">
         <AppMemoryNotice chatId={conversationId} messageId={id} live={live} />
+        {citations}
+        <div className="ml-auto flex items-center">{buttons}</div>
     </div>;
 }

@@ -1,5 +1,5 @@
 import { isMemoryToolEvent } from "~/api/memory";
-import { isMemoryRun, maskMemoryRuns, memoryRunStep } from "../appMemory";
+import { isMemoryRun, maskMemoryRuns, memoryRunItemIds, memoryRunStep } from "../appMemory";
 
 // F132 AC-09 (owner view): memory tool runs render a placeholder, never raw JSON.
 const PLACEHOLDER = "memory-operation";
@@ -18,6 +18,21 @@ describe("memory runs in assistant chat", () => {
     const other = { kind: "run", category: "tool", payload: { tool_key: "memory_store", input: '{"k":"v"}' }, text: "x", raw: {} };
     expect(isMemoryRun(other)).toBe(false);
     expect(maskMemoryRuns([other], () => PLACEHOLDER)[0]).toBe(other);
+  });
+
+  it("merges back-to-back searches into one run that lists their distinct items", () => {
+    const search = (ids: string[]) => ({
+      kind: "run",
+      category: "tool",
+      payload: { tool_key: "memory_search", output: JSON.stringify({ redacted: true, op: "search", item_ids: ids, ok: true }) },
+      text: "",
+      raw: {},
+    });
+    const answer = { kind: "answer", category: "answer", payload: {}, text: "done", raw: {} };
+    const out = maskMemoryRuns([search(["a", "b"]), search(["b", "c"]), answer, search(["d"])], (step) => `found ${step.count}`);
+    expect(out.map((m) => m.text)).toEqual(["found 3", "done", "found 1"]);
+    expect(memoryRunItemIds(out[0])).toEqual(["a", "b", "c"]);
+    expect(memoryRunItemIds(out[2])).toEqual(["d"]);
   });
 
   it("recognises memory tool events by exact name or redacted payload", () => {

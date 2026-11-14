@@ -121,47 +121,31 @@ it("shows the backend reason when an undo fails (AC-22)", async () => {
   expect(screen.getByRole("button", { name: "memory.notice.undo" })).toBeInTheDocument();
 });
 
-it("lists only the items this turn's search returned, each deletable in place (AC-87)", async () => {
-  mockApi.getMemoryTurnApi.mockResolvedValue(
-    turn({
-      retrieved: [item("r1", "Budget is 5000"), item("p1", "Answer in English", { pinned: true })],
-      // Carried into every turn, so it is not listed as something this answer drew on.
-      resident: [item("p1", "Answer in English", { pinned: true }), item("p2", "Works in finance", { pinned: true })],
-    }),
-  );
-  renderNotice({ flags: ATTR_FLAGS });
-
-  const entry = screen.getByRole("button", { name: /memory\.attribution\.entry/ });
+it("lists nothing it only looked up: retrieved items belong to the search step (AC-87)", async () => {
+  mockApi.getMemoryTurnApi.mockResolvedValue(turn({ retrieved: [item("r1", "Budget is 5000")] }));
+  const { container } = renderNotice({ flags: ATTR_FLAGS });
+  expect(container).toBeEmptyDOMElement();
   expect(mockApi.getMemoryTurnApi).not.toHaveBeenCalled();
-  fireEvent.click(entry);
 
-  await screen.findByText("Budget is 5000");
-  const lists = screen.getAllByRole("list");
-  expect(lists).toHaveLength(1);
-  const rows = within(lists[0]).getAllByRole("listitem");
-  expect(rows.map((r) => r.querySelector("p")?.textContent)).toEqual(["Budget is 5000", "Answer in English"]);
-  expect(screen.queryByText("Works in finance")).toBeNull();
-  // No section headings, groups, hint or expand toggle.
-  expect(screen.queryByRole("region")).toBeNull();
-  expect(screen.queryByRole("heading")).toBeNull();
-  expect(screen.queryByText(/resident/i)).toBeNull();
-  expect(screen.getAllByRole("button", { name: "memory.delete" })).toHaveLength(2);
-
-  const row = screen.getByText("Budget is 5000").closest("li") as HTMLElement;
-  fireEvent.click(within(row).getByRole("button", { name: "memory.delete" }));
-  await waitFor(() => expect(mockApi.deleteMemoryItemApi).toHaveBeenCalledWith("r1"));
-  await waitFor(() => expect(screen.queryByText("Budget is 5000")).toBeNull());
-  expect(screen.getByText("Answer in English")).toBeInTheDocument();
+  // Probe mode (deep research) reads the turn but still shows only writes.
+  const probed = renderNotice({ messageId: "9", probe: true });
+  await waitFor(() => expect(mockApi.getMemoryTurnApi).toHaveBeenCalled());
+  expect(probed.container).toBeEmptyDOMElement();
 });
 
-it("shows no attribution in probe mode when the turn only carried resident memory (AC-87)", async () => {
+it("sits inside the answer's action row when inline (AC-21)", async () => {
   mockApi.getMemoryTurnApi.mockResolvedValue(
-    turn({ retrieved: [], resident: [item("p2", "Works in finance", { pinned: true })] }),
+    turn({
+      writes: [{ record_id: 1, op: "remember", item_id: "a", related_item_id: null, undone: false, item: item("a", "Likes tea"), related_item: null }],
+    }),
   );
-  const { container } = renderNotice({ messageId: "9", probe: true });
-  await waitFor(() => expect(mockApi.getMemoryTurnApi).toHaveBeenCalled());
-  expect(screen.queryByRole("button", { name: /memory\.attribution\.entry/ })).toBeNull();
-  expect(container).toBeEmptyDOMElement();
+  const { container } = renderNotice({ flags: WRITE_FLAGS, inline: true });
+  const root = container.querySelector('[data-slot="memory-notice"]') as HTMLElement;
+  expect(root.className).toContain("contents");
+  fireEvent.click(await screen.findByRole("button", { name: /memory\.notice\.remember/ }));
+  expect(await screen.findByText("Likes tea")).toBeInTheDocument();
+  // The opened list takes a line of its own at the end of the wrapping row.
+  expect(screen.getByText("Likes tea").closest(".basis-full")).not.toBeNull();
 });
 
 it("renders nothing and asks nothing without memory flags (AC-21, AC-87)", () => {

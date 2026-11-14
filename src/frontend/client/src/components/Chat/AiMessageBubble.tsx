@@ -731,7 +731,7 @@ function AssistantBubble({
                     transient busy notice — copy/feedback on a "try again" status is
                     meaningless; the notice carries its own Retry. */}
                 {!isStreaming && regularContent && !isTransientError && (
-                    <div className="dsh-message-actions dsh-response-actions flex items-center gap-1 mt-1.5 text-gray-400">
+                    <div className="dsh-message-actions dsh-response-actions flex flex-wrap items-center gap-1 mt-1.5 text-gray-400">
                         <CitationReferencesDrawer
                             content={regularContent}
                             webContent={webContent}
@@ -789,10 +789,13 @@ function AssistantBubble({
                         {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                             <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
                         )}
+                        {/* F132: what this answer remembered sits with the answer's own actions,
+                            owner only (flags never reach a share view). */}
+                        {message.memory && <MemoryNotice inline flags={message.memory} messageId={message.messageId} />}
                     </div>
                 )}
-                {/* F132: memory notice + attribution, owner only (flags never reach a share view). */}
-                {!isStreaming && message.memory && (
+                {/* No action row (e.g. an answer with no text): the notice stands on its own. */}
+                {!isStreaming && message.memory && !(regularContent && !isTransientError) && (
                     <MemoryNotice flags={message.memory} messageId={message.messageId} />
                 )}
             </div>

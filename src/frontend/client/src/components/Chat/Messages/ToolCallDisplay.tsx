@@ -15,7 +15,8 @@ import { AlertCircle } from "lucide-react";
 import { memo, useEffect, useState, type FC } from "react";
 import type { AgentToolCall } from "~/api/chatApi";
 import { isMemoryToolEvent } from "~/api/memory";
-import { describeMemoryStep, memoryStepLabel } from "~/components/Memory/memoryStep";
+import { MemorySearchHits } from "~/components/Memory/MemorySearchHits";
+import { describeMemoryStep, memoryStepLabel, mergeMemorySearchSteps } from "~/components/Memory/memoryStep";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
@@ -243,15 +244,19 @@ const variantStyles = {
 /**
  * F132: memory tool events arrive redacted (`{redacted, op, item_ids, ok, reason_code}`).
  * The row says what the call did and whether it worked — "已记下 1 条记忆",
- * "没记下：内容里有相对时间" — but never shows memory text, which is not in the event.
- * The remembered text itself is listed under the answer (MemoryNotice).
+ * "记忆写入被拒绝：内容里有相对时间" — but never shows memory text, which is not in
+ * the event. A finished search with hits opens to list the items it returned
+ * (MemorySearchHits); several back-to-back searches arrive as one row.
  */
-const MemoryToolStep: FC<{ toolCall: ToolCallDisplayProps["toolCall"]; showConnector: boolean }> = ({
-    toolCall,
+export const MemoryToolStep: FC<{ toolCalls: ToolCallDisplayProps["toolCall"][]; showConnector: boolean }> = ({
+    toolCalls,
     showConnector,
 }) => {
     const localize = useLocalize();
-    const step = describeMemoryStep(toolCall);
+    const [open, setOpen] = useState(false);
+    const steps = toolCalls.map((call) => describeMemoryStep(call));
+    const step = steps.length > 1 ? mergeMemorySearchSteps(steps) : steps[0];
+    const expandable = step.op === "search" && step.state === "done" && step.itemIds.length > 0;
     const icon =
         step.state === "running" ? (
             <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
@@ -260,16 +265,34 @@ const MemoryToolStep: FC<{ toolCall: ToolCallDisplayProps["toolCall"]; showConne
         ) : (
             <Outlined.Bulb size={16} className="shrink-0 text-text-3" />
         );
+    const label = memoryStepLabel(step, localize);
     return (
         <div className="flex w-full min-w-0 gap-1.5" data-memory-step={step.state}>
             <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
                 {icon}
                 {showConnector && <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />}
             </div>
-            <div className="flex min-w-0 flex-1 flex-col pb-3">
-                <span className={cn("text-sm leading-[22px] text-text-3", step.state === "running" && "animate-pulse")}>
-                    {memoryStepLabel(step, localize)}
-                </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-1 pb-3">
+                {expandable ? (
+                    <button
+                        type="button"
+                        className="group flex w-fit items-center gap-1 text-sm leading-[22px] text-text-3 hover:text-text-1"
+                        aria-expanded={open}
+                        onClick={() => setOpen((v) => !v)}
+                    >
+                        <span>{label}</span>
+                        <Outlined.Down size={14} className={cn("shrink-0 transition-transform", !open && "-rotate-90")} />
+                    </button>
+                ) : (
+                    <span className={cn("text-sm leading-[22px] text-text-3", step.state === "running" && "animate-pulse")}>
+                        {label}
+                    </span>
+                )}
+                {expandable && open && (
+                    <div className="w-fit max-w-[560px] border-l-2 border-border-base py-0.5 pl-3">
+                        <MemorySearchHits itemIds={step.itemIds} />
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -277,7 +300,7 @@ const MemoryToolStep: FC<{ toolCall: ToolCallDisplayProps["toolCall"]; showConne
 
 const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnector = false }) =>
     isMemoryToolEvent(toolCall) ? (
-        <MemoryToolStep toolCall={toolCall} showConnector={showConnector} />
+        <MemoryToolStep toolCalls={[toolCall]} showConnector={showConnector} />
     ) : (
         <RegularToolCall toolCall={toolCall} showConnector={showConnector} />
     ),

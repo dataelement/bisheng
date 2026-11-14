@@ -2925,10 +2925,6 @@
       "undone": "元に戻しました",
       "undo_failed": "元に戻せませんでした。もう一度お試しください。"
     },
-    "attribution": {
-      "entry": "メモリーを参照",
-      "empty": "関連するメモリーは削除されました"
-    },
     "tool_operation": "メモリー操作",
     "step": {
       "running_remember": "メモリに記録しています",
@@ -2942,6 +2938,7 @@
       "done_write": "メモリを更新しました",
       "done_search": "メモリを検索し、{{count}} 件見つかりました",
       "done_search_empty": "メモリを検索しましたが、関連する内容はありません",
+      "hits_gone": "関連するメモリーは削除されました",
       "failed_remember": "メモリの書き込みが拒否されました：{{reason}}",
       "failed_correct": "メモリの訂正が拒否されました：{{reason}}",
       "failed_forget": "メモリの削除が拒否されました：{{reason}}",

@@ -57,13 +57,13 @@ export function ResultPanel({ children, messageId, liked, allowFeedback, onLiked
                 rate it through the shared chatmessage feedback endpoints keyed by
                 message id (rollup to message_session is maintained backend-side). */}
             {/* F132: one round = one task message row (design R8), so the round's
-                memory notice and attribution are read by that row's id. Shares the
+                memory notice is read by that row's id. Shares the
                 feedback row's owner-only visibility. */}
             {allowFeedback && messageId && (
-                <div className="mt-3 flex flex-col gap-1">
-                    {/* MessageFeedbackButtons renders `display: contents`, so it needs its
-                        own row here or the column stacks like and dislike vertically. */}
-                    <div className="flex items-center">
+                <div className="mt-3">
+                    {/* MessageFeedbackButtons renders `display: contents`; the row lays its
+                        buttons out, and the memory notice joins the same row. */}
+                    <div className="flex flex-wrap items-center">
                         <MessageFeedbackButtons
                             liked={liked}
                             onLike={(l) => {
@@ -73,8 +73,8 @@ export function ResultPanel({ children, messageId, liked, allowFeedback, onLiked
                             }}
                             onDislikeComment={(c) => disLikeCommentApi(messageId, c)}
                         />
+                        <MemoryNotice inline probe messageId={messageId} />
                     </div>
-                    <MemoryNotice messageId={messageId} probe />
                 </div>
             )}
         </div>

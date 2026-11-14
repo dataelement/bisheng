@@ -14,9 +14,11 @@ export type MemoryStepState = "running" | "done" | "failed";
 export interface MemoryStep {
   op: MemoryStepOp | null;
   state: MemoryStepState;
-  /** Search hits; 1 for a successful write. */
+  /** Search hits (distinct items); 1 for a successful write. */
   count: number;
   reasonCode: number | null;
+  /** Ids of the items a search returned (ids only, never text). */
+  itemIds: string[];
 }
 
 interface MemoryToolEventLike {
@@ -61,19 +63,38 @@ export function describeMemoryStep(call: MemoryToolEventLike): MemoryStep {
   const args = asPayload(call.args);
   const results = asPayload(call.results);
   const op = readOp(results, args) ?? (call.tool_name === "memory_search" ? "search" : null);
-  const ids = Array.isArray(results?.item_ids) ? results.item_ids.length : 0;
+  const itemIds = Array.isArray(results?.item_ids)
+    ? [...new Set(results.item_ids.filter((id): id is string => typeof id === "string" && id !== ""))]
+    : [];
+  const ids = itemIds.length;
   const reasonCode = typeof results?.reason_code === "number" ? results.reason_code : null;
 
-  if (call.inflight) return { op, state: "running", count: 0, reasonCode: null };
-  if (call.error) return { op, state: "failed", count: 0, reasonCode };
+  if (call.inflight) return { op, state: "running", count: 0, reasonCode: null, itemIds: [] };
+  if (call.error) return { op, state: "failed", count: 0, reasonCode, itemIds: [] };
 
   const ok =
     typeof results?.ok === "boolean"
       ? results.ok
       : // Legacy events: a search always answered; a write succeeded only when it returned an id.
         op === "search" || ids > 0;
-  if (!ok) return { op, state: "failed", count: 0, reasonCode };
-  return { op, state: "done", count: op === "search" ? ids : 1, reasonCode: null };
+  if (!ok) return { op, state: "failed", count: 0, reasonCode, itemIds: [] };
+  return { op, state: "done", count: op === "search" ? ids : 1, reasonCode: null, itemIds: op === "search" ? itemIds : [] };
+}
+
+/**
+ * Several searches issued back to back (models often fire them in parallel) read as
+ * one step: "found N" counts distinct items across them. Running while any is still
+ * running; failed only when none succeeded.
+ */
+export function mergeMemorySearchSteps(steps: MemoryStep[]): MemoryStep {
+  if (steps.length === 1) return steps[0];
+  if (steps.some((s) => s.state === "running")) {
+    return { op: "search", state: "running", count: 0, reasonCode: null, itemIds: [] };
+  }
+  const done = steps.filter((s) => s.state === "done");
+  if (!done.length) return { ...steps[0], op: "search" };
+  const itemIds = [...new Set(done.flatMap((s) => s.itemIds))];
+  return { op: "search", state: "done", count: itemIds.length, reasonCode: null, itemIds };
 }
 
 type Localize = (key: string, options?: Record<string, unknown>) => string;

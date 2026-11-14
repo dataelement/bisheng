@@ -30,6 +30,8 @@
  */
 import { Outlined } from 'bisheng-icons';
 import { memo, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from 'react';
+import { isMemoryToolEvent } from '~/api/memory';
+import { describeMemoryStep } from '~/components/Memory/memoryStep';
 import { useLocalize } from '~/hooks';
 import { useCollapseState } from '~/store/linsightCollapse';
 import { cn } from '~/utils';
@@ -195,7 +197,15 @@ const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, sub
 
     const segments = useMemo(() => buildSegments(group.steps), [group.steps]);
 
-    const body: ReactNode = segments.map((seg) => {
+    // F132: memory searches fired back to back render as one row (the first one
+    // carries the rest), so "found N" does not repeat.
+    const isMemorySearchSeg = (seg: (typeof segments)[number] | undefined) =>
+        !!seg &&
+        seg.kind !== 'thinking' &&
+        isMemoryToolEvent({ tool_name: seg.step.name, args: seg.step.params, results: seg.step.output }) &&
+        describeMemoryStep({ tool_name: seg.step.name, args: seg.step.params, results: seg.step.output }).op === 'search';
+
+    const body: ReactNode = segments.map((seg, index) => {
         if (seg.kind === 'thinking') {
             if (!seg.text) return null;
             // No per-passage title (single-level fold) — Body-colored direct text.
@@ -220,6 +230,15 @@ const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, sub
         }
         if (readSkillLoadFailure(seg.step)) {
             return <SkillLoadFailureRow key={seg.key} step={seg.step} />;
+        }
+        if (isMemorySearchSeg(seg)) {
+            if (isMemorySearchSeg(segments[index - 1])) return null;
+            const more: MergedStep[] = [];
+            for (let j = index + 1; isMemorySearchSeg(segments[j]); j++) {
+                const next = segments[j];
+                if (next.kind !== 'thinking') more.push(next.step);
+            }
+            return <ToolRowLite key={seg.key} step={seg.step} memorySearches={more} />;
         }
         return <ToolRowLite key={seg.key} step={seg.step} />;
     });

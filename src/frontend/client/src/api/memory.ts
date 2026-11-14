@@ -200,7 +200,7 @@ export function parseMemorySignal(frame: unknown): MemoryFlags | null {
   return { turn_id: turnId, has_write: Boolean(body.has_write), has_attribution: Boolean(body.has_attribution) };
 }
 
-/** True when the flags ask for a notice or an attribution entry. */
+/** True when the flags carry anything (the notice shows only for writes). */
 export function hasMemoryFlags(flags?: MemoryFlags | null): flags is MemoryFlags {
   return !!flags && (flags.has_write || flags.has_attribution);
 }

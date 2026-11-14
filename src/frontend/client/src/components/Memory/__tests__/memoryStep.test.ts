@@ -1,4 +1,4 @@
-import { describeMemoryStep, memoryStepLabel } from "../memoryStep";
+import { describeMemoryStep, memoryStepLabel, mergeMemorySearchSteps } from "../memoryStep";
 
 // F132: a memory step row says what the call did, never what it wrote.
 const localize = (key: string, options?: Record<string, unknown>) =>
@@ -9,7 +9,7 @@ const call = (results: unknown, extra: Record<string, unknown> = {}) => ({ tool_
 describe("memory step", () => {
   it("names a successful write", () => {
     const step = describeMemoryStep(call({ redacted: true, op: "remember", item_ids: ["i-1"], ok: true, reason_code: null }));
-    expect(step).toEqual({ op: "remember", state: "done", count: 1, reasonCode: null });
+    expect(step).toEqual({ op: "remember", state: "done", count: 1, reasonCode: null, itemIds: [] });
     expect(memoryStepLabel(step, localize)).toBe("memory.step.done_remember");
   });
 
@@ -30,6 +30,17 @@ describe("memory step", () => {
     const search = (ids: string[]) => describeMemoryStep({ tool_name: "memory_search", results: { redacted: true, op: "search", item_ids: ids, ok: true } });
     expect(memoryStepLabel(search(["a", "b", "c"]), localize)).toBe("memory.step.done_search(count=3)");
     expect(memoryStepLabel(search([]), localize)).toBe("memory.step.done_search_empty");
+  });
+
+  it("merges back-to-back searches: distinct items, running while any runs", () => {
+    const search = (ids: string[], extra: Record<string, unknown> = {}) =>
+      describeMemoryStep({ tool_name: "memory_search", results: { redacted: true, op: "search", item_ids: ids, ok: true }, ...extra });
+    const merged = mergeMemorySearchSteps([search(["a", "b"]), search(["b", "a"])]);
+    expect(merged).toMatchObject({ state: "done", count: 2, itemIds: ["a", "b"] });
+    expect(memoryStepLabel(merged, localize)).toBe("memory.step.done_search(count=2)");
+    expect(mergeMemorySearchSteps([search(["a"]), search([], { inflight: true })]).state).toBe("running");
+    const failed = describeMemoryStep({ tool_name: "memory_search", error: "boom" });
+    expect(mergeMemorySearchSteps([failed, search(["c"])])).toMatchObject({ state: "done", itemIds: ["c"] });
   });
 
   it("shows running and tool errors", () => {

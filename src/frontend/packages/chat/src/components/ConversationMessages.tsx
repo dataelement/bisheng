@@ -24,6 +24,8 @@ export interface ConversationMessageSlots {
   selection?: (message: ChatMessage) => ReactNode;
   footer?: (message: ChatMessage, contentRef: RefObject<HTMLDivElement>) => ReactNode;
   runPresentation?: (message: ChatMessage) => RunPresentation;
+  /** Replaces a run's default detail text when the host has something better to show (undefined keeps the default). */
+  runDetail?: (message: ChatMessage) => ReactNode;
 }
 export interface ConversationMessagesProps {
   messages: readonly ChatMessage[];
@@ -67,6 +69,7 @@ function ConversationRow({ message, canExecute, labels, slots, onChoice, onError
   }
   if (message.kind === 'run') {
     const run = slots.runPresentation?.(message);
+    const detail = slots.runDetail?.(message);
     if (message.category === 'node_run') return <div className="py-1 px-4 flex items-center font-bold gap-2 text-sm">
       {!message.final && <Outlined.Loading size={16} className="animate-spin text-primary" />}
       <span>{displayText(payload.name)}</span>
@@ -77,7 +80,8 @@ function ConversationRow({ message, canExecute, labels, slots, onChoice, onError
           : (message.raw.interrupted || run?.unavailable) ? <Outlined.CloseCircle size={16} className="text-danger" /> : <Outlined.CheckCircle size={16} className="text-success" />}
         {run?.title || displayText(payload.name) || (message.final ? labels.completed : labels.thinking)}
       </summary>
-      <div className="bg-[#F5F6F8] dark:bg-[#313336] px-4 py-2 whitespace-pre-wrap text-sm">{displayText(message.raw.thought ?? message.raw.intermediate_steps ?? message.payload)}</div>
+      {detail !== undefined ? <div className="px-4 py-2 text-sm">{detail}</div>
+        : <div className="bg-[#F5F6F8] dark:bg-[#313336] px-4 py-2 whitespace-pre-wrap text-sm">{displayText(message.raw.thought ?? message.raw.intermediate_steps ?? message.payload)}</div>}
     </details>{slots.attachments?.(message)}</div>;
   }
   const reasoningText = message.reasoning || reasoning;
