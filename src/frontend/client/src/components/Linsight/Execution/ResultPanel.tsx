@@ -61,15 +61,19 @@ export function ResultPanel({ children, messageId, liked, allowFeedback, onLiked
                 feedback row's owner-only visibility. */}
             {allowFeedback && messageId && (
                 <div className="mt-3 flex flex-col gap-1">
-                    <MessageFeedbackButtons
-                        liked={liked}
-                        onLike={(l) => {
-                            onLikedChange?.(l);
-                            // returned so the confirmation toast waits for the request
-                            return likeChatApi(messageId, l);
-                        }}
-                        onDislikeComment={(c) => disLikeCommentApi(messageId, c)}
-                    />
+                    {/* MessageFeedbackButtons renders `display: contents`, so it needs its
+                        own row here or the column stacks like and dislike vertically. */}
+                    <div className="flex items-center">
+                        <MessageFeedbackButtons
+                            liked={liked}
+                            onLike={(l) => {
+                                onLikedChange?.(l);
+                                // returned so the confirmation toast waits for the request
+                                return likeChatApi(messageId, l);
+                            }}
+                            onDislikeComment={(c) => disLikeCommentApi(messageId, c)}
+                        />
+                    </div>
                     <MemoryNotice messageId={messageId} probe />
                 </div>
             )}
