@@ -24,6 +24,17 @@ CLIENT_DIR   := $(ROOT)/src/frontend/client
 DOCKER_DIR   := $(ROOT)/docker
 RUN_DIR      := $(ROOT)/logs/dev
 
+# --- native-dev process environment ------------------------------------------
+# docker/.env.app holds per-developer secrets (e.g. PADDLE_OCR_TOKEN) that the
+# backend processes read straight from the environment. It is sourced rather
+# than merged into docker/.env on purpose: that file is compose's deployment
+# env and carries keys the app itself honours (BISHENG_PRO,
+# BISHENG_RUNTIME_CONTROL_SECRET, ...), so feeding it to a dev process would
+# silently change platform behaviour. Missing file is fine — `set -a` over an
+# empty source is a no-op.
+APP_ENV      := $(DOCKER_DIR)/.env.app
+APP_ENV_SRC  := set -a; . $(APP_ENV) 2>/dev/null || true; set +a;
+
 # --- middleware (docker compose) ---------------------------------------------
 # docker/.env holds the CR image tags + credentials and is picked up
 # automatically (project directory = directory of the first -f file).
@@ -59,6 +70,9 @@ WECOM_SYNC_ARGS ?=
 # $(call spawn,<name>,<dir>,<command>,<port>)
 #   - skips (and adopts) a process that already listens on <port>
 #   - otherwise starts it detached, logging to logs/dev/<name>.log
+# Backend-directory processes get $(APP_ENV_SRC) prepended (see above); the SPAs
+# do not need it and are left with the caller's environment untouched.
+APP_ENV_FOR = $(if $(filter $(BACKEND_DIR),$(2)),$(APP_ENV_SRC),)
 define spawn
 	@mkdir -p $(RUN_DIR)
 	@if [ -f $(RUN_DIR)/$(1).pid ] && kill -0 $$(cat $(RUN_DIR)/$(1).pid) 2>/dev/null; then \
@@ -67,7 +81,7 @@ define spawn
 		lsof -nP -iTCP:$(4) -sTCP:LISTEN -t | head -1 > $(RUN_DIR)/$(1).pid; \
 		echo "  $(1): port $(4) already in use — adopted pid $$(cat $(RUN_DIR)/$(1).pid) (make down will stop it)"; \
 	else \
-		( cd $(2) && exec nohup $(3) >>$(RUN_DIR)/$(1).log 2>&1 ) & \
+		$(call APP_ENV_FOR,$(1),$(2))( cd $(2) && exec nohup $(3) >>$(RUN_DIR)/$(1).log 2>&1 ) & \
 		echo $$! > $(RUN_DIR)/$(1).pid; \
 		echo "  $(1): started (pid $$(cat $(RUN_DIR)/$(1).pid)) → logs/dev/$(1).log"; \
 	fi
@@ -169,17 +183,17 @@ infra-pull: ## Pull the arm64 images (slow on a fresh machine)
 # single foreground processes (Ctrl-C to stop)
 # =============================================================================
 backend: ## Run API server in the foreground
-	@cd $(BACKEND_DIR) && exec $(BACKEND_CMD)
+	@$(APP_ENV_SRC) cd $(BACKEND_DIR) && exec $(BACKEND_CMD)
 
 worker-knowledge: ## Run knowledge_celery worker in the foreground
-	@cd $(BACKEND_DIR) && exec $(KNOWLEDGE_CMD)
+	@$(APP_ENV_SRC) cd $(BACKEND_DIR) && exec $(KNOWLEDGE_CMD)
 
 worker-workflow: ## Run workflow_celery worker in the foreground
-	@cd $(BACKEND_DIR) && exec $(WORKFLOW_CMD)
+	@$(APP_ENV_SRC) cd $(BACKEND_DIR) && exec $(WORKFLOW_CMD)
 
 worker-beat: ## Run Celery beat in the foreground
 	@mkdir -p $(RUN_DIR)
-	@cd $(BACKEND_DIR) && exec $(BEAT_CMD)
+	@$(APP_ENV_SRC) cd $(BACKEND_DIR) && exec $(BEAT_CMD)
 
 worker-default: ## Run the default `celery` queue worker (telemetry) in the background
 	$(call spawn,worker-default,$(BACKEND_DIR),$(DEFAULTQ_CMD),)

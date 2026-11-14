@@ -107,12 +107,18 @@ def html_table_to_md(html_str):
 class MineruLoader(BaseBishengLoader):
     def __init__(self, url: str, timeout: int = 600, headers: dict = None, request_kwargs: dict = None,
                  filter_page_header_footer: bool = False,
+                 api_key_enc: str = "", api_key_header: str = "x-api-key",
                  *args, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
         self.url = url
         self.timeout = timeout
-        self.headers = headers if headers is not None else {}
+        self.headers = dict(headers) if headers else {}
+        if api_key_enc:
+            # A key saved in the admin form wins over a stale header in the file.
+            from bisheng.core.config.settings import decrypt_token
+
+            self.headers[api_key_header or "x-api-key"] = decrypt_token(api_key_enc)
         self.request_kwargs = request_kwargs if request_kwargs is not None else {}
         self.filter_page_header_footer = filter_page_header_footer
 

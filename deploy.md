@@ -29,6 +29,7 @@ make infra-down  # 连中间件容器一起停(数据卷保留)
 |------|------|
 | Docker + `docker compose` | 中间件用 `docker/docker-compose.yml` + `docker/docker-compose.local-arm64.yml` |
 | `docker/.env` | CR 镜像 tag 与凭据,compose 自动读取;缺失时 `make infra-up` 会直接报错退出 |
+| `docker/.env.app` | 原生 `make up` 启动 backend / Celery 时 source 的**本机密钥**文件(`PADDLE_OCR_TOKEN` 等);git-ignored,缺失不报错。从 `docker/.env.app.example` 复制。compose/helm 形态不用它,走 `docker/.env` / `backend.extraEnv` |
 | 后端 `.venv` | `src/backend/.venv`(uv 同步好,Python 3.11) |
 | `pnpm` | workspace 内会由 corepack 解析到 `9.15.9`(workspace 要求 `>=9.15.9 <10`) |
 

@@ -12,7 +12,7 @@ from urllib.parse import urljoin
 import httpx
 from loguru import logger
 
-from bisheng.core.config.settings import MineruV4Conf
+from bisheng.core.config.settings import MineruV4Conf, decrypt_token
 
 
 class MineruV4Error(Exception):
@@ -29,8 +29,25 @@ class MineruV4Client:
         parsed = httpx.URL(self.root) if self.root else None
         if not parsed or parsed.scheme not in {"http", "https"} or not parsed.host or parsed.query:
             raise MineruV4Error("MinerU V4 API root URL is invalid")
-        self.api_key = os.getenv(config.api_key_env, "") if config.api_key_env else ""
+        self.api_key = self._resolve_api_key(config)
         self.transport = transport
+
+    @staticmethod
+    def _resolve_api_key(config: MineruV4Conf) -> str:
+        """Key saved from the admin form first, then the environment.
+
+        The stored value wins so a key typed in the UI is actually used; the
+        environment stays as the deployment-level fallback.
+        """
+        if config.api_key_enc:
+            try:
+                return decrypt_token(config.api_key_enc)
+            except Exception as exc:
+                raise MineruV4Error(
+                    "The stored MinerU V4 API key cannot be decrypted; save it again in the "
+                    "document-parse settings"
+                ) from exc
+        return os.getenv(config.api_key_env, "") if config.api_key_env else ""
 
     def _url(self, path: str) -> str:
         return f"{self.root}{path}"

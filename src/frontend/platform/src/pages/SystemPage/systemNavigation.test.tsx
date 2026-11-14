@@ -14,6 +14,7 @@ vi.mock('./components/OrgSync', () => ({ default: () => <div>Sync content</div> 
 vi.mock('./components/PersonalToken', () => ({ PersonalToken: () => <div>Tokens content</div> }))
 vi.mock('./components/ServiceAccount', () => ({ ServiceAccount: () => <div>Accounts content</div> }))
 vi.mock('./components/Config', () => ({ default: () => <div>Configuration content</div> }))
+vi.mock('./components/DocumentParse', () => ({ DocumentParse: () => <div>Document parse content</div> }))
 vi.mock('./theme', () => ({ default: () => <div>Theme content</div> }))
 
 interface FixtureProps {
@@ -32,7 +33,9 @@ afterEach(cleanup)
 
 it('keeps administrator navigation and switches real shared tabs', async () => {
     render(<Fixture user={{ role: 'admin' }} apiEnabled><SystemPage /></Fixture>)
-    expect(screen.getAllByRole('tab')).toHaveLength(8)
+    // Instance-level tabs: the document-parse form sits next to the YAML editor.
+    expect(screen.getAllByRole('tab')).toHaveLength(9)
+    expect(screen.getByRole('tab', { name: 'system.docParseTab' })).toBeVisible()
     expect(screen.getByText('Organization content')).toBeVisible()
     await userEvent.click(screen.getByRole('tab', { name: 'openApiManagement.serviceAccount.title' }))
     expect(screen.getByText('Accounts content')).toBeVisible()
@@ -44,6 +47,7 @@ it('keeps instance settings hidden for child administrators', () => {
     render(<Fixture user={{ role: 'user', is_child_admin: true }} apiEnabled><SystemPage /></Fixture>)
     expect(screen.getAllByRole('tab')).toHaveLength(5)
     expect(screen.queryByRole('tab', { name: 'system.systemConfiguration' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'system.docParseTab' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'orgSync:title' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'system.appearanceSettings' })).not.toBeInTheDocument()
 })
