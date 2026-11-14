@@ -2944,7 +2944,7 @@
   "memory": {
     "nav_title": "Memory",
     "switch_label": "My memory",
-    "switch_hint": "When on, chats remember what you ask them to and automatically keep information that is useful to you. When off, chats no longer read or write memory; you can still view and manage saved memories below.",
+    "switch_hint": "When on, chats automatically keep information that is useful to you and remember what you ask them to. When off, chats no longer read or write memory; you can still view and manage saved memories below.",
     "list_title": "Saved memories",
     "empty": "No saved memories yet",
     "add": "Add",
